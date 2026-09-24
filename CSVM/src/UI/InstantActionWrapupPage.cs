@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using System.Globalization;
-using CSVM.Flight;
+using CSVM.Flight.Modes;
 using CSVM.UI.Menu;
 
 namespace CSVM.UI;

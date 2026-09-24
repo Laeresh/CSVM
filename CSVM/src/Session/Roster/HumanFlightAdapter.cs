@@ -1,6 +1,11 @@
 using System;
 using System.Collections.Generic;
-using CSVM.Flight;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Audio;
+using CSVM.Flight.Camera;
+using CSVM.Flight.Hud;
+using CSVM.Flight.Modes;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.World;
 using CSVM.UI;
@@ -123,7 +128,7 @@ internal sealed class HumanFlightAdapter
         // replaces the airframe's stock EnginePower on a COPY (the stats object is the shared
         // per-airframe cache). Stock pick (id 6) keeps the airframe's own row.
         if (custom != null
-            && Flight.CustomPlaneBuild.EnginePowerFor(_aircraft.ZrdrPath, custom) is { } enginePower)
+            && Flight.Hangar.CustomPlaneBuild.EnginePowerFor(_aircraft.ZrdrPath, custom) is { } enginePower)
         {
             stats = stats.WithEnginePower(enginePower);
         }
@@ -138,7 +143,7 @@ internal sealed class HumanFlightAdapter
             ? capturedSwap.Scheme
             : swap?.Scheme
                 ?? (custom != null && !_liveries.PaintRequested
-                    ? Flight.CustomPlaneBuild.PaintFor(custom, UI.HangarPaintPage.PatternName(custom.PaintPattern))
+                    ? Flight.Hangar.CustomPlaneBuild.PaintFor(custom, UI.HangarPaintPage.PatternName(custom.PaintPattern))
                     : _liveries.SchemeFor(pi, _aircraft.ZrdrPath, _aircraft.PaintRng,
                         _liveries.PatternsForPlane(_aircraft.PlanesGamez, planeName)));
         _flying[pi] = new FlyingAirframe(planeName, scheme);
@@ -167,7 +172,7 @@ internal sealed class HumanFlightAdapter
         if (verbose && controller.Cockpit != null)
             Log.Info("flight", $"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");
         // The engine pick's nitrous bit (ids 3-5) installs the injector, the original's veh+0x946.
-        controller.Nitro.Installed = custom != null && Flight.CustomPlaneBuild.HasNitrous(custom);
+        controller.Nitro.Installed = custom != null && Flight.Hangar.CustomPlaneBuild.HasNitrous(custom);
         // Every human joins team 1 in an Instant Action mission, splitscreen included, the
         // per-pilot team fallback would otherwise collide with an enemy's. --coop asks the same
         // in plain flight; SessionSpec.Resolve already drops Coop when --vs is set.
@@ -188,7 +193,7 @@ internal sealed class HumanFlightAdapter
             // on those pools' own scale; structure stays the def's and the vehicle totals stay
             // the sum over zones. Nothing scales a human rig's pools, so the player never is.
             Damage = stats.DestroyableParts.Count == 0 ? null
-                : custom != null ? Flight.CustomPlaneBuild.DamageFor(stats, custom)
+                : custom != null ? Flight.Hangar.CustomPlaneBuild.DamageFor(stats, custom)
                 : PlaneDamage.For(stats),
             CollideDamageSink = _world.WorldRuntime != null ? _world.WorldRuntime.CollideDamageAt : null,
             GrazeEffectSink = _world.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
@@ -220,7 +225,7 @@ internal sealed class HumanFlightAdapter
             // layer composes over THAT (the built def leaves WeaponId null so a picked ammo still
             // resolves). --loadout= names a def outright, so it takes the whole fit either way.
             var baseDef = custom != null && _policy.LoadoutOverride == null
-                ? Flight.CustomPlaneBuild.LoadoutFor(custom, stockDef)
+                ? Flight.Hangar.CustomPlaneBuild.LoadoutFor(custom, stockDef)
                 : stockDef;
             var ldef = MenuFitFor(pi, swap) is { } choice ? choice.ApplyTo(baseDef) : baseDef;
             try
@@ -317,7 +322,7 @@ internal sealed class HumanFlightAdapter
         if (custom != null)
         {
             // Names what the build reached.
-            Log.Info("flight", $"{tag}custom plane: '{custom.Name}' on {planeName}, armour {custom.ArmourNose}/{custom.ArmourTail}/{custom.ArmourLeftWing}/{custom.ArmourRightWing} units x{Flight.CustomPlaneBuild.ArmourUnitScale}, hardpoints {custom.LeftHardpoints}+{custom.RightHardpoints}, engine {custom.Engine} thrust={stats.EnginePower:0.###}{(controller.Nitro.Installed ? " (nitrous injector)" : "")}");
+            Log.Info("flight", $"{tag}custom plane: '{custom.Name}' on {planeName}, armour {custom.ArmourNose}/{custom.ArmourTail}/{custom.ArmourLeftWing}/{custom.ArmourRightWing} units x{Flight.Hangar.CustomPlaneBuild.ArmourUnitScale}, hardpoints {custom.LeftHardpoints}+{custom.RightHardpoints}, engine {custom.Engine} thrust={stats.EnginePower:0.###}{(controller.Nitro.Installed ? " (nitrous injector)" : "")}");
         }
 
         // Every readout this pane draws for its pilot belongs to the controller's own FlightHud,
@@ -595,7 +600,7 @@ internal sealed class HumanFlightAdapter
     /// <summary>Pane <paramref name="pi"/>'s custom-built plane, or null to fly the stock
     /// airframe. Empty on every launch that did not come off the launchscreen, so the scripted
     /// paths (<c>--plane=</c>, <c>--det</c>) never see one.</summary>
-    private Flight.CustomPlaneDef? CustomPlaneFor(int pi) =>
+    private Flight.Hangar.CustomPlaneDef? CustomPlaneFor(int pi) =>
         pi >= 0 && pi < _policy.MenuCustomPlanes.Count ? _policy.MenuCustomPlanes[pi] : null;
 
     public readonly record struct AssemblyState(int MeshInstances, string WhatSuffix,

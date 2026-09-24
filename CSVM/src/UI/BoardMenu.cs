@@ -5,7 +5,7 @@ namespace CSVM.UI;
 
 /// <summary>
 /// The cursor and item list a board carries, engine-free so the selection rules are testable off
-/// engine the way <see cref="CSVM.Flight.PauseState"/> is. Holds no input source of its own:
+/// engine the way <see cref="CSVM.Flight.Modes.PauseState"/> is. Holds no input source of its own:
 /// the board polls its menu owner through <see cref="MenuInput"/> and feeds one frame's result to
 /// <see cref="Handle"/>. Only the owner's input ever arrives here, which is what stops a second
 /// pad steering a menu it does not own.

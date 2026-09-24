@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Effects;
-using CSVM.Flight;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Camera;
 using CSVM.Mech3;
 using CSVM.Session.Objectives;
 using CSVM.Utils;
@@ -206,7 +207,7 @@ public sealed class WeatherRig
     /// <summary>The applied zone's <c>SUNLIGHT_DIFFUSE</c>/<c>SUNLIGHT_AMBIENT</c>, each scaled
     /// by its own authored colour. The authored pair rather than the energies derived from it,
     /// for the reader that needs the light itself: the ground shadow's darkness is the light the
-    /// aircraft blocks (<c>Flight/GroundShadowLaw</c>).</summary>
+    /// aircraft blocks (<c>Flight/Airframe/GroundShadowLaw</c>).</summary>
     public (Vector3 Diffuse, Vector3 Ambient) SunlightRgb { get; private set; } = DefaultSunlightRgb;
 
     /// <summary>The deck's regime for one camera: the tiles' own world-fixed altitude in every

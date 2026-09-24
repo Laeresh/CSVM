@@ -71,7 +71,7 @@ public static class CampaignSnapshot
         string.Format(CultureInfo.InvariantCulture, "Snap_{0}_{1}.PNG", mission, objective);
 
     /// <summary>Requests one zone's photograph through <paramref name="pane"/> (the session hands
-    /// the pilot's <see cref="Flight.DangerZonePhotograph"/>), written into
+    /// the pilot's <see cref="Flight.Modes.DangerZonePhotograph"/>), written into
     /// <paramref name="directory"/> as a pending file scaled to <see cref="Width"/> by
     /// <see cref="Height"/> once the frame lands. Answers the path it will be staged at, or null
     /// when there was no pane to photograph.</summary>

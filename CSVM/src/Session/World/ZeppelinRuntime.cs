@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
-using CSVM.Flight;
+using CSVM.Flight.Ai;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
@@ -312,7 +314,7 @@ public sealed partial class ZeppelinRuntime : Node
     /// airship's own velocity rather than zero. A plain list and NOT
     /// <see cref="AimCandidateSet"/>'s <c>Structures</c>: the only channel by which a structure
     /// becomes selectable, and the pool takes it only while the pilot's selected ordnance carries
-    /// <c>LOCK_ON</c>, which is what that divergence buys (<c>Flight.TargetPool.Rebuild</c>).</summary>
+    /// <c>LOCK_ON</c>, which is what that divergence buys (<c>Flight.Weapons.TargetPool.Rebuild</c>).</summary>
     public void CollectTargetParts(List<AimCandidate> into, int team = AimAssist.WorldTeam)
     {
         foreach (var zep in _live)

@@ -1,6 +1,8 @@
 using System;
 using CSVM.Effects;
-using CSVM.Flight;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Hud;
+using CSVM.Flight.Weapons;
 using CSVM.Session.Roster;
 using CSVM.Utils;
 using Godot;

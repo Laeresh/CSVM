@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using CSVM.Flight;
+using CSVM.Flight.Camera;
 using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
@@ -174,13 +174,13 @@ public sealed partial class Puffer : Node3D
     /// <c>DEVIATION_DISTANCE</c> offset; the vertical and forward halves are untouched. 1 spawns
     /// exactly where the authored cube puts it, and every emitter but the speed cue stays there.
     /// ⚠ Any other value re-scatters this emitter, so write it only from
-    /// <see cref="SpeedCue.LateralSpreadFor"/>, whose remark carries the rule.</summary>
+    /// <see cref="Flight.Hud.SpeedCue.LateralSpreadFor"/>, whose remark carries the rule.</summary>
     internal float LateralSpreadScale { get; set; } = 1f;
 
     /// <summary>An opacity each particle takes at birth and keeps for its life, multiplying its
     /// ramp. Godot's particle holds its own reference to the ramp current when it spawned, so
     /// a host that rewrites the ramp per frame changes only the particles born after the change.
-    /// 1 for every authored emitter; <see cref="Flight.ExhaustSmoke"/> alone writes it.</summary>
+    /// 1 for every authored emitter; <see cref="Flight.Airframe.ExhaustSmoke"/> alone writes it.</summary>
     internal float BirthAlpha { get; set; } = 1f;
 
     /// <summary>The ambience handed in at construction, so a suite can ask WHICH instance an

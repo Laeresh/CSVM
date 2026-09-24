@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using CSVM.Flight;
+using CSVM.Flight.Modes;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.Session.Objectives;
@@ -321,15 +321,15 @@ public sealed partial class ObjectivesHud : Node
     };
 
     // The edge this panel hangs from: the reading box's right, which is the window's own on any
-    // window 16:9 or narrower (Flight.HudMetrics.ReadingBox).
-    private float PanelRight() => Flight.HudMetrics.ReadingBox(_root!).End.X;
+    // window 16:9 or narrower (Flight.Hud.HudMetrics.ReadingBox).
+    private float PanelRight() => Flight.Hud.HudMetrics.ReadingBox(_root!).End.X;
 
     // The window-height ratio, not HudMetrics.Scale's pane-damped form: this readout draws once
     // for the whole window regardless of splitscreen, the same reasoning PerfHud's own override
     // gives for taking the plain ratio instead.
     private float WindowScale()
     {
-        float windowH = GetTree()?.Root?.Size.Y ?? Flight.HudMetrics.ReferenceHeight;
-        return windowH / Flight.HudMetrics.ReferenceHeight;
+        float windowH = GetTree()?.Root?.Size.Y ?? Flight.Hud.HudMetrics.ReferenceHeight;
+        return windowH / Flight.Hud.HudMetrics.ReferenceHeight;
     }
 }

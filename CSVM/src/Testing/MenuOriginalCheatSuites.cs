@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using CSVM.Flight;
+using CSVM.Flight.Hangar;
 using CSVM.Session.Campaign;
 using CSVM.UI;
 using CSVM.UI.Menu;

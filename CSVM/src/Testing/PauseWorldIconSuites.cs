@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using CSVM.Flight;
+using CSVM.Flight.Hud;
+using CSVM.Flight.Modes;
 using CSVM.Mech3;
 using CSVM.Session.Objectives;
 using CSVM.Session.World;

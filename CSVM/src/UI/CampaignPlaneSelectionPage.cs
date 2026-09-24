@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using CSVM.Flight;
 using CSVM.Session.Campaign;
 using CSVM.UI.Menu;
 

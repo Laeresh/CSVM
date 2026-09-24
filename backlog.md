@@ -443,7 +443,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ **Vocabulary, three populations, never one phrase for two:** **`cloudsprite1`/`cloudsprite2`**
   are the `fvol*` clutter scatter (the deck field, world-locked and tiled); **`cloudparent`** are
   discrete world-placed clusters (C1B's 70, C1's 28, C4's 45); and the **plane-local ambient
-  wisps** each chapter's `speed_cue.zrd` emits 60 m ahead of the player (`Flight.SpeedCue`,
+  wisps** each chapter's `speed_cue.zrd` emits 60 m ahead of the player (`Flight.Hud.SpeedCue`,
   `docs/formats/effects.md`) are a third. A claim about one is not evidence about the others, and
   the first two **share their textures**, `--tex-override` on `cloud1.tif`/`cloud2.tif` paints
   both (`SHOT-21`), so separate them by altitude or cluster position, never by texture.
@@ -648,7 +648,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   smoke is its one code-built puffer, a near-black 0.4 m trail per `exhaust%d` marker whose opacity
   charges from the commanded lever running ahead of the live one and decays at 1.5/s
   (`FUN_004afa20`, `FUN_004afbc0`, fed from `FUN_0048e580`; decode in `docs/formats/effects.md`,
-  "Aircraft throttle-rise exhaust"). `Flight.ExhaustSmoke` ports it in place of the borrowed
+  "Aircraft throttle-rise exhaust"). `Flight.Airframe.ExhaustSmoke` ports it in place of the borrowed
   `nitropuffN` puffers and the invented 0.25 threshold gate, which had no counterpart: every
   constant is now decoded and none is left to tune. The decode reproduces both ends CAP-21 bounds,
   a 1/8 step peaking at opacity 0.013 and an idle-to-full slam at 0.356, out 3.9 sim-s later (the
@@ -842,10 +842,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   returns the view to its settled pose (`docs/controls.md`, the right-stick row). The `J` row lists
   only the numpad and the mouse as the inputs whose released position persists, so a pad player
   has no way to park the view off centre. *Evidence:* `CameraController.PadLook`
-  (`CSVM/src/Flight/CameraController.cs:316`) is the chase view's own rigid path, fed from
+  (`CSVM/src/Flight/Camera/CameraController.cs:316`) is the chase view's own rigid path, fed from
   `FlightController`'s `_chaseLook` filter (`FlightController.cs:2268`), and `Chase` resumes the
   instant the filter reads released, whatever `HeadLook.Mode` is. In first person `HeadLook`'s
-  smooth-mode branch (`CSVM/src/Flight/HeadLook.cs:301`) assigns the head target from the
+  smooth-mode branch (`CSVM/src/Flight/Camera/HeadLook.cs:301`) assigns the head target from the
   filtered stick and runs nothing once the stick is back inside `PadAimCentreBand`, so the head
   target stays near the stick's last filtered position there; whether that reads as parked or as
   a stick that never quite centres is unjudged at the controls. *Fix shape:* one rule for both

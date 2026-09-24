@@ -1,5 +1,6 @@
 using System;
-using CSVM.Flight;
+using CSVM.Flight.Camera;
+using CSVM.Flight.Modes;
 using CSVM.UI;
 using Godot;
 

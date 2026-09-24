@@ -51,7 +51,7 @@ The executable decode in [`docs/org/aim-assist.md`](../../docs/org/aim-assist.md
 | Near-parallel interpolation | Native implementation | Godot lerp/snap stability fallback | Benign engine accommodation |
 | Structure population | Curated mission target structures | `DestructibleRegistry` approximation | Not exact; mainly relevant to ground targets |
 
-Code inspected: [`AimAssist.cs`](../../CSVM/src/Flight/AimAssist.cs), the assisted fire path in [`FlightController.cs`](../../CSVM/src/Flight/FlightController.cs), and the candidate collection in [`Projectile.cs`](../../CSVM/src/Flight/Projectile.cs).
+Code inspected: [`AimAssist.cs`](../../CSVM/src/Flight/Weapons/AimAssist.cs), the assisted fire path in [`FlightController.cs`](../../CSVM/src/Flight/Airframe/FlightController.cs), and the candidate collection in [`Projectile.cs`](../../CSVM/src/Flight/Weapons/Projectile.cs).
 
 ## Gun cadence and theoretical TTK
 
@@ -110,7 +110,7 @@ Positive roster overrides can have the opposite effect: dropping an authored bos
 
 ## The hit reaction, and why it is not a cause
 
-The most relevant control-flow question was [`AiModeMachine.NotifyDamage`](../../CSVM/src/Flight/AiModeMachine.cs). A full read of the damage path settles it in the original's favour:
+The most relevant control-flow question was [`AiModeMachine.NotifyDamage`](../../CSVM/src/Flight/Ai/AiModeMachine.cs). A full read of the damage path settles it in the original's favour:
 
 - CSVM rolls `steady_hand_chance` after a hit, and so does the original (`FUN_004b1160`, called at `0x004b9f1e`).
 - On failure the original sets the evade flag at `+0xBA` (`0x004b9f65`) **and** calls the maneuver picker `FUN_004201a0` (`0x004b9ff8`), whose last act is `mode = 1`, the maneuver executor (`0x004208f7`). CSVM does the same.
@@ -124,7 +124,7 @@ The absorbed damage amount is logged but does not affect CSVM's roll. A design-l
 
 ## Other unverified or minor divergences
 
-- [`PlaneCollider.cs`](../../CSVM/src/Flight/PlaneCollider.cs) creates aircraft hitboxes from model triangles using several constants explicitly marked `TUNE` (wing band, tail split, minimum thickness, volume split, and part limits). These are the projectile hit volumes. Original geometric hit resolution is still untraced, so hit-rate parity is not established.
+- [`PlaneCollider.cs`](../../CSVM/src/Flight/Airframe/PlaneCollider.cs) creates aircraft hitboxes from model triangles using several constants explicitly marked `TUNE` (wing band, tail split, minimum thickness, volume split, and part limits). These are the projectile hit volumes. Original geometric hit resolution is still untraced, so hit-rate parity is not established.
 - The exact-square-root intercept and Godot interpolation safeguards are CSVM implementation differences, but both improve numerical stability and are very unlikely to increase TTK.
 - CSVM extends assist to multiple local human panes. This is intentional split-screen support and cannot explain weaker guns.
 - Ground/structure candidate population is an approximation. That can change which object wins when several ground targets overlap the cone, but it does not explain a lone aircraft taking more gunfire.

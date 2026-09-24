@@ -1,5 +1,6 @@
 using System.IO;
-using CSVM.Flight;
+using CSVM.Flight.Camera;
+using CSVM.Flight.Hangar;
 using CSVM.Session.Roster;
 using CSVM.Utils;
 

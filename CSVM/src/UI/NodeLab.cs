@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using CSVM.Flight;
+using CSVM.Flight.Camera;
 using CSVM.Mech3;
 using CSVM.Tooling;
 using CSVM.Utils;

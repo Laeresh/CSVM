@@ -7,7 +7,7 @@ namespace CSVM.Mech3;
 /// The <c>vehicle.json</c> def table read for what a roster spawn needs to know about a block
 /// before an airframe is built: whether the def exists, which <c>mode</c> it resolves through
 /// <c>kind_of</c>, which player airframe node its model is, and whether it derives from that
-/// airframe's base def. <c>Flight.PlaneStats</c> is the full read of one def; this is the
+/// airframe's base def. <c>Flight.Airframe.PlaneStats</c> is the full read of one def; this is the
 /// index over all of them (docs/formats/vehicle.md "<c>mode</c>", docs/org/aiPilot.md).
 /// </summary>
 public sealed class VehicleDefs
@@ -113,7 +113,7 @@ public sealed class VehicleDefs
     }
 
     /// <summary>The player airframe node an AI def's model is built from, resolved the way
-    /// <c>Flight.PlaneStats.LoadForAi</c> wants it named: the first ancestor whose
+    /// <c>Flight.Airframe.PlaneStats.LoadForAi</c> wants it named: the first ancestor whose
     /// <c>p</c>-prefixed twin is a player def (<c>wingman</c> → <c>devastator</c> →
     /// <c>pdevastator</c> → <c>player_pfighter</c>), else the nearest <c>nodename</c> up the chain
     /// mapped the same way (<c>bswingman</c> names <c>fury</c> → <c>pfury</c>). Null for a def

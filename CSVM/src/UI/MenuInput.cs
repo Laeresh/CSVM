@@ -36,7 +36,7 @@ public sealed class MenuInput
     public bool TextEntry;
 
     /// <summary>The gamepad devices this player reads, or null for every connected pad, the same
-    /// binding <see cref="CSVM.Flight.FlightController"/> takes. A joined player has exactly one
+    /// binding <see cref="CSVM.Flight.Airframe.FlightController"/> takes. A joined player has exactly one
     /// (the pad they pressed Start on); <b>player 1 holds every pad nobody has claimed</b>, which
     /// preserves the any-pad fix: phantom joypad devices can occupy the early slots, so binding
     /// player 1 to <c>pads[0]</c> would leave a real controller dead. Idle devices read as zero,

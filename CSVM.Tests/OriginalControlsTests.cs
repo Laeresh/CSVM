@@ -163,7 +163,7 @@ public class OriginalControlsTests
     {
         free = new FreeFlightFeature();
         setup = new PlayerSetupFeature();
-        setup.SetRoster(OriginalPresentation.Roster(Array.Empty<CSVM.Flight.CustomPlaneDef>()));
+        setup.SetRoster(OriginalPresentation.Roster(Array.Empty<CSVM.Flight.Hangar.CustomPlaneDef>()));
         setup.Join(new ScriptedMenuSeat());
         return new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), free, setup, Measure, controls: controls);
     }

@@ -735,7 +735,7 @@ internal static class MenuOriginalSuites
         {
             ctx.Check(applied.Graphics == graphics && applied.Difficulty == "hard"
                 && applied.NearestAfterKill == false && applied.Rumble == false
-                && applied.DefaultView == CSVM.Flight.PilotView.Name(CSVM.Flight.PilotViewMode.Cockpit)
+                && applied.DefaultView == CSVM.Flight.Camera.PilotView.Name(CSVM.Flight.Camera.PilotViewMode.Cockpit)
                 && applied.AutoHeadTurn == true,
                 $"carrying every stepped choice, the targeting setting stepped back off, the rumble turned off, the opening view and the head turn among them ({applied.Graphics}, {applied.Difficulty}, {applied.NearestAfterKill}, {applied.Rumble}, {applied.DefaultView ?? "none"}, {applied.AutoHeadTurn})");
             ctx.Check(applied.MonitorIndex == display.Monitor && applied.Resolution == display.Resolution
@@ -893,7 +893,7 @@ internal static class MenuOriginalSuites
             $"Accept opens the dropdown over the three campaign tiers, inside its window and with no bar ({shell.Options.OpenGameOption}, {shell.Rows.Count})");
         Press(host, seat, Down);
         Press(host, seat, Accept);
-        ctx.Check(shell.Options.DifficultyChoice == CSVM.Flight.Difficulty.Hard && shell.FocusedKey == OriginalOptionsScreen.DifficultyKey,
+        ctx.Check(shell.Options.DifficultyChoice == CSVM.Flight.Hangar.Difficulty.Hard && shell.FocusedKey == OriginalOptionsScreen.DifficultyKey,
             $"and picking the second closes it on Hard ({shell.Options.DifficultyChoice}, {shell.FocusedKey})");
         Press(host, seat, Down);
         Press(host, seat, Accept);
@@ -903,7 +903,7 @@ internal static class MenuOriginalSuites
         // three. One step down wraps onto the first.
         Press(host, seat, Down);
         Press(host, seat, Accept);
-        ctx.Check(shell.Options.DefaultViewChoice == CSVM.Flight.PilotView.Name(CSVM.Flight.PilotViewMode.Cockpit),
+        ctx.Check(shell.Options.DefaultViewChoice == CSVM.Flight.Camera.PilotView.Name(CSVM.Flight.Camera.PilotViewMode.Cockpit),
             $"and a step down wraps onto the list's own first view and picks it ({shell.Options.DefaultViewChoice ?? "none"})");
         Press(host, seat, Down);
         Press(host, seat, Accept);
@@ -918,7 +918,7 @@ internal static class MenuOriginalSuites
         WalkTo(host, seat, shell, OriginalOptionsScreen.GameOptionsCancelKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.Options
-            && shell.Options.DifficultyChoice == CSVM.Flight.Difficulty.Normal && shell.Options.NearestAfterKillChoice == null
+            && shell.Options.DifficultyChoice == CSVM.Flight.Hangar.Difficulty.Normal && shell.Options.NearestAfterKillChoice == null
             && shell.Options.DefaultViewChoice == null && shell.Options.AutoHeadTurnChoice == null,
             $"CANCEL CHANGES lands back on Preferences with every edit dropped ({shell.Screen}, {shell.Options.DifficultyChoice}, {shell.Options.NearestAfterKillChoice}, {shell.Options.DefaultViewChoice ?? "none"}, {shell.Options.AutoHeadTurnChoice})");
         WalkTo(host, seat, shell, OriginalShell.OptionsBackKey);

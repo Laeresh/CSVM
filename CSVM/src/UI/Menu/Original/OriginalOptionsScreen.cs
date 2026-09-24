@@ -308,19 +308,19 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     // The three IDS_DIFFICULTY rows as the campaign selector labels them.
     private static readonly string[] DifficultyWords =
     {
-        CSVM.Flight.Difficulty.Label(CSVM.Flight.Difficulty.Normal),
-        CSVM.Flight.Difficulty.Label(CSVM.Flight.Difficulty.Hard),
-        CSVM.Flight.Difficulty.Label(CSVM.Flight.Difficulty.Hardest),
+        CSVM.Flight.Hangar.Difficulty.Label(CSVM.Flight.Hangar.Difficulty.Normal),
+        CSVM.Flight.Hangar.Difficulty.Label(CSVM.Flight.Hangar.Difficulty.Hard),
+        CSVM.Flight.Hangar.Difficulty.Label(CSVM.Flight.Hangar.Difficulty.Hardest),
     };
 
     // The Default View dropdown's own three items, the words and the order the original's list
-    // carries. They come from CSVM.Flight.PilotView.Selectable and .Label, decoded from uiData 2127
+    // carries. They come from CSVM.Flight.Camera.PilotView.Selectable and .Label, decoded from uiData 2127
     // in crimson.exe (docs/org/menu-inventory.md holds the addresses).
     private static readonly string[] DefaultViewWords =
     {
-        CSVM.Flight.PilotView.Label(CSVM.Flight.PilotView.Selectable[0]),
-        CSVM.Flight.PilotView.Label(CSVM.Flight.PilotView.Selectable[1]),
-        CSVM.Flight.PilotView.Label(CSVM.Flight.PilotView.Selectable[2]),
+        CSVM.Flight.Camera.PilotView.Label(CSVM.Flight.Camera.PilotView.Selectable[0]),
+        CSVM.Flight.Camera.PilotView.Label(CSVM.Flight.Camera.PilotView.Selectable[1]),
+        CSVM.Flight.Camera.PilotView.Label(CSVM.Flight.Camera.PilotView.Selectable[2]),
     };
 
     // The checkbox's two words, in the order its eight-frame strip reads them: index 0 unchecked,
@@ -338,13 +338,13 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     {
         new(DifficultyKey, "Difficulty", _ => "Select the difficulty level for a solo campaign.",
             OriginalRowKind.Dropdown, DifficultyWords,
-            s => CSVM.Flight.Difficulty.Clamp(s._difficulty),
-            (s, i) => s._difficulty = CSVM.Flight.Difficulty.Clamp(i)),
+            s => CSVM.Flight.Hangar.Difficulty.Clamp(s._difficulty),
+            (s, i) => s._difficulty = CSVM.Flight.Hangar.Difficulty.Clamp(i)),
         new(DefaultViewKey, "Default View", _ => "Select your default view.",
             OriginalRowKind.Dropdown, DefaultViewWords,
             s => IndexOfView(s._defaultView),
-            (s, i) => s._defaultView = CSVM.Flight.PilotView.Name(
-                CSVM.Flight.PilotView.Selectable[Math.Clamp(i, 0, CSVM.Flight.PilotView.Selectable.Count - 1)])),
+            (s, i) => s._defaultView = CSVM.Flight.Camera.PilotView.Name(
+                CSVM.Flight.Camera.PilotView.Selectable[Math.Clamp(i, 0, CSVM.Flight.Camera.PilotView.Selectable.Count - 1)])),
         new(AutoHeadTurnKey, "Auto Head Turn",
             _ => "Select to turn your head automatically as your aircraft turns.",
             OriginalRowKind.Radio, NearestAfterKillWords,
@@ -503,7 +503,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private int _keysTab;
     private int _keysTop;
     private string _graphics = CSVM.Utils.GraphicsMode.Default;
-    private int _difficulty = CSVM.Flight.Difficulty.Normal;
+    private int _difficulty = CSVM.Flight.Hangar.Difficulty.Normal;
     // The targeting setting as saved, null while never set, which the consumer reads as off. It is
     // held nullable rather than as the checkbox's own 0/1. A page that never showed it then hands
     // back "never set" instead of writing a choice the player did not make.
@@ -636,7 +636,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     /// <summary>The Voice level the AUDIO page would apply, or null while never set.</summary>
     public int? AudioVoiceChoice => _audioVoice;
 
-    /// <summary>The difficulty tier (<see cref="CSVM.Flight.Difficulty"/>) the Game Options page
+    /// <summary>The difficulty tier (<see cref="CSVM.Flight.Hangar.Difficulty"/>) the Game Options page
     /// would apply.</summary>
     public int DifficultyChoice => _difficulty;
 
@@ -649,7 +649,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     public bool? RumbleChoice => _rumble;
 
     /// <summary>The opening view the Game Options page would apply, a
-    /// <see cref="CSVM.Flight.PilotView.Name"/> word, or null while nothing has been saved and no
+    /// <see cref="CSVM.Flight.Camera.PilotView.Name"/> word, or null while nothing has been saved and no
     /// row has been touched.</summary>
     public string? DefaultViewChoice => _defaultView;
 
@@ -954,7 +954,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     {
         var saved = _options?.Invoke();
         _graphics = saved?.GraphicsMode ?? CSVM.Utils.GraphicsMode.Default;
-        _difficulty = CSVM.Flight.Difficulty.Parse(saved?.Difficulty) ?? CSVM.Flight.Difficulty.Normal;
+        _difficulty = CSVM.Flight.Hangar.Difficulty.Parse(saved?.Difficulty) ?? CSVM.Flight.Hangar.Difficulty.Normal;
         _nearestAfterKill = saved?.NearestAfterKill;
         _rumble = saved?.Rumble;
         _defaultView = saved?.DefaultView;
@@ -974,7 +974,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     // page writes the ones it shows and hands the rest back as ReadSavedOptions read them. That
     // keeps Launcher.ApplyOptions the options file's one writer.
     private OptionsApplyExit AppliedOptions() =>
-        new(_graphics, CSVM.Flight.Difficulty.Word(_difficulty),
+        new(_graphics, CSVM.Flight.Hangar.Difficulty.Word(_difficulty),
             _monitorIndex, _resolution, _displayMode, _vsync,
             _audioMaster, _audioMusic, _audioEffects, _audioVoice, _nearestAfterKill, _rumble,
             _defaultView, _autoHeadTurn);
@@ -1493,10 +1493,10 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     // not carry, and a never-set field, read as Chase, which is what an unset opening view flies.
     private static int IndexOfView(string? word)
     {
-        var mode = CSVM.Flight.PilotView.Parse(word ?? string.Empty) ?? CSVM.Flight.PilotViewMode.Chase;
-        for (int i = 0; i < CSVM.Flight.PilotView.Selectable.Count; i++)
+        var mode = CSVM.Flight.Camera.PilotView.Parse(word ?? string.Empty) ?? CSVM.Flight.Camera.PilotViewMode.Chase;
+        for (int i = 0; i < CSVM.Flight.Camera.PilotView.Selectable.Count; i++)
         {
-            if (CSVM.Flight.PilotView.Selectable[i] == mode)
+            if (CSVM.Flight.Camera.PilotView.Selectable[i] == mode)
             {
                 return i;
             }

@@ -129,7 +129,7 @@ Instant Action and multiplayer stub amounts to. Two parser rules are the origina
 keep the shipped data honest: blocks are read `OBJECTIVE1`, `OBJECTIVE2` and stop at the first
 missing number, and every directive is found by exact name over the block's flat alternating
 list, so a truncated or misspelled key lands in no field and stays dead. The four target
-directives and `SET_HELP_LABEL` read `Flight/ObjectiveTarget.cs` values, where a nested list is ONE
+directives and `SET_HELP_LABEL` read `Flight/Weapons/ObjectiveTarget.cs` values, where a nested list is ONE
 path keyed `parent/child`. Format and decode: [../formats/objectives.md](../formats/objectives.md).
 
 ## src/Session/Objectives/ObjectiveSites.cs
@@ -138,7 +138,7 @@ their own record authors: `CollectFlagged` runs once per `TargetFlag`, over `tar
 `objective` half (the Enemy cycle) and then its `other_target` half (the Non-Aircraft cycle), the
 curated list admitting a mission's chosen structures and no other destructible. A campaign director's script edits both with
 `ADD_`/`REMOVE_`; the director-free constructor is what Instant Action and the multiplayer modes
-take, their table unedited. World SITES only, one `Flight/ObjectiveSite.cs` per `ObjectiveTarget.Key`, re-read every frame so
+take, their table unedited. World SITES only, one `Flight/Weapons/ObjectiveSite.cs` per `ObjectiveTarget.Key`, re-read every frame so
 a site tracks a moving node and reads `Live` off its `DestructibleRegistry` state; a roster block
 that flags itself rides its own aeroplane. Bound by `GameSession`; [../org/targeting.md](../org/targeting.md).
 
@@ -158,17 +158,17 @@ against the world's gate geometry, with `Load` answering null when a mission arm
 file's `objective_numbers` and `nosnapshot` ride on each armed zone and `TryZone` answers them: that
 number is the zone's completed-objective bit and names the scrapbook photograph it writes. A zone is
 a route ribbon plus a material-matched pair of gate polygons, crossed by a segment passing inside
-each in either order, the rule `Flight/StuntMission.cs` reads off `ia.json`'s zone list; the two differ by authoring surface, not by mechanism. Crossings are tracked per human, each with its own previous position.
+each in either order, the rule `Flight/Modes/StuntMission.cs` reads off `ia.json`'s zone list; the two differ by authoring surface, not by mechanism. Crossings are tracked per human, each with its own previous position.
 Gate decode: [../formats/missions.md](../formats/missions.md).
 
 ## src/Session/Campaign/CampaignSnapshot.cs
-The campaign Danger Zone photograph through `Flight/DangerZonePhotograph.cs`, written into the flying profile's
+The campaign Danger Zone photograph through `Flight/Modes/DangerZonePhotograph.cs`, written into the flying profile's
 directory under the `Snap_<mission>_<objective>` name a capture row resolves against. `Window` frames the pane's
 centred 4:3 part, a wider pane's flanks dropped, and the file is the 640x480 every retail photograph is. `Stage`
 requests one zone's still on the crossing frame, and a worker writes it under a `.PN_` pending name when the
 frame lands. `Commit` sweeps ids 10 to 31 at mission end, keeping them under their scrapbook names on a win and
 deleting them on a loss (the original's two-step); a still landing after the sweep takes the verdict left for it.
-`Flight/StuntCapture.cs` is the other camera: an Instant Action run has no mission slot or objective to be named
+`Flight/Modes/StuntCapture.cs` is the other camera: an Instant Action run has no mission slot or objective to be named
 by. Rows and gate: [../formats/campaign-screens.md](../formats/campaign-screens.md).
 
 ## src/Session/Objectives/ObjectiveGraph.cs
@@ -286,7 +286,7 @@ One campaign mission's scripted-path vehicles. `Place` binds a spawned body to i
 `Release` is what `START_TAXI` calls, and `Step` drives each follower and writes its pose onto the
 body, or hands it to the caller's `setPose` where a simulation of its own owns that pose. A
 finished vehicle raises its handoff callback with the speed the path left it at and leaves the
-registry. The following law is `Flight/PathFollower.cs`, the route `Mech3/ScriptedPath.cs`.
+registry. The following law is `Flight/Ai/PathFollower.cs`, the route `Mech3/ScriptedPath.cs`.
 
 ## src/Session/World/SurfaceVehicleRuntime.cs
 Builds and steps a mission's surface vehicles, the `mode ship` blocks (`patrolboat`, `t_truck`)
@@ -294,9 +294,9 @@ with no player airframe: each is a copy of the chapter's library-root model unde
 at its authored spot, its height read off the water, indexed on the world runtime so the chapter's
 definitions anchor on it and register its destructible pool. `GameSession` builds one lazily for
 the roster phase and the generator block; `SessionSimulation` steps it after the generators that
-may launch another hull. A plane reads it as `Flight/ISurfaceVehicles.cs`. `CollectVehicles` offers every hull to the aim assist's vehicle list
+may launch another hull. A plane reads it as `Flight/Weapons/ISurfaceVehicles.cs`. `CollectVehicles` offers every hull to the aim assist's vehicle list
 ([../org/aim-assist.md](../org/aim-assist.md)); `Projectiles`/`Weapons`/`Voices` arm and voice its gun on the attack radius `AttackRadiusOf` resolves in the engine's own write order, the block's and net's slot over the def's `attack` over the decoded 400 m default and never a zero reach ([../org/aiPilot.md](../org/aiPilot.md)); `Strings` names it, slot 20 into `MarkerName`.
-Read `Flight/SurfaceVehicle.cs` next.
+Read `Flight/Ai/SurfaceVehicle.cs` next.
 
 ## src/Session/World/CutsceneController.cs
 The host a story mission's intro or landings definition raises its `CALLBACK` codes to, and the
@@ -345,7 +345,7 @@ Read `AiGeneratorRuntime.cs` for what drives it.
 
 ## src/Session/Objectives/NetTrailerTargets.cs
 Resolves a patrol net's TRAILER name to a live position supplier, the session half of "an anchored
-net rides its target", so `Flight/AiNetFollower` can do the arithmetic knowing nothing about
+net rides its target", so `Flight/Ai/AiNetFollower` can do the arithmetic knowing nothing about
 players or world nodes. `For(net)` answers only the anchored-and-named shape; the other shipped
 shapes get null, which means "fly the authored coordinates". `player` is the scripted player's rig
 and anything else a world node through the same lookup `ZeppelinRuntime` uses, while `OffsetOf` is
@@ -464,7 +464,7 @@ the prop choreography, and on a human rig the canopy holes, whose `PLAYER_1ST_PE
 and handed to their runtime sealed, and both pre-warm their emitters after the bind so a first burst
 finds its puffers already made; `EnsureWorldEffects` hands the effects runtime the world's `WorldLights` as a contributor, so a burst's authored `LIGHT_STATE` renders on both presentations. `BeginFlightCrashRuntime` opens the crash build as a handle a caller
 steps a phase at a time (`CrashRigQueue.cs`), where the pre-warm itself repeats a slice at a time so a rig's two hundred emitters never
-land on one frame, and `BuildFlightCrashRuntime` is the one-call form. The names it binds are `Flight/EffectCatalogue.cs`; the slot mechanism is `Mech3/TemplateStage.cs`.
+land on one frame, and `BuildFlightCrashRuntime` is the one-call form. The names it binds are `Flight/Airframe/EffectCatalogue.cs`; the slot mechanism is `Mech3/TemplateStage.cs`.
 
 ## src/Session/World/WeatherRig.cs
 Applies the flown mission's weather, driving each rig's skydome, whiteout, deck regime and zone gate every frame, plus the one session-wide `ObjectZoneGate.cs` pass; the whiteout is one pane-filling overlay per rig, carrying the cloud band and the fog-volume curtain on `HudLayers.Whiteout`, under that pane's own cockpit pass, so the window whites out and the interior stays clear.
@@ -479,7 +479,7 @@ pushes the fog range out, which the sun's shadow distance follows. `SunlightRgb`
 ## src/Session/Objectives/ObjectZoneGate.cs
 The per-object half of the zone gate, ticked by `WeatherRig` over the session's aircraft and
 zeppelins. Each frame an object's merged world extent is judged against the cloud band's midpoint
-(`Flight/Weather.cs`'s `ObjectZone`) and its meshes move onto that zone's `Mech3/ZoneGate.cs` layer,
+(`Flight/Airframe/Weather.cs`'s `ObjectZone`) and its meshes move onto that zone's `Mech3/ZoneGate.cs` layer,
 so a camera on the far side of the band does not draw it at all, which is the original's per-object
 zone assignment plus its camera zone gate. The extent is measured once per root because an airframe
 is rigid, and the walk takes whatever hangs under it, so an effect parented to an aircraft rides

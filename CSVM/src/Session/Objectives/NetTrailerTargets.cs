@@ -8,7 +8,7 @@ namespace CSVM.Session.Objectives;
 
 /// <summary>
 /// Turns a patrol net's TRAILER name into a live position supplier, so
-/// <see cref="Flight.AiNetFollower"/> can do the offset arithmetic knowing nothing
+/// <see cref="Flight.Ai.AiNetFollower"/> can do the offset arithmetic knowing nothing
 /// about players or world nodes. Detail on the lazy-once resolve: see the private
 /// <c>Position</c> method's own comment.
 /// ⚠ An anchored net resolves to the FIRST rig in split play, so it matches single player. Do not
@@ -34,7 +34,7 @@ public sealed class NetTrailerTargets
         _worldNode = worldNode;
     }
 
-    /// <summary>The supplier to hand <see cref="Flight.AiNetFollower"/> for this net, or null when
+    /// <summary>The supplier to hand <see cref="Flight.Ai.AiNetFollower"/> for this net, or null when
     /// the net is not anchored (no trailer, no attach node, or a bare index with no name, the
     /// three shipped shapes that carry no target). Null means "fly the authored coordinates",
     /// which is also what the supplier returning null on a given frame means.</summary>
@@ -55,7 +55,7 @@ public sealed class NetTrailerTargets
     /// overlay's read of the same offset the followers fly. Zero for an unanchored net
     /// or an unresolved target.</summary>
     public Vector3 OffsetOf(AiNet net) =>
-        Flight.AiNetFollower.TrailerOffset(net, For(net)?.Invoke());
+        Flight.Ai.AiNetFollower.TrailerOffset(net, For(net)?.Invoke());
 
     private Vector3? Position(string name)
     {

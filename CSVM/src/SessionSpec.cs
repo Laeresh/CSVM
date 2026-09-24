@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using CSVM.Flight;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Hangar;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
@@ -74,7 +76,7 @@ public enum EnhancedPasses
 /// <c>Count</c> is the entry's <c>n=</c>, so one entry stands for a whole squadron rather than a
 /// plane. <c>Team</c> is its <c>team=</c>, and it is the only way two CLI planes can be put on the
 /// SAME side: a spawn that names none takes its own banded id through
-/// <see cref="Flight.AimAssist.TeamOfPilot"/>, which makes every CLI plane hostile to every other.
+/// <see cref="Flight.Weapons.AimAssist.TeamOfPilot"/>, which makes every CLI plane hostile to every other.
 /// <c>Pos</c> overrides the squadron's placement outright, in world metres.</summary>
 public readonly record struct AiPlaneEntry(string Plane, string? Net = null, int? Accent = null,
     string? Def = null, int? Team = null, int Count = 1, Vector3? Pos = null);
@@ -313,7 +315,7 @@ public sealed record SessionSpec
     public bool NoFog { get; private set; }
 
     /// <summary>Draw the cockpit interior in a world of its own with the camera and the panel at
-    /// the origin (<see cref="Flight.CockpitOverlay"/>) instead of at chapter-scale world
+    /// the origin (<see cref="Flight.Hud.CockpitOverlay"/>) instead of at chapter-scale world
     /// coordinates under the plane, where its dial faces jitter. On by default;
     /// <c>--no-cockpit-pass</c> draws the interior in the main world for comparison.</summary>
     public bool CockpitPass { get; private set; } = true;
@@ -372,7 +374,7 @@ public sealed record SessionSpec
     public int AnimLod { get; private set; } = AnimRuntime.HighLod;
     public string? DestroyName { get; private set; }
     /// <summary><c>--crash[=frame]</c>: the fixed sim frame (<see cref="Utils.GameClock.Frame"/>)
-    /// at which every player's <see cref="Flight.FlightController.DebugForceCrash"/> fires, the
+    /// at which every player's <see cref="Flight.Airframe.FlightController.DebugForceCrash"/> fires, the
     /// only headless trigger for the per-player crash rig (no live collision analog exists).
     /// Null when the flag was absent.</summary>
     public int? CrashFrame { get; private set; }
@@ -458,7 +460,7 @@ public sealed record SessionSpec
     /// <summary><c>--ai-targeting=&lt;aircraft-first|decoded&gt;</c>: whether both AI pickers rank
     /// live enemy aircraft ahead of every turret and structure candidate, which is the default.
     /// The other word runs the decoded picker's own order, which has no class priority
-    /// (<see cref="Flight.AiTargetRanking.AircraftFirst"/>). The class biases are spent either
+    /// (<see cref="Flight.Ai.AiTargetRanking.AircraftFirst"/>). The class biases are spent either
     /// way.</summary>
     public bool AircraftFirstTargeting { get; private set; } = true;
 
@@ -470,9 +472,9 @@ public sealed record SessionSpec
     /// <summary><c>--difficulty=&lt;normal|hard|hardest&gt;</c> (or <c>game.difficulty</c>): the
     /// setting a hostile spawn's armour and health scale by (0.75 / 1.0 / 1.25) and its pilot's
     /// nine skill ratings shift by (-2 / 0 / +2), both from one k
-    /// (<see cref="CSVM.Flight.Difficulty"/>). Defaults to Normal, which is what the executable's
+    /// (<see cref="CSVM.Flight.Hangar.Difficulty"/>). Defaults to Normal, which is what the executable's
     /// own settings registration writes.</summary>
-    public int Difficulty { get; private set; } = CSVM.Flight.Difficulty.Normal;
+    public int Difficulty { get; private set; } = CSVM.Flight.Hangar.Difficulty.Normal;
 
     /// <summary>True when <c>--difficulty=</c> named a tier this parser took. The flag outranks
     /// the saved option (<see cref="WithSavedDifficulty"/>), and a flag whose word was refused
@@ -616,7 +618,7 @@ public sealed record SessionSpec
     public float? Yaw { get; private set; }
     public float? Pitch { get; private set; }
     /// <summary><b>Resolved.</b> The <c>--view=</c> numpad digit (0 = chase;
-    /// <see cref="Flight.CameraController.PinnedBackView"/> = the look-behind, <c>--view=back</c>).
+    /// <see cref="Flight.Camera.CameraController.PinnedBackView"/> = the look-behind, <c>--view=back</c>).
     /// The numpad views orbit a FLYING plane, so one asked for outside flight is dropped.</summary>
     public int View { get; private set; }
     /// <summary><b>Resolved.</b> The <c>--view=</c> SELECTED view mode, <c>chase</c> (the default),
@@ -624,7 +626,7 @@ public sealed record SessionSpec
     /// different things: a numpad digit is a momentary pose held for the run, this is the view the
     /// pilot flies in and the one the cycle key changes. Dropped outside flight, like
     /// <see cref="View"/>.</summary>
-    public Flight.PilotViewMode ViewMode { get; private set; }
+    public Flight.Camera.PilotViewMode ViewMode { get; private set; }
     /// <summary>Whether <see cref="ViewMode"/> came from a <c>--view=</c> naming a mode rather than
     /// from the default. Held because Chase is both the default and a nameable mode, so the value
     /// alone cannot say whether the command line asked for it. That matters because
@@ -632,7 +634,7 @@ public sealed record SessionSpec
     public bool ViewModeExplicit { get; private set; }
     /// <summary>Whether the pilot's head turns with the aircraft in the cockpit, as the options
     /// file has it. It is null where never set, which leaves the <c>headLook.autohead</c> config
-    /// key deciding (<see cref="Flight.FlightController.AutoHeadTurn"/>). Dropped under
+    /// key deciding (<see cref="Flight.Airframe.FlightController.AutoHeadTurn"/>). Dropped under
     /// <c>--det</c> like every other saved option.</summary>
     public bool? AutoHeadTurn { get; private set; }
     /// <summary>The <c>--look=x,y</c> right-stick deflection held for the whole
@@ -1191,7 +1193,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--canopy-holes="))
             {
                 s.CanopyHoles = Math.Clamp(int.Parse(arg["--canopy-holes=".Length..]),
-                    1, Flight.CanopyHoleCue.HoleCount);
+                    1, Flight.Hud.CanopyHoleCue.HoleCount);
             }
             // An unknown word keeps the default rather than picking a policy, the same rule
             // --difficulty= follows. A misspelling must not quietly change what the AI fights.
@@ -1213,7 +1215,7 @@ public sealed record SessionSpec
             // Hardest because a name was misspelled is a balance change nobody asked for.
             else if (arg.StartsWith("--difficulty="))
             {
-                if (Flight.Difficulty.Parse(arg["--difficulty=".Length..]) is { } tier)
+                if (Flight.Hangar.Difficulty.Parse(arg["--difficulty=".Length..]) is { } tier)
                 {
                     s.Difficulty = tier;
                     s.DifficultyExplicit = true;
@@ -1454,7 +1456,7 @@ public sealed record SessionSpec
                 string want = arg["--view=".Length..];
                 // The selected modes are checked first: they are names, so they cannot collide
                 // with a digit or with 'back', and a numpad digit means the other concept.
-                if (Flight.PilotView.Parse(want) is { } mode)
+                if (Flight.Camera.PilotView.Parse(want) is { } mode)
                 {
                     s.ViewMode = mode;
                     s.ViewModeExplicit = true;
@@ -1561,12 +1563,12 @@ public sealed record SessionSpec
     /// <summary>The saved difficulty option folded in, the rule the saved graphics mode follows:
     /// the <c>--difficulty=</c> flag beats the saved word, and a <c>--det</c> run reads no saved
     /// option at all, since options.json is one machine's state and a deterministic run must not
-    /// depend on it. A word <see cref="CSVM.Flight.Difficulty.Parse"/> refuses, or null, changes
+    /// depend on it. A word <see cref="CSVM.Flight.Hangar.Difficulty.Parse"/> refuses, or null, changes
     /// nothing. Applied per launch rather than once per process, so a tier saved on an Options
     /// screen reaches the next flight without a restart.</summary>
     public SessionSpec WithSavedDifficulty(string? savedWord)
     {
-        if (DifficultyExplicit || Det || CSVM.Flight.Difficulty.Parse(savedWord) is not { } saved)
+        if (DifficultyExplicit || Det || CSVM.Flight.Hangar.Difficulty.Parse(savedWord) is not { } saved)
         {
             return this;
         }
@@ -1584,14 +1586,14 @@ public sealed record SessionSpec
 
     /// <summary>The saved opening view folded in, on the difficulty's own rules with <c>--view=</c>
     /// in the flag's place. A command line naming a mode beats the saved word. A word
-    /// <see cref="CSVM.Flight.PilotView.Parse"/> refuses, or null, changes nothing, and a
+    /// <see cref="CSVM.Flight.Camera.PilotView.Parse"/> refuses, or null, changes nothing, and a
     /// <c>--det</c> run reads no saved option. Not folded outside <see cref="Fly"/>, since the two
     /// first-person views sit on a flown aircraft's camera and the other modes have cameras of
     /// their own. It runs after <c>Validate</c>, so it keeps that rule rather than warning.</summary>
     public SessionSpec WithSavedDefaultView(string? savedWord)
     {
         if (ViewModeExplicit || Det || !Fly
-            || CSVM.Flight.PilotView.Parse(savedWord ?? string.Empty) is not { } saved)
+            || CSVM.Flight.Camera.PilotView.Parse(savedWord ?? string.Empty) is not { } saved)
         {
             return this;
         }
@@ -1658,11 +1660,11 @@ public sealed record SessionSpec
     {
         if (string.Equals(s, "back", StringComparison.OrdinalIgnoreCase))
         {
-            return Flight.CameraController.PinnedBackView;
+            return Flight.Camera.CameraController.PinnedBackView;
         }
         if (string.Equals(s, "flyby", StringComparison.OrdinalIgnoreCase))
         {
-            return Flight.CameraController.PinnedFlybyView;
+            return Flight.Camera.CameraController.PinnedFlybyView;
         }
         if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n)
             && n >= 1 && n <= 9 && n != 5)
@@ -1951,11 +1953,11 @@ public sealed record SessionSpec
             View = 0;
         }
         // Same rule for the two first-person modes: they sit on a flown aircraft's camera.
-        if (ViewMode != Flight.PilotViewMode.Chase && !Fly)
+        if (ViewMode != Flight.Camera.PilotViewMode.Chase && !Fly)
         {
-            Warn("core", $"--view={Flight.PilotView.Name(ViewMode)} is a flight camera; "
+            Warn("core", $"--view={Flight.Camera.PilotView.Name(ViewMode)} is a flight camera; "
                          + "ignoring it outside --fly/--stunt");
-            ViewMode = Flight.PilotViewMode.Chase;
+            ViewMode = Flight.Camera.PilotViewMode.Chase;
         }
         // An unknown surface name would otherwise search for an id no collider can carry and
         // report it missing, which reads as a map fact rather than a typo.

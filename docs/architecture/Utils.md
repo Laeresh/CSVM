@@ -121,7 +121,7 @@ site vocabulary, the seeded call sites and the attribution terms a record carrie
 
 ## src/Utils/PaneReadback.cs
 One frame of a viewport read back without stalling the frame that asks: the Danger Zone camera's
-own viewport (`Flight/DangerZonePhotograph.cs`), a pilot's pane where no frames draw, and the
+own viewport (`Flight/Modes/DangerZonePhotograph.cs`), a pilot's pane where no frames draw, and the
 screenshot key's frame. A synchronous `GetImage` plus a PNG encode of a 5120x1440 pane costs the
 frame that runs them over a second. The request copies the viewport's render target through
 `RenderingDevice.TextureGetDataAsync`, whose callback arrives after the device's frame queue, and

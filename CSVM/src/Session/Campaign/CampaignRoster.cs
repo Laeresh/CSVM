@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
-using CSVM.Flight;
+using CSVM.Flight.Ai;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.InstantAction;
 using CSVM.Session.Roster;
@@ -101,7 +102,7 @@ public sealed class RosterSpawnPlan
 
     /// <summary>The roster's own <c>ace</c> flag (slot 67): the block a mission script singles
     /// out. Its skill ratings are exempt from the difficulty offset
-    /// (<see cref="CSVM.Flight.Difficulty.SkillRatingForSpawn"/>) and its kill goes to the
+    /// (<see cref="CSVM.Flight.Hangar.Difficulty.SkillRatingForSpawn"/>) and its kill goes to the
     /// debrief's starred tally (docs/org/debrief.md#what-the-tallies-count).</summary>
     public bool Ace { get; init; }
 

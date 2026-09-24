@@ -33,7 +33,7 @@ public static class OriginalRosters
 
     /// <summary>The roster both presentations pick from: the eleven stock airframes, then the
     /// saved customs, each flying its airframe's stock node.</summary>
-    public static IReadOnlyList<MenuAircraft> Roster(IReadOnlyList<CSVM.Flight.CustomPlaneDef> customs)
+    public static IReadOnlyList<MenuAircraft> Roster(IReadOnlyList<CSVM.Flight.Hangar.CustomPlaneDef> customs)
     {
         var stock = new List<(string Name, string Node)>(Airframes.Count);
         foreach (var airframe in Airframes)

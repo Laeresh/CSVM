@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using CSVM.Flight;
+using CSVM.Flight.Airframe;
 using CSVM.Session.World;
 
 namespace CSVM.Session.Roster;

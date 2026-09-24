@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Threading;
 using CSVM;
-using CSVM.Flight;
 using CSVM.Mech3;
 using Godot;
 using Xunit;

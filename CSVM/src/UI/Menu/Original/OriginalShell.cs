@@ -315,10 +315,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     private readonly BoardArt _activePointer;
     private readonly BoardArt _passivePointer;
     private readonly ControlsFeature? _controls;
-    private readonly CSVM.Flight.CustomPlaneStore? _planes;
+    private readonly CSVM.Flight.Hangar.CustomPlaneStore? _planes;
     // The stock loadouts reader, shared. The campaign opens over it, the Instant Action module
     // holds it, and the per-seat aircraft screen reads a stock fit's ratings off it.
-    private readonly Func<CSVM.Flight.StockLoadouts?>? _stock;
+    private readonly Func<CSVM.Flight.Weapons.StockLoadouts?>? _stock;
     private readonly CampaignLayout _campaignLayout;
     private readonly InstantActionFeature _instantAction;
     // The screen modules this shell stands over, each asked which screens it owns. One dispatch
@@ -360,10 +360,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         IReadOnlyList<OriginalChapter>? chapters = null,
         InstantActionFeature? instantAction = null,
         HangarFeature? hangar = null,
-        CSVM.Flight.CustomPlaneStore? planes = null,
+        CSVM.Flight.Hangar.CustomPlaneStore? planes = null,
         CampaignFeature? campaign = null,
         Func<CSVM.Session.Campaign.CampaignProfileStore>? profiles = null,
-        Func<CSVM.Flight.StockLoadouts?>? stock = null,
+        Func<CSVM.Flight.Weapons.StockLoadouts?>? stock = null,
         string? dataRoot = null,
         // Reads the saved options the Options screen shows back; null opens it on the defaults,
         // which is what an engine-free test wants. The shell never writes them.
@@ -1696,7 +1696,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
 
     (float X, float Y)? IOriginalScreenHost.Pointer => _pointer;
 
-    CSVM.Flight.CustomPlaneStore? IOriginalScreenHost.CampaignPlanes => Campaign.Planes;
+    CSVM.Flight.Hangar.CustomPlaneStore? IOriginalScreenHost.CampaignPlanes => Campaign.Planes;
 
     CSVM.Mech3.UiStrings IOriginalScreenHost.MenuStrings => MenuStrings;
 

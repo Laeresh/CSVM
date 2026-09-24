@@ -26,13 +26,13 @@ public readonly record struct AirframeSwapCode(int Code, string Def, string Plan
 /// is null only where the host has no rigs bound, which is a session with no aircraft to swap.
 /// </summary>
 public readonly record struct AirframeSwapOrder(AirframeSwapCode Airframe, string? CaptureRoot,
-    Flight.PlayerRig? Owner = null);
+    Flight.Camera.PlayerRig? Owner = null);
 
 /// <summary>What one raised swap did: whether an aircraft was replaced at all, and the aircraft the
 /// swap took out of the world (967's capture, null for the other two codes and for a root that
 /// resolved to nothing). ⚠ The caller must hand <c>Hidden</c> back to whatever else is holding that
 /// aircraft out of play, or a cutscene's own reveal puts it back in front of the player.</summary>
-public readonly record struct AirframeSwapResult(bool Swapped, Flight.FlightController? Hidden);
+public readonly record struct AirframeSwapResult(bool Swapped, Flight.Airframe.FlightController? Hidden);
 
 /// <summary>What one mid-mission airframe swap replaces on a player's rig: the planes.zbd node to
 /// build, and the flight state the replacement starts in, lifted off the aircraft being left.
@@ -48,7 +48,7 @@ public readonly record struct AirframeSwapResult(bool Swapped, Flight.FlightCont
 /// null keeps the stock one.</summary>
 internal sealed record AirframeSwapRequest(
     string PlaneNode, FlightStart Start, Mech3.PaintScheme? Scheme = null, bool ShippedSkins = false,
-    Flight.CustomPlaneDef? Build = null);
+    Flight.Hangar.CustomPlaneDef? Build = null);
 
 /// <summary>
 /// The three <c>CALLBACK</c> codes that hand the player a different airframe in mid mission, and

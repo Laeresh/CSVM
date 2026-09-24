@@ -1,7 +1,12 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Effects;
-using CSVM.Flight;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Camera;
+using CSVM.Flight.Hangar;
+using CSVM.Flight.Hud;
+using CSVM.Flight.Modes;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.World;
 using CSVM.UI;
@@ -33,15 +38,15 @@ internal sealed class FlightRosterPolicy
     public int? AiAttackSkill { get; init; }
     public bool AiAttackSkillExplicit { get; init; }
 
-    /// <summary>The session difficulty (<see cref="CSVM.Flight.Difficulty"/>), which scales enemy
+    /// <summary>The session difficulty (<see cref="CSVM.Flight.Hangar.Difficulty"/>), which scales enemy
     /// armour and health at spawn and nothing else. An Instant Action wave's skill overrides it per
     /// spawn through <see cref="AiSpawn.Difficulty"/>.</summary>
-    public int Difficulty { get; init; } = CSVM.Flight.Difficulty.Normal;
-    /// <summary>The saved targeting setting (<see cref="CSVM.Flight.TargetSelection.NearestAfterKill"/>),
+    public int Difficulty { get; init; } = CSVM.Flight.Hangar.Difficulty.Normal;
+    /// <summary>The saved targeting setting (<see cref="CSVM.Flight.Weapons.TargetSelection.NearestAfterKill"/>),
     /// off by default, which is the decoded head rule.</summary>
     public bool NearestAfterKill { get; init; }
     /// <summary>The saved automatic head turn
-    /// (<see cref="CSVM.Flight.FlightController.AutoHeadTurn"/>), null where never set, which
+    /// (<see cref="CSVM.Flight.Airframe.FlightController.AutoHeadTurn"/>), null where never set, which
     /// leaves the <c>headLook.autohead</c> config key deciding.</summary>
     public bool? AutoHeadTurn { get; init; }
     public bool AutoFire { get; init; }

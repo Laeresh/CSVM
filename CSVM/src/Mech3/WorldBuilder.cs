@@ -234,7 +234,7 @@ public sealed class WorldBuilder
     /// a <see cref="GameZ"/> so it needs no built scene and is testable off-engine.
     /// ⚠ Read this before the horizon build. Three chapters ship a <c>zone2</c> that is a bare
     /// marker, so requesting it renders no sky at all; the selection rule is
-    /// <c>Flight.WeatherState.ResolveZone</c>.</summary>
+    /// <c>Flight.Airframe.WeatherState.ResolveZone</c>.</summary>
     public static IReadOnlyList<HorizonZone> HorizonZonesOf(GameZ gamez)
     {
         var zones = new List<HorizonZone>();

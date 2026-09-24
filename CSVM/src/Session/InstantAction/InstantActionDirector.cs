@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using CSVM.Flight;
+using CSVM.Flight.Ai;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Camera;
+using CSVM.Flight.Modes;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Objectives;
 using CSVM.Session.Roster;
@@ -206,7 +210,7 @@ public sealed class InstantActionDirector
                 var ace = inputs.Spawn(new AiSpawn(aceNode, sp.Position, sp.Position + fwd, pilot,
                     ia.Def.AceLivery, InstantActionRuntime.EnemyTeam, Inert: false,
                     ShippedSkins: true, AttackRating: rating, PilotName: ia.Def.AceName,
-                    Difficulty: Flight.Difficulty.Parse(ia.Def.AceSkill)));
+                    Difficulty: Flight.Hangar.Difficulty.Parse(ia.Def.AceSkill)));
                 inputs.RegisterVoice(ace, ia.Def.AceAccentId, rating, rating);
                 _ace = ace;
                 InstantActionRuntime.ApplyActorVolumes(pilot.Machine);
@@ -338,7 +342,7 @@ public sealed class InstantActionDirector
                             Vector3.Forward, pilot, waveScheme, InstantActionRuntime.EnemyTeam,
                             Inert: true, ShippedSkins: waveScheme == null, AttackRating: rating,
                             PilotName: wave.EnemyName,
-                            Difficulty: Flight.Difficulty.Parse(wave.EnemySkill)));
+                            Difficulty: Flight.Hangar.Difficulty.Parse(wave.EnemySkill)));
                         if (enemy == null)
                         {
                             continue;

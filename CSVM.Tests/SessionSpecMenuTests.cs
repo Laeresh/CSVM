@@ -360,10 +360,10 @@ public class SessionSpecMenuTests
     [Fact]
     public void AMenuLaunchCarriesOneFitPerPane()
     {
-        var mine = new Flight.LoadoutChoice();
+        var mine = new Flight.Weapons.LoadoutChoice();
         mine.SetPylon(1, "wep_14");
         var spec = SessionSpec.FromMenu(Cli(), "C4", new[] { "player_fury", "player_bhawk" },
-            MenuMode.Free, iaDef: null, loadouts: new Flight.LoadoutChoice?[] { mine, null });
+            MenuMode.Free, iaDef: null, loadouts: new Flight.Weapons.LoadoutChoice?[] { mine, null });
 
         Assert.Equal(2, spec.MenuLoadouts.Count);
         Assert.Equal("wep_14", spec.MenuLoadouts[0]!.PylonFor(1));
@@ -417,9 +417,9 @@ public class SessionSpecMenuTests
         var spec = SessionSpec.FromMenu(Cli(), "C1", new[] { "player_bhawk", "player_fury" },
             MenuMode.Stunt, WizardDef("stunt_flying"));
 
-        Assert.Null(Flight.PlaneRoster.InstantActionOverride(spec, "player_bhawk"));
-        Assert.Equal("player_bhawk", Flight.PlaneRoster.PlaneFor(spec, 0));
-        Assert.Equal("player_fury", Flight.PlaneRoster.PlaneFor(spec, 1));
+        Assert.Null(Flight.Airframe.PlaneRoster.InstantActionOverride(spec, "player_bhawk"));
+        Assert.Equal("player_bhawk", Flight.Airframe.PlaneRoster.PlaneFor(spec, 0));
+        Assert.Equal("player_fury", Flight.Airframe.PlaneRoster.PlaneFor(spec, 1));
     }
 
     /// <summary>A def read off a file has no per-player pick behind it, so its one player_plane
@@ -429,7 +429,7 @@ public class SessionSpecMenuTests
     {
         var spec = Cli("--ia=mission.json", "--plane=player_bhawk,player_fury");
 
-        Assert.Equal("player_kestrel", Flight.PlaneRoster.InstantActionOverride(spec, "player_kestrel"));
+        Assert.Equal("player_kestrel", Flight.Airframe.PlaneRoster.InstantActionOverride(spec, "player_kestrel"));
     }
 
     /// <summary>The screenshot aid's pointer, which stands in for seat 0's on the Original

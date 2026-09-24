@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using CSVM;
-using CSVM.Flight;
+using CSVM.Flight.Weapons;
 using CSVM.Session.Campaign;
 using CSVM.Session.Objectives;
 using Godot;

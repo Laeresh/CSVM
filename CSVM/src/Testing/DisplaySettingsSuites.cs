@@ -44,7 +44,7 @@ internal static class DisplaySettingsSuites
     {
         ("MenuPresentation", "original", false),
         ("GraphicsMode", GraphicsMode.EnhancedWord, false),
-        ("Difficulty", Flight.Difficulty.Word(Flight.Difficulty.Hard), false),
+        ("Difficulty", Flight.Hangar.Difficulty.Word(Flight.Hangar.Difficulty.Hard), false),
         ("NearestAfterKill", true, false),
         ("Rumble", false, false),
         ("DefaultView", "cockpit", false),

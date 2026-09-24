@@ -9,7 +9,7 @@ using CSVM.UI.Menu.Original;
 namespace CSVM.Testing;
 
 /// <summary>Suites over the Original presentation's pause screen: the real board over a real
-/// <see cref="Flight.PauseState"/>, composed from the chapter's own <c>escape.zrd</c> dialogs, with
+/// <see cref="Flight.Modes.PauseState"/>, composed from the chapter's own <c>escape.zrd</c> dialogs, with
 /// every bitmap it names checked against the extraction. A second suite does the same for the
 /// Instant Action blackboard the sortie's <c>ia_escape.zrd</c> dialog carries.
 /// Decode: docs/org/pause-screen.md.</summary>
@@ -519,7 +519,7 @@ internal static class PauseSheetSuites
             return;
         }
 
-        var pause = new Flight.PauseState();
+        var pause = new Flight.Modes.PauseState();
         var board = OriginalPauseBoard.Build(
             pause,
             _ => new MenuInput { Keyboard = false, Pads = System.Array.Empty<int>() },
@@ -551,7 +551,7 @@ internal static class PauseSheetSuites
         TestContext ctx,
         OriginalPauseBoard board,
         PauseSheet sheet,
-        Flight.PauseState pause,
+        Flight.Modes.PauseState pause,
         StringBuilder report)
     {
         (float X, float Y, bool Pressed)? pointer = null;
@@ -603,7 +603,7 @@ internal static class PauseSheetSuites
         TestContext ctx,
         OriginalPauseBoard board,
         PauseSheet sheet,
-        Flight.PauseState pause,
+        Flight.Modes.PauseState pause,
         System.Action<(float X, float Y, bool Pressed)?> point,
         StringBuilder report)
     {
@@ -729,7 +729,7 @@ internal static class PauseSheetSuites
     private static void DriveBoard(
         TestContext ctx, (CampaignMission Mission, PauseSheet Sheet) entry, StringBuilder report)
     {
-        var pause = new Flight.PauseState();
+        var pause = new Flight.Modes.PauseState();
         var board = OriginalPauseBoard.Build(
             pause,
             _ => new MenuInput { Keyboard = false, Pads = System.Array.Empty<int>() },
@@ -807,7 +807,7 @@ internal static class PauseSheetSuites
     // fires, and the photo strip, the other row that does. Both are driven through the same frame
     // the pad's own step runs in.
     private static void DrivePointer(
-        TestContext ctx, OriginalPauseBoard board, PauseSheet sheet, Flight.PauseState pause,
+        TestContext ctx, OriginalPauseBoard board, PauseSheet sheet, Flight.Modes.PauseState pause,
         StringBuilder report)
     {
         var strip = sheet.Strips[PauseScreens.PreferencesRow];

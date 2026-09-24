@@ -1,6 +1,6 @@
 using System;
 using System.IO;
-using CSVM.Flight;
+using CSVM.Flight.Modes;
 using Godot;
 
 namespace CSVM.UI;

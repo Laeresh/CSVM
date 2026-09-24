@@ -1,4 +1,4 @@
-using CSVM.Flight;
+using CSVM.Flight.Hangar;
 using CSVM.UI.Menu;
 
 namespace CSVM.UI;

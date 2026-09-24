@@ -29,7 +29,7 @@ public class OriginalOptionsTests
         host.Module.OpenGameOptions();
 
         Assert.Equal(OriginalScreen.GameOptions, host.Screen);
-        Assert.Equal(CSVM.Flight.Difficulty.Normal, host.Module.DifficultyChoice);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Normal, host.Module.DifficultyChoice);
         Assert.Equal(GraphicsMode.Default, host.Module.GraphicsChoice);
         Assert.Equal(OriginalOptionsScreen.DifficultyKey, host.FocusedKey);
 
@@ -42,13 +42,13 @@ public class OriginalOptionsTests
         Down(host);
         Accept(host);
         Assert.Null(host.Module.OpenGameOption);
-        Assert.Equal(CSVM.Flight.Difficulty.Hardest, host.Module.DifficultyChoice);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hardest, host.Module.DifficultyChoice);
         Assert.Equal("Hardest", Row(host, OriginalOptionsScreen.DifficultyKey).Label);
         // A sideways step wraps back onto Normal, then on to Hard.
         StepX(host, 1);
-        Assert.Equal(CSVM.Flight.Difficulty.Normal, host.Module.DifficultyChoice);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Normal, host.Module.DifficultyChoice);
         StepX(host, 1);
-        Assert.Equal(CSVM.Flight.Difficulty.Hard, host.Module.DifficultyChoice);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hard, host.Module.DifficultyChoice);
 
         // The second row is the original's own Default View dropdown. Its own list carries the
         // three views in its own order: Cockpit, First Person, Exterior.
@@ -128,7 +128,7 @@ public class OriginalOptionsTests
         var host = Host();
         host.Module.OpenGameOptions();
         StepX(host, 1);
-        Assert.Equal(CSVM.Flight.Difficulty.Hard, host.Module.DifficultyChoice);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hard, host.Module.DifficultyChoice);
         Down(host);
         StepX(host, 1);
         Assert.Equal("cockpit", host.Module.DefaultViewChoice);
@@ -147,7 +147,7 @@ public class OriginalOptionsTests
         Assert.Equal(OriginalOptionsScreen.GameOptionsCancelKey, host.FocusedKey);
         Assert.Null(Accept(host));
         Assert.Equal(OriginalScreen.Options, host.Screen);
-        Assert.Equal(CSVM.Flight.Difficulty.Normal, host.Module.DifficultyChoice);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Normal, host.Module.DifficultyChoice);
         Assert.Null(host.Module.NearestAfterKillChoice);
         Assert.Null(host.Module.RumbleChoice);
         Assert.Null(host.Module.DefaultViewChoice);
@@ -617,7 +617,7 @@ public class OriginalOptionsTests
         host.Module.OpenGameOptions();
 
         Assert.Equal(GraphicsMode.EnhancedWord, host.Module.GraphicsChoice);
-        Assert.Equal(CSVM.Flight.Difficulty.Hardest, host.Module.DifficultyChoice);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hardest, host.Module.DifficultyChoice);
         Assert.True(host.Module.NearestAfterKillChoice);
         Assert.False(host.Module.RumbleChoice);
         // An older file's saved presentation word opens no row: the page reads it nowhere.
@@ -653,7 +653,7 @@ public class OriginalOptionsTests
         saved.MonitorIndex = "9";
         host.Module.OpenGameOptions();
         Assert.Equal(GraphicsMode.Default, host.Module.GraphicsChoice);
-        Assert.Equal(CSVM.Flight.Difficulty.Normal, host.Module.DifficultyChoice);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Normal, host.Module.DifficultyChoice);
         Assert.Null(host.Module.NearestAfterKillChoice);
         Assert.Null(host.Module.RumbleChoice);
         host.Module.OpenVideo();

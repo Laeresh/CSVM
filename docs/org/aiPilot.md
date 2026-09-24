@@ -15,9 +15,9 @@ the authored airframe side is [`formats/vehicle.md`](../formats/vehicle.md) (`mo
 [`formats/ai-nets.md`](../formats/ai-nets.md). The flight physics an AI shares with the player is
 [`flightModel.md`](flightModel.md); the firing half (when an AI pulls the trigger, and the
 `weapons` 5-tuple that governs it) is [`aiPilot/aiWeapons.md`](aiPilot/aiWeapons.md). CSVM's
-implementation seam is `src/Flight/AiPilot.cs`, the driver that picks each mode's aim point and
+implementation seam is `src/Flight/Ai/AiPilot.cs`, the driver that picks each mode's aim point and
 parameter block; the steering law it hands them to is
-`src/Flight/AiControlLaw.cs`, decoded in [`aiControlLaw.md`](aiControlLaw.md).
+`src/Flight/Ai/AiControlLaw.cs`, decoded in [`aiControlLaw.md`](aiControlLaw.md).
 
 ## The headline: there is no netless patrol
 
@@ -620,14 +620,14 @@ runs inside the hold through `AiTargetRanking.KeepsStandingTarget`, so an enemy 
 into reach takes an ally off a camp building at once rather than at the hold's end. A hull is neither
 class and keeps its ranked place. `--ai-targeting=decoded` puts the single running minimum back and
 the bare decoded hold with it, and the order is then the two biases' alone.
-`Flight/SurfaceGunner` never takes the preference, since it
+`Flight/Ai/SurfaceGunner` never takes the preference, since it
 drops non-aircraft candidates anyway.
 
 The admission volume comes out as the attack one in every picker. `AiTargetRanking.Score` refuses a
 candidate past the `attackRange` it is handed, and `FlightController.SelectRankedTarget`, its
 re-score `HoldsStandingTarget` and the withdrawal's reach test all hand it
 `AiModeMachine.AttackRange`, so a member whose activation volume a `DEDG` widened keeps its own
-attack radius for what it may pick up. `Flight/SurfaceGunner` is handed the radius
+attack radius for what it may pick up. `Flight/Ai/SurfaceGunner` is handed the radius
 `SurfaceVehicleRuntime` resolves for the hull at spawn, the block's and net's attack slot over the
 def's own `attack` over the 400 m def record default, which is the engine's own order (see "Where a
 hull's attack triple comes from"). `AiModeMachine.ActivationRange` is left where the spawn seeds it
@@ -1016,7 +1016,7 @@ reach nine seconds after the intro.
 
 ### What CSVM ports of this (D34)
 
-`src/Flight/AiEscort.cs` is the law: the five-state machine, both station offsets, the ramp, the
+`src/Flight/Ai/AiEscort.cs` is the law: the five-state machine, both station offsets, the ramp, the
 break-off test and the separation push, pure over a leader/target snapshot. `AiPilot.Escort` holds
 it and, when its leader is in play, dispatches to it INSTEAD of pursue, lay off, patrol, evade and
 a running maneuver, keeping only stunned and avoid crash ahead of it, which is the original's own
@@ -1473,8 +1473,8 @@ praising the player's run through the gates, and an AI's own rail run never spea
 
 ### What CSVM ports of this
 
-`Flight/DangerZoneRibbon.cs` is the spline, the run cursor and the rail integrator with every
-constant above; `Flight/DangerZoneRibbons.cs` reads every `dzpathN` of the chapter gamez by the
+`Flight/Modes/DangerZoneRibbon.cs` is the spline, the run cursor and the rail integrator with every
+constant above; `Flight/Modes/DangerZoneRibbons.cs` reads every `dzpathN` of the chapter gamez by the
 route-versus-gate material rule, takes each zone's difficulty off its node's flag word and applies
 `dzones.zrd`'s `disable` list. `AiNetFollower`
 reports the node it just reached (`ArrivedNode`), `AiPilot` takes the node-tag entry into

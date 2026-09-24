@@ -1,18 +1,19 @@
 using System;
 using System.Collections.Generic;
-using CSVM.Flight;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Weapons;
 using CSVM.Utils;
 using Godot;
 
 namespace CSVM.UI;
 
 /// <summary>
-/// The targeting overlay (key F15, flag <c>--debug-targets</c>): who is aiming at whom, drawn as
-/// a line from each shooter to the target it has actually acquired, rebuilt every frame. A
-/// turret gunner's <see cref="TurretController.TargetPosition"/> with its
-/// <see cref="TurretController.Gate"/>, and an AI pilot's <see cref="AiGunner.Target"/> with its
-/// <see cref="AiGunner.WantsFire"/>, both drawn from their own live state, never re-derived. The
-/// line's colour is the answer: red firing, amber tracking, grey held; the HUD names each held
+/// The targeting overlay (key F15, flag <c>--debug-targets</c>): a line from each shooter to the
+/// target it has actually acquired, rebuilt every frame. It draws a turret gunner's
+/// <see cref="TurretController.TargetPosition"/> with its <see cref="TurretController.Gate"/>, and
+/// an AI pilot's <see cref="Flight.Ai.AiGunner.Target"/> with its
+/// <see cref="Flight.Ai.AiGunner.WantsFire"/>, both from their own live state, never re-derived.
+/// The line's colour is the answer: red firing, amber tracking, grey held; the HUD names each held
 /// shooter's gate. One instance sits under the shared world root, so every splitscreen pane draws
 /// the same lines with no per-pane copy.
 /// ⚠ Depth test off, unlike <c>AiNetsOverlay</c>: a line into a hull is the one worth seeing.
@@ -195,7 +196,7 @@ public sealed partial class TargetingOverlay : Node
             {
                 tracking++;
             }
-            rows.Add($"{t.Label}  {GateName(t.Gate)}  {Flight.FlightController.TargetLabel(t.TargetSource)}"
+            rows.Add($"{t.Label}  {GateName(t.Gate)}  {Flight.Airframe.FlightController.TargetLabel(t.TargetSource)}"
                      + $"  {t.WorldPosition.DistanceTo(t.TargetPosition):0} m");
         }
 

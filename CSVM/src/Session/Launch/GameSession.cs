@@ -3,7 +3,13 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using CSVM.Flight;
+using CSVM.Flight.Ai;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Audio;
+using CSVM.Flight.Camera;
+using CSVM.Flight.Hud;
+using CSVM.Flight.Modes;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.Session.InstantAction;
@@ -3270,7 +3276,7 @@ public partial class GameSession : Node3D
         // this line and a rig can lose its aircraft mid-session.
         _worldRoot!.AddChild(new UI.DebugMarkerToggle(() =>
         {
-            var huds = new List<Flight.TargetHud>();
+            var huds = new List<Flight.Hud.TargetHud>();
             foreach (var rig in _rigs)
             {
                 if (rig.Controller?.PilotHud.TargetHud is { } hud)
@@ -3745,7 +3751,7 @@ public partial class GameSession : Node3D
         {
             if (rig.Controller is not { CockpitInterior: { } interior } controller)
                 continue;
-            var overlay = Flight.CockpitOverlay.Build(rig.HudParent, interior, _sun, _env);
+            var overlay = Flight.Hud.CockpitOverlay.Build(rig.HudParent, interior, _sun, _env);
             controller.CockpitPass = overlay;
             // The overlay's cloned sun/env carry the zone live at its build; registering them
             // keeps a later mid-flight zone change reaching the interior pass too. Both modes,
@@ -3798,7 +3804,7 @@ public partial class GameSession : Node3D
     // presentation, a mode the original authors no dialog for, or an extraction the sheet cannot be
     // read out of. Falling back to the Built-in board is what keeps a pause always available.
     private UI.Menu.Original.OriginalPauseBoard? BuildOriginalPauseBoard(
-        Flight.PauseState pauseState, AnimRuntime? runtime)
+        Flight.Modes.PauseState pauseState, AnimRuntime? runtime)
     {
         if (_presentation != UI.Menu.PresentationId.Original)
         {
@@ -3830,7 +3836,7 @@ public partial class GameSession : Node3D
     // mission type, which carries no map, memento or parchment and so needs no readout. Free flight
     // and the dogfight are modes of ours that no shipped dialog describes, so they keep the Built-in
     // board, the same split the load screen makes (docs/org/pause-screen.md).
-    private UI.Menu.Original.OriginalPauseBoard? BuildInstantActionPauseBoard(Flight.PauseState pauseState)
+    private UI.Menu.Original.OriginalPauseBoard? BuildInstantActionPauseBoard(Flight.Modes.PauseState pauseState)
     {
         if (_iaDirector?.Runtime is not { } ia
             || UI.LoadScreens.LetterFor(ia.Def.MissionType) is not { } letter)
@@ -3873,7 +3879,7 @@ public partial class GameSession : Node3D
         UI.PauseSheet sheet,
         CampaignDirector campaign,
         IReadOnlyList<UI.Menu.BriefingObjective> objectives,
-        Flight.PauseState pauseState,
+        Flight.Modes.PauseState pauseState,
         AnimRuntime? runtime)
     {
         var graph = campaign.Graph;
@@ -3920,7 +3926,7 @@ public partial class GameSession : Node3D
         return new UI.PauseReadout(rows, campaign.Memento, icons);
     }
 
-    private Flight.PlayerRig? RigOf(int playerIndex)
+    private Flight.Camera.PlayerRig? RigOf(int playerIndex)
     {
         foreach (var rig in _rigs)
         {

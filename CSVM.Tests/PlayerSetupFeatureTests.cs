@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM;
-using CSVM.Flight;
+using CSVM.Flight.Hangar;
 using CSVM.UI;
 using CSVM.UI.Menu;
 using Xunit;

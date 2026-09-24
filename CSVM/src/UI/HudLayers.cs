@@ -25,7 +25,7 @@ internal static class HudLayers
     /// while the window whites out.</summary>
     public const int Whiteout = -2;
 
-    /// <summary>The cockpit interior's own render pass (<c>Flight/CockpitOverlay</c>), under the
+    /// <summary>The cockpit interior's own render pass (<c>Flight/Hud/CockpitOverlay</c>), under the
     /// chrome and over the two world overlays above: 3D always draws before any canvas layer, so
     /// a negative layer still composites over the world, while the screen wash and the HUD keep
     /// drawing over the panel as they do when the interior is in the main world.</summary>

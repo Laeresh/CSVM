@@ -709,11 +709,11 @@ public class SessionSpecTests
     public void TheViewFlagAlsoSelectsCockpitAndNose()
     {
         var cockpit = S("--fly", "--view=cockpit");
-        Assert.Equal(CSVM.Flight.PilotViewMode.Cockpit, cockpit.ViewMode);
+        Assert.Equal(CSVM.Flight.Camera.PilotViewMode.Cockpit, cockpit.ViewMode);
         Assert.Equal(0, cockpit.View);
         Assert.Empty(cockpit.Warnings);
-        Assert.Equal(CSVM.Flight.PilotViewMode.Nose, S("--fly", "--view=nose").ViewMode);
-        Assert.Equal(CSVM.Flight.PilotViewMode.Chase, S("--fly", "--view=2").ViewMode);
+        Assert.Equal(CSVM.Flight.Camera.PilotViewMode.Nose, S("--fly", "--view=nose").ViewMode);
+        Assert.Equal(CSVM.Flight.Camera.PilotViewMode.Chase, S("--fly", "--view=2").ViewMode);
     }
 
     /// <summary>Same rule as the numpad digits: the first-person modes sit on a flown aircraft's
@@ -722,7 +722,7 @@ public class SessionSpecTests
     public void TheSelectedViewModesAreDroppedOutsideFlight()
     {
         var s = S("--viewer", "--view=cockpit");
-        Assert.Equal(CSVM.Flight.PilotViewMode.Chase, s.ViewMode);
+        Assert.Equal(CSVM.Flight.Camera.PilotViewMode.Chase, s.ViewMode);
         Assert.Contains(s.Warnings, w => w.Category == "core" && w.Message.Contains("flight camera"));
     }
 

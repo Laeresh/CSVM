@@ -304,7 +304,7 @@ different speakers on the same frame, the pursuer and one of the player's wingme
 
 ## The remake's dispatch sites
 
-The rules above are represented in `CSVM/src/Flight/AiVoiceDispatcher.cs` (the gate, cooldowns,
+The rules above are represented in `CSVM/src/Flight/Ai/AiVoiceDispatcher.cs` (the gate, cooldowns,
 halving, election, DI tiers, bearing index, engine-free, seeded) and wired by
 `CSVM/src/Session/Roster/AiVoiceRuntime.cs`. Where the original's dispatch site is
 decoded, the remake uses it; where only the trigger's meaning is decoded, the chosen stand-in
@@ -318,7 +318,7 @@ are spoken by the killer, not by the aircraft that died.
 
 | ids | status | site / reason |
 |---|---|---|
-| 0 | wired | the gunner's own acquisition (`Flight/TurretController.cs`), carried mount and world emplacement alike: the first tick it holds a human player as its acquired target, by the entry's own `DETECTION_RANGE` and the shared target picker, with a clear sight line by its own rule. The report leaves through `ProjectilePool.TurretAcquiredPlayer`, the seam both turret families are built against, and `AiVoiceRuntime.WatchTurrets` broadcasts on the warned player's team |
+| 0 | wired | the gunner's own acquisition (`Flight/Weapons/TurretController.cs`), carried mount and world emplacement alike: the first tick it holds a human player as its acquired target, by the entry's own `DETECTION_RANGE` and the shared target picker, with a clear sight line by its own rule. The report leaves through `ProjectilePool.TurretAcquiredPlayer`, the seam both turret families are built against, and `AiVoiceRuntime.WatchTurrets` broadcasts on the warned player's team |
 | 1–12, 14 | wired | the decoded sites above: the pursuer speaks `WA-Attack` and the flight broadcasts the bearing call-out computed in the warned player's frame, raised together while the pursuer's gunner holds a human quarry (`AiVoiceRuntime.RaiseAttackCallOuts`, off the sim clock, not off a mode edge). The original raises them every frame from the weapon pass and the combat driver; the remake raises at the 15 s slot-cooldown interval, since no slot can speak twice inside it. Losing the human re-arms the raise, so a fresh engagement speaks at once, and the mode machine's patrol→pursue commit raises the pair as well when it falls after the mute window. Rows 25 and 26 ride the same raise, ahead of `WA-Attack`, as they do in the original's own block |
 | 13 | wired | a human rig's summary health crossing 30 % on the projectile hit path (decoded threshold), broadcast |
 | 17–19 | wired | the speaker's own summary health on the projectile hit path, 70/50/30 % most-severe-first (decoded) |

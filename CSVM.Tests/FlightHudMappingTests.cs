@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using CSVM.Bindings;
-using CSVM.Flight;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Hud;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.UI;
 using Godot;

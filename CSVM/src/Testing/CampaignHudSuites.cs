@@ -77,7 +77,7 @@ internal static class CampaignHudSuites
             var graph = director.Graph!;
             // Paused from the start: the readout is a pause-screen element (B11), so its drawing
             // path only runs while the board is up, and this suite wants that path exercised.
-            var pause = new CSVM.Flight.PauseState();
+            var pause = new CSVM.Flight.Modes.PauseState();
             pause.TryToggle(0);
             var mark = ObjectivesHud.LoadMark(
                 System.IO.Path.Combine(ctx.DataRoot, "extracted", "rimage"));

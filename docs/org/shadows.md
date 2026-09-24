@@ -269,8 +269,8 @@ it.
 ## What CSVM does today
 
 The placement and the silhouette are implemented, in original graphics mode only
-(`Flight/GroundShadowLaw.cs` for the rule, `Flight/GroundShadowPass.cs` for the drawing and
-`Flight/GroundShadowSilhouette.cs` for the raster; `docs/architecture/Flight.md`). What it takes
+(`Flight/Airframe/GroundShadowLaw.cs` for the rule, `Flight/Airframe/GroundShadowPass.cs` for the drawing and
+`Flight/Airframe/GroundShadowSilhouette.cs` for the raster; `docs/architecture/Flight.md`). What it takes
 from this page and where it departs:
 
 - **Godot shadow mapping cannot be the mechanism.** The original never casts a shadow map; it draws

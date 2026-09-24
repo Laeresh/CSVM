@@ -10,7 +10,7 @@ namespace CSVM.Session.Campaign;
 /// <summary>One owned plane's campaign fit: the ownership record itself, plus the per-gun
 /// ammunition and per-pylon ordnance picks <c>docs/formats/saved-games.md</c> finds in the
 /// original's 204-byte plane record. This is NOT a hangar build (paint, armour, hardpoint count):
-/// those stay in <see cref="Flight.CustomPlaneStore"/>'s global <c>user://Planes/</c>, named here
+/// those stay in <see cref="Flight.Hangar.CustomPlaneStore"/>'s global <c>user://Planes/</c>, named here
 /// by <see cref="Name"/> only, so deleting a profile can never orphan or delete one.</summary>
 public sealed class OwnedPlane
 {
@@ -140,16 +140,16 @@ public sealed class CampaignProfileDef
 }
 
 /// <summary>
-/// JSON persistence for <see cref="CampaignProfileDef"/>: one directory per profile under
-/// <c>user://Profiles/&lt;name&gt;/profile.json</c>, following <see cref="Flight.ScoreStore"/> and
-/// <see cref="Flight.CustomPlaneStore"/>'s precedent: plain System.IO so it unit-tests without an
-/// engine, a missing/malformed file reads as nothing rather than throwing.
+/// JSON persistence for <see cref="CampaignProfileDef"/>, one directory per profile under
+/// <c>user://Profiles/&lt;name&gt;/profile.json</c>. Like <see cref="Flight.Modes.ScoreStore"/>
+/// and <see cref="Flight.Hangar.CustomPlaneStore"/> it is plain System.IO, so it unit-tests without
+/// an engine. A missing or malformed file reads as nothing rather than throwing.
 ///
 /// <para>A profile name is user text entry and becomes a directory name, so it is sanitised the
-/// same way <see cref="Flight.CustomPlaneStore"/> sanitises a plane name. Deleting a profile
-/// removes only its own directory: hangar planes stay in the global
-/// <c>user://Planes/</c> store, referenced here by name only (see <see cref="OwnedPlane"/>), so a
-/// deletion can never orphan or delete one.</para>
+/// same way <see cref="Flight.Hangar.CustomPlaneStore"/> sanitises a plane name. Deleting a profile
+/// removes only its own directory. Hangar planes stay in the global <c>user://Planes/</c> store,
+/// referenced here by name only (see <see cref="OwnedPlane"/>), so a deletion can never orphan or
+/// delete one.</para>
 /// </summary>
 public sealed class CampaignProfileStore
 {
@@ -497,7 +497,7 @@ public sealed class CampaignProfileStore
 
     /// <summary>Writes <paramref name="def"/> to its name's directory, creating it on first save
     /// and overwriting any existing profile of the same name (the name IS the identity, same as
-    /// <see cref="Flight.CustomPlaneStore"/>). Returns the file's absolute path.</summary>
+    /// <see cref="Flight.Hangar.CustomPlaneStore"/>). Returns the file's absolute path.</summary>
     public string Save(CampaignProfileDef def)
     {
         if (string.IsNullOrWhiteSpace(def.Name))
@@ -553,7 +553,7 @@ public sealed class CampaignProfileStore
     }
 
     /// <summary>The directory this name persists to. Characters a directory name cannot carry
-    /// become '_', same treatment <see cref="Flight.CustomPlaneStore.PathFor"/> gives a plane
+    /// become '_', same treatment <see cref="Flight.Hangar.CustomPlaneStore.PathFor"/> gives a plane
     /// name. A name that sanitises to nothing but dots is rejected: "." is this store's own root
     /// and ".." its parent, so accepting either would let Save or Delete act on the whole store
     /// (or on all of <c>user://</c>) instead of on one profile.</summary>

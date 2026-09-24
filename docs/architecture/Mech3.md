@@ -242,7 +242,7 @@ tags, the trailer attach target, and the net's own three volumes (`Volumes`, rec
 as an `AiVolumeSet`). Plus the lookups both ways the data references nets:
 `ById` (aiv field 0), `ByName` (egen/zeppelins/objectives, case-insensitive), `Resolve` (either
 spelling), and `ChapterFirst` (the net an Instant Action actor is given). Consumers:
-`UI/AiNetsOverlay.cs` and `Flight/AiNetFollower.cs`. Golden counts asserted in
+`UI/AiNetsOverlay.cs` and `Flight/Ai/AiNetFollower.cs`. Golden counts asserted in
 `CSVM.Tests/AiNetsTests.cs`.
 
 ## src/Mech3/Maneuvers.cs
@@ -251,7 +251,7 @@ entries as `Maneuver` (name, `natural_touch` difficulty, timed attitude steps, t
 autogyro/relative/nitro/bias flags), plus the selection cull (`EligibleFor`: difficulty ≤ the
 pilot's 1–9 `natural_touch`, with no interpolation table, the stat having no `ai_skill_parameters`
 entry by design) and the roster `signature_maneuvers` bitmask decode (`SignatureNames`, over
-`ExeTableOrder`). Consumers: `Flight/ManeuverExecutor.cs`; goldens in `ManeuversTests`.
+`ExeTableOrder`). Consumers: `Flight/Ai/ManeuverExecutor.cs`; goldens in `ManeuversTests`.
 
 ## src/Mech3/EnemyGenerators.cs
 The mission `egen.zrd.json` reader ([../formats/mission-entities.md](../formats/mission-entities.md)): the enemy generators that
@@ -266,7 +266,7 @@ The mission `zeppelins.zrd.json` reader ([../formats/mission-entities.md](../for
 instances typed as `ZeppelinDef`: motion limits, net name, targets, healthy zones plus
 `num_healthy_required` (defaulted to 1 and clamped to the healthy count, the decoded load
 rule), engines, gasbags, cannons and `cannon_health`. Motion keys feed
-`Flight/ZeppelinMotion` (F17); the damage half feeds `Flight/ZeppelinDamage` +
+`Flight/Airframe/ZeppelinMotion` (F17); the damage half feeds `Flight/Airframe/ZeppelinDamage` +
 `Session/ZeppelinRuntime.WireDamage` (F18). Fixture units + install goldens
 in `CSVM.Tests/ZeppelinsTests.cs`.
 
@@ -277,8 +277,8 @@ the launchscreen's Instant Action wizard. The first two funnel through one priva
 `BuildDef(ZrdrDict)`, `LoadFromJson` doing nothing but mapping a JSON object onto the same
 key/[values] shape `ZrdrDict` already wraps, so a hand-authored mission parses through exactly the
 path a real chapter's does; the wizard overlays only the fields a pilot can configure onto the
-chosen environment's own `Load` result. `spawn_points` and `dzones` stay in `Flight/SpawnPoints`
-and `Flight/StuntMission`, and the wingmen's fit rides beside the def (`SessionSpec.IaWingmanLoadout`) since it is a flight type. Every optional key's default: [../formats/instant-action.md](../formats/instant-action.md).
+chosen environment's own `Load` result. `spawn_points` and `dzones` stay in `Flight/Modes/SpawnPoints`
+and `Flight/Modes/StuntMission`, and the wingmen's fit rides beside the def (`SessionSpec.IaWingmanLoadout`) since it is a flight type. Every optional key's default: [../formats/instant-action.md](../formats/instant-action.md).
 
 ## src/Mech3/AiSkills.cs
 The AI pilot-skill constants from `player.json`: the `ai_skill_parameters` block as
@@ -297,7 +297,7 @@ both authors of an AI's range volumes are read into, a roster block's twelve slo
 floats at elements 2–10 (`FromNetRecord`). `Overlaid` is the engine's per-field non-zero test, so
 `net.Overlaid(block)` is the decoded order ([../org/aiPilot.md](../org/aiPilot.md), "Net assignment"); the
 `min_ai_active_dist` floor is `Session/Campaign/CampaignRoster.cs`'s `ApplyVolumes`. The altitude bands are
-read and carried but have no consumer: `Flight/AiModeMachine.cs` gates on radii alone.
+read and carried but have no consumer: `Flight/Ai/AiModeMachine.cs` gates on radii alone.
 
 ## src/Mech3/RosterMarkers.cs
 Grafts a roster block's authored marker scaffolding onto the rig its spawn built. A chapter's own
@@ -310,7 +310,7 @@ index-addressed definition a node to write and a condition volume that moves wit
 aeroplane the mission actually spawned. Read `LandingApproaches.cs` next.
 
 ## src/Mech3/VehicleDefs.cs
-The `vehicle.json` def table as an index, next to `Flight/PlaneStats.cs`'s full read of one def:
+The `vehicle.json` def table as an index, next to `Flight/Airframe/PlaneStats.cs`'s full read of one def:
 `DefForBlock` strips a block name's trailing `_N` ordinals until a def matches, `ModeOf` walks
 `kind_of` to the nearest authored `mode` (`jet` at the root, the engine's zero default),
 `AirframeFor` finds the player airframe node an AI def's model is built from (the `p`-prefixed twin
@@ -436,7 +436,7 @@ silence floor. No Godot attenuation model expresses the shape, since the ramp is
 full-volume radius. `SessionGainDb` is what the play paths call: the law at `RangeScale`, the one
 piece of state here, shipping at the remake-only `ShippedRangeScale` (`--sound-range-scale=`). The
 decode and its addresses are [../formats/sounds.md](../formats/sounds.md). Callers: `WorldSounds`,
-`Flight/GunVoice.cs`, `Flight/AiWeaponAudio.cs`.
+`Flight/Audio/GunVoice.cs`, `Flight/Ai/AiWeaponAudio.cs`.
 
 ## src/Mech3/WorldLights.cs
 Packs the `LIGHT_STATE` point lights, each as colour times ambient + diffuse, into the 2xN texture
@@ -491,7 +491,7 @@ purely for file size: `IAnimMotion` (`ScriptPlayback`/`SpinMotion`/`FromToMotion
 Not an independently owned subsystem; `AnimRuntime` drives all of it. `MotionSet`, `EmitterDirector`,
 `SoundChannel`, `LightChannel`, `PoseChannel`, `NameResolver` and `TemplateStage` share the
 namespace and ARE owned in their own right, each with its entry below. `SpinMotion.ComposeSpin` is
-the one member reached from outside without `AnimRuntime` at all, by `Flight/PropAnimator.cs`. The
+the one member reached from outside without `AnimRuntime` at all, by `Flight/Airframe/PropAnimator.cs`. The
 motion decode, both contact tiers and the readings they supersede: [../org/objectMotion.md](../org/objectMotion.md).
 
 ## src/Mech3/Anim/MotionSet.cs
@@ -647,7 +647,7 @@ id pool, to clip defs. `PlayableFor(voId, family)` returns the one name to hand
 `MissionRadio.Speak`: the shipped `snd_<FAMILY>-A_id<N>_random` variant group where one is
 authored, else the bare def. `SessionPrewarmNames` is the flight session's mission-roster prewarm
 set, reached through `WorldSession.Options.VoiceClipNames` with CLI and Instant Action accents joined in. Dispatch
-sits above this seam, in `Flight/AiVoiceDispatcher.cs` (the rules) and `Session/Roster/AiVoiceRuntime.cs`
+sits above this seam, in `Flight/Ai/AiVoiceDispatcher.cs` (the rules) and `Session/Roster/AiVoiceRuntime.cs`
 (the wiring), never in it. Decode: docs/formats/combat-voice.md.
 
 ## src/Mech3/MissionCutscenes.cs

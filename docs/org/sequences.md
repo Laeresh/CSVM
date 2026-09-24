@@ -1028,7 +1028,7 @@ them.
   `tail`, one set per chapter, nothing else). The handler resets an object's per-mesh texture-cycle
   list to frame 0 (`FUN_005642a0`) then jumps straight to a specific frame (`FUN_00564410`, index
   from the event's `+0x12`), i.e. "snap this object's cycling texture to state N", not "start a
-  cycle". `docs/architecture.md`'s `Flight/DamageVisuals.cs` entry already records these same defs as
+  cycle". `docs/architecture.md`'s `Flight/Airframe/DamageVisuals.cs` entry already records these same defs as
   deliberately unwired: the live screen-space `GaugeCluster.OnPartDamage` covers the same
   information, while driving the Cockpit view's authored in-3D indicators belongs to the gauge
   work tracked separately. The decode confirms it is the same mechanism, not a second consumer.

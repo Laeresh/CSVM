@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
-using CSVM.Flight;
+using CSVM.Flight.Hangar;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.UI.Menu;
 
@@ -178,7 +179,7 @@ public sealed class HangarFlow
     /// defaults back off, or null when the caller has none (those defaults then load empty).</summary>
     public StockLoadouts? StockFits => _feature.StockFits;
 
-    /// <summary>The zrdr scope <see cref="PlaneStats"/> reads vehicle defs from, for the stock
+    /// <summary>The zrdr scope <see cref="Flight.Airframe.PlaneStats"/> reads vehicle defs from, for the stock
     /// armour allocations; null or unreadable reads as armour defaults of 0.</summary>
     public string? ZrdrPath => _feature.ZrdrPath;
 

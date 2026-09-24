@@ -120,7 +120,7 @@ worktree session here; use a local commit or a file copy.
 - **The golden set.** `analysis/goldens/manifest.json` runs every shot under `--det --mute`, and
   under `--det` only the `--graphics=` flag reaches `GraphicsMode.Resolve`, so an enhanced shot is
   one more manifest entry with the flag in its args.
-- **The speed cue as shipped.** `Flight/SpeedCue.cs` loads each chapter's `speed_cue.zrd`
+- **The speed cue as shipped.** `Flight/Hud/SpeedCue.cs` loads each chapter's `speed_cue.zrd`
   verbatim: three `cuepufferN` states picked by camera altitude, emitted 60 m ahead of the player
   and left in world space for the aircraft to pass (`docs/formats/effects.md` "Aircraft speed-cue
   wisps"); off within 50 m of the ground. Their opacity was judged right at the controls

@@ -1,5 +1,5 @@
 using System;
-using CSVM.Flight;
+using CSVM.Flight.Hangar;
 using CSVM.UI;
 using Xunit;
 

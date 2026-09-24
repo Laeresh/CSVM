@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using CSVM.Flight;
+using CSVM.Flight.Camera;
 using CSVM.Mech3;
 using CSVM.Session.World;
 using CSVM.Utils;

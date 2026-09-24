@@ -1,11 +1,10 @@
 using System;
-using CSVM.Flight;
 
 namespace CSVM.UI;
 
 /// <summary>
 /// The PLANENAME screen: the name that is also the plane's identity in
-/// <see cref="CustomPlaneStore"/>. A pad names a plane by stepping two word lists
+/// <see cref="Flight.Hangar.CustomPlaneStore"/>. A pad names a plane by stepping two word lists
 /// (<see cref="PlaneNameTables"/>) or rolling both at once, so naming costs no keyboard; a keyboard
 /// types over the result for a name no list holds. The two are one field rather than two modes:
 /// typing marks the name freeform and the steppers stop describing it, and the next step throws the

@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
-using CSVM.Flight;
+using CSVM.Flight.Ai;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Camera;
+using CSVM.Flight.Hangar;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.Session.World;
@@ -29,9 +33,9 @@ public readonly record struct AiSpawn(string PlaneName, Vector3 Position, Vector
     string? AiDef = null, LoadoutChoice? Fit = null, int? AttackRating = null, bool Nitro = false,
     AiSkillVector? RosterSkills = null, string? NodeName = null, string? PilotName = null,
     // Overrides the session difficulty for this one spawn, which is all an Instant Action wave's
-    // skill is (Flight.Difficulty); null takes the session's.
+    // skill is (Flight.Hangar.Difficulty); null takes the session's.
     int? Difficulty = null, float? InitHealth = null, float? Armor = null,
-    // Slot 67: exempts this pilot's skill ratings from the difficulty offset (Flight.Difficulty).
+    // Slot 67: exempts this pilot's skill ratings from the difficulty offset (Flight.Hangar.Difficulty).
     bool Ace = false,
     bool ObjectiveMarker = false, string? ObjectiveTypeLabel = null, string? ObjectiveCategory = null,
     // The block's own def when AiDef is null: the livery is read off it, and a def authoring no

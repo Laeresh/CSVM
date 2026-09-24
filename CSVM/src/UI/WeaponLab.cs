@@ -2,7 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
-using CSVM.Flight;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
@@ -12,11 +13,11 @@ namespace CSVM.UI;
 /// <summary>
 /// The weapon lab's panel (<c>--weapon-lab</c>, key B): a configurator for the held aircraft's
 /// live loadout. It owns no weapon and fires nothing; every stepper writes into the
-/// <see cref="Flight.FlightController"/>'s bound <see cref="Loadout"/>, and the aircraft's own
+/// <see cref="Flight.Airframe.FlightController"/>'s bound <see cref="Loadout"/>, and the aircraft's own
 /// trigger fires it. Guns arm the plane's gun groups, hardpoint weapons arm its pylons; picking a
 /// hardpoint weapon re-arms every pylon and rebuilds the mounted ordnance models. The mount
-/// stepper drives <see cref="Flight.FlightController.SelectGunGroup"/> and
-/// <see cref="Flight.FlightController.SelectPylon"/>, and "reset to stock" restores the launch
+/// stepper drives <see cref="Flight.Airframe.FlightController.SelectGunGroup"/> and
+/// <see cref="Flight.Airframe.FlightController.SelectPylon"/>, and "reset to stock" restores the launch
 /// fit. In a lab session the bound loadout is <see cref="Loadout.ForRig"/>'s, so any weapon
 /// reaches any mount without editing <c>stock_loadouts.json</c>. Full decode, including click-to-
 /// place: docs/architecture.md.
@@ -49,7 +50,7 @@ public sealed partial class WeaponLab : Node3D
 
     // The flight session's held aircraft this panel drives, or null for the parked
     // (--weapon-test) host. Set means there IS a live loadout to write into.
-    private readonly Flight.FlightController? _host;
+    private readonly Flight.Airframe.FlightController? _host;
     private readonly Loadout? _loadout;
 
     // The fit the session launched with (stock, or whatever --rocket/--loadout made it), captured
@@ -76,7 +77,7 @@ public sealed partial class WeaponLab : Node3D
 
     // Camera hand-off (V): the free camera exists only while it owns the view.
     private bool _freeCamera;
-    private Flight.SpectatorCamera? _spectator;
+    private Flight.Camera.SpectatorCamera? _spectator;
     private int _cameraTick;
     private Vector3? _settleEye;
 
@@ -97,7 +98,7 @@ public sealed partial class WeaponLab : Node3D
     // In splitscreen the caller builds one lab on rig 0's aircraft/camera only, by design,
     // the other rigs fly with no panel and no camera hand-off.
     public WeaponLab(Node3D plane, WeaponDefs weapons, Loadout? loadout, string planeModel,
-        Flight.FlightController? host = null, Camera3D? camera = null)
+        Flight.Airframe.FlightController? host = null, Camera3D? camera = null)
     {
         _plane = plane;
         _weapons = weapons;
@@ -460,7 +461,7 @@ public sealed partial class WeaponLab : Node3D
         return best is { } found ? (found.Point, Mathf.Sqrt(found.Dist)) : null;
     }
 
-    // Hands the rig's camera to a free Flight.SpectatorCamera and back (V), each direction
+    // Hands the rig's camera to a free Flight.Camera.SpectatorCamera and back (V), each direction
     // taking over from exactly where the other left the eye so there is no jump. The aircraft
     // keeps flying, firing and drawing its HUD throughout; only the view changes hands.
     private void SetFreeCamera(bool on)
@@ -482,7 +483,7 @@ public sealed partial class WeaponLab : Node3D
             // ⚠ No LockCandidates, deliberately: F is this lab's rocket trigger and the held plane
             // fires against a running sim, so a camera target key on the same F would launch one
             // every time you re-aimed the view. The key is inert without a roster (BL-428).
-            _spectator = new Flight.SpectatorCamera(_camera, start, _plane.GlobalPosition)
+            _spectator = new Flight.Camera.SpectatorCamera(_camera, start, _plane.GlobalPosition)
             {
                 Name = "weapon_lab_freecam",
                 ShowReadout = false,   // the lab's own panel is the readout; a second one is clutter

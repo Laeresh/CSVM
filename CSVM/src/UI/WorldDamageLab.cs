@@ -14,7 +14,7 @@ namespace CSVM.UI;
 /// The world damage lab (F19) in <c>--freecam</c>/<c>--anim-lab</c>: when
 /// <see cref="SelectionService"/> lands on a destructible, this panel shows its live HP pools
 /// with a slider, a Kill and a Reset, the interactive twin of <c>--damage-test</c>. Elsewhere F19
-/// means the aircraft's <see cref="Flight.DamageLab"/>; the two never coexist. Only the pool
+/// means the aircraft's <see cref="Flight.Airframe.DamageLab"/>; the two never coexist. Only the pool
 /// <see cref="DestructibleRegistry.Resolve"/> names gets controls, since a node can carry several
 /// pools and driving one nothing can ever hit would read as a working feature. Lowering the
 /// slider spends the difference through <see cref="AnimRuntime.DamageAt"/>, the same call a

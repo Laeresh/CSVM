@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
-using CSVM.Flight;
+using CSVM.Flight.Ai;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using Godot;

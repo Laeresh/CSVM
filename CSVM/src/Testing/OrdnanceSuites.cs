@@ -2,7 +2,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CSVM.Effects;
-using CSVM.Flight;
+using CSVM.Flight.Ai;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Camera;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
 using CSVM.Session.InstantAction;
@@ -2610,7 +2613,7 @@ internal static class OrdnanceSuites
     // WorldEffectsFactory stages them. The caller frees the returned stage.
     internal static Node3D StageBurstRoots(TestContext ctx, TestWorld world, string animName, int slots)
     {
-        var roots = Flight.EffectCatalogue.StageRootsFor(world.Session.Program, new[] { animName },
+        var roots = Flight.Airframe.EffectCatalogue.StageRootsFor(world.Session.Program, new[] { animName },
             Session.World.WorldEffectsFactory.StageRootResolver(world.Gamez));
         ctx.Check(roots.Count > 0,
             $"{animName}: its call closure's anchor roots derived ({roots.Count}: {string.Join(", ", roots)})");

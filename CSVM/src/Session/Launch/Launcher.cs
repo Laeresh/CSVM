@@ -1,7 +1,9 @@
 using System.Collections.Generic;
 using System.IO;
 using CSVM.Bindings;
-using CSVM.Flight;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Camera;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
 using CSVM.Session.Campaign;
@@ -149,7 +151,7 @@ public partial class Launcher : Node3D
     private const float EnhancedTonemapAgxWhite = 6.0f;
     private const float EnhancedTonemapAgxContrast = 1.0f;
 
-    // The zone default FOG_COLOR (Flight/Weather.cs's no-weather zone), which is the colour a
+    // The zone default FOG_COLOR (Flight/Airframe/Weather.cs's no-weather zone), which is the colour a
     // horizon dome fades into at eye level. Enhanced mode's sky until a flown zone writes its own
     // over it, so a world with no weather.json still reflects a plausible sky.
     private static readonly Color EnhancedDefaultSkyColor = new(0.69f, 0.69f, 0.69f);
@@ -465,7 +467,7 @@ public partial class Launcher : Node3D
         }
         // Read by both AI pickers, for the same reason the two statics above are statics. It
         // settles once per launch, and no pilot or gunner chooses it for itself.
-        Flight.AiTargetRanking.AircraftFirst = _spec.AircraftFirstTargeting;
+        Flight.Ai.AiTargetRanking.AircraftFirst = _spec.AircraftFirstTargeting;
         _captureDirector = new Tooling.CaptureDirector(_spec);
         _gltfExporter = new Tooling.GltfExporter(_spec);
         _pendingJoin = _spec.DebugJoin;
@@ -1350,7 +1352,7 @@ public partial class Launcher : Node3D
         }
 
         var readout = PauseAidReadout(sheet, missionZrdr, completed);
-        var pause = new Flight.PauseState();
+        var pause = new Flight.Modes.PauseState();
         var board = OriginalPauseBoard.Build(
             pause, _ => new UI.MenuInput { Keyboard = true }, _dataRoot, sheet, () => readout);
         var layer = new CanvasLayer { Name = "pause_board_aid", Layer = UI.HudLayers.Board };
@@ -1381,7 +1383,7 @@ public partial class Launcher : Node3D
             return;
         }
 
-        var pause = new Flight.PauseState();
+        var pause = new Flight.Modes.PauseState();
         var board = OriginalPauseBoard.Build(
             pause, _ => new UI.MenuInput { Keyboard = true }, _dataRoot, sheet,
             () => UI.PauseReadout.Empty);
@@ -1404,7 +1406,7 @@ public partial class Launcher : Node3D
 
         var icons = new List<UI.PauseWorldIcon>();
         if (sheet.Shared.OwnShip.Length > 0
-            && Flight.SpawnPoints.LoadPlayerInit(missionZrdr) is { } init)
+            && Flight.Modes.SpawnPoints.LoadPlayerInit(missionZrdr) is { } init)
         {
             // Through the readout's own conversion off a nose vector, never off the spawn's heading
             // degrees. Those are the mission data's yaw, which runs opposite the compass.
@@ -2024,21 +2026,21 @@ public partial class Launcher : Node3D
     // explicitly, so a chosen loadout has to be handed over or it would be dropped. A plane the
     // campaign exported flies with the ammunition and ordnance EXPORT wrote into it; a fit set on
     // the loadout screen is this sortie's own explicit pick and stands instead of the stored one.
-    private (List<string> Planes, List<int[]> Pads, List<Flight.LoadoutChoice?> Fits,
-        List<Flight.CustomPlaneDef?> Customs) Unpack(IReadOnlyList<MenuSeatChoice> seats)
+    private (List<string> Planes, List<int[]> Pads, List<Flight.Weapons.LoadoutChoice?> Fits,
+        List<Flight.Hangar.CustomPlaneDef?> Customs) Unpack(IReadOnlyList<MenuSeatChoice> seats)
     {
         var planes = new List<string>(seats.Count);
         var pads = new List<int[]>(seats.Count);
-        var fits = new List<Flight.LoadoutChoice?>(seats.Count);
-        var customs = new List<Flight.CustomPlaneDef?>(seats.Count);
-        Flight.StockLoadouts? stock = null;
+        var fits = new List<Flight.Weapons.LoadoutChoice?>(seats.Count);
+        var customs = new List<Flight.Hangar.CustomPlaneDef?>(seats.Count);
+        Flight.Weapons.StockLoadouts? stock = null;
         foreach (var seat in seats)
         {
             planes.Add(seat.PlaneNode);
             pads.Add(seat.Pads as int[] ?? new List<int>(seat.Pads).ToArray());
             customs.Add(seat.Custom);
             fits.Add(seat.Fit ?? (seat.Custom is { HasLoadout: true } custom
-                ? CampaignLoadout.For(custom, stock ??= Flight.StockLoadouts.Load())
+                ? CampaignLoadout.For(custom, stock ??= Flight.Weapons.StockLoadouts.Load())
                 : null));
         }
 

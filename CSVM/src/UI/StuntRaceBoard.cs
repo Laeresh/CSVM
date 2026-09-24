@@ -1,4 +1,4 @@
-using CSVM.Flight;
+using CSVM.Flight.Modes;
 using CSVM.Utils;
 using Godot;
 

@@ -111,10 +111,10 @@ spawn block assumption and the four lobby arrays.
 `FUN_00498bf0`, carrying a killer id at `+4` and a cause at `+0xc`; the cause table and the three
 Dogfight scoring events (suicide, kill, turret kill) are in `docs/org/multiplayer-scoring.md`. The
 per-mission spawn table `net.zrd` (45 files install-wide, four floats per node) is read by
-`SpawnPoints.LoadNetFreeForAll` in `CSVM/src/Flight/SpawnPoints.cs`, and what the executable does
+`SpawnPoints.LoadNetFreeForAll` in `CSVM/src/Flight/Modes/SpawnPoints.cs`, and what the executable does
 with a picked entry is `docs/org/multiplayer-spawn.md`.
 
-**The seams the code already has.** `CSVM/src/Flight/IFlightInputSource.cs:10` is the one place a
+**The seams the code already has.** `CSVM/src/Flight/Airframe/IFlightInputSource.cs:10` is the one place a
 sim step reads pilot intent, resolved once at `FlightController.cs:1006` from three arms (scripted,
 AI, keyboard). `FlightController` keeps `_simPrev`, `_simCurr` and `_renderPose`
 (`FlightController.cs:1260`), the slot an interpolated remote pose lands in.
@@ -258,7 +258,7 @@ interpolated between the last two and extrapolated past the newest, while everyt
 (guns, rockets, damage visuals, engine audio, HUD markers, collision hulls) works unchanged.
 
 **Evidence (confidence: traced for the seam, lead-only for the arm).**
-`CSVM/src/Flight/IFlightInputSource.cs:10` is the one input seam and its comment says the arm
+`CSVM/src/Flight/Airframe/IFlightInputSource.cs:10` is the one input seam and its comment says the arm
 cannot change after `Bind`. `FlightController.cs:1006` resolves the three existing arms;
 `FlightController.cs:1260` and `FlightController.cs:1405` are where `_simPrev`, `_simCurr` and
 `_renderPose` are set from the model, the slot a received pose replaces. `PilotInputSource` shows
@@ -405,7 +405,7 @@ rotation, and every guest places the aircraft where the host said.
 
 **Evidence (confidence: traced).** `SpawnPoints.LoadNetFreeForAll` reads the table
 (`docs/formats/net-spawns.md`); `docs/org/multiplayer-spawn.md` is what the executable does with a
-pick; `VersusSpawnRotation` (`CSVM/src/Flight/VersusSpawnRotation.cs`) is the remake's rotation
+pick; `VersusSpawnRotation` (`CSVM/src/Flight/Modes/VersusSpawnRotation.cs`) is the remake's rotation
 with one living seat per point and the roomiest-entry respawn; the 16-entry block quantisation is
 in this plan's data survey.
 

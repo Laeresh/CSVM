@@ -1,7 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using CSVM.Flight;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Camera;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
 using CSVM.Session.Roster;
@@ -28,7 +29,7 @@ internal static class AnimationAndEffectsSuites
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            var names = Flight.EffectCatalogue.WorldEffectAnimNames(world.Session.Program);
+            var names = Flight.Airframe.EffectCatalogue.WorldEffectAnimNames(world.Session.Program);
             // The staged set is DERIVED, so this census stages what the
             // real world-effects build stages, from the same call, a root the closure gains and
             // this chapter's gamez cannot supply throws here, naming the def and the anchor.
@@ -123,7 +124,7 @@ internal static class AnimationAndEffectsSuites
                     }
                     ctx.Host.AddChild(rigScope);
                     var resolve = Session.World.WorldEffectsFactory.StageRootResolver(world.Gamez, rigScope);
-                    var rigRoots = Flight.EffectCatalogue.CrashStageRoots(world.Session.Program, resolve);
+                    var rigRoots = Flight.Airframe.EffectCatalogue.CrashStageRoots(world.Session.Program, resolve);
                     var built = new Node3D { Name = "crash_template_replica" };
                     ctx.Host.AddChild(built);
                     int n = Session.World.WorldEffectsFactory.BuildEffectStage(world.Gamez,
@@ -2182,7 +2183,7 @@ internal static class AnimationAndEffectsSuites
     internal static void WithBurst(TestContext ctx, TestWorld world, string animName,
         System.Text.StringBuilder report, System.Action<IReadOnlyList<BurstFire>> body)
     {
-        var roots = Flight.EffectCatalogue.StageRootsFor(world.Session.Program, new[] { animName },
+        var roots = Flight.Airframe.EffectCatalogue.StageRootsFor(world.Session.Program, new[] { animName },
             Session.World.WorldEffectsFactory.StageRootResolver(world.Gamez));
         ctx.Check(roots.Count > 0,
             $"{animName}: its call closure's anchor roots derived ({roots.Count}: {string.Join(", ", roots)})");

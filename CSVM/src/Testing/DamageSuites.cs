@@ -1,7 +1,11 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using CSVM.Flight;
+using CSVM.Flight.Ai;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Camera;
+using CSVM.Flight.Hud;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Roster;
 using CSVM.Tooling;
@@ -600,7 +604,7 @@ internal static class DamageSuites
                 {
                     string n = def.AnimName ?? def.Name ?? "";
                     starts[n] = starts.TryGetValue(n, out var c) ? c + 1 : 1;
-                    if (Flight.EffectCatalogue.AiDamageStageAnims.Contains(n, System.StringComparer.OrdinalIgnoreCase))
+                    if (Flight.Airframe.EffectCatalogue.AiDamageStageAnims.Contains(n, System.StringComparer.OrdinalIgnoreCase))
                         anchors.Add(anchor);
                 };
                 rig.OnInstanceFinished += (def, _) =>

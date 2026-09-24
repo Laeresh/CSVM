@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using CSVM.Flight;
+using CSVM.Flight.Modes;
 using CSVM.Mech3;
 using CSVM.UI;
 using Godot;

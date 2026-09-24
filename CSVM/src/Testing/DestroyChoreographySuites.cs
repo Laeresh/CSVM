@@ -1,7 +1,10 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using CSVM.Flight;
+using CSVM.Flight.Ai;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Camera;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.Session.Roster;
@@ -863,7 +866,7 @@ internal static class DestroyChoreographySuites
                 // Every airframe, not ctx.PlaneName: part of the verdict IS the branch between
                 // them, and `pilot` is a name all eleven carry, so a resolver binding the wrong
                 // one is wrong everywhere at once.
-                foreach (var planeName in Flight.EffectCatalogue.AirframeDestroyAnims.Keys)
+                foreach (var planeName in Flight.Airframe.EffectCatalogue.AirframeDestroyAnims.Keys)
                 {
                     PlayerDestroyArm(ctx, world, planesGamez, textures, planeName,
                         autogyro: string.Equals(planeName, "player_autogyro", System.StringComparison.OrdinalIgnoreCase));
@@ -948,8 +951,8 @@ internal static class DestroyChoreographySuites
                         ctx.Host.AddChild(runtime);
                         var restOrigin = planeModel.GlobalTransform.Origin;
                         runtime.Bind(controller,
-                            world.Session.Program.Subset(Flight.EffectCatalogue.CrashRigAnimNames(
-                                Flight.EffectCatalogue.CrashDefTable(world.Session.Program))));
+                            world.Session.Program.Subset(Flight.Airframe.EffectCatalogue.CrashRigAnimNames(
+                                Flight.Airframe.EffectCatalogue.CrashDefTable(world.Session.Program))));
                         for (int i = 0; i < 6; i++)
                         {
                             runtime.Advance(1f / 60f);
@@ -1083,8 +1086,8 @@ internal static class DestroyChoreographySuites
                     ctx.Host.AddChild(controller);
                     ctx.Host.AddChild(runtime);
                     runtime.Bind(controller,
-                        world.Session.Program.Subset(Flight.EffectCatalogue.CrashRigAnimNames(
-                            Flight.EffectCatalogue.CrashDefTable(world.Session.Program))));
+                        world.Session.Program.Subset(Flight.Airframe.EffectCatalogue.CrashRigAnimNames(
+                            Flight.Airframe.EffectCatalogue.CrashDefTable(world.Session.Program))));
 
                     ctx.Check(Find(planeModel, "exhaust1") != null,
                         $"{model}: builds the exhaust1 marker nitro_boost's puffers anchor at");
@@ -1601,7 +1604,7 @@ internal static class DestroyChoreographySuites
                         engagedAt = i;
                     if (ai.Nitro.ReleasedThisTick && releasedAt < 0)
                         releasedAt = i;
-                    bool shaking = rig.AnimStateOf(Flight.EffectCatalogue.AiShakeAnim) == 2;
+                    bool shaking = rig.AnimStateOf(Flight.Airframe.EffectCatalogue.AiShakeAnim) == 2;
                     if (shaking)
                     {
                         if (shakeFrom < 0)
@@ -1637,7 +1640,7 @@ internal static class DestroyChoreographySuites
                 // The shake: an aircraft nobody is sitting in gets the plane-rocking def instead of
                 // the camera shake, on its own node, and it is a finite three-loop wobble.
                 ctx.Check(shakeFrom == engagedAt,
-                    $"{model}: {Flight.EffectCatalogue.AiShakeAnim} starts on the engaging frame shakeFrom={shakeFrom}");
+                    $"{model}: {Flight.Airframe.EffectCatalogue.AiShakeAnim} starts on the engaging frame shakeFrom={shakeFrom}");
                 ctx.Check(shakeTo > shakeFrom && shakeTo < Frames - 1,
                     $"{model}: …and ends with the def rather than running on shakeTo={shakeTo}");
                 ctx.Check(healthy != null && maxShakeDeg > 0.5f,
@@ -1696,7 +1699,7 @@ internal static class DestroyChoreographySuites
                 crashRoot.Transform = planeModel.Transform;
                 controller.AddChild(crashRoot);
                 var program = world.Session.Program;
-                var crashDefs = Flight.EffectCatalogue.CrashDefTable(program);
+                var crashDefs = Flight.Airframe.EffectCatalogue.CrashDefTable(program);
                 var rootNames = Session.World.WorldEffectsFactory.CrashStageRootNames(
                     program, world.Gamez, controller, crashDefs);
                 Session.World.WorldEffectsFactory.StageCrashTemplates(world.Gamez,
@@ -1711,7 +1714,7 @@ internal static class DestroyChoreographySuites
                 ctx.Host.AddChild(controller);
                 ctx.Host.AddChild(runtime);
                 runtime.Bind(controller,
-                    program.Subset(Flight.EffectCatalogue.CrashRigAnimNames(crashDefs)));
+                    program.Subset(Flight.Airframe.EffectCatalogue.CrashRigAnimNames(crashDefs)));
                 for (int i = 0; i < 6; i++)
                 {
                     runtime.Advance(1f / 60f);
@@ -1983,7 +1986,7 @@ internal static class DestroyChoreographySuites
                     return;
                 ctx.Check(ai.CrashDefs.PlayableDefs.Count == 3
                           && ai.CrashDefs.PlayableDefs.All(d =>
-                              d.StartsWith(Flight.EffectCatalogue.AiCrashDefPrefix, System.StringComparison.Ordinal)),
+                              d.StartsWith(Flight.Airframe.EffectCatalogue.AiCrashDefPrefix, System.StringComparison.Ordinal)),
                     $"the AI table's playable slots are the ai_crash_* trio [{string.Join(", ", ai.CrashDefs.PlayableDefs)}]");
 
                 // The two subtrees one context node has to reach: `healthy` sits on the plane
@@ -2002,7 +2005,7 @@ internal static class DestroyChoreographySuites
                 dirt.SetMeta(SceneBuilder.SurfaceIdMeta, 13);
                 ctx.Host.AddChild(dirt);
                 ai.DebugForceCrash(null, dirt);
-                ctx.Check(ai.Crashed && ai.LastCrashDef == Flight.EffectCatalogue.AiCrashDefPrefix + "dirt",
+                ctx.Check(ai.Crashed && ai.LastCrashDef == Flight.Airframe.EffectCatalogue.AiCrashDefPrefix + "dirt",
                     $"an AI crash on dirt(13) plays ai_crash_dirt def={ai.LastCrashDef ?? "-"}");
                 string healthyState = healthy == null ? "-" : healthy.Visible ? "on" : "off";
                 string wreckState = wreck == null ? "-" : wreck.Visible ? "on" : "off";
@@ -2012,7 +2015,7 @@ internal static class DestroyChoreographySuites
                 // No struck body: the null-material arm resolves slot 0 of the SAME family.
                 ai.Respawn();
                 ai.DebugForceCrash();
-                ctx.Check(ai.LastCrashDef == Flight.EffectCatalogue.AiCrashDefPrefix + "default",
+                ctx.Check(ai.LastCrashDef == Flight.Airframe.EffectCatalogue.AiCrashDefPrefix + "default",
                     $"an AI crash with no material falls to ai_crash_default def={ai.LastCrashDef ?? "-"}");
 
                 // The A/B control: a human rig through the same factory keeps the player family.
@@ -2034,10 +2037,10 @@ internal static class DestroyChoreographySuites
                     world.Session.Builder.Scene, textures, world.Session.Program, verbose: false,
                     planesGamez: planesGamez);
                 ctx.Check(human.CrashDefs != null && human.CrashDefs.PlayableDefs.All(d =>
-                        d.StartsWith(Flight.EffectCatalogue.CrashDefPrefix, System.StringComparison.Ordinal)),
+                        d.StartsWith(Flight.Airframe.EffectCatalogue.CrashDefPrefix, System.StringComparison.Ordinal)),
                     $"the same factory keeps a human rig on player_crash_* [{string.Join(", ", human.CrashDefs?.PlayableDefs ?? System.Array.Empty<string>())}]");
                 human.DebugForceCrash(null, dirt);
-                ctx.Check(human.LastCrashDef == Flight.EffectCatalogue.CrashDefPrefix + "dirt",
+                ctx.Check(human.LastCrashDef == Flight.Airframe.EffectCatalogue.CrashDefPrefix + "dirt",
                     $"…and its dirt crash plays player_crash_dirt def={human.LastCrashDef ?? "-"}");
             }
             finally
@@ -2313,7 +2316,7 @@ internal static class DestroyChoreographySuites
             ctx.Same(1, Count(starts, "fury"),
                 $"the rig started the self-named destroy def exactly once on the kill");
             int crashStarts = starts.Where(kv => kv.Key.StartsWith(
-                Flight.EffectCatalogue.AiCrashDefPrefix, System.StringComparison.OrdinalIgnoreCase))
+                Flight.Airframe.EffectCatalogue.AiCrashDefPrefix, System.StringComparison.OrdinalIgnoreCase))
                 .Sum(kv => kv.Value);
             ctx.Same(0, crashStarts,
                 $"…and no ai_crash_* def, which belongs to the ground contact seconds away");
@@ -2619,7 +2622,7 @@ internal static class DestroyChoreographySuites
             ctx.Check(landedAt is > 0f and < 3f,
                 $"the wreck reached the world inside the 3.0 s window, so it was still a vehicle t={landedAt:0.00} s");
             ctx.Check(ai.LastCrashDef != null && ai.LastCrashDef.StartsWith(
-                    Flight.EffectCatalogue.AiCrashDefPrefix, System.StringComparison.Ordinal),
+                    Flight.Airframe.EffectCatalogue.AiCrashDefPrefix, System.StringComparison.Ordinal),
                 $"…and its contact played the AI ground-impact family, indexed by the struck surface def={ai.LastCrashDef ?? "-"}");
             ctx.Check(visibleFramesBeforeLanding > 0 && !model.Visible,
                 $"…which is what hides it, and only then: {visibleFramesBeforeLanding} visible frame(s) of flight, then model={model.Visible}");
@@ -2685,7 +2688,7 @@ internal static class DestroyChoreographySuites
             }
 
             rig.ManualAdvance = true;
-            ctx.Check(player.DestroyDef == Flight.EffectCatalogue.PlayerDestroyAnim
+            ctx.Check(player.DestroyDef == Flight.Airframe.EffectCatalogue.PlayerDestroyAnim
                       && !player.DestroyDefFliesWreck,
                 $"{planeName}: the human rig's destroy def is '{player.DestroyDef ?? "-"}' and authors no hull ObjectMotion (fliesOwnHull={player.DestroyDefFliesWreck})");
 

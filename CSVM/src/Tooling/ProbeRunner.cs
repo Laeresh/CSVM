@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using CSVM.Flight;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.UI;
 using CSVM.Utils;
@@ -310,7 +310,7 @@ public sealed class ProbeRunner
         return code;
     }
 
-    /// <summary>--dump-weapons[=id|name] (docs/cli.md): the <see cref="Flight.WeaponDefs"/> report,
+    /// <summary>--dump-weapons[=id|name] (docs/cli.md): the <see cref="Flight.Weapons.WeaponDefs"/> report,
     /// stdout and <c>./.scratch/weapons_dump.txt</c>, checked against weapons.md; a clean run (no
     /// UNHANDLED lines) is the pass.</summary>
     /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
@@ -329,7 +329,7 @@ public sealed class ProbeRunner
         return true;
     }
 
-    /// <summary>--dump-flight[=plane|=all] (docs/cli.md): the <see cref="FlightModel"/> envelope
+    /// <summary>--dump-flight[=plane|=all] (docs/cli.md): the <see cref="Flight.Airframe.FlightModel"/> envelope
     /// report against its decoded targets, to stdout and <c>./.scratch/flight_dump.txt</c>. The only
     /// instrument that shows what a flight-constant change did to the whole envelope, and with
     /// <c>=all</c> it shows that across all eleven stock airframes in one run.</summary>
@@ -353,8 +353,9 @@ public sealed class ProbeRunner
     }
 
     /// <summary>--dump-loadout[=plane] (docs/cli.md): builds each plane and binds its stock loadout
-    /// (<see cref="Flight.Loadout"/>), reporting gun groups and hardpoints, or the loud error if a
-    /// marker doesn't resolve. <c>--weapon-lab</c> binds <see cref="Flight.Loadout.ForRig"/> instead.
+    /// (<see cref="Flight.Weapons.Loadout"/>). It reports gun groups and hardpoints, or the loud
+    /// error if a marker doesn't resolve. <c>--weapon-lab</c> binds
+    /// <see cref="Flight.Weapons.Loadout.ForRig"/> instead.
     /// Writes to stdout and <c>./.scratch/loadout_dump.txt</c>.</summary>
     /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
     public bool DumpLoadout(SessionSpec spec)

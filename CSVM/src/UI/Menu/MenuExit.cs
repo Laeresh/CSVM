@@ -1,5 +1,6 @@
 using System.Collections.Generic;
-using CSVM.Flight;
+using CSVM.Flight.Hangar;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 
 namespace CSVM.UI.Menu;
@@ -34,7 +35,7 @@ public sealed record QuitExit : MenuExit;
 /// <summary>The player applied an Options screen: the consumer persists every choice it carries,
 /// then shows the active presentation again at its top level. Which presentation that is stays the
 /// command line's, never an option. Carried are a <see cref="Utils.GraphicsMode"/> word saved and
-/// no more, a <see cref="Flight.Difficulty.Word"/> the next launch reads, and the rest of
+/// no more, a <see cref="Flight.Hangar.Difficulty.Word"/> the next launch reads, and the rest of
 /// <see cref="Utils.OptionsDef"/>'s own fields, null where never set. A screen showing none of them
 /// hands back what it read, since the consumer writes every field it is given. ⚠ All fourteen ride
 /// the exit, not the screen's own save, so the options file keeps one writer, and none is

@@ -1,4 +1,4 @@
-using CSVM.Flight;
+using CSVM.Flight.Airframe;
 using CSVM.Session.World;
 using Godot;
 using Xunit;

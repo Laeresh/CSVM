@@ -27,7 +27,7 @@ public sealed partial class ScreenFlash : Node
     // Reused by every Play call, so routing a wash allocates nothing.
     private readonly List<int> _selected = new();
 
-    private Flight.ViewerSet? _viewers;
+    private Flight.Camera.ViewerSet? _viewers;
 
     /// <summary>The colour currently washed over pane 0's picture, or a fully transparent one when
     /// nothing is running there. The single-player readout (one pane), kept for the `fbfx-flash`
@@ -54,7 +54,7 @@ public sealed partial class ScreenFlash : Node
     /// several. <paramref name="viewers"/> is the session's viewer set, read INDEX-ALIGNED with
     /// those parents because both come from the same rig list; null (a build with no session behind
     /// it) leaves every ramp painting every pane, as it did before the routing existed.</summary>
-    public static ScreenFlash Build(IEnumerable<Node> hudParents, Flight.ViewerSet? viewers = null)
+    public static ScreenFlash Build(IEnumerable<Node> hudParents, Flight.Camera.ViewerSet? viewers = null)
     {
         var flash = new ScreenFlash { Name = "screen_flash", _viewers = viewers };
         foreach (var parent in hudParents)

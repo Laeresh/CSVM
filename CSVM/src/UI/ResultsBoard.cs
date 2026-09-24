@@ -1,4 +1,5 @@
-using CSVM.Flight;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Modes;
 using Godot;
 
 namespace CSVM.UI;

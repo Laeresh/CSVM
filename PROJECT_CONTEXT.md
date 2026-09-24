@@ -163,10 +163,10 @@ GODOT --path CSVM res://scenes/Main.tscn -- --plane=player_bhawk
 
 (First time only: run with `--headless --import` once before running scenes.)
 
-**Module map, the index at [`docs/architecture.md`](docs/architecture.md) routes to the per-namespace file `docs/architecture/<Namespace>.md`.** Find the module in that index, then read only its `##` entry: `Grep "## src/Flight/FlightModel.cs" -A 12 docs/architecture/` returns the whole entry. Read a module's entry before changing it.
+**Module map, the index at [`docs/architecture.md`](docs/architecture.md) routes to the per-namespace file `docs/architecture/<Namespace>.md`.** Find the module in that index, then read only its `##` entry: `Grep "## src/Flight/Airframe/FlightModel.cs" -A 12 docs/architecture/` returns the whole entry. Read a module's entry before changing it.
 
 - `src/Mech3/`, extraction readers, the GameZ→Godot builders, and the animation runtime: install → live world.
-- `src/Flight/`, the aircraft as a flying, shooting, damageable thing, plus its HUD and stunt mode.
+- `src/Flight/`, the aircraft as a flying, shooting, damageable thing, plus its HUD and stunt mode, in eight sub-namespaces, one folder each: `Airframe/` (`FlightController.cs`, the flying node, and `FlightModel.cs`, its physics, with collision and damage), `Weapons/` (fire control, the projectile pool, targeting, turrets), `Ai/` (the AI pilot and the surface hulls), `Camera/`, `Hud/`, `Modes/` (stunt, Dogfight, pause), `Hangar/` (the custom plane) and `Audio/`.
 - `src/Effects/`, particle systems: puffers, the ambient cloud field, precipitation, the world wind.
 - `src/UI/`, launchscreen, splitscreen rig, and the inspection labs (each with a scripted `--debug-*` twin).
 - `src/Video/`, the managed MPEG-1 decoder for the install's `.mpg` cinemas: system-stream demux, video decode, frames as pixel buffers. Holds no engine type.

@@ -688,7 +688,7 @@ row.
 
 The four zones sum to the airframe's own armour rating base in ten of the eleven rows, the Kestrel
 (100 against a base of 110) the only one parting from it, so a stock aircraft's ARMOR word comes
-out of very nearly twice its base. `CSVM/src/Flight/HangarEconomy.cs` carries those sums as
+out of very nearly twice its base. `CSVM/src/Flight/Hangar/HangarEconomy.cs` carries those sums as
 `StockArmourUnits`, which is all the rating needs; the guns and hardpoints of the same builds are
 in `CSVM/data/stock_loadouts.json`, where they agree with these rows slot for slot.
 

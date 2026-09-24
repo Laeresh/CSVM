@@ -2,7 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using CSVM.Flight;
+using CSVM.Flight.Ai;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Camera;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.Session.Objectives;
@@ -106,7 +109,7 @@ internal static class CampaignRosterSuites
     private const int PlainSteadyHand = 0;
     private const int FriendDeadEye = 1;
 
-    // What Normal adds to a hostile pilot's every rating (Flight.Difficulty): the low tier's k.
+    // What Normal adds to a hostile pilot's every rating (Flight.Hangar.Difficulty): the low tier's k.
     private const int DifficultyStep = -2;
     private const string SteadyHandKey = "steady_hand_chance";
 

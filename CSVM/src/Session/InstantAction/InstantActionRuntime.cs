@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
-using CSVM.Flight;
+using CSVM.Flight.Ai;
+using CSVM.Flight.Modes;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 
 namespace CSVM.Session.InstantAction;
@@ -38,7 +40,7 @@ public enum InstantActionObjective
 /// selection, and the mission's end (<see cref="Objective"/>, the lives ledger,
 /// <see cref="Outcome"/>). Detail: this module's docs/architecture.md entry.
 /// The end half holds no engine type and calls no <c>GD.*</c>, the same construction rule
-/// <see cref="Flight.VersusMatch"/> follows.
+/// <see cref="Flight.Modes.VersusMatch"/> follows.
 /// ⚠ Environment→chapter resolution belongs to the launch menu, never here, a --ia=&lt;path&gt;
 /// CLI launch already names its chapter via --chapter=.
 /// ⚠ <see cref="WingmanSlotFor"/>/<see cref="FlownWingmen"/> place and clamp only; livery, team
@@ -114,7 +116,7 @@ public sealed class InstantActionRuntime
     /// condition here: <c>ground_target</c> (which every shipped map's <c>disallow_missions</c>
     /// bars and this milestone does not implement) and any unrecognised hand-authored value. Such
     /// a mission can still be LOST, it simply cannot be won, which is a deliberate disable in
-    /// <see cref="Flight.VersusMatch"/>'s shape rather than an error.</summary>
+    /// <see cref="Flight.Modes.VersusMatch"/>'s shape rather than an error.</summary>
     public InstantActionObjective? Objective => ObjectiveFor(Def.MissionType);
 
     /// <summary><see cref="InstantActionOutcome.Running"/> until the objective is reported or
@@ -410,7 +412,7 @@ public sealed class InstantActionRuntime
     /// <summary>One human death: spends a life and answers whether that pilot flies again. False
     /// means it is out, and the mission is lost once every registered pilot is out. <c>lives 0</c>
     /// is unlimited and always answers true, the disabled-end-condition shape
-    /// <see cref="Flight.VersusMatch"/>'s 0 kill target has; an unregistered pilot answers true too.
+    /// <see cref="Flight.Modes.VersusMatch"/>'s 0 kill target has; an unregistered pilot answers true too.
     /// ⚠ A death after the mission has ENDED spends nothing and answers false: the result was
     /// settled at the ending, and the hold before the board is not the sortie.</summary>
     public bool NotifyPilotDown(int playerIndex)

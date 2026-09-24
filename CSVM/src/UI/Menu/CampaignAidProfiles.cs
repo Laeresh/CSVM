@@ -54,7 +54,7 @@ public static class CampaignAidProfiles
     /// <summary>The build store the scratch-store aids open the campaign over, a subdirectory of
     /// <see cref="Directory"/> emptied with it: the export aid's write lands here and never in
     /// <c>user://Planes</c>.</summary>
-    public static Flight.CustomPlaneStore Planes() => new(Path.Combine(Directory, "Planes"));
+    public static Flight.Hangar.CustomPlaneStore Planes() => new(Path.Combine(Directory, "Planes"));
 
     /// <summary>A fresh scratch store: emptied, then seeded with the two players when
     /// <paramref name="seeded"/>, the first of them progressed through the first three missions

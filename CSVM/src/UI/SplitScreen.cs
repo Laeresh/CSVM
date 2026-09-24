@@ -21,7 +21,7 @@ public sealed partial class SplitScreen : CanvasLayer
     /// <summary>Panes the rig supports, the reserved visual-layer band is this wide.</summary>
     public const int MaxPlayers = 4;
 
-    /// <summary>The layer <see cref="Flight.CockpitVisibility.ShowForPhotograph"/> moves a pilot's
+    /// <summary>The layer <see cref="Flight.Hud.CockpitVisibility.ShowForPhotograph"/> moves a pilot's
     /// hidden airframe groups onto for the one frame the Danger Zone camera draws, the bit just below
     /// the own-airframe band. No pane's cull mask carries it (<see cref="PaneCullMask"/>).</summary>
     public const uint PhotographLayer = 1u << 8;

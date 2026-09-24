@@ -1,5 +1,5 @@
 using System.Linq;
-using CSVM.Flight;
+using CSVM.Flight.Modes;
 using CSVM.UI;
 using CSVM.UI.Menu;
 using Xunit;

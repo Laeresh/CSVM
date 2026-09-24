@@ -324,8 +324,8 @@ public sealed partial class PerfHud : Node
     // so it takes the plain window-height ratio instead.
     private float WindowScale()
     {
-        float windowH = GetTree()?.Root?.Size.Y ?? Flight.HudMetrics.ReferenceHeight;
-        return windowH / Flight.HudMetrics.ReferenceHeight;
+        float windowH = GetTree()?.Root?.Size.Y ?? Flight.Hud.HudMetrics.ReferenceHeight;
+        return windowH / Flight.Hud.HudMetrics.ReferenceHeight;
     }
 }
 

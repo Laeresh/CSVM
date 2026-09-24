@@ -3,7 +3,7 @@
 Part of the [format documentation](README.md) (see also [zrdr.md](zrdr.md),
 [world-structure.md](world-structure.md)). Covers the mission's `weather.json` reader: distance fog, the cloud-cover
 whiteout band, wind, and the shared **colour-triple encoding rule**. Consumed by
-`CSVM/src/Flight/Weather.cs` (`WeatherState`) + `Session.World.WeatherRig.Build`.
+`CSVM/src/Flight/Airframe/Weather.cs` (`WeatherState`) + `Session.World.WeatherRig.Build`.
 
 This reference covers fog colour, precipitation
 (item 5) and the `SUNLIGHT_*` world-lighting decode (item 6, the night/overcast brightness
@@ -456,7 +456,7 @@ to `FOG_COLOR` at the horizon.
 The deck tiles author `lighting: false` like the dome and C1's and C4's `fvol` cloud cards (C1C,
 C2B and C5 author theirs `true`, which buys them a per-vertex directional term rather than a
 brightness scalar; see [`../org/vertexLighting.md`](../org/vertexLighting.md)), but the deck
-alone was measured to be SUNLIGHT-dimmed in the original, `Flight/Weather.cs`'s `SunIncidence`
+alone was measured to be SUNLIGHT-dimmed in the original, `Flight/Airframe/Weather.cs`'s `SunIncidence`
 was calibrated on this exact texture. `WorldBuilder.Add` therefore force-lights the deck's own
 tiles (`forceLit: isDeck`) regardless of the authored flag, applying `csky_world_light` deck-local,
 never as a change to the `lighting` gate or to `csky_world_light` itself.
