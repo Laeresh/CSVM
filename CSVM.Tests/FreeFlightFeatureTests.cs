@@ -24,7 +24,7 @@ public class FreeFlightFeatureTests
         var feature = new FreeFlightFeature();
 
         Assert.Equal(AllEight, feature.Chapters.Select(c => c.Code));
-        Assert.Equal(UI.LaunchMenu.ChapterCodesFor(MenuMode.Free), feature.Chapters.Select(c => c.Code));
+        Assert.Equal(UI.Screens.LaunchMenu.ChapterCodesFor(MenuMode.Free), feature.Chapters.Select(c => c.Code));
         Assert.Equal(MenuMode.Free, FreeFlightFeature.Mode);
     }
 
@@ -66,7 +66,7 @@ public class FreeFlightFeatureTests
         var feature = Picked("C1");
 
         Assert.Equal(
-            UI.LaunchMenu.CanLaunch(MenuMode.Free, allLocked: confirmed == joined, joined),
+            UI.Screens.LaunchMenu.CanLaunch(MenuMode.Free, allLocked: confirmed == joined, joined),
             feature.CanLaunch(joined, confirmed));
     }
 
@@ -151,9 +151,9 @@ public class FreeFlightFeatureTests
     public void TheSharedRosterAgreesWithTheLaunchscreensChapterScreens()
     {
         Assert.Equal(AllEight, MenuChapters.All.Select(c => c.Code));
-        Assert.Equal(UI.LaunchMenu.ChapterCodesFor(MenuMode.Free), MenuChapters.For(MenuMode.Free).Select(c => c.Code));
-        Assert.Equal(UI.LaunchMenu.ChapterCodesFor(MenuMode.Versus), MenuChapters.For(MenuMode.Versus).Select(c => c.Code));
-        Assert.Equal(UI.LaunchMenu.ChapterCodesFor(MenuMode.Stunt), MenuChapters.For(MenuMode.Stunt).Select(c => c.Code));
+        Assert.Equal(UI.Screens.LaunchMenu.ChapterCodesFor(MenuMode.Free), MenuChapters.For(MenuMode.Free).Select(c => c.Code));
+        Assert.Equal(UI.Screens.LaunchMenu.ChapterCodesFor(MenuMode.Versus), MenuChapters.For(MenuMode.Versus).Select(c => c.Code));
+        Assert.Equal(UI.Screens.LaunchMenu.ChapterCodesFor(MenuMode.Stunt), MenuChapters.For(MenuMode.Stunt).Select(c => c.Code));
     }
 
     [Fact]

@@ -19,7 +19,7 @@ the reading this page exists to prevent.
 [`formats/strings.md`](../formats/strings.md). How the original's 800x600 space meets a modern
 window is [`campaign-board.md`](campaign-board.md), which every screen here inherits. The hangar's
 own callbacks and economy are [`hangar.md`](hangar.md), the mission-end book
-[`debrief.md`](debrief.md). Built-in is `CSVM/src/UI/LaunchMenu.cs`, `HangarFlow.cs`,
+[`debrief.md`](debrief.md). Built-in is `CSVM/src/UI/Screens/LaunchMenu.cs`, `HangarFlow.cs`,
 `CampaignFlow.cs` and the `CampaignBoards`/`ComposedBoard`/`BoardFit` trio.
 
 ## Contents

@@ -8,7 +8,8 @@ using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.World;
-using CSVM.UI;
+using CSVM.UI.Boards;
+using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
 
@@ -143,7 +144,7 @@ internal sealed class HumanFlightAdapter
             ? capturedSwap.Scheme
             : swap?.Scheme
                 ?? (custom != null && !_liveries.PaintRequested
-                    ? Flight.Hangar.CustomPlaneBuild.PaintFor(custom, UI.HangarPaintPage.PatternName(custom.PaintPattern))
+                    ? Flight.Hangar.CustomPlaneBuild.PaintFor(custom, UI.Hangar.HangarPaintPage.PatternName(custom.PaintPattern))
                     : _liveries.SchemeFor(pi, _aircraft.ZrdrPath, _aircraft.PaintRng,
                         _liveries.PatternsForPlane(_aircraft.PlanesGamez, planeName)));
         _flying[pi] = new FlyingAirframe(planeName, scheme);

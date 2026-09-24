@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Mech3;
+using CSVM.UI.Boards;
+using CSVM.UI.Campaign;
+using CSVM.UI.Hangar;
 
 namespace CSVM.UI.Menu.Original;
 

@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight.Hangar;
 using CSVM.Mech3;
-using CSVM.UI;
+using CSVM.UI.Boards;
+using CSVM.UI.Campaign;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
+using CSVM.UI.Screens;
 
 namespace CSVM.Tests;
 

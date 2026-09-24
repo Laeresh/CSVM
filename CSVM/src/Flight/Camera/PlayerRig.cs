@@ -12,7 +12,7 @@ public readonly record struct HorizonDome(Node3D Node, int ZoneId);
 /// <summary>
 /// Everything one player's *view* owns for a session. A single-player session has
 /// exactly one rig wrapping GameSession's original main-viewport camera, so the 1P path is
-/// unchanged; splitscreen has one per pane (see <see cref="UI.SplitScreen"/>).
+/// unchanged; splitscreen has one per pane (see <see cref="UI.Boards.SplitScreen"/>).
 ///
 /// <para>The rig exists because the flight view is not just a camera: the skydome, the cloud
 /// deck and the cloud-band whiteout overlay are all anchored to <i>the</i> camera every frame, so
@@ -66,7 +66,7 @@ public sealed class PlayerRig
     // which follow a camera and therefore still need a copy each.
 
     /// <summary>This player's full-pane cloud-band whiteout overlay, faded by camera altitude. It
-    /// draws under this pane's own cockpit pass (<c>UI.HudLayers.Whiteout</c>), so the window
+    /// draws under this pane's own cockpit pass (<c>UI.Boards.HudLayers.Whiteout</c>), so the window
     /// whites out and the interior does not.</summary>
     public ColorRect? Whiteout;
 

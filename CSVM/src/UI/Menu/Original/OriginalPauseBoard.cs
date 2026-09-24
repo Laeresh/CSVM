@@ -1,7 +1,8 @@
 using System;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Modes;
-using CSVM.UI;
+using CSVM.UI.Boards;
+using CSVM.UI.Screens;
 using Godot;
 
 namespace CSVM.UI.Menu.Original;

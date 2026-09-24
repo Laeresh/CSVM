@@ -30,7 +30,7 @@ format is [`formats/menu-layout.md`](formats/menu-layout.md).
 
 A menu presentation is a screen graph together with its navigation, interaction, animation and cue
 selection over the shared features. Drawing alone is not the boundary: the two shipped
-presentations, Built-in (`CSVM/src/UI/Menu/BuiltIn/`, the launchscreen in `CSVM/src/UI/LaunchMenu.cs`)
+presentations, Built-in (`CSVM/src/UI/Menu/BuiltIn/`, the launchscreen in `CSVM/src/UI/Screens/LaunchMenu.cs`)
 and Original (`CSVM/src/UI/Menu/Original/`, the decoded 800x600 screens over the player's extracted
 menu data), reach the same features through different screen sequences, different input idioms
 (cursor rows against a pointer-first page) and different sounds.
@@ -135,7 +135,7 @@ and `MoveX` with auto-repeat applied, the edges `Accept`, `Back`, `Join`, `Loado
 on the press edge, `Wheel` as the steps turned since the last poll and positive toward a list's
 foot; null when the seat's devices have none). A presentation reads meaning and never a key, button
 or axis. A presentation that polls its seats also reads the campaign flow's `Film`
-(`CSVM/src/UI/CinemaHandoff.cs`) before it applies a frame: a cinema stops and hands off inside the
+(`CSVM/src/UI/Screens/CinemaHandoff.cs`) before it applies a frame: a cinema stops and hands off inside the
 input flush, ahead of that poll, so the press that skipped the film would otherwise land as an edge
 on the screen the film just opened.
 
@@ -148,7 +148,7 @@ plugs in as another `IMenuInputSource` with no change to any presentation.
 The seats themselves are the `PlayerSetupFeature`'s. Once that feature is registered,
 `MenuHost.Seats` is its live source list, `MenuHost.AddSeat` joins through it, and a join made
 anywhere shows up in every presentation's `Seats` read. The pad side (`MenuSeatDevices`,
-`CSVM/src/UI/MenuSeatDevices.cs`) is presentation-side and shared by both: seat 0's claimed pad,
+`CSVM/src/UI/Screens/MenuSeatDevices.cs`) is presentation-side and shared by both: seat 0's claimed pad,
 hotplug reconciliation, the gesture scans (each presentation decides on which screens they are
 open), and `FlightPads`, the binding a launch carries per seat. Built-in keeps the Start-to-join
 scan (`PrimeJoins`/`ScanJoins`) on the screens that launch a flight and calls `ClaimP1Pad` every
@@ -161,7 +161,7 @@ Flight, Dogfight, Instant Action and the campaign flight check) only read the ro
 wrote. Once a second seat has signed on, Original draws a seat strip over every campaign board and
 over the Instant Action screen as an overlay; a solo campaign shows the authored board alone. That strip is Built-in's own chip row, the
 player tags alone in the top-right corner each in its seat's identity colour over a dark ground
-(`CSVM/src/UI/SeatStrip.cs` holds the shape the two share, and the Instant Action screen asks for
+(`CSVM/src/UI/Boards/SeatStrip.cs` holds the shape the two share, and the Instant Action screen asks for
 the more opaque ground its light paper needs). The sortie screens keep their own strip lower down,
 where the device and the pick status stand beside the tag. A
 presentation with a pointer maps the window-pixel pointer into its own space; Original does it
@@ -197,7 +197,7 @@ decoded.
 
 The wheel and the thumb reach the lists through one seam. `OriginalShell.Lists` answers the screen's
 scrolling lists as `OriginalList` records, topmost first, each a key, a `ListWindow`
-(`CSVM/src/UI/ListWindow.cs`) the list widget built from its own geometry, and the write that puts
+(`CSVM/src/UI/Boards/ListWindow.cs`) the list widget built from its own geometry, and the write that puts
 the window's first row somewhere else. Nothing is listed under a dialog, and while a drop-down is
 open its list is the only one, since it hangs over the screen. Per frame the shell takes the thumb
 first (a held thumb owns the pointer until it is let go, and the click that took hold activates
@@ -502,7 +502,8 @@ is absent, and every fixture is hand-authored.
 Shared contracts, features and readers live in the namespace `CSVM.UI.Menu` exactly (folder
 `CSVM/src/UI/Menu/`). Each presentation lives in a sub-namespace (`CSVM.UI.Menu.BuiltIn`,
 `CSVM.UI.Menu.Original`) and may depend on anything, `Godot` included. `ComposedBoard`, `BoardFit`
-and the other board types stay presentation-side in `CSVM.UI`.
+and the other board types stay presentation-side in `CSVM.UI.Boards`, beside the other flat UI
+sub-namespaces (`CSVM.UI.Campaign`, `.Screens`, `.Hangar`, `.Overlays`, `.Labs`).
 
 Two scans over the compiled metadata enforce it (`CSVM.Tests/MenuNamespaceDependencyTests.cs`,
 through `AssemblyDependencyScan`, which walks signatures and method-body IL alike without loading
@@ -510,7 +511,7 @@ the assembly):
 
 - no type in `CSVM.UI.Menu` references `Godot.*` or any `CSVM.UI.*` type outside that exact
   namespace, which is what keeps every feature free of both presentations and of the engine;
-- nothing in `CSVM.UI` or any `CSVM.UI.Menu*` namespace names `GameSession`, `Launcher` or
+- nothing in `CSVM.UI` or any of its sub-namespaces names `GameSession`, `Launcher` or
   `LauncherContext`, which is what keeps every presentation from building a session or reaching
   the launcher.
 

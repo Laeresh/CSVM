@@ -7,7 +7,7 @@ namespace CSVM.Session.Roster;
 /// <c>CALLBACK</c> value, the vehicle def the stats and the stock fit come from (<c>pbalmoral</c>),
 /// and the planes.zbd node the model is built from (<c>player_balmoral</c>). That pair is the one
 /// every other player-airframe path already uses (<c>PlaneStats.DefName</c> /
-/// <c>UI.PlanePickerRoster.AirframeNode</c>), so a swap needs no table of its own.
+/// <c>UI.Hangar.PlanePickerRoster.AirframeNode</c>), so a swap needs no table of its own.
 /// <c>AwardAirframe</c> names the special-plane template the code's own case writes by hand
 /// (965 fits the Blue Streak: twin 40 and twin 30, two pylons, 20 armour a zone, the injector),
 /// null for a code that hands over the stock fit. <c>ShippedSkins</c> says the rebuild draws the

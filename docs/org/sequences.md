@@ -997,7 +997,7 @@ one 8-bit level. CSVM does not read it.
 session-level sink and reports `run_time` as the event's **duration**, which is the CSVM equivalent
 of the original's "return 1 until done": the sequence runner gates the next event on it, so
 `he_ground_effect`'s six steps space out over their authored 1.2 s instead of collapsing into one
-instant. The sink is `UI.ScreenFlash` (`docs/architecture.md`), one ramp at a time, replaced
+instant. The sink is `UI.Boards.ScreenFlash` (`docs/architecture.md`), one ramp at a time, replaced
 outright by a later event, painted into every rendered view. Asserted by the `fbfx-flash`
 `--run-tests` suite.
 

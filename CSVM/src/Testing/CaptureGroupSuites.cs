@@ -11,7 +11,7 @@ using CSVM.Session.Campaign;
 using CSVM.Session.Objectives;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
-using CSVM.UI;
+using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
 

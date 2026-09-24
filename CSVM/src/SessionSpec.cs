@@ -766,11 +766,11 @@ public sealed record SessionSpec
     /// drag, and flight has no cursor.</summary>
     public string? DebugSelect { get; private set; }
     /// <summary><b>Resolved.</b> Filtered to the lab's token grammar
-    /// (<c>UI.NodeLab.ParseDebugSpec</c>, called with a reject list so it hands them back as data
+    /// (<c>UI.Labs.NodeLab.ParseDebugSpec</c>, called with a reject list so it hands them back as data
     /// instead of logging), and null outside <c>--freecam</c>/<c>--anim-lab</c>.</summary>
     public string? DebugNodeLab { get; private set; }
     /// <summary><b>Resolved.</b> Same treatment as <see cref="DebugNodeLab"/>, through
-    /// <c>UI.WorldDamageLab.ParseDebugSpec</c>.</summary>
+    /// <c>UI.Labs.WorldDamageLab.ParseDebugSpec</c>.</summary>
     public string? DebugDamage { get; private set; }
     public int DebugJoin { get; private set; }
     /// <summary><c>--debug-waves=N</c> (launchscreen only): pre-configure the first N
@@ -1495,7 +1495,7 @@ public sealed record SessionSpec
     /// <summary>The spec for a launchscreen launch, one plane per player, derived from the pristine
     /// command line <paramref name="cli"/>, never the last session's spec. ⚠ Does not re-resolve:
     /// every menu-settable field must be written here, or the pristine base drops it. The 2-player
-    /// Dogfight lock is <see cref="UI.LaunchMenu"/>'s job. An <paramref name="iaDef"/> decides
+    /// Dogfight lock is <see cref="UI.Screens.LaunchMenu"/>'s job. An <paramref name="iaDef"/> decides
     /// <see cref="Scenario"/> and <see cref="Stunt"/> instead. The two vs arguments are a screen's
     /// match rules, null where none offers them (<see cref="VsKillsExplicit"/>).</summary>
     public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
@@ -1514,7 +1514,7 @@ public sealed record SessionSpec
             // slot is locked, and it needs at least one), so this falls back to the command line's
             // plane rather than to whatever the last session flew.
             PlaneName = names.Length > 0 ? names[0] : cli.PlaneName,
-            Players = Mathf.Clamp(names.Length, 1, UI.SplitScreen.MaxPlayers),
+            Players = Mathf.Clamp(names.Length, 1, UI.Boards.SplitScreen.MaxPlayers),
             Stunt = iaDef != null ? iaDef.MissionType == "stunt_flying" : mode == MenuMode.Stunt,
             Versus = mode == MenuMode.Versus,
             VsKills = cli.VsKillsExplicit ? cli.VsKills : vsKills ?? cli.VsKills,
@@ -1549,7 +1549,7 @@ public sealed record SessionSpec
             MenuCustomPlanes = customs ?? Array.Empty<CustomPlaneDef?>(),
             PlaneNames = planeNodes.ToArray(),
             PlaneName = planeNodes.Count > 0 ? planeNodes[0] : cli.PlaneName,
-            Players = Mathf.Clamp(players, 1, UI.SplitScreen.MaxPlayers),
+            Players = Mathf.Clamp(players, 1, UI.Boards.SplitScreen.MaxPlayers),
             Coop = true,
             Stunt = false,
             Versus = false,
@@ -2007,9 +2007,9 @@ public sealed record SessionSpec
         }
         // The two lab spec grammars live in their labs; the reject list keeps them from logging,
         // which is what lets this run with no engine under it.
-        DebugNodeLab = FilterSpec(DebugNodeLab, UI.NodeLab.ParseDebugSpec, "--debug-nodelab token",
+        DebugNodeLab = FilterSpec(DebugNodeLab, UI.Labs.NodeLab.ParseDebugSpec, "--debug-nodelab token",
             "is not deps/dest/open/all/node=<cs_name>");
-        DebugDamage = FilterSpec(DebugDamage, UI.WorldDamageLab.ParseDebugSpec, "--debug-damage step",
+        DebugDamage = FilterSpec(DebugDamage, UI.Labs.WorldDamageLab.ParseDebugSpec, "--debug-damage step",
             "is not node=/pool=/hp=/kill/reset/tick=/open");
 
         // --stage= replaces the chapter world outright, so it is a flight/spectator affair: there
@@ -2055,7 +2055,7 @@ public sealed record SessionSpec
         {
             Players = PlaneNames.Count;
         }
-        Players = Mathf.Clamp(Players, 1, UI.SplitScreen.MaxPlayers);
+        Players = Mathf.Clamp(Players, 1, UI.Boards.SplitScreen.MaxPlayers);
         if (Players > 1 && !Fly)
         {
             Print($"--players={Players} needs flight (nothing to fly in --viewer); using 1");

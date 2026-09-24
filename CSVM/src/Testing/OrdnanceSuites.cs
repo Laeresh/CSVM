@@ -10,7 +10,7 @@ using CSVM.Mech3;
 using CSVM.Mech3.Anim;
 using CSVM.Session.InstantAction;
 using CSVM.Session.Roster;
-using CSVM.UI;
+using CSVM.UI.Boards;
 using CSVM.Utils;
 using Godot;
 

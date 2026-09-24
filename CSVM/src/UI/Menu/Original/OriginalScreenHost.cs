@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using CSVM.Flight.Hangar;
 using CSVM.Mech3;
+using CSVM.UI.Boards;
+using CSVM.UI.Campaign;
 
 namespace CSVM.UI.Menu.Original;
 

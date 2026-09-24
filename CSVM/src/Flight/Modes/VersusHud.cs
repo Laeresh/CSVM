@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Hud;
-using CSVM.UI;
+using CSVM.UI.Boards;
 using Godot;
 
 namespace CSVM.Flight.Modes;

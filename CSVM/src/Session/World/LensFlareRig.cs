@@ -3,7 +3,7 @@ using System.IO;
 using System.Text.Json;
 using CSVM.Flight.Camera;
 using CSVM.Mech3;
-using CSVM.UI;
+using CSVM.UI.Boards;
 using CSVM.Utils;
 using Godot;
 

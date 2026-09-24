@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
-using CSVM.UI;
 using CSVM.Utils;
 using Godot;
 
@@ -136,7 +135,7 @@ public sealed class ProbeRunner
             // MeshInstance-based, so it merges the healthy + destroyed variants either way.
             if (!haveBounds)
             {
-                bounds = UI.OrbitCamera.MergedAabb(target.Anchor);
+                bounds = UI.Overlays.OrbitCamera.MergedAabb(target.Anchor);
                 haveBounds = true;
             }
             // Spend more than the whole health pool so a single call kills it outright (DamageAt runs

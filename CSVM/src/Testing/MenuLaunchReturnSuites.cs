@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using CSVM.Session.Campaign;
 using CSVM.Session.Launch;
-using CSVM.UI;
+using CSVM.UI.Boards;
+using CSVM.UI.Campaign;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
+using CSVM.UI.Screens;
 using CSVM.Utils;
 
 namespace CSVM.Testing;
@@ -328,9 +330,9 @@ internal static class MenuLaunchReturnSuites
         var setup = run.Host.Features.Get<PlayerSetupFeature>();
         WalkTo(run, menu, "Dogfight");
         run.Press(Accept);
-        ctx.Check(menu.ShownScreen == "Chapter" && menu.ShownRowCount == UI.LaunchMenu.ChapterCodesFor(MenuMode.Versus).Length + 2,
+        ctx.Check(menu.ShownScreen == "Chapter" && menu.ShownRowCount == UI.Screens.LaunchMenu.ChapterCodesFor(MenuMode.Versus).Length + 2,
             $"the map screen carries the two match rows under the maps ({menu.ShownScreen}, {menu.ShownRowCount} rows)");
-        for (int i = 0; i < UI.LaunchMenu.ChapterCodesFor(MenuMode.Versus).Length; i++)
+        for (int i = 0; i < UI.Screens.LaunchMenu.ChapterCodesFor(MenuMode.Versus).Length; i++)
         {
             run.Press(Down);
         }

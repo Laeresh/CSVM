@@ -1,5 +1,5 @@
 using CSVM.Session.InstantAction;
-using CSVM.UI;
+using CSVM.UI.Screens;
 using Xunit;
 
 namespace CSVM.Tests;

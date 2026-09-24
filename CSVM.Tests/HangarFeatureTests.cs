@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using CSVM.Flight.Hangar;
 using CSVM.Mech3;
-using CSVM.UI;
+using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
 using Xunit;
 

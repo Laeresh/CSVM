@@ -53,7 +53,7 @@ public sealed partial class SpyglassView : SubViewport
     }
 
     /// <summary>The picture's cull mask: <paramref name="paneMask"/> less the one layer the pilot's
-    /// own aeroplane is drawn on (<see cref="UI.SplitScreen.OwnAirframeLayer"/>), every other
+    /// own aeroplane is drawn on (<see cref="UI.Boards.SplitScreen.OwnAirframeLayer"/>), every other
     /// aircraft kept.
     /// ⚠ NOT decoded, and do not put the airframe back on the decode's authority: the original's
     /// update touches no per-object visibility, and this follows the original at the controls

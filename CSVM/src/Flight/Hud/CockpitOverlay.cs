@@ -186,7 +186,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
         return new CockpitOverlay(view, camera, interior, light, sun)
         {
             Name = "cockpit_pass",
-            Layer = UI.HudLayers.CockpitPass,
+            Layer = UI.Boards.HudLayers.CockpitPass,
         };
     }
 

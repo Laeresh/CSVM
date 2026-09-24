@@ -216,7 +216,7 @@ public sealed class HardpointSpec
 /// hardpoints with independent ammo counters, ready for the firing code to draw from.
 ///
 /// <para>Marker resolution is against the built tree's <c>cs_name</c> meta (as
-/// <see cref="UI.MarkerOverlay"/> reads it). A named marker that is absent is a <b>loud error</b>
+/// <see cref="UI.Overlays.MarkerOverlay"/> reads it). A named marker that is absent is a <b>loud error</b>
 ///, a thrown exception naming the plane, slot and marker, never a silent skip, since a wrong
 /// binding would silently fire a gun from nowhere.</para>
 /// </summary>

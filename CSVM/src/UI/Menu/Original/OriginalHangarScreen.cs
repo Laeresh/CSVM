@@ -4,6 +4,8 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using CSVM.Flight.Hangar;
 using CSVM.Mech3;
+using CSVM.UI.Boards;
+using CSVM.UI.Campaign;
 
 namespace CSVM.UI.Menu.Original;
 

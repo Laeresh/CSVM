@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using CSVM.Flight.Camera;
 using CSVM.Mech3;
-using CSVM.UI;
+using CSVM.UI.Overlays;
 using CSVM.Utils;
 using Godot;
 

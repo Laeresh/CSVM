@@ -3,7 +3,8 @@ using System.IO;
 using System.Text;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
-using CSVM.UI;
+using CSVM.UI.Boards;
+using CSVM.UI.Campaign;
 
 namespace CSVM.Testing;
 

@@ -52,7 +52,7 @@ path: [../org/logging.md](../org/logging.md). `HitchSidecar.cs` shares this sink
 ## src/Utils/BuildVersion.cs
 The build's own version, read once from `application/config/version` in `project.godot`, which is
 the number's one home. Three surfaces state it back so a report names its build without being
-asked: `Log.Open` writes it as the log file's first line, `UI/BuildStamp.cs` draws it in the menu's
+asked: `Log.Open` writes it as the log file's first line, `UI/Screens/BuildStamp.cs` draws it in the menu's
 corner, and the Windows export preset stamps it into the exe's file properties (`ExportRelease.ps1`
 reads the same key to name the zip, and refuses an export whose exe does not carry it). Reads
 `ProjectSettings`, so it resolves only inside a running engine, which is why `Log.Open` takes the
@@ -78,7 +78,7 @@ milestone fractions, one per `LoadStep`, a monotonic setter that no step can dra
 wall-clock pump throttled to one repaint every 0.1 s. The throttle holds off only a step that left the bar where it was, since our phases can cross ten milestones inside one window and a bar the build skips past shows its first fraction and then the mission; `Trace` and `Draws` are the read-back, every step against the build's own wall clock with the undrawn ones marked.
 Ambient over `Current` for the reason `StartupProfile` is, so `Launcher`, `GameSession` and `WorldSession` report a boundary they have crossed without being handed a sink, and a launch with no screen over it draws nothing at all.
 Engine-free: `FillPixels` and `FrameAt` are the bar's pixel clip and the propeller's frame, and
-`UI/LoadBoard.cs` is what turns them into a drawn frame. Decode:
+`UI/Screens/LoadBoard.cs` is what turns them into a drawn frame. Decode:
 [../org/loading-screen.md](../org/loading-screen.md).
 
 ## src/Utils/StartCover.cs
@@ -87,7 +87,7 @@ up from a dark tone over about a second once the session reports the first frame
 meant to see. Owns the tone, the fade length, the clamp on the huge delta a blocking build hands
 the frame that closes over it, and the hold cap that releases a cover no session ever answers. A
 `--det` run builds a disabled ramp that covers nothing, so no pinned golden and no `--frames=N`
-shot sees it. Engine-free; `UI/SessionStartFade.cs` paints it and `Session/Launch/Launcher.cs` owns when
+shot sees it. Engine-free; `UI/Screens/SessionStartFade.cs` paints it and `Session/Launch/Launcher.cs` owns when
 one is raised.
 
 ## src/Utils/HitchMonitor.cs

@@ -4,7 +4,7 @@ using CSVM.Flight.Airframe;
 using CSVM.Flight.Hud;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
-using CSVM.UI;
+using CSVM.UI.Boards;
 using Godot;
 using Xunit;
 

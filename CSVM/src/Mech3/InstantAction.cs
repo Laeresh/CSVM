@@ -43,7 +43,7 @@ public static class InstantAction
     private static readonly int[] DefaultAceStats = { 5, 6, 6, 8, 9, 6, 7, 6, 9 };
 
     // Display name -> planes.zbd root node (docs/formats/instant-action.md "The built-in
-    // defaults": the IDS_IA_PLANES order). Deliberately duplicates UI.LaunchMenu.Planes rather
+    // defaults": the IDS_IA_PLANES order). Deliberately duplicates UI.Screens.LaunchMenu.Planes rather
     // than sharing it, which keeps the launchscreen file free of this table. CSVM ships one gamez
     // node per airframe (extracted/planes/nodes.json carries no bare "bhawk", only "player_bhawk"),
     // reused for the player and every AI/generator spawn alike, so there is no separate "plain" or

@@ -6,7 +6,8 @@ using CSVM.Flight.Modes;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.Session.Objectives;
-using CSVM.UI;
+using CSVM.UI.Boards;
+using CSVM.UI.Campaign;
 using Godot;
 
 namespace CSVM.Testing;

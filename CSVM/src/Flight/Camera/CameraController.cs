@@ -47,7 +47,7 @@ public enum CameraView
 /// Drives the flown aircraft's camera: the roll-following chase camera and the head that swings
 /// it, the pilot's SELECTED view mode (<see cref="ViewMode"/>: Chase, Cockpit or Nose)
 /// and the free orbit used while the debug freeze holds the world still. Steers a
-/// <see cref="Camera3D"/> it does not own, like <see cref="CSVM.UI.OrbitCamera"/> does for the
+/// <see cref="Camera3D"/> it does not own, like <see cref="CSVM.UI.Overlays.OrbitCamera"/> does for the
 /// static viewer.
 /// Deliberately passive: no clock and no input devices of its own, see <see cref="Chase"/> and
 /// <see cref="Orbit"/> for which clock each uses. The chase RADIUS is dynamic per plane; see

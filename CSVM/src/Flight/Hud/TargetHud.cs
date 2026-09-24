@@ -4,7 +4,6 @@ using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Weapons;
-using CSVM.UI;
 using Godot;
 
 namespace CSVM.Flight.Hud;
@@ -46,7 +45,7 @@ public sealed partial class TargetHud : Control
     /// without extra plumbing.</summary>
     public ProjectilePool? HostilePool;
 
-    /// <summary><c>--debug-markers</c> at launch, <see cref="UI.DebugMarkerToggle"/>'s F16 in
+    /// <summary><c>--debug-markers</c> at launch, <see cref="UI.Overlays.DebugMarkerToggle"/>'s F16 in
     /// flight: mark EVERY live aircraft in <see cref="HostilePool"/> instead of the single nearest
     /// hostile, red for a hostile team, blue for this pane's own side, each with its tag and slant
     /// range. A watching aid while the AI is being worked on (which of six planes is the one that
@@ -199,7 +198,7 @@ public sealed partial class TargetHud : Control
         };
         // The picture hangs on the HUD control itself, so it lives inside this pane's viewport and
         // renders this pane's world; it is idle until a target is off screen and inside the gate.
-        hud._spyglass = SpyglassView.Build(camera, UI.SplitScreen.OwnAirframeLayer(playerIndex));
+        hud._spyglass = SpyglassView.Build(camera, UI.Boards.SplitScreen.OwnAirframeLayer(playerIndex));
         hud.AddChild(hud._spyglass);
         return hud;
     }
@@ -583,7 +582,7 @@ public sealed partial class TargetHud : Control
             return 0f;
         }
 
-        return UI.OrbitCamera.MergedAabb(node).Size.Length() * 0.5f;
+        return UI.Overlays.OrbitCamera.MergedAabb(node).Size.Length() * 0.5f;
     }
 
     // The spyglass gate off this frame's selection, kept beside the bracket gate rather than in

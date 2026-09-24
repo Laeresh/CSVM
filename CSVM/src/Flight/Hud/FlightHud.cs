@@ -4,7 +4,7 @@ using CSVM.Flight.Airframe;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
-using CSVM.UI;
+using CSVM.UI.Boards;
 using Godot;
 
 namespace CSVM.Flight.Hud;

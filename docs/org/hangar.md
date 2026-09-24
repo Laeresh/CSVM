@@ -330,7 +330,7 @@ is left is an `ftol` of `INT_MIN`, which the CRT's `ftol` returns for an indefin
 stack makes the case's `FILD` at `0x0040fb27` produce one, and `INT_MIN / 0x55` is -25264513, whose
 id is -25264012. The capture's other three words are the Blue Streak template's own fields, and that
 template's engine is 4 (`0x0061ab80`), so the record is the template and the blank line is the FPU
-state the menu inherited, not a field. `CSVM/src/UI/PlaneRatings.cs` clamps at both ends and cannot
+state the menu inherited, not a field. `CSVM/src/UI/Hangar/PlaneRatings.cs` clamps at both ends and cannot
 reproduce it.
 
 ## Into the mission: what the build changes on the spawned vehicle

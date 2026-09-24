@@ -10,7 +10,7 @@ using CSVM.Mech3;
 using CSVM.Session.Objectives;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
-using CSVM.UI;
+using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
 
@@ -648,7 +648,7 @@ public sealed class InstantActionDirector
             // Player 1, for the same reason the race and dogfight boards are.
             wrapupBoard.PhotoMode = () => inputs.EnterPhotoMode(0);
             inputs.RegisterBoard(wrapupBoard);
-            var wrapupLayer = new CanvasLayer { Name = "ia_wrapup_board", Layer = UI.HudLayers.Board };
+            var wrapupLayer = new CanvasLayer { Name = "ia_wrapup_board", Layer = UI.Boards.HudLayers.Board };
             wrapupLayer.AddChild(wrapupBoard);
             inputs.WorldRoot.AddChild(wrapupLayer);
         }
@@ -905,7 +905,7 @@ public sealed class InstantActionDirector
         public Action RestartSession = null!;
         public Action ExitSession = null!;
         public PauseState PauseState = null!;
-        public Func<int, UI.MenuInput> MenuInputFor = null!;
+        public Func<int, UI.Screens.MenuInput> MenuInputFor = null!;
         public Action<int> EnterPhotoMode = null!;
         public Action<Control> RegisterBoard = null!;
         // Where the ending goes on a presentation with a wrap-up page of its own. The final numbers

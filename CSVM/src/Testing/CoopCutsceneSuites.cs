@@ -5,7 +5,7 @@ using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Mech3;
 using CSVM.Session.World;
-using CSVM.UI;
+using CSVM.UI.Boards;
 using Godot;
 
 namespace CSVM.Testing;
@@ -16,7 +16,7 @@ namespace CSVM.Testing;
 /// <see cref="CutsceneController"/>, wired through the one seam the session wires. The listener
 /// count is the check the rest of it exists for: the pinned model is one listener per pane, and a
 /// collapse that leaves none takes every 3D emitter in the world silent with it
-/// (docs/architecture.md, <c>src/UI/SplitScreen.cs</c>).</summary>
+/// (docs/architecture.md, <c>src/UI/Boards/SplitScreen.cs</c>).</summary>
 internal static class CoopCutsceneSuites
 {
     // One of CutsceneController.IntroAnims, so the host answers for it with nothing registered,

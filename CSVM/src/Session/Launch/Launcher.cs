@@ -9,10 +9,12 @@ using CSVM.Mech3.Anim;
 using CSVM.Session.Campaign;
 using CSVM.Session.Objectives;
 using CSVM.Session.World;
-using CSVM.UI;
+using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
+using CSVM.UI.Overlays;
+using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
 
@@ -278,7 +280,7 @@ public partial class Launcher : Node3D
     // The cover that bridges the load screen and the session's first real frame. It is raised with
     // the screen, or with the build on a CLI launch. It stays opaque until the session says that
     // frame is ready, then fades up from dark. Null under --det and once it has finished.
-    private UI.SessionStartFade? _startFade;
+    private UI.Screens.SessionStartFade? _startFade;
 
     private double _perfClock;
     private int _perfFrames;
@@ -302,10 +304,10 @@ public partial class Launcher : Node3D
     private HitchMonitor _hitchMonitor = null!;
     // The F14 / --debug-fps frame-cost readout, ticked every frame like
     // the instrument above it, but drawing (if switched on) is its own concern, not this class's.
-    private UI.PerfHud _perfHud = null!;
+    private UI.Overlays.PerfHud _perfHud = null!;
     // The version stamp drawn in the menu's corner, shown and hidden off the host's own "the menu
     // is up" so no presentation has to carry one and no flight capture ever sees it.
-    private UI.BuildStamp _buildStamp = null!;
+    private UI.Screens.BuildStamp _buildStamp = null!;
     private Rid _viewportRid;
     // The previous frame's QPC stamp, so the monitor is fed a raw wall cost rather than Godot's
     // post-processed `delta`. 0 on the first frame, which reports 0 ms and trips nothing.
@@ -818,16 +820,16 @@ public partial class Launcher : Node3D
         // The F14 / --debug-fps readout, process-wide like the camera so it works at the
         // launchscreen too. Built after the --run-tests/--dump-* early exits, which render no
         // frame it would have anything to show.
-        _perfHud = new UI.PerfHud
+        _perfHud = new UI.Overlays.PerfHud
         {
-            InitialMode = _spec.DebugFps == null ? UI.PerfHud.Mode.Off : UI.PerfHud.ParseMode(_spec.DebugFps),
+            InitialMode = _spec.DebugFps == null ? UI.Overlays.PerfHud.Mode.Off : UI.Overlays.PerfHud.ParseMode(_spec.DebugFps),
             Monitor = _hitchMonitor,
         };
         AddChild(_perfHud);
 
         // The version stamp on the menu, process-wide for the same reason and built beside it: the
         // build a capture came from is a fact about the binary, not about a presentation.
-        _buildStamp = new UI.BuildStamp();
+        _buildStamp = new UI.Screens.BuildStamp();
         AddChild(_buildStamp);
 
         // The music channel, once per process and after every early-quit probe: one player that
@@ -850,7 +852,7 @@ public partial class Launcher : Node3D
         {
             // Only on the path a recipient takes. Every other entry carries a content arg, which
             // is a developer's launch, and the log is where that reader already looks.
-            if (UI.NoGameDataScreen.Missing(_dataRoot))
+            if (UI.Screens.NoGameDataScreen.Missing(_dataRoot))
             {
                 ShowNoGameData();
                 return;
@@ -1071,9 +1073,9 @@ public partial class Launcher : Node3D
     /// file runs the continuation straight away, so a flow costs a screen rather than stalling on
     /// a cinema this install does not carry. This is the seam every movie sequence goes
     /// through.</summary>
-    public void PlayCinema(string name, System.Action then, UI.CinemaSkip skip = UI.CinemaScreen.BootKeys)
+    public void PlayCinema(string name, System.Action then, UI.Screens.CinemaSkip skip = UI.Screens.CinemaScreen.BootKeys)
     {
-        if (UI.CinemaScreen.Open(_dataRoot, name, skip) is not { } cinema)
+        if (UI.Screens.CinemaScreen.Open(_dataRoot, name, skip) is not { } cinema)
         {
             Log.Warn("ui", $"cinema {name} not played; looked under {SessionPaths.CinemaFolder(_dataRoot)}");
             then();
@@ -1103,7 +1105,7 @@ public partial class Launcher : Node3D
     // action it lands in and the next begins. Whether the original abandoned the rest of the block
     // instead is not decoded (docs/formats/cinemas.md).
     private void PlayBootSequence(System.Action then) =>
-        UI.BootCard.Play(this, _dataRoot, PlayCinema, then);
+        UI.Screens.BootCard.Play(this, _dataRoot, PlayCinema, then);
 
     // The step the menus advance on. A deterministic run gives them the sim's own, for the reason
     // the sim takes it: what a capture shows must be a function of the frame count and nothing
@@ -1243,7 +1245,7 @@ public partial class Launcher : Node3D
     private void RaiseStartCover()
     {
         DropStartCover();
-        _startFade = UI.SessionStartFade.Build(
+        _startFade = UI.Screens.SessionStartFade.Build(
             _spec.Det, () => _session is { InSession: true, FirstFrameReady: true });
         if (_startFade != null)
         {
@@ -1274,8 +1276,8 @@ public partial class Launcher : Node3D
         var sheet = campaign
             ? CampaignLoadSheet(missionSeq ?? _spec.CampaignMissionSeq ?? 0)
             : null;
-        _loadLayer = new CanvasLayer { Name = "load_board", Layer = UI.HudLayers.Board };
-        var board = UI.LoadBoard.Build(
+        _loadLayer = new CanvasLayer { Name = "load_board", Layer = UI.Boards.HudLayers.Board };
+        var board = UI.Screens.LoadBoard.Build(
             _dataRoot, _zrdrPath, _messagesPath, campaign, subject, missionType, sheet);
         board.CaptureDir = _spec.DebugLoad ?? string.Empty;
         _loadLayer.AddChild(board);
@@ -1284,7 +1286,7 @@ public partial class Launcher : Node3D
 
     // The chart sheet a story position resolves: the loading dialog the mission's own storage
     // address names, that mission's objectives for the parchment, and the profile's memento.
-    private UI.LoadSheet? CampaignLoadSheet(int seq)
+    private UI.Screens.LoadSheet? CampaignLoadSheet(int seq)
     {
         if (CampaignMissionAt(seq) is not { } named)
         {
@@ -1293,7 +1295,7 @@ public partial class Launcher : Node3D
         }
 
         string key = UI.Menu.EscapeDialog.CampaignKey(named.Campaign, named.Mission);
-        var sheet = UI.LoadSheet.Load(
+        var sheet = UI.Screens.LoadSheet.Load(
             _zrdrPath, _messagesPath,
             SessionPaths.MissionZrdr(_dataRoot, named.ChapterFolder, named.MissionFolder),
             key, SeatedMemento());
@@ -1342,7 +1344,7 @@ public partial class Launcher : Node3D
         }
 
         string missionZrdr = SessionPaths.MissionZrdr(_dataRoot, named.ChapterFolder, named.MissionFolder);
-        var sheet = UI.PauseSheet.Load(
+        var sheet = UI.Boards.PauseSheet.Load(
             _zrdrPath, _messagesPath,
             UI.Menu.EscapeDialog.CampaignKey(named.Campaign, named.Mission), instantAction: false);
         if (sheet == null)
@@ -1354,8 +1356,8 @@ public partial class Launcher : Node3D
         var readout = PauseAidReadout(sheet, missionZrdr, completed);
         var pause = new Flight.Modes.PauseState();
         var board = OriginalPauseBoard.Build(
-            pause, _ => new UI.MenuInput { Keyboard = true }, _dataRoot, sheet, () => readout);
-        var layer = new CanvasLayer { Name = "pause_board_aid", Layer = UI.HudLayers.Board };
+            pause, _ => new UI.Screens.MenuInput { Keyboard = true }, _dataRoot, sheet, () => readout);
+        var layer = new CanvasLayer { Name = "pause_board_aid", Layer = UI.Boards.HudLayers.Board };
         layer.AddChild(board);
         AddChild(layer);
         pause.TryToggle(0);
@@ -1368,7 +1370,7 @@ public partial class Launcher : Node3D
     // readout at all. docs/org/pause-screen.md.
     private void ShowInstantActionPauseSheet(string chapter, string missionType)
     {
-        if (UI.LoadScreens.LetterFor(missionType) is not { } letter)
+        if (UI.Screens.LoadScreens.LetterFor(missionType) is not { } letter)
         {
             Log.Warn("ui", $"pause aid: '{missionType}' is no Instant Action mission type");
             return;
@@ -1376,7 +1378,7 @@ public partial class Launcher : Node3D
 
         string key = UI.Menu.EscapeDialog.InstantActionKey(
             Mech3.CampaignSequence.ChapterNumber(chapter), letter);
-        var sheet = UI.PauseSheet.Load(_zrdrPath, _messagesPath, key, instantAction: true);
+        var sheet = UI.Boards.PauseSheet.Load(_zrdrPath, _messagesPath, key, instantAction: true);
         if (sheet == null)
         {
             Log.Warn("ui", $"pause aid: no ia_escape.zrd sheet for {chapter} {missionType} ({key})");
@@ -1385,33 +1387,33 @@ public partial class Launcher : Node3D
 
         var pause = new Flight.Modes.PauseState();
         var board = OriginalPauseBoard.Build(
-            pause, _ => new UI.MenuInput { Keyboard = true }, _dataRoot, sheet,
-            () => UI.PauseReadout.Empty);
-        var layer = new CanvasLayer { Name = "pause_board_aid", Layer = UI.HudLayers.Board };
+            pause, _ => new UI.Screens.MenuInput { Keyboard = true }, _dataRoot, sheet,
+            () => UI.Boards.PauseReadout.Empty);
+        var layer = new CanvasLayer { Name = "pause_board_aid", Layer = UI.Boards.HudLayers.Board };
         layer.AddChild(board);
         AddChild(layer);
         pause.TryToggle(0);
         Log.Info("ui", $"pause aid: {chapter} {missionType} draws {sheet.State.Key}");
     }
 
-    private UI.PauseReadout PauseAidReadout(UI.PauseSheet sheet, string missionZrdr, int completed)
+    private UI.Boards.PauseReadout PauseAidReadout(UI.Boards.PauseSheet sheet, string missionZrdr, int completed)
     {
         var objectives = UI.Menu.BriefingObjectives.Load(
             Mech3.Zrdr.LoadFile(missionZrdr, "objectives.json"), Mech3.Messages.Load(_messagesPath));
-        var rows = new List<UI.PauseObjective>(objectives.Count);
+        var rows = new List<UI.Boards.PauseObjective>(objectives.Count);
         for (int i = 0; i < objectives.Count; i++)
         {
-            rows.Add(new UI.PauseObjective(objectives[i].Text, i < completed));
+            rows.Add(new UI.Boards.PauseObjective(objectives[i].Text, i < completed));
         }
 
-        var icons = new List<UI.PauseWorldIcon>();
+        var icons = new List<UI.Boards.PauseWorldIcon>();
         if (sheet.Shared.OwnShip.Length > 0
             && Flight.Modes.SpawnPoints.LoadPlayerInit(missionZrdr) is { } init)
         {
             // Through the readout's own conversion off a nose vector, never off the spawn's heading
             // degrees. Those are the mission data's yaw, which runs opposite the compass.
             var nose = new Basis(Vector3.Up, Mathf.DegToRad(init.Spawn.HeadingDeg)) * Vector3.Forward;
-            if (UI.PauseReadout.Icon(
+            if (UI.Boards.PauseReadout.Icon(
                 sheet.Shared.OwnShip, init.Spawn.Position.X, init.Spawn.Position.Z,
                 nose.X, nose.Z) is { } ship)
             {
@@ -1426,7 +1428,7 @@ public partial class Launcher : Node3D
             }
         }
 
-        return new UI.PauseReadout(rows, SeatedMemento(), icons);
+        return new UI.Boards.PauseReadout(rows, SeatedMemento(), icons);
     }
 
     // The picture the seated profile hangs, read back off the store the cabin's chooser writes.
@@ -1711,8 +1713,8 @@ public partial class Launcher : Node3D
     // through _UnhandledInput, which quits with neither a menu nor a session up.
     private void ShowNoGameData()
     {
-        Log.Error("core", $"no extracted game data path={Path.Combine(_dataRoot, "extracted")}, {UI.NoGameDataScreen.Instruction(_exported)}");
-        AddChild(UI.NoGameDataScreen.Build(_dataRoot, _exported));
+        Log.Error("core", $"no extracted game data path={Path.Combine(_dataRoot, "extracted")}, {UI.Screens.NoGameDataScreen.Instruction(_exported)}");
+        AddChild(UI.Screens.NoGameDataScreen.Build(_dataRoot, _exported));
     }
 
     // Shows the menu at a semantic destination, building the host on first use. Re-shown by
@@ -1944,13 +1946,13 @@ public partial class Launcher : Node3D
     // through the one writer. PersistOptions is the apply. ⚠ No ShowMenu: the flight returns to
     // the sheet over its own world, not tearing down what the pause stands on. Null where no
     // layout reads.
-    private UI.PausePreferences? BuildPauseOptions()
+    private UI.Screens.PausePreferences? BuildPauseOptions()
     {
         OriginalAvailable(PresentationId.Original);
         var controls = _menuHost != null && _menuHost.Features.TryGet<ControlsFeature>(out var feature)
             ? feature
             : null;
-        return UI.PausePreferences.Build(_dataRoot, _originalLayout, controls, PersistOptions, _menuAudio);
+        return UI.Screens.PausePreferences.Build(_dataRoot, _originalLayout, controls, PersistOptions, _menuAudio);
     }
 
     // --debug-join=N synthesizes N extra device-less players so the splitscreen aircraft select
@@ -2432,7 +2434,7 @@ public sealed class LauncherContext
     /// or answers null where the install carries no decoded menu layout for it to compose from. A
     /// factory rather than the node, since the session parents it and only the Launcher holds the
     /// layout, the shared rebinding feature, the menu's audio and the options file's writer.</summary>
-    public System.Func<UI.PausePreferences?>? PauseOptions { get; init; }
+    public System.Func<UI.Screens.PausePreferences?>? PauseOptions { get; init; }
 
     /// <summary>A campaign mission ended, won or lost: the Launcher frees this session a frame later
     /// and shows the menu at the debrief of the named profile's flown mission, carrying the result

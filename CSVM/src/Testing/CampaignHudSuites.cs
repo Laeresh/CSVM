@@ -4,7 +4,7 @@ using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.Session.Objectives;
 using CSVM.Tooling;
-using CSVM.UI;
+using CSVM.UI.Overlays;
 using Godot;
 
 namespace CSVM.Testing;

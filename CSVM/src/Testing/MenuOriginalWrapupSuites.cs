@@ -4,10 +4,11 @@ using System.Linq;
 using CSVM.Flight.Modes;
 using CSVM.Mech3;
 using CSVM.Session.InstantAction;
-using CSVM.UI;
+using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
+using CSVM.UI.Screens;
 using Godot;
 
 namespace CSVM.Testing;

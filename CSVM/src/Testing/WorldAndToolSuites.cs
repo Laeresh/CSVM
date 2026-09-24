@@ -8,7 +8,9 @@ using CSVM.Flight.Modes;
 using CSVM.Mech3;
 using CSVM.Session.World;
 using CSVM.Tooling;
-using CSVM.UI;
+using CSVM.UI.Boards;
+using CSVM.UI.Labs;
+using CSVM.UI.Screens;
 using Godot;
 
 using static CSVM.Testing.SuiteConstants;

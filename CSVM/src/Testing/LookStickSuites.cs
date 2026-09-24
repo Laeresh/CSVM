@@ -351,7 +351,7 @@ internal static class LookStickSuites
                 RigCount = rigs.Count,
                 Rigs = rigs,
                 PauseState = new PauseState(),
-                MenuInputFor = _ => new UI.MenuInput(),
+                MenuInputFor = _ => new UI.Screens.MenuInput(),
                 ExitSession = () => { },
             }, new LevelStart());
     }

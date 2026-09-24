@@ -206,7 +206,7 @@ public class SessionSpecMenuTests
         {
             many.Add("player_bhawk");
         }
-        Assert.Equal(UI.SplitScreen.MaxPlayers, SessionSpec.FromMenu(Cli(), "C1", many, MenuMode.Free).Players);
+        Assert.Equal(UI.Boards.SplitScreen.MaxPlayers, SessionSpec.FromMenu(Cli(), "C1", many, MenuMode.Free).Players);
     }
 
     // ---- The third mode + its menu-only launch gate ---------------------------------------------
@@ -221,7 +221,7 @@ public class SessionSpecMenuTests
         Assert.Equal(new[] { MenuMode.Free, MenuMode.Stunt, MenuMode.Versus }, modes);
     }
 
-    /// <summary>The launch-gate rule itself (<see cref="UI.LaunchMenu.CanLaunch(MenuMode, bool, int)"/>)
+    /// <summary>The launch-gate rule itself (<see cref="UI.Screens.LaunchMenu.CanLaunch(MenuMode, bool, int)"/>)
     /// is a pure static function, reachable from here with no menu instance behind it: Free Flight
     /// and Stunt Flying launch as soon as everyone joined is locked, solo included; Dogfight
     /// additionally needs 2 joined players. Nothing launches before everyone is locked, whatever
@@ -233,15 +233,15 @@ public class SessionSpecMenuTests
     [InlineData(MenuMode.Versus, 2, true)]
     [InlineData(MenuMode.Versus, 4, true)]
     public void TheLaunchGateLocksDogfightBelowTwoPlayers(MenuMode mode, int joinedCount, bool expected)
-        => Assert.Equal(expected, UI.LaunchMenu.CanLaunch(mode, allLocked: true, joinedCount));
+        => Assert.Equal(expected, UI.Screens.LaunchMenu.CanLaunch(mode, allLocked: true, joinedCount));
 
     [Theory]
     [InlineData(MenuMode.Free)]
     [InlineData(MenuMode.Versus)]
     public void TheLaunchGateNeverOpensBeforeEveryoneIsLocked(MenuMode mode)
-        => Assert.False(UI.LaunchMenu.CanLaunch(mode, allLocked: false, joinedCount: 4));
+        => Assert.False(UI.Screens.LaunchMenu.CanLaunch(mode, allLocked: false, joinedCount: 4));
 
-    /// <summary>The Map screen's roster rule (<see cref="UI.LaunchMenu.ChapterCodesFor"/>): Stunt
+    /// <summary>The Map screen's roster rule (<see cref="UI.Screens.LaunchMenu.ChapterCodesFor"/>): Stunt
     /// Flying hides C1C and C2B, they ship no <c>dzones</c>, so a stunt run there would be an
     /// empty free flight (the original hides "the clouds" from stunt for the same reason), while
     /// every other mode offers all eight chapters.</summary>
@@ -250,9 +250,9 @@ public class SessionSpecMenuTests
     {
         Assert.Equal(
             new[] { "C1", "C1B", "C2", "C3", "C4", "C5" },
-            UI.LaunchMenu.ChapterCodesFor(MenuMode.Stunt));
-        Assert.Equal(8, UI.LaunchMenu.ChapterCodesFor(MenuMode.Free).Length);
-        Assert.Equal(8, UI.LaunchMenu.ChapterCodesFor(MenuMode.Versus).Length);
+            UI.Screens.LaunchMenu.ChapterCodesFor(MenuMode.Stunt));
+        Assert.Equal(8, UI.Screens.LaunchMenu.ChapterCodesFor(MenuMode.Free).Length);
+        Assert.Equal(8, UI.Screens.LaunchMenu.ChapterCodesFor(MenuMode.Versus).Length);
     }
 
     // ---- Instant Action wizard steps 1-2 --------------------------
@@ -265,7 +265,7 @@ public class SessionSpecMenuTests
     {
         Assert.Equal(
             new[] { "C1", "C2B", "C3", "C5", "C1B", "C4", "C2" },
-            UI.LaunchMenu.EnvironmentCodes());
+            UI.Screens.LaunchMenu.EnvironmentCodes());
     }
 
     /// <summary>The MissionType screen's roster for one environment: all four mission types except
@@ -277,10 +277,10 @@ public class SessionSpecMenuTests
     {
         Assert.Equal(
             new[] { "dogfight_ace", "dogfight_squadron", "stunt_flying", "zeppelin_run" },
-            UI.LaunchMenu.MissionTypeKeysFor("C1"));
+            UI.Screens.LaunchMenu.MissionTypeKeysFor("C1"));
         Assert.Equal(
             new[] { "dogfight_ace", "dogfight_squadron", "zeppelin_run" },
-            UI.LaunchMenu.MissionTypeKeysFor("C2B"));
+            UI.Screens.LaunchMenu.MissionTypeKeysFor("C2B"));
     }
 
     /// <summary>Every one of the seven Instant Action environments offers at least the three
@@ -289,9 +289,9 @@ public class SessionSpecMenuTests
     [Fact]
     public void EveryEnvironmentOffersAceSquadronAndZeppelin()
     {
-        foreach (string code in UI.LaunchMenu.EnvironmentCodes())
+        foreach (string code in UI.Screens.LaunchMenu.EnvironmentCodes())
         {
-            var keys = UI.LaunchMenu.MissionTypeKeysFor(code);
+            var keys = UI.Screens.LaunchMenu.MissionTypeKeysFor(code);
             Assert.Contains("dogfight_ace", keys);
             Assert.Contains("dogfight_squadron", keys);
             Assert.Contains("zeppelin_run", keys);

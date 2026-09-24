@@ -438,7 +438,7 @@ public partial class FlightController : Node3D
     /// <summary>The Auto Head Turn option as the options file has it, the original's GAME OPTIONS
     /// checkbox. True turns the head with the aircraft in the cockpit, false leaves it ahead. It is
     /// seeded at build and read every frame. A page accepted over the pause rewrites it
-    /// (<c>UI.PausePreferences</c>). ⚠ Null, the default, is "never set". It leaves the
+    /// (<c>UI.Screens.PausePreferences</c>). ⚠ Null, the default, is "never set". It leaves the
     /// <c>headLook.autohead</c> config key deciding, which ships OFF (<see cref="Utils.Config"/>),
     /// so a build with no options file answers to that key alone.</summary>
     public bool? AutoHeadTurn;
@@ -1082,14 +1082,14 @@ public partial class FlightController : Node3D
         if (IsHumanPiloted)
         {
             // Explicit rather than Godot's implicit default of 1: the sun wash draws just above this
-            // (UI.HudLayers.SunWash), so the HUD's own layer is deliberate, not incidental.
-            var canvas = new CanvasLayer { Layer = UI.HudLayers.Hud };
+            // (UI.Boards.HudLayers.SunWash), so the HUD's own layer is deliberate, not incidental.
+            var canvas = new CanvasLayer { Layer = UI.Boards.HudLayers.Hud };
             _hudCanvas = canvas;
             canvas.Name = "hud";
             // ⚠ The message stack takes a layer of its own, never the HUD's. The crash camera hides
             // the HUD outright, and the original's stack is up over that cut, showing the crash
             // notice the impact posted.
-            var messages = new CanvasLayer { Layer = UI.HudLayers.Hud, Name = "hud_messages" };
+            var messages = new CanvasLayer { Layer = UI.Boards.HudLayers.Hud, Name = "hud_messages" };
             _messageCanvas = messages;
             // The two board-adjacent readouts this node still owns take their z-order slots inside
             // the pilot HUD's own order, so they are handed to it rather than added around it.

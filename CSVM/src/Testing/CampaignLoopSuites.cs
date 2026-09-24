@@ -10,8 +10,10 @@ using CSVM.Session.Campaign;
 using CSVM.Session.Objectives;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
-using CSVM.UI;
+using CSVM.UI.Campaign;
+using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
+using CSVM.UI.Screens;
 using Godot;
 
 namespace CSVM.Testing;

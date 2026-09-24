@@ -242,7 +242,7 @@ tags, the trailer attach target, and the net's own three volumes (`Volumes`, rec
 as an `AiVolumeSet`). Plus the lookups both ways the data references nets:
 `ById` (aiv field 0), `ByName` (egen/zeppelins/objectives, case-insensitive), `Resolve` (either
 spelling), and `ChapterFirst` (the net an Instant Action actor is given). Consumers:
-`UI/AiNetsOverlay.cs` and `Flight/Ai/AiNetFollower.cs`. Golden counts asserted in
+`UI/Overlays/AiNetsOverlay.cs` and `Flight/Ai/AiNetFollower.cs`. Golden counts asserted in
 `CSVM.Tests/AiNetsTests.cs`.
 
 ## src/Mech3/Maneuvers.cs
@@ -368,7 +368,7 @@ screen names the file the extraction ships and stops caring what format it is. A
 decoder here covers returns null, and so does a file the decoder it has cannot read; null is the
 correct answer, since a stand-in picture on a fidelity screen reads as a verdict about the
 original. The JPEG pictures a screen wants are board pictures, read through the shell's own loader
-in `UI/ComposedBoardView.cs`, which is why no JPEG decoder belongs here.
+in `UI/Boards/ComposedBoardView.cs`, which is why no JPEG decoder belongs here.
 
 ## src/Mech3/MarkerRig.cs
 A player airframe's weapon marker rig read from the planes.zbd GameZ: `Extract` walks a `player_*`
@@ -376,7 +376,7 @@ root, accumulating locals down to each `firepoint*`/`pylon*`/`target`, and repor
 positions plus co-located groups (two gun groups on one mount). `Format` prints one dump block per
 plane and `PlayerAirframes` is the model to display list; together they are the instrument
 [../formats/markers.md](../formats/markers.md) regenerates from and the source `--dump-markers` and
-`UI/MarkerOverlay.cs` share. `FindNamedMarker` is the sibling read for one non-weapon node by name,
+`UI/Overlays/MarkerOverlay.cs` share. `FindNamedMarker` is the sibling read for one non-weapon node by name,
 skipping the alternate-state subtrees so a plane whose interior or wreck carries a same-named node
 still resolves to the authored one in the top-level `markers` group.
 
@@ -425,7 +425,7 @@ following its host's pose each frame. `PlayOneShot(name, worldPos, rng)` is the 
 `SOUND` half, fire-and-forget destruction and impact audio on Effects, resolving a `SOUND_GROUPS`
 name to a member first. Radio lines, combat voice included, never come here: they are flat and
 belong to `MissionRadio.cs`. `HasStream` answers availability after the prewarm, `OneShotsStarted` that a cue fired. Who hears
-an emitter is `UI/SplitScreen.cs`'s per-pane model, fed by `SetListeners`: `Tick` measures to the
+an emitter is `UI/Boards/SplitScreen.cs`'s per-pane model, fed by `SetListeners`: `Tick` measures to the
 nearest and levels every player from `SoundFalloff.cs`, never Godot's. Next: `SoundFalloff.cs`.
 
 ## src/Mech3/SoundFalloff.cs
@@ -689,7 +689,7 @@ seam without naming the renderer; `Effects/Puffer.cs` integrates it. Keys: [../f
 ## src/Mech3/SubtreeBounds.cs
 A built subtree's world-space extent, the union of its own mesh boxes (`WorldAabb`), skipping any
 node marked `OverlayMeta` so a tool's drawing parked on an object never grows its box. Shared by
-`AnimRuntime`'s effect siting and the inspect tools behind `UI/SelectionService.cs`.
+`AnimRuntime`'s effect siting and the inspect tools behind `UI/Screens/SelectionService.cs`.
 
 ## src/Mech3/AircraftStage.cs
 The aircraft-archive subtrees a story-mission intro, a hangar or chuteman drop, or a wing-walk

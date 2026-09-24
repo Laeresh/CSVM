@@ -3,7 +3,7 @@ using CSVM.Bindings;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Session.Roster;
-using CSVM.UI;
+using CSVM.UI.Screens;
 using Godot;
 
 namespace CSVM.Testing;
@@ -200,7 +200,7 @@ internal static class MouseFlightSuites
             $"ABLE-TO-FAIL CONTROL: player 1's seat starts on head-look, the cursor banking nothing ({one.MouseFlying})");
         bool wantedOnLook = CaptureDecision(one);
 
-        leaf.Open(new[] { new UI.MenuInput { Keyboard = true } }, 0, new[] { one, two });
+        leaf.Open(new[] { new UI.Screens.MenuInput { Keyboard = true } }, 0, new[] { one, two });
         WalkTo(leaf, UI.Menu.Original.OriginalOptionsScreen.ControlsDoorKey);
         leaf.Drive(new UI.Menu.MenuCommands { Accept = true });
         ctx.Check(leaf.Shell.Screen == UI.Menu.Original.OriginalScreen.ControlsPrefs,

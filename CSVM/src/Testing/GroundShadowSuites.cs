@@ -421,12 +421,12 @@ internal static class GroundShadowSuites
                 new Vector3(PaneSeparation, LowAltitude, 0f));
             camera1 = SuiteViewers.Camera(ctx, one.GlobalPosition);
             camera2 = SuiteViewers.Camera(ctx, two.GlobalPosition);
-            camera1.CullMask = UI.SplitScreen.PlayerCullMask(0);
-            camera2.CullMask = UI.SplitScreen.PlayerCullMask(1);
+            camera1.CullMask = UI.Boards.SplitScreen.PlayerCullMask(0);
+            camera2.CullMask = UI.Boards.SplitScreen.PlayerCullMask(1);
             var panes = new List<PlayerRig>
             {
-                Pane(0, one, UI.SplitScreen.PlayerVisualLayer(0), camera1),
-                Pane(1, two, UI.SplitScreen.PlayerVisualLayer(1), camera2),
+                Pane(0, one, UI.Boards.SplitScreen.PlayerVisualLayer(0), camera1),
+                Pane(1, two, UI.Boards.SplitScreen.PlayerVisualLayer(1), camera2),
             };
             var rigs = new List<FlightController> { one, two };
             var players = new List<Vector3> { one.GlobalPosition, two.GlobalPosition };

@@ -261,7 +261,7 @@ public class InstantActionTests
     [Fact]
     public void AnUnconfiguredWaveMatchesAnOmittedGroupNRegardlessOfCursorPosition()
     {
-        var fromCursors = UI.LaunchMenu.WaveFor(0, militiaIndex: 7, aircraftIndex: 1, skillIndex: 2);
+        var fromCursors = UI.Screens.LaunchMenu.WaveFor(0, militiaIndex: 7, aircraftIndex: 1, skillIndex: 2);
         Assert.Equal(InstantAction.EmptyWave, fromCursors);
 
         var fromFile = InstantAction.Load(TestData.Fixture("ia-minimal")).Waves[1]; // group2: unauthored

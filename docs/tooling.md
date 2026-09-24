@@ -95,7 +95,7 @@ reticle loaders read loose PNGs there.
 ## Launch scripts
 
 **`RunGame.ps1`, the play entry point.** `dotnet build`, then Godot with **no user args**, so the
-launchscreen (`src/UI/LaunchMenu.cs`, Mode → Chapter → Plane) shows. Args are forwarded verbatim,
+launchscreen (`src/UI/Screens/LaunchMenu.cs`, Mode → Chapter → Plane) shows. Args are forwarded verbatim,
 so a content arg (`--fly`/`--stunt`/`--plane=`/`--chapter=`/`--screenshot=`) bypasses it.
 
 **`RunDev.ps1`, the dev helper**, same build step but with console prompts: no args gives

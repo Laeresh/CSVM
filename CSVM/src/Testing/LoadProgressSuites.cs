@@ -2,8 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using CSVM.Mech3;
-using CSVM.UI;
+using CSVM.UI.Boards;
 using CSVM.UI.Menu;
+using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
 

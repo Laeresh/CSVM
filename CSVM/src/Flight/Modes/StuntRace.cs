@@ -33,9 +33,9 @@ public sealed class Racer
 
     /// <summary>The player's identity colour + short tag, shared with the launchscreen's join
     /// strip and plane select so a player recognises "their" colour from menu to results.</summary>
-    public Color Color => UI.SplitScreen.PlayerColor(Index);
+    public Color Color => UI.Boards.SplitScreen.PlayerColor(Index);
 
-    public string Tag => UI.SplitScreen.PlayerTag(Index);
+    public string Tag => UI.Boards.SplitScreen.PlayerTag(Index);
 }
 
 /// <summary>

@@ -6,6 +6,9 @@ using CSVM.Flight.Hangar;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
 using CSVM.Session.Campaign;
+using CSVM.UI.Boards;
+using CSVM.UI.Campaign;
+using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
 

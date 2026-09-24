@@ -34,10 +34,10 @@ than a participant registry. Read `GameSession.cs` for who owns each phase.
 Main.tscn's root and the process bootstrap: CLI parse into `_cli`/`_spec`, data-root precedence, the
 editor check that gives an export its `logs\` and audible volume default, the developer gain on bus 0 with the saved mix under it, at startup and on an Options apply (`Utils/MasterVolume.cs` resolves the first, `Utils/AudioMix.cs` writes the second), the `--dump-*`/`--run-tests` early quits,
 and what outlives a session (camera, sun, audio, music, the perf and hitch instruments, and the one `ChapterCinema` and `ClosingCinema` the campaign's doors play through). It owns the
-menu as one `MenuHost` built on the first show, the presentation resolution, the only options write (an apply from the in-flight `UI/PausePreferences.cs` leaf takes that same route, without the presentation reselect a menu-side apply ends on),
+menu as one `MenuHost` built on the first show, the presentation resolution, the only options write (an apply from the in-flight `UI/Screens/PausePreferences.cs` leaf takes that same route, without the presentation reselect a menu-side apply ends on),
 the frame pacing and the window's screen, mode and size at startup and on an Options apply (`Utils/VSyncSetting.cs`, `Utils/MonitorSetting.cs`, `Utils/DisplayModeSetting.cs`, `Utils/ResolutionSetting.cs`), the enhanced presentation's sun shadow and screen-space passes with the `SessionSpec.EnhancedPasses` doors that leave one out,
 and the sink every menu exit takes ([../menu-presentations.md](../menu-presentations.md)); with no
-extraction it shows `UI/NoGameDataScreen.cs`. `LaunchSession`, `ReturnToMenu`, `RestartSession` and
+extraction it shows `UI/Screens/NoGameDataScreen.cs`. `LaunchSession`, `ReturnToMenu`, `RestartSession` and
 `BeginLaunch`/`RunOwedLaunch` are every path a session starts or ends on (the load screen stays up past the build while the session's owed build steps run one a frame through `GameSession.StepOwedLoad`, which is what makes it a yield of several frames; a CLI launch has no screen and drains them inside `LaunchSession`), a flight left early comes back to the screen it was launched from (settled by the launch through `MenuReturnDestination.ForLaunch`, not by the exit press), and what the persistent `WorldEnvironment` draws behind all of it is `Utils/WorldBackdrop.cs`'s: black while the menu owns the screen and at the quits that still draw, the sky again at every launch.
 
 ## src/Session/Launch/TuningWarmup.cs
@@ -189,7 +189,7 @@ the `aiv` blocks through `CampaignRoster.cs`; `Attach` arms the graph once every
 directive can touch is up; `BindCallbackHost` takes the `CALLBACK` slot ahead of the generator
 runtime's, where 801 to 803 reactivate the lowest-numbered still-deactivated Black Hat of their
 family, CM19's only launch path, and 968 takes C4/M03's escorting wingman out of the world as that mission's docking film says her name; `Step` runs the graph, the escort repair, the music and the danger-zone tracker, whose completed zones photograph into the profile through `CampaignSnapshot`, raise the flight's praise line through `WorldInputs.DangerZoneSpoken` and make `DangerZoneMask`, the id 18 to 30 half of the completed-objective mask. The
-nested `World` is the `IObjectiveWorld`, a directive with no seam here a named no-op, and `WidenGroupEngagement` is where an awake `DEDG` reaches its group's live members; `Memento` is the picture the flying profile hangs, which the pause sheet's own slot takes; mission end records the attempt, folds the persist log into the profile and holds before the cabin behind `LeavingFade`, the ramp `UI.MissionEndFade` paints. Debrief: [../org/debrief.md](../org/debrief.md).
+nested `World` is the `IObjectiveWorld`, a directive with no seam here a named no-op, and `WidenGroupEngagement` is where an awake `DEDG` reaches its group's live members; `Memento` is the picture the flying profile hangs, which the pause sheet's own slot takes; mission end records the attempt, folds the persist log into the profile and holds before the cabin behind `LeavingFade`, the ramp `UI.Screens.MissionEndFade` paints. Debrief: [../org/debrief.md](../org/debrief.md).
 
 ## src/Session/Campaign/CampaignProgression.cs
 The campaign's progression rules over a profile: recording one mission attempt with the original's
@@ -226,9 +226,9 @@ Which film plays before a campaign chapter, and the one handoff to the passenger
 follows it. The chapter is `seq / 5 + 1` over the profile's own position, so no screen passes a
 chapter number in, and chapter N plays `chapN.mpg`. `CampaignCabinPage.MapPinCount` reads the same
 story chapter for the cabin map's pins; `CampaignSequence.Chapter` is a different number, the world
-folder. Playing is a `UI/CinemaHandoff.cs` `CinemaPlay` the caller supplies, `Launcher.PlayCinema`
-being what it is handed, which leaves the film to `UI/CinemaScreen.cs` and keeps every decision here
-testable with no engine present; the cabin opens through that file's `Once`. `Launcher` holds the process's one instance and hands it to `Menu/CampaignFeature.cs`, which is how both presentations' cabin doors reach it (`UI/CampaignFlow.cs`, `UI/Menu/Original/OriginalCampaignScreen.cs`). Films: [../formats/cinemas.md](../formats/cinemas.md).
+folder. Playing is a `UI/Screens/CinemaHandoff.cs` `CinemaPlay` the caller supplies, `Launcher.PlayCinema`
+being what it is handed, which leaves the film to `UI/Screens/CinemaScreen.cs` and keeps every decision here
+testable with no engine present; the cabin opens through that file's `Once`. `Launcher` holds the process's one instance and hands it to `Menu/CampaignFeature.cs`, which is how both presentations' cabin doors reach it (`UI/Campaign/CampaignFlow.cs`, `UI/Menu/Original/OriginalCampaignScreen.cs`). Films: [../formats/cinemas.md](../formats/cinemas.md).
 
 ## src/Session/Campaign/ClosingCinema.cs
 Whether the campaign's closing film plays before the scrapbook a flown mission opens, and the one
@@ -238,7 +238,7 @@ reaches the book with no film, which is what the original's own script does when
 answers false. Nothing is latched and completion state decides nothing, so the flown result travels
 with the menu return (`Menu/MenuReturnDestination.cs`). The film is the `FinalCinema` layout row's
 name and the skip set is Escape and the left mouse alone, narrower than `ChapterCinema.cs`'s on
-purpose; playing is a `UI/CinemaHandoff.cs` `CinemaPlay` (`Launcher.PlayCinema`) whose `Once` opens the book, and `Launcher` holds the one instance and hands it to `Menu/CampaignFeature.cs`. Films: [../formats/cinemas.md](../formats/cinemas.md).
+purpose; playing is a `UI/Screens/CinemaHandoff.cs` `CinemaPlay` (`Launcher.PlayCinema`) whose `Once` opens the book, and `Launcher` holds the one instance and hands it to `Menu/CampaignFeature.cs`. Films: [../formats/cinemas.md](../formats/cinemas.md).
 
 ## src/Session/Campaign/CampaignPersistLog.cs
 The cross-mission state log: what a campaign mission left destroyed, carried into later missions
@@ -450,7 +450,7 @@ title, stamps the block's objective marker, and owns the AI skills cache. The da
 `FlightRoster`'s private human-aircraft path: one `Assemble` builds the painted model,
 `FlightController`, loadout and ordnance, carried turrets, HUD and instruments, damage visuals,
 audio, stunt and match bindings, target selection, the authored start placement, the Danger Zone
-eye, the crash runtime, and last the `UI.SplitScreen.OwnAirframeLayer` stamp that keeps the whole model out of this pilot's
+eye, the crash runtime, and last the `UI.Boards.SplitScreen.OwnAirframeLayer` stamp that keeps the whole model out of this pilot's
 own spyglass disc. It reads only the roster's copied policy plus the grouped aircraft, world and
 human-session contracts. Player order decides the shared paint and spawn draws. An airframe swap's
 captured scheme and its own build are laid over that assembly, the one path a bought plane takes.

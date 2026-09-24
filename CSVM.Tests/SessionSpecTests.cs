@@ -636,7 +636,7 @@ public class SessionSpecTests
 
     [Fact]
     public void ThePlayerCountIsClampedToTheRigsCapacity()
-        => Assert.Equal(UI.SplitScreen.MaxPlayers, S("--fly", "--players=9").Players);
+        => Assert.Equal(UI.Boards.SplitScreen.MaxPlayers, S("--fly", "--players=9").Players);
 
     /// <summary>Splitscreen is a flight mode: it needs planes to fly.</summary>
     [Fact]

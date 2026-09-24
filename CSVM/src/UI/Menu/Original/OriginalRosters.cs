@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CSVM.Mech3;
+using CSVM.UI.Hangar;
 
 namespace CSVM.UI.Menu.Original;
 

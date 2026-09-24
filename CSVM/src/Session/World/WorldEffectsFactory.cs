@@ -81,7 +81,7 @@ public sealed class WorldEffectsFactory
         _ambience = ambience ?? EffectAmbience.Still;
     }
 
-    /// <summary>The session's <see cref="UI.ScreenFlash"/> sink, handed to every runtime this
+    /// <summary>The session's <see cref="UI.Boards.ScreenFlash"/> sink, handed to every runtime this
     /// factory builds, the three defs carrying an <c>FBFX_COLOR_FROM_TO</c> wash play here. Set
     /// once, before the first build; null leaves the event undrawn. Signature matches
     /// <see cref="Mech3.AnimRuntime.ScreenFlash"/>: the ramp, the burst's world point, and the

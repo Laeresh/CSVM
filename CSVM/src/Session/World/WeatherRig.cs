@@ -930,7 +930,7 @@ public sealed class WeatherRig
                 // A pane-filling overlay so the whiteout swallows everything outside (terrain,
                 // plane, clouds) uniformly, like the original. Its layer keeps it behind the HUD
                 // and behind the cockpit pass, which is what leaves the interior clear.
-                var canvas = new CanvasLayer { Layer = UI.HudLayers.Whiteout, Name = "whiteout" };
+                var canvas = new CanvasLayer { Layer = UI.Boards.HudLayers.Whiteout, Name = "whiteout" };
                 rig.Whiteout = new ColorRect
                 {
                     Color = new Color(

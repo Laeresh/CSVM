@@ -6,9 +6,11 @@ using CSVM.Bindings;
 using CSVM.Flight.Hangar;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
-using CSVM.UI;
+using CSVM.UI.Boards;
+using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
+using CSVM.UI.Screens;
 using Xunit;
 using Xunit.Abstractions;
 

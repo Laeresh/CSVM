@@ -274,6 +274,7 @@ only `Airframe`, and nothing else in `Flight` names `Hangar`.
 - `src/Flight/Hangar/CustomPlaneRecord.cs`, import-only reader for the original's 204-byte saved-plane files, one record or a whole install directory to defs.
 - `src/Flight/Hangar/CustomPlaneBuild.cs`, the join from a saved plane onto what a spawn consumes: the loadout over the stock fit, the paint, the armoured zones.
 - `src/Flight/Hangar/HangarEconomy.cs`, the hangar's decoded economy over a built plane: the component tables, per-line costs and weights, the totals and the verdict.
+- `src/Flight/Hangar/HangarPaintTables.cs`, the paint screen's decoded swatch and pattern tables plus the decal names, as CSVM data; the colour resolver is pure.
 
 **`Flight.Audio`**, own-plane audio and the cue selection both audio paths share.
 
@@ -295,9 +296,136 @@ only `Airframe`, and nothing else in `Flight` names `Hangar`.
 ### `src/UI/`, screens, overlays and the inspection labs
 
 The launchscreen and splitscreen rig, the in-flight pause and results boards, plus the interactive debug labs. Every lab has a scripted
-`--debug-*` twin so a finding can be reproduced headlessly, see `docs/cli.md`.
+`--debug-*` twin so a finding can be reproduced headlessly, see `docs/cli.md`. Six sub-namespaces, one folder each, beside
+the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` are built from `Boards`; `Hangar` names nothing
+else in `UI`, and nothing names `Labs`.
 
-- `src/UI/MenuInput.cs`, one player's menu input source: keyboard flag, a `Pads` binding, edge and auto-repeat polling, and the typed characters a field needs.
+**`UI.Boards`**, the widget library every screen draws with: the composed board and its view, fit, palette and faces, the board menu, the list and slider widgets, the splitscreen rig and the canvas-layer order.
+
+- `src/UI/Boards/BoardMenu.cs`, a board's cursor and item list, engine-free, so the selection rules test off engine.
+- `src/UI/Boards/BoardMenuItem.cs`, the rows a board menu can offer: Resume, Photo, Restart, Exit.
+- `src/UI/Boards/BoardMenuView.cs`, draws a board menu's rows in the launchscreen's cursor idiom, inside the board style.
+- `src/UI/Boards/BoardMenuHost.cs`, menu, rows and reader kept together, so a board wires one in two lines.
+- `src/UI/Boards/CursorRow.cs`, one centred list row and its cursor marker, shared by the launchscreen's lists and every board menu.
+- `src/UI/Boards/ControlGlyphs.cs`, the swappable per-control picture set, keyed by kind, index and sign the way a binding's control is.
+- `src/UI/Boards/ControlLine.cs`, one prompt line with a control in the message table's own `%1` slot, as words or as a glyph, and the hint row boards draw.
+- `src/UI/Boards/HudLayers.cs`, the canvas-layer order for everything drawn over the 3D view: flare, whiteout, cockpit pass, HUD, sun wash, debug overlays, labs, boards, cinemas.
+- `src/UI/Boards/SplitScreen.cs`, the splitscreen rig: one SubViewport pane per player (2-4), a shared `World3D`, every pane a 3D audio listener.
+- `src/UI/Boards/MenuZones.cs`, how the launchscreen divides a window: a fixed header and footer, the list in what is left, one shared scale. Engine-free.
+- `src/UI/Boards/LanguiFace.cs`, a langui `[FONTID]` tag read as a typeface: the Windows family it abbreviates, its size in board pixels, bold and italic.
+- `src/UI/Boards/ListWindow.cs`, a scrolled list as a pointer sees it: the window's box, the thumb on its track, and where a wheel step or a thumb drag puts the window.
+- `src/UI/Boards/SliderTrack.cs`, a slider's track as a pointer sees it: the slot, the thumb on it, and the clamped value a press, a drag or a sideways step lands on.
+- `src/UI/Boards/BoardFit.cs`, how the original's fixed 800x600 dialog space lands on any window: one uniform scale, the board centred, the rest letterboxed.
+- `src/UI/Boards/ComposedBoard.cs`, what a composed screen is made of: a backdrop that may be a movie, fills, pictures, strokes, lines, plaques and flowed lists in draw order.
+- `src/UI/Boards/ComposedBoardView.cs`, the Godot half of the boards: a composed board drawn through `BoardFit` at nearest filtering, the art and movie cache, the hint band.
+- `src/UI/Boards/BoardPalette.cs`, the ink a campaign board writes in, one palette per background family.
+- `src/UI/Boards/SeatStrip.cs`, the shape both presentations' player chip strip shares: the face, the corner inset, the cell a chip centres in, and the ink a seat takes.
+- `src/UI/Boards/PauseScreens.cs`, what the Original presentation's pause screen is made of: the mission's chart at its crop, the parchment, the memento and the strips, the authored four and the remake's photo strip.
+- `src/UI/Boards/ScreenFlash.cs`, the full-screen wash, two channels per pane: the proximity-routed burst ramp and the victim-routed blend, composited at paint time.
+- `src/UI/Boards/BlendWash.cs`, one pane's victim-routed wash: the sonic, flash and smoke blend rule and its attack, sustain and release envelope.
+- `src/UI/Boards/PanelFocus.cs`, the one rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
+
+**`UI.Campaign`**, the campaign pages, the out-of-mission flow, the campaign board chrome both presentations compose and the scrapbook.
+
+- `src/UI/Campaign/CampaignFlow.cs`, the campaign's out-of-mission flow, engine-free: a stack of screens over one profile, the `ICampaignPage` mount point.
+- `src/UI/Campaign/CampaignRosterPage.cs`, the player profile screen: the name field over the roster, continue, a confirmed delete, and the name refusals.
+- `src/UI/Campaign/CampaignCabinPage.cs`, the cabin hub: next mission, previous missions, plane construction and the way back to the main menu, over the cabin art.
+- `src/UI/Campaign/CampaignMementoPage.cs`, the memento chooser: the awarded picture under its glass, the two arrows through the awards, and ACCEPT writing the profile's memento slot.
+- `src/UI/Campaign/CampaignBriefingPage.cs`, the mission briefing: the revealed map, the parchment objectives note, the narration a shell plays, and the three buttons.
+- `src/UI/Campaign/CampaignFlightCheckPage.cs`, the FLIGHT CHECK screen: each crew slot's plane, guns and rockets, the ammo and plane doors, and FLY MISSION.
+- `src/UI/Campaign/CampaignAmmoPage.cs`, the AMMO SELECTION screen: four gun-group and eight pylon drop-downs over a working copy, written only by ACCEPT LOADOUT.
+- `src/UI/Campaign/CampaignPlaneSelectionPage.cs`, the PLANE SELECTION screen: a drop-down, silhouette, ratings and weapon lists per slot, EXPORT, and its refusal.
+- `src/UI/Campaign/CampaignPreviousMissionsPage.cs`, the scrapbook's contents list, the career row then one row per mission below the campaign's position, plus the results page a mission's records compute.
+- `src/UI/Campaign/CampaignScrapbookPage.cs`, the scrapbook itself: the browsed spread's scraps, the results card with its tabs and stamps, and the page arrows.
+- `src/UI/Campaign/CampaignScrapbookZoomPage.cs`, one scrap's detail view: the zoom family's background, the inset image where the row names one, its three text lines in their own faces, and EXPORT TO DESKTOP.
+- `src/UI/Campaign/ScrapbookComposition.cs`, the scrapbook's per-spread scrap layout read from the shipped CSV, gated on the mission's own progress mask.
+- `src/UI/Campaign/ScrapbookExport.cs`, EXPORT TO DESKTOP's copy: the scrap's file to the desktop, answering with the name or the OS reason. Engine-free.
+- `src/UI/Campaign/CampaignCombo.cs`, a campaign screen's drop-down field: its authored box, its scrolling window, and a candidate it never commits itself.
+- `src/UI/Campaign/CampaignModal.cs`, the one-button dialog a campaign screen raises over the board, held by the flow because two screens reach the same box.
+- `src/UI/Campaign/CampaignTextEntry.cs`, a campaign screen's one-line text field, typed from a keyboard or stepped from a pad through one alphabet.
+- `src/UI/Campaign/CampaignAidScript.cs`, the input script a `--menu=` colon argument spells: counted moves, confirms and button words a campaign aid replays.
+- `src/UI/Campaign/CampaignBoards.cs`, the fixed chrome of the eight campaign screens, and the composer that turns a page and a cursor into one board.
+- `src/UI/Campaign/CampaignLayout.cs`, the decoded menu layout as the boards read it: geometry and art by section and key, every read carrying its own fallback.
+
+**`UI.Screens`**, the launchscreen, boot, cinema and load screens, the pause, results and wrap-up boards, and the seat input they poll.
+
+- `src/UI/Screens/MenuInput.cs`, one player's menu input source: keyboard flag, a `Pads` binding, edge and auto-repeat polling, and the typed characters a field needs.
+- `src/UI/Screens/MenuSeatDevices.cs`, the pad side of the shared player setup: seat 0's claimed pad, the join and sign-on gestures, hotplug, the flight binding.
+- `src/UI/Screens/MenuControlsSeats.cs`, the rebinding screen's seat bookkeeping for any presentation: which seats it offers, their pad identities and staged keymaps.
+- `src/UI/Screens/ShotGrid.cs`, the Danger Zone photographs' grid rule and the cursor that walks the grid, engine-free.
+- `src/UI/Screens/ShotViewer.cs`, one Danger Zone photograph shown full size over the board that opened it, for both presentations.
+- `src/UI/Screens/ResultsBoard.cs`, the shared shell every results board is built on: backdrop and panel, the palette, the halt contract, the standard menu, and the cursor over a board's photographs.
+- `src/UI/Screens/StuntScoreboard.cs`, end-of-run results overlay: a per-pane panel of per-zone splits, total, the persisted best time, and the run's photo strip.
+- `src/UI/Screens/StuntShotStrip.cs`, the run's Danger Zone photographs as a selectable grid in marker order, shared by the scoreboard and the wrap-up board.
+- `src/UI/Screens/StuntSplits.cs`, the stunt run's split table, shared by the scoreboard and the wrap-up board: per-zone rows, the total, and the best comparison.
+- `src/UI/Screens/StuntRaceBoard.cs`, the race's shared ranked results overlay, on its own full-window CanvasLayer above the splitscreen panes.
+- `src/UI/Screens/VersusBoard.cs`, the Dogfight results overlay, one whole-window CanvasLayer above the splitscreen panes.
+- `src/UI/Screens/IaWrapupBoard.cs`, Instant Action's wrap-up board: outcome headline and the per-counter score rows, summed across every seat, with a stunt run's splits and photographs.
+- `src/UI/Screens/PauseBoard.cs`, the shared pause board and its Resume · Photo · Preferences · Restart · Exit menu, one whole-window CanvasLayer.
+- `src/UI/Screens/LaunchMenu.cs`, the Built-in presentation's launchscreen: the screen graph, the Godot controls, per-seat polling, and the hangar and campaign doors.
+- `src/UI/Screens/InstantActionWrapupPage.cs`, the wrap-up page's content over the decoded section: the heading, the four rows off one frozen snapshot, the further lines on post-its, a stunt run's photographs, the outcome's tick box, the plaque.
+- `src/UI/Screens/MovieSurface.cs`, a movie as a texture the composition can draw: one `ImageTexture` the playback's pixels are uploaded into, and no node at all.
+- `src/UI/Screens/CinemaScreen.cs`, one cinema over the whole window: the picture in the board's own rectangle, the sound pushed to a generator on the Voice bus, and the skip.
+- `src/UI/Screens/CinemaSkips.cs`, the one member that decides what skips what, and the reading of a device event that feeds it: the three authored sets against a press, a pad button among them.
+- `src/UI/Screens/CinemaHandoff.cs`, what every cinema flow shares: the shape of the call that puts a film on screen, and the latch that opens the next screen once however many times the film says it stopped.
+- `src/UI/Screens/BootSequence.cs`, `fmv.zrd`'s boot block engine-free: the copyright card's composition, the block's eight actions in the reader's own order over three injected calls, and how much of a hold reaches the screen.
+- `src/UI/Screens/BootCard.cs`, the boot sequence's engine half: the black the block runs on, the node the copyright card draws on, and the clock its holds run down.
+- `src/UI/Screens/LoadBoard.cs`, the node that hangs the load screen over a build, tracking the window until the world appears.
+- `src/UI/Screens/LoadScreens.cs`, what the load screen is made of: the campaign chart sheet, and the Instant Action blackboard carrying its dialog's own four texts.
+- `src/UI/Screens/PausePreferences.cs`, the Preferences leaf over a paused mission: the Original Options screen hosted on the pause, its exit returning to the sheet with the settings applied.
+- `src/UI/Screens/MissionEndFade.cs`, the mission-end black-out, painting `CampaignDirector.LeavingFade` onto a full-screen rect every frame, one instance per rig.
+- `src/UI/Screens/SessionStartFade.cs`, the cover a session starts under, painting `StartCover`'s ramp over the HUD and the world until the session's first real frame, then up from dark.
+- `src/UI/Screens/BuildStamp.cs`, the build's version as `CSVM v<version>` in the menu's bottom-right corner, once for the window and over every presentation; hidden in flight.
+- `src/UI/Screens/NoGameDataScreen.cs`, the screen shown instead of the menu when the data root holds no extraction: what is missing, and the extraction step that fills it.
+- `src/UI/Screens/SelectionService.cs`, the shared `--freecam` and `--anim-lab` selection: click-pick, the `cs_name` ancestor ladder, a breadcrumb and a highlight box.
+- `src/UI/Screens/ExportSet.cs`, the node lab's Ctrl+click export set: cyan outlines, the breadcrumb's count, and one combined glTF at world transforms.
+
+**`UI.Hangar`**, the Build Custom Plane pages and the plane-picking tables they share with the campaign pages; names nothing else in `UI`.
+
+- `src/UI/Hangar/PlanePickerRoster.cs`, the roster every human plane picker draws: the stock airframes then the store's saved customs. Engine-free.
+- `src/UI/Hangar/PlaneDiagrams.cs`, the original's plan and head-on diagram sheets sliced per airframe, shared by ammo selection, the flight check and the hangar.
+- `src/UI/Hangar/PlaneNameTables.cs`, the two authored word lists the PLANENAME screen rolls a plane name from.
+- `src/UI/Hangar/PlaneFit.cs`, what one campaign aircraft carries, resolved from its hangar build or its airframe's stock fit; engine-free.
+- `src/UI/Hangar/PlaneRatings.cs`, the four Poor-to-Excellent ratings the plane selection screen prints beside an aircraft; only agility is decoded.
+- `src/UI/Hangar/HangarFlow.cs`, the Build Custom Plane flow, Built-in's walk of the shared hangar feature: the screen order, the cursor and the page mount point.
+- `src/UI/Hangar/HangarAirframePage.cs`, the AIRFRAME screen: the eleven airframes, the blueprint preview, and the defaults ask an edited build's swap raises.
+- `src/UI/Hangar/HangarEnginePage.cs`, the ENGINE screen: the airframe's six engines plus the explicit None row, each with its decoded cost and weight.
+- `src/UI/Hangar/HangarArmourPage.cs`, the ARMOR screen: the four zones stepped on the dropdown's own units-times-five scale.
+- `src/UI/Hangar/HangarGunsPage.cs`, the GUNS screen: four slots stepping the eleven-entry calibre cycle, priced per mount.
+- `src/UI/Hangar/HangarHardpointsPage.cs`, the HARDPOINTS screen: a 0-to-4 count per wing, priced per hardpoint.
+- `src/UI/Hangar/HangarPaintPage.cs`, the PAINT screen: a pattern, three colour and shade pairs and three decals over a preview from the original's own masks.
+- `src/UI/Hangar/HangarNamePage.cs`, the PLANENAME screen: two word steppers, a roll across both, and a typed name over the result.
+- `src/UI/Hangar/HangarPurchasePage.cs`, the PURCHASE screen: the itemised bill, the totals row, and the purchase gate in the original's own words.
+
+**`UI.Overlays`**, the debug overlays and keys, the HUD readouts drawn over a pane, and the mission chart.
+
+- `src/UI/Overlays/MissionMap.cs`, the one chart drawer every screen showing a mission's map shares: the sheet at its crop, the reveal's pins, and an icon placed by world position.
+- `src/UI/Overlays/ObjectivesHud.cs`, the campaign mission's objectives readout, drawn on the pause screen alone, one instance per rig.
+- `src/UI/Overlays/ColliderOverlay.cs`, the collider wireframes (C): every built collision shape drawn, coloured by the surface id it resolves to.
+- `src/UI/Overlays/ClassOverlay.cs`, the colour-by-class overlay (H): every drawn mesh tinted destructible, facade, clutter or scenery, a findable-targets view.
+- `src/UI/Overlays/AiNetsOverlay.cs`, the AI patrol-net overlay (F13): the chapter's nets as coloured graphs with labels, plus a live leash per AI aircraft.
+- `src/UI/Overlays/TileGridOverlay.cs`, the map-edge tile-grid overlay (`--debug-tilegrid`): every ground tile tinted by repetition band, so one band is one block.
+- `src/UI/Overlays/NodeLabels.cs`, floating `cs_name` labels over scene nodes (`--debug-names`, no key): meshes or all, anchored on mesh centres and de-cluttered.
+- `src/UI/Overlays/MarkerOverlay.cs`, the `--viewer` firepoint, pylon and target overlay (K): coloured gizmos with de-cluttered labels.
+- `src/UI/Overlays/PhotoModeHud.cs`, photo mode's fading hint line and its Escape or pad-B way out; it raises an event and decides nothing.
+- `src/UI/Overlays/PerfHud.cs`, the frame-cost readout (F14): fps, current frame cost and worst recent frame, once for the window, drawn above the launchscreen too.
+- `src/UI/Overlays/TargetingOverlay.cs`, the targeting overlay (F15): a line from every gunner to its acquired target, coloured by the gate holding the trigger.
+- `src/UI/Overlays/DebugKillTarget.cs`, the kill key (F17): kills player 1's selected target through its own death path; inert on a turret, which has no health key.
+- `src/UI/Overlays/DebugMarkerToggle.cs`, the all-aircraft markers key (F16): writes `TargetHud.MarkAll` on every human pane at once, the key twin of `--debug-markers`.
+- `src/UI/Overlays/OrbitCamera.cs`, the static inspection view's orbit camera: orbit, zoom and AABB framing over a camera it does not own.
+
+**`UI.Labs`**, the inspection labs; nothing else in `UI` names them.
+
+- `src/UI/Labs/LiveryLab.cs`, the `--viewer` livery editor (L): squadron, colour and decal steppers, a live repaint and copy-CLI-args.
+- `src/UI/Labs/MeshLab.cs`, the geometry and shading lab (M): normal lines, smoothing seams, cull and normal overrides, on the parked plane or on the selection.
+- `src/UI/Labs/WeaponLab.cs`, the weapon lab panel (B): steppers that arm the held plane's live loadout, and click-to-place on a world surface. Fires nothing.
+- `src/UI/Labs/NodeLab.cs`, the node lab (N): a lazy `cs_name` tree, search, frame, hide and glTF export, a dependency readout and a destructibles view.
+- `src/UI/Labs/WorldDamageLab.cs`, the world damage lab (F19): an HP slider with kill and reset on the selection's own destructible pool.
+- `src/UI/Labs/AnimLab.cs`, the `--anim-lab` debugger: a quiet stage, a fixed-dt clock, a transport panel, a def picker, the timeline and a freecam.
+- `src/UI/Labs/AnimTimeline.cs`, the anim lab's per-sequence timeline: authored event blocks against runtime-fired ticks, the scheduler-divergence instrument.
+
+**`UI.Menu`**, the presentation seam and its two presentations (`docs/menu-presentations.md`).
+
 - `src/UI/Menu/PresentationId.cs`, the identity a presentation registers under and Options persist; `built-in` and `original` ship.
 - `src/UI/Menu/IMenuPresentation.cs`, one presentation's lifecycle: activate at a mapped destination, tick over the host's seats, deactivate.
 - `src/UI/Menu/PresentationRegistry.cs`, presentation registration: one factory per id, a fresh instance per activation, an unknown id refused.
@@ -325,8 +453,6 @@ The launchscreen and splitscreen rig, the in-flight pause and results boards, pl
 - `src/UI/Menu/CampaignCheats.cs`, what the original's four menu cheats leave switched on: the mission pull-down and its pick, the gallery reveal, the unlock-everything flag.
 - `src/UI/Menu/CampaignAidProfiles.cs`, the scratch profile store the campaign screenshot aids seat a player over, unable to reach the real one.
 - `src/UI/Menu/MenuIdleSource.cs`, a seat's input source with no device behind it, idle every frame; the screenshot aid's extra players.
-- `src/UI/MenuSeatDevices.cs`, the pad side of the shared player setup: seat 0's claimed pad, the join and sign-on gestures, hotplug, the flight binding.
-- `src/UI/MenuControlsSeats.cs`, the rebinding screen's seat bookkeeping for any presentation: which seats it offers, their pad identities and staged keymaps.
 - `src/UI/Menu/FreeFlightFeature.cs`, Free Flight as a shared feature: the chapter roster, the pick, the launch gate and the typed exit.
 - `src/UI/Menu/InstantActionFeature.cs`, Instant Action as a shared feature: the decoded option sets, the typed setup state, the built def.
 - `src/UI/Menu/Original/OriginalShell.cs`, the Original presentation's screen graph over the decoded layout, and its five partials below.
@@ -354,115 +480,11 @@ The launchscreen and splitscreen rig, the in-flight pause and results boards, pl
 - `src/UI/Menu/Original/OriginalRosters.cs`, the Original sortie screens' chapter labels and the eleven stock airframes with their nodes.
 - `src/UI/Menu/Original/OriginalCues.cs`, the four cue names Original asks for: a rollover, a press, and an edit box's two sounds.
 - `src/UI/Menu/Original/PointerSeat.cs`, seat 0 with the mouse as its `MenuPointer`, the click a press edge and the wheel's steps; device reads injected.
-- `src/Session/Launch/MenuCueTable.cs`, the menu cue table: cue name to wav under the rof tree's `ASSETS/SOUNDS`, the four the globals script binds.
-- `src/UI/BoardMenu.cs`, a board's cursor and item list, engine-free, so the selection rules test off engine.
-- `src/UI/BoardMenuItem.cs`, the rows a board menu can offer: Resume, Photo, Restart, Exit.
-- `src/UI/BoardMenuView.cs`, draws a board menu's rows in the launchscreen's cursor idiom, inside the board style.
-- `src/UI/BoardMenuHost.cs`, menu, rows and reader kept together, so a board wires one in two lines.
-- `src/UI/ShotGrid.cs`, the Danger Zone photographs' grid rule and the cursor that walks the grid, engine-free.
-- `src/UI/ShotViewer.cs`, one Danger Zone photograph shown full size over the board that opened it, for both presentations.
-- `src/UI/ResultsBoard.cs`, the shared shell every results board is built on: backdrop and panel, the palette, the halt contract, the standard menu, and the cursor over a board's photographs.
-- `src/UI/StuntScoreboard.cs`, end-of-run results overlay: a per-pane panel of per-zone splits, total, the persisted best time, and the run's photo strip.
-- `src/UI/StuntShotStrip.cs`, the run's Danger Zone photographs as a selectable grid in marker order, shared by the scoreboard and the wrap-up board.
-- `src/UI/StuntSplits.cs`, the stunt run's split table, shared by the scoreboard and the wrap-up board: per-zone rows, the total, and the best comparison.
-- `src/UI/StuntRaceBoard.cs`, the race's shared ranked results overlay, on its own full-window CanvasLayer above the splitscreen panes.
-- `src/UI/VersusBoard.cs`, the Dogfight results overlay, one whole-window CanvasLayer above the splitscreen panes.
-- `src/UI/IaWrapupBoard.cs`, Instant Action's wrap-up board: outcome headline and the per-counter score rows, summed across every seat, with a stunt run's splits and photographs.
-- `src/UI/PauseBoard.cs`, the shared pause board and its Resume · Photo · Preferences · Restart · Exit menu, one whole-window CanvasLayer.
-- `src/UI/CursorRow.cs`, one centred list row and its cursor marker, shared by the launchscreen's lists and every board menu.
-- `src/UI/ControlGlyphs.cs`, the swappable per-control picture set, keyed by kind, index and sign the way a binding's control is.
-- `src/UI/ControlLine.cs`, one prompt line with a control in the message table's own `%1` slot, as words or as a glyph, and the hint row boards draw.
-- `src/UI/HudLayers.cs`, the canvas-layer order for everything drawn over the 3D view: flare, whiteout, cockpit pass, HUD, sun wash, debug overlays, labs, boards, cinemas.
-- `src/UI/SplitScreen.cs`, the splitscreen rig: one SubViewport pane per player (2-4), a shared `World3D`, every pane a 3D audio listener.
-- `src/UI/LaunchMenu.cs`, the Built-in presentation's launchscreen: the screen graph, the Godot controls, per-seat polling, and the hangar and campaign doors.
-- `src/UI/MenuZones.cs`, how the launchscreen divides a window: a fixed header and footer, the list in what is left, one shared scale. Engine-free.
 - `src/UI/Menu/InstantActionPresets.cs`, the Table of Contents: the 19 decoded preset scenarios by name, resolved to the setup screens' own cursor positions.
-- `src/UI/PlanePickerRoster.cs`, the roster every human plane picker draws: the stock airframes then the store's saved customs. Engine-free.
-- `src/UI/PlaneDiagrams.cs`, the original's plan and head-on diagram sheets sliced per airframe, shared by ammo selection, the flight check and the hangar.
-- `src/UI/PlaneNameTables.cs`, the two authored word lists the PLANENAME screen rolls a plane name from.
-- `src/UI/PlaneFit.cs`, what one campaign aircraft carries, resolved from its hangar build or its airframe's stock fit; engine-free.
-- `src/UI/PlaneRatings.cs`, the four Poor-to-Excellent ratings the plane selection screen prints beside an aircraft; only agility is decoded.
-- `src/UI/HangarFlow.cs`, the Build Custom Plane flow, Built-in's walk of the shared hangar feature: the screen order, the cursor and the page mount point.
-- `src/UI/HangarAirframePage.cs`, the AIRFRAME screen: the eleven airframes, the blueprint preview, and the defaults ask an edited build's swap raises.
-- `src/UI/HangarEnginePage.cs`, the ENGINE screen: the airframe's six engines plus the explicit None row, each with its decoded cost and weight.
-- `src/UI/HangarArmourPage.cs`, the ARMOR screen: the four zones stepped on the dropdown's own units-times-five scale.
-- `src/UI/HangarGunsPage.cs`, the GUNS screen: four slots stepping the eleven-entry calibre cycle, priced per mount.
-- `src/UI/HangarHardpointsPage.cs`, the HARDPOINTS screen: a 0-to-4 count per wing, priced per hardpoint.
-- `src/UI/HangarPaintPage.cs`, the PAINT screen: a pattern, three colour and shade pairs and three decals over a preview from the original's own masks.
-- `src/Flight/Hangar/HangarPaintTables.cs`, the paint screen's decoded swatch and pattern tables plus the decal names, as CSVM data; the colour resolver is pure.
-- `src/UI/HangarNamePage.cs`, the PLANENAME screen: two word steppers, a roll across both, and a typed name over the result.
-- `src/UI/HangarPurchasePage.cs`, the PURCHASE screen: the itemised bill, the totals row, and the purchase gate in the original's own words.
-- `src/UI/CampaignFlow.cs`, the campaign's out-of-mission flow, engine-free: a stack of screens over one profile, the `ICampaignPage` mount point.
 - `src/UI/Menu/CampaignFlightField.cs`, a campaign sortie's humans: joined count, the check showing, each guest's pick, and the no-duplicate rule.
-- `src/UI/CampaignRosterPage.cs`, the player profile screen: the name field over the roster, continue, a confirmed delete, and the name refusals.
-- `src/UI/CampaignCabinPage.cs`, the cabin hub: next mission, previous missions, plane construction and the way back to the main menu, over the cabin art.
-- `src/UI/CampaignBriefingPage.cs`, the mission briefing: the revealed map, the parchment objectives note, the narration a shell plays, and the three buttons.
-- `src/UI/CampaignFlightCheckPage.cs`, the FLIGHT CHECK screen: each crew slot's plane, guns and rockets, the ammo and plane doors, and FLY MISSION.
-- `src/UI/CampaignAmmoPage.cs`, the AMMO SELECTION screen: four gun-group and eight pylon drop-downs over a working copy, written only by ACCEPT LOADOUT.
-- `src/UI/CampaignPlaneSelectionPage.cs`, the PLANE SELECTION screen: a drop-down, silhouette, ratings and weapon lists per slot, EXPORT, and its refusal.
 - `src/UI/Menu/BriefingScript.cs`, the reveal script, engine-free: the `Briefing.zrd` reader and the interpreter that runs a state's beat sheet.
 - `src/UI/Menu/EscapeDialog.cs`, the `escape.zrd` and `Loading.zrd` reader: the per-mission map with its crop and world window, the memento slot, and the shared parchment, icons and strips.
 - `src/UI/Menu/BriefingObjectives.cs`, the briefing's parchment note from a mission's `objectives.zrd`, ordered by priority, which a reveal opcode indexes.
-- `src/UI/CampaignPreviousMissionsPage.cs`, the scrapbook's contents list, the career row then one row per mission below the campaign's position, plus the results page a mission's records compute.
-- `src/UI/CampaignScrapbookPage.cs`, the scrapbook itself: the browsed spread's scraps, the results card with its tabs and stamps, and the page arrows.
-- `src/UI/CampaignScrapbookZoomPage.cs`, one scrap's detail view: the zoom family's background, the inset image where the row names one, its three text lines in their own faces, and EXPORT TO DESKTOP.
-- `src/UI/ScrapbookComposition.cs`, the scrapbook's per-spread scrap layout read from the shipped CSV, gated on the mission's own progress mask.
-- `src/UI/ScrapbookExport.cs`, EXPORT TO DESKTOP's copy: the scrap's file to the desktop, answering with the name or the OS reason. Engine-free.
-- `src/UI/LanguiFace.cs`, a langui `[FONTID]` tag read as a typeface: the Windows family it abbreviates, its size in board pixels, bold and italic.
-- `src/UI/CampaignCombo.cs`, a campaign screen's drop-down field: its authored box, its scrolling window, and a candidate it never commits itself.
-- `src/UI/CampaignModal.cs`, the one-button dialog a campaign screen raises over the board, held by the flow because two screens reach the same box.
-- `src/UI/CampaignTextEntry.cs`, a campaign screen's one-line text field, typed from a keyboard or stepped from a pad through one alphabet.
-- `src/UI/CampaignAidScript.cs`, the input script a `--menu=` colon argument spells: counted moves, confirms and button words a campaign aid replays.
-- `src/UI/ListWindow.cs`, a scrolled list as a pointer sees it: the window's box, the thumb on its track, and where a wheel step or a thumb drag puts the window.
-- `src/UI/SliderTrack.cs`, a slider's track as a pointer sees it: the slot, the thumb on it, and the clamped value a press, a drag or a sideways step lands on.
-- `src/UI/BoardFit.cs`, how the original's fixed 800x600 dialog space lands on any window: one uniform scale, the board centred, the rest letterboxed.
-- `src/UI/ComposedBoard.cs`, what a composed screen is made of: a backdrop that may be a movie, fills, pictures, strokes, lines, plaques and flowed lists in draw order.
-- `src/UI/CampaignBoards.cs`, the fixed chrome of the eight campaign screens, and the composer that turns a page and a cursor into one board.
-- `src/UI/CampaignLayout.cs`, the decoded menu layout as the boards read it: geometry and art by section and key, every read carrying its own fallback.
-- `src/UI/InstantActionWrapupPage.cs`, the wrap-up page's content over the decoded section: the heading, the four rows off one frozen snapshot, the further lines on post-its, a stunt run's photographs, the outcome's tick box, the plaque.
-- `src/UI/ComposedBoardView.cs`, the Godot half of the boards: a composed board drawn through `BoardFit` at nearest filtering, the art and movie cache, the hint band.
-- `src/UI/MovieSurface.cs`, a movie as a texture the composition can draw: one `ImageTexture` the playback's pixels are uploaded into, and no node at all.
-- `src/UI/CinemaScreen.cs`, one cinema over the whole window: the picture in the board's own rectangle, the sound pushed to a generator on the Voice bus, and the skip.
-- `src/UI/CinemaSkips.cs`, the one member that decides what skips what, and the reading of a device event that feeds it: the three authored sets against a press, a pad button among them.
-- `src/UI/CinemaHandoff.cs`, what every cinema flow shares: the shape of the call that puts a film on screen, and the latch that opens the next screen once however many times the film says it stopped.
-- `src/UI/BootSequence.cs`, `fmv.zrd`'s boot block engine-free: the copyright card's composition, the block's eight actions in the reader's own order over three injected calls, and how much of a hold reaches the screen.
-- `src/UI/BootCard.cs`, the boot sequence's engine half: the black the block runs on, the node the copyright card draws on, and the clock its holds run down.
-- `src/UI/BoardPalette.cs`, the ink a campaign board writes in, one palette per background family.
-- `src/UI/SeatStrip.cs`, the shape both presentations' player chip strip shares: the face, the corner inset, the cell a chip centres in, and the ink a seat takes.
-- `src/UI/LoadBoard.cs`, the node that hangs the load screen over a build, tracking the window until the world appears.
-- `src/UI/LoadScreens.cs`, what the load screen is made of: the campaign chart sheet, and the Instant Action blackboard carrying its dialog's own four texts.
-- `src/UI/PauseScreens.cs`, what the Original presentation's pause screen is made of: the mission's chart at its crop, the parchment, the memento and the strips, the authored four and the remake's photo strip.
-- `src/UI/PausePreferences.cs`, the Preferences leaf over a paused mission: the Original Options screen hosted on the pause, its exit returning to the sheet with the settings applied.
-- `src/UI/MissionMap.cs`, the one chart drawer every screen showing a mission's map shares: the sheet at its crop, the reveal's pins, and an icon placed by world position.
-- `src/UI/ObjectivesHud.cs`, the campaign mission's objectives readout, drawn on the pause screen alone, one instance per rig.
-- `src/UI/MissionEndFade.cs`, the mission-end black-out, painting `CampaignDirector.LeavingFade` onto a full-screen rect every frame, one instance per rig.
-- `src/UI/SessionStartFade.cs`, the cover a session starts under, painting `StartCover`'s ramp over the HUD and the world until the session's first real frame, then up from dark.
-- `src/UI/ScreenFlash.cs`, the full-screen wash, two channels per pane: the proximity-routed burst ramp and the victim-routed blend, composited at paint time.
-- `src/UI/BlendWash.cs`, one pane's victim-routed wash: the sonic, flash and smoke blend rule and its attack, sustain and release envelope.
-- `src/UI/LiveryLab.cs`, the `--viewer` livery editor (L): squadron, colour and decal steppers, a live repaint and copy-CLI-args.
-- `src/UI/MeshLab.cs`, the geometry and shading lab (M): normal lines, smoothing seams, cull and normal overrides, on the parked plane or on the selection.
-- `src/UI/ColliderOverlay.cs`, the collider wireframes (C): every built collision shape drawn, coloured by the surface id it resolves to.
-- `src/UI/ClassOverlay.cs`, the colour-by-class overlay (H): every drawn mesh tinted destructible, facade, clutter or scenery, a findable-targets view.
-- `src/UI/AiNetsOverlay.cs`, the AI patrol-net overlay (F13): the chapter's nets as coloured graphs with labels, plus a live leash per AI aircraft.
-- `src/UI/TileGridOverlay.cs`, the map-edge tile-grid overlay (`--debug-tilegrid`): every ground tile tinted by repetition band, so one band is one block.
-- `src/UI/WeaponLab.cs`, the weapon lab panel (B): steppers that arm the held plane's live loadout, and click-to-place on a world surface. Fires nothing.
-- `src/UI/PanelFocus.cs`, the one rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
-- `src/UI/NodeLabels.cs`, floating `cs_name` labels over scene nodes (`--debug-names`, no key): meshes or all, anchored on mesh centres and de-cluttered.
-- `src/UI/MarkerOverlay.cs`, the `--viewer` firepoint, pylon and target overlay (K): coloured gizmos with de-cluttered labels.
-- `src/UI/PhotoModeHud.cs`, photo mode's fading hint line and its Escape or pad-B way out; it raises an event and decides nothing.
-- `src/UI/PerfHud.cs`, the frame-cost readout (F14): fps, current frame cost and worst recent frame, once for the window, drawn above the launchscreen too.
-- `src/UI/BuildStamp.cs`, the build's version as `CSVM v<version>` in the menu's bottom-right corner, once for the window and over every presentation; hidden in flight.
-- `src/UI/NoGameDataScreen.cs`, the screen shown instead of the menu when the data root holds no extraction: what is missing, and the extraction step that fills it.
-- `src/UI/TargetingOverlay.cs`, the targeting overlay (F15): a line from every gunner to its acquired target, coloured by the gate holding the trigger.
-- `src/UI/DebugKillTarget.cs`, the kill key (F17): kills player 1's selected target through its own death path; inert on a turret, which has no health key.
-- `src/UI/DebugMarkerToggle.cs`, the all-aircraft markers key (F16): writes `TargetHud.MarkAll` on every human pane at once, the key twin of `--debug-markers`.
-- `src/UI/SelectionService.cs`, the shared `--freecam` and `--anim-lab` selection: click-pick, the `cs_name` ancestor ladder, a breadcrumb and a highlight box.
-- `src/UI/NodeLab.cs`, the node lab (N): a lazy `cs_name` tree, search, frame, hide and glTF export, a dependency readout and a destructibles view.
-- `src/UI/ExportSet.cs`, the node lab's Ctrl+click export set: cyan outlines, the breadcrumb's count, and one combined glTF at world transforms.
-- `src/UI/WorldDamageLab.cs`, the world damage lab (F19): an HP slider with kill and reset on the selection's own destructible pool.
-- `src/UI/OrbitCamera.cs`, the static inspection view's orbit camera: orbit, zoom and AABB framing over a camera it does not own.
-- `src/UI/AnimLab.cs`, the `--anim-lab` debugger: a quiet stage, a fixed-dt clock, a transport panel, a def picker, the timeline and a freecam.
-- `src/UI/AnimTimeline.cs`, the anim lab's per-sequence timeline: authored event blocks against runtime-fired ticks, the scheduler-divergence instrument.
 
 ### `src/Utils/`, session-wide services
 
@@ -547,6 +569,7 @@ delegate to, in six sub-namespaces, one folder each. `Launch` sits on top and no
 - `src/Session/Launch/TuningWarmup.cs`, the startup pass that registers every `Config` key before the orphan report and `--dump-config` read the registry.
 - `src/Session/Launch/ExtractionStamp.cs`, reads the extraction provenance stamp at boot and warns once when it is stale or unreadable; `Behind` is the blocking read, `Schema` the promise a test pins.
 - `src/Session/Launch/MenuAudioService.cs`, the menus' audio host: the music channel, the briefing narration player, the cue player behind `MenuCueTable`, and the AUDIO page's live mix preview.
+- `src/Session/Launch/MenuCueTable.cs`, the menu cue table: cue name to wav under the rof tree's `ASSETS/SOUNDS`, the four the globals script binds.
 
 **`Session.InstantAction`**, one Instant Action mission.
 

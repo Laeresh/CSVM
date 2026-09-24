@@ -675,7 +675,7 @@ own, one per pane, hung on `TargetHud` so it sits inside that pane's viewport. `
 planes and cull mask and starts it rendering; `Idle` stops it. The world is inherited rather than
 owned, so the target is the one in play and wears the flown zone's fog. `DiscMask` is the one
 departure from the pane's view: the eye stands inside the pilot's own aeroplane, so that aeroplane's
-layer (`UI.SplitScreen.OwnAirframeLayer`, stamped by `Session/HumanFlightAdapter`) is dropped, on
+layer (`UI.Boards.SplitScreen.OwnAirframeLayer`, stamped by `Session/HumanFlightAdapter`) is dropped, on
 the original at the controls and not on the decode. `TargetHud.DrawDisc` masks it to a circle.
 
 ## src/Flight/Modes/StuntRunHud.cs
@@ -758,7 +758,7 @@ the original's auto-dock offer on the HUD layer, and the port's respawn prompt o
 the one the crash camera leaves up. `FlightHud` owns when each shows and what it reads; this owns
 only where it sits, as `LineAnchor` over a pane size, static so a suite asserts the placement with no
 `Control`. The fraction is of the pane, never of `HudMetrics`' reading box, so each splitscreen pane
-centres its own. `Prompt` is a `UI/ControlLine.cs`, not a string, so a pad seat's control draws as a
+centres its own. `Prompt` is a `UI/Boards/ControlLine.cs`, not a string, so a pad seat's control draws as a
 glyph where the words go; `Line` is still the words. Decode: [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md) "The prompt's own placement".
 
 ## src/Flight/Hud/TargetHud.cs
@@ -1094,7 +1094,7 @@ the cockpit interior on screen the dials, tape and text block come off (`SetCock
 carrying them; the pipper, marker, message and prompt HUDs stay, the respawn prompt on the message layer the
 crash camera leaves up. `Draw(in FlightHudState)`, the per-frame entry, takes a struct of aircraft STATE, so
 text, dials and gates compose and assert here with no `Control` (`ComputeStallWarning`, `ComputeAgl`,
-`ComposeTextLines`, and both prompt gates and composers). Both composers return a `UI/ControlLine.cs` filled through the message table's own `%1` slot, so the seat's control reaches the line as words or as a glyph without either composer knowing which.
+`ComposeTextLines`, and both prompt gates and composers). Both composers return a `UI/Boards/ControlLine.cs` filled through the message table's own `%1` slot, so the seat's control reaches the line as words or as a glyph without either composer knowing which.
 
 ## src/Flight/Airframe/FlightController.cs
 The flying-aircraft node: input through `FlightModel` to a transform (or, for an AI pilot publishing

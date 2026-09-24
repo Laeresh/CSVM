@@ -7,7 +7,7 @@ using CSVM.Mech3;
 using CSVM.Mech3.Anim;
 using CSVM.Session.Roster;
 using CSVM.Tooling;
-using CSVM.UI;
+using CSVM.UI.Boards;
 using Godot;
 
 using static CSVM.Testing.SuiteConstants;

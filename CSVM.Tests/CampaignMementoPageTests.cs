@@ -2,7 +2,7 @@ using System.IO;
 using System.Linq;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
-using CSVM.UI;
+using CSVM.UI.Campaign;
 using Xunit;
 
 namespace CSVM.Tests;

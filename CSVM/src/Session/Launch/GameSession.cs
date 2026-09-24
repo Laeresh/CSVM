@@ -17,7 +17,9 @@ using CSVM.Session.Objectives;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
 using CSVM.Tooling;
-using CSVM.UI;
+using CSVM.UI.Boards;
+using CSVM.UI.Overlays;
+using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
 
@@ -194,13 +196,13 @@ public partial class GameSession : Node3D
     private SpectatorCamera? _spectator;
     // The session's shared world selection (--freecam/--anim-lab): the clicked leaf plus its
     // cs_name ancestor ladder, which every inspect tool reads instead of picking for itself.
-    private UI.SelectionService? _selection;
+    private UI.Screens.SelectionService? _selection;
     // The node lab (N, --freecam/--anim-lab): tree panel, search, per-node actions and the
     // dependency readout for whatever the selection holds.
-    private UI.NodeLab? _nodeLab;
+    private UI.Labs.NodeLab? _nodeLab;
     // The world damage lab (F19, --freecam/--anim-lab): HP slider + kill/reset on the selection's
     // destructible pool, the interactive twin of --damage-test.
-    private UI.WorldDamageLab? _worldDamageLab;
+    private UI.Labs.WorldDamageLab? _worldDamageLab;
     // The aircraft damage lab (F19, --viewer/--fly/--stunt): per-part HP sliders on the parked
     // plane's visuals, or on P1's real PlaneDamage in flight.
     private DamageLab? _damageLab;
@@ -224,7 +226,7 @@ public partial class GameSession : Node3D
     private LensFlareRig? _lensFlareRig;
     // The FBFX_COLOR_FROM_TO wash, one ramp per rendered view, painted into the pane(s) the burst
     // was near.
-    private UI.ScreenFlash? _screenFlash;
+    private UI.Boards.ScreenFlash? _screenFlash;
     // The active smoke screens (D18): laid by the SMOKE_SCREEN fire path, walked over every rig
     // and AI plane each sim step, washing humans through _screenFlash and stunning AI pilots.
     private SmokeScreens? _smokeScreens;
@@ -297,7 +299,7 @@ public partial class GameSession : Node3D
     private StuntRace? _race;
     // One menu reader per player, built with that player's own pad binding, so a board menu can be
     // driven by its owner alone. Null before the rigs exist.
-    private UI.MenuInput[]? _menuInputs;
+    private UI.Screens.MenuInput[]? _menuInputs;
     // Who is holding the sim clock and why, shared by every rig and by every board that halts.
     // Null before the rigs exist.
     private PauseState? _pauseState;
@@ -308,11 +310,11 @@ public partial class GameSession : Node3D
     // over it while PREFERENCES is open. The leaf is the Launcher's to build (only it holds the
     // decoded layout and the options writer); null leaves both boards without that door.
     private Control? _pauseBoard;
-    private UI.PausePreferences? _pauseOptions;
-    private Func<UI.PausePreferences?>? _pauseOptionsFactory;
+    private UI.Screens.PausePreferences? _pauseOptions;
+    private Func<UI.Screens.PausePreferences?>? _pauseOptionsFactory;
     // Photo mode's three pieces, all null unless it is engaged: the hint/exit reader, the camera
     // holding the pane, and whose pane it is.
-    private UI.PhotoModeHud? _photoHud;
+    private UI.Overlays.PhotoModeHud? _photoHud;
     private SpectatorCamera? _photoCamera;
     private FlightController? _photoPilot;
     // The trailer-target resolver every net follower this session builds shares. Built
@@ -322,7 +324,7 @@ public partial class GameSession : Node3D
     // rolling mirrored-tile window past the map edge
     private Mech3.MapEdgeExtender? _edgeExtender;
     // the splitscreen pane rig (null in single player)
-    private UI.SplitScreen? _split;
+    private UI.Boards.SplitScreen? _split;
 
     // Session lifecycle (the launchscreen's in-process world rebuild): everything a
     // session builds hangs under _worldRoot, so Esc-to-menu can free it and a new session node
@@ -481,7 +483,7 @@ public partial class GameSession : Node3D
         // The FBFX_COLOR_FROM_TO wash: one ramp per rendered view, built as soon as the rigs exist
         // so every runtime below takes the same sink. The viewer set goes with it because the
         // routing rule is per pane, and one rig list builds both index-aligned.
-        _screenFlash = UI.ScreenFlash.Build(_rigs.Select(r => r.HudParent), _viewers);
+        _screenFlash = UI.Boards.ScreenFlash.Build(_rigs.Select(r => r.HudParent), _viewers);
         _worldRoot!.AddChild(_screenFlash);
         _worldEffectsFactory.ScreenFlash = _screenFlash.Play;
         // The smoke screens ride the same wash and read the roster through a closure, since the
@@ -1325,7 +1327,7 @@ public partial class GameSession : Node3D
                     ? cam.GlobalPosition
                     : Vector3.Zero,
                 // Every pane camera is a 3D audio listener, so the world is heard from the nearest
-                // of them (UI.SplitScreen). Same set as the rigs, for the debug log's column only.
+                // of them (UI.Boards.SplitScreen). Same set as the rigs, for the debug log's column only.
                 ListenerPositions = () =>
                 {
                     if (_rigs.Count == 0)
@@ -1444,7 +1446,7 @@ public partial class GameSession : Node3D
         // the --node= partial stage skips it with the rest of the mission dressing.
         if (state.NodeSubtree == null)
         {
-            _plane.AddChild(new UI.AiNetsOverlay(
+            _plane.AddChild(new UI.Overlays.AiNetsOverlay(
                 SessionPaths.ChapterZrdr(state.DataRoot, _spec.Chapter), _spec.Chapter)
             {
                 DebugShow = _spec.DebugAiNets != null,
@@ -1458,7 +1460,7 @@ public partial class GameSession : Node3D
                     {
                         if (ai is { InPlay: true } && ai.Pilot is { Patrol: { CurrentIndex: >= 0 } patrol } pilot)
                         {
-                            into.Add(new UI.AiNetLeash(ai.WorldPosition, patrol.CurrentTarget,
+                            into.Add(new UI.Overlays.AiNetLeash(ai.WorldPosition, patrol.CurrentTarget,
                                 patrol.Net.Id, pilot.SteeringPatrol));
                         }
                     }
@@ -1516,14 +1518,14 @@ public partial class GameSession : Node3D
         // camera-follow to it; it builds no HUD until something is picked.
         if (_spec.Freecam || _spec.AnimLab)
         {
-            _selection = new UI.SelectionService(_plane, _camera)
+            _selection = new UI.Screens.SelectionService(_plane, _camera)
             {
-                DebugPick = _spec.DebugSelect != null ? UI.SelectionService.ParseDebugPick(_spec.DebugSelect) : null,
+                DebugPick = _spec.DebugSelect != null ? UI.Screens.SelectionService.ParseDebugPick(_spec.DebugSelect) : null,
                 ExtraRoots = _selectionExtraRoots,
             };
             // The node lab reads that selection. Its camera is resolved through a
             // delegate: the freecam is created further down, after this point.
-            _nodeLab = new UI.NodeLab(_plane, _selection, session.Runtime, session.Program,
+            _nodeLab = new UI.Labs.NodeLab(_plane, _selection, session.Runtime, session.Program,
                 session.Builder.Scene, BuildsCollision)
             {
                 ExtraRoots = _selectionExtraRoots,
@@ -1538,7 +1540,7 @@ public partial class GameSession : Node3D
             var damageScene = session.Builder.Scene;
             var damageProgram = session.Program;
             var damageRuntime = session.Runtime;
-            _worldDamageLab = new UI.WorldDamageLab(_selection, damageRuntime, BuildsCollision)
+            _worldDamageLab = new UI.Labs.WorldDamageLab(_selection, damageRuntime, BuildsCollision)
             {
                 SelectByName = name => _nodeLab?.SelectByName(name) ?? false,
                 EffectsSource = () => _worldEffectsFactory.EnsureWorldEffects(state.Gamez, damageScene, state.Textures,
@@ -1624,7 +1626,7 @@ public partial class GameSession : Node3D
             int fvolZone = Mech3.WorldBuilder.FogVolumeZoneIdOf(state.Gamez);
             if (cloudField != null && Mech3.ZoneGate.LayerFor(fvolZone) is var fvolLayer and not 0)
             {
-                UI.SplitScreen.SetVisualLayer(cloudField, fvolLayer);
+                UI.Boards.SplitScreen.SetVisualLayer(cloudField, fvolLayer);
             }
 
             // The sun goes in with the weather: its bearing is the zone's own SUNLIGHT_ORIENTATION,
@@ -1680,7 +1682,7 @@ public partial class GameSession : Node3D
                         break;
                     }
                     if (rig.VisualLayer != 0)
-                        UI.SplitScreen.SetVisualLayer(anchor, rig.VisualLayer);
+                        UI.Boards.SplitScreen.SetVisualLayer(anchor, rig.VisualLayer);
                     _worldRoot!.AddChild(anchor);
                     rig.Horizon = anchor;
                 }
@@ -1851,7 +1853,7 @@ public partial class GameSession : Node3D
             _selectionExtraRoots.Add(parked);
         }
 
-        var animLab = new UI.AnimLab(session.Runtime, session.Program, labCam,
+        var animLab = new UI.Labs.AnimLab(session.Runtime, session.Program, labCam,
             labStage, state.Textures, state.Sounds, _masterSeed, _spec.PlayAnim,
             // On a --node= stage the subject IS the stage and is already framed; letting
             // the lab re-aim on every Play swings the camera off the only object there
@@ -1939,7 +1941,7 @@ public partial class GameSession : Node3D
         // unadorned --viewer screenshot is unchanged.
         if (_spec.Viewer && builder.SkinPrefix != null)
         {
-            var lab = new UI.LiveryLab(builder, _liveryResolver.PaintCatalog(state.ZrdrPath), state.Textures, staticScheme,
+            var lab = new UI.Labs.LiveryLab(builder, _liveryResolver.PaintCatalog(state.ZrdrPath), state.Textures, staticScheme,
                 _liveryResolver.Patterns.PatternsFor(builder.SkinPrefix))
             {
                 DebugShow = _spec.DebugLivery.HasValue,
@@ -1981,7 +1983,7 @@ public partial class GameSession : Node3D
         // overrides. ⚠ Build it after the plane joins the tree; it reads geometry back through
         // GlobalTransform, which on a detached node returns identity and logs per call.
         if (_spec.Viewer && _plane != null)
-            _worldRoot!.AddChild(new UI.MeshLab(_plane, PlaneCollider.Build(_plane),
+            _worldRoot!.AddChild(new UI.Labs.MeshLab(_plane, PlaneCollider.Build(_plane),
                 _sun, _env, _camera)
             { DebugSpec = _spec.DebugMesh });
         // Marker overlay (--viewer --plane, K): the firepoint, pylon and target gizmos. Only on the
@@ -1989,7 +1991,7 @@ public partial class GameSession : Node3D
         // since the overlay reads each marker's GlobalPosition.
         if (_spec.Viewer && !_spec.WorldMode && _plane != null)
         {
-            _worldRoot!.AddChild(new UI.MarkerOverlay(_plane) { StartHidden = !_spec.MarkersOverlay });
+            _worldRoot!.AddChild(new UI.Overlays.MarkerOverlay(_plane) { StartHidden = !_spec.MarkersOverlay });
             state.What += _spec.MarkersOverlay ? " + marker overlay" : " + marker overlay (K)";
         }
         // --weapon-test: the whole-catalogue pass check on a PARKED plane. ⚠ Keep it on this cheap
@@ -2486,7 +2488,7 @@ public partial class GameSession : Node3D
 
         _boards.Add(pauseBoard);
         _pauseBoard = pauseBoard;
-        var pauseLayer = new CanvasLayer { Name = "pause_board", Layer = UI.HudLayers.Board };
+        var pauseLayer = new CanvasLayer { Name = "pause_board", Layer = UI.Boards.HudLayers.Board };
         pauseLayer.AddChild(pauseBoard);
         _worldRoot!.AddChild(pauseLayer);
         if (pauseOptions != null)
@@ -2494,7 +2496,7 @@ public partial class GameSession : Node3D
             _pauseOptions = pauseOptions;
             pauseOptions.Closed += ClosePauseOptions;
             _boards.Add(pauseOptions);
-            var optionsLayer = new CanvasLayer { Name = "pause_options", Layer = UI.HudLayers.Board };
+            var optionsLayer = new CanvasLayer { Name = "pause_options", Layer = UI.Boards.HudLayers.Board };
             optionsLayer.AddChild(pauseOptions);
             _worldRoot!.AddChild(optionsLayer);
         }
@@ -2552,7 +2554,7 @@ public partial class GameSession : Node3D
             p1c.InfiniteAmmo = true;
             // --weapon-fire holds the real trigger, the one free flight pulls (decision 3), which
             // one follows the panel's bank, so the lab sets it rather than this call site.
-            var lab = new UI.WeaponLab(p1c.PlaneModel, weaponDefs, p1c.Loadout, _spec.PlaneName,
+            var lab = new UI.Labs.WeaponLab(p1c.PlaneModel, weaponDefs, p1c.Loadout, _spec.PlaneName,
                 host: p1c, camera: labRig.Camera)
             {
                 DebugShow = true,   // the lab IS the session now, the panel is why you launched it
@@ -2606,7 +2608,7 @@ public partial class GameSession : Node3D
             // Player 1: a results board reads _inputFor(0), so its cursor is P1's whoever won.
             raceBoard.PhotoMode = () => EnterPhotoMode(0);
             _boards.Add(raceBoard);
-            var boardLayer = new CanvasLayer { Name = "race_board", Layer = UI.HudLayers.Board };
+            var boardLayer = new CanvasLayer { Name = "race_board", Layer = UI.Boards.HudLayers.Board };
             boardLayer.AddChild(raceBoard);
             _worldRoot!.AddChild(boardLayer);
             foreach (var rig in _rigs)
@@ -2665,7 +2667,7 @@ public partial class GameSession : Node3D
             // Player 1, for the same reason the race board is: the cursor is _inputFor(0)'s.
             board.PhotoMode = () => EnterPhotoMode(0);
             _boards.Add(board);
-            var boardLayer = new CanvasLayer { Name = "dogfight_board", Layer = UI.HudLayers.Board };
+            var boardLayer = new CanvasLayer { Name = "dogfight_board", Layer = UI.Boards.HudLayers.Board };
             boardLayer.AddChild(board);
             _worldRoot!.AddChild(boardLayer);
         }
@@ -3257,7 +3259,7 @@ public partial class GameSession : Node3D
         // F15 / --debug-targets: who is aiming at whom. Reads the live gunners through closures
         // rather than a snapshot, waves activate, AI planes spawn and emplacements die long
         // after this line runs. The roster list is reused, not rebuilt per frame.
-        _worldRoot!.AddChild(new UI.TargetingOverlay(
+        _worldRoot!.AddChild(new UI.Overlays.TargetingOverlay(
             () => _turretEmplacements?.Emplacements ?? Array.Empty<TurretController>(),
             AllAircraft)
         {
@@ -3267,14 +3269,14 @@ public partial class GameSession : Node3D
         // F17: kill P1's TargetSelection.Current through its own death path, the playtester's
         // escape hatch when a stray enemy blocks an objective chain. P1-only, the same precedent
         // F19/F51 set for a single-pane debug tool.
-        _worldRoot!.AddChild(new UI.DebugKillTarget(
+        _worldRoot!.AddChild(new UI.Overlays.DebugKillTarget(
             () => _rigs.Count > 0 ? _rigs[0].Controller : null,
             () => _diagRuntime));
 
         // F16 / --debug-markers: every live aircraft marked on every human pane's targeting HUD.
         // Session-level like F17, and read through a closure because a pane's HUD is built after
         // this line and a rig can lose its aircraft mid-session.
-        _worldRoot!.AddChild(new UI.DebugMarkerToggle(() =>
+        _worldRoot!.AddChild(new UI.Overlays.DebugMarkerToggle(() =>
         {
             var huds = new List<Flight.Hud.TargetHud>();
             foreach (var rig in _rigs)
@@ -3296,7 +3298,7 @@ public partial class GameSession : Node3D
             // One readout and one fade per rig, under that rig's own HudParent, so every pane
             // draws its own copy, the pattern every other per-rig HUD follows. The completion
             // mark's art is loaded once and shared across them, as the HUD font is.
-            var objectiveMark = UI.ObjectivesHud.LoadMark(
+            var objectiveMark = UI.Overlays.ObjectivesHud.LoadMark(
                 Path.Combine(_dataRoot, "extracted", "rimage"));
             foreach (var rig in _rigs)
             {
@@ -3304,11 +3306,11 @@ public partial class GameSession : Node3D
                 // carries the objectives, and two readouts over one pause is one too many.
                 if (_originalPause == null)
                 {
-                    rig.HudParent.AddChild(UI.ObjectivesHud.Build(
+                    rig.HudParent.AddChild(UI.Overlays.ObjectivesHud.Build(
                         campaign, objectiveStrings, _pauseState!, objectiveMark));
                 }
 
-                rig.HudParent.AddChild(UI.MissionEndFade.Build(campaign));
+                rig.HudParent.AddChild(UI.Screens.MissionEndFade.Build(campaign));
             }
 
             // The mission clock running out posts its two notices into the same stack a kill line
@@ -3488,7 +3490,7 @@ public partial class GameSession : Node3D
         // that subtree exactly when M lets go, so it builds and changes nothing until then.
         if (_selection != null)
         {
-            _worldRoot!.AddChild(new UI.MeshLab(_selection, _sun, _env, _camera)
+            _worldRoot!.AddChild(new UI.Labs.MeshLab(_selection, _sun, _env, _camera)
             {
                 DebugSpec = _spec.DebugMesh,
                 // A scripted capture is about the geometry, not the panel over it.
@@ -3512,7 +3514,7 @@ public partial class GameSession : Node3D
                     planeColliders.Add((controller, airframe));
                 }
             }
-            _worldRoot!.AddChild(new UI.ColliderOverlay(_plane, BuildsCollision)
+            _worldRoot!.AddChild(new UI.Overlays.ColliderOverlay(_plane, BuildsCollision)
             {
                 DebugShow = _spec.ShowColliders,
                 Planes = planeColliders,
@@ -3527,7 +3529,7 @@ public partial class GameSession : Node3D
 
             // Colour-by-class overlay (H): same mode set as the collider overlay, since it reads
             // the same live world, a findable-targets view, not a collision one.
-            _worldRoot!.AddChild(new UI.ClassOverlay(_plane, state.Gamez, state.WorldRuntime)
+            _worldRoot!.AddChild(new UI.Overlays.ClassOverlay(_plane, state.Gamez, state.WorldRuntime)
             {
                 DebugShow = _spec.ShowClassOverlay,
             });
@@ -3544,7 +3546,7 @@ public partial class GameSession : Node3D
         // mode list, because "there is a continuation to colour" is exactly the precondition.
         if (_edgeExtender != null && _worldRoot != null && _plane != null)
         {
-            _worldRoot.AddChild(new UI.TileGridOverlay(_plane, _edgeExtender)
+            _worldRoot.AddChild(new UI.Overlays.TileGridOverlay(_plane, _edgeExtender)
             {
                 DebugShow = _spec.ShowTileGrid,
             });
@@ -3562,9 +3564,9 @@ public partial class GameSession : Node3D
         foreach (var rig in _rigs)
             if (rig.Controller?.PlaneModel is { } flown)
                 flownPlanes.Add(flown);
-        _worldRoot!.AddChild(new UI.NodeLabels(_worldRoot!, _rigs.Count > 0 ? _rigs[0].Camera : _camera)
+        _worldRoot!.AddChild(new UI.Overlays.NodeLabels(_worldRoot!, _rigs.Count > 0 ? _rigs[0].Camera : _camera)
         {
-            InitialMode = _spec.DebugNames == null ? UI.NodeLabels.Mode.Off : UI.NodeLabels.ParseMode(_spec.DebugNames),
+            InitialMode = _spec.DebugNames == null ? UI.Overlays.NodeLabels.Mode.Off : UI.Overlays.NodeLabels.ParseMode(_spec.DebugNames),
             // The flown aircraft sits metres from the camera while the world is hundreds of
             // metres away, so without this it wins every label slot. Empty in --viewer, where
             // the parked aircraft IS the subject.
@@ -3784,17 +3786,17 @@ public partial class GameSession : Node3D
 
     // One menu reader per player, bound the way that player's plane is bound: player 1 also has the
     // keyboard, and a session with no per-player split reads every connected pad (null).
-    private UI.MenuInput[] BuildMenuInputs(int[][]? padAssignment)
+    private UI.Screens.MenuInput[] BuildMenuInputs(int[][]? padAssignment)
     {
-        var inputs = new UI.MenuInput[Math.Max(1, _rigs.Count)];
+        var inputs = new UI.Screens.MenuInput[Math.Max(1, _rigs.Count)];
         for (int i = 0; i < inputs.Length; i++)
-            inputs[i] = new UI.MenuInput { Keyboard = i == 0, Pads = padAssignment?[i] };
+            inputs[i] = new UI.Screens.MenuInput { Keyboard = i == 0, Pads = padAssignment?[i] };
         return inputs;
     }
 
     // The reader a board menu drives its cursor from. An owner outside the roster (a board that
     // named no player) falls back to player 1, who always exists.
-    private UI.MenuInput MenuInputFor(int playerIndex)
+    private UI.Screens.MenuInput MenuInputFor(int playerIndex)
     {
         var inputs = _menuInputs ??= BuildMenuInputs(null);
         return playerIndex >= 0 && playerIndex < inputs.Length ? inputs[playerIndex] : inputs[0];
@@ -3817,7 +3819,7 @@ public partial class GameSession : Node3D
         }
 
         var (chapterNumber, missionNumber) = campaign.Address;
-        var sheet = UI.PauseSheet.Load(
+        var sheet = UI.Boards.PauseSheet.Load(
             _zrdrPath, _messagesPath,
             UI.Menu.EscapeDialog.CampaignKey(chapterNumber, missionNumber), instantAction: false);
         if (sheet == null)
@@ -3839,14 +3841,14 @@ public partial class GameSession : Node3D
     private UI.Menu.Original.OriginalPauseBoard? BuildInstantActionPauseBoard(Flight.Modes.PauseState pauseState)
     {
         if (_iaDirector?.Runtime is not { } ia
-            || UI.LoadScreens.LetterFor(ia.Def.MissionType) is not { } letter)
+            || UI.Screens.LoadScreens.LetterFor(ia.Def.MissionType) is not { } letter)
         {
             return null;
         }
 
         string key = UI.Menu.EscapeDialog.InstantActionKey(
             CampaignSequence.ChapterNumber(_spec.Chapter), letter);
-        var sheet = UI.PauseSheet.Load(_zrdrPath, _messagesPath, key, instantAction: true);
+        var sheet = UI.Boards.PauseSheet.Load(_zrdrPath, _messagesPath, key, instantAction: true);
         if (sheet == null)
         {
             Log.Warn("ui", $"pause: no ia_escape.zrd sheet for {_spec.Chapter} {ia.Def.MissionType}");
@@ -3855,7 +3857,7 @@ public partial class GameSession : Node3D
 
         Log.Info("ui", $"pause: {_spec.Chapter} {ia.Def.MissionType} draws {sheet.State.Key}");
         return UI.Menu.Original.OriginalPauseBoard.Build(
-            pauseState, MenuInputFor, _dataRoot, sheet, () => UI.PauseReadout.Empty);
+            pauseState, MenuInputFor, _dataRoot, sheet, () => UI.Boards.PauseReadout.Empty);
     }
 
     // The parchment's own row order, which is the briefing's: every keyed IDENTITY by priority.
@@ -3875,21 +3877,21 @@ public partial class GameSession : Node3D
         }
     }
 
-    private UI.PauseReadout PauseReadout(
-        UI.PauseSheet sheet,
+    private UI.Boards.PauseReadout PauseReadout(
+        UI.Boards.PauseSheet sheet,
         CampaignDirector campaign,
         IReadOnlyList<UI.Menu.BriefingObjective> objectives,
         Flight.Modes.PauseState pauseState,
         AnimRuntime? runtime)
     {
         var graph = campaign.Graph;
-        var rows = UI.PauseReadout.Rows(objectives, n => graph?.CompletedOf(n) ?? false);
+        var rows = UI.Boards.PauseReadout.Rows(objectives, n => graph?.CompletedOf(n) ?? false);
 
-        var icons = new List<UI.PauseWorldIcon>();
+        var icons = new List<UI.Boards.PauseWorldIcon>();
         if (RigOf(pauseState.OwnerPlayerIndex)?.Controller is { } own)
         {
             var forward = -own.GlobalTransform.Basis.Z;
-            if (UI.PauseReadout.Icon(
+            if (UI.Boards.PauseReadout.Icon(
                 sheet.Shared.OwnShip, own.GlobalPosition.X, own.GlobalPosition.Z,
                 forward.X, forward.Z) is { } ship)
             {
@@ -3903,7 +3905,7 @@ public partial class GameSession : Node3D
         foreach (var hull in runtime?.FindNodes(PirateZepNode) ?? Array.Empty<Node3D>())
         {
             var nose = -hull.GlobalTransform.Basis.Z;
-            if (UI.PauseReadout.Icon(
+            if (UI.Boards.PauseReadout.Icon(
                 sheet.Shared.MyZep, hull.GlobalPosition.X, hull.GlobalPosition.Z,
                 nose.X, nose.Z) is { } zeppelin)
             {
@@ -3923,7 +3925,7 @@ public partial class GameSession : Node3D
             Log.Info("ui", $"pause icon {icon.Bitmap} at ({icon.WorldX:0}, {icon.WorldZ:0}) {where} the chart");
         }
 
-        return new UI.PauseReadout(rows, campaign.Memento, icons);
+        return new UI.Boards.PauseReadout(rows, campaign.Memento, icons);
     }
 
     private Flight.Camera.PlayerRig? RigOf(int playerIndex)
@@ -4184,7 +4186,7 @@ public partial class GameSession : Node3D
         // never jumps, while locking any other plane would keep the offset and teleport the view.
         _photoCamera.FollowNode(pilot);
         _photoPilot = pilot;
-        _photoHud = UI.PhotoModeHud.Build(pilot.PadDevices, pilot.UseKeyboard);
+        _photoHud = UI.Overlays.PhotoModeHud.Build(pilot.PadDevices, pilot.UseKeyboard);
         _photoHud.Exit += ExitPhotoMode;
         _worldRoot!.AddChild(_photoHud);
         Log.Info("flight", $"photo mode: P{playerIndex + 1}'s pane, over the frame the board froze");
@@ -4237,7 +4239,7 @@ public partial class GameSession : Node3D
         // the owner's reader, so the keys driving the leaf would drive the menu under it too.
         _pauseBoard.Visible = false;
         _pauseBoard.ProcessMode = ProcessModeEnum.Disabled;
-        var pollers = new List<UI.MenuInput>();
+        var pollers = new List<UI.Screens.MenuInput>();
         var flying = new List<FlightController>();
         foreach (var rig in _rigs)
         {
@@ -4628,7 +4630,7 @@ public partial class GameSession : Node3D
         // disposal); a failed build closes them from StartSession's catch instead.
         public TextureArchive? LabTextures;
         public SoundArchive? LabSounds;
-        public UI.AnimLab? AnimLabNode;
+        public UI.Labs.AnimLab? AnimLabNode;
 
         public GameZNode? NodeSubtree;
         // The --node= subtree's world-frame box, measured at build time and kept for the framing

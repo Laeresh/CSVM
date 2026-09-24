@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Bindings;
-using CSVM.UI;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
+using CSVM.UI.Screens;
 using Xunit;
 
 namespace CSVM.Tests;

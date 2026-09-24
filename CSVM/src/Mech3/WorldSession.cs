@@ -697,7 +697,7 @@ public sealed class WorldSession
         public required Func<Vector3> PlayerPosition { get; init; }
 
         /// <summary>Every 3D audio listener's position, one per pane, since every pane camera is
-        /// listener-enabled (UI.SplitScreen). Read only by the debug sound log's distance column;
+        /// listener-enabled (UI.Boards.SplitScreen). Read only by the debug sound log's distance column;
         /// the engine reads the listeners themselves. Null → <see cref="PlayerPosition"/> alone.</summary>
         public Func<IReadOnlyList<Vector3>>? ListenerPositions { get; init; }
 
