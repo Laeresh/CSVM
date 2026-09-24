@@ -183,7 +183,7 @@ The 1.0 s freeze and the 2.0 s fade are not reproduced: the ending simply takes 
 hold ends.
 
 Where that ending goes depends on the presentation. Built-in keeps its own board inside the flight
-(`src/Flight/IaWrapupBoard.cs`, a stunt run's photographs drawn as a strip under its splits), which
+(`src/UI/IaWrapupBoard.cs`, a stunt run's photographs drawn as a strip under its splits), which
 is also where Restart, Exit and photo mode live. Original
 leaves the world instead and lands on this page in the menu shell, `src/UI/Menu/Original/`
 `OriginalWrapupScreen.cs` over `src/UI/InstantActionWrapupPage.cs`: the magazine spread, the notepad

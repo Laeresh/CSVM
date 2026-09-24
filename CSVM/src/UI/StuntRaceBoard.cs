@@ -1,8 +1,8 @@
-using CSVM.UI;
+using CSVM.Flight;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM.Flight;
+namespace CSVM.UI;
 
 /// <summary>
 /// The shared results board for a splitscreen stunt race, <see cref="ResultsBoard"/>'s shell.

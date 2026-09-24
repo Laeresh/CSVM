@@ -1,5 +1,6 @@
 using CSVM.Flight;
 using CSVM.Session;
+using CSVM.UI;
 using Xunit;
 
 namespace CSVM.Tests;

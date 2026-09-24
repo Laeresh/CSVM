@@ -685,26 +685,6 @@ banner, which in a race becomes this pilot's placing and who they are still wait
 no marker: a danger zone is an objective on the pilot's own cycle and `TargetHud` marks it like
 every other one. What it reports is `StuntMission`'s.
 
-## src/Flight/ResultsBoard.cs
-The shared shell every results board is built on (`StuntScoreboard`, `StuntRaceBoard`,
-`VersusBoard`, `IaWrapupBoard`): backdrop and centred panel, palette and label factories, the
-halt-and-retire contract on the sim clock, and the standard Photo Mode, Restart and Exit menu. A
-panel taller than the window is re-centred and shrunk about its centre to fit. Photographs added
-through `AddShotStrip` are the cursor's second region above the rows: up off Photo Mode (the
-resting row) enters the grid, confirm opens one in a `ShotViewer` over the board, back or a click
-closes it on its cell, and down out of the grid returns to Photo Mode. `PauseBoard` shares the
-chrome statics but not the shell, since a held clock is not an ended run.
-
-## src/Flight/StuntScoreboard.cs
-Stunt Flying's end-of-run results overlay on `ResultsBoard`'s shell: the plane and chapter heading
-over a `StuntSplits` section of per-zone splits, total and best-time comparison, and under it the
-pilot's `StuntShotStrip`. Wakes on `StuntMission.RunCompleted`, records through `ScoreStore.RecordIfBest` and logs the split
-table so a headless run is reviewable. The one per-pane board among the results boards, which is
-why it overrides the shell's whole-window placement. `FlightController` holds a finished pilot's
-finish pose and takes R as a rerun only while it has this board, so an Instant Action pilot, who
-has none, flies on through the ending's hold. Read `ResultsBoard` for the shared shell and
-its halt contract, and `IaWrapupBoard` for the board Instant Action carries the splits on instead.
-
 ## src/Flight/StuntCapture.cs
 The Danger Zone camera: one photograph of the pilot's aircraft per `dzN` marker per stunt run,
 latched once on the physics frame the plane first crosses inside `StuntMission.DzRadius` of the
@@ -714,25 +694,6 @@ requests the pane. The frame lands later on a worker, which writes the PNG named
 marker and run clock into `screenshots/stunts/` and the thumbnail; `Settle` completes the record
 on the main thread and raises `ShotLanded`. The pixels come from the caller's `PaneRequest`
 (`DangerZonePhotograph` live, the pane headless, a synthetic frame in a suite).
-
-## src/Flight/StuntShotStrip.cs
-A stunt run's Danger Zone photographs as a board section, shared by `StuntScoreboard` and
-`IaWrapupBoard`: one captioned thumbnail per shot in marker order, in the grid `ShotGrid` picks so
-a long course wraps into rows. `Cursor` walks the landed cells for the board; the pointer reaches
-them through `CellPointed` and `CellClicked`. It follows its `StuntCapture` in the tree: a marker
-latched on the frame that completes the run arrives after the board woke and `ShotLatched` draws
-the grid again with it. A pending cell is drawn empty and filled on `ShotLanded` (the first landing
-under a guessed aspect lays the grid out again), and a frame that never arrived is left out.
-Hidden while there is no shot.
-
-## src/Flight/StuntSplits.cs
-The stunt run's split section, shared by `StuntScoreboard` and `IaWrapupBoard`: the per-zone rows
-in the order flown with split and cumulative times, placeholder rows for zones never reached, the
-total, and the new-best or stored-best comparison line. `StuntSummary` is the value a board hands
-it, one run with its total and the stored best. A single flag keeps the two boards' shipped
-layouts apart, since the scoreboard rules off its total and the wrap-up board runs the table
-straight into it. `Lines` is the same table as flat text for the Original wrap-up page, whose
-total line opens with `TotalLabel` so the page can leave it out.
 
 ## src/Flight/ScoreStore.cs
 Stunt best-time persistence: one JSON object in `user://stunt_scores.json` keyed
@@ -749,15 +710,6 @@ every mission and clears the placings, leaving the respawn to `GameSession`, whi
 planes. Membership is append-only apart from the internal `Remove`, which compensates an
 uncommitted roster build. Off-engine coverage: `CSVM.Tests/StuntRaceTests.cs`. Read
 `StuntRaceBoard` for what a finished race draws.
-
-## src/Flight/StuntRaceBoard.cs
-The race's shared ranked results overlay on `ResultsBoard`'s shell: one row per player from
-`StuntRace.Standings()` with placing, tag, plane, zones, total and gap to the winner, and a DNF
-row for an unfinished run. Whole-window rather than per-pane, since a race ends for everybody at
-once. Wakes on `RaceCompleted` and retires once `AllFinished` clears, so the rematch is reachable
-without going through the menu. No Instant Action run builds one (`GameSession.RaceBoardFor`):
-there the last finish is the mission's win, and the director's hold and wrap-up end the run.
-`StuntScoreboard` is the single-pilot form of the same table.
 
 ## src/Flight/VersusMatch.cs
 Dogfight deathmatch bookkeeping, engine-free: every pilot carries one signed score, `KillScore` per
@@ -819,16 +771,6 @@ gate and the debug identity string. Off screen it owns the arrow, `ArrowHead`, `
 and draws the picture: the eye on the drawn `RenderPose`, the aim on the target's drawn pose,
 read after the flight rigs (`AfterFlightRigs`). Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
 
-## src/Flight/VersusBoard.cs
-The Dogfight results overlay on `ResultsBoard`'s shell: the winner in their own
-`SplitScreen.PlayerColor`, or a draw on a tie, over one ranked row per player with tag, score,
-kills and deaths from `VersusMatch.Standings()`. Score is the ranked column, kills alone do not
-explain it. Whole-window, because the match ends for everybody at once.
-Wakes on `MatchCompleted` and retires on the rematch; the rows are populated only from that
-completion, so they stay the ones the match ended with even after `Restart()` zeroes the live
-state. Restart routes through `GameSession.RestartMatch`, which the keyboard and pad shortcuts
-reach directly while the board is up. `StuntRaceBoard` is the same construction over a race.
-
 ## src/Flight/HaltReason.cs
 Why the sim clock is stopped, as a flags set: `Paused`, which a player asked for and which carries
 an owner, and `Ended`, which a results board raises. The clock advances only when the set is empty,
@@ -843,33 +785,6 @@ and resuming only for the owner, and it is refused outright while `Ended` is set
 `Clear` own the results-board half and reject `Paused`, which carries ownership and must go
 through `TryToggle`; `ForceResume` drops a pause whoever owns it, for a rerun or an exit chosen
 from a menu. Off-engine coverage: `CSVM.Tests/PauseStateTests.cs`. Read `PauseBoard` next.
-
-## src/Flight/PauseBoard.cs
-The shared pause overlay, whole-window because pausing stops the game for everybody at once. Built
-once by `GameSession` on the shared board layer and wired to `PauseState.Changed` rather than a
-completion event, it shows the pausing player's tag in their own colour and a Resume, Photo Mode,
-Preferences, Restart and Exit menu driven by that player alone, since `PauseState` lets only the
-owner resume; the Preferences row is built only where a `PausePreferences` leaf stands behind it. A
-fresh menu each pause, so the cursor starts on Resume and a stray confirm cannot destroy a run. Its
-menu carries no control hints, the original's pause sheet having none. It shares `ResultsBoard`'s chrome but not its shell, and a campaign session's objectives readout rides
-the same pause on a layer of its own. The Original presentation puts `OriginalPauseBoard` in its place.
-
-## src/Flight/OriginalPauseBoard.cs
-The Original presentation's pause screen, on `PauseBoard`'s own seam: built once by `GameSession`
-over a `PauseSheet` its mission resolves, following `PauseState.Changed`, driven by the pausing
-player's reader alone. What it draws is `PauseScreens`' composition through `ComposedBoardView`, so
-the screen tests off engine and this node owns the cursor, the pointer and the five actions. An Instant Action sortie's sheet is the blackboard, which it writes in `BoardPalette.EscapeBlackboard` rather than the campaign sheet's ink. That
-seat's pointer shares the cursor: a hover moves it, a press holds the strip, the release on it fires, and the OS pointer gives way to the dialog's own. Its readout is a delegate, since the objectives follow the running mission. Preferences stands `PausePreferences` over the held world and `Reprime`s on its close, and photo mode does the same over the frozen world. It draws no control hints, since the original's sheet carries none. Decode: [../org/pause-screen.md](../org/pause-screen.md).
-
-## src/Flight/IaWrapupBoard.cs
-Instant Action's wrap-up board on `ResultsBoard`'s shell, whole-window since the mission ends for
-every human at once: four label and value rows for time to complete, enemies shot down, danger
-zones completed and shot percentage. It takes no live match object at all, only the caller's own
-snapshot handed in once by `InstantActionRuntime`, so `InstantActionDirector` owns every source
-and this class draws what it is given. Its static `FormatElapsed` is the decoded time row, which
-the Original presentation's wrap-up page prints too. On a stunt mission it also grows a `StuntSplits` section and player 1's `StuntShotStrip` (the one live source, handed over at the wrap-up rather than the
-ending so a marker latched after the run completed is on it), and no per-pane scoreboard is built. Its Restart reaches the Launcher's session restart
-and rebuilds the world, because a mission's waves, ace and zeppelin cannot be put back in place.
 
 ## src/Flight/Weather.cs
 `WeatherState`, the flown mission's own weather.json as per-zone `ZoneWeather` records: fog colour,

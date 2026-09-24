@@ -41,7 +41,7 @@ public sealed class StuntShot
 /// A marker that has been photographed is not photographed again in the same run, and one that is
 /// still being flown through does not re-trigger while the aircraft stays inside its radius.
 /// Per pilot, like the run itself: each pane latches its own pilot's photograph through the
-/// <c>pane</c> request it was built with. <see cref="StuntShotStrip"/> draws the strip.
+/// <c>pane</c> request it was built with. <c>StuntShotStrip</c> draws the strip.
 /// </summary>
 public sealed class StuntCapture
 {

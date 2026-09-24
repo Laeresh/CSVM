@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using CSVM.UI;
+using CSVM.Flight;
 using Godot;
 
-namespace CSVM.Flight;
+namespace CSVM.UI;
 
 /// <summary>
 /// The shared pause board and its menu, <see cref="ResultsBoard"/>'s chrome on the same

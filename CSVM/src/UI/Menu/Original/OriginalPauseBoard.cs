@@ -1,8 +1,9 @@
 using System;
+using CSVM.Flight;
 using CSVM.UI;
 using Godot;
 
-namespace CSVM.Flight;
+namespace CSVM.UI.Menu.Original;
 
 /// <summary>
 /// The Original presentation's pause screen: the mission's chart filling the window with its flags

@@ -1,10 +1,10 @@
 using System.Globalization;
 using System.Linq;
-using CSVM.UI;
+using CSVM.Flight;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM.Flight;
+namespace CSVM.UI;
 
 /// <summary>
 /// The shared results board for splitscreen "Dogfight", <see cref="ResultsBoard"/>'s shell: the

@@ -292,7 +292,7 @@ public partial class GameSession : Node3D
     private PauseState? _pauseState;
     // The Original presentation's pause sheet while it is the board in use. Its parchment carries
     // the objectives, so the corner readout is not built beside it.
-    private Flight.OriginalPauseBoard? _originalPause;
+    private UI.Menu.Original.OriginalPauseBoard? _originalPause;
     // The pause board in use, whichever presentation composed it, and the options leaf that stands
     // over it while PREFERENCES is open. The leaf is the Launcher's to build (only it holds the
     // decoded layout and the options writer); null leaves both boards without that door.
@@ -2491,7 +2491,7 @@ public partial class GameSession : Node3D
         // are collected here rather than at a construction site of their own.
         foreach (var rig in _rigs)
         {
-            if (rig.Controller?.Scoreboard is not { } scoreboard)
+            if (rig.Controller?.Scoreboard is not StuntScoreboard scoreboard)
                 continue;
             int owner = rig.Index;
             scoreboard.PhotoMode = () => EnterPhotoMode(owner);
@@ -3792,7 +3792,7 @@ public partial class GameSession : Node3D
     // The Original presentation's pause sheet, or null where it does not apply: the Built-in
     // presentation, a mode the original authors no dialog for, or an extraction the sheet cannot be
     // read out of. Falling back to the Built-in board is what keeps a pause always available.
-    private Flight.OriginalPauseBoard? BuildOriginalPauseBoard(
+    private UI.Menu.Original.OriginalPauseBoard? BuildOriginalPauseBoard(
         Flight.PauseState pauseState, AnimRuntime? runtime)
     {
         if (_presentation != UI.Menu.PresentationId.Original)
@@ -3816,7 +3816,7 @@ public partial class GameSession : Node3D
         }
 
         var objectives = ReadPauseObjectives(campaign);
-        return Flight.OriginalPauseBoard.Build(
+        return UI.Menu.Original.OriginalPauseBoard.Build(
             pauseState, MenuInputFor, _dataRoot, sheet,
             () => PauseReadout(sheet, campaign, objectives, pauseState, runtime));
     }
@@ -3825,7 +3825,7 @@ public partial class GameSession : Node3D
     // mission type, which carries no map, memento or parchment and so needs no readout. Free flight
     // and the dogfight are modes of ours that no shipped dialog describes, so they keep the Built-in
     // board, the same split the load screen makes (docs/org/pause-screen.md).
-    private Flight.OriginalPauseBoard? BuildInstantActionPauseBoard(Flight.PauseState pauseState)
+    private UI.Menu.Original.OriginalPauseBoard? BuildInstantActionPauseBoard(Flight.PauseState pauseState)
     {
         if (_iaDirector?.Runtime is not { } ia
             || UI.LoadScreens.LetterFor(ia.Def.MissionType) is not { } letter)
@@ -3843,7 +3843,7 @@ public partial class GameSession : Node3D
         }
 
         Log.Info("ui", $"pause: {_spec.Chapter} {ia.Def.MissionType} draws {sheet.State.Key}");
-        return Flight.OriginalPauseBoard.Build(
+        return UI.Menu.Original.OriginalPauseBoard.Build(
             pauseState, MenuInputFor, _dataRoot, sheet, () => UI.PauseReadout.Empty);
     }
 

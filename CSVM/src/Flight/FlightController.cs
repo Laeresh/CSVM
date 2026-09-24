@@ -256,8 +256,9 @@ public partial class FlightController : Node3D
     /// <summary>The end-of-run results overlay: splits + total + best-time on
     /// AllComplete. Added to the HUD canvas last (drawn over the marker/dials); wakes itself on
     /// the run's RunCompleted. Null in free flight and in Instant Action, whose pilot flies on past
-    /// the finish.</summary>
-    public StuntScoreboard? Scoreboard;
+    /// the finish. A bare <see cref="Control"/> because the board is UI's own type, which the
+    /// flight layer holds and attaches but never names.</summary>
+    public Control? Scoreboard;
 
     /// <summary>The Dogfight per-pane HUD, <c>--vs</c> only: the match timer/K-D/leader line, the
     /// kill banner, and the opponent markers. Added to the HUD canvas; fed nothing per frame (it

@@ -1,7 +1,8 @@
 using System.Collections.Generic;
+using CSVM.Flight;
 using Godot;
 
-namespace CSVM.Flight;
+namespace CSVM.UI;
 
 /// <summary>One stunt run's numbers for a board's split table: the run itself, its total and how
 /// it compares to the stored best. Read at run end, when the run is over and the clock is

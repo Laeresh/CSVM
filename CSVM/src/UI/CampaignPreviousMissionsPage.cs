@@ -12,7 +12,7 @@ namespace CSVM.UI;
 /// draws, and the two tabs. It is computed from one mission's record,
 /// <c>docs/org/debrief.md#the-screen-is-the-scrapbook</c>. Row titles and the outcome text are
 /// literal strings rather than read off <c>ui_strings.json</c> at runtime, following
-/// <see cref="Flight.IaWrapupBoard"/>'s own precedent. Positions are <c>[@ScrapBook@]</c>'s
+/// <see cref="IaWrapupBoard"/>'s own precedent. Positions are <c>[@ScrapBook@]</c>'s
 /// <c>SB_T_*</c> and <c>SB_KILL*</c> rows, read through the <see cref="CampaignLayout"/> a caller
 /// hands in with the shipped values as the fallback. Wired into <see cref="CampaignFlow"/> as
 /// <see cref="CampaignScreen.Scrapbook"/>'s <see cref="CampaignScrapbookPage"/>, which also draws

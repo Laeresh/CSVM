@@ -1348,7 +1348,7 @@ public partial class Launcher : Node3D
 
         var readout = PauseAidReadout(sheet, missionZrdr, completed);
         var pause = new Flight.PauseState();
-        var board = Flight.OriginalPauseBoard.Build(
+        var board = OriginalPauseBoard.Build(
             pause, _ => new UI.MenuInput { Keyboard = true }, _dataRoot, sheet, () => readout);
         var layer = new CanvasLayer { Name = "pause_board_aid", Layer = UI.HudLayers.Board };
         layer.AddChild(board);
@@ -1379,7 +1379,7 @@ public partial class Launcher : Node3D
         }
 
         var pause = new Flight.PauseState();
-        var board = Flight.OriginalPauseBoard.Build(
+        var board = OriginalPauseBoard.Build(
             pause, _ => new UI.MenuInput { Keyboard = true }, _dataRoot, sheet,
             () => UI.PauseReadout.Empty);
         var layer = new CanvasLayer { Name = "pause_board_aid", Layer = UI.HudLayers.Board };

@@ -45,7 +45,7 @@ public sealed class Racer
 /// whether the race is over.
 /// A player's clock stops at their own <see cref="StuntMission.AllComplete"/> while the others
 /// fly on; when the last one is in, <see cref="RaceCompleted"/> raises the shared
-/// <see cref="StuntRaceBoard"/>. Deliberately not a Node, it is freed with the session, so that
+/// <c>StuntRaceBoard</c>. Deliberately not a Node, it is freed with the session, so that
 /// event needs no teardown.
 /// ⚠ Do not wire <see cref="ScoreStore"/> best-time persistence in here: a race field starts on a
 /// synthetic abreast-grid point no solo run starts at, so a race total is not comparable to one.

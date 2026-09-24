@@ -1,7 +1,7 @@
-using CSVM.UI;
+using CSVM.Flight;
 using Godot;
 
-namespace CSVM.Flight;
+namespace CSVM.UI;
 
 /// <summary>
 /// The shared shell of the results boards (<see cref="VersusBoard"/>, <see cref="StuntRaceBoard"/>,

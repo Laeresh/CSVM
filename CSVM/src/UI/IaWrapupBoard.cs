@@ -1,7 +1,7 @@
-using CSVM.UI;
+using CSVM.Flight;
 using Godot;
 
-namespace CSVM.Flight;
+namespace CSVM.UI;
 
 /// <summary>
 /// Instant Action's wrap-up board, <see cref="ResultsBoard"/>'s shell, the whole window on its

@@ -4,6 +4,7 @@ using System.Text;
 using CSVM.Mech3;
 using CSVM.UI;
 using CSVM.UI.Menu;
+using CSVM.UI.Menu.Original;
 
 namespace CSVM.Testing;
 
@@ -519,7 +520,7 @@ internal static class PauseSheetSuites
         }
 
         var pause = new Flight.PauseState();
-        var board = Flight.OriginalPauseBoard.Build(
+        var board = OriginalPauseBoard.Build(
             pause,
             _ => new MenuInput { Keyboard = false, Pads = System.Array.Empty<int>() },
             ctx.DataRoot,
@@ -548,7 +549,7 @@ internal static class PauseSheetSuites
     // standing. It and the photo strip are the only two rows that do.
     private static void WalkStrips(
         TestContext ctx,
-        Flight.OriginalPauseBoard board,
+        OriginalPauseBoard board,
         PauseSheet sheet,
         Flight.PauseState pause,
         StringBuilder report)
@@ -600,7 +601,7 @@ internal static class PauseSheetSuites
     // halted world rather than a resume, which is what returns a player to the sheet.
     private static void FirePhotoStrip(
         TestContext ctx,
-        Flight.OriginalPauseBoard board,
+        OriginalPauseBoard board,
         PauseSheet sheet,
         Flight.PauseState pause,
         System.Action<(float X, float Y, bool Pressed)?> point,
@@ -729,7 +730,7 @@ internal static class PauseSheetSuites
         TestContext ctx, (CampaignMission Mission, PauseSheet Sheet) entry, StringBuilder report)
     {
         var pause = new Flight.PauseState();
-        var board = Flight.OriginalPauseBoard.Build(
+        var board = OriginalPauseBoard.Build(
             pause,
             _ => new MenuInput { Keyboard = false, Pads = System.Array.Empty<int>() },
             ctx.DataRoot,
@@ -806,7 +807,7 @@ internal static class PauseSheetSuites
     // fires, and the photo strip, the other row that does. Both are driven through the same frame
     // the pad's own step runs in.
     private static void DrivePointer(
-        TestContext ctx, Flight.OriginalPauseBoard board, PauseSheet sheet, Flight.PauseState pause,
+        TestContext ctx, OriginalPauseBoard board, PauseSheet sheet, Flight.PauseState pause,
         StringBuilder report)
     {
         var strip = sheet.Strips[PauseScreens.PreferencesRow];
@@ -872,10 +873,10 @@ internal static class PauseSheetSuites
             + $"{sheet.State.Cursor?.Rollover ?? "-"}");
     }
 
-    private static string? StripArt(Flight.OriginalPauseBoard board, int row) =>
+    private static string? StripArt(OriginalPauseBoard board, int row) =>
         board.Shown is { } shown && row < shown.Plaques.Count ? shown.Plaques[row].Art.Name : null;
 
-    private static string? CursorArt(Flight.OriginalPauseBoard board)
+    private static string? CursorArt(OriginalPauseBoard board)
     {
         if (board.Shown is not { } shown)
         {

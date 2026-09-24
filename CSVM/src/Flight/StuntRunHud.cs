@@ -15,7 +15,7 @@ public sealed partial class StuntRunHud : Control
 {
     /// <summary>The splitscreen race this pilot is flying in, or null in a solo run.
     /// Set, the all-zones-cleared banner becomes their placing + finish time and says who they are
-    /// still waiting on; the shared ranked board (<see cref="StuntRaceBoard"/>) takes over from
+    /// still waiting on; the shared ranked board (<c>StuntRaceBoard</c>) takes over from
     /// there. Paired with <see cref="PlayerIndex"/>.</summary>
     public StuntRace? Race;
 

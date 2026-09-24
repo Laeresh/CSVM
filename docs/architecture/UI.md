@@ -1,6 +1,6 @@
 # UI
 
-The launchscreen and splitscreen rig, plus the interactive debug labs (including its `UI/Menu/` subfolder). Every lab has a scripted `--debug-*` twin so a finding can be reproduced headlessly; see `docs/cli.md`.
+The launchscreen and splitscreen rig, the in-flight pause and results boards, plus the interactive debug labs (including its `UI/Menu/` subfolder). Every lab has a scripted `--debug-*` twin so a finding can be reproduced headlessly; see `docs/cli.md`.
 
 One `## src/...` entry per module, body at most 8 lines, 12 for the highest-traffic modules.
 
@@ -433,6 +433,84 @@ the run clock and the way out under it, and the strip thumbnail where the file c
 reads no device; the owner decides when it closes. A Built-in results board builds it to take
 clicks and raise `Dismissed`, and the Original presentation builds it to take none, since the shell
 polls its own pointer and closes it through the wrap-up page's rows.
+
+## src/UI/ResultsBoard.cs
+The shared shell every results board is built on (`StuntScoreboard`, `StuntRaceBoard`,
+`VersusBoard`, `IaWrapupBoard`): backdrop and centred panel, palette and label factories, the
+halt-and-retire contract on the sim clock, and the standard Photo Mode, Restart and Exit menu. A
+panel taller than the window is re-centred and shrunk about its centre to fit. Photographs added
+through `AddShotStrip` are the cursor's second region above the rows: up off Photo Mode (the
+resting row) enters the grid, confirm opens one in a `ShotViewer` over the board, back or a click
+closes it on its cell, and down out of the grid returns to Photo Mode. `PauseBoard` shares the
+chrome statics but not the shell, since a held clock is not an ended run.
+
+## src/UI/StuntScoreboard.cs
+Stunt Flying's end-of-run results overlay on `ResultsBoard`'s shell: the plane and chapter heading
+over a `StuntSplits` section of per-zone splits, total and best-time comparison, and under it the
+pilot's `StuntShotStrip`. Wakes on `StuntMission.RunCompleted`, records through `ScoreStore.RecordIfBest` and logs the split
+table so a headless run is reviewable. The one per-pane board among the results boards, which is
+why it overrides the shell's whole-window placement. `FlightController` holds a finished pilot's
+finish pose and takes R as a rerun only while it has this board, so an Instant Action pilot, who
+has none, flies on through the ending's hold. Read `ResultsBoard` for the shared shell and
+its halt contract, and `IaWrapupBoard` for the board Instant Action carries the splits on instead.
+
+## src/UI/StuntShotStrip.cs
+A stunt run's Danger Zone photographs as a board section, shared by `StuntScoreboard` and
+`IaWrapupBoard`: one captioned thumbnail per shot in marker order, in the grid `ShotGrid` picks so
+a long course wraps into rows. `Cursor` walks the landed cells for the board; the pointer reaches
+them through `CellPointed` and `CellClicked`. It follows its `StuntCapture` in the tree: a marker
+latched on the frame that completes the run arrives after the board woke and `ShotLatched` draws
+the grid again with it. A pending cell is drawn empty and filled on `ShotLanded` (the first landing
+under a guessed aspect lays the grid out again), and a frame that never arrived is left out.
+Hidden while there is no shot.
+
+## src/UI/StuntSplits.cs
+The stunt run's split section, shared by `StuntScoreboard` and `IaWrapupBoard`: the per-zone rows
+in the order flown with split and cumulative times, placeholder rows for zones never reached, the
+total, and the new-best or stored-best comparison line. `StuntSummary` is the value a board hands
+it, one run with its total and the stored best. A single flag keeps the two boards' shipped
+layouts apart, since the scoreboard rules off its total and the wrap-up board runs the table
+straight into it. `Lines` is the same table as flat text for the Original wrap-up page, whose
+total line opens with `TotalLabel` so the page can leave it out.
+
+## src/UI/StuntRaceBoard.cs
+The race's shared ranked results overlay on `ResultsBoard`'s shell: one row per player from
+`StuntRace.Standings()` with placing, tag, plane, zones, total and gap to the winner, and a DNF
+row for an unfinished run. Whole-window rather than per-pane, since a race ends for everybody at
+once. Wakes on `RaceCompleted` and retires once `AllFinished` clears, so the rematch is reachable
+without going through the menu. No Instant Action run builds one (`GameSession.RaceBoardFor`):
+there the last finish is the mission's win, and the director's hold and wrap-up end the run.
+`StuntScoreboard` is the single-pilot form of the same table.
+
+## src/UI/VersusBoard.cs
+The Dogfight results overlay on `ResultsBoard`'s shell: the winner in their own
+`SplitScreen.PlayerColor`, or a draw on a tie, over one ranked row per player with tag, score,
+kills and deaths from `VersusMatch.Standings()`. Score is the ranked column, kills alone do not
+explain it. Whole-window, because the match ends for everybody at once.
+Wakes on `MatchCompleted` and retires on the rematch; the rows are populated only from that
+completion, so they stay the ones the match ended with even after `Restart()` zeroes the live
+state. Restart routes through `GameSession.RestartMatch`, which the keyboard and pad shortcuts
+reach directly while the board is up. `StuntRaceBoard` is the same construction over a race.
+
+## src/UI/IaWrapupBoard.cs
+Instant Action's wrap-up board on `ResultsBoard`'s shell, whole-window since the mission ends for
+every human at once: four label and value rows for time to complete, enemies shot down, danger
+zones completed and shot percentage. It takes no live match object at all, only the caller's own
+snapshot handed in once by `InstantActionRuntime`, so `InstantActionDirector` owns every source
+and this class draws what it is given. Its static `FormatElapsed` is the decoded time row, which
+the Original presentation's wrap-up page prints too. On a stunt mission it also grows a `StuntSplits` section and player 1's `StuntShotStrip` (the one live source, handed over at the wrap-up rather than the
+ending so a marker latched after the run completed is on it), and no per-pane scoreboard is built. Its Restart reaches the Launcher's session restart
+and rebuilds the world, because a mission's waves, ace and zeppelin cannot be put back in place.
+
+## src/UI/PauseBoard.cs
+The shared pause overlay, whole-window because pausing stops the game for everybody at once. Built
+once by `GameSession` on the shared board layer and wired to `PauseState.Changed` rather than a
+completion event, it shows the pausing player's tag in their own colour and a Resume, Photo Mode,
+Preferences, Restart and Exit menu driven by that player alone, since `PauseState` lets only the
+owner resume; the Preferences row is built only where a `PausePreferences` leaf stands behind it. A
+fresh menu each pause, so the cursor starts on Resume and a stray confirm cannot destroy a run. Its
+menu carries no control hints, the original's pause sheet having none. It shares `ResultsBoard`'s chrome but not its shell, and a campaign session's objectives readout rides
+the same pause on a layer of its own. The Original presentation puts `OriginalPauseBoard` in its place.
 
 ## src/UI/MenuInput.cs
 One player's menu input source: the keyboard flag, a `Pads` binding and the edge and auto-repeat
@@ -1067,9 +1145,16 @@ The Original Instant Action wrap-up page, one standalone module over the decoded
 arrives as `InstantActionWrapupReturn` when a flown mission's hold ends and the session hands the menu its frozen numbers; `ShowWrapup` takes that run and opens the page. Its rows are the CONTINUE
 plaque at its authored corner and one per print, enabled once that print's frame has landed; a print opens its photograph as `Viewing`, which the presentation shows in its `ShotViewer`, and while one is open the page is a single row covering it, which closes it as Back does, the cursor returning to the print. Otherwise both CONTINUE and Back drop the run and reopen the Instant Action screen through that screen's own door, so the sortie's roster and environment are re-read on the
 way. `Compose` is the magazine spread as the backdrop, the four brushstrokes, the heading and the eight row lines, each post-it as fills under a shrinking `BoardNote` of its lines, the photographs as prints, the tick box as strokes, and the plaque. A print drawn empty because its shot has not landed is what `TakeLanded` reports once it has, which the presentation's tick reads to compose the page again. The
-built-in presentation keeps its in-flight `Flight/IaWrapupBoard.cs` instead and has no page here, which is why its own return lands on the Instant Action screen. It is one `IOriginalScreenModule`
+built-in presentation keeps its in-flight `UI/IaWrapupBoard.cs` instead and has no page here, which is why its own return lands on the Instant Action screen. It is one `IOriginalScreenModule`
 reaching the shell only through `IOriginalScreenHost` (`OriginalScreenHost.cs`); the shell exposes it as `Wrapup`. The page's own decode:
 [../formats/instant-action/wrap-up.md](../formats/instant-action/wrap-up.md).
+
+## src/UI/Menu/Original/OriginalPauseBoard.cs
+The Original presentation's pause screen, on `PauseBoard`'s own seam: built once by `GameSession`
+over a `PauseSheet` its mission resolves, following `PauseState.Changed`, driven by the pausing
+player's reader alone. What it draws is `PauseScreens`' composition through `ComposedBoardView`, so
+the screen tests off engine and this node owns the cursor, the pointer and the five actions. An Instant Action sortie's sheet is the blackboard, which it writes in `BoardPalette.EscapeBlackboard` rather than the campaign sheet's ink. That
+seat's pointer shares the cursor: a hover moves it, a press holds the strip, the release on it fires, and the OS pointer gives way to the dialog's own. Its readout is a delegate, since the objectives follow the running mission. Preferences stands `PausePreferences` over the held world and `Reprime`s on its close, and photo mode does the same over the frozen world. It draws no control hints, since the original's sheet carries none. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/UI/Menu/Original/OriginalHangarScreen.cs
 The Original hangar, a standalone module over the shared `HangarFeature` and the decoded hangar

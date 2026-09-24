@@ -1,8 +1,8 @@
 using System.Collections.Generic;
-using CSVM.UI;
+using CSVM.Flight;
 using Godot;
 
-namespace CSVM.Flight;
+namespace CSVM.UI;
 
 /// <summary>
 /// A stunt run's Danger Zone photographs as a board section, shared by

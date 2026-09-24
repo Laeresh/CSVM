@@ -1,8 +1,8 @@
-using CSVM.UI;
+using CSVM.Flight;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM.Flight;
+namespace CSVM.UI;
 
 /// <summary>
 /// The end-of-run results overlay for Stunt Flying, <see cref="ResultsBoard"/>'s shell. When the
