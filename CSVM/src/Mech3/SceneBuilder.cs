@@ -134,6 +134,10 @@ public sealed class SceneBuilder
     /// and every generated shader exactly as they are.</summary>
     public bool DebugClutterFlag;
 
+    /// <summary>Meshes, by gamez mesh index, whose instances stay out of every shadow map. Set by
+    /// the caller before building; null lets every mesh cast.</summary>
+    public Func<int, bool>? CastsNoShadow;
+
     /// <summary>Which transparency classes this builder leaves unbuilt (<c>--hide-alpha</c>,
     /// <c>docs/cli.md</c>). Set by the caller before building, like <see cref="DebugClutterFlag"/>,
     /// because a hidden class is dropped at the surface rather than switched off at runtime. Empty
@@ -463,6 +467,9 @@ void fragment() {
     private enum CylAxis { None, Y, X }
 
     public int MeshInstanceCount { get; private set; }
+
+    /// <summary>Mesh instances built with shadow casting off by <see cref="CastsNoShadow"/>.</summary>
+    public int ShadowlessMeshCount { get; private set; }
     public int ColliderCount { get; private set; }
 
     /// <summary>Mesh instances this builder moved onto a <see cref="ZoneGate"/> layer, indexed by
@@ -994,6 +1001,11 @@ void fragment() {
                     ZoneGatedMeshes[node.ZoneId]++;
                 }
                 mi.SetInstanceShaderParameter("node_bias", NodeBiasOf(node.Index));
+                if (CastsNoShadow?.Invoke(node.MeshIndex) == true)
+                {
+                    mi.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+                    ShadowlessMeshCount++;
+                }
                 // Billboard meshes were recentered on their quad center; put the instance
                 // there so the material's billboard pivots at the center, not the node origin.
                 if (_meshPivotCache.TryGetValue(node.MeshIndex, out var pivot))

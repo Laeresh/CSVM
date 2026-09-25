@@ -63,11 +63,10 @@ public partial class Launcher : Node3D
     // than cutting at a hard edge.
     private const float EnhancedShadowFadeStart = 0.8f;
 
-    // TUNE, judged at the controls, and the pair trades against each other: lower values put
-    // dithered acne over every terrain triangle at C1's 25° sun, higher ones dissolve a hangar's
-    // shadow along with it. These keep the building and aircraft silhouettes. The faint dither
-    // left on grazing lit ground and water belongs to the soft-shadow filter, not to this pair,
-    // and raising either one only deepens it; the filter quality below is the lever on that.
+    // TUNE, judged at the controls. Lower values put dithered acne over lit surfaces at C1's 25°
+    // sun, and higher ones dissolve a hangar's shadow. These keep the building and aircraft
+    // silhouettes. The ground and the water cast no shadow (WorldBuilder.IsShadowlessGround), so
+    // neither can band itself.
     private const float EnhancedShadowBias = 0.05f;
     private const float EnhancedShadowNormalBias = 1.25f;
 

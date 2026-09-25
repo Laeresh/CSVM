@@ -387,6 +387,7 @@ public sealed class WorldBuilder
 
         FindCloudDeck(world, roots);
         _deckUndimmedMeshes.Clear();
+        _scene.CastsNoShadow = GroundSheetTest(world);
         RankConflicts(roots);
         foreach (var idx in roots)
             Add(root, deck, idx);
@@ -421,6 +422,7 @@ public sealed class WorldBuilder
                 DisableShadows(cluster);
         }
 
+        Log.Info("world", $"sun shadow: {_scene.ShadowlessMeshCount} terrain/water mesh instance(s) cast none");
         _builtWorld = world;
         return root;
     }
@@ -550,6 +552,29 @@ public sealed class WorldBuilder
         n.Name.Equals("horizon", StringComparison.OrdinalIgnoreCase)
         || n.Name.Equals("dzpaths", StringComparison.OrdinalIgnoreCase)
         || IsFogVolumeNode(n);
+
+    /// <summary>Whether one world mesh is ground that casts no sun shadow: a sheet of nothing but
+    /// water, or a ground tile carrying no building wall. The original's world casts no sun shadow
+    /// at all, and Enhanced keeps that for the ground. Under a low sun, Godot's soft filter makes a
+    /// flat sheet shadow itself in bands at the shadow map's texel pitch.
+    /// ⚠ <c>cblock*</c> is the city GROUND texture, though it classifies as
+    /// <c>buildings</c>; only a wall keeps a tile casting.</summary>
+    internal static bool IsShadowlessGround(IReadOnlyList<Vector3> vertices,
+        IReadOnlyList<string?> textures, float tileX, float tileZ)
+    {
+        bool allWater = textures.Count > 0;
+        bool wall = false;
+        foreach (var t in textures)
+        {
+            string? surface = SceneBuilder.ClassifySurface(t);
+            allWater &= surface == "water";
+            wall |= surface == "buildings" && !t!.StartsWith("cblock", StringComparison.OrdinalIgnoreCase);
+        }
+        if (allWater)
+            return true;
+        return !wall && MapEdgeExtender.ClassifyGroundMesh(vertices, textures, tileX, tileZ, out _, out _)
+            == MapEdgeExtender.TileVerdict.Accepted;
+    }
 
     // The deck-tile test: one flat, untilted 4-vertex quad, so a wall or a ramp fails it. Static
     // and gamez-only so CloudDeckAltitudeOf can run it with no built scene; the instance walk goes
@@ -766,6 +791,28 @@ public sealed class WorldBuilder
         }
         Walk(root, Transform3D.Identity);
         return merged;
+    }
+
+    // IsShadowlessGround per mesh index, for this world's cell size, decided once per mesh.
+    private Func<int, bool> GroundSheetTest(GameZNode world)
+    {
+        float tileX = (world.AreaRight - world.AreaLeft) / Math.Max(1, world.PartitionCols);
+        float tileZ = (world.AreaBottom - world.AreaTop) / Math.Max(1, world.PartitionRows);
+        var verdicts = new Dictionary<int, bool>();
+        return meshIndex =>
+        {
+            if (verdicts.TryGetValue(meshIndex, out bool known))
+                return known;
+            var mesh = _gamez.Meshes[meshIndex];
+            var textures = new List<string?>(mesh.Polygons.Count);
+            foreach (var poly in mesh.Polygons)
+            {
+                textures.Add(poly.MaterialIndex >= 0 && poly.MaterialIndex < _gamez.Materials.Count
+                    ? _gamez.Materials[poly.MaterialIndex].TextureName
+                    : null);
+            }
+            return verdicts[meshIndex] = IsShadowlessGround(mesh.Vertices, textures, tileX, tileZ);
+        };
     }
 
     // Ranks this world's nodes by its conflict graph for the scene builder's `node_bias`. Runs
