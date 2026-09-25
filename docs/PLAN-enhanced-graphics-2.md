@@ -352,9 +352,12 @@ flight after A1. The doors `--no-ssao`, `--no-ssr`, `--no-glow` and `--no-soft-s
 `SessionSpec` and named the sun's penumbra filter: it alone resolves through a screen-space
 pattern, over 81 % of the C1 waterfall frame, and the top rung removed 86 % of the excess while
 holding the judged penumbra width. `analysis/screen-dither/FINDINGS.md` holds the instrument and
-the numbers. This branch's own SoftHigh constant gave way to main's in the merge; the residue the
-user still reports (water bands, airframe self-shadow noise) and the SoftHigh cost call are
-`BL-1037`'s.
+the numbers. This branch's own SoftHigh constant gave way to main's in the merge. The bands that
+survived the top rung were the ground shadowing itself: Godot's soft filter has no receiver-plane
+bias, so a flat sheet under a low sun reads its own neighbouring texels as nearer the light, in
+bands at the texel pitch. The terrain and the water cast no sun shadow
+(`WorldBuilder.IsShadowlessGround`), as in the original, and the rung stays SoftUltra: a 0.5
+degree sun at SoftHigh bands the far water worse than the shipped pair.
 
 **Branch evidence (kept for reference).** This branch reached the same mechanism independently.
 The pattern is the sun's soft-shadow filter, not the bias pair, and not a cascade artefact: with
@@ -379,7 +382,7 @@ High once TAA is on. The complete `RunTests.ps1` PASS: units 4568 passed 0 faile
 4570, engine 348 passed 0 failed 0 skipped errors clean, goldens **19 shots hash-identical**;
 `CheckCommentCaps.ps1`, `CheckDocEntries.ps1` and `CheckEncoding.ps1` clean. Montages and the full
 lever table are under `.scratch/eg2/A3/`. The branch's reading that Soft Ultra buys nothing over
-Soft High once TAA is on is the evidence `BL-1037` weighs against main's top rung.
+Soft High once TAA is on did not survive: that measure never covered the far water.
 
 **Original approach (kept for reference).**
 

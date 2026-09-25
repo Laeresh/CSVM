@@ -535,36 +535,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   door becomes otherwise. *Cross-refs:* `git log --grep=BL-997`, `git log --grep=BL-1027`,
   `INSTR-91`.
 
-- `BL-1037` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Under Enhanced
-  Graphics, faint diagonal bands cross the water and the aircraft's self-shadow carries noise; the
-  item also takes the sun's penumbra filter down to SoftHigh.** *Verdict at the controls:* after `BL-803`'s fix
-  (the filter at SoftUltra), "it fixes some artifacts but the stripes still remain", the stripes
-  being fine low-contrast diagonal bands over the water at `--pos="-6037.015,395.381,-6040.959"
-  --direction="0.58931,-0.04872,0.80644"` (`Screenshots/crimsonskies_2026-09-20_07-12-26-864.png`),
-  and "some shadows on the plane have visual noise". The cost call `BL-803`'s closing commit left
-  open is taken: this item moves the filter to the SoftHigh rung (4.63 ms against SoftUltra's
-  5.78 ms of GPU time at the C1 waterfall); the build still runs SoftUltra until it does, and the
-  item owns whatever the drop gives back along with the two symptoms.
-  *Evidence:* `git log --grep=BL-803` and `analysis/screen-dither/FINDINGS.md`: the 2x2 alternation
-  instrument found the soft-shadow pass at 2.168 over 81 percent of a C1 waterfall frame, SSAO, SSR
-  and glow under 0.11, SoftUltra removing 86 percent of the excess and SoftHigh 72. Open water was
-  not one of the instrument's poses, and noise inside an airframe's own shadow is acne at the
-  receiver, which the filter's rung does not decide. *Fix shape:* `EnhancedShadowFilterQuality` to
-  SoftHigh; bisect the water bands at the pose with the four doors (`--no-soft-shadows`,
-  `--no-ssao`, `--no-ssr`, `--no-glow`) and against the Faithful presentation at the same pose,
-  since a band both presentations draw is the water's own texture; for the airframe, the shadow
-  bias and normal bias against its own casting at a pose with the sun low across the fuselage.
-  *⚠ Traps:* `EnhancedShadowFilterQuality` carries a prohibition: do not lower it while
-  `EnhancedShadowAngularDistance` stays above the sun's real 0.5 degrees, because Godot resolves the
-  penumbra through a disc rotated per screen pixel and too few samples for the disc's width leave
-  that rotation as a woven pattern over every lit surface. The drop to SoftHigh therefore brings
-  the angular distance down to 0.5 degrees in the same change, or the weave `BL-803` removed
-  returns. Do not raise the rung back to chase the water; the cost call is the user's. A pattern
-  the Faithful presentation also draws is not this item. *Playtest after fix:* the pose above under
-  Enhanced, still and turning, the water flat; then a chase view with the sun across the airframe,
-  its shadow on itself clean. *Cross-refs:* `git log --grep=BL-803`, `SHOT-42`, `docs/cli.md` (the
-  four doors), `docs/PLAN-enhanced-graphics-2.md`.
-
 - `BL-1038` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` `[CM01]` **The trees
   of an island the mission deactivates stand on open water in CM01.** *Verdict at the controls:*
   "Trees from a deactivated island still are active", a curved file of palms on the sea at

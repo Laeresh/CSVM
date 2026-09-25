@@ -292,8 +292,9 @@ which reproduces `FUN_0053c610` exactly, pinned at `(0,0)`, `(−90,0)` and `(0,
 `CSVM.Tests/SunOrientationTests.cs`.
 
 ⚠ **`SUNLIGHT_ORIENTATION` is the SHADING direction, not the sun object's position.** The gamez
-`sun` billboard the lens flare anchors to is a different node entirely and disagrees with it in C3
-by 90°. That disagreement is the original's, and reproducing it is correct (`WORLD-26`).
+`sun` billboard the lens flare anchors to is a different node entirely. In C3 it stands on the same
+135° bearing but 34.4° above the horizon, against the authored −25° pitch. That disagreement is the
+original's, and reproducing it is correct (`WORLD-26`).
 
 ⚠ **Ground shadows do not use this direction either.** The top-level `SHADOW_ANGLES` outranks it in
 the shadow renderer, and every shipped file authors straight down. The same node's diffuse and

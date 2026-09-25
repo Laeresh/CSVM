@@ -412,7 +412,7 @@ member, and it does not go here.
 - **WORLD-25**, **A registry total counts bindings, not coverage: a larger census can mean one
   definition claimed objects it does not describe.**
 - **WORLD-26**, **Anchor an effect to the object it decorates, not to a parameter that merely
-  describes it.** C3 authors a sun yaw of 135 while its `sun` node sits at yaw 45.
+  describes it.** C3 authors a sun pitch of −25 while its `sun` node sits 34.4° above the horizon.
 - **WORLD-27**, **`--play-anim` proves a definition RUNS; it says nothing about whether the game
   ever reaches it, so drive the real entry point before concluding the definition is at fault.**
 - **WORLD-28**, **A suite world built without collision, or with no `ContactMask` wired, poses

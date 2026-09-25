@@ -704,9 +704,11 @@ along local −Z, which reproduces the original's own euler→direction helper `
 (`(-cos p·sin y, sin p, -cos p·cos y)`) exactly.
 
 ⚠ **It is the shading direction, not the sun's position.** The gamez `sun` billboard the lens
-flare anchors to is a *different node* and disagrees, C3 authors yaw 135 while its `sun` sits at
-yaw 45. Nothing in the binary links the two, so the original disagrees with itself and we
-reproduce that rather than reconcile it (`WORLD-26`, `BL-165`).
+flare anchors to is a *different node* and disagrees in height. C3 authors pitch −25 at yaw 135,
+and its `sun` stands on the same bearing 34.4° above the horizon (the node's position seen from
+the dome centre, measured in a built session). Nothing in the binary links the two, so the
+original disagrees with itself and we reproduce that rather than reconcile it (`WORLD-26`,
+`BL-165`).
 
 ⚠ **Shadows do not follow it.** A top-level `SHADOW_ANGLES` key outranks the sunlight direction in
 the original's shadow renderer (`FUN_0049d0a0`), and all 53 shipped files author

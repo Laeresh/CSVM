@@ -93,8 +93,7 @@ public partial class Launcher : Node3D
     private const float EnhancedShadowAngularDistance = 2.0f;
 
     // TUNE, judged at the controls: Godot's own default. Raising it alongside the angular distance
-    // above widens the edge further but dithers the lit water beside it, and halving it sharpens
-    // that dither rather than removing it (headless measure of the 2 px component, 1.6x base).
+    // above widens the edge further.
     private const float EnhancedShadowBlur = 1.0f;
 
     // ⚠ Do not lower this while EnhancedShadowAngularDistance stays above the sun's real 0.5°.
