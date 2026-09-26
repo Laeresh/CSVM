@@ -597,11 +597,12 @@ public partial class Launcher : Node3D
         bool graphicsEnhanced = Utils.GraphicsMode.Resolve(_spec.GraphicsMode, savedOptions?.GraphicsMode);
         // The view distance under the same --det rule, a machine's own state a capture must not read.
         Utils.ViewDistance.Set(savedOptions?.ViewDistance);
-        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={(graphicsEnhanced ? "enhanced" : "original")} view distance x{Utils.ViewDistance.FogScale:0.#} (enhanced only)");
+        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={(graphicsEnhanced ? "enhanced" : "original")} view distance {savedOptions?.ViewDistance ?? Utils.ViewDistance.Default} (enhanced only)");
         // The graphics EffectsLevel's one global: the clutter fade's squared distance scale, 0 when
         // the fade is off. Enhanced mode pushes the fade out by the fog range's own factor (the
-        // scale shrinks) so clutter reaches the pushed haze; original mode's factor is identity.
-        float clutterFadeScaleSq = Utils.EffectsLevel.ResolveClutterFadeScaleSq(WeatherRig.EnhancedFogScale());
+        // scale shrinks) so clutter reaches the pushed haze, and further by the View Distance
+        // option; original mode's factor is identity.
+        float clutterFadeScaleSq = ClutterFadeScaleSq();
         RenderingServer.GlobalShaderParameterAdd(Utils.EffectsLevel.ShaderParam,
             RenderingServer.GlobalShaderParameterType.Float, clutterFadeScaleSq);
         string clutterFarFade = Utils.EffectsLevel.ClutterFarFadeEnabled() ? "true" : "false";
@@ -1766,8 +1767,7 @@ public partial class Launcher : Node3D
         EnhancedLook.ApplySun(_sun, enhanced, _spec.SkippedPasses);
         if (_env != null)
             EnhancedLook.ApplyEnvironment(_env, enhanced, _spec.SkippedPasses);
-        RenderingServer.GlobalShaderParameterSet(Utils.EffectsLevel.ShaderParam,
-            Utils.EffectsLevel.ResolveClutterFadeScaleSq(WeatherRig.EnhancedFogScale()));
+        RenderingServer.GlobalShaderParameterSet(Utils.EffectsLevel.ShaderParam, ClutterFadeScaleSq());
         _session?.ApplyGraphicsMode();
         Log.Info("world", $"graphics mode: {GraphicsMode.Key}={(enhanced ? "enhanced" : "original")} (switched live by {why})");
     }
@@ -1784,20 +1784,23 @@ public partial class Launcher : Node3D
         store.Save(options);
     }
 
-    // The view distance on the running world. It moves nothing in original mode, whose fog is the
-    // authored one, but is resolved there too so a later switch to enhanced opens at the saved push.
-    // The clutter fade follows the fog it reaches, and the session writes its zone's fog again.
+    // The view distance on the running world: one global, the clutter fade's scale. It moves
+    // nothing in original mode, but is resolved there too so a later switch to enhanced opens at
+    // the saved reach.
     private void ApplyViewDistance(string? word)
     {
-        float before = ViewDistance.FogScale;
+        float before = ViewDistance.ClutterReach();
         ViewDistance.Set(word);
-        if (ViewDistance.FogScale == before || !GraphicsMode.Enhanced)
+        if (ViewDistance.ClutterReach() == before)
             return;
-        RenderingServer.GlobalShaderParameterSet(Utils.EffectsLevel.ShaderParam,
-            Utils.EffectsLevel.ResolveClutterFadeScaleSq(WeatherRig.EnhancedFogScale()));
-        _session?.ReapplyZone();
-        Log.Info("world", $"view distance: fog x{ViewDistance.FogScale:0.#} (applied live)");
+        RenderingServer.GlobalShaderParameterSet(Utils.EffectsLevel.ShaderParam, ClutterFadeScaleSq());
+        Log.Info("world", $"view distance: {word}, clutter reach x{ViewDistance.ClutterReach():0.#} (applied live)");
     }
+
+    // The clutter fade's squared scale under the fog push and the View Distance reach, both
+    // identity in original mode. An infinite reach makes it 0, the never-fades scale.
+    private float ClutterFadeScaleSq() =>
+        Utils.EffectsLevel.ResolveClutterFadeScaleSq(WeatherRig.EnhancedFogScale() * ViewDistance.ClutterReach());
 
     // The in-flight Preferences leaf both pause boards open. It takes the decoded layout the
     // Original presentation composes from, and the menu's audio service for its cues. The host's

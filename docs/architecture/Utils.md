@@ -222,7 +222,7 @@ The original's graphics EffectsLevel option as a config key (`graphics.effectsLe
 [../formats/templates.md](../formats/templates.md). A second key, `graphics.clutterFarFade`, is the
 remake's own switch: false resolves the global to a never-fades scale, so clutter draws out to the
 fog instead of ending at the authored metres. Enhanced mode scales it by
-`WeatherRig.EnhancedFogScale()` squared. Read `ClutterBuilder` and `MapEdgeExtender` next.
+`WeatherRig.EnhancedFogScale()` times `ViewDistance.ClutterReach()`, squared. Read `ClutterBuilder` and `MapEdgeExtender` next.
 
 ## src/Utils/GraphicsMode.cs
 The opt-in enhanced-lighting mode's setting (`original` or `enhanced`, default `original`),
@@ -237,10 +237,12 @@ itself is written up as a divergence in `docs/architecture/Root.md`.
 
 ## src/Utils/ViewDistance.cs
 Enhanced mode's view distance: four saved words (`normal`, `far`, `farther`, `farthest`) resolving
-to how far `WeatherRig.FogRangeFor` pushes each zone's authored fog, 2x to 6x. The faithful path
-never reads it, its fog being the original's own view distance. Both Options screens offer it on
-the VIDEO page, dead until Enhanced Graphics is chosen; `Launcher` sets it at startup (never from
-the saved file under `--det`) and again on every apply, re-lighting the zone live.
+to how much further the clutter draws than the fade enhanced mode already gives it, 1x, 2x, 4x or
+no fade. The fog never moves with it, the early chapters' haze being part of their scenery; it
+closes the gap where C5's city blocks faded well inside the fog. The faithful path keeps the
+decoded fade. Both Options screens offer it on the VIDEO page, dead until Enhanced Graphics is
+chosen; `Launcher` folds `ClutterReach` into the clutter fade global at startup (never from the
+saved file under `--det`) and again on every apply.
 
 ## src/Utils/VSyncSetting.cs
 The frame pacing, one setting carrying both whether the loop waits for the screen and the cap it

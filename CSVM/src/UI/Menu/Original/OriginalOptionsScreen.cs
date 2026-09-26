@@ -334,7 +334,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private static readonly string[] GraphicsWords = { "FAITHFUL", "ENHANCED" };
 
     // The View Distance row's labels, index for index with ViewDistance.Words.
-    private static readonly string[] ViewDistanceLabels = { "NORMAL", "FAR", "VERY FAR", "MAXIMUM" };
+    private static readonly string[] ViewDistanceLabels = { "NORMAL", "FAR", "VERY FAR", "UNLIMITED" };
 
     // The Game Options page's options in their authored row order. Each is a title, a control, a
     // description and the words of the store field it reads and writes. A page never saves. The
@@ -1859,10 +1859,10 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private string GraphicsDescription() => "Select the lit world. Applies at once.";
 
     // The View Distance row's description. The row is dead until Enhanced Graphics is ticked, and
-    // says so, since the faithful world keeps the original's own haze.
+    // says so, since the faithful world keeps the original's own fade.
     private string ViewDistanceDescription() => _graphics == CSVM.Utils.GraphicsMode.EnhancedWord
-        ? "Select how far you can see through the haze. Enhanced Graphics only. Applies at once."
-        : "Enhanced Graphics only: tick it to choose how far you can see. The faithful world keeps the original's haze.";
+        ? "Select how far buildings and scenery draw. The haze stays. Enhanced Graphics only."
+        : "Enhanced Graphics only: tick it to choose how far buildings and scenery draw.";
 
     // The screen's sizes and the one a saved size it lacks falls back to. They are read through the
     // reader on every access, like the screens below. The list is widened with the size the options

@@ -3029,7 +3029,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         0 => "Normal",
         1 => "Far",
         2 => "Very far",
-        _ => "Maximum",
+        _ => "Unlimited",
     };
 
     // The monitor and resolution rows ask the engine on every read rather than holding a list from
@@ -3948,7 +3948,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             3 => "Take the nearest target after a kill instead of the first of the list.",
             4 => "Rumble the gamepad for guns, launches, hits, the nitro and a dive past the rated maximum.",
             5 => GraphicsDetail(),
-            6 => "How far you can see through the haze. Enhanced Graphics only; Original keeps the original's haze. Applies at once.",
+            6 => "How far buildings and scenery draw before they fade; the haze stays. Enhanced Graphics only. Applies at once.",
             7 => "Select the monitor the game opens on. Applied on the way out, before the size.",
             8 => ResolutionDetail(),
             9 => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",

@@ -697,9 +697,6 @@ public partial class GameSession : Node3D
         return true;
     }
 
-    /// <summary>Write the flown zone's fog and light again, for a live View Distance change.</summary>
-    public void ReapplyZone() => _weatherRig?.ReapplyZone();
-
     /// <summary>Follow a live graphics-mode switch the launcher has already applied to the shaders,
     /// the sun and the Environment. The zone is lit again under the other arm, each cockpit pass
     /// copies the new look, and the ground shadow is built or freed. The world lights follow on
