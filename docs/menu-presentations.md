@@ -328,10 +328,11 @@ in the heading. The two presentations read the four display settings through one
 set (`CSVM/src/UI/Menu/DisplaySettingRows.cs`) over the same per-machine enumerations, so a saved
 value cannot read one way on the VIDEO page and another on Built-in's screen. Every option page reads the saved options from the store on entry and leaves
 through an `OptionsApplyExit` carrying every choice, whichever page it was sent from, so the store
-keeps its one writer. Both graphics choosers cover `original` and `enhanced` and say in their description that
-the choice takes effect on the next start, since the mode is resolved once at launch and applying
-it rebuilds nothing; while the choice differs from the running mode the description names the
-running mode and says a restart is still owed, read off `GraphicsMode.Enhanced`. The
+keeps its one writer. Both graphics choosers cover `original` and `enhanced`, and the apply switches
+the running world at once (`Launcher.SwitchGraphicsMode`), so neither description owes a restart.
+Beside each stands the View Distance row (`Utils/ViewDistance.cs`), live the same way and marked as
+Enhanced only; the Original VIDEO page draws it dead until its graphics checkbox is ticked, on the
+authored Objects Detail line under V-Sync. The
 startup recovery is `--force-builtin`, which beats everything and rewrites nothing.
 
 **What an Options page focuses with, and what it draws focus as.** Two choices on these pages are

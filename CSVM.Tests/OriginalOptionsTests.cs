@@ -667,12 +667,10 @@ public class OriginalOptionsTests
         Assert.Equal("Screen 0", Row(host, OriginalOptionsScreen.MonitorKey).Label);
     }
 
-    /// <summary>The graphics row's description reads the choice against the running mode. A saved
-    /// word the world has not picked up says a restart is owed, rather than repeating the
-    /// next-start note. Which of the two words is the running one depends on the process, so the
-    /// fact checks that exactly one of them owes the restart.</summary>
+    /// <summary>The graphics row's description owes no restart for either saved word, since the
+    /// apply switches the running world.</summary>
     [Fact]
-    public void TheGraphicsRowSaysWhenARestartIsStillOwed()
+    public void TheGraphicsRowOwesNoRestart()
     {
         var saved = new OptionsDef { GraphicsMode = GraphicsMode.EnhancedWord };
         var host = Host(() => saved);
@@ -683,11 +681,8 @@ public class OriginalOptionsTests
         host.Module.OpenVideo();
         string original = Compose(host).Lines.Single(l => l.Text.StartsWith("Select the lit world.", StringComparison.Ordinal)).Text;
 
-        var owed = new[] { enhanced, original }.Where(t => t.EndsWith("restart to apply.", StringComparison.Ordinal)).ToList();
-        var settled = new[] { enhanced, original }.Where(t => t.EndsWith("Takes effect on the next start.", StringComparison.Ordinal)).ToList();
-        Assert.Single(owed);
-        Assert.Single(settled);
-        Assert.Contains(GraphicsMode.Enhanced ? "This run is enhanced" : "This run is original", owed[0]);
+        Assert.Equal(enhanced, original);
+        Assert.DoesNotContain("restart", enhanced, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -774,8 +769,12 @@ public class OriginalOptionsTests
         Assert.False(resolution.Enabled);
         Assert.Equal((260f, 335f, 70f, 17f), Rect(Row(host, OriginalOptionsScreen.DisplayModeKey)));
         Assert.Equal((260f, 380f, 70f, 17f), Rect(Row(host, OriginalOptionsScreen.VSyncKey)));
-        // The Graphics checkbox keeps the authored Shadows corner. The Clutter Detail line above it
-        // stays blank, no row moving up onto a line the artwork does not draw it on.
+        // View Distance stands on the Objects Detail line under V-Sync, and draws dead under the
+        // faithful default, since it moves the enhanced fog alone.
+        var viewDistance = Row(host, OriginalOptionsScreen.ViewDistanceKey);
+        Assert.Equal((260f, 425f, 70f, 17f), Rect(viewDistance));
+        Assert.False(viewDistance.Enabled);
+        // The Graphics checkbox keeps the authored Shadows corner.
         Assert.Equal((260f, 465f, 16f, 16f), Rect(Row(host, OriginalOptionsScreen.GraphicsKey)));
         Assert.Equal((500f, 470f, 240f, 50f), Rect(Row(host, OriginalOptionsScreen.VideoAcceptKey)));
         Assert.Equal((500f, 520f, 240f, 50f), Rect(Row(host, OriginalOptionsScreen.VideoCancelKey)));
@@ -800,17 +799,20 @@ public class OriginalOptionsTests
         Assert.Contains(board.Lines, l => l.Text == "V-Sync" && l.X == 130f && l.Y == 380f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the frame pacing.", StringComparison.Ordinal)
             && l.X == 340f && l.Y == 380f && l.Width == 310f);
+        Assert.Contains(board.Lines, l => l.Text == "View Distance" && l.X == 130f && l.Y == 425f && l.Width == 130f);
+        Assert.Contains(board.Lines, l => l.Text.StartsWith("Enhanced Graphics only", StringComparison.Ordinal)
+            && l.X == 340f && l.Y == 425f);
         Assert.Contains(board.Lines, l => l.Text == "Enhanced Graphics" && l.X == 130f && l.Y == 470f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the lit world.", StringComparison.Ordinal)
             && l.X == 340f && l.Y == 470f && l.Width == 160f);
-        Assert.Equal(11, board.Lines.Count(l => l.Row < 0));
+        Assert.Equal(13, board.Lines.Count(l => l.Row < 0));
         // The checkbox draws unchecked and unfocused, the page opening on the monitor row above it:
         // the second of its eight frames.
         Assert.Equal(1, board.Plaques.Single(p => p.Art.Name == "PP_B_Check8.png").Frame);
 
         // The box marks the focused dropdown and no other, and it follows the cursor past the dead
-        // size row onto the display mode's. Three rows down it stands on the checkbox, a plaque
-        // strip that takes no box at all, so the page draws none.
+        // size row onto the display mode's. Three rows down, past the dead View Distance row, it
+        // stands on the checkbox, a plaque strip that takes no box at all, so the page draws none.
         Assert.Equal(
             new[] { (260f, 245f, 70f, 15f) },
             board.Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
@@ -1203,11 +1205,11 @@ public class OriginalOptionsTests
             new[]
             {
                 OriginalOptionsScreen.MonitorKey, OriginalOptionsScreen.ResolutionKey, OriginalOptionsScreen.DisplayModeKey,
-                OriginalOptionsScreen.VSyncKey, OriginalOptionsScreen.GraphicsKey,
+                OriginalOptionsScreen.VSyncKey, OriginalOptionsScreen.ViewDistanceKey, OriginalOptionsScreen.GraphicsKey,
                 OriginalOptionsScreen.VideoAcceptKey, OriginalOptionsScreen.VideoCancelKey,
             },
             rows.Select(r => r.Key));
-        RowsAreClearOfEachOther(host, rows, "VIDEO", 10);
+        RowsAreClearOfEachOther(host, rows, "VIDEO", 12);
     }
 
     // The CONTROLS page's rows, the same rule over its own plate. The sensitivity slider is pinned

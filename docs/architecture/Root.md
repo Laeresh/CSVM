@@ -22,7 +22,9 @@ matte material (`SceneBuilder.cs`'s lit-world arm); a `DirectionalLight3D` and t
 ambient are driven from the mission's authored `SUNLIGHT_DIFFUSE`/`SUNLIGHT_AMBIENT` values and
 colours instead of the launcher's hardcoded numbers (`WeatherRig.cs`); the sun casts PSSM shadow
 maps, with each zone's authored fog pushed out 2x and the shadow's max distance following that
-pushed far so shadows never end in clear air; `LIGHT_STATE` point lights are mirrored onto real
+pushed far so shadows never end in clear air; the clutter's far fade follows the same push, and
+the View Distance option (`Utils/ViewDistance.cs`) pushes that fade alone further, up to no fade,
+leaving the fog where it is; `LIGHT_STATE` point lights are mirrored onto real
 `OmniLight3D` nodes that light the world and the aircraft, not only the per-vertex point term's data texture
 (`WorldLights.cs`); the light-source class of glow-arm sprites (flares, beacons, signal lamps)
 scales its colour above 1.0 to feed an Environment glow pass, and an AgX tonemap rolls the
@@ -40,7 +42,7 @@ original's own substitute for shadow mapping, so under enhanced mode, where the 
 shadow maps, the pass is not built at all and the aircraft's own shadow is the mapped one.
 
 The energy mapping from authored SUNLIGHT units to Godot light energies, the 2x fog-range push and
-the shadow distance following it, the night key read off `FOG_COLOR` luminance with its 0.25
+the shadow distance following it, the View Distance reaches, the night key read off `FOG_COLOR` luminance with its 0.25
 separator and its 0.6 / 0.15 energy cap, and how far SSR smears on wave-less water planes are TUNE:
 judged at the controls against captures, not derived from a decoded rule. The night key in
 particular is a proxy the original never uses, which lights from SUNLIGHT and darkens from
@@ -49,9 +51,13 @@ FOG_COLOR independently.
 Both Options screens expose the mode as a two-way row saved into the menu plan's options store
 ([../menu-presentations.md](../menu-presentations.md)); every reader in this codebase consults the
 resolved `GraphicsMode.Enhanced` boolean only, so neither the store nor the screens reach any of
-them. The saved word changes on Apply and the world takes it on the next start, since the shader
-memos and the Environment are built from the value resolved once at launch, which is why each
-screen's description line says so.
+them. An Apply switches the running world, over a paused flight as well, and **G** in flight flips it
+and saves it the same way (`Launcher.SwitchGraphicsMode`). Nothing is rebuilt: the three shader
+caches key on everything but the mode, and `SceneBuilder.RegenerateShaders` rewrites each cached
+shader and fade twin in place, so every material holding one follows. The launcher re-dresses the
+sun and Environment (`Session/Launch/EnhancedLook.cs`), and the session re-lights its zone, copies
+the look into each cockpit pass and builds or frees the ground shadow. `WorldLights` reads the flag
+on every commit. The switch recompiles the changed shaders, which costs a hitch.
 
 ## src/Pads.cs
 Single source of truth for which gamepads exist: every reader goes through it rather than

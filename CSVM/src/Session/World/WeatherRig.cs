@@ -167,6 +167,10 @@ public sealed class WeatherRig
     // world's animations start inside the world build, ahead of this rig.
     private bool _zoneWritten;
     private AnimRuntime.FogStateChange? _pendingFogState;
+    // The zone ApplyZone last wrote and any FOG_STATE written over it since, so a live
+    // graphics-mode switch can put both back in the same last-writer order under the other arm.
+    private WeatherState.ZoneWeather? _appliedZone;
+    private AnimRuntime.FogStateChange? _fogStateOverZone;
 
     // The session's drawn aircraft and zeppelins, read fresh each frame. A wave spawns and an
     // airframe is shot down long after this rig is built, so a held list goes stale.
@@ -323,6 +327,18 @@ public sealed class WeatherRig
     public void RegisterExtraLighting(DirectionalLight3D sun, Godot.Environment? env)
         => _extraLighting.Add((sun, env));
 
+    /// <summary>A live graphics-mode switch: write the current zone again, since both the fog range
+    /// and which lighting arm drives the sun and ambient depend on the mode. A rig with no zone
+    /// written yet has nothing to redo.</summary>
+    public void ReapplyZone()
+    {
+        var over = _fogStateOverZone;
+        if (_appliedZone is { } fog)
+            ApplyZone(fog);
+        if (over is { } fogState)
+            ApplyFogState(fogState);
+    }
+
     /// <summary>Loads the mission's weather.json and resolves the rendered zone, builds the
     /// per-rig domes via <paramref name="buildDomes"/> (needs the resolved zone), then applies
     /// fog + whiteout + precipitation, in that order. ⚠ Do not reorder: each step depends on the
@@ -353,6 +369,7 @@ public sealed class WeatherRig
             _pendingFogState = fog;
             return;
         }
+        _fogStateOverZone = fog;
         if (fog.Color is { } color)
         {
             var linear = color.SrgbToLinear();
@@ -826,6 +843,8 @@ public sealed class WeatherRig
     // Launcher._Ready, so a second Add on an in-process relaunch of a foggy mission crashes.
     private Vector2 ApplyZone(WeatherState.ZoneWeather fog)
     {
+        _appliedZone = fog;
+        _fogStateOverZone = null;
         // FOG_COLOR is a DX7-era sRGB framebuffer value; the shader mixes ALBEDO in linear
         // space, so convert here. See docs/org/weather.md for the 176-gray measurement.
         var fogLinear = fog.FogColor.SrgbToLinear();

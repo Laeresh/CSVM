@@ -60,8 +60,9 @@ public sealed class WorldLights : IDisposable
     // Begin/Commit, and a second Begin/Commit pair on the same set would erase its lights.
     private readonly List<Action<WorldLights>> _sources = new();
 
-    // Non-null only in enhanced mode with a parent given; null keeps original mode's point term
-    // the only consumer and creates not one node, per the mode's zero-footprint contract.
+    // Where the omnis go. Read against GraphicsMode.Enhanced on every Commit rather than at
+    // construction, so a live switch grows the pool or frees it; original mode keeps not one node,
+    // per the mode's zero-footprint contract.
     private readonly Node3D? _omniParent;
 
     private ImageTexture? _texture;
@@ -74,7 +75,7 @@ public sealed class WorldLights : IDisposable
     /// nothing, leaving the data-texture point term exactly as it was.</summary>
     public WorldLights(Node3D? parent = null)
     {
-        _omniParent = GraphicsMode.Enhanced ? parent : null;
+        _omniParent = parent;
     }
 
     /// <summary>Highest simultaneous count seen, reported so the MaxActive bound can be
@@ -169,8 +170,10 @@ public sealed class WorldLights : IDisposable
             _committedFactors.Add(_pending[i].Factor);
         }
 
-        if (_omniParent != null)
+        if (OmnisOn())
             UpdateOmnis(n);
+        else if (_omniPool.Count > 0)
+            FreeOmnis();
 
         if (n == 0)
         {
@@ -219,7 +222,7 @@ public sealed class WorldLights : IDisposable
         if (_lastCount == _loggedSubmitted)
             return;
         _loggedSubmitted = _lastCount;
-        Log.Info("world", $"anim/debug: world lights {_lastCount} rendered of {LiveCount} live{(_pending.Count > MaxActive ? $" (budget {MaxActive}; the rest are past the distance fade)" : "")}{(_omniParent != null ? $" (enhanced: {_lastCount} omni)" : "")}");
+        Log.Info("world", $"anim/debug: world lights {_lastCount} rendered of {LiveCount} live{(_pending.Count > MaxActive ? $" (budget {MaxActive}; the rest are past the distance fade)" : "")}{(OmnisOn() ? $" (enhanced: {_lastCount} omni)" : "")}");
     }
 
     /// <summary>Drops the world's lights, called when a session is torn down, so the next
@@ -235,6 +238,14 @@ public sealed class WorldLights : IDisposable
         RenderingServer.GlobalShaderParameterSet(CountParam, 0);
         _lastCount = 0;
         _texture = null;
+        FreeOmnis();
+    }
+
+    // Whether this set mirrors onto real lights now: enhanced mode, and a parent to hold them.
+    private bool OmnisOn() => GraphicsMode.Enhanced && _omniParent != null;
+
+    private void FreeOmnis()
+    {
         foreach (var omni in _omniPool)
             omni.Free();
         _omniPool.Clear();
