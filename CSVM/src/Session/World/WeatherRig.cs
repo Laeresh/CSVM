@@ -59,13 +59,11 @@ public sealed class WeatherRig
     private const int SkyPanoramaWidth = 8;
     private const int SkyPanoramaHeight = 4;
 
-    // ⚠ TUNE, judged at the controls, and enhanced mode ONLY. Shadowed ground reads badly through
-    // the authored haze: a cast shadow needs contrast to be seen at all, and the zones put full fog
-    // close enough that half of every shadow is already grey. Pushing near and far out together
-    // keeps the ramp's shape (and so the horizon's look) while giving the shadowed range clear air
-    // to live in. The faithful path keeps the authored ranges exactly, per the prohibition in
-    // ApplyZone.
-    private const float EnhancedFogRangeScale = 2f;
+    // ⚠ TUNE, judged at the controls, and enhanced mode ONLY. The sun's shadow distance follows
+    // the authored fog near pushed by this much, the View Distance option's Normal push. It stays
+    // fixed while that option pushes the fog further, since stretching the cascades over kilometres
+    // of clear air would blur every near shadow. The faithful path casts no shadow map at all.
+    private const float EnhancedShadowFogScale = 2f;
 
     // TUNE, judged at the controls. The last shadow cascade fades out over this fraction of the
     // sun's DirectionalShadowMaxDistance rather than cutting at a hard edge, so a shadow reads as
@@ -167,6 +165,10 @@ public sealed class WeatherRig
     // world's animations start inside the world build, ahead of this rig.
     private bool _zoneWritten;
     private AnimRuntime.FogStateChange? _pendingFogState;
+    // The zone ApplyZone last wrote and any FOG_STATE written over it since, so a live
+    // graphics-mode switch can put both back in the same last-writer order under the other arm.
+    private WeatherState.ZoneWeather? _appliedZone;
+    private AnimRuntime.FogStateChange? _fogStateOverZone;
 
     // The session's drawn aircraft and zeppelins, read fresh each frame. A wave spawns and an
     // airframe is shot down long after this rig is built, so a held list goes stale.
@@ -287,17 +289,22 @@ public sealed class WeatherRig
         => (0.2126f * fog.FogColor.R) + (0.7152f * fog.FogColor.G) + (0.0722f * fog.FogColor.B)
            < NightFogLuminance;
 
-    /// <summary>The fog range as written: the authored pair in the faithful path, pushed out by
-    /// <c>EnhancedFogRangeScale</c> in enhanced mode so shadowed ground is not already grey. Pure
-    /// and identity in original mode, which is what keeps that path byte-for-byte the authored
-    /// one.</summary>
+    /// <summary>The fog range as written: the authored pair in the faithful path, pushed out in
+    /// enhanced mode by the View Distance option (<see cref="ViewDistance.FogScale"/>). Near and far
+    /// move together, which keeps the ramp's shape and so the horizon's look, and leaves shadowed
+    /// ground clear air instead of grey haze. Pure and identity in original mode, which is what
+    /// keeps that path byte-for-byte the authored one.</summary>
     public static Vector2 FogRangeFor(Vector2 authored)
-        => GraphicsMode.Enhanced ? authored * EnhancedFogRangeScale : authored;
+        => GraphicsMode.Enhanced ? authored * ViewDistance.FogScale : authored;
+
+    /// <summary>Where enhanced mode's sun shadows end for a zone: its authored fog near under the
+    /// fixed <c>EnhancedShadowFogScale</c>, whatever the View Distance option pushes the fog to.</summary>
+    public static float ShadowDistanceFor(float authoredFogNear) => authoredFogNear * EnhancedShadowFogScale;
 
     /// <summary>The push factor <see cref="FogRangeFor"/> applies as a plain scalar (identity, 1,
     /// in original mode), so another distance-gated population can follow the same pushed fog
-    /// without this class exposing <c>EnhancedFogRangeScale</c> itself.</summary>
-    public static float EnhancedFogScale() => GraphicsMode.Enhanced ? EnhancedFogRangeScale : 1f;
+    /// without this class exposing the option's scale itself.</summary>
+    public static float EnhancedFogScale() => GraphicsMode.Enhanced ? ViewDistance.FogScale : 1f;
 
     /// <summary>Paints one Environment's sky a single flat colour, enhanced mode's stand-in for
     /// the mission's horizon dome. Godot draws a reflection off a <c>Sky</c> resource only, so the
@@ -322,6 +329,18 @@ public sealed class WeatherRig
     /// frame in the pass's own basis.</summary>
     public void RegisterExtraLighting(DirectionalLight3D sun, Godot.Environment? env)
         => _extraLighting.Add((sun, env));
+
+    /// <summary>A live graphics-mode switch: write the current zone again, since both the fog range
+    /// and which lighting arm drives the sun and ambient depend on the mode. A rig with no zone
+    /// written yet has nothing to redo.</summary>
+    public void ReapplyZone()
+    {
+        var over = _fogStateOverZone;
+        if (_appliedZone is { } fog)
+            ApplyZone(fog);
+        if (over is { } fogState)
+            ApplyFogState(fogState);
+    }
 
     /// <summary>Loads the mission's weather.json and resolves the rendered zone, builds the
     /// per-rig domes via <paramref name="buildDomes"/> (needs the resolved zone), then applies
@@ -353,6 +372,7 @@ public sealed class WeatherRig
             _pendingFogState = fog;
             return;
         }
+        _fogStateOverZone = fog;
         if (fog.Color is { } color)
         {
             var linear = color.SrgbToLinear();
@@ -592,7 +612,7 @@ public sealed class WeatherRig
         (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog);
         return Log.Format($"; enhanced sun energy {sunEnergy:0.00} (diffuse {fog.SunDiffuse:0.##}), ")
                + Log.Format($"ambient energy {ambientEnergy:0.00} (ambient {fog.SunAmbient:0.##}), ")
-               + Log.Format($"shadows to {FogRangeFor(new Vector2(fog.FogNear, fog.FogFar)).X:0} m")
+               + Log.Format($"shadows to {ShadowDistanceFor(fog.FogNear):0} m, fog x{ViewDistance.FogScale:0.#}")
                + (IsNightZone(fog) ? "; night zone, energies capped" : string.Empty);
     }
 
@@ -826,6 +846,8 @@ public sealed class WeatherRig
     // Launcher._Ready, so a second Add on an in-process relaunch of a foggy mission crashes.
     private Vector2 ApplyZone(WeatherState.ZoneWeather fog)
     {
+        _appliedZone = fog;
+        _fogStateOverZone = null;
         // FOG_COLOR is a DX7-era sRGB framebuffer value; the shader mixes ALBEDO in linear
         // space, so convert here. See docs/org/weather.md for the 176-gray measurement.
         var fogLinear = fog.FogColor.SrgbToLinear();
@@ -884,7 +906,7 @@ public sealed class WeatherRig
         // a registered clone owns its own camera-relative distance (RegisterExtraLighting).
         if (fog.FogFar > 0f)
         {
-            _sun.DirectionalShadowMaxDistance = FogRangeFor(new Vector2(fog.FogNear, fog.FogFar)).X;
+            _sun.DirectionalShadowMaxDistance = ShadowDistanceFor(fog.FogNear);
             _sun.DirectionalShadowFadeStart = EnhancedShadowFadeStart;
         }
         (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog);

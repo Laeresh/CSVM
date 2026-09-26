@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CSVM.Flight.Camera;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight.Hud;
@@ -123,6 +124,21 @@ public sealed partial class CockpitOverlay : CanvasLayer
         }
     }
 
+    /// <summary>Follow a live graphics-mode switch. The pass's Environment copy takes the session's
+    /// passes, and its light the session sun's shadow settings, clamped to this pass's far plane as
+    /// at build. The zone's energies and ambient then arrive through
+    /// <c>WeatherRig.RegisterExtraLighting</c>.</summary>
+    public void ApplyGraphicsMode(EnhancedPasses skipped)
+    {
+        if (_view.World3D.Environment is { } env)
+            Session.Launch.EnhancedLook.ApplyEnvironment(env, GraphicsMode.Enhanced, skipped);
+        if (_light != null && _sun != null && GodotObject.IsInstanceValid(_sun))
+        {
+            _light.LightColor = _sun.LightColor;
+            Session.Launch.EnhancedLook.CopyShadow(_sun, _light, _camera.Far);
+        }
+    }
+
     /// <summary>Take the pass off the screen for a caller that has stopped syncing it. The crash
     /// cut is that caller: it leaves first person while the rig's per-frame camera work is already
     /// halted, so nothing would reach <see cref="Sync"/> to notice the interior went away.</summary>
@@ -166,22 +182,11 @@ public sealed partial class CockpitOverlay : CanvasLayer
                 // false in original mode, since the world sun's own flag never turns on there.
                 ShadowEnabled = sun.ShadowEnabled,
             };
+            // Clamped to this pass's own camera far plane: the world sun's distance is a zone's fog
+            // far (thousands of metres, always past 100 m), and passing it through would push every
+            // PSSM split past what this near-field pass ever renders.
             if (sun.ShadowEnabled)
-            {
-                light.DirectionalShadowMode = sun.DirectionalShadowMode;
-                light.DirectionalShadowSplit1 = sun.DirectionalShadowSplit1;
-                light.DirectionalShadowSplit2 = sun.DirectionalShadowSplit2;
-                light.DirectionalShadowSplit3 = sun.DirectionalShadowSplit3;
-                light.DirectionalShadowBlendSplits = sun.DirectionalShadowBlendSplits;
-                light.ShadowBias = sun.ShadowBias;
-                light.ShadowNormalBias = sun.ShadowNormalBias;
-                light.LightAngularDistance = sun.LightAngularDistance;
-                light.ShadowBlur = sun.ShadowBlur;
-                // Clamped to this pass's own camera far plane: the world sun's distance is a
-                // zone's fog far (thousands of metres, always past 100 m), and passing it through
-                // would push every PSSM split past what this near-field pass ever renders.
-                light.DirectionalShadowMaxDistance = Mathf.Min(sun.DirectionalShadowMaxDistance, camera.Far);
-            }
+                Session.Launch.EnhancedLook.CopyShadow(sun, light, camera.Far);
         }
         return new CockpitOverlay(view, camera, interior, light, sun)
         {

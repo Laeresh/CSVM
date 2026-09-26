@@ -500,7 +500,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/EffectPools.cs`, the `effect_pools.json` reader: how many copies of each effect-template root the two stages build, scaled by player count.
 - `src/Utils/EffectsLevel.cs`, the original's EffectsLevel option and the clutter fade's squared distance scale it drives, plus the remake's far-fade switch.
 - `src/Utils/GameClock.cs`, the session sim clock every sim consumer takes dt from: run mode (realtime/fixed), halt and single-step, time scale, the holds.
-- `src/Utils/GraphicsMode.cs`, the opt-in enhanced-lighting setting, resolved once at launch into the one boolean every scene builder reads.
+- `src/Utils/GraphicsMode.cs`, the opt-in enhanced-lighting setting, resolved at launch into the one boolean every scene builder reads, and switched live after it.
 - `src/Utils/HitchMonitor.cs`, the always-on frame-hitch detector: a frame far costlier than its recent neighbours gets a record; it logs nothing itself.
 - `src/Utils/HitchSidecar.cs`, the hitch detector's write path: queues a tripped record and drains it to one `[perf] hitch` line plus one JSON sidecar line.
 - `src/Utils/HoldToRepeat.cs`, tap-versus-hold timing for one button: an initial delay, then a repeat every interval until release.
@@ -525,6 +525,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/StartupProfile.cs`, the always-on `[perf] startup …` line: every session build split into the phases it spends its time in.
 - `src/Utils/TapHoldButton.cs`, one button carrying two actions split by how long it is held; the caller feeds it the button level and switches on the answer.
 - `src/Utils/WallCostBank.cs`, one `--perf` cost meter (bracket, banked milliseconds, worst span, count, tally) and the bracket node; the three cost facades are instances of it.
+- `src/Utils/ViewDistance.cs`, enhanced mode's view distance: the saved word and the fog push it resolves to, switched live on an apply.
 - `src/Utils/VSyncSetting.cs`, the frame pacing: the flag/saved/config ladder, and the one place the vsync mode and the frame cap are applied to the engine.
 - `src/Utils/WorldBackdrop.cs`, the persistent environment's background: flat black while the menu owns the screen, the sky again at every launch.
 
@@ -566,6 +567,7 @@ delegate to, in six sub-namespaces, one folder each. `Launch` sits on top and no
 
 - `src/Session/Launch/Launcher.cs`, Main.tscn's root: the once-per-process bootstrap, what outlives a session, the menu host, and every path a session starts or ends.
 - `src/Session/Launch/GameSession.cs`, the per-launch session node: ordered build phases over one `SessionSpec`, owning the clock, world root, panes and runtimes.
+- `src/Session/Launch/EnhancedLook.cs`, the enhanced mode's sun shadows, screen-space passes, tonemap and sky on a sun and an Environment, on or back to the faithful defaults.
 - `src/Session/Launch/TuningWarmup.cs`, the startup pass that registers every `Config` key before the orphan report and `--dump-config` read the registry.
 - `src/Session/Launch/ExtractionStamp.cs`, reads the extraction provenance stamp at boot and warns once when it is stale or unreadable; `Behind` is the blocking read, `Schema` the promise a test pins.
 - `src/Session/Launch/MenuAudioService.cs`, the menus' audio host: the music channel, the briefing narration player, the cue player behind `MenuCueTable`, and the AUDIO page's live mix preview.

@@ -63,4 +63,9 @@ public static class GraphicsMode
         Enhanced = enhanced;
         return enhanced;
     }
+
+    /// <summary>A live switch, after launch: G in flight or an Options apply, both saved. ⚠ Only the launcher calls
+    /// this, since the flag alone moves nothing already built; its switch then rewrites the
+    /// shaders, the lights and the session to match.</summary>
+    public static void Set(bool enhanced) => Enhanced = enhanced;
 }

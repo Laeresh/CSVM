@@ -37,7 +37,7 @@ public sealed record QuitExit : MenuExit;
 /// command line's, never an option. Carried are a <see cref="Utils.GraphicsMode"/> word saved and
 /// no more, a <see cref="Flight.Hangar.Difficulty.Word"/> the next launch reads, and the rest of
 /// <see cref="Utils.OptionsDef"/>'s own fields, null where never set. A screen showing none of them
-/// hands back what it read, since the consumer writes every field it is given. ⚠ All fourteen ride
+/// hands back what it read, since the consumer writes every field it is given. ⚠ All fifteen ride
 /// the exit, not the screen's own save, so the options file keeps one writer, and none is
 /// defaulted. ⚠ A field no screen offers is dropped rather than left riding as a null, since a null
 /// the consumer saves wipes the file's value.</summary>
@@ -55,7 +55,8 @@ public sealed record OptionsApplyExit(
     bool? NearestAfterKill,
     bool? Rumble,
     string? DefaultView,
-    bool? AutoHeadTurn) : MenuExit;
+    bool? AutoHeadTurn,
+    string? ViewDistance) : MenuExit;
 
 /// <summary>Dogfight's two match rules as a screen set them: the kill target that ends a match
 /// early and the match clock in MINUTES, 0 on either disabling that limit. The consumer applies

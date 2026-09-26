@@ -345,6 +345,11 @@ void fragment() {
     private static readonly Dictionary<int, Shader> BiasShaders = new(); // keyed by feature bits
     private static readonly Dictionary<int, Shader> BillboardShaders = new(); // cloud sprites, keyed by blend/scissor bits
     private static readonly Dictionary<int, Shader> CylindricalShaders = new(); // Y/X-axis facades, keyed by axis/blend/scissor/glow bits
+    // Every shader the three caches above hold, beside the recipe that wrote its text, and every
+    // fade twin beside its source. A live graphics-mode switch rewrites both lists in place, which
+    // reaches every material holding one of these shaders, the per-instance duplicates included.
+    private static readonly List<(Shader Shader, Func<string> Code)> Regenerable = new();
+    private static readonly Dictionary<Shader, Shader?> FadeTwins = new();
 
     private readonly GameZ _gamez;
     private readonly TextureArchive _textures;
@@ -616,18 +621,38 @@ void fragment() {
     /// has an alpha path to drive. Writing ALPHA moves the twin into the transparent pass, so
     /// ⚠ callers must install it per instance, never into the shared caches. Null when the code
     /// cannot take the line: no preamble means <c>csky_opacity</c> is undeclared, and no
-    /// <c>col</c> local means there is no alpha to read.</summary>
+    /// <c>col</c> local means there is no alpha to read. One twin per source, so
+    /// <see cref="RegenerateShaders"/> can follow its source across a graphics-mode switch.</summary>
     internal static Shader? FadeShaderFor(Shader source)
     {
-        string code = source.Code;
-        if (!code.Contains(InstanceUniformsInclude, StringComparison.Ordinal)
-            || !code.Contains("vec4 col = ", StringComparison.Ordinal))
-            return null;
-        int close = code.LastIndexOf('}');
-        if (close < 0)
-            return null;
-        return new Shader { Code = code[..close] + $"    ALPHA = col.a{OpacityTerm};\n" + code[close..] };
+        if (FadeTwins.TryGetValue(source, out var known))
+            return known;
+        var twin = FadeCode(source.Code) is { } code ? new Shader { Code = code } : null;
+        FadeTwins[source] = twin;
+        return twin;
     }
+
+    /// <summary>Rewrite every generated shader and fade twin for the current
+    /// <see cref="GraphicsMode.Enhanced"/>. Godot recompiles each changed shader and every material
+    /// holding it redraws under the new text, so the live world switches without a rebuild. Main
+    /// thread only, like the caches.</summary>
+    internal static void RegenerateShaders()
+    {
+        foreach (var (shader, code) in Regenerable)
+        {
+            string next = code();
+            if (next != shader.Code)
+                shader.Code = next;
+        }
+        // A source whose new text cannot take the ALPHA line leaves its twin opaque, so a fade
+        // running across the switch shows its piece whole instead of drawing a stale mode.
+        foreach (var (source, twin) in FadeTwins)
+        {
+            if (twin != null)
+                twin.Code = FadeCode(source.Code) ?? source.Code;
+        }
+    }
+
 
     /// <summary>The surface class one texture name names, <c>"water"</c>, <c>"buildings"</c>, or
     /// null for the untagged default. The collision buckets are built from this
@@ -1622,32 +1647,73 @@ void fragment() {
     // the shader text it always did, so honouring the flags cannot perturb the overwhelming
     // majority of the world through float rounding in a mix().
     // Key bits: 1-64 the flags above, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade,
-    // 4096 DebugClutterFlag, 8192 enhanced, 16384 water, 32768 sun, 65536 gamma blend; free 131072.
+    // 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend; free 8192 and 131072.
+    // ⚠ The graphics mode is not in the key: one Shader serves both modes and RegenerateShaders
+    // rewrites its code on a switch, which is what reaches the materials already built.
     private Shader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
         bool clutterFade = false, bool water = false)
+    {
+        // Only a lit world surface can take the water arm, and only a shaded one the sun term.
+        water &= !shaded && lit;
+        bool sunVertexLit = shaded && _sunVertexLit;
+        // Only a blending surface has an alpha to correct; a scissor compares against a fixed 0.5
+        // and moving its alpha would move the cutout silhouette instead of the composite.
+        bool gammaBlend = blend && GammaBlendAlpha;
+        bool debugClutter = DebugClutterFlag;
+        int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0)
+            | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256)
+            | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (debugClutter ? 4096 : 0)
+            | (water ? 16384 : 0) | (sunVertexLit ? 32768 : 0) | (gammaBlend ? 65536 : 0);
+        if (BiasShaders.TryGetValue(key, out var cached))
+            return cached;
+
+        var shader = RegenerableShader(() => BiasShaderCode(shaded, textured, blend, scissor, doubleSided,
+            scroll, clampUv, lit, fogged, edgeClamp, clutterFade, water, sunVertexLit, gammaBlend, debugClutter));
+        BiasShaders[key] = shader;
+        return shader;
+    }
+
+    // The generators below are static so a recipe in Regenerable holds no builder alive, and kept
+    // beside their getters, which costs one SA1204 suppression per block.
+#pragma warning disable SA1204
+    // The two halves of RegenerateShaders' bookkeeping: a cached shader with its recipe, and a
+    // fade twin's text off its source's.
+    private static Shader RegenerableShader(Func<string> code)
+    {
+        var shader = new Shader { Code = code() };
+        Regenerable.Add((shader, code));
+        return shader;
+    }
+
+    private static string? FadeCode(string code)
+    {
+        if (!code.Contains(InstanceUniformsInclude, StringComparison.Ordinal)
+            || !code.Contains("vec4 col = ", StringComparison.Ordinal))
+            return null;
+        int close = code.LastIndexOf('}');
+        if (close < 0)
+            return null;
+        return code[..close] + $"    ALPHA = col.a{OpacityTerm};\n" + code[close..];
+    }
+
+    // The bias shader's text under the current graphics mode, a pure function of its arguments and
+    // GraphicsMode.Enhanced, so RegenerateShaders can call it again on a switch.
+    private static string BiasShaderCode(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
+        bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp, bool clutterFade, bool water,
+        bool sunVertexLit, bool gammaBlend, bool debugClutter)
     {
         // Enhanced mode only: a world surface authored `lighting: true` shades under the real scene
         // lights off its decoded normals. `lighting: false` is self-lit by intent and keeps the
         // fullbright arm, so `fullbright` rather than `!shaded` selects the terms that arm owns.
         bool worldLit = GraphicsMode.Enhanced && !shaded && lit;
         bool fullbright = !shaded && !worldLit;
-        // ⚠ The water arm exists only inside the lit world arm, so original mode never sets its key
-        // bit and its shader text cannot move.
+        // ⚠ The water arm exists only inside the lit world arm, so original mode's shader text
+        // cannot move.
         bool waterLit = worldLit && water;
         // The original's own aircraft light: unshaded, the per-vertex sun term times the authored
         // colour, clamped, then the texel (docs/org/vertexLighting.md). No Godot light reaches it.
-        bool sunLit = shaded && _sunVertexLit && !GraphicsMode.Enhanced;
-        // Only a blending surface has an alpha to correct; a scissor compares against a fixed 0.5
-        // and moving its alpha would move the cutout silhouette instead of the composite.
-        bool gammaBlend = blend && GammaBlendAlpha;
-        int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0)
-            | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256)
-            | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (DebugClutterFlag ? 4096 : 0)
-            | (GraphicsMode.Enhanced ? 8192 : 0) | (waterLit ? 16384 : 0) | (sunLit ? 32768 : 0)
-            | (gammaBlend ? 65536 : 0);
-        if (BiasShaders.TryGetValue(key, out var cached))
-            return cached;
+        bool sunLit = sunVertexLit && !GraphicsMode.Enhanced;
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("shader_type spatial;");
@@ -1836,7 +1902,7 @@ void fragment() {{");
         // The debug overlays' per-instance tint, a no-op at alpha 0. Under --debug-clutterflag the
         // fullbright world shows the flag colour EmitTriangle wrote into COLOR instead of the lit,
         // fogged texture, which C5's night art would otherwise swallow whole.
-        sb.AppendLine(DebugClutterFlag && !shaded ? ClutterFlagTintLine : TintLine);
+        sb.AppendLine(debugClutter && !shaded ? ClutterFlagTintLine : TintLine);
         if (blend || scissor)
             sb.AppendLine(gammaBlend
                 ? $"    ALPHA = csky_srgb_to_linear(vec3(col.a)).r{OpacityTerm};"
@@ -1844,11 +1910,9 @@ void fragment() {{");
         if (scissor)
             sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
         sb.AppendLine("}");
-
-        var shader = new Shader { Code = sb.ToString() };
-        BiasShaders[key] = shader;
-        return shader;
+        return sb.ToString();
     }
+#pragma warning restore SA1204
 
     // A camera-facing billboard material for the cloud sprites (cloud1/cloud2, flat 2D cards
     // in the source). Unlike the bias shader it does no depth bias (free-floating sprites have
@@ -1864,17 +1928,26 @@ void fragment() {{");
         return mat;
     }
 
-    // Key bits taken: 1 blend, 2 scissor, 4 glow, 8 !lit, 16 !fogged, 32 clampUv, 64 enhanced
-    // mode. Next free bit is 128.
+    // Key bits taken: 1 blend, 2 scissor, 4 glow, 8 !lit, 16 !fogged, 32 clampUv. Next free bit is
+    // 64. The graphics mode stays out of the key, as in GetBiasShader.
     private Shader GetBillboardShader(bool blend, bool scissor, bool glow, bool lit, bool fogged, bool clampUv)
     {
         // A glow variant already ignores csky_world_light, so `lit` cannot split its key.
         lit |= glow;
         int key = (blend ? 1 : 0) | (scissor ? 2 : 0) | (glow ? 4 : 0) | (lit ? 0 : 8) | (fogged ? 0 : 16)
-            | (clampUv ? 32 : 0) | (GraphicsMode.Enhanced ? 64 : 0);
+            | (clampUv ? 32 : 0);
         if (BillboardShaders.TryGetValue(key, out var cached))
             return cached;
 
+        var shader = RegenerableShader(() => BillboardShaderCode(blend, scissor, glow, lit, fogged, clampUv));
+        BillboardShaders[key] = shader;
+        return shader;
+    }
+
+    // The billboard shader's text under the current graphics mode (see BiasShaderCode).
+#pragma warning disable SA1204
+    private static string BillboardShaderCode(bool blend, bool scissor, bool glow, bool lit, bool fogged, bool clampUv)
+    {
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("shader_type spatial;");
         // Fullbright like the rest of the world, double-sided, no shadows. fog_disabled turns
@@ -1942,11 +2015,9 @@ void fragment() {{
         if (scissor)
             sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
         sb.AppendLine("}");
-
-        var shader = new Shader { Code = sb.ToString() };
-        BillboardShaders[key] = shader;
-        return shader;
+        return sb.ToString();
     }
+#pragma warning restore SA1204
 
     // A single-axis (Y or X) cylindrical billboard: the mesh spins about that one fixed world axis
     // to face the camera on the other two, so trees, lampposts, flames and cables stay upright
@@ -1962,17 +2033,27 @@ void fragment() {{
         return mat;
     }
 
-    // Key bits taken: 1 axis, 2 blend, 4 scissor, 8 glow, 16 !lit, 32 !fogged, 64 clampUv,
-    // 128 enhanced mode. Next free bit is 256.
+    // Key bits taken: 1 axis, 2 blend, 4 scissor, 8 glow, 16 !lit, 32 !fogged, 64 clampUv. Next
+    // free bit is 128. The graphics mode stays out of the key, as in GetBiasShader.
     private Shader GetCylindricalShader(CylAxis axis, bool blend, bool scissor, bool glow, bool lit, bool fogged,
         bool clampUv)
     {
         lit |= glow; // a glow variant already ignores csky_world_light, same key
         int key = (axis == CylAxis.X ? 1 : 0) | (blend ? 2 : 0) | (scissor ? 4 : 0) | (glow ? 8 : 0)
-            | (lit ? 0 : 16) | (fogged ? 0 : 32) | (clampUv ? 64 : 0) | (GraphicsMode.Enhanced ? 128 : 0);
+            | (lit ? 0 : 16) | (fogged ? 0 : 32) | (clampUv ? 64 : 0);
         if (CylindricalShaders.TryGetValue(key, out var cached))
             return cached;
 
+        var shader = RegenerableShader(() => CylindricalShaderCode(axis, blend, scissor, glow, lit, fogged, clampUv));
+        CylindricalShaders[key] = shader;
+        return shader;
+    }
+
+    // The single-axis billboard's text under the current graphics mode (see BiasShaderCode).
+#pragma warning disable SA1204
+    private static string CylindricalShaderCode(CylAxis axis, bool blend, bool scissor, bool glow, bool lit,
+        bool fogged, bool clampUv)
+    {
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("shader_type spatial;");
         sb.Append("render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled");
@@ -2032,9 +2113,7 @@ void fragment() {{
         if (scissor)
             sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
         sb.AppendLine("}");
-
-        var shader = new Shader { Code = sb.ToString() };
-        CylindricalShaders[key] = shader;
-        return shader;
+        return sb.ToString();
     }
+#pragma warning restore SA1204
 }
