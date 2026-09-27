@@ -2118,6 +2118,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return rest;
     }
 
+    /// <summary>Whether this runtime has ever posed or moved the node, i.e. holds a rest pose for
+    /// it. A respawn re-poses only these, and leaves nodes other animators drive alone.</summary>
+    internal bool HasPosed(Node3D node) => _rest.ContainsKey(node);
+
     // Thin forwards into the pose family, kept here because their callers name this runtime:
     // MotionRuntime.Create reads the landing-resume mark as `rt.ConsumeLandingResume`, the
     // `ground-contact` suite arms it through `runtime.MarkLandingResume`, and OpacityFade and the

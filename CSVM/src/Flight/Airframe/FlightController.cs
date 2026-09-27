@@ -676,13 +676,11 @@ public partial class FlightController : Node3D
     // held and the look controls are muted, so the sheet's menu keys fly nothing.
     private bool _sheetOverFlight;
     private ImmediateMesh? _probe;              // debug collision-probe line
-    // The rest pose of every node the crash def flings (the destroyed wreck's pieceN meshes) and
-    // the BUILT visibility of every plane-model node, both captured before the first crash so
-    // Respawn can undo what the def did: a RESET_STATE re-poses only the nodes it names and
-    // restores only dontmove, so neither the flung pieces nor the built-hidden torn panels and
-    // wingtip flares come back without these two snapshots. Bound with the rest of the crash rig.
-    private IReadOnlyList<(Node3D Node, Transform3D RestPose)>? _crashRestPoses;
-    private IReadOnlyList<(Node3D Node, bool Visible)>? _crashPlaneVisibility;
+    // The built parent, pose and visibility of every node the death defs play on, captured before
+    // the first crash. That covers the airframe, the wreck and the adopted eject pilot. A
+    // RESET_STATE re-poses only what it names, so Respawn undoes the rest from this. Bound with the
+    // rest of the crash rig.
+    private IReadOnlyList<(Node3D Node, Node3D? Parent, Transform3D RestPose, bool Visible)>? _crashRestStates;
     private AnimRuntime? _crashRuntime;          // the bound rig; reached through CrashRuntime, which forces the build below
     private Node3D? _crashAnchor;                // the rig's `player` anchor, bound with it
     private Node3D? _viewCameraProxy;            // the rig-local `camera1`; see EnsureViewCameraProxy
@@ -1345,17 +1343,18 @@ public partial class FlightController : Node3D
         // on the frame an aeroplane is placed, which is the frame the deferral exists to spare.
         if (_crashRuntime != null)
         {
-            // Hard-stop the played def, re-hide the wreck (its RESET_STATE), and re-home the flung
-            // pieces below (no reset event re-poses them; without this respawn leaves just the prop).
+            // Hard-stop the played def and re-hide the wreck (its RESET_STATE). Then put back what no
+            // reset event names: the flung pieces, the rotor, and an eject cut short on the seat.
             _crashRuntime.ResetToBaseState();
-            if (_crashRestPoses != null)
-                foreach (var (node, rest) in _crashRestPoses)
+            if (_crashRestStates != null)
+                foreach (var (node, parent, rest, vis) in _crashRestStates)
                 {
-                    node.Transform = rest;
-                }
-            if (_crashPlaneVisibility != null)
-                foreach (var (node, vis) in _crashPlaneVisibility)
-                {
+                    if (parent != null && node.GetParent() != parent)
+                        AnimRuntime.Reparent(node, parent);
+                    // ⚠ Only a pose the rig itself wrote. A rig built mid-flight snapshots the
+                    // control surfaces deflected, and their own animator owns them.
+                    if (_crashRuntime.HasPosed(node))
+                        node.Transform = rest;
                     node.Visible = vis;
                 }
         }
@@ -1429,18 +1428,17 @@ public partial class FlightController : Node3D
         finish();
     }
 
-    /// <summary>Binds this plane's crash rig: the runtime the crash and destroy defs play on, the
-    /// def vector the struck surface indexes, the anchor they play against, and the two snapshots a
-    /// respawn restores. One call rather than six assignments, so a rig cannot be half-bound.</summary>
+    /// <summary>Binds this plane's crash rig: the runtime its crash and destroy defs play on, the
+    /// def vector a struck surface indexes, and their anchor. Also the built-state snapshot a
+    /// respawn restores. One call rather than four assignments, so a rig cannot be
+    /// half-bound.</summary>
     public void BindCrashRig(AnimRuntime runtime, SurfaceDefTable? defs, Node3D? anchor,
-        IReadOnlyList<(Node3D Node, Transform3D RestPose)>? restPoses,
-        IReadOnlyList<(Node3D Node, bool Visible)>? planeVisibility)
+        IReadOnlyList<(Node3D Node, Node3D? Parent, Transform3D RestPose, bool Visible)>? restStates)
     {
         _crashRuntime = runtime;
         _crashAnchor = anchor;
         _lifecycle.CrashDefs = defs;
-        _crashRestPoses = restPoses;
-        _crashPlaneVisibility = planeVisibility;
+        _crashRestStates = restStates;
     }
 
     /// <summary>Builds this rig's own <c>camera1</c>, the node the canopy-hole overlay poses
