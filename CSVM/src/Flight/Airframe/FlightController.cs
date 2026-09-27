@@ -1003,6 +1003,8 @@ public partial class FlightController : Node3D
             // down, and a cutscene takes any key or pad button.
             if (!value)
                 SwallowInputHeldThroughReentry();
+            else
+                StopPositionalLoops();
             ApplyPresence();
             InertChanged?.Invoke(this);
         }
@@ -3416,8 +3418,7 @@ public partial class FlightController : Node3D
         Audio?.OnCrash();
         // An AI aircraft's loops end here and stay ended: the animation's own authored sound
         // events are what is audible from now on, and no wreck respawns to restart them.
-        EngineAudio?.Stop();
-        WeaponAudio?.Stop();
+        StopPositionalLoops();
         // The engine wind-down cue layers over the explosion, replacing the loops' abrupt cut with
         // snd_propstop.
         Audio?.OnEngineStop();
@@ -3428,6 +3429,17 @@ public partial class FlightController : Node3D
         // No plume survives a dead engine.
         ExhaustSmoke?.Reset();
         SpeedCue?.Reset();
+    }
+
+    // Every world-positioned loop this aircraft owns, stopped now. A downed or inert host takes no
+    // further tick, so a turret's unexpired lease or a held gun loop would sound until the session ends.
+    // The next live tick restarts whatever is still wanted.
+    private void StopPositionalLoops()
+    {
+        foreach (var turret in Turrets)
+            turret.Voice?.Stop();
+        EngineAudio?.Stop();
+        WeaponAudio?.Stop();
     }
 
     // The authored crash camera: hard-cut to the static elevated vantage and hide the HUD, both

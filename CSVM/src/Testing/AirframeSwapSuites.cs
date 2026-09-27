@@ -56,6 +56,10 @@ internal static class AirframeSwapSuites
     private const float StepDt = 1f / 60f;
     private const float PlayBudgetS = 30f;
 
+    // How long the captured aircraft's gunners get to put one round out, in frames. A whole bored
+    // window of the duty cycle plus a shot interval has to fit inside it.
+    private const int ShotBudgetFrames = 1200;
+
     // The approach the drop is reached over, the way a flown session reaches it: the rig is bound
     // at the world build and the mission's own start anims are then run out with the player clear
     // of the drop's band, since what those anims leave the staged `player` marker in is exactly
@@ -149,6 +153,59 @@ internal static class AirframeSwapSuites
         ctx.Note($"drove the swap {chapter}/{folder} authors against that mission's own world");
     }
 
+    /// <summary>Captures CM02's Balmoral while its carried gunner is mid-burst and its own gun loop
+    /// is held. One frame after the swap, it reads every positional loop that aircraft owns.</summary>
+    [Suite("campaign-capture-silences-guns",
+        "capturing CM02's Balmoral while its carried turret is mid-burst silences every positional "
+        + "loop the hidden aircraft owns: the swap runs on the frame a round leaves the turret, "
+        + "with that gunner's voice still inside its lease and the aircraft's own gun loop held, "
+        + "and one session step after the swap no turret voice, gun loop or engine loop of the "
+        + "captured aircraft is sounding, since the inert airframe takes no tick that could run "
+        + "the lease out")]
+    internal static void CaptureSilencesGuns(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm02Seq)
+            ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm02Seq}");
+        string chapter = mission.ChapterFolder.ToUpperInvariant();
+        string folder = mission.MissionFolder.ToUpperInvariant();
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
+
+        var report = new StringBuilder();
+        using var archive = new SoundArchive(ctx.SoundsPath);
+        var ears = new List<Vector3> { Vector3.Zero };
+        var voices = new SwapVoices(TurretDefs.Load(ctx.ZrdrPath), archive,
+            SoundDefs.Load(ctx.ZrdrPath), () => ears);
+        ctx.CutsceneRoots = true;
+        try
+        {
+            ctx.WithWorld(chapter, collision: false, folder, world =>
+            {
+                var authored = SwapCallsIn(world.Session.Program);
+                if (authored.Count == 0)
+                {
+                    ctx.Check(false, $"{chapter}/{folder} authors a swap callback to capture through");
+                    return;
+                }
+
+                var call = authored[0];
+                var wanted = AirframeSwapCodes.For(call.Code)!.Value;
+                WithStagedCapture(ctx, world, chapter, folder, wanted, call,
+                    staged => CaptureMidBurst(ctx, world, staged, wanted, call, ears, report), voices);
+            });
+        }
+        finally
+        {
+            ctx.CutsceneRoots = false;
+        }
+
+        ctx.WriteArtifact($"test-capture-silences-guns-{chapter}-{folder}.txt", report.ToString());
+        ctx.Note($"captured the {chapter}/{folder} Balmoral mid-burst and read its loops after the swap");
+    }
+
     /// <summary>Plays CM07's hangar drop over that mission's built world on a realtime clock: the
     /// drop's two camera legs fork on <c>hdrop_direction</c>'s state, so exactly one of each pair
     /// starts, and the 965 it raises rebuilds the player on the Blue Streak build in its shipped
@@ -205,9 +262,80 @@ internal static class AirframeSwapSuites
         ctx.Note($"played the hangar drop {chapter}/{folder} authors against that mission's own world");
     }
 
-    // What 965's case writes by hand, read off the code table and the award template it names:
-    // the two have to agree, or the hangar would hand over one Blue Streak and the debrief award
-    // another.
+    // Fires the captured aircraft's carried gunners until one round leaves, holds its own gun loop,
+    // and runs the swap on that same frame. ⚠ Never swap with the turret idle: an expired lease
+    // passes this check with no fix at all.
+    private static void CaptureMidBurst(TestContext ctx, TestWorld world, Staged staged,
+        AirframeSwapCode wanted, (string Anim, int Code, string Root) call, List<Vector3> ears,
+        StringBuilder report)
+    {
+        var (roster, rig, before, cutscene, captured, _, _) = staged;
+        ears[0] = captured.WorldPosition + new Vector3(30f, 0f, 0f);
+        var gunners = captured.Turrets.Where(t => t.Voice != null).ToList();
+        report.AppendLine($"'{call.Root}' carries {captured.Turrets.Length} turret gunner(s), {gunners.Count} voiced: " +
+            string.Join(", ", captured.Turrets.Select(t => $"{t.Label}(voice={t.Voice != null})")));
+        ctx.Check(gunners.Count > 0,
+            $"the captured Balmoral carries a turret gunner with a voice of its own ({gunners.Count} of {captured.Turrets.Length})");
+        if (gunners.Count == 0)
+        {
+            return;
+        }
+
+        // The gunners alone, not the host, since a stepped host flies off its staged pose. The
+        // turret's own tick is what fires and renews the voice.
+        TurretController? firing = null;
+        for (int i = 0; i < ShotBudgetFrames && firing == null; i++)
+        {
+            foreach (var gunner in gunners)
+            {
+                int shots = gunner.ShotsFired;
+                gunner.SimStep(StepDt);
+                if (gunner.ShotsFired > shots)
+                {
+                    firing = gunner;
+                }
+            }
+        }
+
+        report.AppendLine($"mid-burst: {(firing == null ? "no gunner fired" : $"{firing.Label} fired, voice sounding={firing.Voice!.Sounding}")}; gates " +
+            string.Join(", ", gunners.Select(t => $"{t.Label}={t.Gate}")));
+        ctx.Check(firing is { Voice.Sounding: true },
+            $"a carried gunner is mid-burst at the swap: its round just left and its voice is sounding inside the {TurretController.VoiceLeaseSeconds:0.0} s lease");
+        if (firing == null)
+        {
+            return;
+        }
+
+        string? loop = captured.Loadout?.Guns.Select(g => g.Weapon.LoopedSoundName)
+            .FirstOrDefault(n => !string.IsNullOrEmpty(n));
+        captured.WeaponAudio?.StartGunLoop(loop);
+        bool loopHeld = captured.WeaponAudio is { LoopSounding: true };
+        report.AppendLine($"own gun loop '{loop ?? "-"}' held at the swap: {loopHeld}");
+
+        cutscene.BindWorld(world.Runtime);
+        cutscene.BindRigs(rigs: new[] { rig }, aiPlanes: Array.Empty<FlightController>);
+        cutscene.HostDefinitions(new[] { call.Anim });
+        cutscene.SwapAirframe = order => roster.RunSwap(rig, order, handsOver: true);
+        ctx.Check(cutscene.Host(wanted.Code, call.Anim, call.Root),
+            $"the mission-script host answers callback {wanted.Code}");
+        ctx.Check(!ReferenceEquals(rig.Controller, before) && captured.Inert,
+            $"the swap ran and hid the captured aircraft");
+
+        // One session step, the way the simulation ticks every controller it holds.
+        captured.SimStep(StepDt);
+        var still = gunners.Where(t => t.Voice!.Sounding).Select(t => t.Label).ToList();
+        report.AppendLine($"one step after the swap: turret voices sounding [{string.Join(", ", still)}], " +
+            $"gun loop={captured.WeaponAudio?.LoopSounding}, engine={captured.EngineAudio?.EngineSounding}");
+        ctx.Check(still.Count == 0,
+            $"no turret voice of the captured aircraft is sounding a frame after the swap (still sounding: {string.Join(", ", still)})");
+        ctx.Check(captured.WeaponAudio is not { LoopSounding: true },
+            $"nor is its own gun loop, held at the moment of capture");
+        ctx.Check(captured.EngineAudio is not { EngineSounding: true },
+            $"nor its engine loop, since the player now flies that airframe on their own engine");
+    }
+
+    // What 965's case writes by hand, read off the code table and the award template it names. The
+    // two have to agree, or the hangar would hand over one Blue Streak and the debrief award another.
     private static void CheckBlueStreakTemplate(TestContext ctx, StringBuilder report)
     {
         var code = AirframeSwapCodes.For(HangarSwapCode);
@@ -940,7 +1068,8 @@ internal static class AirframeSwapSuites
     // capture animation's aircraft and the hand-over block, then the leg. Two legs share it because
     // a swap replaces the rig it ran on, so neither can read the other's world back.
     private static void WithStagedCapture(TestContext ctx, TestWorld world, string chapter, string folder,
-        AirframeSwapCode wanted, (string Anim, int Code, string Root) call, Action<Staged> leg)
+        AirframeSwapCode wanted, (string Anim, int Code, string Root) call, Action<Staged> leg,
+        SwapVoices? voices = null)
     {
         var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, chapter));
         var pool = new ProjectilePool(textures, null, null);
@@ -954,7 +1083,7 @@ internal static class AirframeSwapSuites
         ctx.Host.AddChild(cutscene);
         try
         {
-            roster = BuildRoster(ctx, world, chapter, textures, pool, rigs);
+            roster = BuildRoster(ctx, world, chapter, textures, pool, rigs, voices: voices);
             roster.BuildPlayers(rigs);
             var before = rig.Controller ?? throw new InvalidOperationException("no rig was built");
             // A real enemy roster spawn, not an override: team != the player's own, so the AI
@@ -1356,7 +1485,7 @@ internal static class AirframeSwapSuites
 
     private static FlightRoster BuildRoster(TestContext ctx, TestWorld world, string chapter,
         TextureArchive textures, ProjectilePool pool, IReadOnlyList<PlayerRig> rigs,
-        string plane = StartPlane, LoadoutChoice? fit = null)
+        string plane = StartPlane, LoadoutChoice? fit = null, SwapVoices? voices = null)
     {
         var spec = SessionSpec.Parse(new[] { $"--plane={plane}" });
         if (fit != null)
@@ -1378,6 +1507,7 @@ internal static class AirframeSwapSuites
             WeaponMessages = Messages.Load(ctx.MessagesPath),
             Textures = textures,
             Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            TurretDefs = voices?.Turrets,
         };
         return new FlightRoster(FlightRosterPolicy.From(spec),
             new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
@@ -1387,6 +1517,9 @@ internal static class AirframeSwapSuites
                 Projectiles = pool,
                 Gamez = planesGamez,
                 ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter),
+                Sounds = voices?.Archive,
+                SoundDefs = voices?.Defs,
+                HumanPositions = voices?.Ears,
             },
             new HumanRosterBindings
             {
@@ -1435,6 +1568,14 @@ internal static class AirframeSwapSuites
         FlightController Captured,
         FlightController Wingman,
         ProjectilePool Pool);
+
+    // What a staged capture's roster needs for its aircraft to be heard. That is the carried turret
+    // table, the sound archive and definitions, and where the listening pilot is.
+    private sealed record SwapVoices(
+        TurretDefs Turrets,
+        SoundArchive Archive,
+        Dictionary<string, SoundDef> Defs,
+        Func<IReadOnlyList<Vector3>> Ears);
 
     // The actors one staged hangar hands its leg: the roster and rig, the aircraft flown in, the
     // host, and the chapter archive the rebuild's skins come out of.
