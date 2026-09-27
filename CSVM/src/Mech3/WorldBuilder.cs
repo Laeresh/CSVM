@@ -88,6 +88,9 @@ public sealed class WorldBuilder
         _scene.Cycler = Cycler;
         _scene.DebugClutterFlag = debugClutterFlag;
         _scene.HiddenAlpha = hiddenAlpha;
+        // Enhanced mode only. Its tonemap and emissive scale move a backdrop off the sky's colour,
+        // so the quad shows. The faithful path draws the backdrop opaque.
+        _scene.KeyedBackdropTexture = GraphicsMode.Enhanced ? IsSkySpriteTexture : null;
     }
 
     /// <summary>Which mission of the chapter this world is being built for, 1-based, forwarded to
@@ -614,6 +617,14 @@ public sealed class WorldBuilder
         || tex.Contains("fire", StringComparison.OrdinalIgnoreCase)
         || tex.Contains("flame", StringComparison.OrdinalIgnoreCase);
 
+    // The skydome's opaque moon and star cards, whose backdrop is painted in the chapter sky
+    // texture's corner colour. ⚠ Match the whole stem; C2's studio set carries moonbackdrop and
+    // moonsurface, which are scenery.
+    internal static bool IsSkySpriteTexture(string tex) =>
+        System.IO.Path.GetFileNameWithoutExtension(tex) is { } stem
+        && (stem.Equals("moon1", StringComparison.OrdinalIgnoreCase)
+            || stem.Equals("star1", StringComparison.OrdinalIgnoreCase));
+
     // The cloud SPRITES only: cloud1/cloud2 are soft vertical cards that face the camera.
     // ⚠ Keep this disjoint from whatever FindCloudDeck classifies as deck, or the deck tiles
     // would spin to face the camera instead of staying a flat horizontal sheet.
@@ -687,29 +698,6 @@ public sealed class WorldBuilder
             mi.SetInstanceShaderParameter("csky_light_fade", 0f);
         foreach (var child in node.GetChildren())
             DisableLightRangeFade(child);
-    }
-
-    // Alpha from distance to the background color (sampled at a corner): background → 0,
-    // the painted glow halo → partial, the moon disc → 1. Reproduces the original's
-    // color-key so the sky shows through right up to the halo, with no hard quad edge.
-    private static ImageTexture ColorKeyed(ImageTexture tex)
-    {
-        var img = tex.GetImage();
-        img.ClearMipmaps();
-        img.Convert(Image.Format.Rgba8);
-        var bg = img.GetPixel(0, 0);
-        const float ramp = 0.25f; // channels this far from the background are fully opaque
-        for (int y = 0; y < img.GetHeight(); y++)
-            for (int x = 0; x < img.GetWidth(); x++)
-            {
-                var c = img.GetPixel(x, y);
-                float d = Mathf.Max(Mathf.Abs(c.R - bg.R),
-                    Mathf.Max(Mathf.Abs(c.G - bg.G), Mathf.Abs(c.B - bg.B)));
-                c.A = Mathf.Clamp(d / ramp, 0f, 1f);
-                img.SetPixel(x, y, c);
-            }
-        img.GenerateMipmaps();
-        return ImageTexture.CreateFromImage(img);
     }
 
     private static Node3D? FindChildByName(Node3D root, string name)
@@ -1142,11 +1130,11 @@ public sealed class WorldBuilder
         return zones[0].Name;
     }
 
-    // The source moon is an axis-aligned quad, which looks tilted from most headings, but the
-    // original shows a round upright moon from any direction, so it must billboard. Replaced
-    // with a camera-facing quad of the same position and size. The original also color-keys the
-    // uniform background away, since crater detail rules out additive and the sky shows through
-    // to the halo; ColorKeyed reproduces that as an alpha ramp on distance from that colour.
+    // The source moon is an axis-aligned quad, which looks tilted from most headings. The original
+    // shows a round upright moon from any direction, so it must billboard. Replaced with a
+    // camera-facing quad of the same position and size. The original also color-keys the uniform
+    // background away, since crater detail rules out additive. SceneBuilder.ColorKeyed reproduces
+    // that as an alpha ramp on distance from that colour.
     private void BillboardMoon(Node3D built)
     {
         var moonNode = FindChildByName(built, "moon");
@@ -1179,7 +1167,7 @@ public sealed class WorldBuilder
             BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled,
             BillboardKeepScale = true, // billboards ignore inherited scale (the 2.5× dome anchor) without this
             Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            AlbedoTexture = ColorKeyed(tex),
+            AlbedoTexture = SceneBuilder.ColorKeyed(tex),
         };
         moonNode.AddChild(new MeshInstance3D
         {

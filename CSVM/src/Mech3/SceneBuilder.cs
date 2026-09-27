@@ -221,6 +221,12 @@ public sealed class SceneBuilder
     /// ⚠ Set before building, like <see cref="DepthBiasScale"/>: it keys the shader.</summary>
     internal bool GammaBlendAlpha;
 
+    /// <summary>Names the sky sprites whose opaque texture paints the sky's own colour as a
+    /// backdrop: the moon and the star field. Their materials take <see cref="ColorKeyed"/>'s copy
+    /// and blend, so only the figure draws. Null keys nothing, which is the faithful path.
+    /// ⚠ Set before building, like <see cref="DepthBiasScale"/>: it decides the material.</summary>
+    internal Func<string, bool>? KeyedBackdropTexture;
+
     /// <summary>The world's conflict ranks (<see cref="ConflictRank"/>), set by the caller before
     /// building. Null, every aircraft, every <c>--node=</c> subtree, any build with no conflict
     /// graph, leaves the cross-node tie-break on the flat node index, which is what those builds
@@ -399,6 +405,8 @@ void fragment() {
     // glowTexture predicate, the same delegate the spherical path uses, so one rule governs every
     // light-vs-scenery billboard in the renderer.
     private readonly Dictionary<(int Material, int Axis, bool Lit, bool Fogged, bool ClampUv), Material> _cylindricalMaterialCache = new();
+    // One keyed copy per KeyedBackdropTexture texture, shared by every material that samples it.
+    private readonly Dictionary<string, ImageTexture> _keyedBackdrops = new(StringComparer.OrdinalIgnoreCase);
     // Every textured material this builder made, paired with the texture name it resolved
     // from, the registry a live repaint needs (the viewer's livery lab re-runs the paint
     // and swaps each material's albedo in place, instead of rebuilding the whole aircraft
@@ -672,6 +680,30 @@ void fragment() {
         return null;
     }
 
+    /// <summary>A copy of <paramref name="tex"/> whose alpha is the distance from its corner texel's
+    /// colour. The backdrop goes to 0, a painted halo to a partial value, the figure to 1. An
+    /// opaque sky sprite paints its backdrop in the sky's colour. Keying it lets the sky show up to
+    /// the halo, with no quad edge.</summary>
+    internal static ImageTexture ColorKeyed(ImageTexture tex)
+    {
+        var img = tex.GetImage();
+        img.ClearMipmaps();
+        img.Convert(Image.Format.Rgba8);
+        var bg = img.GetPixel(0, 0);
+        const float ramp = 0.25f; // channels this far from the background are fully opaque
+        for (int y = 0; y < img.GetHeight(); y++)
+            for (int x = 0; x < img.GetWidth(); x++)
+            {
+                var c = img.GetPixel(x, y);
+                float d = Mathf.Max(Mathf.Abs(c.R - bg.R),
+                    Mathf.Max(Mathf.Abs(c.G - bg.G), Mathf.Abs(c.B - bg.B)));
+                c.A = Mathf.Clamp(d / ramp, 0f, 1f);
+                img.SetPixel(x, y, c);
+            }
+        img.GenerateMipmaps();
+        return ImageTexture.CreateFromImage(img);
+    }
+
     /// <summary>The built <see cref="ArrayMesh"/> for one gamez model index, from this builder's
     /// shared cache and carrying this builder's materials. Exists for
     /// <see cref="ClutterBuilder"/>'s 3D-decoration path, which draws one MultiMesh over this single
@@ -738,6 +770,13 @@ void fragment() {
             : poly.OverlayPasses != null && pass - 1 < poly.OverlayPasses.Count
                 ? poly.OverlayPasses[pass - 1].UvCoords
                 : null;
+
+    // A billboard's ALPHA write. Enhanced mode blends a glow sprite's alpha in gamma space, as the
+    // original's framebuffer did. A flare's faint border fringe then stays faint instead of drawing
+    // a square. The faithful path keeps its linear blend, which its goldens pin.
+    private static string SpriteAlphaLine(bool glowBlend) => glowBlend && GraphicsMode.Enhanced
+        ? $"    ALPHA = csky_srgb_to_linear(vec3(col.a)).r{OpacityTerm};"
+        : $"    ALPHA = col.a{OpacityTerm};";
 
     // flatColorRestated: the polygon's vertex colours only restate its untextured material's own
     // colour (GameZ.VertexColorsRestateMaterialColor), so emit white and let the shader apply that
@@ -1474,6 +1513,7 @@ void fragment() {
         Material mat;
         if (tex != null)
         {
+            tex = KeyedBackdrop(texName!, tex) ?? tex;
             var billboard = BillboardMaterial(tex, blend: true, scissor: false, glow: true, lit: true, fogged: fogged, clampUv: clampUv);
             RegisterCycle(_gamez.Materials[materialIndex], billboard); // same albedo_tex, see GetCylindricalMaterial
             mat = billboard;
@@ -1498,6 +1538,8 @@ void fragment() {
         {
             bool blend = _textures.LastHadAlpha && _textures.LastAlphaIsSoft;
             bool scissor = _textures.LastHadAlpha && !blend;
+            if (KeyedBackdrop(texName!, tex) is { } keyed)
+                (tex, blend, scissor) = (keyed, true, false);
             bool glow = texName != null && _glowTexture != null && _glowTexture(texName);
             var billboard = CylindricalBillboardMaterial(tex, axis, blend, scissor, glow, lit, fogged, clampUv);
             // A billboard shader samples the same albedo_tex, so a flipbook drives it identically,
@@ -1512,6 +1554,17 @@ void fragment() {
         }
         _cylindricalMaterialCache[key] = mat;
         return mat;
+    }
+
+    // The keyed copy when KeyedBackdropTexture names this texture and it carries no alpha, else
+    // null. ⚠ Call it straight after Resolve; it reads the archive's LastHadAlpha.
+    private ImageTexture? KeyedBackdrop(string texName, ImageTexture tex)
+    {
+        if (KeyedBackdropTexture == null || _textures.LastHadAlpha || !KeyedBackdropTexture(texName))
+            return null;
+        if (!_keyedBackdrops.TryGetValue(texName, out var keyed))
+            _keyedBackdrops[texName] = keyed = ColorKeyed(tex);
+        return keyed;
     }
 
     private Material GetMaterial(int materialIndex, int priority, int rank, bool noClutter, bool doubleSided,
@@ -1602,6 +1655,8 @@ void fragment() {
             bool blend = _textures.LastHadAlpha
                 && (_textures.LastAlphaIsSoft || (_blendTexture != null && _blendTexture(texName)));
             bool scissor = _textures.LastHadAlpha && !blend;
+            if (KeyedBackdrop(texName, tex) is { } keyed)
+                (tex, blend, scissor) = (keyed, true, false);
             // Cloud sprites face the camera and take a billboard material: no depth bias, since a
             // free-floating sprite has nothing coplanar to fight, but the SAME cylindrical fog, so
             // they fade into the fog wall instead of punching through it as crisp white.
@@ -2007,7 +2062,7 @@ void fragment() {{
         if (blend || scissor)
         {
             sb.AppendLine(TintLine);
-            sb.AppendLine($"    ALPHA = col.a{OpacityTerm};");
+            sb.AppendLine(SpriteAlphaLine(blend && glow));
         }
         if (scissor)
             sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
@@ -2097,7 +2152,7 @@ void fragment() {{
         if (blend || scissor)
         {
             sb.AppendLine(TintLine);
-            sb.AppendLine($"    ALPHA = col.a{OpacityTerm};");
+            sb.AppendLine(SpriteAlphaLine(blend && glow));
         }
         if (scissor)
             sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");

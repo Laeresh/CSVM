@@ -125,6 +125,52 @@ internal static class WorldAndToolSuites
         }
     }
 
+    // Enhanced mode keys the opaque sky sprites' backdrops, since its tonemap moves them off the
+    // sky's colour. Able to fail: an unkeyed copy keeps the corner opaque, and a looser name match
+    // keys C2's moonbackdrop scenery.
+    [Suite("sky-sprite-backdrop-key",
+        "C4's moon1 and C5's star1 key to a transparent corner and an opaque figure, and the sky "
+        + "sprite match takes those two stems only, leaving C2's moonbackdrop and moonsurface and "
+        + "the flare textures alone")]
+    internal static void SkySpriteBackdropKey(TestContext ctx)
+    {
+        foreach (var (chapter, name) in new[] { ("C4", "moon1.tif"), ("C5", "star1.tif") })
+        {
+            string path = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
+            ctx.RequireData(path, $"{chapter} textures");
+            using var textures = new TextureArchive(path);
+            var tex = textures.Find(name);
+            ctx.Check(tex != null && !textures.LastHadAlpha, $"{chapter} {name} resolves opaque");
+            if (tex == null)
+            {
+                continue;
+            }
+            var img = SceneBuilder.ColorKeyed(tex).GetImage();
+            float peak = 0f;
+            for (int y = 0; y < img.GetHeight(); y++)
+            {
+                for (int x = 0; x < img.GetWidth(); x++)
+                {
+                    peak = Mathf.Max(peak, img.GetPixel(x, y).A);
+                }
+            }
+            int w = img.GetWidth() - 1, h = img.GetHeight() - 1;
+            float corners = Mathf.Max(Mathf.Max(img.GetPixel(0, 0).A, img.GetPixel(w, 0).A),
+                Mathf.Max(img.GetPixel(0, h).A, img.GetPixel(w, h).A));
+            ctx.Check(corners == 0f, $"{chapter} {name} keys its corners transparent max={corners:F3}");
+            ctx.Check(peak >= 0.99f, $"{chapter} {name} keeps its figure opaque peak={peak:F3}");
+        }
+
+        foreach (var (name, sky) in new[]
+        {
+            ("moon1.tif", true), ("STAR1.TIF", true), ("moonbackdrop.tif", false),
+            ("moonsurface.tif", false), ("flare_green.tif", false), ("lflare1.tif", false),
+        })
+        {
+            ctx.Check(WorldBuilder.IsSkySpriteTexture(name) == sky, $"{name} is a sky sprite={sky}");
+        }
+    }
+
     // A second aircraft build must reuse the first's Shader resources rather than generating its
     // own copies of the same text. Godot compiles a Shader the first time a material takes it, so a
     // per-builder shader memo makes every mid-flight AI spawn pay that compile again; a generated
