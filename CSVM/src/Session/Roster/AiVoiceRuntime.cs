@@ -163,6 +163,15 @@ public sealed partial class AiVoiceRuntime : Node
     public void DangerZoneCompleted(FlightController player) =>
         Play(_dispatcher.Broadcast(AiVoiceDispatcher.PrDngrZn, player.Team, _now));
 
+    // The human a pursuer attacks, or null. ⚠ Keep the InPlay and Hostile gates: a downed pursuer's
+    // gunner still holds its target, and its wreck would raise "six low" every 15 s. They are the
+    // beeper paint gate's own pair, and the original's combat driver never runs for a downed aircraft.
+    private static FlightController? HumanQuarryOf(FlightController ai) =>
+        ai.InPlay && ai.Pilot?.Gunner?.AircraftTarget is { IsHumanPiloted: true } quarry
+            && AimAssist.Hostile(ai.Team, quarry.Team)
+            ? quarry
+            : null;
+
     // The turret warning is a broadcast, so the gunner is not the speaker: one of the warned
     // player's own flight says it, elected on that player's team (decoded, id 0 broadcasts).
     private void OnTurretAcquired(TurretController turret, FlightController player) =>
@@ -187,8 +196,7 @@ public sealed partial class AiVoiceRuntime : Node
         // The commit itself, for the case where it falls after the mute window. ⚠ Only out of
         // patrol: a re-entry from avoid crash happens every few seconds near terrain and is the
         // same engagement, which the raise interval would absorb anyway.
-        if (to == AiMode.Pursue && from == AiMode.Patrol
-            && ai.Pilot?.Gunner?.AircraftTarget is { IsHumanPiloted: true } quarry)
+        if (to == AiMode.Pursue && from == AiMode.Patrol && HumanQuarryOf(ai) is { } quarry)
         {
             RaiseAttackCallOut(ai, quarry);
         }
@@ -204,17 +212,16 @@ public sealed partial class AiVoiceRuntime : Node
         }
     }
 
-    // The decoded raise condition for the attack pair: the original's combat driver raises them
-    // every frame its pursuer's target is the local player, and leans on the 15 s slot cooldown
-    // for the rate (docs/formats/combat-voice.md, "The pursue path"). ⚠ Do not raise every tick
-    // here: the broadcast election walks and resolves every speaker, and no slot can speak twice
-    // inside that cooldown anyway, so the raise runs at the cooldown's own interval. Losing the
-    // human clears the stamp, so a fresh engagement raises at once.
+    // The original raises the attack pair every frame its pursuer targets the local player. The
+    // 15 s slot cooldown sets the rate (docs/formats/combat-voice.md, "The pursue path").
+    // ⚠ Do not raise every tick here: the broadcast election walks and resolves every speaker.
+    // No slot can speak twice inside that cooldown, so the raise runs at the cooldown's interval.
+    // Losing the human, or leaving play, clears the stamp, so a fresh engagement raises at once.
     private void RaiseAttackCallOuts()
     {
         foreach (var ai in _byIndex.Values)
         {
-            if (ai.Pilot?.Gunner?.AircraftTarget is not { IsHumanPiloted: true } quarry)
+            if (HumanQuarryOf(ai) is not { } quarry)
             {
                 _nextCallOut.Remove(ai.PlayerIndex);
                 continue;
