@@ -179,7 +179,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 3. ☑ BL-803: the shadow-map bands on grazing surfaces under Enhanced
 4. ☑ Alpha-to-coverage on the cutout surfaces under Enhanced
 5. ☑ FSR 2.2 tried once as the alternative temporal pass, kept or parked on the user's verdict
-6. ☐ An Anti-aliasing row on the VIDEO page, and a Render Scale that follows it down to 50%
+6. ◐ An Anti-aliasing row on the VIDEO page, and a Render Scale that follows it down to 50%
 
 ### Wave B, lit explosions
 
@@ -588,7 +588,28 @@ at 1.0, which the setting's comment must say.
 hand (puffer, clouds, clutter); those hand-rolled billboards give wrong vectors and smear. That is
 likely the deciding defect, so look for it first.
 
-## A6 ☐ An Anti-aliasing row on the VIDEO page, and a Render Scale that follows it down to 50%
+## A6 ◐ An Anti-aliasing row on the VIDEO page, and a Render Scale that follows it down to 50%
+
+**Landed.** `Utils/AntiAliasingSetting.cs` replaces `TemporalPassSetting.cs` and its
+`graphics.temporal` key: the saved `antiAliasing` option, then the `graphics.antiAliasing` config key,
+then the mode's default, with `SavedWord` holding the `--det` drop. `ViewportQuality.Apply` writes
+the method and the scale as the approach below lays out, and writes nothing for Off at native.
+Render Scale offers 50, 67, 77 and 100 to 200, and 50 to 100 under FSR 2.2; the resolvers and both
+pages clamp a scale above 100 to 100 when FSR 2.2 is picked. The Original VIDEO page carries the row
+on the authored but unused Lighting Quality line (`VP_T_LightTitle` / `VP_D_DLight` /
+`VP_T_LightDESC`), the next line under Render Scale, whose list authors exactly five visible items;
+the page does not grow. The built-in Options screen carries it as row 11. With nothing saved, the
+row shows the default of the page's current graphics choice and follows a flip of it. The launch
+line ends `anti_aliasing=<word> aa_source=<layer>`, with `clamped_by=fsr2` after the scale when
+the clamp fired.
+
+**Verified.** The complete `RunTests.ps1` on the plan worktree, exit 0: units **5688 passed, 0
+failed, 3 skipped of 5691**, engine **442 suites passed, 0 failed**, goldens **19 shots
+hash-identical**, which is the proof that Original with its defaults writes nothing on a viewport.
+`display-render-scale` covers the precedence, the `--det` drop, the clamp and each method's viewport
+write read back. `CheckCommentCaps.ps1`, `CheckDocEntries.ps1` and `CheckEncoding.ps1` clean. **Owed
+to the user:** each method's look at the controls, and on the Deck the `[perf]` figures at 100% and
+67% under Enhanced, one pane and four, FSR 1 against FSR 2.2.
 
 **Goal.** The player picks the anti-aliasing method on the VIDEO page of both presentations, and
 Render Scale offers the scales that method can run at, down to 50% so a Steam Deck can run

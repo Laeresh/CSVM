@@ -671,60 +671,61 @@ internal static class GroundShadowSuites
         TemporalPass(ctx, report);
     }
 
-    // The same switch read on the other side of the mode: a 3D viewport takes a temporal pass under
-    // enhanced and Godot's own defaults under original, which is what keeps the pinned goldens on an
-    // untouched faithful image. Enhanced picks between the two passes, and the faithful path writes
-    // neither however the key is spelled. A bare SubViewport stands for all four construction sites,
-    // since every one of them writes through the same ViewportQuality.Apply.
+    // The same switch read on the other side of the mode. With nothing saved, a 3D viewport takes
+    // Godot's TAA under enhanced and Godot's own defaults under original. That keeps the pinned
+    // goldens on an untouched faithful image. A bare SubViewport stands for all four construction
+    // sites, since every one of them writes through the same ViewportQuality.Apply. Each method's
+    // own write is display-render-scale's to pin.
     private static void TemporalPass(TestContext ctx, StringBuilder report)
     {
-        bool wasFsr2 = TemporalPassSetting.Fsr2;
+        var entry = AntiAliasingSetting.Method;
         try
         {
-            var untouched = QualityWrite(null, TemporalPassSetting.Default);
-            var taa = QualityWrite(GraphicsMode.EnhancedWord, TemporalPassSetting.Default);
-            var fsr2 = QualityWrite(GraphicsMode.EnhancedWord, TemporalPassSetting.Fsr2Word);
-            var faithful = QualityWrite(GraphicsMode.Default, TemporalPassSetting.Fsr2Word);
+            var untouched = QualityWrite(null);
+            var taa = QualityWrite(GraphicsMode.EnhancedWord);
+            var faithful = QualityWrite(GraphicsMode.Default);
 
             ctx.Check(!untouched.Taa && untouched.Mode == Viewport.Scaling3DModeEnum.Bilinear,
                 $"a fresh viewport carries no temporal pass and Godot's own scaling ({untouched.Mode}), so the writes below are measured and not assumed");
-            ctx.Check(taa.Taa && taa.Mode == untouched.Mode && taa.Scale == untouched.Scale,
-                $"the default key puts enhanced on Godot's TAA and touches no scaling (taa={taa.Taa}, {taa.Mode} at {taa.Scale})");
-            ctx.Check(!fsr2.Taa && fsr2.Mode == Viewport.Scaling3DModeEnum.Fsr2 && fsr2.Scale == RenderScaleSetting.Native,
-                $"and {TemporalPassSetting.Fsr2Word} puts it on FSR 2.2 at native instead, Godot's own TAA off (taa={fsr2.Taa}, {fsr2.Mode} at {fsr2.Scale})");
-            ctx.Check(faithful.Taa == untouched.Taa && faithful.Mode == untouched.Mode && faithful.Scale == untouched.Scale,
-                $"while the faithful path reads back untouched whichever pass is asked for (taa={faithful.Taa}, {faithful.Mode} at {faithful.Scale})");
-            report.AppendLine($"temporal pass: taa={taa.Taa}/{taa.Mode}, fsr2={fsr2.Taa}/{fsr2.Mode}, original={faithful.Taa}/{faithful.Mode}");
+            ctx.Check(taa.Taa && taa.Mode == untouched.Mode && taa.Scale == untouched.Scale && taa.ScreenSpace == untouched.ScreenSpace,
+                $"the enhanced default puts it on Godot's TAA and touches nothing else (taa={taa.Taa}, {taa.Mode} at {taa.Scale}, {taa.ScreenSpace})");
+            ctx.Check(faithful == untouched,
+                $"while the faithful default reads back untouched (taa={faithful.Taa}, {faithful.Mode} at {faithful.Scale}, {faithful.ScreenSpace})");
+            report.AppendLine($"anti-aliasing default: enhanced={taa.Taa}/{taa.Mode}, original={faithful.Taa}/{faithful.Mode}");
         }
         finally
         {
-            TemporalPassSetting.Resolve(wasFsr2 ? TemporalPassSetting.Fsr2Word : TemporalPassSetting.Default);
+            AntiAliasingSetting.Resolve(Word(entry), null, enhanced: false);
         }
     }
 
-    // What one freshly built viewport reads back after the two settings are resolved and applied,
-    // a null <paramref name="graphics"/> leaving it untouched as the control. Fresh per case because
-    // Apply writes a viewport rather than restoring one, exactly as a construction site uses it.
-    private static (bool Taa, Viewport.Scaling3DModeEnum Mode, float Scale) QualityWrite(
-        string? graphics, string temporal)
+    // What one freshly built viewport reads back once the mode and its default method are applied.
+    // A null graphics word leaves it untouched as the control. Fresh per case because Apply writes a
+    // viewport rather than restoring one, exactly as a construction site uses it.
+    private static (bool Taa, Viewport.Scaling3DModeEnum Mode, float Scale, Viewport.ScreenSpaceAAEnum ScreenSpace) QualityWrite(
+        string? graphics)
     {
         var view = new SubViewport { Name = "quality_probe" };
         try
         {
             if (graphics != null)
             {
-                GraphicsMode.Resolve(graphics);
-                TemporalPassSetting.Resolve(temporal);
+                bool enhanced = GraphicsMode.Resolve(graphics);
+                AntiAliasingSetting.Resolve(null, null, enhanced);
                 ViewportQuality.Apply(view);
             }
 
-            return (view.UseTaa, view.Scaling3DMode, view.Scaling3DScale);
+            return (view.UseTaa, view.Scaling3DMode, view.Scaling3DScale, view.ScreenSpaceAA);
         }
         finally
         {
             view.Free();
         }
     }
+
+    // The word a method is spelled as, so the finally can put the process back on the one it had.
+    private static string Word(AntiAliasingMethod method) =>
+        DisplayWords.AntiAliasingChoices[(int)method];
 
     // Where to look for C1 ground: a coarse grid over the map rather than one named spot, so the
     // suite does not depend on any particular place still being an island.

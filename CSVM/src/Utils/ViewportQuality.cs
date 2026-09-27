@@ -3,46 +3,56 @@ using Godot;
 namespace CSVM.Utils;
 
 /// <summary>
-/// What the resolved <see cref="GraphicsMode"/>, <see cref="TemporalPassSetting"/> and
-/// <see cref="RenderScaleSetting"/> write on a 3D viewport, in one place because there are four of
-/// them: the root viewport the launcher owns, and the SubViewports the cockpit pass, the spyglass
-/// picture and the splitscreen panes build. <see cref="Apply"/> is called once per viewport at
-/// construction, after the resolvers have run; a later render setting is one more write here rather
-/// than a fifth edit at each site. MSAA is not this module's: the project setting carries it for
-/// both presentations, and the three SubViewports copy it themselves.
+/// What the resolved <see cref="AntiAliasingSetting"/> and <see cref="RenderScaleSetting"/> write on
+/// a 3D viewport. Four viewports take them: the launcher's root one and the SubViewports of the
+/// cockpit pass, the spyglass picture and the splitscreen panes.
+/// Each calls <see cref="Apply"/> once at construction, after the resolvers have run.
+/// A later render setting is one more write here rather than a fifth edit at each site. MSAA is not
+/// this module's: the project setting carries it, and the three SubViewports copy it
+/// themselves.
 /// </summary>
 public static class ViewportQuality
 {
-    /// <summary>Put <paramref name="viewport"/> on the presentation the mode resolved to, the temporal pass that mode
-    /// picked, and the scale the render-scale setting resolved to. ⚠ Nothing is written at
-    /// <see cref="RenderScaleSetting.Native"/> and nothing under the faithful mode: the pinned goldens are faithful
-    /// <c>--det</c> runs, which drop the saved scale, so both have to read back Godot's own defaults. The temporal pass
-    /// is the mode's rather than a display setting, so a deterministic run keeps what its launch mode gives it.</summary>
+    /// <summary>Put <paramref name="viewport"/> on the anti-aliasing method and the render scale the
+    /// run resolved. ⚠ Nothing is written for <see cref="AntiAliasingMethod.Off"/> at
+    /// <see cref="RenderScaleSetting.Native"/>, the faithful default. The pinned goldens are
+    /// faithful <c>--det</c> runs, and they have to read back Godot's own defaults.</summary>
     public static void Apply(Viewport viewport)
     {
-        // Supersampling only: Godot accepts a factor above 1 in bilinear mode alone, the FSR modes
-        // being upscalers that refuse one. The scale is a display setting rather than the mode's,
-        // so it is written whichever presentation the run is in.
-        bool supersampling = RenderScaleSetting.Scale > RenderScaleSetting.Native;
+        var method = AntiAliasingSetting.Method;
+        float scale = RenderScaleSetting.Scale;
+        switch (method)
+        {
+            case AntiAliasingMethod.Fxaa:
+                viewport.ScreenSpaceAA = Viewport.ScreenSpaceAAEnum.Fxaa;
+                break;
+            case AntiAliasingMethod.Smaa:
+                viewport.ScreenSpaceAA = Viewport.ScreenSpaceAAEnum.Smaa;
+                break;
+            case AntiAliasingMethod.Taa:
+                viewport.UseTaa = true;
+                break;
+        }
 
-        // ⚠ FSR 2.2 applies at native alone. Above it Godot would downsample bilinearly anyway, so
-        // the scale the player asked for by name wins and the run keeps Godot's TAA, which leaves
-        // it with a temporal pass rather than none.
-        bool fsr2 = GraphicsMode.Enhanced && TemporalPassSetting.Fsr2 && !supersampling;
-
-        // FSR 2.2 carries a temporal pass of its own and replaces Godot's rather than joining it.
-        viewport.UseTaa = GraphicsMode.Enhanced && !fsr2;
-
-        // The sharpness stays at Godot's own default, so the trial judges FSR 2.2 as it ships.
-        if (fsr2)
+        // FSR 2.2 carries its own temporal pass, so it is a scaling mode rather than a flag, and at
+        // native it runs as anti-aliasing alone. Its sharpness stays at Godot's own default.
+        bool fsr2 = method == AntiAliasingMethod.Fsr2;
+        if (scale < RenderScaleSetting.Native)
+        {
+            viewport.Scaling3DMode = fsr2 ? Viewport.Scaling3DModeEnum.Fsr2 : Viewport.Scaling3DModeEnum.Fsr;
+            viewport.Scaling3DScale = scale;
+        }
+        else if (scale > RenderScaleSetting.Native)
+        {
+            // Bilinear is the one mode Godot supersamples in. The resolvers clamp FSR 2.2 to native,
+            // so no method reaches here that this mode would silently drop.
+            viewport.Scaling3DMode = Viewport.Scaling3DModeEnum.Bilinear;
+            viewport.Scaling3DScale = scale;
+        }
+        else if (fsr2)
         {
             viewport.Scaling3DMode = Viewport.Scaling3DModeEnum.Fsr2;
             viewport.Scaling3DScale = RenderScaleSetting.Native;
-        }
-        else if (supersampling)
-        {
-            viewport.Scaling3DMode = Viewport.Scaling3DModeEnum.Bilinear;
-            viewport.Scaling3DScale = RenderScaleSetting.Scale;
         }
     }
 }

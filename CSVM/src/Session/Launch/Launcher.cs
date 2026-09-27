@@ -741,21 +741,24 @@ public partial class Launcher : Node3D
         // option either: options.json is one machine's state (docs/cli.md's --graphics bullet).
         string? savedGraphics = _spec.Det ? null : OptionsStore.UserOptions().Load().GraphicsMode;
         bool graphicsEnhanced = Utils.GraphicsMode.Resolve(_spec.GraphicsMode, savedGraphics);
-        // The render scale is a display setting rather than the mode's, so it layers on its own and
-        // is written whichever presentation won. It rides this line because both reach the same
-        // viewports, and a run that looks softer or slower than expected is read off one line.
+        // Display settings rather than the mode's, so each is written whichever presentation won;
+        // only the method's default follows the mode. They share the mode's line because all three
+        // reach the same viewports, so a softer or slower run than expected is read off one line.
+        string antiAliasingDefault = Utils.AntiAliasingSetting.DefaultFor(graphicsEnhanced);
+        var antiAliasing = Utils.AntiAliasingSetting.Resolve(
+            Utils.AntiAliasingSetting.SavedWord(_spec.Det),
+            Config.GetString(Utils.AntiAliasingSetting.Key, antiAliasingDefault),
+            graphicsEnhanced);
+        // After the method, which clamps the scale: FSR 2.2 runs at native or below.
         var renderScale = Utils.RenderScaleSetting.Resolve(
             Utils.RenderScaleSetting.SavedWord(_spec.Det),
-            Config.GetString(Utils.RenderScaleSetting.Key, Utils.RenderScaleSetting.Default));
-        // Which temporal pass the enhanced presentation runs, read here because it reaches the same
-        // viewports as the two above and a run that reads softer or ghostier is diagnosed off one
-        // line. It is inert on the faithful path.
-        string temporalWord = Utils.TemporalPassSetting.Resolve(
-            Config.GetString(Utils.TemporalPassSetting.Key, Utils.TemporalPassSetting.Default));
+            Config.GetString(Utils.RenderScaleSetting.Key, Utils.RenderScaleSetting.Default),
+            antiAliasing.Word);
         string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
-        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={renderScale.Source} temporal={temporalWord}");
-        // The window's own viewport takes the mode's render flags here, the moment the mode is
-        // known and before any scene builds; the three SubViewports take them at construction.
+        string clamped = renderScale.Clamped ? " clamped_by=fsr2" : string.Empty;
+        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={renderScale.Source}{clamped} anti_aliasing={antiAliasing.Word} aa_source={antiAliasing.Source}");
+        // The window's own viewport takes the render flags here, before any scene builds. The
+        // three SubViewports take them at construction.
         Utils.ViewportQuality.Apply(GetViewport());
         // The graphics EffectsLevel's one global: the clutter fade's squared distance scale, 0 when
         // the fade is off. Enhanced mode pushes the fade out by the fog range's own factor (the
@@ -2357,9 +2360,9 @@ public partial class Launcher : Node3D
 
     // The options file's one writer, shared by the menu's apply above and by the pause leaf's.
     // It saves every choice the screen took. The display settings and the mix are applied now.
-    // ⚠ The graphics word, the render scale, the opening view and the difficulty are saved and no
-    // more. Each is read once, at launch or when a flight is built, so do not rebuild anything
-    // here. The head turn and targeting switch are saved for the next sortie and put on the seats
+    // ⚠ The graphics word, the render scale, the anti-aliasing method, the opening view and the
+    // difficulty are saved and no more. Each is read once, at launch or when a flight is built, so
+    // do not rebuild anything here. The head turn and targeting switch are saved for the next sortie and put on the seats
     // flying now by the pause leaf itself (PausePreferences.FeedGameOptions).
     private void PersistOptions(OptionsApplyExit applied)
     {
@@ -2376,6 +2379,7 @@ public partial class Launcher : Node3D
         options.DisplayMode = applied.DisplayMode;
         options.VSync = applied.VSync;
         options.RenderScale = applied.RenderScale;
+        options.AntiAliasing = applied.AntiAliasing;
         options.AudioMaster = applied.AudioMaster;
         options.AudioMusic = applied.AudioMusic;
         options.AudioEffects = applied.AudioEffects;

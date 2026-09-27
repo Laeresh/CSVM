@@ -55,6 +55,7 @@ internal static class DisplaySettingsSuites
         ("DisplayMode", DisplayWords.Borderless, true),
         ("VSync", "144", true),
         ("RenderScale", "200", true),
+        ("AntiAliasing", DisplayWords.AntiAliasingFsr2, true),
         ("AudioMaster", 0, false),
         ("AudioMusic", 100, false),
         ("AudioEffects", 50, false),
@@ -131,15 +132,22 @@ internal static class DisplaySettingsSuites
         + "saved word while a plain one does, this deterministic run therefore renders at native, "
         + "the VIDEO page opens on the saved word and carries it on what ACCEPT CHANGES applies, and "
         + "ViewportQuality writes a bilinear 2.0 on a viewport at a saved 200 percent while native "
-        + "leaves the viewport exactly as Godot built it")]
+        + "leaves the viewport exactly as Godot built it. The anti-aliasing setting beside it: the "
+        + "saved word beats the graphics.antiAliasing key, the key beats the mode's default (off "
+        + "under original, taa under enhanced), --det drops the saved word, fsr2 clamps a scale above "
+        + "native to 100 and narrows the row to 50..100, picking fsr2 on the page moves a saved 200 "
+        + "to 100, and each method's viewport write is read back: fxaa and smaa as ScreenSpaceAA, taa "
+        + "as UseTaa, fsr2 as FSR 2.2 at 1.0 at native and at 0.67 below it, fsr at 0.67 otherwise")]
     internal static void DisplayRenderScale(TestContext ctx)
     {
         // The process's own scale, which every later suite's SubViewport would take: this suite
         // resolves other scales to measure them, so the run is put back on native in the finally.
         ctx.Check(RenderScaleSetting.Scale == RenderScaleSetting.Native,
             $"a deterministic run renders at native, no saved word reaching it ({RenderScaleSetting.Scale})");
+        var method = AntiAliasingSetting.Method;
         try
         {
+            AntiAliasingSetting.Resolve(DisplayWords.AntiAliasingOff, null, enhanced: false);
             var saved = RenderScaleSetting.Resolve("150", "200");
             ctx.Check(saved.Scale == 1.5f && saved.Word == "150" && saved.Source == "options.json",
                 $"the saved word beats the config key ({Describe(saved)})");
@@ -153,10 +161,13 @@ internal static class DisplaySettingsSuites
             ctx.Check(unknown.Scale == RenderScaleSetting.Native && unknown.Source == fallback.Source,
                 $"a word the vocabulary does not know reads as never set rather than as a choice ({Describe(unknown)})");
             ViewportScale(ctx);
+            AntiAliasingPrecedence(ctx);
+            ViewportAntiAliasing(ctx);
         }
         finally
         {
             RenderScaleSetting.Resolve(null, RenderScaleSetting.Default);
+            AntiAliasingSetting.Resolve(DisplayWords.AntiAliasingChoices[(int)method], null, enhanced: false);
         }
 
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
@@ -184,6 +195,14 @@ internal static class DisplaySettingsSuites
             ctx.Check(RenderScaleSetting.SavedWord(det: true) == null,
                 $"and a --det launch reads no saved display setting at all ({RenderScaleSetting.SavedWord(det: true) ?? "unset"})");
             AppliedScaleRow(ctx, layout);
+
+            OptionsStore.UserOptions().Save(new OptionsDef { AntiAliasing = DisplayWords.AntiAliasingSmaa });
+            ctx.Check(AntiAliasingSetting.SavedWord(det: false) == DisplayWords.AntiAliasingSmaa,
+                $"a plain launch reads the saved anti-aliasing word ({AntiAliasingSetting.SavedWord(det: false) ?? "unset"})");
+            ctx.Check(AntiAliasingSetting.SavedWord(det: true) == null,
+                $"and a --det launch drops it ({AntiAliasingSetting.SavedWord(det: true) ?? "unset"})");
+            OptionsStore.UserOptions().Save(new OptionsDef { RenderScale = "200" });
+            AppliedAntiAliasingRow(ctx, layout);
         }
         finally
         {
@@ -775,6 +794,117 @@ internal static class DisplaySettingsSuites
         }
     }
 
+    // The anti-aliasing layers and the scale clamp fsr2 puts on the scale beside it. The same resolver
+    // runs at launch, so what these read is what the next start's viewports take.
+    private static void AntiAliasingPrecedence(TestContext ctx)
+    {
+        var saved = AntiAliasingSetting.Resolve(DisplayWords.AntiAliasingSmaa, DisplayWords.AntiAliasingFxaa, enhanced: true);
+        ctx.Check(saved.Method == AntiAliasingMethod.Smaa && saved.Source == "options.json",
+            $"the saved anti-aliasing word beats the config key ({Describe(saved)})");
+        var key = AntiAliasingSetting.Resolve(null, DisplayWords.AntiAliasingFxaa, enhanced: true);
+        ctx.Check(key.Method == AntiAliasingMethod.Fxaa && key.Source == AntiAliasingSetting.Key,
+            $"with nothing saved the {AntiAliasingSetting.Key} key decides ({Describe(key)})");
+        var original = AntiAliasingSetting.Resolve(null, AntiAliasingSetting.DefaultFor(false), enhanced: false);
+        var enhanced = AntiAliasingSetting.Resolve(null, AntiAliasingSetting.DefaultFor(true), enhanced: true);
+        ctx.Check(original.Method == AntiAliasingMethod.Off && original.Source == "default"
+            && enhanced.Method == AntiAliasingMethod.Taa && enhanced.Source == "default",
+            $"and with neither the mode decides: off under original, taa under enhanced ({Describe(original)}; {Describe(enhanced)})");
+        var unknown = AntiAliasingSetting.Resolve("msaa8", "sharp", enhanced: false);
+        ctx.Check(unknown.Method == AntiAliasingMethod.Off && unknown.Source == "default",
+            $"a word the vocabulary does not know reads as never set ({Describe(unknown)})");
+
+        var clamped = RenderScaleSetting.Resolve("200", RenderScaleSetting.Default, DisplayWords.AntiAliasingFsr2);
+        ctx.Check(clamped.Scale == RenderScaleSetting.Native && clamped.Word == RenderScaleSetting.Default && clamped.Clamped,
+            $"fsr2 clamps a saved 200 to native, and says so ({Describe(clamped)} clamped={clamped.Clamped})");
+        var below = RenderScaleSetting.Resolve("67", RenderScaleSetting.Default, DisplayWords.AntiAliasingFsr2);
+        ctx.Check(below.Scale == 0.67f && !below.Clamped,
+            $"while a scale below native stands under fsr2 ({Describe(below)})");
+        var other = RenderScaleSetting.Resolve("200", RenderScaleSetting.Default, DisplayWords.AntiAliasingTaa);
+        ctx.Check(other.Scale == 2.0f && !other.Clamped,
+            $"and no other method clamps it ({Describe(other)})");
+        ctx.Check(string.Join(",", RenderScaleSetting.ChoicesFor(DisplayWords.AntiAliasingFsr2)) == "50,67,77,100",
+            $"the fsr2 row offers 50 to 100 ({string.Join(",", RenderScaleSetting.ChoicesFor(DisplayWords.AntiAliasingFsr2))})");
+    }
+
+    // Each method's write, read back off a freshly built viewport against an untouched control. A
+    // viewport is written once as a construction site writes it, so every case builds its own.
+    private static void ViewportAntiAliasing(TestContext ctx)
+    {
+        var control = new SubViewport();
+        try
+        {
+            var off = Written(DisplayWords.AntiAliasingOff, "100");
+            ctx.Check(off == Read(control),
+                $"off at native writes nothing at all ({off})");
+            var fxaa = Written(DisplayWords.AntiAliasingFxaa, "100");
+            ctx.Check(fxaa == Read(control) with { ScreenSpace = Viewport.ScreenSpaceAAEnum.Fxaa },
+                $"fxaa writes ScreenSpaceAA and nothing else ({fxaa})");
+            var smaa = Written(DisplayWords.AntiAliasingSmaa, "100");
+            ctx.Check(smaa == Read(control) with { ScreenSpace = Viewport.ScreenSpaceAAEnum.Smaa },
+                $"smaa writes ScreenSpaceAA and nothing else ({smaa})");
+            var taa = Written(DisplayWords.AntiAliasingTaa, "100");
+            ctx.Check(taa == Read(control) with { Taa = true },
+                $"taa writes UseTaa and nothing else ({taa})");
+            var fsr2 = Written(DisplayWords.AntiAliasingFsr2, "100");
+            ctx.Check(fsr2 == Read(control) with { Mode = Viewport.Scaling3DModeEnum.Fsr2, Scale = RenderScaleSetting.Native },
+                $"fsr2 at native runs FSR 2.2 at 1.0, Godot's own TAA off ({fsr2})");
+            var fsr2Below = Written(DisplayWords.AntiAliasingFsr2, "67");
+            ctx.Check(fsr2Below.Mode == Viewport.Scaling3DModeEnum.Fsr2 && fsr2Below.Scale == 0.67f && !fsr2Below.Taa,
+                $"fsr2 below native upscales through FSR 2.2 ({fsr2Below})");
+            var fsrBelow = Written(DisplayWords.AntiAliasingTaa, "67");
+            ctx.Check(fsrBelow.Mode == Viewport.Scaling3DModeEnum.Fsr && fsrBelow.Scale == 0.67f && fsrBelow.Taa,
+                $"any other method below native upscales through FSR 1 ({fsrBelow})");
+        }
+        finally
+        {
+            control.QueueFree();
+        }
+    }
+
+    // What a viewport built under one method and scale reads back.
+    private static ViewportRead Written(string antiAliasing, string scale)
+    {
+        var view = new SubViewport();
+        try
+        {
+            AntiAliasingSetting.Resolve(antiAliasing, null, enhanced: false);
+            RenderScaleSetting.Resolve(scale, RenderScaleSetting.Default, antiAliasing);
+            ViewportQuality.Apply(view);
+            return Read(view);
+        }
+        finally
+        {
+            view.QueueFree();
+        }
+    }
+
+    private static ViewportRead Read(Viewport view) =>
+        new(view.ScreenSpaceAA, view.UseTaa, view.Scaling3DMode, view.Scaling3DScale);
+
+    // The anti-aliasing row driven over a saved 200: picking fsr2 pulls the scale to 100 and narrows
+    // its row, and both words ride the exit.
+    private static void AppliedAntiAliasingRow(TestContext ctx, MenuLayout layout)
+    {
+        var shell = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(),
+            _ => null, options: () => OptionsStore.UserOptions().Load());
+        shell.Options.OpenVideo();
+        for (int guard = 0; guard < 32 && shell.FocusedKey != OriginalOptionsScreen.AntiAliasingKey; guard++)
+        {
+            shell.Step(new MenuCommands { MoveY = 1 });
+        }
+
+        ctx.Check(Label(shell, OriginalOptionsScreen.AntiAliasingKey) == "Off",
+            $"the anti-aliasing row opens on the original mode's default ({Label(shell, OriginalOptionsScreen.AntiAliasingKey)})");
+        shell.Step(new MenuCommands { MoveX = -1 });
+        ctx.Check(shell.Options.AntiAliasingChoice == DisplayWords.AntiAliasingFsr2 && shell.Options.RenderScaleChoice == "100",
+            $"a step back onto fsr2 moves the saved 200 to 100 ({shell.Options.AntiAliasingChoice ?? "unset"}, {shell.Options.RenderScaleChoice ?? "unset"})");
+        ctx.Check(Label(shell, OriginalOptionsScreen.RenderScaleKey) == "100%" && shell.Options.RenderScaleWords.Count == 4,
+            $"and the scale row redraws at once over the four scales fsr2 runs ({Label(shell, OriginalOptionsScreen.RenderScaleKey)}, {shell.Options.RenderScaleWords.Count})");
+        var applied = Accept(shell);
+        ctx.Check(applied?.AntiAliasing == DisplayWords.AntiAliasingFsr2 && applied?.RenderScale == "100",
+            $"ACCEPT CHANGES carries both ({applied?.AntiAliasing ?? "no exit"}, {applied?.RenderScale ?? "no exit"})");
+    }
+
     // Walks the page's focus onto ACCEPT CHANGES and presses it, the keyboard's own way out.
     private static OptionsApplyExit? Accept(OriginalShell shell)
     {
@@ -815,4 +945,11 @@ internal static class DisplaySettingsSuites
 
     private static string Describe(VSyncPlan plan) =>
         $"vsync {(plan.Enabled ? "on" : "off")} max_fps={plan.MaxFps} source={plan.Source}";
+
+    private static string Describe(AntiAliasingPlan plan) =>
+        $"{plan.Method} word={plan.Word} source={plan.Source}";
+
+    // One viewport's anti-aliasing and scaling fields, compared whole so a stray write shows.
+    private readonly record struct ViewportRead(
+        Viewport.ScreenSpaceAAEnum ScreenSpace, bool Taa, Viewport.Scaling3DModeEnum Mode, float Scale);
 }

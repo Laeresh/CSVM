@@ -1,21 +1,23 @@
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 
 namespace CSVM.Utils;
 
 /// <summary>One resolved render scale: the factor the 3D viewports render at, the word it was
-/// spelled as, and the source that won, named so a log line can say which of the three layers the
-/// run is obeying.</summary>
-public readonly record struct RenderScalePlan(float Scale, string Word, string Source);
+/// spelled as, and the source that won. The source lets a log line say which layer the run obeys.
+/// <paramref name="Clamped"/> says FSR 2.2 pulled a scale above native down to it.</summary>
+public readonly record struct RenderScalePlan(float Scale, string Word, string Source, bool Clamped = false);
 
 /// <summary>
-/// The render scale: the multiple of its own size a 3D viewport renders at before the image is
-/// resampled down to it, so a machine with GPU headroom spends it on edges the pixel grid would
-/// otherwise stagger. The words are <see cref="DisplayWords.RenderScaleChoices"/>, percentages of
-/// native, and the sources layer the way <see cref="VSyncSetting"/> layers its own: the saved
-/// <c>renderScale</c> option, then the <see cref="Key"/> config key, then native.
-/// <see cref="ViewportQuality"/> is the one reader of <see cref="Scale"/> and writes nothing at
-/// native, which is what keeps a faithful run on Godot's own defaults.
+/// The render scale: the multiple of its own size a 3D viewport renders at. Above native the image
+/// is resampled down, spending GPU headroom on edges. Below native it is upscaled, so a machine
+/// without headroom (a Steam Deck) buys frame rate. The words are
+/// <see cref="DisplayWords.RenderScaleChoices"/>, percentages of native. The saved option beats
+/// the <see cref="Key"/> config key, which beats native.
+/// <see cref="ChoicesFor"/> narrows the choices under the anti-aliasing method.
+/// <see cref="ViewportQuality"/> is the one reader of <see cref="Scale"/>. It writes nothing at
+/// native under the defaults, which keeps a faithful run on Godot's own defaults.
 /// </summary>
 public static class RenderScaleSetting
 {
@@ -30,6 +32,10 @@ public static class RenderScaleSetting
     /// for.</summary>
     public const float Native = 1.0f;
 
+    // The words at or below native, the list FSR 2.2 offers.
+    private static readonly string[] AtOrBelowNative =
+        DisplayWords.RenderScaleChoices.Where(w => TryParseWord(w, out float s) && s <= Native).ToArray();
+
     /// <summary><b>Resolved once at launch</b> by <see cref="Resolve"/>, before any 3D viewport is
     /// built. A viewport takes the scale as it is constructed, so a choice made on the Options page
     /// is saved and reaches the image on the next start, which is what the row's description
@@ -40,21 +46,42 @@ public static class RenderScaleSetting
     /// <paramref name="configWord"/>, then native. A word this vocabulary does not know reads as
     /// never set and falls through, the same contract <see cref="OptionsStore"/> validates the field
     /// under. A config key spelling native is reported as the default, since native is what the
-    /// absent key already means.</summary>
-    public static RenderScalePlan Resolve(string? savedWord, string? configWord)
+    /// absent key already means. The winner is then clamped under
+    /// <paramref name="antiAliasingWord"/> the way the VIDEO page clamps it (<see cref="ClampFor"/>).</summary>
+    public static RenderScalePlan Resolve(string? savedWord, string? configWord, string? antiAliasingWord = null)
     {
+        RenderScalePlan plan;
         if (TryParseWord(savedWord, out float saved))
         {
-            return Store(new RenderScalePlan(saved, savedWord!, "options.json"));
+            plan = new RenderScalePlan(saved, savedWord!, "options.json");
         }
-
-        if (configWord != Default && TryParseWord(configWord, out float configured))
+        else if (configWord != Default && TryParseWord(configWord, out float configured))
         {
-            return Store(new RenderScalePlan(configured, configWord!, Key));
+            plan = new RenderScalePlan(configured, configWord!, Key);
+        }
+        else
+        {
+            plan = new RenderScalePlan(Native, Default, "default");
         }
 
-        return Store(new RenderScalePlan(Native, Default, "default"));
+        string clamped = ClampFor(plan.Word, antiAliasingWord)!;
+        return Store(clamped == plan.Word ? plan : new RenderScalePlan(Native, clamped, plan.Source, Clamped: true));
     }
+
+    /// <summary>The render-scale words a row offers under <paramref name="antiAliasingWord"/>. FSR 2.2
+    /// stops at native, since Godot's FSR modes refuse a factor above 1. Every other method takes the
+    /// whole list.</summary>
+    public static IReadOnlyList<string> ChoicesFor(string? antiAliasingWord) =>
+        antiAliasingWord == DisplayWords.AntiAliasingFsr2 ? AtOrBelowNative : DisplayWords.RenderScaleChoices;
+
+    /// <summary><paramref name="scaleWord"/>, or native where <paramref name="antiAliasingWord"/> is
+    /// FSR 2.2 and the scale stands above native. A null word stays null, which already reads as
+    /// native. Picking FSR 2.2 on the VIDEO page moves the scale through this, and
+    /// <see cref="Resolve"/> clamps the saved pair the same way.</summary>
+    public static string? ClampFor(string? scaleWord, string? antiAliasingWord) =>
+        antiAliasingWord == DisplayWords.AntiAliasingFsr2 && TryParseWord(scaleWord, out float scale) && scale > Native
+            ? Default
+            : scaleWord;
 
     /// <summary>The saved word a launch reads, or null under <paramref name="det"/>.
     /// ⚠ A deterministic run reads no saved display setting: options.json is one machine's state

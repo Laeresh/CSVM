@@ -542,7 +542,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/PresentationResolution.cs`, the requested-versus-active menu presentation resolver, force flag, then `--presentation=`, then Original, availability checked separately.
 - `src/Utils/ProcessPassCost.cs`, the wall cost of one whole `_Process` pass and how many passes a window held, measured by a bracket pair spanning the pass.
 - `src/Utils/RenderPoses.cs`, the render half of the fixed-tick simulation: the pose a realtime session draws between two simulation steps.
-- `src/Utils/RenderScaleSetting.cs`, the render scale: the saved/config ladder over 100 to 200 percent of native, resolved once at launch for the four 3D viewports.
+- `src/Utils/RenderScaleSetting.cs`, the render scale: the saved/config ladder over 50 to 200 percent of native, capped at native under FSR 2.2, resolved once at launch for the four 3D viewports.
 - `src/Utils/ResolutionSetting.cs`, the window size: the sizes a screen can hold, the saved one against the screen's own size, and the one place the window size is set.
 - `src/Utils/Rng.cs`, the session's one master seed and the named subsystem generators every random draw derives from.
 - `src/Utils/ScriptedWindow.cs`, Win32-only window hiding for scripted runs; `ScriptedWindow.Hide()` uses `ShowWindow(SW_HIDE)` on the native window.
@@ -551,9 +551,9 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/StartCover.cs`, the session-start cover's ramp: the dark tone, the hold until the first real frame, the one-second fade, and nothing at all under `--det`.
 - `src/Utils/StartupProfile.cs`, the always-on `[perf] startup …` line: every session build split into the phases it spends its time in.
 - `src/Utils/TapHoldButton.cs`, one button carrying two actions split by how long it is held; the caller feeds it the button level and switches on the answer.
-- `src/Utils/TemporalPassSetting.cs`, which temporal pass the enhanced presentation runs, Godot's TAA or FSR 2.2 at native: a trial door on one config key.
+- `src/Utils/AntiAliasingSetting.cs`, the anti-aliasing method (off, FXAA, SMAA, TAA, FSR 2.2): the saved/config ladder over the graphics mode's own default, resolved once at launch.
 - `src/Utils/WallCostBank.cs`, one `--perf` cost meter (bracket, banked milliseconds, worst span, count, tally) and the bracket node; the three cost facades are instances of it.
-- `src/Utils/ViewportQuality.cs`, the render flags the graphics mode and the render scale write on a 3D viewport, in one call the four viewport construction sites share.
+- `src/Utils/ViewportQuality.cs`, what the anti-aliasing method and the render scale write on a 3D viewport, in one call the four viewport construction sites share.
 - `src/Utils/VSyncSetting.cs`, the frame pacing: the flag/saved/config ladder, and the one place the vsync mode and the frame cap are applied to the engine.
 - `src/Utils/WorldBackdrop.cs`, the persistent environment's background: flat black while the menu owns the screen, the sky again at every launch.
 

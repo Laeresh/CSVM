@@ -8,11 +8,12 @@ using System.Text.Json;
 namespace CSVM.Utils;
 
 /// <summary>The display settings' vocabularies: the words <see cref="OptionsDef.DisplayMode"/>,
-/// <see cref="OptionsDef.VSync"/> and <see cref="OptionsDef.RenderScale"/> accept, in the order a
-/// picker offers them. Kept as strings for the reason the presentation and graphics words are: the
-/// resolved value is an argument to an engine call, owned by whichever module makes the call, not a
-/// type this store carries. The other two display settings have no word list, so
-/// <see cref="OptionsStore"/> validates their shape instead.</summary>
+/// <see cref="OptionsDef.VSync"/>, <see cref="OptionsDef.RenderScale"/> and
+/// <see cref="OptionsDef.AntiAliasing"/> accept, in the order a picker offers them. They are kept
+/// as strings, as the presentation and graphics words are. The resolved value is an argument to an
+/// engine call, owned by whichever module makes the call, not a type this store carries. The other
+/// two display settings have no word list, so <see cref="OptionsStore"/> validates their shape
+/// instead.</summary>
 public static class DisplayWords
 {
     /// <summary>A bordered window, the mode the project ships in.</summary>
@@ -33,6 +34,21 @@ public static class DisplayWords
     /// <summary>Native resolution, the scale a launch with no options file renders at.</summary>
     public const string RenderScaleNative = "100";
 
+    /// <summary>No anti-aliasing past the project's own MSAA, the faithful presentation's default.</summary>
+    public const string AntiAliasingOff = "off";
+
+    /// <summary>Godot's FXAA screen-space filter.</summary>
+    public const string AntiAliasingFxaa = "fxaa";
+
+    /// <summary>Godot's SMAA screen-space filter.</summary>
+    public const string AntiAliasingSmaa = "smaa";
+
+    /// <summary>Godot's temporal anti-aliasing, the enhanced presentation's default.</summary>
+    public const string AntiAliasingTaa = "taa";
+
+    /// <summary>AMD FidelityFX Super Resolution 2.2, a temporal pass that also upscales.</summary>
+    public const string AntiAliasingFsr2 = "fsr2";
+
     /// <summary>Every display-mode word.</summary>
     public static readonly IReadOnlyList<string> DisplayModes = new[] { Windowed, Borderless, Fullscreen };
 
@@ -41,11 +57,16 @@ public static class DisplayWords
     /// are the two that do not parse, so one field carries both the choice and the cap.</summary>
     public static readonly IReadOnlyList<string> VSyncChoices = new[] { VSyncOn, VSyncOff, "60", "120", "144" };
 
-    /// <summary>Every render-scale word, a percentage of a 3D viewport's own size. The list stops at
-    /// 200 because Godot resamples above native in bilinear mode alone, and the quality it buys
-    /// flattens off well before the cost does.</summary>
+    /// <summary>Every render-scale word, a percentage of a 3D viewport's own size. Below native the
+    /// image is upscaled; 67 and 77 are FSR's own quality presets. The list stops at 200 because
+    /// Godot supersamples in bilinear mode alone, and the quality it buys flattens off well before
+    /// the cost does.</summary>
     public static readonly IReadOnlyList<string> RenderScaleChoices =
-        new[] { RenderScaleNative, "125", "150", "175", "200" };
+        new[] { "50", "67", "77", RenderScaleNative, "125", "150", "175", "200" };
+
+    /// <summary>Every anti-aliasing word, in the order the VIDEO page offers them.</summary>
+    public static readonly IReadOnlyList<string> AntiAliasingChoices =
+        new[] { AntiAliasingOff, AntiAliasingFxaa, AntiAliasingSmaa, AntiAliasingTaa, AntiAliasingFsr2 };
 }
 
 /// <summary>The difficulty words <see cref="OptionsDef.Difficulty"/> and <c>--difficulty=</c>
@@ -164,6 +185,11 @@ public sealed class OptionsDef
     /// <see cref="DisplayWords.RenderScaleChoices"/>, a percentage of their own size.</summary>
     public string? RenderScale { get; set; }
 
+    /// <summary>The anti-aliasing method the 3D viewports run, one of
+    /// <see cref="DisplayWords.AntiAliasingChoices"/>. Null is "never set", which reads as the
+    /// graphics mode's own default rather than as a word of its own.</summary>
+    public string? AntiAliasing { get; set; }
+
     /// <summary>The Master level, the multiplier over the three category levels
     /// (<see cref="AudioMix"/>). No vocabulary and no spelling to parse, so the store proves the
     /// range alone.
@@ -243,14 +269,16 @@ public sealed class OptionsStore
     // The three selectable views, spelt as --view= takes them.
     private static readonly HashSet<string> ValidDefaultViews = new(ViewWords.All, StringComparer.Ordinal);
 
-    // The three display vocabularies, DisplayWords' own lists as sets. Held here rather than there
-    // for the same reason the four above are held here at all: the words a file may carry are
-    // this reader's business, and a file reads back only what an options screen writes.
+    // The four display vocabularies, DisplayWords' own lists as sets, held here like the sets above.
+    // The words a file may carry are this reader's business. A file reads back only what an
+    // options screen writes.
     private static readonly HashSet<string> ValidDisplayModes = new(DisplayWords.DisplayModes, StringComparer.Ordinal);
 
     private static readonly HashSet<string> ValidVSyncChoices = new(DisplayWords.VSyncChoices, StringComparer.Ordinal);
 
     private static readonly HashSet<string> ValidRenderScales = new(DisplayWords.RenderScaleChoices, StringComparer.Ordinal);
+
+    private static readonly HashSet<string> ValidAntiAliasing = new(DisplayWords.AntiAliasingChoices, StringComparer.Ordinal);
 
     private static readonly JsonWriterOptions WriterOptions = new() { Indented = true };
 
@@ -300,6 +328,7 @@ public sealed class OptionsStore
             Write(w, "displayMode", def.DisplayMode);
             Write(w, "vsync", def.VSync);
             Write(w, "renderScale", def.RenderScale);
+            Write(w, "antiAliasing", def.AntiAliasing);
             WriteLevel(w, "audioMaster", def.AudioMaster);
             WriteLevel(w, "audioMusic", def.AudioMusic);
             WriteLevel(w, "audioEffects", def.AudioEffects);
@@ -347,6 +376,7 @@ public sealed class OptionsStore
                 DisplayMode = Read(root, "displayMode", ValidDisplayModes),
                 VSync = Read(root, "vsync", ValidVSyncChoices),
                 RenderScale = Read(root, "renderScale", ValidRenderScales),
+                AntiAliasing = Read(root, "antiAliasing", ValidAntiAliasing),
                 AudioMaster = ReadLevel(root, "audioMaster"),
                 AudioMusic = ReadLevel(root, "audioMusic"),
                 AudioEffects = ReadLevel(root, "audioEffects"),

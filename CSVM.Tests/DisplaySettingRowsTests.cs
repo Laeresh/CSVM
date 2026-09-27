@@ -19,6 +19,35 @@ public class DisplaySettingRowsTests
     {
         Assert.Equal(DisplayWords.DisplayModes.Count, DisplaySettingRows.DisplayModeLabels.Count);
         Assert.Equal(DisplayWords.VSyncChoices.Count, DisplaySettingRows.VSyncLabels.Count);
+        Assert.Equal(DisplayWords.AntiAliasingChoices.Count, DisplaySettingRows.AntiAliasingLabels.Count);
+        Assert.Equal(
+            new[] { "50%", "67%", "77%", "100%", "125%", "150%", "175%", "200%" },
+            DisplaySettingRows.RenderScaleLabels(DisplayWords.RenderScaleChoices));
+    }
+
+    /// <summary>An anti-aliasing row with nothing saved reads the default of its page's graphics
+    /// word. A word the vocabulary does not know reads the same way.</summary>
+    [Theory]
+    [InlineData(null, GraphicsMode.Default, DisplayWords.AntiAliasingOff)]
+    [InlineData(null, GraphicsMode.EnhancedWord, DisplayWords.AntiAliasingTaa)]
+    [InlineData("msaa8", GraphicsMode.EnhancedWord, DisplayWords.AntiAliasingTaa)]
+    [InlineData(DisplayWords.AntiAliasingSmaa, GraphicsMode.Default, DisplayWords.AntiAliasingSmaa)]
+    [InlineData(DisplayWords.AntiAliasingOff, GraphicsMode.EnhancedWord, DisplayWords.AntiAliasingOff)]
+    public void TheAntiAliasingRowReadsTheSavedWordOrTheModesDefault(string? saved, string graphics, string expected) =>
+        Assert.Equal(expected, DisplaySettingRows.AntiAliasingWord(saved, graphics));
+
+    /// <summary>FSR 2.2 refuses a scale above native, so its Render Scale list stops at 100 and a
+    /// larger saved scale is pulled down to it. Every other method keeps the whole list.</summary>
+    [Fact]
+    public void FsrTwoOffersOnlyTheScalesAtOrBelowNative()
+    {
+        Assert.Equal(new[] { "50", "67", "77", "100" }, RenderScaleSetting.ChoicesFor(DisplayWords.AntiAliasingFsr2));
+        Assert.Equal(DisplayWords.RenderScaleChoices, RenderScaleSetting.ChoicesFor(DisplayWords.AntiAliasingTaa));
+        Assert.Equal(DisplayWords.RenderScaleChoices, RenderScaleSetting.ChoicesFor(null));
+        Assert.Equal("100", RenderScaleSetting.ClampFor("150", DisplayWords.AntiAliasingFsr2));
+        Assert.Equal("67", RenderScaleSetting.ClampFor("67", DisplayWords.AntiAliasingFsr2));
+        Assert.Equal("150", RenderScaleSetting.ClampFor("150", DisplayWords.AntiAliasingSmaa));
+        Assert.Null(RenderScaleSetting.ClampFor(null, DisplayWords.AntiAliasingFsr2));
     }
 
     [Theory]

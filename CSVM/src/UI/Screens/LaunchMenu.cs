@@ -52,7 +52,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     /// <summary>The row that opens the Options screen, under the modes. Options hold
     /// the process-wide choices (the difficulty, the targeting setting, the graphics mode and the
-    /// five display settings). Which presentation runs is not among them: only the two command-line
+    /// six display settings). Which presentation runs is not among them: only the two command-line
     /// flags choose Built-in.</summary>
     public const string OptionsRow = "Options";
 
@@ -143,11 +143,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The Options screen's stepper rows, above the Controls door and the apply row. The screen
     // is a form the cursor walks top to bottom. First the five gameplay settings: the three the
     // Original presentation's GAME OPTIONS page draws, in its order, then the targeting switch
-    // and the rumble. Then the graphics mode and the five display settings in the order the
+    // and the rumble. Then the graphics mode and the six display settings in the order the
     // Original presentation's VIDEO page draws them. Then the four volume levels in the order its
     // AUDIO page draws them, then the two doors.
-    private const int OptionsStepperRows = 15;
-    // How many Options rows show at once. Seventeen rows do not fit the band at 720p, and a band
+    private const int OptionsStepperRows = 16;
+    // How many Options rows show at once. Eighteen rows do not fit the band at 720p, and a band
     // sized to all of them shrinks every row. The screen is windowed at the Controls list's
     // height, which is known to fit.
     private const int OptionsWindow = ControlsWindow;
@@ -262,11 +262,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     // config key deciding, rather than overruling it with a default of this screen's own.
     private bool? _autoHeadTurnChoice;
     private string _graphicsChoice = GraphicsMode.Default;
-    // The five display settings, stepped by the five rows under the graphics one. Each is stored as
-    // the word the options file carries, never as a row index, so a screen unplugged or a size the
-    // monitor stopped offering is answered by the resolver's own forgiving read rather than by a
-    // stale position.
-    private string? _monitorChoice, _resolutionChoice, _displayModeChoice, _vsyncChoice, _renderScaleChoice;
+    // The six display settings, stepped by the six rows under the graphics one. Each is stored as
+    // the word the options file carries, never as a row index. A screen unplugged or a size the
+    // monitor stopped offering then meets the resolver's own forgiving read, not a stale position.
+    private string? _monitorChoice, _resolutionChoice, _displayModeChoice, _vsyncChoice, _renderScaleChoice, _antiAliasingChoice;
     // The size the options file named when this screen opened, which the size row offers as an entry
     // of its own (ResolutionSizes). It is held apart from the stepped choice, so a hand-written
     // size stays in the list after a step lands elsewhere. A step back then reaches it again.
@@ -1738,7 +1737,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         switch (_screen)
         {
             case Screen.Options:
-                // The fifteen choice rows are steppers; the doors under them have nothing to step.
+                // The sixteen choice rows are steppers; the doors under them have nothing to step.
                 switch (_optionsIndex)
                 {
                     case 0: StepDifficultyChoice(dir); return true;
@@ -1752,10 +1751,11 @@ public sealed partial class LaunchMenu : CanvasLayer
                     case 8: StepDisplayModeChoice(dir); return true;
                     case 9: StepVSyncChoice(dir); return true;
                     case 10: StepRenderScaleChoice(dir); return true;
-                    case 11: _audioMasterChoice = StepLevel(_audioMasterChoice, AudioMix.DefaultMaster, dir); return true;
-                    case 12: _audioMusicChoice = StepLevel(_audioMusicChoice, AudioMix.DefaultMusic, dir); return true;
-                    case 13: _audioEffectsChoice = StepLevel(_audioEffectsChoice, AudioMix.DefaultEffects, dir); return true;
-                    case 14: _audioVoiceChoice = StepLevel(_audioVoiceChoice, AudioMix.DefaultVoice, dir); return true;
+                    case 11: StepAntiAliasingChoice(dir); return true;
+                    case 12: _audioMasterChoice = StepLevel(_audioMasterChoice, AudioMix.DefaultMaster, dir); return true;
+                    case 13: _audioMusicChoice = StepLevel(_audioMusicChoice, AudioMix.DefaultMusic, dir); return true;
+                    case 14: _audioEffectsChoice = StepLevel(_audioEffectsChoice, AudioMix.DefaultEffects, dir); return true;
+                    case 15: _audioVoiceChoice = StepLevel(_audioVoiceChoice, AudioMix.DefaultVoice, dir); return true;
                     default: return false;
                 }
             case Screen.Network:
@@ -1864,7 +1864,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                     // standing for the host to hide.
                     _host.Exit(new OptionsApplyExit(_graphicsChoice,
                         Difficulty.Word(_difficultyChoice), _monitorChoice, _resolutionChoice,
-                        _displayModeChoice, _vsyncChoice, _renderScaleChoice, _audioMasterChoice,
+                        _displayModeChoice, _vsyncChoice, _renderScaleChoice, _antiAliasingChoice, _audioMasterChoice,
                         _audioMusicChoice, _audioEffectsChoice, _audioVoiceChoice, _nearestAfterKillChoice,
                         _rumbleChoice, _defaultViewChoice, _autoHeadTurnChoice));
                 }
@@ -3094,6 +3094,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         _displayModeChoice = saved.DisplayMode;
         _vsyncChoice = saved.VSync;
         _renderScaleChoice = saved.RenderScale;
+        _antiAliasingChoice = saved.AntiAliasing;
         _audioMasterChoice = saved.AudioMaster;
         _audioMusicChoice = saved.AudioMusic;
         _audioEffectsChoice = saved.AudioEffects;
@@ -3471,12 +3472,25 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string VSyncChoiceLabel() =>
         DisplaySettingRows.VSyncLabels[DisplaySettingRows.WordIndex(DisplayWords.VSyncChoices, _vsyncChoice, VSyncSetting.Default)];
 
-    private string RenderScaleChoiceLabel() =>
-        DisplaySettingRows.RenderScaleLabels[DisplaySettingRows.WordIndex(DisplayWords.RenderScaleChoices, _renderScaleChoice, RenderScaleSetting.Default)];
+    // The scales the render-scale row offers under the method the anti-aliasing row stands on.
+    private IReadOnlyList<string> RenderScaleWords() =>
+        RenderScaleSetting.ChoicesFor(DisplaySettingRows.AntiAliasingWord(_antiAliasingChoice, _graphicsChoice));
 
-    // The five display steppers. Each writes back the word the options file carries rather than the
-    // row's position, since the apply hands the word to the setting's own resolver; a step off a
-    // value the machine no longer offers therefore starts from the forgiving read, not from -1.
+    private string RenderScaleChoiceLabel()
+    {
+        var words = RenderScaleWords();
+        return DisplaySettingRows.RenderScaleLabels(words)[DisplaySettingRows.WordIndex(words, _renderScaleChoice, RenderScaleSetting.Default)];
+    }
+
+    private string AntiAliasingChoiceLabel()
+    {
+        string word = DisplaySettingRows.AntiAliasingWord(_antiAliasingChoice, _graphicsChoice);
+        return DisplaySettingRows.AntiAliasingLabels[DisplaySettingRows.WordIndex(DisplayWords.AntiAliasingChoices, word, word)];
+    }
+
+    // The six display steppers. Each writes back the word the options file carries, not the row's
+    // position, since the apply hands the word to the setting's own resolver. A step off a value
+    // the machine no longer offers therefore starts from the forgiving read, not from -1.
     private void StepMonitorChoice(int dir)
     {
         var screens = MonitorSetting.Screens();
@@ -3515,9 +3529,20 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private void StepRenderScaleChoice(int dir)
     {
-        var words = DisplayWords.RenderScaleChoices;
+        var words = RenderScaleWords();
         int at = DisplaySettingRows.WordIndex(words, _renderScaleChoice, RenderScaleSetting.Default);
         _renderScaleChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
+    }
+
+    // FSR 2.2 refuses a scale above native, so stepping onto it moves such a scale to native. The
+    // launch applies the same clamp to a saved pair.
+    private void StepAntiAliasingChoice(int dir)
+    {
+        var words = DisplayWords.AntiAliasingChoices;
+        string standing = DisplaySettingRows.AntiAliasingWord(_antiAliasingChoice, _graphicsChoice);
+        int at = DisplaySettingRows.WordIndex(words, standing, standing);
+        _antiAliasingChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
+        _renderScaleChoice = RenderScaleSetting.ClampFor(_renderScaleChoice, _antiAliasingChoice);
     }
 
     // The size row's detail says what the size does under the mode standing with it. The size does
@@ -4070,11 +4095,12 @@ public sealed partial class LaunchMenu : CanvasLayer
                 8 => $"Display mode: {DisplayModeChoiceLabel()}",
                 9 => $"V-Sync: {VSyncChoiceLabel()}",
                 10 => $"Render scale: {RenderScaleChoiceLabel()}",
-                11 => $"Master volume: {LevelLabel(_audioMasterChoice, AudioMix.DefaultMaster)}",
-                12 => $"Music volume: {LevelLabel(_audioMusicChoice, AudioMix.DefaultMusic)}",
-                13 => $"Effects volume: {LevelLabel(_audioEffectsChoice, AudioMix.DefaultEffects)}",
-                14 => $"Voice volume: {LevelLabel(_audioVoiceChoice, AudioMix.DefaultVoice)}",
-                15 => ControlsRow,
+                11 => $"Anti-aliasing: {AntiAliasingChoiceLabel()}",
+                12 => $"Master volume: {LevelLabel(_audioMasterChoice, AudioMix.DefaultMaster)}",
+                13 => $"Music volume: {LevelLabel(_audioMusicChoice, AudioMix.DefaultMusic)}",
+                14 => $"Effects volume: {LevelLabel(_audioEffectsChoice, AudioMix.DefaultEffects)}",
+                15 => $"Voice volume: {LevelLabel(_audioVoiceChoice, AudioMix.DefaultVoice)}",
+                16 => ControlsRow,
                 _ => "Apply and restart the menu",
             },
             Screen.Controls => $"{ControlsRowLabel(index)}   {ControlsRowValue(index)}",
@@ -4461,12 +4487,13 @@ public sealed partial class LaunchMenu : CanvasLayer
             7 => ResolutionDetail(),
             8 => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
             9 => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
-            10 => "Render the world above native and sample it back down. Takes effect on the next start.",
-            11 => "Set the overall volume of all sounds. Heard once the choices are applied.",
-            12 => "Set the volume of the in-game music. Heard once the choices are applied.",
-            13 => "Set the volume of the sound effects. Heard once the choices are applied.",
-            14 => "Set the volume of the voices. Heard once the choices are applied.",
-            15 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
+            10 => "Render the world below native to spare the GPU, or above it for cleaner edges. Takes effect on the next start.",
+            11 => "Select how edges are smoothed. FSR 2.2 also upscales a Render Scale below 100%. Takes effect on the next start.",
+            12 => "Set the overall volume of all sounds. Heard once the choices are applied.",
+            13 => "Set the volume of the in-game music. Heard once the choices are applied.",
+            14 => "Set the volume of the sound effects. Heard once the choices are applied.",
+            15 => "Set the volume of the voices. Heard once the choices are applied.",
+            16 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
             _ => "Saves every choice and restarts the menu at its top level; unfinished setup is discarded.",
         },
         Screen.Controls => ControlsDetail(focus),

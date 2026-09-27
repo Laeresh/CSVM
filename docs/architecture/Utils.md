@@ -255,25 +255,23 @@ warns and falls back. `--det` drops both machine-state layers and keeps only an 
 `--graphics=`, which is how a golden or a deterministic capture pins the mode on purpose. The mode
 itself is written up as a divergence in `docs/architecture/Root.md`.
 
-## src/Utils/TemporalPassSetting.cs
-Which temporal pass the enhanced presentation runs: Godot's own TAA, or FSR 2.2 at native
-resolution, which carries a temporal pass of its own and replaces Godot's rather than joining it.
-The `graphics.temporal` config key (`taa` or `fsr2`, default `taa`) is the only source, with no saved
-option and no menu row, because the two are being flown against each other and the loser is deleted
-rather than kept as a second way in; an unknown word warns and falls back. `Resolve` runs once at
-launch beside `GraphicsMode.Resolve` and lands in the static `Fsr2`, whose one reader is
-`ViewportQuality.Apply`; a `--det` run drops the config file and so reads `taa`. `Launcher`'s
-`[world] graphics mode:` line announces the word that won.
+## src/Utils/AntiAliasingSetting.cs
+The anti-aliasing method, a VIDEO page display setting over `DisplayWords.AntiAliasingChoices`: `off`, `fxaa`, `smaa`,
+`taa` or `fsr2`. `Resolve` layers the saved `antiAliasing` word, then the `graphics.antiAliasing` config key, then
+`DefaultFor` the graphics mode, which is `off` under Original and `taa` under Enhanced; an unknown config word warns and
+falls back. A chosen method is written whichever mode won, since only the default follows the mode. `SavedWord` holds the
+`--det` guard. The resolve runs once at launch after `GraphicsMode.Resolve` and lands in the static `Method`, whose one
+reader is `ViewportQuality.Apply`; `Launcher`'s `[world] graphics mode:` line announces the word and its source. FSR 2.2
+refuses a render scale above native, which `RenderScaleSetting.ClampFor` applies.
 
 ## src/Utils/ViewportQuality.cs
-The render flags `GraphicsMode`, `TemporalPassSetting` and `RenderScaleSetting` write on a 3D viewport, gathered here because
+What `AntiAliasingSetting` and `RenderScaleSetting` write on a 3D viewport, gathered here because
 there are four viewports to write them on: the root viewport `Session/Launch/Launcher.cs` owns, and the SubViewports
 `Flight/Hud/CockpitOverlay.cs`, `Flight/Camera/SpyglassView.cs` and `UI/Boards/SplitScreen.cs` build. `Apply` runs once per viewport at
-construction and writes the mode's temporal pass, Godot's TAA or `Scaling3DModeEnum.Fsr2` at native with Godot's own
-sharpness, plus a bilinear `Scaling3DScale` above native, which is written whichever presentation won because the scale is a
-display setting. Above native FSR 2.2 does not apply and Godot's TAA stays, Godot supersampling in bilinear mode alone.
-Nothing is written under the faithful mode, so a `--det` run reads back Godot's own defaults. MSAA stays
-`project.godot`'s.
+construction. FXAA and SMAA go to `ScreenSpaceAA`, TAA to `UseTaa`. Below native the scale runs through
+`Scaling3DModeEnum.Fsr2` under `fsr2` and `Fsr` otherwise, and above native through `Bilinear`, the one mode Godot
+supersamples in. At native only `fsr2` writes a scaling mode, `Fsr2` at 1.0, which runs as anti-aliasing alone. `off` at
+native writes nothing, so a faithful `--det` run reads back Godot's own defaults. MSAA stays `project.godot`'s.
 
 ## src/Utils/VSyncSetting.cs
 The frame pacing, one setting carrying both whether the loop waits for the screen and the cap it
@@ -316,14 +314,14 @@ the one place `DisplayServer.WindowSetCurrentScreen` is called and skips a windo
 `Launcher`'s call sites make it before the mode and the size, a mode applied first filling the old screen.
 
 ## src/Utils/RenderScaleSetting.cs
-The render scale, a VIDEO page display setting: the multiple of its own size a 3D viewport renders at before the image is
-resampled down to it, so a machine with GPU headroom spends it on edges. The words are `DisplayWords.RenderScaleChoices`,
-percentages of native from 100 to 200, the list stopping there because the quality flattens off well before the cost does.
-`Resolve` layers the way `VSyncSetting` does with one layer fewer, there being no flag: the saved `renderScale` word, then
-the `graphics.renderScale` config key, then native; an unknown word reads as never set and a key spelling native reads as
-the default. `SavedWord` holds the `--det` guard. The resolve runs once at launch beside `GraphicsMode.Resolve` and lands
-in the static `Scale`, whose one reader is `ViewportQuality.Apply`, so a choice made in Options reaches the image on the
-next start; `Launcher`'s `[world] graphics mode:` line announces it.
+The render scale, a VIDEO page display setting: the multiple of its own size a 3D viewport renders at. Above native the
+image is resampled down, spending GPU headroom on edges; below native it is upscaled, buying frame rate on a machine
+without it. The words are `DisplayWords.RenderScaleChoices`, percentages of native from 50 to 200. `Resolve` layers the
+saved `renderScale` word, then the `graphics.renderScale` config key, then native; an unknown word reads as never set and
+a key spelling native reads as the default. The winner is then clamped under the anti-aliasing word: `fsr2` pulls a scale
+above native to 100 (`ClampFor`, which the VIDEO page applies when FSR 2.2 is picked) and `ChoicesFor` offers it only 50
+to 100. `SavedWord` holds the `--det` guard. The resolve runs once at launch and lands in the static `Scale`, whose one
+reader is `ViewportQuality.Apply`; `Launcher`'s `[world] graphics mode:` line announces it and any clamp.
 
 ## src/Utils/ScriptedWindow.cs
 Win32-only window hiding for scripted runs: `ScriptedWindow.Hide()` calls `ShowWindow(SW_HIDE)` on
@@ -331,8 +329,8 @@ the native window handle. Fully static, one call site in `Launcher._Ready` right
 block, where the same predicate drives both window hiding and the interactive run's focus request.
 
 ## src/Utils/OptionsStore.cs
-Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode and difficulty words, the five
-display settings (monitor index, resolution, display mode, V-Sync, render scale), the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn and the remembered install folder (fully qualified or dropped). One file, `user://options.json`,
+Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode and difficulty words, the six
+display settings (monitor index, resolution, display mode, V-Sync, render scale, anti-aliasing), the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn and the remembered install folder (fully qualified or dropped). One file, `user://options.json`,
 independent of `Session/Campaign/CampaignProfileStore.cs`. A missing or malformed file reads as empty, an unknown version invalidates it, an
 unknown value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
 `Version`. Four reads hold that one contract: a word set (`DisplayWords`, `DifficultyWords` and `ViewWords` hold the vocabularies, whose resolved tier and view mode belong to `Flight`), a shape predicate for the

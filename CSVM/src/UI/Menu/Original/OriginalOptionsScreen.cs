@@ -98,6 +98,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     /// <summary>The VIDEO page's render-scale dropdown.</summary>
     public const string RenderScaleKey = "RENDERSCALE";
 
+    /// <summary>The VIDEO page's anti-aliasing dropdown.</summary>
+    public const string AntiAliasingKey = "ANTIALIASING";
+
     /// <summary>The VIDEO page's enhanced-graphics checkbox.</summary>
     public const string GraphicsKey = "GRAPHICS";
 
@@ -443,10 +446,15 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             s => DisplaySettingRows.WordIndex(CSVM.Utils.DisplayWords.VSyncChoices, s._vsync, CSVM.Utils.VSyncSetting.Default),
             (s, i) => s._vsync = CSVM.Utils.DisplayWords.VSyncChoices[i]),
         new(RenderScaleKey, "Render Scale", "VP_T_ObjectsTitle", "VP_D_Objects", "VP_T_ObjectsDESC",
-            _ => "Render the world above native and sample it back down. Takes effect on the next start.",
-            OriginalRowKind.Dropdown, _ => DisplaySettingRows.RenderScaleLabels,
-            s => DisplaySettingRows.WordIndex(CSVM.Utils.DisplayWords.RenderScaleChoices, s._renderScale, CSVM.Utils.RenderScaleSetting.Default),
-            (s, i) => s._renderScale = CSVM.Utils.DisplayWords.RenderScaleChoices[i]),
+            _ => "Render the world below native to spare the GPU, or above it for cleaner edges. Takes effect on the next start.",
+            OriginalRowKind.Dropdown, s => DisplaySettingRows.RenderScaleLabels(s.RenderScaleWords),
+            s => DisplaySettingRows.WordIndex(s.RenderScaleWords, s._renderScale, CSVM.Utils.RenderScaleSetting.Default),
+            (s, i) => s._renderScale = s.RenderScaleWords[i]),
+        new(AntiAliasingKey, "Anti-aliasing", "VP_T_LightTitle", "VP_D_DLight", "VP_T_LightDESC",
+            _ => "Select how edges are smoothed. FSR 2.2 also upscales a Render Scale below 100%. Takes effect on the next start.",
+            OriginalRowKind.Dropdown, _ => DisplaySettingRows.AntiAliasingLabels,
+            s => DisplaySettingRows.WordIndex(CSVM.Utils.DisplayWords.AntiAliasingChoices, s.AntiAliasingWord, s.AntiAliasingWord),
+            (s, i) => s.PickAntiAliasing(CSVM.Utils.DisplayWords.AntiAliasingChoices[i])),
         new(GraphicsKey, "Enhanced Graphics", "VP_T_ShadowsTitle", "VP_B_SHADOWS", "VP_T_ShadowsDESC",
             s => s.GraphicsDescription(), OriginalRowKind.Radio, _ => GraphicsWords,
             s => s._graphics == CSVM.Utils.GraphicsMode.EnhancedWord ? 1 : 0,
@@ -546,7 +554,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     // The automatic head turn as saved, null while never set. Null leaves the headLook.autohead
     // config key deciding rather than overruling it with a default of this page's own.
     private bool? _autoHeadTurn;
-    // The five display settings as they were saved. A page that shows a setting still has to hand
+    // The six display settings as they were saved. A page that shows a setting still has to hand
     // back the ones it does not, or the one writer's save would clear them. Carrying them here is
     // what lets every page's apply do that.
     private string? _monitorIndex;
@@ -558,6 +566,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private string? _displayMode;
     private string? _vsync;
     private string? _renderScale;
+    private string? _antiAliasing;
     // The four saved volume levels, carried for the same reason. The AUDIO page shows them and the
     // other pages do not, and every page's apply hands back the settings it does not show.
     private int? _audioMaster;
@@ -657,6 +666,15 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     /// VIDEO page would apply, or null while nothing has been saved and no row has been
     /// touched.</summary>
     public string? RenderScaleChoice => _renderScale;
+
+    /// <summary>The anti-aliasing word (<see cref="CSVM.Utils.DisplayWords.AntiAliasingChoices"/>) the
+    /// VIDEO page would apply, or null while nothing has been saved and no row has been touched.
+    /// The next start reads a null as the graphics mode's own default.</summary>
+    public string? AntiAliasingChoice => _antiAliasing;
+
+    /// <summary>The scales the Render Scale row offers under the method the Anti-aliasing row stands
+    /// on, which is fewer under FSR 2.2. The list follows that row live.</summary>
+    public IReadOnlyList<string> RenderScaleWords => CSVM.Utils.RenderScaleSetting.ChoicesFor(AntiAliasingWord);
 
     /// <summary>The Master level (<see cref="CSVM.Utils.AudioMix"/>'s 0..100) the AUDIO page would
     /// apply, or null while nothing has been saved and no row has been touched.</summary>
@@ -1043,6 +1061,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         _displayMode = saved?.DisplayMode;
         _vsync = saved?.VSync;
         _renderScale = saved?.RenderScale;
+        _antiAliasing = saved?.AntiAliasing;
         _audioMaster = saved?.AudioMaster;
         _audioMusic = saved?.AudioMusic;
         _audioEffects = saved?.AudioEffects;
@@ -1054,7 +1073,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     // keeps Launcher.ApplyOptions the options file's one writer.
     private OptionsApplyExit AppliedOptions() =>
         new(_graphics, CSVM.Flight.Hangar.Difficulty.Word(_difficulty),
-            _monitorIndex, _resolution, _displayMode, _vsync, _renderScale,
+            _monitorIndex, _resolution, _displayMode, _vsync, _renderScale, _antiAliasing,
             _audioMaster, _audioMusic, _audioEffects, _audioVoice, _nearestAfterKill, _rumble,
             _defaultView, _autoHeadTurn);
 
@@ -1938,6 +1957,18 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     // open. The row's value goes through MonitorSetting.Resolve over this, the same call the apply
     // makes. The row therefore cannot show a screen the window would not be moved to.
     private CSVM.Utils.ScreenList Screens => _screens?.Invoke() ?? CSVM.Utils.MonitorSetting.Unknown;
+
+    // The method the Anti-aliasing row shows: the saved word, or the default of the graphics mode
+    // this page would apply.
+    private string AntiAliasingWord => DisplaySettingRows.AntiAliasingWord(_antiAliasing, _graphics);
+
+    // FSR 2.2 refuses a scale above native, so picking it moves a scale standing there to native.
+    // The launch clamps a saved pair the same way, so the page never shows a scale the run ignores.
+    private void PickAntiAliasing(string word)
+    {
+        _antiAliasing = word;
+        _renderScale = CSVM.Utils.RenderScaleSetting.ClampFor(_renderScale, word);
+    }
 
     // The VIDEO rows. An open list's items stand alone while one is open. Otherwise each setting's
     // control stands on its authored row with the two plaques beside them, all one column. Without

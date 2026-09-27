@@ -280,9 +280,11 @@ the player an aspect ratio they did not pick. The screen is `MonitorSetting.Reso
 whose saved value can name something that is not there: an index no screen answers to is dropped like an
 unknown word and the window stays on the screen it already stands on, which is the primary on a launch
 that has moved nothing. The render scale is `RenderScaleSetting.Resolve`, the saved word over the
-`graphics.renderScale` config key over native, and it is the one display setting that reaches no
-window: the scale is written on each 3D viewport as it is built, so it takes hold at the next start
-the way the graphics mode does, which is what the row's own description says. Every other display
+`graphics.renderScale` config key over native, and the anti-aliasing method is
+`AntiAliasingSetting.Resolve`, the saved word over the `graphics.antiAliasing` config key over the
+graphics mode's own default; FSR 2.2 clamps a scale above native back to it. These two are the display
+settings that reach no window: they are written on each 3D viewport as it is built, so they take hold
+at the next start the way the graphics mode does, which is what the rows' own descriptions say. Every other display
 setting is the case where the apply does
 more than save, since `Launcher.ApplyOptions` puts the chosen pacing, mode and size on the window
 there and then rather than at the next start. Those calls run in the order the window needs them: the
@@ -431,7 +433,7 @@ consumed by `Launcher.OnMenuExit`. The hierarchy is closed:
 | `LaunchExit` | chapter, one `MenuSeatChoice` per seat, `MenuMode`, an `InstantActionDef` for Instant Action, a `VersusRules` for Dogfight, a `MenuNetLaunch` for a networked one | derive the session spec from the CLI plus the payload, bind the seats' pads, build |
 | `CampaignMissionExit` | the profile name, the `cm_sequence` position, one `MenuSeatChoice` per joined human | the same, over the campaign's story position |
 | `QuitExit` | nothing | quit the process |
-| `OptionsApplyExit` | the graphics-mode and difficulty words, the five display settings, the four volume levels, the nearest-after-a-kill switch, the controller-rumble toggle, the opening view and the automatic head turn | save every one of them, then one frame later end the presentation and show it again at its top level |
+| `OptionsApplyExit` | the graphics-mode and difficulty words, the six display settings, the four volume levels, the nearest-after-a-kill switch, the controller-rumble toggle, the opening view and the automatic head turn | save every one of them, then one frame later end the presentation and show it again at its top level |
 
 `MenuSeatChoice` is the plane node, the pad devices the seat claimed, the fit and, for a saved
 custom plane, its resolved `CustomPlaneDef`; the consumer never reads a store. The features build
