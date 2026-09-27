@@ -224,7 +224,7 @@ internal static class MenuOriginalCampaignSuites
         ctx.Same(7, awarded.Count, $"a fresh profile holds the pictures the campaign starts with");
         string seeded = CampaignMementos.Seeded;
         string second = awarded[1];
-        ctx.Check(Draws(shell.Compose(), CampaignMementos.Bitmap(seeded)), $"and the cabin hangs the seeded pin-up");
+        ctx.Check(Draws(shell.Compose(), "SCRAPBOOK/" + seeded), $"and the cabin hangs the seeded pin-up");
         Click(host, seat, Pointer(fit, plaque.X + 5f, plaque.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.CampaignMemento && shell.Rows.Count == 4,
             $"CHANGE MEMENTO opens the chooser's four plaques ({shell.Screen}, {shell.Rows.Count})");
@@ -234,7 +234,7 @@ internal static class MenuOriginalCampaignSuites
         ctx.Check(store.Load(Pilot)?.Memento.Length == 0, $"and nothing is written before the commit");
         var cancel = Row(shell, nameof(BoardButton.CancelMemento))!;
         Click(host, seat, Pointer(fit, cancel.X + 5f, cancel.Y + 5f, pressed: true, clicked: true));
-        ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && Draws(shell.Compose(), CampaignMementos.Bitmap(seeded)),
+        ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && Draws(shell.Compose(), "SCRAPBOOK/" + seeded),
             $"CANCEL CHANGES leaves the cabin hanging what it hung ({shell.Screen})");
         Click(host, seat, Pointer(fit, plaque.X + 5f, plaque.Y + 5f, pressed: true, clicked: true));
         ctx.Check(Draws(shell.Compose(), "SCRAPBOOK/" + seeded), $"the chooser opens again on that picture rather than on the step CANCEL threw away");
@@ -243,7 +243,7 @@ internal static class MenuOriginalCampaignSuites
         Click(host, seat, Pointer(fit, accept.X + 5f, accept.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && store.Load(Pilot)?.Memento == second,
             $"ACCEPT CHANGES returns to the cabin with the chosen name in the profile ({shell.Screen}, {store.Load(Pilot)?.Memento})");
-        ctx.Check(Draws(shell.Compose(), CampaignMementos.Bitmap(second)), $"and the cabin hangs the chosen picture");
+        ctx.Check(Draws(shell.Compose(), "SCRAPBOOK/" + second), $"and the cabin hangs the chosen picture");
     }
 
     // One press of the chooser's forward arrow, read fresh: the plaque is rebuilt every frame.

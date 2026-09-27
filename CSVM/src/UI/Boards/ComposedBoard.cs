@@ -236,16 +236,16 @@ public readonly record struct BoardCrop(float X, float Y, float Width, float Hei
 /// null for every library read from a file.</summary>
 public sealed record BoardArt(BoardArtLibrary Library, string Name, int Frames = 1, Godot.Image? Pixels = null);
 
-/// <summary>A picture placed at its authored pixel position. <paramref name="Centered"/> is the
-/// briefing script's own <c>center</c> flag: the coordinate is the middle, not the top left.
-/// <paramref name="Scale"/> grows the art about its own middle and leaves its authored corner
-/// where it is, which is the <c>scale()</c> a scrapbook scrap takes under the pointer.
-/// <paramref name="Tint"/> multiplies the pixels, null drawing them as authored.
-/// <paramref name="Crop"/> takes a region of the source instead of the whole frame.</summary>
+/// <summary>A picture placed at its authored pixel position. The <paramref name="Centered"/> flag is
+/// the briefing script's own <c>center</c>: the coordinate is the middle, not the top left. The
+/// <paramref name="Scale"/> grows the art about its own middle, as a scrapbook scrap swells under
+/// the pointer. A <paramref name="Tint"/> multiplies the pixels, null drawing them as authored. A
+/// <paramref name="Crop"/> takes a region of the source instead of the whole frame. Marking it
+/// <paramref name="FromCorner"/> scales and spins it about its authored corner, as a script pane does.</summary>
 public sealed record BoardPicture(
     BoardArt Art, float X, float Y, int Frame = 0, bool Centered = false,
     float Opacity = 1f, float Revs = 0f, float Width = 0f, float Height = 0f, float Scale = 1f,
-    BoardTint? Tint = null, BoardCrop? Crop = null);
+    BoardTint? Tint = null, BoardCrop? Crop = null, bool FromCorner = false);
 
 /// <summary>A straight connector line between two authored points in its authored colour, which
 /// is the briefing script's <c>Line</c> opcode and the only non-picture element any board draws.

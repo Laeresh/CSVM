@@ -208,7 +208,15 @@ Two more art layers sit on the desk. `pc_memento` is a pane whose `AK` is
 `"assets\graphics\scrapbook\" + <name>`, the name coming from `uiData` 2150, which reads the
 profile's current memento file name (the `UIData +0x344` field of
 [saved-games.md](saved-games.md)); `pc_frame` is `PC_Mementopicframe.png` drawn over it, and
-clicking the frame forwards a `10003` to the CHANGE MEMENTO button. `pc_pin0` .. `pc_pin4` are five
+clicking the frame forwards a `10003` to the CHANGE MEMENTO button. The script also sets the
+memento pane's `GK = 20`, `HK = 20`, `IK = 1` and `JK = 3`, which `CTL.SCRIPT`'s pane object
+(`ZJ`, its `10009` handler) applies as `scale(YH) = GK, HK, IK` and `rotate(YH) = 0, 0, JK`. The
+whole scrapbook file is therefore drawn at 20 percent on both axes and turned 3 degrees about the
+pane's own corner (`PC_MEMENTO`'s `169, 325`), which puts a 415x515 picture at 83x103, and the
+frame's border covers its edges. The turn is counter-clockwise on screen: registering the
+seeded pin-up against `Campaign CAP-44 Cabin.png` puts the picture's top-left at `169.5, 324.9`,
+81x103, with its top edge rising 3.0 degrees to the right, and the clockwise reading matches far
+worse (normalised cross-correlation 0.09 against 0.69 over the frame's interior). `pc_pin0` .. `pc_pin4` are five
 panes sharing `PC_mappins.png` at five fixed map positions, each taking frame index `R`; the script
 creates `callback($$A$$, 7, -2)` of them, which is the **story chapter number** of the campaign's
 current position (see the callback reference), so the map shows one pin per chapter reached.
