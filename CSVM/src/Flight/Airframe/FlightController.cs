@@ -494,6 +494,12 @@ public partial class FlightController : Node3D
     /// here; this node holds no mission state and decides no rule.</summary>
     public bool Spectating;
 
+    /// <summary>This pilot's crash is final for the mission: a campaign human whose aircraft is
+    /// lost. Neither R nor <see cref="AutoRespawnAfter"/>'s timer brings the wreck back, and no
+    /// prompt offers it. Set by the campaign director, never from here; <c>--no-crash-loss</c>
+    /// leaves it unset.</summary>
+    public bool CrashIsFinal;
+
     /// <summary>The living aircraft an out-of-lives Dogfight pilot watches in chase view, or null
     /// to hold the crash camera. Picked by the session (<see cref="VersusMatch.NextWatched"/>).</summary>
     public FlightController? Watching;
@@ -973,6 +979,11 @@ public partial class FlightController : Node3D
     /// the destroy def's <c>Callback 15</c> hands the hull to the anim, or until it lands and runs
     /// its ground-impact def, whichever the airframe authors.</summary>
     public bool WreckFalling => _lifecycle.WreckFalling;
+
+    /// <summary>Whether R, pad Y or the armed timer would bring this pilot back once crashed. The
+    /// crashed step and the HUD's respawn prompt both read this one answer, so the prompt cannot
+    /// offer a respawn the step refuses.</summary>
+    public bool RespawnOffered => !Spectating && !CrashIsFinal && !CommandsHeld;
 
     /// <summary>An aircraft that has been BUILT but held completely out of the session, not
     /// stepped, drawn, collidable, hittable, or a targeting candidate. The original's wave
@@ -2014,10 +2025,9 @@ public partial class FlightController : Node3D
 
         if (Crashed)
         {
-            // ⚠ Out of lives, or held through an ending, neither R nor AutoRespawnAfter's timer
-            // may bring the pilot back. It is checked here rather than by clearing
-            // AutoRespawnAfter, which R overrides. A hull that dies inside a hold keeps falling.
-            if (Spectating || CommandsHeld)
+            // ⚠ Refused here, not by clearing AutoRespawnAfter, which R overrides. The HUD prompt
+            // reads the same answer. A hull that dies inside a hold keeps falling.
+            if (!RespawnOffered)
             {
                 StepWreckFall(dt);
                 return;
@@ -2939,7 +2949,7 @@ public partial class FlightController : Node3D
             AvailableLoadFactor = _model.AvailableLoadFactor,
             Stalled = _model.isStalled(),
             AutoLandOffered = AutoLandOffered,
-            RespawnOffered = !Spectating && !CommandsHeld,
+            RespawnOffered = RespawnOffered,
             WallDt = wallDt,
             SimDt = simDt,
             DamageSummary = _pilotHud.DrawsTextBlock ? Damage?.Summary() : null,

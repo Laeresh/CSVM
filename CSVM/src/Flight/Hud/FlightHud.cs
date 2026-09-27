@@ -53,9 +53,9 @@ public struct FlightHudState
     /// does something right now.</summary>
     public bool AutoLandOffered;
 
-    /// <summary>Whether the respawn button would actually bring this pilot back right now: false
-    /// for a pilot out of lives and for a seat whose controls the session is holding, both of which
-    /// swallow the press. A prompt naming a control that does nothing is the same defect as a
+    /// <summary>Whether the respawn button would actually bring this pilot back right now, copied
+    /// from <c>FlightController.RespawnOffered</c>. It is false out of lives, after a final
+    /// campaign crash, and for a held seat. A prompt naming a control that does nothing is the same defect as a
     /// prompt naming the wrong control.</summary>
     public bool RespawnOffered;
 

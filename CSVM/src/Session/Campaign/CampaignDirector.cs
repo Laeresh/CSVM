@@ -863,6 +863,10 @@ public sealed class CampaignDirector
             return;
         }
 
+        // Pinned on every seat's death, the last included: no seat that loses its aircraft flies
+        // again, and the HUD's respawn prompt reads the same pin.
+        human.CrashIsFinal = true;
+
         var (seats, down) = FieldDown();
         if (down < seats)
         {
