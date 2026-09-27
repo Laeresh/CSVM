@@ -689,8 +689,9 @@ another schema, or the `UnfinishedMarker` a run leaves until it succeeds, stops 
 unstamped tree stays the boot's warning. The field starts with the remembered install while it is
 still one, else the first found candidate, else the remembered path as a hint. Stale or unfinished
 data re-extracts with `Force`, since the incremental rule compares file times, and adds `Unzip`
-when the tree already has unpacked siblings the loaders would prefer. The run goes to a worker;
-progress and its outcome cross only through `Tick`, once a frame. Success remembers the install.
+when the tree already has unpacked siblings the loaders would prefer. The run goes to a dedicated
+worker thread rather than the thread pool, so a pool held by other blocking work cannot delay its
+start; progress and its outcome cross only through `Tick`, once a frame. Success remembers the install.
 
 ## src/UI/Screens/InstallPicker.cs
 Godot's own `FileDialog` in folder mode over the whole file system, never the native dialog, so

@@ -271,6 +271,10 @@ member, and it does not go here.
   a scripted capture pins its shape and never its pacing; judge pacing in a `--no-det` run.** The
   chase camera's throttle transient fell to 1/e in 2.15 sim seconds either way, which was 1.11 wall
   seconds under `--det` at 114 fps against 2.15 wall seconds without it.
+- **DET-16**, **A unit that blocks on work it queued with `Task.Run` can wait past any bound: xUnit runs
+  tests on pool threads, so the item lands in the blocked thread's local queue, which other threads
+  steal from only when the global queue is empty. Give such work its own thread.** The extraction
+  worker's cancel test failed 4 of 13 full unit passes with the item never started after 10 s.
 
 ## PERF, performance
 

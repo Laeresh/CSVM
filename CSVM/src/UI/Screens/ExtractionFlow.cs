@@ -4,7 +4,6 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
 using CSVM.Extraction;
 using CSVM.Session.Launch;
 
@@ -76,8 +75,8 @@ public sealed class ExtractionFlow
     private CancellationTokenSource? _cancel;
 
     /// <summary>Builds the flow for <paramref name="problem"/> over <paramref name="dataRoot"/>.
-    /// The worker runs through <paramref name="start"/>, the thread pool by default. On success the
-    /// install root goes to <paramref name="remember"/>.</summary>
+    /// The worker runs through <paramref name="start"/>, a dedicated background thread by default.
+    /// On success the install root goes to <paramref name="remember"/>.</summary>
     public ExtractionFlow(DataProblem problem, string dataRoot, string unzbd, string preFill, Runner runner, Action<string> remember, Action<Action>? start = null)
     {
         Problem = problem;
@@ -86,7 +85,7 @@ public sealed class ExtractionFlow
         InstallPath = preFill;
         _runner = runner;
         _remember = remember;
-        _start = start ?? (work => Task.Run(work));
+        _start = start ?? StartThread;
     }
 
     /// <summary>The call that extracts: <see cref="ExtractionRun.Run"/> in production.</summary>
@@ -295,6 +294,11 @@ public sealed class ExtractionFlow
         ExtractionPhase.Rof => "Extracting the menus, cinemas and text",
         _ => "Finishing",
     };
+
+    // Not the thread pool: a run blocks a thread for minutes. A pool item queued from a pool thread
+    // that then blocks sat unstarted for over ten seconds under the unit runner.
+    private static void StartThread(Action work) =>
+        new Thread(() => work()) { IsBackground = true, Name = "extraction" }.Start();
 
     // A data root that refuses the marker fails the run a moment later with the runner's own
     // message. This does not report it twice.
