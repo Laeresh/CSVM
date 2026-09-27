@@ -46,10 +46,10 @@ The `--screenshot=`/`--shots=`/`--frames=` capture state machine plus F11/F12's 
 ad-hoc save, built in `Launcher._Ready` from the launch spec and `Tick()`ed from the Launcher's
 `_Process`, so `--menu --screenshot` captures the launchscreen with no session node alive; it takes
 its camera/orbit/rigs/clock as parameters. That capture reads synchronously, since the process
-exits on its file. `SaveScreenshot`, the F12 save every screen shares, asks `PaneReadback` for the
-frame and writes the PNG into `ShotDir()` (`Screenshots/`, git-ignored) on the worker it lands on,
-logging "screenshot saved" there; it returns the path the file will take, not yet written. Read
-`GoldenShot.cs` for what the save site prints.
+exits on its file. `SaveScreenshot`, the F12 save every screen shares, writes the PNG from
+`PaneReadback`'s frame into `ShotDir()` on the worker it lands on (`ShotDirFor`: the repo's
+`Screenshots/`, or one beside the executable in an export), logging "screenshot saved" there, and
+returns the path the file will take. Read `GoldenShot.cs` for what the save site prints.
 
 ## src/Tooling/GltfExporter.cs
 Exports any `Node3D` subtree to glTF: mesh, live material state, no animation and no emitters.

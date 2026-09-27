@@ -235,7 +235,8 @@ x86_64, `embed_pck=true`, so a single `CSVM.exe` with the pck inside, plus the *
 .NET publish output beside it as `data_CSVM_windows_x86_64/`. The exported build resolves every root
 to the exe's own folder: it reads `extracted/` from there and writes its logs to a plain `logs\`
 beside the exe rather than to the `.scratch\logs\` a repo run uses (`Log.DirectoryFor` is the one
-switch). Per-user state is not in that folder at all: options, bindings, campaign profiles, scores
+switch); F12 screenshots go to a `Screenshots\` folder beside the exe (`CaptureDirector.ShotDirFor`).
+Per-user state is not in that folder at all: options, bindings, campaign profiles, scores
 and custom planes are written through `user://`, which is `%APPDATA%\Godot\app_userdata\CSVM`.
 
 **One-time template install.** The Godot export templates are user-global, not part of the repo's

@@ -54,11 +54,22 @@ public sealed class CaptureDirector
         string.Format(System.Globalization.CultureInfo.InvariantCulture,
             "{0:0.#####},{1:0.#####},{2:0.#####}", v.X, v.Y, v.Z);
 
-    /// <summary>The one folder every ad-hoc capture lands in, whichever screen took it: the repo's
-    /// git-ignored Screenshots/ (rendered frames are game-derived). Menu shots go here too, so a
-    /// pilot has one place to look and one place to attach a picture to a report from.</summary>
+    /// <summary>The one folder every ad-hoc capture lands in, whichever screen took it: see
+    /// <see cref="ShotDirFor"/>. Menu shots go here too, so a pilot has one place to look and one
+    /// place to attach a picture to a report from. Exported is the launcher's own editor test.</summary>
     public static string ShotDir() =>
-        Path.GetFullPath(Path.Combine(ProjectSettings.GlobalizePath("res://"), "..", "Screenshots"));
+        ShotDirFor(ProjectSettings.GlobalizePath("res://"),
+            Path.GetDirectoryName(OS.GetExecutablePath()) ?? string.Empty, !OS.HasFeature("editor"));
+
+    /// <summary>The repo's git-ignored Screenshots/ beside <c>CSVM/</c> (rendered frames are
+    /// game-derived) for an editor-hosted run, and Screenshots/ inside the executable's own folder
+    /// for an exported build. Pure, so both branches are assertable without an engine.
+    /// ⚠ Never derive the exported case from <paramref name="resDir"/>: there res:// is the pck,
+    /// and climbing out of it writes into the folder above the build.</summary>
+    public static string ShotDirFor(string resDir, string exeDir, bool exported) =>
+        exported
+            ? Path.GetFullPath(Path.Combine(exeDir, "Screenshots"))
+            : Path.GetFullPath(Path.Combine(resDir, "..", "Screenshots"));
 
     /// <summary>Save <paramref name="viewport"/>'s current frame to a timestamped PNG under
     /// <see cref="ShotDir"/>. Bound to F12 in the orbit viewer, in free flight and on the menu
