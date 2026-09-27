@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CSVM.Flight;
+using CSVM.Flight.Airframe;
 using CSVM.Flight.Hud;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
@@ -40,6 +41,12 @@ internal static class NetCoopMissionSuites
     private const int OpenerSteps = 600;
 
     private const string GuestName = "Lucy";
+
+    // The wingman suite's host profile and its wingman pick, the Fury, which no profile-less director
+    // binds. The ammunition rides the wire, though the Fury's AI def authors its own guns.
+    private const string WingHost = "WingHost";
+    private const byte WingAirframe = 7;
+    private static readonly int[] WingAmmo = { 2, 2, 2, 2 };
 
     // What each end flies. The host picks dumdum and Lucy magnesium, and the third end keeps the
     // starter's stock slug, so a seat's rounds say whose fit reached it.
@@ -153,6 +160,141 @@ internal static class NetCoopMissionSuites
             guest.Discard();
             host.Discard();
         }
+    }
+
+    [Suite("net-coop-wingman",
+        "a co-op campaign mission whose host profile flies its wingman in a picked aeroplane, host and "
+        + "one guest over a lossy loopback: the host's launch names the pick to the guest, and the "
+        + "guest builds the host-owned wingman in the same airframe, def, damage parts and fit as the "
+        + "host rather than the Devastator a profile-less director binds; every other roster block "
+        + "flies the same def on both machines")]
+    internal static void CCoopWingmanFliesTheHostsPick(TestContext ctx)
+    {
+        var mission = WingmanMission(ctx);
+        var stock = StockLoadouts.Load();
+        string store = Path.Combine(Path.GetTempPath(), $"csvm-coop-wingman-{System.Environment.ProcessId}");
+        var profile = CampaignProfileDef.NewProfile(WingHost);
+        profile.Planes[profile.WingmanPlane] = new OwnedPlane
+        {
+            Name = "Picked Wing",
+            Airframe = WingAirframe,
+            Ammo = (int[])WingAmmo.Clone(),
+        };
+        new CampaignProfileStore(store).Save(profile);
+
+        var devastator = CampaignDirector.CoopWingmanOf(CampaignProfileDef.NewProfile(CampaignDirector.CoopGuestPilot));
+        ctx.Check(devastator.Airframe == NetPlayFeature.StarterAirframe && devastator.Airframe != WingAirframe,
+            $"ABLE-TO-FAIL CONTROL: a profile-less director's wingman is the Devastator, not the host's pick ({devastator.Airframe} vs {WingAirframe})");
+
+        var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.03, 0.01, 0.25), new Random(2405));
+        var host = Door(mesh[0]);
+        var guest = Door(mesh[1]);
+        var ambient = NetCombatSuites.Ambient.Save();
+        Ends? hostEnd = null;
+        Ends? guestEnd = null;
+        try
+        {
+            host.OpenCoopHost(NetPlayFeature.CoopHumans - 1);
+            host.Offer(mission.Seq, WingHost, 1);
+            guest.OpenJoin();
+            Pump(SettleSteps, host, guest);
+            Select(host, mission);
+            Pump(SettleSteps, host, guest);
+            guest.PickCoop(NetPlayFeature.StarterAirframe, true);
+            Pump(SettleSteps, host, guest);
+            if (!guest.IsCoopGuest || !host.CoopAllReady)
+            {
+                ctx.Check(false, $"the guest joins the host's campaign door and is Ready ({guest.Stage}, ready {host.CoopAllReady})");
+                return;
+            }
+
+            hostEnd = Launch(ctx, mission, stock, host, host.BuildLaunch()!, HostAmmo, out _, WingHost, store);
+            guestEnd = Follow(ctx, mission, stock, guest, default, hostEnd, host);
+            if (!hostEnd.Built || !guestEnd.Built)
+            {
+                ctx.Check(false, $"both campaign sessions build (host {hostEnd.Built}, guest {guestEnd.Built})");
+                return;
+            }
+
+            var told = guest.CoopWingman;
+            ctx.Check(told is { Airframe: WingAirframe } named && named.Fit == CoopFit.Of(WingAmmo, null),
+                $"the host's launch names its profile's wingman airframe and fit to the guest ({told?.Airframe}, {told?.Fit})");
+            WingmanMatches(ctx, hostEnd, guestEnd);
+            RosterMatches(ctx, hostEnd, guestEnd);
+        }
+        finally
+        {
+            guestEnd?.Close();
+            hostEnd?.Close();
+            ambient.Restore();
+            guest.Discard();
+            host.Discard();
+            if (Directory.Exists(store))
+            {
+                Directory.Delete(store, recursive: true);
+            }
+        }
+    }
+
+    // The host-owned wingman on both machines: the picked airframe, one def, one set of damage
+    // parts and one fit. The host's own copy is the able-to-fail control that the profile was read.
+    private static void WingmanMatches(TestContext ctx, Ends host, Ends guest)
+    {
+        string want = UI.Hangar.PlanePickerRoster.AirframeNode(WingAirframe);
+        var hostWing = host.Session.Campaign?.Roster.GetValueOrDefault(CampaignDirector.WingmanName);
+        var guestWing = guest.Session.Campaign?.Roster.GetValueOrDefault(CampaignDirector.WingmanName);
+        ctx.Check(host.Session.Campaign?.WingmanNode == want && hostWing != null,
+            $"ABLE-TO-FAIL CONTROL: the host flies its wingman as its profile's pick {want} ({host.Session.Campaign?.WingmanNode}, spawned {hostWing != null})");
+        ctx.Check(guest.Session.Campaign?.WingmanNode == want && guestWing != null,
+            $"the guest binds the host's pick {want} for the wingman, not a default ({guest.Session.Campaign?.WingmanNode}, spawned {guestWing != null})");
+        if (hostWing == null || guestWing == null)
+        {
+            return;
+        }
+
+        string mine = Airframe(hostWing);
+        string theirs = Airframe(guestWing);
+        ctx.Check(mine == theirs,
+            $"the guest's wingman carries the host's def, damage parts and fit (host {mine} | guest {theirs})");
+    }
+
+    // Every block both machines spawned flies one def on both, so no other host-owned aeroplane
+    // takes a default on the guest either.
+    private static void RosterMatches(TestContext ctx, Ends host, Ends guest)
+    {
+        var mine = host.Session.Campaign?.Roster ?? new Dictionary<string, FlightController>();
+        var theirs = guest.Session.Campaign?.Roster ?? new Dictionary<string, FlightController>();
+        var differ = mine.Keys.Where(theirs.ContainsKey)
+            .Where(name => Airframe(mine[name]) != Airframe(theirs[name]))
+            .Select(name => $"{name}: {Airframe(mine[name])} vs {Airframe(theirs[name])}")
+            .ToArray();
+        ctx.Check(mine.Count > 1 && mine.Keys.All(theirs.ContainsKey) && differ.Length == 0,
+            $"all {mine.Count} roster block(s) spawn on the guest with the host's def ({theirs.Count} there; {string.Join("; ", differ)})");
+    }
+
+    // One aeroplane's identity as hits and damage see it: its def, its AI def, its damage parts and
+    // their pools, and its first gun's rounds.
+    private static string Airframe(FlightController rig)
+    {
+        string parts = rig.Damage is { } damage
+            ? string.Join(",", damage.Parts.Keys.OrderBy(k => k, StringComparer.Ordinal))
+              + Log.Format($"@{damage.WholeHealthMax:0.#}/{damage.WholeArmorMax:0.#}")
+            : "none";
+        string ammo = rig.Loadout?.Def is { Guns.Count: > 0 } def ? def.Guns[0].Ammo ?? "" : "";
+        return $"{rig.Stats?.DefName}/{rig.Stats?.AiDefName}/{parts}/{ammo}";
+    }
+
+    private static CampaignMission WingmanMission(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>()
+            .FirstOrDefault(m => m!.Value.ChapterFolder.Length > 0 && m.Value.Wingman)
+            ?? throw new SuiteSkippedException($"cm_sequence carries no wingman mission with a chapter");
+        string chapter = mission.ChapterFolder.ToUpperInvariant();
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, chapter), $"{chapter} gamez");
+        return mission;
     }
 
     // The host's restart in the launcher's order: its session freed, the door's relaunch, the new
@@ -489,15 +631,18 @@ internal static class NetCoopMissionSuites
         Launch(ctx, mission, stock, door, door.BuildLaunch()!, ammo, out seatFits);
 
     private static Ends Launch(TestContext ctx, CampaignMission mission, StockLoadouts stock,
-        NetPlayFeature door, MenuNetLaunch launch, int[] ammo, out CoopFit[] seatFits)
+        NetPlayFeature door, MenuNetLaunch launch, int[] ammo, out CoopFit[] seatFits,
+        string profile = "", string? profilesDir = null)
     {
         var own = CampaignLoadout.For(CoopFit.Of(ammo, null), stock);
         var planes = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(NetPlayFeature.StarterAirframe) };
         (var roster, seatFits) = Launcher.CoopLaunchField(door, launch.Transport, planes, new[] { own }, stock);
         door.TellSeatFits(seatFits);
+        door.TellCoopWingman(Launcher.CoopWingmanFor(profile, profilesDir));
         var fits = seatFits;
-        return NetCombatSuites.Ends.Open(ctx, Spec(mission, own), launch.Transport, isHost: true, HostSeed,
-            roster, UI.Hangar.PlanePickerRoster.StockAirframes, seat => Launcher.CoopSeatFitFor(seat, fits, null, stock));
+        return NetCombatSuites.Ends.Open(ctx, Spec(mission, own, profile, profilesDir), launch.Transport,
+            isHost: true, HostSeed, roster, UI.Hangar.PlanePickerRoster.StockAirframes,
+            seat => Launcher.CoopSeatFitFor(seat, fits, null, stock));
     }
 
     // A guest's launch: its door waits for the host's opener while the host flies. It then builds a
@@ -520,13 +665,18 @@ internal static class NetCoopMissionSuites
         var launch = door.BuildLaunch()!;
         return NetCombatSuites.Ends.Open(ctx, Spec(mission, CampaignLoadout.For(fit, stock)), launch.Transport,
             isHost: false, HostSeed + 1, null, UI.Hangar.PlanePickerRoster.StockAirframes,
-            seat => Launcher.CoopSeatFitFor(seat, null, door, stock));
+            seat => Launcher.CoopSeatFitFor(seat, null, door, stock), () => door.CoopWingman);
     }
 
-    // A co-op launch with no profile behind it. Only a guest's is so in play, and here the host's
-    // is too, so the suite writes nothing to the user's store.
-    private static SessionSpec Spec(CampaignMission mission, LoadoutChoice? fit) =>
-        SessionSpec.FromCampaign(SessionSpec.Parse(new[] { "--mute", "--no-pads" }), "", mission.Seq,
+    // A co-op launch with no profile behind it unless a suite's own store names one. Only a
+    // guest's is so in play, so no suite writes to the user's store.
+    private static SessionSpec Spec(CampaignMission mission, LoadoutChoice? fit, string profile = "",
+        string? profilesDir = null) =>
+        SessionSpec.FromCampaign(
+            SessionSpec.Parse(profilesDir == null
+                ? new[] { "--mute", "--no-pads" }
+                : new[] { "--mute", "--no-pads", $"--profiles={profilesDir}" }),
+            profile, mission.Seq,
             new[] { UI.Hangar.PlanePickerRoster.AirframeNode(NetPlayFeature.StarterAirframe) }, 1, new[] { fit });
 
     // The host's boards on the flight check of the suite's mission, with the starter offered.

@@ -795,6 +795,25 @@ public class NetPlayFeatureTests
     }
 
     [Fact]
+    public void TheHostsLaunchNamesItsWingmanToTheGuestAndOnlyAGuestReadsIt()
+    {
+        var (host, guest) = CoopPair(69);
+        host.ShowCoop(NetCoopScreen.FlightCheck, 3, 2, 0b10_0000);
+        guest.PickCoop(5, true);
+        Pump(host, guest);
+
+        // ABLE-TO-FAIL CONTROL: before the launch no wingman has been named.
+        Assert.Null(guest.CoopWingman);
+        var launch = host.BuildLaunch()!;
+        var wingman = new CoopWingmanMessage(7, CoopFit.Of(new[] { 2, 2 }, null));
+        host.TellCoopWingman(wingman);
+        launch.Transport.Step(0.016);
+        guest.Step(0.016);
+        Assert.Equal(wingman, guest.CoopWingman);
+        Assert.Null(host.CoopWingman);
+    }
+
+    [Fact]
     public void AGuestWalkingOutOfItsFlightIsHeardAtOnceAndOnlyForThatFlight()
     {
         var (host, guest) = CoopPair(71);

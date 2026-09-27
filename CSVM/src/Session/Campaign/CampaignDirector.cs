@@ -347,10 +347,29 @@ public sealed class CampaignDirector
         return spec.WithSeatedAircraft(node, custom, CampaignLoadout.For(plane, StockLoadouts.Load()));
     }
 
-    /// <summary>Construction, the shape <see cref="InstantAction.InstantActionDirector.TryCreate"/> has: null
-    /// outside a campaign launch, and a profile that cannot be loaded warns and flies without a
-    /// director rather than aborting the launch.</summary>
-    public static CampaignDirector? TryCreate(SessionSpec spec, string zrdrPath, string missionZrdrPath)
+    /// <summary>What a co-op host tells its guests the wingman flies. That is the airframe and
+    /// stored fit of <paramref name="profile"/>'s wingman plane, as <see cref="BindWingman"/> reads them.
+    /// <see cref="Net.CoopWingmanMessage.NoAirframe"/> when the profile owns no plane there.</summary>
+    public static Net.CoopWingmanMessage CoopWingmanOf(CampaignProfileDef profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        int at = profile.WingmanPlane;
+        if (at < 0 || at >= profile.Planes.Count
+            || profile.Planes[at].Airframe is < 0 or >= Net.CoopWingmanMessage.NoAirframe)
+        {
+            return new Net.CoopWingmanMessage(Net.CoopWingmanMessage.NoAirframe, default);
+        }
+
+        var plane = profile.Planes[at];
+        return new Net.CoopWingmanMessage((byte)plane.Airframe, Net.CoopFit.Of(plane.Ammo, plane.Ordnance));
+    }
+
+    /// <summary>Construction, the shape <see cref="InstantAction.InstantActionDirector.TryCreate"/> has.
+    /// It is null outside a campaign launch. A profile that cannot be loaded warns and flies without
+    /// a director rather than aborting the launch. Only a co-op guest passes
+    /// <paramref name="hostWingman"/>, so its wingman flies the aeroplane its host named.</summary>
+    public static CampaignDirector? TryCreate(SessionSpec spec, string zrdrPath, string missionZrdrPath,
+        Func<Net.CoopWingmanMessage?>? hostWingman = null)
     {
         if (spec.CampaignProfile == null || spec.CampaignMissionSeq is not { } seq)
         {
@@ -382,7 +401,15 @@ public sealed class CampaignDirector
         Log.Info("core", $"campaign: '{profile.Name}' flying {mission.ChapterFolder}/{mission.MissionFolder}, {script.Objectives.Count} objective(s)");
         var director = new CampaignDirector(script, mission, profile, store, missionZrdrPath,
             CampaignSequence.PreviousInSameChapter(CampaignSequence.Load(zrdrPath), seq)?.Seq);
-        director.BindWingman();
+        if (hostWingman != null)
+        {
+            director.BindHostWingman(hostWingman());
+        }
+        else
+        {
+            director.BindWingman();
+        }
+
         return director;
     }
 
@@ -1060,6 +1087,37 @@ public sealed class CampaignDirector
         WingmanNode = UI.Hangar.PlanePickerRoster.AirframeNode(plane.Airframe);
         WingmanFit = CampaignLoadout.For(plane, StockLoadouts.Load());
         Log.Info("core", $"campaign: {WingmanName} flies '{plane.Name}' as {WingmanNode}, bound for the roster spawn");
+    }
+
+    // A co-op guest's wingman: the host owns and flies it, so this machine builds the airframe and
+    // fit the host named. ⚠ Never fall back to this machine's profile: its default Devastator
+    // would carry other hit volumes and damage parts than the host's aeroplane.
+    private void BindHostWingman(Net.CoopWingmanMessage? told)
+    {
+        if (!_mission.Wingman)
+        {
+            return;
+        }
+
+        if (told is not { } wingman)
+        {
+            GD.PushWarning($"campaign: the co-op host named no aeroplane for {WingmanName}; it flies its " +
+                         "block's own def here, which need not match the host's");
+            Log.Warn("core", $"campaign: the co-op host named no aeroplane for {WingmanName}, flying its block's own def");
+            return;
+        }
+
+        if (!wingman.Binds)
+        {
+            Log.Info("core", $"campaign: the co-op host binds no aeroplane for {WingmanName}, flying its block's own def");
+            return;
+        }
+
+        WingmanNode = UI.Hangar.PlanePickerRoster.AirframeNode(wingman.Airframe);
+        // A stock fit reads back as null from the wire, and as an empty choice from a profile.
+        // The empty choice keeps the two machines' spawns identical.
+        WingmanFit = CampaignLoadout.For(wingman.Fit, StockLoadouts.Load()) ?? new LoadoutChoice();
+        Log.Info("core", $"campaign: {WingmanName} flies the host's airframe {wingman.Airframe} as {WingmanNode}, bound for the roster spawn");
     }
 
     // The music channel's battle detector: the decoded five-second proximity scan, which runs only

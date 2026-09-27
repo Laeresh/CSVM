@@ -263,3 +263,54 @@ public readonly record struct CoopSeatFitMessage(byte Seat, CoopFit Fit)
         return writer.Close();
     }
 }
+
+/// <summary>
+/// The campaign wingman's aeroplane as a co-op host launched it: the airframe its profile picked
+/// and that plane's fit. Sent to every guest before the session's opener, since every machine
+/// builds the host-owned wingman itself and must build the same def. Kept in the lobby.
+/// </summary>
+public readonly record struct CoopWingmanMessage(byte Airframe, CoopFit Fit)
+    : INetMessage<CoopWingmanMessage>
+{
+    /// <summary>The fixed width of the message, header included.</summary>
+    public const int Size = NetMessage.HeaderBytes + 4 + CoopFit.Bytes;
+
+    /// <summary>The airframe value saying the host's profile binds no wingman aeroplane, so the
+    /// wingman block flies its own def on every machine.</summary>
+    public const byte NoAirframe = 0xFF;
+
+    /// <inheritdoc/>
+    public static NetMessageType Type => NetMessageType.CoopWingman;
+
+    /// <inheritdoc/>
+    public static NetReliability Reliability => NetReliability.Reliable;
+
+    /// <summary>Whether the host named an airframe for the wingman.</summary>
+    public bool Binds => Airframe != NoAirframe;
+
+    /// <inheritdoc/>
+    public static bool TryRead(ReadOnlySpan<byte> from, out CoopWingmanMessage message)
+    {
+        message = default;
+        var reader = new NetMessageReader(from);
+        if (!reader.Is(Size) || reader.Type != Type)
+            return false;
+
+        byte airframe = reader.ReadByte();
+        _ = reader.ReadByte();
+        _ = reader.ReadUInt16();
+        message = new CoopWingmanMessage(airframe, CoopFit.Read(ref reader));
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public int Write(Span<byte> into)
+    {
+        var writer = new NetMessageWriter(into, Type);
+        writer.WriteByte(Airframe);
+        writer.WriteByte(0);
+        writer.WriteUInt16(0);
+        Fit.Write(ref writer);
+        return writer.Close();
+    }
+}

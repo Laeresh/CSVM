@@ -192,14 +192,14 @@ its UniqueID, port, address and lease end, so a run after a crash can delete it 
 still runs. A missing or unreadable file recalls none, and a failed write costs only that clear.
 
 ## src/Net/NetLobby.cs
-A carrier's first listener and itself the `INetTransport` the session later binds, since a
-carrier binds only once. A host's `Advertise` sends a `SessionAdvertMessage` to every peer on
-connect and on each change; a guest keeps the latest in `Advert`, and the host's closing word in
-`Closed`, and passes neither on. Co-op board messages stay here too: a host sends `CoopFlow` per
-guest and keeps each guest's latest `CoopPick`, a guest keeps the latest flow and `SeatFits`.
-Others are held (up to `HeldPayloads`) until a session binds, then replayed behind the peer
-announcement; a guest's pick drops what is still held from it. A peer whose build version does
-not play goes on `Clashing` and off every peer list. Read `NetLobbyTests.cs`.
+A carrier's first listener and itself the `INetTransport` the session later binds, since a carrier
+binds only once. A host's `Advertise` sends a `SessionAdvertMessage` to every peer on connect and on
+each change; a guest keeps the latest in `Advert` and the host's closing word in `Closed`. Co-op
+board messages stay here too: a host keeps each guest's latest `CoopPick`, a guest the latest flow,
+`SeatFits` and `Wingman`. Others are held (up to `HeldPayloads`) until a session binds, then replayed
+behind the peer announcement. ⚠ A new round seen while bound marks `FlightOver` until the next bind,
+so the opener survives both unbinds a restart makes. A peer whose build version does not play goes
+on `Clashing` and off every peer list. Read `NetLobbyTests.cs`.
 
 ## src/Net/NetBuildVersion.cs
 MAJOR.MINOR of the build's SemVer string, which two peers compare before they play: builds a patch
@@ -269,13 +269,14 @@ key and ordinal) and `WorldEventMessage`, whose `NetWorldEvent` code says what i
 Ids and phase mapping: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Net/NetCoopMessages.cs
-The campaign co-op boards' three messages, all reliable and all kept in `NetLobby` rather than a
+The campaign co-op boards' four messages, all reliable and all kept in `NetLobby` rather than a
 session. `CoopFlowMessage` is the host's boards as one guest follows them: the screen, the mission,
 the round of picks (`Epoch`), the guest's player number, the Ready mask, the hangar's airframes and,
 on the debrief, the host's result. `CoopPickMessage` is a guest's airframe, `CoopFit`, name, Ready
-and Left under the round it answers, so a Ready from an earlier round never launches the next
-mission. `CoopSeatFitMessage` tells every guest one seat's fit before the session opener. Layout:
-[../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+and Left under the round it answers, so an earlier round's Ready never launches the next mission.
+Before the session opener `CoopSeatFitMessage` tells every guest one seat's fit, and
+`CoopWingmanMessage` the host's wingman airframe and fit, so a guest never builds its own default.
+Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Net/NetDogfightMessages.cs
 The Multiplayer Lobby's three messages, all reliable and all kept in `NetLobby` rather than a

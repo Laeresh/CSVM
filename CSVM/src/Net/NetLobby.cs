@@ -84,6 +84,10 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     /// </summary>
     public IReadOnlyDictionary<int, CoopFit> SeatFits => _seatFits;
 
+    /// <summary>The campaign wingman's aeroplane as the co-op host last launched it, or null while
+    /// no host has named one. Every launch names it again before its opener.</summary>
+    public CoopWingmanMessage? Wingman { get; private set; }
+
     /// <summary>The Dogfight host's latest Mission Options, or null while none has arrived.</summary>
     public DogfightOptionsMessage? DogfightOptions { get; private set; }
 
@@ -105,7 +109,8 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     public bool Bound => _listener != null;
 
     /// <summary>Whether the co-op host opened another flight while a session was bound here. That
-    /// session then hears nothing more, and what arrives is held for the next bind.</summary>
+    /// session then hears nothing more, and what arrives is held for the next bind. The mark stands
+    /// until that bind, however often the carrier is unbound meanwhile.</summary>
     public bool FlightOver => _flightOver;
 
     /// <inheritdoc/>
@@ -201,7 +206,8 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
             _held.Clear();
         }
 
-        _flightOver = false;
+        // ⚠ The mark outlives this unbind, since a freed session unbinds and its door unbinds again.
+        // Were it cleared here, that second unbind would drop the opener. The next bind clears it.
         _boundFlow = null;
     }
 
@@ -374,6 +380,12 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         if (CoopSeatFitMessage.TryRead(payload, out var seatFit))
         {
             _seatFits[seatFit.Seat] = seatFit.Fit;
+            return true;
+        }
+
+        if (CoopWingmanMessage.TryRead(payload, out var wingman))
+        {
+            Wingman = wingman;
             return true;
         }
 

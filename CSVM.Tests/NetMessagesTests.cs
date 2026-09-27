@@ -879,6 +879,26 @@ public class NetMessagesTests
     }
 
     [Fact]
+    public void ACoopWingmanRoundTripsTheAirframeAndItsFitInTwentyBytes()
+    {
+        Assert.Equal(20, CoopWingmanMessage.Size);
+        Span<byte> buffer = stackalloc byte[CoopWingmanMessage.Size];
+        var sent = new CoopWingmanMessage(7, CoopFit.Of(new[] { 2, 2, 2, 2 }, new[] { 0, 3, 0, 0, 0, 0, 0, 0 }));
+        Assert.Equal(CoopWingmanMessage.Size, sent.Write(buffer));
+        Assert.True(CoopWingmanMessage.TryRead(buffer, out var got));
+        Assert.Equal(sent, got);
+        Assert.True(got.Binds);
+        Assert.Equal(0x59, (int)NetMessageType.CoopWingman);
+        Assert.Equal(NetReliability.Reliable, NetMessage.ReliabilityOf(NetMessageType.CoopWingman));
+        Assert.False(new CoopWingmanMessage(CoopWingmanMessage.NoAirframe, default).Binds);
+
+        // ABLE-TO-FAIL CONTROL: a seat fit has the same length and is still not a wingman.
+        Span<byte> seatFit = stackalloc byte[CoopSeatFitMessage.Size];
+        new CoopSeatFitMessage(7, sent.Fit).Write(seatFit);
+        Assert.False(CoopWingmanMessage.TryRead(seatFit, out _));
+    }
+
+    [Fact]
     public void ACoopFitKeepsEachStoredValueAndUnsetStaysUnset()
     {
         var fit = CoopFit.Of(new[] { 0, 4, -1 }, new[] { 0, 12, 1 });

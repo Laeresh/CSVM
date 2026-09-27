@@ -1213,6 +1213,23 @@ public partial class Launcher : Node3D
         return CampaignLoadout.For(fit, stock);
     }
 
+    /// <summary>The campaign wingman a co-op host's launch names to its guests, read off
+    /// <paramref name="profile"/> as the host's own director reads it. A launch with no profile
+    /// flies the fresh profile a director without one binds.</summary>
+    internal static Net.CoopWingmanMessage CoopWingmanFor(string profile, string? profilesDir)
+    {
+        var def = profile.Length == 0
+            ? CampaignProfileDef.NewProfile(CampaignDirector.CoopGuestPilot)
+            : CampaignProfileStore.ForSession(profilesDir).Load(profile);
+        if (def == null)
+        {
+            Log.Warn("core", $"net: co-op profile '{profile}' cannot be read, so no wingman aeroplane is named to the guests");
+            return new Net.CoopWingmanMessage(Net.CoopWingmanMessage.NoAirframe, default);
+        }
+
+        return CampaignDirector.CoopWingmanOf(def);
+    }
+
     /// <summary>A co-op host's field and each seat's fit, by seat. Its own seats come first, with
     /// the fits its launch carried. Then comes every seated guest still on the wire, in the plane,
     /// fit and name its pick carried.</summary>
@@ -1798,6 +1815,9 @@ public partial class Launcher : Node3D
             NetSeats = _netRoster,
             NetAirframes = _netWire == null ? null : UI.Hangar.PlanePickerRoster.StockAirframes,
             NetSeatFit = _coopFlight || _lobbyFlight ? CoopSeatFit : null,
+            NetCoopWingman = _coopFlight && !_netIsHost && _netDoor is { } coopDoor
+                ? () => coopDoor.CoopWingman
+                : null,
         });
         AddChild(_session);
         bool built = _session.StartSession();
@@ -2604,8 +2624,9 @@ public partial class Launcher : Node3D
     // A co-op campaign launch's wire. The host's roster is its own seats and then each guest the
     // door seated, in the stock aeroplane it picked and under its name. Every seat's fit goes to
     // every guest before the session's opener, on the same ordered channel. A guest builds none.
+    // The campaign wingman's aeroplane goes out beside the fits, since every guest builds it too.
     private void TakeCoopLaunch(UI.Menu.MenuNetLaunch? net, IReadOnlyList<string> planes,
-        IReadOnlyList<LoadoutChoice?> fits)
+        IReadOnlyList<LoadoutChoice?> fits, string profile, string? profilesDir)
     {
         _netWire = net?.Transport;
         _netIsHost = net?.IsHost ?? false;
@@ -2620,6 +2641,7 @@ public partial class Launcher : Node3D
         (_netRoster, _coopSeatFits) = CoopLaunchField(_netDoor, _netWire, planes, fits,
             _coopStock ??= StockLoadouts.Load());
         _netDoor.TellSeatFits(_coopSeatFits);
+        _netDoor.TellCoopWingman(CoopWingmanFor(profile, profilesDir));
         Log.Info("core", $"net: co-op launch with {_netRoster.Length - planes.Count} guest(s)");
     }
 
@@ -2694,7 +2716,7 @@ public partial class Launcher : Node3D
     {
         var (planes, pads, fits, customs) = Unpack(mission.Seats);
         LaunchedFrom(mission);
-        TakeCoopLaunch(mission.Net, planes, fits);
+        TakeCoopLaunch(mission.Net, planes, fits, mission.Profile, _cli.ProfilesDir);
         _spec = SessionSpec.FromCampaign(_cli, mission.Profile, mission.MissionSeq, planes,
             pads.Count, fits, customs);
         StepSortieSeed();
@@ -2761,7 +2783,7 @@ public partial class Launcher : Node3D
             return false;
         }
 
-        TakeCoopLaunch(launch, _spec.PlaneNames, _spec.MenuLoadouts);
+        TakeCoopLaunch(launch, _spec.PlaneNames, _spec.MenuLoadouts, _spec.CampaignProfile ?? "", _spec.ProfilesDir);
         return true;
     }
 
@@ -3204,6 +3226,10 @@ public sealed class LauncherContext
     /// Read once the field is known, which on a guest is after the host's roster arrived. A seat
     /// flown here keeps its own menu pick and never asks this.</summary>
     public System.Func<int, Flight.Weapons.LoadoutChoice?>? NetSeatFit { get; init; }
+
+    /// <summary>The campaign wingman's aeroplane as a co-op guest's host named it, null while the
+    /// host named none. Set on a co-op guest only, whose director binds the wingman from it.</summary>
+    public System.Func<Net.CoopWingmanMessage?>? NetCoopWingman { get; init; }
 
     /// <summary>The presentation this session's own boards take, already resolved: the menu's
     /// active one, or what the flags name on a CLI launch. A resolved answer rather than a flag,

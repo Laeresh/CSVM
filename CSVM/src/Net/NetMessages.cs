@@ -119,6 +119,10 @@ public enum NetMessageType : ushort
     /// <summary>A skip of one shared cutscene episode: a guest's ask, or the host's word that it
     /// skipped.</summary>
     CutsceneSkip = 0x0058,
+
+    /// <summary>The campaign wingman's airframe and fit, sent by a co-op host to every guest at a
+    /// launch.</summary>
+    CoopWingman = 0x0059,
 }
 
 /// <summary>Which board a co-op host stands on, the screen a <see cref="CoopFlowMessage"/> names.
@@ -1249,6 +1253,7 @@ public static class NetMessage
         NetMessageType.BuildVersion => BuildVersionMessage.Reliability,
         NetMessageType.DestructibleHit => DestructibleHitMessage.Reliability,
         NetMessageType.CutsceneSkip => CutsceneSkipMessage.Reliability,
+        NetMessageType.CoopWingman => CoopWingmanMessage.Reliability,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "no such message type"),
     };
 

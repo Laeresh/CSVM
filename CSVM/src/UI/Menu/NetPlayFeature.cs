@@ -430,6 +430,10 @@ public sealed class NetPlayFeature : IMenuFeature
     public IReadOnlyDictionary<int, CoopFit> CoopSeatFits =>
         _transport?.SeatFits ?? (IReadOnlyDictionary<int, CoopFit>)new Dictionary<int, CoopFit>();
 
+    /// <summary>The campaign wingman's aeroplane as this co-op guest's host launched it, or null
+    /// while the host has named none.</summary>
+    public CoopWingmanMessage? CoopWingman => IsCoopGuest ? _transport?.Wingman : null;
+
     /// <summary>Whether this co-op guest is Ready under the host's current round.</summary>
     public bool CoopReady => _pickReady && CoopFlow is { } flow && _pickSent is { } sent && sent.Epoch == flow.Epoch;
 
@@ -572,6 +576,21 @@ public sealed class NetPlayFeature : IMenuFeature
             {
                 _transport.Tell(peer, new CoopSeatFitMessage((byte)seat, bySeat[seat]));
             }
+        }
+    }
+
+    /// <summary>Sends every seated co-op guest the campaign wingman's aeroplane. A host calls this at
+    /// its launch, before the session's opener, beside <see cref="TellSeatFits"/>.</summary>
+    public void TellCoopWingman(CoopWingmanMessage wingman)
+    {
+        if (_transport == null || !IsCoopHost)
+        {
+            return;
+        }
+
+        foreach (int peer in _admitted)
+        {
+            _transport.Tell(peer, wingman);
         }
     }
 

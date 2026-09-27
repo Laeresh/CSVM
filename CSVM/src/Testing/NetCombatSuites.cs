@@ -1138,7 +1138,8 @@ internal static class NetCombatSuites
     {
         public static Ends Open(TestContext ctx, SessionSpec spec, INetTransport transport,
             bool isHost, ulong seed, IReadOnlyList<NetSeat>? roster,
-            IReadOnlyList<string>? airframes = null, Func<int, LoadoutChoice?>? seatFit = null)
+            IReadOnlyList<string>? airframes = null, Func<int, LoadoutChoice?>? seatFit = null,
+            Func<CoopWingmanMessage?>? coopWingman = null)
         {
             var pane = new SubViewport
             {
@@ -1180,6 +1181,7 @@ internal static class NetCombatSuites
                 NetHost = isHost,
                 NetAirframes = airframes ?? Airframes,
                 NetSeatFit = seatFit,
+                NetCoopWingman = coopWingman,
             });
             pane.AddChild(session);
             return new Ends(pane, session, session.StartSession());

@@ -210,6 +210,7 @@ public partial class GameSession : Node3D
     // readonly: a guest's roster arrives over the wire, between construction and the build.
     private IReadOnlyList<Net.NetSeat> _netSeats;
     private Func<int, Flight.Weapons.LoadoutChoice?>? _netSeatFit;
+    private Func<Net.CoopWingmanMessage?>? _netCoopWingman;
     // How this guest reads the host's session clock, null on a host and outside a match. Built
     // from the handshake, whose seed is already in _masterSeed by then.
     private Net.NetClockSlew? _netClock;
@@ -451,6 +452,8 @@ public partial class GameSession : Node3D
             ? seats.OrderBy(s => s.SeatIndex).ToArray()
             : Array.Empty<Net.NetSeat>();
         _netSeatFit = ctx.NetSeatFit;
+        // Every guest binds the wingman from its host's word, and one with no word says so loudly.
+        _netCoopWingman = ctx.NetTransport != null && !ctx.NetHost ? ctx.NetCoopWingman ?? (() => null) : null;
         _netClock = ctx.NetHandshake is { } handshake
             ? new Net.NetClockSlew(handshake.HostClock)
             : null;
@@ -710,7 +713,7 @@ public partial class GameSession : Node3D
         // lives on InstantActionDirector.TryCreate.
         _iaDirector = InstantActionDirector.TryCreate(_spec);
         // The campaign's sibling, on the same "a load failure flies without a mission" contract.
-        _campaign = CampaignDirector.TryCreate(_spec, _zrdrPath, state.MissionZrdrPath);
+        _campaign = CampaignDirector.TryCreate(_spec, _zrdrPath, state.MissionZrdrPath, _netCoopWingman);
         if (_campaign is { } campaign)
         {
             // The mission's own WAKEUP_SOUND_GROUP is what cues every campaign track, so the

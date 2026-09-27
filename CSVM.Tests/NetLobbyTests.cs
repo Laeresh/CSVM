@@ -139,6 +139,42 @@ public class NetLobbyTests
     }
 
     [Fact]
+    public void TheHostsNextOpenerOutlivesTheSessionsUnbindAndTheDoorsAfterIt()
+    {
+        var guest = new RecordingTransport(localPeer: 2);
+        var lobby = new NetLobby(guest);
+        guest.Connect(0);
+        guest.Deliver(0, Bytes(new CoopFlowMessage(NetCoopScreen.InMission, 3, 1, 1, 0, 2, 0, false, 0, 0, 0)));
+        var old = new RecordingListener();
+        lobby.Bind(old);
+
+        // The host's restart names a new round, and its opener lands before the guest's session is freed.
+        guest.Deliver(0, Bytes(new CoopFlowMessage(NetCoopScreen.InMission, 3, 2, 1, 0, 2, 0, false, 0, 0, 0)));
+        guest.Deliver(0, Bytes(new CoopWingmanMessage(7, default)));
+        guest.Deliver(0, Handshake(9));
+        Assert.True(lobby.FlightOver);
+        Assert.Empty(old.Payloads);
+        Assert.Equal(1, lobby.Held);
+        Assert.Equal(new CoopWingmanMessage(7, default), lobby.Wingman);
+
+        // The freed session releases the carrier, then the door reclaims it.
+        lobby.Release(old);
+        lobby.Unbind();
+        Assert.Equal(1, lobby.Held);
+
+        var next = new RecordingListener();
+        lobby.Bind(next);
+        Assert.Single(next.Payloads);
+        Assert.False(lobby.FlightOver);
+
+        // ABLE-TO-FAIL CONTROL: with no new round, an unbind still drops what was held.
+        lobby.Unbind();
+        guest.Deliver(0, Handshake(10));
+        lobby.Unbind();
+        Assert.Equal(0, lobby.Held);
+    }
+
+    [Fact]
     public void CoopFlowsAndPicksAreKeptByTheLobbyAndNeverPassedOn()
     {
         var host = new RecordingTransport(localPeer: 1);

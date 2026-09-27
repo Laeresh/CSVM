@@ -232,7 +232,7 @@ score, `0x17` match state, `0x22` hit and `0x27` seat roster. Damage, spawn, the
 director transition, the join handshake and a seat's ask to be spawned again have no
 counterpart, so they are minted at `0x40`, `0x41`, `0x42`, `0x43` and `0x44`, above the ceiling
 above. The host-owned world's four (AI state, AI fire, a guest's hit claim on an AI, and a world
-event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, and a cutscene skip at `0x58`. The handshake carries the master seed, the host's clock and the seat the joining peer was
+event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, and the lobby's co-op wingman at `0x59`. The handshake carries the master seed, the host's clock and the seat the joining peer was
 given; the original needs none of the three, because it draws from no shared stream and hands
 out no seat. The ask carries a seat and nothing else: the original's client takes its own
 respawn, while here the host owns every placement and answers the ask with a spawn event.
@@ -564,20 +564,27 @@ silent or foreign instead of naming the mismatch.
 
 ### Campaign co-op boards
 
-A co-op guest follows the host's boards through three more lobby messages, minted at `0x50` to
-`0x52` since the original has no campaign across a link. None reaches a session.
+A co-op guest follows the host's boards through four more lobby messages, minted at `0x50` to
+`0x52` and `0x59` since the original has no campaign across a link. None reaches a session.
 
 | Id | Message | Class | Carries |
 |---|---|---|---|
 | `0x50` | Co-op flow | reliable, host to each guest | screen at 4 (unknown 0, cabin 1, briefing 2, flight check 3, in mission 4, debrief 5), mission sequence at 5, round at 6, the guest's player number at 7, Ready mask by player number at 8, humans at 9, host's campaign progress at 10, flags at 11 (bit 0 won), hangar airframe mask at 12, the guest's local seats at 14, one reserved byte, objectives mask at 16, cash at 20 (24 bytes) |
 | `0x51` | Co-op pick | reliable, guest to host | round at 4, flags at 5 (bit 0 Ready, bit 1 left the flight), airframe at 6, one reserved byte, the fit at 8, the player name at 20 (16 bytes, zero-padded; 36 bytes) |
 | `0x52` | Co-op seat fit | reliable, host to each guest | seat at 4, three reserved bytes, the fit at 8 (20 bytes) |
+| `0x59` | Co-op wingman | reliable, host to each guest | wingman airframe at 4 (`0xFF` none), three reserved bytes, the fit at 8 (20 bytes) |
 
 A fit is twelve bytes: the four gun slots' ammunition, then the eight ordnance cells, one byte
 each, each the profile's stored value plus one so that zero reads as unset (stock). The pick
 carries a guest's own plane record's ammunition and ordnance. At its launch the host sends every
 guest a seat fit for each seat, its own seats included, before the session's opener on the same
 ordered channel. Every machine then builds each seat flown elsewhere with its own pilot's fit.
+After the seat fits and before the opener the host also sends each guest a co-op wingman naming
+its profile's wingman airframe and fit. A guest's director has no profile of its own, so it binds
+the campaign's `wingman_1` from that word, and both machines build the host-owned wingman in the
+same def with the same damage parts. A guest with no word flies the block's own def and says so in
+a warning; it never substitutes its own default. `0xFF` names no pick, which also flies the block's
+def. A guest a patch older drops `0x59` as unknown and flies the old default.
 The name is the guest's last-played pilot, read without writing, and the host's roster calls
 the guest by it; a guest with none is called by its player number. A guest leaving the flight
 through its pause sheet sets the left flag, and the host takes its seat out at once, as it does
