@@ -121,8 +121,9 @@ constructor's `row` and `sticksOnly`. Escape and the pad's Back cancel and are n
 ## src/Bindings/StickCapture.cs
 The stick half of a capture, over every identity the reader lists (`IStickDevices`): buttons 0..127,
 hats 0..3 per direction (release-first), and axes 0..7 measured from the value each read when the
-capture armed, since a lever rests anywhere. The axis moved furthest past `MoveThreshold` wins. On a
-row where `AxisPairs.TakesFullAxis` holds it becomes `AxisPairs.FullAxisFor`, invert inferred, with
+capture armed, since a lever rests anywhere. The axis moved furthest past `MoveThreshold` wins, or
+on the lever row one within `LeverEndBand` of a nearer end after `LeverMinTravel`. On a row where
+`AxisPairs.TakesFullAxis` holds it becomes `AxisPairs.FullAxisFor`, invert inferred, with
 `DeadzoneFor(row)` (0.08 on the throttle rate pair, 0.02 elsewhere); on any other row a half axis,
 captured only once it sits past its own deadzone. Nothing is scanned while `ReadsBlocked` holds, and
 the rests and masks are taken on the first unblocked poll, never from blocked zeros.
