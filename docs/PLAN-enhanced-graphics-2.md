@@ -178,8 +178,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☑ Render Scale, a VIDEO page row applied to every 3D viewport, ignored under `--det`
 3. ☑ BL-803: the shadow-map bands on grazing surfaces under Enhanced
 4. ☑ Alpha-to-coverage on the cutout surfaces under Enhanced
-5. ◐ FSR 2.2 tried once as the alternative temporal pass, kept or parked on the user's verdict
-6. ☐ Render Scale below native, upscaled by FSR, for the Steam Deck
+5. ☑ FSR 2.2 tried once as the alternative temporal pass, kept or parked on the user's verdict
+6. ☐ An Anti-aliasing row on the VIDEO page, and a Render Scale that follows it down to 50%
 
 ### Wave B, lit explosions
 
@@ -506,7 +506,11 @@ move).
 clutter fade dithers alpha on purpose; coverage on a dithered alpha reads as a different pattern,
 so try it with and without the fade arm.
 
-## A5 ◐ FSR 2.2 tried once as the alternative temporal pass, kept or parked on the user's verdict
+## A5 ☑ FSR 2.2 tried once as the alternative temporal pass, kept or parked on the user's verdict
+
+**Verdict.** Neither pass is deleted: the player chooses. The anti-aliasing method becomes a VIDEO
+page row in both presentations, FSR 2.2 among its choices, and the `graphics.temporal` trial door
+gives way to it. A6 builds the row.
 
 **Landed.** The trial door is a `graphics.temporal` config key carrying `taa` or `fsr2`, default
 `taa`, resolved once at launch by `Utils/TemporalPassSetting.cs` beside `GraphicsMode.Resolve` and
@@ -584,43 +588,50 @@ at 1.0, which the setting's comment must say.
 hand (puffer, clouds, clutter); those hand-rolled billboards give wrong vectors and smear. That is
 likely the deciding defect, so look for it first.
 
-## A6 ☐ Render Scale below native, upscaled by FSR, for the Steam Deck
+## A6 ☐ An Anti-aliasing row on the VIDEO page, and a Render Scale that follows it down to 50%
 
-**Goal.** Render Scale gains choices below 100% that render the 3D viewports at a fraction of
-native and upscale with FSR, so Enhanced Graphics, and splitscreen with it, reach a playable frame
-rate on a Steam Deck.
+**Goal.** The player picks the anti-aliasing method on the VIDEO page of both presentations, and
+Render Scale offers the scales that method can run at, down to 50% so a Steam Deck can run
+Enhanced Graphics and splitscreen at a playable frame rate.
 
-**Evidence (confidence: lead-only).** The v0.2.0 release notes record that Enhanced Graphics and
-splitscreen run well below 60 fps on the Deck while the default graphics hold 60. The user's
-reading on the Deck puts the GPU above 90 percent busy with the CPU at 20 to 30 percent, which
-points at per-pixel GPU cost that a lower render resolution reduces directly. An aggregate CPU
-figure can hide one saturated thread (one of the Deck's eight threads is 12.5 percent), so the
-item's first run on the Deck logs `[perf]` `gpu_ms` against `frame_ms` to confirm it. Godot
-accepts `Scaling3DScale` below 1.0 in `Fsr` (FSR 1, spatial) and `Fsr2` (temporal) modes and
-refuses FSR above 1.0, so the supersampling half of A2 stays bilinear. A5 keeps FSR 2.2 for this
-role, so its verdict decides only the pass at native.
+**Decisions (the user's).** One Anti-aliasing row with five choices: Off, FXAA, SMAA, TAA and
+FSR 2.2. It is a display setting in both presentations, like Render Scale. Unset, it reads as the
+mode's own default: Off under Original, which is today's image (the project's MSAA 2x and nothing
+else), and TAA under Enhanced, which is A1's. MSAA stays fixed at `project.godot`'s 2x with no row
+of its own; A4's coverage edges rely on it. Render Scale's choices follow the row: FSR 2.2 offers
+50 to 100%, the other four offer 50 to 200%.
 
-**Approach.** Extend `DisplayWords.RenderScaleChoices` below 100 (a small set such as 50, 67 and
-77, the last two FSR's own quality presets at 1280x800), and give `ViewportQuality.Apply` a branch:
-below native it writes the FSR mode and the scale, and under Enhanced FSR 2.2 replaces TAA as it
-does in A5's `fsr2` arm. The row stays a display setting written in both presentations, as A2's
-decision 3 holds, and `--det` still drops it. Try FSR 1 and FSR 2.2 on the Deck at the same scale,
-C1 and C5, one pane and four; ship the one that holds the frame rate and reads cleaner, or both if
-they trade places between one pane and four.
+**Evidence (confidence: traced).** Godot 4.7 exposes, per viewport, `ScreenSpaceAA` (Disabled,
+Fxaa, Smaa), `UseTaa`, and `Scaling3DMode` (Bilinear, Fsr, Fsr2) with `Scaling3DScale`; FSR 1 and
+FSR 2.2 refuse a scale above 1.0 and bilinear is the only supersampler, and FSR 2.2 carries its own
+temporal pass and replaces TAA. `ViewportQuality.Apply` is already the one write on all four 3D
+viewports. The v0.2.0 release notes record Enhanced and splitscreen well below 60 fps on the Deck,
+and the user's reading there puts the GPU above 90 percent busy with the CPU at 20 to 30 percent,
+per-pixel cost that a lower render scale reduces directly.
 
-**Model recommendation.** medium; the pick is the user's on the Deck.
+**Approach.** An `AntiAliasingSetting` in `Utils` replaces `TemporalPassSetting`, layered the way
+`RenderScaleSetting` is: the saved option, then a `graphics.antiAliasing` config key, then the
+mode's default, with `SavedWord` holding the `--det` drop. `graphics.temporal` goes with the class.
+`DisplayWords` gains the five words and Render Scale gains 50, 67 and 77 (FSR's own quality presets
+at 1280x800 are 67 and 77). `ViewportQuality.Apply` writes: the screen-space filter for FXAA/SMAA,
+`UseTaa` for TAA, and the scaling mode by scale and method (below native FSR 2.2 when that is the
+method, else FSR 1; above native bilinear; at native nothing, or FSR 2.2 at 1.0 when that is the
+method). The row goes on both presentations' VIDEO pages; picking FSR 2.2 while Render Scale sits
+above 100% moves the scale to 100%, and `Resolve` clamps the same pair the same way.
 
-**Verify.** `display-render-scale` extended to the new words (precedence, `--det` drop, a
-viewport read back at 67% showing the FSR mode and 0.67); goldens unchanged; on the Deck, the
-`[perf]` figures at 100% and at the chosen scale for Enhanced at one pane and four, and the user's
-verdict on the look.
+**Model recommendation.** medium.
 
-**⚠ Traps.** FSR 2.2's own cost is roughly fixed per output pixel rather than per input pixel, and
-a four-pane run pays it once per pane with four histories, so a scale that helps at one pane can
-lose at four. The hand-billboarded shaders (puffer, clouds, clutter) write no motion vectors; A5
-measured no smear at native, but a lower input resolution leans harder on the vectors, so look for
-smear on smoke and clouds first. The cockpit and spyglass SubViewports take the same scale as the
-root viewport or the panes disagree in sharpness (A2's trap).
+**Verify.** The complete battery with goldens hash-identical. A suite covers the precedence, the
+`--det` drop, the scale clamp, and each method's viewport write read back. The menu suites count the
+new row. On the Deck, `[perf]` at 100% and at 67% under Enhanced, one pane and four, FSR 1 against
+FSR 2.2, and the user's look.
+
+**⚠ Traps.** Nothing may be written on a viewport under Original with the defaults, or the
+faithful `--det` goldens move. FSR 2.2's cost is roughly fixed per output pixel and a four-pane run
+pays it once per pane, so a scale that helps at one pane can lose at four. The hand-billboarded
+shaders (puffer, clouds, clutter) write no motion vectors; a lower input resolution leans harder
+on them, so look for smear on smoke and clouds first. The cockpit and spyglass SubViewports take
+the same writes as the root viewport, or the panes disagree in sharpness (A2's trap).
 
 # Wave B, lit explosions
 
