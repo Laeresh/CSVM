@@ -1,4 +1,4 @@
-using CSVM.UI;
+using CSVM.UI.Screens;
 using Godot;
 
 namespace CSVM.Testing;
@@ -33,7 +33,7 @@ internal static class MenuZoneSuites
             RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled,
         };
         ctx.Host.AddChild(view);
-        var menu = MenuSuiteHost.Menu(ctx);
+        var menu = MenuSuiteHost.Menu(ctx, "menu-zone-layout");
         view.AddChild(menu);
         try
         {

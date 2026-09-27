@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using CSVM.Bindings;
-using CSVM.UI;
+using CSVM.UI.Screens;
 using Godot;
 using Xunit;
 
@@ -180,12 +180,12 @@ public class MenuInputBindingTests
     }
 
     [Fact]
-    public void TheJoinGestureIsTheOnlyMenuActionTheSeatCannotResolve()
+    public void TheJoinGestureAndTheSkipAreTheOnlyMenuActionsTheSeatCannotResolve()
     {
         var map = MenuMap();
         foreach (var action in DefaultBindings.ActionsIn(InputContext.Menu))
         {
-            if (action == InputAction.MenuJoin)
+            if (action is InputAction.MenuJoin or InputAction.SkipCutscene)
                 Assert.Empty(map.Bindings(action));
             else
                 Assert.NotEmpty(map.Bindings(action));

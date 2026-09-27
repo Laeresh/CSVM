@@ -24,7 +24,7 @@ public interface IMenuInputSource
 }
 
 /// <summary>The pointer half of one seat's commands, in window pixels; the active presentation
-/// maps it into its own canvas (the Original presentation through <see cref="BoardFit"/>). A
+/// maps it into its own canvas (the Original presentation through <see cref="Boards.BoardFit"/>). A
 /// source with no pointer reports null, not a zeroed position. <paramref name="Wheel"/> is the
 /// wheel's steps this frame, positive toward a list's foot; a presentation turns it into list
 /// steps over whatever list the pointer stands on. <paramref name="RightPressed"/> is the
@@ -70,6 +70,12 @@ public sealed record MenuCommands
 
     /// <summary>Delete one character of captured text (edge).</summary>
     public bool Erase { get; init; }
+
+    /// <summary>Insert the clipboard into captured text (edge): Ctrl+V or Shift+Insert.</summary>
+    public bool Paste { get; init; }
+
+    /// <summary>Clear the highlighted control on a rebinding page (edge).</summary>
+    public bool Unbind { get; init; }
 
     /// <summary>This seat's pointer, or null when its devices have none.</summary>
     public MenuPointer? Pointer { get; init; }

@@ -1,7 +1,6 @@
 using System.Collections.Generic;
-using CSVM.Flight;
+using CSVM.Flight.Airframe;
 using CSVM.Mech3;
-using CSVM.Session;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -61,6 +60,34 @@ public class AircraftLifecycleTests
 
         Assert.False(life.TickAutoRespawn(3.9f, scriptedRun: false));
         Assert.True(life.TickAutoRespawn(0.2f, scriptedRun: false));
+    }
+
+    [Fact]
+    public void AutoRespawnOffWaitsForFireGunsOnceTheCrashSequenceHasRun()
+    {
+        var life = new AircraftLifecycle { AutoRespawnAfter = 3f, RespawnOnFire = true };
+        int reads = 0;
+        bool held = false;
+        bool Fire()
+        {
+            reads++;
+            return held;
+        }
+
+        life.Destroy("wreck_fall", null);
+        held = true;
+        Assert.False(life.TickAutoRespawn(2.9f, scriptedRun: false, Fire));
+        Assert.Equal(0, reads);
+        held = false;
+        Assert.False(life.TickAutoRespawn(0.2f, scriptedRun: false, Fire));
+        Assert.False(life.TickAutoRespawn(5f, scriptedRun: false, Fire));
+        held = true;
+        Assert.True(life.TickAutoRespawn(0.016f, scriptedRun: false, Fire));
+
+        // ABLE-TO-FAIL CONTROL: Auto Respawn on, the same run-down timer is due with no press.
+        var auto = new AircraftLifecycle { AutoRespawnAfter = 3f };
+        auto.Destroy("wreck_fall", null);
+        Assert.True(auto.TickAutoRespawn(3.1f, scriptedRun: false, () => false));
     }
 
     [Fact]

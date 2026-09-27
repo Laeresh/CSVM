@@ -1,5 +1,7 @@
 using System.Diagnostics;
-using CSVM.UI;
+using CSVM.UI.Boards;
+using CSVM.UI.Campaign;
+using CSVM.UI.Screens;
 using Godot;
 
 namespace CSVM.Testing;
@@ -36,7 +38,7 @@ internal static class CampaignBriefingRepaintSuites
     internal static void CampaignBriefingRepaint(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        var menu = MenuSuiteHost.Menu(ctx);
+        var menu = MenuSuiteHost.Menu(ctx, "campaign-briefing-repaint");
         ctx.Host.AddChild(menu);
         try
         {

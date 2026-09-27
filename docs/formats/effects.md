@@ -152,7 +152,8 @@ state.** A sprite draws additively exactly when bit 2 of its texture's render-fl
 which makes the verdict per particle and per flipbook frame rather than per emitter; the decode is
 [`../org/textures.md`](../org/textures.md). No texture any puffer in this install names carries the
 bit, so every authored emitter alpha-mixes. Neither the `COLORS` ramp nor the sprite's own
-brightness enters into it.
+brightness enters into it. The mix runs on the framebuffer's gamma-encoded bytes, which CSVM
+reproduces in its linear target (see [`../org/puffer.md`](../org/puffer.md)).
 
 ## Aircraft speed-cue wisps
 
@@ -172,7 +173,7 @@ white at half-life → transparent black. C1 uses peak alpha 0.4/0.5/0.5; C4 use
 The generic distance-puffer update leaves emitted particles in world space. Consequently the
 aircraft passes through each puff, and its screen-visible duration falls approximately inversely
 with airspeed. This effect is separate from both chapter cloud-card populations and the
-hard-coded throttle-rise exhaust below. CSVM implements it in `Flight.SpeedCue`, loading the
+hard-coded throttle-rise exhaust below. CSVM implements it in `Flight.Hud.SpeedCue`, loading the
 chapter reader verbatim and assigning one private renderer set to each player rig.
 
 CSVM's opt-in enhanced presentation adds a second, camera-local streak field over these wisps
@@ -206,6 +207,14 @@ age 1. The ramp container is refcounted and each particle holds the one current 
 (`FUN_0054f8b0`, particle `[0x1d]`; `FUN_0054f6d0` drops the emitter's reference on a rewrite), so
 the opacity is fixed per particle at spawn.
 
+The draw puts byte 1, not 7, in each colour channel. The ramp holds framebuffer bytes, and the
+per-particle draw (`FUN_0054e6e0`, `0054e9e5`–`0054ea7d`) rounds each channel as it stands without
+scaling it by 255, so the installed `7/255` rounds to 1. The plume is therefore black mixed with
+`SRCALPHA, INVSRCALPHA` over the framebuffer's gamma-encoded bytes, on a `2r` quad with no rim
+treatment, from a 4444 surface of the smoke texture's alpha plane. That draw path and what CSVM
+changes to reproduce it are in [`../org/puffer.md`](../org/puffer.md), "What the mixed sprite puts
+on screen".
+
 What follows from the constants at a 60 Hz step: an idle-to-full digit slam peaks at intensity
 0.356 about 0.9 s in and is off 3.9 s after the command; idle to 5/8 peaks at 0.18; a single 1/8
 step peaks at 0.013 and is off within 0.4 s, which is why the CAP-21 footage shows no plume for it.
@@ -215,7 +224,7 @@ step's slew and the intensity settles below the 0.01 floor. The generic puffer u
 particles in world space, which is why they pass behind the moving aircraft.
 
 `FUN_00476250` builds the wrappers for every aircraft that carries `exhaust%d` markers, not only
-the player's. CSVM implements it in `CSVM/src/Flight/ExhaustSmoke.cs` and builds it on the human
+the player's. CSVM implements it in `CSVM/src/Flight/Airframe/ExhaustSmoke.cs` and builds it on the human
 and the AI rig alike, each fed its own pilot's gap. The trails' particle scatter draws on the
 shared puffer seed stream, as the original's generic particle spawn (`FUN_0054f8b0`) calls the CRT
 `rand` every other puffer calls, so each launched aircraft with exhaust markers re-seeds the

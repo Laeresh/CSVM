@@ -35,7 +35,7 @@ and every splitscreen pane pick up the same settings and the same per-zone updat
 duplicate or share the session's own sun and Environment (`CockpitOverlay.cs`, `SplitScreen.cs`).
 
 One drawing runs in **original mode alone**, the only difference in that direction: the aircraft's
-projected ground shadow (`Flight/GroundShadowPass.cs`, decoded in `../org/shadows.md`). It is the
+projected ground shadow (`Flight/Airframe/GroundShadowPass.cs`, decoded in `../org/shadows.md`). It is the
 original's own substitute for shadow mapping, so under enhanced mode, where the sun casts real
 shadow maps, the pass is not built at all and the aircraft's own shadow is the mapped one.
 
@@ -66,7 +66,8 @@ menu-driven launch binds by device id instead (`Launcher.BindMenuPads`) and so s
 ## src/SessionPaths.cs
 Static resolver for the extracted-data paths (`ChapterTextures`/`ChapterGamez`/`ChapterZrdr`/
 `MissionZrdr`) under a data root, plus `PreferUnzipped` (an unpacked sibling dir beats its `.zip`)
-and the `--zip-assets` switch that inverts it. The `rtextureN` tier decode is on `docs/tooling.md`;
+and the `--zip-assets` switch that inverts it. A chapter or mission in either case maps through
+`Extraction/ZbdTree.cs` to the case the extraction wrote. The `rtextureN` tier decode is on `docs/tooling.md`;
 the `--gamez=`/`--textures=` override policy stays in `GameSession`, not here.
 
 ## src/SessionSpec.cs

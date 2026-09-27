@@ -3,11 +3,19 @@ using System.IO;
 using System.Linq;
 using CSVM.Bindings;
 using CSVM.Effects;
-using CSVM.Flight;
+using CSVM.Flight.Ai;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Camera;
+using CSVM.Flight.Modes;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
-using CSVM.Session;
-using CSVM.UI;
+using CSVM.Session.InstantAction;
+using CSVM.Session.Launch;
+using CSVM.Session.Objectives;
+using CSVM.Session.Roster;
+using CSVM.Session.World;
+using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
 
@@ -873,6 +881,13 @@ internal static class InstantActionSuites
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
         ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
         ctx.RequireData(ctx.MessagesPath, $"messages.json");
+        // The stunt runs fly C1/IA1's markers in the host's one physics space. A cached collidable
+        // C1 world's scenery would stand there too and crash them mid-hold.
+        ctx.EvictCollidableWorlds();
+
+        // ⚠ Do not remove this eviction. The stunt runs fly aircraft through C1's zone positions in
+        // the host's one physics space. A cached collidable C1 world from an earlier suite crashes them there.
+        ctx.EvictCollidableWorlds();
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var weaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null);

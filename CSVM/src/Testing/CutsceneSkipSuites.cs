@@ -2,10 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using CSVM.Flight;
+using CSVM.Flight.Ai;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Camera;
+using CSVM.Flight.Modes;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
-using CSVM.Session;
-using CSVM.UI;
+using CSVM.Session.Roster;
+using CSVM.Session.World;
+using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
 
@@ -357,13 +362,15 @@ internal static class CutsceneSkipSuites
             cutscene.HostDefinitions(new[] { anim });
             ctx.Check(cutscene.Host(CutsceneController.CodeOutOfFlight, anim) && !cutscene.Skippable,
                 $"an episode that has only put the player out of flight offers no skip");
+            ctx.Check(!cutscene.TakeStickPress(0, () => false) && cutscene.Playing,
+                $"so a stick's skip press is declined there, as a key press is");
             ctx.Check(cutscene.Host(CutsceneController.CodeHoldsWorld, anim) && cutscene.Skippable,
                 $"the same episode offers one the moment it raises code {CutsceneController.CodeHoldsWorld}");
-            ctx.Check(cutscene.Skip(),
-                $"and the key press is taken");
+            ctx.Check(cutscene.TakeStickPress(0, () => true),
+                $"and a stick's skip press is taken, through the same skip a key press gets");
             ctx.Check(!cutscene.Playing && !cutscene.Skippable && !cutscene.HoldsWorld,
                 $"which ends the episode and disarms with it, the way the handoff does");
-            report.AppendLine($"armed episode: skip taken, codes {string.Join(",", cutscene.Codes)}");
+            report.AppendLine($"armed episode: stick skip taken, codes {string.Join(",", cutscene.Codes)}");
         }
         finally
         {

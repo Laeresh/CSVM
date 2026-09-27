@@ -1,7 +1,9 @@
 using System.Linq;
 using CSVM.Mech3;
-using CSVM.Session;
-using CSVM.UI;
+using CSVM.Session.Campaign;
+using CSVM.UI.Boards;
+using CSVM.UI.Campaign;
+using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
 using CSVM.Utils;
@@ -259,7 +261,7 @@ public class OriginalShellTests
     {
         // A roster longer than the eleven-row window, so the aircraft column has a thumb at all.
         var setup = new PlayerSetupFeature();
-        var roster = OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.CustomPlaneDef>()).ToList();
+        var roster = OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.Hangar.CustomPlaneDef>()).ToList();
         roster.AddRange(roster.Take(3).ToList());
         setup.SetRoster(roster);
         setup.Join(new ScriptedMenuSeat());
@@ -413,7 +415,7 @@ public class OriginalShellTests
     {
         var free = new FreeFlightFeature();
         var setup = new PlayerSetupFeature();
-        setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.CustomPlaneDef>()));
+        setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.Hangar.CustomPlaneDef>()));
         setup.Join(new ScriptedMenuSeat());
         var shell = new OriginalShell(
             MenuLayoutReaderTests.OriginalLayout(), free, setup,
@@ -907,7 +909,7 @@ public class OriginalShellTests
     private static OriginalShell CreditsShell()
     {
         var setup = new PlayerSetupFeature();
-        setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.CustomPlaneDef>()));
+        setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.Hangar.CustomPlaneDef>()));
         setup.Join(new ScriptedMenuSeat());
         var strings = UiStrings.Parse(
             """
@@ -926,14 +928,14 @@ public class OriginalShellTests
     // A shell with the hangar behind its Build door, over a scratch store in a temp directory
     // that goes with the test. It takes the hangar's own art measure, since the door's screens are
     // the module's. The Devastator is the Instant Action pick a default build inherits.
-    private static void WithHangarShell(System.Action<OriginalShell, HangarFeature, PlayerSetupFeature, CSVM.Flight.CustomPlaneStore> test)
+    private static void WithHangarShell(System.Action<OriginalShell, HangarFeature, PlayerSetupFeature, CSVM.Flight.Hangar.CustomPlaneStore> test)
     {
         string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "csvm-original-shell-hangar-" + System.Guid.NewGuid().ToString("N"));
         try
         {
-            var store = new CSVM.Flight.CustomPlaneStore(dir);
+            var store = new CSVM.Flight.Hangar.CustomPlaneStore(dir);
             var setup = new PlayerSetupFeature();
-            setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.CustomPlaneDef>()));
+            setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.Hangar.CustomPlaneDef>()));
             setup.Join(new ScriptedMenuSeat());
             var hangar = new HangarFeature(UiStrings.Empty, PlanePickerRoster.AirframeNode);
             var instantAction = new InstantActionFeature(_ => InstantAction.Defaults());
@@ -963,9 +965,9 @@ public class OriginalShellTests
         try
         {
             var store = new CampaignProfileStore(System.IO.Path.Combine(dir, "Profiles"));
-            var planes = new CSVM.Flight.CustomPlaneStore(System.IO.Path.Combine(dir, "Planes"));
+            var planes = new CSVM.Flight.Hangar.CustomPlaneStore(System.IO.Path.Combine(dir, "Planes"));
             var setup = new PlayerSetupFeature();
-            setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.CustomPlaneDef>()));
+            setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.Hangar.CustomPlaneDef>()));
             setup.Join(new ScriptedMenuSeat());
             var hangar = new HangarFeature(UiStrings.Empty, PlanePickerRoster.AirframeNode);
             var campaign = new CampaignFeature(UiStrings.Empty, airframe => $"node{airframe}");
@@ -999,7 +1001,7 @@ public class OriginalShellTests
     {
         free = new FreeFlightFeature();
         var setup = new PlayerSetupFeature();
-        setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.CustomPlaneDef>()));
+        setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.Hangar.CustomPlaneDef>()));
         setup.Join(new ScriptedMenuSeat());
         return new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), free, setup, Measure, options: options);
     }

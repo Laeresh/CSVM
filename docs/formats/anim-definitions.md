@@ -156,7 +156,7 @@ written: the zone apply multiplies its range by the detail level's `FOG_SCALE` (
 the event's range goes in raw. Decode notes: [org/weather.md](../org/weather.md#the-fog_state-animation-event).
 
 CSVM: `AnimRuntime` raises the event through `FogStateSink` (`AnimRuntime.FogStateChange`, one
-nullable field per flag bit) and `Session.WeatherRig.ApplyFogState` writes the carried fields onto
+nullable field per flag bit) and `Session.World.WeatherRig.ApplyFogState` writes the carried fields onto
 the `csky_fog_*` globals; an event raised inside the world bootstrap, before the rig exists, is held
 and applied after the zone. The next fog-zone edge re-applies the zone over it. The `fog-state`
 suite pins it on this definition. The `altitude` pair is read as `FogLow`/`FogHigh` in
@@ -1148,6 +1148,11 @@ applies this rule to the shared scope when a compiled mission manifest is presen
 `N shared reader file(s) no ANIMATION_DEFINITION_FILE list of this mission names, not loaded`
 is the census.
 
+The listed values are Windows install paths (`..\data\common\zrdr\anim.zrd`) whatever the host,
+so a reader splits them on `\` and `/` alike to reach the stem. A path API that splits on `/` only
+(`System.IO.Path` on Linux) takes the whole value for one name, no stem matches, and the census
+reads every shared and chapter file skipped with no reader def loaded.
+
 **The chapter scope carries the same rule**, gated the same way (present only when a compiled
 mission manifest loaded) by `AnimProgram.ListedChapterFiles`: a chapter file is listed by its own
 `cam_anim.zrd`, or added directly by an individual mission's `mis_anim.zrd`, exactly as the shared
@@ -1269,7 +1274,7 @@ transient layer: zeppelin turrets, gasbags, engine nacelles, balloons, player co
   carries, persisted state is not limited to a static destroyed/healthy flag.
 - CSVM builds every session from the bootstrap and keeps the persisted half of that log in the
   campaign profile, applied to a later mission of the same chapter
-  (`Session/CampaignPersistLog.cs`). An instant action loaded after a campaign mission in the same
+  (`Session/Campaign/CampaignPersistLog.cs`). An instant action loaded after a campaign mission in the same
   run reads nothing, which is where it still diverges from the original.
 
 **Not yet pinned:** whether the commit happens at damage time or at mission completion (destroy,

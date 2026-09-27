@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CSVM.Bindings;
 using CSVM.Mech3;
-using CSVM.UI;
+using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
 using CSVM.Utils;
@@ -29,7 +29,7 @@ public class OriginalOptionsTests
         host.Module.OpenGameOptions();
 
         Assert.Equal(OriginalScreen.GameOptions, host.Screen);
-        Assert.Equal(CSVM.Flight.Difficulty.Normal, host.Module.DifficultyChoice);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Normal, host.Module.DifficultyChoice);
         Assert.Equal(GraphicsMode.Default, host.Module.GraphicsChoice);
         Assert.Equal(OriginalOptionsScreen.DifficultyKey, host.FocusedKey);
 
@@ -42,13 +42,13 @@ public class OriginalOptionsTests
         Down(host);
         Accept(host);
         Assert.Null(host.Module.OpenGameOption);
-        Assert.Equal(CSVM.Flight.Difficulty.Hardest, host.Module.DifficultyChoice);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hardest, host.Module.DifficultyChoice);
         Assert.Equal("Hardest", Row(host, OriginalOptionsScreen.DifficultyKey).Label);
         // A sideways step wraps back onto Normal, then on to Hard.
         StepX(host, 1);
-        Assert.Equal(CSVM.Flight.Difficulty.Normal, host.Module.DifficultyChoice);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Normal, host.Module.DifficultyChoice);
         StepX(host, 1);
-        Assert.Equal(CSVM.Flight.Difficulty.Hard, host.Module.DifficultyChoice);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hard, host.Module.DifficultyChoice);
 
         // The second row is the original's own Default View dropdown. Its own list carries the
         // three views in its own order: Cockpit, First Person, Exterior.
@@ -128,7 +128,7 @@ public class OriginalOptionsTests
         var host = Host();
         host.Module.OpenGameOptions();
         StepX(host, 1);
-        Assert.Equal(CSVM.Flight.Difficulty.Hard, host.Module.DifficultyChoice);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hard, host.Module.DifficultyChoice);
         Down(host);
         StepX(host, 1);
         Assert.Equal("cockpit", host.Module.DefaultViewChoice);
@@ -147,7 +147,7 @@ public class OriginalOptionsTests
         Assert.Equal(OriginalOptionsScreen.GameOptionsCancelKey, host.FocusedKey);
         Assert.Null(Accept(host));
         Assert.Equal(OriginalScreen.Options, host.Screen);
-        Assert.Equal(CSVM.Flight.Difficulty.Normal, host.Module.DifficultyChoice);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Normal, host.Module.DifficultyChoice);
         Assert.Null(host.Module.NearestAfterKillChoice);
         Assert.Null(host.Module.RumbleChoice);
         Assert.Null(host.Module.DefaultViewChoice);
@@ -625,7 +625,7 @@ public class OriginalOptionsTests
         host.Module.OpenGameOptions();
 
         Assert.Equal(GraphicsMode.EnhancedWord, host.Module.GraphicsChoice);
-        Assert.Equal(CSVM.Flight.Difficulty.Hardest, host.Module.DifficultyChoice);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Hardest, host.Module.DifficultyChoice);
         Assert.True(host.Module.NearestAfterKillChoice);
         Assert.False(host.Module.RumbleChoice);
         // An older file's saved presentation word opens no row: the page reads it nowhere.
@@ -661,7 +661,7 @@ public class OriginalOptionsTests
         saved.MonitorIndex = "9";
         host.Module.OpenGameOptions();
         Assert.Equal(GraphicsMode.Default, host.Module.GraphicsChoice);
-        Assert.Equal(CSVM.Flight.Difficulty.Normal, host.Module.DifficultyChoice);
+        Assert.Equal(CSVM.Flight.Hangar.Difficulty.Normal, host.Module.DifficultyChoice);
         Assert.Null(host.Module.NearestAfterKillChoice);
         Assert.Null(host.Module.RumbleChoice);
         host.Module.OpenVideo();
@@ -897,10 +897,10 @@ public class OriginalOptionsTests
             OriginalOptionsScreen.ControlTabs[0].Rows.Select(r => r.Action).ToArray());
     }
 
-    /// <summary>The Throttle tab is the two lever keys and then the nine absolute eighths, which are
-    /// the digit row the original reserves for them.</summary>
+    /// <summary>The Throttle tab is the two lever keys and then the nine absolute eighths on the
+    /// original's digit row. The port's stick lever row comes last.</summary>
     [Fact]
-    public void TheThrottleTabCarriesTheNineEighthsBelowTheLeverPair()
+    public void TheThrottleTabCarriesTheNineEighthsBelowTheLeverPairAndTheLeverRowLast()
     {
         var rows = OriginalOptionsScreen.ControlTabs[1].Rows.Select(r => r.Action).ToArray();
 
@@ -911,7 +911,8 @@ public class OriginalOptionsTests
             Assert.Equal(InputAction.ThrottleSet0 + eighths, rows[2 + eighths]);
         }
 
-        Assert.Equal(11, rows.Length);
+        Assert.Equal(InputAction.ThrottleLever, rows[11]);
+        Assert.Equal(12, rows.Length);
     }
 
     /// <summary>The Targeting tab lists all eleven of the original's targeting actions in the
@@ -965,7 +966,7 @@ public class OriginalOptionsTests
     }
 
     [Fact]
-    public void ARowWithMoreControlsThanColumnsSaysHowManyItIsNotShowing()
+    public void ARowWithMoreControlsThanColumnsListsEveryOneInControlB()
     {
         var controls = Controls(out _, out _);
         var host = Host(controls: controls);
@@ -989,7 +990,7 @@ public class OriginalOptionsTests
 
         var text = host.Module.KeysCellText(0);
         Assert.Equal("M", text.A);
-        Assert.Equal("N, +1 more", text.B);
+        Assert.Equal("N / B", text.B);
     }
 
     [Fact]
@@ -1007,6 +1008,7 @@ public class OriginalOptionsTests
         Assert.Contains(board.Lines, l => l.Text == "Action");
         Assert.Contains(board.Lines, l => l.Text == "Control A");
         Assert.Contains(board.Lines, l => l.Text == "Control B");
+        Assert.Contains(board.Lines, l => l.Text == "Stick");
     }
 
     [Fact]

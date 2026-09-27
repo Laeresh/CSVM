@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
-using CSVM.UI;
+using CSVM.UI.Boards;
+using CSVM.UI.Campaign;
 using CSVM.UI.Menu;
+using CSVM.UI.Screens;
 
 namespace CSVM.Testing;
 
@@ -45,7 +47,7 @@ internal static class CampaignLayoutSuites
         }
 
         PinnedRowsDiffer(ctx, decoded);
-        var menu = MenuSuiteHost.Menu(ctx);
+        var menu = MenuSuiteHost.Menu(ctx, "campaign-layout-parity");
         ctx.Host.AddChild(menu);
         menu.SetProcess(false);
         var report = new StringBuilder();

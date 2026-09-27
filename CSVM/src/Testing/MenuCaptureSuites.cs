@@ -1,7 +1,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
-using CSVM.UI;
+using CSVM.Tooling;
+using CSVM.UI.Screens;
 using Godot;
 
 namespace CSVM.Testing;
@@ -27,7 +28,7 @@ internal static class MenuCaptureSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         var written = new List<string>();
-        var menu = MenuSuiteHost.Menu(ctx);
+        var menu = MenuSuiteHost.Menu(ctx, "menu-screenshot-key");
         ctx.Host.AddChild(menu);
         try
         {

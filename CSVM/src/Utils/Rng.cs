@@ -35,7 +35,7 @@ public static class Rng
     public const string Ai = "ai";
     public const string Puffer = "puffer";
     public const string Clouds = "clouds";
-    // The cloud field's per-sprite fade band (Effects.FogVolumeClutter). Its own stream, not
+    // The cloud field's per-sprite fade band (FogVolumeClutter). Its own stream, not
     // Rng.Clouds: drawn from the same stream as the placements, one band draw per sprite would
     // shift every later placement, and the field's counts and positions are what the pinned
     // chapter totals and the golden shots stand on.
@@ -44,11 +44,11 @@ public static class Rng
     // reason: every knob value then lays the same decoded field and moves only the offsets.
     public const string CloudJitter = "cloudjitter";
     public const string Precip = "precip";
-    // The enhanced wind-streak field's per-instance seeds (Effects.WindStreaks). Its own stream,
-    // not Rng.Precip: the field is built only under the enhanced presentation, and sharing a
-    // stream would make the faithful path's rain scatter depend on which graphics mode ran.
+    // The enhanced wind-streak field's per-instance seeds (WindStreaks). Its own stream, not
+    // Rng.Precip, because the field is built only under the enhanced presentation. A shared stream
+    // would make the faithful path's rain scatter depend on which graphics mode ran.
     public const string WindStreaks = "windstreaks";
-    // The mission's global wind gust (Effects.WorldWind). Its own stream, not Puffer's: the wind
+    // The mission's global wind gust (WorldWind). Its own stream, not Puffer's: the wind
     // is one random walk for the whole world, stepped once per frame by WeatherRig, while
     // Rng.Puffer is drawn per emitter at spawn, sharing one would make every puffer's scatter a
     // function of how many frames the wind had been blowing.
@@ -66,11 +66,11 @@ public static class Rng
     // is placed on the same frame the crash rig scatters a wreck, and sharing Rng.Crash would make
     // every piece of that wreck a function of where the camera happened to land.
     public const string Camera = "camera";
-    // The Dogfight respawn rotation's draws (Flight.VersusSpawnRotation). Its own stream, and read
+    // The Dogfight respawn rotation's draws (VersusSpawnRotation). Its own stream, and read
     // through IntSeedFor rather than Stream, so a match's respawn picks take nothing out of
     // Rng.Spawn: a draw there would shift the launch spawn index every pinned golden stands on.
     public const string VersusSpawn = "versusspawn";
-    // The Danger Zone photograph's eye scatter (Flight.DangerZonePhotograph). Its own stream, so a
+    // The Danger Zone photograph's eye scatter (DangerZonePhotograph). Its own stream, so a
     // zone crossed never shifts the static cameras' spots or anything else a run rolls.
     public const string Photograph = "photograph";
 

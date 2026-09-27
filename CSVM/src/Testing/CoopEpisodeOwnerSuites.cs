@@ -2,10 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using CSVM.Flight;
+using CSVM.Flight.Ai;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Camera;
+using CSVM.Flight.Modes;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
-using CSVM.Session;
-using CSVM.UI;
+using CSVM.Session.Roster;
+using CSVM.Session.World;
+using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
 
@@ -62,6 +67,56 @@ internal static class CoopEpisodeOwnerSuites
 
         ctx.WriteArtifact($"test-campaign-coop-episode-owner-{chapter}-{folder}.txt", report.ToString());
         ctx.Note($"{chapter}/{folder}: the capture's swap follows the human whose trigger owns the episode");
+    }
+
+    internal static FlightController StageAi(FlightRoster roster, string name, string planeNode, Vector3 at)
+    {
+        var aim = at - Vector3.Forward;
+        return roster.SpawnAi(new AiSpawn(planeNode, at, aim, AiPilot.HoldingCourse(at, aim),
+            Team: AimAssist.PlayerTeam + 1, Inert: false, ShippedSkins: true, NodeName: name));
+    }
+
+    // With seats, every seat not flown here is built the way a session builds a guest's copy. Two
+    // rosters in one process each need their own worldRoot. Godot renames a sibling whose name is
+    // taken, and a roster finds its spawns by name.
+    internal static FlightRoster BuildRoster(TestContext ctx, string chapter, TextureArchive textures,
+        ProjectilePool pool, IReadOnlyList<PlayerRig> rigs, IReadOnlyList<Net.NetSeat>? seats = null,
+        Node3D? worldRoot = null)
+    {
+        var spec = SessionSpec.Parse(new[] { $"--plane={ScriptedPlane},{GuestPlane}" });
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var resources = new AircraftAssemblyResources
+        {
+            PlanesGamez = planesGamez,
+            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+            CamParamsFor = _ => new CamParams(),
+            PaintRng = new RandomNumberGenerator(),
+            ZrdrPath = ctx.ZrdrPath,
+            StockLoadouts = StockLoadouts.Load(),
+            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+            WeaponMessages = Messages.Load(ctx.MessagesPath),
+            Textures = textures,
+            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+        };
+        return new FlightRoster(FlightRosterPolicy.From(spec),
+            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), worldRoot ?? ctx.Host, resources,
+            new FlightWorldBindings
+            {
+                Projectiles = pool,
+                Gamez = planesGamez,
+                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter),
+            },
+            new HumanRosterBindings
+            {
+                RigCount = rigs.Count,
+                Rigs = rigs,
+                NetSeats = seats ?? Array.Empty<Net.NetSeat>(),
+                PauseState = new PauseState(),
+                MenuInputFor = _ => new MenuInput(),
+                ExitSession = () => { },
+            }, new CoopStarts());
     }
 
     private static void Drive(TestContext ctx, TestWorld world, string chapter, StringBuilder report)
@@ -328,51 +383,6 @@ internal static class CoopEpisodeOwnerSuites
         }
 
         return names;
-    }
-
-    private static FlightController StageAi(FlightRoster roster, string name, string planeNode, Vector3 at)
-    {
-        var aim = at - Vector3.Forward;
-        return roster.SpawnAi(new AiSpawn(planeNode, at, aim, AiPilot.HoldingCourse(at, aim),
-            Team: AimAssist.PlayerTeam + 1, Inert: false, ShippedSkins: true, NodeName: name));
-    }
-
-    private static FlightRoster BuildRoster(TestContext ctx, string chapter, TextureArchive textures,
-        ProjectilePool pool, IReadOnlyList<PlayerRig> rigs)
-    {
-        var spec = SessionSpec.Parse(new[] { $"--plane={ScriptedPlane},{GuestPlane}" });
-        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
-        var resources = new AircraftAssemblyResources
-        {
-            PlanesGamez = planesGamez,
-            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
-            CamParamsFor = _ => new CamParams(),
-            PaintRng = new RandomNumberGenerator(),
-            ZrdrPath = ctx.ZrdrPath,
-            StockLoadouts = StockLoadouts.Load(),
-            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
-            WeaponMessages = Messages.Load(ctx.MessagesPath),
-            Textures = textures,
-            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
-        };
-        return new FlightRoster(FlightRosterPolicy.From(spec),
-            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
-            new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host, resources,
-            new FlightWorldBindings
-            {
-                Projectiles = pool,
-                Gamez = planesGamez,
-                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter),
-            },
-            new HumanRosterBindings
-            {
-                RigCount = rigs.Count,
-                Rigs = rigs,
-                PauseState = new PauseState(),
-                MenuInputFor = _ => new MenuInput(),
-                ExitSession = () => { },
-            }, new CoopStarts());
     }
 
     private static CampaignMission? MissionOf(IReadOnlyList<CampaignMission> missions, int seq)

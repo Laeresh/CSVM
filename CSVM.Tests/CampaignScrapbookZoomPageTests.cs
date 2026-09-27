@@ -1,7 +1,9 @@
 using System.IO;
+using CSVM.Extraction;
 using CSVM.Mech3;
-using CSVM.Session;
-using CSVM.UI;
+using CSVM.Session.Campaign;
+using CSVM.UI.Boards;
+using CSVM.UI.Campaign;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -46,9 +48,7 @@ public class CampaignScrapbookZoomPageTests
     public void ATextScrapDrawsNoInsetAndOffersNoExport()
     {
         string root = ScrapbookCompositionFixture.WriteMinimalOpenableScrap(TestData.TempDir(), mission: 1, imageType: "P0");
-        string art = Path.Combine(root, "extracted", "rof", "ASSETS", "GRAPHICS", "SCRAPBOOK");
-        Directory.CreateDirectory(art);
-        File.WriteAllBytes(Path.Combine(art, "SB_01_01_test.PNG"), new byte[] { 1 });
+        WriteScrapArt(root, "SB_01_01_test.PNG", new byte[] { 1 });
         var flow = OpenedOnZoom(root);
 
         var picture = Assert.Single(flow.Page.Pictures);
@@ -174,10 +174,7 @@ public class CampaignScrapbookZoomPageTests
         var flow = OpenedOnZoom();
         string desktop = Path.Combine(TestData.TempDir(), "Desktop");
         Directory.CreateDirectory(desktop);
-        string art = Path.Combine(
-            flow.DataRoot!, "extracted", "rof", "ASSETS", "GRAPHICS", "SCRAPBOOK");
-        Directory.CreateDirectory(art);
-        File.WriteAllBytes(Path.Combine(art, "SB_01_01_test.JPG"), new byte[] { 1, 2, 3 });
+        WriteScrapArt(flow.DataRoot!, "SB_01_01_test.JPG", new byte[] { 1, 2, 3 });
 
         var page = new CampaignScrapbookZoomPage(flow, desktop);
         Assert.Equal(2, page.RowCount);
@@ -227,5 +224,13 @@ public class CampaignScrapbookZoomPageTests
         flow.SetMission(0);
         flow.GoTo(CampaignScreen.Scrapbook);
         return flow;
+    }
+
+    // Writes where the extraction would, in RofTree's case, so a case-sensitive disk finds it.
+    private static void WriteScrapArt(string root, string name, byte[] bytes)
+    {
+        string path = RofTree.Under(root, "ASSETS/GRAPHICS/SCRAPBOOK/" + name);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllBytes(path, bytes);
     }
 }

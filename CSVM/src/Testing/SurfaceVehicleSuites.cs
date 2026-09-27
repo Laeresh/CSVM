@@ -1,9 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using CSVM.Flight;
+using CSVM.Flight.Ai;
+using CSVM.Flight.Hud;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
-using CSVM.Session;
+using CSVM.Session.Campaign;
+using CSVM.Session.Objectives;
+using CSVM.Session.Roster;
+using CSVM.Session.World;
 using CSVM.Utils;
 using Godot;
 
@@ -89,8 +94,8 @@ internal static class SurfaceVehicleSuites
             $"'{BoatDef}' authors two start anims and a two-rung injure ladder: [{startAnims}]");
 
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Boats"), null);
-        // A counting factory: the harness's own archive closes with the build, and the wake is
-        // reached only after it, so the real factory would build nothing (a session's outlives it).
+        // A counting factory: the harness retires the real one after the build, where a session
+        // keeps it. The wake is reached only after the build, so the real one would build nothing.
         ctx.EmitterFactory = new CountingEmitterFactory();
         ctx.WithWorld(BoatChapter, collision: true, BoatMission, world =>
         {

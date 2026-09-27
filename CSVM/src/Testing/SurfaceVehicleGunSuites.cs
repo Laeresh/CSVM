@@ -1,9 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using CSVM.Flight;
+using CSVM.Flight.Ai;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Audio;
+using CSVM.Flight.Camera;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
-using CSVM.Session;
+using CSVM.Session.Campaign;
+using CSVM.Session.InstantAction;
+using CSVM.Session.Objectives;
+using CSVM.Session.Roster;
+using CSVM.Session.World;
 using CSVM.Utils;
 using Godot;
 
@@ -315,8 +323,8 @@ internal static class SurfaceVehicleGunSuites
                 }
 
                 var hulls = director.Vessels.Values.ToList();
-                var boat = hulls.FirstOrDefault(h => h.Plan.Def == "patrolboat");
-                var truck = hulls.FirstOrDefault(h => h.Plan.Def == "t_truck");
+                var boat = hulls.FirstOrDefault(h => h.Def == "patrolboat");
+                var truck = hulls.FirstOrDefault(h => h.Def == "t_truck");
                 ctx.Check(boat != null && truck != null,
                     $"{VoiceChapter}/{VoiceMission} places both hull classes: {hulls.Count} hull(s), boat={boat?.Name ?? "-"} truck={truck?.Name ?? "-"}");
                 if (boat == null || truck == null)
@@ -372,7 +380,7 @@ internal static class SurfaceVehicleGunSuites
             return null;
         }
 
-        string what = $"{hull.Plan.Def} '{hull.Name}'";
+        string what = $"{hull.Def} '{hull.Name}'";
         var emitter = voice.Emitter();
         ctx.Check(emitter.Name == HullCue && Mathf.IsEqualApprox(emitter.RangeMax, cue.RangeMax)
             && Mathf.IsEqualApprox(emitter.Cull, cue.RangeMax * CullMargin),

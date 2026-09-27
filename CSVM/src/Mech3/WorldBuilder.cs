@@ -120,6 +120,7 @@ public sealed class WorldBuilder
     /// <see cref="SceneBuilder.BlendSurfaceCount"/>.</summary>
     public int BlendSurfaceCount => _scene.BlendSurfaceCount;
     public int ScissorSurfaceCount => _scene.ScissorSurfaceCount;
+    public int GroundLayerSurfaceCount => _scene.GroundLayerSurfaceCount;
 
     /// <summary>Polygons drawn as nothing for want of a texture the retail data lacks, see
     /// <see cref="SceneBuilder.UndrawnPolygonCount"/>.</summary>
@@ -148,7 +149,7 @@ public sealed class WorldBuilder
     /// <summary>The gamez <c>zone_id</c> the deck tiles author, or −1 when this world has no deck
     /// or its tiles disagree. The deck is the one world subtree <see cref="ZoneGate"/> does not
     /// stamp with a zone layer, being a per-rig camera-anchored copy, so
-    /// <c>Session.WeatherRig.Tick</c> tests this per rig instead.</summary>
+    /// <c>Session.World.WeatherRig.Tick</c> tests this per rig instead.</summary>
     public int CloudDeckZoneId { get; private set; } = -1;
 
     /// <summary>The deck tiles' own AUTHORED altitude, read off the coverage-winning bucket
@@ -234,7 +235,7 @@ public sealed class WorldBuilder
     /// a <see cref="GameZ"/> so it needs no built scene and is testable off-engine.
     /// ⚠ Read this before the horizon build. Three chapters ship a <c>zone2</c> that is a bare
     /// marker, so requesting it renders no sky at all; the selection rule is
-    /// <see cref="Flight.WeatherState.ResolveZone(string, IReadOnlyList{HorizonZone})"/>.</summary>
+    /// <c>Flight.Airframe.WeatherState.ResolveZone</c>.</summary>
     public static IReadOnlyList<HorizonZone> HorizonZonesOf(GameZ gamez)
     {
         var zones = new List<HorizonZone>();
@@ -284,7 +285,7 @@ public sealed class WorldBuilder
 
     /// <summary>The gamez <c>zone_id</c> every <c>fvol*</c> volume node in this world authors, or
     /// −1 when the chapter ships none or they disagree. The <c>fvol</c> sprite field
-    /// (<see cref="CSVM.Effects.FogVolumeClutter"/>) is gated with those volumes.
+    /// (<c>CSVM.Effects.FogVolumeClutter</c>) is gated with those volumes.
     /// ⚠ Read it per chapter and never assume zone 2. C2B ships its volumes at −1, and assuming
     /// otherwise hides its ambient cloud field below the deck (docs/formats/weather.md).</summary>
     public static int FogVolumeZoneIdOf(GameZ gamez)

@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using CSVM.Flight;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Hangar;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
@@ -74,7 +76,7 @@ public enum EnhancedPasses
 /// <c>Count</c> is the entry's <c>n=</c>, so one entry stands for a whole squadron rather than a
 /// plane. <c>Team</c> is its <c>team=</c>, and it is the only way two CLI planes can be put on the
 /// SAME side: a spawn that names none takes its own banded id through
-/// <see cref="Flight.AimAssist.TeamOfPilot"/>, which makes every CLI plane hostile to every other.
+/// <see cref="Flight.Weapons.AimAssist.TeamOfPilot"/>, which makes every CLI plane hostile to every other.
 /// <c>Pos</c> overrides the squadron's placement outright, in world metres.</summary>
 public readonly record struct AiPlaneEntry(string Plane, string? Net = null, int? Accent = null,
     string? Def = null, int? Team = null, int Count = 1, Vector3? Pos = null);
@@ -171,6 +173,29 @@ public sealed record SessionSpec
     /// <summary>Resolved. <c>--vs-time=</c> was spelled out, so the flag beats a time limit
     /// a menu screen chose (<see cref="FromMenu"/>).</summary>
     public bool VsTimeExplicit { get; private set; }
+    /// <summary><c>--vs-lives=N</c>: how many deaths a pilot has before it stays down for the rest
+    /// of the match. Default 0, no limit.</summary>
+    public int VsLives { get; private set; }
+    /// <summary>Resolved. <c>--vs-lives=</c> was spelled out, so the flag beats a lobby's lives.</summary>
+    public bool VsLivesExplicit { get; private set; }
+    /// <summary>False under <c>--vs-no-respawn</c>: a downed pilot comes back only on its own press,
+    /// the lobby's Auto Respawn unchecked. Default true.</summary>
+    public bool VsAutoRespawn { get; private set; } = true;
+    /// <summary>Resolved. <c>--vs-no-respawn</c> was spelled out, so the flag beats a lobby's box.</summary>
+    public bool VsAutoRespawnExplicit { get; private set; }
+    /// <summary><c>--net-host</c>, <c>--net-host=port</c> or <c>--net-host=address:port</c>: open
+    /// a listen server on that port and fly this session as its host. Null when the flag is
+    /// absent. A scripted smoke is what it is for; a player opens the same socket from the menu's
+    /// multiplayer door. Split with <see cref="ParseHost"/>.</summary>
+    public int? NetHostPort { get; private set; }
+    /// <summary>Which interface <c>--net-host=</c> binds, every one of them unless its value
+    /// named an address. ⚠ A scripted run names 127.0.0.1: a wildcard bind is what makes Windows
+    /// put a firewall dialog on somebody's screen.</summary>
+    public string NetHostBind { get; private set; } = "*";
+    /// <summary><c>--net-join=address</c>, or <c>address:port</c>: join the match at that address
+    /// and fly this session as a guest. Null when the flag is absent. Split with
+    /// <see cref="ParseJoin"/>.</summary>
+    public string? NetJoin { get; private set; }
     /// <summary><b>Resolved.</b> Open the aircraft's per-part HP sliders at launch, a modifier on
     /// <see cref="SessionMode.Viewer"/> (the parked plane) or <see cref="SessionMode.Fly"/> (the
     /// flown one), dropped by the modes that build no aircraft at all. The lab itself is always
@@ -230,9 +255,10 @@ public sealed record SessionSpec
     /// "dump" arm omits <c>--dump-flight</c>, so a <c>--dump-flight</c> run logs as
     /// <c>menu-*.log</c>. That is today's behaviour, reproduced on purpose.</summary>
     public string ModeName =>
-        Mode == SessionMode.AnimLab ? "anim-lab"
+        ExtractInstall != null ? "extract"
+        : Mode == SessionMode.AnimLab ? "anim-lab"
         : DamageTest || EffectsTest || WeaponTest || RunTests ? "test"
-        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid ? "dump"
+        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid || DumpSticks ? "dump"
         : MovieName != null ? "movie"
         : Mode == SessionMode.Freecam ? "freecam"
         : Mode == SessionMode.Viewer ? "viewer"
@@ -246,9 +272,9 @@ public sealed record SessionSpec
     /// a drift, not a decision, the same omission as <see cref="ModeName"/>'s, and it means a
     /// <c>--dump-flight</c> run turns the bundle on yet still asks for focus.</summary>
     public bool IsScripted =>
-        NoFocus || ScreenshotPath != null || ExportGltfPath != null || RunTests
+        NoFocus || ScreenshotPath != null || ExportGltfPath != null || RunTests || ExtractInstall != null
         || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid
-        || DamageTest || EffectsTest || WeaponTest;
+        || DumpSticks || DamageTest || EffectsTest || WeaponTest;
 
     /// <summary><b>Resolved.</b> The chapter world is built instead of a single parked plane.</summary>
     public bool WorldMode { get; private set; }
@@ -281,7 +307,7 @@ public sealed record SessionSpec
     /// type free of file I/O.</summary>
     public string? IaPath { get; private set; }
     /// <summary><c>--campaign=&lt;profile&gt;:&lt;seq&gt;</c>: a campaign session, a selected
-    /// <see cref="Session.CampaignProfileStore"/> profile plus a <c>cm_sequence.zrd</c> mission
+    /// <see cref="Session.Campaign.CampaignProfileStore"/> profile plus a <c>cm_sequence.zrd</c> mission
     /// index, carried here as plain values. Null when the flag was absent; loading the profile and
     /// building the mission are the runtime's job, the contract <see cref="IaPath"/> keeps. No new
     /// <see cref="SessionMode"/>: a content arg with no other mode vote resolves to
@@ -290,6 +316,11 @@ public sealed record SessionSpec
     /// <summary>The <c>:&lt;seq&gt;</c> half of <c>--campaign=</c>; null when it was omitted or
     /// unparseable, in which case a warning is recorded and only the profile name is kept.</summary>
     public int? CampaignMissionSeq { get; private set; }
+    /// <summary><c>--profiles=&lt;dir&gt;</c>: the campaign profile store this process reads and
+    /// writes in place of <c>user://Profiles/</c>, so a probe never touches a player's own
+    /// profiles. Null when the flag was absent. Kept as the raw value; resolving it is
+    /// <see cref="Session.Campaign.CampaignProfileStore.ForSession"/>'s job.</summary>
+    public string? ProfilesDir { get; private set; }
     /// <summary><c>--no-crash-loss</c>: losing the aircraft leaves the campaign mission running,
     /// so a session being debugged can fly on past a crash. The game default is the original's
     /// rule, which ends the mission lost (<c>docs/formats/objectives.md</c>, "Win and loss").
@@ -300,6 +331,10 @@ public sealed record SessionSpec
     /// instead. Only ever carried onto the record here, never loaded or built, the same
     /// purity contract <see cref="IaPath"/> (a path, not a load) already keeps.</summary>
     public InstantActionDef? IaDef { get; private set; }
+    /// <summary>Set only by <see cref="FromMenu"/>: the wingmen's fit from the wizard's loadout
+    /// screen, null for the stock fit and on every CLI launch. Kept beside <see cref="IaDef"/>
+    /// rather than on it because a fit is a flight type the Mech3 def must not name.</summary>
+    public LoadoutChoice? IaWingmanLoadout { get; private set; }
     /// <summary>The <c>--stage=</c> value as given, unvalidated, only "empty" names a stage.
     /// Whether it survived is <see cref="EmptyStage"/>.</summary>
     public string? Stage { get; private set; }
@@ -309,7 +344,7 @@ public sealed record SessionSpec
     public bool NoFog { get; private set; }
 
     /// <summary>Draw the cockpit interior in a world of its own with the camera and the panel at
-    /// the origin (<see cref="Flight.CockpitOverlay"/>) instead of at chapter-scale world
+    /// the origin (<see cref="Flight.Hud.CockpitOverlay"/>) instead of at chapter-scale world
     /// coordinates under the plane, where its dial faces jitter. On by default;
     /// <c>--no-cockpit-pass</c> draws the interior in the main world for comparison.</summary>
     public bool CockpitPass { get; private set; } = true;
@@ -368,7 +403,7 @@ public sealed record SessionSpec
     public int AnimLod { get; private set; } = AnimRuntime.HighLod;
     public string? DestroyName { get; private set; }
     /// <summary><c>--crash[=frame]</c>: the fixed sim frame (<see cref="Utils.GameClock.Frame"/>)
-    /// at which every player's <see cref="Flight.FlightController.DebugForceCrash"/> fires, the
+    /// at which every player's <see cref="Flight.Airframe.FlightController.DebugForceCrash"/> fires, the
     /// only headless trigger for the per-player crash rig (no live collision analog exists).
     /// Null when the flag was absent.</summary>
     public int? CrashFrame { get; private set; }
@@ -454,7 +489,7 @@ public sealed record SessionSpec
     /// <summary><c>--ai-targeting=&lt;aircraft-first|decoded&gt;</c>: whether both AI pickers rank
     /// live enemy aircraft ahead of every turret and structure candidate, which is the default.
     /// The other word runs the decoded picker's own order, which has no class priority
-    /// (<see cref="Flight.AiTargetRanking.AircraftFirst"/>). The class biases are spent either
+    /// (<see cref="Flight.Ai.AiTargetRanking.AircraftFirst"/>). The class biases are spent either
     /// way.</summary>
     public bool AircraftFirstTargeting { get; private set; } = true;
 
@@ -466,9 +501,9 @@ public sealed record SessionSpec
     /// <summary><c>--difficulty=&lt;normal|hard|hardest&gt;</c> (or <c>game.difficulty</c>): the
     /// setting a hostile spawn's armour and health scale by (0.75 / 1.0 / 1.25) and its pilot's
     /// nine skill ratings shift by (-2 / 0 / +2), both from one k
-    /// (<see cref="CSVM.Flight.Difficulty"/>). Defaults to Normal, which is what the executable's
+    /// (<see cref="CSVM.Flight.Hangar.Difficulty"/>). Defaults to Normal, which is what the executable's
     /// own settings registration writes.</summary>
-    public int Difficulty { get; private set; } = CSVM.Flight.Difficulty.Normal;
+    public int Difficulty { get; private set; } = CSVM.Flight.Hangar.Difficulty.Normal;
 
     /// <summary>True when <c>--difficulty=</c> named a tier this parser took. The flag outranks
     /// the saved option (<see cref="WithSavedDifficulty"/>), and a flag whose word was refused
@@ -612,7 +647,7 @@ public sealed record SessionSpec
     public float? Yaw { get; private set; }
     public float? Pitch { get; private set; }
     /// <summary><b>Resolved.</b> The <c>--view=</c> numpad digit (0 = chase;
-    /// <see cref="Flight.CameraController.PinnedBackView"/> = the look-behind, <c>--view=back</c>).
+    /// <see cref="Flight.Camera.CameraController.PinnedBackView"/> = the look-behind, <c>--view=back</c>).
     /// The numpad views orbit a FLYING plane, so one asked for outside flight is dropped.</summary>
     public int View { get; private set; }
     /// <summary><b>Resolved.</b> The <c>--view=</c> SELECTED view mode, <c>chase</c> (the default),
@@ -620,7 +655,7 @@ public sealed record SessionSpec
     /// different things: a numpad digit is a momentary pose held for the run, this is the view the
     /// pilot flies in and the one the cycle key changes. Dropped outside flight, like
     /// <see cref="View"/>.</summary>
-    public Flight.PilotViewMode ViewMode { get; private set; }
+    public Flight.Camera.PilotViewMode ViewMode { get; private set; }
     /// <summary>Whether <see cref="ViewMode"/> came from a <c>--view=</c> naming a mode rather than
     /// from the default. Held because Chase is both the default and a nameable mode, so the value
     /// alone cannot say whether the command line asked for it. That matters because
@@ -628,7 +663,7 @@ public sealed record SessionSpec
     public bool ViewModeExplicit { get; private set; }
     /// <summary>Whether the pilot's head turns with the aircraft in the cockpit, as the options
     /// file has it. It is null where never set, which leaves the <c>headLook.autohead</c> config
-    /// key deciding (<see cref="Flight.FlightController.AutoHeadTurn"/>). Dropped under
+    /// key deciding (<see cref="Flight.Airframe.FlightController.AutoHeadTurn"/>). Dropped under
     /// <c>--det</c> like every other saved option.</summary>
     public bool? AutoHeadTurn { get; private set; }
     /// <summary>The <c>--look=x,y</c> right-stick deflection held for the whole
@@ -683,6 +718,16 @@ public sealed record SessionSpec
     /// per-chapter name.</summary>
     public string DumpTileGridPath { get; private set; } = "";
 
+    /// <summary><c>--dump-sticks</c>: log the SDL2 stick roster with each stick's control counts
+    /// and resting reads, then quit. ⚠ Not in <see cref="ScriptedBy"/>: the bundle's
+    /// <c>--no-pads</c> would empty the Godot roster the gap-filler subtracts, and a hardware
+    /// report has nothing to pin.</summary>
+    public bool DumpSticks { get; private set; }
+
+    /// <summary><c>--dump-sticks=&lt;seconds&gt;</c>: after the report, log every stick control that
+    /// moves for that many seconds (1 to 120); 0 for the plain report.</summary>
+    public int DumpSticksWatch { get; private set; }
+
     public bool DamageTest { get; private set; }
     public string DamageTestFilter { get; private set; } = "";
     public float DamageHd { get; private set; }
@@ -697,6 +742,10 @@ public sealed record SessionSpec
 
     public bool DebugAnim { get; private set; }
     public bool DebugAnimUi { get; private set; }
+
+    /// <summary><c>--debug-net</c>: log a network match's desync counters once a second and draw
+    /// them in a corner of the screen. Nothing is shown outside a network match.</summary>
+    public bool DebugNet { get; private set; }
     public string? PlayAnim { get; private set; }
     public bool DebugDzPaths { get; private set; }
     /// <summary><c>--debug-ainets[=name,…]</c>: open the AI patrol-net overlay (F13) at
@@ -760,11 +809,11 @@ public sealed record SessionSpec
     /// drag, and flight has no cursor.</summary>
     public string? DebugSelect { get; private set; }
     /// <summary><b>Resolved.</b> Filtered to the lab's token grammar
-    /// (<c>UI.NodeLab.ParseDebugSpec</c>, called with a reject list so it hands them back as data
+    /// (<c>UI.Labs.NodeLab.ParseDebugSpec</c>, called with a reject list so it hands them back as data
     /// instead of logging), and null outside <c>--freecam</c>/<c>--anim-lab</c>.</summary>
     public string? DebugNodeLab { get; private set; }
     /// <summary><b>Resolved.</b> Same treatment as <see cref="DebugNodeLab"/>, through
-    /// <c>UI.WorldDamageLab.ParseDebugSpec</c>.</summary>
+    /// <c>UI.Labs.WorldDamageLab.ParseDebugSpec</c>.</summary>
     public string? DebugDamage { get; private set; }
     public int DebugJoin { get; private set; }
     /// <summary><c>--debug-waves=N</c> (launchscreen only): pre-configure the first N
@@ -786,6 +835,10 @@ public sealed record SessionSpec
     /// Authored rather than window pixels, so a shot lands on the same widget whatever the window.
     /// Null = not asked for.</summary>
     public (float X, float Y, bool Down, bool Right)? DebugPointer { get; private set; }
+    /// <summary><c>--debug-marquee=seconds</c>: hold every scrolling menu caption at that phase of
+    /// its scroll (<see cref="CSVM.UI.Boards.BoardMarquee"/>), so a shot shows a long caption part
+    /// way through. Null = not asked for, and <c>--det</c> then holds the start.</summary>
+    public double? DebugMarquee { get; private set; }
     public bool MarkersOverlay { get; private set; }
     public bool WeaponLab { get; private set; }
     public string? WeaponSelect { get; private set; }
@@ -849,6 +902,21 @@ public sealed record SessionSpec
     /// <summary><c>--data-root=</c> verbatim. The precedence against <c>CSVM_DATA_ROOT</c> and the
     /// repo root, and the paths derived from the winner, are resolution.</summary>
     public string? DataRoot { get; private set; }
+
+    /// <summary><c>--extract=&lt;install&gt;</c> verbatim: extract that install into the data root's
+    /// <c>extracted</c> folder and quit with the verdict. Empty for a bare <c>--extract</c>, which
+    /// the install check refuses; null when the flag was absent.</summary>
+    public string? ExtractInstall { get; private set; }
+
+    /// <summary><c>--extract-force</c>: redo every output however new.</summary>
+    public bool ExtractForce { get; private set; }
+
+    /// <summary><c>--extract-unzip</c>: also expand every produced zip into its sibling folder.</summary>
+    public bool ExtractUnzip { get; private set; }
+
+    /// <summary><c>--unzbd=</c> verbatim: the unzbd an extraction runs instead of the default.</summary>
+    public string? UnzbdPath { get; private set; }
+
     public string? Gamez { get; private set; }
     public string? Textures { get; private set; }
     public string? Zrdr { get; private set; }
@@ -976,12 +1044,18 @@ public sealed record SessionSpec
             else if (arg == "--coop") { s.Coop = true; }
             else if (arg.StartsWith("--vs-kills=")) { s.VsKills = int.Parse(arg["--vs-kills=".Length..]); s.VsKillsExplicit = true; }
             else if (arg.StartsWith("--vs-time=")) { s.VsTimeMinutes = int.Parse(arg["--vs-time=".Length..]); s.VsTimeExplicit = true; }
+            else if (arg.StartsWith("--vs-lives=")) { s.VsLives = Math.Max(0, int.Parse(arg["--vs-lives=".Length..])); s.VsLivesExplicit = true; }
+            else if (arg == "--vs-no-respawn") { s.VsAutoRespawn = false; s.VsAutoRespawnExplicit = true; }
+            else if (arg == "--net-host") { s.NetHostPort = UI.Menu.NetPlayFeature.DefaultPort; }
+            else if (arg.StartsWith("--net-host=")) { var h = ParseHost(arg["--net-host=".Length..]); s.NetHostBind = h.Bind; s.NetHostPort = h.Port; }
+            else if (arg.StartsWith("--net-join=")) { s.NetJoin = arg["--net-join=".Length..]; }
             else if (arg == "--freecam") { s._freecamArg = true; s.HasContentArg = true; }
             else if (arg == "--anim-lab") { s._animLabArg = true; s.HasContentArg = true; }
             else if (arg.StartsWith("--play-anim=")) { s.PlayAnim = arg["--play-anim=".Length..]; s.HasContentArg = true; }
             else if (arg.StartsWith("--seed=")) { s.Seed = ulong.Parse(arg["--seed=".Length..]); }
             else if (arg == "--debug-anim-ui") { s.DebugAnimUi = true; s.HasContentArg = true; }
             else if (arg == "--debug-anim") { s.DebugAnim = true; }
+            else if (arg == "--debug-net") { s.DebugNet = true; }
             else if (arg == "--no-pads") { s.NoPads = true; }
             else if (arg == "--no-crash-loss") { s.NoCrashLoss = true; }
             else if (arg == "--det") { s._detArg = true; }
@@ -1006,6 +1080,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--debug-wingmen=")) { s.DebugWingmen = int.Parse(arg["--debug-wingmen=".Length..]); }
             else if (arg.StartsWith("--debug-preset=")) { s.DebugPreset = int.Parse(arg["--debug-preset=".Length..]); }
             else if (arg.StartsWith("--debug-pointer=")) { s.DebugPointer = ParseDebugPointer(arg["--debug-pointer=".Length..]); }
+            else if (arg.StartsWith("--debug-marquee=")) { s.DebugMarquee = double.TryParse(arg["--debug-marquee=".Length..], NumberStyles.Float, CultureInfo.InvariantCulture, out double phase) ? Math.Max(0d, phase) : null; }
             else if (arg.StartsWith("--paint=")) { s.PaintNames = arg["--paint=".Length..].Split(',', StringSplitOptions.TrimEntries); }
             else if (arg.StartsWith("--paint-color=")) { s.PaintColorOverride = ParsePaintColors(arg["--paint-color=".Length..]); }
             else if (arg.StartsWith("--paint-decal=")) { s.PaintDecalOverride = ParsePaintDecals(arg["--paint-decal=".Length..]); }
@@ -1187,7 +1262,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--canopy-holes="))
             {
                 s.CanopyHoles = Math.Clamp(int.Parse(arg["--canopy-holes=".Length..]),
-                    1, Flight.CanopyHoleCue.HoleCount);
+                    1, Flight.Hud.CanopyHoleCue.HoleCount);
             }
             // An unknown word keeps the default rather than picking a policy, the same rule
             // --difficulty= follows. A misspelling must not quietly change what the AI fights.
@@ -1209,7 +1284,7 @@ public sealed record SessionSpec
             // Hardest because a name was misspelled is a balance change nobody asked for.
             else if (arg.StartsWith("--difficulty="))
             {
-                if (Flight.Difficulty.Parse(arg["--difficulty=".Length..]) is { } tier)
+                if (Flight.Hangar.Difficulty.Parse(arg["--difficulty=".Length..]) is { } tier)
                 {
                     s.Difficulty = tier;
                     s.DifficultyExplicit = true;
@@ -1334,11 +1409,17 @@ public sealed record SessionSpec
                 }
                 s.HasContentArg = true;
             }
+            else if (arg.StartsWith("--profiles=")) { s.ProfilesDir = arg["--profiles=".Length..]; }
             else if (arg.StartsWith("--spawn=")) { s.SpawnIndex = int.Parse(arg["--spawn=".Length..]); }
             else if (arg.StartsWith("--spawn-at=")) { s.SpawnAt = ParseVec3(arg["--spawn-at=".Length..]); Deprecate("--spawn-at", "--pos"); }
             else if (arg.StartsWith("--spawn-dir=")) { s.SpawnDir = ParseVec3(arg["--spawn-dir=".Length..]); Deprecate("--spawn-dir", "--direction"); }
             else if (arg.StartsWith("--sky-zone=")) { s.SkyZone = arg["--sky-zone=".Length..]; s.SkyZoneExplicit = true; }
             else if (arg.StartsWith("--data-root=")) { s.DataRoot = arg["--data-root=".Length..]; }
+            else if (arg == "--extract") { s.ExtractInstall = ""; }
+            else if (arg.StartsWith("--extract=")) { s.ExtractInstall = arg["--extract=".Length..]; }
+            else if (arg == "--extract-force") { s.ExtractForce = true; }
+            else if (arg == "--extract-unzip") { s.ExtractUnzip = true; }
+            else if (arg.StartsWith("--unzbd=")) { s.UnzbdPath = arg["--unzbd=".Length..]; }
             else if (arg.StartsWith("--gamez=")) { s.Gamez = arg["--gamez=".Length..]; }
             else if (arg.StartsWith("--textures=")) { s.Textures = arg["--textures=".Length..]; }
             else if (arg.StartsWith("--zrdr=")) { s.Zrdr = arg["--zrdr=".Length..]; }
@@ -1371,6 +1452,20 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--dump-mips=")) { s.DumpMips = true; s.DumpMipsFilter = arg["--dump-mips=".Length..]; }
             else if (arg == "--dump-ai") { s.DumpAi = true; }
             else if (arg.StartsWith("--dump-ai=")) { s.DumpAi = true; s.DumpAiChapter = arg["--dump-ai=".Length..]; }
+            else if (arg == "--dump-sticks") { s.DumpSticks = true; }
+            else if (arg.StartsWith("--dump-sticks="))
+            {
+                string want = arg["--dump-sticks=".Length..];
+                s.DumpSticks = true;
+                if (int.TryParse(want, NumberStyles.Integer, CultureInfo.InvariantCulture, out int seconds) && seconds >= 1)
+                {
+                    s.DumpSticksWatch = Math.Min(seconds, 120);
+                }
+                else
+                {
+                    notes.Add(new Note("core", $"--dump-sticks={want} is not a number of seconds, dumping without the watch"));
+                }
+            }
             else if (arg == "--dump-tilegrid") { s.DumpTileGrid = true; s.HasContentArg = true; }
             else if (arg.StartsWith("--dump-tilegrid=")) { s.DumpTileGrid = true; s.DumpTileGridPath = arg["--dump-tilegrid=".Length..]; s.HasContentArg = true; }
             else if (arg.StartsWith("--tex-override=")) { texOverrides.Add(arg["--tex-override=".Length..]); }
@@ -1450,7 +1545,7 @@ public sealed record SessionSpec
                 string want = arg["--view=".Length..];
                 // The selected modes are checked first: they are names, so they cannot collide
                 // with a digit or with 'back', and a numpad digit means the other concept.
-                if (Flight.PilotView.Parse(want) is { } mode)
+                if (Flight.Camera.PilotView.Parse(want) is { } mode)
                 {
                     s.ViewMode = mode;
                     s.ViewModeExplicit = true;
@@ -1478,6 +1573,19 @@ public sealed record SessionSpec
             }
         }
 
+        // The development options mean nothing to a session, so a stray one is named rather than
+        // silently dropped. The unzbd path is not one, since the extraction screen runs that tool.
+        if (s.ExtractInstall == null)
+        {
+            foreach (var (given, name) in new[] { (s.ExtractForce, "--extract-force"), (s.ExtractUnzip, "--extract-unzip") })
+            {
+                if (given)
+                {
+                    notes.Add(new Note("core", $"{name} does nothing without --extract=<install>, ignoring it"));
+                }
+            }
+        }
+
         s._notes = notes;
         s.Deprecated = deprecated;
         s.LogSpecs = logSpecs;
@@ -1486,15 +1594,37 @@ public sealed record SessionSpec
         return s;
     }
 
+    /// <summary>Splits a <see cref="NetJoin"/> value into the address and the port to join. A
+    /// value naming no port takes the door's own default. An IPv6 address is written in brackets,
+    /// which is what tells its colons from the port's.</summary>
+    public static (string Address, int Port) ParseJoin(string value) =>
+        UI.Menu.NetPlayFeature.SplitAddress(value, UI.Menu.NetPlayFeature.DefaultPort);
+
+    /// <summary>Splits a <see cref="NetHostPort"/> value: a bare port binds every interface, and
+    /// an <c>address:port</c> binds that one address, by the same rules as
+    /// <see cref="ParseJoin"/>.</summary>
+    public static (string Bind, int Port) ParseHost(string value)
+    {
+        string text = value ?? "";
+        if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int bare))
+        {
+            return ("*", bare is > 0 and < 65536 ? bare : UI.Menu.NetPlayFeature.DefaultPort);
+        }
+
+        var (address, port) = ParseJoin(text);
+        return (address.Length == 0 ? "*" : address, port);
+    }
+
     /// <summary>The spec for a launchscreen launch, one plane per player, derived from the pristine
     /// command line <paramref name="cli"/>, never the last session's spec. ⚠ Does not re-resolve:
     /// every menu-settable field must be written here, or the pristine base drops it. The 2-player
-    /// Dogfight lock is <see cref="UI.LaunchMenu"/>'s job. An <paramref name="iaDef"/> decides
-    /// <see cref="Scenario"/> and <see cref="Stunt"/> instead. The two vs arguments are a screen's
-    /// match rules, null where none offers them (<see cref="VsKillsExplicit"/>).</summary>
+    /// Dogfight lock is <see cref="UI.Screens.LaunchMenu"/>'s job. An <paramref name="iaDef"/> decides
+    /// <see cref="Scenario"/> and <see cref="Stunt"/> instead. The vs arguments are a screen's match
+    /// rules, null where none offers them (<see cref="VsKillsExplicit"/>); only the lobby sets lives.</summary>
     public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
         MenuMode mode, InstantActionDef? iaDef = null, IReadOnlyList<LoadoutChoice?>? loadouts = null,
-        IReadOnlyList<CustomPlaneDef?>? customPlanes = null, int? vsKills = null, int? vsTimeMinutes = null)
+        IReadOnlyList<CustomPlaneDef?>? customPlanes = null, int? vsKills = null, int? vsTimeMinutes = null,
+        int? vsLives = null, bool? vsAutoRespawn = null, LoadoutChoice? iaWingmanLoadout = null)
     {
         var names = planeNodes.ToArray();
         return cli with
@@ -1507,11 +1637,13 @@ public sealed record SessionSpec
             // slot is locked, and it needs at least one), so this falls back to the command line's
             // plane rather than to whatever the last session flew.
             PlaneName = names.Length > 0 ? names[0] : cli.PlaneName,
-            Players = Mathf.Clamp(names.Length, 1, UI.SplitScreen.MaxPlayers),
+            Players = Mathf.Clamp(names.Length, 1, UI.Boards.SplitScreen.MaxPlayers),
             Stunt = iaDef != null ? iaDef.MissionType == "stunt_flying" : mode == MenuMode.Stunt,
             Versus = mode == MenuMode.Versus,
             VsKills = cli.VsKillsExplicit ? cli.VsKills : vsKills ?? cli.VsKills,
             VsTimeMinutes = cli.VsTimeExplicit ? cli.VsTimeMinutes : vsTimeMinutes ?? cli.VsTimeMinutes,
+            VsLives = cli.VsLivesExplicit ? cli.VsLives : vsLives ?? cli.VsLives,
+            VsAutoRespawn = cli.VsAutoRespawnExplicit ? cli.VsAutoRespawn : vsAutoRespawn ?? cli.VsAutoRespawn,
             Mode = SessionMode.Fly,
             WorldMode = true,
             Scenario = cli.ScenarioExplicit ? cli.Scenario : iaDef?.MissionType ?? mode switch
@@ -1521,6 +1653,7 @@ public sealed record SessionSpec
                 _ => "zeppelin_run",
             },
             IaDef = iaDef,
+            IaWingmanLoadout = iaDef != null ? iaWingmanLoadout : null,
         };
     }
 
@@ -1528,7 +1661,7 @@ public sealed record SessionSpec
     /// mission: the profile and story position <c>--campaign=</c> would name, and
     /// <paramref name="planeNodes"/>, one entry per joined human in player order (entry 0 the
     /// SEATED pilot's aircraft, entries 1 and up guests'). The chapter and mission are settled by
-    /// <see cref="Session.CampaignDirector.ResolveSpec"/> in the constructor, out of
+    /// <see cref="Session.Campaign.CampaignDirector.ResolveSpec"/> in the constructor, out of
     /// <c>cm_sequence.zrd</c>, as for a command line. ⚠ Derived from the pristine <paramref name="cli"/>.</summary>
     public static SessionSpec FromCampaign(SessionSpec cli, string profile, int seq,
         IReadOnlyList<string> planeNodes, int players,
@@ -1541,11 +1674,12 @@ public sealed record SessionSpec
             MenuCustomPlanes = customs ?? Array.Empty<CustomPlaneDef?>(),
             PlaneNames = planeNodes.ToArray(),
             PlaneName = planeNodes.Count > 0 ? planeNodes[0] : cli.PlaneName,
-            Players = Mathf.Clamp(players, 1, UI.SplitScreen.MaxPlayers),
+            Players = Mathf.Clamp(players, 1, UI.Boards.SplitScreen.MaxPlayers),
             Coop = true,
             Stunt = false,
             Versus = false,
             IaDef = null,
+            IaWingmanLoadout = null,
             Mode = SessionMode.Fly,
             WorldMode = true,
             ChapterGiven = true,
@@ -1554,12 +1688,12 @@ public sealed record SessionSpec
     /// <summary>The saved difficulty option folded in, the rule the saved graphics mode follows:
     /// the <c>--difficulty=</c> flag beats the saved word, and a <c>--det</c> run reads no saved
     /// option at all, since options.json is one machine's state and a deterministic run must not
-    /// depend on it. A word <see cref="CSVM.Flight.Difficulty.Parse"/> refuses, or null, changes
+    /// depend on it. A word <see cref="CSVM.Flight.Hangar.Difficulty.Parse"/> refuses, or null, changes
     /// nothing. Applied per launch rather than once per process, so a tier saved on an Options
     /// screen reaches the next flight without a restart.</summary>
     public SessionSpec WithSavedDifficulty(string? savedWord)
     {
-        if (DifficultyExplicit || Det || CSVM.Flight.Difficulty.Parse(savedWord) is not { } saved)
+        if (DifficultyExplicit || Det || CSVM.Flight.Hangar.Difficulty.Parse(savedWord) is not { } saved)
         {
             return this;
         }
@@ -1577,14 +1711,14 @@ public sealed record SessionSpec
 
     /// <summary>The saved opening view folded in, on the difficulty's own rules with <c>--view=</c>
     /// in the flag's place. A command line naming a mode beats the saved word. A word
-    /// <see cref="CSVM.Flight.PilotView.Parse"/> refuses, or null, changes nothing, and a
+    /// <see cref="CSVM.Flight.Camera.PilotView.Parse"/> refuses, or null, changes nothing, and a
     /// <c>--det</c> run reads no saved option. Not folded outside <see cref="Fly"/>, since the two
     /// first-person views sit on a flown aircraft's camera and the other modes have cameras of
     /// their own. It runs after <c>Validate</c>, so it keeps that rule rather than warning.</summary>
     public SessionSpec WithSavedDefaultView(string? savedWord)
     {
         if (ViewModeExplicit || Det || !Fly
-            || CSVM.Flight.PilotView.Parse(savedWord ?? string.Empty) is not { } saved)
+            || CSVM.Flight.Camera.PilotView.Parse(savedWord ?? string.Empty) is not { } saved)
         {
             return this;
         }
@@ -1651,11 +1785,11 @@ public sealed record SessionSpec
     {
         if (string.Equals(s, "back", StringComparison.OrdinalIgnoreCase))
         {
-            return Flight.CameraController.PinnedBackView;
+            return Flight.Camera.CameraController.PinnedBackView;
         }
         if (string.Equals(s, "flyby", StringComparison.OrdinalIgnoreCase))
         {
-            return Flight.CameraController.PinnedFlybyView;
+            return Flight.Camera.CameraController.PinnedFlybyView;
         }
         if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n)
             && n >= 1 && n <= 9 && n != 5)
@@ -1799,13 +1933,13 @@ public sealed record SessionSpec
 
     /// <summary>A copy pointed at the chapter and mission a <c>--campaign=</c> story position
     /// resolves to. Resolving it needs <c>cm_sequence.zrd</c> off disk, which this type never
-    /// touches, so <see cref="Session.CampaignDirector.ResolveSpec"/> reads the sequence and calls
+    /// touches, so <see cref="Session.Campaign.CampaignDirector.ResolveSpec"/> reads the sequence and calls
     /// this; the rest of the build then sees an ordinary chapter/mission session.</summary>
     public SessionSpec WithCampaignMission(string chapter, string mission) =>
         this with { Chapter = chapter, Mission = mission, ChapterGiven = true };
 
     /// <summary>A copy with <see cref="Zeppelins"/>/<see cref="Generators"/> turned on for a
-    /// campaign mission that ships the data; <see cref="Session.GameSession"/> calls this once
+    /// campaign mission that ships the data; <see cref="Session.Launch.GameSession"/> calls this once
     /// <see cref="WithCampaignMission"/> has settled the chapter/mission <see cref="FromCampaign"/>
     /// could not yet know. ORs rather than overwrites, so an explicit CLI flag survives.</summary>
     public SessionSpec WithCampaignZeppelins(bool hasZeppelins, bool hasGenerators) =>
@@ -1815,7 +1949,7 @@ public sealed record SessionSpec
     /// hangar build and stored fit that go with it. The counterpart of <see cref="FromCampaign"/>'s
     /// seat for a command-line <c>--campaign=</c>, whose spec never passed a launchscreen: reading
     /// the profile needs the store off disk, which this type never touches, so
-    /// <see cref="Session.CampaignDirector.ResolveSeatedPlane"/> reads it and calls this. Guests
+    /// <see cref="Session.Campaign.CampaignDirector.ResolveSeatedPlane"/> reads it and calls this. Guests
     /// keep falling back to entry 0 the way <see cref="FromCampaign"/> leaves them.</summary>
     public SessionSpec WithSeatedAircraft(string planeNode, CustomPlaneDef? custom, LoadoutChoice? fit) =>
         this with
@@ -1944,11 +2078,11 @@ public sealed record SessionSpec
             View = 0;
         }
         // Same rule for the two first-person modes: they sit on a flown aircraft's camera.
-        if (ViewMode != Flight.PilotViewMode.Chase && !Fly)
+        if (ViewMode != Flight.Camera.PilotViewMode.Chase && !Fly)
         {
-            Warn("core", $"--view={Flight.PilotView.Name(ViewMode)} is a flight camera; "
+            Warn("core", $"--view={Flight.Camera.PilotView.Name(ViewMode)} is a flight camera; "
                          + "ignoring it outside --fly/--stunt");
-            ViewMode = Flight.PilotViewMode.Chase;
+            ViewMode = Flight.Camera.PilotViewMode.Chase;
         }
         // An unknown surface name would otherwise search for an id no collider can carry and
         // report it missing, which reads as a map fact rather than a typo.
@@ -1998,9 +2132,9 @@ public sealed record SessionSpec
         }
         // The two lab spec grammars live in their labs; the reject list keeps them from logging,
         // which is what lets this run with no engine under it.
-        DebugNodeLab = FilterSpec(DebugNodeLab, UI.NodeLab.ParseDebugSpec, "--debug-nodelab token",
+        DebugNodeLab = FilterSpec(DebugNodeLab, UI.Labs.NodeLab.ParseDebugSpec, "--debug-nodelab token",
             "is not deps/dest/open/all/node=<cs_name>");
-        DebugDamage = FilterSpec(DebugDamage, UI.WorldDamageLab.ParseDebugSpec, "--debug-damage step",
+        DebugDamage = FilterSpec(DebugDamage, UI.Labs.WorldDamageLab.ParseDebugSpec, "--debug-damage step",
             "is not node=/pool=/hp=/kill/reset/tick=/open");
 
         // --stage= replaces the chapter world outright, so it is a flight/spectator affair: there
@@ -2046,7 +2180,7 @@ public sealed record SessionSpec
         {
             Players = PlaneNames.Count;
         }
-        Players = Mathf.Clamp(Players, 1, UI.SplitScreen.MaxPlayers);
+        Players = Mathf.Clamp(Players, 1, UI.Boards.SplitScreen.MaxPlayers);
         if (Players > 1 && !Fly)
         {
             Print($"--players={Players} needs flight (nothing to fly in --viewer); using 1");

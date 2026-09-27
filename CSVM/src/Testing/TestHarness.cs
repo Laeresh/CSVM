@@ -147,6 +147,13 @@ public static class TestHarness
                 ctx.Failures.Add(detail);
                 Log.Error("test", $"suite threw name={suite.Name}", e);
             }
+            finally
+            {
+                // A cached collidable world's colliders stay in the one physics space. The next
+                // suite's aircraft would strike them though it never asked for a world. Inside the
+                // watch, so the disposal is charged to the suite that built the world.
+                ctx.EvictCollidableWorlds();
+            }
             watch.Stop();
             double wallSeconds = watch.Elapsed.TotalSeconds;
             double buildSeconds = ctx.WorldBuildSeconds;
@@ -667,9 +674,9 @@ public sealed class SuiteSkippedException : Exception
     public SuiteSkippedException(string why) : base(why) { }
 }
 
-/// <summary>One built chapter world, held for the suites that need one. The archives are closed
-/// as soon as the build is done (<see cref="WorldSession"/>'s disposal-lifetime contract), so what
-/// survives here is the scene subtree and its bound runtime.</summary>
+/// <summary>One built chapter world, held for the suites that need one: the scene subtree, its
+/// bound runtime, and the texture archive that scene still reads. The sound archive closes with
+/// the build (<see cref="ArchiveIntent.Suite"/>).</summary>
 public sealed class TestWorld
 {
     public required string Chapter { get; init; }
@@ -678,10 +685,14 @@ public sealed class TestWorld
     public required Node3D Stage { get; init; }
 
     /// <summary>The chapter's parsed gamez, kept past the build so a suite can build real geometry
-    /// of its own from it, the effect-template stage the world-effects runtime stages,
-    /// which is meshes and cannot be faked with named empty nodes. Not disposable, and
-    /// not the texture archive, which IS and is closed with the build.</summary>
+    /// of its own from it. That geometry is the effect-template stage the world-effects runtime
+    /// stages, which is meshes and cannot be faked with named empty nodes.</summary>
     public required GameZ Gamez { get; init; }
+
+    /// <summary>The texture archive this world was built over, owned here and disposed by
+    /// <see cref="Destroy"/>. ⚠ Do not close it with the build. The built scene reads it later, for
+    /// a library root's first copy, an effect stage, a flyout body or a decal.</summary>
+    public required TextureArchive Textures { get; init; }
 
     public AnimRuntime Runtime => Session.Runtime;
 
@@ -691,6 +702,7 @@ public sealed class TestWorld
         // Free, not QueueFree: the harness runs to completion inside one _Ready call, so a queued
         // free would only happen after every suite had already built its own world.
         Stage.Free();
+        Textures.Dispose();
     }
 }
 
@@ -751,11 +763,11 @@ public sealed class TestContext
     public IEmitterFactory? EmitterFactory { get; set; }
 
     /// <summary>The ambience the next world this builds hands its real emitter factory, what a game
-    /// session gives from its own instance (<see cref="WorldSession.Options.Ambience"/>). Null (the
-    /// default) leaves the option null, so a suite that never touches this gets still air and no
-    /// camera, the state every other emitter suite reads. Mutable for the reason
-    /// <see cref="EmitterFactory"/> is, and used with <see cref="WithPrivateWorld"/> for the same
-    /// one: a cached world would hand this suite's ambience to every later suite on the chapter.</summary>
+    /// session gives from its own instance (<see cref="WorldSession.Options.ArchiveEmitterFactory"/>).
+    /// Null (the default) builds that factory over still air. A suite that never sets it gets no
+    /// wind and no camera, the state every other emitter suite reads. It is mutable for the reason
+    /// <see cref="EmitterFactory"/> is, and needs <see cref="WithPrivateWorld"/> for the same one.
+    /// A cached world would hand this suite's ambience to every later suite on the chapter.</summary>
     public EffectAmbience? Ambience { get; set; }
 
     /// <summary>Extra sound-group names to prewarm for the next world this builds, a mission's own
@@ -971,11 +983,11 @@ public sealed class TestContext
         WorldsBuilt = 0;
     }
 
-    /// <summary>Destroys every cached collidable world. A suite that builds its own physics lab
-    /// under the host without a world calls this first: the cache keeps the default chapter's
-    /// collidable world standing across suites, and its sea collider sits at the origin, so a
-    /// splash or a ray fired there reads the previous suite's scenery. The same rule a collidable
-    /// build applies before it opens its own space.</summary>
+    /// <summary>Destroys every cached collidable world. <see cref="TestHarness.Run"/> calls it after
+    /// every suite, so only a non-collidable world crosses suites. A suite that builds a physics lab
+    /// under the host after its own collidable world calls it first. That world's sea collider sits
+    /// at the origin, and its scenery answers any ray or aircraft there. A collidable build applies
+    /// the same rule before it opens its own space.</summary>
     internal void EvictCollidableWorlds()
     {
         var evicted = new List<string>();
@@ -1024,16 +1036,17 @@ public sealed class TestContext
         var profile = new StartupProfile("test-suite", bootMs: 0);
         var previousProfile = StartupProfile.Current;
         StartupProfile.Current = profile;
+        TextureArchive? textures = null;
         try
         {
             var stage = new Node3D { Name = $"TestWorld_{chapter}" };
             Host.AddChild(stage);
-            // The archives are this scope's: WorldSession clears the puffer factory and the sound
-            // loader after its bootstrap precisely so they can close here.
+            // The sound archive is this scope's, the texture archive the returned world's.
             var archives = SessionArchives.OpenFor(ArchiveIntent.Suite, gamezPath, texturesPath,
                 SoundsPath, ZrdrPath, Mute, _decode);
-            using var textures = archives.Textures;
+            textures = archives.Textures;
             using var sounds = archives.Sounds;
+            var ambience = Ambience;
 
             var session = WorldSession.Build(
                 new WorldSession.Options
@@ -1044,14 +1057,15 @@ public sealed class TestContext
                     ZrdrPath = ZrdrPath,
                     InterpPath = InterpPath,
                     MissionZrdrPath = SessionPaths.MissionZrdr(DataRoot, chapter, mission),
+                    ChapterZrdrPath = SessionPaths.ChapterZrdr(DataRoot, chapter),
                     EffectsParent = stage,
                     PlayerPosition = () => Camera.GlobalPosition,
                     Collision = collision,
                     RuntimeSeed = Rng.IntSeedFor(Rng.Anim),
                     EmitterFactory = EmitterFactory,
-                    Ambience = Ambience,
+                    ArchiveEmitterFactory = (tex, parent) => new PufferEmitterFactory(tex, parent, ambience),
                     ExtraPrewarmNames = ExtraPrewarmSoundNames,
-                    CutsceneRoots = CutsceneRoots,
+                    Cutscenes = CutsceneRoots ? CSVM.Session.Launch.GameSession.CutsceneWorldNames : null,
                     LandingTriggers = CutsceneRoots,
                     PlanesGamezPath = PlanesGamezPath,
                     Decode = _decode,
@@ -1069,7 +1083,14 @@ public sealed class TestContext
                 Session = session,
                 Stage = stage,
                 Gamez = archives.Gamez,
+                Textures = textures,
             };
+        }
+        catch
+        {
+            // No world took the archive over, so nothing else would ever close it.
+            textures?.Dispose();
+            throw;
         }
         finally
         {

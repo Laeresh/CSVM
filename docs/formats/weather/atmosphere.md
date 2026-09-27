@@ -142,7 +142,7 @@ top), `_DAT_00a06f84` (`BOTTOM`) and `_DAT_00a06f88` (core bottom) with their re
 by `DAT_00a06f70`, which is set only where the mission authors a band.
 
 > **Landed.** The remake ports the cull. `WeatherState.ObjectZone` is the rule above and
-> `Session.ObjectZoneGate` applies it per frame to the session's aircraft and zeppelins, moving
+> `Session.Objectives.ObjectZoneGate` applies it per frame to the session's aircraft and zeppelins, moving
 > each object's meshes onto the zone's visual layer the camera cull mask already narrows to, so
 > the effect meshes hanging under an aircraft ride with it. A mesh already wearing a layer of its
 > own (the own-airframe hide, a per-pane copy) stays ungated, since a cull mask ORs its bits and

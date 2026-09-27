@@ -1,9 +1,11 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using CSVM.Flight;
+using CSVM.Flight.Airframe;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session;
+using CSVM.Session.Launch;
 using CSVM.Utils;
 using Godot;
 
@@ -48,9 +50,6 @@ internal static class CraterSuites
     internal static void CraterCarve(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        // The lab reads the ground through the one physics space, where a cached collidable world's
-        // colliders would also stand and answer the scan.
-        ctx.EvictCollidableWorlds();
         var report = new StringBuilder();
         ctx.WithPrivateWorld(Chapter, collision: true, world => Drop(ctx, world, report));
         ctx.WriteArtifact("test-crater-carve.txt", report.ToString());

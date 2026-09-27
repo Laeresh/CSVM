@@ -8,7 +8,7 @@ Traps do not live here; the rule is in `docs/architecture.md`.
 
 ## src/Effects/Puffer.cs
 The engine's billboard-particle emitter, read from `PUFFER_STATE` blocks by `PufferState.Load` or
-`FromAnimEvent`: `Puffer.Create` bakes the frame atlas and each frame's blend (the texture's additive
+`FromAnimEvent` (`Mech3/PufferState.cs`): `Puffer.Create` bakes the frame atlas and each frame's blend (the texture's additive
 bit) into an `IEmitterRenderer` (`EmitterRenderer.cs`); this class owns only the CPU integration.
 The authored state picks burst, distance-trail or sustained mode; callers drive it through
 `Emit`/`Stop`, `Burst` and the hard-kill `Clear`, and `CreateWith` reaches all three with no atlas,
@@ -22,16 +22,23 @@ stream, authored in `weather.zrd`'s `WIND` block (schema:
 [../formats/weather.md](../formats/weather.md); decode: [../org/weather.md](../org/weather.md)).
 `EffectAmbience` is the seam holding the per-frame state a `Puffer` reads, the wind and every
 pane's camera pose. `GameSession` owns the one instance and `WeatherRig.Tick` writes it per frame;
-the world build takes that same instance by option, so its emitters fade and cull like the player's
-own. `Still` is the camera-less null object an unwired puffer reads. Read `Puffer.cs` next.
+the world build's emitter factory closes over that same instance, so its emitters fade and cull
+like the player's own. `Still` is the camera-less null object an unwired puffer reads. Read `Puffer.cs` next.
+
+## src/Effects/PufferEmitterFactory.cs
+The one real implementation of the animation layer's `IEmitterFactory` seam (`Mech3/Anim/IEmitter.cs`):
+`Create` turns a `PufferState` into a sustained `Puffer` wrapped as an `IEmitter`, parented under
+the world root and reading the session's `EffectAmbience`. The seam is owned below, so the
+animation runtime drives emitters without naming this layer; `GameSession` and the test harness
+hand the factory in through `WorldSession.Options`. A texture-less state is a stub and builds nothing.
 
 ## src/Effects/EmitterRenderer.cs
 `Puffer`'s lower seam. `IEmitterRenderer` takes live particles (`Attach` sizes the pool, `Grow`
 re-sizes it, `Write` per particle, `Show` publishes the frame), reaching the three emitter modes
 without a GPU via `RecordingEmitterRenderer`. `MultiMeshEmitterRenderer` draws them as MultiMeshes of camera-billboarded quads, over one
 process-wide unit quad and one compiled shader per blend, soft and graphics-mode triple, and owns that shader: quad-rim fade, flipbook column from
-per-instance custom data, the soft-particle depth fade, `csky_srgb_to_linear` on the `COLORS` ramp, the two per-column marks Enhanced Graphics grades by (`IsFireSprite`, an ALBEDO gain over the glow threshold; `IsSmokeSprite`, a `csky_sun_dir` gradient across the quad in the mix variant alone, clamped under that threshold: the faithful text carries neither term), and the
-mission's distance fog off the sky's globals. Blend arrives per atlas column from `Puffer.Create`,
+per-instance custom data, the soft-particle depth fade, `csky_srgb_to_linear` on the `COLORS` ramp, the two per-column marks Enhanced Graphics grades by (`IsFireSprite`, an ALBEDO gain over the glow threshold that the mixed alpha's clamp carries through; `IsSmokeSprite`, a `csky_sun_dir` gradient across the quad in the mix variant alone, clamped under that threshold: the faithful text carries neither term), the
+mission's distance fog off the sky's globals, and a mixed alpha that lands on DX7's byte-space mix. Blend arrives per atlas column from `Puffer.Create`,
 keeping this seam free of `TextureArchive`; a column set spanning both draws one MultiMesh per
 blend, each in write order and depth-sorted on its cloud's AABB centre. Read `Puffer.cs` next.
 
@@ -65,7 +72,7 @@ primitives no archive carries. Schema and the data-to-look TUNE mapping:
 [../formats/weather.md](../formats/weather.md).
 
 ## src/Effects/WindStreaks.cs
-Remake-only wind streaks, a layer OVER the authored speed cue (`Flight/SpeedCue.cs`) rather than a
+Remake-only wind streaks, a layer OVER the authored speed cue (`Flight/Hud/SpeedCue.cs`) rather than a
 replacement: one MultiMesh of thin procedural quads in a camera-centred wrap box on
 `Precipitation`'s pattern, aligned to the aircraft's world velocity, with the same near and rim
 fades. `Create` returns null unless `GraphicsMode.Enhanced`; `HumanFlightAdapter` gives each player

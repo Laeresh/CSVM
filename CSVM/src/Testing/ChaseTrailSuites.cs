@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using System.Text;
-using CSVM.Flight;
+using CSVM.Flight.Camera;
 using CSVM.Utils;
 using Godot;
 

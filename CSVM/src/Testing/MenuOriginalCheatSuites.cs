@@ -1,12 +1,13 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using CSVM.Flight;
-using CSVM.Session;
-using CSVM.UI;
+using CSVM.Flight.Hangar;
+using CSVM.Session.Campaign;
+using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
+using CSVM.UI.Screens;
 
 namespace CSVM.Testing;
 
@@ -73,15 +74,20 @@ internal static class MenuOriginalCheatSuites
         }
 
         var store = new CampaignProfileStore(Path.Combine(root, "Profiles"));
+        var planes = MenuSuiteHost.ScratchPlanes(ctx, "menu-original-cheats");
         var exits = new List<MenuExit>();
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();
         registry.Register(PresentationId.BuiltIn, () => new BuiltInPresentation(
-            ctx.Host, ctx.ZrdrPath, ctx.DataRoot, string.Empty, new MenuInput { Keyboard = true }));
+            ctx.Host, ctx.ZrdrPath, ctx.DataRoot, string.Empty, new MenuInput { Keyboard = true })
+        {
+            Planes = planes,
+        });
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
             ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
         {
             CampaignProfiles = store,
+            Planes = planes,
         });
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
         MenuSuiteHost.AddFeatures(host, ctx.DataRoot);

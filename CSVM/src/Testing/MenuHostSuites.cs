@@ -1,7 +1,7 @@
 using System.Collections.Generic;
-using CSVM.UI;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
+using CSVM.UI.Screens;
 using Godot;
 
 namespace CSVM.Testing;
@@ -37,8 +37,12 @@ internal static class MenuHostSuites
         var exits = new List<MenuExit>();
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();
+        var planes = MenuSuiteHost.ScratchPlanes(ctx, "menu-host-pointer");
         registry.Register(PresentationId.BuiltIn, () => new BuiltInPresentation(
-            ctx.Host, ctx.ZrdrPath, ctx.DataRoot, string.Empty, new MenuInput { Keyboard = true }));
+            ctx.Host, ctx.ZrdrPath, ctx.DataRoot, string.Empty, new MenuInput { Keyboard = true })
+        {
+            Planes = planes,
+        });
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
         MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
         host.AddSeat(seat);
@@ -74,8 +78,12 @@ internal static class MenuHostSuites
         var exits = new List<MenuExit>();
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();
+        var planes = MenuSuiteHost.ScratchPlanes(ctx, "menu-host-tracer");
         registry.Register(PresentationId.BuiltIn, () => new BuiltInPresentation(
-            ctx.Host, ctx.ZrdrPath, ctx.DataRoot, string.Empty, new MenuInput { Keyboard = true }));
+            ctx.Host, ctx.ZrdrPath, ctx.DataRoot, string.Empty, new MenuInput { Keyboard = true })
+        {
+            Planes = planes,
+        });
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exits.Add);
         MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
         host.AddSeat(seat);

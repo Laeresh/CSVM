@@ -56,6 +56,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         uniform sampler2D atlas : source_color, filter_linear, repeat_disable;
         uniform float frame_count = 1.0;
         uniform sampler2D depth_texture : hint_depth_texture, filter_nearest;
+        SCREEN_UNIFORM
 
         varying flat float v_frame;
         varying flat float v_alpha;
@@ -102,6 +103,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
             ALBEDO = mix(ALBEDO, FOG_TARGET, csky_fog_amount(fog_world, CAMERA_POSITION_WORLD));
             ALPHA = t.a * v_alpha * v_color.a * rim.x * rim.y * soft;
+            COMPOSITE
         }
         """;
 
@@ -138,6 +140,28 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
     // already reach 1.0 (docs/org/textures.md), so a lift without this would cross the glow
     // threshold Launcher.EnableGlowAndTonemap reserves for the fire flipbook.
     private const float EnhancedSmokeCeiling = 0.98f;
+
+    // The original's DX7 device mixes framebuffer bytes. This alpha makes Godot's linear mix land
+    // on that byte over the opaque background. ⚠ Do not drop it for the raw alpha: a linear-space
+    // mix draws a near-black plume at about half the original's darkening. Keep it a convex mix:
+    // an additive form blows a stack of light sprites out to white. See docs/org/puffer.md.
+    private const string GammaMixComposite = """
+            vec3 src_g = csky_linear_to_srgb(clamp(ALBEDO, 0.0, 1.0));
+            vec3 dst_l = clamp(texture(screen_texture, SCREEN_UV).rgb, 0.0, 1.0);
+            vec3 dst_g = csky_linear_to_srgb(dst_l);
+            vec3 out_g = src_g * ALPHA + dst_g * (1.0 - ALPHA);
+            vec3 src_l = csky_srgb_to_linear(src_g);
+            vec3 luma = vec3(0.2126, 0.7152, 0.0722);
+            float span = dot(src_l - dst_l, luma);
+            float moved = dot(csky_srgb_to_linear(out_g) - dst_l, luma);
+            ALBEDO = src_l;
+            ALPHA = abs(span) > 1e-4 ? clamp(moved / span, 0.0, 1.0) : ALPHA;
+""";
+
+    // Enhanced only: the composite clamps ALBEDO to 1.0, which would cut the fire gain's glow,
+    // since every puffer sprite alpha-mixes. The overshoot is carried past the clamp and added back.
+    private const string EnhancedMixComposite =
+        "vec3 hdr_over = max(ALBEDO - vec3(1.0), vec3(0.0));\n" + GammaMixComposite + "\n    ALBEDO += hdr_over;";
 
     // ⚠ Format every amplitude invariantly: a comma decimal separator emits shader text that will
     // not compile, on a German-locale machine only.
@@ -316,6 +340,9 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             // carries that colour, so full fog leaves nothing to add.
             var code = ShaderCode
                 .Replace("BLEND_MODE", mix ? "blend_mix" : "blend_add")
+                .Replace("SCREEN_UNIFORM", mix
+                    ? "uniform sampler2D screen_texture : hint_screen_texture, filter_nearest;" : "")
+                .Replace("COMPOSITE", !mix ? "" : enhanced ? EnhancedMixComposite : GammaMixComposite)
                 .Replace("FOG_TARGET", mix ? "csky_fog_color" : "vec3(0.0)")
                 .Replace("SOFT_EXPR", soft ? "clamp((VERTEX.z - scene_z) / 1.5, 0.0, 1.0)" : "1.0")
                 // The faithful text carries no gain at all, not a gain of one: the presentation

@@ -8,7 +8,7 @@ pointer; any live prose linking this file by path is unlinked in the same commit
 The opt-in Enhanced mode (`GraphicsMode.Enhanced`, `--graphics=enhanced`) today lights the world
 from the authored sun and ambient, mirrors the committed world lights onto real omni lights, casts
 4-split soft shadow maps, runs SSAO, blurs a screen-space reflection on water, blooms only the
-glow-arm sprites and tonemaps with AgX (`CSVM/src/Session/Launcher.cs` `SetupLighting`). Clouds are
+glow-arm sprites and tonemaps with AgX (`CSVM/src/Session/Launch/Launcher.cs` `SetupLighting`). Clouds are
 still the original's flat, unshaded sprite cards and explosions are still unlit puffer billboards.
 This plan adds four things to that stack, all behind the same switch: a temporal anti-aliasing pass
 plus a render-scale display setting (Wave A), lit explosions (Wave B), lit cloud cards and volumetric
@@ -93,7 +93,7 @@ worktree session here; use a local commit or a file copy.
   for both modes. `CockpitOverlay.cs:133`, `SpyglassView.cs:45` and `SplitScreen.cs:259` copy that
   project setting onto their own `SubViewport`s, so any viewport-level pass has four places to
   reach. No code reads `use_taa`, `screen_space_aa` or `scaling_3d_*`.
-- **The capture trap.** `Testing/CaptureDirector.cs:109`: a `--shots` image is the previous
+- **The capture trap.** `Tooling/CaptureDirector.cs:109`: a `--shots` image is the previous
   frame's render; `_00` is un-jittered and `_01+` carries the burst camera's dither. A dither
   verdict comes from the controls or an undithered capture, never from a burst frame.
 - **World lights under Enhanced.** `Mech3/WorldLights.cs`: `Begin`/`Add`/`Commit` per frame, and
@@ -125,7 +125,7 @@ worktree session here; use a local commit or a file copy.
 - **The golden set.** `analysis/goldens/manifest.json` runs every shot under `--det --mute`, and
   under `--det` only the `--graphics=` flag reaches `GraphicsMode.Resolve`, so an enhanced shot is
   one more manifest entry with the flag in its args.
-- **The speed cue as shipped.** `Flight/SpeedCue.cs` loads each chapter's `speed_cue.zrd`
+- **The speed cue as shipped.** `Flight/Hud/SpeedCue.cs` loads each chapter's `speed_cue.zrd`
   verbatim: three `cuepufferN` states picked by camera altitude, emitted 60 m ahead of the player
   and left in world space for the aircraft to pass (`docs/formats/effects.md` "Aircraft speed-cue
   wisps"); off within 50 m of the ground. Their opacity was judged right at the controls
@@ -236,8 +236,8 @@ it depends on the halted one.
 the faithful path. The four sites write it through one helper, `Utils/ViewportQuality.cs`:
 `public static void Apply(Viewport viewport)`, which sets `UseTaa` from
 `GraphicsMode.Enhanced` and carries A2's render-scale write beside it. Called from
-`Session/Launcher.cs` on the root viewport right after `GraphicsMode.Resolve` and its log line,
-from `Flight/CockpitOverlay.cs`, `Flight/SpyglassView.cs` and `UI/SplitScreen.cs` at SubViewport
+`Session/Launch/Launcher.cs` on the root viewport right after `GraphicsMode.Resolve` and its log line,
+from `Flight/Hud/CockpitOverlay.cs`, `Flight/Camera/SpyglassView.cs` and `UI/Boards/SplitScreen.cs` at SubViewport
 construction. MSAA is untouched and `project.godot` is unchanged, so nothing reaches the faithful
 path. `Testing/GroundShadowSuites.cs`'s graphics-mode gate gained the assertion that a built
 viewport takes the pass under Enhanced and Godot's default under original; `docs/architecture.md`
@@ -1234,7 +1234,7 @@ speed cue's `decorate` hook does.
 
 **Landed.** Under Enhanced the chase camera's pose is built from a lagged copy of the aircraft's
 attitude, so a roll or a yaw leaves it trailing the nose before it springs back, and the external
-FOV widens with speed. The whole arm enters `Flight/CameraController.cs` through one new call,
+FOV widens with speed. The whole arm enters `Flight/Camera/CameraController.cs` through one new call,
 `StepEnhancedCues(dt, attitude, speedFraction)`: it eases the lagged attitude toward the live one
 at `TrailRate` through the exponential shape `dist_catch_up` uses, and stores what `SpeedFovWiden`
 returns. `Chase` builds its offset direction, its image up and its look-ahead point from that
