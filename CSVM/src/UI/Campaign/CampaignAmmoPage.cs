@@ -281,6 +281,10 @@ public sealed class CampaignAmmoPage : CampaignPage
         return null;
     }
 
+    /// <summary>A pick row takes the cursor only while it has a field, since the rows without one
+    /// draw nothing. ⚠ Read live, never cached: the aircraft and its fit decide which rows have one.</summary>
+    public override bool Focusable(int row) => row >= AcceptRow || Combo(row) != null;
+
     /// <summary>A pick row's words are its field's, and the board draws them inside the field. A
     /// row with no field contributes no line at all, which is why these are empty rather than the
     /// caption's words repeated.</summary>

@@ -185,7 +185,8 @@ public class CampaignAidScriptTests
     {
         var flow = Ammo();
 
-        CampaignAidScript.Replay(flow, "4da");
+        // One step: the one-gun plane's empty groups 1 to 3 take no cursor, so it lands on row 4.
+        CampaignAidScript.Replay(flow, "da");
 
         Assert.Equal(4, flow.Row);
         Assert.NotNull(flow.OpenCombo);

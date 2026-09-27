@@ -251,7 +251,7 @@ problem, and none of them is visible to a census of the three enums.
 | 4 | the hangar's removal list | `HangarPlaneSelectionPage._removing` | the plane list becomes a Delete / Sell list plus Cancel |
 | 5 | the roster's delete confirm | `CampaignRosterPage._confirming` | the whole screen becomes two rows |
 | 6 | an armed name field | `CampaignFlow.CapturesText` | the keyboard types and the cursor axes come from the pad alone |
-| 7 | an open drop-down | `CampaignFlow.OpenCombo` | ⚠ only while its own row is focused; a page that leaves one open behind a moved cursor strands it |
+| 7 | an open drop-down | `CampaignFlow.OpenCombo` | only the focused row's: any cursor move, a pointer's included, closes the rest |
 | 8 | a guest's flight check | `CampaignFlightField` | the same screen, driven by that guest's own device |
 | 9 | the error line | `LaunchMenu._error` | a refusal from either flow's gate rides the focused screen |
 
