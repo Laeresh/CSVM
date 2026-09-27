@@ -329,7 +329,11 @@ member, and it does not go here.
   a thread's allocation context charges that thread for what the context still held. Empty it with
   a forced collection before any window that must read zero.** The step is that remainder alone,
   always under 8 KB: with per-thread pads 512 bytes apart it moved 512 bytes in lockstep, and
-  28,800 windows opened on an emptied context charged nothing where seven charged without it.
+  28,800 windows opened on an emptied context charged nothing where seven charged without it. A
+  loop of windows too many to collect before each measures again, after a forced collection, only
+  a window over its bound, and keeps the least reading, with a negative control that allocates on
+  every read. The net-message fuzz read a zero-allocating reader as 3,992 bytes against a
+  2,048-byte bound once in about 30 full unit passes.
 - **PERF-30**, **A unit test asserts a wall-clock FLOOR, or a figure read off a clock it advances
   itself, never a fixed millisecond ceiling: a ceiling reads the scheduler on an oversubscribed
   machine, so raising it moves the threshold rather than removing the flake.** A six-walk mean
