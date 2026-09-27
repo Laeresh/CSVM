@@ -1021,6 +1021,13 @@ three codes. Three divergences, each deliberate:
   record what painted a rig, so `FlightRoster.RunSwap` can read the captured rig's back even when a
   real enemy roster spawn's `ShippedSkins` reading resolved it to no scheme at all: that null has to
   carry too, or the rebuild falls back to the player's own default livery.
+  **966 follows the same reading**, again the user's at the controls: CM19's captured Warhawk keeps
+  its own paint rather than repainting in the Fortune Hunters scheme. 966 carries only the paint,
+  not the damage or the roster group, which stay 967's (`AirframeHandover.CarriesCapturedPaint`
+  beside `CarriesCapturedDamage`). Its definition, `player-bm_unhook_player`, is rooted on the
+  player marker, so no live rig names the aircraft taken; the rebuild then wears the scheme
+  `bhatwarhawk` authors (`blackhat`), the def CM19's own Warhawk blocks fly, resolved through
+  `PaintScheme.ForDef`. The `campaign-warhawk-capture-livery` suite reads both shapes.
 
 - **965's rebuild flies the Blue Streak build in its shipped skins, unpainted.** The case's tables
   (40/30 with both twin bytes, two hardpoints of six, 20 armour across, the injector bit) are the

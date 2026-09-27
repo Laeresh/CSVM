@@ -307,13 +307,12 @@ plane flown from Instant Action carries its fit, and a co-op seat's `Net.CoopFit
 
 ## src/Session/Roster/AirframeSwap.cs
 The three `CALLBACK` codes that hand the player a different airframe in mid mission, and what each
-names: the vehicle def the stats and the stock fit come from, the planes.zbd node the model is
-built from, an optional special-plane award template, and whether the rebuild draws the airframe's
-shipped skins instead of the pilot's paint. `AirframeSwapOrder` is one raised swap (the airframe,
-the raising definition's root, and the episode owner whose rig it lands on) and
-`AirframeSwapResult` reports whether an aircraft was replaced and which one left the world. A swap
-is always to the player's OWN rig, and what it deliberately does not rebuild is stated at the
-request record. Callback table: [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
+names: the def, the planes.zbd node, an optional award template, and whether the rebuild draws
+shipped skins. `AirframeSwapOrder` is one raised swap (airframe, raising root, episode owner) and
+`AirframeSwapResult` says whether an aircraft was replaced and which one left the world. A swap is
+always to the player's OWN rig; what it does not rebuild is stated at the request record.
+`AirframeHandover` splits what a capture carries: the captured livery rides 966 and 967 (966 falls
+back to `bhatwarhawk`'s scheme with no live rig), its damage and roster group 967 alone. Callback table: [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
 
 ## src/Session/Campaign/CampaignRoster.cs
 The engine-free half of the campaign roster spawner: `CampaignRosterPlan.Build` turns
