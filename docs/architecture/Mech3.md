@@ -570,7 +570,8 @@ edits the prototype material the rack copies share. The fade shader itself is
 
 ## src/Mech3/Anim/NameResolver.cs
 Name to node resolution as one public module, generic over the node type (`NameResolver<TNode>`):
-the index, the wildcard `Matcher`, the memoized `FindAll`, the scoped tier chain
+the index, the wildcard `Matcher`, the memoized `FindAll` (an answer extends over appended rows
+rather than being voided by them), the scoped tier chain
 (`Resolve`/`ResolveScoped`), the symbol authority (`SymbolClaims`/`NarrowToSymbolRoot`), `Anchors`
 (NAME match, symbol narrowing, root lift) and the bind census. Node identity is
 constructor-supplied, never the node type's inherited `Equals`; `DropFreed` retires the rows naming a freed node and `DropNodes` those naming a live subtree a second staging replaces, since a name resolves to whichever claimant was indexed first. `AdmissibleStaging` filters every tier, the owner's verdict on one pooled

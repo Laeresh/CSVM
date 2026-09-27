@@ -390,6 +390,17 @@ member, and it does not go here.
   busy-wait injected into each launch reads a 30 ms median and fails. The cost of the choice: a
   regression that blocks instead of computing reads as nothing, so the window's wall worst stays in
   the report.
+- **PERF-37**, **`physics_ms` is Godot's physics-tick time, and a session whose clock is not
+  parent-driven runs its whole simulation step inside `GameSession._PhysicsProcess`. A large
+  `physics_ms` is therefore the game's own C# code until a split shows the physics server's step.**
+  A zeppelin gasbag loss on CM20 read as 205 and 424 ms of `physics_ms`, and the report blamed a
+  collision rebuild. The same frames in a probe run, where the step lands in `script_ms`, read
+  `physics_ms` at 0.4 to 0.9 ms. Timing the dispatch put the cost on the first CALL_ANIMATION of
+  each library-root effect. Building the copy was under 1 ms; indexing it was 100 to 200 ms. The
+  index ran every RESET_STATE definition's whole-table name scan and then voided every memoized
+  lookup, so the frame after paid for the refill. `zeppelin-library-copy-hitch` holds both on the
+  thread clock (PERF-36). Unfixed, it reads 97 to 131 ms per copy and 18 to 22 ms to re-ask 200
+  names. Fixed, it reads 6.4 ms and 0.2 ms, under bars of 40 and 5 ms.
 
 ## LOG, logs, error censuses, and exit codes
 

@@ -742,7 +742,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             TemplateStillAnimated,
             NameOf,
             s => IndexWorld(s, indexByPointer: false),
-            () => _resolver.ClearFindCache(),
             ApplyResetStatesWithin);
     }
 
@@ -2703,11 +2702,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     // Re-runs the quiet-stage RESET_STATE posing pass (bootstrap pass 1) for whatever now anchors
     // within a subtree added after the fact, IndexStage's (and IndexPooledCopy's) own tail.
+    // ⚠ Keep the name prefilter. Anchors scans the whole node table per definition. Unfiltered, a
+    // library copy built mid-flight paid that for every reset definition, about 150 ms.
     private void ApplyResetStatesWithin(Node3D subtree)
     {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        void Collect(Node3D n)
+        {
+            names.Add(NameOf(n));
+            for (int i = 0, count = n.GetChildCount(); i < count; i++)
+                if (n.GetChild(i) is Node3D c)
+                    Collect(c);
+        }
+        Collect(subtree);
         foreach (var def in _program.Defs)
         {
-            if (def.ResetState == null)
+            if (def.ResetState == null || !_resolver.MayAnchorAmong(def, names))
                 continue;
             foreach (var a in Anchors(def))
                 if (a != null && (a == subtree || subtree.IsAncestorOf(a)))
