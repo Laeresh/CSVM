@@ -314,3 +314,47 @@ public readonly record struct CoopWingmanMessage(byte Airframe, CoopFit Fit)
         return writer.Close();
     }
 }
+
+/// <summary>
+/// A campaign film a co-op host started or ended. The ordinal counts the host's films, so a guest
+/// tells a new film from the end of the one it plays. Each guest plays the named film and ends it
+/// when the host's ends. Kept in the lobby like the flow, and never reaches a session.
+/// </summary>
+public readonly record struct CoopFilmMessage(byte Ordinal, bool Playing, NetCoopFilm Film, byte Chapter)
+    : INetMessage<CoopFilmMessage>
+{
+    /// <summary>The fixed width of the message, header included.</summary>
+    public const int Size = NetMessage.HeaderBytes + 4;
+
+    /// <inheritdoc/>
+    public static NetMessageType Type => NetMessageType.CoopFilm;
+
+    /// <inheritdoc/>
+    public static NetReliability Reliability => NetReliability.Reliable;
+
+    /// <inheritdoc/>
+    public static bool TryRead(ReadOnlySpan<byte> from, out CoopFilmMessage message)
+    {
+        message = default;
+        var reader = new NetMessageReader(from);
+        if (!reader.Is(Size) || reader.Type != Type)
+            return false;
+
+        byte ordinal = reader.ReadByte();
+        bool playing = reader.ReadByte() != 0;
+        var film = (NetCoopFilm)reader.ReadByte();
+        message = new CoopFilmMessage(ordinal, playing, film, reader.ReadByte());
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public int Write(Span<byte> into)
+    {
+        var writer = new NetMessageWriter(into, Type);
+        writer.WriteByte(Ordinal);
+        writer.WriteByte(Playing ? (byte)1 : (byte)0);
+        writer.WriteByte((byte)Film);
+        writer.WriteByte(Chapter);
+        return writer.Close();
+    }
+}

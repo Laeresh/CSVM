@@ -281,6 +281,8 @@ public partial class Launcher : Node3D
     // completion, not a flag stored anywhere, so a second profile that finishes in the same run
     // does not get it again. Do not replace it with a latch persisted in the profile.
     private ClosingCinema? _closingCinema;
+    // The cinema last put up, which StopCinema ends when a co-op host's film ends before the guest's.
+    private UI.Screens.CinemaScreen? _cinemaShown;
     // The score, and the archive it streams from. Both are process-lifetime, unlike the
     // build-scoped SessionArchives.Sounds: one channel has to survive a mission launch, or the
     // cabin track would restart every time the player left a board. See docs/org/music.md.
@@ -1185,7 +1187,20 @@ public partial class Launcher : Node3D
 
         Log.Info("ui", $"cinema {name} playing skip={skip}");
         cinema.Ended = then;
+        _cinemaShown = cinema;
         AddChild(cinema);
+    }
+
+    /// <summary>Ends the cinema <see cref="PlayCinema"/> last put up, as a skip does, when it is
+    /// still showing. A co-op guest's film stops this way when its host's does.</summary>
+    public void StopCinema()
+    {
+        if (_cinemaShown is { } cinema && IsInstanceValid(cinema) && !cinema.Finished)
+        {
+            cinema.Stop();
+        }
+
+        _cinemaShown = null;
     }
 
     /// <summary>Whether a co-op guest's flight is over. Its host named another board or restarted
@@ -2256,8 +2271,8 @@ public partial class Launcher : Node3D
         host.Features.Add(new HangarFeature(strings, PlanePickerRoster.AirframeNode, () => StockLoadouts.Load(), _zrdrPath));
         // The campaign feature carries both cinemas because both presentations already read that
         // one feature, and neither of them can reach a Launcher to play a film through.
-        _chapterCinema ??= new ChapterCinema(PlayCinema);
-        _closingCinema ??= new ClosingCinema(PlayCinema);
+        _chapterCinema ??= new ChapterCinema(PlayCinema, StopCinema);
+        _closingCinema ??= new ClosingCinema(PlayCinema, StopCinema);
         host.Features.Add(new CampaignFeature(
             strings, PlanePickerRoster.AirframeNode, _chapterCinema, _closingCinema));
         // The keymap editor writes through C21's per-player store, with player 1's stick rows split

@@ -232,7 +232,7 @@ score, `0x17` match state, `0x22` hit and `0x27` seat roster. Damage, spawn, the
 director transition, the join handshake and a seat's ask to be spawned again have no
 counterpart, so they are minted at `0x40`, `0x41`, `0x42`, `0x43` and `0x44`, above the ceiling
 above. The host-owned world's four (AI state, AI fire, a guest's hit claim on an AI, and a world
-event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, and the lobby's co-op wingman at `0x59`. The handshake carries the master seed, the host's clock and the seat the joining peer was
+event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, and the lobby's co-op film at `0x5A`. The handshake carries the master seed, the host's clock and the seat the joining peer was
 given; the original needs none of the three, because it draws from no shared stream and hands
 out no seat. The ask carries a seat and nothing else: the original's client takes its own
 respawn, while here the host owns every placement and answers the ask with a spawn event.
@@ -564,8 +564,8 @@ silent or foreign instead of naming the mismatch.
 
 ### Campaign co-op boards
 
-A co-op guest follows the host's boards through four more lobby messages, minted at `0x50` to
-`0x52` and `0x59` since the original has no campaign across a link. None reaches a session.
+A co-op guest follows the host's boards through five more lobby messages, minted at `0x50` to
+`0x52`, `0x59` and `0x5A` since the original has no campaign across a link. None reaches a session.
 
 | Id | Message | Class | Carries |
 |---|---|---|---|
@@ -573,6 +573,7 @@ A co-op guest follows the host's boards through four more lobby messages, minted
 | `0x51` | Co-op pick | reliable, guest to host | round at 4, flags at 5 (bit 0 Ready, bit 1 left the flight), airframe at 6, one reserved byte, the fit at 8, the player name at 20 (16 bytes, zero-padded; 36 bytes) |
 | `0x52` | Co-op seat fit | reliable, host to each guest | seat at 4, three reserved bytes, the fit at 8 (20 bytes) |
 | `0x59` | Co-op wingman | reliable, host to each guest | wingman airframe at 4 (`0xFF` none), three reserved bytes, the fit at 8 (20 bytes) |
+| `0x5A` | Co-op film | reliable, host to each guest | ordinal at 4, playing at 5, film at 6 (chapter 1, closing 2), chapter at 7 (8 bytes) |
 
 A fit is twelve bytes: the four gun slots' ammunition, then the eight ordnance cells, one byte
 each, each the profile's stored value plus one so that zero reads as unset (stock). The pick
@@ -585,6 +586,14 @@ the campaign's `wingman_1` from that word, and both machines build the host-owne
 same def with the same damage parts. A guest with no word flies the block's own def and says so in
 a warning; it never substitutes its own default. `0xFF` names no pick, which also flies the block's
 def. A guest a patch older drops `0x59` as unknown and flies the old default.
+A co-op film names the campaign film the host's board has up: a chapter's opening film before the
+cabin, or the closing film before the book. The host sends it playing when the film starts and
+again with the same ordinal and playing clear when it ends, played out or skipped, and it goes
+out at once rather than on the next flow, so a guest reads the end before the board that follows.
+A guest plays the film it names and ends it on the host's end. A guest's own skip ends only its
+own film, since the host drives the boards. A guest joining while a film plays sees none, and a
+guest back from flight joins a film still playing. A launch ends a guest's film still up, so the
+guest flies with its host. A guest a patch older drops `0x5A` as unknown and plays no film.
 The name is the guest's last-played pilot, read without writing, and the host's roster calls
 the guest by it; a guest with none is called by its player number. A guest leaving the flight
 through its pause sheet sets the left flag, and the host takes its seat out at once, as it does

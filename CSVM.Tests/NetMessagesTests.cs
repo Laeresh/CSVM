@@ -879,6 +879,32 @@ public class NetMessagesTests
     }
 
     [Fact]
+    public void ACoopFilmRoundTripsItsOrdinalStateFilmAndChapterInEightBytes()
+    {
+        Assert.Equal(8, CoopFilmMessage.Size);
+        Span<byte> buffer = stackalloc byte[CoopFilmMessage.Size];
+        foreach (var sent in new[]
+        {
+            new CoopFilmMessage(1, true, NetCoopFilm.Chapter, 2),
+            new CoopFilmMessage(255, false, NetCoopFilm.Closing, 0),
+        })
+        {
+            Assert.Equal(CoopFilmMessage.Size, sent.Write(buffer));
+            Assert.True(CoopFilmMessage.TryRead(buffer, out var got));
+            Assert.Equal(sent, got);
+        }
+
+        Assert.Equal(0x5A, (int)NetMessageType.CoopFilm);
+        Assert.Equal(NetReliability.Reliable, NetMessage.ReliabilityOf(NetMessageType.CoopFilm));
+
+        // ABLE-TO-FAIL CONTROL: a message of another type and width is not a film.
+        Span<byte> wingman = stackalloc byte[CoopWingmanMessage.Size];
+        new CoopWingmanMessage(7, default).Write(wingman);
+        Assert.False(CoopFilmMessage.TryRead(wingman, out _));
+        Assert.False(CoopFilmMessage.TryRead(wingman[..CoopFilmMessage.Size], out _));
+    }
+
+    [Fact]
     public void ACoopWingmanRoundTripsTheAirframeAndItsFitInTwentyBytes()
     {
         Assert.Equal(20, CoopWingmanMessage.Size);

@@ -197,6 +197,11 @@ public class NetLobbyTests
         host.Deliver(3, Bytes(new CoopSeatFitMessage(2, default)));
         host.Deliver(3, Bytes(new CoopSeatFitMessage(2, fit)));
         Assert.Equal(fit, lobby.SeatFits[2]);
+
+        // A film word is kept as the latest, the end replacing the start it names.
+        host.Deliver(3, Bytes(new CoopFilmMessage(1, true, NetCoopFilm.Chapter, 2)));
+        host.Deliver(3, Bytes(new CoopFilmMessage(1, false, NetCoopFilm.Chapter, 2)));
+        Assert.Equal(new CoopFilmMessage(1, false, NetCoopFilm.Chapter, 2), lobby.Film);
         Assert.Empty(session.Payloads);
 
         // A departing guest's pick goes with it, and its leaving reaches the session it flew in.

@@ -123,6 +123,25 @@ public enum NetMessageType : ushort
     /// <summary>The campaign wingman's airframe and fit, sent by a co-op host to every guest at a
     /// launch.</summary>
     CoopWingman = 0x0059,
+
+    /// <summary>A campaign film a co-op host started or ended, sent to every guest so each plays
+    /// the same film and ends it with the host's.</summary>
+    CoopFilm = 0x005A,
+}
+
+/// <summary>Which campaign film a <see cref="CoopFilmMessage"/> names.</summary>
+public enum NetCoopFilm : byte
+{
+    /// <summary>A film this build does not know.</summary>
+    Unknown = 0,
+
+    /// <summary>A chapter's film, played in front of the cabin; the message names the chapter.
+    /// </summary>
+    Chapter = 1,
+
+    /// <summary>The closing film, played in front of the book after the last mission is won.
+    /// </summary>
+    Closing = 2,
 }
 
 /// <summary>Which board a co-op host stands on, the screen a <see cref="CoopFlowMessage"/> names.
@@ -1254,6 +1273,7 @@ public static class NetMessage
         NetMessageType.DestructibleHit => DestructibleHitMessage.Reliability,
         NetMessageType.CutsceneSkip => CutsceneSkipMessage.Reliability,
         NetMessageType.CoopWingman => CoopWingmanMessage.Reliability,
+        NetMessageType.CoopFilm => CoopFilmMessage.Reliability,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "no such message type"),
     };
 

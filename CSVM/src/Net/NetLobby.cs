@@ -88,6 +88,10 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     /// no host has named one. Every launch names it again before its opener.</summary>
     public CoopWingmanMessage? Wingman { get; private set; }
 
+    /// <summary>The co-op host's latest film word, a start or an end, or null while none has
+    /// arrived.</summary>
+    public CoopFilmMessage? Film { get; private set; }
+
     /// <summary>The Dogfight host's latest Mission Options, or null while none has arrived.</summary>
     public DogfightOptionsMessage? DogfightOptions { get; private set; }
 
@@ -386,6 +390,12 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         if (CoopWingmanMessage.TryRead(payload, out var wingman))
         {
             Wingman = wingman;
+            return true;
+        }
+
+        if (CoopFilmMessage.TryRead(payload, out var film))
+        {
+            Film = film;
             return true;
         }
 

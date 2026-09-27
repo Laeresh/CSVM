@@ -273,7 +273,7 @@ chapter number in, and chapter N plays `chapN.mpg`. `CampaignCabinPage.MapPinCou
 story chapter for the cabin map's pins; `CampaignSequence.Chapter` is a different number, the world
 folder. Playing is a `UI/Screens/CinemaHandoff.cs` `CinemaPlay` the caller supplies, `Launcher.PlayCinema`
 being what it is handed, which leaves the film to `UI/Screens/CinemaScreen.cs` and keeps every decision here
-testable with no engine present; the cabin opens through that file's `Once`. `Launcher` holds the process's one instance and hands it to `Menu/CampaignFeature.cs`, which is how both presentations' cabin doors reach it (`UI/Campaign/CampaignFlow.cs`, `UI/Menu/Original/OriginalCampaignScreen.cs`). Films: [../formats/cinemas.md](../formats/cinemas.md).
+testable with no engine present; the cabin opens through that file's `Once`. `Launcher` holds the process's one instance and hands it to `Menu/CampaignFeature.cs`, which is how both presentations' cabin doors reach it (`UI/Campaign/CampaignFlow.cs`, `UI/Menu/Original/OriginalCampaignScreen.cs`). A co-op guest's `Play` plays the chapter its host named and leaves the latch alone, and `Stop` (`Launcher.StopCinema`) ends it when the host's film ends. Films: [../formats/cinemas.md](../formats/cinemas.md).
 
 ## src/Session/Campaign/ClosingCinema.cs
 Whether the campaign's closing film plays before the scrapbook a flown mission opens, and the one
@@ -283,7 +283,7 @@ reaches the book with no film, which is what the original's own script does when
 answers false. Nothing is latched and completion state decides nothing, so the flown result travels
 with the menu return (`Menu/MenuReturnDestination.cs`). The film is the `FinalCinema` layout row's
 name and the skip set is Escape and the left mouse alone, narrower than `ChapterCinema.cs`'s on
-purpose; playing is a `UI/Screens/CinemaHandoff.cs` `CinemaPlay` (`Launcher.PlayCinema`) whose `Once` opens the book, and `Launcher` holds the one instance and hands it to `Menu/CampaignFeature.cs`. Films: [../formats/cinemas.md](../formats/cinemas.md).
+purpose; playing is a `UI/Screens/CinemaHandoff.cs` `CinemaPlay` (`Launcher.PlayCinema`) whose `Once` opens the book, and `Launcher` holds the one instance and hands it to `Menu/CampaignFeature.cs`. A co-op guest's `Play` has no gate, since the film is its host's, and `Stop` ends it with the host's. Films: [../formats/cinemas.md](../formats/cinemas.md).
 
 ## src/Session/Campaign/CampaignPersistLog.cs
 The cross-mission state log: what a campaign mission left destroyed, carried into later missions

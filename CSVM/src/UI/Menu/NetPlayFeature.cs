@@ -104,6 +104,11 @@ public sealed class NetPlayFeature : IMenuFeature
     private CoopFit _pickFit;
     private bool _pickLeft;
 
+    // The film this co-op host shares with its guests, null while none plays, and the last film's
+    // ordinal, which the next one counts on from.
+    private CoopFilmMessage? _filmPlaying;
+    private byte _filmOrdinal;
+
     // A guest back from a flight while its host still names that flight. Cleared once the host
     // names any other board or a flight under another round, which a restart is.
     private bool _flownFlow;
@@ -434,6 +439,13 @@ public sealed class NetPlayFeature : IMenuFeature
     /// while the host has named none.</summary>
     public CoopWingmanMessage? CoopWingman => IsCoopGuest ? _transport?.Wingman : null;
 
+    /// <summary>This co-op guest's host's latest film word, a start or an end, or null while the
+    /// host has shared no film.</summary>
+    public CoopFilmMessage? CoopFilm => IsCoopGuest ? _transport?.Film : null;
+
+    /// <summary>The film this co-op host shares with its guests right now, or null.</summary>
+    public CoopFilmMessage? CoopFilmShown => _filmPlaying;
+
     /// <summary>Whether this co-op guest is Ready under the host's current round.</summary>
     public bool CoopReady => _pickReady && CoopFlow is { } flow && _pickSent is { } sent && sent.Epoch == flow.Epoch;
 
@@ -591,6 +603,38 @@ public sealed class NetPlayFeature : IMenuFeature
         foreach (int peer in _admitted)
         {
             _transport.Tell(peer, wingman);
+        }
+    }
+
+    /// <summary>Tells every seated co-op guest that this host's campaign film
+    /// <paramref name="film"/> has started, so each plays it too. A chapter film names its
+    /// <paramref name="chapter"/>. Nothing is sent from a door that is not a co-op host's.</summary>
+    public void ShowCoopFilm(NetCoopFilm film, int chapter = 0)
+    {
+        if (_transport == null || !IsCoopHost)
+        {
+            return;
+        }
+
+        _filmOrdinal = unchecked((byte)(_filmOrdinal + 1));
+        var started = new CoopFilmMessage(_filmOrdinal, true, film, (byte)Math.Clamp(chapter, 0, byte.MaxValue));
+        _filmPlaying = started;
+        TellFilm(started);
+    }
+
+    /// <summary>Tells every seated co-op guest that this host's film has stopped, played out or
+    /// skipped, so each guest's stops with it. Nothing is sent while no film is shared.</summary>
+    public void EndCoopFilm()
+    {
+        if (_filmPlaying is not { } film)
+        {
+            return;
+        }
+
+        _filmPlaying = null;
+        if (_transport != null && IsCoopHost)
+        {
+            TellFilm(film with { Playing = false });
         }
     }
 
@@ -1308,6 +1352,15 @@ public sealed class NetPlayFeature : IMenuFeature
         }
     }
 
+    // At once rather than on the next step, so a film's end reaches a guest before the board after it.
+    private void TellFilm(CoopFilmMessage film)
+    {
+        foreach (int peer in _admitted)
+        {
+            _transport!.Tell(peer, film);
+        }
+    }
+
     // A guest's Ready belongs to one round: a new round clears it, and the pick goes out again
     // under the new one. What trails in from a flight that ended is never the next one's opener.
     private void FollowHost()
@@ -1360,6 +1413,7 @@ public sealed class NetPlayFeature : IMenuFeature
         _pickFit = default;
         _pickLeft = false;
         _flownFlow = false;
+        _filmPlaying = null;
     }
 
     private bool HostGone() =>

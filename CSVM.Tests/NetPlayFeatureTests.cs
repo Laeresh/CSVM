@@ -814,6 +814,39 @@ public class NetPlayFeatureTests
     }
 
     [Fact]
+    public void TheHostsFilmReachesTheGuestAndItsEndFollowsUnderTheSameOrdinal()
+    {
+        var (host, guest) = CoopPair(70);
+        host.ShowCoop(NetCoopScreen.Debrief, 4, 5, 0b10_0000);
+        Pump(host, guest);
+
+        // ABLE-TO-FAIL CONTROL: an end with no film shared sends nothing.
+        host.EndCoopFilm();
+        Pump(host, guest);
+        Assert.Null(guest.CoopFilm);
+
+        host.ShowCoopFilm(NetCoopFilm.Chapter, 2);
+        Pump(host, guest);
+        var started = guest.CoopFilm;
+        Assert.Equal(new CoopFilmMessage(1, true, NetCoopFilm.Chapter, 2), started);
+        Assert.Equal(started, host.CoopFilmShown);
+        Assert.Null(host.CoopFilm);
+
+        host.EndCoopFilm();
+        Pump(host, guest);
+        Assert.Equal(new CoopFilmMessage(1, false, NetCoopFilm.Chapter, 2), guest.CoopFilm);
+        Assert.Null(host.CoopFilmShown);
+
+        host.ShowCoopFilm(NetCoopFilm.Closing);
+        Pump(host, guest);
+        Assert.Equal(new CoopFilmMessage(2, true, NetCoopFilm.Closing, 0), guest.CoopFilm);
+
+        // A guest's door shares nothing, since only a host's film is anybody else's.
+        guest.ShowCoopFilm(NetCoopFilm.Chapter, 3);
+        Assert.Null(guest.CoopFilmShown);
+    }
+
+    [Fact]
     public void AGuestWalkingOutOfItsFlightIsHeardAtOnceAndOnlyForThatFlight()
     {
         var (host, guest) = CoopPair(71);

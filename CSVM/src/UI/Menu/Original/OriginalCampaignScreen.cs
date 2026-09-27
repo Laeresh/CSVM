@@ -73,6 +73,12 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     private int _guestFlows = -1;
     private MissionAttempt? _guestAttempt;
 
+    // A co-op guest's films: the host's last film word it took, and the ordinal of the film it shows.
+    // The ordinal is null when none shows, and the stop ends that film.
+    private CoopFilmMessage? _guestFilmSeen;
+    private byte? _guestFilm;
+    private Action? _guestFilmStop;
+
     /// <summary>A campaign module over <paramref name="campaign"/> and the campaign layout read off
     /// the shell's own. The store <paramref name="profiles"/> is the user's profiles, which the
     /// Campaign row's door opens over. The store <paramref name="planes"/> takes what an EXPORT
@@ -275,7 +281,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         _debriefCash = run?.Money ?? 0;
         if (_campaign.ClosingCinema is { } cinema)
         {
-            _host.PlayFilm(then => cinema.OpenScrapbook(seq, missionWon, then), () => OpenBook(seq));
+            PlayFilm(then => cinema.OpenScrapbook(seq, missionWon, then), NetCoopFilm.Closing, () => 0, () => OpenBook(seq));
             return true;
         }
 
@@ -308,7 +314,9 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         _guestScreen = NetCoopScreen.Unknown;
         _guestSeq = -1;
         _guestFlows = -1;
+        _guestFilmSeen = null;
         FollowHost(net, flow);
+        FollowFilm(net);
         return true;
     }
 
@@ -710,7 +718,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
 
         if (IsGuest && net.IsCoopGuest && net.CoopFlow is { } flow)
         {
-            return FollowHost(net, flow);
+            return FollowHost(net, flow) | FollowFilm(net);
         }
 
         return false;
@@ -732,7 +740,14 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             _setup.Seats.Count > 0 ? _flightDevices(_setup.Seats[0]) : Array.Empty<int>(),
         };
         var exit = _campaign.BuildExit(pads);
-        return exit == null ? null : exit with { Net = net.BuildLaunch() };
+        if (exit == null)
+        {
+            return null;
+        }
+
+        // A guest still watching its host's film leaves it for the launch rather than missing it.
+        StopGuestFilm();
+        return exit with { Net = net.BuildLaunch() };
     }
 
     /// <summary>Typed characters and Backspace into the roster's name box, the campaign's own
@@ -1181,18 +1196,102 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     // press. The seated profile's chapter cinema plays first where one is due, and the cabin opens
     // on the frame the film stops. A position inside a chapter, and a shell with no cinema (every
     // suite), opens the cabin straight away. The keepFocus flag is the way back's, landing on the
-    // plaque that was left.
+    // plaque that was left. A co-op guest's films are its host's, so none is derived here.
     private void OpenCabin(bool keepFocus = false)
     {
-        if (_campaign?.ChapterCinema is { } cinema && _campaign.Profile is { } seated)
+        if (_campaign?.ChapterCinema is { } cinema && _campaign.Profile is { } seated && !_campaign.IsGuest)
         {
-            _host.PlayFilm(
+            PlayFilm(
                 then => cinema.OpenCabin(seated, then),
+                NetCoopFilm.Chapter,
+                () => cinema.ChapterPlayed,
                 () => ShowCampaign(OriginalScreen.CampaignCabin, keepFocus));
             return;
         }
 
         ShowCampaign(OriginalScreen.CampaignCabin, keepFocus);
+    }
+
+    // Every campaign film this module plays. A co-op host's goes to each guest as well, and its end,
+    // played out or skipped, ends theirs. A film that never went up is shared with nobody.
+    private void PlayFilm(Func<Action, bool> play, NetCoopFilm film, Func<int> chapter, Action then)
+    {
+        var door = _net() is { IsCoopHost: true } host ? host : null;
+        _host.PlayFilm(
+            handoff =>
+            {
+                bool over = false;
+                bool up = play(() =>
+                {
+                    over = true;
+                    door?.EndCoopFilm();
+                    handoff();
+                });
+                if (up && !over)
+                {
+                    door?.ShowCoopFilm(film, chapter());
+                }
+            },
+            then);
+    }
+
+    // A guest plays the film its host plays and ends it when the host's ends. Its own skip ends
+    // only its own film, since the host drives the boards and the guest stands on them.
+    private bool FollowFilm(NetPlayFeature net)
+    {
+        if (net.CoopFilm is not { } word || word == _guestFilmSeen)
+        {
+            return false;
+        }
+
+        _guestFilmSeen = word;
+        if (!word.Playing)
+        {
+            if (_guestFilm == word.Ordinal)
+            {
+                StopGuestFilm();
+            }
+
+            return true;
+        }
+
+        StopGuestFilm();
+        var campaign = _campaign!;
+        byte ordinal = word.Ordinal;
+        Action ended = () =>
+        {
+            if (_guestFilm == ordinal)
+            {
+                _guestFilm = null;
+            }
+        };
+
+        if (word.Film == NetCoopFilm.Chapter && campaign.ChapterCinema is { } chapter)
+        {
+            _guestFilm = ordinal;
+            _guestFilmStop = chapter.Stop;
+            _host.PlayFilm(then => chapter.Play(word.Chapter, then), ended);
+        }
+        else if (word.Film == NetCoopFilm.Closing && campaign.ClosingCinema is { } closing)
+        {
+            _guestFilm = ordinal;
+            _guestFilmStop = closing.Stop;
+            _host.PlayFilm(then => closing.Play(then), ended);
+        }
+
+        return true;
+    }
+
+    // Ends the film a guest shows, which runs its hand-off and takes the film down.
+    private void StopGuestFilm()
+    {
+        if (_guestFilm == null)
+        {
+            return;
+        }
+
+        _guestFilm = null;
+        _guestFilmStop?.Invoke();
     }
 
     // A way back that may land on the cabin, which is then a cabin door with its film in front.
