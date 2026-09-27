@@ -47,12 +47,28 @@ internal static class LookStickSuites
     // readings are compared at a degree rather than at float precision.
     private const float ToleranceDeg = 1.5f;
 
+    // The edge sortie's slow ramp: out to 0.15 and back, 90 frames each way. That is about 0.25°
+    // of swing a frame, crossing the centre band both ways.
+    private const float EdgePeak = 0.15f;
+
+    private const int EdgeRampFrames = 90, EdgeBaselineFrames = 30;
+
+    // What one ramp frame may change beyond a settled chase frame. The turn bound is four times the
+    // ramp's own 0.25°. The move bound is a quarter metre against the ramp's 7 cm.
+    private const float EdgeTurnBoundDeg = 1f, EdgeMoveBound = 0.25f;
+
+    // The largest share of a held swing the first frame after letting go may undo. A return at the
+    // head's decoded 5/s undoes about 8% a frame.
+    private const float ReleaseFirstFrameShare = 0.25f;
+
     // The padlock sortie's target, a bare identity in the pool so the acquisition can be asserted
     // by reference rather than by name.
     private static readonly object PadlockMark = new();
 
-    // Where the stick's own swing has to land: StickX of the shared envelope.
-    private static float ExpectedSwingDeg => StickX * HeadLook.PadLookYawMaxDeg;
+    // Where the stick's own swing has to land: StickX of the shared envelope, less the centre band
+    // the filter takes off the radius.
+    private static float ExpectedSwingDeg =>
+        (StickX - HeadLook.PadAimCentreBand) / (1f - HeadLook.PadAimCentreBand) * HeadLook.PadLookYawMaxDeg;
 
     private static System.Globalization.CultureInfo Inv =>
         System.Globalization.CultureInfo.InvariantCulture;
@@ -99,6 +115,34 @@ internal static class LookStickSuites
         ctx.Note($"flew --look={StickArg},0 in both views and read the cameras it aimed");
     }
 
+    /// <summary>Eases the look stick slowly off centre and back, then lets go of a held deflection
+    /// at once. Both views are read every frame in the aircraft's own frame.</summary>
+    [Suite("look-stick-edge",
+        "the look stick's activation edge flown in both views: easing the stick off centre and back, the camera's per-frame displacement and turn across the frames the look takes and releases the view stay within what the stick's own motion accounts for, and letting go of a held deflection eases the view home over many frames rather than cutting to the chase pose")]
+    internal static void LookStickEdge(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequireData(chapterZrdr, $"C1 zrdr");
+
+        var report = new StringBuilder();
+        foreach (var mode in new[] { PilotViewMode.Chase, PilotViewMode.Cockpit })
+        {
+            string view = PilotView.Name(mode);
+            bool flown = WithFlight(ctx, texturesPath, chapterZrdr, mode, "0,0", (clock, plane) =>
+            {
+                EdgeSortie(ctx, view, clock, plane, report);
+                ReleaseSortie(ctx, view, clock, plane, report);
+            });
+            ctx.Check(flown, $"{view}: the view builds an aircraft to fly");
+        }
+
+        ctx.WriteArtifact("test-look-stick-edge.txt", report.ToString());
+    }
+
     private static void Judge(TestContext ctx, string view, in Swing swing)
     {
         ctx.Check(Mathf.Abs(swing.SwingDeg - ExpectedSwingDeg) < ToleranceDeg,
@@ -112,10 +156,128 @@ internal static class LookStickSuites
             $"{view}: centring the stick returns the view to its settled pose (read {swing.ReleasedDeg:0.#}° off)");
     }
 
+    // The slow ramp: from centre out to EdgePeak and back, one step a frame, with the settled chase
+    // flown first as the baseline. Every frame's change must stay near what the ramp itself turns.
+    private static void EdgeSortie(TestContext ctx, string view, GameClock clock, FlightController plane,
+        StringBuilder report)
+    {
+        Settle(clock, plane);
+        var prev = PlaneFramePose(ctx.Camera, plane);
+        float baseMove = 0f, baseTurn = 0f;
+        for (int i = 0; i < EdgeBaselineFrames; i++)
+        {
+            Step(clock, plane, 1);
+            var pose = PlaneFramePose(ctx.Camera, plane);
+            baseMove = Mathf.Max(baseMove, (pose.Origin - prev.Origin).Length());
+            baseTurn = Mathf.Max(baseTurn, TurnDeg(prev.Basis, pose.Basis));
+            prev = pose;
+        }
+
+        float worstMove = 0f, worstTurn = 0f;
+        int worstFrame = -1;
+        int frames = 2 * EdgeRampFrames;
+        for (int i = 1; i <= frames; i++)
+        {
+            float s = EdgePeak * (i <= EdgeRampFrames ? i : frames - i) / EdgeRampFrames;
+            plane.PinnedLook = new Vector2(s, 0.5f * s);
+            Step(clock, plane, 1);
+            var pose = PlaneFramePose(ctx.Camera, plane);
+            float move = (pose.Origin - prev.Origin).Length();
+            float turn = TurnDeg(prev.Basis, pose.Basis);
+            report.AppendLine($"{view} edge f={i} stick={s:0.0000} move={move:0.0000} m turn={turn:0.000} deg");
+            if (turn > worstTurn || move > worstMove)
+            {
+                worstFrame = i;
+            }
+            worstMove = Mathf.Max(worstMove, move);
+            worstTurn = Mathf.Max(worstTurn, turn);
+            prev = pose;
+        }
+
+        Step(clock, plane, SettleFrames);
+        report.AppendLine($"{view} edge: baseline {baseMove:0.0000} m {baseTurn:0.000} deg, worst {worstMove:0.0000} m {worstTurn:0.000} deg at f={worstFrame}");
+        ctx.Check(worstTurn <= baseTurn + EdgeTurnBoundDeg,
+            $"{view}: easing the stick off centre and back turns the view at most {EdgeTurnBoundDeg:0.#}° a frame over the settled chase's own {baseTurn:0.###}° (worst {worstTurn:0.###}° at frame {worstFrame})");
+        ctx.Check(worstMove <= baseMove + EdgeMoveBound,
+            $"{view}: and moves it at most {EdgeMoveBound:0.##} m a frame over the settled chase's own {baseMove:0.###} m (worst {worstMove:0.###} m at frame {worstFrame})");
+    }
+
+    // A held deflection let go at once. The first frame may carry only part of the way home, and
+    // the settle must still arrive on the pose with no look input.
+    private static void ReleaseSortie(TestContext ctx, string view, GameClock clock, FlightController plane,
+        StringBuilder report)
+    {
+        var settled = PlaneFramePose(ctx.Camera, plane);
+        plane.PinnedLook = new Vector2(StickX, 0f);
+        Step(clock, plane, SettleFrames);
+        var held = PlaneFramePose(ctx.Camera, plane);
+        plane.PinnedLook = Vector2.Zero;
+        Step(clock, plane, 1);
+        var first = PlaneFramePose(ctx.Camera, plane);
+        Step(clock, plane, SettleFrames);
+        var home = PlaneFramePose(ctx.Camera, plane);
+
+        float span = Mathf.Max(TurnDeg(held.Basis, settled.Basis), 1e-3f);
+        float firstShare = TurnDeg(held.Basis, first.Basis) / span;
+        float moveSpan = (held.Origin - settled.Origin).Length();
+        float firstMoveShare = moveSpan > 1e-3f ? (first.Origin - held.Origin).Length() / moveSpan : 0f;
+        float homeDeg = TurnDeg(home.Basis, settled.Basis);
+        report.AppendLine($"{view} release: held {span:0.##} deg off, first frame {firstShare:P1} of the turn and {firstMoveShare:P1} of the move, home {homeDeg:0.###} deg off");
+        ctx.Check(firstShare < ReleaseFirstFrameShare && firstMoveShare < ReleaseFirstFrameShare,
+            $"{view}: letting go of a held stick eases the view home, the first frame carrying {firstShare:P0} of the turn and {firstMoveShare:P0} of the move, under {ReleaseFirstFrameShare:P0}");
+        ctx.Check(homeDeg < ToleranceDeg,
+            $"{view}: and the view arrives back on its settled pose ({homeDeg:0.##}° off)");
+    }
+
+    // The camera's whole pose in the aircraft's own frame, so the aeroplane's flight drops out and
+    // only what the view itself did is left.
+    private static Transform3D PlaneFramePose(Camera3D camera, FlightController plane)
+    {
+        var toPlane = plane.GlobalBasis.Inverse();
+        var cam = camera.GlobalTransform;
+        return new Transform3D(toPlane * cam.Basis.Orthonormalized(), toPlane * (cam.Origin - plane.WorldPosition));
+    }
+
+    // The angle of the rotation carrying one camera basis onto the other, in degrees.
+    private static float TurnDeg(Basis from, Basis to)
+    {
+        var q = (to * from.Transposed()).Orthonormalized().GetRotationQuaternion();
+        return Mathf.RadToDeg(2f * Mathf.Acos(Mathf.Clamp(Mathf.Abs(q.W), 0f, 1f)));
+    }
+
     // One flight: build a single human in the named view with the stick pinned, settle, read the
     // swing, then centre the stick and settle again to read what release leaves behind.
     private static Swing? Fly(TestContext ctx, string texturesPath, string chapterZrdr,
         PilotViewMode mode, StringBuilder report)
+    {
+        Swing? result = null;
+        WithFlight(ctx, texturesPath, chapterZrdr, mode, $"{StickArg},0", (clock, plane) =>
+        {
+            Settle(clock, plane);
+            float swingDeg = SwingDegOf(mode, ctx.Camera, plane, out float sideX);
+            // Release: the pin is the only stick in a headless run, so zeroing it IS letting go.
+            plane.PinnedLook = Vector2.Zero;
+            Settle(clock, plane);
+            float releasedDeg = SwingDegOf(mode, ctx.Camera, plane, out _);
+            report.AppendLine($"{PilotView.Name(mode)}: held {swingDeg:0.##}° side x={sideX:0.###}, " +
+                $"released {releasedDeg:0.##}° (envelope {ExpectedSwingDeg:0.#}°)");
+            if (mode == PilotViewMode.Chase)
+            {
+                // Flown on the back of this sortie: the aeroplane is already built, airborne and
+                // settled at the chase pose.
+                SnapSortie(ctx, clock, plane, report);
+                PadlockSortie(ctx, clock, plane, report);
+            }
+
+            result = new Swing(swingDeg, sideX, releasedDeg);
+        });
+        return result;
+    }
+
+    // Builds one human in the named view with the stick pinned at `look`, hands it to the sortie
+    // unsettled and tears everything down after. False when no aircraft was built.
+    private static bool WithFlight(TestContext ctx, string texturesPath, string chapterZrdr,
+        PilotViewMode mode, string look, Action<GameClock, FlightController> sortie)
     {
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var textures = new TextureArchive(texturesPath);
@@ -130,35 +292,20 @@ internal static class LookStickSuites
         {
             var spec = SessionSpec.Parse(new[]
             {
-                "--fly", $"--look={StickArg},0", $"--view={PilotView.Name(mode)}",
+                "--fly", $"--look={look}", $"--view={PilotView.Name(mode)}",
             });
             var rigs = new[] { rig };
             roster = BuildRoster(ctx, spec, planesGamez, textures, pool, chapterZrdr, rigs);
             roster.BuildPlayers(rigs);
             if (rig.Controller is not { } plane)
             {
-                return null;
+                return false;
             }
 
             var clock = new GameClock { Mode = GameClock.RunMode.Realtime };
             GameClock.Current = clock;
-            Settle(clock, plane);
-            float swingDeg = SwingDegOf(mode, ctx.Camera, plane, out float sideX);
-            // Release: the pin is the only stick in a headless run, so zeroing it IS letting go.
-            plane.PinnedLook = Vector2.Zero;
-            Settle(clock, plane);
-            float releasedDeg = SwingDegOf(mode, ctx.Camera, plane, out _);
-            report.AppendLine($"{PilotView.Name(mode)}: held {swingDeg:0.##}° side x={sideX:0.###}, " +
-                $"released {releasedDeg:0.##}° (envelope {ExpectedSwingDeg:0.#}°)");
-            if (mode == PilotViewMode.Chase)
-            {
-                // Flown on the back of this sortie rather than in its own: the aeroplane is
-                // already built, already airborne and already settled at the chase pose.
-                SnapSortie(ctx, clock, plane, report);
-                PadlockSortie(ctx, clock, plane, report);
-            }
-
-            return new Swing(swingDeg, sideX, releasedDeg);
+            sortie(clock, plane);
+            return true;
         }
         finally
         {

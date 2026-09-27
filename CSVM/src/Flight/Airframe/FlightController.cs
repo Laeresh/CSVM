@@ -556,9 +556,9 @@ public partial class FlightController : Node3D
     // The desktop mouse this seat holds while it flies, and the virtual cursor standing in for the
     // OS one for as long as it does. Idle on every seat that never takes it (MouseCaptureAllowed).
     private readonly MouseCapture _mouse = new();
-    // The look stick as the CHASE swing reads it. Its own filter rather than the head's, because
-    // that swing is rigid and instant and takes the stick on the frames the head is not given it.
-    private readonly StickLookFilter _chaseLook = new();
+    // The look stick as the CHASE swing reads it. It has its own filter because that swing has no
+    // return of its own. A released stick eases home at the head's decoded rates.
+    private readonly StickLookFilter _chaseLook = new(HeadLook.AzimuthSmoothRate, HeadLook.ElevationSmoothRate);
     private readonly AimCandidateSet _aimCandidates = new(); // rebuilt once per fire call (B4/B5)
     private readonly AimCandidateSet _gunnerScan = new();    // the AI gunner's acquisition scan (D14)
     private readonly AimCandidateSet _rescoreScan = new();   // the aircraft-only walk the re-score's withdrawal reads
@@ -605,6 +605,9 @@ public partial class FlightController : Node3D
     // what turns the carried gunners' running counters into a fired-this-tick edge.
     private readonly PadRumble _rumble;
     private int _turretShots;
+
+    // Set by any frame another camera placed, so the chase comes back unswung rather than easing.
+    private bool _chaseLookStale;
 
     // The stick half _stickAxes last polled. The lever reads its bindings from it one by one, since a
     // resolved row cannot tell a centred stick from an unplugged one.
@@ -2366,11 +2369,13 @@ public partial class FlightController : Node3D
         {
             // The lab's free camera has the view, every camera write here would fight it,
             // and an AI rig has no camera at all.
+            _chaseLookStale = true;
         }
         else if (orbiting)
         {
             // The orbit camera runs on wall time on purpose: a held airframe is a stopped subject
             // with the world still running, and the point is to look around it.
+            _chaseLookStale = true;
             var (yawIn, pitchIn, zoomIn) = OrbitInput();
             _cam.Orbit((float)delta, _model.Position, yawIn, pitchIn, zoomIn);
         }
@@ -2384,6 +2389,7 @@ public partial class FlightController : Node3D
         {
             // The crash camera holds the pose Crash() cut to, except the DEATH camera, which is
             // stepped to keep the falling wreck framed. A spent pilot watches a living aircraft.
+            _chaseLookStale = true;
             var watched = Spectating && Watching is { } w && IsInstanceValid(w) && !w.Crashed ? w : null;
             if (watched != null)
             {
@@ -2437,27 +2443,25 @@ public partial class FlightController : Node3D
             }
             else
             {
-                // The one head, on the chase camera's own floor, so the snap cluster, the centre
-                // key and the mouse swing this view exactly as they aim the cockpit. The pad is
-                // left out: it keeps the absolute PadLook path below, in both views.
+                // The one head on the chase camera's own floor: the snap cluster, centre key and
+                // mouse swing this view as they aim the cockpit. The pad is left out: it
+                // swings the finished chase pose absolutely (CameraController.PadSwing).
                 _cam.StepHead(simDt, HeadLookRead(includePad: false), HeadLook.ChaseElevationFloor);
                 var (lookX, lookY) = PadLookInput();
+                // A view that cut away took the swing with it, so the chase comes back unswung.
+                if (_chaseLookStale)
+                {
+                    _chaseLook.Reset();
+                    _chaseLookStale = false;
+                }
                 _chaseLook.Step(simDt, lookX, lookY);
-                if (_chaseLook.Active)
-                {
-                    // E42: the right stick swings the view around the plane instead of
-                    // the usual chase pose, see CameraController.PadLook.
-                    _cam.PadLook(_renderPose, _chaseLook.X, _chaseLook.Y);
-                    logged = CameraView.PadLook;
-                }
-                else
-                {
-                    // Fed simDt, not wall time, so a scripted flight capture stays frame-rate
-                    // independent; fed the DRAWN pose, same rule as the rigid views above.
-                    _cam.Chase(simDt, _renderPose.Origin, _renderPose.Basis);
-                    logged = _cam.Head.Settled ? CameraView.Chase : CameraView.Look;
-                }
+                // Fed simDt, not wall time, so a scripted flight capture stays frame-rate
+                // independent; fed the DRAWN pose, same rule as the rigid views above.
+                _cam.Chase(simDt, _renderPose.Origin, _renderPose.Basis, _chaseLook.X, _chaseLook.Y);
+                logged = _chaseLook.Swinging ? CameraView.PadLook
+                    : _cam.Head.Settled ? CameraView.Chase : CameraView.Look;
             }
+            _chaseLookStale |= logged is not (CameraView.Chase or CameraView.Look or CameraView.PadLook);
             // Keyed to the pose this frame actually took, not to the selection, a look-behind
             // puts the camera outside the aircraft and must bring its body back while held.
             Cockpit?.Apply(_cam.ViewMode, firstPersonPose);
@@ -5065,7 +5069,7 @@ public partial class FlightController : Node3D
 
     // One frame of head-look input, in HeadLook's own conventions. Read here for the same reason
     // the look-around stick is: the camera never learns about pads, mice or key layouts. The
-    // chase camera clears `includePad`, since the stick places that view itself (PadLook).
+    // chase camera clears `includePad`, since the stick swings that view itself (PadSwing).
     private HeadLookInput HeadLookRead(bool includePad = true)
     {
         if (_sheetOverFlight)
