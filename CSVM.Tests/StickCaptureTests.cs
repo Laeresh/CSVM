@@ -374,6 +374,34 @@ public class StickCaptureTests
     }
 
     [Fact]
+    public void TwoUnnamedSticksOnOneRowKeepTheirModelsInTheStickColumn()
+    {
+        var row = new[]
+        {
+            new Binding(VkbR.Device, BindingControl.Button(4)),
+            new Binding(VkbL.Device, BindingControl.Button(4)),
+            new Binding(VkbL.Device, BindingControl.Hat(0, HatDirection.Up)),
+        };
+
+        Assert.Equal(new[] { "231D/0200 Button 5", "231D/0201 Button 5", "231D/0201 Hat Up" }, StickLabels.Columns(row, _ => "  "));
+        Assert.Equal(new[] { "R Button 5", "Button 5", "Hat Up" }, StickLabels.Columns(row, m => m == VkbR ? "R" : null));
+        Assert.Equal(new[] { "R Button 5", "L Button 5", "L Hat Up" }, StickLabels.Columns(row, m => m == VkbR ? "R" : "L"));
+    }
+
+    [Fact]
+    public void OneUnnamedStickOnARowPrintsItsControlAlone()
+    {
+        var row = new[]
+        {
+            new Binding(VkbL.Device, BindingControl.Button(4)),
+            new Binding(VkbL.Device, BindingControl.FullAxis(1, true, 0.02f)),
+        };
+
+        Assert.Equal(new[] { "Button 5", "Axis 2 inverted" }, StickLabels.Columns(row, _ => null));
+        Assert.Empty(StickLabels.Columns(Array.Empty<Binding>(), _ => null));
+    }
+
+    [Fact]
     public void ANonStickDeviceKeepsItsOwnLabel()
     {
         Func<DeviceId, string?> names = d => StickLabels.Prefix(d, _ => "R");

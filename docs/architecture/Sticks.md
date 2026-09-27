@@ -139,7 +139,8 @@ unchanged), and `OpenUserFolder`, which opens the user profile folder through
 How a rebinding screen names a stick: its active profile's short name ("R"), else `Stick` and its
 model, so two unnamed sticks never read as one. `StickPump.Start` registers it as
 `BindingLabels.StickName` before any other check, so a stick row reads as a stick even with sticks
-off. `Column` is the KEYS AND BUTTONS Stick column's shorter caption, which drops the `Stick`
-prefix and model of an unnamed stick and prints the control alone, since the column is half a
-panel wide. `Prefix` and `Column`'s two-argument form are the pure forms a test drives with its
-own names.
+off. `Columns` gives the KEYS AND BUTTONS Stick column's shorter captions of one row, which drop
+the `Stick` prefix and print an unnamed stick's control alone, since the column is half a panel
+wide. When two unnamed models share the row, each unnamed caption keeps its model
+(`231D/0200 Button 5`) so the two read apart. `Prefix`, `Column` and `Columns`' two-argument form
+are the pure forms a test drives with its own names.

@@ -1157,8 +1157,8 @@ port's Stick column, the rest to the authored Control A and Control B. `SlotOfOt
 and Control B to the first and second non-stick binding, so a stick bound ahead of the keys never
 shifts which binding those cells replace. The Stick cell lists every stick binding's caption in the
 row's order, joined by `Separator` (" / ", which Control B shares), the first listed being the one
-the clear gesture drops; a line wider than its cell scrolls (`Boards/BoardMarquee.cs`). An unnamed
-stick's caption is its control alone (`Sticks/StickLabels.cs`'s `Column`). The page placing the column:
+the clear gesture drops; a line wider than its cell scrolls (`Boards/BoardMarquee.cs`). Captions
+come from `Sticks/StickLabels.cs`'s `Columns`. The page placing the column:
 `OriginalOptionsScreen.cs`; the stick-only capture it arms: `ControlsFeature.cs`.
 
 ## src/UI/Menu/Original/OriginalJoinBoard.cs

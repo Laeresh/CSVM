@@ -693,14 +693,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   four modules duplicate them; a page module that reaches back into the form's fields for its
   layout is the form in another file. *Cross-refs:* `BL-1014`, `BL-1015`,
   `docs/menu-presentations.md`, `docs/architecture/UI.md`.
-- `BL-1047` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Two unnamed sticks
-  bound on one row read alike in the KEYS AND BUTTONS page's Stick column.** *Evidence:*
-  `StickLabels.Column` (`CSVM/src/Sticks/StickLabels.cs`) drops the `Stick` prefix and the model of a
-  stick with no profile name, since the column is half a panel wide; two such sticks on one
-  row both print as "Button 5 +1". The remake Controls screen keeps the model and tells them apart,
-  and a named stick ("R") is unaffected. *Fix shape:* fall back to the short model id (`231D/0200`)
-  when two unnamed models share a row. *Cross-refs:* `docs/architecture/Sticks.md` (`StickLabels`),
-  `CSVM/src/UI/Menu/Original/KeysStickColumn.cs`.
 
 ## Splitscreen
 

@@ -85,8 +85,9 @@ public class BoardMarqueeTests
             new(VkbL.Device, BindingControl.Hat(0, HatDirection.Up)),
         };
 
-        // No profile set is live here, so both sticks are unnamed and print the control alone.
-        Assert.Equal("Button 4 / Axis 6 inverted / Hat Up", KeysStickColumn.Text(sticks));
+        // No profile set is live here, so both sticks are unnamed and their models tell them apart.
+        Assert.Equal("231D/0200 Button 4 / 231D/0201 Axis 6 inverted / 231D/0201 Hat Up", KeysStickColumn.Text(sticks));
+        Assert.Equal("Axis 6 inverted / Hat Up", KeysStickColumn.Text(sticks.Skip(1).ToList()));
         Assert.Equal("Button 4", KeysStickColumn.Text(sticks.Take(1).ToList()));
         Assert.Equal(string.Empty, KeysStickColumn.Text(new List<Binding>()));
     }
@@ -105,7 +106,8 @@ public class BoardMarqueeTests
         var (_, sticks) = KeysStickColumn.Split(bindings);
         int slot = KeysStickColumn.SlotOfStick(bindings);
 
-        Assert.StartsWith(StickLabels.Column(bindings[slot]) + KeysStickColumn.Separator, KeysStickColumn.Text(sticks));
+        Assert.Equal(bindings[slot], sticks[0]);
+        Assert.StartsWith("231D/0201 Button 8" + KeysStickColumn.Separator, KeysStickColumn.Text(sticks));
         Assert.Equal(1, slot);
     }
 
