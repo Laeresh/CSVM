@@ -771,10 +771,10 @@ void fragment() {
                 ? poly.OverlayPasses[pass - 1].UvCoords
                 : null;
 
-    // A billboard's ALPHA write. Enhanced mode blends a glow sprite's alpha in gamma space, as the
-    // original's framebuffer did. A flare's faint border fringe then stays faint instead of drawing
-    // a square. The faithful path keeps its linear blend, which its goldens pin.
-    private static string SpriteAlphaLine(bool glowBlend) => glowBlend && GraphicsMode.Enhanced
+    // A billboard's ALPHA write. A glow sprite's alpha blends in gamma space in both modes, as the
+    // original's SRCALPHA, INVSRCALPHA mixed framebuffer bytes (docs/org/textures.md). A flare's
+    // faint border fringe then stays faint instead of drawing a square around the light.
+    private static string SpriteAlphaLine(bool glowBlend) => glowBlend
         ? $"    ALPHA = csky_srgb_to_linear(vec3(col.a)).r{OpacityTerm};"
         : $"    ALPHA = col.a{OpacityTerm};";
 

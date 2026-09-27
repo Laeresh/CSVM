@@ -349,7 +349,31 @@ surface subtends 554 px per metre-at-one-metre. Level 1 is therefore first fully
 black and the far clip stands 570 m beyond ([weather.md](weather.md)). At a grazing angle the
 density rises and the radius shrinks, by the same factor in both the biased and unbiased case.
 
+## No colour key, and a truncated 4-bit alpha
+
+**The hardware draw never colour-keys a texture.** The device setup `FUN_005a0e00` sets its render
+states once (cull, z, shade, fog, `ALPHABLENDENABLE` off, `SRCBLEND` 5, `DESTBLEND` 6), and no code
+in the executable passes state `0x29` (`D3DRENDERSTATE_COLORKEYENABLE`, default off) to
+`SetRenderState`. A texture with no alpha therefore draws every texel opaque. The C4 `moon1` and C5
+`star1` cards are such textures: each paints its backdrop in the chapter sky texture's corner colour
+(`star1` 16,16,25), and that backdrop lands on the sky as a square wherever the sky gradient
+departs from it. The `CAP-11` New York footage shows the same plateau around a star low in the sky,
+a few levels over the sky beside it, and none around a star near the zenith, where the sky matches.
+
+**An alpha surface keeps only the top four bits of each channel.** The upload's ARGB4444 arm
+(`005a1bcf`) hands 4 bits per channel to `FUN_0059e1f0`, which builds each channel mask as the top
+`n` bits of the byte (`0xf0` for 4), and the pixel converter ANDs the source alpha with that mask
+before shifting it into place (`005a2356`). A texel alpha below 16 therefore uploads as 0, and 16 to
+31 as one sixteenth. `flare_green`'s border fringe (alpha 6 to 29) mostly vanishes that way: its
+corners (alpha 7) draw nothing, and its edge midpoints (alpha 29) draw at one sixteenth.
+
 ## Where CSVM differs today
+
+Glow billboards blend their alpha in gamma space in both graphics modes (`SceneBuilder`'s sprite
+alpha line), the byte-space `SRCALPHA, INVSRCALPHA` mix above. Only Enhanced mode keys the `moon1`
+and `star1` backdrops, since its tonemap moves them off the sky's colour; the faithful path draws
+them opaque, as the original does. No texture's alpha is truncated to four bits yet, so a blended
+fringe below 16/255 still draws faintly.
 
 `TextureArchive.RenderFlags` carries the word off each archive's own extraction manifest (the
 `stretch` field) and `IsAdditive` tests bit 2; a name the archive cannot resolve, and a PNG-only

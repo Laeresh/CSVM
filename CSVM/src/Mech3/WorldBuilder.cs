@@ -89,7 +89,8 @@ public sealed class WorldBuilder
         _scene.DebugClutterFlag = debugClutterFlag;
         _scene.HiddenAlpha = hiddenAlpha;
         // Enhanced mode only. Its tonemap and emissive scale move a backdrop off the sky's colour,
-        // so the quad shows. The faithful path draws the backdrop opaque.
+        // so the quad shows. The faithful path draws the backdrop opaque, as the original does
+        // (it never enables a colour key, docs/org/textures.md).
         _scene.KeyedBackdropTexture = GraphicsMode.Enhanced ? IsSkySpriteTexture : null;
     }
 

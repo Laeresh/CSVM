@@ -22,7 +22,7 @@
     {
       "name": "c1b-night-sea",
       "frame": 120,
-      "hash": "ae38fc1df48ff3a6218e8ac21ef0b84d",
+      "hash": "66d3f87556283576a05302afa54d6938",
       "exercises": "night lighting, skydome, islands, coastline sheets dimmed by the 0.426 world light like every lit surface, the placed cloud-puff facades on their world-up look-at pose; static at 120 vs 121, 0.13 % at 120 vs 360 (puff drift).",
       "args": ["--freecam", "--chapter=C1B", "--pos=-6748,300,-8885", "--direction=0.242,-0.25,0.970", "--det", "--mute"]
     },
@@ -57,7 +57,7 @@
     {
       "name": "c5-city-night",
       "frame": 120,
-      "hash": "3b2b0a2cb6ea544c8a12dd91adb02886",
+      "hash": "20a169e2661036459fc0d7195e0c6691",
       "exercises": "the night city: LIGHT_STATE point lights in csky_light_data, 51 beacons on their authored periods, lit window skins, city blocks drawing every mesh of their decoration chain, the star field, the -0.8 mip LOD bias, and culled torch puffs.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute"]
     },
@@ -85,21 +85,21 @@
     {
       "name": "c1-flight-kill",
       "frame": 280,
-      "hash": "9fd2665d5a463b33a8b2177190548b8c",
+      "hash": "02f2bc0399b81045537a50ed9832c436",
       "exercises": "Chase-camera flight firing at two AIs then banking: one shot down 3 s earlier, its fireball and kill line up, the live one bracketed, the gun's smoke, tracers and shot light drawn on this frame's poses, exhaust, shadow; frame-sensitive 78.07 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_kestrel,player_fury", "--ai-damage=0.02", "--target=ai2_player_fury", "--debug-markers", "--fire", "--hold=0,0,0,1@2.5;0.05,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-cockpit",
       "frame": 120,
-      "hash": "b197bcfb0232ea0b6096b446577c779d",
+      "hash": "dac6e5c1809ec0b42e268abb2c6e1960",
       "exercises": "Held pitch-and-roll flight from the pilot's seat: the cockpit1 interior in its own SubViewport world, its needles, drum, horizon glass, belt lights and readouts blended in gamma space, canopy and gunsight over world-lit C1; frame-sensitive 43.35 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--view=cockpit", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "49899d761c2535708a9221bce619fb4a",
+      "hash": "cadc13030603b1333852fc71ef48707d",
       "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage riding its death site, the SpeedCue wisps spread across a 16:9 pane, seeded puffers, world-lit alpha scenery over water; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
@@ -113,7 +113,7 @@
     {
       "name": "c1-debris-rest",
       "frame": 360,
-      "hash": "bce0154efa849b116264af979a170b15",
+      "hash": "c4ec70dcecb128d5897e99487578c15b",
       "exercises": "the two-ray column ground-contact tier, blind to each piece's own colliders: a killed hangar's flung debris resting on terrain, their landings' spark puffers on the mission wind as the visible signal, over C1 ground and cutouts under one world light.",
       "args": ["--freecam", "--chapter=C1", "--collision", "--destroy=m_build03", "--pos=-6104,230,-4200", "--direction=0,-0.55,-0.83", "--det", "--mute"]
     },
@@ -127,7 +127,7 @@
     {
       "name": "campaign-4p-grid",
       "frame": 120,
-      "hash": "08b2801a64fdcf11cf8b9048fa61bf6d",
+      "hash": "2926240f94da4cabaf7f7b6332ea8463",
       "exercises": "Four humans launch a co-op campaign mission on StartGrid with no profile to load, so no director: four render targets, HUDs, gauges and target labels, the lit C1 world, the player-shaped shadow under each pane's own pilot; frame-sensitive 73.79%.",
       "args": ["--campaign=csvm-golden:6", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
     },
