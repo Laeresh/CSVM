@@ -217,8 +217,9 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   the altimeter. (The two reference screenshots place the cluster slightly
   differently, HUD.png is the canonical one, matching the compass metrics.)
   ⚠ Those left and right edges are the reference frame's, so the port measures
-  them from `HudMetrics.ReadingBox` (that frame's 16:9 centred in the pane), not
-  from the pane, which on an ultrawide screen is far wider than the frame.
+  them from `HudMetrics.ReadingBox` (that frame's 16:9 centred in a full-screen
+  view), not from the screen, which on an ultrawide is far wider than the frame. A
+  splitscreen pane is its own box: it is a share of a screen read edge to edge.
   ⚠ A pane NARROWER than that frame has no room for these margins: they are a
   16:9 frame's, and at 4:3 they take a far larger share of a narrower width, which
   reads as the columns pulled in off the border. Each column keeps only

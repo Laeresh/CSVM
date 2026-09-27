@@ -631,10 +631,10 @@ The one place the flight HUD decides how big it draws: `Scale(control, reference
 window height over the reference, damped by `PaneFactor`, the square root of pane height over
 window height, inside a splitscreen pane. `hud.statusTextScale` and `hud.markerTextScale` multiply
 only their matching flight-HUD text within a clamp, leaving arrows and layout at the base scale.
-`ReadingBox` is the placement half: the reference frame's 16:9 at the pane's full height, centred,
-which a pane at or under that aspect equals exactly, so a column anchored to it stays within
-reading width on an ultrawide screen and on a stacked 2-player pane. `ColumnOutdent` is the narrow
-half, a pane under that aspect giving its columns all but a minimal border back. One module.
+`ReadingBox` places: a full-screen view's box is the reference 16:9 at full height, centred, keeping
+ultrawide columns within reading width; a splitscreen pane, short of the window, is its own box.
+`ColumnOutdent` is the narrow half, a pane under that aspect giving its columns all but a minimal
+border back. One module.
 
 ## src/Flight/Hud/HudFont.cs
 The game's own HUD bitmap font, rebuilt from `extracted/rimage/5pointhud.png` and the brighter

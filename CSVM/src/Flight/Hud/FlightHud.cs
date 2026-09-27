@@ -728,9 +728,9 @@ public sealed class FlightHud
         // (HudMetrics). PaneFactor is exactly 1 in single player, so the original 22 px at
         // (16,10) is untouched there; re-applied only when the factor actually changes.
         float paneFactor = HudMetrics.PaneFactor(_text);
-        // ⚠ x measures from the reading box, not the pane: on a pane wider than the reference
-        // frame this block would otherwise stand at the far left, a screen away from the dials it
-        // belongs with. The box's left edge is 0 at 16:9 and under, so nothing moves there.
+        // ⚠ x measures from the reading box, not the pane. On a wide full-screen view this block
+        // would otherwise stand a screen away from its dials. The box's left edge is 0 at 16:9
+        // and under, and in any split pane.
         float left = HudMetrics.ReadingBox(_text).Position.X;
         if (!Mathf.IsEqualApprox(paneFactor, _paneFactor) || !Mathf.IsEqualApprox(left, _textLeft))
         {
