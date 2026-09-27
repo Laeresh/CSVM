@@ -1159,8 +1159,10 @@ multiplied unlinearised, so the `53,74,37` green rendered `109,126,92` where the
 between the port and the reference at the same pose is the sprite's silhouette: the reference's
 puffs read as round soft blobs and ours, thousands of `splashbase` quads stacked, close to an
 opaque rounded square, since the texture's rim carries 2–5 % alpha that no single sprite shows and
-a thousand do. Whether the original's rasteriser dropped that rim (a 4-bit alpha format, an alpha
-test) is not decoded; nothing authored says so.
+a thousand do. The original drops that rim: `splashbase` is an alpha-plane texture without
+render-flags bit 3, so it uploads as ARGB4444 and a rim alpha below 16 becomes 0
+([textures.md](textures.md), "No colour key, and a truncated 4-bit alpha"). Faithful graphics
+truncates it the same way at load.
 
 The three tunables are **not per-weapon**. `FUN_004735b0`, the `ai_skill_parameters` loader, writes
 them from `player.zrd.json`, where their authored names state the mechanism outright:

@@ -134,14 +134,15 @@ Two further writers of the same bit, neither of them the data path:
 
 ### The other bits, named by data correlation only
 
-⚠ **Bits 0, 1 and 3 are not traced in the executable.** The names below come from which textures
-carry them, and from the extractor's existing spelling. Treat them as provisional.
+⚠ **Bits 0 and 1 are not traced in the executable.** Their names come from which textures carry
+them, and from the extractor's existing spelling. Treat them as provisional. Bit 3 is traced to the
+upload (see "No colour key, and a truncated 4-bit alpha" below).
 
-| Bit | Provisional name | C1 textures carrying it |
+| Bit | Name | C1 textures carrying it |
 |---|---|---|
-| `0x01` | `STRETCH_U` | `cliff01_trans1/2`, `compassticks2`, `dougfirtree1`, `firtree1/2`, `river2`, `sky1`, `terpat02_trans2` (plus everything in `Both`) |
-| `0x02` | `STRETCH_V` | `tracer1`, `water1_trans1` (plus everything in `Both`) |
-| `0x08` | `UNK3` | `cloud1`, `cloud2`, `rotorblur`, and nothing else |
+| `0x01` | `STRETCH_U` (provisional) | `cliff01_trans1/2`, `compassticks2`, `dougfirtree1`, `firtree1/2`, `river2`, `sky1`, `terpat02_trans2` (plus everything in `Both`) |
+| `0x02` | `STRETCH_V` (provisional) | `tracer1`, `water1_trans1` (plus everything in `Both`) |
+| `0x08` | `FULL_ALPHA_UPLOAD` | `cloud1`, `cloud2`, `rotorblur`, and nothing else |
 
 Values observed across the install: 0, 1, 2, 3, 4, 7, 8. `Both` (3) is `lkshad2/3/5/6`,
 `nitroprop`, `splash01/02/03`, `splashbase`, `tether_field`, which is consistent with a UV wrap or
@@ -291,7 +292,7 @@ render_flags: u16     // was: stretch
   bit 0  STRETCH_U             (provisional, not traced)
   bit 1  STRETCH_V             (provisional, not traced)
   bit 2  ADDITIVE_TRANSPARENT  (traced: FUN_005a4210, FUN_005a6160)
-  bit 3  UNK3                  (provisional, not traced)
+  bit 3  FULL_ALPHA_UPLOAD     (traced: 0x005a1b58, ARGB8888 instead of ARGB4444)
 ```
 
 The existing enum values map as: `None` = 0, `Horizontal` = 1, `Vertical` = 2, `Both` = 3,
@@ -367,13 +368,32 @@ before shifting it into place (`005a2356`). A texel alpha below 16 therefore upl
 31 as one sixteenth. `flare_green`'s border fringe (alpha 6 to 29) mostly vanishes that way: its
 corners (alpha 7) draw nothing, and its edge midpoints (alpha 29) draw at one sixteenth.
 
+**Which textures take that arm.** The upload `0x005a1840` reads the image's storage flags at `+0x09`
+(bit `0x02`, alpha present) into a local, and for such an image branches on the alpha plane pointer
+at `+0x14` (`005a1adc`). With no plane (the `Simple` class) it builds ARGB1555, a 1-bit alpha. With a
+plane (the `Full` class) it takes ARGB8888 when the device offers it and render-flags bit 3 is set
+(`TEST [EBP+0xc], DL` at `005a1b58`, `DL` = 8 from `005a1a63`), else ARGB4444 when offered
+(`005a1bbe`), else ARGB1555. Bit 3 is carried by `cloud1`, `cloud2` and `rotorblur` alone, so every
+other alpha-plane texture keeps four bits of alpha. How the card expands a 4-bit channel back to
+eight (nibble replication, `a4 * 17`) is hardware behaviour and not in the executable.
+
+**Sampling matches a modern bilinear sampler.** The same device setup sets, per texture stage,
+`MAGFILTER` and `MINFILTER` to linear (states `0x10`, `0x11` = 2), `MIPFILTER` to linear (`0x12` =
+3) and both address modes to wrap (`0x0d`, `0x0e` = 1). Stage 0 modulates the texture colour by the
+vertex colour and leaves `ALPHAOP` at its default, so a sprite's alpha is its texture's alpha. A
+quad's edge pixel therefore reads the texture's border rows, as CSVM's does, and an authored border
+alpha of 16 to 31 draws at one sixteenth in both.
+
 ## Where CSVM differs today
 
 Glow billboards blend their alpha in gamma space in both graphics modes (`SceneBuilder`'s sprite
 alpha line), the byte-space `SRCALPHA, INVSRCALPHA` mix above. Only Enhanced mode keys the `moon1`
 and `star1` backdrops, since its tonemap moves them off the sky's colour; the faithful path draws
-them opaque, as the original does. No texture's alpha is truncated to four bits yet, so a blended
-fringe below 16/255 still draws faintly.
+them opaque, as the original does. Under faithful graphics an alpha-plane texture without bit 3
+keeps the top four bits of its alpha on every mip level, expanded by nibble replication
+(`TextureArchive.TruncatesAlpha`, applied in `TextureArchive.Build` and to `PlanePainter`'s decals
+and painted skins), so a fringe below 16/255 draws nothing. Enhanced graphics keeps 8-bit alpha.
+Colour stays at 8 bits in both modes.
 
 `TextureArchive.RenderFlags` carries the word off each archive's own extraction manifest (the
 `stretch` field) and `IsAdditive` tests bit 2; a name the archive cannot resolve, and a PNG-only

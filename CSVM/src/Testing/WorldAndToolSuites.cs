@@ -11,6 +11,7 @@ using CSVM.Tooling;
 using CSVM.UI.Boards;
 using CSVM.UI.Labs;
 using CSVM.UI.Screens;
+using CSVM.Utils;
 using Godot;
 
 using static CSVM.Testing.SuiteConstants;
@@ -168,6 +169,43 @@ internal static class WorldAndToolSuites
         })
         {
             ctx.Check(WorldBuilder.IsSkySpriteTexture(name) == sky, $"{name} is a sky sprite={sky}");
+        }
+    }
+
+    // Faithful graphics keeps four bits of an alpha-plane texture's alpha, as the original's ARGB4444
+    // upload does. Able to fail: without the truncation flare_green keeps its corner alpha of 7, and
+    // with bit 3 ignored cloud1 loses its 8-bit alpha.
+    [Suite("texture-alpha-nibble",
+        "under faithful graphics C5's flare_green keeps only 4-bit alpha on every mip level and its "
+        + "corner fringe draws nothing, cloud1 (render-flags bit 3) keeps its 8-bit alpha, and "
+        + "enhanced graphics leaves flare_green's alpha whole")]
+    internal static void TextureAlphaNibble(TestContext ctx)
+    {
+        string path = SessionPaths.ChapterTextures(ctx.DataRoot, "C5");
+        ctx.RequireData(path, $"C5 textures");
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        try
+        {
+            GraphicsMode.Resolve(GraphicsMode.Default);
+            using (var faithful = new TextureArchive(path))
+            {
+                var (flare, flareCorner) = AlphaCensus(faithful.BuildMipped("flare_green.tif", out _));
+                ctx.Check(flare.Total > 0 && flare.OffNibble == 0,
+                    $"faithful flare_green alpha is 4-bit on every level off={flare.OffNibble} of {flare.Total}");
+                ctx.Same(0, flareCorner, $"faithful flare_green's corner alpha");
+                var (cloud, _) = AlphaCensus(faithful.BuildMipped("cloud1.tif", out _));
+                ctx.Check(cloud.OffNibble > 0, $"faithful cloud1 keeps 8-bit alpha off={cloud.OffNibble} of {cloud.Total}");
+            }
+
+            GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
+            using var enhanced = new TextureArchive(path);
+            var (whole, wholeCorner) = AlphaCensus(enhanced.BuildMipped("flare_green.tif", out _));
+            ctx.Check(whole.OffNibble > 0 && wholeCorner == 7,
+                $"enhanced flare_green keeps 8-bit alpha off={whole.OffNibble} corner={wholeCorner}");
+        }
+        finally
+        {
+            GraphicsMode.Resolve(wasEnhanced ? GraphicsMode.EnhancedWord : GraphicsMode.Default);
         }
     }
 
@@ -2395,6 +2433,29 @@ internal static class WorldAndToolSuites
             ctx.Host.RemoveChild(stage);
             stage.Free();
         }
+    }
+
+    // Counts a texture's alpha bytes over its whole mip chain, and those off a replicated nibble.
+    // The top-left base texel's alpha comes back beside the counts.
+    private static ((int Total, int OffNibble) Counts, int Corner) AlphaCensus(Image? img)
+    {
+        if (img == null || img.GetFormat() != Image.Format.Rgba8)
+        {
+            return ((0, 0), -1);
+        }
+
+        var data = img.GetData();
+        int total = 0, off = 0;
+        for (int i = 3; i < data.Length; i += 4)
+        {
+            total++;
+            if (data[i] % 17 != 0)
+            {
+                off++;
+            }
+        }
+
+        return ((total, off), data[3]);
     }
 
     // Visible map-scale meshes under a world root, the cloud deck's excepted.

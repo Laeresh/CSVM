@@ -142,6 +142,9 @@ public sealed class PlanePainter
         if (img == null)
             return null;
         img.GenerateMipmaps();
+        // The swapped-in decal is uploaded like the archive's own textures (see TextureArchive.Find).
+        if (_textures.TruncatesAlpha(texName))
+            TextureArchive.TruncateAlphaToNibble(img);
         return ImageTexture.CreateFromImage(img);
     }
 
@@ -210,6 +213,9 @@ public sealed class PlanePainter
 
         var img = Image.CreateFromData(w, h, false, Image.Format.Rgba8, data);
         img.GenerateMipmaps();
+        // The copied base alpha is already truncated; the box-filtered levels below it are not.
+        if (_textures.TruncatesAlpha(baseName))
+            TextureArchive.TruncateAlphaToNibble(img);
         PaintedSkins++;
         return ImageTexture.CreateFromImage(img);
     }

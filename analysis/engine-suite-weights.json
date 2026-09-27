@@ -386,6 +386,7 @@
     "tex-dropin": 0.009,
     "texture-alpha-class": 0.011,
     "sky-sprite-backdrop-key": 0.04,
+    "texture-alpha-nibble": 0.03,
     "exhaust-smoke": 0.43,
     "exhaust-smoke-ai": 0.52,
     "trail-world-anchor": 0.011,
