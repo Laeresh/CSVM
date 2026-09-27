@@ -414,7 +414,7 @@ the board's cursor stands on its photographs. A results board's footer is a `Con
 over the seat's own Select and Confirm, composed off that seat's bindings and device rather than
 off the shipped defaults, since nothing else on such a board teaches the cursor; `Relegend`
 rewrites the row when the seat changes device. A pause board asks for no footer, as the original's
-pause sheet carries none.
+pause sheet carries none. `RowAt` is the pointer's hit test over the drawn rows, in canvas pixels.
 
 ## src/UI/Boards/BoardMenuHost.cs
 `BoardMenu` plus `BoardMenuView` plus the reader, kept together so a board wires a menu in two lines
@@ -424,6 +424,16 @@ back button alone, Escape and Start reaching the pause toggle through `FlightCon
 `Poll` can offer each frame first to a second cursor region on the board (a results board's
 photographs), which the rows then do not read. A poll that reports the seat moved device relegends the view, which is the one seam that gives every
 results board its control hint; `Build`'s legend flag is how the pause board declines one.
+
+## src/UI/Boards/BoardMenuPointer.cs
+The menu owner's pointer over a `BoardMenu`, engine-free, the one rule both pause boards read the
+mouse by, each handing it a frame's pointer and its own hit test. Entering a row moves the shared
+cursor there, so a pointer resting on a row leaves the pad free; a press takes hold of a row and
+fires it through the menu's confirm when the button comes up still on it. `Prime` reads the button
+as it stands, so a click still down from whatever stood over the board is not a fresh press.
+`SettlesFirstSight` makes a fresh board's first pointer mark its row without entering it, since the
+Built-in board's rows stand where a flight's released capture leaves the pointer.
+Off-engine coverage: `CSVM.Tests/BoardMenuPointerTests.cs`.
 
 ## src/UI/Screens/ShotGrid.cs
 The Danger Zone photographs' grid rule, engine-free and shared by the built-in boards'
@@ -515,10 +525,10 @@ The shared pause overlay, whole-window because pausing stops the game for everyb
 once by `GameSession` on the shared board layer and wired to `PauseState.Changed` rather than a
 completion event, it shows the pausing player's tag in their own colour and a Resume, Photo Mode,
 Preferences, Restart and Exit menu driven by that player alone, since `PauseState` lets only the
-owner resume; the Preferences row is built only where a `PausePreferences` leaf stands behind it. A
-fresh menu each pause, so the cursor starts on Resume and a stray confirm cannot destroy a run. Its
+owner resume; the Preferences row is built only where a `PausePreferences` leaf stands behind it. A fresh menu each pause, so the cursor starts on Resume and a stray confirm cannot destroy a run. Its
 menu carries no control hints, the original's pause sheet having none. It shares `ResultsBoard`'s chrome but not its shell, and a campaign session's objectives readout rides
-the same pause on a layer of its own. The Original presentation puts `OriginalPauseBoard` in its place.
+the same pause on a layer of its own. The pauser's mouse shares the cursor on `BoardMenuPointer`'s rule when they hold the keyboard seat, so a pad pauser's board reads no pointer. It writes no mouse mode, since the flight's halt releases the capture and the resume takes it again, and it is `Reprime`d when photo mode or the Preferences leaf closes.
+The Original presentation puts `OriginalPauseBoard` in its place.
 
 ## src/UI/Screens/MenuInput.cs
 One player's menu input source: the keyboard flag, a `Pads` binding and the edge and auto-repeat
@@ -1205,7 +1215,7 @@ The Original presentation's pause screen, on `PauseBoard`'s own seam: built once
 over a `PauseSheet` its mission resolves, following `PauseState.Changed`, driven by the pausing
 player's reader alone. What it draws is `PauseScreens`' composition through `ComposedBoardView`, so
 the screen tests off engine and this node owns the cursor, the pointer and the five actions. An Instant Action sortie's sheet is the blackboard, which it writes in `BoardPalette.EscapeBlackboard` rather than the campaign sheet's ink. That
-seat's pointer shares the cursor: a hover moves it, a press holds the strip, the release on it fires, and the OS pointer gives way to the dialog's own. Its readout is a delegate, since the objectives follow the running mission. Preferences stands `PausePreferences` over the held world and `Reprime`s on its close, and photo mode does the same over the frozen world. It draws no control hints, since the original's sheet carries none. Decode: [../org/pause-screen.md](../org/pause-screen.md).
+seat's pointer shares the cursor on `BoardMenuPointer`'s rule: entering a strip moves it, a press holds the strip, the release on it fires, and the OS pointer gives way to the dialog's own. Its readout is a delegate, since the objectives follow the running mission. Preferences stands `PausePreferences` over the held world and `Reprime`s on its close, and photo mode does the same over the frozen world. It draws no control hints, since the original's sheet carries none. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/UI/Menu/Original/OriginalHangarScreen.cs
 The Original hangar, a standalone module over the shared `HangarFeature` and the decoded hangar

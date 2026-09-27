@@ -20,6 +20,9 @@ namespace CSVM.UI.Menu.Original;
 /// </summary>
 public sealed partial class OriginalPauseBoard : Control
 {
+    // The pointer over the strips, in authored pixels, on the rule every board menu shares.
+    private readonly BoardMenuPointer _pointer = new();
+
     private PauseState _state = null!;
     private Func<int, MenuInput> _inputFor = null!;
     private Func<PauseReadout> _readout = null!;
@@ -28,13 +31,6 @@ public sealed partial class OriginalPauseBoard : Control
     private ComposedBoardView? _view;
     private BoardMenu? _menu;
     private MenuInput? _input;
-
-    // The pointer as the sheet last saw it, in authored pixels, null while nobody is pointing at
-    // it; the strip a press took hold of, -1 for none; and whether that strip is drawing held.
-    private (float X, float Y)? _pointer;
-    private int _armed = -1;
-    private bool _held;
-    private bool _wasPressed;
 
     // What the mouse mode was when the sheet went up, so the resume puts back what the flight was
     // using rather than assuming it was visible.
@@ -123,10 +119,7 @@ public sealed partial class OriginalPauseBoard : Control
     /// happens to be over, which fires that strip the instant the sheet comes back.</summary>
     public void Reprime()
     {
-        _pointer = null;
-        _armed = -1;
-        _held = false;
-        _wasPressed = PointerSource()?.Pressed ?? false;
+        _pointer.Prime(PointerSource()?.Pressed ?? false);
         if (Visible)
         {
             Compose();
@@ -150,7 +143,7 @@ public sealed partial class OriginalPauseBoard : Control
         bool changed = _menu.Handle(_input.Move, _input.Accept, _input.PadBack);
         if (Visible)
         {
-            changed |= StepPointer();
+            changed |= _pointer.Step(_menu, PointerSource(), (x, y) => PauseScreens.RowAt(_sheet, x, y));
         }
 
         if (changed && Visible)
@@ -214,62 +207,8 @@ public sealed partial class OriginalPauseBoard : Control
         _menu = menu;
         _input = _inputFor(_state.OwnerPlayerIndex);
         _input.Prime();
-        _pointer = null;
-        _armed = -1;
-        _held = false;
-        _wasPressed = PointerSource()?.Pressed ?? false;
+        _pointer.Prime(PointerSource()?.Pressed ?? false);
         Compose();
-    }
-
-    // One frame of the pointer over the strips: standing on one moves the shared cursor there,
-    // a press takes hold of the strip it lands on, and that strip fires when the button comes up
-    // still on it, so a press released anywhere else fires nothing. Answers whether to repaint.
-    private bool StepPointer()
-    {
-        if (PointerSource() is not { } at)
-        {
-            bool had = _pointer != null || _held;
-            _pointer = null;
-            _armed = -1;
-            _held = false;
-            return had;
-        }
-
-        bool changed = _pointer != (at.X, at.Y);
-        _pointer = (at.X, at.Y);
-        int over = PauseScreens.RowAt(_sheet, at.X, at.Y);
-        if (over >= 0)
-        {
-            changed |= _menu!.MoveTo(over);
-        }
-
-        bool clicked = at.Pressed && !_wasPressed;
-        bool released = !at.Pressed && _wasPressed;
-        _wasPressed = at.Pressed;
-        if (clicked && over >= 0)
-        {
-            _armed = over;
-        }
-
-        bool held = _armed >= 0 && at.Pressed && over == _armed;
-        changed |= held != _held;
-        _held = held;
-        if (!released)
-        {
-            return changed;
-        }
-
-        bool fires = _armed >= 0 && over == _armed;
-        _armed = -1;
-        if (!fires)
-        {
-            return changed;
-        }
-
-        // The hover already moved the cursor onto this strip, so the shared confirm fires the row
-        // under the pointer and the pad and the pointer reach the actions through one path.
-        _menu!.Handle(0, accept: true, back: false);
-        return true;
     }
 
     // The pausing seat's mouse in authored pixels. Only a seat that reads the keyboard holds one
@@ -320,7 +259,7 @@ public sealed partial class OriginalPauseBoard : Control
     // its button is down on the strip it took hold of.
     private void Compose() =>
         _view?.Show(
-            PauseScreens.For(_sheet, _readout(), _menu?.Index ?? 0, _held, _pointer),
+            PauseScreens.For(_sheet, _readout(), _menu?.Index ?? 0, _pointer.Held, _pointer.At),
             _sheet.InstantAction ? BoardPalette.EscapeBlackboard : BoardPalette.Escape,
             string.Empty,
             string.Empty);

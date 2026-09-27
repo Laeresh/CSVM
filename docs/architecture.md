@@ -313,6 +313,7 @@ else in `UI`, and nothing names `Labs`.
 - `src/UI/Boards/BoardMenuItem.cs`, the rows a board menu can offer: Resume, Photo, Restart, Exit.
 - `src/UI/Boards/BoardMenuView.cs`, draws a board menu's rows in the launchscreen's cursor idiom, inside the board style.
 - `src/UI/Boards/BoardMenuHost.cs`, menu, rows and reader kept together, so a board wires one in two lines.
+- `src/UI/Boards/BoardMenuPointer.cs`, the menu owner's pointer over a board menu: enter a row to move the cursor, release on the pressed row to fire it.
 - `src/UI/Boards/CursorRow.cs`, one centred list row and its cursor marker, shared by the launchscreen's lists and every board menu.
 - `src/UI/Boards/ControlGlyphs.cs`, the swappable per-control picture set, keyed by kind, index and sign the way a binding's control is.
 - `src/UI/Boards/ControlLine.cs`, one prompt line with a control in the message table's own `%1` slot, as words or as a glyph, and the hint row boards draw.

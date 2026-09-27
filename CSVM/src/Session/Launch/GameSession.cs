@@ -5401,9 +5401,9 @@ public partial class GameSession : Node3D
         }
         _photoPilot = null;
         RestoreBoards();
-        // The sheet's pointer too, for the reason the options leaf re-primes it. A mouse button
-        // still down as the mode is left reads as a fresh click on the strip it rests over.
-        _originalPause?.Reprime();
+        // The board's pointer too, for the reason the options leaf re-primes it. A mouse button
+        // still down as the mode is left reads as a fresh click on the row it rests over.
+        ReprimePauseBoard();
         // ⚠ Prime every board reader: MenuInput POLLS raw keys, so the Escape still under the
         // player's finger would read as a fresh press on the board that just returned and dismiss
         // the pause it was meant to reopen (BL-279's mechanism, docs/architecture.md).
@@ -5459,7 +5459,7 @@ public partial class GameSession : Node3D
 
         _pauseBoard.ProcessMode = ProcessModeEnum.Inherit;
         _pauseBoard.Visible = _pauseState?.Paused ?? false;
-        _originalPause?.Reprime();
+        ReprimePauseBoard();
         // ⚠ Prime every board reader and re-seed every pause edge, ExitPhotoMode's own hazard: the
         // Escape that left the leaf is still under the player's finger, and would otherwise dismiss
         // the sheet that just came back or resume the mission behind it.
@@ -5468,6 +5468,13 @@ public partial class GameSession : Node3D
             rig.Controller?.EndPauseLeaf();
             MenuInputFor(rig.Index).Prime();
         }
+    }
+
+    // Both presentations' pause boards read the mouse, so whichever one is in use is re-primed.
+    private void ReprimePauseBoard()
+    {
+        _originalPause?.Reprime();
+        (_pauseBoard as PauseBoard)?.Reprime();
     }
 
     // ⚠ Suspending a board is hide AND stop processing, not hide alone. A board left processing
