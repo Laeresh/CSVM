@@ -646,6 +646,10 @@ public sealed record SessionSpec
     public Vector3? CamDir { get; private set; }
     public float? Yaw { get; private set; }
     public float? Pitch { get; private set; }
+    /// <summary><b>Resolved.</b> The <c>--fov=</c> vertical angle in degrees for the free camera
+    /// of <c>--freecam</c>/<c>--anim-lab</c>, null for the decoded external base. It lets an F11
+    /// line taken from a cockpit view reproduce that view's angle.</summary>
+    public float? Fov { get; private set; }
     /// <summary><b>Resolved.</b> The <c>--view=</c> numpad digit (0 = chase;
     /// <see cref="Flight.Camera.CameraController.PinnedBackView"/> = the look-behind, <c>--view=back</c>).
     /// The numpad views orbit a FLYING plane, so one asked for outside flight is dropped.</summary>
@@ -1536,6 +1540,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--export-gltf=")) { s.ExportGltfPath = arg["--export-gltf=".Length..]; s.HasContentArg = true; }
             else if (arg.StartsWith("--yaw=")) { s.Yaw = Flt(arg["--yaw=".Length..]); }
             else if (arg.StartsWith("--pitch=")) { s.Pitch = Flt(arg["--pitch=".Length..]); }
+            else if (arg.StartsWith("--fov=")) { s.Fov = Flt(arg["--fov=".Length..]); }
             else if (arg.StartsWith("--pos=")) { s.Pos = ParseVec3(arg["--pos=".Length..]); }
             else if (arg.StartsWith("--direction=")) { s.Direction = ParseVec3(arg["--direction=".Length..]); }
             else if (arg.StartsWith("--campos=")) { s.CamPos = ParseVec3(arg["--campos=".Length..]); Deprecate("--campos", "--pos"); }
@@ -2083,6 +2088,18 @@ public sealed record SessionSpec
             Warn("core", $"--view={Flight.Camera.PilotView.Name(ViewMode)} is a flight camera; "
                          + "ignoring it outside --fly/--stunt");
             ViewMode = Flight.Camera.PilotViewMode.Chase;
+        }
+        // Flight and the viewer own their angles, so only the two free-camera modes take one.
+        // Godot clamps a camera to 1..179 on its own, so a value outside it is a typo, not a request.
+        if (Fov is { } fov && !(Freecam || AnimLab))
+        {
+            Warn("core", $"--fov={fov.ToString(CultureInfo.InvariantCulture)} sets the free camera's angle; ignoring it outside --freecam/--anim-lab");
+            Fov = null;
+        }
+        else if (Fov is { } bad && (bad < 1f || bad > 179f))
+        {
+            Warn("core", $"--fov={bad.ToString(CultureInfo.InvariantCulture)} is outside 1..179 degrees; keeping the decoded base");
+            Fov = null;
         }
         // An unknown surface name would otherwise search for an id no collider can carry and
         // report it missing, which reads as a map fact rather than a typo.

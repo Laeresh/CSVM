@@ -1037,9 +1037,8 @@ public partial class Launcher : Node3D
             Tooling.CaptureDirector.SaveScreenshot(GetViewport());
             return;
         }
-        // F11 anywhere: print the mode's subject placement as ready-to-paste --pos=/--direction=
-        // args, so a hand-framed orbit (or a spot found while flying) can be reproduced for a
-        // deterministic --screenshot run.
+        // F11 anywhere: print args that reproduce each pane's camera and, in flight, each
+        // aircraft's placement. A deterministic --screenshot run then replays a hand-framed view.
         if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F11 })
         {
             _captureDirector.PrintPlacement(_spec, _session?.Rigs ?? NoRigs, _camera, _orbit);

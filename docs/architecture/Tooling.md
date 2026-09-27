@@ -42,14 +42,14 @@ scripted world forces belonging to no session. `RunTestSuites` is the one call i
 from outside it. Read `Probes.cs` for the work each wrapper calls into.
 
 ## src/Tooling/CaptureDirector.cs
-The `--screenshot=`/`--shots=`/`--frames=` capture state machine plus F11/F12's placement print and
-ad-hoc save, built in `Launcher._Ready` from the launch spec and `Tick()`ed from the Launcher's
-`_Process`, so `--menu --screenshot` captures the launchscreen with no session node alive; it takes
-its camera/orbit/rigs/clock as parameters. That capture reads synchronously, since the process
-exits on its file. `SaveScreenshot`, the F12 save every screen shares, writes the PNG from
-`PaneReadback`'s frame into `ShotDir()` on the worker it lands on (`ShotDirFor`: the repo's
-`Screenshots/`, or one beside the executable in an export), logging "screenshot saved" there, and
-returns the path the file will take. Read `GoldenShot.cs` for what the save site prints.
+The `--screenshot=`/`--shots=`/`--frames=` capture state machine plus F11's pose print and F12's
+ad-hoc save, built in `Launcher._Ready` from the spec and `Tick()`ed from its `_Process`, so
+`--menu --screenshot` captures the launchscreen with no session alive; camera/orbit/rigs/clock are
+parameters. That capture reads synchronously, since the process exits on its file. `SaveScreenshot`,
+the F12 save every screen shares, writes `PaneReadback`'s frame into `ShotDir()` (`ShotDirFor`: the
+repo's `Screenshots/`, or one beside an export's executable) on the worker it lands on. F11 reads each
+pane's own camera (chase, cockpit, photo mode, free camera) through the pure `PlacementLines`: a
+`--freecam` line, `--fov=` off the external base, and each flight aircraft's `--fly` line.
 
 ## src/Tooling/GltfExporter.cs
 Exports any `Node3D` subtree to glTF: mesh, live material state, no animation and no emitters.

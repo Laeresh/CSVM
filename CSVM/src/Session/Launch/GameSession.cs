@@ -636,11 +636,10 @@ public partial class GameSession : Node3D
         };
         GameClock.Current = _clock;
         LoadProgress.Report(LoadStep.Scaffold);
-        // Every world camera outside the cockpit interior draws at the one decoded base
-        // (CameraController.ExternalFovDeg). The 50 is the static viewer's own framing, which
-        // shows a model rather than the world and is not one of the original's views.
-        _camera.Fov = _spec.Fly || _spec.Freecam || _spec.AnimLab
-            ? CameraController.ExternalFovDeg : 50f;
+        // World cameras outside the cockpit draw at the decoded base, and the viewer's 50 frames
+        // a model. A free camera's own angle option replays a cockpit view an F11 line printed.
+        _camera.Fov = _spec.Fov ?? (_spec.Fly || _spec.Freecam || _spec.AnimLab
+            ? CameraController.ExternalFovDeg : 50f);
         // One rig per rendered view, before anything camera-anchored is built (the skydome and
         // weather visuals below are per-rig). Single player reuses the main-viewport camera.
         BuildRigs(_spec.Fly ? _spec.Players : 1);
