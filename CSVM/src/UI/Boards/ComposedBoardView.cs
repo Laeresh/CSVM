@@ -361,6 +361,15 @@ public sealed partial class ComposedBoardView : Control
         RenderingServer.ForceDraw();
     }
 
+    /// <summary>Holds the moving pictures for the next ordinary frame. It is for a caller that
+    /// does not hold the frame loop, so it forces no draw.</summary>
+    public void HoldMoving(IReadOnlyList<BoardPicture> pictures)
+    {
+        ArgumentNullException.ThrowIfNull(pictures);
+        _moving = pictures;
+        QueueRedraw();
+    }
+
     /// <inheritdoc/>
     public override void _Draw()
     {

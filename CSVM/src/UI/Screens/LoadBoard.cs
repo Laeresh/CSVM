@@ -44,7 +44,8 @@ public sealed partial class LoadBoard : Control
         var board = new LoadBoard
         {
             _dataRoot = dataRoot,
-            _board = LoadScreens.For(campaign, subject, missionType, zrdrPath, messagesPath, sheet),
+            _board = LoadScreens.For(
+                campaign, subject, missionType, zrdrPath, messagesPath, sheet, pumped: true),
             _motion = LoadScreens.MotionFor(campaign, sheet),
             _palette = campaign ? BoardPalette.Paper : BoardPalette.Chalk,
             MouseFilter = MouseFilterEnum.Ignore,
@@ -56,13 +57,15 @@ public sealed partial class LoadBoard : Control
 
     /// <summary>Populates on entry rather than in <see cref="Build"/>: the view sizes itself off
     /// the viewport, which a node outside the tree cannot read. Takes the build's progress with
-    /// it, so the screen is the pump and the pump dies with the screen.</summary>
+    /// it, so the screen is the pump and the pump dies with the screen. The moving layer opens on
+    /// the cycle's first frame, since the composition leaves the still one to it.</summary>
     public override void _Ready()
     {
         var view = ComposedBoardView.Build(_dataRoot);
         AddChild(view);
         _view = view;
         view.Show(_board, _palette, string.Empty, string.Empty);
+        view.HoldMoving(LoadScreens.Moving(_motion, 0f, 0f, 0f, 0));
         _progress = new LoadProgress { Repaint = Repaint };
         LoadProgress.Current = _progress;
     }

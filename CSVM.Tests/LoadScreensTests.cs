@@ -171,6 +171,47 @@ public class LoadScreensTests
         Assert.Empty(board.Notes);
     }
 
+    /// <summary>The blackboard under a build draws one propeller at every frame of the cycle. The
+    /// pumped board leaves the still frame to the moving layer. A still capture keeps that one
+    /// still frame.</summary>
+    [Fact]
+    public void TheBlackboardDrawsOnePropellerWhetherPumpedOrStill()
+    {
+        var motion = LoadScreens.MotionFor(false, null);
+        var pumped = LoadScreens.For(false, "FREE FLIGHT", null, "no-zrdr", "no-messages", pumped: true);
+        var still = LoadScreens.For(false, "FREE FLIGHT", null, "no-zrdr", "no-messages");
+
+        Assert.Equal(1, PropellerDraws(still, motion));
+        Assert.Equal(0, PropellerDraws(pumped, motion));
+        for (int frame = 0; frame < motion.Propeller.Count; frame++)
+        {
+            var painted = LoadScreens.Painted(pumped, motion, 236f, 12f, 0.5f, frame);
+            Assert.Equal(1, PropellerDraws(painted, motion));
+        }
+    }
+
+    /// <summary>The chart sheet under a build draws one propeller at every frame of its script's
+    /// cycle. The cycle element is left out, and every other scripted picture stays. The still
+    /// capture keeps its one first frame.</summary>
+    [ExtractedDataFact]
+    public void TheCampaignSheetDrawsOnePropellerWhetherPumpedOrStill()
+    {
+        var sheet = Filmed();
+        var motion = LoadScreens.MotionFor(true, sheet);
+        var pumped = LoadScreens.For(true, "unused", null, Zrdr(), MessagesPath(), sheet, pumped: true);
+        var still = LoadScreens.For(true, "unused", null, Zrdr(), MessagesPath(), sheet);
+
+        Assert.Equal(6, motion.Propeller.Count);
+        Assert.Equal(1, PropellerDraws(still, motion));
+        Assert.Equal(0, PropellerDraws(pumped, motion));
+        Assert.Equal(still.Pictures.Count - 1, pumped.Pictures.Count);
+        for (int frame = 0; frame < motion.Propeller.Count; frame++)
+        {
+            var painted = LoadScreens.Painted(pumped, motion, 338f, 12f, 0.5f, frame);
+            Assert.Equal(1, PropellerDraws(painted, motion));
+        }
+    }
+
     /// <summary>An absent extraction leaves the board standing with no words rather than throwing
     /// out of a screen that exists to be shown while everything else is still loading.</summary>
     [Fact]
@@ -188,6 +229,13 @@ public class LoadScreensTests
             Zrdr(), MessagesPath(),
             SessionPaths.MissionZrdr(TestData.DataRoot!, "C3", "M01"),
             "loading_c61", "ms_p_initialpinup1")!;
+
+    // Every picture on the board, still layers and overlays alike, that is one of the cycle's
+    // frames: how many propellers a watcher sees.
+    private static int PropellerDraws(ComposedBoard board, LoadMotion motion) =>
+        board.Backdrop.Concat(board.Pictures)
+            .Concat(board.Overlays.SelectMany(o => o.Pictures))
+            .Count(p => motion.Propeller.Contains(p.Art.Name));
 
     private static BoardPicture Picture(ComposedBoard board, string name) =>
         Assert.Single(board.Pictures.Where(p => p.Art.Name == name));

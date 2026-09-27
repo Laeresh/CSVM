@@ -331,7 +331,7 @@ through `ComposedBoardView`, so it inherits the authored-pixel surface and `Boar
 Populated in `_Ready`, since the view sizes itself off the viewport, and it tracks the window every
 frame the way every shared board does. Holds no composition of its own, so what the screen says
 tests off engine; a campaign launch hands it the `LoadSheet` its story position resolves. It is
-also the pump `Utils/LoadProgress.cs` repaints through, installed for its own tree lifetime alone: a step the build reports puts the bar's fill and the propeller's frame on the view's moving layer and presents there, which is how the screen moves at all, a queued redraw being no use while the build holds the loop that would flush it.
+also the pump `Utils/LoadProgress.cs` repaints through, installed for its own tree lifetime alone: it composes the board pumped and opens the moving layer on the cycle's first frame, then a step the build reports puts the bar's fill and the propeller's frame on that layer and presents there, which is how the screen moves at all, a queued redraw being no use while the build holds the loop that would flush it.
 `--debug-load` stands the screen over a CLI launch and photographs each presented frame, the only way to read the bar back with nobody at the menu, and `_ExitTree` writes every reported step against the build's own wall clock as one line.
 
 ## src/UI/Screens/LoadScreens.cs
@@ -340,7 +340,7 @@ one `Loading.zrd` dialog with its mission's objectives and the seated profile's 
 composes either that chart sheet, through `MissionMap` the way `PauseScreens` does, or the Instant
 Action blackboard with the four texts its own `loading_i` dialog places; `DialogTexts` takes that composition by file and key, so an Instant Action pause writes its `ia_escape.zrd` dialog's texts through it. The mission type picks the
 blackboard's dialog by the exe's own letter; free flight and dogfight are ours, so they write the
-mode's name and nothing else. `LoadMotion` is the moving half, the fill strip and the six propeller frames the sheet's own `Cycle` beat names, `Moving` places those two at a fraction and a frame, the clipped fill and the propeller face a pump presents on their own layer, and `Painted` re-lays the same pair into `Overlays` for a caller composing a whole board, so the still composition under them is never rewritten. An absent extraction yields the frame and the bar rather than
+mode's name and nothing else. `LoadMotion` is the moving half, the fill strip and the six propeller frames the sheet's own `Cycle` beat names, `Moving` places those two at a fraction and a frame, the clipped fill and the propeller face a pump presents on their own layer, and `Painted` re-lays the same pair into `Overlays` for a caller composing a whole board, so the still composition under them is never rewritten. A pumped composition (`For`'s `pumped`) leaves the still propeller frame to that layer, the sheet's `Cycle` element excluded by identity, so a build shows one propeller; a still capture keeps the one still frame. An absent extraction yields the frame and the bar rather than
 throwing, since this screen is shown while everything else is still loading. The dialogs, the beat
 sheet and the face mapping: [../org/loading-screen.md](../org/loading-screen.md).
 
