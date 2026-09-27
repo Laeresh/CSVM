@@ -2504,7 +2504,7 @@ public partial class FlightController : Node3D
             // the original's swap is a camera-mode gate, and a held numpad key or look-behind is a
             // pose, not a mode change (⚠ table row 2 traces the analogous head-look case).
             Audio?.Update(simDt, engineDrive, speedFrac, healthFrac, _model.EngineDead,
-                ViewMode == PilotViewMode.Cockpit);
+                EngineAudioCurves.SelectsCockpitLoop(ViewMode));
             EngineAudio?.Update(simDt, engineDrive, speedFrac, healthFrac, _model.EngineDead);
             if (SpeedCue != null && _viewCamera != null)
             {

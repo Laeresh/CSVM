@@ -819,7 +819,7 @@ definition and damage phase come from `EngineAudioCurves`, the gun loop and dry 
 The engine-audio slot maths both audio paths read, because the original runs one per-frame routine
 for the player and every AI vehicle: whether an airframe counts as damaged, the slot's damage phase
 (`StepEnginePhase`: Healthy, Out while the re-arm timer runs, Damaged), which definition it holds
-and the swap's one-off pitch draw, each slot's pitch and gain off the `PlaneStats` curves, the
+(`SelectsCockpitLoop`: Cockpit and Nose both take the cockpit loop) and the swap's one-off pitch draw, each slot's pitch and gain off the `PlaneStats` curves, the
 rattle gate, the drive parameter and the cull distance. The drive adds a turn rate and a climb
 attitude to each curve's parameter under a clamp with headroom above 1, which is why `SoundCurve`
 exposes its steps separately. A pitch reaches the voice only where the definition accepts a

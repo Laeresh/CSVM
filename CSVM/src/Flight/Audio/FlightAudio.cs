@@ -227,18 +227,17 @@ public partial class FlightAudio : Node
 
     public override void _Ready() => StartEngine(); // whine/rattle start on demand
 
-    /// <summary>Per-frame drive: <paramref name="speedFrac"/> is speed / fd_speed,
-    /// <paramref name="healthFrac"/> and <paramref name="engineDead"/> are the damaged-engine
-    /// inputs <see cref="EngineAudioCurves.EngineDamaged"/> gates on, and
-    /// <paramref name="cockpitView"/> is whether the pilot's SELECTED view is the full Cockpit. A
-    /// held numpad key or look-behind is a pose, not a selection, so neither retriggers that swap.
+    /// <summary>Per-frame drive: <paramref name="speedFrac"/> is speed / fd_speed, and
+    /// <paramref name="healthFrac"/> and <paramref name="engineDead"/> feed
+    /// <see cref="EngineAudioCurves.EngineDamaged"/>. <paramref name="firstPersonView"/> comes
+    /// from the SELECTED view, so a held look key never retriggers the swap.
     /// Not called while crashed, so the loops stay dead until respawn.</summary>
     public void Update(float dt, in EngineDrive drive, float speedFrac, float healthFrac,
-        bool engineDead = false, bool cockpitView = false)
+        bool engineDead = false, bool firstPersonView = false)
     {
         if (_engineRamp < 1f)
             _engineRamp = Mathf.Min(1f, _engineRamp + dt / EngineStartRamp);
-        UpdateEngineSlot(dt, EngineAudioCurves.EngineDamaged(healthFrac, engineDead), cockpitView);
+        UpdateEngineSlot(dt, EngineAudioCurves.EngineDamaged(healthFrac, engineDead), firstPersonView);
         // Out is the damaged engine's silence, not a stopped loop to restart.
         if (_engine != null && _enginePhase != EngineSlotPhase.Out)
         {
@@ -457,7 +456,7 @@ public partial class FlightAudio : Node
     // runs too, and acts on a change. The edge silences the slot, the fired re-arm timer starts
     // damaged_engine_sound at a drawn multiplier, and a cleared mask restores the healthy loop at
     // once. While healthy, the view picks the stream.
-    private void UpdateEngineSlot(float dt, bool damaged, bool cockpitView)
+    private void UpdateEngineSlot(float dt, bool damaged, bool firstPersonView)
     {
         if (_engine == null)
         {
@@ -485,7 +484,7 @@ public partial class FlightAudio : Node
         else if (_enginePhase == from)
         {
             if (from == EngineSlotPhase.Healthy)
-                UpdateCockpitSwap(cockpitView);
+                UpdateCockpitSwap(firstPersonView);
         }
         else if (_enginePhase == EngineSlotPhase.Out)
         {
@@ -495,23 +494,23 @@ public partial class FlightAudio : Node
         else
         {
             // Out has nothing to wait for; a stopped damaged loop is the crash the hook restarts.
-            RestoreHealthyStream(cockpitView, play: from == EngineSlotPhase.Out || sounding);
+            RestoreHealthyStream(firstPersonView, play: from == EngineSlotPhase.Out || sounding);
         }
     }
 
-    // The healthy arm's view swap: cockpit_engine_sound while the pilot's SELECTED view is the full
-    // Cockpit, engine_sound otherwise. A hard cut, no crossfade is decoded.
-    private void UpdateCockpitSwap(bool cockpitView)
+    // The healthy arm's view swap: cockpit_engine_sound while the pilot's SELECTED view is Cockpit
+    // or Nose, engine_sound otherwise. A hard cut, no crossfade is decoded.
+    private void UpdateCockpitSwap(bool firstPersonView)
     {
-        if ((cockpitView && _cockpitStream != null) != _engineCockpitView)
+        if ((firstPersonView && _cockpitStream != null) != _engineCockpitView)
         {
-            RestoreHealthyStream(cockpitView, play: _engine!.Playing);
+            RestoreHealthyStream(firstPersonView, play: _engine!.Playing);
         }
     }
 
-    private void RestoreHealthyStream(bool cockpitView, bool play)
+    private void RestoreHealthyStream(bool firstPersonView, bool play)
     {
-        _engineCockpitView = cockpitView && _cockpitStream != null;
+        _engineCockpitView = firstPersonView && _cockpitStream != null;
         var (name, pitchMul) = EngineAudioCurves.EngineDefFor(
             _stats, false, Rng.Stream(Rng.FlightAudio), _engineCockpitView);
         _enginePitchMul = pitchMul;
