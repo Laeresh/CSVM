@@ -14,8 +14,8 @@ public readonly record struct AnalogCommand(float Pitch, float Roll, float Yaw, 
 /// <see cref="PadCurve"/>. A flight stick's axes arrive already deadzoned and rescaled by their own
 /// full-axis bindings, so they pass through linearly. <c>FlightController</c> sums both into the
 /// keyboard and mouse deflections and clamps each axis, the rule every other source already follows.
-/// A throttle lever reads from whichever source holds it and is present, so an unplugged stick
-/// releases its lever rather than reading as half throttle.
+/// A throttle lever reads only the bindings that are present. An unplugged stick therefore leaves
+/// its lever to the other bindings, or releases it, rather than reading as half throttle.
 /// </summary>
 public static class AnalogAxes
 {
@@ -47,26 +47,29 @@ public static class AnalogAxes
         stick.Axis(InputAction.YawLeft, InputAction.YawRight),
         stick.Axis(InputAction.ThrottleUp, InputAction.ThrottleDown));
 
-    /// <summary>The lever's position this tick, the furthest of the two sources it is bound on, or
-    /// null when neither can be read. A source counts while it holds a binding on
-    /// <paramref name="row"/>: any non-stick binding for the pads, a stick binding whose model
-    /// <paramref name="sticks"/> lists for the sticks. An absent stick's axis reads centred, which
-    /// is half throttle on a lever.</summary>
-    public static float? LeverPosition(IReadOnlyList<Binding> row, float padValue, float stickValue, StickRoster? sticks)
+    /// <summary>The lever's position this tick, the furthest binding on <paramref name="row"/> that
+    /// can be read, or null when none can. Every non-stick binding counts, through
+    /// <paramref name="padValue"/>. A stick binding counts only while <paramref name="sticks"/>
+    /// lists its model, and is read alone from <paramref name="stickSide"/>. An absent stick's axis
+    /// reads centred, which is half throttle on a lever.</summary>
+    public static float? LeverPosition(IReadOnlyList<Binding> row, float padValue, IDeviceState stickSide, StickRoster? sticks)
     {
-        bool pads = false;
-        bool connected = false;
+        ArgumentNullException.ThrowIfNull(row);
+        ArgumentNullException.ThrowIfNull(stickSide);
+        float? position = null;
         foreach (var binding in row)
         {
+            float read;
             if (!StickModel.TryFromDevice(binding.Device, out var model))
-                pads = true;
-            else if (!connected && Connected(sticks, model))
-                connected = true;
+                read = padValue;
+            else if (Connected(sticks, model))
+                read = binding.ResolveAbsolute(stickSide, default).Value;
+            else
+                continue;
+            position = Math.Max(position ?? 0f, read);
         }
 
-        if (!pads && !connected)
-            return null;
-        return Math.Max(pads ? padValue : 0f, connected ? stickValue : 0f);
+        return position;
     }
 
     /// <summary>Steps <paramref name="takeover"/> on a position from <see cref="LeverPosition"/>,

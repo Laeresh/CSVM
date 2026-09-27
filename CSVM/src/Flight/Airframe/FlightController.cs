@@ -600,6 +600,10 @@ public partial class FlightController : Node3D
     private readonly PadRumble _rumble;
     private int _turretShots;
 
+    // The stick half _stickAxes last polled. The lever reads its bindings from it one by one, since a
+    // resolved row cannot tell a centred stick from an unplugged one.
+    private IDeviceState _stickSide;
+
     // The message table this seat's control prompts take their wording from, null on a rig built
     // with none (which then reads the prompt's own data-less stand-in).
     private Messages? _strings;
@@ -745,6 +749,7 @@ public partial class FlightController : Node3D
         _stickAxes = new PlayerActions(map, false);
         _padsAlone = StickSplit.WithoutSticks(_seatState);
         _sticksAlone = StickSplit.SticksOnly(_seatState);
+        _stickSide = _sticksAlone;
     }
 
     /// <summary>Raised once per crash, at <see cref="Crash"/>: (victim <see cref="PlayerIndex"/>,
@@ -2817,7 +2822,8 @@ public partial class FlightController : Node3D
         _keyActions.Poll(keyboardSide);
         _padActions.Poll(padSide);
         _padAxes.Poll(StickSplit.WithoutSticks(padSide));
-        _stickAxes.Poll(StickSplit.SticksOnly(padSide));
+        _stickSide = StickSplit.SticksOnly(padSide);
+        _stickAxes.Poll(_stickSide);
         if (_bindings.ObserveDevice(_keyActions.Current, _padActions.Current, _stickAxes.Current))
             ComposeControlPrompts();
     }
@@ -3620,7 +3626,8 @@ public partial class FlightController : Node3D
         _keyActions.Poll(_padMutedState);
         _padActions.Poll(_seatState);
         _padAxes.Poll(_padsAlone);
-        _stickAxes.Poll(_sticksAlone);
+        _stickSide = _sticksAlone;
+        _stickAxes.Poll(_stickSide);
         // A prompt names the device the seat last took input from, so a handover recomposes it.
         if (_bindings.ObserveDevice(_keyActions.Current, _padActions.Current, _stickAxes.Current))
         {
@@ -4709,7 +4716,7 @@ public partial class FlightController : Node3D
         float? position = AnalogAxes.LeverPosition(
             _padActions.Map.Bindings(InputAction.ThrottleLever),
             _padAxes.Value(InputAction.ThrottleLever),
-            _stickAxes.Value(InputAction.ThrottleLever),
+            _stickSide,
             sticks);
         return AnalogAxes.StepLever(_leverTakeover, position, otherCommand);
     }

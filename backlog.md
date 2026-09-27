@@ -242,16 +242,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   flight tick's own steps (forces, contact, damage) out; they share the accumulator and belong
   together. *Cross-refs:* `BL-1015`, `BL-1016` (the same shape in `GameSession.cs` and
   `OriginalOptionsScreen.cs`), `docs/architecture/Flight.md`.
-- `BL-1045` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **A throttle lever bound
-  on two stick models reads at least half throttle when one of the two is unplugged.**
-  *Evidence:* `AnalogAxes.LeverPosition` (`CSVM/src/Flight/Airframe/AnalogAxes.cs`) decides presence
-  per source, not per binding: one connected stick model makes the whole stick source count, and
-  the stick value is read over every stick binding on the row. The unplugged model's axis reads 0,
-  which a full axis maps to 0.5, and `Math.Max` then holds the lever at half or more. The
-  single-lever case (the shipped VKB profiles) is unaffected, because an unplugged stick leaves no
-  connected model and the lever is released. *Fix shape:* read the stick value over the bindings
-  whose model `AnalogAxes.Connected` lists, not over the whole row. *Cross-refs:*
-  `docs/architecture/Bindings.md` (`LeverTakeover`), `CSVM.Tests/ThrottleLeverTests.cs`.
 
 ## Environment & world
 

@@ -930,8 +930,9 @@ The two analogue shares of a seat's flight command. `Pad` bends pitch and roll t
 same actions with the same signs and no curve, since a stick's full-axis binding already deadzones
 and rescales, so a throttle-pair full axis is a rate in proportion to deflection. The controller
 sums both into the keyboard and mouse deflections and clamps each axis. `LeverPosition` reads a
-Throttle (lever) from whichever side it is bound on and still connected, and `StepLever` releases
-the takeover when neither is, so an unplugged stick does not read as half throttle. Engine-free.
+Throttle (lever) as the furthest of its bindings still connected, a stick binding counting only
+while `Connected` lists its model and read from the stick half binding by binding, and `StepLever`
+releases the takeover when none is, so an unplugged stick does not read as half throttle. Engine-free.
 
 ## src/Flight/Airframe/StickSplit.cs
 An `IDeviceState` filter that passes a seat's flight-stick identities alone (`SticksOnly`) or
