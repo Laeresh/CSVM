@@ -582,7 +582,7 @@ public sealed partial class TargetHud : Control
             return 0f;
         }
 
-        return UI.Overlays.OrbitCamera.MergedAabb(node).Size.Length() * 0.5f;
+        return Flight.Camera.OrbitCamera.MergedAabb(node).Size.Length() * 0.5f;
     }
 
     // The spyglass gate off this frame's selection, kept beside the bracket gate rather than in

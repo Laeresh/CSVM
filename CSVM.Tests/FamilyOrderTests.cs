@@ -47,11 +47,7 @@ public sealed class FamilyOrderTests
 
     private static readonly string[] Allowed =
     {
-        "CSVM.Effects.EffectAmbience -> CSVM.Flight.Camera.ViewerSet",
-        "CSVM.Effects.Precipitation -> CSVM.Flight.Airframe.WeatherState",
-        "CSVM.Effects.Puffer -> CSVM.Flight.Camera.ViewerSet",
         "CSVM.Flight.Airframe.PlaneRoster -> CSVM.Spec.SessionSpec",
-        "CSVM.Flight.Hud.TargetHud -> CSVM.UI.Overlays.OrbitCamera",
         "CSVM.Session.Campaign.CampaignDirector -> CSVM.UI.Hangar.PlanePickerRoster",
         "CSVM.Session.Campaign.ChapterCinema -> CSVM.UI.Screens.CinemaHandoff",
         "CSVM.Session.Campaign.ChapterCinema -> CSVM.UI.Screens.CinemaPlay",
@@ -69,10 +65,6 @@ public sealed class FamilyOrderTests
         "CSVM.Spec.SessionSpec -> CSVM.UI.Labs.NodeLab",
         "CSVM.Spec.SessionSpec -> CSVM.UI.Labs.WorldDamageLab",
         "CSVM.Spec.SessionSpec -> CSVM.UI.Menu.NetPlayFeature",
-        "CSVM.Tooling.CaptureDirector -> CSVM.UI.Overlays.OrbitCamera",
-        "CSVM.Tooling.ProbeRunner -> CSVM.UI.Overlays.OrbitCamera",
-        "CSVM.UI.Boards.MenuInput -> CSVM.Flight.Airframe.StickSplit",
-        "CSVM.UI.Boards.ScreenFlash -> CSVM.Flight.Camera.ViewerSet",
     };
 
     [Fact]

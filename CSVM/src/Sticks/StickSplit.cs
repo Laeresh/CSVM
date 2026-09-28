@@ -1,7 +1,7 @@
 using CSVM.Bindings;
 using CSVM.Sticks;
 
-namespace CSVM.Flight.Airframe;
+namespace CSVM.Sticks;
 
 /// <summary>One side of a seat's non-keyboard hardware: its flight sticks alone, or everything
 /// except them. A seat's reader answers pads and sticks together, and one keymap holds both. The

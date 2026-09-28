@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using CSVM.Effects;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
-using CSVM.Flight.Camera;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
 using CSVM.Session.Roster;

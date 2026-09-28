@@ -5,7 +5,7 @@ using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM.Flight.Airframe;
+namespace CSVM.Effects;
 
 /// <summary>
 /// Per-mission atmosphere from the mission's own <c>weather.json</c>, a zrdr reader. Feeds the

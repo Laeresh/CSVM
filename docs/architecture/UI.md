@@ -796,13 +796,6 @@ an ordered script rather than a token set. Only the pool the registry resolves i
 node can carry several; the rest are listed read-only with the reason, because driving a twin would
 damage a pool nothing can ever hit.
 
-## src/UI/Overlays/OrbitCamera.cs
-The static inspection view's orbit-camera controller (drag to orbit, wheel to zoom, AABB framing):
-owns the orbit state and drives a camera it does not own. `Frame` takes the eye and pivot the host
-resolved, and `MergedAabb` merges a subtree's world-space mesh boxes, shared with the anim lab. The
-`lookAt` argument is a pivot point rather than a direction, since with the eye it also sets the
-radius the wheel and the drag work in.
-
 ## src/UI/Labs/AnimLab.cs
 The `--anim-lab` debugger: a quiet world stage with a pinned seed, a fixed-dt clock, a transport
 panel, a def picker, an `AnimTimeline`, a spectator freecam following the shared selection, and a

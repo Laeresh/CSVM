@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using CSVM.Flight.Camera;
 using Godot;
 
 namespace CSVM.Effects;

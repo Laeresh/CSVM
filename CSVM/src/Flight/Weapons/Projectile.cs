@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using CSVM.Effects;
 using CSVM.Flight.Airframe;
-using CSVM.Flight.Camera;
 using CSVM.Flight.Hud;
 using CSVM.Mech3;
 using CSVM.Utils;

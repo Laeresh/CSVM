@@ -623,7 +623,7 @@ internal static class NetSessionSuites
             CaptureDirector = new CaptureDirector(spec),
             MasterSeed = seed,
             Camera = camera,
-            Orbit = new UI.Overlays.OrbitCamera(camera),
+            Orbit = new Flight.Camera.OrbitCamera(camera),
             Sun = sun,
             Env = new Godot.Environment(),
             MenuDriven = false,

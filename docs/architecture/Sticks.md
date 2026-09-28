@@ -143,3 +143,9 @@ off. `Column` is the KEYS AND BUTTONS Stick column's shorter caption, which drop
 prefix and model of an unnamed stick and prints the control alone, since the column is half a
 panel wide. `Prefix` and `Column`'s two-argument form are the pure forms a test drives with its
 own names.
+
+## src/Sticks/StickSplit.cs
+An `IDeviceState` filter that passes a seat's flight-stick identities alone (`SticksOnly`) or
+everything else (`WithoutSticks`), deciding by `StickModel.TryFromDevice`. `FlightController` polls
+one keymap through each, so a pad row and a stick row on the same action resolve apart for
+`AnalogAxes`. The seat's own reader stays the only thing that reads hardware.

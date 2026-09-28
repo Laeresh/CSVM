@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using CSVM.Bindings;
+using CSVM.Effects;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
@@ -161,7 +162,7 @@ public partial class Launcher : Node3D
     private const float EnhancedTonemapAgxWhite = 6.0f;
     private const float EnhancedTonemapAgxContrast = 1.0f;
 
-    // The zone default FOG_COLOR (Flight/Airframe/Weather.cs's no-weather zone), which is the colour a
+    // The zone default FOG_COLOR (Effects/Weather.cs's no-weather zone), which is the colour a
     // horizon dome fades into at eye level. Enhanced mode's sky until a flown zone writes its own
     // over it, so a world with no weather.json still reflects a plausible sky.
     private static readonly Color EnhancedDefaultSkyColor = new(0.69f, 0.69f, 0.69f);

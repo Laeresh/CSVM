@@ -134,12 +134,10 @@ only `Airframe`, and nothing else in `Flight` names `Hangar`.
 - `src/Flight/Airframe/BeeperTags.cs`, the beeper's paint and the seeker's pick: the world tag list with its countdown and tail, the tagging gate, the selection rule.
 - `src/Flight/Airframe/HaltReason.cs`, why the clock is stopped; the clock advances only when no reason is set.
 - `src/Flight/Airframe/PhysicsConstants.cs`, `NomGravity`, the single `nom_gravity` value the flight model and its tests share.
-- `src/Flight/Airframe/Weather.cs`, weather.json reader → `WeatherState`: per-zone fog, sunlight, cloud whiteout, wind, precipitation.
 - `src/Flight/Airframe/FlightModel.cs`, the arcade velocity-vector flight physics: thrust/drag/gravity/lift, stall, calibrated control rates.
 - `src/Flight/Airframe/StickRamp.cs`, the keyboard stick as an accumulator: a held key ramps the axis at 2.5/s, release or reversal drops it to centre in one frame.
 - `src/Flight/Airframe/MouseFlight.cs`, the mouse as a stick: a cursor offset over the pane per axis, each deadzoned and rescaled, plus the autogyro exchange; engine-free.
 - `src/Flight/Airframe/AnalogAxes.cs`, the pad share of the flight command through the pad curve and the flight-stick share linear, plus the lever read that releases on an unplugged stick.
-- `src/Flight/Airframe/StickSplit.cs`, a device-state filter passing a seat's flight sticks alone or everything but them, so pad and stick rows of one keymap resolve apart.
 - `src/Flight/Airframe/PropAnimator.cs`, spins the collected prop/rotor discs about their local axes, throttle-scaled (idle floor 0.4); `--fly` only.
 - `src/Flight/Airframe/ExhaustSmoke.cs`, the original's code-built exhaust trail: near-black smoke whose strength charges from the commanded lever running ahead of the live one.
 - `src/Flight/Airframe/FuelTank.cs`, the flown tank: burns with the lever, and a dry one freezes the throttle lever where it stands. Engine-free.
@@ -232,7 +230,7 @@ only `Airframe`, and nothing else in `Flight` names `Hangar`.
 - `src/Flight/Camera/OrbitLock.cs`, the re-lock rule behind that key: nearest first, then outward, engine-free.
 - `src/Flight/Camera/PlaneShake.cs`, the plane-wobble oscillators (gunfire buzz, overspeed rattle, hit rocks, nitro engage) summed to roll on `ShakePivot`.
 - `src/Flight/Camera/PlayerRig.cs`, one rendered view's state: camera, SubViewport, HUD parent, visual layer, controller, own sky/deck/puffs.
-- `src/Flight/Camera/ViewerSet.cs`, the session-owned "every pane's camera" registry, bound once after the rigs are built; the tracer floor is its first consumer.
+- `src/Flight/Camera/OrbitCamera.cs`, the static inspection view's orbit camera: orbit, zoom and AABB framing over a camera it does not own.
 
 **`Flight.Hud`**, everything drawn over the pilot's view, and the cockpit.
 
@@ -299,6 +297,8 @@ only `Airframe`, and nothing else in `Flight` names `Hangar`.
 - `src/Effects/FogVolumeClutter.cs`, the authored ambient cloud field: `fogvol.zrd` clutter scattered through its `fvol*` volumes, one MultiMesh per kind.
 - `src/Effects/Precipitation.cs`, weather.json rain/snow: one camera-following MultiMesh of flakes or streaks, self-animating on the GPU.
 - `src/Effects/WorldWind.cs`, the mission's global wind (static vector plus random-walk gust) and `EffectAmbience`, the seam a `Puffer` reads it through.
+- `src/Effects/Weather.cs`, weather.json reader → `WeatherState`: per-zone fog, sunlight, cloud whiteout, wind, precipitation.
+- `src/Effects/ViewerSet.cs`, the session-owned "every pane's camera" registry, bound once after the rigs are built; the tracer floor is its first consumer.
 
 ### `src/UI/`, screens, overlays and the inspection labs
 
@@ -424,7 +424,6 @@ else in `UI`, and nothing names `Labs`.
 - `src/UI/Overlays/TargetingOverlay.cs`, the targeting overlay (F15): a line from every gunner to its acquired target, coloured by the gate holding the trigger.
 - `src/UI/Overlays/DebugKillTarget.cs`, the kill key (F17): kills player 1's selected target through its own death path; inert on a turret, which has no health key.
 - `src/UI/Overlays/DebugMarkerToggle.cs`, the all-aircraft markers key (F16): writes `TargetHud.MarkAll` on every human pane at once, the key twin of `--debug-markers`.
-- `src/UI/Overlays/OrbitCamera.cs`, the static inspection view's orbit camera: orbit, zoom and AABB framing over a camera it does not own.
 
 **`UI.Labs`**, the inspection labs; nothing else in `UI` names them.
 
@@ -720,6 +719,7 @@ filling only the models Godot's pad roster lacks.
 - `src/Sticks/StickLabels.cs`, a stick's caption prefix for the rebinding screens: its profile's short name, else `Stick` and its model (the Stick column drops the latter).
 - `src/Sticks/StickShape.cs`, the flight-stick shape test: three axes or more, axes 0 and 1 resting near centre in the roster's rest sample.
 - `src/Sticks/GenericStickDefault.cs`, the in-memory default for the one stick-shaped unprofiled model: X, Y, Rz, Z lever, two fire buttons, hat menus.
+- `src/Sticks/StickSplit.cs`, a device-state filter passing a seat's flight sticks alone or everything but them, so pad and stick rows of one keymap resolve apart.
 
 ### `src/Video/`, the MPEG-1 cinema decoder
 

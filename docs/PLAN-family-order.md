@@ -98,7 +98,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E, the Flight residue
 
-17. ☐ ViewerSet and WeatherState → Effects, StickSplit → Sticks, OrbitCamera → Flight.Camera
+17. ☑ ViewerSet and WeatherState → Effects, StickSplit → Sticks, OrbitCamera → Flight.Camera
 
 ### Wave F, docs and cleanup
 
@@ -350,7 +350,20 @@ type in UI.Campaign owns it>; its callers change from `BoardPalette.For(s)` to t
 
 # Wave E, the Flight residue
 
-## E17 ☐ ViewerSet and WeatherState → Effects, StickSplit → Sticks, OrbitCamera → Flight.Camera
+## E17 ☑ ViewerSet and WeatherState → Effects, StickSplit → Sticks, OrbitCamera → Flight.Camera
+
+**Landed.** `src/Effects/ViewerSet.cs` and `src/Effects/Weather.cs` under `CSVM.Effects`,
+`src/Sticks/StickSplit.cs` under `CSVM.Sticks`, `src/Flight/Camera/OrbitCamera.cs` under
+`CSVM.Flight.Camera`; entries on `Effects.md`, `Sticks.md` and `Flight.md`, index bullets in
+their sections. Eight allowlist pairs retired, 18 remain. Effects and UI.Boards name no Flight
+type, and Flight.Hud and Tooling name no UI.Overlays type. The Flight.Camera row holds with
+OrbitCamera in it.
+
+**Verified.** `FamilyOrderTests`, `MenuNamespaceDependencyTests` and the weather, stick-split,
+viewer-set, orbit-camera and menu-input tests 88/88; `CheckDocEntries.ps1` clean; full
+`.\RunTests.ps1`, see the commit.
+
+**Original approach (kept for reference).**
 
 **Goal.** Effects names no Flight type, UI.Boards names no Flight type, and Flight.Hud and Tooling
 name no UI.Overlays type.

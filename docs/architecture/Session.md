@@ -495,7 +495,7 @@ pushes the fog range out, which the sun's shadow distance follows. `SunlightRgb`
 ## src/Session/Objectives/ObjectZoneGate.cs
 The per-object half of the zone gate, ticked by `WeatherRig` over the session's aircraft and
 zeppelins. Each frame an object's merged world extent is judged against the cloud band's midpoint
-(`Flight/Airframe/Weather.cs`'s `ObjectZone`) and its meshes move onto that zone's `Mech3/ZoneGate.cs` layer,
+(`Effects/Weather.cs`'s `ObjectZone`) and its meshes move onto that zone's `Mech3/ZoneGate.cs` layer,
 so a camera on the far side of the band does not draw it at all, which is the original's per-object
 zone assignment plus its camera zone gate. The extent is measured once per root because an airframe
 is rigid, and the walk takes whatever hangs under it, so an effect parented to an aircraft rides

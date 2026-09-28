@@ -1,6 +1,6 @@
 using Godot;
 
-namespace CSVM.UI.Overlays;
+namespace CSVM.Flight.Camera;
 
 /// <summary>
 /// The static inspection view's orbit-camera controller: LMB-drag orbit, mouse-wheel zoom, and
