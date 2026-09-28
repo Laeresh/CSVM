@@ -2028,9 +2028,9 @@ internal static class OrdnanceSuites
         "Enhanced Graphics only: a wep_06 rocket burst registers exactly one short-lived " +
         "WorldLights burst light at the hit, which commits as an ordinary light, mirrors onto one " +
         "shadowless OmniLight3D from the same pool, decays as it burns and is gone the frame its " +
-        "fireball stops burning, for a def that authors no light of its own; the faithful " +
-        "presentation registers none at all, a def that authors its light registers none, and a " +
-        "gun hit registers none in either presentation")]
+        "fireball stops burning, with he_ground_effect's authored light replaced by it; the " +
+        "faithful presentation registers none at all and replaces nothing, and a gun hit registers " +
+        "none in either presentation")]
     internal static void BurstLightEnvelope(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
@@ -2063,12 +2063,12 @@ internal static class OrdnanceSuites
             var plays = new List<string>();
             var live = new ProjectilePool(textures, null, null)
             {
-                // The sink answers "no authored light", which is the fireball defs' case: this
-                // suite measures the envelope, and `burst-light` owns the authored-light gate.
+                // The sink registers the envelope alone: this suite measures it, and `burst-light`
+                // owns the authored ramp it replaces under Enhanced.
                 EffectSink = (name, at, orient, ringOrient, ttl) =>
                 {
                     plays.Add(name);
-                    WorldEffectsFactory.RegisterBurstLight(lights, name, at, () => burning, authorsOwnLight: false);
+                    WorldEffectsFactory.RegisterBurstLight(lights, name, at, () => burning);
                 },
             };
             pool = live;
@@ -2093,6 +2093,8 @@ internal static class OrdnanceSuites
             lights.Commit(viewers);
             ctx.Same(0, lights.CommittedPositions.Count,
                 $"ABLE-TO-FAIL CONTROL: the faithful presentation registers no burst light for the same hit");
+            ctx.Check(WorldEffectsFactory.ReplacedLightAnimNames() == null,
+                $"and replaces no authored light, so he_ground_effect keeps its own ramp");
             ctx.Same(0, omniParent.GetChildCount(), $"and spawns no omni");
             lights.Dispose();
 
@@ -2100,16 +2102,13 @@ internal static class OrdnanceSuites
             try
             {
                 lights = new WorldLights(omniParent);
-                WorldEffectsFactory.RegisterBurstLight(lights, "3040slug_gunhit", origin, () => burning, authorsOwnLight: false);
+                WorldEffectsFactory.RegisterBurstLight(lights, "3040slug_gunhit", origin, () => burning);
                 lights.Begin(Dt);
                 lights.Commit(viewers);
                 ctx.Same(0, lights.CommittedPositions.Count,
                     $"a gun hit carries no fireball and registers nothing even under Enhanced");
-                WorldEffectsFactory.RegisterBurstLight(lights, "he_ground_effect", origin, () => burning, authorsOwnLight: true);
-                lights.Begin(Dt);
-                lights.Commit(viewers);
-                ctx.Same(0, lights.CommittedPositions.Count,
-                    $"a fireball whose def authors its own light registers no second one");
+                ctx.Check(WorldEffectsFactory.ReplacedLightAnimNames()?.Contains("he_ground_effect") == true,
+                    $"under Enhanced he_ground_effect's authored light is replaced, so the burst is its only light");
 
                 ctx.Check(Drop(), $"the same rocket plays the same effect under Enhanced");
                 lights.Begin(Dt);
@@ -2289,12 +2288,12 @@ internal static class OrdnanceSuites
     // (extracted/C1/cam_anim/he_ring-he_ground_effect.json). (4,20), +(50,160), +(10,25), +(30,80),
     // +(10,35) holds (104,320) until the @Event+0.2 pair adds (30,80) and (10,20), then INACTIVE.
     [Suite("burst-light",
-        "he_ground_effect's authored he_light and he_light1 reach the world's WorldLights through " +
-        "the effects runtime on both presentations: the def's colour, the (104,320) m plateau its " +
-        "LIGHT_ANIMATION deltas accumulate to, a peak no wider than the authored 420 m, both " +
-        "committed beside the owner's own light and gone after their INACTIVE events, the effect " +
-        "sink's enhanced envelope staying out because the def authors its light; under " +
-        "Enhanced the same set mirrors onto omnis, on the faithful path onto none")]
+        "he_ground_effect's authored he_light and he_light1 run their ramp through the effects " +
+        "runtime on both presentations: the def's colour, the (104,320) m plateau its " +
+        "LIGHT_ANIMATION deltas accumulate to, a peak no wider than the authored 420 m, gone after " +
+        "their INACTIVE events. The faithful path commits both beside the owner's own light and " +
+        "spawns no omni; under Enhanced the burst envelope replaces them, one light on one omni " +
+        "no wider than 180 m")]
     internal static void BurstLight(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -2302,7 +2301,7 @@ internal static class OrdnanceSuites
             EffectStageSuiteHelper.WithEffectStage(ctx, world, "he_ground_effect",
                 new[] { "he_ring", "he_ring1", "he_trails" }, (stage, runtime, point) =>
             {
-                // The fireball defs are the ones the enhanced envelope still lights.
+                // A fireball def has no authored ramp, so under Enhanced the burst is its only light.
                 if (runtime.Handles("large_fireball"))
                     ctx.Check(!runtime.AuthorsLight("large_fireball"), $"large_fireball authors no light of its own");
                 // One pool slot, so the second play reuses the first one's copy and its light keys.
@@ -2326,13 +2325,13 @@ internal static class OrdnanceSuites
         try
         {
             runtime.ContributeLightsTo(lights);
+            runtime.LightReplacedAnimNames = WorldEffectsFactory.ReplacedLightAnimNames();
             ctx.Check(runtime.PlayEffectAt("he_ground_effect", point), $"{mode}: he_ground_effect plays");
-            // The effect sink's own burst-light call, asked the way production asks it. The def
-            // authors its light, so the envelope stays out and the counts below hold in both modes.
-            // A doubled light would commit a fourth and outlive the INACTIVE.
-            bool authors = runtime.AuthorsLight("he_ground_effect");
-            ctx.Check(authors, $"{mode}: the runtime reads he_ground_effect as authoring its own light");
-            WorldEffectsFactory.RegisterBurstLight(lights, "he_ground_effect", point, () => true, authors);
+            ctx.Check(runtime.AuthorsLight("he_ground_effect"), $"{mode}: the runtime reads he_ground_effect as authoring its own light");
+            // The effect sink's own burst-light call, asked the way production asks it. Under
+            // Enhanced the burst stands in for he_light and he_light1, which stay tracked but
+            // uncommitted; on the faithful path the call registers nothing.
+            WorldEffectsFactory.RegisterBurstLight(lights, "he_ground_effect", point, () => true);
             float clock = 0f, firstLit = -1f, lastLit = -1f, peakMax = 0f, peakOmni = 0f;
             int maxCommitted = 0;
             var color = Colors.Black;
@@ -2343,7 +2342,7 @@ internal static class OrdnanceSuites
                 runtime.Advance(Dt);
                 clock += Dt;
                 // The owner's frame: its own light, then the commit that asks the contributor in.
-                lights.Begin();
+                lights.Begin(Dt);
                 lights.Add(ownerLight, Colors.White, 2f, 10f);
                 lights.Commit(viewers);
                 maxCommitted = Mathf.Max(maxCommitted, lights.CommittedPositions.Count);
@@ -2378,16 +2377,20 @@ internal static class OrdnanceSuites
             ctx.Check(peakMax >= 320f && peakMax <= 420.01f,
                 $"{mode}: the peak stays within the authored 420 m, never clamped below the plateau ({peakMax:0.##} m)");
             ctx.Check(burstOffset < 1f, $"{mode}: a committed light sits on the burst ({burstOffset:0.###} m off)");
-            ctx.Same(3, maxCommitted, $"{mode}: the owner's light, he_light and he_light1 commit together");
-            ctx.Check(lastLit > 0.3f && lastLit < 0.6f, $"{mode}: he_light goes out on its INACTIVE event ({lastLit:0.###} s)");
-            ctx.Same(1, lights.CommittedPositions.Count, $"{mode}: once both bursts are out only the owner's light is left");
             if (enhanced)
-                ctx.Check(peakOmni >= 320f, $"{mode}: the burst mirrors onto an omni of its authored reach ({peakOmni:0.#} m)");
+                ctx.Same(2, maxCommitted, $"{mode}: the owner's light and the one burst light commit together, he_light and he_light1 replaced");
+            else
+                ctx.Same(3, maxCommitted, $"{mode}: the owner's light, he_light and he_light1 commit together");
+            ctx.Check(lastLit > 0.3f && lastLit < 0.6f, $"{mode}: he_light goes out on its INACTIVE event ({lastLit:0.###} s)");
+            ctx.Same(1, lights.CommittedPositions.Count, $"{mode}: once the burst is out only the owner's light is left");
+            if (enhanced)
+                ctx.Check(peakOmni > 0f && peakOmni <= 180.01f, $"{mode}: the omni is the burst envelope's, not the authored 420 m ramp ({peakOmni:0.#} m)");
             else
                 ctx.Same(0, omniParent.GetChildCount(), $"{mode}: and spawns no omni");
         }
         finally
         {
+            runtime.LightReplacedAnimNames = null;
             runtime.ContributeLightsTo(null);
             lights.Dispose();
             if (enhanced)

@@ -30,6 +30,10 @@ internal sealed class AnimLight
 
     public bool Active;
 
+    // Declared by a def whose light the enhanced burst light stands in for
+    // (AnimRuntime.LightReplacedAnimNames). Tracked and tweened as authored, never submitted.
+    public bool Replaced;
+
     // LIGHT_ANIMATION: signed deltas applied over run_time (see HandleLightAnimation).
     public float TweenLeft;
 

@@ -799,21 +799,24 @@ The HE burst authors a point light of its own. `he_ground_effect` runs `he_light
 `LIGHT_STATE he_light` ACTIVE at the `he_ring` node with `RANGE (4, 20)` and
 `COLOR (1.0, 0.86, 0.29)`, then walks six signed `LIGHT_ANIMATION` range deltas that grow the max
 from 20 m to 420 m over 0.41 s and switches the light INACTIVE again; the same definition's `FBFX`
-frame-buffer wash runs 1.2 s. CSVM renders that authored light on both presentations: the effects
-runtime contributes its `LIGHT_STATE` lights into the world's `WorldLights` through `AddSource`,
-and the `burst-light` suite pins the ramp. `torpedo_ground_effect` authors `torp_light` the same way.
+frame-buffer wash runs 1.2 s. On the faithful presentation CSVM renders that authored light: the
+effects runtime contributes its `LIGHT_STATE` lights into the world's `WorldLights` through
+`AddSource`, and the `burst-light` suite pins the ramp. `torpedo_ground_effect` authors
+`torp_light` the same way.
 
-⚠ **Remake-only, and Enhanced Graphics only.** Under `GraphicsMode.Enhanced` a played fireball
-effect whose definition authors no light of its own (`large_fireball`, `small_fireball`)
-registers a short-lived light with the world's `WorldLights`
+⚠ **Remake-only, and Enhanced Graphics only.** Under `GraphicsMode.Enhanced` every played burst
+effect (`he_ground_effect`, `torpedo_ground_effect`, `large_fireball`, `small_fireball`) registers
+a short-lived light with the world's `WorldLights`
 ([`../architecture/Mech3.md`](../architecture/Mech3.md)), so a detonation lights the terrain,
 buildings and aircraft around it. It borrows the authored `he_light` colour and takes the ignition
 end of the authored range; its peak, decay and flicker are a remake envelope with no counterpart in
-the data, and it ends with the fireball it came from rather than on a clock. A definition that
-authors a light (`AnimRuntime.AuthorsLight`) registers none, since its own light already stands at
-that point. CSVM: `EffectCatalogue.BurstLightAnimNames` names which effects throw one,
+the data, and it ends with the fireball it came from rather than on a clock. It replaces the
+authored ramp of the def it comes from: the runtime still plays and tweens `he_light` and
+`torp_light` but does not submit them (`AnimRuntime.LightReplacedAnimNames`), because the authored
+ramp's faint 320 m to 420 m wash beside the bright short envelope read as no burst light at all.
+CSVM: `EffectCatalogue.BurstLightAnimNames` names which effects throw one,
 `WorldEffectsFactory.RegisterBurstLight` decides, `WorldLights.AddBurst` holds the envelope, and
-the `burst-light-envelope` suite pins both presentations. The heat shimmer over the same burst
+the `burst-light-envelope` and `burst-light` suites pin both presentations. The heat shimmer over the same burst
 (`Effects/HeatShimmer.cs`) is that same remake-only, Enhanced-only layer: it reads the whole of the
 same effect names and the same liveness, so every fireball refracts the air over it, and the
 faithful presentation carries no shimmer.

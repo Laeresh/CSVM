@@ -291,6 +291,7 @@ public sealed class WorldEffectsFactory
         // A burst's authored LIGHT_STATE (he_light and its kin) submits into the world's own set,
         // so it rides the world's fade, budget and omni mirror on both presentations.
         effects.ContributeLightsTo(worldRuntime.Lights);
+        effects.LightReplacedAnimNames = ReplacedLightAnimNames();
         if (worldRuntime.ExternalEffect == null)
         {
             worldRuntime.ExternalEffect = (name, pt, node, follow) =>
@@ -307,7 +308,7 @@ public sealed class WorldEffectsFactory
                 // there is one place a burst light or a shimmer is decided rather than two that
                 // can disagree. Both read the same liveness, the fireball's own ANIM_STATE.
                 Func<bool> stillBurning = () => effects.AnimStateOf(name) == AnimStateRunning;
-                RegisterBurstLight(worldRuntime.Lights, name, pt, stillBurning, effects.AuthorsLight(name));
+                RegisterBurstLight(worldRuntime.Lights, name, pt, stillBurning);
                 RegisterHeatShimmer(name, pt, stillBurning);
             };
             // The one callee a burst may re-base, and only when the pool hands a basis in, which is
@@ -347,16 +348,23 @@ public sealed class WorldEffectsFactory
         new CrashRigBuild(this, controller, planeBuilder, planeName, gamez, worldScene, textures,
             crashProgram, verbose, worldSounds, planesGamez);
 
+    /// <summary>The defs whose authored lights the burst light stands in for: every burst def
+    /// under Enhanced Graphics. An HE detonation is then one light, not a faint wide ramp beside a
+    /// bright short one. Null on the faithful path, which draws every authored light.</summary>
+    internal static HashSet<string>? ReplacedLightAnimNames() => GraphicsMode.Enhanced
+        ? new HashSet<string>(EffectCatalogue.BurstLightAnimNames, StringComparer.OrdinalIgnoreCase)
+        : null;
+
     /// <summary>The effect sink's burst-light rule, the one place it is decided. Under Enhanced
     /// Graphics a played fireball effect (<see cref="EffectCatalogue.IsBurstLight"/>) registers a
     /// short-lived light with the world's <see cref="WorldLights"/>, gone when
     /// <paramref name="stillBurning"/> goes false. The faithful presentation and a view with no
-    /// lights register nothing. ⚠ Nor does a def that authors its own light
-    /// (<paramref name="authorsOwnLight"/>), whose light is already in the set.</summary>
+    /// lights register nothing. A def that authors its own light still takes one: under Enhanced
+    /// its authored light is not drawn (<see cref="AnimRuntime.LightReplacedAnimNames"/>).</summary>
     internal static void RegisterBurstLight(WorldLights? lights, string animName, Vector3 at,
-        Func<bool> stillBurning, bool authorsOwnLight)
+        Func<bool> stillBurning)
     {
-        if (lights == null || authorsOwnLight || !GraphicsMode.Enhanced || !EffectCatalogue.IsBurstLight(animName))
+        if (lights == null || !GraphicsMode.Enhanced || !EffectCatalogue.IsBurstLight(animName))
             return;
         lights.AddBurst(at, EffectCatalogue.BurstLightColor, stillBurning);
     }

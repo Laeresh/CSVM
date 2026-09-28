@@ -663,8 +663,7 @@ the live ones on the sim step `LightChannel.Tick` already has, submits them into
 the frame's `LIGHT_STATE` lights and drops each one the frame its fireball stops burning. They ride
 the existing distance fade, `MaxActive` rank and `OmniLight3D` pool with nothing new added to any of
 the three. The decision point is `WorldEffectsFactory.RegisterBurstLight` at the effect sink, which
-asks `EffectCatalogue.IsBurstLight` (the four fireball-throwing impact effects), whether the def
-authors its own light (see the decision below) and `GraphicsMode`,
+asks `EffectCatalogue.IsBurstLight` (the four fireball-throwing impact effects) and `GraphicsMode`,
 so the faithful path registers nothing and asks for nothing. Liveness is the effect's own
 `ANIM_STATE`, not a timer. The envelope is one TUNE block next to `OmniAttenuationTune`: a 3.0
 ignition gain, a 0.29 s e-fold that is spent by the 1.2 s the authored frame-buffer wash runs, a
@@ -721,13 +720,9 @@ dark and the Enhanced path carries that ramp as an omni.
 authored `he_light` and `he_light1` plus this item's envelope. `torpedo_ground_effect` authors
 `torp_light` the same way; `large_fireball` and `small_fireball` author none. The smallest change
 that stops the doubling is a gate at the one decision point: `RegisterBurstLight` takes
-`authorsOwnLight`, which the effect sink answers from `AnimRuntime.AuthorsLight` (any `LightState`
-or `LightAnimation` event in the def), so the envelope now lights only the two fireball defs and
-the authored ramp is the HE and torpedo bursts' light on both presentations. The envelope's own
-constants are unchanged. The branch's suite is `burst-light-envelope` (the envelope, plus a def
-that authors its light registering none); main's `burst-light` calls the sink's rule with the
-runtime's own answer and still commits exactly the owner's light, `he_light` and `he_light1`, then
-the owner's alone. Measured on the hidden desktop at `--fly --chapter=C1 --pos=-6104,300,-4420
+`authorsOwnLight`, which the effect sink answered from `AnimRuntime.AuthorsLight` (any `LightState`
+or `LightAnimation` event in the def), so the envelope lit only the two fireball defs and the
+authored ramp was the HE and torpedo bursts' light on both presentations. Measured on the hidden desktop at `--fly --chapter=C1 --pos=-6104,300,-4420
 --direction=0,-0.33,0.94 --fire-rockets --hold=0,0,0,0.3 --frames=90 --shots=12 --mute
 --graphics=enhanced` (two `he_ground_effect` impacts before frame 90): ungated against gated,
 about 9,400 to 10,000 pixels differ per frame, mean |d| 1.2 to 1.3 and at most 9 levels, 89 % of
@@ -735,8 +730,17 @@ them brighter ungated, centred on the bursts, and mean luminance 0.004 to 0.005 
 repeat of the gated run differs from it in zero pixels. C1's airfield holds the 16-light budget at
 16 of 47 live throughout, so any slot the envelope took came out of a beacon's (89 % is frame 0's
 share).
-Whether the HE burst should read brighter than its authored ramp under Enhanced is the user's
-call, which raising the authored light's omni energy would answer rather than a second light.
+
+**Decision at the controls: the envelope replaces the authored ramp under Enhanced.** With the gate
+in, a rocket burst under Enhanced showed no visible lighting; the authored ramp's wide, faint wash
+does not read as a flash, and only the faithful path looked lit. The gate is gone: every burst def
+registers the envelope under Enhanced, and `WorldEffectsFactory` hands the effects runtime
+`LightReplacedAnimNames` (the same four names), so `LightChannel` still plays and tweens `he_light`,
+`he_light1` and `torp_light` but never submits them. One light per burst again, on the envelope's
+constants. The faithful path is unchanged: nothing replaced, the authored ramp committed. The
+`burst-light` suite pins both (faithful: owner, `he_light`, `he_light1`; Enhanced: owner plus one
+burst no wider than 180 m, the authored ramp still tracked in the snapshot). Owed at the controls:
+the look against the faithful path's authored ramp.
 
 ## B12 ☑ The additive fireball frames bloom
 

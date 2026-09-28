@@ -113,15 +113,15 @@ public static class EffectCatalogue
 
     // The impact effects whose fireball lights what stands around it: the HE ground burst, the
     // torpedo's, and the two heaviest fireball defs. ⚠ Enhanced Graphics only,
-    // and a remake-only rule. Effects.HeatShimmer takes the whole set, and WorldLights.AddBurst
-    // the part with no authored light; the faithful path registers neither. The gun hits and the
+    // and a remake-only rule. Effects.HeatShimmer and WorldLights.AddBurst take the whole set.
+    // The burst light replaces the authored light a def declares (AnimRuntime.LightReplacedAnimNames);
+    // the faithful path registers neither and draws the authored light. The gun hits and the
     // fireless bursts carry no fireball, and `ap_ground_effect`/`flak_effect` throw a spark.
     public static readonly string[] BurstLightAnimNames =
         { "he_ground_effect", "torpedo_ground_effect", "large_fireball", "small_fireball" };
 
     // The burst light's colour, the authored `he_light` LIGHT_STATE colour of an HE detonation
-    // (docs/org/ordnanceTypes.md, "The burst light in Enhanced Graphics"). Only a def with no
-    // light of its own takes it (AnimRuntime.AuthorsLight), which leaves the two fireball defs.
+    // (docs/org/ordnanceTypes.md, "The burst light in Enhanced Graphics").
     public static readonly Color BurstLightColor = new(1.0f, 0.86f, 0.29f);
 
     // The bailed pilot under his canopy. He is not a piece of the wreck, he is a man stepping out

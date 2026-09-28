@@ -141,6 +141,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// this set is authored against a fixed axis, and re-basing it moves choreography.</summary>
     public HashSet<string>? OrientedCallAnimNames;
 
+    /// <summary>Defs whose authored lights are tracked but never submitted, because the enhanced
+    /// burst light stands in for them, keyed by <c>AnimName ?? Name</c>. Set by the world-effects
+    /// rig under Enhanced Graphics alone; null on the faithful path, which draws every light.</summary>
+    public HashSet<string>? LightReplacedAnimNames;
+
     /// <summary>Callers whose unresolvable CALL_ANIMATION target is worth one warning each, keyed by
     /// <c>AnimName ?? Name</c>, and the airframe that warning names. Injected like
     /// <see cref="LevelPlacedTemplateNames"/> above: the per-plane crash rig sets both to the damage
@@ -868,7 +873,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         var viewers = LightViewerPositions?.Invoke();
         return viewers != null && viewers.Count > 0 ? viewers : new[] { PlayerPos() };
-    }, () => DebugMotions, () => LightsCommittedElsewhere);
+    }, () => DebugMotions, () => LightsCommittedElsewhere,
+        def => LightReplacedAnimNames?.Contains(def.AnimName ?? def.Name) == true);
 
     /// <summary>This runtime's object-pose/visual family: the `OBJECT_*` pose, opacity and motion
     /// events, and the motion-builder role. It takes this runtime itself as one dependency, since
