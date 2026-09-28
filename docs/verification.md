@@ -896,6 +896,11 @@ member, and it does not go here.
   blended surface whose alpha is below one paints over a card's soft edge without erasing it, and an
   equality count reads that as zero.** A C1 ground strip sorted after a tree card read 0 erased
   pixels and 1125 reordered ones in the same pane.
+- **INSTR-96**, **Count leaked nodes as orphans left AFTER the harness frees what was queued, and
+  list them through `ClassDB.ClassCallStatic("Node", "get_orphan_node_ids")`: the C# binding
+  `Node.GetOrphanNodeIds` types the 64-bit ids as `int`, so none of them resolves.** Before the
+  flush the queued frees swamped a 26-node session leak with up to +7,219 in one menu suite; after
+  it the catalog leaves 0 to 6 per suite, and a suite over `TestHarness.OrphanLeakTolerance` fails.
 
 ## SRC, sources and documents
 

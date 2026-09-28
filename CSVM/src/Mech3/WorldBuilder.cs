@@ -413,6 +413,11 @@ public sealed class WorldBuilder
             DisableShadows(deck);
             Log.Info("world", $"cloud deck: {_deckNodes.Count} tiles at y={_deckAltitude} ({_deckCoverage:P0} of the map)");
         }
+        else
+        {
+            // Never parented, so nothing else would free it.
+            deck.Free();
+        }
 
         // A post-walk pass because the clusters are nested too deep for a walk root to recognise.
         // Logged per chapter so a real "none" cannot read like a census that stopped working.

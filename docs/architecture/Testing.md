@@ -22,8 +22,8 @@ chapter-world builder over `WorldSession`), the PASS/FAIL/SKIP table, `test-repo
 `TestContext.ScratchDir`, and the process exit code. `Select` is the pure selector over the flag's
 value; `SuiteShards` handles the one term that divides rather than selects. The world cache and its
 eviction, the mission-override and private-world forms, the shared `DecodeCache`, the per-build
-`StartupProfile` and the engine-error allowlist each carry their own rule at their member. Read
-`SuiteCatalog.cs` for registration and `PhaseAttribution.cs` for a build's time in the report.
+`StartupProfile`, the between-suite queued-free flush and the engine-error allowlist carry their
+own rules at their members. Read `SuiteCatalog.cs` for registration, `PhaseAttribution.cs` for time.
 
 ## src/Testing/SuiteShards.cs
 Godot-free and pure (`CSVM.Tests` proves it without the engine): the `shard:<index>/<count>` term
