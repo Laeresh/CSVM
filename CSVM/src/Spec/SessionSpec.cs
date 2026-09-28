@@ -9,7 +9,7 @@ using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM;
+namespace CSVM.Spec;
 
 /// <summary>The session shapes, closed. Every launch is exactly one of these; <c>Stunt</c>,
 /// <c>Versus</c>, <c>Players</c>, <c>EmptyStage</c>, <c>NodeName</c> and <c>DamageLab</c> are

@@ -7,6 +7,7 @@ using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Launch;
 using CSVM.Session.Objectives;
+using CSVM.Spec;
 using Godot;
 
 namespace CSVM.Testing;

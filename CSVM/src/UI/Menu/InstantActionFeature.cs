@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
+using CSVM.Spec;
 using CSVM.Utils;
 
 namespace CSVM.UI.Menu;

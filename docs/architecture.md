@@ -815,10 +815,13 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/NetSession.cs`, a session's own end of the wire: typed sends under each type's declared class, dispatch to per-type handlers, the join a host answers with and a guest checks, the host's relay between guests, and the counters a suite reads.
 - `src/Net/NetInstruments.cs`, one machine's desync counters over its own traffic: sequence gaps as drops, stale and late arrivals, and reliable events out of their causal order.
 
+### `src/Spec/`, the launch spec
+
+- `src/Spec/SessionSpec.cs`, the launch args as one immutable, engine-free value: `Parse` parses **and** resolves, plus the pure arg parsers the tests reach.
+
 ### Session root and tests
 
 - `src/Pads.cs`, single owner of "which gamepads exist": the phantom-device policy, the launch-time roster split, the focus gate and `--no-pads`.
 - `src/SessionPaths.cs`, resolves the extracted-data paths (per-chapter gamez/texture/zrdr, per-mission zrdr) under a data root in `ZbdTree`'s case, unpacked folder or `.zip`.
-- `src/SessionSpec.cs`, the launch args as one immutable, engine-free value: `Parse` parses **and** resolves, plus the pure arg parsers the tests reach.
 
 - `CSVM.Tests/`, the xUnit project (`dotnet test`): engine-free reader units on hand-authored fixtures + `extracted/` golden counts, skipped when absent; plus eight former in-engine suites moved here as `Probes.*`/plain-static/`StuntMission`/`GaugeCluster` facts.

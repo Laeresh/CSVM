@@ -9,6 +9,7 @@ using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.Session.InstantAction;
 using CSVM.Session.Roster;
+using CSVM.Spec;
 using Godot;
 
 namespace CSVM.Testing;

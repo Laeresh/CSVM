@@ -10,6 +10,7 @@ using CSVM.Net;
 using CSVM.Session;
 using CSVM.Session.Launch;
 using CSVM.Session.Roster;
+using CSVM.Spec;
 using CSVM.Tooling;
 using CSVM.Utils;
 using Godot;

@@ -38,7 +38,7 @@ trimesh per surface class and soil and by sidedness, both halves on one body reg
 `WorldCollision`; `MissionStructureTeamMeta` is the channel `DestructibleRegistry` reads a pool's
 team through. A textured surface takes `csky_world_light` on its `lighting` flag alone, and every
 mip-mapped arm fetches through `SampleAlbedo`, the one `csky_sample_albedo` carrying the chapter's
-LOD bias, reused by `Clutter` and `MeshLab`. `AlphaOf` reads back the transparency verdict a built material's shader was generated for, the registry `HiddenAlpha` (`--hide-alpha`) drops a class by, dropping the surface rather than the instance so the classes isolate from each other. A blended world surface lying within `GroundLayerMinUp` of level (a terrain strip, a road, a shadow decal; never the caller's blend list, the cloud deck and sky) takes `GroundLayerRenderPriority` and draws ahead of every other transparent draw, so a clutter card standing on it composites over it: the card kinds are chapter-wide MultiMeshes whose one sort key is the forest's centre, so the depth sort put a nearer strip over the card's soft edge. A `sunVertexLit` builder (the in-flight aircraft) draws original mode's shaded arm unshaded, with the original's per-vertex sun term, whose ambient half is the Danger Zone photograph's fill at an armed `PhotoEyeParam` eye. Arms and selection: [Root.md](Root.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
+LOD bias, reused by `Clutter` and `MeshLab`. `AlphaOf` reads back the transparency verdict a built material's shader was generated for, the registry `HiddenAlpha` (`--hide-alpha`) drops a class by, dropping the surface rather than the instance so the classes isolate from each other. A blended world surface lying within `GroundLayerMinUp` of level (a terrain strip, a road, a shadow decal; never the caller's blend list, the cloud deck and sky) takes `GroundLayerRenderPriority` and draws ahead of every other transparent draw, so a clutter card standing on it composites over it: the card kinds are chapter-wide MultiMeshes whose one sort key is the forest's centre, so the depth sort put a nearer strip over the card's soft edge. A `sunVertexLit` builder (the in-flight aircraft) draws original mode's shaded arm unshaded, with the original's per-vertex sun term, whose ambient half is the Danger Zone photograph's fill at an armed `PhotoEyeParam` eye. Arms and selection: [Spec.md](Spec.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
 
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame
@@ -462,7 +462,7 @@ fade and `MaxActive` significance rank answer to the NEAREST viewer handed in
 (`AnimRuntime.LightViewerPositions`, from `GameSession`'s `ViewerSet`). The world runtime owns the
 frame (`Begin`/`Add`/`Commit`); the world-effects runtime contributes through `AddSource`, so a
 burst ranks against the beacons in one set. With a parent `Node3D` in enhanced mode, `Commit`
-mirrors the committed set onto pooled `OmniLight3D` nodes ([Root.md](Root.md)).
+mirrors the committed set onto pooled `OmniLight3D` nodes ([Spec.md](Spec.md)).
 
 ## src/Mech3/MissionSetup.cs
 Parses + applies the per-mission `.gw` interp script that decides which world entities a mission

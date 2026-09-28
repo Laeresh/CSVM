@@ -16,6 +16,7 @@ using CSVM.Session.InstantAction;
 using CSVM.Session.Objectives;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.Tooling;
 using CSVM.UI.Boards;
 using CSVM.UI.Overlays;

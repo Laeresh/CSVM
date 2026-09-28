@@ -11,6 +11,7 @@ using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;

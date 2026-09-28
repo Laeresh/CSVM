@@ -1,6 +1,6 @@
-# Root
+# Spec
 
-The three files at the root of `CSVM/src` (`SessionSpec.cs`, `SessionPaths.cs`, `Pads.cs`), plus the enhanced graphics mode, a rendering divergence that spans every namespace.
+The `CSVM.Spec` family (`src/Spec/`, the launch args as one value), the two files still at the root of `CSVM/src` (`SessionPaths.cs`, `Pads.cs`), and the enhanced graphics mode, a rendering divergence that spans every namespace.
 
 One `## src/...` entry per module, body at most 8 lines, 12 for the highest-traffic modules.
 
@@ -70,7 +70,7 @@ and the `--zip-assets` switch that inverts it. A chapter or mission in either ca
 `Extraction/ZbdTree.cs` to the case the extraction wrote. The `rtextureN` tier decode is on `docs/tooling.md`;
 the `--gamez=`/`--textures=` override policy stays in `GameSession`, not here.
 
-## src/SessionSpec.cs
+## src/Spec/SessionSpec.cs
 Everything the command line settles about a session as one immutable, engine-free record:
 `Parse(args)` parses **and** resolves, so a consumer reads an answer instead of re-deriving one, and
 the pure arg parsers (`ParseVec3`, `ParsePlanes`, `ParseHold`, …) are public so they are testable.

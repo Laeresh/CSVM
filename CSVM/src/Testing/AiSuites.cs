@@ -12,6 +12,7 @@ using CSVM.Session.Campaign;
 using CSVM.Session.InstantAction;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.Tooling;
 using CSVM.Utils;
 using Godot;

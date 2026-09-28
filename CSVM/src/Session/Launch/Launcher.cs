@@ -9,6 +9,7 @@ using CSVM.Mech3.Anim;
 using CSVM.Session.Campaign;
 using CSVM.Session.Objectives;
 using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;

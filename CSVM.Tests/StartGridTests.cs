@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight.Modes;
 using CSVM.Session.Roster;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 using Xunit;

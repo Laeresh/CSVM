@@ -8,6 +8,7 @@ using CSVM.Session;
 using CSVM.Session.Launch;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 

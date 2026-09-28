@@ -14,6 +14,7 @@ using CSVM.Mech3.Anim;
 using CSVM.Session.Campaign;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.Tooling;
 using CSVM.Utils;
 using Godot;

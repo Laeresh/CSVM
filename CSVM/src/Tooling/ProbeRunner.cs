@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 

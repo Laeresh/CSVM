@@ -9,6 +9,7 @@ using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 

@@ -5,6 +5,7 @@ using CSVM.Flight;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
 using CSVM.Net;
+using CSVM.Spec;
 using CSVM.UI;
 using CSVM.UI.Boards;
 using CSVM.UI.Hangar;

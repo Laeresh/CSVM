@@ -9,6 +9,7 @@ using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.UI.Screens;
 using Godot;
 

@@ -4,6 +4,7 @@ using System.IO;
 using CSVM.Flight.Hangar;
 using CSVM.Session.Campaign;
 using CSVM.Session.Launch;
+using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
 using CSVM.UI.Menu;

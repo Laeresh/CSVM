@@ -186,7 +186,8 @@ GODOT --path CSVM res://scenes/Main.tscn -- --plane=player_bhawk
 - `src/Sticks/`, flight sticks Godot does not enumerate, read through the pinned `SDL2.dll`: the gap-filling stick roster, its hot-plug and input gate, the per-frame pump, the per-model profile files and the generic single-stick default.
 - `src/Session/`, six sub-namespaces, one folder each: `Launch/` (`Launcher.cs`, the Main.tscn root, and `GameSession.cs`, the per-launch session node it instantiates), `InstantAction/`, `Campaign/` (the campaign director and the profile), `Roster/` (the aircraft aggregate, livery and spawn resolution, the AI generators), `World/` (the simulation step, weather, effects, zeppelins, turrets, cutscenes) and `Objectives/` (the mission script and its rules).
 - `src/Net/`, the network seam: the transport interface a session sends byte payloads through, the in-process loopback carrier with its injected latency, jitter and loss model, the ENet carrier a match ships over, and the seat, handshake, clock and remote-pose records around them. Only the carriers name an engine type.
-- `src/` root, `SessionSpec.cs`, `SessionPaths.cs`, `Pads.cs`.
+- `src/Spec/`, the launch args as one immutable value (`SessionSpec.cs`) and the enums beside it.
+- `src/` root, `SessionPaths.cs`, `Pads.cs`.
 - `CSVM.Tests/`, the xUnit project: engine-free reader units. Anything reaching `GD.*` or a live `Node` belongs in `src/Testing/` instead.
 
 Highest-traffic modules, so the common cases skip the index: `GameSession.cs` (session build), `FlightController.cs` (the flying node), `FlightModel.cs` (physics), `SceneBuilder.cs` (every mesh), `WorldBuilder.cs` (chapter worlds), `AnimRuntime.cs` (world animation), `Projectile.cs` (weapon fire), `Suites.cs` (golden counts).

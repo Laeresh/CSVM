@@ -7,12 +7,12 @@ using Godot;
 namespace CSVM.Flight.Airframe;
 
 /// <summary>
-/// The per-frame ground-shadow pass: one modulating quad under every live aircraft, placed,
-/// sized, coloured and dropped by <see cref="GroundShadowLaw"/>, with the aircraft's own
-/// silhouette rasterised into its texture by <see cref="GroundShadowSilhouette"/>. Original
-/// graphics mode only, enhanced mode casting real shadow maps instead (docs/architecture/Root.md).
-/// The player's own shape belongs to the pane whose pilot is flying that aeroplane, so an
-/// aeroplane a human flies carries two quads in a multi-pane session, told apart by visual layer.
+/// The per-frame ground-shadow pass: one modulating quad under every live aircraft.
+/// <see cref="GroundShadowLaw"/> places, sizes, colours and drops it, and
+/// <see cref="GroundShadowSilhouette"/> rasterises the aircraft's silhouette into its texture.
+/// Original graphics mode only; enhanced mode casts real shadow maps (docs/architecture/Spec.md).
+/// The player's own shape belongs to the pane whose pilot flies that aeroplane. So in a
+/// multi-pane session a human's aeroplane carries two quads, told apart by visual layer.
 /// ⚠ The quad is flat where the original modulates the ground's own polygons, so the shadow
 /// rides over a steep enough slope. Decode: docs/org/shadows.md.
 /// </summary>

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Threading;
 using CSVM;
 using CSVM.Mech3;
+using CSVM.Spec;
 using Godot;
 using Xunit;
 

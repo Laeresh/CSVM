@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CSVM.Flight.Modes;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 

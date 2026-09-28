@@ -12,6 +12,7 @@ using CSVM.Session.Campaign;
 using CSVM.Session.Launch;
 using CSVM.Session.Objectives;
 using CSVM.Session.Roster;
+using CSVM.Spec;
 using CSVM.UI.Menu;
 using CSVM.Utils;
 using Godot;

@@ -4,6 +4,7 @@ using System.Linq;
 using CSVM;
 using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
+using CSVM.Spec;
 using CSVM.UI.Menu;
 using Xunit;
 

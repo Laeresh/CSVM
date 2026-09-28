@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CSVM;
 using CSVM.Flight.Hangar;
+using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.UI.Hangar;
 using CSVM.UI.Menu;

@@ -11,6 +11,7 @@ using CSVM.Net;
 using CSVM.Session;
 using CSVM.Session.Campaign;
 using CSVM.Session.InstantAction;
+using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
 using CSVM.UI.Hangar;

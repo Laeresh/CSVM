@@ -5,6 +5,7 @@ using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Mech3;
 using CSVM.Session.Objectives;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 

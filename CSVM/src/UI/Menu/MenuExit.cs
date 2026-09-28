@@ -3,6 +3,7 @@ using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Net;
+using CSVM.Spec;
 
 namespace CSVM.UI.Menu;
 

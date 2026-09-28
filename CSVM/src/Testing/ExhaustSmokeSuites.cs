@@ -6,6 +6,7 @@ using CSVM.Flight.Camera;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Roster;
+using CSVM.Spec;
 using Godot;
 
 namespace CSVM.Testing;

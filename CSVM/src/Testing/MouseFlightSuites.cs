@@ -3,6 +3,7 @@ using CSVM.Bindings;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Session.Roster;
+using CSVM.Spec;
 using CSVM.UI.Screens;
 using Godot;
 

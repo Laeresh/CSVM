@@ -7,6 +7,7 @@ using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
 using CSVM.Mech3;
 using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.Tooling;
 using CSVM.UI.Boards;
 using CSVM.UI.Labs;

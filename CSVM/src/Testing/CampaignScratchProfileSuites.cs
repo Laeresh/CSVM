@@ -6,6 +6,7 @@ using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.Session.Objectives;
+using CSVM.Spec;
 using CSVM.UI.Hangar;
 using Godot;
 

@@ -8,6 +8,7 @@ using CSVM.Flight.Weapons;
 using CSVM.Net;
 using CSVM.Session;
 using CSVM.Session.Launch;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 

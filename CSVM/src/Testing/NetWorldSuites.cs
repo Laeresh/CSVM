@@ -9,6 +9,7 @@ using CSVM.Net;
 using CSVM.Session;
 using CSVM.Session.Launch;
 using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.Tooling;
 using CSVM.Utils;
 using Godot;

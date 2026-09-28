@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Net;
+using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.UI.Screens;
 

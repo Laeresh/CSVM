@@ -83,7 +83,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B, empty the root namespace
 
-11. ☐ `CSVM.Spec`: SessionSpec, MenuMode and their records
+11. ☑ `CSVM.Spec`: SessionSpec, MenuMode and their records
 12. ☐ SessionPaths → Extraction, Pads → Bindings
 
 ### Wave C, promote Launch
@@ -169,7 +169,18 @@ not the authority for the list.
 
 # Wave B, empty the root namespace
 
-## B11 ☐ `CSVM.Spec`: SessionSpec, MenuMode and their records
+## B11 ☑ `CSVM.Spec`: SessionSpec, MenuMode and their records
+
+**Landed.** `CSVM/src/Spec/SessionSpec.cs` under `CSVM.Spec`, carrying every enum and record
+declared beside it; `using CSVM.Spec;` added where the name no longer resolved from a parent
+namespace. `Root.md` is `Spec.md` (its enhanced-graphics section stays with `EnhancedPasses`), the
+index has `### src/Spec/`, and the three links to `Root.md` point at `Spec.md`. The allowlist
+entries naming SessionSpec follow its new full name; the table gains a `CSVM.Spec` row.
+
+**Verified.** `FamilyOrderTests` 3/3; `CheckDocEntries.ps1` clean; full `.\RunTests.ps1`, see the
+commit.
+
+**Original approach (kept for reference).**
 
 **Goal.** SessionSpec.cs and MenuMode live in `src/Spec/` under `CSVM.Spec`; no type other than
 Pads and SessionPaths is left in the root namespace.
@@ -187,8 +198,8 @@ SessionProbe, AiPlaneEntry, ZepStageSpec and `SessionSpec.Note`, per the class-m
 **Verify.** `FamilyOrderTests` passes with a shorter allowlist; `CheckDocEntries.ps1`; full
 `.\RunTests.ps1`.
 
-**⚠ Traps.** <TODO: check CLI/docs references to `src/SessionSpec.cs` by path outside
-`docs/architecture*`>.
+**⚠ Traps.** Path references outside `docs/architecture*` were `PROJECT_CONTEXT.md`'s namespace
+map and one comment in `GroundShadowPass.cs`; `Root.md` was linked from `Utils.md` and `Mech3.md`.
 
 ## B12 ☐ SessionPaths → Extraction, Pads → Bindings
 

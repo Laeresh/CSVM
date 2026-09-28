@@ -2,6 +2,7 @@ using System.Linq;
 using CSVM;
 using CSVM.Effects;
 using CSVM.Mech3;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 using Xunit;

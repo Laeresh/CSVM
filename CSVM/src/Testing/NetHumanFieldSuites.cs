@@ -9,6 +9,7 @@ using CSVM.Session;
 using CSVM.Session.Campaign;
 using CSVM.Session.Launch;
 using CSVM.Session.Objectives;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 

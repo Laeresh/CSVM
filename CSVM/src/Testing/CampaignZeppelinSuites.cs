@@ -4,6 +4,7 @@ using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.Session.Launch;
 using CSVM.Session.World;
+using CSVM.Spec;
 using Godot;
 
 namespace CSVM.Testing;

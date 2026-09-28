@@ -253,7 +253,7 @@ scene builder reads, so the sources can be layered without touching a reader. Th
 which beats the `graphics.mode` config key, which beats the default; an unknown word at any layer
 warns and falls back. `--det` drops both machine-state layers and keeps only an explicit
 `--graphics=`, which is how a golden or a deterministic capture pins the mode on purpose. The mode
-itself is written up as a divergence in `docs/architecture/Root.md`.
+itself is written up as a divergence in `docs/architecture/Spec.md`.
 
 ## src/Utils/VSyncSetting.cs
 The frame pacing, one setting carrying both whether the loop waits for the screen and the cap it

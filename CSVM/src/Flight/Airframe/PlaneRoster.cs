@@ -1,4 +1,5 @@
 using System;
+using CSVM.Spec;
 
 namespace CSVM.Flight.Airframe;
 
