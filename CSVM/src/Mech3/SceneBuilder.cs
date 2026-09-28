@@ -240,6 +240,12 @@ public sealed class SceneBuilder
     /// ⚠ Set before building, like <see cref="DepthBiasScale"/>: it keys the shader.</summary>
     internal bool GammaBlendAlpha;
 
+    /// <summary>Keep this builder's cutouts on the plain scissor under Enhanced, without the
+    /// <see cref="CoverageMode"/> arm. ⚠ Set for a subtree drawn into a transparent viewport (the
+    /// cockpit pass). Coverage writes the resolved sample fraction into the target's alpha, so the
+    /// composite shows the world through a gauge face. Set before building: it keys the shader.</summary>
+    internal bool NoAlphaCoverage;
+
     /// <summary>The world's conflict ranks (<see cref="ConflictRank"/>), set by the caller before
     /// building. Null, every aircraft, every <c>--node=</c> subtree, any build with no conflict
     /// graph, leaves the cross-node tie-break on the flat node index, which is what those builds
@@ -1714,12 +1720,11 @@ void fragment() {
         return mat;
     }
 
-    // `lit` / `fogged` are the model's own authored render flags. They select shader VARIANTS
-    // rather than driving a uniform on purpose: a lit, fogged surface then emits byte-for-byte
-    // the shader text it always did, so honouring the flags cannot perturb the overwhelming
-    // majority of the world through float rounding in a mix().
-    // Key bits: 1-64 the flags above, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade,
-    // 4096 DebugClutterFlag, 8192 enhanced, 16384 water, 32768 sun, 65536 gamma blend; free 131072.
+    // `lit` / `fogged` are authored render flags that select shader VARIANTS, not a uniform. A lit,
+    // fogged surface then emits the shader text it always did, free of a mix()'s float rounding.
+    // Key bits: 1-64 the flags, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade.
+    // Then 4096 DebugClutterFlag, 8192 enhanced, 16384 water, 32768 sun, 65536 gamma blend.
+    // Then 131072 NoAlphaCoverage; free 262144.
     private Shader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
         bool clutterFade = false, bool water = false)
@@ -1738,11 +1743,14 @@ void fragment() {
         // Only a blending surface has an alpha to correct; a scissor compares against a fixed 0.5
         // and moving its alpha would move the cutout silhouette instead of the composite.
         bool gammaBlend = blend && GammaBlendAlpha;
+        // The coverage arm samples albedo_tex for its edge derivative, so an untextured cutout keeps
+        // the plain scissor. The archive cannot produce one, since a verdict needs a texture.
+        bool coverage = scissor && textured && GraphicsMode.Enhanced && !NoAlphaCoverage;
         int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0)
             | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256)
             | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (DebugClutterFlag ? 4096 : 0)
             | (GraphicsMode.Enhanced ? 8192 : 0) | (waterLit ? 16384 : 0) | (sunLit ? 32768 : 0)
-            | (gammaBlend ? 65536 : 0);
+            | (gammaBlend ? 65536 : 0) | (NoAlphaCoverage ? 131072 : 0);
         if (BiasShaders.TryGetValue(key, out var cached))
             return cached;
 
@@ -1755,9 +1763,7 @@ void fragment() {
             : "render_mode skip_vertex_transform, cull_front");
         if (fullbright || sunLit)
             sb.Append(", unshaded");
-        // The coverage arm samples albedo_tex for its edge derivative, so an untextured cutout
-        // (which the archive cannot produce, a verdict needs a texture) keeps the plain scissor.
-        if (scissor && textured && GraphicsMode.Enhanced)
+        if (coverage)
             sb.Append(CoverageMode);
         sb.AppendLine(";");
         sb.AppendLine("uniform float depth_bias = 0.0;");
@@ -1944,7 +1950,7 @@ void fragment() {{");
                 : $"    ALPHA = col.a{OpacityTerm};");
         if (scissor)
             sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
-        if (scissor && textured && GraphicsMode.Enhanced)
+        if (coverage)
             sb.AppendLine(CoverageLines);
         sb.AppendLine("}");
 

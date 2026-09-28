@@ -49,10 +49,10 @@ public sealed class WorldLights : IDisposable
     // blowing it out.
     private const float OmniEnergyScale = 4.0f;
 
-    // TUNE: Godot's default omni falloff exponent, kept explicit rather than left implicit so a
-    // future retune has one named place to change; judged against the decoded range-based fade
-    // reading comparably soft at the controls.
-    private const float OmniAttenuationTune = 1.0f;
+    // Every omni's falloff exponent. Godot's default 1.0 adds an inverse-distance term that spends
+    // a 20 m lamp within a few metres, where the original's weight is still 1. At 0 only Godot's
+    // range window remains, which OmniRange (below) lines up with the authored linear ramp.
+    private const float OmniAttenuation = 0.0f;
 
     // ---- the enhanced-only burst light (AddBurst), one TUNE block ----
     // Each burst's colour, peak, reach and decay are its BurstShape (EffectCatalogue.BurstLightShapes).
@@ -79,9 +79,9 @@ public sealed class WorldLights : IDisposable
     // would otherwise pulse in lockstep and read as one light rather than several.
     private const float BurstPhaseStride = 0.618f;
 
-    // The burst omni's falloff exponent. Godot's 1.0 is an inverse-distance falloff, spent twenty
-    // metres out, so a 180 m reach would light only the crater.
-    private const float BurstAttenuation = 0.0f;
+    // Where Godot's range window, (1 - (d/r)^4)^2 at exponent 0, falls to half, as a fraction of
+    // the range. The authored ramp is at half midway between its near and far range.
+    private static readonly float HalfWeightFraction = Mathf.Pow(1f - Mathf.Sqrt(0.5f), 0.25f);
 
     private readonly List<Entry> _pending = new();
     private readonly byte[] _buffer = new byte[MaxActive * FloatsPerLight * sizeof(float)];
@@ -140,6 +140,12 @@ public sealed class WorldLights : IDisposable
             RenderingServer.GlobalShaderParameterType.Int, 0);
     }
 
+    /// <summary>The enhanced omni range that stands in for an authored near/far pair. Godot's
+    /// window is at half weight where the authored linear ramp is, midway between the two. Inside
+    /// the near range both are close to full weight.</summary>
+    public static float OmniRange(float rangeMin, float rangeMax) =>
+        0.5f * (rangeMin + rangeMax) / HalfWeightFraction;
+
     /// <summary>Starts a frame's submission. Lights are re-submitted every frame because they
     /// ride moving hosts (a muzzle flash on a turret, the train's firebox). <paramref name="dt"/>
     /// is the sim step the live <see cref="AddBurst"/> lights age by; a caller with no burst
@@ -178,7 +184,8 @@ public sealed class WorldLights : IDisposable
     /// <summary>Submits one active light. <paramref name="color"/> is the data's own value and
     /// <paramref name="scalar"/> the light's ambient + diffuse (1 for a light authoring neither).
     /// The shader takes their product unconverted, as the factor the original adds to a vertex's
-    /// light (docs/org/vertexLighting.md); the enhanced omnis take the colour linearised.</summary>
+    /// light (docs/org/vertexLighting.md). The enhanced omnis take the colour linearised, times the
+    /// same scalar, over <see cref="OmniRange"/>.</summary>
     public void Add(Vector3 pos, Color color, float rangeMin, float rangeMax, float scalar = 1f)
     {
         // A degenerate or inverted range would divide by zero in the shader's weight. The data
@@ -186,7 +193,8 @@ public sealed class WorldLights : IDisposable
         // signed deltas and can cross over mid-pulse.
         if (rangeMax <= rangeMin)
             rangeMax = rangeMin + 0.01f;
-        _pending.Add(new Entry(pos, color * scalar, color.SrgbToLinear(), rangeMin, rangeMax));
+        _pending.Add(new Entry(pos, color * scalar, color.SrgbToLinear() * scalar, rangeMin, rangeMax,
+            OmniRange(rangeMin, rangeMax)));
     }
 
     /// <summary>Packs the frame's lights and uploads them. When more than
@@ -307,7 +315,7 @@ public sealed class WorldLights : IDisposable
     {
         while (_omniPool.Count < n)
         {
-            var omni = new OmniLight3D { ShadowEnabled = false, OmniAttenuation = OmniAttenuationTune };
+            var omni = new OmniLight3D { ShadowEnabled = false, OmniAttenuation = OmniAttenuation };
             _omniParent!.AddChild(omni);
             _omniPool.Add(omni);
         }
@@ -322,8 +330,7 @@ public sealed class WorldLights : IDisposable
             var e = _pending[i];
             float peak = Mathf.Max(e.Color.R, Mathf.Max(e.Color.G, e.Color.B));
             omni.GlobalPosition = e.Pos;
-            omni.OmniRange = e.Max;
-            omni.OmniAttenuation = e.Attenuation;
+            omni.OmniRange = e.OmniRange;
             omni.LightColor = peak > 0f ? new Color(e.Color.R / peak, e.Color.G / peak, e.Color.B / peak) : Colors.White;
             omni.LightEnergy = OmniEnergyScale * peak;
             omni.Visible = true;
@@ -349,7 +356,7 @@ public sealed class WorldLights : IDisposable
             // Straight into _pending rather than through Add: the colour is already linear and the
             // ranges are well-formed, so neither of Add's two conversions applies.
             _pending.Add(new Entry(burst.Pos, burst.Shape.Color * gain, burst.Color * gain,
-                BurstRangeMin, burst.Shape.RangeMax, BurstAttenuation));
+                BurstRangeMin, burst.Shape.RangeMax, burst.Shape.RangeMax));
         }
     }
 
@@ -405,16 +412,15 @@ public sealed class WorldLights : IDisposable
         public readonly Color Factor; // the shader's term: authored colour x ambient + diffuse
         public readonly Color Color;  // linear, the enhanced omni's
         public readonly float Min, Max;
-        public readonly float Attenuation; // the enhanced omni's falloff exponent
-        public Entry(Vector3 pos, Color factor, Color color, float min, float max,
-            float attenuation = OmniAttenuationTune)
+        public readonly float OmniRange; // the enhanced omni's
+        public Entry(Vector3 pos, Color factor, Color color, float min, float max, float omniRange)
         {
-            Pos = pos; Factor = factor; Color = color; Min = min; Max = max; Attenuation = attenuation;
+            Pos = pos; Factor = factor; Color = color; Min = min; Max = max; OmniRange = omniRange;
         }
 
         /// <summary>The same light dimmed by the distance fade, the colour is the intensity,
         /// so scaling it is how a light leaves the set without popping.</summary>
-        public Entry Faded(float f) => new(Pos, Factor * f, Color * f, Min, Max, Attenuation);
+        public Entry Faded(float f) => new(Pos, Factor * f, Color * f, Min, Max, OmniRange);
     }
 
     // One live burst light. A class rather than a struct because Age is written every frame, and

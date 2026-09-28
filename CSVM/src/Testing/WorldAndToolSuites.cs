@@ -2170,7 +2170,9 @@ internal static class WorldAndToolSuites
         + "the able-to-fail control against P1 alone drops the same light, and the one-viewer "
         + "case reads exactly what it read before; the packed factor is the authored colour times "
         + "ambient + diffuse and the shader term takes no dot product; given a parent node the same commit mirrors "
-        + "one OmniLight3D per committed light in enhanced mode and none at all in original mode")]
+        + "one OmniLight3D per committed light in enhanced mode and none at all in original mode; "
+        + "under Enhanced an authored light's omni has no inverse-distance term, reaches half "
+        + "weight where the authored ramp does, and takes the ambient + diffuse scalar")]
     internal static void WorldLightsNearestViewer(TestContext ctx)
     {
         var p1 = Vector3.Zero;
@@ -2266,6 +2268,41 @@ internal static class WorldAndToolSuites
             }
             mirrored.Dispose();
             ctx.Same(0, omniParent.GetChildCount(), $"Dispose frees every spawned omni");
+
+            // Under Enhanced an authored light's omni has no inverse-distance term. Its range puts
+            // half weight where the authored ramp's is, and its energy takes the authored scalar.
+            CSVM.Utils.GraphicsMode.Resolve(CSVM.Utils.GraphicsMode.EnhancedWord);
+            try
+            {
+                var authored = new WorldLights(omniParent);
+                authored.Begin();
+                authored.Add(nearP1, Colors.White, 7f, 20f);
+                authored.Add(nearP1, Colors.White, 7f, 20f, 0.5f);
+                authored.Commit(new[] { p1 });
+                var omnis = new List<OmniLight3D>();
+                foreach (var child in omniParent.GetChildren())
+                {
+                    if (child is OmniLight3D omni)
+                        omnis.Add(omni);
+                }
+                ctx.Same(2, omnis.Count, $"enhanced mirrors both authored lights");
+                if (omnis.Count == 2)
+                {
+                    float range = omnis[0].OmniRange;
+                    float atMid = Mathf.Pow(1f - Mathf.Pow(13.5f / range, 4f), 2f);
+                    ctx.Check(omnis[0].OmniAttenuation == 0f && omnis[1].OmniAttenuation == 0f,
+                        $"the omnis carry no inverse-distance term (attenuation {omnis[0].OmniAttenuation})");
+                    ctx.Check(range > 13.5f && range < 20f && Mathf.Abs(atMid - 0.5f) < 0.01f,
+                        $"a 7-20 m light's omni reaches half weight at 13.5 m, where the ramp does (range {range:0.00}, weight {atMid:0.000})");
+                    ctx.Check(Mathf.IsEqualApprox(omnis[1].LightEnergy, omnis[0].LightEnergy * 0.5f),
+                        $"the authored scalar scales the omni's energy ({omnis[1].LightEnergy:0.000} against {omnis[0].LightEnergy:0.000})");
+                }
+                authored.Dispose();
+            }
+            finally
+            {
+                CSVM.Utils.GraphicsMode.Resolve(CSVM.Utils.GraphicsMode.Default);
+            }
         }
         finally
         {

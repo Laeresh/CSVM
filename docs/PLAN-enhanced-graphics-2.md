@@ -98,8 +98,8 @@ worktree session here; use a local commit or a file copy.
   verdict comes from the controls or an undithered capture, never from a burst frame.
 - **World lights under Enhanced.** `Mech3/WorldLights.cs`: `Begin`/`Add`/`Commit` per frame, and
   in Enhanced mode `Commit` mirrors the committed set onto a growing pool of `OmniLight3D`
-  (`ShadowEnabled = false`, `OmniAttenuationTune`), energy from the colour's peak channel. This is
-  the pool a burst light joins.
+  (`ShadowEnabled = false`, attenuation 0, an authored light's range from `OmniRange`), energy
+  from the colour's peak channel. This is the pool a burst light joins.
 - **The explosion sprites.** `Effects/EmitterRenderer.cs` `MultiMeshEmitterRenderer`: one shader
   per (blend, soft) pair, `unshaded`, blend per atlas column off the texture's own additive bit,
   `ALBEDO = t.rgb * srgb_to_linear(COLORS ramp)`, quad-rim fade, soft-particle depth fade,
@@ -188,6 +188,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 13. ☑ Sun-shaded smoke billboards
 14. ☑ Heat shimmer over a fireball
 15. ☑ Scorch decals at a hit
+16. ☐ A small light in every burning fire puff, over an Enhanced light budget raised past 16
 
 ### Wave C, lit clouds
 
@@ -217,7 +218,8 @@ most of A4's population.
 
 B12 and B13 both edit `EmitterRenderer.cs`'s one shader: sequential. B11 touches `WorldLights.cs`
 and the effect sink, B14 adds its own material, B15 touches the crater/decal path; those three can
-run in parallel worktrees with that file ownership. C21 owns `FogVolumeClutter.cs`; C22 is a new
+run in parallel worktrees with that file ownership. B16 owns `WorldLights.cs` after B11 and reads
+the fire columns B12 flags in `Puffer`, so it runs after both. C21 owns `FogVolumeClutter.cs`; C22 is a new
 module and can run beside C21; C23 depends on C21's shader. E41 is a new `Effects` module and
 E42 owns `CameraController.cs`; they run in parallel with each other and with Wave C, after A1.
 E41 must not touch `SpeedCue.cs` or `Puffer.cs`, the faithful path's wisps. D31 and D32 depend on everything,
@@ -506,6 +508,15 @@ move).
 clutter fade dithers alpha on purpose; coverage on a dithered alpha reads as a different pattern,
 so try it with and without the fade arm.
 
+**Fix at the controls: the cockpit interior keeps the plain scissor.** In the cockpit view under
+Enhanced, with the Anti-aliasing row on Off at 100, the gauge faces were see-through. The interior
+draws into the transparent cockpit pass (`CockpitOverlay`), and coverage writes the resolved
+sample fraction into that target's alpha, so the composite let the world through wherever a face's
+alpha sat below 1. The interior's own `SceneBuilder` sets `NoAlphaCoverage` (`PlaneBuilder`), a
+shader key bit of its own, and its cutouts keep the scissor; the world keeps coverage. Captured on
+the hidden desktop with the user's saved options: every gauge face is opaque again, the world
+outside unchanged.
+
 ## A5 ☑ FSR 2.2 tried once as the alternative temporal pass, kept or parked on the user's verdict
 
 **Verdict.** Neither pass is deleted: the player chooses. The anti-aliasing method becomes a VIDEO
@@ -612,8 +623,9 @@ to the user:** each method's look at the controls, and on the Deck the `[perf]` 
 67% under Enhanced, one pane and four, FSR 1 against FSR 2.2.
 
 **Fix at the controls: the cockpit pass takes no method and no scale.** In the cockpit view the
-world outside came out black under TAA, FSR 1 (any scale below 100, so also with the row on Off)
-and FSR 2.2, and the gauge backgrounds turned see-through under FXAA. The cockpit pass
+world outside came out black under TAA, FSR 1 (any scale below 100) and FSR 2.2, and the gauge
+backgrounds turned see-through under FXAA. The see-through gauges with the row on Off at 100 are
+A4's, fixed there. The cockpit pass
 (`CockpitOverlay`) is a `TransparentBg` SubViewport composited over the world, and Godot's temporal,
 upscaling and screen-space resolves do not keep its alpha. `ViewportQuality.Apply` now returns
 early on a transparent viewport, which keeps the project's MSAA 2x on the interior's edges; the
@@ -772,6 +784,19 @@ over HE; `burst-light` pins the lift. Captured on the hidden desktop: HE, seeker
 C1 tarmac under Enhanced; HE's range edge shows as a soft ring on flat ground. The torpedo was not
 captured (the scripted pose pitches away before it arms) and is owed at the controls with the other
 three.
+
+**Decision at the controls: the authored lights take the authored reach.** The same falloff hid
+every authored `LIGHT_STATE` light under Enhanced: a C1 airfield lamp authors a 7 m to 20 m linear
+ramp, and `OmniAttenuation` 1.0 had it spent within a few metres. Every pooled omni now runs at
+attenuation 0, and an authored light's omni range is `WorldLights.OmniRange`, the range at which
+Godot's window, (1 - (d/r)^4)^2, is at half weight midway between the authored near and far range,
+where the authored ramp is (18.4 m for the lamp). The omni's colour also takes the light's
+ambient + diffuse scalar, which the shader's factor always carried. The faithful path is unchanged.
+Captured at `--freecam --chapter=C1 --pos=-6620,175,-5690 --direction=0,-0.42,-0.91`: the parking
+lot beside a lamp gains about 16 levels of red and the barracks wall 15 under Enhanced, where the
+old falloff moved neither; grass beyond the lamps is unchanged. `world-lights-nearest-viewer` pins
+the attenuation, the half-weight range and the scalar. The wing-tip and muzzle omnis are separate
+nodes that keep Godot's default falloff.
 
 ## B12 ☑ The additive fireball frames bloom
 
@@ -1054,6 +1079,50 @@ decals sit on the surface and fade at the cap. Faithful goldens zero movers.
 
 **⚠ Traps.** Decals on water read wrong; skip the water surfaces `ClassifySurface` names.
 Alpha-to-coverage (A4) does not apply to decals.
+
+## B16 ☐ A small light in every burning fire puff, over an Enhanced light budget raised past 16
+
+**Goal.** Under Enhanced every explosion keeps lighting its surroundings after the flash: each
+burning puffer that sequences the fire flipbook carries a small flickering light while its fire
+frames are live, so a wreck fire, a burning building or a fireball's trail lights the ground and
+walls around it. The light budget grows under Enhanced so these lights do not evict the authored
+beacons or the burst lights.
+
+**Decisions (the user's).** Extend the lighting to every explosion and put smaller lights in the
+fire puffs; raise the light budget together with it.
+
+**Evidence (confidence: traced).** `WorldLights.MaxActive` (16) is the project's own bound, not a
+Godot one: it is the row count of the data texture Original's per-vertex `csky_point_light` loop
+reads, a per-vertex cost on every `lighting: true` model. Forward+ clusters its lights (512
+elements per view by default), so the Enhanced omni pool has no engine limit near 16. C1's
+airfield alone holds 16 of 47 live lights. B12 already flags the fire columns per puffer
+(`MultiMeshEmitterRenderer.IsFireSprite`, `fire_f01`…`fire_f06`, resolved in `Puffer.Create`).
+The omnis carry no inverse-distance term and a range matched to the authored ramp (B11), so a
+small range reads as a pool of light rather than a point.
+
+**Approach.** Split the two budgets: the data texture keeps `MaxActive` 16, so Original's shader
+and its goldens do not move, and the omni pool takes its own `EnhancedMaxActive` from the graphics
+`EffectsLevel` (TUNE, for example 32 at low and 64 at high). The significance rank decides both
+sets from one sort. A puffer whose live particles include a fire column registers one pooled light
+per emitter, not per particle, at the emitter's live centroid, with a TUNE warm colour, a small
+range and the B11 flicker; it is dropped the frame the emitter's last fire particle ends. Lights
+rank below the authored lights and the burst lights at equal significance, so a crowd of fires
+never takes a beacon's slot.
+
+**Model recommendation.** high: it changes the budget both presentations share and adds a
+per-frame source from the puffer path.
+
+**Verify.** Faithful goldens zero movers (the data texture is untouched). A suite pins the split:
+Original commits at most 16, Enhanced mirrors more than 16 when more are live, a fire puffer
+registers one light and drops it with its last fire frame, and a beacon survives a crowd of fires.
+Captured at C5 night beside a burning wreck; then the user at the controls, and on
+the Deck the `[perf]` reading with a salvo into a city block at each effects level.
+
+**⚠ Traps.** Each omni is shaded per pixel over its whole screen footprint; the Deck is already
+GPU-bound under Enhanced, so the budget must follow the effects level, and a close fire filling the
+screen costs more than a far one. A per-particle light multiplies the count by the particle count;
+keep one per emitter. The cockpit pass is its own `World3D`, so world omnis do not reach the
+interior.
 
 # Wave C, lit clouds
 

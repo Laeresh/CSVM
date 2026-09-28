@@ -120,6 +120,7 @@ public sealed class PlaneBuilder
                 // The panel is a wall of soft-alpha decals over dark instruments, which is where
                 // the linear-space composite departs visibly from the original's (see the field).
                 GammaBlendAlpha = true,
+                NoAlphaCoverage = true,
             };
         }
         _spinningProps = spinningProps;
