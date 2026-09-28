@@ -4,6 +4,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using CSVM;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;

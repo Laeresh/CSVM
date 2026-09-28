@@ -94,7 +94,7 @@ public sealed partial class PhotoModeHud : CanvasLayer
     // window both hold, and another player's pad cannot close a mode that is not theirs.
     private bool ReadsPad(int device)
     {
-        foreach (int pad in CSVM.Pads.For(_padDevices))
+        foreach (int pad in CSVM.Bindings.Pads.For(_padDevices))
             if (pad == device)
                 return true;
         return false;

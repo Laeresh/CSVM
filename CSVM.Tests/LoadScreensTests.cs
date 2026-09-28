@@ -1,6 +1,7 @@
 using System.IO;
 using System.Linq;
 using CSVM;
+using CSVM.Extraction;
 using CSVM.UI.Boards;
 using CSVM.UI.Screens;
 using Xunit;

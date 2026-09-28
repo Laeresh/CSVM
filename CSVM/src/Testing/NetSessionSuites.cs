@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using CSVM.Extraction;
 using CSVM.Flight;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Modes;

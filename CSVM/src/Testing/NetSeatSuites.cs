@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using CSVM.Bindings;
+using CSVM.Extraction;
 using CSVM.Flight;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;

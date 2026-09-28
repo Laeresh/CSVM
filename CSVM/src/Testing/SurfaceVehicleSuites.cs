@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Hud;
 using CSVM.Flight.Weapons;

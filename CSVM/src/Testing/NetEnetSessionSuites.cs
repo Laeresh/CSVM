@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
+using CSVM.Extraction;
 using CSVM.Net;
 using CSVM.Session;
 using CSVM.Session.Launch;

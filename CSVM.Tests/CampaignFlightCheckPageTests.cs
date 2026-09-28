@@ -1,4 +1,5 @@
 using System.IO;
+using CSVM.Extraction;
 using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;

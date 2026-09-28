@@ -1,4 +1,5 @@
 using System.IO;
+using CSVM.Extraction;
 using CSVM.Flight.Camera;
 using Xunit;
 

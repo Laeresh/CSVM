@@ -4699,7 +4699,7 @@ public partial class FlightController : Node3D
     // An unplugged stick's lever reads centred the same way, and is forgotten the same way.
     private float? LeverSetting(bool otherCommand)
     {
-        if (CSVM.Pads.InputBlocked)
+        if (CSVM.Bindings.Pads.InputBlocked)
         {
             _leverTakeover.Release();
             return null;

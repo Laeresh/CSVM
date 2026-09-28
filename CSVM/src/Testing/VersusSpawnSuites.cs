@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Modes;

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Mech3;
 using CSVM.Session.Objectives;

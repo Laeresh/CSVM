@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 
-namespace CSVM;
+namespace CSVM.Extraction;
 
 /// <summary>
 /// Resolves the per-chapter and per-mission extraction paths (gamez / texture / zrdr) under a

@@ -695,6 +695,7 @@ both sit on top of these types.
 - `src/Bindings/LaunchBindings.cs`, where a seat's keymap comes from when the seat is built: the player's saved file, or the shipped defaults, plus seat 1's stick rows.
 - `src/Bindings/IStickRows.cs`, the seam seat 1's keymap is completed through from the stick profiles, so this namespace never names the stick library.
 - `src/Bindings/PadRumble.cs`, one seat's controller rumble on the original's own effect table, routed to the pads that seat's bindings read.
+- `src/Bindings/Pads.cs`, single owner of "which gamepads exist": the phantom-device policy, the launch-time roster split, the focus gate and `--no-pads`.
 
 ### `src/Sticks/`, flight sticks through SDL2
 
@@ -766,6 +767,7 @@ in [`formats/extraction.md`](formats/extraction.md).
 - `src/Extraction/UnzbdTool.cs`, the bundled unzbd as a child process: its platform file name and release path, one run with both streams drained, and its identity for the stamp.
 - `src/Extraction/ExtractionRun.cs`, the whole extraction in order (install check, ZBD half, `.rof` half, stamps) with one progress stream, cancel, summary and exit code, for `--extract` and the extraction screen.
 - `src/Extraction/ExtractionStampWriter.cs`, writes `extracted/VERSION.json` without a BOM, merging one half's field and the engine's schema into what is there.
+- `src/Extraction/SessionPaths.cs`, resolves the extracted-data paths (per-chapter gamez/texture/zrdr, per-mission zrdr) under a data root in `ZbdTree`'s case, unpacked folder or `.zip`.
 
 ### `src/Net/`, the network seam
 
@@ -819,9 +821,6 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 
 - `src/Spec/SessionSpec.cs`, the launch args as one immutable, engine-free value: `Parse` parses **and** resolves, plus the pure arg parsers the tests reach.
 
-### Session root and tests
-
-- `src/Pads.cs`, single owner of "which gamepads exist": the phantom-device policy, the launch-time roster split, the focus gate and `--no-pads`.
-- `src/SessionPaths.cs`, resolves the extracted-data paths (per-chapter gamez/texture/zrdr, per-mission zrdr) under a data root in `ZbdTree`'s case, unpacked folder or `.zip`.
+### `CSVM.Tests/`, the unit tests
 
 - `CSVM.Tests/`, the xUnit project (`dotnet test`): engine-free reader units on hand-authored fixtures + `extracted/` golden counts, skipped when absent; plus eight former in-engine suites moved here as `Probes.*`/plain-static/`StuntMission`/`GaugeCluster` facts.

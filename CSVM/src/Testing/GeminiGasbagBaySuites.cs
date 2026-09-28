@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Mech3;
 using CSVM.Session.Objectives;
 using CSVM.Session.World;

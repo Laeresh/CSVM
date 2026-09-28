@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CSVM.Effects;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;

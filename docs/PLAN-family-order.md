@@ -84,7 +84,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B, empty the root namespace
 
 11. ☑ `CSVM.Spec`: SessionSpec, MenuMode and their records
-12. ☐ SessionPaths → Extraction, Pads → Bindings
+12. ☑ SessionPaths → Extraction, Pads → Bindings
 
 ### Wave C, promote Launch
 
@@ -201,7 +201,17 @@ SessionProbe, AiPlaneEntry, ZepStageSpec and `SessionSpec.Note`, per the class-m
 **⚠ Traps.** Path references outside `docs/architecture*` were `PROJECT_CONTEXT.md`'s namespace
 map and one comment in `GroundShadowPass.cs`; `Root.md` was linked from `Utils.md` and `Mech3.md`.
 
-## B12 ☐ SessionPaths → Extraction, Pads → Bindings
+## B12 ☑ SessionPaths → Extraction, Pads → Bindings
+
+**Landed.** `src/Extraction/SessionPaths.cs` and `src/Bindings/Pads.cs`, their entries on
+`Extraction.md` and `Bindings.md`, the root namespace empty. The root family row is gone, so a type
+left in the root namespace now fails `EveryNamespaceHasARank`; with it went the rule that a row
+without a dot matches only itself. Six allowlist pairs retired.
+
+**Verified.** `FamilyOrderTests` 3/3 after it had failed on exactly the six stale pairs and the
+unused root row; `CheckDocEntries.ps1` clean; full `.\RunTests.ps1`, see the commit.
+
+**Original approach (kept for reference).**
 
 **Goal.** The root namespace is empty.
 

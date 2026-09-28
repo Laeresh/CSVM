@@ -60,7 +60,7 @@ public static class TestData
     public static string? ExtractedRoot { get; }
 
     /// <summary>The folder <c>extracted/</c> sits in, the "data root" the engine's
-    /// <see cref="CSVM.SessionPaths"/> takes. Null when <see cref="ExtractedRoot"/> is.</summary>
+    /// <see cref="CSVM.Extraction.SessionPaths"/> takes. Null when <see cref="ExtractedRoot"/> is.</summary>
     public static string? DataRoot { get; }
 
     /// <summary>The install folder holding the ten <c>.mpg</c> cinemas, or null when none is

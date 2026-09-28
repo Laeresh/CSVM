@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Utils;
 using Xunit;

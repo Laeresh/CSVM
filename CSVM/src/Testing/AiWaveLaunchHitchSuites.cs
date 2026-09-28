@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;

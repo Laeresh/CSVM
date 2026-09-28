@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Mech3;
 using Xunit;

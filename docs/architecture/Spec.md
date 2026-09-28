@@ -1,6 +1,6 @@
 # Spec
 
-The `CSVM.Spec` family (`src/Spec/`, the launch args as one value), the two files still at the root of `CSVM/src` (`SessionPaths.cs`, `Pads.cs`), and the enhanced graphics mode, a rendering divergence that spans every namespace.
+The `CSVM.Spec` family (`src/Spec/`, the launch args as one value) and the enhanced graphics mode, a rendering divergence that spans every namespace.
 
 One `## src/...` entry per module, body at most 8 lines, 12 for the highest-traffic modules.
 
@@ -52,23 +52,6 @@ resolved `GraphicsMode.Enhanced` boolean only, so neither the store nor the scre
 them. The saved word changes on Apply and the world takes it on the next start, since the shader
 memos and the Environment are built from the value resolved once at launch, which is why each
 screen's description line says so.
-
-## src/Pads.cs
-Single source of truth for which gamepads exist: every reader goes through it rather than
-`Input.GetConnectedJoypads()`. Owns the phantom-device policy (span every pad, never `pads[0]`),
-`Disabled` (`--no-pads`) and the focus gate that suppresses reads without un-joining anyone.
-`AssignPads` is the launch-time roster split: P2 to P4 take roster POSITIONS in order and P1 gets
-every pad none of them claimed, so a device occupying a position without producing input takes that
-seat and leaves the real pad in P1's pool, flying P1's plane beside P1's own. `LogPads` records the
-roster with position and id separately, which is what makes that mismatch readable afterwards. A
-menu-driven launch binds by device id instead (`Launcher.BindMenuPads`) and so seats no phantom.
-
-## src/SessionPaths.cs
-Static resolver for the extracted-data paths (`ChapterTextures`/`ChapterGamez`/`ChapterZrdr`/
-`MissionZrdr`) under a data root, plus `PreferUnzipped` (an unpacked sibling dir beats its `.zip`)
-and the `--zip-assets` switch that inverts it. A chapter or mission in either case maps through
-`Extraction/ZbdTree.cs` to the case the extraction wrote. The `rtextureN` tier decode is on `docs/tooling.md`;
-the `--gamez=`/`--textures=` override policy stays in `GameSession`, not here.
 
 ## src/Spec/SessionSpec.cs
 Everything the command line settles about a session as one immutable, engine-free record:

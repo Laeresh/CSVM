@@ -18,7 +18,7 @@ namespace CSVM.Tests;
 public sealed class FamilyOrderTests
 {
     // Lowest first; the longest matching prefix wins, which is how UI.Boards ranks below Flight
-    // while the rest of UI ranks above Session. A prefix without a dot matches only itself.
+    // while the rest of UI ranks above Session.
     private static readonly (string Prefix, int Rank)[] Families =
     {
         ("CSVM.Utils", 1),
@@ -31,7 +31,6 @@ public sealed class FamilyOrderTests
         ("CSVM.Net", 8),
         ("CSVM.UI.Boards", 9),
         ("CSVM.Flight", 10),
-        ("CSVM", 11),
         ("CSVM.Spec", 11),
         ("CSVM.Session", 12),
         ("CSVM.Tooling", 13),
@@ -48,14 +47,10 @@ public sealed class FamilyOrderTests
 
     private static readonly string[] Allowed =
     {
-        "CSVM.Bindings.PadRumble -> CSVM.Pads",
-        "CSVM.Bindings.SeatDeviceState -> CSVM.Pads",
         "CSVM.Effects.EffectAmbience -> CSVM.Flight.Camera.ViewerSet",
         "CSVM.Effects.Precipitation -> CSVM.Flight.Airframe.WeatherState",
         "CSVM.Effects.Puffer -> CSVM.Flight.Camera.ViewerSet",
-        "CSVM.Flight.Airframe.FlightController -> CSVM.Pads",
         "CSVM.Flight.Airframe.PlaneRoster -> CSVM.Spec.SessionSpec",
-        "CSVM.Flight.Camera.SpectatorCamera -> CSVM.Pads",
         "CSVM.Flight.Hud.TargetHud -> CSVM.UI.Overlays.OrbitCamera",
         "CSVM.Session.Campaign.CampaignDirector -> CSVM.UI.Hangar.PlanePickerRoster",
         "CSVM.Session.Campaign.ChapterCinema -> CSVM.UI.Screens.CinemaHandoff",
@@ -76,13 +71,11 @@ public sealed class FamilyOrderTests
         "CSVM.Spec.SessionSpec -> CSVM.UI.Labs.NodeLab",
         "CSVM.Spec.SessionSpec -> CSVM.UI.Labs.WorldDamageLab",
         "CSVM.Spec.SessionSpec -> CSVM.UI.Menu.NetPlayFeature",
-        "CSVM.Sticks.StickPump -> CSVM.Pads",
         "CSVM.Tooling.CaptureDirector -> CSVM.UI.Overlays.OrbitCamera",
         "CSVM.Tooling.ProbeRunner -> CSVM.UI.Overlays.OrbitCamera",
         "CSVM.UI.Boards.BoardMenuHost -> CSVM.UI.Screens.MenuInput",
         "CSVM.UI.Boards.BoardMenuView -> CSVM.UI.Screens.MenuInput",
         "CSVM.UI.Boards.BoardPalette -> CSVM.UI.Campaign.CampaignScreen",
-        "CSVM.UI.Boards.ComposedBoardView -> CSVM.SessionPaths",
         "CSVM.UI.Boards.ComposedBoardView -> CSVM.UI.Screens.MovieSurface",
         "CSVM.UI.Boards.PauseReadout -> CSVM.UI.Menu.BriefingObjective",
         "CSVM.UI.Boards.PauseReadout -> CSVM.UI.Overlays.MissionMap",
@@ -135,7 +128,7 @@ public sealed class FamilyOrderTests
             .ToList();
 
         var unranked = namespaces.Where(n => Rank(n) < 0).ToList();
-        var unused = Families.Where(f => !namespaces.Any(n => Match(n, f.Prefix))).Select(f => f.Prefix).ToList();
+        var unused = Families.Where(f => !namespaces.Any(n => Under(n, f.Prefix))).Select(f => f.Prefix).ToList();
 
         Assert.True(unranked.Count == 0, "Namespaces with no row in the family table:" + Lines(unranked));
         Assert.True(unused.Count == 0, "Family rows that match no namespace:" + Lines(unused));
@@ -198,10 +191,7 @@ public sealed class FamilyOrderTests
     }
 
     private static int Rank(string ns) =>
-        Families.Where(f => Match(ns, f.Prefix)).OrderByDescending(f => f.Prefix.Length).Select(f => f.Rank).DefaultIfEmpty(-1).First();
-
-    private static bool Match(string ns, string prefix) =>
-        prefix.Contains('.', StringComparison.Ordinal) ? Under(ns, prefix) : ns == prefix;
+        Families.Where(f => Under(ns, f.Prefix)).OrderByDescending(f => f.Prefix.Length).Select(f => f.Rank).DefaultIfEmpty(-1).First();
 
     private static bool Under(string ns, string prefix) =>
         ns == prefix || ns.StartsWith(prefix + ".", StringComparison.Ordinal);

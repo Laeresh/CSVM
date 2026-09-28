@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using CSVM.Bindings;
+using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Weapons;
