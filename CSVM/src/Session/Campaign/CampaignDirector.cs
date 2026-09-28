@@ -578,7 +578,7 @@ public sealed class CampaignDirector
             bool placed = false;
             if (spawn.TaxiPath is { } taxi && _paths != null)
             {
-                placed = PlaceOnPath(rig, spawn.Name, taxi);
+                placed = PlaceOnPath(rig, spawn.Name, taxi, seatWalk: true);
                 if (!placed)
                 {
                     Log.Info("core", $"campaign: roster '{spawn.Name}' authors taxi path '{taxi}', which this world does not carry: it flies");
@@ -968,18 +968,20 @@ public sealed class CampaignDirector
         graph.EndAfterPlayerLost();
     }
 
-    // A path-driven aircraft: held (no flight integration) and re-pinned to the follower's pose
-    // every tick, which is the original's exclusive movement-law switch; the handoff un-holds it
-    // and re-activates it at the speed the path left it (docs/org/flightModel.md "The
-    // scripted-path follower").
-    private bool PlaceOnPath(FlightController rig, string name, string taxi)
+    // A path-driven aircraft is held and re-pinned to the follower's pose every tick, the original's
+    // exclusive movement-law switch. The handoff un-holds it at the speed the path left it
+    // (docs/org/flightModel.md "The scripted-path follower"). A spawn placement seats the patrol
+    // walk at the path's start and the handoff keeps it (docs/org/aiPilot.md "A path vehicle's net
+    // seat"). A warp placement (FUN_004940d0) seats nothing, so its handoff reseats.
+    private bool PlaceOnPath(FlightController rig, string name, string taxi, bool seatWalk = false)
     {
         bool placed = _paths!.Place(name, taxi, rig,
             onComplete: speed =>
             {
                 rig.Held = false;
                 var nose = rig.NoseDirection;
-                rig.Activate(rig.WorldPosition, rig.WorldPosition + nose, nose * speed);
+                rig.Activate(rig.WorldPosition, rig.WorldPosition + nose, nose * speed,
+                    keepPatrolSeat: seatWalk);
             },
             setPose: (p, heading) =>
             {
@@ -989,6 +991,10 @@ public sealed class CampaignDirector
         if (placed)
         {
             rig.Held = true;
+            if (seatWalk)
+            {
+                rig.Pilot?.Patrol?.Seat(rig.WorldPosition, rig.NoseDirection);
+            }
         }
         return placed;
     }
@@ -1438,6 +1444,15 @@ public sealed class CampaignDirector
         if (rig.RemoteOwned)
         {
             Log.Info("core", $"campaign: '{name}' wakes on the host, not here");
+            return true;
+        }
+
+        // A vehicle on a path wakes where the path holds it, keeping the walk its placement seated.
+        // The original's activation skips its net step for a path vehicle (FUN_004b0f40).
+        if (_paths?.IsPlaced(name) == true)
+        {
+            var at = rig.WorldPosition;
+            rig.Activate(at, at + rig.NoseDirection, keepPatrolSeat: true);
             return true;
         }
 

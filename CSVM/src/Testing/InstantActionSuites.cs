@@ -279,9 +279,8 @@ internal static class InstantActionSuites
             float distSq = wave2Member.WorldPosition.DistanceSquaredTo(humanPos);
             ctx.Check(distSq >= InstantActionWaves.MinSpawnDistanceSquared,
                 $"activated at least 500 m from the human: dist={Mathf.Sqrt(distSq):0} m");
-            // The activation snap the original does (FUN_004b0f40 → FUN_00432010): the arrival
-            // re-seats the walk, so the member patrols from where it was put down instead of
-            // flying back to the node by its parking pose.
+            // The arrival re-seats the walk, so the member patrols from where it was put down,
+            // not from the node by its parking pose.
             wave2Pilot.Patrol.Update(wave2Member.WorldPosition);
             ctx.Check(wave2Pilot.Patrol.CurrentIndex == 1,
                 $"activation re-seats it on the node by its ARRIVAL: idx={wave2Pilot.Patrol.CurrentIndex}");

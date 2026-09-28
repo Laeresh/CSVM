@@ -29,8 +29,8 @@ public class AiNetFollowerTests
     [Fact]
     public void ReseatPicksTheNearestNodeAgainFromWhereverItNowIs()
     {
-        // The activation snap (BL-364): a wave member seats itself while parked, is teleported,
-        // and must patrol from its arrival rather than fly back to the parking pose's node.
+        // A wave re-activation (BL-364): the member seats itself while parked, is teleported, and
+        // patrols from its arrival, not the parking pose's node.
         var f = new AiNetFollower(Loop(), new Random(1));
         f.Update(Vector3.Zero);
         Assert.Equal(0, f.CurrentIndex);
@@ -463,6 +463,35 @@ public class AiNetFollowerTests
         // At the hub, still heading −X: node 3 is straight ahead, node 1 is the edge just flown.
         Assert.True(f.Update(f.CurrentTarget, Vector3.Left));
         Assert.Equal(3, f.CurrentIndex);
+    }
+
+    /// <summary>The spawn seat (<c>FUN_00475fc0</c>) happens at the placement, not on the first
+    /// walk step. A vehicle that later flies away from there still owns the placement's leg.
+    /// CM21's Cabbie seats on its rooftop's node and takes off toward the tagged node.</summary>
+    [Fact]
+    public void SeatTakesThePlacementsLegAndALaterStepFromElsewhereKeepsIt()
+    {
+        var f = new AiNetFollower(Loop(), new Random(1));
+        f.Update(new Vector3(900f, 400f, 1100f)); // a stale seat on node 2, which Seat discards
+        f.Seat(new Vector3(100f, 400f, 100f), Vector3.Right);
+        Assert.Equal(0, f.LegStartIndex);
+        Assert.Equal(1, f.CurrentIndex);
+
+        // Short of node 1 along the leg, and nearest to node 2: a lazy seat here would take node 2.
+        Assert.False(f.Update(new Vector3(850f, 400f, 900f), Vector3.Right));
+        Assert.Equal(0, f.LegStartIndex);
+        Assert.Equal(1, f.CurrentIndex);
+    }
+
+    /// <summary>A single-edge seat node leaves along its one edge whatever the nose says, the
+    /// shape of <c>M1Cabbie</c>'s node 2 on the rooftop.</summary>
+    [Fact]
+    public void SeatOnASingleEdgeNodeLeavesAlongThatEdge()
+    {
+        var f = new AiNetFollower(Path(), new Random(1));
+        f.Seat(new Vector3(-50f, 400f, 0f), Vector3.Left);
+        Assert.Equal(0, f.LegStartIndex);
+        Assert.Equal(1, f.CurrentIndex);
     }
 
     private static AiNetNode Node(float x, float z) => new(new Vector3(x, 400f, z), Array.Empty<float>());

@@ -176,10 +176,21 @@ public sealed class AiNetFollower
     /// follower that offset only its current target would seat itself on the wrong node.</summary>
     public Vector3 NodePosition(int index) => Net.Nodes[index].Position + LiveOffset();
 
+    /// <summary>Seats the walk now, from <paramref name="position"/> and <paramref name="heading"/>,
+    /// instead of on the first <see cref="Update"/>. The original seats a spawned vehicle's net at
+    /// its placement (<c>FUN_00475fc0</c>, docs/org/aiPilot.md). A vehicle held on a scripted path
+    /// therefore takes off already walking from the node nearest where it was parked.</summary>
+    /// <param name="position">Where the vehicle stands.</param>
+    /// <param name="heading">The vehicle's nose, which picks the first edge.</param>
+    public void Seat(Vector3 position, Vector3 heading)
+    {
+        Reseat();
+        Update(position, heading);
+    }
+
     /// <summary>Drops the walk back to "nearest node next", so the next <see cref="Update"/>
-    /// re-seats from wherever the follower now is: the original's activation snap
-    /// (<c>FUN_004b0f40</c> into <c>FUN_00432010</c>) and its danger-zone exit
-    /// (<c>FUN_00490590</c>) alike, both decoded in this module's architecture.md entry.</summary>
+    /// re-seats from wherever the follower now is. A teleported wave's re-activation and the
+    /// danger-zone exit (<c>FUN_00490590</c>) both use it, decoded in this module's entry.</summary>
     /// <param name="avoidFrom">One end of an edge the next seat pick must refuse, −1 for none.</param>
     /// <param name="avoidTo">The other end of that edge.</param>
     public void Reseat(int avoidFrom = -1, int avoidTo = -1)

@@ -75,6 +75,9 @@ public sealed class ScriptedPathVehicles
     public bool IsFrozen(string vehicle) =>
         _placed.TryGetValue(vehicle, out var entry) && entry.Follower.Frozen;
 
+    /// <summary>Whether a vehicle is on a path now, held or running, and not yet handed off.</summary>
+    public bool IsPlaced(string vehicle) => _placed.ContainsKey(vehicle);
+
     /// <summary>One tick of every placed vehicle. A finished one is dropped from the registry after
     /// its handoff, so nothing keeps writing a pose over the flight model's.</summary>
     public void Step(float dt)

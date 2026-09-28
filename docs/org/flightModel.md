@@ -2919,6 +2919,8 @@ so it is the one every shipped path vehicle needs, and `vehicle.json` has no fie
 take.
 The roster spawner calls `ScriptedPathVehicles.Place`, so C1/M04 really does put four aeroplanes on
 `pp1`–`pp4` and its `START_TAXI` chain really does release them.
+The handoff leaves the vehicle's patrol walk where the spawn seated it, at the path's first waypoint;
+[aiPilot.md](aiPilot.md) "A path vehicle's net seat is taken at its placement" has the decode.
 A surface vehicle (`mode ship`, the patrol boats) is driven by the same law for its whole life
 (`Flight/Ai/SurfaceVehicle.cs`): the follower steers it over an unbounded route, a generator's
 take-off run and then a walk of its net's edges, so it never reaches the final leg's acceleration
@@ -2940,7 +2942,7 @@ throttle lever at `+0x124`/`+0x128`, and sets `+0xcc = 1` with `+0xd4` untouched
 runs the strip immediately instead of waiting for a goal. C1/M04's two airfields each author a
 five-point run about 260 m long. The consumer is the same follower: `FUN_00489ea0` reads the
 launch's `+0xcc` and runs `FUN_0048a110` over the generator's path at `+0xc8` from the leg index
-zeroed at `+0xd0`, and `FUN_004b0f40`'s activation skips the net-nearest-node snap while `+0xcc`
+zeroed at `+0xd0`, and `FUN_004b0f40`'s activation skips its net step while `+0xcc`
 is set, so the launch is placed by the run and not by its net. CSVM ports this entry in
 `AiGeneratorRuntime.Spawn`: the launched aircraft is held and driven by `PathFollower` over the
 path nodes' live positions from the launch pose, released into the flight model at the final leg's

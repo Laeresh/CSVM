@@ -839,6 +839,55 @@ with `+0x67c = 0` on every path, including the failure path where the net id did
 So `mode wingman` is not "this aircraft escorts". It is **"this aircraft escorts when it has no
 net"**, and the net wins whenever one is authored.
 
+## A path vehicle's net seat is taken at its placement
+
+The walk's seat (`+0x2e8`, `+0x2ec`) is written once at spawn and nothing on the way to the
+flight model rewrites it. The order inside the roster spawn `FUN_0047c210`:
+
+| Address | What happens |
+|---|---|
+| `0x0047c3a5` | the vehicle is placed on waypoint 0 of its taxi path, facing the leg into waypoint 1 |
+| `0x0047c568`, `0x0047c57e` | path flag `+0xcc = 1` and freeze flag `+0xd4 = 1` |
+| `0x0047c77b` | `FUN_00476250`, whose net assignment `FUN_00475fc0` seats the walk from `+0x204`, the placed position |
+| `0x0047ca20` | `FUN_004b0f40(vehicle, deactivated)` |
+
+So the seat is the node nearest the path's first waypoint (`FUN_00431900`, a 3-D distance through
+`FUN_00538880`) and the edge leaving it best lined up with the path's first leg (`FUN_00431e40`).
+
+**Activation does not reseat the walk.** `FUN_004b0f40` clears the inactive flags and then tests
+`+0xcc` (`0x004b1005`, `0x004b1025`): a vehicle on a path skips its net step outright. For any other
+vehicle that step moves the vehicle's POSITION through `FUN_00432010` (`0x004b1089`), the trailer
+carry of the "The trailer" section above, and it never writes `+0x2e8` or `+0x2ec`. The path
+follower's handoff (`FUN_0048a110` clearing `+0xcc` at `0x0048a863`) writes no net field either.
+A path vehicle therefore takes off already walking the leg its placement seated, however far the
+take-off carried it.
+
+**Node heights are absolute.** `FUN_00432010` passes a node's Y through verbatim, trailer or not,
+and the only altitude rules the AI has are the flat 20 m floor and the crash ray of "Crash
+avoidance is a STATE" below. There is no terrain following and no per-plane height field: the
+`200.0` in the Cabbie's roster block is slot 7, `init_health`
+([`../formats/ai-rosters.md`](../formats/ai-rosters.md)).
+
+**What this decides in CM21.** The Cabbie (`autogyro_1`, C5/M01) is placed on the rooftop `pp1`
+(waypoint 0 at (-7424, 365, -10960), heading +Z). Its net `M1Cabbie` (#5) seats on node 2
+(-7438, 400, -10771), whose one edge goes to node 11, so the walk is 2, 11, 12, 3, 4 at 400 m.
+Node 4 carries the tag `[0, 0, 1, 33]`, and reaching it enters `dzpath33` by name through
+`FUN_00421500` from the nearer end, the route's last vertex at y 371. The run descends to 23 to
+82 m between the buildings, climbs to 257 m over one block and ends at its first vertex, 393 m up.
+Reseating at the take-off's handoff point (-7424, 418, -10648) instead picks node 4 as the node
+flown FROM and walks 4, 0, 5, which never arrives at node 4 and never fires the tag: the net at
+350 to 400 m for the whole mission.
+
+Every taxi-path vehicle seats this way: C1/M04's `blakepeace_2_3` to `_6` (nets 13 and 15),
+C2/M02's `secgyro_1` to `_4` (net 9) and `devastator_1` (net 5), and the Cabbie. Of those nets only
+`M1Cabbie` carries a tagged node, so for the others the seat decides only the first leg flown.
+
+CSVM: `CampaignDirector.PlaceOnPath` seats the walk with `AiNetFollower.Seat` right after a roster
+spawn's placement, and both the wake (`ActivateDormantRoster`) and the handoff activate with
+`FlightController.Activate(keepPatrolSeat: true)` while the vehicle is on its path. A
+`WARP_VEHICLE` onto a path (`FUN_004940d0`) runs no net assignment, so its handoff still reseats.
+Pinned by the `campaign-cabbie-run` suite.
+
 ## Which edge a vehicle leaves a node on: the nose, never a draw
 
 `FUN_00431e40(net, nodeIndex, excludeEdgeIndex, direction)` picks the edge, and it has exactly two
@@ -1620,7 +1669,8 @@ right to call it a list.
 Activation is separate from all of this. `FUN_004b0f40(vehicle, deactivated)` is the
 activate/deactivate primitive, clearing or setting `+0x945`, `+0x91d`, `+0x91e` and `+0x91f`, and is
 called from the spawn with the roster's `deactivated` field. On activation, a vehicle that has a net
-is snapped to that net's nearest node (`FUN_00432010`).
+and is not on a scripted path has its position carried by the net's trailer offset (`FUN_00432010`);
+the walk itself is never reseated ("A path vehicle's net seat is taken at its placement").
 
 ## `preferred_engagement_altitude` is a maneuver-selection weight
 
@@ -1717,7 +1767,7 @@ law is a campaign behaviour and the wrong fix for a wingman that leaves the figh
 | `FUN_00475820` | def to vehicle copy, including `mode` |
 | `FUN_00476250` | post-spawn vehicle init, including the wingman demotion |
 | `FUN_0047c210` | the roster spawn: `netids` draw, `preferred_engagement_altitude`, activation |
-| `FUN_004b0f40` | activate / deactivate |
+| `FUN_004b0f40` | activate / deactivate; the trailer carry of the position, skipped while `+0xcc` is set, never a reseat |
 | `FUN_00479240` | the `vehicle.json` def parser, including the `mode` string table |
 | `FUN_004201a0` | evasive-maneuver selection, the one reader of `preferred_engagement_altitude` |
 | `FUN_0041c470` | the debug overlay that names the modes and recomputes the target ranking |

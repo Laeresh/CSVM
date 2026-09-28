@@ -369,8 +369,8 @@ target node out, with `AiPilot.Patrol` and `ZeppelinMotion` its two consumers. G
 nose it is the decoded walk, seating on the nearest node and flying the far end of the edge whose leg
 best lines up with that nose, then repeating that pick at every arrival with the edge just flown
 excluded, which is what makes a group sharing one net fly in formation. Arrival is measured along the
-leg rather than as a capture sphere. It also holds a net's live stop-point flags and the structural
-dead-end hold, both gated on `ObservesStopPoints`, and `Reseat` is the original's activation snap.
+leg rather than as a capture sphere. It holds the live stop points and dead-end hold (`ObservesStopPoints`).
+`Seat` seats a path placement at once, and `Reseat` drops the seat for a re-activation or zone exit.
 Decode: [../org/aiPilot.md](../org/aiPilot.md). Read `AiPilot.cs` next.
 
 ## src/Flight/Modes/DangerZoneRibbon.cs

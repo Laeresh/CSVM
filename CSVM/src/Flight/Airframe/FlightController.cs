@@ -1492,14 +1492,13 @@ public partial class FlightController : Node3D
         return drew;
     }
 
-    /// <summary>The inverse of building inert: re-home this aircraft at <paramref name="pos"/>
-    /// with its nose on <paramref name="lookAt"/>, put it back in play and respawn it there, the
-    /// original's teleport-then-reactivate, in one call. <see cref="Respawn"/> does the rest of the
-    /// work it always does (spawn speed and throttle, a healthy repaired airframe, full ammo, the
-    /// start choreography), so a wave arrives flying rather than parked. Calling this on an
-    /// aircraft already in play is simply that teleport-and-reset.</summary>
+    /// <summary>The inverse of building inert, the original's teleport-then-reactivate. It re-homes
+    /// this aircraft at <paramref name="pos"/>, facing <paramref name="lookAt"/>, and respawns it.
+    /// <see cref="Respawn"/> restores speed, airframe, ammo and the start choreography, so a wave
+    /// arrives flying. On an aircraft already in play it is that teleport-and-reset.
+    /// <paramref name="keepPatrolSeat"/> keeps the patrol walk, for a scripted-path vehicle.</summary>
     public void Activate(Vector3 pos, Vector3 lookAt, Vector3? launchVelocity = null,
-        bool carrierDrop = false, float? launchThrottle = null)
+        bool carrierDrop = false, float? launchThrottle = null, bool keepPatrolSeat = false)
     {
         var dir = lookAt - pos;
         _spawnPos = pos;
@@ -1508,10 +1507,11 @@ public partial class FlightController : Node3D
             _spawnAttitude = Basis.LookingAt(dir.Normalized(), Vector3.Up);
         Inert = false;
         ArmSpawnTimers(carrierDrop);
-        // The original snaps an activated vehicle to its net's nearest node (FUN_004b0f40 →
-        // FUN_00432010), which is what makes a teleported wave patrol where it ARRIVED rather
-        // than fly back to wherever it was parked.
-        Pilot?.Patrol?.Reseat();
+        // Reseating makes a teleported wave patrol where it ARRIVED rather than fly back to where it
+        // was parked. The original skips its activation net step for a path vehicle (FUN_004b0f40,
+        // docs/org/aiPilot.md), so a handoff keeps the walk seated at the spawn placement.
+        if (!keepPatrolSeat)
+            Pilot?.Patrol?.Reseat();
         Respawn();
         if (launchVelocity is { } velocity)
             _model.SetVelocity(velocity);
