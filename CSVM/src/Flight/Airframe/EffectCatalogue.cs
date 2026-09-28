@@ -62,6 +62,12 @@ public static class EffectCatalogue
     // vehicle named `player`. Same NAME as the crash root, so it needs no anchor of its own.
     public const string PlayerDestroyAnim = "player";
 
+    /// <summary>What a vehicle def naming no <c>spin_props_anim</c> spins its propellers with.</summary>
+    public const string DefaultSpinPropsAnim = "spinprops";
+
+    /// <summary>What a vehicle def naming no <c>stop_props_anim</c> winds them down with.</summary>
+    public const string DefaultStopPropsAnim = "stopprops";
+
     // The middle of damage_shakes.zrd.json's three `*_aishake` defs, the plane-rocking half of the
     // camera shake a person at the controls gets instead. FlightController plays it on an AI's
     // nitro engage, the one trigger of the three the executable's shake player is decoded on, and
@@ -133,11 +139,12 @@ public static class EffectCatalogue
     public static readonly string[] PlaneDamageEffectAnims =
         { "nose_damage_effects", "tail_damage_effects", "leftwing_damage_effects", "rightwing_damage_effects" };
 
-    // The propeller defs, from plane_props.zrd.json, which FlightController plays directly. It plays
-    // `spinprops` at every spawn and restart, and `stopprops` on the choke and the death.
-    // `startprops` stays loadable, but nothing plays it. No def or scene in the original's data
-    // names it (docs/org/ordnanceTypes.md).
-    public static readonly string[] PropChoreographyAnims = { "startprops", "stopprops", "spinprops" };
+    // The propeller defs from plane_props.zrd.json. FlightController plays them directly unless the
+    // airframe's def names its own pair, which CrashRigAnimNames binds too. `startprops` stays
+    // loadable, but nothing plays it. No def or scene in the original's data names it
+    // (docs/org/ordnanceTypes.md).
+    public static readonly string[] PropChoreographyAnims =
+        { "startprops", DefaultStopPropsAnim, DefaultSpinPropsAnim };
 
     // The nitro boost's two defs (plane_props.zrd.json): the nitroprop discs cross-fade in over
     // the spinning props with the exhaust puffers and snd_nitrostart, and the decay reverses it.
@@ -287,18 +294,22 @@ public static class EffectCatalogue
         return false;
     }
 
-    /// <summary>Everything the per-player crash rig binds, every playable crash-vector slot (the
-    /// struck surface is only known at impact, so the whole vector is bound), the four damage
-    /// shims, the prop choreography, both authored damage-stage menus and this rig's destroy def,
-    /// i.e. every def that plays ON one aircraft, and therefore the name set whose anchor-root
-    /// closure that rig's own template stage must satisfy (<see cref="CrashStageRoots"/>). Both
-    /// menus regardless of who flies; <paramref name="humanPiloted"/> adds the canopy holes.</summary>
+    /// <summary>Everything the per-player crash rig binds, which is every def that plays ON one
+    /// aircraft. That is every playable crash-vector slot, since the struck surface is known only at
+    /// impact. It adds the four damage shims, the prop choreography, both damage-stage menus and the
+    /// destroy def. The rig's template stage must satisfy this set's anchor-root closure, which is
+    /// <see cref="CrashStageRoots"/>. A human rig adds the canopy holes, and
+    /// <paramref name="propAnims"/> is the propeller pair the airframe's own def names.</summary>
     public static IReadOnlyList<string> CrashRigAnimNames(SurfaceDefTable crashDefs,
-        string? destroyAnim = null, bool humanPiloted = false)
+        string? destroyAnim = null, bool humanPiloted = false, IEnumerable<string>? propAnims = null)
     {
         var names = new List<string>(crashDefs.PlayableDefs);
         names.AddRange(PlaneDamageEffectAnims);
         names.AddRange(PropChoreographyAnims);
+        if (propAnims != null)
+            foreach (var prop in propAnims)
+                if (!names.Contains(prop, StringComparer.OrdinalIgnoreCase))
+                    names.Add(prop);
         names.AddRange(NitroAnims);
         names.Add(AiShakeAnim);
         names.AddRange(DamageStageAnims);

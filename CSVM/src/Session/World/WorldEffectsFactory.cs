@@ -829,11 +829,14 @@ public sealed class WorldEffectsFactory
                 // BOUNCE reads a real struck surface rather than a guess.
                 crashRuntime.SurfaceIsWater = body => ProjectilePool.SurfaceIsWater(body as Node);
             }
+            // The def's own propeller pair. Its anchors are airframe names, so the stage closure above
+            // needs no template for it.
+            var propAnims = new[] { _controller.SpinPropsAnim, _controller.StopPropsAnim };
             // Bind only the closure of names that play ON this aircraft (CrashRigAnimNames), never the
             // full ~800-def world program, its ~150 generic-named defs would mis-anchor onto this
             // plane's parts and run their reset states on it.
             var bound = _crashProgram.Subset(EffectCatalogue.CrashRigAnimNames(_crashDefs!, _destroyAnim,
-                _controller.IsHumanPiloted));
+                _controller.IsHumanPiloted, propAnims));
             crashRuntime.Bind(_controller, bound);
             _controller.AddChild(crashRuntime);
             _controller.DestroyDef = _destroyAnim;

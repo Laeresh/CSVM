@@ -383,6 +383,7 @@
     "shootable-flyout": 0.071,
     "smoke-screen": 0.578,
     "sonic-ground-ring": 0.045,
+    "spawn-props-by-def": 0.93,
     "spawn-props-silent": 0.88,
     "splitscreen-listeners": 0.006,
     "spyglass-marker-hud": 0.374,

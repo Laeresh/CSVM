@@ -320,6 +320,15 @@ public sealed class PlaneStats
     public SoundCurve WhinePitch = new(1f, 0.65f, 1.2f, 1.25f);
     public string RattleSound = "snd_planeshake";
 
+    /// <summary>vehicle.json <c>spin_props_anim</c>, the definition the spawn and the choke's restart
+    /// start on the propeller slot: <c>spinprops</c> on every fixed-wing chain, <c>agyro_rotors</c>
+    /// on the autogyro's. Null when the chain names none (docs/org/ordnanceTypes.md).</summary>
+    public string? SpinPropsAnim;
+
+    /// <summary>vehicle.json <c>stop_props_anim</c>, the wind-down the choke and the death start:
+    /// <c>stopprops</c> on every shipped chain. Null when the chain names none.</summary>
+    public string? StopPropsAnim;
+
     /// <summary>player.json <c>rattle.speed_range[0]</c>, the speed as a fraction of fd_speed the
     /// rattle loop starts at, and the whole of the original's law for it. ⚠ Do not add the block's
     /// <c>volume_range</c> back as a ramp: the original parses that pair and its second speed into
@@ -658,6 +667,19 @@ public sealed class PlaneStats
 
         stats.VehicleArmor = PropOpt("armor");
         stats.VehicleHealth = PropOpt("health");
+
+        // Off the def the vehicle spawns as, which is the record the original's two slot routines
+        // read at def+0x18c and def+0x190.
+        string? SpawnStr(string key)
+        {
+            foreach (var d in damageChain)
+                if (d.Str(key) is { Length: > 0 } s)
+                    return s;
+            return null;
+        }
+
+        stats.SpinPropsAnim = SpawnStr("spin_props_anim");
+        stats.StopPropsAnim = SpawnStr("stop_props_anim");
 
         // Off the damage chain, because the def the vehicle SPAWNS as is what the original copies
         // these off: an AI variant's own chain for an AI aeroplane, and the player chain, where

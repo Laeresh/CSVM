@@ -897,6 +897,14 @@ public partial class FlightController : Node3D
     /// that wants a name falls back to the node's.</summary>
     public PlaneStats? Stats => _model?.Stats;
 
+    /// <summary>The definition this airframe's def names as <c>spin_props_anim</c>, which the spawn
+    /// and the choke's restart start. <c>spinprops</c> when the def names none.</summary>
+    public string SpinPropsAnim => Stats?.SpinPropsAnim ?? EffectCatalogue.DefaultSpinPropsAnim;
+
+    /// <summary>The definition this airframe's def names as <c>stop_props_anim</c>, which the choke
+    /// and the death start. <c>stopprops</c> when the def names none.</summary>
+    public string StopPropsAnim => Stats?.StopPropsAnim ?? EffectCatalogue.DefaultStopPropsAnim;
+
     /// <summary>This pane's HUD message stack, where the session posts the kill line. Null until
     /// <c>_Ready</c> has built the HUD, and on every AI rig, which builds none.</summary>
     public HudMessages? MessageStack => _pilotHud.MessageStack;
@@ -1407,7 +1415,8 @@ public partial class FlightController : Node3D
 
     /// <summary>The first spawn's propellers, for the assemblers that attach the crash rig after
     /// <see cref="Setup"/> has already respawned without one. The same silent, instant
-    /// <c>spinprops</c> every later <see cref="Respawn"/> plays (docs/org/ordnanceTypes.md).</summary>
+    /// <see cref="SpinPropsAnim"/> every later <see cref="Respawn"/> plays
+    /// (docs/org/ordnanceTypes.md).</summary>
     public void SpinPropsAtSpawn()
     {
         if (PlaneModel != null && CrashRuntime is { } rig)
@@ -2735,13 +2744,13 @@ public partial class FlightController : Node3D
     {
         if (_propsStopped || PlaneModel == null || CrashRuntime is not { } rig)
             return;
-        rig.Stop("spinprops");
-        rig.Play("stopprops", PlaneModel, applyReset: false);
+        rig.Stop(SpinPropsAnim);
+        rig.Play(StopPropsAnim, PlaneModel);
         _propsStopped = true;
     }
 
-    // The restart half: silent and instant, because the original's falling edge runs `spinprops`
-    // and never `startprops`, whose snd_propstart the original plays nowhere.
+    // The restart half: silent and instant, because the original's falling edge runs the def's
+    // spin definition and never `startprops`, whose snd_propstart the original plays nowhere.
     private void PlaySpinProps()
     {
         if (!_propsStopped || PlaneModel == null || CrashRuntime is not { } rig)
@@ -2749,21 +2758,25 @@ public partial class FlightController : Node3D
         SpinProps(rig, PlaneModel);
     }
 
-    // The spin slot's one start, shared by the spawn and the choke's restart. ⚠ Take stopprops off
-    // first: a hull that went down with its propellers stopped would otherwise fly again with the
-    // wind-down still fading staticpropN in.
+    // The spin slot's one start, shared by the spawn and the choke's restart. ⚠ Take the stop
+    // definition off first. A hull that went down with its propellers stopped would otherwise fly
+    // again with the wind-down still fading staticpropN in.
     private void SpinProps(AnimRuntime rig, Node3D model)
     {
-        rig.Stop("stopprops");
+        string spin = SpinPropsAnim;
+        rig.Stop(StopPropsAnim);
         // ⚠ Suppressed, or the def's endless XYZ_ROTATION becomes a second writer on the same
         // disc transforms PropAnimator turns at those very rates.
-        rig.SuppressedMotionAnims.Add("spinprops");
-        rig.Play("spinprops", model, applyReset: false);
+        rig.SuppressedMotionAnims.Add(spin);
+        // ⚠ Keep the reset: agyro_rotors activates prop1/rotor1 only in its RESET_STATE, which the
+        // original's start runs (docs/org/ordnanceTypes.md). Without it a choked autogyro restarts
+        // with no propeller.
+        rig.Play(spin, model);
         RestoreDiscOpacity(rig, model);
         _propsStopped = false;
     }
 
-    // `spinprops` re-activates the blur discs and writes no opacity. The wind-down it reverses
+    // The spin definition re-activates the blur discs and writes no opacity. The wind-down it reverses
     // faded those same discs to zero. The restart therefore puts the alpha back itself, or the
     // aeroplane comes out of a choke with its propellers turning invisibly.
     private void RestoreDiscOpacity(AnimRuntime rig, Node node)

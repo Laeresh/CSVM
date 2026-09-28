@@ -565,7 +565,7 @@ the def's `turrets` block as `TurretMount`s, engines.json stock engine power, an
 globals, which are the flight constants plus the tuning the cue, aim-assist, head-look and damage
 paths read. It also carries the `crash` block's restitution ceiling, the engine sound defs and their
 curves, `destroyable_parts` as `DestroyablePart` records with the def-level injure anims, and the
-`collision` probe list, and `AiTargetBias`/`AiStructBias`, the def's two acquisition rank terms, and `AiAttackDwell`/`AiNotPursuitDwell`, the pursuit timers, all read off the chain the vehicle spawns as. `Load` resolves down the player chain, `LoadForAi` takes only the damage model off the AI chain, and the `With*` family layers roster, difficulty and hangar overrides on.
+`collision` probe list, and `AiTargetBias`/`AiStructBias`, the def's two acquisition rank terms, and `AiAttackDwell`/`AiNotPursuitDwell`, the pursuit timers, and `SpinPropsAnim`/`StopPropsAnim`, the propeller pair, all read off the chain the vehicle spawns as. `Load` resolves down the player chain, `LoadForAi` takes only the damage model off the AI chain, and the `With*` family layers roster, difficulty and hangar overrides on.
 
 ## src/Flight/Airframe/PlaneRoster.cs
 Static, spec-free lookups over a `SessionSpec`'s plane roster: `PlaneFor(spec, index)`,
