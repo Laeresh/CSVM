@@ -19,6 +19,11 @@ public static class ViewportQuality
     /// faithful <c>--det</c> runs, and they have to read back Godot's own defaults.</summary>
     public static void Apply(Viewport viewport)
     {
+        // ⚠ A transparent viewport (the cockpit pass) takes neither. Godot's TAA and FSR resolves
+        // write an opaque alpha, so the pass comes out black everywhere but the interior and hides
+        // the world. It keeps the project's MSAA, which covers the interior's edges.
+        if (viewport.TransparentBg)
+            return;
         var method = AntiAliasingSetting.Method;
         float scale = RenderScaleSetting.Scale;
         switch (method)

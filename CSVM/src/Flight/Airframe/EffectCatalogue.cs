@@ -113,16 +113,29 @@ public static class EffectCatalogue
 
     // The impact effects whose fireball lights what stands around it: the HE ground burst, the
     // torpedo's, and the two heaviest fireball defs. ⚠ Enhanced Graphics only,
-    // and a remake-only rule. Effects.HeatShimmer and WorldLights.AddBurst take the whole set.
-    // The burst light replaces the authored light a def declares (AnimRuntime.LightReplacedAnimNames);
-    // the faithful path registers neither and draws the authored light. The gun hits and the
+    // and a remake-only rule. Effects.HeatShimmer and the enhanced scorch take the whole set.
+    // Each also throws a burst light (BurstLightShapes, below). The faithful path registers none of
+    // these and draws the authored light. The gun hits and the
     // fireless bursts carry no fireball, and `ap_ground_effect`/`flak_effect` throw a spark.
     public static readonly string[] BurstLightAnimNames =
         { "he_ground_effect", "torpedo_ground_effect", "large_fireball", "small_fireball" };
 
-    // The burst light's colour, the authored `he_light` LIGHT_STATE colour of an HE detonation
-    // (docs/org/ordnanceTypes.md, "The burst light in Enhanced Graphics").
-    public static readonly Color BurstLightColor = new(1.0f, 0.86f, 0.29f);
+    // Every effect that throws an enhanced burst light, and that light's shape (WorldLights.AddBurst).
+    // A superset of BurstLightAnimNames. The seeker's ground flare and the flash rocket's detonation
+    // light the ground but carry no fireball, so they neither shimmer nor scorch. Under Enhanced each
+    // replaces the authored light its def declares (AnimRuntime.LightReplacedAnimNames). The HE and
+    // torpedo defs author one `he_light` colour (1.0, 0.86, 0.29); these are redder, and the torpedo
+    // reads far heavier. TUNE, judged at the controls (docs/org/ordnanceTypes.md).
+    public static readonly IReadOnlyDictionary<string, WorldLights.BurstShape> BurstLightShapes =
+        new Dictionary<string, WorldLights.BurstShape>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["he_ground_effect"] = new(new Color(1.0f, 0.62f, 0.24f), 4.0f, 180f, 0.29f),
+            ["large_fireball"] = new(new Color(1.0f, 0.62f, 0.24f), 4.0f, 180f, 0.29f),
+            ["small_fireball"] = new(new Color(1.0f, 0.62f, 0.24f), 2.5f, 120f, 0.25f),
+            ["torpedo_ground_effect"] = new(new Color(1.0f, 0.52f, 0.2f), 9.0f, 280f, 0.45f),
+            ["ballflare.flt"] = new(new Color(1.0f, 0.7f, 0.42f), 1.8f, 160f, 0.3f),
+            ["flash_effect"] = new(new Color(0.72f, 0.84f, 1.0f), 14.0f, 350f, 0.22f),
+        };
 
     // The bailed pilot under his canopy. He is not a piece of the wreck, he is a man stepping out
     // of it, so he takes neither its momentum nor its attitude. The momentum half needs no list any
@@ -258,6 +271,10 @@ public static class EffectCatalogue
     public static bool IsBurstLight(string animName) =>
         Array.Exists(BurstLightAnimNames,
             name => string.Equals(name, animName, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The burst light a played effect throws, or null for one that throws none.</summary>
+    public static WorldLights.BurstShape? BurstLightShape(string animName) =>
+        BurstLightShapes.TryGetValue(animName, out var shape) ? shape : null;
 
     /// <summary>The crash-def vector this program can play, built over the whole surface registry
     /// with <see cref="CrashDefPrefix"/>, what <c>BuildFlightCrashRuntime</c> binds and what

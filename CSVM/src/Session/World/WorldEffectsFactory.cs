@@ -348,25 +348,25 @@ public sealed class WorldEffectsFactory
         new CrashRigBuild(this, controller, planeBuilder, planeName, gamez, worldScene, textures,
             crashProgram, verbose, worldSounds, planesGamez);
 
-    /// <summary>The defs whose authored lights the burst light stands in for: every burst def
+    /// <summary>The defs whose authored lights the burst light stands in for: every burst-light def
     /// under Enhanced Graphics. An HE detonation is then one light, not a faint wide ramp beside a
     /// bright short one. Null on the faithful path, which draws every authored light.</summary>
     internal static HashSet<string>? ReplacedLightAnimNames() => GraphicsMode.Enhanced
-        ? new HashSet<string>(EffectCatalogue.BurstLightAnimNames, StringComparer.OrdinalIgnoreCase)
+        ? new HashSet<string>(EffectCatalogue.BurstLightShapes.Keys, StringComparer.OrdinalIgnoreCase)
         : null;
 
     /// <summary>The effect sink's burst-light rule, the one place it is decided. Under Enhanced
-    /// Graphics a played fireball effect (<see cref="EffectCatalogue.IsBurstLight"/>) registers a
-    /// short-lived light with the world's <see cref="WorldLights"/>, gone when
+    /// Graphics a played effect with a <see cref="EffectCatalogue.BurstLightShape"/> registers a
+    /// short-lived light of that shape with the world's <see cref="WorldLights"/>, gone when
     /// <paramref name="stillBurning"/> goes false. The faithful presentation and a view with no
     /// lights register nothing. A def that authors its own light still takes one: under Enhanced
     /// its authored light is not drawn (<see cref="AnimRuntime.LightReplacedAnimNames"/>).</summary>
     internal static void RegisterBurstLight(WorldLights? lights, string animName, Vector3 at,
         Func<bool> stillBurning)
     {
-        if (lights == null || !GraphicsMode.Enhanced || !EffectCatalogue.IsBurstLight(animName))
+        if (lights == null || !GraphicsMode.Enhanced || EffectCatalogue.BurstLightShape(animName) is not { } shape)
             return;
-        lights.AddBurst(at, EffectCatalogue.BurstLightColor, stillBurning);
+        lights.AddBurst(at, shape, stillBurning);
     }
 
     /// <summary>The effect sink's heat-shimmer rule, the one place it is decided: under Enhanced

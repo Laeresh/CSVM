@@ -611,6 +611,16 @@ write read back. `CheckCommentCaps.ps1`, `CheckDocEntries.ps1` and `CheckEncodin
 to the user:** each method's look at the controls, and on the Deck the `[perf]` figures at 100% and
 67% under Enhanced, one pane and four, FSR 1 against FSR 2.2.
 
+**Fix at the controls: the cockpit pass takes no method and no scale.** In the cockpit view the
+world outside came out black under TAA, FSR 1 (any scale below 100, so also with the row on Off)
+and FSR 2.2, and the gauge backgrounds turned see-through under FXAA. The cockpit pass
+(`CockpitOverlay`) is a `TransparentBg` SubViewport composited over the world, and Godot's temporal,
+upscaling and screen-space resolves do not keep its alpha. `ViewportQuality.Apply` now returns
+early on a transparent viewport, which keeps the project's MSAA 2x on the interior's edges; the
+pass is small, so native resolution there costs little. `display-render-scale` checks that a
+transparent viewport reads back unwritten under FXAA, SMAA, TAA at 67 and FSR 2.2 at 50. The E41
+note that called the black world in its shots a capture artifact was this bug.
+
 **Goal.** The player picks the anti-aliasing method on the VIDEO page of both presentations, and
 Render Scale offers the scales that method can run at, down to 50% so a Steam Deck can run
 Enhanced Graphics and splitscreen at a playable frame rate.
@@ -651,8 +661,9 @@ FSR 2.2, and the user's look.
 faithful `--det` goldens move. FSR 2.2's cost is roughly fixed per output pixel and a four-pane run
 pays it once per pane, so a scale that helps at one pane can lose at four. The hand-billboarded
 shaders (puffer, clouds, clutter) write no motion vectors; a lower input resolution leans harder
-on them, so look for smear on smoke and clouds first. The cockpit and spyglass SubViewports take
-the same writes as the root viewport, or the panes disagree in sharpness (A2's trap).
+on them, so look for smear on smoke and clouds first. The spyglass SubViewport and the panes take
+the same writes as the root viewport, or they disagree in sharpness (A2's trap); the transparent
+cockpit pass takes none (see the fix above).
 
 # Wave B, lit explosions
 
@@ -741,6 +752,26 @@ constants. The faithful path is unchanged: nothing replaced, the authored ramp c
 `burst-light` suite pins both (faithful: owner, `he_light`, `he_light1`; Enhanced: owner plus one
 burst no wider than 180 m, the authored ramp still tracked in the snapshot). Owed at the controls:
 the look against the faithful path's authored ramp.
+
+**Decision at the controls: a shape per burst def, lifted and unattenuated.** The replacing light
+still showed nothing on the ground. Enhanced world materials take the `worldLit` arm
+(`SceneBuilder`), which has no per-vertex `csky_point_light` term, so only the omni lights the
+terrain; an omni at ground level meets flat ground edge-on (N·L near 0), and `OmniAttenuation` 1.0
+spends it within about 20 m. The burst now stands `WorldLights.BurstLift` (30 m) above the hit with
+attenuation 0, so its whole range lights the ground at a usable angle. The user then asked for HE a
+little stronger, the torpedo much stronger than HE, a redder colour than the authored
+(1.0, 0.86, 0.29) that `he_light` and `torp_light` share, a light for the seeker's ground burst and a
+bright, large, white-blue one for the flash rocket. `EffectCatalogue.BurstLightShapes` gives each
+def a `WorldLights.BurstShape` (colour, peak gain, range, e-fold): HE and `large_fireball` 4.0 over
+180 m in 0.29 s, `small_fireball` 2.5 over 120 m, the torpedo 9.0 over 280 m in 0.45 s,
+`ballflare.flt` (the seeker's default row) 1.8 over 160 m, since four land together and 6 each
+washed the whole view, and `flash_effect` 14.0 over 350 m in 0.22 s, replacing its authored white
+light. The seeker and flash defs are no fireball, so `IsBurstLight` (the shimmer and scorch set)
+leaves them out. The `burst-light-envelope` suite pins the two new shapes and the torpedo's lead
+over HE; `burst-light` pins the lift. Captured on the hidden desktop: HE, seeker and flash light the
+C1 tarmac under Enhanced; HE's range edge shows as a soft ring on flat ground. The torpedo was not
+captured (the scripted pose pitches away before it arms) and is owed at the controls with the other
+three.
 
 ## B12 ☑ The additive fireball frames bloom
 
@@ -1263,9 +1294,7 @@ nothing at 228 mph (0.76 of the Bloodhawk's 135 m/s `fd_speed`) in all three vie
 chase, cockpit and nose at 326 mph in a shallow dive, with the wisps emitting in both.
 **Owed to the user:** the look at the controls, where the motion is most of the cue a still cannot
 show; the density and length pick off the four pairs in `.scratch/eg2/E41/`; and whether Enhanced
-should dim the wisps, which ships as no dimming. A cockpit-view `--screenshot` composites a black
-world through the cockpit pass, so those two shots carry `--no-cockpit-pass`; that is a capture
-artifact of the pass, not of this item.
+should dim the wisps, which ships as no dimming. Those two shots carry `--no-cockpit-pass`.
 
 **Original approach (kept for reference).**
 

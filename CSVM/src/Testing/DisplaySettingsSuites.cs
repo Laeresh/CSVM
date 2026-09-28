@@ -854,6 +854,18 @@ internal static class DisplaySettingsSuites
             var fsrBelow = Written(DisplayWords.AntiAliasingTaa, "67");
             ctx.Check(fsrBelow.Mode == Viewport.Scaling3DModeEnum.Fsr && fsrBelow.Scale == 0.67f && fsrBelow.Taa,
                 $"any other method below native upscales through FSR 1 ({fsrBelow})");
+            // The cockpit pass is transparent, and each of these resolves overwrites its alpha. TAA
+            // and FSR black out the world behind it; FXAA clears the gauge faces.
+            foreach (var (method, scale) in new[]
+            {
+                (DisplayWords.AntiAliasingFxaa, "100"), (DisplayWords.AntiAliasingSmaa, "100"),
+                (DisplayWords.AntiAliasingTaa, "67"), (DisplayWords.AntiAliasingFsr2, "50"),
+            })
+            {
+                var transparent = Written(method, scale, transparent: true);
+                ctx.Check(transparent == Read(control),
+                    $"a transparent viewport under {method} at {scale} takes nothing ({transparent})");
+            }
         }
         finally
         {
@@ -862,9 +874,9 @@ internal static class DisplaySettingsSuites
     }
 
     // What a viewport built under one method and scale reads back.
-    private static ViewportRead Written(string antiAliasing, string scale)
+    private static ViewportRead Written(string antiAliasing, string scale, bool transparent = false)
     {
-        var view = new SubViewport();
+        var view = new SubViewport { TransparentBg = transparent };
         try
         {
             AntiAliasingSetting.Resolve(antiAliasing, null, enhanced: false);

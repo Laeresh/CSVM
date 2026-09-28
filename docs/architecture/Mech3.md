@@ -461,8 +461,8 @@ Packs the `LIGHT_STATE` point lights, each as colour times ambient + diffuse, in
 to the NEAREST viewer handed in (`AnimRuntime.LightViewerPositions`, from `GameSession`'s `ViewerSet`). The world runtime
 owns the frame (`Begin`/`Add`/`Commit`); the world-effects runtime contributes through `AddSource`, so a burst ranks
 against the beacons in one set. With a parent `Node3D` in enhanced mode, `Commit` mirrors the committed set onto pooled
-`OmniLight3D` nodes ([Root.md](Root.md)). Enhanced alone, `AddBurst` adds an explosion flash, aged on `Begin`'s dt and
-dying with its fireball, which replaces the burst def's own authored ramp (`AnimRuntime.LightReplacedAnimNames`).
+`OmniLight3D` nodes ([Root.md](Root.md)). Enhanced alone, `AddBurst` adds an explosion flash in a per-def `BurstShape`, lifted and unattenuated, aged on `Begin`'s dt and
+dying with its effect, which replaces the burst def's own authored light (`AnimRuntime.LightReplacedAnimNames`).
 
 ## src/Mech3/MissionSetup.cs
 Parses + applies the per-mission `.gw` interp script that decides which world entities a mission

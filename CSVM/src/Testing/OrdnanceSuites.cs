@@ -2045,6 +2045,16 @@ internal static class OrdnanceSuites
         ctx.Check(EffectCatalogue.IsBurstLight("he_ground_effect")
                   && !EffectCatalogue.IsBurstLight("3040slug_gunhit"),
             $"the catalogue calls wep_06's he_ground_effect a fireball and a gun hit not one");
+        // The seeker's ground flare and the flash rocket's detonation carry no fireball. They take a
+        // burst light but neither shimmer nor scorch.
+        var flash = EffectCatalogue.BurstLightShape("flash_effect");
+        ctx.Check(EffectCatalogue.BurstLightShape("ballflare.flt") != null && flash is { } f && f.Color.B > f.Color.R
+                  && !EffectCatalogue.IsBurstLight("ballflare.flt") && !EffectCatalogue.IsBurstLight("flash_effect"),
+            $"wep_11's ballflare.flt and wep_09's flash_effect throw a burst light, the flash's bluish, and are no fireball");
+        ctx.Check(EffectCatalogue.BurstLightShape("torpedo_ground_effect") is { } torp
+                  && EffectCatalogue.BurstLightShape("he_ground_effect") is { } heShape
+                  && torp.PeakGain > 2f * heShape.PeakGain && torp.RangeMax > heShape.RangeMax,
+            $"the torpedo's burst is far heavier than the HE rocket's");
 
         const float Dt = 1f / 60f;
         var origin = new Vector3(900f, 4000f, 900f);
@@ -2321,7 +2331,7 @@ internal static class OrdnanceSuites
             GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
         var lights = new WorldLights(omniParent);
         var viewers = new[] { point };
-        var ownerLight = point + new Vector3(30f, 0f, 0f);
+        var ownerLight = point + new Vector3(60f, 0f, 0f);
         try
         {
             runtime.ContributeLightsTo(lights);
@@ -2376,7 +2386,9 @@ internal static class OrdnanceSuites
                 $"{mode}: the four opening deltas accumulate to the authored (104,320) m plateau ({plateau.Min:0.##},{plateau.Max:0.##})");
             ctx.Check(peakMax >= 320f && peakMax <= 420.01f,
                 $"{mode}: the peak stays within the authored 420 m, never clamped below the plateau ({peakMax:0.##} m)");
-            ctx.Check(burstOffset < 1f, $"{mode}: a committed light sits on the burst ({burstOffset:0.###} m off)");
+            // The enhanced burst light stands BurstLift above the hit, so level ground is not lit edge-on.
+            float lift = enhanced ? WorldLights.BurstLift : 0f;
+            ctx.Check(Mathf.Abs(burstOffset - lift) < 1f, $"{mode}: a committed light sits {lift:0} m above the burst ({burstOffset:0.###} m off)");
             if (enhanced)
                 ctx.Same(2, maxCommitted, $"{mode}: the owner's light and the one burst light commit together, he_light and he_light1 replaced");
             else

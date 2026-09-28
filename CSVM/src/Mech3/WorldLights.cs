@@ -24,6 +24,10 @@ public sealed class WorldLights : IDisposable
     /// at build as "world lights: … peak N"), so nearest-N never actually drops one.</summary>
     public const int MaxActive = 16;
 
+    // TUNE: how far above the hit a burst light (AddBurst) stands, in metres. At the hit itself flat
+    // ground takes it edge-on, where a lit surface's diffuse term is zero however bright the light.
+    internal const float BurstLift = 30f;
+
     // The data's lights are SMALL, every startup light in this install has a range_max between
     // 2 and 22 m, so one seen from far enough away is a sub-pixel smudge that the mission's fog
     // has already washed out. Rather than hard-cull at a radius (which pops), the contribution
@@ -51,22 +55,10 @@ public sealed class WorldLights : IDisposable
     private const float OmniAttenuationTune = 1.0f;
 
     // ---- the enhanced-only burst light (AddBurst), one TUNE block ----
-    // The range a burst lights to, in metres, both off the authored `he_light` ramp in
-    // `he_ground_effect` (docs/org/ordnanceTypes.md): the min is its ignition inner radius and the
-    // max its reach one step in, where the fireball is at its brightest. The ramp's own 420 m end
-    // value is the dying light's last frame and would flood a whole chapter for the burst's life.
+    // Each burst's colour, peak, reach and decay are its BurstShape (EffectCatalogue.BurstLightShapes).
+    // What every burst shares is here. The inner radius is the authored `he_light` ramp's ignition
+    // min in `he_ground_effect` (docs/org/ordnanceTypes.md).
     private const float BurstRangeMin = 4f;
-    private const float BurstRangeMax = 180f;
-
-    // What the burst colour is multiplied by at ignition. OmniEnergyScale above is anchored on a
-    // beacon, and a detonation must read far brighter than one. It drives the fullbright spill add
-    // as well as the omni, which is what bounds it: much above this the ground clips to white.
-    private const float BurstPeakGain = 3.0f;
-
-    // The decay's e-folding time in seconds, chosen so the envelope is spent (under BurstFloor) at
-    // the 1.2 s the same burst's authored frame-buffer wash runs for, which is the original's own
-    // statement of how long a detonation owns the picture.
-    private const float BurstDecay = 0.29f;
 
     // The gain a burst is retired at. Below it the light moves no pixel and only holds a slot the
     // distance fade and the MaxActive rank would rather give a light that does.
@@ -86,6 +78,10 @@ public sealed class WorldLights : IDisposable
     // Cycles of flicker phase between one burst and the next. A salvo landing in the same frame
     // would otherwise pulse in lockstep and read as one light rather than several.
     private const float BurstPhaseStride = 0.618f;
+
+    // The burst omni's falloff exponent. Godot's 1.0 is an inverse-distance falloff, spent twenty
+    // metres out, so a 180 m reach would light only the crater.
+    private const float BurstAttenuation = 0.0f;
 
     private readonly List<Entry> _pending = new();
     private readonly byte[] _buffer = new byte[MaxActive * FloatsPerLight * sizeof(float)];
@@ -160,13 +156,13 @@ public sealed class WorldLights : IDisposable
     /// exactly as they treat a beacon. <paramref name="stillBurning"/> is the fireball's own
     /// liveness, read every frame: the light is dropped the frame it goes false, so no burst light
     /// can outlive the fireball that threw it.</summary>
-    public void AddBurst(Vector3 pos, Color color, Func<bool> stillBurning)
+    public void AddBurst(Vector3 pos, BurstShape shape, Func<bool> stillBurning)
     {
         if (!GraphicsMode.Enhanced)
             return;
         // Linearised once here, and the envelope scales the linear value: scaling the sRGB value
         // would bend both the decay and the flicker. The shader's term keeps the data's own value.
-        _bursts.Add(new Burst(pos, color, color.SrgbToLinear(), stillBurning,
+        _bursts.Add(new Burst(pos + (Vector3.Up * BurstLift), shape, shape.Color.SrgbToLinear(), stillBurning,
             _burstsRegistered++ * BurstPhaseStride));
     }
 
@@ -327,6 +323,7 @@ public sealed class WorldLights : IDisposable
             float peak = Mathf.Max(e.Color.R, Mathf.Max(e.Color.G, e.Color.B));
             omni.GlobalPosition = e.Pos;
             omni.OmniRange = e.Max;
+            omni.OmniAttenuation = e.Attenuation;
             omni.LightColor = peak > 0f ? new Color(e.Color.R / peak, e.Color.G / peak, e.Color.B / peak) : Colors.White;
             omni.LightEnergy = OmniEnergyScale * peak;
             omni.Visible = true;
@@ -343,16 +340,16 @@ public sealed class WorldLights : IDisposable
         {
             var burst = _bursts[i];
             burst.Age += dt;
-            float gain = BurstGain(burst.Age, burst.Phase);
+            float gain = BurstGain(burst.Shape, burst.Age, burst.Phase);
             if (gain < BurstFloor || !burst.StillBurning())
             {
                 _bursts.RemoveAt(i);
                 continue;
             }
             // Straight into _pending rather than through Add: the colour is already linear and the
-            // ranges are constants, so neither of Add's two conversions applies.
-            _pending.Add(new Entry(burst.Pos, burst.Factor * gain, burst.Color * gain,
-                BurstRangeMin, BurstRangeMax));
+            // ranges are well-formed, so neither of Add's two conversions applies.
+            _pending.Add(new Entry(burst.Pos, burst.Shape.Color * gain, burst.Color * gain,
+                BurstRangeMin, burst.Shape.RangeMax, BurstAttenuation));
         }
     }
 
@@ -363,11 +360,11 @@ public sealed class WorldLights : IDisposable
     // The burst envelope: an ignition peak, an exponential decay and a flicker that never reaches
     // zero. The flicker is two sines rather than one so it does not read as a regular pulse, and
     // each burst carries its own phase so a salvo does not flash in lockstep.
-    private static float BurstGain(float age, float phase)
+    private static float BurstGain(BurstShape shape, float age, float phase)
     {
         float wave = Mathf.Tau * ((BurstFlickerHz * age) + phase);
         float flicker = 1f + (BurstFlickerDepth * 0.5f * (Mathf.Sin(wave) + Mathf.Sin(wave * BurstFlickerBeat)));
-        return BurstPeakGain * Mathf.Exp(-age / BurstDecay) * flicker;
+        return shape.PeakGain * Mathf.Exp(-age / shape.Decay) * flicker;
     }
 
     // Angular size of the light's pool, scaled by its (already fade-applied) intensity, the
@@ -396,34 +393,42 @@ public sealed class WorldLights : IDisposable
     private void Write(int offset, float value) =>
         BitConverter.TryWriteBytes(_buffer.AsSpan(offset, sizeof(float)), value);
 
+    /// <summary>One kind of burst light, Enhanced Graphics only. It holds the colour in the data's
+    /// sRGB, the gain on it at ignition, the reach in metres and the decay's e-folding time in
+    /// seconds. A remake envelope with no counterpart in the data; the values per effect are
+    /// <c>EffectCatalogue.BurstLightShapes</c>.</summary>
+    public readonly record struct BurstShape(Color Color, float PeakGain, float RangeMax, float Decay);
+
     private readonly struct Entry
     {
         public readonly Vector3 Pos;
         public readonly Color Factor; // the shader's term: authored colour x ambient + diffuse
         public readonly Color Color;  // linear, the enhanced omni's
         public readonly float Min, Max;
-        public Entry(Vector3 pos, Color factor, Color color, float min, float max)
+        public readonly float Attenuation; // the enhanced omni's falloff exponent
+        public Entry(Vector3 pos, Color factor, Color color, float min, float max,
+            float attenuation = OmniAttenuationTune)
         {
-            Pos = pos; Factor = factor; Color = color; Min = min; Max = max;
+            Pos = pos; Factor = factor; Color = color; Min = min; Max = max; Attenuation = attenuation;
         }
 
         /// <summary>The same light dimmed by the distance fade, the colour is the intensity,
         /// so scaling it is how a light leaves the set without popping.</summary>
-        public Entry Faded(float f) => new(Pos, Factor * f, Color * f, Min, Max);
+        public Entry Faded(float f) => new(Pos, Factor * f, Color * f, Min, Max, Attenuation);
     }
 
     // One live burst light. A class rather than a struct because Age is written every frame, and
     // the omni's colour is held already linearised (see AddBurst).
     private sealed class Burst
     {
-        public Burst(Vector3 pos, Color factor, Color color, Func<bool> stillBurning, float phase)
+        public Burst(Vector3 pos, BurstShape shape, Color color, Func<bool> stillBurning, float phase)
         {
-            Pos = pos; Factor = factor; Color = color; StillBurning = stillBurning; Phase = phase;
+            Pos = pos; Shape = shape; Color = color; StillBurning = stillBurning; Phase = phase;
         }
 
         public Vector3 Pos { get; }
 
-        public Color Factor { get; }
+        public BurstShape Shape { get; }
 
         public Color Color { get; }
 
