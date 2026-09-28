@@ -303,10 +303,9 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         // never touched.
         net.PlayerName = _profiles?.Invoke().LastPlayedPilotName ?? string.Empty;
 
-        // The door's pick is the guest's memory for the joined session, and a fresh join clears it.
-        // Reopening from it is what carries the plane and its fit across flights and retries.
-        _campaign.OpenGuest(net.Advert?.Host ?? string.Empty, flow.Progress, flow.Airframes, _stock?.Invoke(), _dataRoot,
-            net.Pick.Airframe, net.Pick.Fit);
+        // The guest flies the aeroplane its host's allocation gives its seat, which the door keeps
+        // across flights and retries.
+        _campaign.OpenGuest(net.Advert?.Host ?? string.Empty, flow.Progress, net.CoopSeatPlane, _stock?.Invoke(), _dataRoot);
         _flow = new CampaignFlow(_campaign, _layout);
         _host.CloseDialog();
         _briefingReturn = OriginalScreen.CampaignCabin;
@@ -567,9 +566,9 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             return true;
         }
 
-        // A guest steps back only out of its own two screens. Anywhere else Back asks whether to
-        // leave the session, since the host's boards are not the guest's to walk.
-        if (IsGuest && _host.Screen is not (OriginalScreen.CampaignAmmo or OriginalScreen.CampaignPlaneSelection))
+        // A guest's Back asks whether to leave the session, since the host's boards are not the
+        // guest's to walk.
+        if (IsGuest)
         {
             AskLeaveSession();
             return true;
@@ -710,8 +709,10 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
                 _ => _campaign.NextMissionSeq,
             };
 
-            // The result goes first, so the flow that names the debrief already carries it.
+            // The result goes first, so the flow that names the debrief already carries it. So does
+            // the allocation, over every seat a co-op flight can hold, this machine's own first.
             net.HostFlow.ShowResult(_debriefWon, _debriefObjectives, _debriefCash);
+            net.OfferCoopPlanes(_campaign.CoopSeatPlanes(NetPlayFeature.CoopHumans));
             net.ShowCoop(screen, shown, profile.MissionsCompleted, CampaignFeature.HangarAirframes(profile));
             return false;
         }
@@ -734,7 +735,10 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             return null;
         }
 
-        _campaign!.SetMission(flow.MissionSeq);
+        // The host's last word on this seat's aeroplane arrived before its opener. So the launch
+        // flies the plane the host seated here, even one changed since the board last looked.
+        _campaign!.FollowHost(flow.Progress, net.CoopSeatPlane);
+        _campaign.SetMission(flow.MissionSeq);
         var pads = new List<IReadOnlyList<int>>
         {
             _setup.Seats.Count > 0 ? _flightDevices(_setup.Seats[0]) : Array.Empty<int>(),
@@ -830,16 +834,10 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         _ => OriginalScreen.CampaignScrapbookZoom,
     };
 
-    // A guest's own controls are its aeroplane and its ammunition. Those are their two screens,
-    // and on its check the two buttons that open them and its Ready. Everything else follows the host.
-    // EXPORT writes a build to disk, and a guest's machine keeps nothing from the host's campaign.
-    private static bool GuestRowLive(CampaignScreen screen, BoardButton button) => screen switch
-    {
-        CampaignScreen.Ammo => true,
-        CampaignScreen.PlaneSelection => button != BoardButton.ExportPlane,
-        CampaignScreen.FlightCheck => button is BoardButton.ChangeAmmo or BoardButton.ChangePlane or BoardButton.FlyMission,
-        _ => false,
-    };
+    // A guest's own control is its Ready on its check. Its aeroplane and fit are the ones its host's
+    // allocation gives it, and everything else follows the host.
+    private static bool GuestRowLive(CampaignScreen screen, BoardButton button) =>
+        screen == CampaignScreen.FlightCheck && button == BoardButton.FlyMission;
 
     // The network state's lines over one dark ground, in the painting's empty top-left corner.
     private static void ComposeBand(string band, BoardLayers layers)
@@ -1385,14 +1383,15 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     };
 
     // A guest takes the board its host names, re-entering it only when the board or the mission
-    // moves. Its own cursor and its ammo and plane screens are left alone meanwhile.
+    // moves. Its own cursor is left alone meanwhile. A new seat aeroplane redraws its check.
     private bool FollowHost(NetPlayFeature net, CoopFlowMessage flow)
     {
         var campaign = _campaign!;
-        campaign.FollowHost(flow.Progress, flow.Airframes);
+        var flown = campaign.Profile;
+        campaign.FollowHost(flow.Progress, net.CoopSeatPlane);
         net.Pick.Set(campaign.GuestAirframe, net.Pick.Ready, campaign.GuestCoopFit);
         bool ready = net.CoopReady;
-        bool changed = campaign.GuestReady != ready || net.CoopFlows != _guestFlows;
+        bool changed = campaign.GuestReady != ready || net.CoopFlows != _guestFlows || !ReferenceEquals(flown, campaign.Profile);
         campaign.GuestReady = ready;
         if (flow.Screen == NetCoopScreen.Debrief && net.CoopFlows != _guestFlows)
         {
@@ -1435,18 +1434,12 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         return true;
     }
 
-    // What a guest's press may do. Its own two screens take every press but EXPORT. Its check
-    // takes the three buttons that are its own. Every other row is greyed and moves nothing.
+    // What a guest's press may do: its Ready on its check. Every other row is greyed and moves
+    // nothing.
     private bool GuestPressLive(OriginalRow row)
     {
-        var screen = CampaignScreenOf(_host.Screen);
         int pageRow = RowIndexOf(row.Key);
-        if (screen is CampaignScreen.Ammo or CampaignScreen.PlaneSelection)
-        {
-            return pageRow < 0 || GuestRowLive(screen, _flow!.Page.Button(pageRow).Button);
-        }
-
-        return pageRow >= 0 && GuestRowLive(screen, _flow!.Page.Button(pageRow).Button);
+        return pageRow >= 0 && GuestRowLive(CampaignScreenOf(_host.Screen), _flow!.Page.Button(pageRow).Button);
     }
 
     private void ToggleGuestReady()

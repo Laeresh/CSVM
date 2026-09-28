@@ -860,26 +860,27 @@ public class OriginalShellTests
             shell.Step(Back);
             Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
 
-            // FLY MISSION hands the screen to the guest. Seat 0's cursor, Accept and Back then
-            // move nothing: no row, no ammo screen, no retreat off the guest's check.
+            // FLY MISSION hands the screen to the guest, whose check opens on its own FLY MISSION.
+            // Seat 0's cursor, Accept and Back then move nothing: no row, no launch, no retreat.
             var fly = Row(shell, "FlyMission");
             Assert.Null(Click(shell, fly.X + 2f, fly.Y + 2f).Exit);
             Assert.Equal((1, 2), (campaign.Field.Current, campaign.Field.Players));
-            Assert.Equal("ChangeAmmo", shell.FocusedKey);
-            Assert.False(shell.Step(Down).Changed);
+            Assert.Equal("FlyMission", shell.FocusedKey);
+            Assert.False(shell.Step(Up).Changed);
             Assert.False(shell.Step(Accept).Changed);
             Assert.False(shell.Step(Back).Changed);
             Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
             Assert.Equal(1, campaign.Field.Current);
-            Assert.Equal("ChangeAmmo", shell.FocusedKey);
+            Assert.Equal("FlyMission", shell.FocusedKey);
 
-            // The guest's own device drives it, and the ammo screen its row opens is the guest's too.
-            Assert.True(shell.StepSeat(1, Accept).Changed);
-            Assert.Equal(OriginalScreen.CampaignAmmo, shell.Screen);
-            Assert.False(shell.Step(Back).Changed);
-            Assert.Equal(OriginalScreen.CampaignAmmo, shell.Screen);
+            // The guest's own device drives it, and its Back retreats to seat 0's check.
+            Assert.True(shell.StepSeat(1, Up).Changed);
+            Assert.NotEqual("FlyMission", shell.FocusedKey);
             shell.StepSeat(1, Back);
             Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
+            Assert.Equal(0, campaign.Field.Current);
+            fly = Row(shell, "FlyMission");
+            Assert.Null(Click(shell, fly.X + 2f, fly.Y + 2f).Exit);
             Assert.Equal(1, campaign.Field.Current);
 
             // Seat 0's pointer still reaches the guest's check, the one device a pilot with no pad

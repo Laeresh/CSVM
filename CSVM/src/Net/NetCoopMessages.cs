@@ -265,6 +265,67 @@ public readonly record struct CoopSeatFitMessage(byte Seat, CoopFit Fit)
 }
 
 /// <summary>
+/// The aeroplane a co-op host's allocation gives one seat. That is a named plane of the host's
+/// hangar with its own fit and build, or the stock Devastator when no unique plane is left. The host
+/// sends each guest its own seat's whenever it changes, and the guest's flight check stands on it.
+/// Kept in the lobby.
+/// </summary>
+public readonly record struct CoopSeatPlaneMessage(
+    byte Seat, bool Hangar, byte Airframe, CoopFit Fit = default, NetPlaneBuild? Build = null, string Name = "")
+    : INetMessage<CoopSeatPlaneMessage>
+{
+    /// <summary>The fixed width of the message, header included.</summary>
+    public const int Size = NetMessage.HeaderBytes + 4 + CoopFit.Bytes + NetPlaneBuild.Bytes + NetPlaneBuild.NameBytes;
+
+    /// <inheritdoc/>
+    public static NetMessageType Type => NetMessageType.CoopSeatPlane;
+
+    /// <inheritdoc/>
+    public static NetReliability Reliability => NetReliability.Reliable;
+
+    /// <summary>The word for a seat that flies <paramref name="airframe"/> at rest, no plane of the
+    /// hangar being left for it.</summary>
+    public static CoopSeatPlaneMessage Stock(int seat, int airframe) =>
+        new((byte)Math.Clamp(seat, 0, byte.MaxValue), false, (byte)Math.Clamp(airframe, 0, byte.MaxValue));
+
+    /// <inheritdoc/>
+    public static bool TryRead(ReadOnlySpan<byte> from, out CoopSeatPlaneMessage message)
+    {
+        message = default;
+        var reader = new NetMessageReader(from);
+        if (!reader.Is(Size) || reader.Type != Type)
+            return false;
+
+        byte seat = reader.ReadByte();
+        byte flags = reader.ReadByte();
+        byte airframe = reader.ReadByte();
+        _ = reader.ReadByte();
+        var fit = CoopFit.Read(ref reader);
+        var build = NetPlaneBuild.Read(ref reader);
+        message = new CoopSeatPlaneMessage(seat, (flags & 1) != 0, airframe, fit, (flags & 2) != 0 ? build : null, build.Name);
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public int Write(Span<byte> into)
+    {
+        var writer = new NetMessageWriter(into, Type);
+        writer.WriteByte(Seat);
+        writer.WriteByte((byte)((Hangar ? 1 : 0) | (Build != null ? 2 : 0)));
+        writer.WriteByte(Airframe);
+        writer.WriteByte(0);
+        Fit.Write(ref writer);
+
+        // The plane's name rides in the build's own name field. A hangar plane with no build on file
+        // still reaches the guest under its hangar name.
+        var build = Build?.Copy() ?? new NetPlaneBuild();
+        build.Name = Name ?? string.Empty;
+        build.Write(ref writer);
+        return writer.Close();
+    }
+}
+
+/// <summary>
 /// The campaign wingman's aeroplane as a co-op host launched it: the airframe its profile picked
 /// and that plane's fit. Sent to every guest before the session's opener, since every machine
 /// builds the host-owned wingman itself and must build the same def. Kept in the lobby.

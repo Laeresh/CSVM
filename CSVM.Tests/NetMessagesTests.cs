@@ -953,12 +953,13 @@ public class NetMessagesTests
     {
         Assert.Equal(8, StartGateMessage.Size);
         Span<byte> buffer = stackalloc byte[StartGateMessage.Size];
-        foreach (var word in new[] { NetStartWord.Loaded, NetStartWord.Start })
+        foreach (var word in new[] { NetStartWord.Loaded, NetStartWord.Start, NetStartWord.Hold })
         {
-            var sent = new StartGateMessage(word);
+            var sent = new StartGateMessage(word, 201);
             Assert.Equal(StartGateMessage.Size, sent.Write(buffer));
             Assert.True(StartGateMessage.TryRead(buffer, out var got));
             Assert.Equal(sent, got);
+            Assert.Equal(201, buffer[5]);
         }
 
         Assert.Equal(0x5B, (int)NetMessageType.StartGate);
@@ -988,6 +989,34 @@ public class NetMessagesTests
         Span<byte> seatFit = stackalloc byte[CoopSeatFitMessage.Size];
         new CoopSeatFitMessage(7, sent.Fit).Write(seatFit);
         Assert.False(CoopWingmanMessage.TryRead(seatFit, out _));
+    }
+
+    [Fact]
+    public void ACoopSeatPlaneRoundTripsTheSeatThePlaneItsFitBuildAndName()
+    {
+        Assert.Equal(62, CoopSeatPlaneMessage.Size);
+        Assert.Equal(0x5F, (int)NetMessageType.CoopSeatPlane);
+        Assert.Equal(NetReliability.Reliable, NetMessage.ReliabilityOf(NetMessageType.CoopSeatPlane));
+        Span<byte> buffer = stackalloc byte[CoopSeatPlaneMessage.Size];
+        var fit = CoopFit.Of(new[] { 3, 2, 0, 0 }, new[] { 4, 0, 0, 0, 0, 0, 0, 4 });
+        var build = new NetPlaneBuild { Airframe = 7, Name = "Kestrel" };
+        var sent = new CoopSeatPlaneMessage(2, true, 7, fit, build, "Kestrel");
+        Assert.Equal(CoopSeatPlaneMessage.Size, sent.Write(buffer));
+        Assert.True(CoopSeatPlaneMessage.TryRead(buffer, out var got));
+        Assert.Equal(sent, got);
+
+        // A hangar plane with no build still carries its name, and the stock word carries neither.
+        new CoopSeatPlaneMessage(1, true, 2, fit, null, "Osprey").Write(buffer);
+        Assert.True(CoopSeatPlaneMessage.TryRead(buffer, out var bare));
+        Assert.Equal((true, (NetPlaneBuild?)null, "Osprey"), (bare.Hangar, bare.Build, bare.Name));
+        CoopSeatPlaneMessage.Stock(3, 5).Write(buffer);
+        Assert.True(CoopSeatPlaneMessage.TryRead(buffer, out var stock));
+        Assert.Equal(((byte)3, false, (byte)5, ""), (stock.Seat, stock.Hangar, stock.Airframe, stock.Name));
+
+        // ABLE-TO-FAIL CONTROL: a wingman word is not a seat plane.
+        Span<byte> wingman = stackalloc byte[CoopWingmanMessage.Size];
+        new CoopWingmanMessage(7, fit).Write(wingman);
+        Assert.False(CoopSeatPlaneMessage.TryRead(wingman, out _));
     }
 
     [Fact]

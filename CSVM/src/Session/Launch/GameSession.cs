@@ -219,6 +219,8 @@ public partial class GameSession : Node3D
     // The start barrier, null outside a network match. While it holds, the clock is start-held
     // and only the wire is stepped.
     private Net.NetStartGate? _startGate;
+    // Whether this machine's world is built, so a guest answers the host's hold word only then.
+    private bool _startBuilt;
     // When the host repeats the match state, null on a guest and outside a match. A guest never
     // holds one, which is what makes the host the only writer of the clock.
     private Net.MatchStateCadence? _matchCadence;
@@ -4564,6 +4566,8 @@ public partial class GameSession : Node3D
     }
 
     // A host answers a guest that loads after the start at once, so a late machine is never held.
+    // A loaded word under another round opens nothing: it may be an earlier flight's on this link.
+    // The host names its round in reply, and a guest that did not know it yet answers again.
     private void TakeStartWord(int peer, Net.StartGateMessage word)
     {
         if (_startGate is not { } gate || _net is not { } net)
@@ -4573,18 +4577,29 @@ public partial class GameSession : Node3D
 
         if (net.IsHost && word.Word == Net.NetStartWord.Loaded)
         {
-            if (gate.Open)
+            if (!gate.Current(word.Round))
             {
-                net.Send(peer, new Net.StartGateMessage(Net.NetStartWord.Start), Net.NetChannels.Events);
+                SendHold(peer);
+            }
+            else if (!gate.Open)
+            {
+                gate.TakeLoaded(peer, word.Round);
             }
             else
             {
-                gate.TakeLoaded(peer);
+                net.Send(peer, new Net.StartGateMessage(Net.NetStartWord.Start, gate.Round), Net.NetChannels.Events);
+            }
+        }
+        else if (!net.IsHost && word.Word == Net.NetStartWord.Hold)
+        {
+            if (gate.TakeHold(word.Round) && _startBuilt)
+            {
+                SendLoaded();
             }
         }
         else if (!net.IsHost && word.Word == Net.NetStartWord.Start)
         {
-            gate.TakeStart();
+            gate.TakeStart(word.Round);
         }
     }
 
@@ -4597,13 +4612,39 @@ public partial class GameSession : Node3D
             return;
         }
 
+        _startBuilt = true;
         clock.StartHeld = !gate.Open;
-        if (!net.IsHost)
+        if (net.IsHost)
         {
-            net.Send(net.HostPeer, new Net.StartGateMessage(Net.NetStartWord.Loaded), Net.NetChannels.Events);
+            foreach (int peer in gate.Waiting)
+            {
+                SendHold(peer);
+            }
+        }
+        else if (!gate.Open)
+        {
+            SendLoaded();
         }
 
-        Log.Info("core", $"net start: {(gate.Open ? $"nobody to wait for ({gate.Release})" : net.IsHost ? $"holding for {gate.Waiting.Count} machine(s) to load" : "loaded, holding for the host's start")}");
+        Log.Info("core", $"net start: {(gate.Open ? $"nobody to wait for ({gate.Release})" : net.IsHost ? $"holding for {gate.Waiting.Count} machine(s) to load, round {gate.Round}" : "loaded, holding for the host's start")}");
+    }
+
+    // Under the round this guest heard, 0 before any hold word reached it. The host takes only
+    // its own round, so it tells this word from one an earlier flight on this link sent.
+    private void SendLoaded()
+    {
+        if (_net is { } net && _startGate is { } gate)
+        {
+            net.Send(net.HostPeer, new Net.StartGateMessage(Net.NetStartWord.Loaded, gate.Round), Net.NetChannels.Events);
+        }
+    }
+
+    private void SendHold(int peer)
+    {
+        if (_net is { } net && _startGate is { } gate)
+        {
+            net.Send(peer, new Net.StartGateMessage(Net.NetStartWord.Hold, gate.Round), Net.NetChannels.Events);
+        }
     }
 
     // One physics tick of a held start: the wire only. True when the barrier opened on this tick,
@@ -4628,7 +4669,7 @@ public partial class GameSession : Node3D
         clock.StartHeld = false;
         if (_net is { IsHost: true } net)
         {
-            net.Broadcast(new Net.StartGateMessage(Net.NetStartWord.Start), Net.NetChannels.Events);
+            net.Broadcast(new Net.StartGateMessage(Net.NetStartWord.Start, gate.Round), Net.NetChannels.Events);
         }
 
         Log.Info("core", $"net start: released ({gate.Release}) after {gate.WaitedSeconds:0.00} s");

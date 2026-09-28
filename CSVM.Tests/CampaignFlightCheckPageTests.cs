@@ -315,21 +315,20 @@ public class CampaignFlightCheckPageTests
         Assert.Equal(CampaignExit.FlyMission, flow.Exit);
     }
 
-    // A guest's page is one PILOT block and its two action rows: the wingman belongs to the seated
-    // profile, and CHANGE PLANE is always offered because a guest picks out of their own roster.
+    // A guest's page is one PILOT block with no action rows. The wingman belongs to the seated
+    // profile, and the co-op allocation, not the guest, decides the plane and its fit.
     [Fact]
-    public void AGuestsPageCarriesOnePilotBlockAndNoWingman()
+    public void AGuestsPageCarriesOnePilotBlockAndNoWingmanAndOpensOnFlyMission()
     {
         var page = NewPage(out var flow, out _, wingman: true);
         flow.SetPlayers(2);
         flow.Field.Advance();
 
-        Assert.Equal(5, page.RowCount);
+        Assert.Equal(3, page.RowCount);
         Assert.StartsWith("PILOT", page.RowText(0));
-        Assert.Equal("CHANGE AMMO", page.RowText(1));
-        Assert.StartsWith("CHANGE PLANE", page.RowText(2));
-        Assert.Equal("RETURN TO BRIEFING", page.RowText(3));
-        Assert.Equal("FLY MISSION", page.RowText(4));
+        Assert.Equal("RETURN TO BRIEFING", page.RowText(1));
+        Assert.Equal("FLY MISSION", page.RowText(2));
+        Assert.Equal(2, page.OpeningRow);
     }
 
     [Fact]
@@ -360,28 +359,6 @@ public class CampaignFlightCheckPageTests
         Assert.True(flow.Field.Locked);
         Assert.False(page.Back());
         Assert.False(flow.Field.Locked);
-    }
-
-    // A guest's CHANGE PLANE takes the same door the seated player's does, on its own slot. The
-    // horizontal axis does nothing on either: one screen changes a plane, so one place enforces the
-    // duplicate rule.
-    [Fact]
-    public void AGuestsChangePlaneOpensThePickerAndStepsNothingInPlace()
-    {
-        var page = NewPage(out var flow, out _, wingman: false);
-        flow.SetPlayers(2);
-        flow.Field.Advance();
-        flow.SetPlaneSlot(1);
-        var before = flow.Field.Plane(1)!;
-
-        Assert.Equal("CHANGE PLANE", page.RowText(2));
-        Assert.False(page.Step(2, 1));
-        Assert.Same(before, flow.Field.Plane(1));
-
-        Assert.True(page.Accept(2));
-        Assert.Equal(CampaignScreen.PlaneSelection, flow.Screen);
-        Assert.Equal(0, flow.PlaneSlot);
-        Assert.Equal(0, flow.Store.Load("Zachary")!.SelectedPlane);
     }
 
     // A custom-built plane's own guns/hardpoints, not the airframe's stock fit, drive the lists

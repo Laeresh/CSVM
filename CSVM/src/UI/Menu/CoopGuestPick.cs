@@ -4,10 +4,11 @@ using CSVM.Net;
 namespace CSVM.UI.Menu;
 
 /// <summary>
-/// A co-op guest's own pick from its host's hangar: the airframe and the fit it flies with. It also
-/// says whether the guest means to be Ready and whether it walked out of the flight. It lasts the
-/// joined session across flights, and a new join starts on the starter and the stock fit. The door
-/// sends it under the host's round of picks, and again only when it changed.
+/// A guest's own pick: the airframe and the fit it flies with. It also says whether the guest means
+/// to be Ready and whether it walked out of the flight. It lasts the joined session across flights,
+/// and a new join starts on the starter and the stock fit. The door sends it under the host's round
+/// of picks, and again only when it changed. A co-op host seats its guests in the aeroplanes its own
+/// allocation gives them, so there the airframe and fit only echo that plane back.
 /// </summary>
 public sealed class CoopGuestPick
 {

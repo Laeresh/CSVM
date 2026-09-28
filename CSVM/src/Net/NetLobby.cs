@@ -78,6 +78,10 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     /// <summary>How many co-op flows have arrived, so a board can tell a repeat from news.</summary>
     public int Flows { get; private set; }
 
+    /// <summary>The aeroplane the co-op host's allocation last gave this guest's seat, or null while
+    /// none has arrived.</summary>
+    public CoopSeatPlaneMessage? SeatPlane { get; private set; }
+
     /// <summary>Each connected guest's latest co-op pick, by peer.</summary>
     public IReadOnlyDictionary<int, CoopPickMessage> Picks => _picks;
 
@@ -378,6 +382,12 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
             // board instead, and a bound session still hears that flight's tail.
             _flightOver |= _listener != null && _boundFlow is { Screen: NetCoopScreen.InMission } under
                 && flow.Screen == NetCoopScreen.InMission && flow.Epoch != under.Epoch;
+            return true;
+        }
+
+        if (CoopSeatPlaneMessage.TryRead(payload, out var seatPlane))
+        {
+            SeatPlane = seatPlane;
             return true;
         }
 

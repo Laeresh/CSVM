@@ -211,11 +211,19 @@ public static class NetDoorAid
     public static NetPlayFeature JoinedGuest(int missionSeq, int players) => Joined(missionSeq, players, out _);
 
     /// <summary>A door joined as <see cref="JoinedGuest"/> that has also heard its host name its
-    /// boards as <paramref name="flow"/>, so a guest's campaign follows them. With
+    /// boards as <paramref name="flow"/>, so a guest's campaign follows them. When given, the host
+    /// has also named its seat's aeroplane as <paramref name="plane"/>. With
     /// <paramref name="ready"/> the guest has answered Ready under that round.</summary>
-    public static NetPlayFeature CoopGuest(CoopFlowMessage flow, bool ready)
+    public static NetPlayFeature CoopGuest(CoopFlowMessage flow, bool ready, CoopSeatPlaneMessage? plane = null)
     {
         var door = Joined(flow.MissionSeq, flow.Humans, out var host);
+        if (plane is { } seat)
+        {
+            Span<byte> word = stackalloc byte[CoopSeatPlaneMessage.Size];
+            seat.Write(word);
+            host.Send(host.Peers[0], word, NetReliability.Reliable);
+        }
+
         Span<byte> bytes = stackalloc byte[CoopFlowMessage.Size];
         flow.Write(bytes);
         host.Send(host.Peers[0], bytes, NetReliability.Reliable);

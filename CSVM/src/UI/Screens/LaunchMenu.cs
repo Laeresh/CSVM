@@ -958,6 +958,9 @@ public sealed partial class LaunchMenu : CanvasLayer
             {
                 walked++;
             }
+
+            // The walk skips the page's re-entry, so the cursor opens where a guest's own would.
+            flow.FocusRow(flow.Page.OpeningRow);
         }
 
         _aidGuest = 0;

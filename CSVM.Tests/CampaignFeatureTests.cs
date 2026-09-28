@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using CSVM.Flight.Hangar;
 using CSVM.Mech3;
@@ -462,29 +463,30 @@ public class CampaignFeatureTests
     }
 
     [Fact]
-    public void AGuestFliesTheHostsStockHangarAndWritesNothing()
+    public void AGuestFliesTheHostsAllocatedPlaneAndWritesNothing()
     {
         var (feature, store, dir) = Open();
         feature.ContinuePlayer(Pilot);
         var files = Snapshot(dir);
-        ushort hangar = (1 << 5) | (1 << 7);
+        var fit = CSVM.Net.CoopFit.Of(new[] { 3, 2, 0, 0 }, new[] { 4, 0, 0, 0, 0, 0, 0, 4 });
+        var allocated = new CSVM.Net.CoopSeatPlaneMessage(1, true, 7, fit, null, "Kestrel");
 
-        feature.OpenGuest("Zachary", 4, hangar);
+        feature.OpenGuest("Zachary", 4, allocated);
         Assert.True(feature.IsGuest);
         Assert.True(feature.IsOpen);
         Assert.Null(feature.Store);
-        Assert.Equal(new[] { 5, 7 }, feature.Profile!.Planes.ConvertAll(p => p.Airframe));
-        Assert.All(feature.Profile.Planes, plane => Assert.False(plane.Special));
-        Assert.Equal(5, feature.GuestAirframe);
+        var plane = Assert.Single(feature.Profile!.Planes);
+        Assert.Equal(("Kestrel", 7, false), (plane.Name, plane.Airframe, plane.Special));
+        Assert.Equal(7, feature.GuestAirframe);
+        Assert.Equal(fit, feature.GuestCoopFit);
         Assert.Equal(4, feature.NextMissionSeq);
-        Assert.True(feature.ChangePlaneAllowed(0));
+        Assert.False(feature.ChangePlaneAllowed(0));
         Assert.False(feature.ChangePlaneAllowed(1));
 
         feature.SetMission(12);
         Assert.False(feature.GrantMissionAircraft());
-        feature.Profile.SelectedPlane = 1;
         feature.RecordGuestResult(12, null, 0b11, 900);
-        var exit = feature.BuildExit(new IReadOnlyList<int>[] { new[] { 0 }, new[] { 1 } })!;
+        var exit = feature.BuildExit(new IReadOnlyList<int>[] { new[] { 0 } })!;
         Assert.Equal("", exit.Profile);
         Assert.Equal(12, exit.MissionSeq);
         var seat = Assert.Single(exit.Seats);
@@ -495,13 +497,13 @@ public class CampaignFeatureTests
         Assert.Equal(0b11, run.CompletedMask);
         Assert.Equal(900, run.Money);
 
-        // The host's hangar moving on keeps the pick where the host still holds it, and the results.
-        feature.FollowHost(5, (ushort)(hangar | (1 << 2)));
-        Assert.Equal(7, feature.GuestAirframe);
-        Assert.Equal(3, feature.Profile.Planes.Count);
-        Assert.NotNull(CampaignProgression.ResultOf(feature.Profile, 12));
-        feature.FollowHost(5, 1 << 2);
+        // The host's allocation moving on rebuilds the guest's one plane and keeps the results.
+        feature.FollowHost(5, new CSVM.Net.CoopSeatPlaneMessage(1, true, 2, fit, null, "Osprey"));
         Assert.Equal(2, feature.GuestAirframe);
+        Assert.Equal("Osprey", Assert.Single(feature.Profile!.Planes).Name);
+        Assert.NotNull(CampaignProgression.ResultOf(feature.Profile, 12));
+        feature.FollowHost(5, CSVM.Net.CoopSeatPlaneMessage.Stock(1, CoopPlanePool.StockAirframe));
+        Assert.Equal(CoopPlanePool.StockAirframe, feature.GuestAirframe);
 
         // Nothing a guest did reached the disk, and the host's roster still reads as it was.
         Assert.Equal(files, Snapshot(dir));
@@ -517,38 +519,48 @@ public class CampaignFeatureTests
     }
 
     [Fact]
-    public void AGuestReopensOnItsRememberedPickUntilItChangesPlane()
+    public void AGuestWithNoAllocationYetFliesAStockDevastator()
     {
         var (feature, _, _) = Open();
-        ushort hangar = (1 << 5) | (1 << 7);
-        var fit = CSVM.Net.CoopFit.Of(new[] { 3, 2, 0, 0 }, new[] { 4, 0, 0, 0, 0, 0, 0, 4 });
         var fresh = new OwnedPlane();
         var stock = CSVM.Net.CoopFit.Of(fresh.Ammo, fresh.Ordnance);
 
-        // ABLE-TO-FAIL CONTROL: a fresh join opens on the starter at its stock fit.
-        feature.OpenGuest("Zachary", 4, hangar);
-        Assert.Equal(5, feature.GuestAirframe);
+        feature.OpenGuest("Zachary", 4, null);
+        Assert.Equal(CoopPlanePool.StockAirframe, feature.GuestAirframe);
         Assert.Equal(stock, feature.GuestCoopFit);
+        Assert.Null(feature.GuestBuild);
 
-        feature.OpenGuest("Zachary", 4, hangar, airframe: 7, fit: fit);
+        // ABLE-TO-FAIL CONTROL: a word naming a hangar plane replaces it.
+        feature.FollowHost(4, new CSVM.Net.CoopSeatPlaneMessage(1, true, 7, stock, null, "Kestrel"));
         Assert.Equal(7, feature.GuestAirframe);
-        Assert.Equal(fit, feature.GuestCoopFit);
-        Assert.Equal(new[] { 0, 0, 0, 0 }, feature.Profile!.Planes[0].Ammo);
+    }
 
-        // The host buying another airframe rebuilds the hangar and keeps the pick's fit.
-        feature.FollowHost(5, (ushort)(hangar | (1 << 2)));
-        Assert.Equal(7, feature.GuestAirframe);
-        Assert.Equal(fit, feature.GuestCoopFit);
+    [Fact]
+    public void AHostsSeatPlanesExcludeItsOwnAndTheWingmansAndFallBackToStock()
+    {
+        var (feature, _, _) = Open();
+        feature.ContinuePlayer(Pilot);
+        var profile = feature.Profile!;
+        profile.Planes.Clear();
+        profile.Planes.Add(new OwnedPlane { Name = "A", Airframe = 5 });
+        profile.Planes.Add(new OwnedPlane { Name = "B", Airframe = 7, Ammo = new[] { 3, 1, 0, 0 } });
+        profile.Planes.Add(new OwnedPlane { Name = "C", Airframe = 2 });
+        profile.Planes.Add(new OwnedPlane { Name = "D", Airframe = 9 });
+        profile.SelectedPlane = 0;
+        profile.WingmanPlane = 2;
 
-        // Changing the plane is what puts the guest on the new plane's default fit.
-        feature.CommitPlanes(feature.Profile!.Planes.FindIndex(p => p.Airframe == 5), null);
-        Assert.Equal(5, feature.GuestAirframe);
-        Assert.Equal(stock, feature.GuestCoopFit);
+        var planes = feature.CoopSeatPlanes(4);
+        Assert.Equal(new[] { 0, 1, 2, 3 }, planes.Select(p => (int)p.Seat));
+        Assert.Equal("A", planes[0].Name);
+        Assert.Equal(("B", (byte)7, true), (planes[1].Name, planes[1].Airframe, planes[1].Hangar));
+        Assert.Equal(CSVM.Net.CoopFit.Of(profile.Planes[1].Ammo, profile.Planes[1].Ordnance), planes[1].Fit);
+        Assert.Equal("D", planes[2].Name);
+        Assert.Equal((false, (byte)CoopPlanePool.StockAirframe), (planes[3].Hangar, planes[3].Airframe));
 
-        // A remembered airframe the host no longer offers opens on the starter's stock fit.
-        feature.OpenGuest("Zachary", 4, 1 << 5, airframe: 7, fit: fit);
-        Assert.Equal(5, feature.GuestAirframe);
-        Assert.Equal(stock, feature.GuestCoopFit);
+        // ABLE-TO-FAIL CONTROL: a guest's own campaign offers nobody a hangar plane.
+        var (guest, _, _) = Open();
+        guest.OpenGuest("Zachary", 4, planes[1]);
+        Assert.All(guest.CoopSeatPlanes(2), p => Assert.False(p.Hangar));
     }
 
     [Fact]

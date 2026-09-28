@@ -273,6 +273,15 @@ identity: `Save` writes a loaded profile back to its `Folder`, and a file whose 
 another folder (a copy, a hand rename) is read under the folder's name with a warning. `ForSession`
 is a launch's store, `--profiles=` or `user://Profiles/`. Format: [../formats/saved-games.md](../formats/saved-games.md).
 
+## src/Session/Campaign/CoopPlanePool.cs
+Which of the seated profile's aircraft each human of a co-op campaign sortie flies, one allocator
+for splitscreen seats and network guests alike. `Allocate` holds the host's selected plane and the
+wingman's plane first, then gives each further seat in order the first plane of the hangar nobody
+holds, compared by name, and `Stock` (the stock Devastator, `StockAirframe`) once none is left. A
+seat's answer depends only on the seats before it. Engine-free: the host decides, and the wire
+carries only the answer. Wire: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+Coverage: `CSVM.Tests/CoopPlanePoolTests.cs`.
+
 ## src/Session/Campaign/ChapterCinema.cs
 Which film plays before a campaign chapter, and the one handoff to the passenger cabin that
 follows it. The chapter is `seq / 5 + 1` over the profile's own position, so no screen passes a

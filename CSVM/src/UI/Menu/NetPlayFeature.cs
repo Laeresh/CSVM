@@ -24,10 +24,12 @@ public enum NetDoorStage
 }
 
 /// <summary>One guest a co-op host seated: its peer and its player number. It also says whether
-/// the guest is Ready this round and names its airframe from the host's hangar. It carries the
-/// guest's fit and player name. <see cref="Left"/> says it walked out of the flight under way.</summary>
+/// the guest is Ready this round, and names the airframe, fit and build of the aeroplane the host's
+/// allocation gives it. It carries the guest's player name. <see cref="Left"/> says it walked out of
+/// the flight under way.</summary>
 public readonly record struct CoopGuest(
-    int Peer, int Slot, bool Ready, byte Airframe, CoopFit Fit = default, string Name = "", bool Left = false);
+    int Peer, int Slot, bool Ready, byte Airframe, CoopFit Fit = default, string Name = "", bool Left = false,
+    NetPlaneBuild? Build = null);
 
 /// <summary>
 /// The multiplayer door as a shared feature. It owns the port and the address a board edits, the
@@ -343,8 +345,9 @@ public sealed class NetPlayFeature : IMenuFeature
         }
     }
 
-    /// <summary>The guests this co-op host seated, in player order: each one's player number, its
-    /// Ready mark under the current round, and the airframe it flies.</summary>
+    /// <summary>The guests this co-op host seated, in player order. Each has its player number, its
+    /// Ready mark under the current round, and the aeroplane allocated to its seat.
+    /// The guest's own pick names only its Ready, its name and whether it left.</summary>
     public IReadOnlyList<CoopGuest> CoopGuests
     {
         get
@@ -354,8 +357,9 @@ public sealed class NetPlayFeature : IMenuFeature
             {
                 int peer = _admitted[i];
                 var pick = _transport!.Picks.TryGetValue(peer, out var sent) ? sent : default;
-                guests.Add(new CoopGuest(peer, _localPlayers + i, ReadyNow(peer), AirframeOf(peer),
-                    pick.Fit, pick.Name ?? "", pick.Left && pick.Epoch == _epoch));
+                var plane = HostFlow.PlaneOf(_localPlayers + i);
+                guests.Add(new CoopGuest(peer, _localPlayers + i, ReadyNow(peer), plane.Airframe,
+                    plane.Fit, pick.Name ?? "", pick.Left && pick.Epoch == _epoch, plane.Build));
             }
 
             return guests;
@@ -387,6 +391,10 @@ public sealed class NetPlayFeature : IMenuFeature
     /// <summary>The campaign wingman's aeroplane as this co-op guest's host launched it, or null
     /// while the host has named none.</summary>
     public CoopWingmanMessage? CoopWingman => IsCoopGuest ? _transport?.Wingman : null;
+
+    /// <summary>The aeroplane this co-op guest's host allocates to its seat, or null while the host
+    /// has named none.</summary>
+    public CoopSeatPlaneMessage? CoopSeatPlane => IsCoopGuest ? _transport?.SeatPlane : null;
 
     /// <summary>This co-op guest's host's latest film word, a start or an end, or null while the
     /// host has shared no film.</summary>
@@ -658,6 +666,15 @@ public sealed class NetPlayFeature : IMenuFeature
             : SessionAdvertMessage.NoMission;
         _hostName = hostName ?? "";
         _localPlayers = Math.Max(1, localPlayers);
+    }
+
+    /// <summary>The aeroplane this co-op host's allocation gives each seat, <paramref name="bySeat"/>
+    /// indexed by seat with this machine's own seats first. Each guest hears its own seat's on the
+    /// next <see cref="Step"/>, and a launch seats every guest in it.</summary>
+    public void OfferCoopPlanes(IReadOnlyList<CoopSeatPlaneMessage> bySeat)
+    {
+        ArgumentNullException.ThrowIfNull(bySeat);
+        HostFlow.ShowPlanes(bySeat);
     }
 
     /// <summary>Starts a join to the typed address. The join lands on a later
@@ -1145,9 +1162,6 @@ public sealed class NetPlayFeature : IMenuFeature
 
     private bool ReadyNow(int peer) =>
         _transport != null && _transport.Picks.TryGetValue(peer, out var pick) && pick.Epoch == _epoch && pick.Ready;
-
-    private byte AirframeOf(int peer) =>
-        HostFlow.AirframeOf(_transport != null && _transport.Picks.TryGetValue(peer, out var pick) ? pick.Airframe : null);
 
     // Zero is skipped, so a pick a guest never sent (epoch 0) is never counted as current.
     private void NextRound() => _epoch = (byte)(_epoch == byte.MaxValue ? 1 : _epoch + 1);

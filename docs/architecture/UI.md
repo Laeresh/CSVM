@@ -101,12 +101,12 @@ alone. `Modal` and `Message` are the dialog and the refusal band every screen sh
 ## src/UI/Menu/CampaignFlightField.cs
 Owns a campaign sortie's humans as part of the shared `CampaignFeature` (`Feature.Field`, in
 `CSVM.UI.Menu` so either presentation walks the same field): joined count, the flight check showing,
-and each guest's pick. Player 0 keeps the seated profile's aircraft; later players fly
-session-scoped stock records or copies, so a guest's edits reach no profile store. A rebuild (a
-mission launch, a hangar visit, a re-seat) carries each guest's pick and its fit over, so the run's
-later missions open on what they chose. `Advance`/`Retreat`/`Rewind` walk one reused flight-check
-page through the field, and the seated player's first FLY MISSION latches `Locked`. `Taken` and
-`Choose` are the no-duplicate rule, stock picks compared by airframe and profile picks by name.
+and each guest's aeroplane. Player 0 keeps the seated profile's aircraft; each later player flies a
+session-scoped copy of the plane `Session/Campaign/CoopPlanePool.cs` allocates its seat, or a stock
+Devastator record, so nothing a guest flies is the profile's own record. Every rebuild (a mission
+launch, a hangar visit, a crew change) allocates again, so a guest's plane follows the host's hangar
+and crew. `Advance`/`Retreat`/`Rewind` walk one reused flight-check page through the field, and
+the seated player's first FLY MISSION latches `Locked`.
 
 ## src/UI/Campaign/Campaign*Page.cs
 The ten campaign screens, one file each, every one an `ICampaignPage` over `CampaignFlow`: the
@@ -1374,19 +1374,19 @@ The multiplayer door as a shared `IMenuFeature`, engine-free and carrier-free: t
 Carriers and the LAN socket arrive as delegates (the launcher's `Net/NetCarrier.cs`, or a suite's loopback mesh), the router as a `Net/RouterAccess.cs` (`Router`); every open wraps its carrier in a `Net/NetLobby.cs`.
 `OpenHost`, `OpenCoopHost` (whose `Offer` names the mission), `OpenDogfightHost` and `OpenJoin` open; `Step` carries the link and moves `Revision` on news, which both menus repaint on; `Close` gives the router back.
 In co-op the door seats guests and keeps the round of picks. `ShowCoop` names the host's boards through `HostFlow` (`CoopHostFlow.cs`), `CoopAllReady` holds FLY MISSION until every guest is Ready, `CoopLaunchDue` tells a guest to follow, and `TellSeatFits`, `TellSeatBuilds` and `TellCoopWingman` go out before the opener.
-`ShowCoopFilm` and `EndCoopFilm` share the host's campaign films (`CoopFilm` is a guest's latest word). A guest's own pick is `Pick` (`CoopGuestPick.cs`), and `LeaveCoopMission` tells the host at once that it walked out.
+`ShowCoopFilm` and `EndCoopFilm` share the host's campaign films (`CoopFilm` is a guest's latest word). `OfferCoopPlanes` hands `HostFlow` the host's allocation by seat, and `CoopSeatPlane` is a guest's latest word naming its own. A guest's own pick is `Pick` (`CoopGuestPick.cs`), and `LeaveCoopMission` tells the host at once that it walked out.
 `Dogfight` is the `DogfightLobby` either end stands in, unshown behind a Built-in host; `DogfightLaunchDue` tells a guest its host has launched, and a guest back from a match waits for the next round. `Version` is `Net/NetBuildVersion.cs`: either end refuses the other's version, with both on `Fault`.
 A host reads `StableIpv6` and `LanIpv4` as it opens; `GuestAddress` is what a guest types, and `CopyGuestAddress` hands it to `CopyText` (the launcher's clipboard, on Ctrl+C). Boards: `LaunchMenu.cs`.
 
 ## src/UI/Menu/CoopHostFlow.cs
 What a co-op host names to its guests, owned apart from the door: the board (`Screen`), the mission, the campaign's progress, the hangar it offers, the debrief's result (`ShowResult`) and the campaign film it shares (`FilmShown`).
-It builds each seated guest's `CoopFlowMessage` and sends one again only when it changed. It also decides the airframe a guest flies when its pick is not on offer: the starter, else the hangar's first.
+It builds each seated guest's `CoopFlowMessage` and sends one again only when it changed. It holds the allocation by seat (`ShowPlanes`, read back by `PlaneOf`) and sends each guest its own seat's `CoopSeatPlaneMessage` before the flow, again only when it changed.
 The round of picks is the door's: `NetPlayFeature.ShowCoop` advances it on this module's answer and hands it to every send.
 Wire: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Coverage: `CSVM.Tests/NetPlayFeatureTests.cs`.
 
 ## src/UI/Menu/CoopGuestPick.cs
-A co-op guest's own pick from its host's hangar, owned apart from the door: `Airframe`, `Fit` and the Ready it means, set together by `Set`, and the walk-out mark `NetPlayFeature.LeaveCoopMission` sets.
-It lasts the joined session across flights and starts on `StarterAirframe` and the stock fit. The door sends it under the host's round and again only when it changed; a new round clears Ready and the walk-out.
+A guest's own pick, owned apart from the door: `Airframe`, `Fit` and the Ready it means, set together by `Set`, and the walk-out mark `NetPlayFeature.LeaveCoopMission` sets.
+It lasts the joined session across flights and starts on `StarterAirframe` and the stock fit. The door sends it under the host's round and again only when it changed; a new round clears Ready and the walk-out. A co-op host seats a guest from its own allocation, so there the airframe and fit only echo it.
 `NetPlayFeature.CoopReady` is Ready as the host last heard it. Coverage: `CSVM.Tests/NetPlayFeatureTests.cs`.
 
 ## src/UI/Menu/DogfightLobby.cs
@@ -1410,7 +1410,7 @@ as a delegate, since only the caller holds the langui table.
 The multiplayer doors the `--menu=` screenshot aids stand on: a host door over a loopback wire with
 guests already on it and a router stub mapping at a documentation address, and a guest door already
 joined to a loopback host advertising a campaign mission. `CoopGuest` stands a guest on a given
-host flow, and `AnswerReady` makes a host's guest Ready. `DogfightDoors` is a Dogfight host and two
+host flow and seat plane, and `AnswerReady` makes a host's guest Ready. `DogfightDoors` is a Dogfight host and two
 guests on one wire, `PoseDogfight` sets the lobby the `lobby` aid shows, and `PlayedScores` is the
 finished match its Game Scores page lands. The games list's sample LAN holds one game of
 `OtherVersion`, which the list marks. No aid opens a socket or asks a router.

@@ -139,6 +139,20 @@ public class NetLobbyTests
     }
 
     [Fact]
+    public void AGuestsLobbyKeepsTheLatestSeatPlaneTheHostNamed()
+    {
+        var guest = new RecordingTransport(localPeer: 2);
+        var lobby = new NetLobby(guest);
+        guest.Connect(0);
+        Assert.Null(lobby.SeatPlane);
+
+        guest.Deliver(0, Bytes(CoopSeatPlaneMessage.Stock(1, 5)));
+        guest.Deliver(0, Bytes(new CoopSeatPlaneMessage(1, true, 7, default, null, "Kestrel")));
+
+        Assert.Equal(new CoopSeatPlaneMessage(1, true, 7, default, null, "Kestrel"), lobby.SeatPlane);
+    }
+
+    [Fact]
     public void TheHostsNextOpenerOutlivesTheSessionsUnbindAndTheDoorsAfterIt()
     {
         var guest = new RecordingTransport(localPeer: 2);

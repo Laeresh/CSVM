@@ -372,10 +372,18 @@ internal static class NetCoopMissionSuites
     private static void FirstFlight(TestContext ctx, CampaignMission mission, StockLoadouts stock,
         IReadOnlyList<LoopbackTransport> mesh, NetPlayFeature host, NetPlayFeature lucy, NetPlayFeature third)
     {
+        // The host's allocation seats Lucy on a hangar plane fitted with LucyAmmo, and the third
+        // guest on the stock Devastator.
         var lucyFit = CoopFit.Of(LucyAmmo, null);
         Select(host, mission);
+        host.OfferCoopPlanes(new[]
+        {
+            CoopSeatPlaneMessage.Stock(0, CoopGuestPick.StarterAirframe),
+            new CoopSeatPlaneMessage(1, true, CoopGuestPick.StarterAirframe, lucyFit, null, "Lucy's Devastator"),
+            CoopSeatPlaneMessage.Stock(2, CoopGuestPick.StarterAirframe),
+        });
         Pump(SettleSteps, host, lucy, third);
-        lucy.Pick.Set(CoopGuestPick.StarterAirframe, true, lucyFit);
+        lucy.Pick.Set(CoopGuestPick.StarterAirframe, true);
         Pump(SettleSteps, host, lucy, third);
         ctx.Check(!host.CoopAllReady,
             $"ABLE-TO-FAIL CONTROL: one guest Ready holds the launch ({string.Join(", ", host.CoopGuests.Select(g => g.Ready))})");
@@ -518,15 +526,15 @@ internal static class NetCoopMissionSuites
             $"each machine seats the named guest as {GuestName} and the unnamed one as P3 ({string.Join(" | ", names)})");
     }
 
-    // A seat's rounds on every machine are its own pilot's pick. The third guest flies stock, so
-    // its slug is the control a fit that never arrived would also read.
+    // A seat's rounds on every machine are the fit of the plane the host's allocation gave it. The
+    // third guest flies stock, so its slug is the control a fit that never arrived would also read.
     private static void Fits(TestContext ctx, Ends[] ends, CoopFit[] seatFits)
     {
         string[] want = { AmmoName(HostAmmo[0]), AmmoName(LucyAmmo[0]) };
         var read = ends.Select(e => Enumerable.Range(0, 3).Select(s => Ammo(e, s)).ToArray()).ToArray();
         string reading = string.Join(" | ", read.Select(r => string.Join(",", r)));
         ctx.Check(seatFits.Length == 3 && seatFits[1] == CoopFit.Of(LucyAmmo, null),
-            $"the host's launch carries each seat's fit, Lucy's pick among them ({seatFits.Length} seat(s))");
+            $"the host's launch carries each seat's fit, Lucy's allocated plane's among them ({seatFits.Length} seat(s))");
         ctx.Check(read.All(r => r[0] == want[0] && r[1] == want[1]),
             $"every machine builds the host's seat on {want[0]} and Lucy's on {want[1]} ({reading})");
         ctx.Check(read.All(r => r[2] is { } stock && stock != want[0] && stock != want[1]),

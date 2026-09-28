@@ -1250,8 +1250,8 @@ public partial class Launcher : Node3D
     }
 
     /// <summary>A co-op host's field and each seat's fit, by seat. Its own seats come first, with
-    /// the fits its launch carried. Then comes every seated guest still on the wire, in the plane,
-    /// fit and name its pick carried.</summary>
+    /// the fits its launch carried. Then comes every seated guest still on the wire, under its name,
+    /// in the airframe and fit allocated to its seat.</summary>
     internal static (Net.NetSeat[] Roster, Net.CoopFit[] SeatFits) CoopLaunchField(
         UI.Menu.NetPlayFeature door, Net.INetTransport wire, IReadOnlyList<string> planes,
         IReadOnlyList<LoadoutChoice?> fits, StockLoadouts stock)
@@ -1330,7 +1330,8 @@ public partial class Launcher : Node3D
 
     /// <summary>Each seat's custom plane, by seat, null for a stock one. This machine's seats take
     /// <paramref name="customs"/> in menu order. A guest's seat takes the build its lobby pick sent
-    /// when <paramref name="rules"/> admit it. Without rules, as in co-op, a guest flies stock.
+    /// when <paramref name="rules"/> admit it. Without rules a guest's pick seats no build; a co-op
+    /// guest's comes from its host's allocation instead (<see cref="CoopSeatBuilds"/>).
     /// </summary>
     internal static Net.NetPlaneBuild?[] SeatBuildsFor(IReadOnlyList<Net.NetSeat> roster,
         IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs, Net.INetTransport wire, Net.NetPlaneRules? rules)
@@ -1360,6 +1361,28 @@ public partial class Launcher : Node3D
             }
 
             builds[seat] = build;
+        }
+
+        return builds;
+    }
+
+    /// <summary>A co-op host's custom planes, by seat, null for a stock one. Its own seats take
+    /// <paramref name="customs"/> in menu order. Each guest's seat takes the build of the plane
+    /// allocated to it, never one the guest brought.</summary>
+    internal static Net.NetPlaneBuild?[] CoopSeatBuilds(IReadOnlyList<Net.NetSeat> roster,
+        IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs, UI.Menu.NetPlayFeature door, Net.INetTransport wire)
+    {
+        var builds = SeatBuildsFor(roster, customs, wire, null);
+        var guests = door.CoopGuests;
+        for (int seat = 0; seat < roster.Count; seat++)
+        {
+            foreach (var guest in guests)
+            {
+                if (!roster[seat].IsLocal && guest.Peer == roster[seat].PeerId)
+                {
+                    builds[seat] = guest.Build;
+                }
+            }
         }
 
         return builds;
@@ -2721,10 +2744,10 @@ public partial class Launcher : Node3D
     }
 
     // A co-op campaign launch's wire. The host's roster is its own seats and then each guest the
-    // door seated, in the stock aeroplane it picked and under its name. Every seat's fit goes to
-    // every guest before the session's opener, on the same ordered channel. A guest builds none.
-    // The campaign wingman's aeroplane goes out beside the fits, since every guest builds it too,
-    // and so does each of the host's own custom planes. A guest flies stock.
+    // door seated, under its name, in the aeroplane allocated to its seat.
+    // Every seat's fit and build goes to every guest before the session's opener, on the same
+    // ordered channel. A guest builds none. The campaign wingman's aeroplane goes out beside the
+    // fits, since every guest builds it too.
     private void TakeCoopLaunch(UI.Menu.MenuNetLaunch? net, IReadOnlyList<string> planes,
         IReadOnlyList<LoadoutChoice?> fits, IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs, string profile,
         string? profilesDir)
@@ -2742,7 +2765,7 @@ public partial class Launcher : Node3D
 
         (_netRoster, _coopSeatFits) = CoopLaunchField(_netDoor, _netWire, planes, fits,
             _coopStock ??= StockLoadouts.Load());
-        _seatBuilds = SeatBuildsFor(_netRoster, customs, _netWire, null);
+        _seatBuilds = CoopSeatBuilds(_netRoster, customs, _netDoor, _netWire);
         _netDoor.TellSeatFits(_coopSeatFits);
         _netDoor.TellSeatBuilds(_seatBuilds);
         _netDoor.TellCoopWingman(CoopWingmanFor(profile, profilesDir));

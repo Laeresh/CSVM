@@ -5,6 +5,7 @@ using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
+using CSVM.Session.Launch;
 
 namespace CSVM.UI.Menu;
 
@@ -41,14 +42,20 @@ public sealed class CampaignFeature : IMenuFeature
     // floor (docs/formats/campaign-screens.md, "Plane change").
     private const int ChangePlaneFloor = 3;
 
-    // A guest's hangar holds one aeroplane per airframe and no wingman's, so a second airframe is
-    // already a choice. The script's floor of three counts the wingman's plane in.
-    private const int GuestChangePlaneFloor = 2;
-
     // The campaign's first aeroplane, which every host's hangar holds from its first mission.
     private const int GuestStarterAirframe = 5;
 
     private readonly Func<int, string> _nodeOfAirframe;
+
+    // Each hangar plane's build as the wire carries it, by name, and the profile they were read for.
+    // ⚠ Do not drop the cache. A co-op host's board asks for every seat's aeroplane each frame, and
+    // the build store re-reads its file on every load. A hangar visit replaces the profile instance.
+    private readonly Dictionary<string, Net.NetPlaneBuild?> _seatBuilds = new();
+    private CampaignProfileDef? _seatBuildsFor;
+
+    // The aeroplane a co-op guest's host allocated to its seat, and that plane's build as a def.
+    private Net.CoopSeatPlaneMessage? _guestPlane;
+    private CustomPlaneDef? _guestBuild;
 
     // The sequence entry read for MissionSeq, and which sequence that was; -2 is "not read for
     // any", which no MissionSeq ever is, since the cabin's own default is -1.
@@ -157,7 +164,8 @@ public sealed class CampaignFeature : IMenuFeature
     public (int Mission, int Spread, int Item)? ZoomTarget { get; private set; }
 
     /// <summary>The humans flying this sortie: how many joined, whose flight check is showing, and
-    /// what each guest picked. Solo until a presentation says otherwise.</summary>
+    /// which aeroplane the co-op allocation gives each guest. Solo until a presentation says
+    /// otherwise.</summary>
     public CampaignFlightField Field { get; }
 
     /// <summary>The <c>cm_sequence.zrd</c> entry <see cref="MissionSeq"/> names, or null when the
@@ -212,13 +220,17 @@ public sealed class CampaignFeature : IMenuFeature
             ? profile.Planes[Math.Clamp(profile.SelectedPlane, 0, profile.Planes.Count - 1)].Airframe
             : -1;
 
-    /// <summary>The ammunition and ordnance a co-op guest set on its selected aeroplane, the fit its
-    /// pick carries to the host. Stock with no guest campaign open.</summary>
+    /// <summary>The ammunition and ordnance on the aeroplane a co-op guest flies, which is the fit
+    /// of the host's plane its allocation gave the guest. Stock with no guest campaign open.</summary>
     public Net.CoopFit GuestCoopFit =>
         IsGuest && Profile is { Planes.Count: > 0 } profile
             && profile.Planes[Math.Clamp(profile.SelectedPlane, 0, profile.Planes.Count - 1)] is { } plane
             ? Net.CoopFit.Of(plane.Ammo, plane.Ordnance)
             : default;
+
+    /// <summary>The hangar build of the aeroplane a co-op guest flies, as its host's allocation
+    /// named it. Null for a plane with none, such as a stock airframe.</summary>
+    public CustomPlaneDef? GuestBuild => IsGuest ? _guestBuild : null;
 
     // Whether MissionSeq is one of the two missions the flight check calls uiData 2021 on, which
     // is also what makes uiData 2018 report one plane fewer than the profile owns.
@@ -287,28 +299,25 @@ public sealed class CampaignFeature : IMenuFeature
     }
 
     /// <summary>Opens a co-op guest's campaign, a profile in memory named for the host, as far
-    /// through the story as <paramref name="progress"/>. It owns one stock aeroplane per airframe in
-    /// <paramref name="airframes"/> (a bit per airframe id). It stands on <paramref name="airframe"/>
-    /// fitted with <paramref name="fit"/> where the host still offers that airframe, else on the
-    /// starter's stock fit. Nothing is saved. Opening again drops whatever campaign was open.</summary>
+    /// through the story as <paramref name="progress"/>. It owns the one aeroplane the host's
+    /// allocation gives this guest's seat (<paramref name="plane"/>), a stock Devastator while the
+    /// host has named none. Nothing is saved. Opening again drops whatever campaign was open.</summary>
     public void OpenGuest(
-        string hostName, int progress, ushort airframes, StockLoadouts? stock = null, string? dataRoot = null,
-        int airframe = -1, Net.CoopFit fit = default)
+        string hostName, int progress, Net.CoopSeatPlaneMessage? plane, StockLoadouts? stock = null, string? dataRoot = null)
     {
         Discard();
         IsGuest = true;
         Stock = stock;
         DataRoot = dataRoot;
-        bool offered = airframe is >= 0 and < 16 && (airframes & (1 << airframe)) != 0;
-        Profile = offered
-            ? GuestProfile(hostName ?? "", progress, airframes, airframe, fit)
-            : GuestProfile(hostName ?? "", progress, airframes, StarterAirframeOf(airframes), default);
+        _guestPlane = plane;
+        _guestBuild = CustomPlaneWire.Def(plane?.Build);
+        Profile = GuestProfile(hostName ?? "", progress, plane);
     }
 
-    /// <summary>Follows the co-op host's hangar and story position on a guest's campaign. A hangar
-    /// that changed rebuilds the guest's aeroplanes, keeping the picked airframe and its fit where
-    /// the host still offers it. False on a campaign that is not a guest's.</summary>
-    public bool FollowHost(int progress, ushort airframes)
+    /// <summary>Follows the co-op host's story position and its allocation on a guest's campaign. A
+    /// seat aeroplane that changed rebuilds the guest's hangar on the new one, keeping the results
+    /// the guest recorded. False on a campaign that is not a guest's.</summary>
+    public bool FollowHost(int progress, Net.CoopSeatPlaneMessage? plane)
     {
         if (!IsGuest || Profile is not { } profile)
         {
@@ -316,19 +325,46 @@ public sealed class CampaignFeature : IMenuFeature
         }
 
         profile.MissionsCompleted = Math.Max(0, progress);
-        if (GuestAirframes(profile) == (airframes == 0 ? 1 << GuestStarterAirframe : airframes))
+        if (plane == _guestPlane)
         {
             return true;
         }
 
-        int picked = GuestAirframe;
-        bool kept = picked >= 0 && (airframes & (1 << picked)) != 0;
+        _guestPlane = plane;
+        _guestBuild = CustomPlaneWire.Def(plane?.Build);
         var results = new List<MissionResult>(profile.MissionResults);
-        Profile = kept
-            ? GuestProfile(profile.Name, progress, airframes, picked, GuestCoopFit)
-            : GuestProfile(profile.Name, progress, airframes, StarterAirframeOf(airframes), default);
+        Profile = GuestProfile(profile.Name, progress, plane);
         Profile.MissionResults.AddRange(results);
         return true;
+    }
+
+    /// <summary>The aeroplane the co-op allocation (<see cref="CoopPlanePool"/>) gives each seat of
+    /// the seated profile's sortie, <paramref name="seats"/> of them with seat 0 the profile's own.
+    /// Each names a hangar plane with its fit and build, or the stock Devastator. What a co-op host
+    /// tells its guests.</summary>
+    public IReadOnlyList<Net.CoopSeatPlaneMessage> CoopSeatPlanes(int seats)
+    {
+        var allocated = CoopPlanePool.Allocate(IsGuest ? null : Profile, seats);
+        var planes = new Net.CoopSeatPlaneMessage[allocated.Length];
+
+        // A stock seat carries the fit of a record at rest, which the guest's own campaign and a
+        // splitscreen stock record fly. So every machine seats it on the same bytes.
+        var rest = new OwnedPlane();
+        var restFit = Net.CoopFit.Of(rest.Ammo, rest.Ordnance);
+        for (int seat = 0; seat < planes.Length; seat++)
+        {
+            if (allocated[seat] < 0 || Profile is not { } profile)
+            {
+                planes[seat] = Net.CoopSeatPlaneMessage.Stock(seat, CoopPlanePool.StockAirframe) with { Fit = restFit };
+                continue;
+            }
+
+            var plane = profile.Planes[allocated[seat]];
+            planes[seat] = new Net.CoopSeatPlaneMessage((byte)seat, true, (byte)Math.Clamp(plane.Airframe, 0, byte.MaxValue),
+                Net.CoopFit.Of(plane.Ammo, plane.Ordnance), SeatBuildOf(profile, plane), plane.Name);
+        }
+
+        return planes;
     }
 
     /// <summary>A co-op guest's debrief record for mission <paramref name="seq"/>. Its own
@@ -473,12 +509,12 @@ public sealed class CampaignFeature : IMenuFeature
     public void SetPlaneSlot(int slot) => PlaneSlot = slot;
 
     /// <summary>Whether the flight check may offer CHANGE PLANE for crew slot
-    /// <paramref name="slot"/>, 0 the pilot's and 1 the wingman's: the two rules
-    /// <c>FLIGHTCHECK.SCRIPT</c> applies, the pilot's alone barred outright on the two grant
-    /// missions, and both barred while <see cref="ChangePlaneCount"/> is under the floor.</summary>
-    public bool ChangePlaneAllowed(int slot) => IsGuest
-        ? slot == 0 && (Profile?.Planes.Count ?? 0) >= GuestChangePlaneFloor
-        : (slot != 0 || !GrantMission) && ChangePlaneCount >= ChangePlaneFloor;
+    /// <paramref name="slot"/>, 0 the pilot's and 1 the wingman's. <c>FLIGHTCHECK.SCRIPT</c> bars
+    /// the pilot's alone on the two grant missions, and both while
+    /// <see cref="ChangePlaneCount"/> is under the floor. Never on a co-op guest's, whose aeroplane
+    /// is the one its host's allocation gives it.</summary>
+    public bool ChangePlaneAllowed(int slot) =>
+        !IsGuest && (slot != 0 || !GrantMission) && ChangePlaneCount >= ChangePlaneFloor;
 
     /// <summary>The flight check's own <c>uiData</c> 2021 on entry: on the two missions whose
     /// reward-table entry is ungated, the story aircraft joins the profile the first time and
@@ -677,14 +713,17 @@ public sealed class CampaignFeature : IMenuFeature
 
         Store?.Save(profile);
 
-        // A guest flies one stock aeroplane with no build and no profile of its own, which the
-        // exit's empty profile name says to the session.
+        // A network guest flies the one aeroplane its host allocated, with that plane's build. It
+        // has no profile of its own, which the exit's empty profile name says to the session. A
+        // local guest's stock record is named for its airframe, so no build is looked up under it.
         int players = IsGuest ? Math.Min(1, padsPerPlayer.Count) : padsPerPlayer.Count;
         var seats = new List<MenuSeatChoice>(players);
         for (int player = 0; player < players; player++)
         {
             var plane = Field.Plane(player) ?? new OwnedPlane();
-            var custom = IsGuest ? null : Planes?.Load(plane.Name) ?? CampaignProgression.BuildForOwned(plane);
+            var custom = IsGuest ? CustomPlaneWire.Def(_guestPlane?.Build)
+                : Field.IsStock(plane) ? null
+                : Planes?.Load(plane.Name) ?? CampaignProgression.BuildForOwned(plane);
             seats.Add(new MenuSeatChoice(
                 _nodeOfAirframe(plane.Airframe),
                 padsPerPlayer[player],
@@ -703,6 +742,8 @@ public sealed class CampaignFeature : IMenuFeature
         Store = null;
         IsGuest = false;
         GuestReady = false;
+        _guestPlane = null;
+        _guestBuild = null;
         Planes = null;
         Stock = null;
         DataRoot = null;
@@ -742,35 +783,6 @@ public sealed class CampaignFeature : IMenuFeature
         }
 
         return byAirframe;
-    }
-
-    private static int StarterAirframeOf(ushort airframes)
-    {
-        if ((airframes & (1 << GuestStarterAirframe)) != 0 || airframes == 0)
-        {
-            return GuestStarterAirframe;
-        }
-
-        for (int a = 0; a < 16; a++)
-        {
-            if ((airframes & (1 << a)) != 0)
-            {
-                return a;
-            }
-        }
-
-        return GuestStarterAirframe;
-    }
-
-    private static ushort GuestAirframes(CampaignProfileDef profile)
-    {
-        int mask = 0;
-        foreach (var plane in profile.Planes)
-        {
-            mask |= 1 << plane.Airframe;
-        }
-
-        return (ushort)mask;
     }
 
     // Writes a fit's stored values onto a record. A stock fit leaves the record at rest, and so does
@@ -832,32 +844,40 @@ public sealed class CampaignFeature : IMenuFeature
         return null;
     }
 
-    // One stock aeroplane per offered airframe, in airframe order, each named for its airframe, with
-    // the picked one carrying its fit. Never Special, since an award record resolves to the award's
-    // build and a guest flies stock only. Every other airframe opens on its own stock fit.
-    private CampaignProfileDef GuestProfile(string hostName, int progress, ushort airframes, int picked, Net.CoopFit fit)
+    // One aeroplane, the one the host allocated: its hangar name and fit, or the stock Devastator
+    // named for its airframe. Never Special, since the build the host named is the one it flies.
+    private CampaignProfileDef GuestProfile(string hostName, int progress, Net.CoopSeatPlaneMessage? allocated)
     {
         var profile = new CampaignProfileDef { Name = hostName, MissionsCompleted = Math.Max(0, progress) };
-        int offered = airframes == 0 ? 1 << GuestStarterAirframe : airframes;
-        for (int a = 0; a < CampaignProgression.AirframeCount && a < 16; a++)
+        var word = allocated ?? Net.CoopSeatPlaneMessage.Stock(0, CoopPlanePool.StockAirframe);
+        int airframe = Math.Clamp((int)word.Airframe, 0, CampaignProgression.AirframeCount - 1);
+        var plane = new OwnedPlane
         {
-            if ((offered & (1 << a)) == 0)
-            {
-                continue;
-            }
+            Name = word.Hangar && word.Name.Length > 0 ? word.Name : Strings.Text(3000 + airframe, $"Airframe {airframe}"),
+            Airframe = airframe,
+        };
+        Refit(plane, word.Fit);
+        profile.Planes.Add(plane);
+        return profile;
+    }
 
-            var plane = new OwnedPlane { Name = Strings.Text(3000 + a, $"Airframe {a}"), Airframe = a };
-            if (a == picked)
-            {
-                profile.SelectedPlane = profile.Planes.Count;
-                Refit(plane, fit);
-            }
-
-            profile.Planes.Add(plane);
+    // The build a hangar plane flies, as the wire carries it: its store file, else an award's own
+    // template, else none (a starter Devastator).
+    private Net.NetPlaneBuild? SeatBuildOf(CampaignProfileDef profile, OwnedPlane plane)
+    {
+        if (!ReferenceEquals(_seatBuildsFor, profile))
+        {
+            _seatBuilds.Clear();
+            _seatBuildsFor = profile;
         }
 
-        profile.WingmanPlane = profile.SelectedPlane;
-        return profile;
+        if (!_seatBuilds.TryGetValue(plane.Name, out var build))
+        {
+            build = CustomPlaneWire.Build(Planes?.Load(plane.Name) ?? CampaignProgression.BuildForOwned(plane));
+            _seatBuilds[plane.Name] = build;
+        }
+
+        return build;
     }
 
     private CustomPlaneDef StockBuild(OwnedPlane plane)

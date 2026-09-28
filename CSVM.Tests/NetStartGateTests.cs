@@ -11,34 +11,65 @@ namespace CSVM.Tests;
 [Trait("Tier", "Quick")]
 public class NetStartGateTests
 {
+    private const byte Round = 7;
+
     [Fact]
     public void AHostOpensOnlyOnceEveryLoadingMachineHasReported()
     {
-        var gate = NetStartGate.Host(new[] { 1, 2, 2 });
+        var gate = NetStartGate.Host(new[] { 1, 2, 2 }, Round);
         Assert.False(gate.Open);
         Assert.Equal(2, gate.Waiting.Count);
 
-        Assert.False(gate.TakeLoaded(1));
+        Assert.False(gate.TakeLoaded(1, Round));
         Assert.False(gate.Open);
-        Assert.False(gate.TakeLoaded(1));
-        Assert.True(gate.TakeLoaded(2));
+        Assert.False(gate.TakeLoaded(1, Round));
+        Assert.True(gate.TakeLoaded(2, Round));
         Assert.Equal(NetStartRelease.Everyone, gate.Release);
 
         // A word after the gate opened changes nothing.
-        Assert.False(gate.TakeLoaded(2));
+        Assert.False(gate.TakeLoaded(2, Round));
         Assert.Equal(NetStartRelease.Everyone, gate.Release);
+    }
+
+    [Fact]
+    public void AHostDiscardsALoadedWordFromAnEarlierRound()
+    {
+        // A restart binds the new flight on the same link, so the guest's loaded word from the
+        // flight before can arrive while this one waits. It must not open the gate.
+        var gate = NetStartGate.Host(new[] { 1 }, round: 2);
+        Assert.False(gate.TakeLoaded(1, 1));
+        Assert.False(gate.Open);
+        Assert.Single(gate.Waiting);
+        Assert.False(gate.TakeLoaded(1, 0));
+        Assert.False(gate.Open);
+
+        // ABLE-TO-FAIL CONTROL: the same guest's word under this round opens it.
+        Assert.True(gate.TakeLoaded(1, 2));
+        Assert.Equal(NetStartRelease.Everyone, gate.Release);
+    }
+
+    [Fact]
+    public void TwoHostGatesInARowNeverShareARound()
+    {
+        var first = NetStartGate.Host(new[] { 1 });
+        var second = NetStartGate.Host(new[] { 1 });
+        Assert.NotEqual((byte)0, first.Round);
+        Assert.NotEqual((byte)0, second.Round);
+        Assert.NotEqual(first.Round, second.Round);
+        Assert.False(second.TakeLoaded(1, first.Round));
+        Assert.False(second.Open);
     }
 
     [Fact]
     public void AMachineThatDropsWhileLoadingReleasesTheHost()
     {
-        var gate = NetStartGate.Host(new[] { 1, 2 });
-        gate.TakeLoaded(1);
+        var gate = NetStartGate.Host(new[] { 1, 2 }, Round);
+        gate.TakeLoaded(1, Round);
         Assert.True(gate.TakeLeft(2));
         Assert.Equal(NetStartRelease.Left, gate.Release);
 
         // ABLE-TO-FAIL CONTROL: a peer nobody waited on releases nothing.
-        var other = NetStartGate.Host(new[] { 1 });
+        var other = NetStartGate.Host(new[] { 1 }, Round);
         Assert.False(other.TakeLeft(5));
         Assert.False(other.Open);
     }
@@ -54,7 +85,7 @@ public class NetStartGateTests
     [Fact]
     public void AWaitGivesUpAtTheTimeoutAndNotBefore()
     {
-        var gate = NetStartGate.Host(new[] { 1 });
+        var gate = NetStartGate.Host(new[] { 1 }, Round);
         Assert.False(gate.Step(NetStartGate.TimeoutSeconds - 1.0));
         Assert.False(gate.Open);
         Assert.True(gate.Step(1.0));
@@ -72,14 +103,36 @@ public class NetStartGateTests
         var started = NetStartGate.Guest(0);
         Assert.False(started.Open);
         // A loaded word is the host's to take; on a guest it opens nothing.
-        Assert.False(started.TakeLoaded(0));
-        Assert.True(started.TakeStart());
+        Assert.False(started.TakeLoaded(0, Round));
+        Assert.True(started.TakeHold(Round));
+        Assert.True(started.TakeStart(Round));
         Assert.Equal(NetStartRelease.Started, started.Release);
-        Assert.False(started.TakeStart());
+        Assert.False(started.TakeStart(Round));
 
         var dropped = NetStartGate.Guest(0);
         Assert.True(dropped.TakeLeft(0));
         Assert.Equal(NetStartRelease.Left, dropped.Release);
+    }
+
+    [Fact]
+    public void AGuestKeepsTheFirstRoundItHeardAndIgnoresAnyOther()
+    {
+        // An old flight still held must not answer the new flight's hold word. Its loaded word
+        // would release the new host before this machine's new world is built.
+        var guest = NetStartGate.Guest(0);
+        Assert.False(guest.TakeStart(Round));
+        Assert.False(guest.Open);
+
+        Assert.True(guest.TakeHold(Round));
+        Assert.Equal(Round, guest.Round);
+        Assert.False(guest.TakeHold(Round + 1));
+        Assert.Equal(Round, guest.Round);
+        Assert.False(guest.TakeStart(Round + 1));
+        Assert.False(guest.Open);
+
+        // ABLE-TO-FAIL CONTROL: the round it answered starts it.
+        Assert.True(guest.TakeHold(Round));
+        Assert.True(guest.TakeStart(Round));
     }
 
     [Fact]
@@ -105,8 +158,9 @@ public class NetStartGateTests
     [Fact]
     public void AStartWordOnTheHostOpensNothing()
     {
-        var gate = NetStartGate.Host(new[] { 1 });
-        Assert.False(gate.TakeStart());
+        var gate = NetStartGate.Host(new[] { 1 }, Round);
+        Assert.False(gate.TakeStart(Round));
+        Assert.False(gate.TakeHold(Round));
         Assert.False(gate.Open);
     }
 }

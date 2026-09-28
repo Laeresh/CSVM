@@ -1,18 +1,22 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Net;
+using CSVM.Session.Campaign;
 
 namespace CSVM.UI.Menu;
 
 /// <summary>
 /// What a co-op host names to its guests about its boards: the board, the mission, the progress,
-/// the hangar it offers and the debrief's result. It also holds the film it shares. It
-/// builds each guest's flow and sends one again only when it changed. The round of picks is the
+/// the hangar it offers and the debrief's result. It also holds the film it shares and the
+/// aeroplane its allocation gives each seat. It builds each guest's flow and seat aeroplane and
+/// sends either again only when it changed. The round of picks is the
 /// door's, so the door advances it on <see cref="Show"/>'s answer and hands it to every send.
 /// </summary>
 public sealed class CoopHostFlow
 {
     private readonly Dictionary<int, CoopFlowMessage> _sent = new();
+    private readonly Dictionary<int, CoopSeatPlaneMessage> _planesSent = new();
+    private CoopSeatPlaneMessage[] _planes = Array.Empty<CoopSeatPlaneMessage>();
     private byte _seq;
     private byte _progress;
     private ushort _airframes;
@@ -46,6 +50,13 @@ public sealed class CoopHostFlow
         _cash = cash;
     }
 
+    /// <summary>The aeroplane the host's allocation gives seat <paramref name="seat"/>, the stock
+    /// Devastator for a seat it names nothing for.</summary>
+    public CoopSeatPlaneMessage PlaneOf(int seat) =>
+        seat >= 0 && seat < _planes.Length
+            ? _planes[seat]
+            : CoopSeatPlaneMessage.Stock(seat, CoopPlanePool.StockAirframe);
+
     // True when the change starts a new round of picks. A new mission does, as does a move onto a
     // board other than the briefing and flight check.
     internal bool Show(NetCoopScreen screen, int missionSeq, int progress, ushort airframes)
@@ -61,33 +72,34 @@ public sealed class CoopHostFlow
         return newRound;
     }
 
-    // A pick of an airframe the host's hangar does not hold, or no pick at all, flies the starter.
-    internal byte AirframeOf(byte? picked)
+    // Takes the allocation by seat. Each entry is stamped with its own seat, so no caller can send
+    // a guest a word that names somebody else's.
+    internal void ShowPlanes(IReadOnlyList<CoopSeatPlaneMessage> bySeat)
     {
-        if (picked is { } airframe && Offers(airframe))
+        var planes = new CoopSeatPlaneMessage[Math.Min(bySeat.Count, byte.MaxValue)];
+        for (int seat = 0; seat < planes.Length; seat++)
         {
-            return airframe;
+            planes[seat] = bySeat[seat] with { Seat = (byte)seat };
         }
 
-        if (Offers(CoopGuestPick.StarterAirframe) || _airframes == 0)
-        {
-            return CoopGuestPick.StarterAirframe;
-        }
+        _planes = planes;
+    }
 
-        for (byte a = 0; a < 16; a++)
+    // Each guest's flow differs only in its own player number, and its seat's aeroplane is its
+    // own; each goes out whenever it changed. The aeroplane goes first, so a guest opening its
+    // campaign on the flow already holds it.
+    internal void Send(NetLobby wire, IReadOnlyList<int> admitted, int localPlayers, byte round, Func<int, bool> readyNow)
+    {
+        for (int i = 0; i < admitted.Count; i++)
         {
-            if (Offers(a))
+            var plane = PlaneOf(localPlayers + i);
+            if (!_planesSent.TryGetValue(admitted[i], out var told) || told != plane)
             {
-                return a;
+                wire.Tell(admitted[i], plane);
+                _planesSent[admitted[i]] = plane;
             }
         }
 
-        return CoopGuestPick.StarterAirframe;
-    }
-
-    // Each guest's flow differs only in its own player number; one goes out whenever it changed.
-    internal void Send(NetLobby wire, IReadOnlyList<int> admitted, int localPlayers, byte round, Func<int, bool> readyNow)
-    {
         byte mask = 0;
         for (int i = 0; i < admitted.Count; i++)
         {
@@ -118,12 +130,17 @@ public sealed class CoopHostFlow
             if (!Contains(admitted, peer))
             {
                 _sent.Remove(peer);
+                _planesSent.Remove(peer);
             }
         }
     }
 
     // A wire handed back from a flight has lost what it was told, so every flow goes out again.
-    internal void ClearSent() => _sent.Clear();
+    internal void ClearSent()
+    {
+        _sent.Clear();
+        _planesSent.Clear();
+    }
 
     internal CoopFilmMessage StartFilm(NetCoopFilm film, int chapter)
     {
@@ -149,6 +166,8 @@ public sealed class CoopHostFlow
     internal void Forget()
     {
         _sent.Clear();
+        _planesSent.Clear();
+        _planes = Array.Empty<CoopSeatPlaneMessage>();
         Screen = NetCoopScreen.Cabin;
         _seq = 0;
         _progress = 0;
@@ -171,6 +190,4 @@ public sealed class CoopHostFlow
 
         return false;
     }
-
-    private bool Offers(int airframe) => airframe is >= 0 and < 16 && (_airframes & (1 << airframe)) != 0;
 }

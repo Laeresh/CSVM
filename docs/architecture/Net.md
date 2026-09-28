@@ -290,13 +290,13 @@ key and ordinal) and `WorldEventMessage`, whose `NetWorldEvent` code says what i
 Ids and phase mapping: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Net/NetCoopMessages.cs
-The campaign co-op boards' five messages, all reliable and all kept in `NetLobby` rather than a
-session. `CoopFlowMessage` is the host's boards as one guest follows them: the screen, the mission,
-the round of picks (`Epoch`), the guest's player number, the Ready mask, the hangar's airframes and,
-on the debrief, the host's result. `CoopPickMessage` is a guest's airframe, `CoopFit`, name, Ready
-and Left under the round it answers, so an earlier round's Ready never launches the next mission.
-Before the session opener `CoopSeatFitMessage` tells every guest one seat's fit, and
-`CoopWingmanMessage` the host's wingman airframe and fit, so a guest never builds its own default.
+The campaign co-op boards' six messages, all reliable and all kept in `NetLobby`, not a session.
+`CoopFlowMessage` is the host's boards as one guest follows them: the screen, the mission, the
+round of picks (`Epoch`), the guest's player number, the Ready mask, the hangar and the debrief's
+result. `CoopPickMessage` is a guest's airframe, `CoopFit`, name, Ready and Left under the round it
+answers. `CoopSeatPlaneMessage` is the plane the host's allocation gives a guest's seat, with its
+fit, build and name, or the stock Devastator. Before the opener `CoopSeatFitMessage` tells every
+guest a seat's fit and `CoopWingmanMessage` the host's wingman airframe and fit.
 `CoopFilmMessage` names a film the host started or ended. [Layout](../org/multiplayer-messages.md).
 
 ## src/Net/NetDogfightMessages.cs
@@ -351,12 +351,13 @@ stamped later than the guest's clock reads, is dropped. `Asked` and `Answered` a
 suite reads, the host's `Answered` being the arrivals its relay leaves alone.
 
 ## src/Net/NetStartGate.cs
-The start barrier of a network flight, and its `0x5B` word. A host's gate waits on every linked
-machine flying a seat; each guest sends `Loaded` at the end of its build, and the host opens when
-the last one arrives, when the last one still loading drops, or after `TimeoutSeconds` (TUNE, under
-the ENet keepalive ceiling). It then broadcasts `Start`, and answers a `Loaded` that arrives later
-with a `Start` of its own. A guest's gate opens on that word or on its host's link dropping. Pure
-state: `GameSession` holds `GameClock.StartHeld` while the gate is closed and steps only the wire.
+The start barrier of a network flight, and its `0x5B` word. A host's gate takes a fresh `Round`
+and names it in `Hold`; a built guest sends `Loaded` under the first round it heard. The host opens
+when the last one arrives, drops, or after `TimeoutSeconds` (TUNE, under the ENet keepalive
+ceiling), then broadcasts `Start` and answers a later `Loaded` with one of its own. ⚠ A `Loaded`
+under another round opens nothing and is answered with `Hold`: a restart reuses the link, and the
+old flight's word would start the new one early. A guest opens on `Start` under its round or on its
+host's link dropping. Pure state: `GameSession` holds `GameClock.StartHeld` and steps the wire.
 
 ## src/Net/NetHandshake.cs
 What a host hands a joining guest before either flies: the master seed and the host's session

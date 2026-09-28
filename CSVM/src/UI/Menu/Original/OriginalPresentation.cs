@@ -1219,7 +1219,8 @@ public sealed class OriginalPresentation : IMenuPresentation
     }
 
     // The guest as the host's boards leave it, three humans on the wire and this guest the second.
-    // The third is Ready on the check, so a shot shows another's mark beside this guest's own.
+    // The third is Ready on the check, so a shot shows another's mark beside this guest's own. The
+    // guest flies what the host's allocation gives seat 1 of the aid pilot's hangar.
     private void PoseCoopGuest(string board)
     {
         var host = CampaignAidProfiles.Store(seeded: true, progressed: true).Load(CampaignAidProfiles.Pilot);
@@ -1228,24 +1229,19 @@ public sealed class OriginalPresentation : IMenuPresentation
         var flow = board switch
         {
             "briefing" => new CoopFlowMessage(NetCoopScreen.Briefing, flown, 1, 1, 0, 3, flown, false, airframes, 0, 0),
-            "flightcheck" or "planeselection" or "ammo" =>
-                new CoopFlowMessage(NetCoopScreen.FlightCheck, flown, 1, 1, 0, 3, flown, false, airframes, 0, 0),
+            "flightcheck" => new CoopFlowMessage(NetCoopScreen.FlightCheck, flown, 1, 1, 0, 3, flown, false, airframes, 0, 0),
             "ready" => new CoopFlowMessage(NetCoopScreen.FlightCheck, flown, 1, 1, 0b100, 3, flown, false, airframes, 0, 0),
             "debrief" => new CoopFlowMessage(NetCoopScreen.Debrief, (byte)(flown - 1), 2, 1, 0, 3, flown, true, airframes, 0b11, 4500),
             _ => new CoopFlowMessage(NetCoopScreen.Cabin, flown, 1, 1, 0, 3, flown, false, airframes, 0, 0),
         };
 
-        _shell!.StandInNetDoor(NetDoorAid.CoopGuest(flow, ready: board == "ready"));
+        int index = CoopPlanePool.Allocate(host, 2)[1];
+        var plane = index >= 0 && host!.Planes[index] is { } owned
+            ? new CoopSeatPlaneMessage(1, true, (byte)owned.Airframe, CoopFit.Of(owned.Ammo, owned.Ordnance), null, owned.Name)
+            : CoopSeatPlaneMessage.Stock(1, CoopPlanePool.StockAirframe);
+        _shell!.StandInNetDoor(NetDoorAid.CoopGuest(flow, ready: board == "ready", plane));
         _shell.Connection.OpenConnection();
         _shell.StepNet(0.0);
-        if (board == "planeselection")
-        {
-            _shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
-        }
-        else if (board == "ammo")
-        {
-            _shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignAmmo);
-        }
     }
 
     // --debug-join=N, once: N device-less seats with distinct cursors, the last one selected, so

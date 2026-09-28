@@ -298,7 +298,7 @@ named in it; `WaveEdit` is the twelfth and has no aid, which is the warning unde
 | `campaign-hangar` | the hangar over the profile's wallet | `Campaign` → `Hangar` |
 | `campaign-fly` | walks a real profile to Fly Mission and launches | `Campaign` |
 | `campaign-coop[:guests]` | the cabin with the co-op network door open over a loopback wire holding that many guests (0 by default), its band and remote chips drawn; Original draws the same pose with its CLOSE NETWORK plaque | `Campaign` |
-| `campaign-coop-guest[:board]` | Original only: a co-op guest joined to a loopback host, standing on the board the host names (`cabin` by default, `briefing`, `flightcheck`, `ready`, `planeselection`, `ammo`, `debrief`), the host's rows greyed and the guest band drawn; `ready` is the check after the guest's Ready, `debrief` the host's won result | `Campaign` |
+| `campaign-coop-guest[:board]` | Original only: a co-op guest joined to a loopback host, standing on the board the host names (`cabin` by default, `briefing`, `flightcheck`, `ready`, `debrief`), the host's rows greyed and the guest band drawn, flying the plane the host's allocation gives its seat; `ready` is the check after the guest's Ready, `debrief` the host's won result | `Campaign` |
 | `campaign-coop-ready` | Original only: a co-op host's flight check with two guests, the first Ready and the second not, so FLY MISSION is greyed and the strip's chips say Ready | `Campaign` |
 | `connection` | Original only: the Multiplayer Connection page | out of scope |
 | `connection-games[:searching]` | Original only: the LAN games list over an in-process LAN answering with five sample games, one of another build version, or with none so the Searching box stands | out of scope |
