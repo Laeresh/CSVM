@@ -79,12 +79,6 @@ public sealed class CampaignDirector
     private readonly HashSet<string> _leaderlessReported = new(StringComparer.Ordinal);
     private readonly Dictionary<string, FlightController> _roster = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, RosterSpawnPlan> _rosterPlans = new(StringComparer.OrdinalIgnoreCase);
-
-    // A block's actual placement, apart from its authored plan: a world node override at spawn,
-    // or the authored pose otherwise. WAKEUP_ENEMIES re-places a deactivated block here, not at
-    // the plan's authored pose, so a script-moved block wakes where it now stands.
-    private readonly Dictionary<string, (Vector3 Position, Vector3 Forward)> _rosterPlacedPose =
-        new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, SurfaceVehicle> _vessels = new(StringComparer.OrdinalIgnoreCase);
 
     // A guest's two WARP_VEHICLE halves, keyed by the vehicle's name hash: the directive its graph
@@ -464,17 +458,18 @@ public sealed class CampaignDirector
     }
 
     /// <summary>Seats a pilot on a patrol net: the assignment <c>SET_AI_NET</c> makes and the one a
-    /// lost leader makes. The escort buffer goes with it, since a net outranks wingman mode, and a
-    /// fresh walk seats itself at the node nearest wherever the aeroplane IS, so a mid-flight swap
-    /// captures the new route instead of restarting it. ⚠ Re-baseline the machine on the vehicle's
-    /// own ranges BEFORE the net's volumes: <see cref="CampaignRosterPlan.ApplyVolumes"/> skips a
-    /// radius the net authors as zero, and a stale gate keeps a bomb-run escort in patrol.</summary>
+    /// lost leader makes. A net outranks wingman mode, so the escort buffer goes with it. The fresh
+    /// walk is seated at once where the aeroplane IS (<c>FUN_00475fc0</c>), asleep or flying.
+    /// ⚠ Re-baseline the machine on the vehicle's own ranges BEFORE the net's volumes. A radius the
+    /// net authors as zero is skipped by <see cref="CampaignRosterPlan.ApplyVolumes"/>, and a stale
+    /// gate keeps a bomb-run escort in patrol.</summary>
     internal static void SeatOnNet(FlightController rig, AiPilot pilot, AiNet net,
         NetTrailerTargets? trailers, float minAiActiveDist)
     {
         pilot.Escort = null;
         pilot.Patrol = new AiNetFollower(net, Utils.Rng.NewSystemRandom(Utils.Rng.Ai),
             trailerTarget: trailers?.For(net));
+        pilot.Patrol.Seat(rig.WorldPosition, rig.NoseDirection);
         if (pilot.Machine is { } gates && rig.Stats is { } defs)
         {
             gates.AttackRange = defs.AiAttackRange;
@@ -563,7 +558,6 @@ public sealed class CampaignDirector
             }
             _roster[spawn.Name] = rig;
             _rosterPlans[spawn.Name] = spawn;
-            _rosterPlacedPose[spawn.Name] = (pos, fwd);
             RegisterObjectiveMarker(spawn.Name, spawn);
             rig.Group = spawn.Group;
             rig.Downed += (_, killer) => CreditKill(spawn, killer);
@@ -583,6 +577,13 @@ public sealed class CampaignDirector
                 {
                     Log.Info("core", $"campaign: roster '{spawn.Name}' authors taxi path '{taxi}', which this world does not carry: it flies");
                 }
+            }
+
+            // Every netted block is seated where it spawns, deactivated or not (FUN_0047c210), so a
+            // later wake walks on from here (docs/org/aiPilot.md "Activation keeps the walk").
+            if (!placed)
+            {
+                pilot.Patrol?.Seat(rig.WorldPosition, rig.NoseDirection);
             }
 
             // A downward probe against the built terrain collision, at the placed position: names
@@ -972,7 +973,7 @@ public sealed class CampaignDirector
     // exclusive movement-law switch. The handoff un-holds it at the speed the path left it
     // (docs/org/flightModel.md "The scripted-path follower"). A spawn placement seats the patrol
     // walk at the path's start and the handoff keeps it (docs/org/aiPilot.md "A path vehicle's net
-    // seat"). A warp placement (FUN_004940d0) seats nothing, so its handoff reseats.
+    // seat"). A warp placement (FUN_004940d0) seats nothing, so its vehicle keeps the walk it had.
     private bool PlaceOnPath(FlightController rig, string name, string taxi, bool seatWalk = false)
     {
         bool placed = _paths!.Place(name, taxi, rig,
@@ -980,8 +981,7 @@ public sealed class CampaignDirector
             {
                 rig.Held = false;
                 var nose = rig.NoseDirection;
-                rig.Activate(rig.WorldPosition, rig.WorldPosition + nose, nose * speed,
-                    keepPatrolSeat: seatWalk);
+                rig.Activate(rig.WorldPosition, rig.WorldPosition + nose, nose * speed);
             },
             setPose: (p, heading) =>
             {
@@ -1433,7 +1433,7 @@ public sealed class CampaignDirector
     // script that moved it keeps the move. False when the name is no dormant roster block.
     private bool ActivateDormantRoster(string name)
     {
-        if (!_roster.TryGetValue(name, out var rig) || !_rosterPlans.TryGetValue(name, out var plan)
+        if (!_roster.TryGetValue(name, out var rig) || !_rosterPlans.ContainsKey(name)
             || !rig.Inert)
         {
             return false;
@@ -1447,19 +1447,15 @@ public sealed class CampaignDirector
             return true;
         }
 
-        // A vehicle on a path wakes where the path holds it, keeping the walk its placement seated.
-        // The original's activation skips its net step for a path vehicle (FUN_004b0f40).
-        if (_paths?.IsPlaced(name) == true)
+        // Off a path, the net's trailer carries the wake position (FUN_004b0f40). The walk seated at
+        // spawn is kept (docs/org/aiPilot.md "Activation keeps the walk").
+        var at = rig.WorldPosition;
+        if (_paths?.IsPlaced(name) != true && rig.Pilot?.Patrol is { } walk)
         {
-            var at = rig.WorldPosition;
-            rig.Activate(at, at + rig.NoseDirection, keepPatrolSeat: true);
-            return true;
+            at = walk.Carry(at);
         }
 
-        var (pos, fwd) = _rosterPlacedPose.TryGetValue(name, out var placed)
-            ? placed
-            : (plan.Position, plan.Forward);
-        rig.Activate(pos, pos + fwd);
+        rig.Activate(at, at + rig.NoseDirection);
         return true;
     }
 
@@ -1813,9 +1809,9 @@ public sealed class CampaignDirector
 
         public void WakeupEnemies(IReadOnlyList<string> names)
         {
-            // The partner of BOTH deactivated flags (docs/formats/objectives.md): the roster's,
-            // which puts an inert aircraft back in play at its placed pose, and a zeppelin record's,
-            // which puts a hidden airship into the world. A name is one or the other, never both.
+            // The partner of BOTH deactivated flags (docs/formats/objectives.md). The roster's puts
+            // an inert aircraft back in play, and a zeppelin record's shows a hidden airship.
+            // A name is one or the other, never both.
             int aircraft = 0, zeppelins = 0, vessels = 0;
             foreach (var name in names)
             {

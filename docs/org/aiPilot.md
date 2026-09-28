@@ -839,28 +839,57 @@ with `+0x67c = 0` on every path, including the failure path where the net id did
 So `mode wingman` is not "this aircraft escorts". It is **"this aircraft escorts when it has no
 net"**, and the net wins whenever one is authored.
 
-## A path vehicle's net seat is taken at its placement
+## Activation keeps the walk
 
-The walk's seat (`+0x2e8`, `+0x2ec`) is written once at spawn and nothing on the way to the
-flight model rewrites it. The order inside the roster spawn `FUN_0047c210`:
+The walk's seat (`+0x2e8`, `+0x2ec`) is written by the net assignment `FUN_00475fc0` and by nothing
+on the way to the flight model. Every netted roster block is seated at its placement, deactivated
+or not. The order inside the roster spawn `FUN_0047c210`:
 
 | Address | What happens |
 |---|---|
-| `0x0047c3a5` | the vehicle is placed on waypoint 0 of its taxi path, facing the leg into waypoint 1 |
+| `0x0047c3a5` | a taxi-path vehicle is placed on waypoint 0 of its path, facing the leg into waypoint 1 |
 | `0x0047c568`, `0x0047c57e` | path flag `+0xcc = 1` and freeze flag `+0xd4 = 1` |
 | `0x0047c77b` | `FUN_00476250`, whose net assignment `FUN_00475fc0` seats the walk from `+0x204`, the placed position |
-| `0x0047ca20` | `FUN_004b0f40(vehicle, deactivated)` |
+| `0x0047ca14`–`0x0047ca20` | `FUN_004b0f40(vehicle, 1)`, called only for a block whose `deactivated` is set |
 
-So the seat is the node nearest the path's first waypoint (`FUN_00431900`, a 3-D distance through
-`FUN_00538880`) and the edge leaving it best lined up with the path's first leg (`FUN_00431e40`).
+So the seat is the node nearest the placement (`FUN_00431900`, a 3-D distance through
+`FUN_00538880`) and the edge leaving it best lined up with the nose (`FUN_00431e40`). For a
+taxi-path vehicle that is the node nearest the path's first waypoint and the edge along its first
+leg.
 
-**Activation does not reseat the walk.** `FUN_004b0f40` clears the inactive flags and then tests
-`+0xcc` (`0x004b1005`, `0x004b1025`): a vehicle on a path skips its net step outright. For any other
-vehicle that step moves the vehicle's POSITION through `FUN_00432010` (`0x004b1089`), the trailer
-carry of the "The trailer" section above, and it never writes `+0x2e8` or `+0x2ec`. The path
-follower's handoff (`FUN_0048a110` clearing `+0xcc` at `0x0048a863`) writes no net field either.
-A path vehicle therefore takes off already walking the leg its placement seated, however far the
-take-off carried it.
+**Activation does not reseat the walk.** `FUN_004b0f40(vehicle, 0)` clears `+0x945`, `+0x91d`,
+`+0x91f` and `+0x91e`, then tests the path flag `+0xcc` (`0x004b1005`, `JNZ` at `0x004b1025`): a
+vehicle on a path skips its net step outright. For any other vehicle it tests the net id `+0x2e4 >= 0`
+(`0x004b102b`–`0x004b1033`), finds the net in the chapter table `DAT_0064f610`
+(`0x004b1039`–`0x004b105b`) and calls `FUN_00432010(out, &vehicle+0x204)` with the net as `ECX`
+(`0x004b1089`). That is the trailer rule of "The trailer" above applied to the vehicle's own
+POSITION: with a resolved target and an anchor other than −1 the X and Z move by the target less the
+anchor node, the Y is kept, and otherwise the position is returned unchanged. The result is written
+to `+0x204`–`+0x20c` and `+0x1a4`–`+0x1ac`, the position history from `+0x6a4` is refilled with it
+and the velocity `+0x6b0`–`+0x6b8` is zeroed. The tail calls `FUN_004d1d50`, `FUN_00489f60`,
+`FUN_004cca30(node, 1)`, `FUN_0047b790` and `FUN_004733c0(1)`. Nothing in it writes `+0x2e8` or
+`+0x2ec`.
+
+The carry is a placement, not a walk rule: a vehicle woken on an anchored net appears at its spawn
+moved by the trailer's current offset, and flies on toward the node its spawn seated. Whether the
+carried position survives depends on the caller:
+
+| Caller of `FUN_004b0f40(vehicle, 0)` | Places the vehicle afterwards? |
+|---|---|
+| `FUN_00469af0`, `WAKEUP_ENEMIES` | no, the carry stands |
+| `FUN_0047e080` cases `0x321`, `0x322`, `0x323` (the `bhatwarhawk`, `bhatbrigand` and `bhatgyro` launch hooks) and `0x3c6` | no, the carry stands |
+| `FUN_0045b9d0`, the Instant Action wave director | yes, at the wave's arrival point |
+| `FUN_00452450`, the generator release | yes, at the generator |
+| `FUN_0047e080` case `0x3c7`, the `balmoral` wingman | yes, at the player plus 100 m |
+
+The nearest-node seat has five callers, and none is an activation: `FUN_00475fc0` (the assignment),
+`FUN_0048ad20`, `FUN_00490590` (the danger-zone exit), `FUN_0049c920` (the wingman release, which
+seats at once) and `FUN_004bd840`. An aircraft returning from pursue is not reseated either; it
+flies on toward the node it was heading for.
+
+The path follower's handoff (`FUN_0048a110` clearing `+0xcc` at `0x0048a863`) writes no net field
+either. A path vehicle therefore takes off already walking the leg its placement seated, however
+far the take-off carried it.
 
 **Node heights are absolute.** `FUN_00432010` passes a node's Y through verbatim, trailer or not,
 and the only altitude rules the AI has are the flat 20 m floor and the crash ray of "Crash
@@ -882,11 +911,20 @@ Every taxi-path vehicle seats this way: C1/M04's `blakepeace_2_3` to `_6` (nets 
 C2/M02's `secgyro_1` to `_4` (net 9) and `devastator_1` (net 5), and the Cabbie. Of those nets only
 `M1Cabbie` carries a tagged node, so for the others the seat decides only the first leg flown.
 
-CSVM: `CampaignDirector.PlaceOnPath` seats the walk with `AiNetFollower.Seat` right after a roster
-spawn's placement, and both the wake (`ActivateDormantRoster`) and the handoff activate with
-`FlightController.Activate(keepPatrolSeat: true)` while the vehicle is on its path. A
-`WARP_VEHICLE` onto a path (`FUN_004940d0`) runs no net assignment, so its handoff still reseats.
-Pinned by the `campaign-cabbie-run` suite.
+CSVM: `CampaignDirector.BuildRoster` seats every netted block with `AiNetFollower.Seat` where it
+spawns, `PlaceOnPath` after its path placement, and `SeatOnNet` (`SET_AI_NET`, the lost leader) at
+once where the aeroplane is. `FlightController.Activate` never touches the walk. The wake
+(`ActivateDormantRoster`) moves a vehicle off a path by `AiNetFollower.Carry`, the trailer offset
+with the height kept, and a vehicle on its path by nothing. A `WARP_VEHICLE` onto a path
+(`FUN_004940d0`) seats nothing, so its handoff keeps the walk the vehicle already had. Pinned by the
+`campaign-cabbie-run` and `campaign-wake-trailer-carry` suites.
+
+Which shipped missions the carry moves: a deactivated block on an anchored net whose wake is not
+followed by a placement. They are C1/M04 (`blakebloodhawk_8` on `M4ReinfAce`, the player;
+`blakebloodhawk_9` to `_13` on `M4ZepAttack`), C1C/M01, C2/M01, C2/M02, C2B/M04, C2/M05, C3/M03,
+C3/M04, C4/M02 (`bhatbrigand_1` to `_3`, the player), C4/M03, C4/M05, C5/M02, C5/M03 and C5/M04.
+A dormant block on an unanchored net wakes where it spawned. C4/M02's Blacke (`bhatgyro_1`,
+unanchored) is warped while dormant and wakes at the warp pose.
 
 ## Which edge a vehicle leaves a node on: the nose, never a draw
 
@@ -1667,10 +1705,10 @@ the list reader and the editor comment quoted in [`ai-rosters.md`](../formats/ai
 right to call it a list.
 
 Activation is separate from all of this. `FUN_004b0f40(vehicle, deactivated)` is the
-activate/deactivate primitive, clearing or setting `+0x945`, `+0x91d`, `+0x91e` and `+0x91f`, and is
-called from the spawn with the roster's `deactivated` field. On activation, a vehicle that has a net
-and is not on a scripted path has its position carried by the net's trailer offset (`FUN_00432010`);
-the walk itself is never reseated ("A path vehicle's net seat is taken at its placement").
+activate/deactivate primitive, clearing or setting `+0x945`, `+0x91d`, `+0x91e` and `+0x91f`. The
+spawn calls it only for a block whose `deactivated` is set, with 1. On activation, a vehicle that
+has a net and is not on a scripted path has its position carried by the net's trailer offset
+(`FUN_00432010`); the walk itself is never reseated ("Activation keeps the walk").
 
 ## `preferred_engagement_altitude` is a maneuver-selection weight
 
@@ -1722,6 +1760,14 @@ remaining five.
 
 Their volumes are `FUN_0045a240`'s ±10000 m, not the net's: the block wins the overwrite (above).
 
+Each actor's walk is seated where the build places it, through the same spawn as the campaign's
+("Activation keeps the walk"). The wingmen and the ace spawn live at their spawn points. A wave
+member is spawned deactivated at the world origin facing yaw 0 when the mode is `zeppelin_run` or
+the wave is not wave 1, and live at the spawn point plus its fan otherwise. So every member of
+waves 2 to 4, and of every `zeppelin_run` wave, is seated on the node nearest the origin. The wave
+director `FUN_0045b9d0` activates it and places it at the arrival point, and it flies on from that
+origin seat.
+
 Two consequences follow from the demotion rule above, read off the code path and consistent with
 the original at the controls:
 
@@ -1766,8 +1812,9 @@ law is a campaign behaviour and the wrong fix for a wingman that leaves the figh
 | `FUN_0049c880` | releases every wingman onto a net through the above; UNREFERENCED in the image |
 | `FUN_00475820` | def to vehicle copy, including `mode` |
 | `FUN_00476250` | post-spawn vehicle init, including the wingman demotion |
-| `FUN_0047c210` | the roster spawn: `netids` draw, `preferred_engagement_altitude`, activation |
-| `FUN_004b0f40` | activate / deactivate; the trailer carry of the position, skipped while `+0xcc` is set, never a reseat |
+| `FUN_0047c210` | the roster spawn: `netids` draw, `preferred_engagement_altitude`, the net seat at the placement, deactivation |
+| `FUN_004b0f40` | activate / deactivate; on activation the trailer carry of the position, skipped while `+0xcc` is set, never a reseat |
+| `FUN_0045a390` | the Instant Action build: every actor's net, and the origin parking of waves 2 to 4 and of `zeppelin_run` |
 | `FUN_00479240` | the `vehicle.json` def parser, including the `mode` string table |
 | `FUN_004201a0` | evasive-maneuver selection, the one reader of `preferred_engagement_altitude` |
 | `FUN_0041c470` | the debug overlay that names the modes and recomputes the target ranking |

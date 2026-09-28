@@ -494,6 +494,43 @@ public class AiNetFollowerTests
         Assert.Equal(1, f.CurrentIndex);
     }
 
+    /// <summary>The activation's carry (<c>FUN_00432010</c>). The position moves by the trailer
+    /// offset in X and Z, live with the target, and keeps its own height.</summary>
+    [Fact]
+    public void CarryMovesAPositionByTheTrailerOffsetAndKeepsItsHeight()
+    {
+        var target = new Vector3(5000f, 50f, -2000f);   // anchor node 4 at (500,500): offset (4500, 0, −2500)
+        var f = new AiNetFollower(Anchored(), new Random(1), trailerTarget: () => target);
+        Assert.Equal(new Vector3(4600f, 750f, -2300f), f.Carry(new Vector3(100f, 750f, 200f)));
+        target = new Vector3(500f, 0f, 500f);           // the target on the anchor: no carry
+        Assert.Equal(new Vector3(100f, 750f, 200f), f.Carry(new Vector3(100f, 750f, 200f)));
+    }
+
+    /// <summary>The carry is the identity wherever the offset is: an unanchored net, a caller that
+    /// passed no supplier, and a target that cannot be located.</summary>
+    [Fact]
+    public void CarryIsTheIdentityWithNoOffsetToApply()
+    {
+        var at = new Vector3(100f, 750f, 200f);
+        Assert.Equal(at, new AiNetFollower(Loop(), new Random(1), trailerTarget: () => new Vector3(9000f, 0f, 9000f)).Carry(at));
+        Assert.Equal(at, new AiNetFollower(Anchored(), new Random(1)).Carry(at));
+        Assert.Equal(at, new AiNetFollower(Anchored(), new Random(1), trailerTarget: () => null).Carry(at));
+    }
+
+    /// <summary>A walk seated at a parking pose is not reseated by a position far away. Only an
+    /// explicit seat moves it, and the original's activation never makes one.</summary>
+    [Fact]
+    public void ASeatedWalkKeepsItsLegWhenTheVehicleIsPutDownElsewhere()
+    {
+        var f = new AiNetFollower(Loop(), new Random(1));
+        f.Seat(Vector3.Zero, Vector3.Right);
+        Assert.Equal((0, 1), (f.LegStartIndex, f.CurrentIndex));
+
+        // Put down short of node 1 along the leg and nearest to node 3: a fresh seat would take node 3.
+        Assert.False(f.Update(new Vector3(400f, 400f, 900f), Vector3.Back));
+        Assert.Equal((0, 1), (f.LegStartIndex, f.CurrentIndex));
+    }
+
     private static AiNetNode Node(float x, float z) => new(new Vector3(x, 400f, z), Array.Empty<float>());
 
     private static AiNetNode Tagged(params float[] tags) => new(new Vector3(0f, 400f, 0f), tags);

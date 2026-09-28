@@ -2920,7 +2920,7 @@ take.
 The roster spawner calls `ScriptedPathVehicles.Place`, so C1/M04 really does put four aeroplanes on
 `pp1`–`pp4` and its `START_TAXI` chain really does release them.
 The handoff leaves the vehicle's patrol walk where the spawn seated it, at the path's first waypoint;
-[aiPilot.md](aiPilot.md) "A path vehicle's net seat is taken at its placement" has the decode.
+[aiPilot.md](aiPilot.md) "Activation keeps the walk" has the decode.
 A surface vehicle (`mode ship`, the patrol boats) is driven by the same law for its whole life
 (`Flight/Ai/SurfaceVehicle.cs`): the follower steers it over an unbounded route, a generator's
 take-off run and then a walk of its net's edges, so it never reaches the final leg's acceleration

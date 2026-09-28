@@ -97,7 +97,7 @@ The engine side of one Instant Action mission, behind `GameSession`'s one nullab
 field: a plain sealed class that builds no node of its own, so every actor it makes parents under
 the handed world root. `TryCreate` takes the wizard's def or `--ia=<path>`; `BuildActors` is the
 contiguous actor phase (the chapter's first patrol net, the ace, the wingman fan and its escort
-chain, every configured wave built inert at the world origin, each actor named on its `AiSpawn.PilotName`: the ace's `ace_name`, a wave's `enemy_name`, a wingman slot's fixed pilot); `Step` ticks the sequencer and activates what it returns; `WireEndConditions` routes each mode's own win signal, the lives
+chain, every configured wave built inert at the world origin, each actor's walk seated where it spawns and kept on activation, each actor named on its `AiSpawn.PilotName`: the ace's `ace_name`, a wave's `enemy_name`, a wingman slot's fixed pilot); `Step` ticks the sequencer and activates what it returns; `WireEndConditions` routes each mode's own win signal, the lives
 ledger and the whole-window wrap-up board, snapshotting the four counters at the ending and holding the pilots' seats (not the world, not the cameras) until the hold runs out and the board is due: a win keeps the stick and loses the commands, a loss loses both, and a hull lost inside the hold spends no life and takes no pane. The decoded rules stay engine-free in
 `InstantActionRuntime.cs` and `InstantActionWaves.cs`; this class owns every `ia:` log line.
 
@@ -192,7 +192,7 @@ animation. `Replicate` hands the graph to another machine's: it then evaluates n
 The engine side of one campaign mission and the sibling of `InstantActionDirector`: a plain sealed
 class building no node of its own. `ResolveSpec` runs in `GameSession`'s constructor and turns a
 `--campaign=<profile>:<seq>` position into a chapter and mission; `BuildRoster` plans and spawns
-the `aiv` blocks through `CampaignRoster.cs`; `Attach` arms the graph once every runtime a
+the `aiv` blocks through `CampaignRoster.cs`, seating each netted one's walk where it spawns, and a wake moves an off-path block by its net's trailer (`AiNetFollower.Carry`); `Attach` arms the graph once every runtime a
 directive can touch is up; `BindCallbackHost` takes the `CALLBACK` slot ahead of the generator
 runtime's, where 801 to 803 reactivate the lowest-numbered still-deactivated Black Hat of their
 family, CM19's only launch path; `WarpDrawn` raises the world stream's `WARP_VEHICLE` pick, and `TakeWarpsFromHost` makes a guest director wait for the host's instead of drawing; 968 takes C4/M03's escorting wingman out of the world as that mission's docking film says her name; `Step` runs the graph, the escort repair, the music and the danger-zone tracker, whose completed zones photograph into the profile through `CampaignSnapshot`, raise the flight's praise line through `WorldInputs.DangerZoneSpoken` and make `DangerZoneMask`, the id 18 to 30 half of the completed-objective mask. The

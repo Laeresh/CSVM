@@ -1495,10 +1495,11 @@ public partial class FlightController : Node3D
     /// <summary>The inverse of building inert, the original's teleport-then-reactivate. It re-homes
     /// this aircraft at <paramref name="pos"/>, facing <paramref name="lookAt"/>, and respawns it.
     /// <see cref="Respawn"/> restores speed, airframe, ammo and the start choreography, so a wave
-    /// arrives flying. On an aircraft already in play it is that teleport-and-reset.
-    /// <paramref name="keepPatrolSeat"/> keeps the patrol walk, for a scripted-path vehicle.</summary>
+    /// arrives flying. On an aircraft already in play it is that teleport-and-reset.</summary>
+    // ⚠ Never reseat the patrol walk here. The original's activation writes no net field
+    // (FUN_004b0f40), so a woken or teleported aircraft walks on from its spawn seat.
     public void Activate(Vector3 pos, Vector3 lookAt, Vector3? launchVelocity = null,
-        bool carrierDrop = false, float? launchThrottle = null, bool keepPatrolSeat = false)
+        bool carrierDrop = false, float? launchThrottle = null)
     {
         var dir = lookAt - pos;
         _spawnPos = pos;
@@ -1507,11 +1508,6 @@ public partial class FlightController : Node3D
             _spawnAttitude = Basis.LookingAt(dir.Normalized(), Vector3.Up);
         Inert = false;
         ArmSpawnTimers(carrierDrop);
-        // Reseating makes a teleported wave patrol where it ARRIVED rather than fly back to where it
-        // was parked. The original skips its activation net step for a path vehicle (FUN_004b0f40,
-        // docs/org/aiPilot.md), so a handoff keeps the walk seated at the spawn placement.
-        if (!keepPatrolSeat)
-            Pilot?.Patrol?.Reseat();
         Respawn();
         if (launchVelocity is { } velocity)
             _model.SetVelocity(velocity);
