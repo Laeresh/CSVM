@@ -40,6 +40,7 @@ public sealed partial class AiVoiceRuntime : Node
     private readonly HashSet<int> _watchedFriendlyFire = new();
     private readonly HashSet<(int Speaker, string Family)> _noClipLogged = new();
     private readonly Dictionary<int, float> _nextCallOut = new();
+    private readonly Dictionary<int, int> _accentTurns = new();
     private float _now;
 
     public AiVoiceRuntime(CombatVoice voice, WorldSounds sounds, MissionRadio radio, Random rng)
@@ -95,7 +96,11 @@ public sealed partial class AiVoiceRuntime : Node
         {
             return;
         }
-        int? voId = _voice.PilotFor(accent, _rng);
+        // ⚠ Deal the pilot by registration turn, never from _rng; each network end's stream is its own.
+        // A host and its guests register the same AI in the same order, so they deal the same pilot.
+        int turn = _accentTurns.GetValueOrDefault(accent);
+        _accentTurns[accent] = turn + 1;
+        int? voId = _voice.PilotFor(accent, turn);
         if (voId is not { } vo)
         {
             Log.Info("sound", $"ai voice: {ai.Name}: accent {accent} resolves to no voiced pilot, silent");

@@ -342,7 +342,7 @@ internal static class InstantActionSuites
         var defs = SoundDefs.Load(ctx.ZrdrPath);
         var groups = SoundDefs.LoadGroups(ctx.ZrdrPath);
         var voice = new CombatVoice(defs, groups, CombatVoice.LoadAccents(ctx.ZrdrPath));
-        int? acePilot = voice.PilotFor(aceDef.AceAccentId, new System.Random(1));
+        int? acePilot = voice.PilotFor(aceDef.AceAccentId, 0);
         if (acePilot is not { } vo)
         {
             throw new SuiteSkippedException($"accent {aceDef.AceAccentId} resolves to no voiced pilot");
@@ -354,13 +354,13 @@ internal static class InstantActionSuites
         // thirteen militia accents all speak; among the five wingman slots only 14 does not, its
         // row being the single pilot id the install ships no clip for.
         var mute = UI.Menu.InstantActionFeature.Militias
-            .Where(m => voice.PilotFor(m.AccentId, new System.Random(1)) == null)
+            .Where(m => voice.PilotFor(m.AccentId, 0) == null)
             .Select(m => m.Name).ToList();
         ctx.Check(mute.Count == 0,
             $"every militia's wave accent reaches a voiced pilot; silent: [{string.Join(",", mute)}]");
         var silentSlots = Enumerable.Range(0, 5)
             .Select(i => InstantActionRuntime.WingmanSlotFor(i).AccentId)
-            .Where(a => voice.PilotFor(a, new System.Random(1)) == null).ToList();
+            .Where(a => voice.PilotFor(a, 0) == null).ToList();
         ctx.Check(silentSlots.SequenceEqual(new[] { 14 }),
             $"wingman slot accent 14 alone reaches no voiced pilot: [{string.Join(",", silentSlots)}]");
         ctx.Check(voice.Pool(14).SequenceEqual(new[] { 5 }) && voice.ClipsFor(5, "DA").Count == 0,

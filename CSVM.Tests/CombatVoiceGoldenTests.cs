@@ -108,12 +108,25 @@ public class CombatVoiceGoldenTests
     }
 
     [ExtractedDataFact]
+    public void ASeveralPilotAccentDealsItsPoolInAuthoredOrder()
+    {
+        var voice = Voice(out _, out _);
+        // Accent 1's pool is {26, 27, 28}: its fourth aircraft wraps to the first pilot.
+        Assert.Equal(new int?[] { 26, 27, 28, 26 },
+            Enumerable.Range(0, 4).Select(turn => voice.PilotFor(1, turn)).ToArray());
+        // Accent 0 deals the def-only id 35 second, a pilot with no WAVs, as the original deals it.
+        Assert.Equal(new int?[] { 18, 35, 37 },
+            Enumerable.Range(0, 3).Select(turn => voice.PilotFor(0, turn)).ToArray());
+    }
+
+    [ExtractedDataFact]
     public void TheWorkedExampleChainResolvesEndToEnd()
     {
         var voice = Voice(out _, out var groups);
         // accent 12 (Jack/Ilsa per the survey) → the single-id pool {2} → id2's clips.
         Assert.Equal(new[] { 2 }, voice.Pool(12));
-        Assert.Equal(2, voice.PilotFor(12, new System.Random(1)));
+        Assert.Equal(2, voice.PilotFor(12, 0));
+        Assert.Equal(2, voice.PilotFor(12, 5));
         string? playable = voice.PlayableFor(2, "DI-LowDmg");
         Assert.Equal("snd_DI-LowDmg-A_id2_random", playable);
         Assert.True(groups.ContainsKey(playable!));

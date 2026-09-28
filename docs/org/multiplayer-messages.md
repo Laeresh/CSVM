@@ -631,6 +631,13 @@ is per AI and each session has one voice runtime, so a splitscreen host's panes 
 DI tiers stay derived, as the original derives them, from code 2's hull fraction, and the death cry
 from code 1's death. A guest's own copies raise nothing locally.
 
+No message carries the speaker's pilot either. The original hands a mission vehicle the local
+player's own voice (`FUN_00499c60`, net record `+0x78`, at `0x0047531e`), so its peers do not
+agree on it. The remake deals each AI a pilot from its accent's pool in registration order on every
+end, the single-player rule, and the ends agree because they register the same AI in the same order
+([`../formats/combat-voice.md`](../formats/combat-voice.md), "Which pilot of a pool an aircraft
+takes").
+
 ## Positional starts
 
 A landing row and the ladder switch start definitions off where a human is, and in a campaign

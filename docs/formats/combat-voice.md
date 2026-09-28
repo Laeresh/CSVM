@@ -129,8 +129,27 @@ id set the clip survey found. The row count coincidentally sits near the trigger
 unrelated tables and conflating them will mis-key every lookup. Row shape: `[accentId, voId, …]`;
 rows 0–10 hold 2–3-id pools, rows 11–34 a single id.
 
-In multiplayer the accent lookup is skipped and the voice set is handed in directly, so a remake's
-single-player path is the one that needs `accentID`.
+### Which pilot of a pool an aircraft takes
+
+**The pool is dealt in order, not drawn.** The vehicle constructor (`FUN_0047c210`) copies the
+def's accent into `vehicle + 0x980` and calls the voice setup `FUN_00477790` (`0x0047d74f`). In
+single player that asks `FUN_004b4af0` for the accent's pilot, and `FUN_004b47a0` answers with the
+id under the accent row's cursor (row `+0x14`), then advances the cursor, wrapping from the pool's
+end to its start. No random stream is read. The cursor starts on the pool's first id: the
+`voice.zrd` loader `FUN_004b4cd0` rewinds it after every id it adds (`FUN_004b4a70`), and the
+mission vehicle loader `FUN_004735b0` runs that loader (`0x004735d7`) after `FUN_004b4e40` has
+cleared the table, so each mission starts every accent afresh. The Nth aircraft a mission builds on
+an accent therefore takes the pool's `N mod size`-th id, in authored order. A dealt id with no clips
+is not skipped: its slots stay null and that aircraft is silent (accent 0 deals 18, 35, 37, and the
+aircraft dealt 35 says nothing).
+
+**In multiplayer the accent is not read at all.** `FUN_00477790` tests the multiplayer flag
+(`FUN_00440ad0`) and takes the VO id its caller hands in. A remote player's vehicle
+(`FUN_00497990`, the call at `0x00497c84`) is handed that player's own net record `+0x78`. A
+mission vehicle (`FUN_004735b0`, `0x0047531e`) is handed `FUN_00499c60`, which is the *local*
+player's record `+0x78`, defaulting to 1. So in the original's network games every peer voices every
+mission AI in its own player's voice, and two peers do not agree unless their players picked the
+same voice. The remake keeps the single-player deal on every end instead, below.
 
 ### The clips are sounds.json entries, and the data picks the variants itself
 
@@ -164,7 +183,8 @@ The extraction shows:
   wingmen"); its other four slots and all thirteen militia wave accents reach live ids.
 
 **Runtime (`CSVM/src/Mech3/CombatVoice.cs`).** The chain above is a queryable service:
-`accentID` → pool → `PilotFor` (random pick, clipless ids skipped) → `PlayableFor(voId, family)`,
+`accentID` → pool → `PilotFor(accent, turn)` (the deal above, a dealt id with no clip def
+answering null) → `PlayableFor(voId, family)`,
 which returns the `_random` group when authored, else the bare def; both feed
 `MissionRadio.Speak`, the flat Voice-bus queue the objective callouts share, because the original
 queues a combat line on that one channel with no position ([sounds.md](sounds.md), "There is one
@@ -176,6 +196,15 @@ mission roster's own accents (`CombatVoice.SessionPrewarmNames`, wired through
 21 of 53 missions author none. Prewarming everything was measured at 1,258 streams / 60.7 MB PCM
 / ~0.7 s and rejected. E16's dispatch (the gate, cooldowns and elections below) sits on top of
 this seam.
+
+`AiVoiceRuntime.RegisterAi` counts the turn per accent in the order the session hands its AI over,
+from 0 in each session, which is the original's per-mission deal. In a network session this is also
+what keeps the voices together: a host and its guests register the same AI in the same order (the
+order their admission ordinals already depend on), so every end deals every AI the same pilot with
+nothing on the wire. A pick drawn from each end's own voice stream would part as soon as one end
+rolls a line the other does not. This departs from the original's network rule above,
+which voices every mission AI in the local player's own voice: the remake has no per-player voice
+pick for that rule to read.
 
 ## Whether a line actually plays
 

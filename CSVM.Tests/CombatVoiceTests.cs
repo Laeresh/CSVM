@@ -1,4 +1,4 @@
-using System;
+using System.Linq;
 using CSVM.Mech3;
 using Xunit;
 
@@ -35,20 +35,21 @@ public class CombatVoiceTests
     }
 
     [Fact]
-    public void PilotForSkipsPoolIdsWithoutClips()
+    public void PilotForDealsThePoolInOrderAndWraps()
     {
         var voice = Voice();
-        // Accent 0's pool is {1, 2, 99}; 99 has no clip defs and is never picked.
-        var rng = new Random(1);
-        for (int i = 0; i < 20; i++)
-        {
-            int? id = voice.PilotFor(0, rng);
-            Assert.True(id is 1 or 2, $"picked {id}");
-        }
-        // Accent 1's pool is only the clipless 99.
-        Assert.Null(voice.PilotFor(1, rng));
-        // An eligibility filter narrows further.
-        Assert.Equal(2, voice.PilotFor(0, rng, id => id == 2));
+        // Accent 0's pool is {1, 2, 99}: turns deal 1, 2, then the clipless 99 as a silent pilot,
+        // and wrap back to 1. Nothing is drawn, so the same turn always deals the same pilot.
+        var dealt = Enumerable.Range(0, 7).Select(turn => voice.PilotFor(0, turn)).ToArray();
+        Assert.Equal(new int?[] { 1, 2, null, 1, 2, null, 1 }, dealt);
+        Assert.Equal(voice.PilotFor(0, 4), voice.PilotFor(0, 4));
+        // Accent 1's pool is only the clipless 99; an unknown accent or a negative turn deals nothing.
+        Assert.Null(voice.PilotFor(1, 0));
+        Assert.Null(voice.PilotFor(7, 0));
+        Assert.Null(voice.PilotFor(0, -1));
+        // An eligibility filter silences the dealt pilot rather than dealing the next one.
+        Assert.Null(voice.PilotFor(0, 0, id => id == 2));
+        Assert.Equal(2, voice.PilotFor(0, 1, id => id == 2));
     }
 
     [Fact]

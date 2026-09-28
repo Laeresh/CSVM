@@ -186,25 +186,20 @@ public sealed class CombatVoice
         _accents.TryGetValue(accentId, out var pool) ? pool : Array.Empty<int>();
 
     /// <summary>
-    /// Picks one pilot VO id from the accent's pool, the spawn-time half of the chain. Pool
-    /// members without any clip def are skipped, and <paramref name="eligible"/> narrows further
-    /// (the flight session passes a prewarm-backed availability check). Null when nothing in the pool qualifies.
+    /// The pilot VO id the accent's <paramref name="turn"/>-th aircraft takes, counting from 0. The
+    /// pool is dealt in its authored order and wraps, as the original deals it, never drawn. Null when
+    /// the dealt id has no clip def or fails <paramref name="eligible"/>, so that aircraft is silent.
+    /// The decode is docs/formats/combat-voice.md.
     /// </summary>
-    public int? PilotFor(int accentId, Random rng, Func<int, bool>? eligible = null)
+    public int? PilotFor(int accentId, int turn, Func<int, bool>? eligible = null)
     {
-        var candidates = new List<int>();
-        foreach (int id in Pool(accentId))
-        {
-            if (_clips.ContainsKey(id) && (eligible == null || eligible(id)))
-            {
-                candidates.Add(id);
-            }
-        }
-        if (candidates.Count == 0)
+        int[] pool = Pool(accentId);
+        if (pool.Length == 0 || turn < 0)
         {
             return null;
         }
-        return candidates[rng.Next(candidates.Count)];
+        int id = pool[turn % pool.Length];
+        return _clips.ContainsKey(id) && (eligible == null || eligible(id)) ? id : null;
     }
 
     /// <summary>
