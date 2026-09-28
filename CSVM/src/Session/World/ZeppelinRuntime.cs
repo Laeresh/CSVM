@@ -653,7 +653,7 @@ public sealed partial class ZeppelinRuntime : Node
 
         into.Add(new AimCandidate
         {
-            Position = inst.Anchor.GlobalPosition,
+            Position = inst.Centre,
             Velocity = velocity,
             Team = team,
             Live = ZoneIsAlive(inst),

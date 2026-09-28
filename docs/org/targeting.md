@@ -678,6 +678,13 @@ and the lifeboat at the group's own origin, so a marker on the node reads as a m
 The authored bbox is the answer in both: `lifesaver11`'s `child_bbox` spans y −1.411 to 24.745 in
 group coordinates, putting its centre 11.667 m up.
 
+The aim assist reads the same point: the `MStructList` scorer `FUN_004bb3b0` takes the candidate's
+position from vtable slot 0 and hands it to the lead solver `FUN_00460e30`, so the marker and the
+gun convergence are one point. CSVM keeps them one point with `DestructibleRegistry.Instance.Centre`,
+the box centre of the pool's damage node, which the gun assist, the selection marker and the AI all
+read. C2/M05's towing cranes show why the anchor is the wrong point: `zcraneN` stands at the joint
+on the zeppelin, and its flagged `healthy` child, the yellow striped arm, hangs 23 m below it.
+
 ## The cycle order
 
 `FUN_004bbd60` compares two candidates against a 15-float snapshot of the player: position in

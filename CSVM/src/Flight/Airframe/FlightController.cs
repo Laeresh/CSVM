@@ -4079,7 +4079,7 @@ public partial class FlightController : Node3D
             case DestructibleRegistry.Instance inst:
                 live = inst.Status != DestructibleRegistry.State.Destroyed
                     && GodotObject.IsInstanceValid(inst.Anchor) && inst.Anchor.IsInsideTree();
-                position = live ? inst.Anchor.GlobalPosition : Vector3.Zero;
+                position = live ? inst.Centre : Vector3.Zero;
                 velocity = Vector3.Zero;
                 forward = Vector3.Zero;
                 return true;
@@ -4108,7 +4108,7 @@ public partial class FlightController : Node3D
                 return true;
             case DestructibleRegistry.Instance inst when GodotObject.IsInstanceValid(inst.Anchor)
                 && inst.Anchor.IsInsideTree():
-                position = inst.Anchor.GlobalPosition;
+                position = inst.Centre;
                 return true;
             default:
                 position = Vector3.Zero;

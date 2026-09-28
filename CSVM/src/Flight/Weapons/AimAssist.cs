@@ -488,12 +488,12 @@ public sealed class AimCandidateSet
         float coneOverride = AimAssist.NoConeOverride) =>
         Ordnance.Add(Make(position, velocity, team, live: true, source, coneOverride));
 
-    /// <summary>Every registered destructible that is not already destroyed, as structure
-    /// candidates. A pool carrying <see cref="DestructibleRegistry.Instance.Team"/> uses it; one
-    /// carrying none falls through to <see cref="AimAssist.NeutralTeam"/> and is nobody's target,
-    /// the original's own rule for a world object no data owns (docs/org/targeting.md). Skipped: an
-    /// anchor outside the tree or hidden in it (a switched-off subtree is out of the world, as
-    /// <see cref="TurretController.Alive"/> reads) and a dormant pool.</summary>
+    /// <summary>Every registered destructible not yet destroyed, as a structure candidate at its
+    /// <see cref="DestructibleRegistry.Instance.Centre"/>. A pool without a team is
+    /// <see cref="AimAssist.NeutralTeam"/>, the original's rule for an unowned world object
+    /// (docs/org/targeting.md). Skipped: an anchor outside the tree or hidden in it (a switched-off
+    /// subtree is out of the world, as <see cref="TurretController.Alive"/> reads) and a dormant
+    /// pool.</summary>
     public void AddStructures(DestructibleRegistry registry)
     {
         foreach (var inst in registry.All)
@@ -502,7 +502,7 @@ public sealed class AimCandidateSet
             {
                 continue;
             }
-            AddStructure(inst.Anchor.GlobalPosition, inst.Team ?? AimAssist.NeutralTeam,
+            AddStructure(inst.Centre, inst.Team ?? AimAssist.NeutralTeam,
                 inst.Status != DestructibleRegistry.State.Destroyed, inst);
         }
     }
@@ -525,7 +525,7 @@ public sealed class AimCandidateSet
             {
                 continue;
             }
-            AddStructure(inst.Anchor.GlobalPosition, team,
+            AddStructure(inst.Centre, team,
                 inst.Status != DestructibleRegistry.State.Destroyed, inst);
         }
     }
