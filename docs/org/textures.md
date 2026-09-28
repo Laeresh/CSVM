@@ -443,7 +443,8 @@ All of that is a different question from `LastAlphaClass`, the extractor's own
 
 `TextureArchive` carries two absent-name sets rather than one, because the retail data lacks
 textures for two different reasons. `KnownAbsentFromGameData` (`pir_spinner`, `barngrill`) draws a
-neutral gray card; `AbsentAndUndrawn` (`cloud1`, `cloud2`) drops the polygon, which is what C3's
+neutral gray card on the generated shader, so it keeps the polygon's sidedness, the fog and a
+dormant zeppelin's fade to opacity 0; `AbsentAndUndrawn` (`cloud1`, `cloud2`) drops the polygon, which is what C3's
 skydome needs. ⚠ Membership of the second set is not enough on its own: `IsAbsentAndUndrawn` also
 requires the lookup to fail, so the seven chapters that do ship the pair keep drawing it.
 `SceneBuilder.UndrawnPolygonCount` reports 2 for a C3 world build and 0 for every other chapter,

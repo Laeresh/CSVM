@@ -1642,12 +1642,17 @@ void fragment() {
         {
             var tex = Resolve(texName);
             if (tex == null)
-                // Genuine game-data gaps (pir_spinner, barngrill) get a neutral gray, like
-                // the original engine; anything else is likely our lookup failing and stays
-                // debug-magenta so it's obvious.
-                return NewStandard(albedoColor: TextureArchive.IsKnownAbsent(texName)
+            {
+                // Data gaps (pir_spinner, barngrill) draw gray like the original; a failed lookup stays magenta.
+                // ⚠ Keep this on the generated shader: a StandardMaterial3D drops sidedness, fog and
+                // csky_opacity, so a dormant hull's piece would still draw.
+                var fallback = TextureArchive.IsKnownAbsent(texName)
                     ? new Color(0.5f, 0.5f, 0.5f)
-                    : Colors.Magenta);
+                    : Colors.Magenta;
+                return BiasMaterial(priority, rank, noClutter, doubleSided, null, fallback, blend: false,
+                    scissor: false, scroll: Vector2.Zero, clampUv: false, lit: lit, fogged: fogged,
+                    pass: pass, clutterFade: clutterFade);
+            }
 
             // Soft-alpha textures (shadow decals, clouds, prop blur, waterfalls, smoke, detected
             // from the pixels) and the caller's explicit blend list alpha-blend; every other alpha
@@ -1677,24 +1682,6 @@ void fragment() {
             scroll: Vector2.Zero, clampUv: false, lit: lit, fogged: fogged, pass: pass, clutterFade: clutterFade);
     }
 
-    private StandardMaterial3D NewStandard(Color? albedoColor = null)
-    {
-        var mat = new StandardMaterial3D
-        {
-            // Only used for billboards (cloud sprites) and the missing-texture fallback,
-            // which should render from both sides regardless of source sidedness.
-            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-            Roughness = 0.85f,
-            Metallic = 0.0f,
-            VertexColorUseAsAlbedo = true, // baked lighting from the source data
-        };
-        if (_fullbright)
-            mat.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
-        if (albedoColor is { } c)
-            mat.AlbedoColor = c;
-        return mat;
-    }
-
     // Records the verdict a world material's shader was generated for. Every constructor that can
     // make a blended or scissored surface calls it. The depth_draw_never variants live on the
     // billboard shaders, so a census reaching only the bias path would call them opaque.
@@ -1702,8 +1689,8 @@ void fragment() {
         _materialAlpha[mat] = blend ? TransparencyClass.BlendSurface
             : scissor ? TransparencyClass.ScissorSurface : TransparencyClass.None;
 
-    // A ShaderMaterial that mirrors NewStandard's look but pulls the geometry toward the
-    // eye (or pushes it away, negative priority) by a fraction of its view distance.
+    // A ShaderMaterial that pulls the geometry toward the eye (or pushes it away, negative
+    // priority) by a fraction of its view distance.
     // The per-node draw-order term is added at instance level (see BuildSubtree).
     private ShaderMaterial BiasMaterial(int priority, int rank, bool noClutter, bool doubleSided, ImageTexture? tex,
         Color? color, bool blend, bool scissor, Vector2 scroll, bool clampUv, bool lit, bool fogged, int pass = 0,
