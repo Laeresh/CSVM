@@ -199,11 +199,11 @@ public static class EngineAudioCurves
         boosting);
 
     /// <summary>Slot 0, the engine loop. Each curve's parameter is the throttle lever plus a
-    /// turn-rate and a climb-attitude term, clamped to [0, 1.5] BEFORE the curve maps it
-    /// (docs/formats/vehicle.md, "The engine slot's pitch and gain are not throttle alone"); the
-    /// pitch then carries the swap multiplier and the mixer's clamp, or is 1 when
+    /// turn-rate and a climb-attitude term. The sum is clamped to [0, 1.5] BEFORE the curve maps it
+    /// (docs/formats/vehicle.md, "The engine slot's pitch and gain are not throttle alone").
+    /// The pitch then carries the swap multiplier and the mixer's clamp, or is 1 when
     /// <paramref name="pitchable"/> (<see cref="SlotIsPitched"/>) is clear. The volume is the curve
-    /// alone: the caller still applies the definition's own VOLUME, its ramp and any mix gain.</summary>
+    /// alone: the caller still applies the definition's own VOLUME and any mix gain.</summary>
     internal static (float Pitch, float Volume) Engine(
         PlaneStats stats, in EngineDrive drive, float pitchMul, bool pitchable)
     {

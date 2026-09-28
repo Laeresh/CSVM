@@ -207,6 +207,15 @@ of slot 0 and one cue. There is no sputter or restart sound on the slot.
   `FUN_004b1470(0, 1.0)` on that same frame and stores the multiplier 1.0 at `0x004b1b33`. There is no
   wait in this direction. Bit `0x1` clears on a heal because `FUN_004b8180` rewrites it from the
   whole-vehicle fraction against `def+0xbc` (`0x004b82af` sets, `0x004b82bd` clears).
+- **Spawn and respawn.** The healthy start is the same call. The per-frame vehicle update
+  `FUN_004897c0` runs `FUN_004b18a0` every frame, and while the slot-0 handle `veh+0x70` is zero
+  the healthy arm starts slot 0 and slot 1 with `FUN_004b1470(0, 1.0)` and `FUN_004b1470(1, 1.0)`
+  (`0x004b1b72` to `0x004b1b88`), then writes that frame's curve volume through `FUN_005978f0` at
+  `0x004b1e21`. A dead player's frame stops and zeroes all four handles (`FUN_004b1510`, called at
+  `0x004b1910`), so the first frame after a respawn takes the same start. `FUN_004b1470` hands its
+  gain straight to the play call (`FUN_00593590` or `FUN_00593b80`, then `FUN_00593680`), which
+  converts it to decibels and nothing more, so there is no per-vehicle fade at any start. The only
+  other factor on the level is the voice-over duck below, which a start does not reset.
 - **The cull.** An AI past the 2000-unit cull skips the timer altogether, so a culled damaged engine
   is Out with a frozen timer until it comes back in range.
 - **Bit `0x2` does not add a phase.** Only the choker sets it (`FUN_004b9bc0`, `0x004b9e34`); no graze
@@ -260,6 +269,31 @@ two coefficients as a matched pair that both landed.
 Boost short-circuits both curves rather than scaling them: with the boost flag `+0x947` set
 (`0x004b1c51`), `tVol` is replaced by **1.17** and `tPitch` by **1.25** outright, which is what the
 `1.5` clamp headroom above 1.0 exists for.
+
+### A voice line ducks every engine
+
+The volume `FUN_004b18a0` writes to either slot is `sfxLevel · G · volume`, where `G` is one global
+float at `0x0062ae24` (read at `0x004b1e0d` and `0x004b1f2f`; the image holds 1.0). All nine
+references to `G` are in this routine. After both slots are written it asks `FUN_00597590`
+(`0x004b1f65`) whether the sound queue has an item on air (`DAT_00639eb4`, the queue pump in
+[sounds.md](sounds.md)), and steps `G`:
+
+```
+L = voiceover_volume_limiter                      ; 0x0071c3a0
+if a queued voice is on air:
+    if slot0Volume > L or slot1Volume > L:  G = max(G - (1 - L)·dt, L)          ; 0x004b1f92..0x004b1fc9
+else if G < 1:
+    G = min(G + (1 - L)·0.1667·dt, 1.0)                                       ; 0x004b1feb..0x004b201e
+```
+
+`L` is 0.5: `FUN_004735b0` stores `0x3f000000` at `0x00473e60` and replaces it only when the key
+`voiceover_volume_limiter` (string at `0x0062768c`) is authored, and no file in the install authors
+it. `0.1667` is the float at `0x00608b94`. So a radio line pulls the engines down to half within
+one second and they come back over about six seconds once the queue falls quiet, for one aircraft
+in range. Because `G` is global and the step runs once per call, every in-range aircraft steps it
+again on the same frame (the down step only where its own written volume is above `L`), so those
+times shorten with company. A spawn or respawn does not touch `G`, so a start under a radio
+call starts at whatever level the duck stands at. ⚠ CSVM does not model this duck.
 
 ## Destroyable parts
 

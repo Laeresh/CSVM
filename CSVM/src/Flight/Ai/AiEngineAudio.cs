@@ -9,14 +9,14 @@ using Godot;
 namespace CSVM.Flight.Ai;
 
 /// <summary>
-/// One AI aircraft's engine audio, positional: the same two slots the pilot's own
-/// <see cref="FlightAudio"/> drives (engine, and the whine no shipped airframe names), on
-/// <see cref="AudioStreamPlayer3D"/>s riding this node, plus the distance cull that silences an
-/// aircraft the player is too far from. Every number comes from
-/// <see cref="EngineAudioCurves"/>, which the own-ship path reads too.
-/// ⚠ Own-ship concepts stay out: no splitscreen mix gain (the panes' listeners already decide who
-/// hears this), no start ramp, no prop-start cue, no crash or graze one-shots, an AI kill is
-/// audible from the crash animation's own authored sound events.
+/// One AI aircraft's engine audio, positional. It drives the same two slots as the pilot's own
+/// <see cref="FlightAudio"/> (engine, and the whine no shipped airframe names) on
+/// <see cref="AudioStreamPlayer3D"/>s riding this node. A distance cull silences an aircraft the
+/// player is too far from. Every number comes from <see cref="EngineAudioCurves"/>, which the
+/// own-ship path reads too.
+/// ⚠ Own-ship concepts stay out: no splitscreen mix gain, since the panes' listeners already decide
+/// who hears this. No crash or graze one-shots either: an AI kill is audible from the crash
+/// animation's own authored sound events.
 /// </summary>
 public sealed partial class AiEngineAudio : Node3D
 {

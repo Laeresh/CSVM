@@ -27,10 +27,6 @@ public partial class FlightAudio : Node
     public float MixGain = 1f;
 
     private const float SilenceThreshold = 0.002f;
-    // s for the loop to fade to full at a (re)spawn. The length is startprops' prop cross-fade
-    // (plane_props.zrd.json, RUN_TIME 2.0), which nothing plays; the original starts the loop at
-    // full level (docs/formats/vehicle.md). TUNE pending a listen A/B.
-    private const float EngineStartRamp = 2.0f;
 
     private readonly List<(string name, AudioStreamWav stream, float volume)> _crashSounds = new();
 
@@ -56,7 +52,7 @@ public partial class FlightAudio : Node
     private float _propStopVol = 1f;
     private AudioStreamPlayer? _dzCamera;
     private float _dzCameraVol = 1f;
-    private float _engineRamp = 1f; // 0→1 gain envelope while the engine catches after a start
+    private float _engineGain;       // the linear gain Update last wrote to the engine slot
 
     // Gun firing: kept references so the looped firing sound + empty-clip cue can be built
     // on demand from any caliber's LOOPED_SOUND_NAME. Own-ship, non-positional (like the engine).
@@ -85,8 +81,9 @@ public partial class FlightAudio : Node
     /// <summary>Whether the engine slot is sounding, read off the live player.</summary>
     internal bool EngineSounding => _engine is { Playing: true };
 
-    /// <summary>The engine slot's start ramp, 0 to 1; a respawn restarts it and a damaged start does not.</summary>
-    internal float EngineRampLevel => _engineRamp;
+    /// <summary>The linear gain the last <see cref="Update"/> wrote to the engine slot, before the
+    /// silence floor. A suite holds a start against the curve's full level with it.</summary>
+    internal float EngineGain => _engineGain;
 
     /// <summary>Whether the slot currently holds the <c>damaged_engine_sound</c> stream.</summary>
     internal bool EngineHoldsDamagedStream => _engine != null && _damagedStream != null
@@ -234,21 +231,19 @@ public partial class FlightAudio : Node
     public void Update(float dt, in EngineDrive drive, float speedFrac, float healthFrac,
         bool engineDead = false, bool firstPersonView = false)
     {
-        if (_engineRamp < 1f)
-            _engineRamp = Mathf.Min(1f, _engineRamp + dt / EngineStartRamp);
         UpdateEngineSlot(dt, EngineAudioCurves.EngineDamaged(healthFrac, engineDead), firstPersonView);
         // Out is the damaged engine's silence, not a stopped loop to restart.
         if (_engine != null && _enginePhase != EngineSlotPhase.Out)
         {
             if (_enginePhase == EngineSlotPhase.Healthy && !_engine.Playing)
-                StartEngine(); // respawn after a crash: a fresh volume ramp-in
+                StartEngine(); // the respawn after a crash
             var (pitch, volume) = EngineAudioCurves.Engine(
                 _stats, drive, _enginePitchMul, _enginePitchable);
             _engine.PitchScale = pitch;
             float baseVol = _enginePhase == EngineSlotPhase.Damaged ? _damagedVol
                 : _engineCockpitView ? _cockpitVol : _engineVol;
-            _engine.VolumeDb = Mathf.LinearToDb(Mathf.Max(SilenceThreshold,
-                volume * baseVol * _engineRamp * MixGain));
+            _engineGain = volume * baseVol * MixGain;
+            _engine.VolumeDb = Mathf.LinearToDb(Mathf.Max(SilenceThreshold, _engineGain));
         }
         if (_whine != null)
         {
@@ -475,7 +470,6 @@ public partial class FlightAudio : Node
             _enginePitchable = EngineAudioCurves.SlotIsPitched(_defs, name);
             _engine.Stop();
             _engine.Stream = _damagedStream;
-            _engineRamp = 1f; // the original starts it at full level, with no start cue
             _engine.Play();
             Log.Info("sound", $"engine sound: slot 0 -> {name} pitchMul={_enginePitchMul:0.000} pitched={_enginePitchable}");
         }
@@ -522,8 +516,8 @@ public partial class FlightAudio : Node
         Log.Info("sound", $"engine sound: slot 0 -> {name} pitchMul={_enginePitchMul:0.000} pitched={_enginePitchable}");
     }
 
-    // A dead aircraft's slot goes back to healthy and silent, so the respawn's own start cue is
-    // what brings it back rather than a leftover damaged phase.
+    // A dead aircraft's slot goes back to healthy and silent. The respawn's own start then brings
+    // it back, not a leftover damaged phase.
     private void ResetEngineSlot()
     {
         if (_engine == null)
@@ -568,11 +562,8 @@ public partial class FlightAudio : Node
         return player;
     }
 
-    // Fade the engine loop in from silence, with no start cue. Used for the initial spawn (here)
-    // and every respawn (via the loop-restart hook in Update).
-    private void StartEngine()
-    {
-        _engineRamp = 0f;
-        _engine?.Play();
-    }
+    // Starts the loop for the spawn (here) and every respawn (the restart hook in Update). ⚠ No
+    // fade and no start cue: the original's healthy start is FUN_004b1470(0, 1.0), at full level.
+    // That frame's curve volume is written on the same pass (docs/formats/vehicle.md).
+    private void StartEngine() => _engine?.Play();
 }

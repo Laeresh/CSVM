@@ -2334,7 +2334,8 @@ internal static class CombatSuites
         "the own-ship engine slot across heavy damage: the damage edge cuts the healthy loop on " +
         "that frame, the slot stays silent below the re-arm timer's 3 s floor, the damaged loop " +
         "starts by the 5 s ceiling at full level with no start ramp and then holds while it " +
-        "sounds, and a heal restores the healthy loop on the same frame with no wait")]
+        "sounds, a heal restores the healthy loop on the same frame with no wait, and the spawn " +
+        "and a respawn both start the healthy loop at the curve's full level on their first frame")]
     internal static void EngineDamagePhases(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -2356,7 +2357,16 @@ internal static class CombatSuites
         {
             const float dt = 1f / 60f;
             var drive = new EngineDrive(1f, 0f, 0f);
-            for (int i = 0; i < 180; i++)
+            // The level each start must reach on its own first frame: the throttle curve times the
+            // definition's VOLUME, MixGain being 1. A start ramp would scale it by dt over its length.
+            float curve = EngineAudioCurves.Engine(stats, drive, 1f, false).Volume;
+            float healthyFull = curve * soundDefs[stats.EngineSound].Volume;
+            float damagedFull = curve * soundDefs[stats.DamagedEngineSound].Volume;
+
+            audio.Update(dt, drive, 1f, 1f);
+            ctx.Check(audio.EngineSounding && Mathf.IsEqualApprox(audio.EngineGain, healthyFull),
+                $"the spawn's first frame sounds the healthy loop at full level (gain={audio.EngineGain:0.0000}, full={healthyFull:0.0000})");
+            for (int i = 1; i < 180; i++)
                 audio.Update(dt, drive, 1f, 1f);
             ctx.Check(audio.EnginePhase == EngineSlotPhase.Healthy && audio.EngineSounding
                       && !audio.EngineHoldsDamagedStream,
@@ -2387,8 +2397,8 @@ internal static class CombatSuites
                 $"the damaged loop starts {startFrame * dt:0.00} s after the edge, inside the drawn 3 to 5 s threshold");
             ctx.Check(audio.EngineSounding && audio.EngineHoldsDamagedStream,
                 $"…on the damaged_engine_sound stream, sounding");
-            ctx.Check(Mathf.IsEqualApprox(audio.EngineRampLevel, 1f),
-                $"…at full level with no start ramp (ramp={audio.EngineRampLevel:0.00})");
+            ctx.Check(Mathf.IsEqualApprox(audio.EngineGain, damagedFull),
+                $"…at full level with no start ramp (gain={audio.EngineGain:0.0000}, full={damagedFull:0.0000})");
 
             bool held = true;
             for (int i = 0; i < 600; i++)
@@ -2402,6 +2412,15 @@ internal static class CombatSuites
             ctx.Check(audio.EnginePhase == EngineSlotPhase.Healthy && audio.EngineSounding
                       && !audio.EngineHoldsDamagedStream,
                 $"a heal restores the healthy loop on the same frame (phase={audio.EnginePhase})");
+
+            // The crash stops the loops and Update is not called while crashed, so the next Update
+            // is the respawn's first frame.
+            audio.OnCrash();
+            audio.OnEngineStop();
+            ctx.Check(!audio.EngineSounding, $"the crash stops the engine loop");
+            audio.Update(dt, drive, 1f, 1f);
+            ctx.Check(audio.EngineSounding && Mathf.IsEqualApprox(audio.EngineGain, healthyFull),
+                $"the respawn's first frame sounds the healthy loop at full level (gain={audio.EngineGain:0.0000}, full={healthyFull:0.0000})");
         }
         finally
         {
