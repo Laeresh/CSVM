@@ -988,7 +988,7 @@ public partial class Launcher : Node3D
         {
             if (UI.Boards.MenuInput.IsPasteChord(key))
             {
-                UI.Screens.TypedText.Live.FeedPaste();
+                UI.Boards.TypedText.Live.FeedPaste();
             }
             else if (UI.Boards.MenuInput.IsCopyChord(key))
             {
@@ -1000,7 +1000,7 @@ public partial class Launcher : Node3D
             }
             else
             {
-                UI.Screens.TypedText.Live.Feed(key.Pressed, key.Echo, key.Unicode);
+                UI.Boards.TypedText.Live.Feed(key.Pressed, key.Echo, key.Unicode);
             }
         }
 
@@ -1059,7 +1059,7 @@ public partial class Launcher : Node3D
 
     public override void _Process(double delta)
     {
-        UI.Screens.TypedText.Live.Stamp(Engine.GetProcessFrames());
+        UI.Boards.TypedText.Live.Stamp(Engine.GetProcessFrames());
         // The --run-tests clock is the only one this node owns; the session node advances its own
         // at the very top of the frame (ProcessPriority -1000, one notch ahead of this).
         if (_clock is { } clock)

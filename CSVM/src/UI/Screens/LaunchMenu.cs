@@ -3587,7 +3587,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         bool banded = !CampaignBoards.DetailPaned(page, row, flow.Layout) && !detail.Contains('\n');
         _boardRoot.Show(
             CampaignBoards.For(page, row, _pressFrames > 0, detail, flow.Modal, flow.Layout),
-            BoardPalette.For(page.Screen),
+            CampaignBoards.Palette(page.Screen),
             banded ? detail : string.Empty,
             CampaignFooter(flow));
     }

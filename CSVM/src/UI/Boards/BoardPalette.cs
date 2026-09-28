@@ -1,4 +1,3 @@
-using CSVM.UI.Campaign;
 using Godot;
 
 namespace CSVM.UI.Boards;
@@ -97,15 +96,4 @@ public sealed record BoardPalette(
         LabelRollover: Escape.LabelRollover,
         LabelActivate: Escape.LabelActivate,
         Hint: Chalk.Hint);
-
-    /// <summary>The palette a screen writes in.</summary>
-    public static BoardPalette For(CampaignScreen screen) => screen switch
-    {
-        CampaignScreen.FlightCheck or CampaignScreen.Ammo
-            or CampaignScreen.PlaneSelection => Paper,
-        CampaignScreen.PreviousMissions or CampaignScreen.Scrapbook
-            or CampaignScreen.ScrapbookZoom => Album,
-        CampaignScreen.Briefing => Parchment,
-        _ => Panel,
-    };
 }

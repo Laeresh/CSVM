@@ -218,8 +218,8 @@ section and row and reads through `CampaignLayout` with the value the board drew
 existed as its fallback, so a screen composes the same with or without the file; the briefing's
 chrome is `Briefing.zrd`'s own, and a slot marked pinned keeps a measured value instead. `SlotOf`
 and `DialogSlot` answer a plaque's rectangle for a pointer to hit-test, `DetailSlot` and
-`DetailPaned` the description panes, and `DialogChrome` the messagebox widget set a box draws and
-where its pane lands. The pinned values: [../org/campaign-board.md](../org/campaign-board.md).
+`DetailPaned` the description panes, `DialogChrome` the messagebox widget set a box draws and
+where its pane lands, and `Palette` the `BoardPalette` a screen writes in. The pinned values: [../org/campaign-board.md](../org/campaign-board.md).
 
 ## src/UI/Campaign/CampaignLayout.cs
 The decoded menu layout as the campaign boards read it: one widget row's authored geometry and art
@@ -529,7 +529,7 @@ seat reads a set of pads and no binding may hold a connection index. `Typed` and
 text field, `PadMove`/`PadMoveX` are the axes such a screen reads instead, since W, A, S and D
 are letters there. `Typed` is read off `TypedText`, so each character is the one the pilot's own layout produced, and `Paste` is a Ctrl+V or Shift+Insert chord whose text a box reads through the `Clipboard` seam; `TypeableKeys` names the US key positions text entry takes off the cursor bindings. `Device` and `DeviceMoved` come from an `ActiveDevice` over a fourth reading, the keyboard half alone, so a board hint names the side the seat last used and knows the tick it changed; `Hint` composes one such line. Wrapped by `Menu/BuiltIn/BuiltInSeat.cs`, bound by `MenuSeatDevices`; it also serves the in-flight boards. Beside all of that stand three static raw pad reads, `JoinPressed`, `SignOnPressed` and `SignOffPressed` for Start, A and B: a pad no seat owns has no keymap, so nothing bound can answer for the join gesture or the join board's two. Player 1 also reads the flight sticks, and its menu stick rows follow the active profiles (`Sticks/StickProfileSet.cs`); a joined seat never reads a stick.
 
-## src/UI/Screens/TypedText.cs
+## src/UI/Boards/TypedText.cs
 The characters the keyboard typed as the pilot's own layout produced them, engine-free, which every
 `MenuInput.Typed` reads. A polled key code names a US key position, so a German ':' (Shift and the
 period key) read that way is '>'; only a key event's Unicode carries the character. The launcher
@@ -1424,7 +1424,7 @@ chapter's own base def), the mission type, the lives, the four waves, the wingme
 picks and a preset. `Refusal`/`CanLaunch`, `BuildDef`, `LaunchWingmanFit` and `BuildExit` are the gate and the launch.
 `Discard` resets every field. Decode: [../formats/instant-action.md](../formats/instant-action.md).
 
-## src/UI/Screens/MovieSurface.cs
+## src/UI/Boards/MovieSurface.cs
 A movie as something a composition can draw: a `CSVM.Video.MoviePlayback` and the `ImageTexture`
 its pixels are uploaded to, made once and updated in place. There is no node, so a caller hangs
 the texture where its own layout row puts it and this surface never learns which screen that is.

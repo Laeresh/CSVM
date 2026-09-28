@@ -71,10 +71,7 @@ public sealed class FamilyOrderTests
         "CSVM.Spec.SessionSpec -> CSVM.UI.Menu.NetPlayFeature",
         "CSVM.Tooling.CaptureDirector -> CSVM.UI.Overlays.OrbitCamera",
         "CSVM.Tooling.ProbeRunner -> CSVM.UI.Overlays.OrbitCamera",
-        "CSVM.UI.Boards.BoardPalette -> CSVM.UI.Campaign.CampaignScreen",
-        "CSVM.UI.Boards.ComposedBoardView -> CSVM.UI.Screens.MovieSurface",
         "CSVM.UI.Boards.MenuInput -> CSVM.Flight.Airframe.StickSplit",
-        "CSVM.UI.Boards.MenuInput -> CSVM.UI.Screens.TypedText",
         "CSVM.UI.Boards.ScreenFlash -> CSVM.Flight.Camera.ViewerSet",
     };
 

@@ -332,6 +332,8 @@ else in `UI`, and nothing names `Labs`.
 - `src/UI/Boards/BlendWash.cs`, one pane's victim-routed wash: the sonic, flash and smoke blend rule and its attack, sustain and release envelope.
 - `src/UI/Boards/PanelFocus.cs`, the one rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
 - `src/UI/Boards/MenuInput.cs`, one player's menu input source: keyboard flag, a `Pads` binding, edge and auto-repeat polling, and the typed characters a field needs.
+- `src/UI/Boards/TypedText.cs`, the typed-character feed every menu seat reads: each key event's own character under the pilot's layout, and the paste chords.
+- `src/UI/Boards/MovieSurface.cs`, a movie as a texture the composition can draw: one `ImageTexture` the playback's pixels are uploaded into, and no node at all.
 
 **`UI.Campaign`**, the campaign pages, the out-of-mission flow, the campaign board chrome both presentations compose and the scrapbook.
 
@@ -357,7 +359,6 @@ else in `UI`, and nothing names `Labs`.
 
 **`UI.Screens`**, the launchscreen, boot, cinema and load screens, the pause, results and wrap-up boards.
 
-- `src/UI/Screens/TypedText.cs`, the typed-character feed every menu seat reads: each key event's own character under the pilot's layout, and the paste chords.
 - `src/UI/Screens/MenuSeatDevices.cs`, the pad side of the shared player setup: seat 0's claimed pad, the join and sign-on gestures, hotplug, the flight binding.
 - `src/UI/Screens/MenuControlsSeats.cs`, the rebinding screen's seat bookkeeping for any presentation: which seats it offers, their pad identities and staged keymaps.
 - `src/UI/Screens/ShotGrid.cs`, the Danger Zone photographs' grid rule and the cursor that walks the grid, engine-free.
@@ -372,7 +373,6 @@ else in `UI`, and nothing names `Labs`.
 - `src/UI/Screens/PauseBoard.cs`, the shared pause board and its Resume · Photo · Preferences · Restart · Exit menu, one whole-window CanvasLayer.
 - `src/UI/Screens/LaunchMenu.cs`, the Built-in presentation's launchscreen: the screen graph, the Godot controls, per-seat polling, and the hangar and campaign doors.
 - `src/UI/Screens/InstantActionWrapupPage.cs`, the wrap-up page's content over the decoded section: the heading, the four rows off one frozen snapshot, the further lines on post-its, a stunt run's photographs, the outcome's tick box, the plaque.
-- `src/UI/Screens/MovieSurface.cs`, a movie as a texture the composition can draw: one `ImageTexture` the playback's pixels are uploaded into, and no node at all.
 - `src/UI/Screens/CinemaScreen.cs`, one cinema over the whole window: the picture in the board's own rectangle, the sound pushed to a generator on the Voice bus, and the skip.
 - `src/UI/Screens/CinemaSkips.cs`, the one member that decides what skips what, and the reading of a device event that feeds it: the three authored sets against a press, a pad button among them.
 - `src/UI/Screens/CinemaHandoff.cs`, what every cinema flow shares: the shape of the call that puts a film on screen, and the latch that opens the next screen once however many times the film says it stopped.

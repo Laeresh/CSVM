@@ -94,7 +94,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D, UI.Boards as the leaf widget library
 
 15. ☑ Pause* → UI.Screens, MenuInput → UI.Boards
-16. ☐ TypedText and MovieSurface → UI.Boards, `BoardPalette.For` → UI.Campaign
+16. ☑ TypedText and MovieSurface → UI.Boards, `BoardPalette.For` → UI.Campaign
 
 ### Wave E, the Flight residue
 
@@ -318,7 +318,19 @@ sub-namespace groups and the index.
 **⚠ Traps.** The `orch-13` branch edits BoardMenuView, ComposedBoard and ComposedBoardView; merge
 main in before this item if orch-13 has landed.
 
-## D16 ☐ TypedText and MovieSurface → UI.Boards, `BoardPalette.For` → UI.Campaign
+## D16 ☑ TypedText and MovieSurface → UI.Boards, `BoardPalette.For` → UI.Campaign
+
+**Landed.** `src/UI/Boards/TypedText.cs` and `src/UI/Boards/MovieSurface.cs` under
+`CSVM.UI.Boards`. `BoardPalette.For` is `CampaignBoards.Palette(CampaignScreen)`, beside the other
+per-screen chrome the campaign composer reads; its two callers are LaunchMenu and
+OriginalPresentation. Three allowlist pairs retired. UI.Boards now names nothing in UI.Screens or
+UI.Campaign; its two remaining pairs are E17's (StickSplit, ViewerSet).
+
+**Verified.** `FamilyOrderTests`, `MenuNamespaceDependencyTests` and the palette, typed-text,
+movie, campaign-board and menu-input tests 69/69; `CheckDocEntries.ps1` clean; full
+`.\RunTests.ps1`, see the commit.
+
+**Original approach (kept for reference).**
 
 **Goal.** UI.Boards names nothing in UI.Screens or UI.Campaign.
 
