@@ -4,7 +4,6 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using CSVM.Extraction;
-using CSVM.Launch;
 using CSVM.UI.Screens;
 using Xunit;
 

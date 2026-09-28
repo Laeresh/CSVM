@@ -97,10 +97,6 @@ public sealed class FamilyOrderTests
         "CSVM.UI.Boards.PauseSheet -> CSVM.UI.Menu.EscapeState",
         "CSVM.UI.Boards.PauseSheet -> CSVM.UI.Screens.LoadScreens",
         "CSVM.UI.Boards.ScreenFlash -> CSVM.Flight.Camera.ViewerSet",
-        "CSVM.UI.Menu.Original.OriginalAvailability -> CSVM.Launch.ExtractionStamp",
-        "CSVM.UI.Screens.ExtractionFlow -> CSVM.Launch.ExtractionStamp",
-        "CSVM.UI.Screens.ExtractionFlow -> CSVM.Launch.StampStanding",
-        "CSVM.UI.Screens.NoGameDataScreen -> CSVM.Launch.ExtractionStamp",
     };
 
     [Fact]

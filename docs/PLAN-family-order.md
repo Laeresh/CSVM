@@ -89,7 +89,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C, promote Launch
 
 13. ☑ `Session.Launch` → `CSVM.Launch`
-14. ☐ ExtractionStamp and StampStanding → Extraction
+14. ☑ ExtractionStamp and StampStanding → Extraction
 
 ### Wave D, UI.Boards as the leaf widget library
 
@@ -261,7 +261,16 @@ full names; update it here, and delete it in F18.
 `git log main -- CSVM/src/Session/Launch` right before this commit and merge main in first if it
 moved.
 
-## C14 ☐ ExtractionStamp and StampStanding → Extraction
+## C14 ☑ ExtractionStamp and StampStanding → Extraction
+
+**Landed.** `src/Extraction/ExtractionStamp.cs` under `CSVM.Extraction`, its entry on
+`Extraction.md`. The four UI allowlist pairs into it retired, and the extraction-side files that
+named `CSVM.Launch` only for the stamp no longer do.
+
+**Verified.** `FamilyOrderTests`, `MenuNamespaceDependencyTests` and `ExtractionStampTests` 10/10;
+`CheckDocEntries.ps1` clean; full `.\RunTests.ps1`, see the commit.
+
+**Original approach (kept for reference).**
 
 **Goal.** Nothing below Launch names a Launch type.
 

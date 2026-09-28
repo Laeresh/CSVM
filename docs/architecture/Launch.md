@@ -38,16 +38,6 @@ drives (rocket and tracer tunables, the loadout caps, the `Puffer` scales, the `
 spacing, the graphics keys). It sits in `Launch` so that `Utils.Config` names none of the modules
 it serves. A module newly wired to `Config` adds its line here. `Launcher._Ready` is the one caller.
 
-## src/Launch/ExtractionStamp.cs
-Reads the provenance stamp the extraction scripts leave at `extracted/VERSION.json` (unzbd version
-line, exe hash, fork commit, schema integer) and compares its schema against this class's own
-`Schema` const, in `Launcher._Ready` right after the base paths settle, with at most one warning line
-per boot naming the fix. An unstamped tree only warns, since a dev tree holds valid extractions older
-than the stamp. `Standing` (unstamped, current, older, newer) is what stops a menu launch at the
-extraction screen on another schema (`UI/Screens/ExtractionFlow.cs`); `Behind` is the read for a
-caller that blocks, true only for a stamped schema under the one asked for. `Schema` also lives in both
-extraction scripts, and `CSVM.Tests/ExtractionStampTests.cs` refuses a bump that moves fewer than all three.
-
 ## src/Launch/MenuAudioService.cs
 The host's `IMenuAudio` over the process's playback. `BeginNarration` ducks the music and restarts the narration player on
 the resolved stream; `EndNarration` lifts the duck and stops it, idempotent because the launchscreen calls it every frame
