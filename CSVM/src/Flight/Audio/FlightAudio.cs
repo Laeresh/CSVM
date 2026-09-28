@@ -9,15 +9,15 @@ using Godot;
 namespace CSVM.Flight.Audio;
 
 /// <summary>
-/// Own-plane sound, all from the player's own game data: the plane's engine loop (per-plane WAV via
-/// vehicle.json 'engine_sound', throttle-driven pitch and volume, cut on the damage edge and then
-/// swapped for 'damaged_engine_sound' once the re-arm timer fires (<see cref="EngineSlotPhase"/>), and for 'cockpit_engine_sound' while the pilot's SELECTED view is
-/// Cockpit or Nose, <see cref="EngineAudioCurves.EngineDefFor"/> is the one precedence rule both
-/// swaps share), the overspeed whine ('prop_sound', which no shipped def names), the
-/// airframe rattle (player.json 'rattle', a gate at full level past fd_speed), plus the one-shots
-/// (snd_propstart/snd_propstop). Non-positional players: these are what the pilot hears, and
-/// <see cref="Ai.AiEngineAudio"/> is the positional twin every other aircraft carries (own-ship only,
-/// an AI rig has no selected view, so it never reads 'cockpit_engine_sound').
+/// Own-plane sound from the player's own game data, non-positional because it is what the pilot
+/// hears. The engine loop is vehicle.json 'engine_sound', with throttle-driven pitch and volume.
+/// Two swaps replace it (<see cref="EngineSlotPhase"/>): the damaged loop after the re-arm timer,
+/// and the cockpit loop while the SELECTED view is Cockpit or Nose.
+/// Both swaps share one precedence rule, <see cref="EngineAudioCurves.EngineDefFor"/>.
+/// Beside it run the overspeed whine ('prop_sound', named by no shipped def), the rattle
+/// (player.json 'rattle') and the snd_propstop and crash one-shots.
+/// The positional twin every other aircraft carries is <see cref="Ai.AiEngineAudio"/>, which has
+/// no cockpit loop, since an AI rig has no selected view.
 /// </summary>
 public partial class FlightAudio : Node
 {
@@ -27,9 +27,9 @@ public partial class FlightAudio : Node
     public float MixGain = 1f;
 
     private const float SilenceThreshold = 0.002f;
-    // s for the loop to fade to full behind snd_propstart. Sourced from startprops' authored prop
-    // cross-fade (plane_props.zrd.json, OBJECT_OPACITY_FROM_TO RUN_TIME 2.0 on staticpropN→propN)
-    //, the nearest authored duration. TUNE pending a listen A/B.
+    // s for the loop to fade to full at a (re)spawn. The length is startprops' prop cross-fade
+    // (plane_props.zrd.json, RUN_TIME 2.0), which nothing plays; the original starts the loop at
+    // full level (docs/formats/vehicle.md). TUNE pending a listen A/B.
     private const float EngineStartRamp = 2.0f;
 
     private readonly List<(string name, AudioStreamWav stream, float volume)> _crashSounds = new();
@@ -52,8 +52,8 @@ public partial class FlightAudio : Node
     private float _groundExpVol = 1f, _waterExpVol = 1f;
     private AudioStreamPlayer? _grazeGround, _grazeWater;
     private float _grazeGroundVol = 1f, _grazeWaterVol = 1f;
-    private AudioStreamPlayer? _propStart, _propStop;
-    private float _propStartVol = 1f, _propStopVol = 1f;
+    private AudioStreamPlayer? _propStop;
+    private float _propStopVol = 1f;
     private AudioStreamPlayer? _dzCamera;
     private float _dzCameraVol = 1f;
     private float _engineRamp = 1f; // 0→1 gain envelope while the engine catches after a start
@@ -127,10 +127,9 @@ public partial class FlightAudio : Node
             _whine = MakeLoop(archive, defs, whineName, out _whineVol);
         _rattle = MakeLoop(archive, defs, stats.RattleSound, out _rattleVol);
 
-        // Prop start/stop one-shots (both non-looped, no VOLUME field → base gain 1.0):
-        // snd_propstart plays as the engine ramps in on (re)spawn; snd_propstop is the
-        // wind-down for a future landing/shutdown (see OnEngineStop).
-        _propStart = MakeOneShot(archive, defs, "snd_propstart", out _propStartVol);
+        // The engine-stop one-shot (non-looped, no VOLUME field, so base gain 1.0; see
+        // OnEngineStop). ⚠ No snd_propstart player: the original plays that cue nowhere, and a
+        // spawn's engine is already running (docs/org/ordnanceTypes.md).
         _propStop = MakeOneShot(archive, defs, "snd_propstop", out _propStopVol);
 
         // The stunt run's camera sting, a flat SFX definition no SOUND_GROUPS entry and no world
@@ -242,7 +241,7 @@ public partial class FlightAudio : Node
         if (_engine != null && _enginePhase != EngineSlotPhase.Out)
         {
             if (_enginePhase == EngineSlotPhase.Healthy && !_engine.Playing)
-                StartEngine(); // respawn after a crash: propstart + fresh volume ramp-in
+                StartEngine(); // respawn after a crash: a fresh volume ramp-in
             var (pitch, volume) = EngineAudioCurves.Engine(
                 _stats, drive, _enginePitchMul, _enginePitchable);
             _engine.PitchScale = pitch;
@@ -360,19 +359,18 @@ public partial class FlightAudio : Node
         Log.Info("sound", $"stunt capture: snd_dangerzone_camera MixGain={MixGain:0.00} vol={gain:0.000}");
     }
 
-    /// <summary>Engine wind-down: plays snd_propstop and kills the loops. Layers over the crash
-    /// explosion one-shot (<see cref="OnCrash"/>) rather than replacing it, FlightController
-    /// calls both from the same crash/destruction moment, snd_propstop right after the boom, so
-    /// the loops end on the authored cue instead of a cut. The loop-restart hook in
-    /// <see cref="Update"/> is what fires snd_propstart again on the next respawn; nothing here
-    /// needs to prevent that.</summary>
+    /// <summary>Engine wind-down: plays snd_propstop and kills the loops. It layers over the crash
+    /// explosion one-shot (<see cref="OnCrash"/>) rather than replacing it. FlightController calls
+    /// both at the same moment, snd_propstop right after the boom, so the loops end on the cue.
+    /// The loop-restart hook in <see cref="Update"/> starts the loop again on the next
+    /// respawn.</summary>
     public void OnEngineStop()
     {
         ResetEngineSlot();
         _whine?.Stop();
         _rattle?.Stop();
         // D32: fires right after OnCrash's boom, the same crash instant, MixGain for
-        // the same pile-up reason, not the "your prop" respawn cue StartEngine plays below.
+        // the same pile-up reason.
         float gain = _propStopVol * MixGain;
         PlayOneShot(_propStop, gain);
         Log.Info("sound", $"engine stop: snd_propstop MixGain={MixGain:0.00} vol={gain:0.000}");
@@ -570,14 +568,11 @@ public partial class FlightAudio : Node
         return player;
     }
 
-    // Spin the engine loop up from silence behind snd_propstart. Used for the
-    // initial spawn (here) and every respawn (via the loop-restart hook in Update).
+    // Fade the engine loop in from silence, with no start cue. Used for the initial spawn (here)
+    // and every respawn (via the loop-restart hook in Update).
     private void StartEngine()
     {
         _engineRamp = 0f;
         _engine?.Play();
-        // Stays at raw volume, deliberately unlike the crash-boom family, a respawn does not
-        // pile up with other rigs' at one instant.
-        PlayOneShot(_propStart, _propStartVol);
     }
 }

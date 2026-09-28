@@ -1091,12 +1091,12 @@ internal static class DestroyChoreographySuites
     }
 
     // nitro_boost/nitro_decay anchor as NAME "warhawk" (plane_props.zrd), which never resolves in
-    // a per-plane crash rig's own index, the shape startprops/stopprops share, fixed by Play's
-    // PlaneModel fallback. ⚠ No flyable player_* model carries nitropropN (that disc geometry
-    // ships only on the separate bare-named library root); the fix restores what the flown
-    // plane's own nodes CAN show, the nitropuffN exhaust puffers at exhaust1..4.
+    // a per-plane crash rig's own index, the shape spinprops/stopprops share, fixed by Play's
+    // PlaneModel fallback. ⚠ No flyable player_* model carries nitropropN, whose disc geometry
+    // ships only on the separate bare-named library root. The fix restores what the flown plane's
+    // own nodes CAN show: the nitropuffN exhaust puffers at exhaust1..4.
     [Suite("nitro-boost-anchors",
-        "nitro_boost/nitro_decay author NAME \"warhawk\" as their anchor, which never resolves inside a per-plane crash rig; Play's PlaneModel fallback (the same shape startprops/stopprops already use) starts both defs on the flown Warhawk and sustains its nitropuff1 exhaust puffer, though no flyable model carries the nitropropN disc geometry itself")]
+        "nitro_boost/nitro_decay author NAME \"warhawk\" as their anchor, which never resolves inside a per-plane crash rig; Play's PlaneModel fallback (the same shape spinprops/stopprops already use) starts both defs on the flown Warhawk and sustains its nitropuff1 exhaust puffer, though no flyable model carries the nitropropN disc geometry itself")]
     internal static void NitroBoostAnchors(TestContext ctx)
     {
         const string model = "player_warhawk";
@@ -1325,10 +1325,10 @@ internal static class DestroyChoreographySuites
                         return null;
                     }
                     runtime.ManualAdvance = true;
-                    // The spawn choreography, replayed the way both assemblers do. Setup ran before
+                    // The first spawn's propellers, spun the way both assemblers do. Setup ran before
                     // this runtime existed, so the rig would otherwise fly with no definition ever
                     // having touched its two prop presentations.
-                    runtime.Play("startprops", planeModel, applyReset: false);
+                    rig.SpinPropsAtSpawn();
                     return rig;
                 }
 
@@ -1382,15 +1382,24 @@ internal static class DestroyChoreographySuites
                     return alpha < 0f || alpha > 0.01f;
                 }
 
-                // ⚠ The spawn definition's own end, not the moment the discs look right. Its last
-                // OBJECT_ACTIVE_STATE lands a frame after the fade it follows. A choke taken on
-                // that frame would have its own staticpropN activation undone by it.
-                float open = FlyUntil(() => human.CrashRuntime!.AnimStateOf("startprops") == Executed
-                                            && ai.CrashRuntime!.AnimStateOf("startprops") == Executed, 20f);
+                // The spawn is instant: one frame in, the blur discs are already alone on the
+                // aeroplane, with no spin-up ramp to wait out.
+                Fly(Dt);
                 foreach (var rig in built)
                 {
                     ctx.Check(!rig.PropsStopped && Shown(rig, "prop1") && !Shown(rig, "staticprop1"),
-                        $"{rig.Name}: opens with the spinning discs on the slot stopped={rig.PropsStopped} prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")} after={open:0.00} s");
+                        $"{rig.Name}: opens with the spinning discs on the slot on its first frame stopped={rig.PropsStopped} prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")}");
+                    SpawnPropsSuites.CheckSilentSpawn(ctx, rig, "the spawn");
+                }
+
+                // ⚠ The spawn definition's own end before the choke: a choke inside spinprops'
+                // 0.1 s offset would race the definition it stops.
+                float open = FlyUntil(() => human.CrashRuntime!.AnimStateOf("spinprops") == Executed
+                                            && ai.CrashRuntime!.AnimStateOf("spinprops") == Executed, 2f);
+                foreach (var rig in built)
+                {
+                    ctx.Same(Executed, rig.CrashRuntime!.AnimStateOf("spinprops"),
+                        $"{rig.Name}: the spawn's spinprops has run to its end after={open:0.00} s");
                 }
 
                 // The rising edge, read on the frame the choke lands rather than the next step.
@@ -1457,7 +1466,7 @@ internal static class DestroyChoreographySuites
                 }
 
                 // Back in the air off the stopped presentation the crash above left behind. That is
-                // the spawn choreography's own job: nothing else writes those opacities back.
+                // the respawn's spinprops job: nothing else writes those opacities back.
                 foreach (var rig in built)
                 {
                     rig.Respawn();
@@ -1469,6 +1478,7 @@ internal static class DestroyChoreographySuites
                 {
                     ctx.Check(!rig.PropsStopped && Shown(rig, "prop1") && !Shown(rig, "staticprop1"),
                         $"{rig.Name}: the respawn put the blur discs back on a hull that went down stopped prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")} after={spun:0.00} s");
+                    SpawnPropsSuites.CheckSilentSpawn(ctx, rig, "the respawn");
                 }
 
                 // The fourth arm, the death: a kill with no choke anywhere near it winds the discs
@@ -1523,6 +1533,7 @@ internal static class DestroyChoreographySuites
                     ctx.Check(!rig.PropsStopped && Shown(rig, "prop1") && !Shown(rig, "staticprop1")
                               && rig.CrashRuntime!.AnimStateOf("stopprops") != Running,
                         $"{rig.Name}: the respawn took the wind-down off the slot and put the blur discs back prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")} stop={rig.CrashRuntime!.AnimStateOf("stopprops")} after={restored:0.00} s");
+                    SpawnPropsSuites.CheckSilentSpawn(ctx, rig, "the respawn inside the wind-down");
                 }
             }
             finally
@@ -2874,6 +2885,10 @@ internal static class DestroyChoreographySuites
             }
 
             rig.ManualAdvance = true;
+            // The first spawn's propellers, as the assemblers spin them, so the state compared
+            // below is the one a respawn is meant to restore.
+            player.SpinPropsAtSpawn();
+            rig.Advance(1f / 60f);
             var cpilot = Find(crashRoot, "cpilot");
             var wreck = Find(crashRoot, "destroyed");
             ctx.Check(cpilot != null && wreck != null,
@@ -2918,7 +2933,7 @@ internal static class DestroyChoreographySuites
             }
 
             rig.Advance(1f / 60f);
-            var stuck = touched.Where(s => !s.Matches(rig)).Select(s => s.Describe()).ToList();
+            var stuck = touched.Where(s => !s.Matches(rig) && !StillBladeAtRest(s)).Select(s => s.Describe()).ToList();
             ctx.Check(stuck.Count == 0,
                 $"{label}: every node the death touched is back on its built state ({touched.Count - stuck.Count}/{touched.Count}){(stuck.Count == 0 ? "" : ": " + string.Join("; ", stuck.Take(8)))}");
             ctx.Check(!cpilot.IsVisibleInTree() && Find(planeModel, "pilot") is { Visible: true },
@@ -2929,6 +2944,14 @@ internal static class DestroyChoreographySuites
             player?.Free();
         }
     }
+
+    // ⚠ A still blade's angle is not compared while the spawn keeps it hidden. The compiled stopprops
+    // turns it down to rest (slow_rotorN), and the spawn's spinprops never writes that angle back.
+    // Its parent, visibility and position still are, which is what catches a flung rotor.
+    private static bool StillBladeAtRest(NodeState s) =>
+        PropParts.Classify(AnimRuntime.NameOf(s.Node)) == PropParts.Kind.Static
+        && !s.Node.Visible && !s.Visible && s.Node.GetParent() == s.Parent
+        && s.Node.Transform.Origin.IsEqualApprox(s.Transform.Origin);
 
     private static void SnapshotStates(Node3D node, List<NodeState> into)
     {
@@ -3105,7 +3128,7 @@ internal static class DestroyChoreographySuites
     // A node's parent, transform and switch as they stood when the snapshot was taken.
     private sealed record NodeState(Node3D Node, Node? Parent, Transform3D Transform, bool Visible)
     {
-        // A node a live motion drives (the spawn's own prop spin) is compared by position alone.
+        // A node a live motion drives after the respawn is compared by position alone.
         public bool Matches(AnimRuntime? rig = null) => Node.GetParent() == Parent && Node.Visible == Visible
             && (Node.Transform.IsEqualApprox(Transform)
                 || (rig != null && rig.Motions.DrivesTransform(Node)

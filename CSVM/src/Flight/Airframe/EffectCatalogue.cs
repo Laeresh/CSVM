@@ -133,12 +133,10 @@ public static class EffectCatalogue
     public static readonly string[] PlaneDamageEffectAnims =
         { "nose_damage_effects", "tail_damage_effects", "leftwing_damage_effects", "rightwing_damage_effects" };
 
-    // The engine start/stop choreography (plane_props.zrd.json): the static blade prop cross-fades
-    // to its spinning blur disc (with the startup smokepuffN burst) and the reverse on shutdown.
-    // Bound alongside the crash def for the same live puffer factory; unlike the crash/damage defs
-    // above, FlightController plays these directly (spawn/engine-death), never through a CALL.
-    // `spinprops` is the silent, instant restart the original's own bit-2 falling edge runs
-    // (docs/org/ordnanceTypes.md); `startprops` is named by no airframe def in the original's data.
+    // The propeller defs, from plane_props.zrd.json, which FlightController plays directly. It plays
+    // `spinprops` at every spawn and restart, and `stopprops` on the choke and the death.
+    // `startprops` stays loadable, but nothing plays it. No def or scene in the original's data
+    // names it (docs/org/ordnanceTypes.md).
     public static readonly string[] PropChoreographyAnims = { "startprops", "stopprops", "spinprops" };
 
     // The nitro boost's two defs (plane_props.zrd.json): the nitroprop discs cross-fade in over

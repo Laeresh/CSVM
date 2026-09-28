@@ -597,9 +597,9 @@ internal sealed class HumanFlightAdapter
             _worldEffects.BuildFlightCrashRuntime(controller, planeBuilder, planeName, _world.Gamez,
                 _world.WorldScene, _aircraft.Textures, _world.CrashProgram, verbose,
                 worldSounds: _world.WorldRuntime?.Sounds, planesGamez: _aircraft.PlanesGamez);
-            // The start choreography for the very first spawn: Respawn() plays this same def on
-            // every later respawn, but Setup() above called Respawn() before this runtime existed.
-            controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);
+            // The very first spawn's propellers: Respawn() spins them on every later respawn, but
+            // Setup() above called Respawn() before this runtime existed.
+            controller.SpinPropsAtSpawn();
         }
 
         // This pilot's own airframe onto its own visual layer, LAST, so everything the lines above

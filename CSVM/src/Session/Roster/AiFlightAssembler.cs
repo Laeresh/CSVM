@@ -290,13 +290,12 @@ internal sealed class AiFlightAssembler
                 // with a pump takes it off the launch frame; one without builds it in place.
                 if (_crashRigs is { } queue)
                 {
-                    queue.Defer(controller, rig,
-                        () => controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false));
+                    queue.Defer(controller, rig, controller.SpinPropsAtSpawn);
                 }
                 else
                 {
                     rig.Finish();
-                    controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);
+                    controller.SpinPropsAtSpawn();
                 }
             }
         }

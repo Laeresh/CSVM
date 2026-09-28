@@ -301,9 +301,9 @@ public sealed class WorldEffectsFactory
 
     /// <summary>Builds the per-plane crash runtime: <c>player_crash_*</c> for a human rig,
     /// <c>ai_crash_*</c> for an AI plane (<see cref="EffectCatalogue.CrashDefTableFor"/>). Builds
-    /// the effect-template roots and the plane's wreck under a <c>player</c> crash root, then binds
+    /// the effect-template roots and the plane's wreck under a <c>player</c> crash root. Then binds
     /// a non-auto-start <see cref="AnimRuntime"/> to the controller, scoped so every anchor is unique.
-    /// ⚠ <c>startprops</c>/<c>stopprops</c> never resolve on any airframe, so callers pass the plane
+    /// ⚠ <c>spinprops</c>/<c>stopprops</c> never resolve on any airframe, so callers pass the plane
     /// model as fallback anchor; <paramref name="planesGamez"/> is the second stage source.</summary>
     public void BuildFlightCrashRuntime(FlightController controller, PlaneBuilder planeBuilder,
         string planeName, GameZ gamez, SceneBuilder worldScene, TextureArchive textures,

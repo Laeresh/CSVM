@@ -991,12 +991,9 @@ public sealed class CampaignDirector
     private bool PlaceOnPath(FlightController rig, string name, string taxi, bool seatWalk = false)
     {
         bool placed = _paths!.Place(name, taxi, rig,
-            onComplete: speed =>
-            {
-                rig.Held = false;
-                var nose = rig.NoseDirection;
-                rig.Activate(rig.WorldPosition, rig.WorldPosition + nose, nose * speed);
-            },
+            // ⚠ Never Activate here. FUN_0048a110 only clears the path flag, and a respawn would
+            // replay the spawn in the air: the propellers, the spawn grace and the pose reset.
+            onComplete: speed => rig.ReleaseHeld(rig.NoseDirection * speed, reseatWalk: false),
             setPose: (p, heading) =>
             {
                 var nose = new Basis(Vector3.Up, heading) * Vector3.Forward;

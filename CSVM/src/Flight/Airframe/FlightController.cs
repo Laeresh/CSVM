@@ -856,6 +856,10 @@ public partial class FlightController : Node3D
     /// the plane at its spawn throttle.</summary>
     public float Throttle => _model.Throttle;
 
+    /// <summary>How many times <see cref="Respawn"/> has run on this aircraft, the one in
+    /// <see cref="Setup"/> included. The suites read it to tell a handoff from a respawn.</summary>
+    public int RespawnCount { get; private set; }
+
     /// <summary>Seconds left on this aircraft's engine-dead timer, zero when the engine runs. The
     /// choker's one observable, since nothing else on that path changes (see
     /// <see cref="TryChokeEngine"/>).</summary>
@@ -1373,15 +1377,12 @@ public partial class FlightController : Node3D
         // The original tops the tank up where it places the aircraft, from the def-derived capacity.
         Fuel.Capacity = Stats?.FuelCapacity ?? 0f;
         Fuel.Fill();
-        // ⚠ Off the slot before the spawn choreography goes on it. A hull that went down with its
-        // propellers stopped would otherwise fly again with the stop definition still running. That
-        // definition fades staticpropN in under the start one fading it back out.
-        _crashRuntime?.Stop("stopprops");
+        RespawnCount++;
 
-        // ⚠ The backing field here, never CrashRuntime: a still-armed rig has played nothing, so
-        // there is nothing to replay, and asking would build the whole rig on the placement frame.
-        // First setup precedes adapter construction, so the adapter replays startprops after attachment.
-        _crashRuntime?.Play("startprops", PlaneModel, applyReset: false);
+        // ⚠ The backing field here, never CrashRuntime. Asking would build a still-armed rig on the
+        // placement frame. First setup precedes the rig, so the assembler spins the discs later.
+        if (_crashRuntime is { } spawnRig && PlaneModel != null)
+            SpinProps(spawnRig, PlaneModel);
         _propsStopped = false;  // a fresh airframe's discs turn, whatever the last hull ended on
         // A fresh engine has no in-flight plume, and no charge left over from the last airframe.
         ExhaustSmoke?.Reset();
@@ -1402,6 +1403,15 @@ public partial class FlightController : Node3D
     {
         _grantedPlacement = (pos, lookAt);
         Respawn();
+    }
+
+    /// <summary>The first spawn's propellers, for the assemblers that attach the crash rig after
+    /// <see cref="Setup"/> has already respawned without one. The same silent, instant
+    /// <c>spinprops</c> every later <see cref="Respawn"/> plays (docs/org/ordnanceTypes.md).</summary>
+    public void SpinPropsAtSpawn()
+    {
+        if (PlaneModel != null && CrashRuntime is { } rig)
+            SpinProps(rig, PlaneModel);
     }
 
     /// <summary>Opens this spawn's collision-free window, and with
@@ -1494,7 +1504,7 @@ public partial class FlightController : Node3D
 
     /// <summary>The inverse of building inert, the original's teleport-then-reactivate. It re-homes
     /// this aircraft at <paramref name="pos"/>, facing <paramref name="lookAt"/>, and respawns it.
-    /// <see cref="Respawn"/> restores speed, airframe, ammo and the start choreography, so a wave
+    /// <see cref="Respawn"/> restores speed, airframe and ammo and spins the propellers, so a wave
     /// arrives flying. On an aircraft already in play it is that teleport-and-reset.</summary>
     // ⚠ Never reseat the patrol walk here. The original's activation writes no net field
     // (FUN_004b0f40), so a woken or teleported aircraft walks on from its spawn seat.
@@ -1546,22 +1556,24 @@ public partial class FlightController : Node3D
             SnapCamera();
     }
 
-    /// <summary>Hands a held aircraft back to the flight model where it stands, moving at
-    /// <paramref name="velocity"/> with the lever at <paramref name="throttle"/>: the
-    /// scripted-path follower's handoff, which the original makes by clearing the path flag and
-    /// nothing else (<c>FUN_0048a110</c>), so no respawn and no spawn grace, and the collision
-    /// sweep and ground blow run from the first flown step. The patrol net reseats where the
-    /// aircraft is, since the run placed it and not the net.</summary>
-    public void ReleaseHeld(Vector3 velocity, float throttle)
+    /// <summary>Hands a held aircraft back to the flight model where it stands, at
+    /// <paramref name="velocity"/>, with the lever at <paramref name="throttle"/> or the spawn lever.
+    /// This is the scripted-path handoff, where the original only clears the path flag
+    /// (<c>FUN_0048a110</c>). No respawn, no propeller start and no spawn grace.
+    /// <paramref name="reseatWalk"/> is the generator run's reseat. A roster path vehicle keeps the
+    /// walk its placement seated (docs/org/aiPilot.md).</summary>
+    public void ReleaseHeld(Vector3 velocity, float? throttle = null, bool reseatWalk = true)
     {
+        float lever = throttle ?? _spawnThrottle;
         Held = false;
         _model.SetVelocity(velocity);
-        SetLever(throttle);
-        _model.Throttle = throttle;
+        SetLever(lever);
+        _model.Throttle = lever;
         if (Pilot != null)
-            Pilot.Throttle = throttle;
+            Pilot.Throttle = lever;
         ExhaustSmoke?.Reset();
-        Pilot?.Patrol?.Reseat();
+        if (reseatWalk)
+            Pilot?.Patrol?.Reseat();
     }
 
     /// <summary>Weapon lab: pin the held airframe at <paramref name="pos"/> with its nose on
@@ -2654,9 +2666,8 @@ public partial class FlightController : Node3D
             {
                 PlayAiShake();
             }
-            // Play, not PlayWithin: the def's anchor NAME ("warhawk") never resolves in this
-            // per-plane index, same as startprops/stopprops above, Play's fallback to
-            // PlaneModel is what makes those work; PlayWithin has no such fallback.
+            // Play, not PlayWithin. The def's anchor NAME ("warhawk") never resolves in this
+            // per-plane index, as with spinprops/stopprops. Play falls back to PlaneModel; PlayWithin does not.
             if (PlaneModel != null)
                 CrashRuntime?.Play("nitro_boost", PlaneModel, applyReset: false);
             Log.Debug("flight", $"nitro engaged charge={Nitro.Charge:0.0}");
@@ -2735,12 +2746,20 @@ public partial class FlightController : Node3D
     {
         if (!_propsStopped || PlaneModel == null || CrashRuntime is not { } rig)
             return;
+        SpinProps(rig, PlaneModel);
+    }
+
+    // The spin slot's one start, shared by the spawn and the choke's restart. ⚠ Take stopprops off
+    // first: a hull that went down with its propellers stopped would otherwise fly again with the
+    // wind-down still fading staticpropN in.
+    private void SpinProps(AnimRuntime rig, Node3D model)
+    {
         rig.Stop("stopprops");
         // ⚠ Suppressed, or the def's endless XYZ_ROTATION becomes a second writer on the same
         // disc transforms PropAnimator turns at those very rates.
         rig.SuppressedMotionAnims.Add("spinprops");
-        rig.Play("spinprops", PlaneModel, applyReset: false);
-        RestoreDiscOpacity(rig, PlaneModel);
+        rig.Play("spinprops", model, applyReset: false);
+        RestoreDiscOpacity(rig, model);
         _propsStopped = false;
     }
 
