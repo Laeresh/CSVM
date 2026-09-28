@@ -2311,6 +2311,171 @@ internal static class WorldAndToolSuites
         }
     }
 
+    // Synthetic lights and a fake-renderer emitter, like the suite above. What is pinned is the
+    // budget and the source's lifetime; the look is the user's at the controls.
+    [Suite("world-lights-enhanced-budget",
+        "Under Enhanced the omni pool reaches past the data texture's 16 rows to the effects level's "
+        + "budget from one rank, the faithful path commits at most 16 and spawns no omni, a burning "
+        + "emitter submits one light at its fire centroid and drops it with its last fire frame while "
+        + "its smoke lives on, and a beacon keeps its slot against a crowd of equally near fires")]
+    internal static void WorldLightsEnhancedBudget(TestContext ctx)
+    {
+        var viewer = new[] { Vector3.Zero };
+        bool wasEnhanced = CSVM.Utils.GraphicsMode.Enhanced;
+        var parent = new Node3D();
+        ctx.Host.AddChild(parent);
+        try
+        {
+            ctx.Check(WorldLights.OmniBudget("high") == 64 && WorldLights.OmniBudget("medium") == 48
+                      && WorldLights.OmniBudget("low") == 32 && WorldLights.OmniBudget("bogus") == 64,
+                $"the omni budget follows the effects level, an unknown word taking high's");
+
+            CSVM.Utils.GraphicsMode.Resolve(CSVM.Utils.GraphicsMode.Default);
+            var faithful = new WorldLights(parent);
+            faithful.Begin();
+            for (int i = 0; i < 40; i++)
+                faithful.Add(new Vector3(i, 0f, -20f), Colors.White, 1f, 10f);
+            faithful.AddFire(new Vector3(0f, 0f, -10f), 8f, 10, 0f);
+            faithful.Commit(viewer);
+            ctx.Check(faithful.CommittedPositions.Count == WorldLights.MaxActive && faithful.LiveCount == 40
+                      && parent.GetChildCount() == 0,
+                $"the faithful path commits {faithful.CommittedPositions.Count} of {faithful.LiveCount} live, takes no fire and spawns no omni");
+            faithful.Dispose();
+
+            CSVM.Utils.GraphicsMode.Resolve(CSVM.Utils.GraphicsMode.EnhancedWord);
+            var enhanced = new WorldLights(parent, omniBudget: 32);
+            enhanced.Begin();
+            for (int i = 0; i < 40; i++)
+                enhanced.Add(new Vector3(i, 0f, -20f), Colors.White, 1f, 10f);
+            enhanced.Commit(viewer);
+            int visible = 0;
+            foreach (var child in parent.GetChildren())
+            {
+                if (child is OmniLight3D { Visible: true })
+                    visible++;
+            }
+            ctx.Check(enhanced.CommittedPositions.Count == WorldLights.MaxActive && enhanced.OmniCount == 32 && visible == 32,
+                $"Enhanced keeps 16 texture rows and lights {enhanced.OmniCount} omnis ({visible} visible) of 40 live under a budget of 32");
+
+            // One beacon among 80 fires as near and as wide. The fires' weight keeps it in the
+            // texture's head; the control shows the same crowd authored instead takes its slot.
+            var beacon = new Vector3(0f, 0f, -50f);
+            enhanced.Begin();
+            enhanced.Add(beacon, Colors.White, 7f, 20f);
+            for (int i = 0; i < 80; i++)
+                enhanced.AddFire(new Vector3(i - 40f, -5f, -50f), 8f, 10, i * 0.1f);
+            enhanced.Commit(viewer);
+            ctx.Check(enhanced.CommittedPositions.Count > 0 && enhanced.CommittedPositions[0] == beacon,
+                $"the beacon ranks first against 80 fires as near as it is");
+            enhanced.Begin();
+            for (int i = 0; i < 80; i++)
+                enhanced.Add(new Vector3(i - 40f, -5f, -50f), Colors.White, 7f, 20f, 2f);
+            enhanced.Add(beacon, Colors.White, 7f, 20f);
+            enhanced.Commit(viewer);
+            ctx.Check(!enhanced.CommittedPositions.Contains(beacon),
+                $"ABLE-TO-FAIL CONTROL: 80 brighter authored lights at the same spot do take the beacon's row");
+            enhanced.Dispose();
+
+            WorldLightsFireSource(ctx, parent, viewer);
+        }
+        finally
+        {
+            CSVM.Utils.GraphicsMode.Resolve(wasEnhanced ? CSVM.Utils.GraphicsMode.EnhancedWord : CSVM.Utils.GraphicsMode.Default);
+            ctx.Host.RemoveChild(parent);
+            parent.Free();
+        }
+    }
+
+    // A flipbook that burns for the first half of each particle's life and smokes for the second.
+    // The light's end can then be told apart from the emitter's. The harness clock is detached, as
+    // in puffer-modes: nothing steps it, so particles would never age.
+    internal static void WorldLightsFireSource(TestContext ctx, Node3D parent, Vector3[] viewer)
+    {
+        var clock = CSVM.Utils.GameClock.Current;
+        CSVM.Utils.GameClock.Current = null;
+        try
+        {
+            WorldLightsFireSourceUnclocked(ctx, parent, viewer);
+        }
+        finally
+        {
+            CSVM.Utils.GameClock.Current = clock;
+        }
+    }
+
+    internal static void WorldLightsFireSourceUnclocked(TestContext ctx, Node3D parent, Vector3[] viewer)
+    {
+        var state = new PufferState
+        {
+            Name = "fire_light_puffer",
+            Number = 1,
+            TimeInterval = 1f / 60f,
+            SizeMin = 4f,
+            SizeMax = 4f,
+            LifetimeMin = 1f,
+            LifetimeMax = 1f,
+            TextureSequence = new[] { (0f, "fire_f01"), (0.5f, "smoke101") },
+        };
+        var fireColumns = new[] { true, false };
+        var amb = new CSVM.Effects.EffectAmbience();
+        var lights = new WorldLights(parent);
+        lights.AddSource(amb.SubmitFires);
+        var puffer = CSVM.Effects.Puffer.CreateWith(state, new RecordingEmitterRenderer(), sustained: true,
+            ambience: amb, fireColumns: fireColumns);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            const float step = 1f / 60f;
+            var at = new Vector3(0f, 10f, -30f);
+            for (int i = 0; i < 20; i++)
+            {
+                puffer.Emit(at, Basis.Identity, step);
+                puffer._Process(step);
+            }
+            lights.Begin(step);
+            lights.Commit(viewer);
+            ctx.Check(amb.Fires.Count == 1 && lights.LiveCount == 1 && lights.OmniCount == 1,
+                $"a burning emitter submits one light for {puffer.FireCount} fire particles (fires {amb.Fires.Count}, live {lights.LiveCount}, omnis {lights.OmniCount})");
+            ctx.Check(puffer.FireCentroid.DistanceTo(at) < 0.5f && lights.CommittedPositions.Count == 1
+                      && lights.CommittedPositions[0].Y > at.Y,
+                $"the light stands above the fire centroid {puffer.FireCentroid}");
+
+            puffer.Stop();
+            int frames = 0;
+            while (puffer.FireCount > 0 && frames++ < 120)
+                puffer._Process(step);
+            lights.Begin(step);
+            lights.Commit(viewer);
+            ctx.Check(amb.Fires.Count == 0 && lights.LiveCount == 0 && puffer.LiveCount > 0,
+                $"the light goes with the last fire frame while {puffer.LiveCount} smoke particles live on (fires {amb.Fires.Count}, live {lights.LiveCount})");
+        }
+        finally
+        {
+            lights.Dispose();
+            puffer.Free();
+        }
+
+        CSVM.Utils.GraphicsMode.Resolve(CSVM.Utils.GraphicsMode.Default);
+        var faithfulAmb = new CSVM.Effects.EffectAmbience();
+        var faithful = CSVM.Effects.Puffer.CreateWith(state, new RecordingEmitterRenderer(), sustained: true,
+            ambience: faithfulAmb, fireColumns: fireColumns);
+        ctx.Host.AddChild(faithful);
+        try
+        {
+            for (int i = 0; i < 20; i++)
+            {
+                faithful.Emit(Vector3.Zero, Basis.Identity, 1f / 60f);
+                faithful._Process(1f / 60f);
+            }
+            ctx.Check(faithful.LiveCount > 0 && faithfulAmb.Fires.Count == 0 && faithful.FireCount == 0,
+                $"the faithful path's emitter burns without registering a fire");
+        }
+        finally
+        {
+            faithful.Free();
+        }
+    }
+
     // ---- the fade re-derive's ancestor walk ------------------------------------------------------
 
     // A synthetic tree rather than a chapter's, because what is measured is the shape of the walk

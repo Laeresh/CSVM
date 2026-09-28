@@ -6,15 +6,11 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// Packs the animated world's <c>LIGHT_STATE</c> point lights, and those of any runtime registered
-/// through <see cref="AddSource"/> (the world-effects bursts), into a data texture the world and
-/// aircraft shaders read as the original's per-vertex point-light term on `lighting: true` models
-/// (the flare itself is separate gamez geometry <see cref="SceneBuilder"/> already draws). In
-/// original mode that term is the only consumer: the world renders unshaded, so a real
-/// <see cref="OmniLight3D"/> would contribute nothing to it
-/// (docs/formats/gotchas.md's fullbright entry). Given a parent in enhanced mode, this also
-/// mirrors the same committed set onto a pool of real omnis, so the lit world and the aircraft
-/// pick up the light for real.
+/// Packs the world's <c>LIGHT_STATE</c> point lights, and those of <see cref="AddSource"/>'s
+/// runtimes (bursts, fires), into a data texture: the per-vertex point term on `lighting: true`
+/// models. In original mode that term is the only consumer, since the unshaded world ignores a
+/// real <see cref="OmniLight3D"/> (docs/formats/gotchas.md's fullbright entry). Given a parent in
+/// enhanced mode, it also mirrors the same rank onto real omnis, up to the effects level's budget.
 /// </summary>
 public sealed class WorldLights : IDisposable
 {
@@ -79,6 +75,39 @@ public sealed class WorldLights : IDisposable
     // would otherwise pulse in lockstep and read as one light rather than several.
     private const float BurstPhaseStride = 0.618f;
 
+    // ---- the enhanced-only fire light (AddFire), one TUNE block ----
+
+    // The gain on FireColor at full strength, well under a burst's peak, since a fire lights its
+    // surroundings for as long as it burns.
+    private const float FireGain = 1.5f;
+
+    // The reach per metre of mean fire sprite size, and the bounds on it. A fire's pool of light
+    // grows with the fire, but a single sprite never lights a street and a trail puff never a hall.
+    private const float FireReachPerSize = 2.5f;
+    private const float FireRangeMin = 8f;
+    private const float FireRangeMax = 45f;
+
+    // The live fire particles at which a fire reaches full strength. A dying fire's last embers
+    // dim its light rather than holding it at full until the final frame.
+    private const float FireFullCount = 4f;
+
+    // How far above the fire's centroid its light stands, as a fraction of its reach. The ground
+    // around a fire then takes it at an angle rather than edge-on (see BurstLift).
+    private const float FireLiftFraction = 0.25f;
+
+    // A fire's weight in the rank against authored and burst lights. At equal significance the fire
+    // loses, so a crowd of fires never takes a beacon's slot.
+    private const float FireRankWeight = 0.25f;
+
+    // The Enhanced omni budget at each effects level. The data texture keeps MaxActive whatever the
+    // level, so the faithful shader and its goldens never move. Each omni is shaded per pixel.
+    private const int OmniBudgetHigh = 64;
+    private const int OmniBudgetMedium = 48;
+    private const int OmniBudgetLow = 32;
+
+    // TUNE: a fire light's colour in the data's sRGB, the orange of the fire flipbook's middle frames.
+    private static readonly Color FireColor = new(1f, 0.5f, 0.18f);
+
     // Where Godot's range window, (1 - (d/r)^4)^2 at exponent 0, falls to half, as a fraction of
     // the range. The authored ramp is at half midway between its near and far range.
     private static readonly float HalfWeightFraction = Mathf.Pow(1f - Mathf.Sqrt(0.5f), 0.25f);
@@ -98,18 +127,26 @@ public sealed class WorldLights : IDisposable
     // the only consumer and creates not one node, per the mode's zero-footprint contract.
     private readonly Node3D? _omniParent;
 
+    // The most omnis the Enhanced pool lights at once, never below MaxActive.
+    private readonly int _omniBudget;
+
     private ImageTexture? _texture;
     private int _lastCount = -1;
     private int _loggedSubmitted = -1;
+    private int _loggedOmnis = -1;
     private int _burstsRegistered;
 
-    /// <summary>Enhanced mode only: mirrors the same committed set onto real
-    /// <see cref="OmniLight3D"/> nodes under <paramref name="parent"/>, so the lit world and the
-    /// aircraft are lit for real. Original mode ignores <paramref name="parent"/> and spawns
+    // Seconds of sim time since the world began, the fire lights' flicker clock.
+    private float _fireClock;
+
+    /// <summary>Enhanced mode only: mirrors the ranked set onto real <see cref="OmniLight3D"/> nodes
+    /// under <paramref name="parent"/>, up to <paramref name="omniBudget"/> of them. Null takes the
+    /// configured effects level's <see cref="OmniBudget"/>. Original mode ignores both and spawns
     /// nothing, leaving the data-texture point term exactly as it was.</summary>
-    public WorldLights(Node3D? parent = null)
+    public WorldLights(Node3D? parent = null, int? omniBudget = null)
     {
         _omniParent = GraphicsMode.Enhanced ? parent : null;
+        _omniBudget = Math.Max(MaxActive, omniBudget ?? OmniBudget(Config.GetString(EffectsLevel.Key, EffectsLevel.Default)));
     }
 
     /// <summary>Highest simultaneous count seen, reported so the MaxActive bound can be
@@ -129,6 +166,11 @@ public sealed class WorldLights : IDisposable
     /// index, after the distance fade: diagnostics only, like the positions.</summary>
     public IReadOnlyList<Color> CommittedFactors => _committedFactors;
 
+    /// <summary>Enhanced mode: the omnis the last <see cref="Commit"/> lit, which can exceed
+    /// <see cref="MaxActive"/> up to the effects level's budget. Diagnostics, like the positions.
+    /// </summary>
+    public int OmniCount { get; private set; }
+
     /// <summary>Registers the global shader parameters the world shader references. Called once
     /// per process, before any material using them is built, the defaults (no texture, count 0)
     /// are a no-op, so a session that never animates a light renders exactly as before.</summary>
@@ -146,6 +188,16 @@ public sealed class WorldLights : IDisposable
     public static float OmniRange(float rangeMin, float rangeMax) =>
         0.5f * (rangeMin + rangeMax) / HalfWeightFraction;
 
+    /// <summary>The Enhanced omni budget an effects level word sets (see
+    /// <see cref="EffectsLevel"/>); a word the original does not know takes the default level's.
+    /// </summary>
+    public static int OmniBudget(string level) => level.Trim().ToLowerInvariant() switch
+    {
+        "medium" => OmniBudgetMedium,
+        "low" => OmniBudgetLow,
+        _ => OmniBudgetHigh,
+    };
+
     /// <summary>Starts a frame's submission. Lights are re-submitted every frame because they
     /// ride moving hosts (a muzzle flash on a turret, the train's firebox). <paramref name="dt"/>
     /// is the sim step the live <see cref="AddBurst"/> lights age by; a caller with no burst
@@ -153,6 +205,7 @@ public sealed class WorldLights : IDisposable
     public void Begin(float dt = 0f)
     {
         _pending.Clear();
+        _fireClock += dt;
         SubmitBursts(dt);
     }
 
@@ -170,6 +223,20 @@ public sealed class WorldLights : IDisposable
         // would bend both the decay and the flicker. The shader's term keeps the data's own value.
         _bursts.Add(new Burst(pos + (Vector3.Up * BurstLift), shape, shape.Color.SrgbToLinear(), stillBurning,
             _burstsRegistered++ * BurstPhaseStride));
+    }
+
+    /// <summary>Enhanced mode only: this frame's light for one burning fire emitter. A source submits
+    /// it every frame the emitter burns. The light stands over the fire particles' centroid, reaches
+    /// with their mean size and dims as their count falls. The phase keeps two fires out of step.
+    /// It ranks below an authored or burst light of equal significance.</summary>
+    public void AddFire(Vector3 centroid, float meanSize, int fireCount, float phase)
+    {
+        if (!GraphicsMode.Enhanced || fireCount <= 0)
+            return;
+        float reach = Mathf.Clamp(FireReachPerSize * meanSize, FireRangeMin, FireRangeMax);
+        float gain = FireGain * Mathf.Min(1f, fireCount / FireFullCount) * Flicker(_fireClock, phase);
+        _pending.Add(new Entry(centroid + (Vector3.Up * (FireLiftFraction * reach)), FireColor * gain,
+            FireColor.SrgbToLinear() * gain, FireLiftFraction * reach, reach, reach, FireRankWeight));
     }
 
     /// <summary>Registers a submitter that <see cref="Commit"/> asks for its lights every frame,
@@ -194,7 +261,7 @@ public sealed class WorldLights : IDisposable
         if (rangeMax <= rangeMin)
             rangeMax = rangeMin + 0.01f;
         _pending.Add(new Entry(pos, color * scalar, color.SrgbToLinear() * scalar, rangeMin, rangeMax,
-            OmniRange(rangeMin, rangeMax)));
+            OmniRange(rangeMin, rangeMax), 1f));
     }
 
     /// <summary>Packs the frame's lights and uploads them. When more than
@@ -215,16 +282,17 @@ public sealed class WorldLights : IDisposable
             else if (fade < 1f)
                 _pending[i] = _pending[i].Faded(fade);
         }
-        int n = _pending.Count;
-        if (n > PeakCount)
-            PeakCount = n;
-        if (n > MaxActive)
+        int live = _pending.Count;
+        if (live > PeakCount)
+            PeakCount = live;
+        if (live > MaxActive)
         {
             // Rank by angular size (range/distance), not raw distance, plain nearest-N would
-            // drop a big flare in favor of an equally-far pinpoint.
+            // drop a big flare in favor of an equally-far pinpoint. One sort decides both sets:
+            // the texture takes its head, the Enhanced omnis a longer run of the same order.
             _pending.Sort((a, b) => Significance(b, viewerPositions).CompareTo(Significance(a, viewerPositions)));
-            n = MaxActive;
         }
+        int n = Math.Min(live, MaxActive);
 
         _committedPositions.Clear();
         _committedFactors.Clear();
@@ -235,7 +303,7 @@ public sealed class WorldLights : IDisposable
         }
 
         if (_omniParent != null)
-            UpdateOmnis(n);
+            UpdateOmnis(Math.Min(live, _omniBudget));
 
         if (n == 0)
         {
@@ -273,18 +341,17 @@ public sealed class WorldLights : IDisposable
         _lastCount = n;
     }
 
-    /// <summary>--debug-anim: report the submitted/live counts when they change. This is how a
-    /// headless run shows whether the <see cref="MaxActive"/> bound is actually binding (i.e.
-    /// whether any light near the camera is being dropped) rather than assuming it isn't. In
-    /// enhanced mode the same count is also the number of live <see cref="OmniLight3D"/> nodes,
-    /// since <see cref="UpdateOmnis"/> drives one per committed light off this exact <c>n</c>.
-    /// </summary>
+    /// <summary>--debug-anim: report the submitted/live counts when they change. A headless run
+    /// reads from it whether the <see cref="MaxActive"/> bound is dropping a light near the camera.
+    /// In enhanced mode it also reports <see cref="OmniCount"/>, the lit omnis, which run past the
+    /// texture's count up to the effects level's budget.</summary>
     public void LogOnce()
     {
-        if (_lastCount == _loggedSubmitted)
+        if (_lastCount == _loggedSubmitted && OmniCount == _loggedOmnis)
             return;
         _loggedSubmitted = _lastCount;
-        Log.Info("world", $"anim/debug: world lights {_lastCount} rendered of {LiveCount} live{(_pending.Count > MaxActive ? $" (budget {MaxActive}; the rest are past the distance fade)" : "")}{(_omniParent != null ? $" (enhanced: {_lastCount} omni)" : "")}");
+        _loggedOmnis = OmniCount;
+        Log.Info("world", $"anim/debug: world lights {_lastCount} rendered of {LiveCount} live{(_pending.Count > MaxActive ? $" (budget {MaxActive}; the rest are past the distance fade)" : "")}{(_omniParent != null ? $" (enhanced: {OmniCount} omni of budget {_omniBudget})" : "")}");
     }
 
     /// <summary>Drops the world's lights, called when a session is torn down, so the next
@@ -300,19 +367,19 @@ public sealed class WorldLights : IDisposable
         _committedFactors.Clear();
         RenderingServer.GlobalShaderParameterSet(CountParam, 0);
         _lastCount = 0;
+        OmniCount = 0;
         _texture = null;
         foreach (var omni in _omniPool)
             omni.Free();
         _omniPool.Clear();
     }
 
-    // Enhanced mode: mirrors _pending[0..n) onto a pool of real OmniLight3D nodes, growing the
-    // pool lazily up to MaxActive and hiding the rest rather than freeing/respawning every frame.
-    // Position, range and colour all come from the same Entry the texture packs, including the
-    // distance fade already folded into Color by Faded(), so an omni dims and vanishes exactly
-    // when its texel does rather than popping.
+    // Enhanced mode: mirrors _pending[0..n) onto a pool of real OmniLight3D nodes. The pool grows
+    // lazily up to the omni budget and hides the rest rather than respawning every frame. Each omni
+    // takes its Entry's position, range and faded colour, so it dims out with the distance fade.
     private void UpdateOmnis(int n)
     {
+        OmniCount = n;
         while (_omniPool.Count < n)
         {
             var omni = new OmniLight3D { ShadowEnabled = false, OmniAttenuation = OmniAttenuation };
@@ -356,7 +423,7 @@ public sealed class WorldLights : IDisposable
             // Straight into _pending rather than through Add: the colour is already linear and the
             // ranges are well-formed, so neither of Add's two conversions applies.
             _pending.Add(new Entry(burst.Pos, burst.Shape.Color * gain, burst.Color * gain,
-                BurstRangeMin, burst.Shape.RangeMax, burst.Shape.RangeMax));
+                BurstRangeMin, burst.Shape.RangeMax, burst.Shape.RangeMax, 1f));
         }
     }
 
@@ -364,22 +431,25 @@ public sealed class WorldLights : IDisposable
     // hoisted above every instance member for SA1204's sake (same local-suppression precedent as
     // CameraController.FirstPersonPose).
 #pragma warning disable SA1204
-    // The burst envelope: an ignition peak, an exponential decay and a flicker that never reaches
-    // zero. The flicker is two sines rather than one so it does not read as a regular pulse, and
-    // each burst carries its own phase so a salvo does not flash in lockstep.
-    private static float BurstGain(BurstShape shape, float age, float phase)
+    // The burst envelope: an ignition peak, an exponential decay and the flicker.
+    private static float BurstGain(BurstShape shape, float age, float phase) =>
+        shape.PeakGain * Mathf.Exp(-age / shape.Decay) * Flicker(age, phase);
+
+    // A fire's flicker, shared by the bursts and the fire lights, never reaching zero. Two sines
+    // keep it from reading as a regular pulse. Each light carries its own phase, so a salvo does
+    // not flash in lockstep.
+    private static float Flicker(float t, float phase)
     {
-        float wave = Mathf.Tau * ((BurstFlickerHz * age) + phase);
-        float flicker = 1f + (BurstFlickerDepth * 0.5f * (Mathf.Sin(wave) + Mathf.Sin(wave * BurstFlickerBeat)));
-        return shape.PeakGain * Mathf.Exp(-age / shape.Decay) * flicker;
+        float wave = Mathf.Tau * ((BurstFlickerHz * t) + phase);
+        return 1f + (BurstFlickerDepth * 0.5f * (Mathf.Sin(wave) + Mathf.Sin(wave * BurstFlickerBeat)));
     }
 
-    // Angular size of the light's pool, scaled by its (already fade-applied) intensity, the
-    // cheapest honest proxy for "how much of this frame does it change". Distance is to the
-    // nearest viewer, matching Commit's own fade rule.
+    // Angular size of the light's pool, times its faded intensity and its rank weight. It is the
+    // cheapest honest proxy for how much of the frame a light changes. Distance is to the nearest
+    // viewer, matching Commit's own fade rule.
     private static float Significance(Entry e, IReadOnlyList<Vector3> viewerPositions) =>
         e.Max / Mathf.Max(NearestDistance(e.Pos, viewerPositions), 1f)
-        * Mathf.Max(e.Color.R, Mathf.Max(e.Color.G, e.Color.B));
+        * Mathf.Max(e.Color.R, Mathf.Max(e.Color.G, e.Color.B)) * e.Rank;
 
     // The closest of every live viewer, never the average or the first, so the fade and the
     // budget both answer to whichever pane is actually near, the same per-pane rule the puffer
@@ -413,14 +483,15 @@ public sealed class WorldLights : IDisposable
         public readonly Color Color;  // linear, the enhanced omni's
         public readonly float Min, Max;
         public readonly float OmniRange; // the enhanced omni's
-        public Entry(Vector3 pos, Color factor, Color color, float min, float max, float omniRange)
+        public readonly float Rank;      // the weight on its significance, below 1 for a fire
+        public Entry(Vector3 pos, Color factor, Color color, float min, float max, float omniRange, float rank)
         {
-            Pos = pos; Factor = factor; Color = color; Min = min; Max = max; OmniRange = omniRange;
+            Pos = pos; Factor = factor; Color = color; Min = min; Max = max; OmniRange = omniRange; Rank = rank;
         }
 
         /// <summary>The same light dimmed by the distance fade, the colour is the intensity,
         /// so scaling it is how a light leaves the set without popping.</summary>
-        public Entry Faded(float f) => new(Pos, Factor * f, Color * f, Min, Max, OmniRange);
+        public Entry Faded(float f) => new(Pos, Factor * f, Color * f, Min, Max, OmniRange, Rank);
     }
 
     // One live burst light. A class rather than a struct because Age is written every frame, and

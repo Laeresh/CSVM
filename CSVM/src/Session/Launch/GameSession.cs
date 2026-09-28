@@ -1628,6 +1628,9 @@ public partial class GameSession : Node3D
         state.DeckUndimmedMeshes = builder.CloudDeckUndimmedMeshes;
         // Owned by the session so a teardown drops the previous world's lights.
         _worldLights = session.Lights;
+        // Under Enhanced every burning emitter lights its surroundings; on the faithful path no
+        // emitter registers, so the source submits nothing.
+        _worldLights?.AddSource(_ambience.SubmitFires);
         state.CrashProgram = session.Program;
         state.WorldScene = session.Builder.Scene;
         state.WorldRuntime = session.Runtime;

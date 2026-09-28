@@ -188,7 +188,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 13. ☑ Sun-shaded smoke billboards
 14. ☑ Heat shimmer over a fireball
 15. ☑ Scorch decals at a hit
-16. ☐ A small light in every burning fire puff, over an Enhanced light budget raised past 16
+16. ☑ A small light in every burning fire puff, over an Enhanced light budget raised past 16
 
 ### Wave C, lit clouds
 
@@ -1080,7 +1080,35 @@ decals sit on the surface and fade at the cap. Faithful goldens zero movers.
 **⚠ Traps.** Decals on water read wrong; skip the water surfaces `ClassifySurface` names.
 Alpha-to-coverage (A4) does not apply to decals.
 
-## B16 ☐ A small light in every burning fire puff, over an Enhanced light budget raised past 16
+## B16 ☑ A small light in every burning fire puff, over an Enhanced light budget raised past 16
+
+**Landed.** `WorldLights` splits its two budgets. The data texture keeps `MaxActive` 16 rows, and
+under Enhanced the omni pool lights up to `OmniBudget` for `graphics.effectsLevel` (64 at high, 48
+at medium, 32 at low, every one TUNE). One significance sort orders both: the texture takes its
+head and the omnis a longer run of the same order. `WorldLights.AddFire` is one burning emitter's
+light: a warm orange (TUNE sRGB 1.0, 0.5, 0.18) at gain 1.5 scaled down while fewer than four fire
+particles live, with the B11 flicker (now one `Flicker` both lights share). Its reach is 2.5 times
+the fire particles' mean grown size, clamped to 8 to 45 m, and it stands a quarter of its reach
+above their centroid so the ground takes it at an angle. Its significance carries a 0.25 rank
+weight, so at equal significance a fire loses to an authored or burst light. A `Puffer` built under
+Enhanced keeps the fire columns `Create` already resolves; the integrate loop counts the live
+particles on a fire column before the distance gate (an undrawn fire still lights its surroundings)
+and publishes their count, centroid and mean size. `EffectAmbience` holds the emitters that are
+burning, told only on a start or a stop, and its `SubmitFires` is the `WorldLights` source that
+`GameSession` registers beside the world's lights; a freed emitter drops out there, and `Still`
+ignores the call so a lab's emitters burn without a world. The faithful path builds no fire column
+array, so its emitters do no fire work and its data texture is what it was.
+
+**Verified.** The complete `RunTests.ps1` PASS (units 5688 passed 0 failed 3 skipped, engine 443
+suites, goldens 19 hash-identical, zero movers). The `world-lights-enhanced-budget` suite pins the
+budget per level, the faithful path at 16 rows with no omni and no fire, 32 omnis of 40 live under
+a budget of 32, a beacon first against 80 equally near fires (and a control where 80 brighter
+authored lights evict it), a real emitter's one light above its fire centroid dropped while its
+smoke lives on, and a faithful emitter registering nothing. A forced crash 5 m above C1's airfield
+at frame 150, Enhanced with the fire source off against on: the grass beside the wreck gains about
+27 levels of red and 3 of green, and grass farther out does not move. A crash in the air lights
+nothing, since its fires burn beyond their reach of the ground. Not verified here: the look at the
+controls, which is the user's, and the Deck `[perf]` reading per effects level.
 
 **Goal.** Under Enhanced every explosion keeps lighting its surroundings after the flash: each
 burning puffer that sequences the fire flipbook carries a small flickering light while its fire

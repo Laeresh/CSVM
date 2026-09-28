@@ -412,6 +412,7 @@
     "wingman-lost-leader": 0.449,
     "wingman-station": 1.513,
     "world-emitter-ambience": 2.65,
+    "world-lights-enhanced-budget": 0.03,
     "world-lights-nearest-viewer": 0.002,
     "world-query-reuse": 0.005,
     "world-sound-falloff": 0.05,

@@ -23,7 +23,7 @@ stream, authored in `weather.zrd`'s `WIND` block (schema:
 `EffectAmbience` is the seam holding the per-frame state a `Puffer` reads, the wind and every
 pane's camera pose. `GameSession` owns the one instance and `WeatherRig.Tick` writes it per frame;
 the world build's emitter factory closes over that same instance, so its emitters fade and cull
-like the player's own. `Still` is the camera-less null object an unwired puffer reads. Read `Puffer.cs` next.
+like the player's own. `Still` is the camera-less null object an unwired puffer reads. Under Enhanced it also holds the emitters burning a fire column, and `SubmitFires`, a `WorldLights` source, lights each. Read `Puffer.cs` next.
 
 ## src/Effects/PufferEmitterFactory.cs
 The one real implementation of the animation layer's `IEmitterFactory` seam (`Mech3/Anim/IEmitter.cs`):
