@@ -260,12 +260,12 @@ public sealed class CampaignRosterPlan
                     continue;
                 }
             }
-            // The block's own def decides the mode. The AI def only carries stats and livery: the
-            // profile's airframe takes its w<plane> twin, a def that is no variant of its airframe
-            // takes the plain base def.
+            // The block's own def decides the mode; the AI def carries stats and livery. ⚠ Key the
+            // w<plane> twin on the bound wingman block, never its airframe, as the original does.
+            // Any other block that is no variant of its airframe flies the plain base def.
             string? aiDef = surface ? null
                 : defs.DerivesFrom(def, baseDef) ? def
-                : planeNode == wingmanNode && defs.Has("w" + baseDef) && defs.DerivesFrom("w" + baseDef, baseDef)
+                : boundWingman && defs.Has("w" + baseDef) && defs.DerivesFrom("w" + baseDef, baseDef)
                     ? "w" + baseDef
                     : null;
 

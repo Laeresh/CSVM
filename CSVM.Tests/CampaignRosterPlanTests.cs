@@ -144,6 +144,23 @@ public class CampaignRosterPlanTests
     }
 
     [Fact]
+    public void ANonVariantBlockOnTheWingmansAirframeKeepsThePlainBaseDef()
+    {
+        var plan = CampaignRosterPlan.Build(new List<(string, List<object?>)>
+        {
+            ("wingman_1", Block(-1f, "player")),
+            ("bswingman_1", Block(-1f, "player")),
+        }, Defs, Nets, wingmanNode: "player_fury", wingmanFit: new LoadoutChoice());
+
+        var byName = plan.Spawns.ToDictionary(s => s.Name);
+        Assert.Equal("wfury", byName["wingman_1"].AiDef);
+        Assert.Equal("player_fury", byName["bswingman_1"].PlaneNode);
+        Assert.Null(byName["bswingman_1"].AiDef);
+        Assert.Equal("wingman", byName["bswingman_1"].Mode);
+        Assert.Null(byName["bswingman_1"].Fit);
+    }
+
+    [Fact]
     public void ADefThatIsNoVariantOfItsAirframeFliesThePlainBaseDef()
     {
         var plan = CampaignRosterPlan.Build(new List<(string, List<object?>)>
