@@ -340,14 +340,14 @@ public sealed class FlightRoster
         {
             if (rig.Controller is { } controller)
             {
-                controller.DetachRosterBindings(_world.Projectiles);
+                controller.DetachRosterBindings(_world.Projectiles, freeNow: true);
                 rig.Controller = null;
             }
         }
         foreach (var controller in _ai)
         {
             RemoveSubscriptions(controller);
-            controller.DetachRosterBindings(_world.Projectiles);
+            controller.DetachRosterBindings(_world.Projectiles, freeNow: true);
         }
         _humans = Array.Empty<PlayerRig>();
         _ai.Clear();
@@ -547,7 +547,7 @@ public sealed class FlightRoster
         // Before the detach, because a rollback's controller is freed here and a rig still queued
         // against it would be built onto a node on its way out.
         _crashRigs.Drop(controller);
-        controller.DetachRosterBindings(_world.Projectiles);
+        controller.DetachRosterBindings(_world.Projectiles, freeNow: false);
         controller.GetParent()?.RemoveChild(controller);
         controller.QueueFree();
     }

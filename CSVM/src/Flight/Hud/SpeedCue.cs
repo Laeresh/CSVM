@@ -113,12 +113,18 @@ public sealed class SpeedCue
         _selectionTimer = 0f;
     }
 
-    internal void Dispose()
+    /// <summary>Takes the three puffers out of the scene. With <paramref name="freeNow"/> set, they
+    /// are freed in place rather than at the frame's end, which a session's own teardown needs
+    /// (<see cref="Airframe.FlightController.DetachRosterBindings"/>).</summary>
+    internal void Dispose(bool freeNow)
     {
         foreach (var puffer in _puffers)
         {
             puffer.GetParent()?.RemoveChild(puffer);
-            puffer.QueueFree();
+            if (freeNow)
+                puffer.Free();
+            else
+                puffer.QueueFree();
         }
     }
 

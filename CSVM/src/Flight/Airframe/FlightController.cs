@@ -2530,23 +2530,25 @@ public partial class FlightController : Node3D
         }
     }
 
-    internal void DetachRosterBindings(ProjectilePool pool)
+    /// <summary>Drops this aircraft's roster registrations and takes down its HUD layers and speed
+    /// cue. With <paramref name="freeNow"/> set, those detached nodes are freed in place rather than
+    /// at the frame's end. ⚠ Do not queue them at a session's own teardown. The in-engine suites run inside one
+    /// frame, so that queue never flushes and every session's HUD and cue puffers outlive it.</summary>
+    internal void DetachRosterBindings(ProjectilePool pool, bool freeNow)
     {
         if (Body != null)
             pool.UnregisterAircraft(Body);
         if (_hudCanvas != null && GodotObject.IsInstanceValid(_hudCanvas))
         {
-            _hudCanvas.GetParent()?.RemoveChild(_hudCanvas);
-            _hudCanvas.QueueFree();
+            Discard(_hudCanvas, freeNow);
             _hudCanvas = null;
         }
         if (_messageCanvas != null && GodotObject.IsInstanceValid(_messageCanvas))
         {
-            _messageCanvas.GetParent()?.RemoveChild(_messageCanvas);
-            _messageCanvas.QueueFree();
+            Discard(_messageCanvas, freeNow);
             _messageCanvas = null;
         }
-        SpeedCue?.Dispose();
+        SpeedCue?.Dispose(freeNow);
         SpeedCue = null;
         Race?.Remove(PlayerIndex);
         Race = null;
@@ -2554,6 +2556,15 @@ public partial class FlightController : Node3D
         PauseState = null;
         TargetSubParts = null;
         TargetObjectives = null;
+
+        static void Discard(Node node, bool freeNow)
+        {
+            node.GetParent()?.RemoveChild(node);
+            if (freeNow)
+                node.Free();
+            else
+                node.QueueFree();
+        }
     }
 
     /// <summary>Whether static world geometry blocks the segment, the turret gunners' cached
