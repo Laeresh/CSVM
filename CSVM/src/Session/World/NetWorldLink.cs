@@ -47,6 +47,7 @@ internal sealed class NetWorldLink
     private CampaignDirector? _director;
     private AiGeneratorRuntime? _generators;
     private Func<IReadOnlyList<FlightController>>? _roster;
+    private AiVoiceRuntime? _voice;
     private int _steps;
 
     /// <summary>Wires one session's end. A host hears the guests' hit claims and publishes its
@@ -122,6 +123,12 @@ internal sealed class NetWorldLink
     /// <summary>Host launches a guest could not build at the named ordinal, and so dropped.</summary>
     internal int SpawnsRefused { get; private set; }
 
+    /// <summary>AI combat-voice raises the host has put on the wire.</summary>
+    internal int VoiceRaisesSent { get; private set; }
+
+    /// <summary>Host AI combat-voice raises a guest has run through its own gate.</summary>
+    internal int VoiceRaisesTaken { get; private set; }
+
     /// <summary>A stable name for one destructible pool, the guard a guest checks the host's
     /// registration index against. <see cref="NameKey"/> over the definition and anchor names.</summary>
     internal static int PoolKey(DestructibleRegistry.Instance inst)
@@ -144,6 +151,15 @@ internal sealed class NetWorldLink
 
         return unchecked((int)hash);
     }
+
+    /// <summary>A combat-voice raise as the <see cref="NetWorldEvent.AiVoice"/> argument. The trigger
+    /// sits in bits 0 to 7, bit 15 marks a broadcast, and bits 16 to 31 hold its team.</summary>
+    internal static int PackVoice(int trigger, int? team) =>
+        (trigger & 0xFF) | (team is { } side ? 0x8000 | (side << 16) : 0);
+
+    /// <summary>The trigger and broadcast team <see cref="PackVoice"/> packed.</summary>
+    internal static (int Trigger, int? Team) UnpackVoice(int argument) =>
+        (argument & 0xFF, (argument & 0x8000) != 0 ? argument >> 16 : null);
 
     /// <summary>The AI admitted at <paramref name="ordinal"/>, or null.</summary>
     internal FlightController? AiAt(int ordinal) =>
@@ -211,6 +227,19 @@ internal sealed class NetWorldLink
 
         generators.Replicate();
         _net.On<AiSpawnMessage>((_, spawn) => TakeAiSpawn(spawn));
+    }
+
+    /// <summary>Puts the AI combat voice under the link. The host relays each raise that reads its
+    /// AI's own state, the AI named by admission ordinal. A guest runs each through its own gate,
+    /// and derives an AI's damage distress from the hull events.</summary>
+    internal void FollowVoice(AiVoiceRuntime voice)
+    {
+        ArgumentNullException.ThrowIfNull(voice);
+        _voice = voice;
+        if (_net.IsHost)
+        {
+            voice.Raised += SendAiVoice;
+        }
     }
 
     /// <summary>Admits every AI the roster gained since the last call, in roster order. Run at the
@@ -419,6 +448,22 @@ internal sealed class NetWorldLink
         _net.Broadcast(
             new WorldEventMessage((ushort)NetWorldEvent.AiHull, (ushort)ordinal, 0, damage.SummaryHealthFraction),
             NetChannels.Events);
+    }
+
+    // Reliable and seat-independent: every guest hears the host AI's line, and each guest's own gate
+    // decides whether it plays. An AI this end never admitted has no ordinal to name it by.
+    private void SendAiVoice(FlightController ai, int trigger, int? team)
+    {
+        int ordinal = _admitted.IndexOf(ai);
+        if (ordinal is < 0 or > ushort.MaxValue)
+        {
+            return;
+        }
+
+        _net.Broadcast(
+            new WorldEventMessage((ushort)NetWorldEvent.AiVoice, (ushort)ordinal, PackVoice(trigger, team), 0f),
+            NetChannels.Events);
+        VoiceRaisesSent++;
     }
 
     // Admitted here rather than at the next step's admission, so the ordinal on the wire is the
@@ -693,6 +738,17 @@ internal sealed class NetWorldLink
                 if (AiAt(e.Subject) is { } hurt && GodotObject.IsInstanceValid(hurt))
                 {
                     hurt.Visuals?.OnHullDamage(e.Value);
+                    _voice?.TakeHull(hurt, e.Value);
+                    WorldEventsApplied++;
+                }
+
+                break;
+            case NetWorldEvent.AiVoice:
+                if (_voice != null && AiAt(e.Subject) is { } speaker && GodotObject.IsInstanceValid(speaker))
+                {
+                    var (trigger, team) = UnpackVoice(e.Argument);
+                    _voice.TakeRaise(speaker, trigger, team);
+                    VoiceRaisesTaken++;
                     WorldEventsApplied++;
                 }
 

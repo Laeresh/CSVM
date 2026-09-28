@@ -260,7 +260,9 @@ reaches). There the condition is explicit rather than implied: the actor is not 
 player's side (`FUN_004952f0`, the record's `+0x3c` against the local record's) and sits within
 **1695 m** of the player, and the same taunt pair and bearing broadcast follow (`0x00470822`,
 `0x00470849`, `0x004708e0`). That range belongs to the multiplayer path alone; the single-player
-driver applies none.
+driver applies none. The remake's guest does not derive the pair this way; the host relays its AI's
+raises instead ([`../org/multiplayer-messages.md`](../org/multiplayer-messages.md), "AI voice
+across the link").
 
 ### The taunt pair 25 and 26 is the pursuer's own geometry
 

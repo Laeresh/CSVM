@@ -534,6 +534,18 @@ public class NetMessagesTests
         Assert.NotEqual(CSVM.Session.World.NetWorldLink.NameKey("patrolboat_1"), CSVM.Session.World.NetWorldLink.NameKey("patrolboat_2"));
     }
 
+    // A host AI's voice raise rides the world event. An addressed line carries no team, and a
+    // broadcast keeps its team apart from the trigger, the neutral team 0 included.
+    [Fact]
+    public void AiVoiceRaisePacksTriggerAndTeam()
+    {
+        Assert.Equal(7, (int)NetWorldEvent.AiVoice);
+        Assert.Equal((14, (int?)null), CSVM.Session.World.NetWorldLink.UnpackVoice(CSVM.Session.World.NetWorldLink.PackVoice(14, null)));
+        Assert.Equal((7, (int?)1), CSVM.Session.World.NetWorldLink.UnpackVoice(CSVM.Session.World.NetWorldLink.PackVoice(7, 1)));
+        Assert.Equal((12, (int?)0), CSVM.Session.World.NetWorldLink.UnpackVoice(CSVM.Session.World.NetWorldLink.PackVoice(12, 0)));
+        Assert.Equal((28, (int?)300), CSVM.Session.World.NetWorldLink.UnpackVoice(CSVM.Session.World.NetWorldLink.PackVoice(28, 300)));
+    }
+
     // A take-off run carries a lever and no carrier drop; a zeppelin drop carries a velocity.
     [Fact]
     public void AiSpawnRoundTripsBothLaunchShapes()

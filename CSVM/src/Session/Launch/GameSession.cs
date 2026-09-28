@@ -582,6 +582,10 @@ public partial class GameSession : Node3D
     /// admitted AI and the applied events off it.</summary>
     internal NetWorldLink? NetWorld => _netWorld;
 
+    /// <summary>The AI combat voice, null when the session built no sound defs. The harness suites
+    /// raise and count its call-outs.</summary>
+    internal AiVoiceRuntime? AiVoice => _aiVoice;
+
     /// <summary>The cutscene host, null outside a flown world. A suite drives its airframe swap
     /// seam the way a replayed definition's code does.</summary>
     internal CutsceneController? Cutscene => _cutscene;
@@ -4760,6 +4764,11 @@ public partial class GameSession : Node3D
         if (_generators != null)
         {
             _netWorld.FollowGenerators(_generators, () => AiPlanes);
+        }
+
+        if (_aiVoice != null)
+        {
+            _netWorld.FollowVoice(_aiVoice);
         }
 
         Log.Info("core", $"net world: {(net.IsHost ? $"host (flying every AI and deciding every world hit, {world?.Destructibles.Count ?? 0} pool(s))" : "guest (AI replicated from the host, world pools spending nothing of their own)")}");

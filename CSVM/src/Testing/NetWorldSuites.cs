@@ -135,6 +135,126 @@ internal static class NetWorldSuites
         }
     }
 
+    [Suite("net-ai-voice",
+        "a host and a guest with two AI aircraft over a 30 ms, 25 per cent lossy loopback, sound "
+        + "loaded: a host AI's attack call-out raised on the host is raised on the guest after the "
+        + "link's transit and not before, once, for the same AI by admission ordinal, with the same "
+        + "triggers in the same order and the bearing broadcast on the quarry's team; a second raise "
+        + "by the other AI against the other seat is named for that AI; and the guest raises "
+        + "nothing of its own for its replicated copies")]
+    internal static void TheHostVoicesItsAi(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} textures");
+        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
+        ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{MpMission} zrdr");
+        // ⚠ Not --mute: a muted session loads no sound defs and so builds no combat voice at all.
+        var spec = SessionSpec.Parse(new[]
+        {
+            "--vs", $"--chapter={ctx.Chapter}", $"--mission={MpMission}", "--players=1", "--no-pads",
+            AiField,
+        });
+        var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.03, 0.01, 0.25), new Random(7717));
+        var roster = new NetSeat[]
+        {
+            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = Airframes[0] },
+            new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
+        };
+        NetSeats.Validate(roster);
+
+        ulong master = Rng.Master;
+        bool pinned = Rng.Pinned;
+        var clockWas = GameClock.Current;
+        var profileWas = StartupProfile.Current;
+        Ends? host = null;
+        Ends? guest = null;
+        try
+        {
+            host = Ends.Open(ctx, spec, mesh[0], isHost: true, HostSeed, roster);
+            guest = Ends.Open(ctx, spec, mesh[1], isHost: false, HostSeed + 1, null);
+            ctx.Check(host.Built && guest.Built,
+                $"both sessions build in one process (host {host.Built}, guest {guest.Built})");
+            if (!host.Built || !guest.Built)
+            {
+                return;
+            }
+
+            NetStartSuites.UntilStarted(host.Session, guest.Session);
+            Lockstep(1, host.Session, guest.Session);
+            var mine = host.Session.NetWorld!;
+            var theirs = guest.Session.NetWorld!;
+            ctx.Check(mine.Admitted == 2 && theirs.Admitted == 2,
+                $"both ends admit the two AI aircraft (host {mine.Admitted}, guest {theirs.Admitted})");
+            var hostVoice = host.Session.AiVoice;
+            var guestVoice = guest.Session.AiVoice;
+            ctx.Check(hostVoice != null && guestVoice != null,
+                $"both ends build the AI combat voice (host {hostVoice != null}, guest {guestVoice != null})");
+            if (mine.Admitted < 2 || theirs.Admitted < 2 || hostVoice == null || guestVoice == null)
+            {
+                return;
+            }
+
+            var said = new List<(int Ordinal, int Trigger, int? Team)>();
+            var heard = new List<(int Ordinal, int Trigger, int? Team)>();
+            hostVoice.Raised += (ai, trigger, team) => said.Add((Ordinal(mine, ai), trigger, team));
+            guestVoice.Raised += (ai, trigger, team) => heard.Add((Ordinal(theirs, ai), trigger, team));
+            for (int i = 0; i < 600 && hostVoice.Now < Flight.Ai.AiVoiceDispatcher.MuteWindowS; i++)
+            {
+                Lockstep(1, host.Session, guest.Session);
+            }
+
+            Lockstep(SettleSteps, host.Session, guest.Session);
+            ctx.Check(heard.Count == said.Count,
+                $"before any forced raise the guest has raised only what the host did ({heard.Count} against {said.Count})");
+            Relay(ctx, host.Session, guest.Session, 0, host.Session.SeatRigs[1].Controller!, said, heard);
+            Relay(ctx, host.Session, guest.Session, 1, host.Session.SeatRigs[0].Controller!, said, heard);
+        }
+        finally
+        {
+            guest?.Close();
+            host?.Close();
+            StartupProfile.Current = profileWas;
+            GameClock.Current = clockWas;
+            Rng.Reset(master, pinned);
+        }
+    }
+
+    // One forced attack raise by the host's AI at an ordinal against a seat's aeroplane, and what
+    // the guest raises from it.
+    private static void Relay(TestContext ctx, GameSession host, GameSession guest, int ordinal,
+        FlightController quarry, List<(int Ordinal, int Trigger, int? Team)> said,
+        List<(int Ordinal, int Trigger, int? Team)> heard)
+    {
+        said.Clear();
+        heard.Clear();
+        int sent = host.NetWorld!.VoiceRaisesSent;
+        int taken = guest.NetWorld!.VoiceRaisesTaken;
+        host.AiVoice!.RaiseAttackCallOut(host.NetWorld.AiAt(ordinal)!, quarry);
+        var raised = said.ToList();
+        string shown = string.Join(" ", raised.Select(r => $"{r.Ordinal}:{r.Trigger}{(r.Team is { } t ? $"@{t}" : "")}"));
+        ctx.Check(raised.Count(r => r == (ordinal, Flight.Ai.AiVoiceDispatcher.WaAttack, null)) == 1
+                  && raised.Any(r => r.Ordinal == ordinal && r.Team == quarry.Team),
+            $"the host's AI {ordinal} raises its WA-Attack once and the bearing broadcast on the quarry's team {quarry.Team} ({shown})");
+        // ABLE-TO-FAIL CONTROL. Nothing is raised on the guest in the step the host raised it, so
+        // what arrives below crossed the link.
+        ctx.Check(heard.Count == 0,
+            $"ABLE-TO-FAIL CONTROL: the guest has raised nothing before the host's event crosses ({heard.Count})");
+        Lockstep(SettleSteps, host, guest);
+        string got = string.Join(" ", heard.Select(r => $"{r.Ordinal}:{r.Trigger}{(r.Team is { } t ? $"@{t}" : "")}"));
+        ctx.Note($"AI {ordinal} voice raise (ordinal:trigger@team): host {shown}, guest {got}");
+        ctx.Check(heard.SequenceEqual(said) && heard.Count(r => r == (ordinal, Flight.Ai.AiVoiceDispatcher.WaAttack, null)) == 1,
+            $"the guest raises the same {said.Count} call-out(s) for AI {ordinal}, WA-Attack once ({got})");
+        int crossed = guest.NetWorld.VoiceRaisesTaken - taken;
+        ctx.Check(host.NetWorld.VoiceRaisesSent - sent == said.Count && crossed == said.Count,
+            $"one event per raise, sent and taken ({host.NetWorld.VoiceRaisesSent - sent} sent, {crossed} taken)");
+    }
+
+    private static int Ordinal(NetWorldLink link, FlightController ai) =>
+        Enumerable.Range(0, link.Admitted).FirstOrDefault(i => ReferenceEquals(link.AiAt(i), ai), -1);
+
     // Both ends admitted the same AI in the same order, and only the guest's are replicated.
     private static void Admission(TestContext ctx, NetWorldLink mine, NetWorldLink theirs)
     {

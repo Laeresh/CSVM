@@ -284,6 +284,11 @@ public enum NetWorldEvent : ushort
     /// <summary>A guest's link dropped mid-mission and its aeroplane left the field. The subject is
     /// that guest's seat.</summary>
     SeatLeft = 6,
+
+    /// <summary>A host AI raised a combat-voice trigger. The subject is the admission ordinal of the
+    /// AI the line is about. The argument packs the trigger in bits 0 to 7, a broadcast flag in bit
+    /// 15 and the broadcast's team in bits 16 to 31.</summary>
+    AiVoice = 7,
 }
 
 /// <summary>Why a pilot died, the original's own cause word

@@ -85,7 +85,7 @@ transport's own connect and disconnect callbacks are the counterpart.
 | `+0x10` | orientation, three angles packed into one dword as `yaw << 0x15 \| pitch << 0xb \| roll` |
 | `+0x14` | motion, packed the same way as `a << 0x14 \| b << 10 \| c` |
 | `+0x18` | `GetTickCount` at build time |
-| `+0x1c` | throttle in the low byte, a 7-bit field at bits 8..14, and one flag at bit 15 |
+| `+0x1c` | the health fraction × 255 in the low byte (vehicle `+0x2d0` over `+0x2cc`, clamped 0..255; the receiver `FUN_00498170` scales it back into `+0x2d0`), a 7-bit field at bits 8..14, and one flag at bit 15 |
 | `+0x1e` | a 3-bit shot count at bits 4..6 and a 4-bit hit count at bits 0..3 |
 | `+0x20` | when the shot count is above zero, three dwords of shot state |
 | tail | the queued hit records, 12 bytes each |
@@ -547,6 +547,9 @@ park, which covers a script wake, a Black Hat launch and a wingman taken out. A 
 is not sent, because each end's own cutscene parks its own copy. 6 a seat left (the subject is
 the seat of a guest whose link dropped mid-mission): the host sends it to the guests still flying,
 every end removes that aeroplane and tells its players "<name> left", and the mission goes on.
+7 an AI's combat-voice raise (the subject is the ordinal of the AI the line is about, the argument
+packs the trigger in bits 0..7, a broadcast flag in bit 15 and the broadcast's team in bits
+16..31); see "AI voice across the link" below.
 
 Code 3 goes out at once for a stage change or a kill. A hit that lowers a pool without either is
 held and sent on the seat stream's next tick, one sample per pool however many hits landed, because
@@ -587,8 +590,41 @@ Each simulation phase, as a guest runs it:
 | Surface vehicles | **Replicated patrol**: each hull chases the host's `0x4D` samples. A hull's death arrives as a pool event; its gun still fires locally. |
 | Instant action | Not run in a network match. |
 | Campaign | The director replay above. |
-| AI voice | Derived locally; a replicated AI runs no mode machine, so its mode-driven call-outs are silent. |
+| AI voice | **Host-raised**: a replicated AI's attack pair, shake taunt, gloat and ally distress arrive as `0x48` code 7 and pass this end's own gate; its DI tiers and death cry are derived from codes 2 and 1. |
 | Versus | The match state above. |
+
+### AI voice across the link
+
+The original sends no voice trigger and no mode code. Its one send, `FUN_005b2640`, is called only
+by the message builders, and the addressed gate `FUN_004afd00` (the speaker in `ECX`, the trigger
+and the force flag on the stack) is reached from no receive handler: its callers are
+`FUN_0041d9f0`, `FUN_0041f420`, `FUN_0043d640`, `FUN_00470750`, `FUN_00498170`, `FUN_00498bf0`,
+`FUN_004b82d0`, `FUN_004b86a0`, `FUN_004b9770` and `FUN_004b9bc0`, and none of the `0x10` fire
+handler (`LAB_00498950`), the `0x21` handler (`LAB_004990d0`) or the `0x24`/`0x25` handler
+(`LAB_0049bde0`) calls it. The broadcast helper `FUN_004b86a0` is reached from `FUN_0041d9f0`,
+`FUN_00446990`, `FUN_00470750`, `FUN_004aabb0` and `FUN_004b9bc0`, none a network handler. Each peer
+derives its call-outs from what it already receives, with no mode machine for a remote aircraft:
+
+- `FUN_00470750`, run per remote vehicle from the remote update `FUN_00470210` (called by
+  `FUN_004897c0`), skips a remote on the local player's side (`FUN_004952f0`, remote record `+0x3c`
+  against the local record's) and one farther than 1695.0 from the local player (`0x00607e78`), and
+  otherwise raises the taunt 26 or 25 off the geometry (`0x00470822`, `0x00470849`) and the bearing
+  broadcast (`0x004708e0`).
+- `FUN_00498170` applies a `0x0f` state: the low byte of `+0x1c` becomes the vehicle's health, and
+  when it falls on a remote of the local side the gate raises DI 19, 18 or 17 against 0.3, 0.5 and
+  0.7 of the vehicle's whole (`0x004985cf`).
+- The death handler `FUN_00498bf0` plays the dying pilot's cry itself (`0x00498f67`, `0x00498f9a`).
+
+The remake cannot derive the same way, because its raises read what only the flying end holds: the
+gunner's target behind the attack pair, the mode machine's evade flag behind the shake taunt 27,
+the killer behind the gloats 22 and 23, and the shooter behind the ally distress 28. A guest's copy
+of an AI steps none of those, and stepping them would voice transitions the host's AI never made.
+So the host relays each such raise as code 7, reliable and to every guest, and each guest runs it
+through its own gate: the mute window, the speaker's aliveness and radio, the slot cooldown, the
+talker roll, and for a broadcast the election among its own speakers on the named team. The raise
+is per AI and each session has one voice runtime, so a splitscreen host's panes send it once. The
+DI tiers stay derived, as the original derives them, from code 2's hull fraction, and the death cry
+from code 1's death. A guest's own copies raise nothing locally.
 
 ## Positional starts
 

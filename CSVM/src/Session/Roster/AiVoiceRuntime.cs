@@ -59,6 +59,12 @@ public sealed partial class AiVoiceRuntime : Node
     /// its QUEUE tolerance is still dropped there, unheard.</summary>
     public event Action<string, int, string>? LinePlayed;
 
+    /// <summary>Every raise about an AI that reads what only the flying end knows, before the gate.
+    /// It carries the AI, the trigger id, and the broadcast team or null for an addressed line. A
+    /// host relays these to its guests, and a guest raises them again from
+    /// <see cref="TakeRaise"/>.</summary>
+    internal event Action<FlightController, int, int?>? Raised;
+
     /// <summary>The dispatcher, exposed for tests/probes (registration order, cooldown stamps).</summary>
     public AiVoiceDispatcher Dispatcher => _dispatcher;
 
@@ -106,7 +112,7 @@ public sealed partial class AiVoiceRuntime : Node
 
         ai.DamageApplied += (damaged, _) =>
         {
-            if (damaged.Damage is { } dmg)
+            if (damaged.Damage is { } dmg && !damaged.RemoteOwned)
             {
                 Play(_dispatcher.NotifyDamage(speaker.Id, dmg.SummaryHealthFraction, _now));
             }
@@ -163,11 +169,56 @@ public sealed partial class AiVoiceRuntime : Node
     public void DangerZoneCompleted(FlightController player) =>
         Play(_dispatcher.Broadcast(AiVoiceDispatcher.PrDngrZn, player.Team, _now));
 
+    /// <summary>A raise the host's copy of <paramref name="ai"/> made, run through this end's own
+    /// gate as the original's peers each run theirs. A <paramref name="team"/> is a broadcast
+    /// elected among this end's speakers on that team.</summary>
+    internal void TakeRaise(FlightController ai, int trigger, int? team)
+    {
+        Play(team is { } side
+            ? _dispatcher.Broadcast(trigger, side, _now)
+            : _dispatcher.Dispatch(ai.PlayerIndex, trigger, _now));
+        Raised?.Invoke(ai, trigger, team);
+    }
+
+    /// <summary>The DI distress for a replicated AI, derived from the hull fraction the host sends.
+    /// The original derives it the same way, from the state message's health byte.</summary>
+    internal void TakeHull(FlightController ai, float fraction) =>
+        Play(_dispatcher.NotifyDamage(ai.PlayerIndex, fraction, _now));
+
+    // One raise of the pair: the pursuer's own WA-Attack and the flight's bearing call-out. The
+    // bearing is computed in the warned player's frame and broadcast on the player's side. The
+    // taunt pair rides the same raise, addressed to the pursuer off its own nose against the quarry.
+    // ⚠ The mute window is read here as well as in the gate. A raise the window refuses must not
+    // consume the interval. Otherwise a pursuer that commits on the mission's first frame would
+    // stay silent for the next fifteen seconds.
+    internal void RaiseAttackCallOut(FlightController ai, FlightController quarry)
+    {
+        if (_now < AiVoiceDispatcher.MuteWindowS)
+        {
+            return;
+        }
+        _nextCallOut[ai.PlayerIndex] = _now + AiVoiceDispatcher.SlotCooldownS;
+        // The decoded block refuses the taunt while the pursuer is itself in an evade reaction,
+        // and a pilot with no mode machine is not evading.
+        if (ai.Pilot?.Machine is not { Evading: true }
+            && AiVoiceDispatcher.TauntTriggerFor(ai.WorldPosition, ai.NoseDirection,
+                quarry.WorldPosition) is { } taunt)
+        {
+            Say(ai, taunt);
+        }
+        Say(ai, AiVoiceDispatcher.WaAttack);
+        int bearing = AiVoiceDispatcher.BearingTriggerFor(
+            quarry.WorldPosition, quarry.NoseDirection, ai.WorldPosition);
+        Play(_dispatcher.Broadcast(bearing, quarry.Team, _now));
+        Raised?.Invoke(ai, bearing, quarry.Team);
+    }
+
     // The human a pursuer attacks, or null. ⚠ Keep the InPlay and Hostile gates: a downed pursuer's
     // gunner still holds its target, and its wreck would raise "six low" every 15 s. They are the
     // beeper paint gate's own pair, and the original's combat driver never runs for a downed aircraft.
+    // A replicated AI's target is the host's to know, and its raises arrive from there.
     private static FlightController? HumanQuarryOf(FlightController ai) =>
-        ai.InPlay && ai.Pilot?.Gunner?.AircraftTarget is { IsHumanPiloted: true } quarry
+        ai.InPlay && !ai.RemoteOwned && ai.Pilot?.Gunner?.AircraftTarget is { IsHumanPiloted: true } quarry
             && AimAssist.Hostile(ai.Team, quarry.Team)
             ? quarry
             : null;
@@ -190,9 +241,15 @@ public sealed partial class AiVoiceRuntime : Node
         machine.ModeChanged += (from, to, _) => OnModeChanged(ai, machine, from, to);
     }
 
+    // ⚠ A replicated AI's copy of the machine must never voice anything. Its rolls diverge from the
+    // host's, so it would speak transitions the host's AI never made.
     private void OnModeChanged(FlightController ai, AiModeMachine machine, AiMode from, AiMode to)
     {
-        int speakerId = ai.PlayerIndex;
+        if (ai.RemoteOwned)
+        {
+            return;
+        }
+
         // The commit itself, for the case where it falls after the mute window. ⚠ Only out of
         // patrol: a re-entry from avoid crash happens every few seconds near terrain and is the
         // same engagement, which the raise interval would absorb anyway.
@@ -208,8 +265,15 @@ public sealed partial class AiVoiceRuntime : Node
             && to is not (AiMode.Evade or AiMode.EvasiveManeuver)
             && !machine.Evading)
         {
-            Play(_dispatcher.Dispatch(speakerId, AiVoiceDispatcher.TaSucShk, _now));
+            Say(ai, AiVoiceDispatcher.TaSucShk);
         }
+    }
+
+    // An addressed raise the flying end alone can make, played here and offered to the relay.
+    private void Say(FlightController ai, int trigger)
+    {
+        Play(_dispatcher.Dispatch(ai.PlayerIndex, trigger, _now));
+        Raised?.Invoke(ai, trigger, null);
     }
 
     // The original raises the attack pair every frame its pursuer targets the local player. The
@@ -232,33 +296,6 @@ public sealed partial class AiVoiceRuntime : Node
             }
             RaiseAttackCallOut(ai, quarry);
         }
-    }
-
-    // One raise of the pair: the pursuer's own WA-Attack and the flight's bearing call-out,
-    // computed in the warned player's frame and broadcast on the player's side. The taunt pair
-    // rides the same raise, addressed to the pursuer off its own nose against the quarry.
-    // ⚠ The mute window is read here as well as in the gate. A raise the window refuses must not
-    // consume the interval, or a pursuer that commits on the mission's first frame would stay
-    // silent for the next fifteen seconds, which is the whole complaint.
-    private void RaiseAttackCallOut(FlightController ai, FlightController quarry)
-    {
-        if (_now < AiVoiceDispatcher.MuteWindowS)
-        {
-            return;
-        }
-        _nextCallOut[ai.PlayerIndex] = _now + AiVoiceDispatcher.SlotCooldownS;
-        // The decoded block refuses the taunt while the pursuer is itself in an evade reaction,
-        // and a pilot with no mode machine is not evading.
-        if (ai.Pilot?.Machine is not { Evading: true }
-            && AiVoiceDispatcher.TauntTriggerFor(ai.WorldPosition, ai.NoseDirection,
-                quarry.WorldPosition) is { } taunt)
-        {
-            Play(_dispatcher.Dispatch(ai.PlayerIndex, taunt, _now));
-        }
-        Play(_dispatcher.Dispatch(ai.PlayerIndex, AiVoiceDispatcher.WaAttack, _now));
-        int bearing = AiVoiceDispatcher.BearingTriggerFor(
-            quarry.WorldPosition, quarry.NoseDirection, ai.WorldPosition);
-        Play(_dispatcher.Broadcast(bearing, quarry.Team, _now));
     }
 
     // ⚠ Subscribed for every aircraft handed over, human rigs included. The gloat's speaker is the
@@ -306,7 +343,15 @@ public sealed partial class AiVoiceRuntime : Node
         int trigger = AimAssist.Hostile(victim.Team, AimAssist.PlayerTeam)
             ? AiVoiceDispatcher.GlEnemyDwn
             : AiVoiceDispatcher.GlAllyDwn;
-        Play(_dispatcher.Dispatch(shooter, trigger, _now));
+        if (!_byIndex.TryGetValue(shooter, out var killerAi))
+        {
+            Play(_dispatcher.Dispatch(shooter, trigger, _now));
+        }
+        else if (!killerAi.RemoteOwned && !killerAi.IsHumanPiloted)
+        {
+            // Which AI scored is the host's to know, so a replicated killer's gloat is relayed.
+            Say(killerAi, trigger);
+        }
     }
 
     // ⚠ Subscribed for AI only: the struck aircraft is the speaker here, and a human rig speaks no
@@ -326,7 +371,7 @@ public sealed partial class AiVoiceRuntime : Node
     // globals and waits on that decode.
     private void OnFriendlyFire(FlightController victim, int? shooter)
     {
-        if (shooter is not { } id || !_humans.Contains(id))
+        if (shooter is not { } id || !_humans.Contains(id) || victim.RemoteOwned)
         {
             return;
         }
@@ -334,7 +379,7 @@ public sealed partial class AiVoiceRuntime : Node
         {
             return;
         }
-        Play(_dispatcher.Dispatch(victim.PlayerIndex, AiVoiceDispatcher.DsAlly, _now));
+        Say(victim, AiVoiceDispatcher.DsAlly);
     }
 
     // B8's availability contract: the resolved name must have a decoded stream behind it, for a
