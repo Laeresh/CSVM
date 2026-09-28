@@ -268,6 +268,23 @@ public class NetMessagesTests
         Assert.Equal(new string('x', SeatRosterMessage.CallsignBytes - 1), got.Seats[0].Callsign);
     }
 
+    // A host names its own seat by what the roster carries, so its copy and a guest's agree. That
+    // holds for a name past the width and for one whose last character straddles it.
+    [Theory]
+    [InlineData("Zachary")]
+    [InlineData("Montgomery Fairweather")]
+    [InlineData("Léonie Désirée-Hébert")]
+    [InlineData("")]
+    public void CarriedIsWhatTheRosterReadsBack(string name)
+    {
+        var buffer = new byte[SeatRosterMessage.SizeFor(1)];
+        new SeatRosterMessage(1u, new List<NetSeatEntry> { new(0, 0, 0, true, name) }).Write(buffer);
+
+        Assert.True(SeatRosterMessage.TryRead(buffer, out var got));
+        Assert.Equal(got.Seats[0].Callsign, SeatRosterMessage.Carried(name));
+        Assert.StartsWith(SeatRosterMessage.Carried(name), name, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void AnEmptyRosterIsStillAWholeMessage()
     {

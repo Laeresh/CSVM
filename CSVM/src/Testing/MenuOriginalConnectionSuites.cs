@@ -939,6 +939,8 @@ internal static class MenuOriginalConnectionSuites
         var (roster, _) = CSVM.Session.Launch.Launcher.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load());
         ctx.Check(roster.Length == 2 && roster[1].PlaneNode == PlanePickerRoster.AirframeNode(2),
             $"the host's roster builds the guest's seat on its pick ({string.Join(", ", roster.Select(s => s.PlaneNode))})");
+        ctx.Check(roster.Length == 2 && roster[0].Callsign == SplitScreen.PlayerTag(0),
+            $"a host whose advert names nobody is seated under its player tag ({roster.FirstOrDefault()?.Callsign})");
         int before = guestExits.Count;
         _ = NetSession.Host((NetLobby)wire.Transport, roster, 7UL);
         for (int frame = 0; frame < 4 && guestExits.Count == before; frame++)

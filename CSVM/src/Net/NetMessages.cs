@@ -1179,6 +1179,19 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
     /// <summary>How wide a roster of <paramref name="seats"/> seats is.</summary>
     public static int SizeFor(int seats) => PrefixSize + (EntrySize * seats);
 
+    /// <summary>What of <paramref name="callsign"/> an entry carries: the longest whole-character
+    /// prefix whose UTF-8 fits the field beside its terminator. A host names its own seats by it,
+    /// so its roster reads what every guest's copy reads.</summary>
+    public static string Carried(string? callsign)
+    {
+        if (string.IsNullOrEmpty(callsign))
+            return "";
+
+        Span<byte> field = stackalloc byte[CallsignBytes - 1];
+        System.Text.Encoding.UTF8.GetEncoder().Convert(callsign.AsSpan(), field, true, out _, out int used, out _);
+        return System.Text.Encoding.UTF8.GetString(field[..used]);
+    }
+
     /// <inheritdoc/>
     public static bool TryRead(ReadOnlySpan<byte> from, out SeatRosterMessage message)
     {

@@ -142,7 +142,16 @@ slot holds distinct per-pilot indices, two pilots never match, and the arm canno
 dying pilot's own included, on every death, a crash included. The single-player kill line
 (`vehicleDamage.md` "The kill message") is gated off in a network game and never adds to these.
 A name is the remote record's CString at `+0x34`, which `FUN_00499c90` starts as row 6007
-`MSG_UNKNOWN` ("Unknown"). The handler composes into two 0x31-byte stack buffers, a top line and a
+`MSG_UNKNOWN` ("Unknown"). Both callers overwrite it at once with the lobby player record's name
+at `+0x10`, found by DirectPlay id through `FUN_0046f110`: `FUN_00495310` for this machine's own
+pilot (the id is `FUN_005b4200`'s, so on the host the host's own) and `FUN_00497990` for each peer
+that arrives. That name is the player's DirectPlay name: `FUN_00414640` copies it from the wrapper's
+player entry `+0x44`, which `FUN_005b24a0` fills from the `pszCallsign` setting (`DAT_00642f0c`,
+registered at `00401416`, "noname" at `0063b100` when unset) as both session-open paths make their
+local player (`FUN_00412c30` at `00412d18`/`00412d52`, `FUN_00412e30` at `00412f22`/`00412f66`). So
+the host's seat is named by its callsign exactly as every guest's is, in the kill lines and in the
+lobby's player list (`FUN_00412530` reads the same `+0x10`), and the connection page refuses a blank
+callsign (`FUN_00407060`, called at `0040820c`). The handler composes into two 0x31-byte stack buffers, a top line and a
 second line, switched on the cause at `+0xc` through the jump table at `0x499028`:
 
 | Cause | Top line | Second line |
@@ -165,7 +174,10 @@ The remake posts these lines from the host's decision rather than from each mach
 report, since a relayed report never returns to the machine that sent it. The host scores the
 death, sends the scores, then sends `0x5C`, the death notice, and posts the lines itself; each
 guest posts them from the notice, after the lives line the scores produced. A pilot is named by
-its seat's callsign. Cause 3 names the owner's seat, since the remake's Dogfight has no teams.
+its seat's callsign. A lobby host's first seat takes the name its advert carries, cut to the
+roster's width so every machine reads the same name, and its player tag only when that name is
+empty. A second local seat keeps its tag: the original's session-open paths make one local player
+each, so it has no counterpart there. Cause 3 names the owner's seat, since the remake's Dogfight has no teams.
 Splitscreen Dogfight posts the same lines in every pane, named by player tag.
 
 ## The zeppelin state packet

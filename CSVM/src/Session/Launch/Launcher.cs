@@ -1276,7 +1276,8 @@ public partial class Launcher : Node3D
     }
 
     /// <summary>A network Dogfight host's field and each seat's fit, by seat. Its own seats come
-    /// first. Each guest follows in the stock airframe, fit and name its lobby pick carried.
+    /// first, the first named as its advert names the host and any other by player tag. Each guest
+    /// follows in the stock airframe, fit and name its lobby pick carried.
     /// ⚠ A guest with no pick on the wire flies the host's first airframe on the stock fit. That is
     /// the Built-in Dogfight door's only rule.</summary>
     internal static (Net.NetSeat[] Roster, Net.CoopFit[] SeatFits) VersusLaunchField(
@@ -1285,6 +1286,9 @@ public partial class Launcher : Node3D
     {
         var seats = new List<Net.NetSeat>(planes.Count + wire.Peers.Count);
         var seatFits = new List<Net.CoopFit>(seats.Capacity);
+        var lobby = wire as Net.NetLobby;
+        // Cut to the roster's width, so the host's kill lines read what each guest's copy reads.
+        string hostName = Net.SeatRosterMessage.Carried((lobby?.Advertising?.Host ?? "").Trim()).Trim();
         for (int i = 0; i < planes.Count; i++)
         {
             seats.Add(new Net.NetSeat
@@ -1292,13 +1296,13 @@ public partial class Launcher : Node3D
                 PeerId = wire.LocalPeer,
                 SeatIndex = seats.Count,
                 IsLocal = true,
-                Callsign = UI.Boards.SplitScreen.PlayerTag(i),
+                Callsign = i == 0 && hostName.Length > 0 ? hostName : UI.Boards.SplitScreen.PlayerTag(i),
                 PlaneNode = planes[i],
             });
             seatFits.Add(CampaignLoadout.FitOf(i < fits.Count ? fits[i] : null, stock));
         }
 
-        var picks = (wire as Net.NetLobby)?.Picks;
+        var picks = lobby?.Picks;
         foreach (int peer in wire.Peers)
         {
             if (seats.Count >= Net.NetSeats.MaxPlayers)

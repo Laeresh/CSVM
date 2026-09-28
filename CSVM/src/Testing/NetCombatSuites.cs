@@ -360,7 +360,9 @@ internal static class NetCombatSuites
     [Suite("net-kill-line",
         "a host session and a guest session in one process: each Dogfight death posts the "
         + "original's kill lines once on both machines, the victim above Destroyed by the killer, "
-        + "a death with no killer as Self-Destroyed and a turret owner's kill as Killed by its Turret")]
+        + "a death with no killer as Self-Destroyed and a turret owner's kill as Killed by its Turret. "
+        + "A lobby launch names the host's seat by its advert's name, so a host kill reads Destroyed by "
+        + "that name on both machines")]
     internal static void EveryMachinePostsTheKill(TestContext ctx)
     {
         var spec = MatchSpec(ctx, out _);
@@ -393,6 +395,12 @@ internal static class NetCombatSuites
             KillLines(ctx, peers, "a turret owner's kill", "guest1", "Killed by host Turret",
                 () => guest.NetLink!.Send(guest.NetLink.HostPeer,
                     new DeathMessage(1, 0, NetDeathCause.TurretOwner, 0u), NetChannels.Events));
+            foreach (var end in Enumerable.Reverse(ends))
+            {
+                end.Close();
+            }
+
+            NamedHostKills(ctx, spec, 6308);
         }
         finally
         {
@@ -457,9 +465,10 @@ internal static class NetCombatSuites
     // One death on clean stacks: each machine's own pane then reads exactly the decoded lines,
     // top line newest. A relayed copy posted twice, or one machine silent, fails it.
     private static void KillLines(TestContext ctx, GameSession[] peers, string what, string top,
-        string? under, Action kill)
+        string? under, Action kill, Action<int>? fly = null)
     {
-        Lockstep(GrantSteps, peers);
+        fly ??= steps => Lockstep(steps, peers);
+        fly(GrantSteps);
         var stacks = peers.Select((p, i) => p.SeatRigs[i].Controller?.MessageStack).ToArray();
         foreach (var stack in stacks)
         {
@@ -467,7 +476,7 @@ internal static class NetCombatSuites
         }
 
         kill();
-        Lockstep(SettleSteps, peers);
+        fly(SettleSteps);
         var want = under == null ? new[] { top } : new[] { top, under };
         // The victim's own crash notice is the ground impact's line, not the kill's, and is left out.
         string crash = Messages.Load(ctx.MessagesPath).Get(HudMessages.CrashKey);
@@ -479,6 +488,86 @@ internal static class NetCombatSuites
         string reading = string.Join(" | ", reads.Select(r => string.Join(" / ", r)));
         ctx.Check(reads.All(r => r.SequenceEqual(want)),
             $"{what}: both machines post {string.Join(" / ", want)} once ({reading})");
+    }
+
+    // A lobby Dogfight launched through both doors, its host named past the roster's width. The
+    // host's seat takes its advert's name, cut where the wire cuts it. Both machines then read the
+    // same name in a kill line.
+    private static void NamedHostKills(TestContext ctx, SessionSpec spec, int seed)
+    {
+        const string HostName = "Montgomery Fairweather";
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(seed));
+        var hostDoor = new UI.Menu.NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[1]) { PlayerName = HostName };
+        var guestDoor = new UI.Menu.NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[1]);
+        Ends? host = null;
+        Ends? guest = null;
+        try
+        {
+            hostDoor.OpenDogfightHost(1);
+            guestDoor.OpenJoin();
+            StepDoors(SettleSteps, hostDoor, guestDoor);
+            var hostLaunch = hostDoor.BuildLaunch();
+            if (!guestDoor.IsDogfightGuest || hostLaunch == null)
+            {
+                ctx.Check(false, $"[named host] the guest joins the host's Dogfight ({guestDoor.Stage})");
+                return;
+            }
+
+            var planes = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(UI.Menu.CoopGuestPick.StarterAirframe) };
+            var (roster, _) = Launcher.VersusLaunchField(hostLaunch.Transport, planes, new LoadoutChoice?[] { null }, StockLoadouts.Load());
+            string named = SeatRosterMessage.Carried(HostName).Trim();
+            ctx.Check(roster[0].Callsign == named && named.Length > 0 && named != HostName && HostName.StartsWith(named, StringComparison.Ordinal),
+                $"[named host] the host's seat takes its advert's name cut to the roster's width ({roster[0].Callsign})");
+            host = Ends.Open(ctx, spec, hostLaunch.Transport, isHost: true, HostSeed, roster,
+                UI.Hangar.PlanePickerRoster.StockAirframes);
+            for (int i = 0; i < GrantSteps && !guestDoor.DogfightLaunchDue; i++)
+            {
+                host.Session._PhysicsProcess(GameClock.FixedDt);
+                StepDoors(1, hostDoor, guestDoor);
+            }
+
+            var guestLaunch = guestDoor.DogfightLaunchDue ? guestDoor.BuildLaunch() : null;
+            if (guestLaunch == null)
+            {
+                ctx.Check(false, $"[named host] the guest's door hears the host's opener");
+                return;
+            }
+
+            guest = Ends.Open(ctx, spec, guestLaunch.Transport, isHost: false, HostSeed + 1, null,
+                UI.Hangar.PlanePickerRoster.StockAirframes);
+            ctx.Check(host.Built && guest.Built, $"[named host] both sessions build ({host.Built}, {guest.Built})");
+            if (!host.Built || !guest.Built)
+            {
+                return;
+            }
+
+            var peers = new[] { host.Session, guest.Session };
+            var (h, g) = (host, guest);
+            Action<int> fly = steps => FlyTogether(steps, h, g, hostDoor, guestDoor);
+            fly(SettleSteps);
+            ctx.Check(guest.Session.NetSeats.Count == 2 && guest.Session.NetSeats[0].Callsign == named,
+                $"[named host] the guest's copy of the roster names the host's seat the same ({string.Join(", ", guest.Session.NetSeats.Select(s => s.Callsign))})");
+            foreach (var rig in peers.SelectMany(p => p.SeatRigs))
+            {
+                if (rig.Controller is { } pilot)
+                {
+                    pilot.AutoRespawnAfter = QuickRespawn;
+                }
+            }
+
+            string guestName = roster[1].Callsign;
+            KillLines(ctx, peers, "[named host] the host kills the guest", guestName, $"Destroyed by {named}",
+                () => guest.Session.SeatRigs[1].Controller!.DebugForceCrash(guest.Session.SeatRigs[0].Controller!.PlayerIndex), fly);
+            KillLines(ctx, peers, "[named host] the guest kills the host", named, $"Destroyed by {guestName}",
+                () => host.Session.SeatRigs[0].Controller!.DebugForceCrash(host.Session.SeatRigs[1].Controller!.PlayerIndex), fly);
+        }
+        finally
+        {
+            guest?.Close();
+            host?.Close();
+            guestDoor.Discard();
+            hostDoor.Discard();
+        }
     }
 
     // One lobby Dogfight, launched through both doors, whose host then goes: its link cut, or its
