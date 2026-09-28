@@ -130,7 +130,7 @@ internal static class AirframeSwapSuites
         + "swap built; plus the two things 967 does past that rebuild, on the same data: the "
         + "capture definition's own aircraft hidden with what is left of its hull carried onto "
         + "the player's, and the outgoing aeroplane handed to wingman_4 -- authored "
-        + "deactivated, flying the player's own airframe in this mission and its own def's "
+        + "deactivated, flying the player's own airframe on its w<plane> def in this mission and its own def's "
         + "everywhere else, revealed 100 m off the old nose at -45 degrees on the player's own "
         + "heading with the sums measured off the hull it was given")]
     internal static void AirframeSwap(TestContext ctx)
@@ -1072,6 +1072,16 @@ internal static class AirframeSwapSuites
             $"and in this mission it flies the player's own '{StartPlane}', which is the aeroplane it is about to be given");
         ctx.Check(!string.Equals(own.PlaneNode, StartPlane, StringComparison.OrdinalIgnoreCase),
             $"rather than the '{own.Def}' def's own airframe it flies everywhere else");
+
+        // The original's name-keyed arm names the player airframe's w<plane> def. The shipped twin
+        // authors no pools, so the hand-over's cap is its base def's pair.
+        string twin = "w" + defs.BaseDefForPlayerNode(StartPlane);
+        report.AppendLine($"{AirframeHandover.WingmanName}: own AI def '{own.AiDef ?? "-"}', handed over '{handed.AiDef ?? "-"}'");
+        ctx.Check(string.Equals(handed.AiDef, twin, StringComparison.OrdinalIgnoreCase),
+            $"handed over, it flies the '{StartPlane}' twin '{twin}', as the original's wingman_4 arm names it");
+        ctx.Check(string.Equals(own.AiDef, own.Def, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(handed.Mode, own.Mode, StringComparison.OrdinalIgnoreCase),
+            $"and its own '{own.Def}' def keeps deciding the mode ('{handed.Mode}')");
     }
 
     private static void Drive(TestContext ctx, TestWorld world, string chapter, string folder,
@@ -1141,8 +1151,10 @@ internal static class AirframeSwapSuites
             var captured = StageAi(roster, call.Root, wanted.PlaneNode,
                 before.WorldPosition + (before.NoseDirection * 300f), inert: false,
                 team: capturedTeam, shippedSkins: true);
+            // On the w<plane> twin the plan gives it, so the hand-over's cap is that def's pair.
             var wingman = StageAi(roster, AirframeHandover.WingmanName, StartPlane,
-                before.WorldPosition + new Vector3(0f, 0f, 5000f), inert: true);
+                before.WorldPosition + new Vector3(0f, 0f, 5000f), inert: true,
+                aiDef: "w" + VehicleDefs.Load(ctx.ZrdrPath).BaseDefForPlayerNode(StartPlane));
             Damage(wingman, 0.10f);
             leg(new Staged(roster, rig, before, cutscene, captured, wingman, pool));
         }
@@ -1316,11 +1328,12 @@ internal static class AirframeSwapSuites
     // hand-over having run at all (INSTR-10).
     private static FlightController StageAi(FlightRoster roster, string name, string planeNode,
         Vector3 at, bool inert, PaintScheme? scheme = null, int team = AimAssist.PlayerTeam,
-        bool shippedSkins = false)
+        bool shippedSkins = false, string? aiDef = null)
     {
         var aim = at - Vector3.Forward;
         return roster.SpawnAi(new AiSpawn(planeNode, at, aim, AiPilot.HoldingCourse(at, aim),
-            Scheme: scheme, Team: team, Inert: inert, ShippedSkins: shippedSkins, NodeName: name));
+            Scheme: scheme, Team: team, Inert: inert, ShippedSkins: shippedSkins, NodeName: name,
+            AiDef: aiDef));
     }
 
     // Whether two rigs' painted output actually matches, read off the painter rather than the

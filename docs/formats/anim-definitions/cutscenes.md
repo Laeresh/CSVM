@@ -969,7 +969,8 @@ Each case does the same five things, in this order.
    `wingman_4` (`0x00627b34`) and then the chapter/mission pair against `c3`/`m05` and `c4`/`m04`
    (`0x00627b40`–`0x00627b4c`), holding nothing everywhere else. Only inside that arm does it give
    the record **the player's own aircraft type and livery** (`DAT_0071daec`, with airframe id 0xb
-   substituted by 5, and the paint pair at `DAT_0071daf0`/`DAT_0071daf4`). Both cases then give it
+   substituted by 5, named as its `w<plane>` def through `FUN_00426d60` at `0x004750b4`, and the
+   paint pair at `DAT_0071daf0`/`DAT_0071daf4`). Both cases then give it
    the section sums measured in step 1 (`+0x2c8` armour, `+0x2d0` structure) and reveal it
    (`FUN_004b0f40(0)`, which clears the hidden bit `+0x945` and the three cutscene flags and
    reactivates the scene node). **Only 967 places it**: 100 m along the bearing `yaw − 45°` with its
@@ -1004,12 +1005,15 @@ three codes. Three divergences, each deliberate:
 - **The airframe and livery are decided at the roster spawn, not at the swap.** The original writes
   them at mission start and so does CSVM (`CampaignRosterPlan.Build`'s `handover` argument), which
   is why `wingman_4` is a Devastator in `player_fortune` paint everywhere else and the player's own
-  aeroplane in these two missions.
+  aeroplane, flying that airframe's `w<plane>` def, in these two missions.
 - **The handed-over sums are capped at the receiving aircraft's own maxima.** The original needs no
   cap: its `wingman_4` flies the player's airframe, so the sums cannot exceed its pools. CSVM reads
   one airframe's pools as a zone sum on a human rig and as the AI def's authored pair on an AI one
   (`docs/org/vehicleDamage.md`), so an undamaged hand-over lands at the receiver's full pools rather
-  than at the player's larger number.
+  than at the player's larger number. The receiver's pair is its `w<plane>` def's, which authors no
+  `armor` or `health` and so inherits its base def's (`wfury` 72/72 from `fury`), and the Devastator's
+  `wingman` its own 100/100. The def's `wingman` class also exempts the pair from the ±5 % spawn
+  jitter a `jet` takes, so the cap is exactly the authored pair.
 - **967's rebuild carries the captured aircraft's own `PaintScheme` onto the player's new hull**
   (`BL-543`, `BL-554`). This is NOT in the executable: case 967 (`FUN_0047e080`, `0x3c7`) rebuilds
   through `FUN_0047fd50(s_pbalmoral, s_player_balmoral)`, which reads no paint field off the
