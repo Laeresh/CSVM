@@ -102,7 +102,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave F, docs and cleanup
 
-18. ☐ Hangar rule corrected in the docs, the architecture.md pointer paragraph, the Menu test's Launcher fact deleted, CONTEXT.md **Family**
+18. ☑ Hangar rule corrected in the docs, the architecture.md pointer paragraph, the Menu test's Launcher fact deleted, CONTEXT.md **Family**
 
 ### Wave G, merge
 
@@ -385,7 +385,20 @@ OrbitCamera in it.
 
 # Wave F, docs and cleanup
 
-## F18 ☐ Hangar rule corrected, the pointer paragraph, the Launcher fact deleted, CONTEXT.md Family
+## F18 ☑ Hangar rule corrected, the pointer paragraph, the Launcher fact deleted, CONTEXT.md Family
+
+**Landed.** A **The family order** paragraph above the module index states the ranks, the one
+standing exception and the pair list, and names `FamilyOrderTests.cs` as the authority. The Flight
+and UI rule sentences (index, `Flight.md`, `UI.md`) point at it, and UI.Hangar names only
+UI.Boards and the shared UI.Menu. `menu-presentations.md` keeps the one metadata scan and credits
+the family order with keeping UI off the launcher; the Launcher fact is deleted. `CONTEXT.md`
+gains **Family** under a new "Code layout" section. The seat-input wording in the UI intro, the
+index group lines and the `PROJECT_CONTEXT.md` map follows D15's move.
+
+**Verified.** `FamilyOrderTests` and `MenuNamespaceDependencyTests` 8/8; `CheckDocEntries.ps1`,
+comment caps and encoding clean; full `.\RunTests.ps1`, see the commit.
+
+**Original approach (kept for reference).**
 
 **Goal.** The docs state the order the test enforces, and no second test duplicates it.
 

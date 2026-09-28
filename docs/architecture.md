@@ -20,6 +20,14 @@ and landed-work stories go in the commit message.
   file precisely so they cannot drift apart; `PROJECT_CONTEXT.md` carries only the namespace-level
   map and must not grow a per-module list again.
 
+**The family order.** The top-level namespaces are ranked families, lowest first: `Utils`,
+`Extraction`, `Mech3`, `Video`, `Bindings`, `Sticks`, `Effects`, `Net`, `UI.Boards`, `Flight`,
+`Spec`, `Session`, `Tooling`, `UI`, `Launch`, `Testing`. A type names only types in its own family
+or a lower one; `Tooling` naming `Testing` is the one standing exception, and the remaining
+inversions are listed pair by pair. The sub-namespace rules the index states under `Flight` and
+`UI` are the same test's within-family rows. `CSVM.Tests/FamilyOrderTests.cs` holds the table,
+the rows and the pair list, and is the authority where this paragraph and it differ.
+
 ## Module index
 
 ### `src/Mech3/`, extraction readers, world and scene building
@@ -118,7 +126,8 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 The plane as a flying, shooting, damageable thing, plus its HUD and stunt mode. Reads plane stats
 from the extracted zrdr; owns the arcade physics and everything drawn over the pilot's view. Eight
 sub-namespaces, one folder each. `Airframe`, `Weapons` and `Ai` name each other; `Camera` names
-only `Airframe`, and nothing else in `Flight` names `Hangar`.
+only `Airframe`, and nothing else in `Flight` names `Hangar` (the family order's within-family
+rows).
 
 **`Flight.Airframe`**, the flying node, its physics, collision, damage and the weapon-effect registries it carries.
 
@@ -304,8 +313,8 @@ only `Airframe`, and nothing else in `Flight` names `Hangar`.
 
 The launchscreen and splitscreen rig, the in-flight pause and results boards, plus the interactive debug labs. Every lab has a scripted
 `--debug-*` twin so a finding can be reproduced headlessly, see `docs/cli.md`. Six sub-namespaces, one folder each, beside
-the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` are built from `Boards`; `Hangar` names nothing
-else in `UI`, and nothing names `Labs`.
+the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` are built from `Boards`; `Hangar` names only
+`Boards` and the shared `UI.Menu`, and nothing names `Labs` (the family order's within-family rows).
 
 **`UI.Boards`**, the widget library every screen draws with: the composed board and its view, fit, palette and faces, the board menu and the seat input it polls, the list and slider widgets, the splitscreen rig and the canvas-layer order.
 
@@ -391,7 +400,7 @@ else in `UI`, and nothing names `Labs`.
 - `src/UI/Screens/ExportSet.cs`, the node lab's Ctrl+click export set: cyan outlines, the breadcrumb's count, and one combined glTF at world transforms.
 - `src/UI/Screens/PauseScreens.cs`, what the Original presentation's pause screen is made of: the mission's chart at its crop, the parchment, the memento and the strips, the authored four and the remake's photo strip.
 
-**`UI.Hangar`**, the Build Custom Plane pages and the plane-picking tables they share with the campaign pages; names nothing else in `UI`.
+**`UI.Hangar`**, the Build Custom Plane pages and the plane-picking tables they share with the campaign pages; names only `UI.Boards` and the shared `UI.Menu`.
 
 - `src/UI/Hangar/PlanePickerRoster.cs`, the roster every human plane picker draws: the stock airframes then the store's saved customs. Engine-free.
 - `src/UI/Hangar/PlaneDiagrams.cs`, the original's plan and head-on diagram sheets sliced per airframe, shared by ammo selection, the flight check and the hangar.
