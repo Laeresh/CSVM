@@ -44,6 +44,11 @@ public sealed class GameClock
     /// clear because the movie itself is authored animation.</summary>
     public bool AuthoredAnimationHeld;
 
+    /// <summary>A network flight waiting for every machine to load. No step, frame time or physics
+    /// dt passes, so nothing here runs ahead of the others. ⚠ Keep it out of
+    /// <see cref="ParentDriven"/>. The session steps the wire itself while this is set.</summary>
+    public bool StartHeld;
+
     // A hitch must not unwind as a burst of catch-up steps: a quarter second (15 steps) keeps
     // slow frames honest without turning a debugger breakpoint stall into fast-forward.
     private const float MaxAccum = 0.25f;
@@ -101,7 +106,12 @@ public sealed class GameClock
     /// before any consumer reads the clock.</summary>
     public void BeginFrame(double wallDelta)
     {
-        if (Halted)
+        if (StartHeld)
+        {
+            Dt = FixedDt;
+            Steps = 0;
+        }
+        else if (Halted)
         {
             Dt = FixedDt;
             Steps = _stepPending ? 1 : 0;
@@ -139,5 +149,5 @@ public sealed class GameClock
     /// parent-driven modes and <see cref="SimHeld"/> both need the movie's separate frame path,
     /// while <see cref="AuthoredAnimationHeld"/> keeps both paths quiet.</summary>
     public float PhysicsDt(double godotPhysicsDelta) =>
-        ParentDriven || SimHeld || AuthoredAnimationHeld ? 0f : (float)godotPhysicsDelta;
+        ParentDriven || SimHeld || AuthoredAnimationHeld || StartHeld ? 0f : (float)godotPhysicsDelta;
 }

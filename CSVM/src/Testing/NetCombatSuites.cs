@@ -169,6 +169,9 @@ internal static class NetCombatSuites
                       && host.Session.NetLink!.Peers.Count == 2,
                 $"the two guests hold one peer each and the host holds both ({first.Session.NetLink!.Peers.Count}, {second.Session.NetLink!.Peers.Count}, {host.Session.NetLink!.Peers.Count})");
 
+            // Past the start barrier first. A guest's loaded word is the host's own to take, and is
+            // never forwarded, so it belongs outside the relay count.
+            NetStartSuites.UntilStarted(host.Session, first.Session, second.Session);
             Relay(ctx, host.Session, first.Session, second.Session);
         }
         finally
@@ -400,6 +403,55 @@ internal static class NetCombatSuites
 
             ambient.Restore();
         }
+    }
+
+    // One Dogfight launch, plus the spawn table both ends walk. Every peer is launched with the
+    // same arguments unless a suite hands one its own. What otherwise differs between them is the
+    // roster and the seed, which the join sets.
+    internal static SessionSpec MatchSpec(TestContext ctx, out IReadOnlyList<SpawnPoint> table,
+        params string[] extraArgs)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} textures");
+        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
+        ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{MpMission} zrdr");
+        var args = new List<string>
+        {
+            "--vs", $"--chapter={ctx.Chapter}", $"--mission={MpMission}", "--players=1", "--mute",
+            "--no-pads",
+        };
+        args.AddRange(extraArgs);
+        var spec = SessionSpec.Parse(args.ToArray());
+        var loaded = new SpawnPicker(spec).LoadSpawnList(missionZrdr, spec.Scenario);
+        if (loaded is not { Count: >= 2 })
+        {
+            throw new SuiteSkippedException($"{ctx.Chapter}/{MpMission} authors no usable net.zrd table");
+        }
+
+        table = loaded;
+        return spec;
+    }
+
+    // The field, seat 0 on the host and one seat per guest after it.
+    internal static NetSeat[] Roster(int seats)
+    {
+        var roster = new NetSeat[seats];
+        for (int i = 0; i < seats; i++)
+        {
+            roster[i] = new NetSeat
+            {
+                PeerId = i,
+                SeatIndex = i,
+                IsLocal = i == 0,
+                Callsign = i == 0 ? "host" : $"guest{i}",
+                PlaneNode = Airframes[i % Airframes.Length],
+            };
+        }
+
+        NetSeats.Validate(roster);
+        return roster;
     }
 
     // One death on clean stacks: each machine's own pane then reads exactly the decoded lines,
@@ -1150,55 +1202,6 @@ internal static class NetCombatSuites
                 session._PhysicsProcess(GameClock.FixedDt);
             }
         }
-    }
-
-    // One Dogfight launch, plus the spawn table both ends walk. Every peer is launched with the
-    // same arguments unless a suite hands one its own. What otherwise differs between them is the
-    // roster and the seed, which the join sets.
-    private static SessionSpec MatchSpec(TestContext ctx, out IReadOnlyList<SpawnPoint> table,
-        params string[] extraArgs)
-    {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
-        ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{MpMission} zrdr");
-        var args = new List<string>
-        {
-            "--vs", $"--chapter={ctx.Chapter}", $"--mission={MpMission}", "--players=1", "--mute",
-            "--no-pads",
-        };
-        args.AddRange(extraArgs);
-        var spec = SessionSpec.Parse(args.ToArray());
-        var loaded = new SpawnPicker(spec).LoadSpawnList(missionZrdr, spec.Scenario);
-        if (loaded is not { Count: >= 2 })
-        {
-            throw new SuiteSkippedException($"{ctx.Chapter}/{MpMission} authors no usable net.zrd table");
-        }
-
-        table = loaded;
-        return spec;
-    }
-
-    // The field, seat 0 on the host and one seat per guest after it.
-    private static NetSeat[] Roster(int seats)
-    {
-        var roster = new NetSeat[seats];
-        for (int i = 0; i < seats; i++)
-        {
-            roster[i] = new NetSeat
-            {
-                PeerId = i,
-                SeatIndex = i,
-                IsLocal = i == 0,
-                Callsign = i == 0 ? "host" : $"guest{i}",
-                PlaneNode = Airframes[i % Airframes.Length],
-            };
-        }
-
-        NetSeats.Validate(roster);
-        return roster;
     }
 
     // The process-global state several sessions in one process share. Saved before the first is

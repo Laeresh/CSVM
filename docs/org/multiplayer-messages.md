@@ -264,7 +264,7 @@ score, `0x17` match state, `0x22` hit and `0x27` seat roster. Damage, spawn, the
 director transition, the join handshake and a seat's ask to be spawned again have no
 counterpart, so they are minted at `0x40`, `0x41`, `0x42`, `0x43` and `0x44`, above the ceiling
 above. The host-owned world's four (AI state, AI fire, a guest's hit claim on an AI, and a world
-event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, and a match's death notice at `0x5C`. The handshake carries the master seed, the host's clock and the seat the joining peer was
+event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, the start barrier's word at `0x5B`, and a match's death notice at `0x5C`. The handshake carries the master seed, the host's clock and the seat the joining peer was
 given; the original needs none of the three, because it draws from no shared stream and hands
 out no seat. The ask carries a seat and nothing else: the original's client takes its own
 respawn, while here the host owns every placement and answers the ask with a spawn event.
@@ -553,6 +553,25 @@ can start a film after the host's skip of it arrives.
 
 The skip notice (`SplitScreen.NoteSkip`) is the pressing machine's own: it names the local skipper
 on the machine where the input landed, and no machine names a skipper from another.
+
+## The start barrier
+
+Every machine holds its flight on its load screen until every machine flying a seat has built its
+world, and then all of them start (`Net/NetStartGate.cs`). The original has no counterpart. The
+word is a session message: it is sent only once the sender's handlers stand, so it never waits in
+the lobby.
+
+| Id | Message | Class | Carries |
+|---|---|---|---|
+| `0x5B` | Start gate | reliable, guest to host (loaded) and host to all (start) | word at 4 (loaded 1, start 2), three reserved bytes (8 bytes) |
+
+A guest sends loaded as the last act of its build, before its first simulated step. The host
+waits on every linked machine that flies a seat, and broadcasts start when the last one reports,
+drops, or does not answer within the timeout. A loaded that reaches a host already started is
+answered with a start to that machine alone. While a machine holds, its clock takes no step: the
+mission clock, the AI, the director and the world events wait with the aeroplanes, and only the
+link and the clock ping are stepped. The host-owned world therefore sends nothing to a guest
+before that guest's world can apply it, unless the wait gave up on that guest.
 
 ## The lobby
 

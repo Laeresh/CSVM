@@ -106,6 +106,9 @@ internal static class NetWorldSuites
                 return;
             }
 
+            // Past the start barrier first: over this link's latency, neither world runs until the
+            // loaded word and the start word have both crossed.
+            NetStartSuites.UntilStarted(host.Session, guest.Session);
             Lockstep(1, host.Session, guest.Session);
             var mine = host.Session.NetWorld!;
             var theirs = guest.Session.NetWorld!;

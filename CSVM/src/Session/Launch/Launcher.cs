@@ -307,6 +307,9 @@ public partial class Launcher : Node3D
     // load is carried out one step a frame with the screen still up. That is what makes the screen
     // a real yield of several frames. -1 means nothing is owed.
     private int _loadStepsRun = -1;
+
+    // Frames the load screen stayed up after the owed steps, for a network start still held.
+    private int _startHeldFrames;
     // The cover that bridges the load screen and the session's first real frame. It is raised with
     // the screen, or with the build on a CLI launch. It stays opaque until the session says that
     // frame is ready, then fades up from dark. Null under --det and once it has finished.
@@ -1482,9 +1485,25 @@ public partial class Launcher : Node3D
                 return;
             }
 
-            Log.Info("ui", $"load screen: {_loadStepsRun} owed build step(s) run behind the screen");
+            // A network flight waiting for its other machines keeps the screen up, since its world
+            // stands still until they have all loaded.
+            if (_session is { StartHeld: true })
+            {
+                _startHeldFrames++;
+                return;
+            }
+
+            Log.Info("ui", $"load screen: {_loadStepsRun} owed build step(s) run behind the screen, {_startHeldFrames} frame(s) held for the other machines");
             _loadStepsRun = -1;
             HideLoadScreen();
+            if (_startHeldFrames > 0)
+            {
+                // The cover's own hold is capped from when it went up, so a long wait would spend
+                // it behind the screen. A fresh one covers the frame the world first runs on.
+                RaiseStartCover();
+            }
+
+            _startHeldFrames = 0;
             return;
         }
 
@@ -1494,12 +1513,13 @@ public partial class Launcher : Node3D
         }
         _launchFramesWaited = -1;
         bool built = TryLaunchSession();
-        // The screen stays up while the build's own owed steps run, and comes down on the frame
-        // they finish. A load screen left up past that would draw over the first frame of the
+        // The screen stays up while the build's own owed steps run and a network start is held,
+        // and comes down on the frame both end. A load screen left up past that would draw over the first frame of the
         // world, and over a --screenshot capture.
-        if (built && _session is { } loaded && loaded.StepOwedLoad())
+        if (built && _session is { } loaded && loaded.StepOwedLoad() is var owed && (owed || loaded.StartHeld))
         {
-            _loadStepsRun = 1;
+            _loadStepsRun = owed ? 1 : 0;
+            _startHeldFrames = 0;
             return;
         }
         HideLoadScreen();
@@ -1559,7 +1579,7 @@ public partial class Launcher : Node3D
     {
         DropStartCover();
         _startFade = UI.Screens.SessionStartFade.Build(
-            _spec.Det, () => _session is { InSession: true, FirstFrameReady: true });
+            _spec.Det, () => _session is { InSession: true, FirstFrameReady: true, StartHeld: false });
         if (_startFade != null)
         {
             AddChild(_startFade);

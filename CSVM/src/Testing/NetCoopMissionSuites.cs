@@ -328,6 +328,8 @@ internal static class NetCoopMissionSuites
         // The host steps first, so its new session's first sends are on the wire while the guest's
         // old session is still bound. None of them may land in that session.
         int steps = 0;
+        var hostPlane = next.Session.SeatRigs[0].Controller;
+        var hostFrom = hostPlane?.GlobalPosition ?? Vector3.Zero;
         for (; steps < OpenerSteps && !Launcher.CoopGuestFlightOver(guestDoor); steps++)
         {
             next.Session._PhysicsProcess(GameClock.FixedDt);
@@ -338,6 +340,10 @@ internal static class NetCoopMissionSuites
 
         ctx.Check(Launcher.CoopGuestFlightOver(guestDoor) && guestDoor.Stage == NetDoorStage.Joined,
             $"the host's new round ends the guest's flight after {steps} step(s), its link still up ({guestDoor.Stage})");
+        // The restarted mission waits for the guest's new world, so the host flies nowhere meanwhile.
+        float held = hostPlane == null ? -1f : hostPlane.GlobalPosition.DistanceTo(hostFrom);
+        ctx.Check(next.Session.StartHeld && held is >= 0f and < 0.01f,
+            $"the host's restarted mission holds its start while the guest's new world is unbuilt ({next.Session.StartHeld}, {held:0.00} m)");
         guestDoor.LeaveCoopMission();
         guestEnd.Close();
         guestDoor.Reclaim();
@@ -350,6 +356,9 @@ internal static class NetCoopMissionSuites
         }
 
         Fly(SettleSteps, new[] { next, again }, new[] { hostDoor, guestDoor });
+        ctx.Check(!next.Session.StartHeld && !again.Session.StartHeld
+                  && next.Session.StartGate?.Release == NetStartRelease.Everyone,
+            $"and both machines start once it has loaded ({next.Session.StartGate?.Release}, {again.Session.StartGate?.Release})");
         ctx.Check(next.Session.NetSeats.Count == 2 && again.Session.NetSeats.Count == 2
                   && next.Session.SeatRigs[1].Controller is { Inert: false },
             $"the guest's seat stands in the restarted field on both machines and flies on the host ({next.Session.NetSeats.Count}, {again.Session.NetSeats.Count} seat(s))");

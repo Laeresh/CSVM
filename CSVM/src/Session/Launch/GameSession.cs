@@ -215,6 +215,9 @@ public partial class GameSession : Node3D
     // from the handshake, whose seed is already in _masterSeed by then.
     private Net.NetClockSlew? _netClock;
     private Net.NetClockPing? _netPing;
+    // The start barrier, null outside a network match. While it holds, the clock is start-held
+    // and only the wire is stepped.
+    private Net.NetStartGate? _startGate;
     // When the host repeats the match state, null on a guest and outside a match. A guest never
     // holds one, which is what makes the host the only writer of the clock.
     private Net.MatchStateCadence? _matchCadence;
@@ -531,6 +534,14 @@ public partial class GameSession : Node3D
     /// suite reads what it asked or answered.</summary>
     internal Net.NetClockPing? NetPing => _netPing;
 
+    /// <summary>This session's start barrier, null outside a network match. A suite reads why and
+    /// after how long it opened.</summary>
+    internal Net.NetStartGate? StartGate => _startGate;
+
+    /// <summary>Whether the flight is built but waits for every machine to load. The launcher keeps
+    /// its load screen up for as long as this holds.</summary>
+    internal bool StartHeld => _clock is { StartHeld: true };
+
     /// <summary>What is holding this session's world, null before the build. A results board's
     /// wake raises <see cref="PauseState.Ended"/> here, so this is where a suite reads whether the
     /// wrap-up board is holding a machine.</summary>
@@ -605,6 +616,7 @@ public partial class GameSession : Node3D
         }
 
         WireNetClock();
+        WireStartGate();
         // Published as the ambient Current so WorldSession, which the test harness also drives with
         // no session around it, can record its phases blind.
         _startup = new StartupProfile(_spec.ModeName, Time.GetTicksMsec())
@@ -876,6 +888,7 @@ public partial class GameSession : Node3D
         _simulation = new SessionSimulation(new SessionSimulationRuntime(this));
         _startup?.EndBuild();
         InSession = true;
+        HoldStart();
         LoadProgress.Report(LoadStep.Finished);
         return true;
     }
@@ -919,7 +932,7 @@ public partial class GameSession : Node3D
         // A cutscene skips on any input, as the original's state core does; a stick's is polled in
         // PollStickSkip. ⚠ Escape is exempt: it is the way out of the session. ⚠ Pads count only
         // where this session reads pads at all, since a pad reports button 0 pressed on arrival.
-        if (_cutscene is { Playing: true }
+        if (_cutscene is { Playing: true } && !StartHeld
             && (@event is InputEventKey { Pressed: true, Echo: false, Keycode: not Key.Escape }
                 || (!_spec.PadsDisabled && @event is InputEventJoypadButton { Pressed: true })))
         {
@@ -1056,14 +1069,24 @@ public partial class GameSession : Node3D
     /// </summary>
     public override void _PhysicsProcess(double delta)
     {
-        if (delta <= 0.0 || _clock is not { ParentDriven: false })
+        if (delta <= 0.0 || _clock is not { } clock)
+            return;
+        // Ahead of the mode check: a held start steps the wire from here in every clock mode. The
+        // parent-driven loop runs no steps while held.
+        bool wireStepped = clock.StartHeld;
+        if (wireStepped && !StepStartHold(clock, delta))
+            return;
+        if (clock.ParentDriven)
             return;
         // Before the step, never after: everything below reads world poses, and a follower or a
         // held pose seeded from a drawn one would feed the interpolation back into the simulation.
         RenderPoses.Restore();
         // Before the step, so everything that arrived is already applied when the phases run.
-        _net?.Step(delta);
-        _netPing?.Step();
+        if (!wireStepped)
+        {
+            _net?.Step(delta);
+            _netPing?.Step();
+        }
         _simulation?.Step((float)delta);
     }
 
@@ -3920,7 +3943,8 @@ public partial class GameSession : Node3D
     // of the controller's own tick, which is where a declined press's held state is re-read.
     private void PollStickSkip()
     {
-        if (_stickSkip is not { } stick || _cutscene == null)
+        // No skip while the start is held: the film has not begun on the machines still loading.
+        if (_stickSkip is not { } stick || _cutscene == null || StartHeld)
         {
             return;
         }
@@ -4516,6 +4540,96 @@ public partial class GameSession : Node3D
         {
             _netPing = Net.NetClockPing.Follow(net, slew, () => _clock?.Time ?? 0.0);
         }
+    }
+
+    // The start barrier, armed before the build so no word is dropped as unknown. A host waits on
+    // every machine flying a seat that is still linked; a guest waits on its host.
+    private void WireStartGate()
+    {
+        if (_net is not { } net || _netSeats.Count == 0)
+        {
+            return;
+        }
+
+        var linked = net.Peers;
+        _startGate = net.IsHost
+            ? Net.NetStartGate.Host(_netSeats.Where(s => !s.IsLocal && linked.Contains(s.PeerId))
+                .Select(s => s.PeerId).Distinct())
+            : Net.NetStartGate.Guest(net.HostPeer);
+        net.On<Net.StartGateMessage>(TakeStartWord);
+        net.PeerLeft += peer => _startGate?.TakeLeft(peer);
+    }
+
+    // A host answers a guest that loads after the start at once, so a late machine is never held.
+    private void TakeStartWord(int peer, Net.StartGateMessage word)
+    {
+        if (_startGate is not { } gate || _net is not { } net)
+        {
+            return;
+        }
+
+        if (net.IsHost && word.Word == Net.NetStartWord.Loaded)
+        {
+            if (gate.Open)
+            {
+                net.Send(peer, new Net.StartGateMessage(Net.NetStartWord.Start), Net.NetChannels.Events);
+            }
+            else
+            {
+                gate.TakeLoaded(peer);
+            }
+        }
+        else if (!net.IsHost && word.Word == Net.NetStartWord.Start)
+        {
+            gate.TakeStart();
+        }
+    }
+
+    // The last act of the build. Holding here, rather than in the launcher, freezes the mission
+    // clock, the AI and the world events along with the aeroplanes.
+    private void HoldStart()
+    {
+        if (_startGate is not { } gate || _clock is not { } clock || _net is not { } net)
+        {
+            return;
+        }
+
+        clock.StartHeld = !gate.Open;
+        if (!net.IsHost)
+        {
+            net.Send(net.HostPeer, new Net.StartGateMessage(Net.NetStartWord.Loaded), Net.NetChannels.Events);
+        }
+
+        Log.Info("core", $"net start: {(gate.Open ? $"nobody to wait for ({gate.Release})" : net.IsHost ? $"holding for {gate.Waiting.Count} machine(s) to load" : "loaded, holding for the host's start")}");
+    }
+
+    // One physics tick of a held start: the wire only. True when the barrier opened on this tick,
+    // so the caller runs the tick's simulation step too.
+    private bool StepStartHold(GameClock clock, double delta)
+    {
+        RenderPoses.Restore();
+        _net?.Step(delta);
+        _netPing?.Step();
+        if (_startGate is not { } gate)
+        {
+            clock.StartHeld = false;
+            return true;
+        }
+
+        gate.Step(delta);
+        if (!gate.Open)
+        {
+            return false;
+        }
+
+        clock.StartHeld = false;
+        if (_net is { IsHost: true } net)
+        {
+            net.Broadcast(new Net.StartGateMessage(Net.NetStartWord.Start), Net.NetChannels.Events);
+        }
+
+        Log.Info("core", $"net start: released ({gate.Release}) after {gate.WaitedSeconds:0.00} s");
+        return true;
     }
 
     // The campaign's objectives over the wire, once the graph is armed. The host's graph runs the

@@ -932,6 +932,28 @@ public class NetMessagesTests
     }
 
     [Fact]
+    public void AStartGateWordRoundTripsInEightBytes()
+    {
+        Assert.Equal(8, StartGateMessage.Size);
+        Span<byte> buffer = stackalloc byte[StartGateMessage.Size];
+        foreach (var word in new[] { NetStartWord.Loaded, NetStartWord.Start })
+        {
+            var sent = new StartGateMessage(word);
+            Assert.Equal(StartGateMessage.Size, sent.Write(buffer));
+            Assert.True(StartGateMessage.TryRead(buffer, out var got));
+            Assert.Equal(sent, got);
+        }
+
+        Assert.Equal(0x5B, (int)NetMessageType.StartGate);
+        Assert.Equal(NetReliability.Reliable, NetMessage.ReliabilityOf(NetMessageType.StartGate));
+
+        // ABLE-TO-FAIL CONTROL: a film word of the same width is not a start word.
+        Span<byte> film = stackalloc byte[CoopFilmMessage.Size];
+        new CoopFilmMessage(1, true, NetCoopFilm.Chapter, 2).Write(film);
+        Assert.False(StartGateMessage.TryRead(film, out _));
+    }
+
+    [Fact]
     public void ACoopWingmanRoundTripsTheAirframeAndItsFitInTwentyBytes()
     {
         Assert.Equal(20, CoopWingmanMessage.Size);

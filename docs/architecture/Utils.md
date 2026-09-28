@@ -24,8 +24,8 @@ when the device is not. Pinned by the `target-input` suite.
 The session's simulation clock: `BeginFrame(wallDelta)` sets `Steps` and `Dt`, and `GameSession`
 turns those into requests to `SessionSimulation`, so pausing, single-stepping and fixed-dt replay
 all enter through one ordered step. Modes are Realtime, FixedAccum (the interactive anim lab) and
-FixedStep (scripted runs and `--det`); `Halted`, `SimHeld` and `AuthoredAnimationHeld` are
-orthogonal holds, each carrying its own rule at its own field. Published as `GameClock.Current`,
+FixedStep (scripted runs and `--det`); `Halted`, `SimHeld`, `AuthoredAnimationHeld` and
+`StartHeld` (a network flight waiting for every machine to load) are orthogonal holds, each carrying its own rule at its own field. Published as `GameClock.Current`,
 session-scoped and nulled on teardown, where null reads as the raw frame delta. Read
 `RenderPoses.cs` for the render half of the same tick and `ShaderTime.cs` for the shaders' view.
 

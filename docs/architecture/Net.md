@@ -70,6 +70,9 @@ These are the design rules every module below is shaped by, and every multiplaye
   Offline play, splitscreen included, still freezes the clock. Only the host's sheet offers
   Restart: a co-op restart relaunches the mission on every machine through the door's next round,
   and a Dogfight restart reruns the match in place for everyone.
+- **Everyone starts together.** No machine's simulation runs until every machine flying a seat has
+  built its world: the mission clock, the AI and the world events wait with the aeroplanes, behind
+  the load screen (`NetStartGate`). A drop or a timeout releases the wait.
 
 ## src/Net/INetTransport.cs
 The seam itself, and the two types it is spoken in. `NetReliability` is the three classes a
@@ -320,6 +323,14 @@ The round trip a guest's `NetClockSlew` takes the link latency from, modelled on
 `Answer` makes the host reply at once with its clock. An answer overtaken by a newer one, or
 stamped later than the guest's clock reads, is dropped. `Asked` and `Answered` are the counters a
 suite reads, the host's `Answered` being the arrivals its relay leaves alone.
+
+## src/Net/NetStartGate.cs
+The start barrier of a network flight, and its `0x5B` word. A host's gate waits on every linked
+machine flying a seat; each guest sends `Loaded` at the end of its build, and the host opens when
+the last one arrives, when the last one still loading drops, or after `TimeoutSeconds` (TUNE, under
+the ENet keepalive ceiling). It then broadcasts `Start`, and answers a `Loaded` that arrives later
+with a `Start` of its own. A guest's gate opens on that word or on its host's link dropping. Pure
+state: `GameSession` holds `GameClock.StartHeld` while the gate is closed and steps only the wire.
 
 ## src/Net/NetHandshake.cs
 What a host hands a joining guest before either flies: the master seed and the host's session

@@ -128,6 +128,10 @@ public enum NetMessageType : ushort
     /// the same film and ends it with the host's.</summary>
     CoopFilm = 0x005A,
 
+    /// <summary>The start of a network flight: a guest's word that its world is built, or the
+    /// host's word that every machine starts.</summary>
+    StartGate = 0x005B,
+
     /// <summary>The host's word on a match death, sent to every guest so each posts the same kill
     /// lines.</summary>
     DeathNotice = 0x005C,
@@ -1319,6 +1323,7 @@ public static class NetMessage
         NetMessageType.CutsceneSkip => CutsceneSkipMessage.Reliability,
         NetMessageType.CoopWingman => CoopWingmanMessage.Reliability,
         NetMessageType.CoopFilm => CoopFilmMessage.Reliability,
+        NetMessageType.StartGate => StartGateMessage.Reliability,
         NetMessageType.DeathNotice => DeathNoticeMessage.Reliability,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "no such message type"),
     };
