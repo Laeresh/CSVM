@@ -536,7 +536,8 @@ constants rather than reading a layout.
   on a guest) is live while Outlaw Components is ticked and opens the outlaw list
   (`MP_LOBBY_OUTLAWED.PNG`) over the tab page, laid out as
   [`multiplayer-messages.md`](multiplayer-messages.md) decodes it; each tick reaches every guest at
-  once, and the list is read-only on a guest and on a Ready host. A completed match's Exit lands every pilot back in the same lobby on Game Scores,
+  once, the list is read-only on a guest and on a Ready host, and a toggle of Outlaw Components
+  empties it. A completed match's Exit lands every pilot back in the same lobby on Game Scores,
   which shows that match's name, points, kills and deaths best first (Hits % stays blank), with
   every Ready cleared for the next round. Game Scores is greyed until a match has landed. The own
   name is drawn red in the list and the chat, and the player list shows its first eleven rows with

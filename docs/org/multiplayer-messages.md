@@ -312,7 +312,9 @@ are what the check reads for a stock pick:
 on a guest. It is greyed (`mail(1)`) while Outlaw Components (`ACA`) is clear and live (`mail(2)`)
 while it is ticked, on both ends and whether or not the host is Ready: the options refresh 1015 sets
 it on the tick alone, and the Ready message 2012 leaves it alone. Every toggle of `ACA` calls uiData
-5044, whose case at `0x40eca8` calls `FUN_004107a0` and clears all 34 flags. A press on Select...
+5044, whose case at `0x40eca8` (entry 7 of the table at `0x40f98c`) loads `0x64e168`, calls
+`FUN_004107a0`, which zeroes all 34 flags, and returns 0. It reads no argument and tests nothing, so
+the list empties whether the tick was set or cleared. A press on Select...
 runs `MULTIPLAYER_OUTLAW.SCRIPT`, greys the four lobby tabs and pauses the mission page; on the host
 it first calls 5050 (`0x40ef3f`), where `FUN_004106c0` copies the list at `0x64e168` to `0x64df60`.
 
@@ -348,10 +350,11 @@ on a host that is not Ready, then closes. So a guest's View... opens the list re
 
 The remake builds this pane over the tab page (`OriginalOutlawList`). Each tick calls
 `DogfightLobby.SetOutlawed`, which starts a new round, clears every Ready and sends `0x5E` to every
-guest at once, so Accept only closes; Cancel restores the opening list the same way. The remake's
-list survives a toggle of Outlaw Components rather than clearing on 5044, and the model takes a flag
-while the tick is clear, which reaches every guest; the screen's Select... greys then, as the
-original's does.
+guest at once, so Accept only closes; Cancel restores the opening list the same way. A toggle of
+Outlaw Components either way empties the list as 5044 does: `DogfightLobby.SetOutlawComponents`
+writes the new tick and the empty list as one rules change, so one round starts, every Ready clears
+and one `0x5E` reaches each guest. The model still takes a flag while the tick is clear, which
+reaches every guest; the screen's Select... greys then, as the original's does.
 
 ## The lobby roster
 

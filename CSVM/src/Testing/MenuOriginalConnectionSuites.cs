@@ -217,7 +217,8 @@ internal static class MenuOriginalConnectionSuites
 
     [Suite("menu-original-outlaw-list",
         "The Multiplayer Lobby's outlaw list over the loopback: Select... is greyed on both ends while "
-        + "Outlaw Components is clear, and the host's list still reaches the guest then. Once ticked, "
+        + "Outlaw Components is clear, and the host's list still reaches the guest then. Toggling the "
+        + "tick either way empties the list on both ends in one round. Once ticked, "
         + "the host's Select... opens the list over the tab page with the tabs greyed, and one tick of "
         + "an airframe, a gun calibre, an ammunition, a rocket past the scroll, All Ammo, All Rockets and "
         + "nitro each reaches the guest with every Ready cleared. A rocket row under All Rockets stays "
@@ -269,6 +270,7 @@ internal static class MenuOriginalConnectionSuites
             }
 
             EditedWithTheTickClear(ctx, host, guest, ends);
+            ToggleEmptiesTheList(ctx, host, guest, ends);
             ClickRow(ctx, host, OriginalLobbyScreen.OutlawKey);
             Pump(ends.ToArray());
             ClickRow(ctx, host, OriginalLobbyScreen.SelectKey);
@@ -1018,6 +1020,36 @@ internal static class MenuOriginalConnectionSuites
             $"and it reaches the guest with every Ready cleared ({there.Rules.Outlawing}, {there.Rules.Has(NetPlaneRules.NitroFlag)}, {string.Join(",", here.Players.Select(p => p.Ready))})");
         here.SetOutlawed(NetPlaneRules.NitroFlag, false);
         SettleEnds(ends);
+    }
+
+    // A click on Outlaw Components, setting it and then clearing it, empties the list on both ends.
+    // Each click is one round and clears every Ready. The tick is left clear.
+    private static void ToggleEmptiesTheList(TestContext ctx, End host, End guest, List<End> ends)
+    {
+        var here = host.Door.Dogfight!;
+        var there = guest.Door.Dogfight!;
+        var flags = Enumerable.Range(0, 11).Where(r => r != here.Airframe && r != there.Airframe).Take(2)
+            .Select(r => NetPlaneRules.AirframeFlag + r).Append(NetPlaneRules.NitroFlag).ToArray();
+        foreach (bool setting in new[] { true, false })
+        {
+            string way = setting ? "setting" : "clearing";
+            foreach (int flag in flags)
+            {
+                here.SetOutlawed(flag, true);
+            }
+
+            SettleEnds(ends);
+            ReadyGuest(ctx, host, guest, ends, $"before {way} Outlaw Components");
+            ctx.Check(flags.All(there.Rules.Has), $"the guest holds the host's {flags.Length} flags before {way} the tick ({there.Rules.Outlawed:X})");
+            int epoch = here.Options.Epoch;
+            ClickRow(ctx, host, OriginalLobbyScreen.OutlawKey);
+            SettleEnds(ends);
+            ctx.Check(here.Rules is { Outlawed: 0 } && there.Rules is { Outlawed: 0 } && there.Rules.Outlawing == setting,
+                $"{way} Outlaw Components empties the list on both ends ({here.Rules.Outlawed:X}, {there.Rules.Outlawed:X}, tick {there.Rules.Outlawing})");
+            ctx.Check(here.Options.Epoch == (byte)(epoch + 1) && there.Options.Epoch == here.Options.Epoch
+                      && !there.Ready && here.Players.All(p => !p.Ready),
+                $"in one round that clears every Ready (epoch {epoch} to {here.Options.Epoch}, guest {there.Options.Epoch}, {string.Join(",", here.Players.Select(p => p.Ready))})");
+        }
     }
 
     // One tick of each kind on the host's list. Before each the guest is Ready, and after it the

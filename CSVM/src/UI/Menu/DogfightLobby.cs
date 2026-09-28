@@ -283,9 +283,11 @@ public sealed class DogfightLobby
     /// <summary>Checks or clears Allow Custom Planes. Refused on a guest.</summary>
     public bool SetAllowCustomPlanes(bool allow) => ChangeRules(_rules with { AllowCustom = allow });
 
-    /// <summary>Checks or clears Outlaw Components, which puts the outlaw list in force. Refused on
-    /// a guest.</summary>
-    public bool SetOutlawComponents(bool outlaw) => ChangeRules(_rules with { Outlawing = outlaw });
+    /// <summary>Checks or clears Outlaw Components, which puts the outlaw list in force. A toggle
+    /// either way empties the list in the same round, as the original's 5044 does. Refused on a
+    /// guest.</summary>
+    public bool SetOutlawComponents(bool outlaw) =>
+        ChangeRules(outlaw == _rules.Outlawing ? _rules : _rules with { Outlawing = outlaw, Outlawed = 0 });
 
     /// <summary>Sets or clears one flag of the outlaw list (<see cref="NetPlaneRules"/> names them).
     /// Refused on a guest and outside the list.</summary>

@@ -235,6 +235,7 @@ public sealed class DogfightLobbyTests
         Assert.False(host.Players[1].Ready);
 
         Assert.True(host.SetOutlawComponents(true));
+        Assert.True(host.SetOutlawed(NetPlaneRules.NitroFlag, true));
         Settle(host, guests);
         Assert.Equal(PlaneRefusal.Engine, guest.Refusal);
         Assert.False(guest.SetReady(true));
@@ -260,6 +261,7 @@ public sealed class DogfightLobbyTests
         Assert.Equal(fit, guest.LaunchFit);
 
         host.SetOutlawComponents(true);
+        host.SetOutlawed(NetPlaneRules.AmmoFlag + 3, true);
         Settle(host, guests);
         Assert.Equal(NetPlaneRules.NoAmmo, guest.LaunchFit.AmmoAt(1));
         Assert.False(guest.SetReady(true));
@@ -272,6 +274,53 @@ public sealed class DogfightLobbyTests
         Assert.Empty(guest.ReadyRefusals);
         Settle(host, guests);
         Assert.True(host.Players[1].Ready);
+    }
+
+    [Fact]
+    public void TogglingOutlawComponentsEitherWayEmptiesTheListInOneRound()
+    {
+        RulesCounter? counter = null;
+        var (host, guests, _) = Lobbies(2, hostCarrier: inner => counter = new RulesCounter(inner));
+        var guest = guests[0];
+        host.SetOutlawed(NetPlaneRules.AirframeFlag + 4, true);
+        host.SetOutlawed(NetPlaneRules.NitroFlag, true);
+        host.SetOutlawed(NetPlaneRules.AllAmmoFlag, true);
+        Settle(host, guests);
+        Assert.True(host.SetReady(true));
+        Assert.True(guest.SetReady(true));
+        Settle(host, guests);
+        Assert.All(host.Players, p => Assert.True(p.Ready));
+        int epoch = host.Options.Epoch;
+        int sent = counter!.Sent;
+
+        Assert.True(host.SetOutlawComponents(true));
+        Settle(host, guests);
+        Assert.Equal(new NetPlaneRules(false, true, 0), host.Rules);
+        Assert.Equal(host.Rules, guest.Rules);
+        Assert.Equal(epoch + 1, host.Options.Epoch);
+        Assert.Equal(sent + 1, counter.Sent);
+        Assert.False(host.Ready);
+        Assert.False(guest.Ready);
+        Assert.All(host.Players, p => Assert.False(p.Ready));
+
+        // Clearing the tick empties a list set under it too.
+        host.SetOutlawed(NetPlaneRules.GunFlag + 2, true);
+        host.SetOutlawed(NetPlaneRules.RocketFlag + 5, true);
+        Settle(host, guests);
+        epoch = host.Options.Epoch;
+        sent = counter.Sent;
+        Assert.True(host.SetOutlawComponents(false));
+        Settle(host, guests);
+        Assert.Equal(default(NetPlaneRules), guest.Rules);
+        Assert.Equal(epoch + 1, guest.Options.Epoch);
+        Assert.Equal(sent + 1, counter.Sent);
+
+        // ABLE-TO-FAIL CONTROL: setting the tick it already holds keeps the list and the round.
+        host.SetOutlawed(NetPlaneRules.NitroFlag, true);
+        epoch = host.Options.Epoch;
+        Assert.True(host.SetOutlawComponents(false));
+        Assert.True(host.Rules.Has(NetPlaneRules.NitroFlag));
+        Assert.Equal(epoch, host.Options.Epoch);
     }
 
     [Fact]
@@ -389,10 +438,10 @@ public sealed class DogfightLobbyTests
     }
 
     private static (DogfightLobby Host, List<DogfightLobby> Guests, IReadOnlyList<LoopbackTransport> Mesh) Lobbies(
-        int players, string guestName = "")
+        int players, string guestName = "", Func<INetTransport, INetTransport>? hostCarrier = null)
     {
         var mesh = LoopbackTransport.Mesh(players, Clean, new Random(players));
-        var hostWire = new NetLobby(mesh[0]);
+        var hostWire = new NetLobby(hostCarrier?.Invoke(mesh[0]) ?? mesh[0]);
         var host = new DogfightLobby(hostWire, () => "Host");
         var guests = new List<DogfightLobby>();
         var wires = new List<NetLobby> { hostWire };
@@ -423,5 +472,35 @@ public sealed class DogfightLobbyTests
                 guests[i].Step();
             }
         }
+    }
+
+    // The host's carrier, counting the plane rules messages it sends.
+    private sealed class RulesCounter : INetTransport
+    {
+        private readonly INetTransport _inner;
+
+        public RulesCounter(INetTransport inner) => _inner = inner;
+
+        public int Sent { get; private set; }
+
+        public int LocalPeer => _inner.LocalPeer;
+
+        public IReadOnlyList<int> Peers => _inner.Peers;
+
+        public void Bind(INetTransportListener listener) => _inner.Bind(listener);
+
+        public void Send(int peer, ReadOnlySpan<byte> payload, NetReliability reliability, int channel = 0)
+        {
+            if (NetMessage.TryReadHeader(payload, out var type, out _) && type == NetMessageType.LobbyPlaneRules)
+            {
+                Sent++;
+            }
+
+            _inner.Send(peer, payload, reliability, channel);
+        }
+
+        public void Disconnect(int peer) => _inner.Disconnect(peer);
+
+        public void Step(double dt) => _inner.Step(dt);
     }
 }
