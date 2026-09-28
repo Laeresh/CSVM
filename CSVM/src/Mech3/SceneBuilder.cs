@@ -213,6 +213,12 @@ public sealed class SceneBuilder
     /// meshes and materials: set it before building, never between builds.</summary>
     internal float DepthBiasScale = 1f;
 
+    /// <summary>Enhanced mode only: the metres a lit surface of this builder reads the sun's shadow
+    /// map out along its own normal. A receiver-side
+    /// normal offset for this builder's surfaces alone; the world keeps the sun's shared bias pair.
+    /// Zero reads the map at the surface itself. Set before building.</summary>
+    internal float ShadowLookupOffset;
+
     /// <summary>Blend this builder's soft-alpha surfaces in GAMMA space, the way the original's
     /// framebuffer mixed sRGB values, instead of the linear space Godot composites in: the same
     /// correction <c>csky_srgb.gdshaderinc</c> makes for the DX7 vertex MODULATE, applied to the
@@ -1714,6 +1720,8 @@ void fragment() {
         bias += pass * OverlayPassBias;
         bias = Mathf.Clamp(bias * DepthBiasScale, -MaxScaledBias, MaxScaledBias);
         mat.SetShaderParameter("depth_bias", bias);
+        if (!_fullbright && GraphicsMode.Enhanced && ShadowLookupOffset != 0f)
+            mat.SetShaderParameter("shadow_lookup_offset", ShadowLookupOffset);
         if (tex != null)
             mat.SetShaderParameter("albedo_tex", tex);
         if (color is { } c)
@@ -1772,6 +1780,8 @@ void fragment() {
             sb.Append(", unshaded");
         sb.AppendLine(";");
         sb.AppendLine("uniform float depth_bias = 0.0;");
+        if (shaded && !sunLit && GraphicsMode.Enhanced)
+            sb.AppendLine("uniform float shadow_lookup_offset = 0.0;");
         // The shared ordered instance-uniform block; this shader always carries instance uniforms,
         // so it always takes the full preamble, see the contract in the .gdshaderinc. `csky_fog_on`
         // is a per-instance runtime fog opt-out that nothing sets to 0 today.
@@ -1910,6 +1920,9 @@ void fragment() {{");
             sb.AppendLine("    ROUGHNESS = 0.85;");
             sb.AppendLine("    METALLIC = 0.0;");
             sb.AppendLine($"    SPECULAR = {AircraftSpecularLiteral};");
+            // NORMAL is outward here: the vertex stage pre-negated it and Godot flipped it back.
+            if (GraphicsMode.Enhanced)
+                sb.AppendLine("    LIGHT_VERTEX = VERTEX + NORMAL * shadow_lookup_offset;");
         }
         else if (waterLit)
         {

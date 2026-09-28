@@ -32,6 +32,12 @@ public sealed class PlaneBuilder
     /// tilt so the gunsight stays on the guns. Decode: docs/org/cameraViews.md.</summary>
     public const float HeadPitchOffsetRad = -0.08203f;
 
+    // TUNE, Enhanced only: metres the airframe reads the sun's shadow map out along its normal.
+    // Without it a skin lit by a low sun shows shadow acne, which the soft filter's rotated disc
+    // turns into a per-pixel dot grid. ⚠ Do not raise the sun's shared bias pair instead; that
+    // detaches every contact shadow. Measurement: docs/verification.md SHOT-43.
+    private const float AirframeShadowLookupOffset = 0.5f;
+
     // The flare mesh is a SphericalY facade, posed through the facade look-at like every other
     // population of that class (docs/org/cloudCards.md), keeping the node's scale.
     // ⚠ Never Godot's billboard mode: it is the camera basis, so a bank rolls the flare with the eye.
@@ -106,7 +112,11 @@ public sealed class PlaneBuilder
         _painter = scheme != null ? painter : null;
         _patterns = patterns ?? PatternLibrary.Empty;
         _scene = new SceneBuilder(gamez, textures, blendTexture: IsPropBlurTexture, cullBackfaces: true,
-            textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex, sunVertexLit: true);
+            textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex, sunVertexLit: true)
+        {
+            // The interior keeps zero: its own pass measured no self-shadow noise at its scale.
+            ShadowLookupOffset = AirframeShadowLookupOffset,
+        };
         // ⚠ A builder of its own, never a field toggled on the airframe's: DepthBiasScale is baked
         // into cached meshes and materials, so one builder switching it mid-build would hand a
         // later caller a mesh biased for the wrong scale.

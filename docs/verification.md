@@ -195,6 +195,11 @@ member, and it does not go here.
   themselves cannot separate the pattern from the texture it lies on: over the same pose the C2
   city frame's own detail buries it entirely.
 
+- **SHOT-43**, **Read shadow noise on an aircraft against the same pose with the sun's shadow
+  off, never off the frame alone.** The airframe skins carry rivet rows that read as the same dot
+  grid, so a frame-only figure scores the texture; at C3's spawn the shadow's own high-pass excess
+  over the red paint was 1.13 levels against a 3.48 texture floor (`AirframeShadowLookupOffset`).
+
 ## GOLD, golden images
 
 - **GOLD-1**, **Update moved hashes with the visual change, and explain each moved shot in the
