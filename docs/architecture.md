@@ -291,6 +291,7 @@ only `Airframe`, and nothing else in `Flight` names `Hangar`.
 - `src/Flight/Audio/AudioListeners.cs`, where the session's ears are, the one nearest-human seam every positional flight-audio cull measures from.
 - `src/Flight/Audio/WeaponAudioCues.cs`, the weapon-sound selection both audio paths share: a definition name to a resolved cue with its `RANGE` pair and the one cull distance past it.
 - `src/Flight/Audio/EngineAudioCurves.cs`, the engine-slot definition choice and curve maths both audio paths share.
+- `src/Flight/Audio/EngineVoiceDuck.cs`, the one session-wide gain that lowers every engine slot while a radio line is on air.
 
 ### `src/Effects/`, particle systems
 

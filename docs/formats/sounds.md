@@ -64,6 +64,8 @@ whose stamp has passed. The position pointer is null on this path, so a combat l
 placed at the speaker. The remake's `MissionRadio` is that queue: objective cues enter it through
 `Cue` with their 1 s delay, and combat lines through `Speak` with none. ⚠ The 0.3 s gap between
 items is not modelled; `MissionRadio` starts a waiting call on the step after the last line ends.
+While an item is on air the engine slots of every aircraft duck ([vehicle.md](vehicle.md), "A
+voice line ducks every engine").
 
 Beside the effect/UI sets (`COMMON`, the per-mission `c<x>m<nn>` sets, the `brief_*` and `DIALOG`
 sets), 35 sets named `id<N>` carry the combat-voice clips: `snd_id<N>_<TYPE>` →

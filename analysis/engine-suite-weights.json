@@ -190,6 +190,7 @@
     "enet-transport": 0.23,
     "engine-damage-phases": 0.05,
     "engine-note": 0.004,
+    "engine-voice-duck": 0.1,
     "extraction-picker": 0.05,
     "extraction-screen": 0.05,
     "fade-walk-bound": 0.032,

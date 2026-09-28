@@ -811,8 +811,8 @@ run's Danger Zone camera fire, most drawing the sound their own definition autho
 The three incoming-fire cues are group draws, flat as the original plays them: `OnWarningShot`,
 `OnBulletHit` and `OnWindowHit`, rate-limited by `FlightController`. The engine slot's pitch, gain,
 definition and damage phase come from `EngineAudioCurves`, the gun loop and dry cue from
-`WeaponAudioCues`; `MixGain` is the only own-ship scale left, for splitscreen. `AiEngineAudio` and
-`AiWeaponAudio` are the positional pair an AI aircraft carries instead of this.
+`WeaponAudioCues`; `MixGain` scales for splitscreen and `EngineVoiceDuck` lowers both engine slots.
+`AiEngineAudio` and `AiWeaponAudio` are the positional pair an AI aircraft carries instead of this.
 
 ## src/Flight/Audio/EngineAudioCurves.cs
 The engine-audio slot maths both audio paths read, because the original runs one per-frame routine
@@ -824,15 +824,23 @@ attitude to each curve's parameter under a clamp with headroom above 1, which is
 exposes its steps separately. A pitch reaches the voice only where the definition accepts a
 frequency write (`SlotIsPitched`), leaving the damaged and cockpit loops at their own rate. Decode: [../formats/vehicle.md](../formats/vehicle.md), [../formats/sounds.md](../formats/sounds.md), [../org/shakes.md](../org/shakes.md).
 
+## src/Flight/Audio/EngineVoiceDuck.cs
+The engine duck under a radio line: one gain the session builds once and hands to every engine
+voice, `FlightAudio` and `AiEngineAudio` alike, which multiply it into both engine slots. Each
+voice steps it after writing its slots, so every in-range aircraft moves it, as the original's
+global. It falls while `MissionRadio` has a line on air and an engine's level (the Effects bus
+gain, the gain and the curve) stands above `PlaneStats.VoiceoverVolumeLimiter`, then recovers.
+`StepGain` is the pure step. Decode: [../formats/vehicle.md](../formats/vehicle.md).
+
 ## src/Flight/Ai/AiEngineAudio.cs
 The positional twin of `FlightAudio` an AI-flown aircraft carries instead of it: the same two engine
 slots on `AudioStreamPlayer3D`s plus the injector's `snd_nitro` loop, and the cull that stops them
 past `EngineAudioCurves`' cull distance and starts them again inside it. The nitro slot is keyed,
 `RefreshNitroLoop` giving it 0.1 s more each time, so its cadence is the state machine's own calls.
 Its listeners are the human pilots, the seam `AiWeaponAudio` and `ProjectilePool` read too.
-`Attach` is the whole spawner-side surface. The damage phase steps through `EngineAudioCurves`
-like the own ship's, except that a culled aircraft never ticks the re-arm timer. The `sound` log
-carries each slot's verdict, a line per cull transition and one per damaged-engine swap.
+`Attach` is the whole spawner-side surface. The damage phase and `EngineVoiceDuck` step as the own
+ship's, except that a culled aircraft steps neither. The `sound` log carries each slot's verdict, a
+line per cull transition and one per damaged-engine swap.
 
 ## src/Flight/Ai/AiWeaponAudio.cs
 The weapon half of what an AI-flown aircraft carries instead of `FlightAudio`: the sustained-fire

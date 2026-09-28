@@ -2428,6 +2428,179 @@ internal static class CombatSuites
         }
     }
 
+    // The engine duck under a voice line on a real MissionRadio, own-ship and AI engine voices.
+    // Decode: docs/formats/vehicle.md, "A voice line ducks every engine". Every rate comes from
+    // the decode's constants, so a failure here is the port drifting.
+    [Suite("engine-voice-duck",
+        "a queued voice line on air pulls every engine slot down at (1 - L)/s until its level meets " +
+        "the authored limit L = 0.4, an objective cue's start delay not counting as air time, a " +
+        "combat line counting like a mission line, a respawn under the line starting at the ducked " +
+        "level, the gain climbing back at (1 - L) x 0.1667/s once the queue is quiet, an in-range AI " +
+        "engine stepping the same gain again and a culled one not, while an unducked control voice " +
+        "holds full level throughout")]
+    internal static void EngineVoiceDuckSuite(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
+        var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        float limit = stats.VoiceoverVolumeLimiter;
+        ctx.Check(Mathf.IsEqualApprox(limit, 0.4f),
+            $"player.zrd authors voiceover_volume_limiter={limit:0.000}, over the compiled 0.5");
+
+        using var archive = new SoundArchive(ctx.SoundsPath);
+        AudioStreamWav? Stream(string name) =>
+            soundDefs.TryGetValue(name, out var d) ? archive.Find(d.WavName, d.Looped) : null;
+        // A mission's own VO waits 45 s for the channel and a combat bark 0.5 s (docs/formats/sounds.md).
+        string? missionLine = DuckLine(soundDefs, Stream, d => d.QueueSeconds >= 40f, 3.0);
+        string? combatLine = DuckLine(soundDefs, Stream,
+            d => d.QueueSeconds < 1f && d.Name.StartsWith("snd_id", System.StringComparison.OrdinalIgnoreCase), 0.8);
+        ctx.Check(missionLine != null && combatLine != null,
+            $"a mission line of 3 s or more ({missionLine}) and a combat line of 0.8 s or more ({combatLine})");
+        if (missionLine == null || combatLine == null)
+            return;
+        ctx.Note($"lines: mission {missionLine} {Stream(missionLine)!.GetLength():0.00} s, combat {combatLine} {Stream(combatLine)!.GetLength():0.00} s");
+
+        var radio = new MissionRadio(soundDefs, soundGroups, Stream);
+        ctx.Host.AddChild(radio);
+        float sfx = 1f;
+        var duck = new EngineVoiceDuck(() => radio.OnAir != null, () => sfx);
+        var ducked = new FlightAudio { VoiceDuck = duck };
+        ducked.Setup(archive, soundDefs, stats, weapons, soundGroups);
+        ctx.Host.AddChild(ducked);
+        // The control: the same airframe's voice with no duck, under the same line.
+        var control = new FlightAudio();
+        control.Setup(archive, soundDefs, stats, weapons, soundGroups);
+        ctx.Host.AddChild(control);
+        AiEngineAudio? ai = null;
+        try
+        {
+            const float dt = 1f / 60f;
+            var drive = new EngineDrive(1f, 0f, 0f);
+            float full = EngineAudioCurves.Engine(stats, drive, 1f, false).Volume
+                * soundDefs[stats.EngineSound].Volume;
+            float fall = 1f - limit;
+            float rise = fall * EngineVoiceDuck.RecoveryFraction;
+            const float eps = 1e-4f;
+
+            // Radio first, as the session's step runs before the engines' frame.
+            void Frame()
+            {
+                radio.Tick(dt);
+                ducked.Update(dt, drive, 1f, 1f);
+                control.Update(dt, drive, 1f, 1f);
+                ai?.Update(dt, drive, 1f, 1f);
+            }
+            float Run(float seconds)
+            {
+                int n = Mathf.RoundToInt(seconds / dt);
+                for (int i = 0; i < n; i++)
+                    Frame();
+                return n * dt;
+            }
+            void UntilOnAir()
+            {
+                for (int i = 0; i < 180 && radio.OnAir == null; i++)
+                    Frame();
+            }
+            void UntilQuiet()
+            {
+                for (int i = 0; i < 60 * 120 && (radio.OnAir != null || radio.Pending > 0); i++)
+                    Frame();
+            }
+
+            Run(0.5f);
+            ctx.Check(duck.Gain == 1f && Mathf.IsEqualApprox(ducked.EngineGain, full),
+                $"with the channel quiet the gain holds 1 and the engine sounds at full level (gain={duck.Gain:0.000})");
+
+            ctx.Check(radio.Cue(missionLine, new System.Random(1)) == 1, $"the mission line {missionLine} queues");
+            Run(0.9f);
+            ctx.Check(radio.OnAir == null && duck.Gain == 1f,
+                $"the cue's 1 s start delay is not air time (gain={duck.Gain:0.000})");
+            UntilOnAir();
+            ctx.Check(radio.OnAir == missionLine, $"the mission line goes on air (on-air={radio.OnAir})");
+            float g0 = duck.Gain;
+            float t = Run(0.5f);
+            float expected = g0 - (fall * t);
+            ctx.Check(Mathf.Abs(duck.Gain - expected) < eps,
+                $"on air the gain falls at (1 - L)/s = {fall:0.00}/s: {duck.Gain:0.0000} after {t:0.00} s, expected {expected:0.0000}");
+            ctx.Check(ducked.EngineGain < control.EngineGain * 0.8f && Mathf.IsEqualApprox(control.EngineGain, full),
+                $"the ducked engine stands below the unducked control (ducked={ducked.EngineGain:0.0000}, control={control.EngineGain:0.0000})");
+
+            Run(0.7f);
+            ctx.Check(duck.Gain == limit && Mathf.IsEqualApprox(ducked.EngineGain, full * limit),
+                $"at the effects level 1.0 the fall stops at L (gain={duck.Gain:0.0000}, engine={ducked.EngineGain:0.0000} of {full:0.0000})");
+
+            // A spawn does not touch the gain, so the respawn's first frame starts ducked.
+            ducked.OnCrash();
+            ducked.OnEngineStop();
+            Frame();
+            ctx.Check(ducked.EngineSounding && Mathf.IsEqualApprox(ducked.EngineGain, full * limit),
+                $"a respawn under the line starts at the ducked level (engine={ducked.EngineGain:0.0000})");
+
+            UntilQuiet();
+            ctx.Check(radio.OnAir == null, $"the mission line ends");
+            float gq = duck.Gain;
+            t = Run(3f);
+            expected = gq + (rise * t);
+            ctx.Check(Mathf.Abs(duck.Gain - expected) < eps,
+                $"once quiet the gain climbs at (1 - L) x 0.1667/s = {rise:0.0000}/s: {duck.Gain:0.0000} after {t:0.00} s, expected {expected:0.0000}");
+            Run(4f);
+            ctx.Check(duck.Gain == 1f && Mathf.IsEqualApprox(ducked.EngineGain, full),
+                $"…and is back at 1 inside the decoded 6 s (gain={duck.Gain:0.0000})");
+
+            // The shipped effects level. The fall runs only while 0.5 x gain stands above L, so it
+            // stops near L / 0.5 = 0.8.
+            sfx = 0.5f;
+            ctx.Check(radio.Speak(combatLine, new System.Random(2)) != null, $"the combat line {combatLine} queues");
+            UntilOnAir();
+            Run(0.5f);
+            float floor = limit / sfx;
+            ctx.Check(radio.OnAir == combatLine && duck.Gain <= floor && duck.Gain > floor - (fall * dt) - eps,
+                $"a combat line ducks too, and at the effects level 0.5 the gain stops at {duck.Gain:0.0000}, where 0.5 x gain meets L (floor {floor:0.0000})");
+            UntilQuiet();
+            Run(3f);
+            ctx.Check(duck.Gain == 1f, $"…and recovers to 1 (gain={duck.Gain:0.0000})");
+
+            // A second aircraft in range steps the same global on the same frame, as the original's
+            // per-vehicle routine does.
+            sfx = 1f;
+            ai = new AiEngineAudio { Name = "DuckAiEngine", VoiceDuck = duck };
+            ctx.Host.AddChild(ai);
+            ai.Setup(archive, soundDefs, stats);
+            var aiAt = ai.GlobalPosition;
+            var listener = aiAt;
+            ai.Listeners = () => new[] { listener };
+            radio.Cue(missionLine, new System.Random(3));
+            UntilOnAir();
+            g0 = duck.Gain;
+            t = Run(0.25f);
+            expected = g0 - (2f * fall * t);
+            ctx.Check(Mathf.Abs(duck.Gain - expected) < eps,
+                $"with an AI engine in range the gain falls twice as fast: {duck.Gain:0.0000} after {t:0.00} s, expected {expected:0.0000}");
+            float aiFull = full;
+            ctx.Check(ai.EngineSounding && ai.EngineGain < aiFull * 0.9f,
+                $"…and the AI engine carries it (ai={ai.EngineGain:0.0000} of {aiFull:0.0000})");
+
+            listener = aiAt + new Vector3(EngineAudioCurves.CullDistance * 2f, 0f, 0f);
+            g0 = duck.Gain;
+            t = Run(0.25f);
+            expected = g0 - (fall * t);
+            ctx.Check(Mathf.Abs(duck.Gain - expected) < eps && !ai.EngineSounding,
+                $"past the cull the AI engine no longer steps it: {duck.Gain:0.0000} after {t:0.00} s, expected {expected:0.0000}");
+        }
+        finally
+        {
+            radio.Stop();
+            ai?.QueueFree();
+            control.QueueFree();
+            ducked.QueueFree();
+            radio.QueueFree();
+        }
+    }
+
     // The air-to-air hit chain on two real flight rigs driven by manual sim steps: body strike,
     // struck-shape to part mapping, armor-first damage, the decoded whole-vehicle kill rule, a
     // crashed plane's immunity, Downed attribution into a real VersusMatch, the VS respawn loop, and
@@ -3103,6 +3276,20 @@ internal static class CombatSuites
             enemy?.Free();
             textures.Dispose();
         }
+    }
+
+    // The first radio line in name order whose definition the filter takes and whose clip lasts
+    // at least the given length. Name order keeps the pick the same on every run.
+    private static string? DuckLine(IReadOnlyDictionary<string, SoundDef> defs,
+        System.Func<string, AudioStreamWav?> stream, System.Func<SoundDef, bool> which, double minSeconds)
+    {
+        foreach (var def in defs.Values.Where(d => d.Queued && which(d))
+                     .OrderBy(d => d.Name, System.StringComparer.Ordinal))
+        {
+            if (stream(def.Name) is { } s && s.GetLength() >= minSeconds)
+                return def.Name;
+        }
+        return null;
     }
 
     // The rattle loop sits beside the engine slot, on the same speed fraction the whine's curves

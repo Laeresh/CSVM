@@ -26,6 +26,10 @@ public partial class FlightAudio : Node
     /// (equal-power, so 2P ≈ −3 dB each, 4P ≈ −6 dB). TUNE, pending a real 4P listen.</summary>
     public float MixGain = 1f;
 
+    /// <summary>The session's engine duck, shared with every AI engine; null plays the slots
+    /// unducked, as a lab or a suite without a radio does.</summary>
+    public EngineVoiceDuck? VoiceDuck;
+
     private const float SilenceThreshold = 0.002f;
 
     private readonly List<(string name, AudioStreamWav stream, float volume)> _crashSounds = new();
@@ -81,8 +85,9 @@ public partial class FlightAudio : Node
     /// <summary>Whether the engine slot is sounding, read off the live player.</summary>
     internal bool EngineSounding => _engine is { Playing: true };
 
-    /// <summary>The linear gain the last <see cref="Update"/> wrote to the engine slot, before the
-    /// silence floor. A suite holds a start against the curve's full level with it.</summary>
+    /// <summary>The linear gain the last <see cref="Update"/> wrote to the engine slot, voice duck
+    /// included, before the silence floor. A suite holds a start against the curve's full level
+    /// with it.</summary>
     internal float EngineGain => _engineGain;
 
     /// <summary>Whether the slot currently holds the <c>damaged_engine_sound</c> stream.</summary>
@@ -232,24 +237,32 @@ public partial class FlightAudio : Node
         bool engineDead = false, bool firstPersonView = false)
     {
         UpdateEngineSlot(dt, EngineAudioCurves.EngineDamaged(healthFrac, engineDead), firstPersonView);
+        float duck = VoiceDuck?.Gain ?? 1f;
+        float engineCurve = 0f, whineCurve = 0f;
         // Out is the damaged engine's silence, not a stopped loop to restart.
-        if (_engine != null && _enginePhase != EngineSlotPhase.Out)
+        bool live = _engine != null && _enginePhase != EngineSlotPhase.Out;
+        if (live)
         {
-            if (_enginePhase == EngineSlotPhase.Healthy && !_engine.Playing)
+            if (_enginePhase == EngineSlotPhase.Healthy && !_engine!.Playing)
                 StartEngine(); // the respawn after a crash
             var (pitch, volume) = EngineAudioCurves.Engine(
                 _stats, drive, _enginePitchMul, _enginePitchable);
-            _engine.PitchScale = pitch;
+            _engine!.PitchScale = pitch;
             float baseVol = _enginePhase == EngineSlotPhase.Damaged ? _damagedVol
                 : _engineCockpitView ? _cockpitVol : _engineVol;
-            _engineGain = volume * baseVol * MixGain;
+            engineCurve = volume;
+            _engineGain = volume * baseVol * MixGain * duck;
             _engine.VolumeDb = Mathf.LinearToDb(Mathf.Max(SilenceThreshold, _engineGain));
         }
         if (_whine != null)
         {
             var (pitch, volume) = EngineAudioCurves.Whine(_stats, speedFrac);
-            UpdateLoop(_whine, volume * _whineVol * MixGain, pitch);
+            whineCurve = volume;
+            UpdateLoop(_whine, volume * _whineVol * MixGain * duck, pitch);
         }
+        // After both slots are written, as the original steps it. An Out slot does not step.
+        if (live)
+            VoiceDuck?.Step(dt, _stats.VoiceoverVolumeLimiter, engineCurve, whineCurve);
         UpdateLoop(_rattle, EngineAudioCurves.Rattle(_stats, speedFrac) * _rattleVol * MixGain, 1f);
     }
 

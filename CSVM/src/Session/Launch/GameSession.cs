@@ -2664,6 +2664,9 @@ public partial class GameSession : Node3D
             Sounds = state.Sounds,
             SoundDefs = state.SoundDefs,
             SoundGroups = state.SoundGroups,
+            // Read through the field: the radio is built after these bindings, and a session
+            // with none never ducks.
+            VoiceDuck = new EngineVoiceDuck(() => _radio?.OnAir != null, AudioMix.EffectsGain),
             DebugCollision = state.DebugCollision,
             // Read through the field rather than captured by value: the rig is built after these
             // bindings, and a zone apply rewrites the band while the mission runs.

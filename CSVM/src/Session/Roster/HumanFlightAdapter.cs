@@ -407,7 +407,7 @@ internal sealed class HumanFlightAdapter
         // that pilot is sitting in theirs, on their own machine.
         if (!remote && _world.Sounds != null && _world.SoundDefs != null)
         {
-            var audio = new FlightAudio { MixGain = _human.MixGain };
+            var audio = new FlightAudio { MixGain = _human.MixGain, VoiceDuck = _world.VoiceDuck };
             audio.Setup(_world.Sounds, _world.SoundDefs, stats, _aircraft.WeaponDefs, _world.SoundGroups);
             controller.Audio = audio;
             controller.AddChild(audio);

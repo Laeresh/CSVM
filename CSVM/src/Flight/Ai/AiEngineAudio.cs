@@ -30,7 +30,12 @@ public sealed partial class AiEngineAudio : Node3D
     /// ask it. Left null, the cull falls back to this node's own viewport camera.</summary>
     public Func<IReadOnlyList<Vector3>>? Listeners;
 
+    /// <summary>The session's engine duck, the one the pilot's own <see cref="FlightAudio"/> steps
+    /// too; null plays the slots unducked.</summary>
+    public EngineVoiceDuck? VoiceDuck;
+
     private PlaneStats _stats = null!;
+    private float _engineGain;     // the linear gain Update last wrote to the engine slot
     private AudioStreamPlayer3D? _engine, _whine, _nitro;
     private AudioStreamWav? _engineStream, _damagedStream;
     private float _engineVol = 1f, _damagedVol = 1f, _whineVol = 1f, _nitroVol = 1f;
@@ -50,13 +55,17 @@ public sealed partial class AiEngineAudio : Node3D
     /// <see cref="EngineSounding"/> is.</summary>
     internal bool NitroSounding => _nitro is { Playing: true };
 
+    /// <summary>The linear gain the last in-range <see cref="Update"/> wrote to the engine slot,
+    /// voice duck included, before distance attenuation.</summary>
+    internal float EngineGain => _engineGain;
+
     /// <summary>Builds this aircraft's engine audio and hangs it under <paramref name="controller"/>,
     /// or returns null when the session found no sound archive. The spawner's whole share of the
     /// job; call it after the controller has joined the tree, since the cull reads a world position.
     /// <paramref name="listeners"/> left null falls back to the node's own viewport camera.</summary>
     public static AiEngineAudio? Attach(FlightController controller, SoundArchive? archive,
         IReadOnlyDictionary<string, SoundDef>? defs, PlaneStats stats,
-        Func<IReadOnlyList<Vector3>>? listeners = null)
+        Func<IReadOnlyList<Vector3>>? listeners = null, EngineVoiceDuck? voiceDuck = null)
     {
         if (archive == null || defs == null)
         {
@@ -66,7 +75,7 @@ public sealed partial class AiEngineAudio : Node3D
             Log.Info("sound", $"ai engine {controller.Name}: no sound archive, this aircraft carries no engine loop");
             return null;
         }
-        var audio = new AiEngineAudio { Name = "EngineAudio", Listeners = listeners };
+        var audio = new AiEngineAudio { Name = "EngineAudio", Listeners = listeners, VoiceDuck = voiceDuck };
         controller.AddChild(audio);
         audio.Setup(archive, defs, stats);
         return audio;
@@ -126,17 +135,27 @@ public sealed partial class AiEngineAudio : Node3D
                 _phase = EngineSlotPhase.Out;
             return;
         }
-        if (_engine != null && StepEngineSlot(_engine, damaged, dt))
+        float duck = VoiceDuck?.Gain ?? 1f;
+        float engineCurve = 0f, whineCurve = 0f;
+        bool live = _engine != null && StepEngineSlot(_engine, damaged, dt);
+        if (live)
         {
             var (pitch, volume) = EngineAudioCurves.Engine(
                 _stats, drive, _enginePitchMul, _enginePitchable);
-            UpdateLoop(_engine, volume * (_phase == EngineSlotPhase.Damaged ? _damagedVol : _engineVol), pitch);
+            engineCurve = volume;
+            _engineGain = volume * (_phase == EngineSlotPhase.Damaged ? _damagedVol : _engineVol) * duck;
+            UpdateLoop(_engine!, _engineGain, pitch);
         }
         if (_whine != null)
         {
             var (pitch, volume) = EngineAudioCurves.Whine(_stats, speedFrac);
-            UpdateLoop(_whine, volume * _whineVol, pitch);
+            whineCurve = volume;
+            UpdateLoop(_whine, volume * _whineVol * duck, pitch);
         }
+        // Every aircraft steps it, as the original's per-vehicle routine does. There too a culled
+        // or Out aircraft returns before its step.
+        if (live)
+            VoiceDuck?.Step(dt, _stats.VoiceoverVolumeLimiter, engineCurve, whineCurve);
     }
 
     /// <summary>The injector's own loop, keyed rather than driven: a refresh gives it

@@ -299,6 +299,11 @@ public sealed class PlaneStats
     public SoundCurve EngineVolume = new(0.1f, 1f, 1f, 1f);
     public SoundCurve EnginePitch = new(0.1f, 0.6f, 1f, 1f);
 
+    /// <summary>player.json <c>voiceover_volume_limiter</c>, the level a voice line holds every
+    /// engine slot down to (<see cref="Audio.EngineVoiceDuck"/>). The fallback is the executable's
+    /// compiled 0.5; the install authors 0.4. Decode: docs/formats/vehicle.md.</summary>
+    public float VoiceoverVolumeLimiter = 0.5f;
+
     /// <summary>vehicle.json <c>cockpit_engine_sound</c>, the engine slot's def in the Cockpit
     /// (mode 6) and Nose (mode 7) views.
     /// Selected by <see cref="Audio.EngineAudioCurves.SelectsCockpitLoop"/> and
@@ -933,6 +938,7 @@ public sealed class PlaneStats
                 stats.WhineVolume = Curve(prop, "min_speed_volume", "max_speed_volume", stats.WhineVolume);
                 stats.WhinePitch = Curve(prop, "min_speed_pitch", "max_speed_pitch", stats.WhinePitch);
             }
+            stats.VoiceoverVolumeLimiter = player.Float("voiceover_volume_limiter", stats.VoiceoverVolumeLimiter);
             if (player.Dict("rattle") is { } rattle)
             {
                 stats.RattleSound = rattle.Str("sound") ?? stats.RattleSound;

@@ -268,7 +268,7 @@ internal sealed class AiFlightAssembler
             // one-shots measure against. An aircraft answering two listener models let a
             // splitscreen pane hear its engine and not its guns, or the reverse.
             controller.EngineAudio = AiEngineAudio.Attach(controller, _world.Sounds, _world.SoundDefs,
-                stats, _world.HumanPositions);
+                stats, _world.HumanPositions, _world.VoiceDuck);
             // Attach no-ops to null when the session found no sound archive; the own-ship
             // FlightAudio is never built for an AI. The engine loop culls at 2000 units, each
             // weapon cue at its own authored audible distance.

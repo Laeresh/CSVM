@@ -950,6 +950,10 @@ member, and it does not go here.
   objective number was written up as coming from the mission graph because `dzones.zrd` was said to
   carry no objective id; its `objective_numbers` key carries exactly that id, and the pairs match
   the shipped `Snap_<mission>_<objective>` scrapbook rows mission for mission.
+- **SRC-20**, **Evaluate a decoded compare at the shipped option and data values before saying what
+  the player hears; a threshold on a product of scales can be partial or inert at the defaults.**
+  The engine voice duck was written up as halving the engines, and with `SfxVolume` 0.5 and the
+  authored limiter 0.4 in the product it lowers them by about 1.9 dB.
 
 ## What this project cannot verify itself
 

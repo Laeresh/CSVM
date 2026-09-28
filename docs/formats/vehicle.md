@@ -286,14 +286,43 @@ else if G < 1:
     G = min(G + (1 - L)·0.1667·dt, 1.0)                                       ; 0x004b1feb..0x004b201e
 ```
 
-`L` is 0.5: `FUN_004735b0` stores `0x3f000000` at `0x00473e60` and replaces it only when the key
-`voiceover_volume_limiter` (string at `0x0062768c`) is authored, and no file in the install authors
-it. `0.1667` is the float at `0x00608b94`. So a radio line pulls the engines down to half within
-one second and they come back over about six seconds once the queue falls quiet, for one aircraft
-in range. Because `G` is global and the step runs once per call, every in-range aircraft steps it
-again on the same frame (the down step only where its own written volume is above `L`), so those
-times shorten with company. A spawn or respawn does not touch `G`, so a start under a radio
-call starts at whatever level the duck stands at. ⚠ CSVM does not model this duck.
+`L` is **0.4** in the install. `FUN_004735b0` stores the compiled `0x3f000000` (0.5) at
+`0x00473e60` and overwrites it at `0x00473e7c` when `player.zrd` authors the root key
+`voiceover_volume_limiter` (string at `0x0062768c`), which it does, as `[0.4]`. `0.1667` is the
+float at `0x00608b94`, so the recovery runs at 0.1/s against a fall of 0.6/s.
+
+⚠ **The fall is a limiter on the written level, not a fixed duck to `L`.** `sfxLevel` is
+`FUN_00440650`, the `SfxVolume` option (`*DAT_0064f6dc`, default 0.5 from `FUN_0043fb50`), and the
+shipped engine volume curve is flat 1.0, so the level the compare reads is `SfxVolume · G`. At the
+shipped 0.5 it stands above 0.4 only while `G > 0.8`: a line takes `G` from 1.0 to 0.8 in a third
+of a second, the engine's written level from 0.5 to 0.4 (about 1.9 dB), and the recovery takes two
+seconds. At `SfxVolume` 1.0 the fall runs to the floor `G = L` in one second and recovers over six.
+At `SfxVolume` 0.4 or below it never moves.
+
+- **What counts as on air.** `FUN_00597590` is `DAT_00639eb4 != 0`. The pump `FUN_00593110` sets
+  it when it starts a queued item and clears it the frame it finds that voice stopped, before the
+  0.3 s gap; `FUN_00591f40` and `FUN_00592170` clear it on a flush. Only a definition carrying
+  `QUEUE` enters that list, so a mission's objective VO and every combat voice line both duck the
+  engines, and nothing else does. An objective cue's 1 s start delay is not air time.
+- **What is ducked.** All nine references to `G` are in this routine, which writes slot 0 (the
+  engine, cockpit or damaged loop) and slot 1 (the whine) and nothing else. The rattle, the nitro
+  loop, gunfire, one-shots and world sounds keep their level. A vehicle outside mode class 0 and 4
+  branches at `0x004b193e` to `0x004b202d`, which writes slot 0 without `G` and returns unstepped.
+- **Who steps it.** `G` is global and each aircraft's call steps it once, after writing its own
+  slots at the current `G`. A culled AI returns before the step (`0x004b1b47`), and so does a
+  damaged slot waiting on its re-arm timer, whose handle is zero (`0x004b1b17`). The fall runs only
+  for an aircraft whose own written level is above `L`, the recovery for every one that steps, so
+  company speeds both.
+- **Spawns.** A spawn or respawn does not touch `G`, so a start under a radio call starts at
+  whatever level the duck stands at.
+
+CSVM ports it as `EngineVoiceDuck`: one per session, stepped by the pilot's `FlightAudio` and every
+in-range `AiEngineAudio` after each writes its slots, on `MissionRadio.OnAir`. The `SfxVolume`
+counterpart is the Effects bus gain (`AudioMix.EffectsGain`, 0.5 at the shipped Effects level of 50
+under Master 100). Neither the definition's `VOLUME` nor the splitscreen `MixGain` is in the compare,
+since the original's level carries neither. The original has one listener; in splitscreen the one
+gain lowers every pane's engines together, and each pane's own aircraft steps it like one more
+in-range aircraft would.
 
 ## Destroyable parts
 
