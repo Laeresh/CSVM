@@ -192,20 +192,23 @@ internal sealed class AiFlightAssembler
             }
             onCreated(controller);
 
-            // The AI def's own fit when it authors one, the player stock table otherwise. Both
-            // paths say so when they come up empty: an AI plane that flies unarmed is a bug that
-            // looks exactly like a passive enemy from the cockpit.
+            // A fit outranks the AI def's weapons, since the original rebuilds its wingman's list
+            // from the hangar record. Every path warns when it comes up empty, because an unarmed
+            // AI plane looks exactly like a passive enemy from the cockpit.
             try
             {
-                if (stats.AiWeapons.Count > 0)
+                if (spawn.Fit is { } fit && _aircraft.StockLoadouts.For(stats.DefName) is { } fitBase)
+                {
+                    controller.Loadout = Loadout.BindWingman(fit.ApplyTo(fitBase), planeModel, _aircraft.WeaponDefs);
+                }
+                else if (stats.AiWeapons.Count > 0)
                 {
                     controller.Loadout = Loadout.BindAi(stats.AiWeapons,
                         stats.AiDefName ?? stats.DefName, planeModel, _aircraft.WeaponDefs);
                 }
                 else if (_aircraft.StockLoadouts.For(stats.DefName) is { } loadout)
                 {
-                    controller.Loadout = Loadout.Bind(
-                        spawn.Fit is { } fit ? fit.ApplyTo(loadout) : loadout, planeModel, _aircraft.WeaponDefs);
+                    controller.Loadout = Loadout.Bind(loadout, planeModel, _aircraft.WeaponDefs);
                 }
                 else
                 {

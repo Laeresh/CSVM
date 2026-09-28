@@ -52,7 +52,7 @@ internal static class NetCoopMissionSuites
     private const int CabbieTaxiSteps = 60 * 60;
 
     // The wingman suite's host profile and its wingman pick, the Fury, which no profile-less director
-    // binds. The ammunition rides the wire, though the Fury's AI def authors its own guns.
+    // binds. The armour-piercing ammunition rides the wire and outranks the Fury's AI def's guns.
     private const string WingHost = "WingHost";
     private const byte WingAirframe = 7;
     private static readonly int[] WingAmmo = { 2, 2, 2, 2 };
@@ -175,8 +175,9 @@ internal static class NetCoopMissionSuites
         "a co-op campaign mission whose host profile flies its wingman in a picked aeroplane, host and "
         + "one guest over a lossy loopback: the host's launch names the pick to the guest, and the "
         + "guest builds the host-owned wingman in the same airframe, def, damage parts and fit as the "
-        + "host rather than the Devastator a profile-less director binds; every other roster block "
-        + "flies the same def on both machines")]
+        + "host rather than the Devastator a profile-less director binds, its guns firing the picked "
+        + "ammunition over its AI def's own; every other roster block flies the same def and weapons "
+        + "on both machines")]
     internal static void CCoopWingmanFliesTheHostsPick(TestContext ctx)
     {
         var mission = WingmanMission(ctx);
@@ -405,6 +406,14 @@ internal static class NetCoopMissionSuites
         string theirs = Airframe(guestWing);
         ctx.Check(mine == theirs,
             $"the guest's wingman carries the host's def, damage parts and fit (host {mine} | guest {theirs})");
+
+        // The pick, not the def's own block: the AI def's gun is a wep_130, the pick a matrix id.
+        var picked = StockLoadouts.Load().ForModel(want)?.Guns
+            .Select(g => StockLoadouts.GunWeaponId(g.Caliber, CampaignLoadout.AmmoNames[WingAmmo[g.Slot - 1]]))
+            .ToArray() ?? Array.Empty<string>();
+        var flown = hostWing.Loadout?.Guns.Select(g => g.Weapon.Id).ToArray() ?? Array.Empty<string>();
+        ctx.Check(picked.Length > 0 && flown.SequenceEqual(picked),
+            $"the host's wingman fires the picked ammunition [{string.Join(",", picked)}] rather than its AI def's guns ([{string.Join(",", flown)}])");
     }
 
     // Every block both machines spawned flies one def on both, so no other host-owned aeroplane
@@ -422,15 +431,17 @@ internal static class NetCoopMissionSuites
     }
 
     // One aeroplane's identity as hits and damage see it: its def, its AI def, its damage parts and
-    // their pools, and its first gun's rounds.
+    // their pools. Then the weapon every gun and pylon it bound fires.
     private static string Airframe(FlightController rig)
     {
         string parts = rig.Damage is { } damage
             ? string.Join(",", damage.Parts.Keys.OrderBy(k => k, StringComparer.Ordinal))
               + Log.Format($"@{damage.WholeHealthMax:0.#}/{damage.WholeArmorMax:0.#}")
             : "none";
-        string ammo = rig.Loadout?.Def is { Guns.Count: > 0 } def ? def.Guns[0].Ammo ?? "" : "";
-        return $"{rig.Stats?.DefName}/{rig.Stats?.AiDefName}/{parts}/{ammo}";
+        string weapons = rig.Loadout is { } loadout
+            ? string.Join(",", loadout.Guns.Select(g => g.Weapon.Id).Concat(loadout.Hardpoints.Select(h => $"{h.Index}:{h.Weapon.Id}")))
+            : "";
+        return $"{rig.Stats?.DefName}/{rig.Stats?.AiDefName}/{parts}/{weapons}";
     }
 
     private static CampaignMission WingmanMission(TestContext ctx)

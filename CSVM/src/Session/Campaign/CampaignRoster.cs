@@ -222,8 +222,10 @@ public sealed class CampaignRosterPlan
             // base def or PlaneStats cannot resolve it, and the plain base def flies instead.
             string? planeNode = null;
             string? baseDef = null;
+            bool boundWingman = false;
             if (wingmanNode != null && name.Equals(wingmanName, StringComparison.OrdinalIgnoreCase))
             {
+                boundWingman = true;
                 planeNode = wingmanNode;
                 baseDef = defs.BaseDefForPlayerNode(wingmanNode);
             }
@@ -325,7 +327,9 @@ public sealed class CampaignRosterPlan
                 ObjectiveTarget = AiSkills.RosterObjectiveTarget(fields),
                 HelpLabel = AiSkills.RosterHelpLabel(fields),
                 CategoryLabel = AiSkills.RosterCategoryLabel(fields),
-                Fit = planeNode == wingmanNode ? wingmanFit : null,
+                // ⚠ Key the fit on the block, never the airframe. It outranks an AI def's weapons, so
+                // an enemy on the wingman's airframe would fly the player's pick.
+                Fit = boundWingman ? wingmanFit : null,
                 Scheme = handover is { } paint
                          && name.Equals(AirframeHandover.WingmanName, StringComparison.OrdinalIgnoreCase)
                     ? paint.Scheme

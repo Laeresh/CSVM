@@ -501,7 +501,7 @@ the spawn streams. Read `AiFlightAssembler.cs` for the build it calls.
 
 ## src/Session/Roster/AiFlightAssembler.cs
 `FlightRoster`'s private AI assembly path: authored or fallback pilot skills and maneuvers, then the airframe, controller, livery,
-loadout and ordnance, damage visuals, the positional engine and weapon voices that stand in for the own-ship `FlightAudio`, the
+loadout (a spawn's fit through `Loadout.BindWingman` ahead of the AI def's `weapons`) and ordnance, damage visuals, the positional engine and weapon voices that stand in for the own-ship `FlightAudio`, the
 optional crash runtime, then the node placed. The airframe (painted model, hulls, prop, wing-light and surface animators) is CLAIMED
 from `AiAirframePool.cs` where one is ready and built in place otherwise, over one shared `PlaneCollider` per airframe and one shared
 `PlanePainter` per airframe and livery (PERF-22). That runtime is OPENED rather than built wherever the caller supplied a queue, so the

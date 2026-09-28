@@ -127,6 +127,23 @@ public class CampaignRosterPlanTests
     }
 
     [Fact]
+    public void AnEnemyOnTheWingmansAirframeCarriesNoFit()
+    {
+        var fit = new LoadoutChoice();
+        var plan = CampaignRosterPlan.Build(new List<(string, List<object?>)>
+        {
+            ("wingman_1", Block(-1f, "player")),
+            ("secfury_1", Block(5f, "")),
+        }, Defs, Nets, wingmanNode: "player_fury", wingmanFit: fit);
+
+        var byName = plan.Spawns.ToDictionary(s => s.Name);
+        Assert.Same(fit, byName["wingman_1"].Fit);
+        Assert.Equal("player_fury", byName["secfury_1"].PlaneNode);
+        Assert.Equal("secfury", byName["secfury_1"].AiDef);
+        Assert.Null(byName["secfury_1"].Fit);
+    }
+
+    [Fact]
     public void ADefThatIsNoVariantOfItsAirframeFliesThePlainBaseDef()
     {
         var plan = CampaignRosterPlan.Build(new List<(string, List<object?>)>

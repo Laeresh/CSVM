@@ -30,6 +30,7 @@ public readonly record struct FlightRosterBuild(int MeshInstances, string Summar
 /// <c>InitHealth</c>/<c>Armor</c> override the hull pools pre-scale (docs/org/vehicleDamage.md).</summary>
 public readonly record struct AiSpawn(string PlaneName, Vector3 Position, Vector3 LookAt, AiPilot Pilot,
     PaintScheme? Scheme = null, int? Team = null, bool Inert = false, bool ShippedSkins = false,
+    // ⚠ Set Fit on a wingman spawn only: it outranks the AI def's own weapons block too.
     string? AiDef = null, LoadoutChoice? Fit = null, int? AttackRating = null, bool Nitro = false,
     AiSkillVector? RosterSkills = null, string? NodeName = null, string? PilotName = null,
     // Overrides the session difficulty for this one spawn, which is all an Instant Action wave's

@@ -227,6 +227,17 @@ public sealed class Loadout
     /// (docs/formats/saved-games.md, "Where the ammunition and ordnance picks live").</summary>
     public const string StockOrdnance = "wep_06";
 
+    /// <summary>The near end of every wingman slot's engagement window, metres. The original's wingman
+    /// slot builder writes this literal for guns and ordnance alike (<c>FUN_00444300</c>).</summary>
+    public const float WingmanMinRangeM = 1f;
+
+    /// <summary>The far end of that window, metres, stored squared as 810000 by the same builder.</summary>
+    public const float WingmanMaxRangeM = 900f;
+
+    /// <summary>A wingman pylon's refire interval, seconds: the builder's ordnance literal, which
+    /// stands in for the 30 s a militia def authors (docs/org/aiPilot/aiWeapons.md).</summary>
+    public const float WingmanOrdnanceRefireS = 20f;
+
     /// <summary>The original's hardpoint fill order, decoded from its stock loadout table: a fit
     /// of fewer than 8 pylons leaves physical gaps rather than filling pylon1..N contiguously.
     /// <c>hp.Count</c> takes a PREFIX of this sequence. ⚠ Do not read the two interleaved halves
@@ -497,6 +508,29 @@ public sealed class Loadout
             group.MaxRangeM = slot.MaxRangeM;
             group.RefireSeconds = slot.RefireSeconds;
         }
+    }
+
+    /// <summary>The campaign wingman's fit: the hangar pick laid over its airframe's stock fit and
+    /// bound as a player's. The original discards the AI def's <c>weapons</c> block for this one
+    /// vehicle. Every slot then carries that build's engine constants in place of an authored tuple
+    /// (docs/org/aiPilot/aiWeapons.md, "The wingman's fit").</summary>
+    public static Loadout BindWingman(LoadoutDef fitted, Node3D plane, WeaponDefs weapons)
+    {
+        var loadout = Bind(fitted, plane, weapons);
+        foreach (var gun in loadout.Guns)
+        {
+            gun.MinRangeM = WingmanMinRangeM;
+            gun.MaxRangeM = WingmanMaxRangeM;
+        }
+
+        foreach (var hardpoint in loadout.Hardpoints)
+        {
+            hardpoint.MinRangeM = WingmanMinRangeM;
+            hardpoint.MaxRangeM = WingmanMaxRangeM;
+            hardpoint.RefireSeconds = WingmanOrdnanceRefireS;
+        }
+
+        return loadout;
     }
 
     /// <summary>Synthesizes a lab loadout covering the airframe's whole marker rig: all four
