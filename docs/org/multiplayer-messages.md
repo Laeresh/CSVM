@@ -546,7 +546,9 @@ index, the argument a hash of its definition and anchor names, which the guest c
 applying and searches by when the index has shifted), 4 a `WARP_VEHICLE` pick (the subject is the
 drawn waypoint index, the argument the hash of the warped vehicle's name), 5 an AI's presence (the argument is 1 for in
 play and 0 for deactivated). The host sends 5 whenever an AI's `Inert` changes outside a cutscene
-park, which covers a script wake, a Black Hat launch and a wingman taken out. A cutscene park (913)
+park, which covers a script wake, a Black Hat launch, a wingman taken out and an aircraft a
+`TRAVELERS ... DELETE_ON_SUCCESS` removes. Only the host's graph evaluates that condition, so the
+removal is decided there and a guest's copy leaves on the 0. A cutscene park (913)
 is not sent, because each end's own cutscene parks its own copy. 6 a seat left (the subject is
 the seat of a guest whose link dropped mid-mission): the host sends it to the guests still flying,
 every end removes that aeroplane and tells its players "<name> left", and the mission goes on.

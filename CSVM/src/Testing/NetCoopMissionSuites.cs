@@ -42,6 +42,15 @@ internal static class NetCoopMissionSuites
 
     private const string GuestName = "Lucy";
 
+    // CM21: OBJECTIVE28 wakes the Cabbie and releases his taxi. OBJECTIVE20 removes him within
+    // 1000 m of its point, which is read off the host's own script.
+    private const string Cabbie = "autogyro_1";
+    private const int CabbieWake = 28;
+    private const int CabbieDelivered = 20;
+
+    // The longest the Cabbie's rooftop taxi run is given to hand him to the flight model.
+    private const int CabbieTaxiSteps = 60 * 60;
+
     // The wingman suite's host profile and its wingman pick, the Fury, which no profile-less director
     // binds. The ammunition rides the wire, though the Fury's AI def authors its own guns.
     private const string WingHost = "WingHost";
@@ -234,6 +243,146 @@ internal static class NetCoopMissionSuites
                 Directory.Delete(store, recursive: true);
             }
         }
+    }
+
+    [Suite("net-coop-cabbie-delivered",
+        "CM21 flown by a host and one guest over a lossy loopback: the host's wake of OBJECTIVE28 "
+        + "puts the Cabbie (autogyro_1) in play on both machines, and once the host's Cabbie is "
+        + "within 1000 m of OBJECTIVE20's point the host's director completes it and removes him, "
+        + "and the guest's copy leaves the world off the host's presence event while the guest's "
+        + "own director, which evaluates nothing, removes nothing")]
+    internal static void DCoopCabbieLeavesEveryMachine(TestContext ctx)
+    {
+        var mission = CabbieMission(ctx);
+        var stock = StockLoadouts.Load();
+        var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.03, 0.01, 0.25), new Random(2406));
+        var host = Door(mesh[0]);
+        var guest = Door(mesh[1]);
+        var ambient = NetCombatSuites.Ambient.Save();
+        Ends? hostEnd = null;
+        Ends? guestEnd = null;
+        try
+        {
+            host.OpenCoopHost(NetPlayFeature.CoopHumans - 1);
+            host.Offer(mission.Seq, "Host", 1);
+            guest.OpenJoin();
+            Pump(SettleSteps, host, guest);
+            Select(host, mission);
+            Pump(SettleSteps, host, guest);
+            guest.Pick.Set(CoopGuestPick.StarterAirframe, true);
+            Pump(SettleSteps, host, guest);
+            if (!guest.IsCoopGuest || !host.CoopAllReady)
+            {
+                ctx.Check(false, $"the guest joins the host's campaign door and is Ready ({guest.Stage}, ready {host.CoopAllReady})");
+                return;
+            }
+
+            hostEnd = Launch(ctx, mission, stock, host, HostAmmo, out _);
+            guestEnd = Follow(ctx, mission, stock, guest, default, hostEnd, host);
+            if (!hostEnd.Built || !guestEnd.Built)
+            {
+                ctx.Check(false, $"both campaign sessions build (host {hostEnd.Built}, guest {guestEnd.Built})");
+                return;
+            }
+
+            CabbieLeaves(ctx, hostEnd, guestEnd, host, guest);
+        }
+        finally
+        {
+            guestEnd?.Close();
+            hostEnd?.Close();
+            ambient.Restore();
+            guest.Discard();
+            host.Discard();
+        }
+    }
+
+    // The host alone decides the delivery. Its removal is a presence change, which is the one
+    // message that takes the guest's copy out.
+    private static void CabbieLeaves(TestContext ctx, Ends hostEnd, Ends guestEnd, NetPlayFeature hostDoor,
+        NetPlayFeature guestDoor)
+    {
+        var ends = new[] { hostEnd, guestEnd };
+        var doors = new[] { hostDoor, guestDoor };
+        if (ends.Any(e => e.Session.Cutscene is { Playing: true }))
+        {
+            hostEnd.Session.Cutscene?.Skip();
+            for (int i = 0; i < SkipWindowSteps && ends.Any(e => e.Session.Cutscene is { Playing: true }); i++)
+            {
+                FlyOnce(ends, doors);
+            }
+        }
+
+        // A step on each end admits the roster, which is what hands the guest's copies to the host.
+        // The humans then hold where they stand, so nothing but the script moves during the legs.
+        Fly(SettleSteps, ends, doors);
+        foreach (var end in ends)
+        {
+            foreach (var rig in end.Session.Rigs)
+            {
+                if (rig.Controller is { } pilot)
+                {
+                    pilot.Held = true;
+                }
+            }
+        }
+
+        var hostDirector = hostEnd.Session.Campaign;
+        var guestDirector = guestEnd.Session.Campaign;
+        var mine = hostDirector?.Roster.GetValueOrDefault(Cabbie);
+        var theirs = guestDirector?.Roster.GetValueOrDefault(Cabbie);
+        if (hostDirector?.Graph is not { } graph || guestDirector?.Graph is not { } replica
+            || mine == null || theirs == null)
+        {
+            ctx.Check(false, $"both machines spawn '{Cabbie}' under a campaign director (host {mine != null}, guest {theirs != null})");
+            return;
+        }
+
+        ctx.Check(mine.Inert && theirs.Inert && theirs.RemoteOwned && !replica.CompletedOf(CabbieDelivered),
+            $"'{Cabbie}' ships deactivated on both machines, the guest's copy owned by the host (remote {theirs.RemoteOwned})");
+        graph.Wake(CabbieWake);
+        int steps = 0;
+        for (; steps < CabbieTaxiSteps && (theirs.Inert || hostDirector.Paths?.IsPlaced(Cabbie) == true); steps++)
+        {
+            FlyOnce(ends, doors);
+        }
+
+        ctx.Check(mine.InPlay && theirs.InPlay && !graph.CompletedOf(CabbieDelivered),
+            $"ABLE-TO-FAIL CONTROL: the host's wake puts him in play on both machines and off his taxi path, undelivered ({steps} step(s))");
+
+        var delivery = hostDirector.Script.Objectives.FirstOrDefault(d => d.Number == CabbieDelivered)?.Travelers;
+        if (delivery?.WherePoint is not { Length: 3 } p || !delivery.DeleteOnSuccess)
+        {
+            throw new SuiteSkippedException($"C5/M01 OBJECTIVE{CabbieDelivered} no longer authors the Cabbie's delivery");
+        }
+
+        mine.WarpTo(new Vector3(p[0], p[1], p[2]), 0f, 0f);
+        mine.Held = true;
+        steps = 0;
+        for (; steps < SkipWindowSteps && (!graph.CompletedOf(CabbieDelivered) || !theirs.Inert); steps++)
+        {
+            FlyOnce(ends, doors);
+        }
+
+        ctx.Check(graph.CompletedOf(CabbieDelivered) && mine.Deactivated && hostDirector.Removed.Contains(Cabbie),
+            $"on the point the host completes OBJECTIVE{CabbieDelivered} and removes him");
+        ctx.Check(theirs.Inert && replica.CompletedOf(CabbieDelivered),
+            $"and the guest's copy leaves the world with the host's objective replayed ({steps} step(s))");
+        ctx.Check(guestDirector.Removed.Count == 0,
+            $"…taken out by the host's word, never by a removal the guest's own director decided");
+    }
+
+    private static CampaignMission CabbieMission(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>()
+            .FirstOrDefault(m => m!.Value.ChapterFolder.Equals("C5", StringComparison.OrdinalIgnoreCase)
+                                 && m.Value.MissionFolder.Equals("M01", StringComparison.OrdinalIgnoreCase))
+            ?? throw new SuiteSkippedException($"cm_sequence carries no C5/M01");
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, "C5"), $"C5 textures");
+        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, "C5"), $"C5 gamez");
+        return mission;
     }
 
     // The host-owned wingman on both machines: the picked airframe, one def, one set of damage

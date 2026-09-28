@@ -81,6 +81,10 @@ public sealed class CampaignDirector
     private readonly Dictionary<string, RosterSpawnPlan> _rosterPlans = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, SurfaceVehicle> _vessels = new(StringComparer.OrdinalIgnoreCase);
 
+    // Roster aircraft a DELETE_ON_SUCCESS has taken out of the world. The original unlinks the
+    // vehicle, so no later name lookup finds it; this latch is that unlinking here.
+    private readonly HashSet<string> _removed = new(StringComparer.OrdinalIgnoreCase);
+
     // A guest's two WARP_VEHICLE halves, keyed by the vehicle's name hash: the directive its graph
     // replayed and the host's drawn index. Either can arrive first, so each waits for the other.
     private readonly Dictionary<int, Queue<(string Vehicle, IReadOnlyList<WarpPoint> Points)>> _warpsAwaitingPick = new();
@@ -212,6 +216,10 @@ public sealed class CampaignDirector
     /// <see cref="RosterInputs.SpawnSurface"/> built, plus a ship generator's hulls under their
     /// launch names.</summary>
     public IReadOnlyDictionary<string, SurfaceVehicle> Vessels => _vessels;
+
+    /// <summary>The roster aircraft a <c>TRAVELERS ... DELETE_ON_SUCCESS</c> has removed, by block
+    /// name. Each is deactivated for good: no wake, taxi or <c>SET_AI_*</c> finds it again.</summary>
+    public IReadOnlySet<string> Removed => _removed;
 
     /// <summary>Roster blocks that carry their own objective-target flag (aiv slot 37), by block
     /// name, with the MSG_OBJ_* label their own slot 39 authors. The mission's record of which
@@ -1421,6 +1429,7 @@ public sealed class CampaignDirector
                 || name[family.Length] != '_'
                 || !int.TryParse(name[(family.Length + 1)..], out int ordinal)
                 || ordinal >= lowest
+                || _removed.Contains(name)
                 || !_roster.TryGetValue(name, out var rig)
                 || !rig.Inert)
             {
@@ -1480,7 +1489,24 @@ public sealed class CampaignDirector
     // they share this; a miss is reported by the caller rather than swallowed, because a mission
     // naming an aircraft that is not there is a real signal.
     private FlightController? Commanded(string name) =>
-        _roster.TryGetValue(name, out var rig) ? rig : null;
+        !_removed.Contains(name) && _roster.TryGetValue(name, out var rig) ? rig : null;
+
+    // DELETE_ON_SUCCESS's removal (FUN_0047bab0): the aircraft leaves the world for good. It is
+    // deactivated rather than freed, because its admission ordinal names it on the wire; the
+    // presence change is what reaches a guest's copy. A guest's copy waits for that change.
+    private bool RemoveFromWorld(string name)
+    {
+        if (_removed.Contains(name) || !_roster.TryGetValue(name, out var rig) || rig.RemoteOwned)
+        {
+            return false;
+        }
+
+        _removed.Add(name);
+        rig.Parked = false;
+        rig.Inert = true;
+        Log.Info("core", $"campaign: TRAVELERS DELETE_ON_SUCCESS took '{name}' out of the world");
+        return true;
+    }
 
     // The directive's half on a guest: placed at once when the host's draw is already here.
     private void AwaitHostWarp(string vehicle, IReadOnlyList<WarpPoint> points)
@@ -1736,9 +1762,12 @@ public sealed class CampaignDirector
 
         public bool? TravelersMet(TravelersSpec spec)
         {
+            // A reference named `player` is the human field, read from the subject's side. C5/M02
+            // removes each aircraft once every human is 2000 m clear of it.
+            bool humanReference = IsPlayer(spec.WhereNode);
             Vector3? reference = spec.WherePoint is { } p
                 ? new Vector3(p[0], p[1], p[2])
-                : Where(spec.WhereNode ?? string.Empty);
+                : humanReference ? Vector3.Zero : Where(spec.WhereNode ?? string.Empty);
             if (reference == null)
             {
                 return null;
@@ -1756,6 +1785,7 @@ public sealed class CampaignDirector
                 }
 
                 int matching = 0;
+                List<string>? counted = null;
                 foreach (var (name, plan) in _owner._rosterPlans)
                 {
                     if (plan.Group != group)
@@ -1776,12 +1806,23 @@ public sealed class CampaignDirector
                         continue;
                     }
 
-                    bool memberInside = where.DistanceSquaredTo(reference.Value) <= spec.Radius * spec.Radius;
-                    if (memberInside == spec.Approaching)
+                    if (Reaches(where, reference.Value, humanReference, spec) is not { } reached)
+                    {
+                        return null;
+                    }
+
+                    if (reached)
                     {
                         matching++;
+                        if (spec.DeleteOnSuccess)
+                        {
+                            (counted ??= new List<string>()).Add(name);
+                        }
                     }
                 }
+
+                // FUN_00465b40 removes every counted member, whether or not the tally is reached.
+                counted?.ForEach(Remove);
 
                 return matching >= spec.Count;
             }
@@ -1791,15 +1832,37 @@ public sealed class CampaignDirector
                 return null;
             }
 
-            if (!string.Equals(spec.Who, "player", StringComparison.OrdinalIgnoreCase))
+            if (!IsPlayer(spec.Who))
             {
-                if (Where(spec.Who) is not { } who)
+                // ⚠ Keep the subject's activity gate. FUN_00465b40 tests nothing while the subject's
+                // node is inactive, which a deactivated, parked or removed vehicle's node is.
+                if (SubjectOf(spec.Who) is not { } subject)
                 {
                     return null;
                 }
 
-                bool at = who.DistanceSquaredTo(reference.Value) <= spec.Radius * spec.Radius;
-                return spec.Approaching ? at : !at;
+                if (!subject.Active)
+                {
+                    return false;
+                }
+
+                bool? met = Reaches(subject.Position, reference.Value, humanReference, spec);
+                if (met == true && spec.DeleteOnSuccess)
+                {
+                    Remove(spec.Who);
+                }
+
+                return met;
+            }
+
+            if (humanReference)
+            {
+                return null;
+            }
+
+            if (spec.DeleteOnSuccess)
+            {
+                _owner.Gap("TRAVELERS", "DELETE_ON_SUCCESS on the player subject removes nothing");
             }
 
             // The authored `player` subject is the whole human field, nearest first.
@@ -1821,6 +1884,11 @@ public sealed class CampaignDirector
             int aircraft = 0, zeppelins = 0, vessels = 0;
             foreach (var name in names)
             {
+                if (_owner._removed.Contains(name))
+                {
+                    continue;
+                }
+
                 if (_owner.ActivateDormantRoster(name))
                 {
                     aircraft++;
@@ -2192,7 +2260,7 @@ public sealed class CampaignDirector
             int released = 0;
             foreach (var name in names)
             {
-                if (_owner._paths?.Release(name) == true)
+                if (!_owner._removed.Contains(name) && _owner._paths?.Release(name) == true)
                 {
                     released++;
                 }
@@ -2208,6 +2276,9 @@ public sealed class CampaignDirector
             }
         }
 
+        private static bool IsPlayer(string? name) =>
+            string.Equals(name, NetTrailerTargets.PlayerName, StringComparison.OrdinalIgnoreCase);
+
         // The shared tail of the three SET_AI_* directives: one line for what landed, one Gap for
         // what did not. An unmatched name has been through every arm the lookup has, so it names
         // something this session did not build rather than an arm that is missing.
@@ -2222,6 +2293,53 @@ public sealed class CampaignDirector
             {
                 _owner.Gap(directive, $"'{unmatched[0]}' and {unmatched.Count - 1} more name no " +
                                       "aircraft, hull or zeppelin this mission built");
+            }
+        }
+
+        // Whether a subject at `at` is inside or outside the radius, as the clause asks. A human-field
+        // reference measures to the nearest human. Null when nobody, not even a listener, is there.
+        private bool? Reaches(Vector3 at, Vector3 reference, bool humanReference, TravelersSpec spec)
+        {
+            if (!humanReference)
+            {
+                bool inside = at.DistanceSquaredTo(reference) <= spec.Radius * spec.Radius;
+                return inside == spec.Approaching;
+            }
+
+            var field = SnapshotHumans();
+            if (field.Count > 0)
+            {
+                return CampaignHumanField.Travelers(field, at, spec.Radius, spec.Approaching);
+            }
+
+            return _in.ListenerPosition is { } listener
+                ? CampaignHumanField.Travelers(
+                    new[] { new HumanState(listener(), null, false) }, at, spec.Radius, spec.Approaching)
+                : null;
+        }
+
+        // A node-form subject and whether it is in the world: the roster's aircraft or hull first,
+        // then a built world node. This engine keeps no activity bit for a world node.
+        private (Vector3 Position, bool Active)? SubjectOf(string name)
+        {
+            if (_owner._roster.TryGetValue(name, out var rig))
+            {
+                return (rig.WorldPosition, !rig.Inert);
+            }
+
+            if (_owner._vessels.TryGetValue(name, out var vessel))
+            {
+                return (vessel.Position, !vessel.Inert);
+            }
+
+            return Where(name) is { } at ? (at, true) : null;
+        }
+
+        private void Remove(string name)
+        {
+            if (!_owner.RemoveFromWorld(name) && !_owner._removed.Contains(name))
+            {
+                _owner.Gap("TRAVELERS", $"DELETE_ON_SUCCESS names '{name}', which is no roster aircraft this end removes");
             }
         }
 
