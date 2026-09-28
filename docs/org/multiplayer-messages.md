@@ -253,8 +253,9 @@ bytes back into `0x642f8c` and posts `0x3f7`. The block at `+4` is a copy of `0x
 | `+0x26`, `+0x27` | | unmapped |
 
 [Evidence: decoded] The outlaw list follows at message `+0x2c`, packed by `FUN_00410800` (below),
-and the whole message is sent unguaranteed (`FUN_005b2640(.., 0, 0)`). [Evidence: undecoded] What
-triggers the send, and bytes `+0x26`..`+0x27`, are open. No message carries a pilot's remaining lives: each peer seeds them from
+and the whole message is sent unguaranteed (`FUN_005b2640(.., 0, 0)`). `FUN_004134e0` is called
+from a per-frame step at `0x415656` while the lobby object's byte `+4`, a dirty flag, is set.
+[Evidence: undecoded] What sets that flag, and bytes `+0x26`..`+0x27`, are open. No message carries a pilot's remaining lives: each peer seeds them from
 this block and counts them down on the `0x12` death reports
 ([`multiplayer-scoring.md`](multiplayer-scoring.md)). The remake's `0x53` carries the same lives
 settings and nothing more.
@@ -303,6 +304,54 @@ are what the check reads for a stock pick:
 | Airframe | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | Guns | 0,5,5,5 | 2,1,5,2 | 2,2,0,0 | 1,0,5,5 | 3,0,5,0 | 2,1,0,5 | 4,0,5,0 | 4,0,5,5 | 3,2,5,1 | 2,1,5,5 | 4,2,5,5 |
+
+### The outlaw list screen
+
+[Evidence: decoded] The lobby's Select... (`BCA` in `MULTIPLAYERLOBBY_MISSION.SCRIPT`,
+`mp_b_medium.png` at page +295,+277) reads langui 10103 "Select..." on the host and 10508 "View..."
+on a guest. It is greyed (`mail(1)`) while Outlaw Components (`ACA`) is clear and live (`mail(2)`)
+while it is ticked, on both ends and whether or not the host is Ready: the options refresh 1015 sets
+it on the tick alone, and the Ready message 2012 leaves it alone. Every toggle of `ACA` calls uiData
+5044, whose case at `0x40eca8` calls `FUN_004107a0` and clears all 34 flags. A press on Select...
+runs `MULTIPLAYER_OUTLAW.SCRIPT`, greys the four lobby tabs and pauses the mission page; on the host
+it first calls 5050 (`0x40ef3f`), where `FUN_004106c0` copies the list at `0x64e168` to `0x64df60`.
+
+The pane is `mp_lobby_outlawed.png` at (314, 26), the tab page's place, titled 10136 "Outlawed
+Components" at +15,+45. Five sub-tabs stand at y +63, four frames each, their labels black and the
+picked one (142,0,0): Airframes (10130, `mp_lobby_tabmedium.png`, +46), then Engines, Guns, Ammo and
+Rockets (10131..10134, `mp_lobby_tabsmall.png`, +127, +200, +268, +336). Airframes is picked on
+open. Every box is `mp_b_readycheckbox8states.png` (eight frames of 48x26) with its label at +60,+4:
+
+| Sub-tab | Boxes | Names | Read / write (uiData) |
+|---|---|---|---|
+| Airframes | 11 rows, 4 shown from +85,+120 at a 36 px pitch | langui 3000+i (`FUN_00410b60`, 5020) | 5063 `FUN_00410cc0` / 5025 byte +i |
+| Engines | one at +100,+150 | 10135 "Outlaw Nitro-Boosted Engines" | 5033 third out (`0x64e189`) / 5043 byte +0x21 |
+| Guns | 5 rows from +85,+110 at a 32 px pitch | langui 3320+i (`FUN_00410ab0`, 5017) | 5065 `FUN_00410c10` / 5022 byte +0xb+i |
+| Ammo | Outlaw All Ammo, then 4 rows from +85,+120 at 36 px | 10137, then langui 3350+i (`FUN_00410ae0`, 5018) | 5033 first out (`0x64e188`) / 5028 byte +0x20; rows 5018 / 5023 byte +0x10+i |
+| Rockets | Outlaw All Rockets, then 11 rows, 4 shown | 10138, then langui 3380+i (`FUN_00410b30`, 5019) | 5033 second out (`0x64e187`) / 5027 byte +0x1f; rows 5064 `FUN_00410c80` / 5024 byte +0x14+i |
+
+The two Outlaw All boxes stand at +95,+86 drawn at half size (`scale(TD) = 50,50,100`), their labels
+at +40,-2. While one is set its page's rows read ticked (5018 and `FUN_00410c80` answer outlawed)
+and a click on a row is ignored. The long pages scroll under a control at +393,+104, 167 high
+(`mp_b_scrollup.png`, `mp_b_scrolldown.png`, `mp_b_scrollbar.png`, colour `0xff282418`). The uiData
+switch is at `0x40e3e5` (jump table `0x40f93c`, 5016..5035) and `0x40e7f7` (table `0x40f98c`,
+5037..5075).
+
+A box is live (`mail(8)`/`mail(2)`) only on the host while it is not Ready, and otherwise shows its
+state disabled (`mail(5)`/`mail(1)`). Accept (10540, `mp_b_medium.png` at +200,+280) is removed
+(`deactivate`) on a guest and greyed while the host is Ready; its press calls `$$A$$` 1028 on the
+host and closes. Cancel (10541 at +300,+280) calls 5051 (`0x40ef5d`, the copy back from `0x64df60`)
+on a host that is not Ready, then closes. So a guest's View... opens the list read-only. Closing
+(91111) re-enables the lobby tabs, Game Scores only once a match has landed.
+
+[Evidence: undecoded] What `$$A$$` 1028 does. It is the likely trigger of the `0x26` send above.
+
+The remake builds this pane over the tab page (`OriginalOutlawList`). Each tick calls
+`DogfightLobby.SetOutlawed`, which starts a new round, clears every Ready and sends `0x5E` to every
+guest at once, so Accept only closes; Cancel restores the opening list the same way. The remake's
+list survives a toggle of Outlaw Components rather than clearing on 5044, and the model takes a flag
+while the tick is clear, which reaches every guest; the screen's Select... greys then, as the
+original's does.
 
 ## The lobby roster
 

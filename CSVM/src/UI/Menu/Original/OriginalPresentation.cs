@@ -193,7 +193,8 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The aid value that opens the Multiplayer Lobby over the aids' loopback wire with two
     /// guests on it. Its first colon argument names the view: host (the default), guest (Ready) or
     /// waiting (a guest not yet Ready). The second names the tab: mission (the default), plane,
-    /// ammo, rockets or scores, which lands a finished match first.</summary>
+    /// ammo, rockets or scores, which lands a finished match first. Outlaw and outlaw-rockets open
+    /// the outlaw list on Airframes or Rockets, with two airframes and All Rockets outlawed.</summary>
     public const string LobbyAid = "lobby";
 
     /// <summary>The campaign aid values Original shares with Built-in, each over the scratch
@@ -1020,7 +1021,24 @@ public sealed class OriginalPresentation : IMenuPresentation
             _shell.Lobby.OpenGuest();
         }
 
+        bool outlaw = tab.StartsWith("outlaw", StringComparison.Ordinal);
+        if (outlaw && host.Dogfight is { } rules)
+        {
+            // Before the pose, whose Ready the rules change would otherwise clear.
+            rules.SetOutlawComponents(true);
+            rules.SetOutlawed(NetPlaneRules.AirframeFlag + 1, true);
+            rules.SetOutlawed(NetPlaneRules.AirframeFlag + 3, true);
+            rules.SetOutlawed(NetPlaneRules.AllRocketsFlag, true);
+        }
+
         NetDoorAid.PoseDogfight(host, guests);
+        if (outlaw)
+        {
+            _shell.Lobby.ShowOutlawList(tab == "outlaw-rockets" ? OutlawPage.Rockets : OutlawPage.Airframes);
+            _shell.StepNet(0.0);
+            return;
+        }
+
         if (tab == "scores")
         {
             // Game Scores fills only on the way back from a match, so every door lands one.

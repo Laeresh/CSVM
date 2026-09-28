@@ -302,7 +302,7 @@ named in it; `WaveEdit` is the twelfth and has no aid, which is the warning unde
 | `campaign-coop-ready` | Original only: a co-op host's flight check with two guests, the first Ready and the second not, so FLY MISSION is greyed and the strip's chips say Ready | `Campaign` |
 | `connection` | Original only: the Multiplayer Connection page | out of scope |
 | `connection-games[:searching]` | Original only: the LAN games list over an in-process LAN answering with five sample games, one of another build version, or with none so the Searching box stands | out of scope |
-| `lobby[:host\|guest[:mission\|plane\|ammo\|rockets\|scores]]` | Original only: the Multiplayer Lobby as its host or first guest, over an in-process wire with two guests, Time 5 and Limited Lives set, the first guest Ready and one chat line from each, on the named tab | out of scope |
+| `lobby[:host\|guest[:mission\|plane\|ammo\|rockets\|scores\|outlaw\|outlaw-rockets]]` | Original only: the Multiplayer Lobby as its host or first guest, over an in-process wire with two guests, Time 5 and Limited Lives set, the first guest Ready and one chat line from each, on the named tab; `outlaw` and `outlaw-rockets` open the outlaw list on Airframes or Rockets with two airframes and All Rockets outlawed | out of scope |
 | `network-coopjoin` | the Network board of a guest joined over the loopback to a campaign host, the session named in its status | `Network` |
 | `network-coopwait` | that guest's waiting board | `Network` |
 | `loadboard[:mission_type]` | the load screen's blackboard, over the menu, writing that mission type's own dialog | out of scope |
@@ -531,9 +531,12 @@ constants rather than reading a layout.
   or per wing cell. Boot, Create Team, the Ready box (`MP_B_CHECKBOXLARGE.PNG`) and its Ready? label,
   LAUNCH!, the chat box, Send and Leave Game stand on every tab.
 - **What is ours in the lobby.** Only Deathmatch flies, so Capture the Flag, Zeppelin vs Zeppelin,
-  the teams, the outlaw list's Select... and Boot draw greyed. The host's Allow Custom Planes and
-  Outlaw Components are live, and Custom Planes lists the pilot's saved planes while custom planes
-  are allowed. A completed match's Exit lands every pilot back in the same lobby on Game Scores,
+  the teams and Boot draw greyed. The host's Allow Custom Planes and Outlaw Components are live, and
+  Custom Planes lists the pilot's saved planes while custom planes are allowed. Select... (View...
+  on a guest) is live while Outlaw Components is ticked and opens the outlaw list
+  (`MP_LOBBY_OUTLAWED.PNG`) over the tab page, laid out as
+  [`multiplayer-messages.md`](multiplayer-messages.md) decodes it; each tick reaches every guest at
+  once, and the list is read-only on a guest and on a Ready host. A completed match's Exit lands every pilot back in the same lobby on Game Scores,
   which shows that match's name, points, kills and deaths best first (Hits % stays blank), with
   every Ready cleared for the next round. Game Scores is greyed until a match has landed. The own
   name is drawn red in the list and the chat, and the player list shows its first eleven rows with
