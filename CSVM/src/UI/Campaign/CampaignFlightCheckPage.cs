@@ -52,13 +52,14 @@ internal readonly record struct FlightCheckState(
 
 /// <summary>
 /// The flight check screen (<c>Campaign Flight Check.png</c>, <c>FLIGHTCHECK.SCRIPT</c>,
-/// <c>docs/formats/campaign-screens.md</c>). It shows the mission title, a PILOT row, and a WINGMAN
-/// row when the mission's <c>cm_sequence</c> wingman flag is set. Each row has CHANGE AMMO (into
-/// <see cref="CampaignScreen.Ammo"/>) and CHANGE PLANE where the slot's rules allow, then come
-/// RETURN TO BRIEFING and FLY MISSION. Each plane's dense text and the objectives note live in
-/// <see cref="Detail"/>, as on <see cref="CampaignRosterPage"/>, not in the rows. With guests joined this one page draws the whole sequence, a
-/// player at a time (<see cref="CampaignFlightField"/>). The co-op allocation decides a guest's
-/// aeroplane and fit, so a guest's check offers neither change.
+/// <c>docs/formats/campaign-screens.md</c>). It shows the mission title and a PILOT row, plus a
+/// WINGMAN row when the mission's <c>cm_sequence</c> wingman flag is set. Each row has CHANGE AMMO
+/// (into <see cref="CampaignScreen.Ammo"/>) and CHANGE PLANE where the slot's own rules allow,
+/// then RETURN TO BRIEFING and FLY MISSION. Each plane's dense text (title, both eight-row lists)
+/// and the objectives note live in <see cref="Detail"/>, as on <see cref="CampaignRosterPage"/>,
+/// not in the row list. CHANGE PLANE opens <see cref="CampaignScreen.PlaneSelection"/> on the row's own slot for a guest and
+/// the seated player alike, so one place enforces the duplicate rule. With guests joined this one
+/// page draws the whole sequence, a player at a time (<see cref="CampaignFlightField"/>).
 /// </summary>
 public sealed class CampaignFlightCheckPage : CampaignPage
 {
@@ -194,10 +195,6 @@ public sealed class CampaignFlightCheckPage : CampaignPage
 
     /// <inheritdoc/>
     public override int RowCount => Rows().Count;
-
-    /// <summary>A guest's check opens on its last button, FLY MISSION or READY, the one press it has
-    /// to make. The seated player's opens on the first row.</summary>
-    public override int OpeningRow => Player > 0 || Flow.Feature.IsGuest ? Rows().Count - 1 : 0;
 
     /// <summary>Each crew slot's aircraft silhouette, the airframe's own frame of the icon sheet,
     /// at <c>FC_P_PILOTPLANE</c> and <c>FC_P_WINGPLANE</c>.</summary>
@@ -428,7 +425,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     {
         var profile = Flow.Profile ?? EmptyProfile;
         var pilot = Player > 0 ? Flow.Field.Plane(Player) : PlaneAt(profile, profile.SelectedPlane);
-        var wing = Player == 0 && HasWingman ? PlaneAt(profile, profile.WingmanPlane) : null;
+        var wing = Player == 0 && HasWingman ? WingmanPlane(profile) : null;
         return new FlightCheckState(
             Flow.Profile, Flow.MissionSeq, Player, HasWingman,
             Flow.Feature.ChangePlaneAllowed(PilotSlot), Flow.Feature.ChangePlaneAllowed(WingmanSlot),
@@ -438,18 +435,19 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     }
 
     // Every row this screen draws, composed from the profile and the mission's wingman flag. The
-    // PILOT block has two action rows, as does a WINGMAN block when the mission flies one. Then
-    // come RETURN TO BRIEFING and FLY MISSION. A guest's own check draws one PILOT
-    // block with no action rows and no wingman. The co-op allocation gave it its aeroplane and fit,
-    // and the wingman is the seated profile's.
+    // PILOT block and its two action rows come first. The WINGMAN block and its two follow when the
+    // mission carries a wingman, then RETURN TO BRIEFING and FLY MISSION. A guest's own check draws
+    // one PILOT block and no wingman, since the wingman is the seated profile's.
     private List<FlightRow> BuildRows()
     {
         var profile = Flow.Profile ?? EmptyProfile;
         var rows = new List<FlightRow>();
-        if (Player > 0 || Flow.Feature.IsGuest)
+        if (Player > 0)
         {
-            var plane = Player > 0 ? Flow.Field.Plane(Player) : PlaneAt(profile, profile.SelectedPlane);
-            AddSlot(rows, plane, slot: PilotSlot, heading: "PILOT", changePlane: false, changeAmmo: false);
+            // A guest picks out of copies of the hangar and the stock Devastator. Neither of
+            // FLIGHTCHECK.SCRIPT's plane-change gates applies, since both are rules about the
+            // seated profile's own aircraft.
+            AddSlot(rows, Flow.Field.Plane(Player), slot: PilotSlot, heading: "PILOT", changePlane: true);
         }
         else
         {
@@ -457,7 +455,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
                 changePlane: Flow.Feature.ChangePlaneAllowed(PilotSlot));
             if (HasWingman)
             {
-                AddSlot(rows, PlaneAt(profile, profile.WingmanPlane), slot: WingmanSlot, heading: "WINGMAN",
+                AddSlot(rows, WingmanPlane(profile), slot: WingmanSlot, heading: "WINGMAN",
                     changePlane: Flow.Feature.ChangePlaneAllowed(WingmanSlot));
             }
         }
@@ -475,8 +473,11 @@ public sealed class CampaignFlightCheckPage : CampaignPage
             ? profile.Planes[Math.Clamp(index, 0, profile.Planes.Count - 1)]
             : null;
 
-    private void AddSlot(List<FlightRow> rows, OwnedPlane? plane, int slot, string heading, bool changePlane,
-        bool changeAmmo = true)
+    // The plane the wingman flies, which is not its saved one while a human holds that.
+    private OwnedPlane? WingmanPlane(CampaignProfileDef profile) =>
+        Flow.Feature.FlownWingmanPlane ?? PlaneAt(profile, profile.WingmanPlane);
+
+    private void AddSlot(List<FlightRow> rows, OwnedPlane? plane, int slot, string heading, bool changePlane)
     {
         if (plane == null)
         {
@@ -487,11 +488,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         var (guns, rockets) = WeaponColumns(plane);
         rows.Add(new FlightRow($"{heading}   {SlotLabel(plane)}",
             LoadoutBlock(plane), FlightRowKind.Info, slot, plane.Airframe, guns, rockets));
-        if (changeAmmo)
-        {
-            rows.Add(new FlightRow("CHANGE AMMO", string.Empty, FlightRowKind.ChangeAmmo, slot));
-        }
-
+        rows.Add(new FlightRow("CHANGE AMMO", string.Empty, FlightRowKind.ChangeAmmo, slot));
         if (changePlane)
         {
             // The plaque carries its label alone, the original's own FC_B_CHANGEPLANE: the plane
@@ -656,11 +653,11 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     // instance because a hangar visit replaces that instance (CampaignFeature.Resume).
     private CustomPlaneDef? BuildFor(OwnedPlane plane)
     {
-        // A network guest's one aeroplane is its host's, and so is the build. Only the host's word
-        // carries it, since this machine's store knows nothing of the host's hangar.
+        // A network guest's planes are its host's, and so are the builds. Only the host's hangar
+        // words carry them, since this machine's store knows nothing of that hangar.
         if (Flow.Feature.IsGuest)
         {
-            return Flow.Feature.GuestBuild;
+            return Flow.Feature.GuestBuildOf(plane);
         }
 
         if (Flow.Field.IsStock(plane))

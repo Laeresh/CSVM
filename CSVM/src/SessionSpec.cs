@@ -316,6 +316,11 @@ public sealed record SessionSpec
     /// <summary>The <c>:&lt;seq&gt;</c> half of <c>--campaign=</c>; null when it was omitted or
     /// unparseable, in which case a warning is recorded and only the profile name is kept.</summary>
     public int? CampaignMissionSeq { get; private set; }
+
+    /// <summary>The aeroplane the cabin settled for the wingman when a human holds its saved plane.
+    /// Null when the wingman flies that saved plane. Only a campaign launch from the menu sets it;
+    /// no flag names it.</summary>
+    public Net.CoopWingmanMessage? CampaignWingman { get; private set; }
     /// <summary><c>--profiles=&lt;dir&gt;</c>: the campaign profile store this process reads and
     /// writes in place of <c>user://Profiles/</c>, so a probe never touches a player's own
     /// profiles. Null when the flag was absent. Kept as the raw value; resolving it is
@@ -1670,11 +1675,13 @@ public sealed record SessionSpec
     /// <c>cm_sequence.zrd</c>, as for a command line. ⚠ Derived from the pristine <paramref name="cli"/>.</summary>
     public static SessionSpec FromCampaign(SessionSpec cli, string profile, int seq,
         IReadOnlyList<string> planeNodes, int players,
-        IReadOnlyList<LoadoutChoice?>? fits = null, IReadOnlyList<CustomPlaneDef?>? customs = null) =>
+        IReadOnlyList<LoadoutChoice?>? fits = null, IReadOnlyList<CustomPlaneDef?>? customs = null,
+        Net.CoopWingmanMessage? wingman = null) =>
         cli with
         {
             CampaignProfile = profile,
             CampaignMissionSeq = seq,
+            CampaignWingman = wingman,
             MenuLoadouts = fits ?? Array.Empty<LoadoutChoice?>(),
             MenuCustomPlanes = customs ?? Array.Empty<CustomPlaneDef?>(),
             PlaneNames = planeNodes.ToArray(),

@@ -7,16 +7,17 @@ namespace CSVM.UI.Menu;
 
 /// <summary>
 /// What a co-op host names to its guests about its boards: the board, the mission, the progress,
-/// the hangar it offers and the debrief's result. It also holds the film it shares and the
-/// aeroplane its allocation gives each seat. It builds each guest's flow and seat aeroplane and
-/// sends either again only when it changed. The round of picks is the
-/// door's, so the door advances it on <see cref="Show"/>'s answer and hands it to every send.
+/// the hangar it offers and the debrief's result. Each hangar plane names its holding seat. It also
+/// holds the film it shares. It builds each guest's flow and hangar words and sends one again only
+/// when it changed. The round of picks is the door's, so the door advances it on <see cref="Show"/>'s
+/// answer and hands it to every send.
 /// </summary>
 public sealed class CoopHostFlow
 {
     private readonly Dictionary<int, CoopFlowMessage> _sent = new();
-    private readonly Dictionary<int, CoopSeatPlaneMessage> _planesSent = new();
-    private CoopSeatPlaneMessage[] _planes = Array.Empty<CoopSeatPlaneMessage>();
+    private readonly Dictionary<int, CoopHangarMessage[]> _hangarSent = new();
+    private CoopHangarMessage[] _hangar = Array.Empty<CoopHangarMessage>();
+    private int[] _seatPlanes = Array.Empty<int>();
     private byte _seq;
     private byte _progress;
     private ushort _airframes;
@@ -50,12 +51,15 @@ public sealed class CoopHostFlow
         _cash = cash;
     }
 
-    /// <summary>The aeroplane the host's allocation gives seat <paramref name="seat"/>, the stock
-    /// Devastator for a seat it names nothing for.</summary>
-    public CoopSeatPlaneMessage PlaneOf(int seat) =>
-        seat >= 0 && seat < _planes.Length
-            ? _planes[seat]
-            : CoopSeatPlaneMessage.Stock(seat, CoopPlanePool.StockAirframe);
+    /// <summary>The plane seat <paramref name="seat"/> flies as the host last settled every pick
+    /// (<see cref="CoopPlanePool.Resolve"/>). An index into the hangar, or
+    /// <see cref="CoopPlanePool.Stock"/> for a seat it names nothing for.</summary>
+    public int PlaneOf(int seat) =>
+        seat >= 0 && seat < _seatPlanes.Length && _seatPlanes[seat] < _hangar.Length ? _seatPlanes[seat] : CoopPlanePool.Stock;
+
+    /// <summary>Hangar plane <paramref name="index"/> as the guests hear it, or null past the hangar.
+    /// </summary>
+    public CoopHangarMessage? HangarAt(int index) => index >= 0 && index < _hangar.Length ? _hangar[index] : null;
 
     // True when the change starts a new round of picks. A new mission does, as does a move onto a
     // board other than the briefing and flight check.
@@ -72,32 +76,35 @@ public sealed class CoopHostFlow
         return newRound;
     }
 
-    // Takes the allocation by seat. Each entry is stamped with its own seat, so no caller can send
-    // a guest a word that names somebody else's.
-    internal void ShowPlanes(IReadOnlyList<CoopSeatPlaneMessage> bySeat)
+    // Takes the hangar in order with each plane's holder, and the plane each seat flies. Each word
+    // is stamped with its own place and the hangar's size.
+    internal void ShowHangar(IReadOnlyList<CoopHangarMessage> hangar, IReadOnlyList<int> seatPlanes)
     {
-        var planes = new CoopSeatPlaneMessage[Math.Min(bySeat.Count, byte.MaxValue)];
-        for (int seat = 0; seat < planes.Length; seat++)
+        int count = Math.Min(hangar.Count, byte.MaxValue);
+        if (_hangar.Length != count)
         {
-            planes[seat] = bySeat[seat] with { Seat = (byte)seat };
+            _hangar = new CoopHangarMessage[count];
         }
 
-        _planes = planes;
+        for (int at = 0; at < count; at++)
+        {
+            _hangar[at] = hangar[at] with { Index = (byte)at, Count = (byte)count };
+        }
+
+        _seatPlanes = new int[seatPlanes.Count];
+        for (int seat = 0; seat < _seatPlanes.Length; seat++)
+        {
+            _seatPlanes[seat] = seatPlanes[seat];
+        }
     }
 
-    // Each guest's flow differs only in its own player number, and its seat's aeroplane is its
-    // own; each goes out whenever it changed. The aeroplane goes first, so a guest opening its
-    // campaign on the flow already holds it.
+    // Each guest's flow differs only in its own player number; one goes out whenever it changed.
+    // The hangar words go first, so a guest opening its campaign on the flow already holds them.
     internal void Send(NetLobby wire, IReadOnlyList<int> admitted, int localPlayers, byte round, Func<int, bool> readyNow)
     {
-        for (int i = 0; i < admitted.Count; i++)
+        foreach (int peer in admitted)
         {
-            var plane = PlaneOf(localPlayers + i);
-            if (!_planesSent.TryGetValue(admitted[i], out var told) || told != plane)
-            {
-                wire.Tell(admitted[i], plane);
-                _planesSent[admitted[i]] = plane;
-            }
+            SendHangar(wire, peer);
         }
 
         byte mask = 0;
@@ -130,7 +137,7 @@ public sealed class CoopHostFlow
             if (!Contains(admitted, peer))
             {
                 _sent.Remove(peer);
-                _planesSent.Remove(peer);
+                _hangarSent.Remove(peer);
             }
         }
     }
@@ -139,7 +146,7 @@ public sealed class CoopHostFlow
     internal void ClearSent()
     {
         _sent.Clear();
-        _planesSent.Clear();
+        _hangarSent.Clear();
     }
 
     internal CoopFilmMessage StartFilm(NetCoopFilm film, int chapter)
@@ -166,8 +173,9 @@ public sealed class CoopHostFlow
     internal void Forget()
     {
         _sent.Clear();
-        _planesSent.Clear();
-        _planes = Array.Empty<CoopSeatPlaneMessage>();
+        _hangarSent.Clear();
+        _hangar = Array.Empty<CoopHangarMessage>();
+        _seatPlanes = Array.Empty<int>();
         Screen = NetCoopScreen.Cabin;
         _seq = 0;
         _progress = 0;
@@ -189,5 +197,29 @@ public sealed class CoopHostFlow
         }
 
         return false;
+    }
+
+    // Every word this peer has not heard as it stands now.
+    private void SendHangar(NetLobby wire, int peer)
+    {
+        if (!_hangarSent.TryGetValue(peer, out var told) || told.Length != _hangar.Length)
+        {
+            told = new CoopHangarMessage[_hangar.Length];
+            for (int at = 0; at < told.Length; at++)
+            {
+                told[at] = _hangar[at] with { Count = 0 };
+            }
+
+            _hangarSent[peer] = told;
+        }
+
+        for (int at = 0; at < _hangar.Length; at++)
+        {
+            if (told[at] != _hangar[at])
+            {
+                wire.Tell(peer, _hangar[at]);
+                told[at] = _hangar[at];
+            }
+        }
     }
 }

@@ -1,26 +1,30 @@
 using System;
 using CSVM.Net;
+using CSVM.Session.Campaign;
 
 namespace CSVM.UI.Menu;
 
 /// <summary>
-/// A guest's own pick: the airframe and the fit it flies with. It also says whether the guest means
-/// to be Ready and whether it walked out of the flight. It lasts the joined session across flights,
-/// and a new join starts on the starter and the stock fit. The door sends it under the host's round
-/// of picks, and again only when it changed. A co-op host seats its guests in the aeroplanes its own
-/// allocation gives them, so there the airframe and fit only echo that plane back.
+/// A co-op guest's own pick: the plane of its host's hangar, the airframe and the fit it flies
+/// with. It also says whether the guest means to be Ready and whether it walked out of the flight.
+/// It lasts the joined session across flights, and a new join starts with no plane picked and the
+/// stock fit. The door sends it under the host's round of picks, and again only when it changed.
 /// </summary>
 public sealed class CoopGuestPick
 {
-    /// <summary>The airframe a co-op guest flies when its own pick is not one the host offers: the
-    /// campaign's first aeroplane, which every hangar holds.</summary>
-    public const byte StarterAirframe = 5;
+    /// <summary>The airframe a co-op guest flies before its pick names one: the campaign's first
+    /// aeroplane, which every hangar holds.</summary>
+    public const byte StarterAirframe = CoopPlanePool.StockAirframe;
 
     private CoopPickMessage? _sent;
     private bool _left;
 
-    /// <summary>The airframe this guest picked from its host's hangar.</summary>
+    /// <summary>The airframe this guest flies.</summary>
     public byte Airframe { get; private set; } = StarterAirframe;
+
+    /// <summary>The plane of the host's hangar this guest picked: an index into the hangar,
+    /// <see cref="CoopPlanePool.Stock"/> or <see cref="CoopPlanePool.Unpicked"/>.</summary>
+    public int Plane { get; private set; } = CoopPlanePool.Unpicked;
 
     /// <summary>Whether this guest means to be Ready, sent or not yet sent. A new round of picks
     /// clears it.</summary>
@@ -29,15 +33,18 @@ public sealed class CoopGuestPick
     /// <summary>The ammunition and ordnance the pick carries to the host.</summary>
     public CoopFit Fit { get; private set; }
 
-    /// <summary>Picks <paramref name="airframe"/> from the host's hangar, whether it is Ready, and
-    /// the fit it flies with. Reaches the host on the door's next step, under the host's current
-    /// round.</summary>
+    /// <summary>The airframe this guest flies, whether it is Ready, and the fit it flies with.
+    /// Reaches the host on the door's next step, under the host's current round.</summary>
     public void Set(int airframe, bool ready, CoopFit fit = default)
     {
         Airframe = (byte)Math.Clamp(airframe, 0, byte.MaxValue);
         Ready = ready;
         Fit = fit;
     }
+
+    /// <summary>Picks <paramref name="plane"/> of the host's hangar, as <see cref="Plane"/> names
+    /// one. Reaches the host on the door's next step.</summary>
+    public void Choose(int plane) => Plane = plane >= CoopPlanePool.Stock ? plane : CoopPlanePool.Unpicked;
 
     // Ready counts only once the host has heard it under the round it names now.
     internal bool ReadyUnder(byte round) => Ready && _sent is { } sent && sent.Epoch == round;
@@ -55,7 +62,7 @@ public sealed class CoopGuestPick
             _left = false;
         }
 
-        var pick = new CoopPickMessage(round, Ready, Airframe, Fit, name, _left);
+        var pick = new CoopPickMessage(round, Ready, Airframe, Fit, name, _left, CoopPickMessage.PlaneByte(Plane));
         return _sent == pick ? null : pick;
     }
 
@@ -66,6 +73,7 @@ public sealed class CoopGuestPick
         _sent = null;
         Ready = false;
         Airframe = StarterAirframe;
+        Plane = CoopPlanePool.Unpicked;
         Fit = default;
         _left = false;
     }

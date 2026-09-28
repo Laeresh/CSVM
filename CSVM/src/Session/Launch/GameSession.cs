@@ -4073,6 +4073,9 @@ public partial class GameSession : Node3D
             return true;
         }
 
+        // A host built first sends its hold at once, so it can land inside this pump.
+        // ⚠ Claim the start words before pumping, or that hold is dropped as unknown.
+        net.On<Net.StartGateMessage>(TakeStartWord);
         for (int i = 0; i < NetJoinSteps && !net.Joined; i++)
         {
             net.Step(GameClock.FixedDt);
@@ -4564,7 +4567,7 @@ public partial class GameSession : Node3D
         _startGate = net.IsHost
             ? Net.NetStartGate.Host(_netSeats.Where(s => !s.IsLocal && linked.Contains(s.PeerId))
                 .Select(s => s.PeerId).Distinct())
-            : Net.NetStartGate.Guest(net.HostPeer);
+            : _startGate ?? Net.NetStartGate.Guest(net.HostPeer);
         net.On<Net.StartGateMessage>(TakeStartWord);
         net.PeerLeft += peer => _startGate?.TakeLeft(peer);
     }
@@ -4574,6 +4577,12 @@ public partial class GameSession : Node3D
     // The host names its round in reply, and a guest that did not know it yet answers again.
     private void TakeStartWord(int peer, Net.StartGateMessage word)
     {
+        // A guest's word can precede its roster, which names the host, so the sender stands in.
+        if (_net is { IsHost: false })
+        {
+            _startGate ??= Net.NetStartGate.Guest(peer);
+        }
+
         if (_startGate is not { } gate || _net is not { } net)
         {
             return;

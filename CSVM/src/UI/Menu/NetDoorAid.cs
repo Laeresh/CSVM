@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using CSVM.Net;
+using CSVM.Session.Campaign;
 
 namespace CSVM.UI.Menu;
 
@@ -212,15 +213,15 @@ public static class NetDoorAid
 
     /// <summary>A door joined as <see cref="JoinedGuest"/> that has also heard its host name its
     /// boards as <paramref name="flow"/>, so a guest's campaign follows them. When given, the host
-    /// has also named its seat's aeroplane as <paramref name="plane"/>. With
-    /// <paramref name="ready"/> the guest has answered Ready under that round.</summary>
-    public static NetPlayFeature CoopGuest(CoopFlowMessage flow, bool ready, CoopSeatPlaneMessage? plane = null)
+    /// has first named its hangar as <paramref name="hangar"/>. With <paramref name="ready"/> the
+    /// guest has answered Ready under that round.</summary>
+    public static NetPlayFeature CoopGuest(CoopFlowMessage flow, bool ready, IReadOnlyList<CoopHangarMessage>? hangar = null)
     {
         var door = Joined(flow.MissionSeq, flow.Humans, out var host);
-        if (plane is { } seat)
+        Span<byte> word = stackalloc byte[CoopHangarMessage.Size];
+        foreach (var plane in hangar ?? Array.Empty<CoopHangarMessage>())
         {
-            Span<byte> word = stackalloc byte[CoopSeatPlaneMessage.Size];
-            seat.Write(word);
+            plane.Write(word);
             host.Send(host.Peers[0], word, NetReliability.Reliable);
         }
 
@@ -235,6 +236,36 @@ public static class NetDoorAid
         }
 
         return door;
+    }
+
+    /// <summary>The words a co-op host names <paramref name="host"/>'s hangar with while
+    /// <paramref name="seats"/> humans fly it and none past the host has picked yet. Each plane
+    /// carries the seat <see cref="CoopPlanePool.Resolve"/> gives it, no build, and its stored fit.
+    /// </summary>
+    public static CoopHangarMessage[] HangarWords(CampaignProfileDef? host, int seats)
+    {
+        var planes = host?.Planes ?? new List<OwnedPlane>();
+        int count = Math.Min(planes.Count, byte.MaxValue);
+        var names = new string[count];
+        for (int at = 0; at < count; at++)
+        {
+            names[at] = planes[at].Name;
+        }
+
+        var picks = new int[Math.Max(1, seats)];
+        Array.Fill(picks, CoopPlanePool.Unpicked);
+        picks[0] = host?.SelectedPlane ?? CoopPlanePool.Unpicked;
+        int[] flown = CoopPlanePool.Resolve(names, picks);
+        var words = new CoopHangarMessage[count];
+        for (int at = 0; at < count; at++)
+        {
+            int holder = Array.FindIndex(flown, plane => plane >= 0 && names[plane] == names[at]);
+            words[at] = new CoopHangarMessage((byte)at, (byte)count, holder >= 0 ? (byte)holder : CoopHangarMessage.NoHolder,
+                (byte)Math.Clamp(planes[at].Airframe, 0, byte.MaxValue), CoopFit.Of(planes[at].Ammo, planes[at].Ordnance),
+                null, names[at]);
+        }
+
+        return words;
     }
 
     private static NetPlayFeature Joined(int missionSeq, int players, out INetTransport host)

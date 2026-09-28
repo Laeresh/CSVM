@@ -166,14 +166,16 @@ public readonly record struct CoopFit(uint Ammo, ulong Ordnance)
 }
 
 /// <summary>
-/// A co-op guest's answer on its flight check, under the round it answers. It names the airframe
-/// picked from the host's hangar, its fit, the guest's player name and whether it is Ready. A host
-/// counts a pick only under its own current round. A Ready from before a mission change therefore
-/// never launches the next one. <see cref="Left"/> says the guest walked out of the flight under way.
-/// Kept in the lobby, so a flight's end cannot carry it into the next session.
+/// A co-op guest's answer on its flight check, under the round it answers. It names the airframe it
+/// flies, its fit, the guest's player name and whether it is Ready. On a campaign it also names the
+/// plane of the host's hangar it picked (<see cref="Plane"/>). A host counts a Ready only under its
+/// own current round. A Ready from before a mission change therefore never launches the next one.
+/// <see cref="Left"/> says the guest walked out of the flight under way. Kept in the lobby, so a
+/// flight's end cannot carry it into the next session.
 /// </summary>
 public readonly record struct CoopPickMessage(
-    byte Epoch, bool Ready, byte Airframe, CoopFit Fit = default, string Name = "", bool Left = false)
+    byte Epoch, bool Ready, byte Airframe, CoopFit Fit = default, string Name = "", bool Left = false,
+    byte Plane = CoopPickMessage.NoPlane)
     : INetMessage<CoopPickMessage>
 {
     /// <summary>The fixed width of the message, header included.</summary>
@@ -182,11 +184,35 @@ public readonly record struct CoopPickMessage(
     /// <summary>How many bytes the player name takes, the roster's own callsign width.</summary>
     public const int NameBytes = SeatRosterMessage.CallsignBytes;
 
+    /// <summary>The <see cref="Plane"/> of a guest that has picked no plane of the hangar.</summary>
+    public const byte NoPlane = 0;
+
+    /// <summary>The <see cref="Plane"/> of a guest that picked the shared stock Devastator.</summary>
+    public const byte StockPlane = 0xFF;
+
     /// <inheritdoc/>
     public static NetMessageType Type => NetMessageType.CoopPick;
 
     /// <inheritdoc/>
     public static NetReliability Reliability => NetReliability.Reliable;
+
+    /// <summary>The picked plane as an index into the host's hangar: -1 for the stock Devastator,
+    /// -2 for no pick. Any other byte is the index plus one.</summary>
+    public int PlaneIndex => Plane switch
+    {
+        NoPlane => -2,
+        StockPlane => -1,
+        _ => Plane - 1,
+    };
+
+    /// <summary>The <see cref="Plane"/> byte for <paramref name="index"/>, the reverse of
+    /// <see cref="PlaneIndex"/>. An index past the byte reads as no pick.</summary>
+    public static byte PlaneByte(int index) => index switch
+    {
+        -1 => StockPlane,
+        >= 0 and < StockPlane - 1 => (byte)(index + 1),
+        _ => NoPlane,
+    };
 
     /// <inheritdoc/>
     public static bool TryRead(ReadOnlySpan<byte> from, out CoopPickMessage message)
@@ -199,10 +225,10 @@ public readonly record struct CoopPickMessage(
         byte epoch = reader.ReadByte();
         byte flags = reader.ReadByte();
         byte airframe = reader.ReadByte();
-        _ = reader.ReadByte();
+        byte plane = reader.ReadByte();
         var fit = CoopFit.Read(ref reader);
         string name = reader.ReadText(NameBytes);
-        message = new CoopPickMessage(epoch, (flags & 1) != 0, airframe, fit, name, (flags & 2) != 0);
+        message = new CoopPickMessage(epoch, (flags & 1) != 0, airframe, fit, name, (flags & 2) != 0, plane);
         return true;
     }
 
@@ -213,9 +239,75 @@ public readonly record struct CoopPickMessage(
         writer.WriteByte(Epoch);
         writer.WriteByte((byte)((Ready ? 1 : 0) | (Left ? 2 : 0)));
         writer.WriteByte(Airframe);
-        writer.WriteByte(0);
+        writer.WriteByte(Plane);
         Fit.Write(ref writer);
         writer.WriteText(Name, NameBytes);
+        return writer.Close();
+    }
+}
+
+/// <summary>
+/// One plane of a co-op host's hangar as its guests pick from it. It names its place and the
+/// hangar's size, the seat that holds it, its airframe, stored fit, build and name. The build is
+/// null for a plane with none on file. The host sends every plane to every guest, and again
+/// whenever one changes. The holders are the host's settling of every seat's pick, so every
+/// machine refuses the same taken planes. Kept in the lobby by place.
+/// </summary>
+public readonly record struct CoopHangarMessage(
+    byte Index, byte Count, byte Holder, byte Airframe, CoopFit Fit = default, NetPlaneBuild? Build = null,
+    string Name = "")
+    : INetMessage<CoopHangarMessage>
+{
+    /// <summary>The fixed width of the message, header included.</summary>
+    public const int Size = NetMessage.HeaderBytes + 5 + CoopFit.Bytes + NetPlaneBuild.Bytes + NetPlaneBuild.NameBytes + NameBytes;
+
+    /// <summary>How many bytes the plane's name takes: the hangar's 32-character name cap and its
+    /// terminator.</summary>
+    public const int NameBytes = 33;
+
+    /// <summary>The <see cref="Holder"/> of a plane no seat holds.</summary>
+    public const byte NoHolder = 0xFF;
+
+    /// <inheritdoc/>
+    public static NetMessageType Type => NetMessageType.CoopHangar;
+
+    /// <inheritdoc/>
+    public static NetReliability Reliability => NetReliability.Reliable;
+
+    /// <summary>Whether a seat holds this plane.</summary>
+    public bool Held => Holder != NoHolder;
+
+    /// <inheritdoc/>
+    public static bool TryRead(ReadOnlySpan<byte> from, out CoopHangarMessage message)
+    {
+        message = default;
+        var reader = new NetMessageReader(from);
+        if (!reader.Is(Size) || reader.Type != Type)
+            return false;
+
+        byte index = reader.ReadByte();
+        byte count = reader.ReadByte();
+        byte holder = reader.ReadByte();
+        byte airframe = reader.ReadByte();
+        bool built = reader.ReadByte() != 0;
+        var fit = CoopFit.Read(ref reader);
+        var build = NetPlaneBuild.Read(ref reader);
+        message = new CoopHangarMessage(index, count, holder, airframe, fit, built ? build : null, reader.ReadText(NameBytes));
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public int Write(Span<byte> into)
+    {
+        var writer = new NetMessageWriter(into, Type);
+        writer.WriteByte(Index);
+        writer.WriteByte(Count);
+        writer.WriteByte(Holder);
+        writer.WriteByte(Airframe);
+        writer.WriteByte(Build != null ? (byte)1 : (byte)0);
+        Fit.Write(ref writer);
+        (Build ?? new NetPlaneBuild()).Write(ref writer);
+        writer.WriteText(Name ?? string.Empty, NameBytes);
         return writer.Close();
     }
 }
@@ -260,67 +352,6 @@ public readonly record struct CoopSeatFitMessage(byte Seat, CoopFit Fit)
         writer.WriteByte(0);
         writer.WriteUInt16(0);
         Fit.Write(ref writer);
-        return writer.Close();
-    }
-}
-
-/// <summary>
-/// The aeroplane a co-op host's allocation gives one seat. That is a named plane of the host's
-/// hangar with its own fit and build, or the stock Devastator when no unique plane is left. The host
-/// sends each guest its own seat's whenever it changes, and the guest's flight check stands on it.
-/// Kept in the lobby.
-/// </summary>
-public readonly record struct CoopSeatPlaneMessage(
-    byte Seat, bool Hangar, byte Airframe, CoopFit Fit = default, NetPlaneBuild? Build = null, string Name = "")
-    : INetMessage<CoopSeatPlaneMessage>
-{
-    /// <summary>The fixed width of the message, header included.</summary>
-    public const int Size = NetMessage.HeaderBytes + 4 + CoopFit.Bytes + NetPlaneBuild.Bytes + NetPlaneBuild.NameBytes;
-
-    /// <inheritdoc/>
-    public static NetMessageType Type => NetMessageType.CoopSeatPlane;
-
-    /// <inheritdoc/>
-    public static NetReliability Reliability => NetReliability.Reliable;
-
-    /// <summary>The word for a seat that flies <paramref name="airframe"/> at rest, no plane of the
-    /// hangar being left for it.</summary>
-    public static CoopSeatPlaneMessage Stock(int seat, int airframe) =>
-        new((byte)Math.Clamp(seat, 0, byte.MaxValue), false, (byte)Math.Clamp(airframe, 0, byte.MaxValue));
-
-    /// <inheritdoc/>
-    public static bool TryRead(ReadOnlySpan<byte> from, out CoopSeatPlaneMessage message)
-    {
-        message = default;
-        var reader = new NetMessageReader(from);
-        if (!reader.Is(Size) || reader.Type != Type)
-            return false;
-
-        byte seat = reader.ReadByte();
-        byte flags = reader.ReadByte();
-        byte airframe = reader.ReadByte();
-        _ = reader.ReadByte();
-        var fit = CoopFit.Read(ref reader);
-        var build = NetPlaneBuild.Read(ref reader);
-        message = new CoopSeatPlaneMessage(seat, (flags & 1) != 0, airframe, fit, (flags & 2) != 0 ? build : null, build.Name);
-        return true;
-    }
-
-    /// <inheritdoc/>
-    public int Write(Span<byte> into)
-    {
-        var writer = new NetMessageWriter(into, Type);
-        writer.WriteByte(Seat);
-        writer.WriteByte((byte)((Hangar ? 1 : 0) | (Build != null ? 2 : 0)));
-        writer.WriteByte(Airframe);
-        writer.WriteByte(0);
-        Fit.Write(ref writer);
-
-        // The plane's name rides in the build's own name field. A hangar plane with no build on file
-        // still reaches the guest under its hangar name.
-        var build = Build?.Copy() ?? new NetPlaneBuild();
-        build.Name = Name ?? string.Empty;
-        build.Write(ref writer);
         return writer.Close();
     }
 }

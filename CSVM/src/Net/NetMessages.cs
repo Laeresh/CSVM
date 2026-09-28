@@ -144,9 +144,9 @@ public enum NetMessageType : ushort
     /// outlaw list.</summary>
     LobbyPlaneRules = 0x005E,
 
-    /// <summary>The aeroplane a co-op host's allocation gives one guest's seat, sent to that guest
+    /// <summary>One plane of a co-op host's hangar and the seat that holds it, sent to every guest
     /// whenever it changes.</summary>
-    CoopSeatPlane = 0x005F,
+    CoopHangar = 0x005F,
 }
 
 /// <summary>Which campaign film a <see cref="CoopFilmMessage"/> names.</summary>
@@ -1362,7 +1362,7 @@ public static class NetMessage
         NetMessageType.DeathNotice => DeathNoticeMessage.Reliability,
         NetMessageType.PlaneBuild => PlaneBuildMessage.Reliability,
         NetMessageType.LobbyPlaneRules => LobbyPlaneRulesMessage.Reliability,
-        NetMessageType.CoopSeatPlane => CoopSeatPlaneMessage.Reliability,
+        NetMessageType.CoopHangar => CoopHangarMessage.Reliability,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "no such message type"),
     };
 

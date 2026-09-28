@@ -12,7 +12,7 @@ the session clock, world root, panes, seats, mode runtimes and resource lifetime
 `WorldSession`, and effects staging to `WorldEffectsFactory`. `_rigs` is the pane list every camera-anchored system reads; `_seatRigs` is the whole field, a network match's
 guests included, and sizes the roster, the spawn walk, the versus board, the respawn rotation, the human-aircraft step and a campaign's human field (`HumanField`), so a guest flown elsewhere counts at its interpolated pose, and a co-op campaign of more than one seat starts on `StartGrid` whatever its local pane count; `TakeGuestLeft` retires a seat whose guest walked out. A context transport opens a `Net.NetSession` in
 the constructor, before the world, so a host can answer a join it has not built for yet; `AwaitNetJoin` pumps that wire until the host's seed, seat and roster have landed,
-ahead of `Rng.Reset` and the seat sizing, and the handshake's clock opens the `NetClockSlew` advanced each frame, which `WireNetClock`'s `NetClockPing` round trip corrects from the first step. `WireStartGate` arms the `NetStartGate` before the build, whose last act holds the clock on it (`GameClock.StartHeld`) until every machine has loaded, with only the wire stepped meanwhile. After the synchronous build it constructs one
+ahead of `Rng.Reset` and the seat sizing, and the handshake's clock opens the `NetClockSlew` advanced each frame, which `WireNetClock`'s `NetClockPing` round trip corrects from the first step. `WireStartGate` arms the `NetStartGate` before the build (a guest claims its words before the join's pump, where a host's early hold lands), whose last act holds the clock on it (`GameClock.StartHeld`) until every machine has loaded, with only the wire stepped meanwhile. After the synchronous build it constructs one
 `SessionSimulation`, which owns the step order; both step paths step the wire first, so an arrival is applied on the step after it landed, and the human-aircraft phase
 puts every seat flown here on the wire on the `AircraftStateCadence` as the SIM pose, while a sample for a seat flown elsewhere reaches that seat's own pose buffer.
 `WireNetCombat` puts combat on the same wire: an owner's fire event spawns the round on every peer, the shooter's machine decides a hit and addresses the victim's owner,
@@ -274,12 +274,12 @@ another folder (a copy, a hand rename) is read under the folder's name with a wa
 is a launch's store, `--profiles=` or `user://Profiles/`. Format: [../formats/saved-games.md](../formats/saved-games.md).
 
 ## src/Session/Campaign/CoopPlanePool.cs
-Which of the seated profile's aircraft each human of a co-op campaign sortie flies, one allocator
-for splitscreen seats and network guests alike. `Allocate` holds the host's selected plane and the
-wingman's plane first, then gives each further seat in order the first plane of the hangar nobody
-holds, compared by name, and `Stock` (the stock Devastator, `StockAirframe`) once none is left. A
-seat's answer depends only on the seats before it. Engine-free: the host decides, and the wire
-carries only the answer. Wire: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+The rule that settles a co-op campaign sortie's own plane picks, for splitscreen seats and network
+guests alike. `Resolve` runs the picks in seat order: a seat keeps a pick no earlier seat holds,
+compared by name, and otherwise takes the first free plane, else `Stock` (the shared stock
+Devastator, `StockAirframe`), so on a same-moment clash the earlier seat wins. `Wingman` comes after
+every human: its saved plane while no seat holds it, else the first free plane, else `Stock`.
+Engine-free: the host settles, and the wire carries only the answer. Wire: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 Coverage: `CSVM.Tests/CoopPlanePoolTests.cs`.
 
 ## src/Session/Campaign/ChapterCinema.cs

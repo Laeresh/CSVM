@@ -3,94 +3,68 @@ using Xunit;
 
 namespace CSVM.Tests;
 
-/// <summary>The co-op allocation. One seat holds each unique hangar plane, the host's and the
-/// wingman's first, and a seat with nothing left flies a stock Devastator.</summary>
+/// <summary>The rule that settles the co-op sortie's plane picks. One seat holds a plane, compared
+/// by name, and the earlier seat keeps a plane two seats picked. A seat left without one flies the
+/// stock Devastator, and the wingman comes after every human.</summary>
 public class CoopPlanePoolTests
 {
-    [Fact]
-    public void GuestsClaimDistinctPlanesAfterTheHostAndTheWingman()
-    {
-        var profile = Hangar("A", "B", "C", "D", "E");
-        profile.SelectedPlane = 2;
-        profile.WingmanPlane = 0;
+    private const int Stock = CoopPlanePool.Stock;
+    private const int Unpicked = CoopPlanePool.Unpicked;
+    private static readonly string[] Hangar = { "A", "B", "C", "D" };
 
-        Assert.Equal(new[] { 2, 1, 3, 4 }, CoopPlanePool.Allocate(profile, 4));
+    [Fact]
+    public void EverySeatKeepsAFreePickOfItsOwn()
+    {
+        Assert.Equal(new[] { 0, 3, 1, 2 }, CoopPlanePool.Resolve(Hangar, new[] { 0, 3, 1, 2 }));
     }
 
     [Fact]
-    public void ASeatBeyondThePoolFliesStock()
+    public void OnAClashTheEarlierSeatKeepsThePlaneAndTheLaterTakesTheFirstFree()
     {
-        var profile = Hangar("A", "B", "C");
-        profile.WingmanPlane = 1;
+        Assert.Equal(new[] { 0, 2, 1 }, CoopPlanePool.Resolve(Hangar, new[] { 0, 2, 2 }));
 
-        Assert.Equal(new[] { 0, 2, CoopPlanePool.Stock, CoopPlanePool.Stock }, CoopPlanePool.Allocate(profile, 4));
+        // ABLE-TO-FAIL CONTROL: the host's own pick is never moved by a guest's.
+        Assert.Equal(new[] { 2, 0 }, CoopPlanePool.Resolve(Hangar, new[] { 2, 2 }));
     }
 
     [Fact]
-    public void ANewProfileLeavesAGuestNothingButStock()
+    public void ASeatWithNoPickTakesTheFirstFreePlaneThenTheStockDevastator()
     {
-        var allocated = CoopPlanePool.Allocate(CampaignProfileDef.NewProfile("Zachary"), 2);
-
-        Assert.Equal(new[] { 0, CoopPlanePool.Stock }, allocated);
-    }
-
-    // The wingman's plane is held even when it names the host's own, and an index outside the
-    // hangar holds nothing.
-    [Fact]
-    public void AWingmanOnTheHostsPlaneOrOutsideTheHangarFreesTheRest()
-    {
-        var profile = Hangar("A", "B");
-        profile.WingmanPlane = 0;
-        Assert.Equal(new[] { 0, 1 }, CoopPlanePool.Allocate(profile, 2));
-
-        profile.WingmanPlane = 9;
-        Assert.Equal(new[] { 0, 1 }, CoopPlanePool.Allocate(profile, 2));
-
-        // ABLE-TO-FAIL CONTROL: a wingman on the other plane takes it.
-        profile.WingmanPlane = 1;
-        Assert.Equal(new[] { 0, CoopPlanePool.Stock }, CoopPlanePool.Allocate(profile, 2));
-    }
-
-    // Uniqueness is by name, so two records the hangar shows as one aircraft seat one human.
-    [Fact]
-    public void TwoRecordsSharingANameAreOnePlane()
-    {
-        var profile = Hangar("A", "B", "B", "C");
-        profile.WingmanPlane = 3;
-
-        Assert.Equal(new[] { 0, 1, CoopPlanePool.Stock }, CoopPlanePool.Allocate(profile, 3));
-    }
-
-    // A local splitscreen field and the network guests after it read the same prefix.
-    [Fact]
-    public void ASmallerSortieReadsTheSamePlanesAsTheWidest()
-    {
-        var profile = Hangar("A", "B", "C", "D");
-        profile.WingmanPlane = 1;
-        var widest = CoopPlanePool.Allocate(profile, 4);
-
-        for (int seats = 1; seats <= 4; seats++)
-        {
-            Assert.Equal(widest[..seats], CoopPlanePool.Allocate(profile, seats));
-        }
+        Assert.Equal(new[] { 1, 0, 2, 3, Stock }, CoopPlanePool.Resolve(Hangar, new[] { 1, Unpicked, Unpicked, Unpicked, Unpicked }));
     }
 
     [Fact]
-    public void NoProfileOrAnEmptyHangarIsAllStock()
+    public void TheStockDevastatorIsSharedAndHoldsNothing()
     {
-        Assert.Equal(new[] { CoopPlanePool.Stock, CoopPlanePool.Stock }, CoopPlanePool.Allocate(null, 2));
-        Assert.Equal(new[] { CoopPlanePool.Stock }, CoopPlanePool.Allocate(new CampaignProfileDef(), 1));
-        Assert.Empty(CoopPlanePool.Allocate(Hangar("A"), 0));
+        Assert.Equal(new[] { Stock, Stock, 0 }, CoopPlanePool.Resolve(Hangar, new[] { Stock, Stock, Unpicked }));
     }
 
-    private static CampaignProfileDef Hangar(params string[] names)
+    [Fact]
+    public void APickOutsideTheHangarIsNoPick()
     {
-        var profile = new CampaignProfileDef { Name = "Zachary" };
-        foreach (var name in names)
-        {
-            profile.Planes.Add(new OwnedPlane { Name = name, Airframe = 5 });
-        }
+        Assert.Equal(new[] { 0, 1 }, CoopPlanePool.Resolve(Hangar, new[] { 0, 9 }));
+    }
 
-        return profile;
+    [Fact]
+    public void PlanesAreComparedByNameAsTheFlightChecksClashRuleCompares()
+    {
+        string[] twins = { "Twin", "Twin", "Other" };
+        Assert.Equal(new[] { 0, 2 }, CoopPlanePool.Resolve(twins, new[] { 0, 1 }));
+    }
+
+    [Fact]
+    public void TheWingmanKeepsItsSavedPlaneWhileNoHumanHoldsIt()
+    {
+        Assert.Equal(1, CoopPlanePool.Wingman(Hangar, new[] { 0, 2 }, 1));
+    }
+
+    [Fact]
+    public void AHeldWingmanPlaneGivesWayToTheFirstFreeThenTheStockDevastator()
+    {
+        Assert.Equal(2, CoopPlanePool.Wingman(Hangar, new[] { 0, 1 }, 1));
+        Assert.Equal(Stock, CoopPlanePool.Wingman(Hangar, new[] { 0, 1, 2, 3 }, 1));
+
+        // ABLE-TO-FAIL CONTROL: a seat on the stock Devastator holds no hangar plane.
+        Assert.Equal(1, CoopPlanePool.Wingman(Hangar, new[] { 0, Stock }, 1));
     }
 }

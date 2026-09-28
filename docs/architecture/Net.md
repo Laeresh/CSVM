@@ -293,11 +293,10 @@ Ids and phase mapping: [../org/multiplayer-messages.md](../org/multiplayer-messa
 The campaign co-op boards' six messages, all reliable and all kept in `NetLobby`, not a session.
 `CoopFlowMessage` is the host's boards as one guest follows them: the screen, the mission, the
 round of picks (`Epoch`), the guest's player number, the Ready mask, the hangar and the debrief's
-result. `CoopPickMessage` is a guest's airframe, `CoopFit`, name, Ready and Left under the round it
-answers. `CoopSeatPlaneMessage` is the plane the host's allocation gives a guest's seat, with its
-fit, build and name, or the stock Devastator. Before the opener `CoopSeatFitMessage` tells every
-guest a seat's fit and `CoopWingmanMessage` the host's wingman airframe and fit.
-`CoopFilmMessage` names a film the host started or ended. [Layout](../org/multiplayer-messages.md).
+result. `CoopPickMessage` is a guest's airframe, `CoopFit`, name, Ready, Left and hangar `Plane`
+under its round. `CoopHangarMessage` is one host hangar plane with its fit, build, name and holding
+seat. Before the opener `CoopSeatFitMessage` gives a seat's fit and `CoopWingmanMessage` the
+wingman's; `CoopFilmMessage` names a film. [Layout](../org/multiplayer-messages.md).
 
 ## src/Net/NetDogfightMessages.cs
 The Multiplayer Lobby's three messages, all reliable and all kept in `NetLobby` rather than a

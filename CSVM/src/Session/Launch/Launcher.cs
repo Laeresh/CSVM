@@ -1250,8 +1250,8 @@ public partial class Launcher : Node3D
     }
 
     /// <summary>A co-op host's field and each seat's fit, by seat. Its own seats come first, with
-    /// the fits its launch carried. Then comes every seated guest still on the wire, under its name,
-    /// in the airframe and fit allocated to its seat.</summary>
+    /// the fits its launch carried. Then comes every seated guest still on the wire, in the plane,
+    /// fit and name its pick carried.</summary>
     internal static (Net.NetSeat[] Roster, Net.CoopFit[] SeatFits) CoopLaunchField(
         UI.Menu.NetPlayFeature door, Net.INetTransport wire, IReadOnlyList<string> planes,
         IReadOnlyList<LoadoutChoice?> fits, StockLoadouts stock)
@@ -1331,7 +1331,7 @@ public partial class Launcher : Node3D
     /// <summary>Each seat's custom plane, by seat, null for a stock one. This machine's seats take
     /// <paramref name="customs"/> in menu order. A guest's seat takes the build its lobby pick sent
     /// when <paramref name="rules"/> admit it. Without rules a guest's pick seats no build; a co-op
-    /// guest's comes from its host's allocation instead (<see cref="CoopSeatBuilds"/>).
+    /// guest's comes from its host's hangar instead (<see cref="CoopSeatBuilds"/>).
     /// </summary>
     internal static Net.NetPlaneBuild?[] SeatBuildsFor(IReadOnlyList<Net.NetSeat> roster,
         IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs, Net.INetTransport wire, Net.NetPlaneRules? rules)
@@ -1367,8 +1367,8 @@ public partial class Launcher : Node3D
     }
 
     /// <summary>A co-op host's custom planes, by seat, null for a stock one. Its own seats take
-    /// <paramref name="customs"/> in menu order. Each guest's seat takes the build of the plane
-    /// allocated to it, never one the guest brought.</summary>
+    /// <paramref name="customs"/> in menu order. Each guest's seat takes the build of the hangar
+    /// plane it flies, never one the guest brought.</summary>
     internal static Net.NetPlaneBuild?[] CoopSeatBuilds(IReadOnlyList<Net.NetSeat> roster,
         IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs, UI.Menu.NetPlayFeature door, Net.INetTransport wire)
     {
@@ -2744,13 +2744,13 @@ public partial class Launcher : Node3D
     }
 
     // A co-op campaign launch's wire. The host's roster is its own seats and then each guest the
-    // door seated, under its name, in the aeroplane allocated to its seat.
+    // door seated, under its name. A guest flies the hangar plane the host settled for its seat.
     // Every seat's fit and build goes to every guest before the session's opener, on the same
-    // ordered channel. A guest builds none. The campaign wingman's aeroplane goes out beside the
-    // fits, since every guest builds it too.
+    // ordered channel. A guest builds none. The campaign wingman's aeroplane goes out beside the fits,
+    // since every guest builds it too: `wingman` when the cabin kept it off its saved plane.
     private void TakeCoopLaunch(UI.Menu.MenuNetLaunch? net, IReadOnlyList<string> planes,
         IReadOnlyList<LoadoutChoice?> fits, IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs, string profile,
-        string? profilesDir)
+        string? profilesDir, Net.CoopWingmanMessage? wingman)
     {
         _netWire = net?.Transport;
         _netIsHost = net?.IsHost ?? false;
@@ -2768,7 +2768,7 @@ public partial class Launcher : Node3D
         _seatBuilds = CoopSeatBuilds(_netRoster, customs, _netDoor, _netWire);
         _netDoor.TellSeatFits(_coopSeatFits);
         _netDoor.TellSeatBuilds(_seatBuilds);
-        _netDoor.TellCoopWingman(CoopWingmanFor(profile, profilesDir));
+        _netDoor.TellCoopWingman(wingman ?? CoopWingmanFor(profile, profilesDir));
         Log.Info("core", $"net: co-op launch with {_netRoster.Length - planes.Count} guest(s)");
     }
 
@@ -2845,9 +2845,9 @@ public partial class Launcher : Node3D
     {
         var (planes, pads, fits, customs) = Unpack(mission.Seats);
         LaunchedFrom(mission);
-        TakeCoopLaunch(mission.Net, planes, fits, customs, mission.Profile, _cli.ProfilesDir);
+        TakeCoopLaunch(mission.Net, planes, fits, customs, mission.Profile, _cli.ProfilesDir, mission.Wingman);
         _spec = SessionSpec.FromCampaign(_cli, mission.Profile, mission.MissionSeq, planes,
-            pads.Count, fits, customs);
+            pads.Count, fits, customs, mission.Wingman);
         StepSortieSeed();
         BindMenuPads(pads);
         BeginLaunch();
@@ -2913,7 +2913,7 @@ public partial class Launcher : Node3D
         }
 
         TakeCoopLaunch(launch, _spec.PlaneNames, _spec.MenuLoadouts, _spec.MenuCustomPlanes, _spec.CampaignProfile ?? "",
-            _spec.ProfilesDir);
+            _spec.ProfilesDir, _spec.CampaignWingman);
         return true;
     }
 

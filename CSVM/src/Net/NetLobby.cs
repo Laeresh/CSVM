@@ -31,6 +31,7 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     private readonly Dictionary<int, NetPlaneBuild> _pickBuilds = new();
     private readonly Dictionary<int, NetPlaneBuild?> _seatBuilds = new();
     private readonly List<int> _unpicked = new();
+    private readonly List<CoopHangarMessage?> _hangar = new();
 
     private readonly List<(int Peer, LobbyChatMessage Line)> _chat = new();
 
@@ -78,12 +79,29 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     /// <summary>How many co-op flows have arrived, so a board can tell a repeat from news.</summary>
     public int Flows { get; private set; }
 
-    /// <summary>The aeroplane the co-op host's allocation last gave this guest's seat, or null while
-    /// none has arrived.</summary>
-    public CoopSeatPlaneMessage? SeatPlane { get; private set; }
-
     /// <summary>Each connected guest's latest co-op pick, by peer.</summary>
     public IReadOnlyDictionary<int, CoopPickMessage> Picks => _picks;
+
+    /// <summary>The co-op host's hangar as its latest words name it, in hangar order. Empty until
+    /// every plane of it has arrived.</summary>
+    public IReadOnlyList<CoopHangarMessage> Hangar
+    {
+        get
+        {
+            var planes = new List<CoopHangarMessage>(_hangar.Count);
+            foreach (var plane in _hangar)
+            {
+                if (plane is not { } word)
+                {
+                    return Array.Empty<CoopHangarMessage>();
+                }
+
+                planes.Add(word);
+            }
+
+            return planes;
+        }
+    }
 
     /// <summary>Each seat's fit as the co-op host last launched it, by seat. A launch names every
     /// seat again, so an entry from an earlier flight is always overwritten before it is read.
@@ -385,9 +403,24 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
             return true;
         }
 
-        if (CoopSeatPlaneMessage.TryRead(payload, out var seatPlane))
+        if (CoopHangarMessage.TryRead(payload, out var hangar))
         {
-            SeatPlane = seatPlane;
+            // Each word names the hangar's size, so one from a smaller hangar drops the planes past it.
+            while (_hangar.Count > hangar.Count)
+            {
+                _hangar.RemoveAt(_hangar.Count - 1);
+            }
+
+            while (_hangar.Count < hangar.Count)
+            {
+                _hangar.Add(null);
+            }
+
+            if (hangar.Index < _hangar.Count)
+            {
+                _hangar[hangar.Index] = hangar;
+            }
+
             return true;
         }
 

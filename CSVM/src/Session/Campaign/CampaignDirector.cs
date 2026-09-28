@@ -361,7 +361,9 @@ public sealed class CampaignDirector
     /// <summary>Construction, the shape <see cref="InstantAction.InstantActionDirector.TryCreate"/> has.
     /// It is null outside a campaign launch. A profile that cannot be loaded warns and flies without
     /// a director rather than aborting the launch. Only a co-op guest passes
-    /// <paramref name="hostWingman"/>, so its wingman flies the aeroplane its host named.</summary>
+    /// <paramref name="hostWingman"/>, so its wingman flies the aeroplane its host named. A host
+    /// whose humans hold the saved wingman plane flies the one the cabin settled instead
+    /// (<see cref="SessionSpec.CampaignWingman"/>).</summary>
     public static CampaignDirector? TryCreate(SessionSpec spec, string zrdrPath, string missionZrdrPath,
         Func<Net.CoopWingmanMessage?>? hostWingman = null)
     {
@@ -398,6 +400,10 @@ public sealed class CampaignDirector
         if (hostWingman != null)
         {
             director.BindHostWingman(hostWingman());
+        }
+        else if (spec.CampaignWingman is { } settled)
+        {
+            director.BindHostWingman(settled);
         }
         else
         {
@@ -1095,8 +1101,8 @@ public sealed class CampaignDirector
         Log.Info("core", $"campaign: {WingmanName} flies '{plane.Name}' as {WingmanNode}, bound for the roster spawn");
     }
 
-    // A co-op guest's wingman: the host owns and flies it, so this machine builds the airframe and
-    // fit the host named. ⚠ Never fall back to this machine's profile: its default Devastator
+    // A wingman the host named: a co-op guest's, or the host's own when a human holds the saved
+    // plane. ⚠ Never fall back to this machine's profile on a guest. Its default Devastator
     // would carry other hit volumes and damage parts than the host's aeroplane.
     private void BindHostWingman(Net.CoopWingmanMessage? told)
     {

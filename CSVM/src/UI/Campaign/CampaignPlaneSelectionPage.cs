@@ -22,11 +22,13 @@ internal readonly record struct PlaneRow(PlaneRowKind Kind, int Slot = 0);
 /// <summary>
 /// The plane selection screen (<c>Campaign Flight Check Change Plane.png</c>,
 /// <c>PLANESELECTION.SCRIPT</c>, <c>docs/formats/campaign-screens.md</c>). Each crew slot has a
-/// drop-down, a silhouette, four ratings, a gun and hardpoint list and EXPORT, and the screen ends
-/// on ACCEPT/CANCEL SELECTIONS. The flight check's CHANGE PLANE opens it and names the slot the
-/// cursor lands on (<see cref="CampaignFlow.PlaneSlot"/>). It edits live, restores the picks it
-/// opened with on CANCEL, and writes them into the profile on ACCEPT. Only the seated player's
-/// check opens it: a guest flies what the co-op allocation gives it (<see cref="CampaignFlightField"/>).
+/// drop-down, a silhouette, four ratings, a gun and hardpoint list and an EXPORT, and the screen
+/// ends in ACCEPT/CANCEL SELECTIONS. The flight check's CHANGE PLANE opens it on a slot
+/// (<see cref="CampaignFlow.PlaneSlot"/>), and it edits live, restores on CANCEL and writes the
+/// profile on ACCEPT. Over a guest's own roster (<see cref="CampaignGuest.Choices"/>) it has one
+/// PILOT slot, no EXPORT, and an ACCEPT that moves the guest's pick and writes nothing. On every
+/// check a plane another human holds is refused naming that seat
+/// (<see cref="CampaignFlightField.HolderOf"/>).
 /// </summary>
 public sealed class CampaignPlaneSelectionPage : CampaignPage
 {
@@ -74,7 +76,8 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
     private const int ExportLabel = 1139;
     private const int HardpointsLabel = 1008;
 
-    // IDS_PS_CANTFLYSAMEPLANE, the words the seated player's refused pick is answered with.
+    // IDS_PS_CANTFLYSAMEPLANE, the words the seated pair's refused pick is answered with. A plane
+    // another human holds earns the feature's own words instead, since 710 names Pilot and Wingman.
     private const int SamePlaneRefusal = 710;
 
     // The words a finished export is answered with. ⚠ Its %1!s! is the airframe's title, not the
@@ -215,13 +218,23 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
     }
 
     /// <summary>How many crew slots this screen draws: both when the mission carries a wingman, the
-    /// pilot's alone otherwise.</summary>
-    public int ActiveSlots => HasWingman ? 2 : 1;
+    /// pilot's alone otherwise. A guest's check draws one, whatever the mission flies: the wingman
+    /// belongs to the seated profile.</summary>
+    public int ActiveSlots => Guest == null && HasWingman ? 2 : 1;
 
     private bool HasWingman => _wingmanOverride ?? Flow.MissionHasWingman;
 
-    // The aircraft the combos list, the seated profile's.
-    private IReadOnlyList<OwnedPlane> Roster => (Flow.Profile ?? EmptyProfile).Planes;
+    // Whose picker this is: 0 the seated player's, 1 and up a guest's, the same index the flight
+    // check draws itself for.
+    private int Player => Flow.Field.Current;
+
+    // The guest this screen is picking for, or null on the seated player's own.
+    private CampaignGuest? Guest =>
+        Player > 0 && Player - 1 < Flow.Field.Guests.Count ? Flow.Field.Guests[Player - 1] : null;
+
+    // The aircraft the combos list: a guest's own session-scoped choices, else the seated profile's.
+    private IReadOnlyList<OwnedPlane> Roster =>
+        Guest is { } guest ? guest.Choices : (Flow.Profile ?? EmptyProfile).Planes;
 
     /// <inheritdoc/>
     public override BoardButtonRef Button(int row)
@@ -373,13 +386,19 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
 
     // Every row this screen draws: a combo and an EXPORT per active crew slot, then the two commit
     // buttons. A slot with no aircraft to pick from still draws its combo, which is then empty.
+    // ⚠ A guest gets no EXPORT. They fly a session copy carrying the owner's plane name, so the
+    // write would land on the owner's stored record.
     private List<PlaneRow> Rows()
     {
         var rows = new List<PlaneRow>(6);
+        bool guest = Guest != null;
         for (int slot = 0; slot < ActiveSlots; slot++)
         {
             rows.Add(new PlaneRow(PlaneRowKind.Pick, slot));
-            rows.Add(new PlaneRow(PlaneRowKind.Export, slot));
+            if (!guest)
+            {
+                rows.Add(new PlaneRow(PlaneRowKind.Export, slot));
+            }
         }
 
         rows.Add(new PlaneRow(PlaneRowKind.Accept));
@@ -387,18 +406,25 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
         return rows;
     }
 
-    // Fills the combos from the seated profile's roster and remembers the picks it opened with,
-    // which is what CANCEL restores.
+    // Fills the combos from the roster this screen picks out of, the seated profile's or a guest's.
+    // It remembers the picks it opened with, which is what CANCEL restores.
     private void Fill()
     {
+        if (Guest is { } guest)
+        {
+            Load(guest, guest.Choices, guest.Choice, guest.Choice);
+            return;
+        }
+
         var profile = Flow.Profile ?? EmptyProfile;
         Load(profile, profile.Planes,
             Clamped(profile.Planes.Count, profile.SelectedPlane),
             Clamped(profile.Planes.Count, profile.WingmanPlane));
     }
 
-    // Refilled when the thing behind the entries changed: a different profile, or an aircraft
-    // bought since.
+    // Refilled when the thing behind the entries changed: a different profile, a different guest,
+    // or an aircraft bought since. Keyed on the roster's owner rather than the list, since the two
+    // guests of a three-player field hold equal-length lists of their own separate copies.
     private void Load(object owner, IReadOnlyList<OwnedPlane> planes, int pilot, int wingman)
     {
         if (ReferenceEquals(_filledFor, owner) && _filledCount == planes.Count)
@@ -434,9 +460,9 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
             return false;
         }
 
-        if (Clashes(slot, pick))
+        if (Refusal(slot, pick) is { } refusal)
         {
-            Flow.RaiseModal(Flow.Strings.Text(SamePlaneRefusal, "Pilot and Wingman must fly different planes."));
+            Flow.RaiseModal(refusal);
             return true;
         }
 
@@ -444,17 +470,35 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
         return true;
     }
 
-    // The script's permit test on 10015: the change is allowed when the two combos differ or when
-    // only one crew slot is active; the seated pair's rule is the feature's, compared by name.
-    private bool Clashes(int slot, int pick) =>
-        ActiveSlots >= 2 && Flow.Feature.SeatedPairClashes(pick, _combos[slot == 0 ? 1 : 0].Selected);
+    // The script's permit test on 10015, extended to every human on the sortie. The seated pair
+    // must differ by name when both crew slots are active. No slot may take a plane another human
+    // holds, and that refusal names the human's seat. Null when the pick stands.
+    // ⚠ Who holds what comes from the field, never from a second copy of the rule. Only the field
+    // knows this machine's guests and the network seats alike.
+    private string? Refusal(int slot, int pick)
+    {
+        if (Guest != null)
+        {
+            int taken = Flow.Field.Holder(Player, pick);
+            return taken >= 0 ? Flow.Feature.SeatRefusal(taken) : null;
+        }
 
-    // EXPORT: the plane and the loadout the campaign fitted it with go into the build store, the
-    // feature's write. Then come the original's own words for it. The feature refuses a stock
-    // record on its own.
+        if (ActiveSlots >= 2 && Flow.Feature.SeatedPairClashes(pick, _combos[slot == 0 ? 1 : 0].Selected))
+        {
+            return Flow.Strings.Text(SamePlaneRefusal, "Pilot and Wingman must fly different planes.");
+        }
+
+        var roster = Roster;
+        int holder = pick >= 0 && pick < roster.Count ? Flow.Field.HolderOf(0, roster[pick]) : -1;
+        return holder >= 0 ? Flow.Feature.SeatRefusal(holder) : null;
+    }
+
+    // EXPORT writes the plane and its campaign loadout into the build store through the feature,
+    // then shows the original's own words for it. A guest gets no EXPORT row, and the feature
+    // refuses a stock record on its own.
     private bool Export(int slot)
     {
-        if (PlaneFor(slot) is not { } plane || !Flow.Feature.ExportPlane(plane))
+        if (PlaneFor(slot) is not { } plane || Guest != null || !Flow.Feature.ExportPlane(plane))
         {
             return false;
         }
@@ -474,9 +518,18 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
               "Instant Action missions.";
     }
 
-    // ACCEPT: the two picks into the profile and the profile to disk, the feature's write.
+    // ACCEPT: the two picks into the profile and the profile to disk, the feature's write. A guest's
+    // ACCEPT moves their own session-scoped pick instead and writes nothing at all, keeping the
+    // profile unchanged.
     private void Commit()
     {
+        if (Guest != null)
+        {
+            Flow.Field.Choose(Player, _combos[0].Selected);
+            _opened[0] = _combos[0].Selected;
+            return;
+        }
+
         if (Flow.Profile is not { } profile || profile.Planes.Count == 0)
         {
             return;
@@ -557,11 +610,13 @@ public sealed class CampaignPlaneSelectionPage : CampaignPage
         return Flow.Strings.Text(3320 + idx, $" .{30 + (idx * 10)}-cal.").Trim();
     }
 
-    // ⚠ Asks the field whether the record is a stock airframe before touching CustomPlaneStore: a
-    // guest's stock record is named for its airframe, and a hangar plane sharing that name would
-    // otherwise fit it with somebody else's build.
+    // ⚠ Asks the field whether the record is a stock airframe before touching CustomPlaneStore. A
+    // guest's stock record is named for its airframe. A hangar plane sharing that name would
+    // otherwise fit it with somebody else's build. A network guest's builds are its host's.
     private PlaneFit FitOf(OwnedPlane plane) => PlaneFit.For(
         plane.Airframe,
-        Flow.Field.IsStock(plane) ? null : Flow.Planes?.Load(plane.Name),
+        Flow.Feature.IsGuest ? Flow.Feature.GuestBuildOf(plane)
+            : Flow.Field.IsStock(plane) ? null
+            : Flow.Planes?.Load(plane.Name),
         Flow.Stock?.ForModel(PlanePickerRoster.AirframeNode(plane.Airframe)));
 }

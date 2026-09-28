@@ -23,13 +23,12 @@ public enum NetDoorStage
     Failed,
 }
 
-/// <summary>One guest a co-op host seated: its peer and its player number. It also says whether
-/// the guest is Ready this round, and names the airframe, fit and build of the aeroplane the host's
-/// allocation gives it. It carries the guest's player name. <see cref="Left"/> says it walked out of
-/// the flight under way.</summary>
+/// <summary>One guest a co-op host seated: its peer and its player number. It says whether the
+/// guest is Ready this round. It names the hangar plane the host settled for it, with that plane's
+/// airframe, fit and build. It carries the guest's player name. <see cref="Left"/> says it walked out of the flight under way.</summary>
 public readonly record struct CoopGuest(
     int Peer, int Slot, bool Ready, byte Airframe, CoopFit Fit = default, string Name = "", bool Left = false,
-    NetPlaneBuild? Build = null);
+    int Plane = Session.Campaign.CoopPlanePool.Stock, NetPlaneBuild? Build = null);
 
 /// <summary>
 /// The multiplayer door as a shared feature. It owns the port and the address a board edits, the
@@ -345,9 +344,10 @@ public sealed class NetPlayFeature : IMenuFeature
         }
     }
 
-    /// <summary>The guests this co-op host seated, in player order. Each has its player number, its
-    /// Ready mark under the current round, and the aeroplane allocated to its seat.
-    /// The guest's own pick names only its Ready, its name and whether it left.</summary>
+    /// <summary>The guests this co-op host seated, in player order: each one's player number, its
+    /// Ready mark under the current round, and the plane it flies. A guest flies its own fit on the
+    /// plane it picked, and the plane's stored fit on one the host's settling gave it instead.
+    /// </summary>
     public IReadOnlyList<CoopGuest> CoopGuests
     {
         get
@@ -357,14 +357,42 @@ public sealed class NetPlayFeature : IMenuFeature
             {
                 int peer = _admitted[i];
                 var pick = _transport!.Picks.TryGetValue(peer, out var sent) ? sent : default;
-                var plane = HostFlow.PlaneOf(_localPlayers + i);
-                guests.Add(new CoopGuest(peer, _localPlayers + i, ReadyNow(peer), plane.Airframe,
-                    plane.Fit, pick.Name ?? "", pick.Left && pick.Epoch == _epoch, plane.Build));
+                int plane = HostFlow.PlaneOf(_localPlayers + i);
+                var word = HostFlow.HangarAt(plane);
+                byte airframe = word?.Airframe ?? CoopGuestPick.StarterAirframe;
+                var fit = word is { } flown && pick.PlaneIndex != plane ? flown.Fit : pick.Fit;
+                guests.Add(new CoopGuest(peer, _localPlayers + i, ReadyNow(peer), airframe,
+                    fit, pick.Name ?? "", pick.Left && pick.Epoch == _epoch, plane, word?.Build));
             }
 
             return guests;
         }
     }
+
+    /// <summary>The plane of the hangar each guest this co-op host seated picked, in player order,
+    /// as <see cref="CoopGuestPick.Plane"/> names one. What the host settles every seat's pick from.
+    /// </summary>
+    public IReadOnlyList<int> CoopGuestPlanes
+    {
+        get
+        {
+            var planes = new int[_admitted.Count];
+            for (int i = 0; i < planes.Length; i++)
+            {
+                planes[i] = _transport!.Picks.TryGetValue(_admitted[i], out var pick)
+                    ? pick.PlaneIndex
+                    : Session.Campaign.CoopPlanePool.Unpicked;
+            }
+
+            return planes;
+        }
+    }
+
+    /// <summary>The co-op host's hangar as this guest last heard it, each plane with the seat that
+    /// holds it. Empty on a door that is not a co-op guest's, and until the host has named it.
+    /// </summary>
+    public IReadOnlyList<CoopHangarMessage> CoopHangar =>
+        IsCoopGuest && _transport != null ? _transport.Hangar : Array.Empty<CoopHangarMessage>();
 
     /// <summary>The host's latest word about its boards as this co-op guest heard it, or null.
     /// </summary>
@@ -391,10 +419,6 @@ public sealed class NetPlayFeature : IMenuFeature
     /// <summary>The campaign wingman's aeroplane as this co-op guest's host launched it, or null
     /// while the host has named none.</summary>
     public CoopWingmanMessage? CoopWingman => IsCoopGuest ? _transport?.Wingman : null;
-
-    /// <summary>The aeroplane this co-op guest's host allocates to its seat, or null while the host
-    /// has named none.</summary>
-    public CoopSeatPlaneMessage? CoopSeatPlane => IsCoopGuest ? _transport?.SeatPlane : null;
 
     /// <summary>This co-op guest's host's latest film word, a start or an end, or null while the
     /// host has shared no film.</summary>
@@ -668,13 +692,15 @@ public sealed class NetPlayFeature : IMenuFeature
         _localPlayers = Math.Max(1, localPlayers);
     }
 
-    /// <summary>The aeroplane this co-op host's allocation gives each seat, <paramref name="bySeat"/>
-    /// indexed by seat with this machine's own seats first. Each guest hears its own seat's on the
-    /// next <see cref="Step"/>, and a launch seats every guest in it.</summary>
-    public void OfferCoopPlanes(IReadOnlyList<CoopSeatPlaneMessage> bySeat)
+    /// <summary>This co-op host's hangar in order, each plane with the seat holding it and its
+    /// build. The plane every seat flies is <paramref name="seatPlanes"/>, this machine's own seats
+    /// first. Every guest hears the hangar on the next <see cref="Step"/>, and a launch seats every
+    /// guest in its plane.</summary>
+    public void OfferCoopHangar(IReadOnlyList<CoopHangarMessage> hangar, IReadOnlyList<int> seatPlanes)
     {
-        ArgumentNullException.ThrowIfNull(bySeat);
-        HostFlow.ShowPlanes(bySeat);
+        ArgumentNullException.ThrowIfNull(hangar);
+        ArgumentNullException.ThrowIfNull(seatPlanes);
+        HostFlow.ShowHangar(hangar, seatPlanes);
     }
 
     /// <summary>Starts a join to the typed address. The join lands on a later

@@ -372,7 +372,7 @@ score, `0x17` match state, `0x22` hit and `0x27` seat roster. Damage, spawn, the
 director transition, the join handshake and a seat's ask to be spawned again have no
 counterpart, so they are minted at `0x40`, `0x41`, `0x42`, `0x43` and `0x44`, above the ceiling
 above. The host-owned world's four (AI state, AI fire, a guest's hit claim on an AI, and a world
-event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, the start barrier's word at `0x5B`, a match's death notice at `0x5C`, the lobby's plane build and plane rules at `0x5D` and `0x5E`, and the lobby's co-op seat plane at `0x5F`. The handshake carries the master seed, the host's clock and the seat the joining peer was
+event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, the start barrier's word at `0x5B`, a match's death notice at `0x5C`, the lobby's plane build and plane rules at `0x5D` and `0x5E`, and the lobby's co-op hangar plane at `0x5F`. The handshake carries the master seed, the host's clock and the seat the joining peer was
 given; the original needs none of the three, because it draws from no shared stream and hands
 out no seat. The ask carries a seat and nothing else: the original's client takes its own
 respawn, while here the host owns every placement and answers the ask with a spawn event.
@@ -798,27 +798,35 @@ session.
 | Id | Message | Class | Carries |
 |---|---|---|---|
 | `0x50` | Co-op flow | reliable, host to each guest | screen at 4 (unknown 0, cabin 1, briefing 2, flight check 3, in mission 4, debrief 5), mission sequence at 5, round at 6, the guest's player number at 7, Ready mask by player number at 8, humans at 9, host's campaign progress at 10, flags at 11 (bit 0 won), hangar airframe mask at 12, the guest's local seats at 14, one reserved byte, objectives mask at 16, cash at 20 (24 bytes) |
-| `0x51` | Co-op pick | reliable, guest to host | round at 4, flags at 5 (bit 0 Ready, bit 1 left the flight), airframe at 6, one reserved byte, the fit at 8, the player name at 20 (16 bytes, zero-padded; 36 bytes) |
+| `0x51` | Co-op pick | reliable, guest to host | round at 4, flags at 5 (bit 0 Ready, bit 1 left the flight), airframe at 6, the picked plane at 7 (0 none, `0xFF` the stock Devastator, else its place in the host's hangar plus one), the fit at 8, the player name at 20 (16 bytes, zero-padded; 36 bytes) |
 | `0x52` | Co-op seat fit | reliable, host to each guest | seat at 4, three reserved bytes, the fit at 8 (20 bytes) |
 | `0x59` | Co-op wingman | reliable, host to each guest | wingman airframe at 4 (`0xFF` none), three reserved bytes, the fit at 8 (20 bytes) |
 | `0x5A` | Co-op film | reliable, host to each guest | ordinal at 4, playing at 5, film at 6 (chapter 1, closing 2), chapter at 7 (8 bytes) |
-| `0x5F` | Co-op seat plane | reliable, host to each guest | seat at 4, flags at 5 (bit 0 a plane of the host's hangar, bit 1 a custom build), airframe at 6, one reserved byte, the fit at 8, the 26 build bytes as `0x5D`'s at 20, the plane's name in 16 bytes at 46 (62 bytes) |
+| `0x5F` | Co-op hangar plane | reliable, host to each guest | the plane's place in the hangar at 4, the hangar's plane count at 5, the seat holding it at 6 (`0xFF` none), airframe at 7, flags at 8 (bit 0 a custom build), the stored fit at 9, the 26 build bytes and 16-byte build name as `0x5D`'s at 21, the plane's name in 33 bytes at 63 (96 bytes) |
 
 A fit is twelve bytes: the four gun slots' ammunition, then the eight ordnance cells, one byte
 each, each the profile's stored value plus one so that zero reads as unset (stock).
 
-The host's profile decides every co-op seat's aeroplane. Its selected plane and its wingman's
-plane are held first, whether or not the mission flies a wingman. Each further seat, the host's
-own splitscreen seats and then each guest in player order, takes the next plane of the hangar in
-profile order that no earlier seat holds, a plane counting once by name. A seat left with none
-flies the stock Devastator at rest. A seat plane word names the seat's plane with that plane's
-own fit, build and name, or the stock Devastator with the bit 0 flag clear. The host sends each
-guest its own seat's word before the flow, and again whenever the allocation changes, so a crew
-change or a CHANGE PLANE on the host's check re-seats every guest. The lobby keeps the latest word.
-A guest's flight check stands on that plane with no CHANGE PLANE or CHANGE AMMO, and a guest with
-no word yet stands on the stock Devastator. The pick echoes the guest's allocated airframe and
-fit, but the host seats each guest from its own allocation, never from the pick. Allow Custom
-Planes and Outlaw Components are Dogfight rules and do not apply here. At its launch the host sends every
+Every co-op seat picks its own plane from the host's hangar, and no two seats fly one plane, a
+plane counting once by name as the flight check's "Pilot and Wingman must fly different planes."
+compares. The stock Devastator is the exception: any number of seats fly it, and it holds no
+hangar plane. The host settles the picks in seat order (its own seat, its splitscreen seats, then
+each guest in player order): a seat keeps a free pick, and a seat whose pick an earlier seat holds,
+or that has picked nothing, takes the first free plane, else the stock Devastator. A hangar plane
+word is one plane of the host's hangar with its stored fit, build, name and the seat that holds
+it. The host sends each guest every word before the flow, and again whenever one changes, and the
+lobby keeps them by place, so every machine refuses the same held planes. A plain join with no
+campaign board up sends none. A guest's roster is a copy of each word's plane, then a stock
+Devastator. It opens on its remembered pick unless an earlier seat holds it, else on the plane
+the host settled for it, and CHANGE PLANE and CHANGE AMMO stay on its check. A pick of a plane an
+earlier seat holds is refused with a modal naming that seat. Two guests picking one plane at once
+are settled by the host, and the later seat moves to what the next word gives it. The pick carries
+the plane's place, and the host seats each guest on its settled plane with the pick's fit when the
+guest flies the plane it picked, else the word's own fit. The flow's hangar airframe mask stays on
+the wire but a guest does not read it. The wingman is held only on a mission that flies one, after
+every human: its saved plane while no seat holds it, else the first free plane, else the stock
+Devastator at rest, which the host names in the launch's co-op wingman. Allow Custom Planes and
+Outlaw Components are Dogfight rules and do not apply here. At its launch the host sends every
 guest a seat fit for each seat, its own seats included, before the session's opener on the same
 ordered channel. Every machine then builds each seat flown elsewhere with its own pilot's fit.
 After the seat fits and before the opener the host also sends each guest a co-op wingman naming

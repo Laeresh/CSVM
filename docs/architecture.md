@@ -470,7 +470,7 @@ else in `UI`, and nothing names `Labs`.
 - `src/UI/Menu/FreeFlightFeature.cs`, Free Flight as a shared feature: the chapter roster, the pick, the launch gate and the typed exit.
 - `src/UI/Menu/InstantActionFeature.cs`, Instant Action as a shared feature: the decoded option sets, the typed setup state, the built def.
 - `src/UI/Menu/NetPlayFeature.cs`, the multiplayer door as a shared feature: the port and address, the socket, the link readouts, the session advert, the wire a launch takes.
-- `src/UI/Menu/CoopHostFlow.cs`, what a co-op host names to its guests: its board, mission, progress, hangar, debrief result, shared film and each seat's allocated plane, each guest's words sent again only when they changed.
+- `src/UI/Menu/CoopHostFlow.cs`, what a co-op host names to its guests: its board, mission, progress, hangar with each plane's holder, debrief result and shared film, each guest's words sent again only when they changed.
 - `src/UI/Menu/CoopGuestPick.cs`, a guest's own pick: airframe, fit, Ready and the walk-out mark, sent under the host's round.
 - `src/UI/Menu/DogfightLobby.cs`, the Multiplayer Lobby's state over the network lobby: the host's options and rounds, the player list, picks and Ready, chat, and the launch gate.
 - `src/UI/Menu/CoopDoorText.cs`, the words the campaign's network door is drawn in: the host's band, the advertised session's name, the join and waiting boards' status lines.
@@ -612,7 +612,7 @@ delegate to, in six sub-namespaces, one folder each. `Launch` sits on top and no
 - `src/Session/Campaign/CampaignDangerZones.cs`, a campaign mission's own danger zones: the `dzpathN` gates its script arms, tracked per human by the stunt gate rule, each carrying its mission's objective number.
 - `src/Session/Campaign/CampaignSnapshot.cs`, the Danger Zone photograph a campaign mission writes into the flying profile's directory under the scrapbook row's own `Snap_<mission>_<objective>` name.
 - `src/Session/Campaign/CampaignProfileStore.cs`, JSON persistence for one named campaign profile: funds, owned planes, mission records, awards and the destruction log.
-- `src/Session/Campaign/CoopPlanePool.cs`, which of the host's aircraft each co-op seat flies: the host's and the wingman's held first, then one unique plane per seat, then the stock Devastator.
+- `src/Session/Campaign/CoopPlanePool.cs`, the rule settling each co-op seat's own plane pick: one seat to a plane in seat order, the earlier seat winning a clash, the stock Devastator shared, and the wingman after every human.
 - `src/Session/Campaign/CampaignProgression.cs`, the rules that write a profile: an attempt's best-of merge, the monotonic position, the rewards and the skip offer.
 - `src/Session/Campaign/CampaignMementos.cs`, the cabin-wall pictures a profile may hang: the award table, which rows a profile holds, and the one bitmap name every screen draws.
 - `src/Session/Campaign/CampaignPersistLog.cs`, the cross-mission state log: what a mission left destroyed, carried silently into later missions of the same chapter.
@@ -807,7 +807,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/LanDiscoverySocket.cs`, the shipped `ILanSocket` over Godot's UDP peer with broadcast allowed, the second type allowed to name a Godot networking type.
 - `src/Net/NetMessages.cs`, the message vocabulary: one struct per message, each declaring its type word and reliability class, over a shared four-byte header.
 - `src/Net/NetWorldMessages.cs`, the host-owned world's messages: an AI's pose, fire and hit claim, a generator launch, a zeppelin's and a surface vehicle's path sample, and the world event.
-- `src/Net/NetCoopMessages.cs`, the co-op boards' lobby messages: the host's flow one guest follows (screen, mission, round, Ready mask, hangar, result), the host's campaign films, each guest's allocated plane, and a guest's pick and Ready under a round.
+- `src/Net/NetCoopMessages.cs`, the co-op boards' lobby messages: the host's flow one guest follows (screen, mission, round, Ready mask, hangar, result), the host's campaign films, its hangar with each plane's holder, and a guest's plane pick and Ready under a round.
 - `src/Net/NetDogfightMessages.cs`, the Multiplayer Lobby's messages: the host's options under a round, the player list, and one chat line.
 - `src/Net/NetPositionalMessages.cs`, the positional start: a landing row the host started and for which seat, the ladder holder, and a guest's held auto-land button.
 - `src/Net/NetMessageWriter.cs`, the writer and reader cursors every message is packed and unpacked through: little-endian primitives, quantised unit fields, fixed-width text.

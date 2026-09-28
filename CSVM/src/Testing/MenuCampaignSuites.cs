@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using CSVM.Flight.Hangar;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
@@ -68,9 +67,9 @@ internal static class MenuCampaignSuites
         + "return opens the scrapbook on the flown mission and turns back to the cabin, a replay of "
         + "the first mission offers every ordnance and aircraft the profile has earned where the "
         + "same screen three flights in offers only the rows those flights unlocked, the guest "
-        + "check walks a debug-joined field of checks with no CHANGE AMMO or CHANGE PLANE, each guest "
-        + "flies a copy of the plane the co-op allocation gives its seat, on this mission's check and "
-        + "on the next one's after the launch and the return, every scratch-profile aid opens its screen, and the two "
+        + "check walks a debug-joined field, a guest's own ammunition pick writes nothing into the "
+        + "seated profile and still stands on the next mission's check after the launch and the "
+        + "return, every scratch-profile aid opens its screen, and the two "
         + "campaign films own the frames they play and the press that ended them")]
     internal static void MenuCampaignJourney(TestContext ctx)
     {
@@ -106,7 +105,7 @@ internal static class MenuCampaignSuites
             DebriefReturn(ctx, menu, store);
             ReplayOffersEarnedRows(ctx, menu, store);
             GuestCheck(ctx, menu);
-            GuestPlanesAcrossMissions(ctx, menu, store, exits);
+            GuestPickAcrossMissions(ctx, menu, store, exits);
             Aids(ctx, menu);
             FilmHandBack(ctx);
         }
@@ -695,26 +694,28 @@ internal static class MenuCampaignSuites
         ctx.Check(flow.Screen == CampaignScreen.FlightCheck && flow.Field.Players == 4 && flow.Field.Current == 2 && flow.Field.Locked,
             $"the guest-check aid walks a four-player field to P3's check ({flow.Field.Players}, current {flow.Field.Current})");
         ctx.Check(menu.ShownBoard is { } board && HasLine(board, "FLIGHT CHECK P3"), $"headed for the guest");
-        ctx.Check(menu.ShownRowCount == 3 && menu.ShownRow == 2 && menu.ShownRowText == "FLY MISSION",
-            $"a guest's check is one PILOT block with no action rows, then the two plaques, opening on FLY MISSION ({menu.ShownRowCount}, {menu.ShownRowText})");
+        ctx.Check(menu.ShownRowCount == 5 && menu.ShownRow == 1 && menu.ShownRowText == "CHANGE AMMO",
+            $"a guest's check is one PILOT block with CHANGE AMMO and CHANGE PLANE, then the two plaques ({menu.ShownRowCount}, {menu.ShownRowText})");
         menu.Drive(Back);
         ctx.Check(flow.Field.Current == 1 && flow.Screen == CampaignScreen.FlightCheck, $"Back retreats to P2's check ({flow.Field.Current})");
         ctx.Check(menu.ShownBoard is { } second && HasLine(second, "FLIGHT CHECK P2"), $"headed for that guest");
         WalkTo(menu, "FLY MISSION");
         menu.Drive(Accept);
-        ctx.Check(flow.Field.Current == 2 && menu.ShownRow == 2 && menu.ShownRowText == "FLY MISSION",
+        ctx.Check(flow.Field.Current == 2 && menu.ShownRowText == "CHANGE AMMO",
             $"FLY MISSION on a guest's check advances to the next, the cursor opening afresh ({flow.Field.Current}, {menu.ShownRowText})");
         WalkTo(menu, "FLY MISSION");
         menu.Drive(Accept);
         ctx.Check(flow.Field.Current == 3 && flow.Screen == CampaignScreen.FlightCheck, $"and again onto P4's ({flow.Field.Current})");
     }
 
-    // Each guest flies what the co-op allocation gives its seat: a copy of a plane nobody else
-    // holds, else the stock Devastator. The launch discards the campaign and the return re-reads the
-    // profile, and the next mission's check still opens on the same allocation.
-    private static void GuestPlanesAcrossMissions(
+    // A guest's ammunition pick is theirs for the rest of the run. The launch discards the campaign
+    // and the return re-reads the profile, and the next mission's check still opens on what they
+    // chose. ⚠ The same walk pins that none of it reached the seated profile. A guest's record is
+    // a copy, and their ACCEPT must leave the profile file untouched.
+    private static void GuestPickAcrossMissions(
         TestContext ctx, LaunchMenu menu, CampaignProfileStore store, List<MenuExit> exits)
     {
+        string file = Path.Combine(store.DirFor(Pilot), "profile.json");
         var flow = OpenGuestFlightCheck(ctx, menu, "four humans reach the mission's checks");
         if (flow == null)
         {
@@ -723,10 +724,33 @@ internal static class MenuCampaignSuites
 
         string picked = flow.Field.Plane(1)?.Name ?? string.Empty;
         int seq = flow.MissionSeq;
-        ctx.Check(AllocatedFlown(flow, out string reading),
-            $"each guest flies a copy of the plane the co-op allocation gives its seat, or stock ({reading})");
-        ctx.Check(Enumerable.Range(0, flow.Page.RowCount).All(row => flow.Page.RowText(row) is not ("CHANGE AMMO" or "CHANGE PLANE")),
-            $"and the guest's check offers no CHANGE AMMO or CHANGE PLANE ({flow.Page.RowCount} rows)");
+        WalkTo(menu, "CHANGE AMMO");
+        menu.Drive(Accept);
+        ctx.Check(flow.Screen == CampaignScreen.Ammo && ReferenceEquals(flow.AmmoTarget(), flow.Field.Plane(1)),
+            $"the guest's CHANGE AMMO opens on their own aircraft ({flow.Screen}, {picked})");
+        int group = -1;
+        for (int row = 0; row < 4 && group < 0; row++)
+        {
+            if (flow.Page.Combo(row) != null)
+            {
+                group = row;
+            }
+        }
+
+        ctx.Check(group >= 0, $"the guest's aircraft mounts a gun to fit ({group})");
+        if (group < 0)
+        {
+            return;
+        }
+
+        string before = File.ReadAllText(file);
+        WalkTo(menu, flow.Page.RowText(group));
+        menu.Drive(Right);
+        WalkTo(menu, "ACCEPT LOADOUT");
+        menu.Drive(Accept);
+        ctx.Check(flow.Screen == CampaignScreen.FlightCheck && flow.Field.Plane(1)?.Ammo[group] == 1,
+            $"ACCEPT LOADOUT fits the guest's own record ({flow.Field.Plane(1)?.Ammo[group]})");
+        ctx.Check(File.ReadAllText(file) == before, $"and writes nothing into the seated profile's file");
 
         for (int player = 1; player < 4; player++)
         {
@@ -752,30 +776,8 @@ internal static class MenuCampaignSuites
 
         ctx.Check(flow.MissionSeq == seq + 1, $"on the story position the flown mission advanced to ({flow.MissionSeq})");
         var kept = flow.Field.Plane(1);
-        bool allocated = AllocatedFlown(flow, out string again);
-        ctx.Check(kept?.Name == picked && allocated,
-            $"and each guest's check still stands on its allocated aircraft ({kept?.Name}, {again})");
-    }
-
-    // Whether every guest of a four-player field flies its seat's allocation, a copy of the
-    // profile's record and never the record itself.
-    private static bool AllocatedFlown(CampaignFlow flow, out string reading)
-    {
-        var profile = flow.Profile!;
-        var allocated = CoopPlanePool.Allocate(profile, 4);
-        var names = new List<string>();
-        bool ok = true;
-        for (int player = 1; player < 4; player++)
-        {
-            var plane = flow.Field.Plane(player);
-            names.Add(plane?.Name ?? "-");
-            ok &= plane != null && (allocated[player] < 0
-                ? flow.Field.IsStock(plane)
-                : plane.Name == profile.Planes[allocated[player]].Name && !ReferenceEquals(plane, profile.Planes[allocated[player]]));
-        }
-
-        reading = string.Join(", ", names);
-        return ok;
+        ctx.Check(kept?.Name == picked && kept?.Ammo[group] == 1,
+            $"and the guest's check still stands on their aircraft with the ammunition they picked ({kept?.Name}, {kept?.Ammo[group]})");
     }
 
     // The walk both halves above share: the cabin a flown mission returns to, then the frame that

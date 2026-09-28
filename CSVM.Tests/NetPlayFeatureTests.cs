@@ -712,25 +712,24 @@ public class NetPlayFeatureTests
     }
 
     [Fact]
-    public void AGuestIsSeatedInThePlaneTheHostsAllocationGivesItsSlotAndHearsIt()
+    public void AGuestFliesTheHangarPlaneTheHostSettledForItsSeatNotThePickedAirframe()
     {
         var (host, guest) = CoopPair(59);
         host.ShowCoop(NetCoopScreen.FlightCheck, 3, 2, 0b1010_0000);
         guest.Pick.Set(9, true);
         Pump(host, guest);
-
-        // ABLE-TO-FAIL CONTROL: before the host offers planes, a guest's own pick seats it stock.
         Assert.Equal(CoopGuestPick.StarterAirframe, Assert.Single(host.CoopGuests).Airframe);
-        Assert.False(guest.CoopSeatPlane!.Value.Hangar);
 
-        var fit = CoopFit.Of(new[] { 3, 1 }, new[] { 0, 7 });
-        var plane = new CoopSeatPlaneMessage(1, true, 7, fit, null, "Kestrel");
-        host.OfferCoopPlanes(new[] { CoopSeatPlaneMessage.Stock(0, 2), plane });
+        // ABLE-TO-FAIL CONTROL: once the host settles seat 1 on a hangar plane, its airframe flies.
+        var hangar = new[]
+        {
+            new CoopHangarMessage(0, 2, 0, 3, Name: "Mine"),
+            new CoopHangarMessage(1, 2, 1, 7, Name: "Yours"),
+        };
+        host.OfferCoopHangar(hangar, new[] { 0, 1 });
         Pump(host, guest);
-        var seated = Assert.Single(host.CoopGuests);
-        Assert.Equal(((byte)7, fit), (seated.Airframe, seated.Fit));
-        Assert.Equal(plane, guest.CoopSeatPlane);
-        Assert.Null(host.CoopSeatPlane);
+        Assert.Equal(7, Assert.Single(host.CoopGuests).Airframe);
+        Assert.Equal(2, guest.CoopHangar.Count);
     }
 
     [Fact]
@@ -776,13 +775,12 @@ public class NetPlayFeatureTests
     }
 
     [Fact]
-    public void AGuestIsSeatedOnItsAllocatedFitUnderItsNameAndTheHostsLaunchTellsItEverySeatsFit()
+    public void AGuestsPickCarriesItsFitAndNameAndTheHostsLaunchTellsItEverySeatsFit()
     {
         var (host, guest) = CoopPair(67);
         host.ShowCoop(NetCoopScreen.FlightCheck, 3, 2, 0b10_0000);
         var fit = CoopFit.Of(new[] { 3, 1 }, new[] { 0, 7 });
-        host.OfferCoopPlanes(new[] { CoopSeatPlaneMessage.Stock(0, 5), new CoopSeatPlaneMessage(1, true, 5, fit, null, "Kestrel") });
-        guest.Pick.Set(5, true);
+        guest.Pick.Set(5, true, fit);
         Pump(host, guest);
 
         // ABLE-TO-FAIL CONTROL: a guest with no player name is seated with none.

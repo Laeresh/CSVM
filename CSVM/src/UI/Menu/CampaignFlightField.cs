@@ -5,26 +5,74 @@ using CSVM.Session.Campaign;
 namespace CSVM.UI.Menu;
 
 /// <summary>
+/// One guest's aircraft on a co-op campaign sortie: the records the picker offers them, and which
+/// one they are on. Every record here is session-scoped: a COPY of one of the seated profile's
+/// aircraft, or the stock Devastator at rest. A guest's ammunition edits land on something the
+/// profile store never sees.
+/// </summary>
+public sealed class CampaignGuest
+{
+    private readonly List<OwnedPlane> _choices;
+
+    internal CampaignGuest(int player, List<OwnedPlane> choices)
+    {
+        Player = player;
+        _choices = choices;
+    }
+
+    /// <summary>Which human this is: 1 for P2, up to 3 for P4. The seated player is never one.</summary>
+    public int Player { get; }
+
+    /// <summary>Every aircraft this guest may fly: a copy of each of the seated profile's planes in
+    /// hangar order, then the stock Devastator. Any number of seats may fly that one.</summary>
+    public IReadOnlyList<OwnedPlane> Choices => _choices;
+
+    /// <summary>Which entry of <see cref="Choices"/> is the stock Devastator, the last.</summary>
+    public int StockChoice => _choices.Count - 1;
+
+    /// <summary>Which entry of <see cref="Choices"/> is picked.</summary>
+    public int Choice { get; internal set; }
+
+    /// <summary>The aircraft this guest flies.</summary>
+    public OwnedPlane Plane => _choices[Math.Clamp(Choice, 0, _choices.Count - 1)];
+
+    /// <summary>The plane of the hangar this guest flies, an index into the seated profile's
+    /// planes, or <see cref="CoopPlanePool.Stock"/>.</summary>
+    public int HangarPick => Choice >= 0 && Choice < StockChoice ? Choice : CoopPlanePool.Stock;
+}
+
+/// <summary>
 /// The humans flying one campaign sortie, as the flight check walks them: how many joined, whose
-/// check is showing, and which aeroplane each guest flies. The seated player is 0 and keeps the
-/// profile's own aircraft. Players 1 and up are guests, who bring no profile and fly what the co-op
-/// allocation (<see cref="CoopPlanePool"/>) gives their seat. That is a COPY of one of the seated
-/// profile's aircraft with its own fit, or a stock Devastator. A network guest draws from the same
-/// pool after these seats. Engine-free and presentation-neutral, and owned by the
-/// <see cref="CampaignFeature"/>, so both presentations walk the same allocation and player index.
+/// check is showing, and what each guest picked. The seated player is 0 and keeps the profile's
+/// own aircraft. Players 1 and up are guests, who bring no profile and fly the session-scoped
+/// records <see cref="CampaignGuest"/> holds. One human at a time flies a plane of the hangar,
+/// network guests included, so a pick another human holds is refused (<see cref="HolderOf"/>).
+/// A guest's pick and its fit last the whole run, across the launches and hangar visits that
+/// rebuild the rosters. Engine-free and presentation-neutral, owned by the
+/// <see cref="CampaignFeature"/> so both presentations walk the same rules and player index.
 /// </summary>
 public sealed class CampaignFlightField
 {
     private readonly CampaignFeature _feature;
-    private readonly List<OwnedPlane> _guests = new();
+    private readonly List<CampaignGuest> _guests = new();
 
     // Every stock record handed out, by reference: a screen resolving one plane's guns asks here
     // rather than reading CustomPlaneStore under a name an airframe title could collide with.
     private readonly HashSet<OwnedPlane> _stock = new();
 
-    // What the guest records were built from. The allocation reads only the profile instance, its
-    // two crew picks, its plane count and the joined count. A change to any of them rebuilds.
-    private (CampaignProfileDef? Profile, int Selected, int Wingman, int Planes, int Players) _builtFor;
+    // What each guest player had picked when their roster was last rebuilt, by player index. A
+    // rebuild is not a decision to start over. The campaign is discarded and reopened around every
+    // flight, and a hangar visit re-reads the profile. Without this a guest's aircraft and its
+    // ammunition would fall back to their defaults on the next mission's check.
+    private readonly Dictionary<int, CarriedPick> _carried = new();
+
+    // The profile the guest rosters were built from. A different one (Resume re-reads it after a
+    // hangar visit) rebuilds them, since a roster is a statement about that profile's aircraft.
+    private CampaignProfileDef? _rosterProfile;
+
+    // Whose campaign the carried picks were made on. Another player's campaign is another sortie,
+    // so its guests open on the roster's own defaults rather than on what this one flew.
+    private string _carriedFor = string.Empty;
 
     private int _players = 1;
     private bool _locked;
@@ -40,8 +88,8 @@ public sealed class CampaignFlightField
     /// <summary>Whether the seated player has committed the field by pressing FLY MISSION.</summary>
     public bool Locked => _locked;
 
-    /// <summary>The aeroplane each guest flies, in player order. Empty for a solo campaign.</summary>
-    public IReadOnlyList<OwnedPlane> Guests
+    /// <summary>The guests, in player order. Empty for a solo campaign.</summary>
+    public IReadOnlyList<CampaignGuest> Guests
     {
         get
         {
@@ -97,26 +145,88 @@ public sealed class CampaignFlightField
     }
 
     /// <summary>The aircraft player <paramref name="player"/> flies: the profile's selected plane
-    /// for the seated player, the allocation's answer for anybody else, null when neither exists.</summary>
+    /// for the seated player, that guest's own pick for anybody else, null when neither exists.</summary>
     public OwnedPlane? Plane(int player)
     {
-        if (player <= 0)
-        {
-            return SeatedPlane();
-        }
-
-        EnsureGuests();
-        return player - 1 < _guests.Count ? _guests[player - 1] : null;
+        return player <= 0 ? SeatedPlane() : GuestAt(player)?.Plane;
     }
 
-    /// <summary>Whether this record is a stock airframe at rest rather than a profile aircraft.
-    /// ⚠ A screen must ask here before reading <c>CustomPlaneStore</c> under the record's name: a
-    /// stock record is named for its airframe, and a hangar plane sharing that name would
-    /// otherwise fit a guest with somebody else's build.</summary>
-    public bool IsStock(OwnedPlane plane) => _stock.Contains(plane);
+    /// <summary>Whether entry <paramref name="pick"/> of a guest's own choices is one another
+    /// human already flies, which is what the picker refuses a pick on. False for a player index
+    /// that names no guest: only a guest chooses out of this roster.</summary>
+    public bool Taken(int player, int pick) => Holder(player, pick) >= 0;
 
-    // ⚠ A copy, never the profile's own record. A guest's record belongs to the sortie, and a
-    // reference here would let anything written to it land in the seated profile.
+    /// <summary>The seat of the human already flying entry <paramref name="pick"/> of a guest's own
+    /// choices, which the picker's refusal names, or -1 when none does.</summary>
+    public int Holder(int player, int pick)
+    {
+        if (GuestAt(player) is not { } guest || pick < 0 || pick >= guest.Choices.Count)
+        {
+            return -1;
+        }
+
+        return HolderOf(player, guest.Choices[pick]);
+    }
+
+    /// <summary>The seat of another human flying a plane named as <paramref name="plane"/> is,
+    /// asked for player <paramref name="player"/>, or -1. Seats count as the wire counts them, the
+    /// seated player 0 on a host. The stock Devastator is never held. ⚠ The one no-duplicate rule
+    /// every picker asks, the seated player's included: it covers this machine's humans and the
+    /// network seats alike.</summary>
+    public int HolderOf(int player, OwnedPlane plane)
+    {
+        ArgumentNullException.ThrowIfNull(plane);
+        if (IsStock(plane))
+        {
+            return -1;
+        }
+
+        if (player != 0 && SeatedPlane() is { } seated && !IsStock(seated) && seated.Name == plane.Name)
+        {
+            return _feature.SeatOf(0);
+        }
+
+        foreach (var other in _guests)
+        {
+            if (other.Player != player && other.HangarPick >= 0 && other.Plane.Name == plane.Name)
+            {
+                return _feature.SeatOf(other.Player);
+            }
+        }
+
+        return _feature.RemoteHolder(plane.Name, _feature.SeatOf(player));
+    }
+
+    /// <summary>Puts a guest on entry <paramref name="pick"/> of their own choices, which is what
+    /// the picker's ACCEPT does. An entry another human flies is refused here as well as on the
+    /// picker. A caller that skips the screen cannot walk around the no-duplicate rule.
+    /// Returns whether the pick moved. ⚠ Nothing here reaches the seated profile: every record a
+    /// guest may be put on is session-scoped.</summary>
+    public bool Choose(int player, int pick)
+    {
+        if (GuestAt(player) is not { } guest
+            || pick < 0 || pick >= guest.Choices.Count || pick == guest.Choice
+            || Taken(player, pick))
+        {
+            return false;
+        }
+
+        guest.Choice = pick;
+        return true;
+    }
+
+    /// <summary>Whether this record is a stock Devastator at rest rather than a profile aircraft.
+    /// ⚠ A screen must ask here before reading <c>CustomPlaneStore</c> under the record's name. A
+    /// stock record is named for its airframe. A hangar plane sharing that name would otherwise fit
+    /// a guest with somebody else's build.</summary>
+    public bool IsStock(OwnedPlane plane) => _stock.Contains(plane) || _feature.IsSharedStock(plane);
+
+    // What a carried pick is named by: the stock Devastator, or the plane's own name for a profile
+    // aircraft, the key the no-duplicate rule compares.
+    private static string KeyOf(OwnedPlane plane, bool stock) => stock ? "stock" : $"owned:{plane.Name}";
+
+    // ⚠ A copy, never the profile's own record. A guest edits ammunition on whatever this returns,
+    // and a reference here would write those edits into the seated profile.
     private static OwnedPlane CopyOf(OwnedPlane plane) => new()
     {
         Name = plane.Name,
@@ -125,6 +235,15 @@ public sealed class CampaignFlightField
         Ordnance = (int[])plane.Ordnance.Clone(),
         Special = plane.Special,
     };
+
+    // The guest player index names, or null for the seated player and for a player who has not
+    // joined. Every public entry that takes a player index comes through here.
+    private CampaignGuest? GuestAt(int player)
+    {
+        EnsureGuests();
+        int at = player - 1;
+        return at >= 0 && at < _guests.Count ? _guests[at] : null;
+    }
 
     private OwnedPlane? SeatedPlane()
     {
@@ -136,36 +255,126 @@ public sealed class CampaignFlightField
         return profile.Planes[Math.Clamp(profile.SelectedPlane, 0, profile.Planes.Count - 1)];
     }
 
-    // Rebuilds every guest's record whenever what the allocation reads has moved. A hangar visit
-    // replaces the profile, and a crew change on the seated player's check frees or takes a plane.
+    // Builds whatever guests the joined count now needs, drops the trailing ones it does not, and
+    // starts over whenever the seated profile changed under them. Every pick standing is carried
+    // first, so a rebuild puts each guest back on the aircraft and the fit they chose.
     private void EnsureGuests()
     {
-        var profile = _feature.Profile;
-        var key = (profile, profile?.SelectedPlane ?? 0, profile?.WingmanPlane ?? 0, profile?.Planes.Count ?? 0, _players);
-        if (key == _builtFor && _guests.Count == _players - 1)
+        bool rebuild = !ReferenceEquals(_rosterProfile, _feature.Profile);
+        if (rebuild || _guests.Count != _players - 1)
+        {
+            Carry();
+        }
+
+        if (rebuild)
+        {
+            _rosterProfile = _feature.Profile;
+            _guests.Clear();
+            _stock.Clear();
+        }
+
+        while (_guests.Count > _players - 1)
+        {
+            _guests.RemoveAt(_guests.Count - 1);
+        }
+
+        while (_guests.Count < _players - 1)
+        {
+            _guests.Add(NewGuest(_guests.Count + 1));
+        }
+    }
+
+    // Records what every live guest is on, by the same key the no-duplicate rule compares, with the
+    // fit they are flying. Called before anything drops a guest, since the record itself goes with
+    // them.
+    private void Carry()
+    {
+        if (_guests.Count == 0)
         {
             return;
         }
 
-        _builtFor = key;
-        _guests.Clear();
-        _stock.Clear();
-        int[] allocated = CoopPlanePool.Allocate(profile, _players);
-        for (int player = 1; player < _players; player++)
+        _carriedFor = _rosterProfile?.Name ?? string.Empty;
+        foreach (var guest in _guests)
         {
-            _guests.Add(allocated[player] >= 0 ? CopyOf(profile!.Planes[allocated[player]]) : StockDevastator());
+            var plane = guest.Plane;
+            _carried[guest.Player] = new CarriedPick(
+                KeyOf(plane, guest.HangarPick < 0),
+                (int[])plane.Ammo.Clone(),
+                (int[])plane.Ordnance.Clone());
         }
     }
 
-    private OwnedPlane StockDevastator()
+    // Where this guest's carried pick lands in their freshly built choices, or -1. They may carry
+    // none, or it may have been made on another player's campaign. The profile may no longer own
+    // that aircraft, or somebody else may fly it now. ⚠ The fit is written onto the entry, which
+    // is a stock record or a copy, never the seated profile's own plane.
+    private int Restore(CampaignGuest guest)
     {
-        int airframe = CoopPlanePool.StockAirframe;
-        var record = new OwnedPlane
+        if (!_carried.TryGetValue(guest.Player, out var carried)
+            || !string.Equals(_carriedFor, _rosterProfile?.Name ?? string.Empty, StringComparison.Ordinal))
         {
-            Name = _feature.Strings.Text(3000 + airframe, $"Airframe {airframe}"),
-            Airframe = airframe,
-        };
-        _stock.Add(record);
-        return record;
+            return -1;
+        }
+
+        for (int pick = 0; pick < guest.Choices.Count; pick++)
+        {
+            var choice = guest.Choices[pick];
+            if (KeyOf(choice, pick == guest.StockChoice) != carried.Key || HolderOf(guest.Player, choice) >= 0)
+            {
+                continue;
+            }
+
+            choice.Ammo = (int[])carried.Ammo.Clone();
+            choice.Ordnance = (int[])carried.Ordnance.Clone();
+            return pick;
+        }
+
+        return -1;
     }
+
+    // One guest's own copy of the roster: a copy of each of the seated profile's aircraft, then a
+    // stock Devastator. Per guest rather than shared, so one guest's ammunition edits cannot reach a
+    // record another guest later picks up.
+    private CampaignGuest NewGuest(int player)
+    {
+        var choices = new List<OwnedPlane>((_rosterProfile?.Planes.Count ?? 0) + 1);
+        if (_rosterProfile is { } profile)
+        {
+            foreach (var owned in profile.Planes)
+            {
+                choices.Add(CopyOf(owned));
+            }
+        }
+
+        var stock = _feature.StockDevastator();
+        _stock.Add(stock);
+        choices.Add(stock);
+
+        // Built before the guest joins _guests, so the rule sees only the players who went before.
+        var guest = new CampaignGuest(player, choices);
+        int carried = Restore(guest);
+        guest.Choice = carried >= 0 ? carried : FirstFree(guest);
+        return guest;
+    }
+
+    // The first plane of the hangar nobody holds, else the stock Devastator. A guest opens on
+    // something they can actually fly, and players come before the wingman.
+    private int FirstFree(CampaignGuest guest)
+    {
+        for (int pick = 0; pick < guest.StockChoice; pick++)
+        {
+            if (HolderOf(guest.Player, guest.Choices[pick]) < 0)
+            {
+                return pick;
+            }
+        }
+
+        return guest.StockChoice;
+    }
+
+    // One guest's pick as it survives a rebuild: which entry they were on, and the ammunition and
+    // ordnance fitted to it. The entry is named by the key the rule compares, not by a row number.
+    // The arrays are copies, since the record they came from is rebuilt under them.
+    private readonly record struct CarriedPick(string Key, int[] Ammo, int[] Ordnance);
 }
