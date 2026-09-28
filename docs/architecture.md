@@ -89,6 +89,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/Anim/OpacityWriter.cs`, a subtree's per-instance opacity: the instance parameter and the translucent twin override, never a shared-material edit.
 - `src/Mech3/Anim/NameResolver.cs`, name to node resolution: the index, wildcard matcher, scope tier chain, symbol authority, anchors and the bind census.
 - `src/Mech3/Anim/CutsceneFastForward.cs`, the rate one cutscene episode's own definitions run at while the player holds a key through a scene that offers no skip.
+- `src/Mech3/Anim/RangeGateAuthority.cs`, which machine answers a `PLAYER_RANGE` gate: the host for one whose call closure raises a `CALLBACK`, each machine for the rest.
 - `src/Mech3/SequenceRunner.cs`, the engine-free sequence interpreter (event clock, LOOP, IF/ELSEIF, WAIT_FOR_COMPLETION) behind the `ISequenceHost` seam.
 - `src/Mech3/DestructibleRegistry.cs`, live per-instance HP for `HEALTH>0` anim defs, one pool per `(def, anchor)`; `Resolve` maps a struck collider back.
 - `src/Mech3/ScriptedPath.cs`, resolves an authored waypoint path (`pp1` → the gamez `pp1_aipath` subtree) into ordered world-space waypoints.
@@ -619,7 +620,7 @@ delegate to, in six sub-namespaces, one folder each. `Launch` sits on top and no
 - `src/Session/Campaign/LandingApproachRuntime.cs`, the mid-mission cutscene trigger: `landings.zrd` rows tested against each flying human, and the auto-land offer.
 - `src/Session/Campaign/LadderSwitch.cs`, the rope-ladder switch as an engine-free rule and state machine, plus the co-op holder rule deciding which human owns it.
 - `src/Session/Campaign/LadderSwitchRuntime.cs`, that switch flown against the built world: the per-human attitude and sensor read, and the definitions it starts.
-- `src/Session/Campaign/NetPositionalStartLink.cs`, the landing rows and the ladder switch over the wire: the host decides over the whole field and a guest replays the start for the named seat.
+- `src/Session/Campaign/NetPositionalStartLink.cs`, the landing rows, the ladder switch and the code-raising range gates over the wire: the host decides over the whole field and a guest replays its decision.
 
 **`Session.Roster`**, who is flying and how each got an aeroplane.
 

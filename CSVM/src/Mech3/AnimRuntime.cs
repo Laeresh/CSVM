@@ -309,6 +309,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// session with no host leaves it false and reads live, as it always has.</summary>
     internal bool PlayerRangeHeld;
 
+    /// <summary>Which machine answers each range gate: the host for a gate that raises a mission
+    /// code, every end for the rest. A network session wires its two seams.</summary>
+    internal RangeGateAuthority RangeGates = new();
+
     /// <summary>Where the player is, for a <c>PLAYER_RANGE</c> condition with no
     /// <see cref="PlayerPositions"/> wired (a lab, a unit test). Supplied by the session (the
     /// flown aircraft, or the spectator camera); absent → the viewport camera, and failing
@@ -2410,6 +2414,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         _root = worldRoot;
         _program = program;
         _callTargets = null;
+        RangeGates.Bind(program.ByAnimName);
         // ⚠ Hand these flags over before the first Add/Anchors call; they are construction-time
         // facts about this runtime. The census covers the bootstrap passes only.
         _resolver.NameResolveFallback = NameResolveFallback;
@@ -3710,8 +3715,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             // condition is the runtime flag itself.
             "HwRender" => true,
             "PlayerFirstPerson" => FirstPersonView?.Invoke() ?? false,
-            "PlayerRange" => anchor != null
-                             && NearestPlayerDistanceSquared(WorldPos(anchor)) <= num,
+            "PlayerRange" => anchor != null && PlayerInRange(def, anchor, num),
             // ANIM_HEALTH gates damage effects: "if this object has been worn down to N".
             // Read against the LIVE per-instance HP, not the def's authored value, so a
             // tower damaged to 30 smokes while its undamaged siblings do not.
@@ -4219,6 +4223,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         foreach (var p in RangePositions())
             d2 = Mathf.Min(d2, point.DistanceSquaredTo(p));
         return d2 == float.MaxValue ? point.DistanceSquaredTo(PlayerPos()) : d2;
+    }
+
+    // A PLAYER_RANGE gate's answer, from whichever machine RangeGates says owns it. C4/M03's
+    // blacke_drop is the one shipped gate whose closure raises a code (docs/org/multiplayer-messages.md).
+    // ⚠ Do not read a host-decided gate locally on a guest; the two ends would start it apart.
+    private bool PlayerInRange(AnimDefinition def, Node3D anchor, float radiusSq)
+    {
+        if (!RangeGates.HostDecides(def))
+        {
+            return NearestPlayerDistanceSquared(WorldPos(anchor)) <= radiusSq;
+        }
+
+        string gate = RangeGateAuthority.GateName(def, anchor.Name, radiusSq);
+        return RangeGates.HostVerdict is { } host
+            ? host(gate)
+            : RangeGates.Decide(gate, NearestPlayerDistanceSquared(WorldPos(anchor)) <= radiusSq);
     }
 
     private Node3D? ConditionNode(object? reference, AnimDefinition def, Node3D? anchor)

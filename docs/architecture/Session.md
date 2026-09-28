@@ -235,12 +235,13 @@ skip input sends the ask and ends nothing locally, and hands each skip the host 
 [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Session/Campaign/NetPositionalStartLink.cs
-The landing rows and the ladder switch over the wire, one per network session with either runtime
-bound. On the host it sends each row start and holder change from `LandingApproachRuntime.Started`
-and `LadderSwitchRuntime.HolderChanged`, and gives a guest's copy the held auto-land button that
-seat's own machine reports. On a guest it replicates both runtimes, starts the row the host named
-for that seat's rig, takes the host's holder, and `Step` reports its own seats' held button when it
-changes. Kinds and replay mapping: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+The landing rows, the ladder switch and the code-raising range gates over the wire, one per network
+session with any of them bound. On the host it sends each row start, holder change and gate verdict
+from `LandingApproachRuntime.Started`, `LadderSwitchRuntime.HolderChanged` and
+`RangeGateAuthority.Decided`, and gives a guest's copy the held auto-land button that seat's own
+machine reports. On a guest it replicates both runtimes, starts the row the host named for that
+seat's rig, takes the host's holder, answers each gate with the host's verdict, and `Step` reports
+its own seats' held button when it changes. Kinds and replay mapping: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Session/Campaign/CampaignProgression.cs
 The campaign's progression rules over a profile: recording one mission attempt with the original's

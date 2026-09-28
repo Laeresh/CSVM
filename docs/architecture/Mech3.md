@@ -494,7 +494,7 @@ kill, `ApplyDamageStages`, `RunDeathSequence`, `CarryState`; a host publishes ea
 with a frame budget, which never splits one def), the range-deferred start sweep
 and the vehicle/library-root index, and hands every construction site a sealed `TemplateStage`. Its
 range gates read the players through `RangePositions`: the last pose they flew, while
-`PlayerRangeHeld` says a cutscene is posing their aeroplanes. `FastForward` is the per-definition
+`PlayerRangeHeld` says a cutscene is posing their aeroplanes, and `RangeGates` says which machine answers each gate (`Anim/RangeGateAuthority.cs`). `FastForward` is the per-definition
 rate a held key raises a cutscene to (`Anim/CutsceneFastForward.cs`), which `Advance` spends as repeated passes of the instance walk. `CollectLateStarts` and `CatchUp` step only the instances started in between, with their motions, for a guest's late director event. `SuppressedMotionAnims` names the definitions whose `OBJECT_MOTION` events this runtime drops, for a pose another writer owns, which also ends a definition that motion was sustaining (docs/verification.md, INSTR-74). What binds a member is on that member:
 the pool-slot checkout reset, the prewarm's scope, the mission-trigger closure, the undercover
 probe's decode, the death call's site follow. Each dispatch axis is a sibling module; the router keeps the case labels and the public fields callers configure: `SequenceRunner.cs`, `Anim/MotionSet.cs`, `Anim/NameResolver.cs`, `Anim/EmitterDirector.cs`, `Anim/SoundChannel.cs`, `Anim/LightChannel.cs`, `Anim/PoseChannel.cs`, `Anim/TemplateStage.cs`. Decode: docs/org/sequences.md.
@@ -586,6 +586,14 @@ owned by nobody but `CutsceneController`, which scopes it per episode and hands 
 rate as repeated passes of the instance walk. A remake-only rule, so both constants are design
 choices rather than decoded figures. Read `Session/World/CutsceneController.cs` next; the reasoning is
 docs/formats/anim-definitions/cutscenes.md, "Handoff and skip".
+
+## src/Mech3/Anim/RangeGateAuthority.cs
+Which machine answers a `PLAYER_RANGE` gate. `HostDecides` walks a definition's `CALL_ANIMATION`
+closure once per world and answers true when it reaches a `CALLBACK`; `Decide` records the deciding
+end's verdict and raises `Decided` on a change; a set `HostVerdict` replaces the local read on a
+guest. Engine-free: `AnimRuntime.RangeGates` holds one per runtime and binds it to the program at
+bootstrap, and `Session/Campaign/NetPositionalStartLink.cs` wires the two seams in network co-op.
+The census of shipped gates and the wire kind: docs/org/multiplayer-messages.md, "Positional starts".
 
 ## src/Mech3/Anim/TemplateStage.cs
 The effect-template stage as one module (`TemplateStage<TNode>`): pool-slot arithmetic (`SlotOf`,

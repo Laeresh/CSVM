@@ -401,7 +401,8 @@ What a guest replays, and what it derives from what it replayed:
   event like `WAKEUP_ENEMIES`; 800's credit launches nothing there of its own. 965 to 967 (the
   airframe swap) belong to the episode's owner and run on every end (below). Definitions started
   by a player's position are not graph events: the landing rows and the ladder switch cross as
-  `0x4E` (below), and the `PlayerRange` conditions run on each end over the whole field.
+  `0x4E` (below), as does the one `PlayerRange` gate whose definitions raise a code; the other
+  `PlayerRange` conditions run on each end over the whole field.
   The escorting wingman is a roster block spawned at build, not a director event.
 
 A guest applies each event on arrival and then catches up on it (`Session/Objectives/NetDirectorCatchUp.cs`).
@@ -514,6 +515,7 @@ Each simulation phase, as a guest runs it:
 |---|---|
 | Ending hold, radio, smoke screens, beeper tags, incoming fire | Local presentation or per-pane rules, no world authority. |
 | Landing approaches, ladder switch | **Host-decided**: a row start and a ladder holder arrive as `0x4E`; the guest offers the auto-land prompt to its own humans and sends their held button. |
+| World animation | Local, except a `PlayerRange` gate whose definitions raise a code, which is **host-decided** and read from `0x4E`'s range gate verdict. |
 | Capture AI aircraft | Local membership; new AI are admitted by ordinal before any is stepped. |
 | Projectiles | Local on every end, spawned from fire events; the guest's rounds spend nothing on the world or on an AI. |
 | Human aircraft | Replicated per seat (`0x0f`, `0x10`, `0x22`, `0x40`, `0x12`). |
@@ -547,6 +549,7 @@ The kinds are `NetPositionalStart`:
 | 1 Landing row | host to all | the row the host's trigger started, and the seat whose flying started it |
 | 2 Ladder holder | host to all | the seat now holding the switch, or no seat |
 | 3 Auto-land held | guest to host | the guest's own seat has the auto-land button down while offered the prompt, or has let it go |
+| 4 Range gate | host to all | the host's verdict on a code-raising `PlayerRange` gate, sent when it changes: the row is the gate name's hash, the held flag the verdict, no seat |
 
 A guest starts the named row for the named seat's rig, which makes that seat the episode's owner
 on the guest as on the host. An `auto` row's prompt is per pane, so a guest still tests its own
@@ -564,8 +567,30 @@ the world, so it names an ordinal both ends already hold, and the host's samples
 guest. A guest's scripted player, which an episode claimed by nobody
 belongs to, is the host's first seat.
 
-The `PlayerRange` conditions are not sent: each end tests them over the whole field, so a range
-start can differ between ends by the link delay.
+A `PlayerRange` gate is the host's when its definition, or one it starts through
+`CALL_ANIMATION`, raises a `CALLBACK` (`Mech3/Anim/RangeGateAuthority.cs`). The host tests it
+over its whole field and sends kind 4 when the verdict changes; a guest answers the gate with the
+host's last verdict and never tests it against its own field. A pass the guest's gate has not read
+yet is held until it is read, so a host pass shorter than the gate's poll still starts the
+definition once on the guest. The gate is named by its definition, anchor and radius in metres
+squared (`blacke_drop/blacke_marker/4096`), and the wire carries that name's FNV-1a hash.
+
+Of the 216 shipped animation names carrying a `PlayerRange` condition (1016 definitions over the
+shared, chapter and mission sources), C4/M03's `blacke_drop` is the only one whose closure raises a
+code: its 64 m gate on `blacke_marker` starts `bdplayer`, `bdchute` and the two drop cameras, which
+raise cutscene codes 11, 951, 1 and 2, and it reaches `dropped_blacke`, which the mission's
+objectives read. Every other gate stays on each end over the whole field, so its start can differ
+between ends by the link delay:
+- the ordnance washes (the gun hits, ground effects, flak, muzzle bursts), which each machine draws
+  for its own viewer;
+- the zeppelin props at 270 m, the MP-map and repair-base `call_door` at 25 m, C1's lightning,
+  C1/M02's `pure_panic` and C1B/M03's `foghorn_toot`;
+- C4/M03's `blacke_drop_east` on `blk_e_marker`, which picks which drop camera leg plays. Both
+  legs raise the same codes, so the choice is presentation, but the two ends can show different
+  legs;
+- C5/M02's `arcadia_start` at 1400 m, which burns the Workers' Voyage's gas bags and so sets the
+  `panels` nodes its objectives count inactive. A node state, not a code: the guest's objectives
+  are the host's replicated graph, and the burn is drawn on each end.
 
 Every end draws the episode owner on the staged `player` marker, the owner's own machine and every
 other one alike. On an end where that seat is a copy fed by samples, the copy is in no pane, and

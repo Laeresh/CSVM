@@ -3533,7 +3533,7 @@ public partial class GameSession : Node3D
 
         WireNetDirector();
         WireNetWorld(state.WorldRuntime);
-        WireNetPositionalStarts();
+        WireNetPositionalStarts(state.WorldRuntime);
         WireNetCutscenes();
 
         // F15 / --debug-targets: who is aiming at whom. Reads the live gunners through closures
@@ -4658,17 +4658,18 @@ public partial class GameSession : Node3D
         Log.Info("core", $"net director: {(net.IsHost ? $"host (every transition of {graph.Count} objective(s), and the ending, as they happen)" : $"guest (replaying the host's transitions over {graph.Count} objective(s), evaluating none of its own)")}");
     }
 
-    // The landing rows and the ladder switch over the wire. The host decides them off every seat,
-    // and a guest replays those decisions and reports its own auto-land button.
-    private void WireNetPositionalStarts()
+    // The landing rows, the ladder switch and the mission-code range gates over the wire. The host
+    // decides them off every seat, and a guest replays those decisions and reports its own
+    // auto-land button.
+    private void WireNetPositionalStarts(AnimRuntime? world)
     {
-        if (_net is not { } net || _netSeats.Count == 0 || (_landings == null && _ladder == null))
+        if (_net is not { } net || _netSeats.Count == 0 || (_landings == null && _ladder == null && world == null))
         {
             return;
         }
 
-        _netStarts = NetPositionalStartLink.Open(net, () => _seatRigs, _landings, _ladder);
-        Log.Info("core", $"net positional starts: {(net.IsHost ? $"host (landing rows and the ladder decided over {_seatRigs.Count} seats)" : "guest (replaying the host's row starts and holder, reporting its own auto-land button)")}");
+        _netStarts = NetPositionalStartLink.Open(net, () => _seatRigs, _landings, _ladder, world);
+        Log.Info("core", $"net positional starts: {(net.IsHost ? $"host (landing rows, the ladder and mission-code range gates decided over {_seatRigs.Count} seats)" : "guest (replaying the host's row starts, holder and range gates, reporting its own auto-land button)")}");
     }
 
     // The cutscene skip over the wire: any player's skip ends the shared episode on every machine,

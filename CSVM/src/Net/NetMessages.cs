@@ -231,6 +231,11 @@ public enum NetPositionalStart : byte
     /// <summary>A guest's auto-land button, sent to the host whenever it changes while an auto row
     /// is offered to that seat. The seat is the guest's own.</summary>
     AutoLandHeld = 3,
+
+    /// <summary>The host's verdict on a range gate whose definition raises a mission code, sent
+    /// whenever it changes. The row is the gate name's hash, the held flag the verdict, and the
+    /// seat is <see cref="NetMessage.NoSeat"/>.</summary>
+    RangeGate = 4,
 }
 
 /// <summary>What kind of session a host holds open, the word a join board names it by.</summary>
