@@ -35,7 +35,7 @@ public sealed class FamilyOrderTests
         ("CSVM.Session", 12),
         ("CSVM.Tooling", 13),
         ("CSVM.UI", 14),
-        ("CSVM.Session.Launch", 15),
+        ("CSVM.Launch", 15),
         ("CSVM.Testing", 16),
     };
 
@@ -97,10 +97,10 @@ public sealed class FamilyOrderTests
         "CSVM.UI.Boards.PauseSheet -> CSVM.UI.Menu.EscapeState",
         "CSVM.UI.Boards.PauseSheet -> CSVM.UI.Screens.LoadScreens",
         "CSVM.UI.Boards.ScreenFlash -> CSVM.Flight.Camera.ViewerSet",
-        "CSVM.UI.Menu.Original.OriginalAvailability -> CSVM.Session.Launch.ExtractionStamp",
-        "CSVM.UI.Screens.ExtractionFlow -> CSVM.Session.Launch.ExtractionStamp",
-        "CSVM.UI.Screens.ExtractionFlow -> CSVM.Session.Launch.StampStanding",
-        "CSVM.UI.Screens.NoGameDataScreen -> CSVM.Session.Launch.ExtractionStamp",
+        "CSVM.UI.Menu.Original.OriginalAvailability -> CSVM.Launch.ExtractionStamp",
+        "CSVM.UI.Screens.ExtractionFlow -> CSVM.Launch.ExtractionStamp",
+        "CSVM.UI.Screens.ExtractionFlow -> CSVM.Launch.StampStanding",
+        "CSVM.UI.Screens.NoGameDataScreen -> CSVM.Launch.ExtractionStamp",
     };
 
     [Fact]

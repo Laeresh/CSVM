@@ -26,7 +26,7 @@ using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM.Session.Launch;
+namespace CSVM.Launch;
 
 /// <summary>
 /// The per-launch session node: one aircraft from the player's own extracted game data under orbit
@@ -38,7 +38,7 @@ namespace CSVM.Session.Launch;
 ///
 /// ⚠ Do not add a Teardown(); return-to-menu is a bare QueueFree and the session subtree frees
 /// atomically under <c>_worldRoot</c>. ⚠ Do not parse an arg here: a new flag is a SessionSpec
-/// change. Module entry: docs/architecture.md on src/Session/Launch/GameSession.cs.
+/// change. Module entry: docs/architecture.md on src/Launch/GameSession.cs.
 /// </summary>
 public partial class GameSession : Node3D
 {

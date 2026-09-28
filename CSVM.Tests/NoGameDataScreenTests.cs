@@ -62,7 +62,7 @@ public class NoGameDataScreenTests
         string older = NoGameDataScreen.Body(DataProblem.Older, 2);
         Assert.Contains("older", older);
         Assert.Contains("data version 2", older);
-        Assert.Contains($"this build reads {CSVM.Session.Launch.ExtractionStamp.Schema}", older);
+        Assert.Contains($"this build reads {CSVM.Launch.ExtractionStamp.Schema}", older);
         Assert.Contains("newer", NoGameDataScreen.Body(DataProblem.Newer, 9));
         Assert.Contains(NoGameDataScreen.Instruction, NoGameDataScreen.Body(DataProblem.Missing, null));
     }

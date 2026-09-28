@@ -20,7 +20,7 @@ using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM.Session.Launch;
+namespace CSVM.Launch;
 
 /// <summary>
 /// Main.tscn's root: the once-per-process bootstrap, and everything that persists across

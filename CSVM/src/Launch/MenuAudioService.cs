@@ -6,7 +6,7 @@ using CSVM.UI.Menu;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM.Session.Launch;
+namespace CSVM.Launch;
 
 /// <summary>
 /// The menu host's <see cref="IMenuAudio"/> over the process's own playback: the music channel

@@ -118,7 +118,7 @@ the rows. A changed screen save turns it into a user file. The layout and rule a
 Seat 1's `SkipCutscene` off the active profile's Menu rows alone: `Pressed` (the edge) and `Held`,
 one `Poll` per frame. `Prime` swallows a trigger already down, so the press that opened a screen
 cannot skip it. Reads nothing for any other seat or with sticks off. Polled by
-`UI/Screens/CinemaScreen.cs`, `UI/Screens/BootCard.cs` and `Session/Launch/GameSession.cs` (into
+`UI/Screens/CinemaScreen.cs`, `UI/Screens/BootCard.cs` and `Launch/GameSession.cs` (into
 `CutsceneController.TakeStickPress`). Rules in `docs/org/input.md`, "Skip Cutscene, the stick's
 skip"; covered by `CSVM.Tests/StickSkipTests.cs`.
 

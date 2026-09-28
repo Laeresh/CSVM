@@ -88,7 +88,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C, promote Launch
 
-13. ☐ `Session.Launch` → `CSVM.Launch`
+13. ☑ `Session.Launch` → `CSVM.Launch`
 14. ☐ ExtractionStamp and StampStanding → Extraction
 
 ### Wave D, UI.Boards as the leaf widget library
@@ -229,7 +229,17 @@ SessionPaths entry to `Extraction.md`. Remove the stale allowlist entries.
 
 # Wave C, promote Launch
 
-## C13 ☐ `Session.Launch` → `CSVM.Launch`
+## C13 ☑ `Session.Launch` → `CSVM.Launch`
+
+**Landed.** `CSVM/src/Launch/` under `CSVM.Launch`, `Main.tscn` on `res://src/Launch/Launcher.cs`,
+the six entries on a new `Launch.md` and an index section `### src/Launch/`. `Session.md` and the
+namespace map list five sub-namespaces. The family row is `("CSVM.Launch", 15)`, and the four
+ExtractionStamp/StampStanding allowlist pairs carry the new names until C14 retires them.
+
+**Verified.** `FamilyOrderTests` and `MenuNamespaceDependencyTests` 9/9; `CheckDocEntries.ps1`
+clean; main had not moved; full `.\RunTests.ps1`, see the commit.
+
+**Original approach (kept for reference).**
 
 **Goal.** The composition root is its own top family, above UI.
 

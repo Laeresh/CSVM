@@ -1,4 +1,4 @@
-using CSVM.Session.Launch;
+using CSVM.Launch;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
 using Xunit;

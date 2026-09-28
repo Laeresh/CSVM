@@ -1,5 +1,5 @@
 using System.IO;
-using CSVM.Session.Launch;
+using CSVM.Launch;
 using Xunit;
 
 namespace CSVM.Tests;

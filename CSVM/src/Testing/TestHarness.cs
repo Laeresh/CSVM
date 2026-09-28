@@ -1066,7 +1066,7 @@ public sealed class TestContext
                     EmitterFactory = EmitterFactory,
                     ArchiveEmitterFactory = (tex, parent) => new PufferEmitterFactory(tex, parent, ambience),
                     ExtraPrewarmNames = ExtraPrewarmSoundNames,
-                    Cutscenes = CutsceneRoots ? CSVM.Session.Launch.GameSession.CutsceneWorldNames : null,
+                    Cutscenes = CutsceneRoots ? CSVM.Launch.GameSession.CutsceneWorldNames : null,
                     LandingTriggers = CutsceneRoots,
                     PlanesGamezPath = PlanesGamezPath,
                     Decode = _decode,

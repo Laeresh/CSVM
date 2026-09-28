@@ -578,20 +578,21 @@ The `--dump-*` probes, the capture loop, the golden-image hash and the glTF expo
 - `src/Tooling/CaptureDirector.cs`, the `--screenshot=`/`--shots=`/`--frames=` capture state machine + F11/F12, ticked from `_Process`.
 - `src/Tooling/GltfExporter.cs`, exports the viewer plane subtree to glTF (mesh + livery + baked damage) for `--export-gltf=`/F10, on a throwaway duplicate.
 
-### `src/Session/`, the launch/session layer
+### `src/Launch/`, the composition root
 
-The `Launcher` scene root, the per-launch `GameSession` node, and the session-build clusters they
-delegate to, in six sub-namespaces, one folder each. `Launch` sits on top and nothing else in
-`Session` names it; `Objectives` sits at the bottom and names one other (`Campaign`, once).
+The process and the per-launch session: the top family bar `Testing`, so nothing else names it.
 
-**`Session.Launch`**, the process and the per-launch session.
+- `src/Launch/Launcher.cs`, Main.tscn's root: the once-per-process bootstrap, what outlives a session, the menu host, and every path a session starts or ends.
+- `src/Launch/GameSession.cs`, the per-launch session node: ordered build phases over one `SessionSpec`, owning the clock, world root, panes and runtimes.
+- `src/Launch/TuningWarmup.cs`, the startup pass that registers every `Config` key before the orphan report and `--dump-config` read the registry.
+- `src/Launch/ExtractionStamp.cs`, reads the extraction provenance stamp at boot and warns once when it is stale or unreadable; `Behind` is the blocking read, `Schema` the promise a test pins.
+- `src/Launch/MenuAudioService.cs`, the menus' audio host: the music channel, the briefing narration player, the cue player behind `MenuCueTable`, and the AUDIO page's live mix preview.
+- `src/Launch/MenuCueTable.cs`, the menu cue table: cue name to wav under the rof tree's `ASSETS/SOUNDS`, the four the globals script binds.
 
-- `src/Session/Launch/Launcher.cs`, Main.tscn's root: the once-per-process bootstrap, what outlives a session, the menu host, and every path a session starts or ends.
-- `src/Session/Launch/GameSession.cs`, the per-launch session node: ordered build phases over one `SessionSpec`, owning the clock, world root, panes and runtimes.
-- `src/Session/Launch/TuningWarmup.cs`, the startup pass that registers every `Config` key before the orphan report and `--dump-config` read the registry.
-- `src/Session/Launch/ExtractionStamp.cs`, reads the extraction provenance stamp at boot and warns once when it is stale or unreadable; `Behind` is the blocking read, `Schema` the promise a test pins.
-- `src/Session/Launch/MenuAudioService.cs`, the menus' audio host: the music channel, the briefing narration player, the cue player behind `MenuCueTable`, and the AUDIO page's live mix preview.
-- `src/Session/Launch/MenuCueTable.cs`, the menu cue table: cue name to wav under the rof tree's `ASSETS/SOUNDS`, the four the globals script binds.
+### `src/Session/`, the session-build layer
+
+The session-build clusters `GameSession` delegates to, in five sub-namespaces, one folder each.
+`Objectives` sits at the bottom and names one other (`Campaign`, once).
 
 **`Session.InstantAction`**, one Instant Action mission.
 
