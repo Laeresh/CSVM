@@ -344,7 +344,7 @@ mode's name and nothing else. `LoadMotion` is the moving half, the fill strip an
 throwing, since this screen is shown while everything else is still loading. The dialogs, the beat
 sheet and the face mapping: [../org/loading-screen.md](../org/loading-screen.md).
 
-## src/UI/Boards/PauseScreens.cs
+## src/UI/Screens/PauseScreens.cs
 What the Original presentation's pause screen is made of, engine-free: the frame behind it, the
 mission's chart at its authored source crop, the pins and icons its dialog's script places, the
 objectives parchment, the memento, and the labelled button strips, the block's four plus the remake's own PHOTO MODE at the place that block leaves free. An Instant Action sortie's dialog carries none of that and draws the load screen's blackboard instead, its four texts composed through `LoadScreens` and its parchment left off by the dialog's own script.
@@ -520,7 +520,7 @@ fresh menu each pause, so the cursor starts on Resume and a stray confirm cannot
 menu carries no control hints, the original's pause sheet having none. It shares `ResultsBoard`'s chrome but not its shell, and a campaign session's objectives readout rides
 the same pause on a layer of its own. The Original presentation puts `OriginalPauseBoard` in its place.
 
-## src/UI/Screens/MenuInput.cs
+## src/UI/Boards/MenuInput.cs
 One player's menu input source: the keyboard flag, a `Pads` binding and the edge and auto-repeat
 state, with `Poll(dt)` filling the cursor axes, accept, back and start out of the `Menu` binding
 context (`src/Bindings/`) from three readings of one seat: keyboard live, keyboard minus the

@@ -10,6 +10,7 @@ using CSVM.Flight.Audio;
 using CSVM.Flight.Weapons;
 using CSVM.Launch;
 using CSVM.Mech3;
+using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
 using CSVM.UI.Screens;

@@ -4,6 +4,7 @@ using System.Linq;
 using CSVM.Extraction;
 using CSVM.Flight.Modes;
 using CSVM.Mech3;
+using CSVM.UI.Boards;
 using CSVM.UI.Screens;
 using Godot;
 

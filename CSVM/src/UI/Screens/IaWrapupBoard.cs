@@ -1,4 +1,5 @@
 using CSVM.Flight.Modes;
+using CSVM.UI.Boards;
 using Godot;
 
 namespace CSVM.UI.Screens;

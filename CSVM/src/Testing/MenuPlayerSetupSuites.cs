@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using CSVM.Bindings;
 using CSVM.Spec;
+using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Screens;

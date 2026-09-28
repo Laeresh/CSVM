@@ -352,7 +352,7 @@ released.
 
 ## Where CSVM differs
 
-`UI/Boards/PauseScreens.cs` composes the pause sheet at its authored coordinates and
+`UI/Screens/PauseScreens.cs` composes the pause sheet at its authored coordinates and
 `UI/Menu/Original/OriginalPauseBoard.cs` hangs it over the flown world in the Original presentation; the
 Built-in presentation keeps `UI/Screens/PauseBoard.cs`. `UI/Menu/EscapeDialog.cs` reads `escape.zrd`,
 its Instant Action twin and the load screen's `Loading.zrd`, and `UI/Overlays/MissionMap.cs` is the one map

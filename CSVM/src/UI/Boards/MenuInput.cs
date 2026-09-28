@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using CSVM.Bindings;
 using CSVM.Flight.Airframe;
 using CSVM.Sticks;
-using CSVM.UI.Boards;
+using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM.UI.Screens;
+namespace CSVM.UI.Boards;
 
 /// <summary>
 /// One launchscreen player's input source: the keyboard (player 1 only) and that player's own

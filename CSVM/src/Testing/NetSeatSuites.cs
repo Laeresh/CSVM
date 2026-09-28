@@ -321,7 +321,7 @@ internal static class NetSeatSuites
                 VersusMatch = match,
                 PadAssignment = padAssignment,
                 PauseState = new PauseState(),
-                MenuInputFor = _ => new UI.Screens.MenuInput(),
+                MenuInputFor = _ => new UI.Boards.MenuInput(),
                 ExitSession = () => { },
             }, field.Picker);
 

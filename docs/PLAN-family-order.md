@@ -93,7 +93,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D, UI.Boards as the leaf widget library
 
-15. ☐ Pause* → UI.Screens, MenuInput → UI.Boards
+15. ☑ Pause* → UI.Screens, MenuInput → UI.Boards
 16. ☐ TypedText and MovieSurface → UI.Boards, `BoardPalette.For` → UI.Campaign
 
 ### Wave E, the Flight residue
@@ -287,7 +287,20 @@ named `CSVM.Launch` only for the stamp no longer do.
 
 # Wave D, UI.Boards as the leaf widget library
 
-## D15 ☐ Pause* → UI.Screens, MenuInput → UI.Boards
+## D15 ☑ Pause* → UI.Screens, MenuInput → UI.Boards
+
+**Landed.** `src/UI/Screens/PauseScreens.cs` (PauseSheet, PauseReadout, PauseObjective,
+PauseWorldIcon, PauseScreens) under `CSVM.UI.Screens`, `src/UI/Boards/MenuInput.cs` under
+`CSVM.UI.Boards`, their index bullets in the new groups and the seat input named in the
+`UI.Boards` group line. 23 allowlist pairs retired. Two interim pairs were added, both from
+MenuInput: to `Screens.TypedText` (D16 moves it) and `Flight.Airframe.StickSplit` (E17 moves it).
+UI.Boards now names nothing in UI.Menu or UI.Overlays.
+
+**Verified.** `FamilyOrderTests`, `MenuNamespaceDependencyTests`, the PauseScreens and MenuInput
+tests 87/87; `CheckDocEntries.ps1` clean; orch-13 had not landed on main; full `.\RunTests.ps1`,
+see the commit.
+
+**Original approach (kept for reference).**
 
 **Goal.** UI.Boards names nothing in UI.Menu, UI.Overlays or UI.Screens.
 

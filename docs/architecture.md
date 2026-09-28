@@ -307,7 +307,7 @@ The launchscreen and splitscreen rig, the in-flight pause and results boards, pl
 the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` are built from `Boards`; `Hangar` names nothing
 else in `UI`, and nothing names `Labs`.
 
-**`UI.Boards`**, the widget library every screen draws with: the composed board and its view, fit, palette and faces, the board menu, the list and slider widgets, the splitscreen rig and the canvas-layer order.
+**`UI.Boards`**, the widget library every screen draws with: the composed board and its view, fit, palette and faces, the board menu and the seat input it polls, the list and slider widgets, the splitscreen rig and the canvas-layer order.
 
 - `src/UI/Boards/BoardMenu.cs`, a board's cursor and item list, engine-free, so the selection rules test off engine.
 - `src/UI/Boards/BoardMenuItem.cs`, the rows a board menu can offer: Resume, Photo, Restart, Exit.
@@ -328,10 +328,10 @@ else in `UI`, and nothing names `Labs`.
 - `src/UI/Boards/ComposedBoardView.cs`, the Godot half of the boards: a composed board drawn through `BoardFit` at nearest filtering, the art and movie cache, the hint band.
 - `src/UI/Boards/BoardPalette.cs`, the ink a campaign board writes in, one palette per background family.
 - `src/UI/Boards/SeatStrip.cs`, the shape both presentations' player chip strip shares: the face, the corner inset, the cell a chip centres in, and the ink a seat takes.
-- `src/UI/Boards/PauseScreens.cs`, what the Original presentation's pause screen is made of: the mission's chart at its crop, the parchment, the memento and the strips, the authored four and the remake's photo strip.
 - `src/UI/Boards/ScreenFlash.cs`, the full-screen wash, two channels per pane: the proximity-routed burst ramp and the victim-routed blend, composited at paint time.
 - `src/UI/Boards/BlendWash.cs`, one pane's victim-routed wash: the sonic, flash and smoke blend rule and its attack, sustain and release envelope.
 - `src/UI/Boards/PanelFocus.cs`, the one rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
+- `src/UI/Boards/MenuInput.cs`, one player's menu input source: keyboard flag, a `Pads` binding, edge and auto-repeat polling, and the typed characters a field needs.
 
 **`UI.Campaign`**, the campaign pages, the out-of-mission flow, the campaign board chrome both presentations compose and the scrapbook.
 
@@ -355,9 +355,8 @@ else in `UI`, and nothing names `Labs`.
 - `src/UI/Campaign/CampaignBoards.cs`, the fixed chrome of the eight campaign screens, and the composer that turns a page and a cursor into one board.
 - `src/UI/Campaign/CampaignLayout.cs`, the decoded menu layout as the boards read it: geometry and art by section and key, every read carrying its own fallback.
 
-**`UI.Screens`**, the launchscreen, boot, cinema and load screens, the pause, results and wrap-up boards, and the seat input they poll.
+**`UI.Screens`**, the launchscreen, boot, cinema and load screens, the pause, results and wrap-up boards.
 
-- `src/UI/Screens/MenuInput.cs`, one player's menu input source: keyboard flag, a `Pads` binding, edge and auto-repeat polling, and the typed characters a field needs.
 - `src/UI/Screens/TypedText.cs`, the typed-character feed every menu seat reads: each key event's own character under the pilot's layout, and the paste chords.
 - `src/UI/Screens/MenuSeatDevices.cs`, the pad side of the shared player setup: seat 0's claimed pad, the join and sign-on gestures, hotplug, the flight binding.
 - `src/UI/Screens/MenuControlsSeats.cs`, the rebinding screen's seat bookkeeping for any presentation: which seats it offers, their pad identities and staged keymaps.
@@ -390,6 +389,7 @@ else in `UI`, and nothing names `Labs`.
 - `src/UI/Screens/InstallPicker.cs`, the install folder picker: Godot's own directory dialog embedded in the window, with pad buttons to go up a folder and take the one shown.
 - `src/UI/Screens/SelectionService.cs`, the shared `--freecam` and `--anim-lab` selection: click-pick, the `cs_name` ancestor ladder, a breadcrumb and a highlight box.
 - `src/UI/Screens/ExportSet.cs`, the node lab's Ctrl+click export set: cyan outlines, the breadcrumb's count, and one combined glTF at world transforms.
+- `src/UI/Screens/PauseScreens.cs`, what the Original presentation's pause screen is made of: the mission's chart at its crop, the parchment, the memento and the strips, the authored four and the remake's photo strip.
 
 **`UI.Hangar`**, the Build Custom Plane pages and the plane-picking tables they share with the campaign pages; names nothing else in `UI`.
 

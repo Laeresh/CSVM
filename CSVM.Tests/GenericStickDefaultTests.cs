@@ -3,7 +3,7 @@ using System.IO;
 using System.Linq;
 using CSVM.Bindings;
 using CSVM.Sticks;
-using CSVM.UI.Screens;
+using CSVM.UI.Boards;
 using Xunit;
 
 namespace CSVM.Tests;

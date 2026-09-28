@@ -100,7 +100,7 @@ internal static class AiSuites
                     RigCount = 2,
                     Rigs = rigs,
                     PauseState = pauseState,
-                    MenuInputFor = _ => new UI.Screens.MenuInput(),
+                    MenuInputFor = _ => new UI.Boards.MenuInput(),
                     ExitSession = () => { },
                 }, new FixedFlightStarts());
             humanRoster.SetTargetSubParts(targetSource);

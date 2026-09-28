@@ -11,6 +11,7 @@ using CSVM.Session.Objectives;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
 using CSVM.Spec;
+using CSVM.UI.Boards;
 using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
@@ -906,7 +907,7 @@ public sealed class InstantActionDirector
         public Action RestartSession = null!;
         public Action ExitSession = null!;
         public PauseState PauseState = null!;
-        public Func<int, UI.Screens.MenuInput> MenuInputFor = null!;
+        public Func<int, UI.Boards.MenuInput> MenuInputFor = null!;
         public Action<int> EnterPhotoMode = null!;
         public Action<Control> RegisterBoard = null!;
         // Where the ending goes on a presentation with a wrap-up page of its own. The final numbers
