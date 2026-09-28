@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using CSVM.Flight;
+using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Net;
@@ -19,7 +20,7 @@ public enum LobbyTab
     /// <summary>Mission Options: environment, type, victory, teams, lives and planes.</summary>
     Mission,
 
-    /// <summary>Select Plane: the stock airframe this pilot flies.</summary>
+    /// <summary>Select Plane: the stock airframe or custom plane this pilot flies.</summary>
     Plane,
 
     /// <summary>Select Ammo: the gun ammunition and the rocket on each wing cell.</summary>
@@ -33,8 +34,8 @@ public enum LobbyTab
 /// The original's Multiplayer Lobby over <see cref="DogfightLobby"/>, drawn from the lobby scripts'
 /// own placements (<c>docs/org/menu-inventory.md</c>). The player list, Ready, chat and Leave Game
 /// stand on every tab. Only a Dogfight flies, so Capture the Flag, the zeppelin mode, the teams,
-/// Allow Custom Planes, Outlaw Components and Boot draw greyed. The host's options lock while the host
-/// is Ready. Every pilot's own picks stay live, and changing one clears that pilot's Ready.
+/// the outlaw list's Select... and Boot draw greyed. The host's options lock while the host is
+/// Ready. Every pilot's own picks stay live, and changing one clears that pilot's Ready.
 /// </summary>
 public sealed class OriginalLobbyScreen : IOriginalScreenModule
 {
@@ -83,10 +84,10 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>The Auto Respawn checkbox.</summary>
     public const string AutoRespawnKey = "MPL_C_RESPAWN";
 
-    /// <summary>Allow Custom Planes, greyed.</summary>
+    /// <summary>Allow Custom Planes, live on the host.</summary>
     public const string CustomPlanesKey = "MPL_C_CUSTOM";
 
-    /// <summary>Outlaw Components, greyed.</summary>
+    /// <summary>Outlaw Components, live on the host.</summary>
     public const string OutlawKey = "MPL_C_OUTLAW";
 
     /// <summary>The outlaw list's Select..., greyed.</summary>
@@ -95,7 +96,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>The Default Planes sub-tab.</summary>
     public const string DefaultPlanesKey = "MPL_TAB_DEFAULT";
 
-    /// <summary>The Custom Planes sub-tab, greyed.</summary>
+    /// <summary>The Custom Planes sub-tab, live while the host allows custom planes.</summary>
     public const string CustomTabKey = "MPL_TAB_CUSTOM";
 
     /// <summary>The Select Plane box.</summary>
@@ -197,6 +198,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private readonly Func<StockLoadouts?> _stock;
     private readonly Func<IReadOnlyList<int>> _pads;
     private readonly Func<string?> _pilotName;
+    private readonly Func<IReadOnlyList<CustomPlaneDef>> _customs;
     private string? _open;
     private int _listTop;
     private string _chat = string.Empty;
@@ -207,12 +209,16 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private int _heard;
 
     /// <summary>A lobby module over the door <paramref name="net"/> answers. Its words come from the
-    /// string table under <paramref name="dataRoot"/>, its fits from <paramref name="stock"/>. <paramref name="pads"/> names seat 0's flight devices and
-    /// <paramref name="pilotName"/> the pilot's name, null for none.</summary>
+    /// string table under <paramref name="dataRoot"/>, its fits from <paramref name="stock"/>. Seat
+    /// 0's flight devices are <paramref name="pads"/>, and the pilot's name is
+    /// <paramref name="pilotName"/>, null for none. The pilot's saved custom planes are
+    /// <paramref name="customs"/>, none when null.</summary>
     public OriginalLobbyScreen(
         Func<NetPlayFeature?> net, IOriginalScreenHost host, string? dataRoot, Func<StockLoadouts?>? stock,
-        Func<IReadOnlyList<int>>? pads = null, Func<string?>? pilotName = null)
+        Func<IReadOnlyList<int>>? pads = null, Func<string?>? pilotName = null,
+        Func<IReadOnlyList<CustomPlaneDef>>? customs = null)
     {
+        _customs = customs ?? (() => Array.Empty<CustomPlaneDef>());
         _net = net ?? throw new ArgumentNullException(nameof(net));
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _text = new MultiplayerBoardText(_host, dataRoot);
@@ -226,6 +232,10 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
     /// <summary>Whether the Select Ammo tab shows its Rockets page rather than its Guns page.</summary>
     public bool Rockets { get; private set; }
+
+    /// <summary>Whether the Select Plane tab lists the pilot's custom planes rather than the stock
+    /// ones.</summary>
+    public bool CustomPlanes { get; private set; }
 
     /// <summary>The dropdown whose list stands open, or null.</summary>
     public string? OpenDropdown => _open;
@@ -404,6 +414,18 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             case RocketsTabKey:
                 Rockets = true;
                 return null;
+            case DefaultPlanesKey:
+                CustomPlanes = false;
+                return null;
+            case CustomTabKey:
+                CustomPlanes = true;
+                return null;
+            case CustomPlanesKey:
+                lobby?.SetAllowCustomPlanes(!lobby.Rules.AllowCustom);
+                return null;
+            case OutlawKey:
+                lobby?.SetOutlawComponents(!lobby.Rules.Outlawing);
+                return null;
             case TimeRadioKey:
                 lobby?.SetVictory(DogfightVictory.Time);
                 return null;
@@ -417,7 +439,11 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                 lobby?.SetAutoRespawn(!lobby.Options.AutoRespawn);
                 return null;
             case ReadyKey:
-                lobby?.SetReady(!lobby.Ready);
+                if (lobby != null && !lobby.SetReady(!lobby.Ready))
+                {
+                    Refused(lobby.ReadyRefusals);
+                }
+
                 return null;
             case ChatKey:
             case SendKey:
@@ -662,8 +688,28 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         _chat = string.Empty;
         Tab = LobbyTab.Mission;
         Rockets = false;
+        CustomPlanes = false;
         _host.CloseDialog();
         _host.Open(OriginalScreen.Lobby);
+    }
+
+    // The original's own refusal at Ready: langui 10517, then 10514, 10515 and 10516 for each
+    // reason, on its OK dialog.
+    private void Refused(IReadOnlyList<PlaneRefusal> why)
+    {
+        string text = _text.Word(10517, "You cannot select Ready yet.");
+        foreach (var refusal in why)
+        {
+            text += " " + refusal switch
+            {
+                PlaneRefusal.Ammo => _text.Word(10515, "You have not selected the necessary ammunition for your guns."),
+                PlaneRefusal.Rockets => _text.Word(10516, "You have not selected the necessary rockets for your plane's hardpoints."),
+                _ => _text.Word(10514, "You have not selected a valid plane."),
+            };
+        }
+
+        _host.RaiseDialog(text, DialogIcon.Warning,
+            new OriginalDialogAnswer(OriginalShell.DialogOkKey, CampaignBoards.DialogCenterKey, _text.Word(100, "OK"), null));
     }
 
     private void Leave()
@@ -676,13 +722,15 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         _host.Open(OriginalScreen.Connection);
     }
 
-    // Seat 0 on the airframe and fit this pilot picked, on the chapter and the rules the host's
-    // options name. The wire rides out with it.
+    // Seat 0 on the plane and fit this pilot picked, on the chapter and the rules the host's options
+    // name. The wire rides out with it. ⚠ A custom plane flies as its wire build reads back, the
+    // copy every other machine builds, never the stored def.
     private LaunchExit Exit(NetPlayFeature net, DogfightLobby lobby)
     {
         var options = lobby.Options;
         var seat = new MenuSeatChoice(
-            PlanePickerRoster.AirframeNode(lobby.Airframe), _pads(), CampaignLoadout.For(lobby.Fit, _stock()));
+            PlanePickerRoster.AirframeNode(lobby.Airframe), _pads(), CampaignLoadout.For(lobby.LaunchFit, _stock()),
+            CSVM.Session.Launch.CustomPlaneWire.Def(lobby.Build));
         return new LaunchExit(
             DogfightLobby.ChapterOf(options.Environment), new[] { seat }, MenuMode.Versus,
             Match: DogfightLobby.RulesOf(options), Net: net.BuildLaunch());
@@ -748,16 +796,34 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         rows.Add(Check(LimitedLivesKey, CheckArt, PageX + 241f, PageY + 192f, 110f, 11f, live));
         rows.Add(Box(LivesKey, BoxText(LivesKey, lobby), PageX + 360f, PageY + 193f, 25f, 22f, live && options.LimitedLives));
         rows.Add(Check(AutoRespawnKey, CheckArt, PageX + 241f, PageY + 207f, 110f, 11f, live));
-        rows.Add(Check(CustomPlanesKey, CheckArt, PageX + 241f, PageY + 247f, 150f, 11f, false));
-        rows.Add(Check(OutlawKey, CheckArt, PageX + 265f, PageY + 262f, 150f, 11f, false));
+        rows.Add(Check(CustomPlanesKey, CheckArt, PageX + 241f, PageY + 247f, 150f, 11f, live));
+        rows.Add(Check(OutlawKey, CheckArt, PageX + 265f, PageY + 262f, 150f, 11f, live));
         rows.Add(_text.Strip(SelectKey, MediumArt, PageX + 295f, PageY + 277f, false, 1, 96f, 37f));
     }
 
     private void PlaneRows(DogfightLobby lobby, List<OriginalRow> rows)
     {
+        bool customs = lobby.Rules.AllowCustom;
+        CustomPlanes &= customs;
         rows.Add(_text.Strip(DefaultPlanesKey, TabLargeArt, PageX + 194f, PageY + 44f, true, 1, 119f, 23f));
-        rows.Add(_text.Strip(CustomTabKey, TabLargeArt, PageX + 316f, PageY + 44f, false, 1, 119f, 23f));
-        rows.Add(Drop(PlaneKey, PlaneWord(lobby.Airframe), PageX + 11f, PageY + 80f, 195f, 36f, true));
+        rows.Add(_text.Strip(CustomTabKey, TabLargeArt, PageX + 316f, PageY + 44f, customs, 1, 119f, 23f));
+        string label = lobby.Build is { } build ? build.Name : PlaneWord(lobby.Airframe);
+        rows.Add(Drop(PlaneKey, label, PageX + 11f, PageY + 80f, 195f, 36f, !CustomPlanes || SavedPlanes().Count > 0));
+    }
+
+    // The pilot's custom planes the pickers offer: every saved one the campaign has exported.
+    private List<CustomPlaneDef> SavedPlanes()
+    {
+        var planes = new List<CustomPlaneDef>();
+        foreach (var def in _customs())
+        {
+            if (!def.AwaitingExport)
+            {
+                planes.Add(def);
+            }
+        }
+
+        return planes;
     }
 
     private void AmmoRows(DogfightLobby lobby, List<OriginalRow> rows)
@@ -795,7 +861,14 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private string PlaneWord(int airframe) =>
         _text.Word(10565, "Stock") + " " + ShortNames[Math.Clamp(airframe, 0, ShortNames.Length - 1)];
 
-    private LoadoutDef? StockDef(int airframe) => _stock()?.ForModel(PlanePickerRoster.AirframeNode(airframe));
+    // The fit the Select Ammo tab edits over: a custom plane's own guns and pylons, or the stock ones.
+    private LoadoutDef? StockDef(int airframe)
+    {
+        var stock = _stock()?.ForModel(PlanePickerRoster.AirframeNode(airframe));
+        return stock != null && CSVM.Session.Launch.CustomPlaneWire.Def(Lobby?.Build) is { } custom
+            ? CustomPlaneBuild.LoadoutFor(custom, stock)
+            : stock;
+    }
 
     // The list behind a dropdown: its words, the value it stands on, which values can be picked and
     // how a pick is written. Null for a key that is not a live dropdown.
@@ -822,6 +895,22 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             case TypeKey:
                 return new DropdownList(new[] { TypeWord(0), TypeWord(1), TypeWord(2) }, lobby.Options.MissionType,
                     i => DogfightLobby.Flies((DogfightMissionType)i), i => lobby.SetMissionType((DogfightMissionType)i));
+            case PlaneKey when CustomPlanes:
+                {
+                    var saved = SavedPlanes();
+                    var items = new string[saved.Count];
+                    int current = -1;
+                    for (int i = 0; i < items.Length; i++)
+                    {
+                        items[i] = saved[i].Name;
+                        current = lobby.Build?.Name == saved[i].Name ? i : current;
+                    }
+
+                    return new DropdownList(items, current, _ => true, i =>
+                        lobby.PickCustom(CSVM.Session.Launch.CustomPlaneWire.Build(saved[i])!,
+                            saved[i].HasLoadout ? CoopFit.Of(saved[i].Ammo, saved[i].Ordnance) : default));
+                }
+
             case PlaneKey:
                 {
                     var items = new string[DogfightLobby.AirframeCount];
@@ -832,7 +921,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
                     return new DropdownList(items, lobby.Airframe, _ => true, i =>
                     {
-                        if (i != lobby.Airframe)
+                        if (i != lobby.Airframe || lobby.Build != null)
                         {
                             lobby.Pick(i, default);
                         }
@@ -853,7 +942,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
             int stored = lobby.Fit.AmmoAt(slot);
             int current = stored is >= 0 and < 4 ? stored : Math.Max(0, Array.IndexOf(CampaignLoadout.AmmoNames, gun.Ammo));
-            return new DropdownList(items, current, _ => true, i => lobby.Pick(lobby.Airframe, Refit(lobby.Fit, slot, i, -1, 0)));
+            return new DropdownList(items, current, _ => true, i => lobby.Refit(Refit(lobby.Fit, slot, i, -1, 0)));
         }
 
         if (key.StartsWith(CellKeyPrefix, StringComparison.Ordinal) && _stock()?.Options.PylonOrdnance is { Count: > 0 } table)
@@ -880,7 +969,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
             int stored = lobby.Fit.OrdnanceAt(cell);
             current = stored is > 0 && stored <= table.Count ? stored - 1 : current;
-            return new DropdownList(items, current, _ => true, i => lobby.Pick(lobby.Airframe, Refit(lobby.Fit, -1, 0, cell, i + 1)));
+            return new DropdownList(items, current, _ => true, i => lobby.Refit(Refit(lobby.Fit, -1, 0, cell, i + 1)));
         }
 
         return null;
@@ -1065,6 +1154,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             ScoreRadioKey => options?.Victory == DogfightVictory.Score,
             LimitedLivesKey => options?.LimitedLives == true,
             AutoRespawnKey => options?.AutoRespawn == true,
+            CustomPlanesKey => lobby?.Rules.AllowCustom == true,
+            OutlawKey => lobby?.Rules.Outlawing == true,
             ReadyKey => lobby?.Ready == true,
             _ => false,
         };
@@ -1091,14 +1182,17 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         {
             float lift = row.Key == AutoRespawnKey ? 3f : 2f;
             layers.Lines.Add(_text.Line(id, word, row.X + (row.Key is TimeRadioKey or ScoreRadioKey ? 25f : 20f), row.Y - lift, 0f,
-                row.Enabled || row.Key is TimeRadioKey or ScoreRadioKey or LimitedLivesKey or AutoRespawnKey ? Black : TabDisabled));
+                row.Enabled || row.Key is TimeRadioKey or ScoreRadioKey or LimitedLivesKey or AutoRespawnKey or CustomPlanesKey or OutlawKey
+                    ? Black
+                    : TabDisabled));
         }
     }
 
     private void ComposePlaque(OriginalRow row, bool focused, bool pressed, BoardLayers layers)
     {
         bool subTab = row.Key is DefaultPlanesKey or CustomTabKey or GunsTabKey or RocketsTabKey;
-        bool picked = row.Key == DefaultPlanesKey || (row.Key == GunsTabKey && !Rockets) || (row.Key == RocketsTabKey && Rockets);
+        bool picked = (row.Key == DefaultPlanesKey && !CustomPlanes) || (row.Key == CustomTabKey && CustomPlanes)
+            || (row.Key == GunsTabKey && !Rockets) || (row.Key == RocketsTabKey && Rockets);
         int frame = !row.Enabled ? 0 : subTab && picked ? 3 : ComposedBoard.PlaqueFrame(row.Art!.Frames, focused, pressed);
         layers.Pictures.Add(new BoardPicture(row.Art!, row.X, row.Y, frame));
         var (id, word) = row.Key switch

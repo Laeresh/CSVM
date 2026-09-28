@@ -135,6 +135,14 @@ public enum NetMessageType : ushort
     /// <summary>The host's word on a match death, sent to every guest so each posts the same kill
     /// lines.</summary>
     DeathNotice = 0x005C,
+
+    /// <summary>One seat's custom plane build: a guest's own with its pick, or each seat's from
+    /// the host at a launch.</summary>
+    PlaneBuild = 0x005D,
+
+    /// <summary>A Dogfight host's plane rules: Allow Custom Planes, Outlaw Components and the
+    /// outlaw list.</summary>
+    LobbyPlaneRules = 0x005E,
 }
 
 /// <summary>Which campaign film a <see cref="CoopFilmMessage"/> names.</summary>
@@ -1325,6 +1333,8 @@ public static class NetMessage
         NetMessageType.CoopFilm => CoopFilmMessage.Reliability,
         NetMessageType.StartGate => StartGateMessage.Reliability,
         NetMessageType.DeathNotice => DeathNoticeMessage.Reliability,
+        NetMessageType.PlaneBuild => PlaneBuildMessage.Reliability,
+        NetMessageType.LobbyPlaneRules => LobbyPlaneRulesMessage.Reliability,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "no such message type"),
     };
 

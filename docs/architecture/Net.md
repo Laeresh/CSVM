@@ -32,7 +32,9 @@ These are the design rules every module below is shaped by, and every multiplaye
 - **Modes.** Dogfight and campaign co-op. Co-op is the host's campaign with guests flying as its
   human field, the local splitscreen campaign's shape: a guest has no profile or progression of its
   own, its save is never touched, and it flies stock planes, since its own machine simulates the
-  airframe it flies. Capture the flag, Zeppelin vs and custom planes over the network are not built.
+  airframe it flies. A Dogfight pilot may fly a custom plane when the host's Allow Custom Planes and
+  outlaw list admit it, and a co-op host's own custom planes fly; every machine builds a custom plane
+  from its owner's `NetPlaneBuild`. Capture the flag and Zeppelin vs are not built.
 - **Listen server.** One player hosts; there is no dedicated headless host.
 - **The player ceiling is 16.** `NetSeats.MaxPlayers`, with every seat-indexed table built
   `SeatCapacity` wide. The original has no coded cap (its pilot list is never counted against a
@@ -198,8 +200,8 @@ still runs. A missing or unreadable file recalls none, and a failed write costs 
 A carrier's first listener and itself the `INetTransport` the session later binds, since a carrier
 binds only once. A host's `Advertise` sends a `SessionAdvertMessage` to every peer on connect and on
 each change; a guest keeps the latest in `Advert` and the host's closing word in `Closed`. Co-op
-board messages stay here too: a host keeps each guest's latest `CoopPick`, a guest the latest flow,
-`SeatFits`, `Wingman` and `Film`. Others are held (up to `HeldPayloads`) until a session binds, then replayed
+board messages stay here too: a host keeps each guest's latest `CoopPick` and `PickBuilds`, a guest
+the latest flow, `SeatFits`, `SeatBuilds`, `PlaneRules`, `Wingman` and `Film`. Others are held (up to `HeldPayloads`) until a session binds, then replayed
 behind the peer announcement. ⚠ A new round seen while bound marks `FlightOver` until the next bind,
 so the opener survives both unbinds a restart makes. A peer whose build version does not play goes
 on `Clashing` and off every peer list. Read `NetLobbyTests.cs`.
@@ -287,6 +289,14 @@ session. `DogfightOptionsMessage` is the host's Mission Options under the round 
 `DogfightRosterMessage` is the whole player list with the reading guest's own row marked, and
 `LobbyChatMessage` is one typed line under its speaker's name, which the host relays. A guest's
 plane and Ready ride `CoopPickMessage`. Layout:
+[../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+
+## src/Net/NetPlaneMessages.cs
+Custom planes on the wire. `NetPlaneBuild` is one plane's airframe, engine, armour, hardpoints, guns
+and paint as the saved record holds them, and `PlaneBuildMessage` carries one: a guest's pick, or a
+seat's build at launch. `NetPlaneRules` is the host's Allow Custom Planes, Outlaw Components and the
+original's 34-flag outlaw list; `Refuses` and `Enforce` are the original's Ready check, so every end
+judges a plane alike. `LobbyPlaneRulesMessage` sends the rules. Decode:
 [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Net/NetPositionalMessages.cs

@@ -210,6 +210,7 @@ public partial class GameSession : Node3D
     // readonly: a guest's roster arrives over the wire, between construction and the build.
     private IReadOnlyList<Net.NetSeat> _netSeats;
     private Func<int, Flight.Weapons.LoadoutChoice?>? _netSeatFit;
+    private Func<int, Flight.Hangar.CustomPlaneDef?>? _netSeatBuild;
     private Func<Net.CoopWingmanMessage?>? _netCoopWingman;
     // How this guest reads the host's session clock, null on a host and outside a match. Built
     // from the handshake, whose seed is already in _masterSeed by then.
@@ -455,6 +456,7 @@ public partial class GameSession : Node3D
             ? seats.OrderBy(s => s.SeatIndex).ToArray()
             : Array.Empty<Net.NetSeat>();
         _netSeatFit = ctx.NetSeatFit;
+        _netSeatBuild = ctx.NetSeatBuild;
         // Every guest binds the wingman from its host's word, and one with no word says so loudly.
         _netCoopWingman = ctx.NetTransport != null && !ctx.NetHost ? ctx.NetCoopWingman ?? (() => null) : null;
         _netClock = ctx.NetHandshake is { } handshake
@@ -2666,6 +2668,7 @@ public partial class GameSession : Node3D
             RigCount = _seatRigs.Count,
             NetSeats = _netSeats,
             SeatFit = _netSeatFit,
+            SeatBuild = _netSeatBuild,
             MixGain = mixGain,
             PadAssignment = padAssignment,
             PauseState = _pauseState!,

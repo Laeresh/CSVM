@@ -435,6 +435,11 @@ public sealed class NetPlayFeature : IMenuFeature
     public IReadOnlyDictionary<int, CoopFit> CoopSeatFits =>
         _transport?.SeatFits ?? (IReadOnlyDictionary<int, CoopFit>)new Dictionary<int, CoopFit>();
 
+    /// <summary>Each seat's custom plane as this guest's host launched it, by seat, null for a stock
+    /// seat.</summary>
+    public IReadOnlyDictionary<int, NetPlaneBuild?> SeatBuilds =>
+        _transport?.SeatBuilds ?? (IReadOnlyDictionary<int, NetPlaneBuild?>)new Dictionary<int, NetPlaneBuild?>();
+
     /// <summary>The campaign wingman's aeroplane as this co-op guest's host launched it, or null
     /// while the host has named none.</summary>
     public CoopWingmanMessage? CoopWingman => IsCoopGuest ? _transport?.Wingman : null;
@@ -587,6 +592,27 @@ public sealed class NetPlayFeature : IMenuFeature
             for (int seat = 0; seat < bySeat.Count && seat <= byte.MaxValue; seat++)
             {
                 _transport.Tell(peer, new CoopSeatFitMessage((byte)seat, bySeat[seat]));
+            }
+        }
+    }
+
+    /// <summary>Sends every seated guest each seat's custom plane, null for a stock seat,
+    /// <paramref name="bySeat"/> indexed by seat. A host calls this at its launch beside
+    /// <see cref="TellSeatFits"/>, so a guest builds every custom plane before it reports loaded.
+    /// </summary>
+    public void TellSeatBuilds(IReadOnlyList<NetPlaneBuild?> bySeat)
+    {
+        ArgumentNullException.ThrowIfNull(bySeat);
+        if (_transport == null || !IsHost)
+        {
+            return;
+        }
+
+        foreach (int peer in IsCoopHost ? _admitted : _transport.AllPeers)
+        {
+            for (int seat = 0; seat < bySeat.Count && seat < PlaneBuildMessage.Mine; seat++)
+            {
+                _transport.Tell(peer, new PlaneBuildMessage((byte)seat, bySeat[seat]));
             }
         }
     }

@@ -255,6 +255,7 @@ public partial class Launcher : Node3D
     // A co-op host's fit for each seat, by seat, as its launch told the guests. A guest reads its
     // host's word off the door instead.
     private Net.CoopFit[] _coopSeatFits = System.Array.Empty<Net.CoopFit>();
+    private Net.NetPlaneBuild?[] _seatBuilds = System.Array.Empty<Net.NetPlaneBuild?>();
     private StockLoadouts? _coopStock;
     // The decoded menu layout the Original presentation composes from, loaded once by the
     // availability check and handed to every Original instance the registry creates.
@@ -1279,7 +1280,8 @@ public partial class Launcher : Node3D
     /// ⚠ A guest with no pick on the wire flies the host's first airframe on the stock fit. That is
     /// the Built-in Dogfight door's only rule.</summary>
     internal static (Net.NetSeat[] Roster, Net.CoopFit[] SeatFits) VersusLaunchField(
-        Net.INetTransport wire, IReadOnlyList<string> planes, IReadOnlyList<LoadoutChoice?> fits, StockLoadouts stock)
+        Net.INetTransport wire, IReadOnlyList<string> planes, IReadOnlyList<LoadoutChoice?> fits, StockLoadouts stock,
+        Net.NetPlaneRules? rules = null)
     {
         var seats = new List<Net.NetSeat>(planes.Count + wire.Peers.Count);
         var seatFits = new List<Net.CoopFit>(seats.Capacity);
@@ -1314,11 +1316,61 @@ public partial class Launcher : Node3D
                 Callsign = name.Length > 0 ? name : $"guest {peer.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
                 PlaneNode = picked ? UI.Hangar.PlanePickerRoster.AirframeNode(chosen.Airframe) : planes[0],
             });
-            seatFits.Add(picked ? chosen.Fit : default);
+            // The guest's own lobby flies its pick through the same rules, so both ends agree.
+            seatFits.Add(picked ? rules?.Enforce(chosen.Fit) ?? chosen.Fit : default);
         }
 
         Net.NetSeats.Validate(seats, wire.LocalPeer);
         return (seats.ToArray(), seatFits.ToArray());
+    }
+
+    /// <summary>Each seat's custom plane, by seat, null for a stock one. This machine's seats take
+    /// <paramref name="customs"/> in menu order. A guest's seat takes the build its lobby pick sent
+    /// when <paramref name="rules"/> admit it. Without rules, as in co-op, a guest flies stock.
+    /// </summary>
+    internal static Net.NetPlaneBuild?[] SeatBuildsFor(IReadOnlyList<Net.NetSeat> roster,
+        IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs, Net.INetTransport wire, Net.NetPlaneRules? rules)
+    {
+        var builds = new Net.NetPlaneBuild?[roster.Count];
+        var picks = (wire as Net.NetLobby)?.PickBuilds;
+        for (int seat = 0; seat < roster.Count; seat++)
+        {
+            if (roster[seat].IsLocal)
+            {
+                int menu = Net.NetSeats.LocalOrdinal(roster, seat);
+                builds[seat] = menu >= 0 && menu < customs.Count ? CustomPlaneWire.Build(customs[menu]) : null;
+                continue;
+            }
+
+            if (rules is not { } admitting || picks == null || !picks.TryGetValue(roster[seat].PeerId, out var build))
+            {
+                continue;
+            }
+
+            // Unreachable from a lobby, which launches only on admitted planes; the log names the case.
+            var refusal = admitting.Refuses(build.Airframe, build);
+            if (refusal != Net.PlaneRefusal.None)
+            {
+                Log.Warn("core", $"net: seat {seat.ToString(System.Globalization.CultureInfo.InvariantCulture)}'s custom plane '{build.Name}' is refused ({refusal}), so it flies stock");
+                continue;
+            }
+
+            builds[seat] = build;
+        }
+
+        return builds;
+    }
+
+    /// <summary>The custom plane a seat flown elsewhere carries: from <paramref name="launched"/> on
+    /// the host that launched it, or the host's word through <paramref name="door"/> on a guest.
+    /// Null for a stock seat.</summary>
+    internal static Flight.Hangar.CustomPlaneDef? SeatBuildFor(int seat, IReadOnlyList<Net.NetPlaneBuild?>? launched,
+        UI.Menu.NetPlayFeature? door)
+    {
+        var build = launched != null
+            ? seat >= 0 && seat < launched.Count ? launched[seat] : null
+            : door?.SeatBuilds.TryGetValue(seat, out var told) == true ? told : null;
+        return CustomPlaneWire.Def(build);
     }
 
     /// <summary>Where a finished lobby Dogfight lands: its lobby's Game Scores, named off the list
@@ -1850,6 +1902,7 @@ public partial class Launcher : Node3D
             NetSeats = _netRoster,
             NetAirframes = _netWire == null ? null : UI.Hangar.PlanePickerRoster.StockAirframes,
             NetSeatFit = _coopFlight || _lobbyFlight ? CoopSeatFit : null,
+            NetSeatBuild = _coopFlight || _lobbyFlight ? NetSeatBuild : null,
             NetCoopWingman = _coopFlight && !_netIsHost && _netDoor is { } coopDoor
                 ? () => coopDoor.CoopWingman
                 : null,
@@ -2511,7 +2564,7 @@ public partial class Launcher : Node3D
     {
         var (planes, pads, fits, customs) = Unpack(launch.Seats);
         LaunchedFrom(launch);
-        TakeNetLaunch(launch, planes, fits);
+        TakeNetLaunch(launch, planes, fits, customs);
         _spec = SessionSpec.FromMenu(_cli, launch.Chapter, planes, launch.Mode, launch.InstantAction, fits, customs,
             launch.Match?.KillTarget, launch.Match?.TimeLimitMinutes, launch.Match?.Lives, launch.Match?.AutoRespawn,
             launch.WingmanLoadout);
@@ -2636,37 +2689,46 @@ public partial class Launcher : Node3D
     // The wire a menu launch carried, kept for the session build. A host also builds the match's
     // roster here. The transport's peer list is the field, and the door is the only thing that
     // has seen it. A guest builds none, since the host's roster replaces whatever it had. Every
-    // seat's fit goes to every guest before the session's opener, as a co-op launch sends them.
-    private void TakeNetLaunch(LaunchExit launch, IReadOnlyList<string> planes, IReadOnlyList<LoadoutChoice?> fits)
+    // seat's fit and custom plane go to every guest before the session's opener, as a co-op launch
+    // sends them.
+    private void TakeNetLaunch(LaunchExit launch, IReadOnlyList<string> planes, IReadOnlyList<LoadoutChoice?> fits,
+        IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs)
     {
         _netWire = launch.Net?.Transport;
         _netIsHost = launch.Net?.IsHost ?? false;
         _netRoster = null;
         _coopSeatFits = System.Array.Empty<Net.CoopFit>();
+        _seatBuilds = System.Array.Empty<Net.NetPlaneBuild?>();
         _lobbyFlight = _netWire != null && _netDoor is { Dogfight: not null };
         if (_netWire == null || !_netIsHost)
         {
             return;
         }
 
-        (_netRoster, _coopSeatFits) = VersusLaunchField(_netWire, planes, fits, _coopStock ??= StockLoadouts.Load());
+        var rules = _lobbyFlight ? _netDoor!.Dogfight!.Rules : (Net.NetPlaneRules?)null;
+        (_netRoster, _coopSeatFits) = VersusLaunchField(_netWire, planes, fits, _coopStock ??= StockLoadouts.Load(), rules);
+        _seatBuilds = SeatBuildsFor(_netRoster, customs, _netWire, rules);
         if (_lobbyFlight)
         {
             _netDoor!.TellSeatFits(_coopSeatFits);
+            _netDoor.TellSeatBuilds(_seatBuilds);
         }
     }
 
     // A co-op campaign launch's wire. The host's roster is its own seats and then each guest the
     // door seated, in the stock aeroplane it picked and under its name. Every seat's fit goes to
     // every guest before the session's opener, on the same ordered channel. A guest builds none.
-    // The campaign wingman's aeroplane goes out beside the fits, since every guest builds it too.
+    // The campaign wingman's aeroplane goes out beside the fits, since every guest builds it too,
+    // and so does each of the host's own custom planes. A guest flies stock.
     private void TakeCoopLaunch(UI.Menu.MenuNetLaunch? net, IReadOnlyList<string> planes,
-        IReadOnlyList<LoadoutChoice?> fits, string profile, string? profilesDir)
+        IReadOnlyList<LoadoutChoice?> fits, IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs, string profile,
+        string? profilesDir)
     {
         _netWire = net?.Transport;
         _netIsHost = net?.IsHost ?? false;
         _netRoster = null;
         _coopSeatFits = System.Array.Empty<Net.CoopFit>();
+        _seatBuilds = System.Array.Empty<Net.NetPlaneBuild?>();
         _coopFlight = _netWire != null && _netDoor is { IsCoopHost: true } or { IsCoopGuest: true };
         if (_netWire == null || !_netIsHost || _netDoor == null)
         {
@@ -2675,13 +2737,17 @@ public partial class Launcher : Node3D
 
         (_netRoster, _coopSeatFits) = CoopLaunchField(_netDoor, _netWire, planes, fits,
             _coopStock ??= StockLoadouts.Load());
+        _seatBuilds = SeatBuildsFor(_netRoster, customs, _netWire, null);
         _netDoor.TellSeatFits(_coopSeatFits);
+        _netDoor.TellSeatBuilds(_seatBuilds);
         _netDoor.TellCoopWingman(CoopWingmanFor(profile, profilesDir));
         Log.Info("core", $"net: co-op launch with {_netRoster.Length - planes.Count} guest(s)");
     }
 
     private LoadoutChoice? CoopSeatFit(int seat) =>
         CoopSeatFitFor(seat, _netIsHost ? _coopSeatFits : null, _netDoor, _coopStock ??= StockLoadouts.Load());
+
+    private Flight.Hangar.CustomPlaneDef? NetSeatBuild(int seat) => SeatBuildFor(seat, _netIsHost ? _seatBuilds : null, _netDoor);
 
     // The seat choices as the four parallel lists the spec factories take. The fits ride
     // alongside the planes rather than inside them: FromMenu writes each menu-settable field
@@ -2751,7 +2817,7 @@ public partial class Launcher : Node3D
     {
         var (planes, pads, fits, customs) = Unpack(mission.Seats);
         LaunchedFrom(mission);
-        TakeCoopLaunch(mission.Net, planes, fits, mission.Profile, _cli.ProfilesDir);
+        TakeCoopLaunch(mission.Net, planes, fits, customs, mission.Profile, _cli.ProfilesDir);
         _spec = SessionSpec.FromCampaign(_cli, mission.Profile, mission.MissionSeq, planes,
             pads.Count, fits, customs);
         StepSortieSeed();
@@ -2818,7 +2884,8 @@ public partial class Launcher : Node3D
             return false;
         }
 
-        TakeCoopLaunch(launch, _spec.PlaneNames, _spec.MenuLoadouts, _spec.CampaignProfile ?? "", _spec.ProfilesDir);
+        TakeCoopLaunch(launch, _spec.PlaneNames, _spec.MenuLoadouts, _spec.MenuCustomPlanes, _spec.CampaignProfile ?? "",
+            _spec.ProfilesDir);
         return true;
     }
 
@@ -3261,6 +3328,10 @@ public sealed class LauncherContext
     /// Read once the field is known, which on a guest is after the host's roster arrived. A seat
     /// flown here keeps its own menu pick and never asks this.</summary>
     public System.Func<int, Flight.Weapons.LoadoutChoice?>? NetSeatFit { get; init; }
+
+    /// <summary>The custom plane a seat flown elsewhere carries, by seat index, or null for a stock
+    /// airframe. Read when the field is known, as <see cref="NetSeatFit"/> is.</summary>
+    public System.Func<int, Flight.Hangar.CustomPlaneDef?>? NetSeatBuild { get; init; }
 
     /// <summary>The campaign wingman's aeroplane as a co-op guest's host named it, null while the
     /// host named none. Set on a co-op guest only, whose director binds the wingman from it.</summary>

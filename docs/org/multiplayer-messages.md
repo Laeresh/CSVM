@@ -64,7 +64,7 @@ send call, and "To" is the fourth.
 | `0x22` | `FUN_00499110` | `LAB_00499190` | `0x10` | yes | 0 | a damage attribution: victim id at `+4`, attacker id at `+8`, a dword from the weapon record `+0x10` at `+0xc` |
 | `0x23` | `FUN_0049bd00` | `LAB_0049bd70` | `0xc` | yes | one peer | the ping: two `GetTickCount` stamps, sent only to a peer whose id is at or above ours, so one side of each pair pings |
 | `0x24`, `0x25` | none found | `LAB_0049bde0` | | | | receive-only in this build, both on one handler |
-| `0x26` | `FUN_004134e0` | lobby, `FUN_00415940` | `0x2c` + a variable payload | yes | 0 | the lobby settings block, below |
+| `0x26` | `FUN_004134e0` | lobby, `FUN_00415940` | `0x30` + the packed outlaw list | **no** | 0 | the lobby settings block, below |
 | `0x27` | `FUN_004135f0` | lobby | 8 + `0x20` per player + a tail | yes | 0 | the lobby roster, below |
 
 ⚠ **Types `0x02`, `0x03`, `0x05`, `0x06`, `0x07`, `0x0d` and `0x0e` never cross the wire.**
@@ -237,13 +237,60 @@ bytes back into `0x642f8c` and posts `0x3f7`. The block at `+4` is a copy of `0x
 | `+0x1c` | `0x642fa8` | Limited Lives byte |
 | `+0x20` | `0x642fac` | lives count dword |
 | `+0x24` | `0x642fb0` | Auto Respawn byte |
-| `+0x25`..`+0x27` | | unmapped flags |
+| `+0x25` | `0x642fb1` | Allow Custom Planes byte |
+| `+0x26`, `+0x27` | | unmapped |
 
-A variable payload follows at `+0x2c`. [Evidence: undecoded] What triggers the send, and bytes
-`+0x25`..`+0x27`, are open. No message carries a pilot's remaining lives: each peer seeds them from
+[Evidence: decoded] The outlaw list follows at message `+0x2c`, packed by `FUN_00410800` (below),
+and the whole message is sent unguaranteed (`FUN_005b2640(.., 0, 0)`). [Evidence: undecoded] What
+triggers the send, and bytes `+0x26`..`+0x27`, are open. No message carries a pilot's remaining lives: each peer seeds them from
 this block and counts them down on the `0x12` death reports
 ([`multiplayer-scoring.md`](multiplayer-scoring.md)). The remake's `0x53` carries the same lives
 settings and nothing more.
+
+## Custom planes
+
+[Evidence: decoded] Allow Custom Planes is the byte at `0x642fb1`, written by the lobby's check at
+`0x40dde5` and read at `0x40deeb`, `0x40f053` and `0x407f04`. The lobby globals are zero-initialised,
+so a new lobby allows no custom planes. At Ready (`0x407f02`) the program copies it to `0x61f2ec` and
+calls `FUN_00414580(1)`.
+
+The outlaw list is one object at `0x64e168`, built by `FUN_00410560`, of 34 byte flags:
+
+| Flags | Outlaws | Check |
+|---|---|---|
+| 0..10 | one airframe each, in airframe order | `FUN_00410cc0` |
+| 11..15 | one gun calibre each; calibre 5, no gun, is always allowed | `FUN_00410c10` |
+| 16..19 | one ammunition each; 4, none, is always allowed | `FUN_00410c40` |
+| 20..30 | one rocket-table row each; row 11, none, is always allowed | `FUN_00410c80` |
+| 31 | every rocket | `FUN_00410c80` |
+| 32 | every ammunition | `FUN_00410c40` |
+| 33 | nitro-boosted engines: engines 3 to 5 refused, engine 6 (none) always refused | `FUN_00410cf0` |
+
+`FUN_00410800` packs the list into five bytes, lowest flag in bit 0 of the first byte, and
+`FUN_00410930` unpacks it. `FUN_00410d30` checks a plane record's engine (`+0x30`), airframe
+(`+0x2c`) and four guns (`+0x88`) against it.
+
+The Ready check runs on each client, for its own pick only, in the Ready callback at `0x40f026`. A
+custom plane (`0x645c10 == 1`) is refused while Allow Custom Planes is clear, and so is a record the
+check fails; `FUN_0040fa30` then clears the pick. A mounted gun's outlawed ammunition refuses Ready
+and `FUN_0040fa60(4)` sets all four guns' ammunition to none. A loaded pylon's outlawed rocket
+refuses Ready and `FUN_0040fa90(11)` sets all eight pylons to none and both hardpoint counts to 0.
+Outlaw All Ammo and Outlaw All Rockets make the same resets without refusing. A refusal shows langui
+10517 followed by 10514 (plane), 10515 (ammunition) and 10516 (rockets) for each reason, and a
+second Ready takes the reset fit. The host does not validate a remote pick.
+
+A pilot's plane travels as DirectPlay player data: `FUN_00414470` writes 80 bytes through
+`FUN_005b31f0` (SetPlayerData, guaranteed). It carries the airframe, the paint pattern, three decals,
+three colours and each gun slot's weapon id. It does not carry the engine, the armour or the
+hardpoints, so a remote copy of a custom plane flies on the stock template's. `FUN_004136e0` builds
+the remote planes from it, and in a team game the team colours replace the paint.
+
+The stock templates at `0x619f58` (stride `0xcc`) all carry engine 1. Their guns, at `+0x88`..`+0x94`,
+are what the check reads for a stock pick:
+
+| Airframe | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Guns | 0,5,5,5 | 2,1,5,2 | 2,2,0,0 | 1,0,5,5 | 3,0,5,0 | 2,1,0,5 | 4,0,5,0 | 4,0,5,5 | 3,2,5,1 | 2,1,5,5 | 4,2,5,5 |
 
 ## The lobby roster
 
@@ -264,7 +311,7 @@ score, `0x17` match state, `0x22` hit and `0x27` seat roster. Damage, spawn, the
 director transition, the join handshake and a seat's ask to be spawned again have no
 counterpart, so they are minted at `0x40`, `0x41`, `0x42`, `0x43` and `0x44`, above the ceiling
 above. The host-owned world's four (AI state, AI fire, a guest's hit claim on an AI, and a world
-event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, the start barrier's word at `0x5B`, and a match's death notice at `0x5C`. The handshake carries the master seed, the host's clock and the seat the joining peer was
+event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, the start barrier's word at `0x5B`, a match's death notice at `0x5C`, and the lobby's plane build and plane rules at `0x5D` and `0x5E`. The handshake carries the master seed, the host's clock and the seat the joining peer was
 given; the original needs none of the three, because it draws from no shared stream and hands
 out no seat. The ask carries a seat and nothing else: the original's client takes its own
 respawn, while here the host owns every placement and answers the ask with a spawn event.
@@ -660,7 +707,7 @@ The debrief flow carries the host's result, which every guest's scrapbook shows.
 
 ### Dogfight lobby
 
-The Multiplayer Lobby runs over three more lobby messages, minted at `0x53` to `0x55`, with a
+The Multiplayer Lobby runs over five more lobby messages, minted at `0x53` to `0x55`, `0x5D` and `0x5E`, with a
 guest's plane and Ready riding the co-op pick at `0x51` under the lobby's own round. None reaches a
 session.
 
@@ -669,6 +716,8 @@ session.
 | `0x53` | Dogfight options | reliable, host to each guest | round at 4, environment at 5, mission type at 6 (Capture the Flag 0, Deathmatch 1, Zeppelin vs Zeppelin 2), flags at 7 (bit 0 Score rather than Time, bit 1 Limited Lives, bit 2 Auto Respawn), minutes at 8, lives at 9, score at 10 (12 bytes) |
 | `0x54` | Dogfight roster | reliable, host to each guest | round at 4, row count at 5, the reading guest's own row at 6, one reserved byte, then sixteen rows of 20 bytes: flags (bit 0 Ready, bit 1 host), airframe, two reserved bytes, the name in 16 bytes (328 bytes) |
 | `0x55` | Lobby chat | reliable, guest to host and host to each guest | the speaker's name in 16 bytes at 4, the line in 84 bytes at 20 (104 bytes) |
+| `0x5D` | Plane build | reliable, guest to host (its pick, seat `0xFF`) and host to each guest (every seat, at launch) | seat at 4, flags at 5 (bit 0 custom), then 26 bytes: airframe, engine, four armour presses (nose, tail, left, right), left and right hardpoints, four gun calibres (5 empty), twin mask, paint pattern, three colours, three shades, three decals, three spare; the name in 16 bytes (48 bytes) |
+| `0x5E` | Plane rules | reliable, host to each guest | round at 4, flags at 5 (bit 0 Allow Custom Planes, bit 1 Outlaw Components), the outlaw list in the original's five-byte packing at 6, one reserved byte (12 bytes) |
 
 Any option change advances the round and clears every Ready, the host's own included, so a player
 is never launched on options it did not see. A guest's changed pick clears that guest's own Ready,
@@ -677,6 +726,17 @@ launch waits until every row is Ready. A guest's
 chat line goes to the host, which adds it to its own list and relays it to every other guest under
 the name the guest's pick gave, so each end shows the line once. The advert's mission sequence
 carries the environment index for a Dogfight, which is what the games list reads.
+
+A custom plane crosses whole, where the original's player data leaves out the engine, the armour
+and the hardpoints. The shooter decides a hit here, so every copy of a plane needs its owner's hit
+volumes and armour. A guest sends its pick's build before the pick; at launch the host sends every
+seat's build and fit before the session's opener, on the same ordered channel, so a guest has built
+every custom plane before it reports loaded. The plane rules change the round as an option does.
+The original's Ready check runs on each end for its own pick, and the host also checks every guest's
+pick against its rules before counting it Ready, which the original does not. An outlawed
+ammunition or rocket refuses Ready once and resets the fit, as the original does; the hardpoint
+counts are kept, since the pylons stay empty either way. A co-op launch sends the host's own custom
+planes, and its guests fly stock.
 
 ### LAN discovery
 

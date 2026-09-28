@@ -531,8 +531,9 @@ constants rather than reading a layout.
   or per wing cell. Boot, Create Team, the Ready box (`MP_B_CHECKBOXLARGE.PNG`) and its Ready? label,
   LAUNCH!, the chat box, Send and Leave Game stand on every tab.
 - **What is ours in the lobby.** Only Deathmatch flies, so Capture the Flag, Zeppelin vs Zeppelin,
-  the teams, Allow Custom Planes, Outlaw Components, Custom Planes and Boot draw greyed; guests fly
-  stock planes. A completed match's Exit lands every pilot back in the same lobby on Game Scores,
+  the teams, the outlaw list's Select... and Boot draw greyed. The host's Allow Custom Planes and
+  Outlaw Components are live, and Custom Planes lists the pilot's saved planes while custom planes
+  are allowed. A completed match's Exit lands every pilot back in the same lobby on Game Scores,
   which shows that match's name, points, kills and deaths best first (Hits % stays blank), with
   every Ready cleared for the next round. Game Scores is greyed until a match has landed. The own
   name is drawn red in the list and the chat, and the player list shows its first eleven rows with

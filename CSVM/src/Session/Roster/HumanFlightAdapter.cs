@@ -654,9 +654,14 @@ internal sealed class HumanFlightAdapter
 
     /// <summary>Pane <paramref name="pi"/>'s custom-built plane, or null to fly the stock
     /// airframe. Empty on every launch that did not come off the launchscreen, so the scripted
-    /// paths (<c>--plane=</c>, <c>--det</c>) never see one.</summary>
-    private Flight.Hangar.CustomPlaneDef? CustomPlaneFor(int pi) =>
-        MenuSeatOf(pi) is int menu && menu >= 0 && menu < _policy.MenuCustomPlanes.Count ? _policy.MenuCustomPlanes[menu] : null;
+    /// paths (<c>--plane=</c>, <c>--det</c>) never see one. A seat flown elsewhere carries its own
+    /// pilot's build, so every machine builds it alike.</summary>
+    private Flight.Hangar.CustomPlaneDef? CustomPlaneFor(int pi) => MenuSeatOf(pi) switch
+    {
+        < 0 => _human.SeatBuild?.Invoke(pi),
+        int menu when menu < _policy.MenuCustomPlanes.Count => _policy.MenuCustomPlanes[menu],
+        _ => null,
+    };
 
     // Which of this machine's menu seats flies seat pi. The menu lists only the local seats, and a
     // guest's own seat stands behind its host's in the roster. A seat flown elsewhere has none.

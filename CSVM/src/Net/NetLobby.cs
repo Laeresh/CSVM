@@ -28,6 +28,8 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     private readonly List<int> _bound = new();
     private readonly Dictionary<int, CoopPickMessage> _picks = new();
     private readonly Dictionary<int, CoopFit> _seatFits = new();
+    private readonly Dictionary<int, NetPlaneBuild> _pickBuilds = new();
+    private readonly Dictionary<int, NetPlaneBuild?> _seatBuilds = new();
     private readonly List<int> _unpicked = new();
 
     private readonly List<(int Peer, LobbyChatMessage Line)> _chat = new();
@@ -83,6 +85,17 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     /// seat again, so an entry from an earlier flight is always overwritten before it is read.
     /// </summary>
     public IReadOnlyDictionary<int, CoopFit> SeatFits => _seatFits;
+
+    /// <summary>Each connected guest's custom plane, by peer. A guest on a stock pick has none.
+    /// </summary>
+    public IReadOnlyDictionary<int, NetPlaneBuild> PickBuilds => _pickBuilds;
+
+    /// <summary>Each seat's custom plane as the host last launched it, by seat, null for a stock
+    /// seat. A launch names every seat again, as it does its fit.</summary>
+    public IReadOnlyDictionary<int, NetPlaneBuild?> SeatBuilds => _seatBuilds;
+
+    /// <summary>The Dogfight host's latest plane rules, or null while none has arrived.</summary>
+    public LobbyPlaneRulesMessage? PlaneRules { get; private set; }
 
     /// <summary>The campaign wingman's aeroplane as the co-op host last launched it, or null while
     /// no host has named one. Every launch names it again before its opener.</summary>
@@ -286,6 +299,7 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         _clashing.Remove(peer);
         _held.RemoveAll(held => held.Peer == peer);
         _picks.Remove(peer);
+        _pickBuilds.Remove(peer);
         _unpicked.Remove(peer);
         if (_listener != null && _bound.Remove(peer))
         {
@@ -376,6 +390,12 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
             return true;
         }
 
+        if (PlaneBuildMessage.TryRead(payload, out var built))
+        {
+            TakeBuild(peer, built);
+            return true;
+        }
+
         if (_unpicked.Contains(peer))
         {
             return false;
@@ -424,7 +444,7 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         return true;
     }
 
-    // The Dogfight lobby's three messages. A chat inbox past the held depth drops its oldest line,
+    // The Dogfight lobby's four messages. A chat inbox past the held depth drops its oldest line,
     // so a lobby nobody reads cannot grow without bound.
     private bool TakeDogfight(int peer, ReadOnlySpan<byte> payload)
     {
@@ -437,6 +457,12 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         if (DogfightRosterMessage.TryRead(payload, out var roster))
         {
             DogfightRoster = roster;
+            return true;
+        }
+
+        if (LobbyPlaneRulesMessage.TryRead(payload, out var rules))
+        {
+            PlaneRules = rules;
             return true;
         }
 
@@ -467,9 +493,27 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         _clashing.Add(peer);
         _held.RemoveAll(held => held.Peer == peer);
         _picks.Remove(peer);
+        _pickBuilds.Remove(peer);
         if (_listener != null && _bound.Remove(peer))
         {
             _listener.OnPeerDisconnected(peer);
+        }
+    }
+
+    // A guest's own build goes with its pick, by peer. A host's build names a seat of its launch.
+    private void TakeBuild(int peer, PlaneBuildMessage built)
+    {
+        if (built.Seat != PlaneBuildMessage.Mine)
+        {
+            _seatBuilds[built.Seat] = built.Build;
+        }
+        else if (built.Build is { } build)
+        {
+            _pickBuilds[peer] = build;
+        }
+        else
+        {
+            _pickBuilds.Remove(peer);
         }
     }
 

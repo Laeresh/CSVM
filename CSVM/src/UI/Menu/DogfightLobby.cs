@@ -28,10 +28,11 @@ public readonly record struct DogfightScore(string Name, int Points, int Kills, 
 
 /// <summary>
 /// The Multiplayer Lobby of a Dogfight, on both of its ends, engine-free. The host owns the Mission
-/// Options and the player list, and each guest reads them off the wire. Every pilot picks a stock
-/// airframe and a fit and marks itself Ready, and the host launches once every pilot is Ready. A
-/// guest's pick travels as a <see cref="CoopPickMessage"/> under the round the host's options name,
-/// so an option change clears every Ready. A match flown from here lands back on it with its scores.
+/// Options, the plane rules and the player list, and each guest reads them off the wire. Every pilot
+/// picks a stock airframe or one of its custom planes, and a fit, and marks itself Ready on a plane
+/// the rules admit. The host launches once every pilot is Ready. A guest's pick travels as a
+/// <see cref="CoopPickMessage"/> under the round the host's options name, so an option change clears
+/// every Ready. A match flown from here lands back on it with its scores.
 /// </summary>
 public sealed class DogfightLobby
 {
@@ -89,11 +90,17 @@ public sealed class DogfightLobby
     private readonly List<DogfightChatLine> _chat = new();
     private readonly Dictionary<int, DogfightOptionsMessage> _optionsSent = new();
     private readonly Dictionary<int, DogfightRosterMessage> _rosterSent = new();
+    private readonly Dictionary<int, LobbyPlaneRulesMessage> _rulesSent = new();
+    private readonly List<PlaneRefusal> _refusals = new();
     private DogfightOptionsMessage _options = new(
         1, 0, (byte)DogfightMissionType.Deathmatch, DogfightVictory.Time, DefaultTimeMinutes, DefaultScore,
         false, DefaultLives, true);
 
+    // The original's settings block starts zeroed, so a new lobby allows no custom plane.
+    private NetPlaneRules _rules;
     private byte _airframe = DefaultAirframe;
+    private NetPlaneBuild? _build;
+    private NetPlaneBuild? _buildSent;
     private CoopFit _fit;
     private bool _ready;
     private byte _readyEpoch;
@@ -133,8 +140,28 @@ public sealed class DogfightLobby
     /// <summary>The ammunition and ordnance this pilot picked, stock when all zero.</summary>
     public CoopFit Fit => _fit;
 
-    /// <summary>Whether this pilot marked itself Ready under the current round.</summary>
-    public bool Ready => _ready && _readyEpoch == Options.Epoch;
+    /// <summary>The fit this pilot flies: its pick as <see cref="NetPlaneRules.Enforce"/> leaves it.
+    /// The host reads a guest's fit through the same rules, so both ends agree.</summary>
+    public CoopFit LaunchFit => Rules.Enforce(_fit);
+
+    /// <summary>The custom plane this pilot picked, or null on a stock airframe.</summary>
+    public NetPlaneBuild? Build => _build;
+
+    /// <summary>The plane rules as this end stands on them: its own on the host, the host's word on
+    /// a guest. A guest that has heard nothing reads a new lobby's, which allow no custom plane.
+    /// </summary>
+    public NetPlaneRules Rules => IsHost ? _rules : _wire.PlaneRules?.Rules ?? default;
+
+    /// <summary>Why the rules refuse this pilot's plane, or none.</summary>
+    public PlaneRefusal Refusal => Rules.Refuses(_airframe, _build);
+
+    /// <summary>Whether this pilot marked itself Ready under the current round, on a plane the rules
+    /// admit.</summary>
+    public bool Ready => _ready && _readyEpoch == Options.Epoch && Refusal == PlaneRefusal.None;
+
+    /// <summary>Why the last <see cref="SetReady"/> was refused, in the order the original lists
+    /// them. Empty after a mark that took.</summary>
+    public IReadOnlyList<PlaneRefusal> ReadyRefusals => _refusals;
 
     /// <summary>The chat panel's lines, oldest first.</summary>
     public IReadOnlyList<DogfightChatLine> Chat => _chat;
@@ -253,14 +280,20 @@ public sealed class DogfightLobby
     /// <summary>Checks or clears Auto Respawn. Refused on a guest.</summary>
     public bool SetAutoRespawn(bool auto) => Change(_options with { AutoRespawn = auto });
 
-    /// <summary>Allow Custom Planes, drawn greyed: guests fly stock planes, so nothing sets it.</summary>
-    public bool SetAllowCustomPlanes(bool allow) => false;
+    /// <summary>Checks or clears Allow Custom Planes. Refused on a guest.</summary>
+    public bool SetAllowCustomPlanes(bool allow) => ChangeRules(_rules with { AllowCustom = allow });
 
-    /// <summary>Outlaw Components, drawn greyed with Allow Custom Planes.</summary>
-    public bool SetOutlawComponents(bool outlaw) => false;
+    /// <summary>Checks or clears Outlaw Components, which puts the outlaw list in force. Refused on
+    /// a guest.</summary>
+    public bool SetOutlawComponents(bool outlaw) => ChangeRules(_rules with { Outlawing = outlaw });
 
-    /// <summary>Picks this pilot's airframe and fit, live whether or not it is Ready. A changed pick
-    /// clears this pilot's own Ready. Refused outside the eleven stock airframes.</summary>
+    /// <summary>Sets or clears one flag of the outlaw list (<see cref="NetPlaneRules"/> names them).
+    /// Refused on a guest and outside the list.</summary>
+    public bool SetOutlawed(int flag, bool outlawed) =>
+        flag is >= 0 and < NetPlaneRules.Flags && ChangeRules(_rules.With(flag, outlawed));
+
+    /// <summary>Picks this pilot's stock airframe and fit, live whether or not it is Ready. A changed
+    /// pick clears this pilot's own Ready. Refused outside the eleven stock airframes.</summary>
     public bool Pick(int airframe, CoopFit fit)
     {
         if (airframe is < 0 or >= AirframeCount)
@@ -268,23 +301,42 @@ public sealed class DogfightLobby
             return false;
         }
 
-        // ⚠ Readiness is consent to the plane as it stood, so the host must not launch a changed one.
-        if (airframe != _airframe || fit != _fit)
-        {
-            _ready = false;
-        }
-
-        _airframe = (byte)airframe;
-        _fit = fit;
+        Take((byte)airframe, null, fit);
         return true;
     }
 
-    /// <summary>Marks this pilot Ready or not under the current round. A guest's mark reaches the host
-    /// on the next step.</summary>
-    public void SetReady(bool ready)
+    /// <summary>Picks one of this pilot's custom planes and its fit. Refused on an airframe outside
+    /// the eleven. Whether the rules admit it is asked at Ready, as the original asks.</summary>
+    public bool PickCustom(NetPlaneBuild build, CoopFit fit)
     {
+        ArgumentNullException.ThrowIfNull(build);
+        if (build.Airframe >= AirframeCount)
+        {
+            return false;
+        }
+
+        Take(build.Airframe, build.Copy(), fit);
+        return true;
+    }
+
+    /// <summary>Changes this pilot's fit alone, keeping the plane it stands on.</summary>
+    public void Refit(CoopFit fit) => Take(_airframe, _build, fit);
+
+    /// <summary>Marks this pilot Ready or not under the current round. A guest's mark reaches the host
+    /// on the next step. False, and no mark, when the rules refuse this pilot's plane or a picked
+    /// ammunition or rocket; <see cref="ReadyRefusals"/> then names each reason.</summary>
+    public bool SetReady(bool ready)
+    {
+        _refusals.Clear();
+        if (ready && ReadyCheck())
+        {
+            _ready = false;
+            return false;
+        }
+
         _ready = ready;
         _readyEpoch = Options.Epoch;
+        return true;
     }
 
     /// <summary>A lobby screen now stands on this lobby, so a guest's pick and name go to the host.
@@ -305,7 +357,7 @@ public sealed class DogfightLobby
             }
 
             picked = true;
-            if (!pick.Ready || pick.Epoch != _options.Epoch)
+            if (!Admits(peer, pick))
             {
                 return GuestsNotReady;
             }
@@ -443,6 +495,67 @@ public sealed class DogfightLobby
         return false;
     }
 
+    // A guest counts as Ready only under this round and on a plane the rules admit. The guest's
+    // own lobby asks the same, but the host does not take its word for it.
+    private bool Admits(int peer, CoopPickMessage pick) =>
+        pick.Ready && pick.Epoch == _options.Epoch
+        && _rules.Refuses(pick.Airframe, _wire.PickBuilds.TryGetValue(peer, out var build) ? build : null) == PlaneRefusal.None;
+
+    // The original's Ready check, true when it refuses. An outlawed ammunition or rocket also resets
+    // every gun's or pylon's to none, so the next Ready takes; Outlaw All resets without refusing.
+    private bool ReadyCheck()
+    {
+        var rules = Rules;
+        if (rules.Refuses(_airframe, _build) is var plane and not PlaneRefusal.None)
+        {
+            _refusals.Add(plane);
+        }
+
+        if (rules.AmmoOutlawed(_fit) && !rules.Has(NetPlaneRules.AllAmmoFlag))
+        {
+            _refusals.Add(PlaneRefusal.Ammo);
+        }
+
+        if (rules.RocketsOutlawed(_fit) && !rules.Has(NetPlaneRules.AllRocketsFlag))
+        {
+            _refusals.Add(PlaneRefusal.Rockets);
+        }
+
+        _fit = rules.Enforce(_fit);
+        return _refusals.Count > 0;
+    }
+
+    // ⚠ Readiness is consent to the plane as it stood, so the host must not launch a changed one.
+    private void Take(byte airframe, NetPlaneBuild? build, CoopFit fit)
+    {
+        if (airframe != _airframe || fit != _fit || !Equals(build, _build))
+        {
+            _ready = false;
+        }
+
+        _airframe = airframe;
+        _build = build;
+        _fit = fit;
+    }
+
+    // A rules change is a new round, as an options change is.
+    private bool ChangeRules(NetPlaneRules changed)
+    {
+        if (!IsHost)
+        {
+            return false;
+        }
+
+        if (changed != _rules)
+        {
+            _rules = changed;
+            _options = _options with { Epoch = NextEpoch() };
+            _ready = false;
+        }
+
+        return true;
+    }
+
     // Every host change is a new round: the Ready marks under the old options clear.
     private bool Change(DogfightOptionsMessage changed)
     {
@@ -491,7 +604,7 @@ public sealed class DogfightLobby
                 ? named
                 : "Pilot " + (rows.Count + 1).ToString(CultureInfo.InvariantCulture);
             byte airframe = picked && pick.Airframe < AirframeCount ? pick.Airframe : DefaultAirframe;
-            rows.Add(new DogfightLobbySeat(name, airframe, picked && pick.Ready && pick.Epoch == _options.Epoch, false));
+            rows.Add(new DogfightLobbySeat(name, airframe, picked && Admits(peers[i], pick), false));
         }
 
         return rows;
@@ -507,6 +620,15 @@ public sealed class DogfightLobby
         for (int i = 0; i < peers.Count; i++)
         {
             int peer = peers[i];
+
+            // The rules go first, so a guest reading a new round reads it under the rules it has.
+            var rules = new LobbyPlaneRulesMessage(_options.Epoch, _rules);
+            if (!_rulesSent.TryGetValue(peer, out var told) || told != rules)
+            {
+                _wire.Tell(peer, rules);
+                _rulesSent[peer] = rules;
+            }
+
             if (!_optionsSent.TryGetValue(peer, out var sent) || sent != _options)
             {
                 _wire.Tell(peer, _options);
@@ -527,6 +649,7 @@ public sealed class DogfightLobby
             {
                 _optionsSent.Remove(gone);
                 _rosterSent.Remove(gone);
+                _rulesSent.Remove(gone);
             }
         }
     }
@@ -538,6 +661,13 @@ public sealed class DogfightLobby
         if (_hostPeer < 0 || !Shown || _wire.DogfightOptions is not { } options)
         {
             return;
+        }
+
+        // The build goes before the pick, so the host never reads a Ready without the plane behind it.
+        if (!Equals(_build, _buildSent))
+        {
+            _wire.Tell(_hostPeer, new PlaneBuildMessage(PlaneBuildMessage.Mine, _build));
+            _buildSent = _build?.Copy();
         }
 
         var pick = new CoopPickMessage(options.Epoch, Ready, _airframe, _fit, OwnName());

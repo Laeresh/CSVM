@@ -428,7 +428,8 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         Lobby = new OriginalLobbyScreen(
             () => _net, this, dataRoot, _stock,
             () => _setup.Seats.Count > 0 ? _flightDevices(_setup.Seats[0]) : Array.Empty<int>(),
-            () => profiles?.Invoke().LastPlayedPilotName);
+            () => profiles?.Invoke().LastPlayedPilotName,
+            () => planes?.List() ?? Array.Empty<CSVM.Flight.Hangar.CustomPlaneDef>());
         Connection = new OriginalConnectionScreen(() => _net, this, dataRoot, Lobby.OpenHost);
         _modules = Hangar != null
             ? new IOriginalScreenModule[] { InstantAction, Options, Campaign, Hangar, Wrapup, JoinBoard, Connection, Lobby }
