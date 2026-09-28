@@ -211,12 +211,13 @@ public sealed class UpnpLeaseTests
         var door = new NetPlayFeature(
             (_, _, _) => LoopbackTransport.Mesh(1, LoopbackConditions.Perfect, new Random(1))[0],
             (_, _) => throw new InvalidOperationException("this door joins nothing"),
-            port =>
-            {
-                Interlocked.Increment(ref asked);
-                return new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, "", "mapped", LeaseSeconds: 1);
-            },
-            unmapped.Add);
+            new RouterAccess(
+                port =>
+                {
+                    Interlocked.Increment(ref asked);
+                    return new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, "", "mapped", LeaseSeconds: 1);
+                },
+                unmapped.Add));
 
         door.OpenHost(1);
         Assert.NotNull(door.BuildLaunch());

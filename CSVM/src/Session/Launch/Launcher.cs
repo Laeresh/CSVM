@@ -2362,16 +2362,17 @@ public partial class Launcher : Node3D
         _netDoor = new NetPlayFeature(
             (port, guests, bind) => Net.NetCarrier.Host(port, guests, bind),
             (address, port) => Net.NetCarrier.Join(address, port),
-            Net.NetCarrier.PortMap,
-            Net.NetCarrier.PortUnmap,
+            new Net.RouterAccess(
+                Net.NetCarrier.PortMap,
+                Net.NetCarrier.PortUnmap,
+                // The pinhole opens for the stable address, the one the IPv6 socket binds and the
+                // board shows. A temporary address would rotate away from under the router's rule.
+                Net.NetCarrier.Pinhole(HostAddress.StableGlobalIPv6),
+                Net.NetCarrier.PinholeClose),
             Net.NetCarrier.Lan)
         {
             Version = Net.NetBuildVersion.Parse(BuildVersion.Current),
             LanNetworks = LocalNetworks.Ipv4,
-            // The pinhole opens for the stable address, the one the IPv6 socket binds and the board
-            // shows. A temporary address would rotate away from under the router's rule.
-            OpenPinhole = Net.NetCarrier.Pinhole(HostAddress.StableGlobalIPv6),
-            ClosePinhole = Net.NetCarrier.PinholeClose,
             StableIpv6 = Net.NetCarrier.StableIpv6,
             LanIpv4 = Net.NetCarrier.LanIpv4,
             CopyText = DisplayServer.ClipboardSet,

@@ -1370,14 +1370,24 @@ the backing-out ladder; the gate is the mode's minimum of seats and every seat c
 and `BuildExit` are the typed result. Nothing here reads a pad: `src/UI/Screens/MenuSeatDevices.cs`, below.
 
 ## src/UI/Menu/NetPlayFeature.cs
-The multiplayer door as a shared `IMenuFeature`, engine-free and carrier-free: the port and address
-a board edits, the socket it opens, and the readouts a board draws (`Stage`, `Peers`, `Link`,
-`PortMap`, `Pinhole`, `Fault`, `HostStarted`, `Advert`). Carriers, port maps and the IPv6 pinhole
-(`OpenPinhole`, `ClosePinhole`) arrive as delegates (the launcher's `Net/NetCarrier.cs`, or a suite's loopback mesh and no router), each lease held on its own thread; every open wraps its
-carrier in a `Net/NetLobby.cs`. `OpenHost`, `OpenCoopHost` (whose `Offer` names the mission) and
-`OpenJoin` open; `Step` carries the link and moves `Revision` on news, which both menus repaint on; `Close` gives both leases back. In co-op `ShowCoop` sends each
-guest the host's boards, `CoopAllReady` holds FLY MISSION until every guest is Ready, `CoopLaunchDue` tells a guest to follow, `TellSeatFits` sends every seat's fit before the opener, `ShowCoopFilm` and `EndCoopFilm` share the host's campaign films (`CoopFilm` is a guest's latest word), and
-`LeaveCoopMission` tells the host at once that a guest walked out. `OpenDogfightHost` opens a Dogfight lobby, and `Dogfight` is the `DogfightLobby` either end stands in, created on a guest when its host's advert names a Dogfight and unshown behind a Built-in host; `DogfightLaunchDue` tells a guest its host has launched, and a guest back from a match waits for the host's next round. `Version` is the build's `Net/NetBuildVersion.cs`: a host refuses a guest of another version, and a guest such a host, with both versions on `Fault`. `TypeAddress` and `PasteAddress` take an address up to `AddressLimit`, brackets included, and `OpenJoin` opens on `JoinTarget`, the address split by `SplitAddress`: a port follows a closing bracket or a lone colon, so a bare IPv6 address is all host. `SessionSpec.ParseJoin` shares the rule. A host reads `StableIpv6` and `LanIpv4` as it opens; `GuestAddress` is what a guest types, and `CopyGuestAddress` hands it to `CopyText` (the launcher's clipboard, on Ctrl+C). Boards: `LaunchMenu.cs`.
+The multiplayer door as a shared `IMenuFeature`, engine-free and carrier-free: the port and address a board edits (`TypeAddress`, `PasteAddress`, up to `AddressLimit`), the socket it opens, and the readouts a board draws (`Stage`, `Peers`, `Link`, `Fault`, `HostStarted`, `Advert`). `OpenJoin` opens on `JoinTarget`, the address parsed by `Net/NetEndpoint.cs`.
+Carriers and the LAN socket arrive as delegates (the launcher's `Net/NetCarrier.cs`, or a suite's loopback mesh), the router as a `Net/RouterAccess.cs` (`Router`); every open wraps its carrier in a `Net/NetLobby.cs`.
+`OpenHost`, `OpenCoopHost` (whose `Offer` names the mission), `OpenDogfightHost` and `OpenJoin` open; `Step` carries the link and moves `Revision` on news, which both menus repaint on; `Close` gives the router back.
+In co-op the door seats guests and keeps the round of picks. `ShowCoop` names the host's boards through `HostFlow` (`CoopHostFlow.cs`), `CoopAllReady` holds FLY MISSION until every guest is Ready, `CoopLaunchDue` tells a guest to follow, and `TellSeatFits`, `TellSeatBuilds` and `TellCoopWingman` go out before the opener.
+`ShowCoopFilm` and `EndCoopFilm` share the host's campaign films (`CoopFilm` is a guest's latest word). A guest's own pick is `Pick` (`CoopGuestPick.cs`), and `LeaveCoopMission` tells the host at once that it walked out.
+`Dogfight` is the `DogfightLobby` either end stands in, unshown behind a Built-in host; `DogfightLaunchDue` tells a guest its host has launched, and a guest back from a match waits for the next round. `Version` is `Net/NetBuildVersion.cs`: either end refuses the other's version, with both on `Fault`.
+A host reads `StableIpv6` and `LanIpv4` as it opens; `GuestAddress` is what a guest types, and `CopyGuestAddress` hands it to `CopyText` (the launcher's clipboard, on Ctrl+C). Boards: `LaunchMenu.cs`.
+
+## src/UI/Menu/CoopHostFlow.cs
+What a co-op host names to its guests, owned apart from the door: the board (`Screen`), the mission, the campaign's progress, the hangar it offers, the debrief's result (`ShowResult`) and the campaign film it shares (`FilmShown`).
+It builds each seated guest's `CoopFlowMessage` and sends one again only when it changed. It also decides the airframe a guest flies when its pick is not on offer: the starter, else the hangar's first.
+The round of picks is the door's: `NetPlayFeature.ShowCoop` advances it on this module's answer and hands it to every send.
+Wire: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Coverage: `CSVM.Tests/NetPlayFeatureTests.cs`.
+
+## src/UI/Menu/CoopGuestPick.cs
+A co-op guest's own pick from its host's hangar, owned apart from the door: `Airframe`, `Fit` and the Ready it means, set together by `Set`, and the walk-out mark `NetPlayFeature.LeaveCoopMission` sets.
+It lasts the joined session across flights and starts on `StarterAirframe` and the stock fit. The door sends it under the host's round and again only when it changed; a new round clears Ready and the walk-out.
+`NetPlayFeature.CoopReady` is Ready as the host last heard it. Coverage: `CSVM.Tests/NetPlayFeatureTests.cs`.
 
 ## src/UI/Menu/DogfightLobby.cs
 The Multiplayer Lobby's state over a `Net/NetLobby.cs`, engine-free, one class for both ends.

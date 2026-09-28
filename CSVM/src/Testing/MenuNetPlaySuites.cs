@@ -96,8 +96,8 @@ internal static class MenuNetPlaySuites
                 return;
             }
 
-            string dialled = NetPlayFeature.Endpoint(Stable, port);
-            string lan = NetPlayFeature.Endpoint(Lan, port);
+            string dialled = new NetEndpoint(Stable, port).ToString();
+            string lan = new NetEndpoint(Lan, port).ToString();
             ctx.Check(menu.ShownDetail.Contains($"Guests type {dialled}, or {lan} on this network.", StringComparison.Ordinal)
                       && menu.ShownDetail.Contains($"{CoopDoorText.CopyPress} copies {dialled}.", StringComparison.Ordinal),
                 $"the status line names the bracketed IPv6 address, the LAN address and the copy key ({menu.ShownDetail})");

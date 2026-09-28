@@ -130,6 +130,13 @@ IPv6 pinhole, and `StableIpv6`/`LanIpv4` the addresses it names (`Utils/HostAddr
 null for a carrier reachable without them. The launcher opens the pinhole for the stable address.
 ⚠ Nothing above the seam branches on the carrier.
 
+## src/Net/NetEndpoint.cs
+A host and the port a join opens on, as one value. `Parse` splits an address as a player types it
+or `--net-join` names it: a port follows a closing bracket or a lone colon, so a bare IPv6 address
+is all host, and a missing or out-of-range port takes the fallback. `ToString` writes it back with
+an IPv6 host bracketed. The menu door's `JoinTarget` and `SessionSpec.ParseJoin` both parse through
+it; the carriers' `Join` still takes the host and the port apart.
+
 ## src/Net/UpnpPortMap.cs
 A best-effort port mapping through Godot's UPnP client, so a host behind a router is reachable
 from outside it. `Map` returns one of five outcomes a board can show (mapped, no gateway, refused,
@@ -138,7 +145,7 @@ neither throws. No gateway means no device answered. Godot calls a gateway inval
 connection check fails without saying why, so for such a device this file asks the description's
 connection services for the external address itself, over Godot's `HttpClient`, whose `Get` and
 `Soap` exchanges `UpnpPinholeMap.cs` shares. Both calls block for the gateway search, so they
-belong on the door's own thread. The rules are `UpnpLease.cs`'s; this is the only file naming `Upnp`.
+belong on `RouterAccess.cs`'s own thread. The rules are `UpnpLease.cs`'s; this is the only file naming `Upnp`.
 
 ## src/Net/IgdAddress.cs
 A gateway's external address read without the engine. `Kind` sorts an IPv4 address into public,
@@ -154,8 +161,8 @@ not, is asked its external address first; a private, shared or reserved one retu
 `NoPublicAddress` with no delete and no add, since no mapping behind a carrier's NAT is reachable.
 A mapping asks a finite lease of `LeaseSeconds` (TUNE, `BL-1043`), and one that draws error 725
 gets a permanent one. A fresh add first deletes the stale mapping on the port and on the port the
-last run remembered, by exact port only; a renewal only adds again. `NextRenewal` says when the door
-asks next: half the lease after a grant, an eighth after a failed renewal, never for a permanent
+last run remembered, by exact port only; a renewal only adds again. `NextRenewal` says when
+`RouterAccess.cs` asks next: half the lease after a grant, an eighth after a failed renewal, never for a permanent
 lease; the IPv6 pinhole renews on the same schedule. Read `UpnpLeaseTests.cs`.
 
 ## src/Net/UpnpPortMemory.cs
@@ -169,8 +176,8 @@ A best-effort IPv6 pinhole in the host's router, for a line whose IPv4 has no pu
 Godot's UPnP client maps IPv4 only, so `Open` finds the IGD v2 `WANIPv6FirewallControl:1` service
 by an SSDP search (through `LanDiscoverySocket.cs`) and speaks SOAP to the control URL its
 description names, over `UpnpPortMap.cs`'s HTTP exchange. `Open` renews the pinhole this process
-holds, `Close` deletes it by UniqueID; neither throws and both block, so they run on the door's
-thread. The FRITZ!Box 7590 names the service in both `igddesc.xml` and `igd2desc.xml`, at
+holds, `Close` deletes it by UniqueID; neither throws and both block, so they run on
+`RouterAccess.cs`'s thread. The FRITZ!Box 7590 names the service in both `igddesc.xml` and `igd2desc.xml`, at
 `/igd2upnp/control/WANIPv6Firewall1`. The rules are `UpnpPinhole.cs`'s; the memory is
 `UpnpPinholeMemory.cs`.
 
@@ -179,7 +186,7 @@ The IPv6 pinhole's rules, engine-free behind `IPinholeGateway`. Each missing pie
 any add with its own outcome: no global address (`NoAddress`, no gateway call), no service,
 a firewall that is off, a `GetFirewallStatus` that allows no inbound pinhole (`Disallowed`). A
 pinhole takes `UpnpLease.LeaseSeconds`, is renewed by UniqueID (`UpdatePinhole`) and re-added when
-the router forgot it; the door renews on `UpnpLease.NextRenewal`'s schedule. A fresh add first
+the router forgot it; `RouterAccess.cs` renews on `UpnpLease.NextRenewal`'s schedule. A fresh add first
 deletes the pinhole an earlier run remembered, only while its lease runs, since the router frees
 the number after. Read `UpnpPinholeTests.cs`.
 
@@ -195,6 +202,15 @@ parses to nothing. Read `UpnpPinholeTests.cs`.
 The IPv6 pinhole this machine last opened, kept in `upnp_pinhole.txt` under the user directory as
 its UniqueID, port, address and lease end, so a run after a crash can delete it while its lease
 still runs. A missing or unreadable file recalls none, and a failed write costs only that clear.
+
+## src/Net/RouterAccess.cs
+A host's hold on its router, engine-free: the UPnP IPv4 mapping and the IGD v2 IPv6 pinhole, asked
+through the calls it is built with (`NetCarrier.cs`'s, or a suite's stubs). `Open` starts each lease
+on a dedicated thread, never the pool, since each call blocks for a gateway search, and each thread
+renews on `UpnpLease.NextRenewal`'s schedule. `Poll` takes a landed answer onto `PortMap` and
+`Pinhole`. `Close` stops the renewals and waits for them before it gives back whatever was granted,
+so a renewal in flight cannot put a mapping back. The door, `UI/Menu/NetPlayFeature.cs`, opens it as
+a host opens and closes it on the way out. Read `RouterAccessTests.cs`.
 
 ## src/Net/NetLobby.cs
 A carrier's first listener and itself the `INetTransport` the session later binds, since a carrier

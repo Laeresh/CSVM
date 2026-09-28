@@ -53,8 +53,9 @@ internal static class MenuOriginalCoopFlowSuites
         var hostDoor = new NetPlayFeature(
             (_, _, _) => mesh[0],
             (_, _) => throw new InvalidOperationException("the host does not join"),
-            port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
-            _ => { });
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }));
         var guestDoor = new NetPlayFeature(
             (_, _, _) => throw new InvalidOperationException("a guest does not host"),
             (_, _) => mesh[1]);
@@ -163,7 +164,7 @@ internal static class MenuOriginalCoopFlowSuites
         ctx.Check(hangar is { Planes.Count: > 1 }, $"the guest's hangar offers more than one plane ({hangar?.Planes.Count})");
         if (hangar != null)
         {
-            hangar.SelectedPlane = Math.Max(0, hangar.Planes.FindIndex(plane => plane.Airframe != NetPlayFeature.StarterAirframe));
+            hangar.SelectedPlane = Math.Max(0, hangar.Planes.FindIndex(plane => plane.Airframe != CoopGuestPick.StarterAirframe));
 
             // The ammo screen's own write: explosive in the first gun slot.
             hangar.Planes[hangar.SelectedPlane].Ammo[0] = 3;
@@ -175,7 +176,7 @@ internal static class MenuOriginalCoopFlowSuites
         Pump(host, guest, frames: 4);
         ctx.Check(guest.Door.CoopReady && host.Door.CoopAllReady && host.Door.CoopGuests[0].Ready,
             $"the guest's press answers Ready and the host hears it ({guest.Door.CoopReady}, {host.Door.CoopAllReady})");
-        ctx.Check(picked != NetPlayFeature.StarterAirframe && host.Door.CoopGuests[0].Airframe == picked,
+        ctx.Check(picked != CoopGuestPick.StarterAirframe && host.Door.CoopGuests[0].Airframe == picked,
             $"with the plane the guest picked ({host.Door.CoopGuests[0].Airframe}, picked {picked})");
         ctx.Check(fit.AmmoAt(0) == 3 && host.Door.CoopGuests[0].Fit == fit,
             $"and the ammunition it set on that plane ({host.Door.CoopGuests[0].Fit.AmmoAt(0)}, set {fit.AmmoAt(0)})");
@@ -246,9 +247,9 @@ internal static class MenuOriginalCoopFlowSuites
     // guest's campaign is rebuilt around its return, and it answers the new round on what it flew.
     private static (byte Airframe, CoopFit Fit) PickOutlivesARestart(TestContext ctx, End host, End guest)
     {
-        byte picked = guest.Door.CoopPickAirframe;
-        var fit = guest.Door.CoopPickFit;
-        ctx.Check(picked != NetPlayFeature.StarterAirframe && fit.AmmoAt(0) == 3,
+        byte picked = guest.Door.Pick.Airframe;
+        var fit = guest.Door.Pick.Fit;
+        ctx.Check(picked != CoopGuestPick.StarterAirframe && fit.AmmoAt(0) == 3,
             $"ABLE-TO-FAIL CONTROL: the pick the guest flew is not a fresh join's starter and stock fit ({picked}, {fit.AmmoAt(0)})");
         var guestWire = guest.Door.BuildLaunch();
         var relaunch = CSVM.Session.Launch.Launcher.CoopRelaunch(host.Door);
@@ -392,14 +393,14 @@ internal static class MenuOriginalCoopFlowSuites
         // CHANGE PLANE's commit onto the starter, which this guest has not fitted.
         var campaign = guest.Host.Features.Get<CampaignFeature>();
         var planes = campaign.Profile?.Planes;
-        int starter = planes?.FindIndex(plane => plane.Airframe == NetPlayFeature.StarterAirframe) ?? -1;
+        int starter = planes?.FindIndex(plane => plane.Airframe == CoopGuestPick.StarterAirframe) ?? -1;
         campaign.CommitPlanes(starter, null);
         Pump(host, guest, frames: 4);
         var fresh = new OwnedPlane();
         var stock = CoopFit.Of(fresh.Ammo, fresh.Ordnance);
-        ctx.Check(starter >= 0 && campaign.GuestAirframe == NetPlayFeature.StarterAirframe && campaign.GuestCoopFit == stock,
+        ctx.Check(starter >= 0 && campaign.GuestAirframe == CoopGuestPick.StarterAirframe && campaign.GuestCoopFit == stock,
             $"changing the plane puts the guest on the new plane's default ammunition ({campaign.GuestAirframe}, ammo {campaign.GuestCoopFit.AmmoAt(0)})");
-        GuestFliesItsPick(ctx, host, hostWire, ((byte)NetPlayFeature.StarterAirframe, stock), "and the host builds the new plane on it");
+        GuestFliesItsPick(ctx, host, hostWire, ((byte)CoopGuestPick.StarterAirframe, stock), "and the host builds the new plane on it");
         host.Seat.Enqueue(new MenuCommands { Back = true });
         Pump(host, guest, frames: 4);
     }
@@ -407,7 +408,7 @@ internal static class MenuOriginalCoopFlowSuites
     // The host's launch field for the guest's seat, over the host's wire.
     private static void GuestFliesItsPick(TestContext ctx, End host, MenuNetLaunch launch, (byte Airframe, CoopFit Fit) pick, string what)
     {
-        var own = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(NetPlayFeature.StarterAirframe) };
+        var own = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(CoopGuestPick.StarterAirframe) };
         var (roster, seatFits) = CSVM.Session.Launch.Launcher.CoopLaunchField(
             host.Door, launch.Transport, own, Array.Empty<Flight.Weapons.LoadoutChoice?>(), Flight.Weapons.StockLoadouts.Load());
         ctx.Check(roster.Length == 2 && roster[1].PlaneNode == UI.Hangar.PlanePickerRoster.AirframeNode(pick.Airframe) && seatFits[1] == pick.Fit,
@@ -456,7 +457,7 @@ internal static class MenuOriginalCoopFlowSuites
     private static void AwaitMapping(NetPlayFeature door)
     {
         var waited = System.Diagnostics.Stopwatch.StartNew();
-        while (door.PortMap == null && waited.Elapsed.TotalSeconds < 20.0)
+        while (door.Router.PortMap == null && waited.Elapsed.TotalSeconds < 20.0)
         {
             door.Step(0.0);
             System.Threading.Thread.Sleep(1);

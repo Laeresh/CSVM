@@ -130,7 +130,7 @@ internal static class NetCoopMissionSuites
             Pump(SettleSteps, host, guest);
             Select(host, mission);
             Pump(SettleSteps, host, guest);
-            guest.PickCoop(NetPlayFeature.StarterAirframe, true);
+            guest.Pick.Set(CoopGuestPick.StarterAirframe, true);
             Pump(SettleSteps, host, guest);
             if (!guest.IsCoopGuest || !host.CoopAllReady)
             {
@@ -183,7 +183,7 @@ internal static class NetCoopMissionSuites
         new CampaignProfileStore(store).Save(profile);
 
         var devastator = CampaignDirector.CoopWingmanOf(CampaignProfileDef.NewProfile(CampaignDirector.CoopGuestPilot));
-        ctx.Check(devastator.Airframe == NetPlayFeature.StarterAirframe && devastator.Airframe != WingAirframe,
+        ctx.Check(devastator.Airframe == CoopGuestPick.StarterAirframe && devastator.Airframe != WingAirframe,
             $"ABLE-TO-FAIL CONTROL: a profile-less director's wingman is the Devastator, not the host's pick ({devastator.Airframe} vs {WingAirframe})");
 
         var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.03, 0.01, 0.25), new Random(2405));
@@ -200,7 +200,7 @@ internal static class NetCoopMissionSuites
             Pump(SettleSteps, host, guest);
             Select(host, mission);
             Pump(SettleSteps, host, guest);
-            guest.PickCoop(NetPlayFeature.StarterAirframe, true);
+            guest.Pick.Set(CoopGuestPick.StarterAirframe, true);
             Pump(SettleSteps, host, guest);
             if (!guest.IsCoopGuest || !host.CoopAllReady)
             {
@@ -375,11 +375,11 @@ internal static class NetCoopMissionSuites
         var lucyFit = CoopFit.Of(LucyAmmo, null);
         Select(host, mission);
         Pump(SettleSteps, host, lucy, third);
-        lucy.PickCoop(NetPlayFeature.StarterAirframe, true, lucyFit);
+        lucy.Pick.Set(CoopGuestPick.StarterAirframe, true, lucyFit);
         Pump(SettleSteps, host, lucy, third);
         ctx.Check(!host.CoopAllReady,
             $"ABLE-TO-FAIL CONTROL: one guest Ready holds the launch ({string.Join(", ", host.CoopGuests.Select(g => g.Ready))})");
-        third.PickCoop(NetPlayFeature.StarterAirframe, true);
+        third.Pick.Set(CoopGuestPick.StarterAirframe, true);
         Pump(SettleSteps, host, lucy, third);
         ctx.Check(host.CoopAllReady, $"both guests Ready opens the launch");
 
@@ -428,7 +428,7 @@ internal static class NetCoopMissionSuites
     private static void SecondFlight(TestContext ctx, CampaignMission mission, StockLoadouts stock,
         IReadOnlyList<LoopbackTransport> mesh, NetPlayFeature host, NetPlayFeature third)
     {
-        third.PickCoop(NetPlayFeature.StarterAirframe, true);
+        third.Pick.Set(CoopGuestPick.StarterAirframe, true);
         Pump(SettleSteps, host, third);
         ctx.Check(host.CoopAllReady && host.CoopGuests.Count == 1,
             $"after the retry the one guest left is Ready again ({host.CoopGuests.Count} seated)");
@@ -610,8 +610,8 @@ internal static class NetCoopMissionSuites
         var result = third.Session.Campaign?.Result;
         host.Close();
         hostDoor.Reclaim();
-        hostDoor.ShowCoopResult(false, 0, 0);
-        hostDoor.ShowCoop(NetCoopScreen.Debrief, mission.Seq, 0, 1 << NetPlayFeature.StarterAirframe);
+        hostDoor.HostFlow.ShowResult(false, 0, 0);
+        hostDoor.ShowCoop(NetCoopScreen.Debrief, mission.Seq, 0, 1 << CoopGuestPick.StarterAirframe);
         for (int i = 0; i < SettleSteps; i++)
         {
             third.Session._PhysicsProcess(GameClock.FixedDt);
@@ -626,11 +626,11 @@ internal static class NetCoopMissionSuites
         third.Close();
         thirdDoor.Reclaim();
 
-        hostDoor.ShowCoop(NetCoopScreen.Briefing, mission.Seq, 0, 1 << NetPlayFeature.StarterAirframe);
+        hostDoor.ShowCoop(NetCoopScreen.Briefing, mission.Seq, 0, 1 << CoopGuestPick.StarterAirframe);
         Pump(SettleSteps, hostDoor, thirdDoor);
-        ctx.Check(thirdDoor.CoopFlow is { Screen: NetCoopScreen.Briefing } && !thirdDoor.CoopPickReady && !hostDoor.CoopAllReady,
-            $"the host's Retry puts the guest back on the briefing with its Ready cleared ({thirdDoor.CoopFlow?.Screen}, ready {thirdDoor.CoopPickReady})");
-        hostDoor.ShowCoop(NetCoopScreen.FlightCheck, mission.Seq, 0, 1 << NetPlayFeature.StarterAirframe);
+        ctx.Check(thirdDoor.CoopFlow is { Screen: NetCoopScreen.Briefing } && !thirdDoor.Pick.Ready && !hostDoor.CoopAllReady,
+            $"the host's Retry puts the guest back on the briefing with its Ready cleared ({thirdDoor.CoopFlow?.Screen}, ready {thirdDoor.Pick.Ready})");
+        hostDoor.ShowCoop(NetCoopScreen.FlightCheck, mission.Seq, 0, 1 << CoopGuestPick.StarterAirframe);
     }
 
     // The host's launch: the door names the flight and the launcher's helper builds the field and
@@ -644,7 +644,7 @@ internal static class NetCoopMissionSuites
         string profile = "", string? profilesDir = null)
     {
         var own = CampaignLoadout.For(CoopFit.Of(ammo, null), stock);
-        var planes = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(NetPlayFeature.StarterAirframe) };
+        var planes = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(CoopGuestPick.StarterAirframe) };
         (var roster, seatFits) = Launcher.CoopLaunchField(door, launch.Transport, planes, new[] { own }, stock);
         door.TellSeatFits(seatFits);
         door.TellCoopWingman(Launcher.CoopWingmanFor(profile, profilesDir));
@@ -686,11 +686,11 @@ internal static class NetCoopMissionSuites
                 ? new[] { "--mute", "--no-pads" }
                 : new[] { "--mute", "--no-pads", $"--profiles={profilesDir}" }),
             profile, mission.Seq,
-            new[] { UI.Hangar.PlanePickerRoster.AirframeNode(NetPlayFeature.StarterAirframe) }, 1, new[] { fit });
+            new[] { UI.Hangar.PlanePickerRoster.AirframeNode(CoopGuestPick.StarterAirframe) }, 1, new[] { fit });
 
     // The host's boards on the flight check of the suite's mission, with the starter offered.
     private static void Select(NetPlayFeature host, CampaignMission mission) =>
-        host.ShowCoop(NetCoopScreen.FlightCheck, mission.Seq, 0, 1 << NetPlayFeature.StarterAirframe);
+        host.ShowCoop(NetCoopScreen.FlightCheck, mission.Seq, 0, 1 << CoopGuestPick.StarterAirframe);
 
     private static CampaignMission Mission(TestContext ctx)
     {

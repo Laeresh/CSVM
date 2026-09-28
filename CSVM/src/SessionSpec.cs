@@ -1602,8 +1602,8 @@ public sealed record SessionSpec
     /// <summary>Splits a <see cref="NetJoin"/> value into the address and the port to join. A
     /// value naming no port takes the door's own default. An IPv6 address is written in brackets,
     /// which is what tells its colons from the port's.</summary>
-    public static (string Address, int Port) ParseJoin(string value) =>
-        UI.Menu.NetPlayFeature.SplitAddress(value, UI.Menu.NetPlayFeature.DefaultPort);
+    public static Net.NetEndpoint ParseJoin(string value) =>
+        Net.NetEndpoint.Parse(value, UI.Menu.NetPlayFeature.DefaultPort);
 
     /// <summary>Splits a <see cref="NetHostPort"/> value: a bare port binds every interface, and
     /// an <c>address:port</c> binds that one address, by the same rules as

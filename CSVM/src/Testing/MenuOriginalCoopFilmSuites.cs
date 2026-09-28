@@ -60,8 +60,9 @@ internal static class MenuOriginalCoopFilmSuites
         var hostDoor = new NetPlayFeature(
             (_, _, _) => mesh[0],
             (_, _) => throw new InvalidOperationException("the host does not join"),
-            port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
-            _ => { });
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }));
         var guestDoor = new NetPlayFeature(
             (_, _, _) => throw new InvalidOperationException("a guest does not host"),
             (_, _) => mesh[1]);
@@ -159,11 +160,11 @@ internal static class MenuOriginalCoopFilmSuites
 
         guest.Closing.End();
         Pump(host, guest, frames: 4);
-        ctx.Check(!guest.Closing.Running && host.Closing.Running && host.Door.CoopFilmShown != null,
+        ctx.Check(!guest.Closing.Running && host.Closing.Running && host.Door.HostFlow.FilmShown != null,
             $"the guest's own skip ends its film and leaves the host's playing ({guest.Closing.Running}, {host.Closing.Running})");
         host.Closing.End();
         Pump(host, guest, frames: 4);
-        ctx.Check(host.Shell.Screen == OriginalScreen.CampaignScrapbook && host.Door.CoopFilmShown == null,
+        ctx.Check(host.Shell.Screen == OriginalScreen.CampaignScrapbook && host.Door.HostFlow.FilmShown == null,
             $"the host's film ends onto its book ({host.Shell.Screen})");
         ctx.Check(guest.Closing is { Plays: 1, Stops: 0 },
             $"and its end finds no film on the guest to stop ({guest.Closing.Plays} play(s), {guest.Closing.Stops} stop(s))");
@@ -189,7 +190,7 @@ internal static class MenuOriginalCoopFilmSuites
             $"the guest's board follows the host's check behind its film ({guest.Shell.Screen})");
 
         // The film holds the guest's presses, so its Ready is given at the door.
-        guest.Door.PickCoop(guest.Door.CoopPickAirframe, true, guest.Door.CoopPickFit);
+        guest.Door.Pick.Set(guest.Door.Pick.Airframe, true, guest.Door.Pick.Fit);
         Pump(host, guest, frames: 4);
         ClickRow(ctx, host, nameof(BoardButton.FlyMission));
         if (hostExits.LastOrDefault() is not CampaignMissionExit { Net: { } wire })
@@ -198,7 +199,7 @@ internal static class MenuOriginalCoopFilmSuites
             return;
         }
 
-        var own = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(NetPlayFeature.StarterAirframe) };
+        var own = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(CoopGuestPick.StarterAirframe) };
         var (roster, _) = CSVM.Session.Launch.Launcher.CoopLaunchField(
             host.Door, wire.Transport, own, Array.Empty<Flight.Weapons.LoadoutChoice?>(), Flight.Weapons.StockLoadouts.Load());
         _ = NetSession.Host((NetLobby)wire.Transport, roster, 7UL);
@@ -267,7 +268,7 @@ internal static class MenuOriginalCoopFilmSuites
     private static void AwaitMapping(NetPlayFeature door)
     {
         var waited = System.Diagnostics.Stopwatch.StartNew();
-        while (door.PortMap == null && waited.Elapsed.TotalSeconds < 20.0)
+        while (door.Router.PortMap == null && waited.Elapsed.TotalSeconds < 20.0)
         {
             door.Step(0.0);
             System.Threading.Thread.Sleep(1);

@@ -504,7 +504,7 @@ internal static class NetCombatSuites
                 return;
             }
 
-            var planes = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(UI.Menu.NetPlayFeature.StarterAirframe) };
+            var planes = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(UI.Menu.CoopGuestPick.StarterAirframe) };
             var (roster, _) = Launcher.VersusLaunchField(hostLaunch.Transport, planes, new LoadoutChoice?[] { null }, StockLoadouts.Load());
             host = Ends.Open(ctx, spec, hostLaunch.Transport, isHost: true, HostSeed, roster,
                 UI.Hangar.PlanePickerRoster.StockAirframes);

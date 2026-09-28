@@ -110,7 +110,7 @@ public class HostAddressDoorTests
 
         // ABLE-TO-FAIL CONTROL: a door that names no address keeps the pinhole's own full clause.
         var plain = PinholeDoor(null, new UpnpPinholeResult(UpnpPinholeOutcome.Opened, 0, Stable, ""));
-        Assert.Equal(CoopDoorText.PinholeStatus(plain.Pinhole!.Value), CoopDoorText.HostPinholeStatus(plain));
+        Assert.Equal(CoopDoorText.PinholeStatus(plain.Router.Pinhole!.Value), CoopDoorText.HostPinholeStatus(plain));
         Assert.Contains(Stable, CoopDoorText.HostPinholeStatus(plain), StringComparison.Ordinal);
     }
 
@@ -195,8 +195,7 @@ public class HostAddressDoorTests
         return new NetPlayFeature(
             (_, _, _) => mesh[0],
             (_, _) => mesh[0],
-            mapper,
-            map is null ? null : _ => { })
+            new RouterAccess(mapper, map is null ? null : _ => { }))
         {
             StableIpv6 = ipv6,
             LanIpv4 = lan,
@@ -208,21 +207,20 @@ public class HostAddressDoorTests
     private static NetPlayFeature PinholeDoor(Func<string?>? ipv6, UpnpPinholeResult pinhole)
     {
         var mesh = LoopbackTransport.Mesh(1, Clean, new Random(19));
-        var door = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0])
+        var router = new RouterAccess(openPinhole: port => pinhole with { Port = port }, closePinhole: _ => { });
+        var door = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0], router)
         {
             StableIpv6 = ipv6,
             LanIpv4 = () => Lan,
-            OpenPinhole = port => pinhole with { Port = port },
-            ClosePinhole = _ => { },
         };
         door.OpenHost(7);
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
-        while (door.Pinhole == null && DateTime.UtcNow < deadline)
+        while (door.Router.Pinhole == null && DateTime.UtcNow < deadline)
         {
             door.Step(0.016);
         }
 
-        Assert.NotNull(door.Pinhole);
+        Assert.NotNull(door.Router.Pinhole);
         return door;
     }
 
@@ -230,11 +228,11 @@ public class HostAddressDoorTests
     private static void WaitForMapping(NetPlayFeature door)
     {
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
-        while (door.PortMap == null && DateTime.UtcNow < deadline)
+        while (door.Router.PortMap == null && DateTime.UtcNow < deadline)
         {
             door.Step(0.016);
         }
 
-        Assert.NotNull(door.PortMap);
+        Assert.NotNull(door.Router.PortMap);
     }
 }

@@ -58,8 +58,9 @@ internal static class MenuOriginalConnectionSuites
         var hostDoor = new NetPlayFeature(
             (_, _, _) => hostWires.Dequeue(),
             (_, _) => throw new InvalidOperationException("the host does not join"),
-            port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
-            unmapped.Add,
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                unmapped.Add),
             lan.Bind);
         var doors = new List<NetPlayFeature> { hostDoor };
         for (int i = 1; i < mesh.Count; i++)
@@ -144,8 +145,9 @@ internal static class MenuOriginalConnectionSuites
         var hostDoor = new NetPlayFeature(
             (_, _, _) => gate,
             (_, _) => throw new InvalidOperationException("the host does not join"),
-            port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
-            _ => { },
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }),
             lan.Bind);
         var doors = new List<NetPlayFeature> { hostDoor };
         for (int i = 1; i < mesh.Count; i++)
@@ -238,8 +240,9 @@ internal static class MenuOriginalConnectionSuites
         var hostDoor = new NetPlayFeature(
             (_, _, _) => gate,
             (_, _) => throw new InvalidOperationException("the host does not join"),
-            port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
-            _ => { },
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }),
             lan.Bind);
         var guestDoor = new NetPlayFeature(
             (_, _, _) => throw new InvalidOperationException("the guest does not host"),
@@ -349,8 +352,9 @@ internal static class MenuOriginalConnectionSuites
         var hostDoor = new NetPlayFeature(
             (_, _, _) => gate,
             (_, _) => throw new InvalidOperationException("the host does not join"),
-            port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
-            _ => { },
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }),
             lan.Bind)
         { Version = NetBuildVersion.Parse("0.7.0") };
         int opened = 0;
@@ -1018,7 +1022,7 @@ internal static class MenuOriginalConnectionSuites
         string typed = TypeKeys(ctx, guest, reader, Reported);
         ctx.Check(typed == Reported && door.Address == Reported,
             $"ABLE-TO-FAIL CONTROL: the whole {Reported.Length}-character address arrives and the box keeps it ('{typed}' typed, '{door.Address}' kept)");
-        ctx.Check(door.JoinTarget == (Host, 47500),
+        ctx.Check(door.JoinTarget == new NetEndpoint(Host, 47500),
             $"the door joins the bare host on the typed port ({door.JoinTarget.Host}, {door.JoinTarget.Port})");
 
         var line = guest.Shell.Compose().Lines.FirstOrDefault(l => l.Text == door.Address);
@@ -1117,7 +1121,7 @@ internal static class MenuOriginalConnectionSuites
 
         door.TypeAddress(Bare);
         door.StepPort(port - door.Port);
-        ctx.Check(door.JoinTarget == (Bare, port),
+        ctx.Check(door.JoinTarget == new NetEndpoint(Bare, port),
             $"a bare IPv6 address keeps its last group in the host and joins on the board's port ({door.JoinTarget.Host}, {door.JoinTarget.Port})");
         int before = host.Peers.Count;
         door.OpenJoin();
@@ -1411,7 +1415,7 @@ internal static class MenuOriginalConnectionSuites
     private static void AwaitMapping(NetPlayFeature door)
     {
         var waited = System.Diagnostics.Stopwatch.StartNew();
-        while (door.PortMap == null && waited.Elapsed.TotalSeconds < 20.0)
+        while (door.Router.PortMap == null && waited.Elapsed.TotalSeconds < 20.0)
         {
             door.Step(0.0);
             System.Threading.Thread.Sleep(1);

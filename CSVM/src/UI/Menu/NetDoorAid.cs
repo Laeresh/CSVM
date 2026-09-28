@@ -66,8 +66,9 @@ public static class NetDoorAid
         return new NetPlayFeature(
             (port, maxGuests, bind) => mesh[0],
             (address, port) => throw new InvalidOperationException("the aid's host door joins nothing"),
-            port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, ExternalAddress, "aid"),
-            port => given = port);
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, ExternalAddress, "aid"),
+                port => given = port));
     }
 
     /// <summary>Opens <paramref name="door"/> as a campaign host and waits for its mapping, so the
@@ -78,7 +79,7 @@ public static class NetDoorAid
         door.OpenCoopHost(NetSeats.MaxPlayers - localPlayers);
         door.Offer(missionSeq, HostName, localPlayers);
         var waited = System.Diagnostics.Stopwatch.StartNew();
-        while (door.PortMap == null && waited.ElapsedMilliseconds < MappingWaitMs)
+        while (door.Router.PortMap == null && waited.ElapsedMilliseconds < MappingWaitMs)
         {
             door.Step(0.0);
             Thread.Sleep(1);
@@ -106,8 +107,9 @@ public static class NetDoorAid
         var host = new NetPlayFeature(
             (port, maxGuests, bind) => mesh[0],
             (address, port) => throw new InvalidOperationException("the aid's host door joins nothing"),
-            port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, ExternalAddress, "aid"),
-            port => { })
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, ExternalAddress, "aid"),
+                port => { }))
         { PlayerName = HostName };
         string[] names = { "Nathan", "Sheila" };
         var guests = new List<NetPlayFeature>();
@@ -220,7 +222,7 @@ public static class NetDoorAid
         door.Step(0.0);
         if (ready)
         {
-            door.PickCoop(door.CoopPickAirframe, true);
+            door.Pick.Set(door.Pick.Airframe, true);
             door.Step(0.0);
         }
 

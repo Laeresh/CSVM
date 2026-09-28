@@ -306,7 +306,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         // The door's pick is the guest's memory for the joined session, and a fresh join clears it.
         // Reopening from it is what carries the plane and its fit across flights and retries.
         _campaign.OpenGuest(net.Advert?.Host ?? string.Empty, flow.Progress, flow.Airframes, _stock?.Invoke(), _dataRoot,
-            net.CoopPickAirframe, net.CoopPickFit);
+            net.Pick.Airframe, net.Pick.Fit);
         _flow = new CampaignFlow(_campaign, _layout);
         _host.CloseDialog();
         _briefingReturn = OriginalScreen.CampaignCabin;
@@ -711,7 +711,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             };
 
             // The result goes first, so the flow that names the debrief already carries it.
-            net.ShowCoopResult(_debriefWon, _debriefObjectives, _debriefCash);
+            net.HostFlow.ShowResult(_debriefWon, _debriefObjectives, _debriefCash);
             net.ShowCoop(screen, shown, profile.MissionsCompleted, CampaignFeature.HangarAirframes(profile));
             return false;
         }
@@ -1390,7 +1390,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     {
         var campaign = _campaign!;
         campaign.FollowHost(flow.Progress, flow.Airframes);
-        net.PickCoop(campaign.GuestAirframe, net.CoopPickReady, campaign.GuestCoopFit);
+        net.Pick.Set(campaign.GuestAirframe, net.Pick.Ready, campaign.GuestCoopFit);
         bool ready = net.CoopReady;
         bool changed = campaign.GuestReady != ready || net.CoopFlows != _guestFlows;
         campaign.GuestReady = ready;
@@ -1456,8 +1456,8 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             return;
         }
 
-        net.PickCoop(_campaign.GuestAirframe, !net.CoopPickReady, _campaign.GuestCoopFit);
-        _campaign.GuestReady = net.CoopPickReady;
+        net.Pick.Set(_campaign.GuestAirframe, !net.Pick.Ready, _campaign.GuestCoopFit);
+        _campaign.GuestReady = net.Pick.Ready;
     }
 
     // Leaving hangs up; the shell then takes the guest back to the Connection page.

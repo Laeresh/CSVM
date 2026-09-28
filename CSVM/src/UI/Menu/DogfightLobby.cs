@@ -63,7 +63,7 @@ public sealed class DogfightLobby
 
     /// <summary>The airframe a pilot flies until it picks one: the Devastator, the original's first
     /// row.</summary>
-    public const byte DefaultAirframe = NetPlayFeature.StarterAirframe;
+    public const byte DefaultAirframe = CoopGuestPick.StarterAirframe;
 
     /// <summary>How many stock airframes the Select Plane list offers.</summary>
     public const int AirframeCount = 11;

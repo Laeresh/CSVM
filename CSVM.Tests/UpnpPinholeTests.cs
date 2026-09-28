@@ -316,33 +316,32 @@ public sealed class UpnpPinholeTests
         var closed = new List<int>();
         var door = new NetPlayFeature(
             (_, _, _) => LoopbackTransport.Mesh(1, LoopbackConditions.Perfect, new Random(1))[0],
-            (_, _) => throw new InvalidOperationException("this door joins nothing"))
-        {
-            OpenPinhole = port =>
-            {
-                Interlocked.Increment(ref asked);
-                return new UpnpPinholeResult(UpnpPinholeOutcome.Opened, port, Address, "opened", LeaseSeconds: 1);
-            },
-            ClosePinhole = closed.Add,
-        };
+            (_, _) => throw new InvalidOperationException("this door joins nothing"),
+            new RouterAccess(
+                openPinhole: port =>
+                {
+                    Interlocked.Increment(ref asked);
+                    return new UpnpPinholeResult(UpnpPinholeOutcome.Opened, port, Address, "opened", LeaseSeconds: 1);
+                },
+                closePinhole: closed.Add));
 
         door.OpenHost(1);
         var waited = Stopwatch.StartNew();
-        while ((Volatile.Read(ref asked) < 3 || door.Pinhole == null) && waited.Elapsed < TimeSpan.FromSeconds(10))
+        while ((Volatile.Read(ref asked) < 3 || door.Router.Pinhole == null) && waited.Elapsed < TimeSpan.FromSeconds(10))
         {
             door.Step(0.016);
             Thread.Sleep(10);
         }
 
         Assert.True(Volatile.Read(ref asked) >= 3, $"asked {asked} times in {waited.Elapsed}");
-        Assert.True(door.Pinhole!.Value.IsOpen);
+        Assert.True(door.Router.Pinhole!.Value.IsOpen);
         door.Close();
         int atClose = Volatile.Read(ref asked);
         Thread.Sleep(700);
 
         Assert.Equal(atClose, Volatile.Read(ref asked));
         Assert.Equal(new[] { NetPlayFeature.DefaultPort }, closed);
-        Assert.Null(door.Pinhole);
+        Assert.Null(door.Router.Pinhole);
     }
 
     // ABLE-TO-FAIL CONTROL for the one above: a pinhole that never opened is not closed.
@@ -352,21 +351,20 @@ public sealed class UpnpPinholeTests
         var closed = new List<int>();
         var door = new NetPlayFeature(
             (_, _, _) => LoopbackTransport.Mesh(1, LoopbackConditions.Perfect, new Random(1))[0],
-            (_, _) => throw new InvalidOperationException("this door joins nothing"))
-        {
-            OpenPinhole = port => new UpnpPinholeResult(UpnpPinholeOutcome.Disallowed, port, Address, "not allowed"),
-            ClosePinhole = closed.Add,
-        };
+            (_, _) => throw new InvalidOperationException("this door joins nothing"),
+            new RouterAccess(
+                openPinhole: port => new UpnpPinholeResult(UpnpPinholeOutcome.Disallowed, port, Address, "not allowed"),
+                closePinhole: closed.Add));
 
         door.OpenHost(1);
         var waited = Stopwatch.StartNew();
-        while (door.Pinhole == null && waited.Elapsed < TimeSpan.FromSeconds(10))
+        while (door.Router.Pinhole == null && waited.Elapsed < TimeSpan.FromSeconds(10))
         {
             door.Step(0.016);
             Thread.Sleep(1);
         }
 
-        Assert.Equal(UpnpPinholeOutcome.Disallowed, door.Pinhole!.Value.Outcome);
+        Assert.Equal(UpnpPinholeOutcome.Disallowed, door.Router.Pinhole!.Value.Outcome);
         door.Close();
         Assert.Empty(closed);
     }
