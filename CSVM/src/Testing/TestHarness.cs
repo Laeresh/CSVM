@@ -40,10 +40,10 @@ public static class TestHarness
     /// out of <c>.scratch/</c> into the shard's own subdirectory.</summary>
     public const int ReportSchema = 3;
 
-    /// <summary>How many orphan nodes a suite may leave past its teardown before it fails. The
-    /// catalog leaves at most 6, and a session that keeps its HUD layers leaves about 26, so the cap
-    /// sits between the two. Measurement: docs/verification.md INSTR-96.</summary>
-    public const int OrphanLeakTolerance = 16;
+    /// <summary>How many orphan nodes a suite may leave past its teardown before it fails. Every
+    /// suite in the catalog leaves none, so one stray node fails the suite that dropped it and its
+    /// verdict names the root. Measurement: docs/verification.md INSTR-96.</summary>
+    public const int OrphanLeakTolerance = 0;
 
     /// <summary>The engine errors this project currently emits that are not the harness's to fix.
     /// Every entry names the open item that owns it; when that item lands, the entry is deleted and
@@ -132,7 +132,7 @@ public static class TestHarness
             // Every suite starts from the same stream positions, so its verdict is a function of
             // the suite rather than of how many draws its predecessors left in this one process.
             Rng.Rewind();
-            int orphansAtStart = TestContext.OrphanNodeCount();
+            var orphansAtStart = TestContext.OrphanNodeIdSet();
             var watch = System.Diagnostics.Stopwatch.StartNew();
             SuiteStatus status;
             string detail = suite.What;
@@ -163,10 +163,11 @@ public static class TestHarness
             }
             watch.Stop();
             // Measured after the flush, so only nodes the suite dropped without freeing count.
-            int orphansLeft = TestContext.OrphanNodeCount() - orphansAtStart;
+            int orphansLeft = TestContext.OrphanNodeCount() - orphansAtStart.Count;
+            string orphanRoots = orphansLeft != 0 ? TestContext.DescribeNewOrphans(orphansAtStart) : "";
             if (orphansLeft > OrphanLeakTolerance && status != SuiteStatus.Skip)
             {
-                string leak = $"left {orphansLeft} orphan node(s) past its teardown, over the tolerance of {OrphanLeakTolerance}";
+                string leak = $"left {orphansLeft} orphan node(s) past its teardown, over the tolerance of {OrphanLeakTolerance}: {orphanRoots}";
                 ctx.Failures.Add(leak);
                 Log.Error("test", $"FAIL {leak}");
                 status = SuiteStatus.Fail;
@@ -216,7 +217,7 @@ public static class TestHarness
                 : "";
             // Every leftover is reported, under the tolerance too, so a small new leak is visible
             // in the run that brings it in.
-            string orphanSuffix = orphansLeft != 0 ? $" orphans_left={orphansLeft}" : "";
+            string orphanSuffix = orphansLeft != 0 ? $" orphans_left={orphansLeft} [{orphanRoots}]" : "";
             Log.Info("test", $"suite {suite.Name} {status.ToString().ToUpperInvariant()} in {wallSeconds:0.00}s{phaseSuffix}{orphanSuffix}");
         }
         var releaseWatch = System.Diagnostics.Stopwatch.StartNew();
@@ -983,6 +984,24 @@ public sealed class TestContext
     /// Zero in a release export, where the engine lists no orphans.</summary>
     internal static int OrphanNodeCount() => OrphanNodeIds().Count;
 
+    /// <summary>The live orphan node ids, the snapshot <see cref="DescribeNewOrphans"/> diffs against.</summary>
+    internal static HashSet<ulong> OrphanNodeIdSet() => new(OrphanNodeIds());
+
+    /// <summary>Names each new orphan subtree root absent from <paramref name="before"/> with its
+    /// node count. The verdict line then points at the code that dropped it.</summary>
+    internal static string DescribeNewOrphans(HashSet<ulong> before)
+    {
+        var roots = new List<string>();
+        foreach (ulong id in OrphanNodeIds())
+        {
+            if (!before.Contains(id) && GodotObject.InstanceFromId(id) is Node node && node.GetParent() == null)
+            {
+                roots.Add($"{node.GetType().Name} '{node.Name}' ({CountSubtree(node)})");
+            }
+        }
+        return string.Join(", ", roots);
+    }
+
     /// <summary>Clears everything a suite may leave behind on this context: the build knobs and the
     /// world-build/disposal attribution. Called once per suite in <see cref="TestHarness.Run"/>, the
     /// same lifetime <see cref="Failures"/>/<see cref="Notes"/>/<see cref="Counts"/> already have.
@@ -1065,6 +1084,16 @@ public sealed class TestContext
             ids.Add(id.AsUInt64());
         }
         return ids;
+    }
+
+    private static int CountSubtree(Node node)
+    {
+        int count = 1;
+        foreach (var child in node.GetChildren(includeInternal: true))
+        {
+            count += CountSubtree(child);
+        }
+        return count;
     }
 
     // Times one Destroy() call. Never attributed to a suite when it happens outside one (the

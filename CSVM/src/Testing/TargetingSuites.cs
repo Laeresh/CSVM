@@ -1407,6 +1407,8 @@ internal static class TargetingSuites
         FlightController? victim = null;
         AnimRuntime? runtime = null;
         Node3D? gasbagNode = null;
+        UI.Overlays.DebugKillTarget? debugKill = null;
+        UI.Overlays.DebugKillTarget? noPilotKill = null;
         try
         {
             var live = new ProjectilePool(textures, null, null);
@@ -1440,7 +1442,7 @@ internal static class TargetingSuites
             var gasbagInst = runtime.Destructibles.Register(
                 new AnimDefinition { Name = "gasbag1", AnimName = "zep_zone_gasbag1" }, gasbagNode, 200f);
 
-            var debugKill = new UI.Overlays.DebugKillTarget(() => null, () => runtime);
+            debugKill = new UI.Overlays.DebugKillTarget(() => null, () => runtime);
 
             const int Killer = FlightRoster.ShooterIdBase + 1;
             int? downedKiller = null;
@@ -1461,11 +1463,13 @@ internal static class TargetingSuites
             debugKill.KillSource(new object(), "unrecognised", Killer);
 
             // Nothing selected: Kill() itself (not KillSource) must not throw with no pilot.
-            var noPilotKill = new UI.Overlays.DebugKillTarget(() => null, () => runtime);
+            noPilotKill = new UI.Overlays.DebugKillTarget(() => null, () => runtime);
             noPilotKill.Kill();
         }
         finally
         {
+            debugKill?.Free();
+            noPilotKill?.Free();
             victim?.Free();
             runtime?.Free();
             gasbagNode?.Free();

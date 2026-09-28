@@ -202,7 +202,7 @@ internal static class CampaignDockingSuites
         {
             runtime.ContactMask = maskWas;
             runtime.SurfaceIsWater = null;
-            zeps?.Dispose();
+            zeps?.Free();
             player?.Free();
             var members = new List<FlightController>(
                 roster?.AiAircraft ?? Array.Empty<FlightController>());

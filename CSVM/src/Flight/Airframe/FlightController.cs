@@ -2530,14 +2530,18 @@ public partial class FlightController : Node3D
         }
     }
 
-    /// <summary>Drops this aircraft's roster registrations and takes down its HUD layers and speed
-    /// cue. With <paramref name="freeNow"/> set, those detached nodes are freed in place rather than
+    /// <summary>Drops this aircraft's roster registrations and takes down its HUD layers, any readout
+    /// never attached to them, and its speed cue. With <paramref name="freeNow"/> set, those detached nodes are freed in place rather than
     /// at the frame's end. ⚠ Do not queue them at a session's own teardown. The in-engine suites run inside one
     /// frame, so that queue never flushes and every session's HUD and cue puffers outlive it.</summary>
     internal void DetachRosterBindings(ProjectilePool pool, bool freeNow)
     {
         if (Body != null)
             pool.UnregisterAircraft(Body);
+        // A rolled-back aircraft never ran _Ready, so no canvas holds the readouts built for it.
+        _pilotHud.DiscardUnattached(freeNow);
+        VersusHud = FlightHud.Loose(VersusHud, freeNow);
+        Scoreboard = FlightHud.Loose(Scoreboard, freeNow);
         if (_hudCanvas != null && GodotObject.IsInstanceValid(_hudCanvas))
         {
             Discard(_hudCanvas, freeNow);

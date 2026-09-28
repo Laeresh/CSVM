@@ -900,7 +900,9 @@ member, and it does not go here.
   list them through `ClassDB.ClassCallStatic("Node", "get_orphan_node_ids")`: the C# binding
   `Node.GetOrphanNodeIds` types the 64-bit ids as `int`, so none of them resolves.** Before the
   flush the queued frees swamped a 26-node session leak with up to +7,219 in one menu suite; after
-  it the catalog leaves 0 to 6 per suite, and a suite over `TestHarness.OrphanLeakTolerance` fails.
+  it every suite in the catalog leaves 0, `TestHarness.OrphanLeakTolerance` is 0, and a failing
+  suite's verdict names each new orphan root with its node count. A `Dispose()` on a node drops
+  only its C# wrapper, so a test node is freed with `Free()`.
 
 ## SRC, sources and documents
 

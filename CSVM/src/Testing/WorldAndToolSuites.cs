@@ -2187,12 +2187,12 @@ internal static class WorldAndToolSuites
         ctx.Check(main.AudioListenerEnable3D,
             $"the main viewport is a 3D audio listener (the untouched 1P path)");
 
-        // The default the rig has to override, proved rather than assumed.
-        using (var bare = new SubViewport())
-        {
-            ctx.Check(!bare.AudioListenerEnable3D,
-                $"a fresh SubViewport is NOT an audio listener, so each pane must set it");
-        }
+        // The default the rig has to override, proved rather than assumed. Freed, not disposed:
+        // Dispose drops only the managed wrapper and leaves the node alive.
+        var bare = new SubViewport();
+        ctx.Check(!bare.AudioListenerEnable3D,
+            $"a fresh SubViewport is NOT an audio listener, so each pane must set it");
+        bare.Free();
 
         for (int players = 2; players <= SplitScreen.MaxPlayers; players++)
         {

@@ -1116,6 +1116,7 @@ internal static class CombatSuites
         var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
         ProjectilePool? pool = null;
         Node3D? carrier = null;
+        AnimRuntime? runtime = null;
         try
         {
             var live = new ProjectilePool(null!, null, null);
@@ -1161,7 +1162,7 @@ internal static class CombatSuites
             }
 
             var factory = new CountingEmitterFactory();
-            var runtime = new AnimRuntime(AnimRuntime.NewTemplateStage(placesCalled: false))
+            runtime = new AnimRuntime(AnimRuntime.NewTemplateStage(placesCalled: false))
             {
                 EmitterFactory = factory,
             };
@@ -1194,6 +1195,7 @@ internal static class CombatSuites
         }
         finally
         {
+            runtime?.Free();
             pool?.Free();
             carrier?.Free();
         }

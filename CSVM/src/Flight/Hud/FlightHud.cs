@@ -364,6 +364,26 @@ public sealed class FlightHud
         return new MissileGaugeReadout(true, selectedHp.Index - 1, selectedHp.Ammo, selectedHp.Weapon.Name);
     }
 
+    /// <summary>Frees <paramref name="node"/> when it has no parent and answers null, or answers it
+    /// unchanged. A parented node belongs to whatever holds it.</summary>
+    public static T? Loose<T>(T? node, bool freeNow)
+        where T : Node
+    {
+        if (node == null || !GodotObject.IsInstanceValid(node) || node.GetParent() != null)
+        {
+            return node;
+        }
+        if (freeNow)
+        {
+            node.Free();
+        }
+        else
+        {
+            node.QueueFree();
+        }
+        return null;
+    }
+
     /// <summary>Builds the text block and parents every readout onto <paramref name="canvas"/> in
     /// the shipped draw order. <paramref name="versusHud"/> and <paramref name="scoreboard"/> are
     /// the two board-adjacent readouts the flight node still owns; they are threaded through
@@ -413,6 +433,19 @@ public sealed class FlightHud
             canvas.AddChild(scoreboard); // end-of-run results, drawn over everything
         if (FontTest != null)
             canvas.AddChild(FontTest); // --hud-font-test: the bitmap-font proof overlay
+    }
+
+    /// <summary>Frees every readout assembly built that <see cref="Attach"/> never parented, and
+    /// drops the reference. An aircraft removed before its first frame in the tree leaves all
+    /// of them loose, and no canvas teardown reaches a node with no parent.</summary>
+    public void DiscardUnattached(bool freeNow)
+    {
+        Compass = Loose(Compass, freeNow);
+        Gauges = Loose(Gauges, freeNow);
+        Reticle = Loose(Reticle, freeNow);
+        StuntRun = Loose(StuntRun, freeNow);
+        TargetHud = Loose(TargetHud, freeNow);
+        FontTest = Loose(FontTest, freeNow);
     }
 
     /// <summary>Binds the two weapon gauges to their persistent state, only for a system this
