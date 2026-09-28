@@ -93,7 +93,8 @@ at its first death and still counts as alive, which is a defect in the original.
 
 **A death.** [Evidence: decoded] `FUN_00498bf0`, the `0x12` death handler, decrements the dying
 pilot's `+0x40` on every peer (`0x498c41`). For the local pilot, and only while lives are below
-100, it posts a five-second HUD line (`0x498c52`..`0x498cba`): row 210 `MSG_NUM_LIVES` ("You Have
+100, it posts a five-second HUD line (`0x498c52`..`0x498cba`) in the `DAT_006eba60` colour, ahead of the
+kill lines ([`multiplayer-messages.md`](multiplayer-messages.md) "The kill lines"): row 210 `MSG_NUM_LIVES` ("You Have
 %1!d! Lives Left!") above one, row 211 `MSG_ONE_LIFE` at one, and row 209 `MSG_NO_LIVES` at zero.
 No message carries a pilot's lives: each peer counts them from the death reports.
 

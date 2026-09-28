@@ -127,6 +127,10 @@ public enum NetMessageType : ushort
     /// <summary>A campaign film a co-op host started or ended, sent to every guest so each plays
     /// the same film and ends it with the host's.</summary>
     CoopFilm = 0x005A,
+
+    /// <summary>The host's word on a match death, sent to every guest so each posts the same kill
+    /// lines.</summary>
+    DeathNotice = 0x005C,
 }
 
 /// <summary>Which campaign film a <see cref="CoopFilmMessage"/> names.</summary>
@@ -656,6 +660,47 @@ public readonly record struct DeathMessage(
         writer.WriteByte(KillerSeat);
         writer.WriteUInt16((ushort)Cause);
         writer.WriteUInt32(SourceId);
+        return writer.Close();
+    }
+}
+
+/// <summary>
+/// A match death as the host decided it, sent to every guest so each posts the kill lines once.
+/// The owner's <see cref="DeathMessage"/> is relayed to everyone but its reporter, so it cannot
+/// be the post. Reliable. The cause is the one the host scored, so a death with no seat to charge
+/// reads <see cref="NetDeathCause.Suicide"/>.</summary>
+public readonly record struct DeathNoticeMessage(byte VictimSeat, byte KillerSeat, NetDeathCause Cause)
+    : INetMessage<DeathNoticeMessage>
+{
+    /// <summary>The fixed width of the message, header included.</summary>
+    public const int Size = 8;
+
+    /// <inheritdoc/>
+    public static NetMessageType Type => NetMessageType.DeathNotice;
+
+    /// <inheritdoc/>
+    public static NetReliability Reliability => NetReliability.Reliable;
+
+    /// <inheritdoc/>
+    public static bool TryRead(ReadOnlySpan<byte> from, out DeathNoticeMessage message)
+    {
+        message = default;
+        var reader = new NetMessageReader(from);
+        if (!reader.Is(Size) || reader.Type != Type)
+            return false;
+
+        message = new DeathNoticeMessage(
+            reader.ReadByte(), reader.ReadByte(), (NetDeathCause)reader.ReadUInt16());
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public int Write(Span<byte> into)
+    {
+        var writer = new NetMessageWriter(into, Type);
+        writer.WriteByte(VictimSeat);
+        writer.WriteByte(KillerSeat);
+        writer.WriteUInt16((ushort)Cause);
         return writer.Close();
     }
 }
@@ -1274,6 +1319,7 @@ public static class NetMessage
         NetMessageType.CutsceneSkip => CutsceneSkipMessage.Reliability,
         NetMessageType.CoopWingman => CoopWingmanMessage.Reliability,
         NetMessageType.CoopFilm => CoopFilmMessage.Reliability,
+        NetMessageType.DeathNotice => DeathNoticeMessage.Reliability,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "no such message type"),
     };
 

@@ -462,6 +462,36 @@ public class FlightHudMappingTests
         Assert.Equal("You Have 2 Lives Left!", HudMessages.LivesLine(strings, 2));
     }
 
+    [Fact]
+    public void ADogfightDeathWordsTheVictimOverItsKillerForEachCause()
+    {
+        var strings = Messages.Parse(
+            "{\"language_id\":1033,\"entries\":["
+            + "{\"key\":\"MSG_DESTROYED_BY_X\",\"id\":214,\"value\":\"Destroyed by %1\"},"
+            + "{\"key\":\"MSG_UNKNOWN\",\"id\":6007,\"value\":\"Unknown\"},"
+            + "{\"key\":\"MSG_MP_SUICIDE\",\"id\":7063,\"value\":\"%1 Self-Destroyed\"},"
+            + "{\"key\":\"MSG_MP_KILLED_X_ZEP\",\"id\":7064,\"value\":\"Killed by %1 Zeppelin\"},"
+            + "{\"key\":\"MSG_MP_KILLED_X_TURRET\",\"id\":7065,\"value\":\"Killed by %1 Turret\"}]}");
+
+        Assert.Equal(("Ace", "Destroyed by Rook"),
+            HudMessages.MatchKillLines(strings, HudMessages.MatchDeath.Killer, "Ace", "Rook"));
+        Assert.Equal(("Ace Self-Destroyed", (string?)null),
+            HudMessages.MatchKillLines(strings, HudMessages.MatchDeath.NoKiller, "Ace", null));
+        Assert.Equal(("Ace", "Killed by Rook Zeppelin"),
+            HudMessages.MatchKillLines(strings, HudMessages.MatchDeath.Zeppelin, "Ace", "Rook"));
+        Assert.Equal(("Ace", "Killed by Rook Turret"),
+            HudMessages.MatchKillLines(strings, HudMessages.MatchDeath.Turret, "Ace", "Rook"));
+
+        // An unnamed pilot is the record's default name, and only the killer arm cuts at 48.
+        Assert.Equal(("Unknown", "Destroyed by Unknown"),
+            HudMessages.MatchKillLines(strings, HudMessages.MatchDeath.Killer, "", null));
+        string longName = new('x', 60);
+        Assert.Equal(48, HudMessages.MatchKillLines(strings, HudMessages.MatchDeath.Killer, "Ace", longName).Under!.Length);
+
+        // ABLE-TO-FAIL CONTROL: a death with no killer names nobody even when one is passed.
+        Assert.Null(HudMessages.MatchKillLines(strings, HudMessages.MatchDeath.NoKiller, "Ace", "Rook").Under);
+    }
+
     // The two rows the prompt reads, as messages.json carries them (ids 181 and 182).
     private static Messages AutoLandMessages() => Messages.Parse(
         "{\"language_id\":1033,\"entries\":["

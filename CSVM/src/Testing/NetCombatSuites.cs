@@ -6,6 +6,7 @@ using CSVM.Flight.Airframe;
 using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
+using CSVM.Mech3;
 using CSVM.Net;
 using CSVM.Session;
 using CSVM.Session.Launch;
@@ -298,7 +299,8 @@ internal static class NetCombatSuites
         "two pairs of sessions in one process on the lobby's lives rules: with two lives a guest's "
         + "seat comes back after its first death and stays down after its second on both machines, "
         + "the host refusing its ask, the spent seat watching the host's aircraft and the match "
-        + "ending on reason 4 with the lives and ending lines in the guest's pane, and with Auto "
+        + "ending on reason 4, the guest's pane reading its lives line under the kill lines and the "
+        + "ending over them, and with Auto "
         + "Respawn off a downed seat stays down past the crash camera until its pilot presses Fire "
         + "Guns, then comes back through the host's grant")]
     internal static void TheLobbysLivesRule(TestContext ctx)
@@ -350,6 +352,81 @@ internal static class NetCombatSuites
         {
             ambient.Restore();
         }
+    }
+
+    [Suite("net-kill-line",
+        "a host session and a guest session in one process: each Dogfight death posts the "
+        + "original's kill lines once on both machines, the victim above Destroyed by the killer, "
+        + "a death with no killer as Self-Destroyed and a turret owner's kill as Killed by its Turret")]
+    internal static void EveryMachinePostsTheKill(TestContext ctx)
+    {
+        var spec = MatchSpec(ctx, out _);
+        var ambient = Ambient.Save();
+        var ends = new List<Ends>();
+        try
+        {
+            var peers = Pair(ctx, spec, 6307, ends);
+            if (peers == null)
+            {
+                return;
+            }
+
+            foreach (var rig in peers.SelectMany(p => p.SeatRigs))
+            {
+                if (rig.Controller is { } pilot)
+                {
+                    pilot.AutoRespawnAfter = QuickRespawn;
+                }
+            }
+
+            var host = peers[0];
+            var guest = peers[1];
+            KillLines(ctx, peers, "the guest kills the host", "host", "Destroyed by guest1",
+                () => host.SeatRigs[0].Controller!.DebugForceCrash(host.SeatRigs[1].Controller!.PlayerIndex));
+            KillLines(ctx, peers, "the host kills the guest", "guest1", "Destroyed by host",
+                () => guest.SeatRigs[1].Controller!.DebugForceCrash(guest.SeatRigs[0].Controller!.PlayerIndex));
+            KillLines(ctx, peers, "the guest crashes with nobody to charge", "guest1 Self-Destroyed", null,
+                () => guest.SeatRigs[1].Controller!.DebugForceCrash());
+            KillLines(ctx, peers, "a turret owner's kill", "guest1", "Killed by host Turret",
+                () => guest.NetLink!.Send(guest.NetLink.HostPeer,
+                    new DeathMessage(1, 0, NetDeathCause.TurretOwner, 0u), NetChannels.Events));
+        }
+        finally
+        {
+            foreach (var end in Enumerable.Reverse(ends))
+            {
+                end.Close();
+            }
+
+            ambient.Restore();
+        }
+    }
+
+    // One death on clean stacks: each machine's own pane then reads exactly the decoded lines,
+    // top line newest. A relayed copy posted twice, or one machine silent, fails it.
+    private static void KillLines(TestContext ctx, GameSession[] peers, string what, string top,
+        string? under, Action kill)
+    {
+        Lockstep(GrantSteps, peers);
+        var stacks = peers.Select((p, i) => p.SeatRigs[i].Controller?.MessageStack).ToArray();
+        foreach (var stack in stacks)
+        {
+            stack?.Clear();
+        }
+
+        kill();
+        Lockstep(SettleSteps, peers);
+        var want = under == null ? new[] { top } : new[] { top, under };
+        // The victim's own crash notice is the ground impact's line, not the kill's, and is left out.
+        string crash = Messages.Load(ctx.MessagesPath).Get(HudMessages.CrashKey);
+        string[] Read(HudMessages? stack) => stack == null
+            ? new[] { "no stack" }
+            : Enumerable.Range(0, HudMessages.Slots).Select(stack.LineAt)
+                .OfType<string>().Where(l => l.Length > 0 && l != crash).ToArray();
+        var reads = stacks.Select(Read).ToArray();
+        string reading = string.Join(" | ", reads.Select(r => string.Join(" / ", r)));
+        ctx.Check(reads.All(r => r.SequenceEqual(want)),
+            $"{what}: both machines post {string.Join(" / ", want)} once ({reading})");
     }
 
     // One lobby Dogfight, launched through both doors, whose host then goes: its link cut, or its
@@ -521,6 +598,9 @@ internal static class NetCombatSuites
         ctx.Check(peers.All(p => !p.Versus!.Completed && p.MatchEnd == NetMatchEnd.Running)
                   && guest.SeatRigs[1].Controller!.Watching == null,
             $"ABLE-TO-FAIL CONTROL: with a life left the match runs and the seat watches nobody ({string.Join(", ", peers.Select(p => p.MatchEnd))})");
+        string first = PaneLines(guest.SeatRigs[1].Controller!);
+        ctx.Check(first.StartsWith("guest1 / Destroyed by host / You Have ONE Life Left!", StringComparison.Ordinal),
+            $"the guest's pane reads the kill lines over its lives line, the handler's order ({first})");
 
         int grants = peers[0].SpawnsTaken;
         guest.SeatRigs[1].Controller!.DebugForceCrash(guest.SeatRigs[0].Controller!.PlayerIndex);
@@ -536,12 +616,16 @@ internal static class NetCombatSuites
             $"and the spent seat watches the host's aircraft, the one still flying ({guest.SeatRigs[1].Controller!.Watching?.PlayerIndex})");
         ctx.Check(peers.All(p => p.Versus!.Completed && p.MatchEnd == NetMatchEnd.NobodyLeft),
             $"one pilot with lives left ends the match on reason 4 on both machines ({string.Join(", ", peers.Select(p => p.MatchEnd))})");
-        string lines = guest.SeatRigs[1].Controller!.MessageStack is { } stack
+        // Five lines into four slots: the ending and the kill lines push the lives line out.
+        string lines = PaneLines(guest.SeatRigs[1].Controller!);
+        ctx.Check(lines.StartsWith("Game Over: / No Enemies Left / guest1 / Destroyed by host", StringComparison.Ordinal),
+            $"and the guest's pane reads the ending over the last kill ({lines})");
+    }
+
+    private static string PaneLines(FlightController pilot) =>
+        pilot.MessageStack is { } stack
             ? string.Join(" / ", Enumerable.Range(0, HudMessages.Slots).Select(stack.LineAt))
             : "no stack";
-        ctx.Check(lines.Contains("Out of Lives", StringComparison.Ordinal) && lines.Contains("No Enemies Left", StringComparison.Ordinal),
-            $"and the guest's pane reads its last life and the ending ({lines})");
-    }
 
     // Auto Respawn off: the crash camera's three seconds pass and the seat stays down. Its pilot's
     // Fire Guns press is what brings it back, through the host like any other return.

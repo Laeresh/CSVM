@@ -251,7 +251,7 @@ since a wildcard bind is what raises a firewall dialog.
 ## src/Net/NetMessages.cs
 The vocabulary: `NetMessageType` (one word per message), the death, spawn and match-end enums
 taken from the original's own values, `NetDirectorEvent` (the director message's codes and id
-layouts), `NetWorldEvent` (the world event's codes), `NetPositionalStart` (the positional start's kinds), `NetSessionKind`, and the message structs, the host's spawn grant, a seat's ask, the clock ping and the lobby's `SessionAdvertMessage` among them. Each is a value type implementing `INetMessage<TSelf>`,
+layouts), `NetWorldEvent` (the world event's codes), `NetPositionalStart` (the positional start's kinds), `NetSessionKind`, and the message structs, the host's spawn grant, a seat's ask, the host's death notice, the clock ping and the lobby's `SessionAdvertMessage` among them. Each is a value type implementing `INetMessage<TSelf>`,
 which carries its type word and its `INetTransport.cs` reliability class as static abstracts, so
 a sender reads the class off the type without constructing anything. `NetMessage` holds what they
 share: the four-byte header, the no-seat and no-spawn-entry markers, the aircraft-state width

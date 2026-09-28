@@ -67,6 +67,22 @@ public sealed partial class HudMessages : Control
     /// <summary>"No Enemies Left", row 7067, the second of them.</summary>
     public const string AllAloneKey = "MSG_MP_ALL_ALONE";
 
+    /// <summary>"Destroyed by %1", row 214, a Dogfight kill's second line with the killer's name
+    /// (<c>FUN_0059cd70(.., 0x31, 0xd6, ..)</c> at <c>0x498d20</c>).</summary>
+    public const string DestroyedByKey = "MSG_DESTROYED_BY_X";
+
+    /// <summary>"%1 Self-Destroyed", row 7063, the one line of a Dogfight death with no killer.</summary>
+    public const string SelfDestroyedKey = "MSG_MP_SUICIDE";
+
+    /// <summary>"Killed by %1 Zeppelin", row 7064, a zeppelin part's kill.</summary>
+    public const string KilledByZeppelinKey = "MSG_MP_KILLED_X_ZEP";
+
+    /// <summary>"Killed by %1 Turret", row 7065, a turret owner's kill.</summary>
+    public const string KilledByTurretKey = "MSG_MP_KILLED_X_TURRET";
+
+    /// <summary>"Unknown", row 6007, the name a pilot record starts with and keeps if never named.</summary>
+    public const string UnknownKey = "MSG_UNKNOWN";
+
     // The placement, from FUN_00458a10: x is 0.5 of the display width (0x006032e0) with the
     // centring flag set (the text object's +0x1044, read at 0x005c7e4f), y is 0.2 of its height
     // (0x006034fc), and each further slot sits 18 px lower (FUN_00458530's `+ 0x12`). The 18 px and
@@ -103,6 +119,22 @@ public sealed partial class HudMessages : Control
 
         /// <summary>Neither: the neutral team, which takes the stack's default colour.</summary>
         Neutral,
+    }
+
+    /// <summary>The four causes of a Dogfight death, the cause field of the <c>0x12</c> report.</summary>
+    public enum MatchDeath
+    {
+        /// <summary>Cause 1, a pilot's kill.</summary>
+        Killer,
+
+        /// <summary>Cause 2, nobody to charge: a crash, a mid-air, or a pilot's own rounds.</summary>
+        NoKiller,
+
+        /// <summary>Cause 3, a zeppelin part's kill.</summary>
+        Zeppelin,
+
+        /// <summary>Cause 4, a turret owner's kill.</summary>
+        Turret,
     }
 
     /// <summary>Whether a victim counts as an aeroplane, which is what decides between the
@@ -194,9 +226,39 @@ public sealed partial class HudMessages : Control
         : livesLeft == 1 ? Text(strings, OneLifeKey)
         : Messages.Fill(Text(strings, NumLivesKey), livesLeft.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
-    /// <summary>Posts <see cref="LivesLine"/> into the dying pilot's own pane, in its own colour.</summary>
+    /// <summary>Posts <see cref="LivesLine"/> into the dying pilot's own pane, in the colour the
+    /// death handler posts all its lines in (<c>DAT_006eba60</c>, the enemy arm).</summary>
     public static void PostLivesLeft(HudMessages stack, Messages? strings, int livesLeft) =>
-        stack.Post(LivesLine(strings, livesLeft), Side.Friendly);
+        stack.Post(LivesLine(strings, livesLeft), Side.Enemy);
+
+    /// <summary>The lines one Dogfight death posts, top line first. That is the victim's name over
+    /// the killer's line, or one Self-Destroyed line when nobody killed it. Every machine
+    /// composes the same pair, since the names are the pilots' own and not the viewer's.
+    /// Decode: docs/org/multiplayer-messages.md "The death report".</summary>
+    public static (string Top, string? Under) MatchKillLines(Messages? strings, MatchDeath cause,
+        string? victim, string? killer)
+    {
+        string victimName = NameOr(strings, victim);
+        string killerName = NameOr(strings, killer);
+        return cause switch
+        {
+            MatchDeath.NoKiller => (Messages.Fill(Text(strings, SelfDestroyedKey), victimName), null),
+            MatchDeath.Zeppelin => (victimName, Messages.Fill(Text(strings, KilledByZeppelinKey), killerName)),
+            MatchDeath.Turret => (victimName, Messages.Fill(Text(strings, KilledByTurretKey), killerName)),
+            // Only this arm fills a bounded 0x31-byte buffer, so only it is cut rather than split.
+            _ => (victimName, Clip(Messages.Fill(Text(strings, DestroyedByKey), killerName))),
+        };
+    }
+
+    /// <summary>Posts <see cref="MatchKillLines"/> into one pane's stack, both in the enemy arm. The
+    /// killer's line goes first so the victim's name reads above it (<c>0x498eae</c>-<c>0x498ee8</c>).</summary>
+    public static void PostMatchKill(HudMessages stack, Messages? strings, MatchDeath cause,
+        string? victim, string? killer)
+    {
+        var (top, under) = MatchKillLines(strings, cause, victim, killer);
+        stack.Post(under, Side.Enemy);
+        stack.Post(top, Side.Enemy);
+    }
 
     /// <summary>Posts reason 4's ending so "Game Over:" reads above "No Enemies Left", both in the
     /// stack's default colour.</summary>
@@ -311,6 +373,12 @@ public sealed partial class HudMessages : Control
     }
 
     private static string Text(Messages? strings, string key) => strings?.Get(key) ?? key;
+
+    private static string NameOr(Messages? strings, string? name) =>
+        name is { Length: > 0 } given ? given : Text(strings, UnknownKey);
+
+    private static string Clip(string line) =>
+        line.Length > WholeLineChars ? line[..WholeLineChars] : line;
 
     // sprintf("%s %s", name, message): an unnamed victim keeps the leading space the original
     // writes, since the empty name is a string it formats with, not a case it skips.

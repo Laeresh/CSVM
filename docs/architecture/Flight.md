@@ -744,20 +744,19 @@ The per-pane Dogfight HUD: a compact status line (remaining time, this pane's ki
 leader's tag) in `StuntRunHud`'s run-status slot, and one marker per living opponent rig, either an
 on-screen tag or `EdgeMarker`'s arrow and bearing in that opponent's own `SplitScreen.PlayerColor`.
 `Build` binds the match and this pane's own camera; `HumanFlightAdapter` attaches the live rig list
-and `FlightController` feeds the pose each frame. A kill has no banner of its own here: `KillLine`
-words the match's version of it and `HudMessages` shows it, the one message element the original
-has. The per-opponent marker is CSVM's splitscreen answer to the original's radar; the shape's
+and `FlightController` feeds the pose each frame. A kill has no banner of its own here: `HudMessages`
+words and shows it, the one message element the original has. The per-opponent marker is CSVM's splitscreen answer to the original's radar; the shape's
 provenance is in [../org/targeting.md](../org/targeting.md).
 
 ## src/Flight/Hud/HudMessages.cs
 The original's one centred HUD message element: four slots a fifth of the way down the pane, newest
-in slot 0, each carrying its own colour and its own five seconds, a newer line pushing the older
-ones down with their remaining time and a re-post of slot 0 refreshing it rather than duplicating
-it. `KillLine` words one death as the reading pane sees it (its own pilot by name, a wingman with
-no name, any other aeroplane by its title, anything else destroyed), `SideOf` picks the colour arm
-off the victim's team, `WordsKillLine` keeps a hull flown into the world off that line, and
-`PostCrash`/`PostTimeExpired` are the two notices that are not a death. All static, so a suite
-asserts the decode with no `Control`. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md).
+in slot 0, each with its own colour and five seconds; a newer line pushes the older ones down and
+a re-post of slot 0 refreshes it. `KillLine` words one death as the reading pane sees it (its own
+pilot by name, a wingman with no name, any other aeroplane by its title, anything else destroyed),
+`SideOf` picks the colour arm off the victim's team, `WordsKillLine` keeps a hull flown into the
+world off that line, `PostCrash`/`PostTimeExpired` are the two notices that are not a death, and
+`MatchKillLines` words a Dogfight death the same on every machine. All static, so a suite asserts
+the decode with no `Control`. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md).
 
 ## src/Flight/Hud/PromptLine.cs
 A control prompt's own centred line, three tenths of the way down the pane, in the landings rig's

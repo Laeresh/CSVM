@@ -2934,6 +2934,18 @@ public partial class GameSession : Node3D
         // ⚠ The roster hook too: an aircraft a wave releases never passes through the _rigs loop.
         void PostKillLine(FlightController victim, int victimId, int? killer)
         {
+            // A seat's death in a match takes the Dogfight death lines, which post on every death,
+            // crashes included. On the wire the host's notice posts them, never this report.
+            if (_versus is { } m && victimId >= 0 && victimId < m.PlayerCount)
+            {
+                if (_netSeats.Count == 0)
+                {
+                    PostSplitScreenDeath(victimId, killer is int k && k >= 0 && k < m.PlayerCount ? k : null);
+                }
+
+                return;
+            }
+
             if (!HudMessages.WordsKillLine(victim))
             {
                 return;
@@ -2945,16 +2957,7 @@ public partial class GameSession : Node3D
                 {
                     continue;
                 }
-                // Dogfight words a death by seat, so the gate is the VICTIM being one. The decoded
-                // post reads nothing off the killer, and an unattributed death (a mid-air, the
-                // ground) still posts its line. An AI in a match keeps the decoded wording.
-                if (_versus is { } m && victimId >= 0 && victimId < m.PlayerCount)
-                {
-                    int? seat = killer is int k && k >= 0 && k < m.PlayerCount ? k : null;
-                    stack.Post(VersusHud.KillLine(seat, victimId),
-                        HudMessages.SideOf(victim.Team, viewer.Team));
-                    continue;
-                }
+                // An AI in a match keeps the single-player wording.
                 HudMessages.PostKill(stack, weaponMessages, victim, viewer.Team,
                     ReferenceEquals(victim, viewer), _pilotName);
             }
@@ -4157,6 +4160,8 @@ public partial class GameSession : Node3D
         net.On<Net.DamageMessage>((_, damage) => TakeDamage(damage));
         net.On<Net.DeathMessage>((_, death) => TakeDeath(death));
         net.On<Net.ScoreMessage>((_, score) => TakeScore(score));
+        net.On<Net.DeathNoticeMessage>((_, notice) =>
+            PostDeathNotice(notice.VictimSeat, notice.KillerSeat, notice.Cause));
         if (net.IsHost)
         {
             // A hit is addressed to one machine, everything else is news for the whole field.
@@ -4377,7 +4382,8 @@ public partial class GameSession : Node3D
 
         int victim = death.VictimSeat;
         int killer = death.KillerSeat < match.PlayerCount ? death.KillerSeat : -1;
-        if (killer < 0 || death.Cause == Net.NetDeathCause.Suicide)
+        bool charged = killer >= 0 && death.Cause != Net.NetDeathCause.Suicide;
+        if (!charged)
         {
             match.RegisterDeath(victim);
         }
@@ -4392,12 +4398,78 @@ public partial class GameSession : Node3D
             SendScore(killer);
         }
 
+        // Sent between the scores and the ending on one reliable channel. Every machine then posts
+        // the lives line, the kill lines and the ending in the original's order.
+        var notice = new Net.DeathNoticeMessage((byte)victim,
+            charged ? (byte)killer : Net.NetMessage.NoSeat,
+            charged ? death.Cause : Net.NetDeathCause.Suicide);
+        _net.Broadcast(notice, Net.NetChannels.Events);
+        PostDeathNotice(notice.VictimSeat, notice.KillerSeat, notice.Cause);
+
         // ⚠ The ending goes out AFTER the scores that settled the round, never from the match's
         // completion event, which fires before them. A guest whose match already reads completed
         // drops every score behind it, and its board would then name a different winner.
         if (match.Completed && _matchEnd == Net.NetMatchEnd.Running)
         {
             SendMatchState();
+        }
+    }
+
+    // A splitscreen match's death in every pane, the seats named by their player tags. The match
+    // handler subscribed first, so the death is already counted for the lives line.
+    private void PostSplitScreenDeath(int victim, int? killer)
+    {
+        PostLivesLines();
+        foreach (var pane in _rigs)
+        {
+            if (pane.Controller?.MessageStack is { } stack)
+            {
+                HudMessages.PostMatchKill(stack, _flightStrings,
+                    killer != null ? HudMessages.MatchDeath.Killer : HudMessages.MatchDeath.NoKiller,
+                    UI.Boards.SplitScreen.PlayerTag(victim),
+                    killer is int k ? UI.Boards.SplitScreen.PlayerTag(k) : null);
+            }
+        }
+    }
+
+    // A match death as the host decided it, posted into every local pane once: the host from its
+    // own scoring, a guest from the notice. The dying pilot's lives line goes in first, below.
+    private void PostDeathNotice(int victim, int killer, Net.NetDeathCause cause)
+    {
+        PostLivesLines();
+        var death = cause switch
+        {
+            Net.NetDeathCause.Suicide => HudMessages.MatchDeath.NoKiller,
+            Net.NetDeathCause.ZeppelinPart => HudMessages.MatchDeath.Zeppelin,
+            Net.NetDeathCause.TurretOwner => HudMessages.MatchDeath.Turret,
+            _ => HudMessages.MatchDeath.Killer,
+        };
+        string? victimName = victim < _netSeats.Count ? _netSeats[victim].Callsign : null;
+        string? killerName = killer < _netSeats.Count ? _netSeats[killer].Callsign : null;
+        foreach (var pane in _rigs)
+        {
+            if (pane.Controller?.MessageStack is { } stack)
+            {
+                HudMessages.PostMatchKill(stack, _flightStrings, death, victimName, killerName);
+            }
+        }
+    }
+
+    // Every seat's lives line still owed, ahead of the kill lines, since the original's handler
+    // posts it first. The match step's own pass then finds nothing left to post.
+    private void PostLivesLines()
+    {
+        if (_versus is not { Lives: > 0 } match)
+        {
+            return;
+        }
+
+        for (int seat = 0; seat < _seatRigs.Count; seat++)
+        {
+            if (_seatRigs[seat].Controller is { } pilot)
+            {
+                PostLivesLeft(match, seat, pilot);
+            }
         }
     }
 

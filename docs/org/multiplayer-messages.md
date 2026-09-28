@@ -136,6 +136,38 @@ at `00496bba`. The team chat arm of `FUN_00499a50` compares the same field.
 So the friendly-fire arm is correct as written and needs no team lookup: in an un-teamed match the
 slot holds distinct per-pilot indices, two pilots never match, and the arm cannot fire.
 
+### The kill lines
+
+[Evidence: decoded] `FUN_00498bf0` posts the death's lines itself, so every peer posts them, the
+dying pilot's own included, on every death, a crash included. The single-player kill line
+(`vehicleDamage.md` "The kill message") is gated off in a network game and never adds to these.
+A name is the remote record's CString at `+0x34`, which `FUN_00499c90` starts as row 6007
+`MSG_UNKNOWN` ("Unknown"). The handler composes into two 0x31-byte stack buffers, a top line and a
+second line, switched on the cause at `+0xc` through the jump table at `0x499028`:
+
+| Cause | Top line | Second line |
+|---|---|---|
+| 1, a killer | the victim's name (`sprintf "%s"` at `0x498d0a`) | row 214 `MSG_DESTROYED_BY_X` "Destroyed by %1" with the killer's name, `FUN_0059cd70(buf, 0x31, 0xd6, ..)` at `0x498d20`, so cut at 48 characters |
+| 2, no killer | row 7063 `MSG_MP_SUICIDE` "%1 Self-Destroyed" with the victim's name (`0x498d91`..`0x498da8`) | none |
+| 3, a zeppelin part | the victim's name | row 7064 `MSG_MP_KILLED_X_ZEP` "Killed by %1 Zeppelin" with the team record's `+8` name (`FUN_0046e0f0`), at `0x498dfd` |
+| 4, a turret owner | the victim's name | row 7065 `MSG_MP_KILLED_X_TURRET` "Killed by %1 Turret" with the owner's `+0x34`, at `0x498e70` |
+
+The second line is posted first and only when non-empty (`0x498eae`..`0x498ecf`), then the top
+line (`0x498ed7`..`0x498ee8`), so the victim's name reads above "Destroyed by". Both go through
+`FUN_004588e0(line, 5.0, DAT_006eba60, DAT_006eba60)`: the HUD message stack, five seconds, in the
+colour global the single-player kill line takes for a team above the player's. The Limited Lives
+line (`0x498c52`..`0x498cba`, same colour) is posted before them and so reads below them. Row 7003
+`MSG_DESTROYED_BY` ("was destroyed by") has no reference in the program: a search for the operand
+`0x1b5b` finds none. After the posts the handler plays the combat voice (`FUN_004afd00`, codes
+`0x14`..`0x17`), plays a remote victim's wreck, and on the host runs the score table.
+
+The remake posts these lines from the host's decision rather than from each machine's copy of the
+report, since a relayed report never returns to the machine that sent it. The host scores the
+death, sends the scores, then sends `0x5C`, the death notice, and posts the lines itself; each
+guest posts them from the notice, after the lives line the scores produced. A pilot is named by
+its seat's callsign. Cause 3 names the owner's seat, since the remake's Dogfight has no teams.
+Splitscreen Dogfight posts the same lines in every pane, named by player tag.
+
 ## The zeppelin state packet
 
 `FUN_0049adf0` sends type `0x1e` unguaranteed on a fixed **0.5-second** cadence (`_DAT_0071d238`
@@ -232,7 +264,7 @@ score, `0x17` match state, `0x22` hit and `0x27` seat roster. Damage, spawn, the
 director transition, the join handshake and a seat's ask to be spawned again have no
 counterpart, so they are minted at `0x40`, `0x41`, `0x42`, `0x43` and `0x44`, above the ceiling
 above. The host-owned world's four (AI state, AI fire, a guest's hit claim on an AI, and a world
-event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, and the lobby's co-op film at `0x5A`. The handshake carries the master seed, the host's clock and the seat the joining peer was
+event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, and a match's death notice at `0x5C`. The handshake carries the master seed, the host's clock and the seat the joining peer was
 given; the original needs none of the three, because it draws from no shared stream and hands
 out no seat. The ask carries a seat and nothing else: the original's client takes its own
 respawn, while here the host owns every placement and answers the ask with a spawn event.

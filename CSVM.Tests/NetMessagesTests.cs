@@ -905,6 +905,33 @@ public class NetMessagesTests
     }
 
     [Fact]
+    public void ADeathNoticeRoundTripsVictimKillerAndCauseInEightBytes()
+    {
+        Assert.Equal(8, DeathNoticeMessage.Size);
+        Span<byte> buffer = stackalloc byte[DeathNoticeMessage.Size];
+        foreach (var sent in new[]
+        {
+            new DeathNoticeMessage(1, 0, NetDeathCause.Killer),
+            new DeathNoticeMessage(3, NetMessage.NoSeat, NetDeathCause.Suicide),
+            new DeathNoticeMessage(0, 2, NetDeathCause.TurretOwner),
+        })
+        {
+            Assert.Equal(DeathNoticeMessage.Size, sent.Write(buffer));
+            Assert.True(DeathNoticeMessage.TryRead(buffer, out var got));
+            Assert.Equal(sent, got);
+        }
+
+        Assert.Equal(0x5C, (int)NetMessageType.DeathNotice);
+        Assert.Equal(NetReliability.Reliable, NetMessage.ReliabilityOf(NetMessageType.DeathNotice));
+
+        // ABLE-TO-FAIL CONTROL: the owner's own death report is not the host's notice.
+        Span<byte> report = stackalloc byte[DeathMessage.Size];
+        new DeathMessage(1, 0, NetDeathCause.Killer, 0u).Write(report);
+        Assert.False(DeathNoticeMessage.TryRead(report, out _));
+        Assert.False(DeathNoticeMessage.TryRead(report[..DeathNoticeMessage.Size], out _));
+    }
+
+    [Fact]
     public void ACoopWingmanRoundTripsTheAirframeAndItsFitInTwentyBytes()
     {
         Assert.Equal(20, CoopWingmanMessage.Size);
