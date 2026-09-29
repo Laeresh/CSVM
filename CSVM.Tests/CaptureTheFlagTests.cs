@@ -10,12 +10,19 @@ namespace CSVM.Tests;
 /// <summary>
 /// Capture the Flag off-engine. <see cref="FlagMatch"/> takes an enemy flag at its base or any
 /// floating flag within 25 m. A carried flag goes home at the carrier's base, and the first asker
-/// wins. A downed carrier's flag floats and its throw ends at 15 s. A capture scores 5 and a return
-/// 1, and the two flag messages round-trip.
+/// wins. A downed carrier's flag floats and its throw ends at 15 s. A capture scores
+/// <c>score_enemy_flag</c> and a return <c>score_return_flag</c>, and the two flag messages
+/// round-trip.
 /// </summary>
 [Trait("Tier", "Quick")]
 public sealed class CaptureTheFlagTests
 {
+    // The five values the shipped player.zrd authors over the fallbacks (docs/org/multiplayer-scoring.md).
+    private static readonly MatchScores Shipped = MatchScores.Fallback with
+    {
+        Kill = 2, Suicide = -2, HullLoss = 10, FlagReturn = 8, FlagCapture = 10,
+    };
+
     private static readonly Vector3 RedHome = new(-1000f, 50f, -1000f);
     private static readonly Vector3 BlueHome = new(-3000f, 50f, -1000f);
 
@@ -55,25 +62,26 @@ public sealed class CaptureTheFlagTests
     }
 
     [Fact]
-    public void ACaptureScoresFiveAndAReturnScoresOneAndAFloatingReturnScoresNothing()
+    public void ACaptureAndAReturnScoreTheirKeysAndAFloatingReturnScoresNothing()
     {
         var flags = Match();
         flags.Decide(1, FlagAsk.Take, 2);
         var capture = flags.Decide(1, FlagAsk.Home, 2)!.Value;
-        Assert.Equal(FlagMatch.CaptureScore, FlagMatch.Points(capture, TeamOf));
+        Assert.Equal(Shipped.FlagCapture, FlagMatch.Points(capture, TeamOf, Shipped));
+        Assert.Equal(MatchScores.Fallback.FlagCapture, FlagMatch.Points(capture, TeamOf, MatchScores.Fallback));
 
         flags.Decide(1, FlagAsk.Take, 2);
         flags.Drop(2, RedHome, Vector3.Up, RedHome.Y);
         var caught = flags.Decide(1, FlagAsk.Take, 0)!.Value;
         Assert.Equal(FlagState.Floating, caught.From);
-        Assert.Equal(0, FlagMatch.Points(caught, TeamOf));
+        Assert.Equal(0, FlagMatch.Points(caught, TeamOf, Shipped));
         var returned = flags.Decide(1, FlagAsk.Home, 0)!.Value;
-        Assert.Equal(FlagMatch.ReturnScore, FlagMatch.Points(returned, TeamOf));
+        Assert.Equal(Shipped.FlagReturn, FlagMatch.Points(returned, TeamOf, Shipped));
 
         flags.Decide(1, FlagAsk.Take, 2);
         flags.Drop(2, RedHome, Vector3.Up, RedHome.Y);
         var floated = flags.Decide(1, FlagAsk.Home, FlagMatch.NoHolder)!.Value;
-        Assert.Equal(0, FlagMatch.Points(floated, TeamOf));
+        Assert.Equal(0, FlagMatch.Points(floated, TeamOf, Shipped));
     }
 
     [Fact]
@@ -153,14 +161,14 @@ public sealed class CaptureTheFlagTests
     [Fact]
     public void AFlagBroughtHomeAddsToTheMatchAndCanEndItOnTheTeamTotal()
     {
-        var match = new VersusMatch(3, killTarget: 6, timeLimit: 0f);
+        var match = new VersusMatch(3, killTarget: Shipped.Kill + Shipped.FlagCapture, timeLimit: 0f, scores: Shipped);
         match.AssignTeams(Teams);
         match.RegisterKill(0, 2);
         Assert.False(match.Completed);
 
-        match.AddScore(1, FlagMatch.CaptureScore);
+        match.AddScore(1, Shipped.FlagCapture);
 
-        Assert.Equal(FlagMatch.CaptureScore, match.ScoreOf(1));
+        Assert.Equal(Shipped.FlagCapture, match.ScoreOf(1));
         Assert.Equal(0, match.KillsOf(1));
         Assert.True(match.Completed);
     }

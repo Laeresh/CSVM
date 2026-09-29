@@ -33,9 +33,6 @@ internal static class NetTeamSuites
     // How close to a table entry a placed aeroplane counts as standing on it, horizontally.
     private const float EntryTolerance = 5f;
 
-    // Three points: no pilot of the two-seat team reaches it alone in the sequence below, so the
-    // ending can only be the team's total.
-    private const int TeamTarget = 3;
 
     // The scripted climb the net match suites fly, so no seat scores a crash of its own.
     private const string TrackedFlight = "--hold=0.6,0.9,0,1";
@@ -49,12 +46,12 @@ internal static class NetTeamSuites
         + "team 2: each seat opens on its own team's net.zrd block and comes back inside it, teammates "
         + "are not hostile and neither team flies on a raw lobby number, every pane reads a teammate "
         + "on the Ally cycle in the friendly green and the other team in red, a teammate kill costs the "
-        + "killer a point and counts no kill, the host ends the match when a team's total reaches the "
+        + "killer score_suicide and counts no kill, the host ends the match when a team's total reaches the "
         + "Score target though no pilot reached it alone, every machine's board names the winning "
         + "team, and after the rematch the drop of the other team's only pilot ends it on reason 4")]
     internal static void ATeamMatchAcrossThreeMachines(TestContext ctx)
     {
-        var spec = NetCombatSuites.MatchSpec(ctx, out _, TrackedFlight, $"--vs-kills={TeamTarget}");
+        var spec = NetCombatSuites.MatchSpec(ctx, out _, TrackedFlight, $"--vs-kills={TeamTarget(MatchScores.Load(ctx.ZrdrPath))}");
         var table = SpawnPoints.LoadNetTable(SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission));
         if (table is not { Count: > 2 * SpawnPoints.NetBlock })
         {
@@ -189,8 +186,12 @@ internal static class NetTeamSuites
         ctx.Check(foes, $"ABLE-TO-FAIL CONTROL: and the other team's seat on the Enemy cycle, never green ({string.Join(", ", readings)})");
     }
 
+    // The Score target, four of team 1's kills and one teamkill in the sequence below. No pilot of
+    // the two-seat team reaches it alone, so only the team's total can end the match.
+    private static int TeamTarget(MatchScores scores) => (4 * scores.Kill) + scores.Suicide;
+
     // The scoring, killed on the machine that flies each victim and scored by the host alone.
-    // The team 1 total reaches three off two pilots on two points and one, after a teamkill.
+    // The team 1 total reaches the target off two pilots on two kills each, after a teamkill.
     private static void Kills(TestContext ctx, GameSession[] peers)
     {
         foreach (var rig in peers.SelectMany(p => p.SeatRigs))
@@ -201,25 +202,27 @@ internal static class NetTeamSuites
             }
         }
 
+        var scores = peers[0].Versus!.Scores;
+        int kill = scores.Kill, suicide = scores.Suicide, target = TeamTarget(scores);
         Down(peers, victim: 2, killer: 0);
-        Board(ctx, peers, "seat 0 kills the other team's seat", (1, 1, 0), (0, 0, 0), (0, 0, 1));
+        Board(ctx, peers, "seat 0 kills the other team's seat", (kill, 1, 0), (0, 0, 0), (0, 0, 1));
         Returned(ctx, peers, seat: 2);
 
         Down(peers, victim: 0, killer: 1);
-        Board(ctx, peers, "a teammate kill costs the killer a point and counts no kill", (1, 1, 1), (-1, 0, 0), (0, 0, 1));
-        ctx.Check(peers.All(p => p.Versus!.TeamScoreOf(1) == 0),
+        Board(ctx, peers, $"a teammate kill costs the killer {-suicide} and counts no kill", (kill, 1, 1), (suicide, 0, 0), (0, 0, 1));
+        ctx.Check(peers.All(p => p.Versus!.TeamScoreOf(1) == kill + suicide),
             $"and the team's total falls with it on every machine ({Totals(peers)})");
         Returned(ctx, peers, seat: 0);
 
         Down(peers, victim: 2, killer: 1);
         Down(peers, victim: 2, killer: 1);
-        ctx.Check(peers.All(p => p.Versus!.TeamScoreOf(1) == TeamTarget - 1 && !p.Versus!.Completed && p.MatchEnd == NetMatchEnd.Running),
-            $"ABLE-TO-FAIL CONTROL: one point short of the target the match runs on every machine ({Totals(peers)})");
+        ctx.Check(peers.All(p => p.Versus!.TeamScoreOf(1) == target - kill && !p.Versus!.Completed && p.MatchEnd == NetMatchEnd.Running),
+            $"ABLE-TO-FAIL CONTROL: one kill short of the target the match runs on every machine ({Totals(peers)})");
 
         Down(peers, victim: 2, killer: 0);
         ctx.Check(peers.All(p => p.Versus!.Completed && p.MatchEnd == NetMatchEnd.ScoreTarget && p.Pause is { Ended: true }),
-            $"team 1's total of {TeamTarget} ends the match on the Score limit on every machine ({string.Join(", ", peers.Select(p => p.MatchEnd))})");
-        ctx.Check(peers.All(p => Enumerable.Range(0, 3).All(seat => p.Versus!.ScoreOf(seat) < TeamTarget)),
+            $"team 1's total of {target} ends the match on the Score limit on every machine ({string.Join(", ", peers.Select(p => p.MatchEnd))})");
+        ctx.Check(peers.All(p => Enumerable.Range(0, 3).All(seat => p.Versus!.ScoreOf(seat) < target)),
             $"though no pilot reached it alone ({Totals(peers)})");
         var titles = peers.Select(p => VersusBoard.Title(p.Versus!)).ToArray();
         ctx.Check(titles.All(t => t == "RED SQUADRON WINS"),
@@ -248,7 +251,7 @@ internal static class NetTeamSuites
         ctx.Check(staying.All(p => p.Versus!.Completed && p.MatchEnd == NetMatchEnd.NobodyLeft),
             $"the drop of team 2's only pilot ends the match on reason 4 on both remaining machines ({string.Join(", ", staying.Select(p => p.MatchEnd))})");
 
-        var alone = new VersusMatch(3, TeamTarget, 300f);
+        var alone = new VersusMatch(3, TeamTarget(MatchScores.Fallback), 300f);
         alone.Leave(2);
         ctx.Check(!alone.Completed,
             $"ABLE-TO-FAIL CONTROL: the same drop in a free-for-all leaves two opponents and the match runs");

@@ -402,7 +402,7 @@ internal sealed class FlagRuntime
     private void Score(FlagChange change)
     {
         var teams = _in.SeatTeams;
-        int points = FlagMatch.Points(change, seat => seat >= 0 && seat < teams.Count ? teams[seat] : 0);
+        int points = FlagMatch.Points(change, seat => seat >= 0 && seat < teams.Count ? teams[seat] : 0, _in.Match.Scores);
         if (points == 0)
         {
             return;

@@ -84,8 +84,9 @@ anything else re-sends the unchanged row. `FUN_0049a240` then broadcasts `0x1d`:
   Captured" with the team name for 5 s.
 - **To home.** Row 201 "%1 Flag Is At Home Base" for 5 s, `flg_off_n` on the holder,
   `cs_flag_n` shown and `turnon_flite_n` run. **Only from held:** a holder on the flag's own team
-  scores event 4 (`score_return_flag`, +1) and its team hears `snd_CTFscoreRec`; any other holder
-  scores event 5 (`score_enemy_flag`, +5) and the teams hear `snd_CTFscoreFlag` or
+  scores event 4 (`score_return_flag`, 8 in the shipped `player.zrd`, fallback +1) and its team
+  hears `snd_CTFscoreRec`; any other holder scores event 5 (`score_enemy_flag`, 10 shipped,
+  fallback +5) and the teams hear `snd_CTFscoreFlag` or
   `snd_CTFscoreEnemy` by side. `FUN_00499270` then sends the score table.
 - A holder change strips the previous holder's flag. After the rows, `FUN_0046e310(0x15, 7)`
   rebuilds the HUD score text.
@@ -164,7 +165,8 @@ Return" exist, but no lobby script creates a control for them.
 
 `Flight/Modes/FlagMatch.cs` holds the rules above engine-free: the reach, the two cooldowns, first
 asker wins, the take ahead of the host's answer, the table's rows, the drop, the 15 s throw and the
-points. `Session/World/FlagRuntime.cs` runs them in a network match. The differences:
+points, which are the match's `MatchScores` read from `player.zrd` (10 a capture and 8 a return as
+shipped). `Session/World/FlagRuntime.cs` runs them in a network match. The differences:
 
 - The ask is message `0x63` and the table `0x64`, naming seats rather than player ids
   ([`multiplayer-messages.md`](multiplayer-messages.md)). A floating row in the table is ignored,
@@ -185,4 +187,4 @@ points. `Session/World/FlagRuntime.cs` runs them in a network match. The differe
   marker, which the world index cannot find, stands where the carried flag is. Its name line is
   the team's name in place of the missing row 7055. The carrier's tag replaces the airframe name
   the remake's aircraft marker prints, and names the pilot by its callsign.
-- Not built: `ejectflag` and `score_turret_kill`.
+- Not built: `ejectflag`.

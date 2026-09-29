@@ -2612,7 +2612,8 @@ public partial class GameSession : Node3D
         // binds every pane's VersusHud to this one instance below); the score/respawn plumbing
         // that feeds it Downed reports only runs once every rig exists, further down.
         VersusMatch? versus = _spec.Versus
-            ? new VersusMatch(_seatRigs.Count, _spec.VsKills, _spec.VsTimeMinutes * 60f, _spec.VsLives)
+            ? new VersusMatch(_seatRigs.Count, _spec.VsKills, _spec.VsTimeMinutes * 60f, _spec.VsLives,
+                MatchScores.Load(state.ZrdrPath, why => Log.Warn("flight", $"dogfight: player.zrd unreadable, scoring the executable's fallbacks: {why}")))
             : null;
         if (versus != null && SeatTeams() is { } seatTeams)
         {
@@ -2957,7 +2958,7 @@ public partial class GameSession : Node3D
                     };
                 }
             match.MatchCompleted += () => Log.Info("flight", $"dogfight: match complete, {string.Join(", ", match.Standings().Select(s => $"P{s.PlayerIndex + 1} {s.Score}pts {s.Kills}K/{s.Deaths}D (#{s.Rank})"))}{string.Concat(match.TeamStandings().Select(t => $", team {t.Team} '{t.Name}' {t.Score}pts (#{t.Rank})"))}");
-            Log.Info("flight", $"dogfight: {_seatRigs.Count} pilots, {(match.KillTarget > 0 ? $"first to {match.KillTarget} points" : "no kill target")}, {(match.TimeLimit > 0f ? $"{match.TimeLimit / 60f:0.#} min limit" : "no time limit")}{(match.Teamed ? $", teams by seat {string.Join(",", Enumerable.Range(0, match.PlayerCount).Select(match.TeamOf))}" : "")}");
+            Log.Info("flight", $"dogfight: {_seatRigs.Count} pilots, {(match.KillTarget > 0 ? $"first to {match.KillTarget} points" : "no kill target")}, {(match.TimeLimit > 0f ? $"{match.TimeLimit / 60f:0.#} min limit" : "no time limit")}{(match.Teamed ? $", teams by seat {string.Join(",", Enumerable.Range(0, match.PlayerCount).Select(match.TeamOf))}" : "")}, {match.Scores}");
 
             // The match's shared results board: same construction as the race board above,
             // one CanvasLayer over the whole window (the match ends for everybody at once), R
@@ -4248,8 +4249,7 @@ public partial class GameSession : Node3D
         net.On<Net.DamageMessage>((_, damage) => TakeDamage(damage));
         net.On<Net.DeathMessage>((_, death) => TakeDeath(death));
         net.On<Net.ScoreMessage>((_, score) => TakeScore(score));
-        net.On<Net.DeathNoticeMessage>((_, notice) =>
-            PostDeathNotice(notice.VictimSeat, notice.KillerSeat, notice.Cause));
+        net.On<Net.DeathNoticeMessage>((_, notice) => TakeDeathNotice(notice));
         if (net.IsHost)
         {
             // A hit is addressed to one machine, everything else is news for the whole field.
@@ -4362,11 +4362,13 @@ public partial class GameSession : Node3D
         // reads. It has flown on by the time the claim lands, and the zone must not fly with it.
         var pose = new Transform3D(hit.Victim.Attitude, hit.Victim.WorldPosition);
         int weapon = _weaponWire.TryGetValue(hit.Weapon.Id, out int index) ? index : 0;
+        int hull = ZeppelinVersus.HullOfShooter(hit.Shooter);
         net.SendToSeat(
             victimSeat,
             new Net.HitMessage((byte)victimSeat,
                 shooterSeat >= 0 ? (byte)shooterSeat : Net.NetMessage.NoSeat, (ushort)weapon,
-                hit.DamageScale, (short)hit.ShapeIndex, pose.AffineInverse() * hit.Impact),
+                hit.DamageScale, (short)hit.ShapeIndex, pose.AffineInverse() * hit.Impact,
+                hull is >= 0 and < Net.NetMessage.NoSeat ? (byte)hull : Net.NetMessage.NoSeat),
             Net.NetChannels.Events);
         return true;
     }
@@ -4385,6 +4387,7 @@ public partial class GameSession : Node3D
 
         int shooter = hit.ShooterSeat < _seatRigs.Count
             ? _seatRigs[hit.ShooterSeat].Controller?.PlayerIndex ?? ProjectilePool.NoShooter
+            : hit.Hull != Net.NetMessage.NoSeat ? ZeppelinVersus.BroadsideShooter(hit.Hull)
             : ProjectilePool.NoShooter;
         var pose = new Transform3D(victim.Attitude, victim.WorldPosition);
         victim.TakeProjectileHit(defs.All[hit.Weapon], pose * hit.LocalImpact,
@@ -4428,11 +4431,16 @@ public partial class GameSession : Node3D
         }
 
         int killerSeat = killer is int shooter ? SeatOfShooter(shooter) : -1;
+        int hull = killer is int fired ? ZeppelinVersus.HullOfShooter(fired) : -1;
         // Cause 2 covers every death with no seat to charge, an AI's kill included. The decode
         // has no last-damager memory and no third party to credit, so the pilot pays for it.
+        // Cause 3 is a hull's broadside round, named by the hull's placement index.
         var death = new Net.DeathMessage(
             (byte)seat, killerSeat >= 0 ? (byte)killerSeat : Net.NetMessage.NoSeat,
-            killerSeat >= 0 ? Net.NetDeathCause.Killer : Net.NetDeathCause.Suicide, 0u);
+            killerSeat >= 0 ? Net.NetDeathCause.Killer
+            : hull >= 0 ? Net.NetDeathCause.ZeppelinPart
+            : Net.NetDeathCause.Suicide,
+            hull >= 0 ? (uint)hull : 0u);
         if (!net.IsHost)
         {
             net.Send(net.HostPeer, death, Net.NetChannels.Events);
@@ -4459,9 +4467,9 @@ public partial class GameSession : Node3D
         ScoreDeath(death);
     }
 
-    // The one place a network match's numbers move, and it runs on the host alone. Causes 3 and 4
-    // name the turret or zeppelin owner in the killer field, so they score as a kill to that
-    // owner. Nothing in the remake raises them yet.
+    // The one place a network match's numbers move, and it runs on the host alone. Cause 4 names
+    // the turret's owner in the killer field and scores it score_turret_kill. Cause 3 is a hull's
+    // broadside, named by placement index in the source field: event 9 sets the hull's side's term.
     private void ScoreDeath(in Net.DeathMessage death)
     {
         if (_versus is not { } match || _net is not { IsHost: true })
@@ -4471,14 +4479,23 @@ public partial class GameSession : Node3D
 
         int victim = death.VictimSeat;
         int killer = death.KillerSeat < match.PlayerCount ? death.KillerSeat : -1;
+        int hullTeam = death.Cause == Net.NetDeathCause.ZeppelinPart && _zvzPlay is { } zvz && death.SourceId < 2
+            ? zvz.Rules.TeamOfHull((int)death.SourceId)
+            : 0;
         bool charged = killer >= 0 && death.Cause != Net.NetDeathCause.Suicide;
-        if (!charged)
+        if (hullTeam > 0)
+        {
+            killer = -1;
+            charged = false;
+            match.RegisterZeppelinKill(victim, hullTeam);
+        }
+        else if (!charged)
         {
             match.RegisterDeath(victim);
         }
         else
         {
-            match.RegisterKill(killer, victim);
+            match.RegisterKill(killer, victim, turret: death.Cause == Net.NetDeathCause.TurretOwner);
         }
 
         SendScore(victim);
@@ -4491,9 +4508,10 @@ public partial class GameSession : Node3D
         // the lives line, the kill lines and the ending in the original's order.
         var notice = new Net.DeathNoticeMessage((byte)victim,
             charged ? (byte)killer : Net.NetMessage.NoSeat,
-            charged ? death.Cause : Net.NetDeathCause.Suicide);
+            hullTeam > 0 ? Net.NetDeathCause.ZeppelinPart : charged ? death.Cause : Net.NetDeathCause.Suicide,
+            (byte)Math.Clamp(hullTeam, 0, byte.MaxValue));
         _net.Broadcast(notice, Net.NetChannels.Events);
-        PostDeathNotice(notice.VictimSeat, notice.KillerSeat, notice.Cause);
+        PostDeathNotice(notice.VictimSeat, notice.KillerSeat, notice.Cause, notice.Team);
 
         // ⚠ The ending goes out AFTER the scores that settled the round, never from the match's
         // completion event, which fires before them. A guest whose match already reads completed
@@ -4521,9 +4539,22 @@ public partial class GameSession : Node3D
         }
     }
 
+    // A guest's copy of the host's decision. A hull's kill writes its side's term here too, since
+    // no score message carries a team's term. The write is a set, so a repeat changes nothing.
+    private void TakeDeathNotice(in Net.DeathNoticeMessage notice)
+    {
+        if (notice.Cause == Net.NetDeathCause.ZeppelinPart && notice.Team > 0)
+        {
+            _versus?.RegisterZeppelinKill(notice.VictimSeat, notice.Team);
+        }
+
+        PostDeathNotice(notice.VictimSeat, notice.KillerSeat, notice.Cause, notice.Team);
+    }
+
     // A match death as the host decided it, posted into every local pane once: the host from its
-    // own scoring, a guest from the notice. The dying pilot's lives line goes in first, below.
-    private void PostDeathNotice(int victim, int killer, Net.NetDeathCause cause)
+    // own scoring, a guest from the notice. The dying pilot's lives line goes in first, below. A
+    // hull's kill is named for its side's lobby team, as the original's row 7064 is.
+    private void PostDeathNotice(int victim, int killer, Net.NetDeathCause cause, int team = 0)
     {
         PostLivesLines();
         var death = cause switch
@@ -4534,7 +4565,8 @@ public partial class GameSession : Node3D
             _ => HudMessages.MatchDeath.Killer,
         };
         string? victimName = victim < _netSeats.Count ? _netSeats[victim].Callsign : null;
-        string? killerName = killer < _netSeats.Count ? _netSeats[killer].Callsign : null;
+        string? killerName = team > 0 && _versus is { } match ? match.TeamName(team)
+            : killer < _netSeats.Count ? _netSeats[killer].Callsign : null;
         foreach (var pane in _rigs)
         {
             if (pane.Controller?.MessageStack is { } stack)

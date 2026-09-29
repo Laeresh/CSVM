@@ -710,7 +710,8 @@ Capture the Flag's rules, engine-free: one flag per lobby team with its home, he
 floating. `Check` is a pilot's per-tick proximity ask with the 25 m reach and the two cooldowns,
 `Decide` the host's first-asker-wins decision, `TakeAhead` a guest's take before the answer, `Apply`
 the host's table on a guest, `Drop` a downed carrier's flag and `Advance` its 15 s throw arc, and
-`Points` what a flag brought home scores. The host's own-flag-home option gates a capture.
+`Points` what a flag brought home scores off the match's `MatchScores`. The host's own-flag-home
+option gates a capture.
 `Session/World/FlagRuntime.cs` runs it in a match. Read `CaptureTheFlagTests.cs` and
 `docs/org/multiplayer-ctf.md`.
 
@@ -726,11 +727,11 @@ away one while held or floating), and `HolderTag` is the carrier's name line. Ev
 Zeppelin vs Zeppelin's rules, engine-free: `Sides` takes the first two lobby teams in seat order,
 hull 0 flying the first and hull 1 the second, and `SpawnBlocks` opens each side in the `net.zrd`
 block round its own hull. `Counts` lets each gas bag score once, at its own death or its bound
-broadside cannon's, and `Points` is 10 to an enemy and -10 on the killer's own hull.
-`RespawnPoint` is the return halfway between the field and the pilot's hull, and `HullSide` labels
-a hull's marker "Defend" to its side and "Destroy" to the other. The hull loss itself
-ends the match through `VersusMatch.EndOnHullLoss`. `Session/World/ZeppelinVersusRuntime.cs` runs
-it in a match. Read `ZeppelinVersusTests.cs` and `docs/org/multiplayer-zvz.md`.
+cannon's, and `Points` is `score_gas_kill` to an enemy and `score_my_gas_kill` on the killer's
+own hull. `RespawnPoint` is the return by the pilot's hull, `HullSide` labels a hull's marker by
+side, and `BroadsideShooter` is the shooter id a hull's rounds carry. `VersusMatch.EndOnHullLoss`
+ends the match on the hull loss, and `Session/World/ZeppelinVersusRuntime.cs` runs it in a match.
+Read `ZeppelinVersusTests.cs` and `docs/org/multiplayer-zvz.md`.
 
 ## src/Flight/Modes/ScoreStore.cs
 Stunt best-time persistence: one JSON object in `user://stunt_scores.json` keyed
@@ -748,15 +749,22 @@ planes. Membership is append-only apart from the internal `Remove`, which compen
 uncommitted roster build. Off-engine coverage: `CSVM.Tests/StuntRaceTests.cs`. Read
 `StuntRaceBoard` for what a finished race draws.
 
+## src/Flight/Modes/MatchScores.cs
+What each network match scoring event is worth, engine-free: the nine `score_*` keys of
+`player.zrd`, `Read` from a parsed file or `Load`ed from the reader archive at session build, each
+key the file does not author keeping the executable's `Fallback`. `VersusMatch` carries the set,
+and `FlagMatch.Points` and `ZeppelinVersus.Points` read it. Read `MatchScoresTests.cs` and
+`docs/org/multiplayer-scoring.md`.
+
 ## src/Flight/Modes/VersusMatch.cs
-Dogfight deathmatch bookkeeping, engine-free: every pilot carries one signed score, `KillScore` per kill to the shooter
-and `SuicideScore` per death with no killer to the pilot who died, the original's own amounts. `RegisterKill`/`RegisterDeath`
+Dogfight deathmatch bookkeeping, engine-free: every pilot carries one signed score, the `Scores` kill value per kill to the shooter
+and its suicide value per death with no killer to the pilot who died (`MatchScores`, read from `player.zrd`). `RegisterKill`/`RegisterDeath`
 report those facts, `Advance(dt)` is the host-fed match clock, `MatchCompleted` fires once on a score reaching the target or
 on the time-out (leader wins, equal top scores draw), `Standings()` ranks by score with ties sharing a rank and carries kills
 and deaths for display, and `Restart()` zeroes everything and re-arms completion. `ApplyScore` writes a seat's row as the host reports it,
 so a guest mirrors the host's board. `Replicate()` hands the clock, both limits and the ending to that host too: `Advance` then moves
 nothing and only `ApplyState` ends or re-arms a match. `OutOfLives` holds a spent pilot down, `Leave` marks a dropped one, fewer than two
-pilots with lives end the match as `AllAlone` (reason 4), and `NextWatched` picks the seat a spent pilot watches. `AssignTeams` makes a team match: a teammate kill scores as a suicide, the target reads a team's total (`TeamScoreOf`, `TeamStandings`) and reason 4 asks for two teams. `AddScore` takes a mode's own points, a Capture the Flag flag brought home or a gas bag. `EndOnHullLoss` is Zeppelin vs Zeppelin's end, naming the `ObjectiveWinner` and giving every other team a bonus `TeamTotalOf` shows and the Score limit never reads. Read `VersusMatchTests.cs`, `TeamDeathmatchTests.cs`, `VersusHud`, `VersusBoard` and `docs/org/multiplayer-scoring.md`.
+pilots with lives end the match as `AllAlone` (reason 4), and `NextWatched` picks the seat a spent pilot watches. `AssignTeams` makes a team match: a teammate kill scores as a suicide, the target reads a team's total (`TeamScoreOf`, `TeamStandings`) and reason 4 asks for two teams. `AddScore` takes a mode's own points, a Capture the Flag flag brought home or a gas bag. `EndOnHullLoss` is Zeppelin vs Zeppelin's end, naming the `ObjectiveWinner` and adding to every other team's term (`TeamTermOf`), which `TeamTotalOf` shows and the Score limit never reads; `RegisterZeppelinKill` sets the term of the side whose hull downed a pilot. Read `VersusMatchTests.cs`, `TeamDeathmatchTests.cs`, `VersusHud`, `VersusBoard` and `docs/org/multiplayer-scoring.md`.
 
 ## src/Flight/Modes/VersusSpawnRotation.cs
 Where a Dogfight seat comes back, engine-free: it owns the per-seat spawn-list ledger the opening

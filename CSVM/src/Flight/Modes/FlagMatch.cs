@@ -68,14 +68,6 @@ public sealed class FlagMatch
     /// <summary>The throw arc's gravity, m/s², the <c>flg_throw_n</c> motion's own.</summary>
     public const float ThrowGravity = -7f;
 
-    /// <summary>What an enemy flag brought home scores its carrier, <c>score_enemy_flag</c>'s
-    /// default at <c>0071c804</c>.</summary>
-    public const int CaptureScore = 5;
-
-    /// <summary>What a pilot's own flag brought home scores it, <c>score_return_flag</c>'s default
-    /// at <c>0071c7fc</c>.</summary>
-    public const int ReturnScore = 1;
-
     // The landing response every column contact takes (docs/org/objectMotion.md).
     private const float ContactDamping = 0.2f;
 
@@ -115,14 +107,16 @@ public sealed class FlagMatch
     }
 
     /// <summary>The points a change scores its carrier: a flag carried home scores
-    /// <see cref="ReturnScore"/> when it is the carrier's own and <see cref="CaptureScore"/>
-    /// otherwise. Nothing else scores, a floating flag's return included (<c>FUN_0049a300</c>).</summary>
-    public static int Points(FlagChange change, Func<int, int> teamOf)
+    /// <see cref="MatchScores.FlagReturn"/> when it is the carrier's own and
+    /// <see cref="MatchScores.FlagCapture"/> otherwise. Nothing else scores, a floating flag's return
+    /// included (<c>FUN_0049a300</c>).</summary>
+    public static int Points(FlagChange change, Func<int, int> teamOf, MatchScores scores)
     {
         ArgumentNullException.ThrowIfNull(teamOf);
+        ArgumentNullException.ThrowIfNull(scores);
         if (change.From != FlagState.Held || change.To != FlagState.Home || change.HolderBefore < 0)
             return 0;
-        return teamOf(change.HolderBefore) == change.Team ? ReturnScore : CaptureScore;
+        return teamOf(change.HolderBefore) == change.Team ? scores.FlagReturn : scores.FlagCapture;
     }
 
     /// <summary>The flag of <paramref name="team"/>, or null for a team with none.</summary>

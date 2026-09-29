@@ -8,14 +8,66 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// Zeppelin vs Zeppelin off-engine. The first two lobby teams in seat order take hull 0 and hull 1
-/// and the blocks around them. A gas bag scores once, 10 to an enemy and -10 to its own side, and a
-/// broadside cannon scores its bound bag. A lost hull ends the match with the other side the winner
-/// and 100 to every other team that the Score limit never reads. The return lands halfway between
-/// the field and the pilot's own hull, and the two messages round-trip.
+/// and the blocks around them. A gas bag scores once, to an enemy and against its own side, and a
+/// broadside cannon scores its bound bag. A lost hull ends the match, the other side the winner and
+/// every other team given a term the Score limit never reads. A pilot a hull downs sets its side's
+/// term. The return lands halfway between the field and the pilot's own hull, and the two messages
+/// round-trip.
 /// </summary>
 [Trait("Tier", "Quick")]
 public sealed class ZeppelinVersusTests
 {
+    // Values unlike every fallback, so a rule that ignored the set it was given would fail.
+    private static readonly MatchScores Authored = MatchScores.Fallback with
+    {
+        HullLoss = 10, ZeppelinKill = 3, GasbagKill = 7, OwnGasbagKill = -4,
+    };
+
+    [Fact]
+    public void AHullsBroadsideRoundsCarryItsOwnShooterId()
+    {
+        Assert.Equal(0, ZeppelinVersus.HullOfShooter(ZeppelinVersus.BroadsideShooter(0)));
+        Assert.Equal(1, ZeppelinVersus.HullOfShooter(ZeppelinVersus.BroadsideShooter(1)));
+        Assert.True(ZeppelinVersus.BroadsideShooter(0) < CSVM.Flight.Weapons.ProjectilePool.NoShooter);
+
+        // ABLE-TO-FAIL CONTROL: an unowned round and every seat's id name no hull.
+        Assert.Equal(-1, ZeppelinVersus.HullOfShooter(CSVM.Flight.Weapons.ProjectilePool.NoShooter));
+        Assert.Equal(-1, ZeppelinVersus.HullOfShooter(0));
+        Assert.Equal(-1, ZeppelinVersus.HullOfShooter(100));
+    }
+
+    [Fact]
+    public void APilotAHullDownsSetsItsSidesTermOnceAndCostsTheVictimNoScore()
+    {
+        var match = new VersusMatch(3, killTarget: 50, timeLimit: 0f, scores: Authored);
+        match.AssignTeams(new[] { 1, 2, 2 });
+
+        match.RegisterZeppelinKill(victim: 1, team: 1);
+        match.RegisterZeppelinKill(victim: 2, team: 1);
+
+        Assert.Equal(Authored.ZeppelinKill, match.TeamTotalOf(1));
+        Assert.Equal(0, match.TeamScoreOf(1));
+        Assert.Equal(0, match.ScoreOf(1));
+        Assert.Equal(1, match.DeathsOf(1));
+        Assert.Equal(1, match.DeathsOf(2));
+
+        // The lost hull adds its term on top, as the original's event 3 adds to the same field.
+        match.EndOnHullLoss(losingTeam: 2, winningTeam: 1);
+        Assert.Equal(Authored.ZeppelinKill + Authored.HullLoss, match.TeamTotalOf(1));
+
+        // ABLE-TO-FAIL CONTROL: a replicated match takes the term but leaves deaths to the host.
+        var guest = new VersusMatch(2, killTarget: 0, timeLimit: 600f, scores: Authored);
+        guest.AssignTeams(new[] { 1, 2 });
+        guest.Replicate();
+        guest.RegisterZeppelinKill(victim: 1, team: 1);
+        Assert.Equal(Authored.ZeppelinKill, guest.TeamTermOf(1));
+        Assert.Equal(0, guest.DeathsOf(1));
+
+        // The host's running tick after it keeps the term; only a rematch of an ended match clears.
+        guest.ApplyState(0, 600f, 300f, ended: false);
+        Assert.Equal(Authored.ZeppelinKill, guest.TeamTermOf(1));
+    }
+
     [Fact]
     public void TheSidesAreTheFirstTwoTeamsInSeatOrderWhateverTheirNumbers()
     {
@@ -35,18 +87,18 @@ public sealed class ZeppelinVersusTests
     [Fact]
     public void AGasBagScoresOnceAndItsCannonScoresItFirst()
     {
-        var rules = new ZeppelinVersus(1, 2);
+        var rules = new ZeppelinVersus(1, 2, Authored);
         var cannon = new HullPartLoss(1, "gasbag1", Cannon: true, Seat: 0);
         var bag = new HullPartLoss(1, "GASBAG1", Cannon: false, Seat: 2);
 
         Assert.True(rules.Counts(cannon));
-        Assert.Equal(ZeppelinVersus.GasbagScore, rules.Points(cannon, killerTeam: 1));
+        Assert.Equal(Authored.GasbagKill, rules.Points(cannon, killerTeam: 1));
         Assert.False(rules.Counts(bag));
 
         // Hull 0's bag of the same name is its own bag, and a side's own bag costs.
         var own = new HullPartLoss(0, "gasbag1", Cannon: false, Seat: 1);
         Assert.True(rules.Counts(own));
-        Assert.Equal(ZeppelinVersus.OwnGasbagScore, rules.Points(own, killerTeam: 1));
+        Assert.Equal(Authored.OwnGasbagKill, rules.Points(own, killerTeam: 1));
 
         // ABLE-TO-FAIL CONTROL: a part no seat killed scores nothing.
         Assert.Equal(0, rules.Points(own with { Seat = -1 }, killerTeam: 1));
@@ -55,18 +107,18 @@ public sealed class ZeppelinVersusTests
     [Fact]
     public void ALostHullEndsTheMatchForTheOtherSideAndItsBonusIsNotTheScoreLimit()
     {
-        var match = new VersusMatch(4, killTarget: 50, timeLimit: 0f);
+        var match = new VersusMatch(4, killTarget: 50, timeLimit: 0f, scores: Authored);
         match.AssignTeams(new[] { 1, 1, 2, 3 });
-        match.AddScore(0, ZeppelinVersus.GasbagScore);
+        match.AddScore(0, Authored.GasbagKill);
 
         match.EndOnHullLoss(losingTeam: 2, winningTeam: 1);
 
         Assert.True(match.Completed);
         Assert.Equal(1, match.ObjectiveWinner);
-        Assert.Equal(ZeppelinVersus.GasbagScore, match.TeamScoreOf(1));
-        Assert.Equal(ZeppelinVersus.GasbagScore + VersusMatch.HullLossBonus, match.TeamTotalOf(1));
+        Assert.Equal(Authored.GasbagKill, match.TeamScoreOf(1));
+        Assert.Equal(Authored.GasbagKill + Authored.HullLoss, match.TeamTotalOf(1));
         Assert.Equal(0, match.TeamTotalOf(2));
-        Assert.Equal(VersusMatch.HullLossBonus, match.TeamTotalOf(3));
+        Assert.Equal(Authored.HullLoss, match.TeamTotalOf(3));
         Assert.Equal(1, Assert.Single(match.TeamStandings(), t => t.Rank == 1).Team);
 
         // Once only, and a rematch clears it.
@@ -90,7 +142,7 @@ public sealed class ZeppelinVersusTests
 
         match.ApplyState(0, 600f, 300f, ended: true);
         Assert.True(match.Completed);
-        Assert.Equal(VersusMatch.HullLossBonus, match.TeamTotalOf(2));
+        Assert.Equal(MatchScores.Fallback.HullLoss, match.TeamTotalOf(2));
 
         // ABLE-TO-FAIL CONTROL: the host's running state after a rematch clears the ending.
         match.ApplyState(0, 600f, 600f, ended: false);

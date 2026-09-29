@@ -239,11 +239,11 @@ carries its tag (`FlightController.MarkerName`). Decode: [../org/multiplayer-ctf
 ## src/Session/World/ZeppelinVersusRuntime.cs
 Zeppelin vs Zeppelin in a network match, built by `GameSession.WireZeppelinVersus` for a `--zvz`
 launch over the `MP3` world's `ZeppelinRuntime`: hull 0 goes to the first side's lobby team and
-hull 1 to the second (`SetTeam`), so aim and friend-or-foe follow them. Off
-`ZeppelinRuntime.PartDestroyed` the host scores each gas bag to the seat whose hit killed it, and
-every machine speaks the gas bag line. `ZeppelinKilled` ends the match on the host, and a guest
-takes the winner from the `0x17` state. `RespawnPoint` is the host's computed return, sent as
-`SpawnAtMessage`. `SideOf` labels each hull's marker by side for the site feed. Decode:
+hull 1 to the second (`SetTeam`), both broadsides engaged with rounds named for their hull. Off
+`PartDestroyed` the host scores each gas bag to the seat whose hit killed it, and every machine
+speaks the gas bag line. `ZeppelinKilled` ends the match on the host, a guest taking the winner
+from the `0x17` state; `Rules` names the side a broadside's kill goes to. `RespawnPoint` is
+the host's return, sent as `SpawnAtMessage`, and `SideOf` labels each hull's marker. Decode:
 [../org/multiplayer-zvz.md](../org/multiplayer-zvz.md).
 
 ## src/Session/World/NetCutsceneLink.cs
@@ -457,9 +457,10 @@ place of the follower. Decode: [../formats/mission-entities.md](../formats/missi
 The broadside half of `ZeppelinRuntime`, the second file of that partial class. `WireCannons`
 resolves the hardcoded `wep_28` round and each cannon's node and damage pool; per step the runtime
 resolves the record's authored `targets`, gates on the authored fire range and the decoded arc,
-plays the deploy and retract anims scoped to the hull, and fires real unowned rounds scattered by
-the record's inaccuracy. The broadside stays off until a script arms it through the
-`COMPLETED_ZEPCANNONS` seam, and a destroyed cannon thins the volley. Decode:
+plays the deploy and retract anims scoped to the hull, and fires real rounds scattered by the
+record's inaccuracy, unowned unless `NamesBroadsideRounds` names them for their hull. The broadside
+stays off until a script arms it through the `COMPLETED_ZEPCANNONS` seam or Zeppelin vs Zeppelin
+arms both hulls, and a destroyed cannon thins the volley. Decode:
 [../formats/mission-entities.md](../formats/mission-entities.md), "Broadside firing".
 
 ## src/Session/World/TurretEmplacementRuntime.cs

@@ -7,6 +7,7 @@ using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Net;
 using CSVM.Session.Launch;
+using CSVM.Session.World;
 using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
@@ -32,8 +33,13 @@ internal static class NetZeppelinVersusSuites
 
     private const float QuickRespawn = 0.5f;
 
-    // Far above what the gas bags score and far below the lost hull's bonus.
+    // Above team 1's two enemy gas bags and within them plus a lost hull's term, whether player.zrd's
+    // 10 or the executable's 100.
     private const int ScoreTarget = 30;
+
+    // Enough of the broadside's rounds, each scaled up, to take a pilot's hull through any shield.
+    private const int BroadsideShots = 8;
+    private const float BroadsideScale = 1000f;
 
     private const float Overkill = 100000f;
 
@@ -55,10 +61,13 @@ internal static class NetZeppelinVersusSuites
         "three sessions on the chapter's MP3 map, two seats on lobby team 2 listed first and one on "
         + "team 1: every machine flies multiplayer1zep for team 2 and multiplayer2zep for team 1, "
         + "with each side's parts on its team and each seat opening beside its own hull; every pane "
-        + "reads its own hull as Defend and the other as Destroy under the team's name; an enemy "
-        + "gas bag scores its killer 10 and its own side -10; a broadside cannon scores its bound bag "
-        + "once; a downed seat returns by its hull above the spawn table; and the third bag of "
-        + "multiplayer1zep ends the match for team 1 with 100 each that the Score limit never reads")]
+        + "reads its own hull as Defend and the other as Destroy under the team's name; both hulls' "
+        + "broadsides are engaged on every machine; an enemy gas bag scores its killer "
+        + "score_gas_kill and its own side score_my_gas_kill; a broadside cannon scores its bound bag "
+        + "once; a downed seat returns by its hull above the spawn table; a pilot a hull's broadside "
+        + "downs costs it no score and sets that hull's side's term to score_zep_kill; and the third "
+        + "bag of multiplayer1zep ends the match for team 1 with player.zrd's score_zep that the "
+        + "Score limit never reads")]
     internal static void AMatchOfHullsAcrossThreeMachines(TestContext ctx)
     {
         var spec = Spec(ctx);
@@ -103,8 +112,10 @@ internal static class NetZeppelinVersusSuites
 
             Lockstep(SettleSteps, peers);
             HullMarkers(ctx, peers);
+            Broadsides(ctx, peers);
             GasBags(ctx, peers);
             Returns(ctx, peers);
+            HullKill(ctx, peers);
             HullLost(ctx, peers);
         }
         finally
@@ -193,12 +204,25 @@ internal static class NetZeppelinVersusSuites
         ctx.Check(right, $"every pane reads its own side's hull as Defend and the other's as Destroy in red, each under its team's name, on every machine ({string.Join(", ", got)})");
     }
 
+    // FUN_00496490 writes both hulls' engage byte, so every machine's broadsides are live, and
+    // their rounds carry the hull that fired them.
+    private static void Broadsides(TestContext ctx, GameSession[] peers)
+    {
+        var got = peers.Select(p => string.Join(",", new[] { "multiplayer1zep", "multiplayer2zep" }
+            .Select(n => p.ZeppelinHulls!.BroadsideOf(n) is { } b ? $"{n}:{b.CannonsEngaged}/{b.Cannons.Count}" : $"{n}:none"))).ToArray();
+        ctx.Check(peers.All(p => p.ZeppelinHulls!.NamesBroadsideRounds
+                                 && p.ZeppelinHulls.BroadsideOf("multiplayer1zep") is { CannonsEngaged: true, Cannons.Count: 6 }
+                                 && p.ZeppelinHulls.BroadsideOf("multiplayer2zep") is { CannonsEngaged: true, Cannons.Count: 6 }),
+            $"both hulls' six broadsides are engaged on every machine, their rounds named for the hull ({string.Join(" | ", got)})");
+    }
+
     // An enemy bag scores, a cannon scores its bound bag once, and a side's own bag costs.
     private static void GasBags(TestContext ctx, GameSession[] peers)
     {
+        var scores = peers[0].Versus!.Scores;
         Kill(peers, "multiplayer1zep", "gasbag1", seat: 2);
-        ctx.Check(peers.All(p => p.Versus!.ScoreOf(2) == ZeppelinVersus.GasbagScore && p.Versus!.KillsOf(2) == 0),
-            $"team 1's seat downing multiplayer1zep's gasbag1 scores it {ZeppelinVersus.GasbagScore} on every machine ({Scores(peers)})");
+        ctx.Check(peers.All(p => p.Versus!.ScoreOf(2) == scores.GasbagKill && p.Versus!.KillsOf(2) == 0),
+            $"team 1's seat downing multiplayer1zep's gasbag1 scores it {scores.GasbagKill} on every machine ({Scores(peers)})");
         ctx.Check(peers.All(p => Pool(p, "multiplayer1zep", "gasbag1") is { Status: DestructibleRegistry.State.Destroyed }),
             $"and the bag is destroyed on every machine ({string.Join(", ", peers.Select(p => Pool(p, "multiplayer1zep", "gasbag1")?.Status.ToString() ?? "none"))})");
         ctx.Check(peers[0].ZvzPlay!.Spoken.Contains("snd_Zep_GBlost") && peers[1].ZvzPlay!.Spoken.Contains("snd_Zep_GBlost")
@@ -206,15 +230,15 @@ internal static class NetZeppelinVersusSuites
             $"team 2's machines hear their gas bag lost and team 1's hears it destroyed ({Spoken(peers)})");
 
         Kill(peers, "multiplayer2zep", "lbroad1", seat: 0);
-        ctx.Check(peers.All(p => p.Versus!.ScoreOf(0) == ZeppelinVersus.GasbagScore),
+        ctx.Check(peers.All(p => p.Versus!.ScoreOf(0) == scores.GasbagKill),
             $"a broadside cannon of multiplayer2zep scores its killer its bound gasbag1 on every machine ({Scores(peers)})");
         Kill(peers, "multiplayer2zep", "gasbag1", seat: 1);
         ctx.Check(peers.All(p => p.Versus!.ScoreOf(1) == 0 && Pool(p, "multiplayer2zep", "gasbag1") is { Status: DestructibleRegistry.State.Destroyed }),
             $"ABLE-TO-FAIL CONTROL: the bag itself then dies and scores nobody, its count spent by the cannon ({Scores(peers)})");
 
         Kill(peers, "multiplayer1zep", "gasbag2", seat: 1);
-        ctx.Check(peers.All(p => p.Versus!.ScoreOf(1) == ZeppelinVersus.OwnGasbagScore),
-            $"a team 2 seat downing its own hull's gasbag2 costs it {-ZeppelinVersus.OwnGasbagScore} on every machine ({Scores(peers)})");
+        ctx.Check(peers.All(p => p.Versus!.ScoreOf(1) == scores.OwnGasbagKill),
+            $"a team 2 seat downing its own hull's gasbag2 costs it {-scores.OwnGasbagKill} on every machine ({Scores(peers)})");
         ctx.Check(peers.All(p => !p.Versus!.Completed && p.ZeppelinHulls!.SurvivorsOf("multiplayer1zep") == 3),
             $"ABLE-TO-FAIL CONTROL: with three of five bags standing multiplayer1zep flies on and the match runs ({string.Join(", ", peers.Select(p => p.ZeppelinHulls!.SurvivorsOf("multiplayer1zep")))})");
     }
@@ -236,17 +260,57 @@ internal static class NetZeppelinVersusSuites
             $"the downed seat returns at the respawn ring's height on every machine, over the table's 800 m top ({string.Join(" | ", at.Select(p => $"({p.X:0},{p.Y:0},{p.Z:0})"))})");
     }
 
+    // Seat 2 of team 1, downed on the host by multiplayer1zep's broadside and reported by its own
+    // machine as cause 3. Event 9 sets team 2's term and charges the victim nothing.
+    private static void HullKill(TestContext ctx, GameSession[] peers)
+    {
+        var scores = peers[0].Versus!.Scores;
+        var round = WeaponDefs.Load(ctx.ZrdrPath).Get(ZeppelinRuntime.BroadsideWeaponId);
+        if (round == null)
+        {
+            ctx.Check(false, $"the weapon catalogue holds the broadside's {ZeppelinRuntime.BroadsideWeaponId}");
+            return;
+        }
+
+        int scoreBefore = peers[0].Versus!.ScoreOf(2);
+        int deathsBefore = peers[0].Versus!.DeathsOf(2);
+        var copy = peers[0].SeatRigs[2].Controller!;
+        var owned = peers[2].SeatRigs[2].Controller!;
+        for (int shot = 0; shot < BroadsideShots && !owned.Crashed; shot++)
+        {
+            copy.Body!.TakeProjectileHit(round, copy.WorldPosition, 0, ZeppelinVersus.BroadsideShooter(0), BroadsideScale);
+            Lockstep(2, peers);
+        }
+
+        Lockstep(PartSteps, peers);
+        ctx.Check(peers.All(p => p.Versus!.DeathsOf(2) == deathsBefore + 1 && p.Versus!.ScoreOf(2) == scoreBefore),
+            $"a pilot downed by multiplayer1zep's broadside takes a death and no score on every machine ({Scores(peers)})");
+        ctx.Check(peers.All(p => p.Versus!.TeamTermOf(2) == scores.ZeppelinKill && p.Versus!.TeamScoreOf(2) == p.Versus!.TeamTotalOf(2) - scores.ZeppelinKill),
+            $"and team 2, whose hull fired, has its term set to {scores.ZeppelinKill} on every board, never in the Score limit's total ({Scores(peers)})");
+        ctx.Check(peers.All(p => p.Versus!.TeamTermOf(1) == 0),
+            $"ABLE-TO-FAIL CONTROL: the victim's own side's term stays 0 ({Scores(peers)})");
+
+        // Back in the air before the last bag, so the ending finds every seat flying.
+        for (int step = 0; step < GrantSteps && owned.Crashed; step++)
+        {
+            Lockstep(1, peers);
+        }
+
+        Lockstep(PartSteps, peers);
+    }
+
     // The third bag of multiplayer1zep takes it below three standing and ends the match.
     private static void HullLost(TestContext ctx, GameSession[] peers)
     {
+        var scores = peers[0].Versus!.Scores;
         Kill(peers, "multiplayer1zep", "gasbag3", seat: 2);
-        ctx.Check(peers.All(p => p.Versus!.ScoreOf(2) == 2 * ZeppelinVersus.GasbagScore),
+        ctx.Check(peers.All(p => p.Versus!.ScoreOf(2) == 2 * scores.GasbagKill),
             $"the third bag scores its killer before the hull goes ({Scores(peers)})");
         ctx.Check(peers.All(p => p.Versus!.Completed && p.MatchEnd == NetMatchEnd.Objective && p.Versus!.ObjectiveWinner == 1),
             $"multiplayer1zep lost ends the match on its objective for team 1 on every machine ({string.Join(", ", peers.Select(p => $"{p.MatchEnd}/{p.Versus!.ObjectiveWinner}"))})");
-        ctx.Check(peers.All(p => p.Versus!.TeamTotalOf(1) == p.Versus!.TeamScoreOf(1) + VersusMatch.HullLossBonus
-                                 && p.Versus!.TeamTotalOf(2) == p.Versus!.TeamScoreOf(2)),
-            $"and team 1 takes the {VersusMatch.HullLossBonus} bonus on every board, the losing side none ({Scores(peers)})");
+        ctx.Check(peers.All(p => p.Versus!.TeamTotalOf(1) == p.Versus!.TeamScoreOf(1) + scores.HullLoss
+                                 && p.Versus!.TeamTotalOf(2) == p.Versus!.TeamScoreOf(2) + scores.ZeppelinKill),
+            $"and team 1 takes the lost hull's {scores.HullLoss} on every board, the losing side only its own term ({Scores(peers)})");
         ctx.Check(peers.All(p => p.Versus!.TeamScoreOf(1) < ScoreTarget && p.Versus!.TeamTotalOf(1) >= ScoreTarget),
             $"ABLE-TO-FAIL CONTROL: the bonus carries team 1 past the {ScoreTarget}-point limit only on the board, which the limit never reads ({Scores(peers)})");
         var titles = peers.Select(p => VersusBoard.Title(p.Versus!)).ToArray();

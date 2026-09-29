@@ -26,7 +26,7 @@ public class TeamDeathmatchTests
 
         match.RegisterKill(shooter: 0, victim: 1);
 
-        Assert.Equal(VersusMatch.SuicideScore, match.ScoreOf(0));
+        Assert.Equal(match.Scores.Suicide, match.ScoreOf(0));
         Assert.Equal(0, match.KillsOf(0));
         Assert.Equal(1, match.DeathsOf(1));
         Assert.Equal(0, match.ScoreOf(1));

@@ -27,30 +27,20 @@ public readonly record struct VersusTeamStanding(int Team, string Name, int Kill
 /// <c>GD.Print</c> in this family once crashed the xUnit host. Keep it engine-free by construction.</summary>
 public sealed class VersusMatch
 {
-    /// <summary>What a kill is worth, the original's <c>score_kill</c> default
-    /// (<c>docs/org/multiplayer-scoring.md</c>).</summary>
-    public const int KillScore = 1;
-
-    /// <summary>What a death with no killer costs the pilot who died, the original's
-    /// <c>score_suicide</c> default. Negative on purpose: a crash moves you away from the target
-    /// (<c>docs/org/multiplayer-scoring.md</c>).</summary>
-    public const int SuicideScore = -1;
-
-    /// <summary>What a lost hull gives every other team in Zeppelin vs Zeppelin, <c>score_zep</c>'s
-    /// fallback. ⚠ Never add it to <see cref="TeamScoreOf"/>: the Score limit does not read it
-    /// (docs/org/multiplayer-zvz.md).</summary>
-    public const int HullLossBonus = 100;
-
     private readonly Row[] _scores;
     private readonly Dictionary<int, string> _teamNames = new();
     private readonly Dictionary<int, int> _teamBonus = new();
 
-    public VersusMatch(int playerCount, int killTarget = 5, float timeLimit = 300f, int lives = 0)
+    /// <summary>A match of <paramref name="playerCount"/> seats scored by <paramref name="scores"/>,
+    /// <see cref="MatchScores.Fallback"/> when none is given.</summary>
+    public VersusMatch(int playerCount, int killTarget = 5, float timeLimit = 300f, int lives = 0,
+        MatchScores? scores = null)
     {
         playerCount = Math.Max(1, playerCount); // 2-4 in practice; a solo session still scores
         KillTarget = Math.Max(0, killTarget);
         TimeLimit = Math.Max(0f, timeLimit);
         Lives = Math.Max(0, lives);
+        Scores = scores ?? MatchScores.Fallback;
         _scores = new Row[playerCount];
         for (int i = 0; i < playerCount; i++)
             _scores[i] = new Row();
@@ -61,6 +51,10 @@ public sealed class VersusMatch
 
     /// <summary>How many players are being scored.</summary>
     public int PlayerCount => _scores.Length;
+
+    /// <summary>What each scoring event is worth in this match, the same on every machine since
+    /// every machine reads the same <c>player.zrd</c>.</summary>
+    public MatchScores Scores { get; }
 
     /// <summary>The score that ends the match, 0 = no kill target (time is then the only way to
     /// end it). Named for the menu row that sets it. The original compares that row against a
@@ -168,15 +162,20 @@ public sealed class VersusMatch
         return total;
     }
 
-    /// <summary>A team's total as the board shows it: <see cref="TeamScoreOf"/> plus what the team
-    /// was given as a team, a lost enemy hull's <see cref="HullLossBonus"/>.</summary>
-    public int TeamTotalOf(int team) =>
-        TeamScoreOf(team) + (_teamBonus.TryGetValue(team, out int bonus) ? bonus : 0);
+    /// <summary>A team's total as the board shows it: <see cref="TeamScoreOf"/> plus the team's own
+    /// term, which only Zeppelin vs Zeppelin writes (<see cref="EndOnHullLoss"/>,
+    /// <see cref="RegisterZeppelinKill"/>).</summary>
+    public int TeamTotalOf(int team) => TeamScoreOf(team) + TeamTermOf(team);
+
+    /// <summary>What a team was given as a team, the original's team <c>+0x14</c> term. ⚠ Never add
+    /// it to <see cref="TeamScoreOf"/>: the Score limit does not read it
+    /// (docs/org/multiplayer-zvz.md).</summary>
+    public int TeamTermOf(int team) => _teamBonus.TryGetValue(team, out int term) ? term : 0;
 
     /// <summary>Zeppelin vs Zeppelin's end: <paramref name="losingTeam"/>'s hull is gone, every other
-    /// team takes <see cref="HullLossBonus"/> and <paramref name="winningTeam"/> wins (end reason 3).
-    /// Once per match. A replicated match takes it from the host's state and completes there.
-    /// </summary>
+    /// team's term takes <see cref="MatchScores.HullLoss"/> and <paramref name="winningTeam"/> wins
+    /// (end reason 3). Once per match. A replicated match takes it from the host's state and
+    /// completes there.</summary>
     public void EndOnHullLoss(int losingTeam, int winningTeam)
     {
         if (ObjectiveWinner != 0 || (Completed && !Replicated))
@@ -185,11 +184,27 @@ public sealed class VersusMatch
         foreach (int team in TeamNumbers())
         {
             if (team != losingTeam)
-                _teamBonus[team] = (_teamBonus.TryGetValue(team, out int had) ? had : 0) + HullLossBonus;
+                _teamBonus[team] = TeamTermOf(team) + Scores.HullLoss;
         }
 
         if (!Replicated)
             Complete();
+    }
+
+    /// <summary>The original's event 9, a pilot downed by the zeppelin of <paramref name="team"/>.
+    /// The team's term is set to <see cref="MatchScores.ZeppelinKill"/> rather than added to, so
+    /// only the first such kill moves it. The victim takes a death and no score. A replicated match sets the term
+    /// alone, its deaths arriving as the host's scores. No-op once <see cref="Completed"/>.</summary>
+    public void RegisterZeppelinKill(int victim, int team)
+    {
+        if (Completed)
+            return;
+        if (team > 0)
+            _teamBonus[team] = Scores.ZeppelinKill;
+        if (Replicated || RowOf(victim) is not { } victimRow)
+            return;
+        victimRow.Deaths++;
+        CheckAlone();
     }
 
     /// <summary>Every team some seat flies on, ranked by <see cref="TeamTotalOf"/> as
@@ -244,7 +259,7 @@ public sealed class VersusMatch
     /// host's count, so every machine reads the same answer once the score arrives.</summary>
     public bool OutOfLives(int playerIndex) => Lives > 0 && DeathsOf(playerIndex) >= Lives;
 
-    /// <summary>The ranked number: <see cref="KillScore"/> per kill plus <see cref="SuicideScore"/>
+    /// <summary>The ranked number: <see cref="Scores"/>' kill value per kill plus its suicide value
     /// per death with no killer, plus a mode's own points (<see cref="AddScore"/>). May go negative.
     /// </summary>
     public int ScoreOf(int playerIndex) => RowOf(playerIndex)?.Score ?? 0;
@@ -255,12 +270,13 @@ public sealed class VersusMatch
     public int KillsRemaining(int playerIndex) =>
         KillTarget > 0 ? Math.Max(0, KillTarget - Counted(playerIndex)) : 0;
 
-    /// <summary>A weapon kill: +1 kill and <see cref="KillScore"/> to the shooter, +1 death to the
+    /// <summary>A weapon kill: +1 kill and <see cref="MatchScores.Kill"/> to the shooter, or
+    /// <see cref="MatchScores.TurretKill"/> to a <paramref name="turret"/>'s owner, +1 death to the
     /// victim. Completes the match once the shooter's score reaches <see cref="KillTarget"/>.
-    /// ⚠ A teammate's kill counts no kill and costs the shooter <see cref="SuicideScore"/>: the
-    /// original charges <c>score_suicide</c> to a killer on the victim's team slot.
+    /// ⚠ A teammate's kill counts no kill and costs the shooter <see cref="MatchScores.Suicide"/>:
+    /// the original charges <c>score_suicide</c> to a killer on the victim's team slot.
     /// No-op once <see cref="Completed"/>.</summary>
-    public void RegisterKill(int shooter, int victim)
+    public void RegisterKill(int shooter, int victim, bool turret = false)
     {
         if (Completed)
             return;
@@ -268,12 +284,12 @@ public sealed class VersusMatch
         bool teammate = shooter != victim && shooterRow is { Team: > 0 } && shooterRow.Team == TeamOf(victim);
         if (shooterRow != null && teammate)
         {
-            shooterRow.Score += SuicideScore;
+            shooterRow.Score += Scores.Suicide;
         }
         else if (shooterRow != null)
         {
             shooterRow.Kills++;
-            shooterRow.Score += KillScore;
+            shooterRow.Score += turret ? Scores.TurretKill : Scores.Kill;
         }
         var victimRow = RowOf(victim);
         if (victimRow != null)
@@ -283,7 +299,7 @@ public sealed class VersusMatch
         CheckAlone();
     }
 
-    /// <summary>A death with no killer, terrain or mid-air: +1 death and <see cref="SuicideScore"/>
+    /// <summary>A death with no killer, terrain or mid-air: +1 death and <see cref="MatchScores.Suicide"/>
     /// to the pilot who died, the original's own penalty. Never completes the match by itself, a
     /// falling score cannot reach the target. No-op once <see cref="Completed"/>.</summary>
     public void RegisterDeath(int victim)
@@ -294,7 +310,7 @@ public sealed class VersusMatch
         if (victimRow != null)
         {
             victimRow.Deaths++;
-            victimRow.Score += SuicideScore;
+            victimRow.Score += Scores.Suicide;
         }
         CheckAlone();
     }
@@ -375,8 +391,10 @@ public sealed class VersusMatch
         {
             Complete();
         }
-        else
+        else if (Completed)
         {
+            // ⚠ Re-arm only a completed match. Every running tick says ended = false, and a clear
+            // there would wipe a team's term as soon as the next tick landed.
             Completed = false;
             ObjectiveWinner = 0;
             _teamBonus.Clear();

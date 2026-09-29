@@ -30,8 +30,9 @@ shipped data does not have to supply:
 `0x4739fa` and keeps it in `ebp`, the node every `score_*` lookup from `0x473fb0` searches), and
 [Evidence: data] the shipped file authors the five values in the last column. So the original plays
 a kill for 2, a suicide for -2, a lost hull for 10 and the two flag events for 8 and 10; the
-defaults are only fallbacks. The remake scores the defaults, the values its team modes were decided
-on; whether to take the shipped ones is an open question on the tracker.
+defaults are only fallbacks. [Evidence: decoded] Each fallback is stored only on a missing key
+(`0x473fd0` to `0x47411b`), and each integer is the value node's `+0xc`. The default Score limit
+of 40 is therefore twenty kills in the original.
 
 `FUN_0046ecd0` dispatches an event id to one of three per-mode tables on the mode field at
 `+0x5c`. **Dogfight (modes 1 and 2) reaches `FUN_0046ed40`, which honours exactly three events**:
@@ -52,7 +53,8 @@ at `+0xc`:
 |---|---|---|
 | 1 | the killer argument is non-zero | `score_kill` to the killer, **or `score_suicide` to the killer** when killer and victim share the team slot at **remote record `+0x3c`**, the `0x1090`-byte record `FUN_00499d80` looks up, not the pilot record |
 | 2 | no killer at all | `score_suicide` to the pilot who died |
-| 3, 4 | a zeppelin part or a turret owner | that owner's event |
+| 3 | a zeppelin | event 9 with the zeppelin's team (`0x498e1c`): that team's `+0x14` term is set to `score_zep_kill`; the victim is charged nothing |
+| 4 | a turret owner | event 6, `score_turret_kill`, to the owner, or `score_suicide` to the owner when it shares the victim's team slot (`0x498e89`..`0x498ea9`) |
 
 ⚠ **There is no last-damager memory anywhere on this path.** The credited killer is the attacker of
 the one damage event that took the hull to zero, read straight off the damage call's own argument
@@ -151,30 +153,35 @@ walks the team list: each team's `+0x10` is set to its `+0x14` and then takes th
 every pilot whose `+8` names that team (`0x46eaa2`..`0x46eaf0`), mirrored into the team's display
 record at `+0x38`. [Evidence: decoded, not re-read here] `FUN_00499270` then ends the match with
 reason 2 when a team's `+0x10` reaches the target `0071c17c`, and skips the per-pilot check while
-`0071d89c` is set. [Evidence: undecoded] The writers of a team's own `+0x14` term were not traced;
-no Deathmatch score event names a team.
+`0071d89c` is set. [Evidence: decoded] A team's own `+0x14` term is written only by mode 4's table
+`FUN_0046ee20`: event 3 adds `score_zep` to every team whose `+0x18` differs from the lost hull's
+(`0x46eeb3`..`0x46eed8`), and event 9 sets the named team's term to `score_zep_kill`
+(`0x46ee99`..`0x46eead`, the team found by `FUN_0046e0f0`). No Deathmatch score event names a team.
 
 **Reason 4 is one team left.** [Evidence: decoded] `FUN_004999f0` compares the team slots, so a
 team match ends when every pilot with lives is on one team, however many of them there are.
 
 ## What the remake takes
 
-`Flight/Modes/VersusMatch.cs` keeps the same signed score: `KillScore` (+1) per kill, `SuicideScore`
-(-1) for a death with no killer, the kill-target row compared against the score rather than against
-raw kills, and standings ranked by score with a tie at the top rendered as a draw. Kills and deaths
-stay as separate display counters, which the original keeps in the pilot's career record rather
-than in the match.
+`Flight/Modes/MatchScores.cs` reads the nine keys from `player.zrd` at session build, each with
+the fallback above, so every mode, the free-for-all Dogfight included, scores the shipped values.
+`Flight/Modes/VersusMatch.cs` keeps the same signed score: `score_kill` per kill, `score_suicide`
+for a death with no killer, `score_turret_kill` to a turret's owner, the kill-target row compared
+against the score rather than against raw kills, and standings ranked by score with a tie at the
+top rendered as a draw. Kills and deaths stay as separate display counters, which the original
+keeps in the pilot's career record rather than in the match.
 
 A lobby launch with teams is a team match (`VersusMatch.AssignTeams`, from each seat's
-`NetSeat.TeamId`). A teammate kill costs the killer `SuicideScore` and counts no kill. A team's
-total is the sum of its members' scores, since nothing in the remake scores a team directly, and the
-Score limit is read against that total alone. Reason 4 asks for pilots with lives on two teams, a
-teamless seat counting as a team of its own. Every machine derives the totals from the per-seat
-scores, so the remake's `0x13`, one seat's score, carries no team count, unlike the original's
-table ([`multiplayer-messages.md`](multiplayer-messages.md)). Zeppelin vs Zeppelin's lost hull is
-the one team award: `VersusMatch.EndOnHullLoss` gives every other team `score_zep` on the board's
-total (`TeamTotalOf`), never in the number the Score limit reads (`TeamScoreOf`), and ends the match
-as `NetMatchEnd.Objective` with the winning team named in the state
+`NetSeat.TeamId`). A teammate kill costs the killer `score_suicide` and counts no kill. A team's
+total is the sum of its members' scores, and the Score limit is read against that total alone.
+Reason 4 asks for pilots with lives on two teams, a teamless seat counting as a team of its own.
+Every machine derives the totals from the per-seat scores, so the remake's `0x13`, one seat's
+score, carries no team count, unlike the original's table
+([`multiplayer-messages.md`](multiplayer-messages.md)). The team's own term (`TeamTermOf`) is
+written only by Zeppelin vs Zeppelin: `VersusMatch.EndOnHullLoss` adds `score_zep` to every other
+team's term and `RegisterZeppelinKill` sets the term of a side whose hull downed a pilot. Both show
+on the board's total (`TeamTotalOf`), never in the number the Score limit reads (`TeamScoreOf`).
+A hull loss ends the match as `NetMatchEnd.Objective` with the winning team named in the state
 ([`multiplayer-zvz.md`](multiplayer-zvz.md)).
 
 The lives rule follows the decode above, with three differences. The count is clamped to 1..99

@@ -50,8 +50,9 @@ internal sealed class ZeppelinVersusInputs
 /// <summary>
 /// Zeppelin vs Zeppelin in a live network match: <see cref="ZeppelinVersus"/>'s rules over the
 /// mission's two hulls. Each hull takes its side's lobby team, so aim and friend-or-foe follow it.
-/// The host scores a dead gas bag or broadside cannon to the seat whose hit killed it. It ends the
-/// match when a hull is lost. Every machine speaks the gas bag lines and posts the ending.
+/// The host scores each dead gas bag or cannon to the seat whose hit killed it, and ends the match
+/// on a lost hull. Both hulls' broadsides are engaged, their rounds named for the hull
+/// that fired. Every machine speaks the gas bag lines and posts the ending.
 /// Decode: docs/org/multiplayer-zvz.md.
 /// </summary>
 internal sealed class ZeppelinVersusRuntime
@@ -131,9 +132,15 @@ internal sealed class ZeppelinVersusRuntime
             return null;
         }
 
-        var rules = new ZeppelinVersus(first, second);
+        var rules = new ZeppelinVersus(first, second, inputs.Match.Scores);
         zeppelins.SetTeam(hull0, AimAssist.LobbyTeam(first) ?? AimAssist.NeutralTeam);
         zeppelins.SetTeam(hull1, AimAssist.LobbyTeam(second) ?? AimAssist.NeutralTeam);
+
+        // FUN_00496490 writes every hull's engage byte, so both broadsides fire on every machine.
+        // Only the host's rounds spend anything: a guest's world pools and aircraft wait for its word.
+        zeppelins.NamesBroadsideRounds = true;
+        zeppelins.SetCannonsEngaged(hull0, true, "Zeppelin vs Zeppelin");
+        zeppelins.SetCannonsEngaged(hull1, true, "Zeppelin vs Zeppelin");
         int localTeam = 0;
         for (int seat = 0; seat < inputs.SeatTeams.Count && localTeam == 0; seat++)
         {

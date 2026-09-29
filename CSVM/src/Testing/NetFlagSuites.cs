@@ -31,9 +31,6 @@ internal static class NetFlagSuites
 
     private const float QuickRespawn = 0.5f;
 
-    // Two captures end it and nothing short of them can: team 2 scores only by its flags.
-    private const int ScoreTarget = 2 * FlagMatch.CaptureScore;
-
     // How high over a flag a pilot is put, inside the reach.
     private const float Over = 15f;
 
@@ -58,8 +55,8 @@ internal static class NetFlagSuites
         + "Enemy by the pane's side; a guest takes the enemy flag at its base, the flag hangs on its "
         + "aeroplane on every machine, the base flag hides and the away marker and the carrier's tag "
         + "name the carrier; bringing it home "
-        + "scores 5; a carrier's death floats the flag on every machine; a pilot catches its own "
-        + "floating flag and returning it scores 1; an uncaught flag goes home when its 15 s throw "
+        + "scores score_enemy_flag; a carrier's death floats the flag on every machine; a pilot catches its own "
+        + "floating flag and returning it scores score_return_flag; an uncaught flag goes home when its 15 s throw "
         + "runs out, scoring nobody; and a second capture ends the match on the Score limit by team")]
     internal static void AMatchOfFlagsAcrossThreeMachines(TestContext ctx)
     {
@@ -122,6 +119,9 @@ internal static class NetFlagSuites
         }
     }
 
+    // Two captures end it and nothing short of them can: team 2 scores only by its flags.
+    private static int ScoreTarget(TestContext ctx) => 2 * MatchScores.Load(ctx.ZrdrPath).FlagCapture;
+
     private static SessionSpec Spec(TestContext ctx)
     {
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, SessionSpec.CtfMission);
@@ -132,7 +132,7 @@ internal static class NetFlagSuites
         return SessionSpec.Parse(new[]
         {
             "--vs", $"--chapter={ctx.Chapter}", $"--mission={SessionSpec.CtfMission}", "--players=1", "--mute",
-            "--no-pads", "--ctf", TrackedFlight, $"--vs-kills={ScoreTarget}",
+            "--no-pads", "--ctf", TrackedFlight, $"--vs-kills={ScoreTarget(ctx)}",
         });
     }
 
@@ -177,10 +177,10 @@ internal static class NetFlagSuites
         Put(peers, seat: 2, peers[2].Flags!.Flags.HomeOf(2));
         Lockstep(AskSteps, peers);
         Home(ctx, peers, "carried to team 2's base it goes home on every machine", team: 1);
-        ctx.Check(peers.All(p => p.Versus!.ScoreOf(2) == before + FlagMatch.CaptureScore && p.Versus!.KillsOf(2) == 0),
-            $"and the capture scores its carrier {FlagMatch.CaptureScore} on every machine ({Scores(peers)})");
+        ctx.Check(peers.All(p => p.Versus!.ScoreOf(2) == before + p.Versus!.Scores.FlagCapture && p.Versus!.KillsOf(2) == 0),
+            $"and the capture scores its carrier {peers[0].Versus!.Scores.FlagCapture} on every machine ({Scores(peers)})");
         ctx.Check(peers.All(p => !p.Versus!.Completed),
-            $"ABLE-TO-FAIL CONTROL: one capture is short of the {ScoreTarget}-point target and the match runs ({Scores(peers)})");
+            $"ABLE-TO-FAIL CONTROL: one capture is short of the {ScoreTarget(ctx)}-point target and the match runs ({Scores(peers)})");
         Park(peers, seat: 2);
     }
 
@@ -214,8 +214,8 @@ internal static class NetFlagSuites
         Put(peers, seat: 0, peers[0].Flags!.Flags.HomeOf(1));
         Lockstep(AskSteps, peers);
         Home(ctx, peers, "returned to its own base", team: 1);
-        ctx.Check(peers.All(p => p.Versus!.ScoreOf(0) == before + FlagMatch.ReturnScore),
-            $"and the return scores its carrier {FlagMatch.ReturnScore} on every machine ({Scores(peers)})");
+        ctx.Check(peers.All(p => p.Versus!.ScoreOf(0) == before + p.Versus!.Scores.FlagReturn),
+            $"and the return scores its carrier {peers[0].Versus!.Scores.FlagReturn} on every machine ({Scores(peers)})");
         Park(peers, seat: 0);
     }
 
@@ -247,7 +247,7 @@ internal static class NetFlagSuites
         Lockstep(CooledSteps, peers);
         Put(peers, seat: 2, peers[2].Flags!.Flags.HomeOf(2));
         Lockstep(AskSteps, peers);
-        ctx.Check(peers.All(p => p.Versus!.TeamScoreOf(2) == ScoreTarget && p.Versus!.Completed && p.MatchEnd == NetMatchEnd.ScoreTarget),
+        ctx.Check(peers.All(p => p.Versus!.TeamScoreOf(2) == ScoreTarget(ctx) && p.Versus!.Completed && p.MatchEnd == NetMatchEnd.ScoreTarget),
             $"the second capture ends the match on the Score limit by team on every machine ({Scores(peers)}; {string.Join(", ", peers.Select(p => p.MatchEnd))})");
         var titles = peers.Select(p => VersusBoard.Title(p.Versus!)).ToArray();
         ctx.Check(titles.All(t => t == "BLUE ANGELS WINS"),

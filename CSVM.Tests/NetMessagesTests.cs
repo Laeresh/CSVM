@@ -115,6 +115,13 @@ public class NetMessagesTests
         Assert.Equal(HitMessage.Size, written);
         Assert.True(HitMessage.TryRead(buffer, out var got));
         Assert.Equal(sent, got);
+        Assert.Equal(NetMessage.NoSeat, got.Hull);
+
+        // A hull's broadside round rides in the same width, the hull where the padding was.
+        var broadside = sent with { ShooterSeat = NetMessage.NoSeat, Hull = 1 };
+        Assert.Equal(HitMessage.Size, broadside.Write(buffer));
+        Assert.True(HitMessage.TryRead(buffer, out var fired));
+        Assert.Equal(broadside, fired);
     }
 
     [Fact]
@@ -996,15 +1003,16 @@ public class NetMessagesTests
     }
 
     [Fact]
-    public void ADeathNoticeRoundTripsVictimKillerAndCauseInEightBytes()
+    public void ADeathNoticeRoundTripsVictimKillerCauseAndAHullsTeamInTenBytes()
     {
-        Assert.Equal(8, DeathNoticeMessage.Size);
+        Assert.Equal(10, DeathNoticeMessage.Size);
         Span<byte> buffer = stackalloc byte[DeathNoticeMessage.Size];
         foreach (var sent in new[]
         {
             new DeathNoticeMessage(1, 0, NetDeathCause.Killer),
             new DeathNoticeMessage(3, NetMessage.NoSeat, NetDeathCause.Suicide),
             new DeathNoticeMessage(0, 2, NetDeathCause.TurretOwner),
+            new DeathNoticeMessage(2, NetMessage.NoSeat, NetDeathCause.ZeppelinPart, Team: 3),
         })
         {
             Assert.Equal(DeathNoticeMessage.Size, sent.Write(buffer));

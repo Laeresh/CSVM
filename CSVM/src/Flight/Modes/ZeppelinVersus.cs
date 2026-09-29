@@ -20,14 +20,6 @@ public readonly record struct HullPartLoss(int Hull, string Gasbag, bool Cannon,
 /// </summary>
 public sealed class ZeppelinVersus
 {
-    /// <summary>What an enemy gas bag scores its killer, <c>score_gas_kill</c>'s fallback, which the
-    /// shipped <c>player.zrd</c> does not author.</summary>
-    public const int GasbagScore = 10;
-
-    /// <summary>What a gas bag of the killer's own hull costs it, <c>score_my_gas_kill</c>'s fallback.
-    /// </summary>
-    public const int OwnGasbagScore = -10;
-
     /// <summary>The respawn's altitude floor, and its whole altitude over lower ground
     /// (<c>0x603730</c>, the flat 900 m at <c>0x496b75</c>).</summary>
     public const float RespawnFloor = 900f;
@@ -39,14 +31,27 @@ public sealed class ZeppelinVersus
     public const float HeadingBase = 1.5708f;
 
     private readonly int[] _teams;
+    private readonly MatchScores _scores;
     private readonly HashSet<(int Hull, string Gasbag)> _scored = new();
 
     /// <summary>A match whose hull 0 flies <paramref name="firstTeam"/> and hull 1
-    /// <paramref name="secondTeam"/>, lobby team numbers.</summary>
-    public ZeppelinVersus(int firstTeam, int secondTeam)
+    /// <paramref name="secondTeam"/>, lobby team numbers, its gas bags worth what
+    /// <paramref name="scores"/> says (<see cref="MatchScores.Fallback"/> when none is given).</summary>
+    public ZeppelinVersus(int firstTeam, int secondTeam, MatchScores? scores = null)
     {
         _teams = new[] { Math.Max(0, firstTeam), Math.Max(0, secondTeam) };
+        _scores = scores ?? MatchScores.Fallback;
     }
+
+    /// <summary>The shooter id a hull's broadside rounds carry in a match, so a pilot they down is
+    /// charged to that hull's side. Below <see cref="ProjectilePool.NoShooter"/>, clear of every
+    /// seat and AI id, and by placement index.</summary>
+    public static int BroadsideShooter(int hull) => ProjectilePool.NoShooter - 1 - hull;
+
+    /// <summary>The hull whose broadside fired a round carrying <paramref name="shooter"/>, or -1 for
+    /// any other shooter id.</summary>
+    public static int HullOfShooter(int shooter) =>
+        shooter < ProjectilePool.NoShooter ? ProjectilePool.NoShooter - 1 - shooter : -1;
 
     /// <summary>The first two distinct lobby teams in seat order, 0 where fewer are flying. Any
     /// further team flies without a hull.</summary>
@@ -160,5 +165,7 @@ public sealed class ZeppelinVersus
     /// <summary>What a counting loss scores its killer on <paramref name="killerTeam"/>: its own
     /// hull's bag costs, any other scores (<c>FUN_0049b740</c>). Nothing without a killer.</summary>
     public int Points(HullPartLoss loss, int killerTeam) =>
-        loss.Seat < 0 ? 0 : killerTeam > 0 && killerTeam == TeamOfHull(loss.Hull) ? OwnGasbagScore : GasbagScore;
+        loss.Seat < 0 ? 0
+        : killerTeam > 0 && killerTeam == TeamOfHull(loss.Hull) ? _scores.OwnGasbagKill
+        : _scores.GasbagKill;
 }

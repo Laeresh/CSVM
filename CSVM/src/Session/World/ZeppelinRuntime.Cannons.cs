@@ -29,6 +29,12 @@ public sealed partial class ZeppelinRuntime
     private Random? _gasbagRng;
     private RandomNumberGenerator? _scatterRng;
 
+    /// <summary>Whether a broadside round carries its hull's
+    /// <see cref="Flight.Modes.ZeppelinVersus.BroadsideShooter"/> id rather than
+    /// <see cref="ProjectilePool.NoShooter"/>, so a pilot it downs is charged to that hull. Set by
+    /// Zeppelin vs Zeppelin alone; every other mission's rounds stay unowned.</summary>
+    public bool NamesBroadsideRounds { get; set; }
+
     /// <summary>The live broadside machine, for the suite's state assertions; null for an
     /// unknown node or a record without cannons.</summary>
     public ZeppelinBroadside? BroadsideOf(string node) => Find(node)?.Broadside;
@@ -45,14 +51,14 @@ public sealed partial class ZeppelinRuntime
     /// broadside (<see cref="ZeppelinBroadside.CannonsEngaged"/>, the decoded byte <c>+0xc</c>).
     /// Every broadside starts disengaged, so a mission whose script never runs the directive
     /// never deploys a hatch. Returns false for an unknown node or one without cannons.</summary>
-    public bool SetCannonsEngaged(string node, bool engaged)
+    public bool SetCannonsEngaged(string node, bool engaged, string by = "the mission script")
     {
         if (Find(node) is not { Broadside: { } broadside } zep)
         {
             return false;
         }
         broadside.CannonsEngaged = engaged;
-        Log.Info("weapons", $"zep: '{zep.Def.Node}' broadside {(engaged ? "engaged" : "disengaged")} by the mission script, targets [{string.Join(",", zep.Def.Targets)}]");
+        Log.Info("weapons", $"zep: '{zep.Def.Node}' broadside {(engaged ? "engaged" : "disengaged")} by {by}, targets [{string.Join(",", zep.Def.Targets)}]");
         return true;
     }
 
@@ -197,7 +203,7 @@ public sealed partial class ZeppelinRuntime
             broadside.RightSign = -1f;
         }
         zep.Broadside = broadside;
-        Log.Info("weapons", $"zep: '{def.Node}' broadside wired, {def.LeftCannons.Count}+{def.RightCannons.Count} cannons, {BroadsideWeaponId} {_broadsideWeapon!.Velocity ?? ProjectilePool.DefaultVelocity:0} m/s, delay {broadside.FireDelaySeconds:0.#} s, range {def.CannonFireRange ?? 0f:0} m, inaccuracy {def.CannonInaccuracyDeg ?? 0f:0.#}°, targets [{string.Join(",", def.Targets)}], disengaged until COMPLETED_ZEPCANNONS");
+        Log.Info("weapons", $"zep: '{def.Node}' broadside wired, {def.LeftCannons.Count}+{def.RightCannons.Count} cannons, {BroadsideWeaponId} {_broadsideWeapon!.Velocity ?? ProjectilePool.DefaultVelocity:0} m/s, delay {broadside.FireDelaySeconds:0.#} s, range {def.CannonFireRange ?? 0f:0} m, inaccuracy {def.CannonInaccuracyDeg ?? 0f:0.#}°, targets [{string.Join(",", def.Targets)}], disengaged until engaged");
     }
 
     // One broadside step for a live, active zeppelin: resolve the authored target, gate on
@@ -249,6 +255,9 @@ public sealed partial class ZeppelinRuntime
         var sideNormal = ZeppelinBroadside.SideNormal(zep.Motion.YawRad, zep.Motion.PitchRad,
             side, broadside.RightSign);
         zep.LastVolleyDirs.Clear();
+        int shooter = NamesBroadsideRounds
+            ? Flight.Modes.ZeppelinVersus.BroadsideShooter(_live.IndexOf(zep))
+            : ProjectilePool.NoShooter;
         int fired = 0;
         int skipped = 0;
         foreach (var cannon in ready)
@@ -277,8 +286,7 @@ public sealed partial class ZeppelinRuntime
             }
             var dir = AimAssist.Scatter(aim,
                 Mathf.DegToRad(zep.Def.CannonInaccuracyDeg ?? 0f), _scatterRng!);
-            _pool.Spawn(_broadsideWeapon, muzzle.GlobalTransform, hullVel,
-                ProjectilePool.NoShooter, muzzle, dir);
+            _pool.Spawn(_broadsideWeapon, muzzle.GlobalTransform, hullVel, shooter, muzzle, dir);
             broadside.Fired(cannon);
             zep.LastVolleyDirs.Add(dir);
             zep.BroadsideShots++;

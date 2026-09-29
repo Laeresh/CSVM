@@ -17,13 +17,14 @@ code), data (extracted files), inferred (not checked in code).
 | Address | Role |
 |---|---|
 | `FUN_00413430` | At launch, records the first two teams in lobby order |
-| `FUN_00496490` | Puts each zeppelin on its side and marks it friend or foe |
+| `FUN_00496490` | Puts each zeppelin on its side, marks it friend or foe and engages its broadside |
 | `FUN_0049b4c0` | Relabels a hull's target entry: its team's name, "Defend" or "Destroy" |
 | `FUN_004c0680` region | A gas bag's damage; its death sends `0x1f` and scores |
 | `FUN_004c0900` region | A broadside cannon's damage; its death sends `0x20` and scores its bag |
 | `FUN_0049b740` | A gas bag's scoring event: the voice line, then the score on the host |
 | `FUN_0049adf0` | The host's zeppelin tick: the `0x1e` hull state, and the lost hull's end |
 | `FUN_0046ee20` | Mode 4's score table |
+| `FUN_00498bf0` | The `0x12` death handler; its cause 3 is a pilot killed by a zeppelin |
 | `FUN_004969b0` | The placement; its mode 4 branch is the return by the hull |
 | `FUN_00495c40` | Loads the zeppelin and match voice lines |
 
@@ -48,6 +49,25 @@ otherwise (`0x49b50c`..`0x49b6d0`). The map's `targets.zrd` labels `multiplayer1
 every machine; the type line "Zeppelin" stays. So a pilot's own hull is blue and the other red
 ([`targeting.md`](targeting.md), "Friend or foe").
 
+## Broadsides
+
+[Evidence: decoded] The same loop of `FUN_00496490` walks the zeppelin roster's pointer vector
+(`0x71df84` to `0x71df88`, the list object at `0x71df80`) and, for every record, writes 1 to the
+engage byte `+0xc` (`mov eax, 1` at `0x4965e2`, `mov byte ptr [esi+0xc], al` at `0x4965e9`). That
+is the byte `COMPLETED_ZEPCANNONS` writes through `FUN_0046a0b0`, which looks the record up in the
+same `0x71df80` list and stores its flag at `+0xc` (`0x46a0c9`). So in Zeppelin vs Zeppelin both
+hulls fire their broadsides with no script: the per-frame pass reads that byte
+([`../formats/mission-entities.md`](../formats/mission-entities.md), "Broadside firing").
+[Evidence: data] Every `MP3` `zeppelins.zrd` gives each hull six cannons, `targets` the other hull,
+`cannon_fire_delay` 15 s and `cannon_fire_range` 15000. The zeppelin-vs-zeppelin arm aims at the
+other hull's live gas bags; a round's own `RANGE` is 3500 m (`wep_28`).
+
+### ⚠ "No hull fires, since no `MP3` authors `COMPLETED_ZEPCANNONS`" — RETIRED (2026-09-29)
+
+This page read the directive's absence as both broadsides staying off in every shipped match, and
+so called event 9 unreachable. The side setup engages them itself, above. Do not read a
+`COMPLETED_ZEPCANNONS` census as the whole of the engage flag's writers again.
+
 ## Scoring
 
 [Evidence: decoded] A gas bag's record keeps two bytes: `+0x10`, its death sent, and `+0x11`, its
@@ -63,19 +83,27 @@ later scores nothing.
 [Evidence: decoded] `FUN_0049b740` compares the zeppelin's team with the local pilot's team slot
 `+0x3c`. On a match it plays `snd_Zep_GBlost` (`0x71d204`), otherwise `snd_Zep_GBdest`
 (`0x71d1f8`), on every machine that runs it. Then on the host alone (`FUN_005b4210`) it scores the
-attacker's record: event 8 (`score_my_gas_kill`) when the zeppelin's team is the attacker's, else
-event 7 (`score_gas_kill`), and runs the limit check `FUN_00499270`.
+attacker's record: event 8 (`score_my_gas_kill`, -10) when the zeppelin's team is the attacker's,
+else event 7 (`score_gas_kill`, +10), and runs the limit check `FUN_00499270`. Neither key is in the
+shipped `player.zrd`, so both are the executable's fallbacks.
 
 [Evidence: decoded] `FUN_0049adf0`, the host's tick, walks the zeppelins by ordinal from 1. For one
 whose dead byte `+6` is set while the match runs (`0x71c190` clear), it raises event 3 with that
 ordinal, ends the match with reason 3 and runs `FUN_00499270` (`0x49afb4`..`0x49afcf`). Event 3
-adds `score_zep` to every other team's total.
+adds `score_zep` to the `+0x14` term of every team whose `+0x18` is not the lost hull's
+(`0x46eeb3`..`0x46eed8`). [Evidence: data] The shipped `player.zrd` authors `score_zep` 10; the
+executable's fallback is 100 ([`multiplayer-scoring.md`](multiplayer-scoring.md)).
 
-[Evidence: decoded] The death handler's cause 3, a pilot killed by a zeppelin, raises event 9 with
-the zeppelin's `+0x18` (`0x498e1c`). Event 9 overwrites a team's `+0x14` with `score_zep_kill`.
-Every shipped `MP3` authors broadside targets but no `COMPLETED_ZEPCANNONS`
-([`../formats/mission-entities.md`](../formats/mission-entities.md)), so no hull fires and the cause
-never arises there.
+[Evidence: decoded] The dying client reports cause 3 when its killer resolves to a zeppelin: in
+`FUN_00498a90`, `FUN_0049b4a0` maps the killer to its node and `FUN_0049b440` finds the roster
+record with that node at `+0x1c`, whose team `+0` goes in the report's killer field. The handler's
+cause 3 finds that team (`FUN_0046e0f0`, `0x498dc2`), posts row 7064 "Killed by %1 Zeppelin" with that team's
+name, and raises event 9 with the team's `+0x18` (`0x498e1c`); it charges the victim nothing. The
+dispatcher `FUN_0046ecd0` runs on the host alone (`FUN_005b4210`). Event 9 **sets** that team's
+`+0x14` to `score_zep_kill` (`0x46eea7`..`0x46eead`), the only event of the table that assigns
+rather than adds. [Evidence: data] `player.zrd` does not author `score_zep_kill`, so the fallback 1
+(`0x47411b`) is in play. The term is 0 until a hull is lost, so the first pilot a team's zeppelin
+kills gives that team 1, and later ones change nothing.
 
 ## The end
 
@@ -113,11 +141,27 @@ link. The sides are the first two lobby teams in seat order, a seat on no team s
 opens in the `net.zrd` block round its own hull, block 1 or 2 by side rather than by team number,
 so two teams numbered 2 and 3 still open by their hulls. A dead part's shooter is the pool's
 `LastShooter`, and a hull loss ends the match with `NetMatchEnd.Objective`, the `0x17` state
-carrying the winning team. `score_zep`'s 100 goes to every other team's board total and never to
+carrying the winning team. Every value is the match's `MatchScores`, read from `player.zrd`, so a
+lost hull's `score_zep` is 10. It goes to every other team's term on the board's total and never to
 the Score limit, and the winner is the side whose hull survived, both maintainer decisions. The end
-posts the original's two lines; in place of the unrecorded `snd_MP_mis_Won` and `snd_MP_mis_Lost`,
-the winners hear `snd_Zep_dest` and the losers `snd_Zep_lost`. The return is the decoded point,
-computed on the host and sent as `SpawnAtMessage`. A rematch is refused, since no world pool
-rebuilds. Each hull's marker is relabelled per pane rather than per machine
-(`ZeppelinVersus.HullSide`), so splitscreen panes on two sides each read their own hull as
-"Defend". Event 9 and the rearm are not taken.
+posts the original's two lines. The return is the decoded point, computed on the host and sent as
+`SpawnAtMessage`. A rematch is refused, since no world pool rebuilds. Each hull's marker is
+relabelled per pane rather than per machine (`ZeppelinVersus.HullSide`), so splitscreen panes on
+two sides each read their own hull as "Defend". The rearm is not taken.
+
+Both broadsides are engaged on every machine as the side setup engages them
+(`ZeppelinRuntime.SetCannonsEngaged`), and each round carries its hull's shooter id
+(`ZeppelinVersus.BroadsideShooter`, below `ProjectilePool.NoShooter`). Every machine fires its own
+copy of the volleys, and only the host's spend anything, as the host-owned world has it: a guest's
+world pools spend nothing, and a round no seat fired is decided on the host. A hit the host sends
+names the hull in `HitMessage`, so the victim's machine reports its death as cause 3 with the hull's
+placement index. The host then runs event 9 (`VersusMatch.RegisterZeppelinKill`): the victim takes
+a death and no score, and the side's term is set to `score_zep_kill`. The death notice `0x5C`
+carries that side's team, so every guest sets the same term and posts "Killed by %1 Zeppelin" with
+the team's name. A broadside cannon a seat destroys scores its bound gas bag, as above; a gas bag a
+hull's round destroys is spent and scores nobody, since no seat fired it.
+
+**Remake choice, the end's sounds.** The original plays `snd_Zep_dest` to every machine at reason 3,
+and `snd_MP_mis_Won`/`snd_MP_mis_Lost` have no recording. The remake plays `snd_Zep_dest` to the
+winning side and `snd_Zep_lost`, which the original loads and never plays, to the side whose hull
+was lost.

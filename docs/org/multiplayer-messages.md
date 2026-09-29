@@ -178,7 +178,11 @@ its seat's callsign. A lobby host's first seat takes the host's own callsign (Pl
 carried on the wire as `NetLobby.LocalCallsign`), cut to the roster's width so every machine reads
 the same name, and its player tag only when that callsign is empty. The advert's name is the
 game's, not the host's, and never names a seat. A second local seat keeps its tag: the original's session-open paths make one local player
-each, so it has no counterpart there. Cause 3 names the owner's seat, since the remake's Dogfight has no teams.
+each, so it has no counterpart there. Cause 3 is a Zeppelin vs Zeppelin hull's broadside: the dying
+client names the hull by placement index in the report's source field, and the notice carries that
+hull's lobby team in its ninth byte, which names the line and sets the team's term on every guest
+([`multiplayer-zvz.md`](multiplayer-zvz.md), "What the remake takes"). The host's `0x22` hit names
+the hull in the byte after the part, where a round no seat fired came from a broadside.
 Splitscreen Dogfight posts the same lines in every pane, named by player tag.
 
 ## The zeppelin state packet

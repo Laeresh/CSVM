@@ -580,15 +580,17 @@ public readonly record struct FireMessage(
 }
 
 /// <summary>
-/// The shooter's claim that one of its rounds landed. Reliable, because the victim's client is
-/// the only place the damage is applied, and a lost claim is a hit that never happened. The
-/// weapon is an index into the shared weapon catalogue. The <see cref="Damage"/> field is the
-/// share of that weapon's authored pair the round carries, 1 for a direct strike and the blast
-/// falloff otherwise. The struck collision shape is <see cref="Part"/>, or -1 for a shapeless one.
-/// The <see cref="LocalImpact"/> point is in the victim's own body space, so the victim resolves
-/// the same zone however far it has flown since.</summary>
+/// The shooter's claim that one of its rounds landed, reliable since the victim's client alone
+/// applies damage. The weapon is an index into the shared weapon catalogue. The
+/// <see cref="Damage"/> field is the share of that weapon's authored pair the round carries, 1 for
+/// a direct strike and the blast falloff otherwise. The struck collision shape is
+/// <see cref="Part"/>, or -1 for a shapeless one. The <see cref="LocalImpact"/> point is in the
+/// victim's own body space, so the victim resolves the same zone however far it has flown since.
+/// The <see cref="Hull"/> byte names the zeppelin whose broadside fired an unowned round, by
+/// placement index, and is <see cref="NetMessage.NoSeat"/> otherwise.</summary>
 public readonly record struct HitMessage(
-    byte VictimSeat, byte ShooterSeat, ushort Weapon, float Damage, short Part, Vector3 LocalImpact)
+    byte VictimSeat, byte ShooterSeat, ushort Weapon, float Damage, short Part, Vector3 LocalImpact,
+    byte Hull = NetMessage.NoSeat)
     : INetMessage<HitMessage>
 {
     /// <summary>The fixed width of the message, header included.</summary>
@@ -612,10 +614,11 @@ public readonly record struct HitMessage(
         byte shooter = reader.ReadByte();
         ushort weapon = reader.ReadUInt16();
         short part = reader.ReadInt16();
-        _ = reader.ReadUInt16();
+        byte hull = reader.ReadByte();
+        _ = reader.ReadByte();
         float damage = reader.ReadSingle();
         var impact = new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
-        message = new HitMessage(victim, shooter, weapon, damage, part, impact);
+        message = new HitMessage(victim, shooter, weapon, damage, part, impact, hull);
         return true;
     }
 
@@ -627,7 +630,8 @@ public readonly record struct HitMessage(
         writer.WriteByte(ShooterSeat);
         writer.WriteUInt16(Weapon);
         writer.WriteInt16(Part);
-        writer.WriteUInt16(0);
+        writer.WriteByte(Hull);
+        writer.WriteByte(0);
         writer.WriteSingle(Damage);
         writer.WriteSingle(LocalImpact.X);
         writer.WriteSingle(LocalImpact.Y);
@@ -726,12 +730,13 @@ public readonly record struct DeathMessage(
 /// A match death as the host decided it, sent to every guest so each posts the kill lines once.
 /// The owner's <see cref="DeathMessage"/> is relayed to everyone but its reporter, so it cannot
 /// be the post. Reliable. The cause is the one the host scored, so a death with no seat to charge
-/// reads <see cref="NetDeathCause.Suicide"/>.</summary>
-public readonly record struct DeathNoticeMessage(byte VictimSeat, byte KillerSeat, NetDeathCause Cause)
+/// reads <see cref="NetDeathCause.Suicide"/>. A zeppelin's kill names the lobby team of the hull
+/// that fired in <see cref="Team"/>, 0 for every other cause.</summary>
+public readonly record struct DeathNoticeMessage(byte VictimSeat, byte KillerSeat, NetDeathCause Cause, byte Team = 0)
     : INetMessage<DeathNoticeMessage>
 {
     /// <summary>The fixed width of the message, header included.</summary>
-    public const int Size = 8;
+    public const int Size = 10;
 
     /// <inheritdoc/>
     public static NetMessageType Type => NetMessageType.DeathNotice;
@@ -748,7 +753,7 @@ public readonly record struct DeathNoticeMessage(byte VictimSeat, byte KillerSea
             return false;
 
         message = new DeathNoticeMessage(
-            reader.ReadByte(), reader.ReadByte(), (NetDeathCause)reader.ReadUInt16());
+            reader.ReadByte(), reader.ReadByte(), (NetDeathCause)reader.ReadUInt16(), reader.ReadByte());
         return true;
     }
 
@@ -759,6 +764,8 @@ public readonly record struct DeathNoticeMessage(byte VictimSeat, byte KillerSea
         writer.WriteByte(VictimSeat);
         writer.WriteByte(KillerSeat);
         writer.WriteUInt16((ushort)Cause);
+        writer.WriteByte(Team);
+        writer.WriteByte(0);
         return writer.Close();
     }
 }
