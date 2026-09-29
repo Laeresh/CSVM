@@ -2832,38 +2832,40 @@ public sealed partial class ProjectilePool : Node3D
                 if (pointTerm)
                     QueuePointFlash(muzzle, anchor, MuzzleSecondaryOffset + at, near, far, tint);
                 else
-                    EmitLight(muzzle, anchor, MuzzleSecondaryOffset + at, far, tint);
+                    EmitLight(muzzle, anchor, MuzzleSecondaryOffset + at, near, far, tint);
             }
             return;
         }
         // The def's 3rdperson_lts variants: RANDOM_WEIGHT 0.333 / 0.333 / else, each a range band
         // and a colour; the range within the band is a random pick.
         float roll = _rng.Randf();
-        float range;
+        float bandNear, range;
         Color color;
         if (roll < 0.333f)
         {
+            bandNear = 1.0f;
             range = RandRange(1.0f, 2.0f);
             color = new Color(0.88f, 0.78f, 0.36f);
         }
         else if (roll < 0.667f)
         {
+            bandNear = 1.25f;
             range = RandRange(1.25f, 3.25f);
             color = new Color(0.93f, 0.78f, 0.36f);
         }
         else
         {
+            bandNear = 2.0f;
             range = RandRange(2.0f, 3.75f);
             color = new Color(0.93f, 0.78f, 0.36f);
         }
-        EmitLight(muzzle, anchor, MuzzleSecondaryOffset, range, color);
+        EmitLight(muzzle, anchor, MuzzleSecondaryOffset, bandNear, range, color);
     }
 
     // Lights one pooled OmniLight3D at the given offset in the muzzle frame for MuzzleLightLife.
-    // An anchor node keeps it there while the flash lives; without one the light stays where it
-    // was lit. Silently drops the flash when the pool is at cap, which is what a volley past
-    // MaxMuzzleLights costs.
-    private void EmitLight(Transform3D muzzle, Node3D? anchor, Vector3 local, float range, Color color)
+    // It takes the near/far pair the way every world lamp does (WorldLights.OmniRange). An anchor
+    // keeps it in place while the flash lives. A volley past MaxMuzzleLights drops the flash.
+    private void EmitLight(Transform3D muzzle, Node3D? anchor, Vector3 local, float near, float far, Color color)
     {
         LightFlash? slot = null;
         foreach (var l in _lights)
@@ -2884,13 +2886,14 @@ public sealed partial class ProjectilePool : Node3D
                 {
                     ShadowEnabled = false,
                     LightEnergy = MuzzleLightEnergy,
+                    OmniAttenuation = WorldLights.OmniAttenuation,
                     Visible = false,
                 },
             };
             AddChild(slot.Light);
             _lights.Add(slot);
         }
-        slot.Light.OmniRange = range;
+        slot.Light.OmniRange = WorldLights.OmniRange(near, far);
         slot.Light.LightColor = color;
         slot.Light.GlobalPosition = muzzle.Origin + (muzzle.Basis.Orthonormalized() * local);
         slot.Light.Visible = true;

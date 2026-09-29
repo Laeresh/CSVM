@@ -262,7 +262,12 @@ public sealed partial class CockpitOverlay : CanvasLayer
             {
                 if (used >= _flashes.Count)
                 {
-                    var twin = new OmniLight3D { Name = $"interior_flash_{used}", ShadowEnabled = false };
+                    var twin = new OmniLight3D
+                    {
+                        Name = $"interior_flash_{used}",
+                        ShadowEnabled = false,
+                        OmniAttenuation = Mech3.WorldLights.OmniAttenuation,
+                    };
                     _view.AddChild(twin);
                     _flashes.Add(twin);
                 }

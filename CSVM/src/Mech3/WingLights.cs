@@ -21,8 +21,8 @@ public static class WingLights
     /// <summary>Blink cycle length, wing_light.json's LOOP SEQUENCE_OFFSET.</summary>
     public const float BlinkPeriod = 1.5f;
 
-    /// <summary>Point-light falloff band, wing_light.json's LIGHT_STATE RANGE. Godot's
-    /// OmniLight3D has no inner radius, so only the max feeds <c>OmniRange</c>.</summary>
+    /// <summary>Point-light falloff pair, wing_light.json's LIGHT_STATE RANGE. Godot's
+    /// OmniLight3D has no inner radius, so both feed <c>WorldLights.OmniRange</c>.</summary>
     public const float FlareRangeMin = 0.5f;
     public const float FlareRangeMax = 1.25f;
 

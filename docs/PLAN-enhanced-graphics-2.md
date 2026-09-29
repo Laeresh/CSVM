@@ -800,8 +800,11 @@ ambient + diffuse scalar, which the shader's factor always carried. The faithful
 Captured at `--freecam --chapter=C1 --pos=-6620,175,-5690 --direction=0,-0.42,-0.91`: the parking
 lot beside a lamp gains about 16 levels of red and the barracks wall 15 under Enhanced, where the
 old falloff moved neither; grass beyond the lamps is unchanged. `world-lights-nearest-viewer` pins
-the attenuation, the half-weight range and the scalar. The wing-tip and muzzle omnis are separate
-nodes that keep Godot's default falloff.
+the attenuation, the half-weight range and the scalar. The wing-tip lamps, the muzzle flashes and
+the cockpit's twins of those flashes take the same rule, `WorldLights.OmniAttenuation` and
+`WorldLights.OmniRange` over their authored pairs; `wing-flare-pose` and
+`muzzle-light-first-person-point-term` pin it. A third-person muzzle flash keeps its rolled far
+range, with the band's lower end as its near.
 
 ## B12 ☑ The additive fireball frames bloom
 

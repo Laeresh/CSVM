@@ -1443,7 +1443,8 @@ internal static class WorldAndToolSuites
     [Suite("wing-flare-pose",
         "a player plane's wing-light flares pose through the facade look-at and never through the "
         + "camera's basis, and a flare seen from its authored quad's edge still draws, against an "
-        + "unposed copy of the same quad that draws nothing there")]
+        + "unposed copy of the same quad that draws nothing there; each flare's lamp takes the "
+        + "authored falloff pair with no inverse-distance term")]
     internal static void WingFlarePose(TestContext ctx)
     {
         const string plane = "player_pfighter";
@@ -1479,6 +1480,13 @@ internal static class WorldAndToolSuites
                 flareMaterial ??= mi.MaterialOverride;
             }
         }
+        // Each flare's lamp takes the authored falloff pair the way every world lamp does.
+        CSVM.Flight.Airframe.WingLightBlinker.Build(builder.WingFlares, AnimRuntime.HighLod);
+        var lamps = builder.WingFlares.SelectMany(f => f.GetChildren().OfType<OmniLight3D>()).ToList();
+        float lampRange = WorldLights.OmniRange(WingLights.FlareRangeMin, WingLights.FlareRangeMax);
+        ctx.Check(lamps.Count == 2 && lamps.All(l => l.OmniAttenuation == WorldLights.OmniAttenuation
+                                                     && Mathf.IsEqualApprox(l.OmniRange, lampRange)),
+            $"each wing lamp has no inverse-distance term and the {lampRange:0.00} m half-weight range: {string.Join(", ", lamps.Select(l => $"{l.OmniRange:0.00}/{l.OmniAttenuation}"))}");
         built.Free();
         ctx.Check(builder.WingFlares.Count == 2, $"{plane} carries two wing flares count={builder.WingFlares.Count}");
         if (quad == null || flareMaterial == null)

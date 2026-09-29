@@ -54,11 +54,13 @@ public sealed class WingLightBlinker
         var lamps = new List<(Node3D, OmniLight3D)>(flares.Count);
         foreach (var flare in flares)
         {
-            // AT_NODE offset is (0,0,0) in the def, the light sits exactly at the flare.
+            // AT_NODE offset is (0,0,0) in the def, the light sits exactly at the flare. It takes
+            // the authored falloff pair the way every world lamp does (WorldLights.OmniRange).
             var light = new OmniLight3D
             {
                 LightColor = WingLights.FlareColor,
-                OmniRange = WingLights.FlareRangeMax,
+                OmniRange = WorldLights.OmniRange(WingLights.FlareRangeMin, WingLights.FlareRangeMax),
+                OmniAttenuation = WorldLights.OmniAttenuation,
                 LightEnergy = LightEnergy,
                 ShadowEnabled = false,
                 Visible = false,

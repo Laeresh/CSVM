@@ -20,6 +20,13 @@ public sealed class WorldLights : IDisposable
     /// at build as "world lights: … peak N"), so nearest-N never actually drops one.</summary>
     public const int MaxActive = 16;
 
+    /// <summary>The falloff exponent of every point omni that stands for an authored light: this
+    /// pool, the wing-tip flares and the muzzle flashes. Godot's default 1.0 adds an
+    /// inverse-distance term that spends a 20 m lamp within a few metres, where the original's
+    /// weight is still 1. At 0 only Godot's range window remains, which <see cref="OmniRange"/>
+    /// lines up with the authored linear ramp.</summary>
+    public const float OmniAttenuation = 0.0f;
+
     // TUNE: how far above the hit a burst light (AddBurst) stands, in metres. At the hit itself flat
     // ground takes it edge-on, where a lit surface's diffuse term is zero however bright the light.
     internal const float BurstLift = 30f;
@@ -45,10 +52,6 @@ public sealed class WorldLights : IDisposable
     // blowing it out.
     private const float OmniEnergyScale = 4.0f;
 
-    // Every omni's falloff exponent. Godot's default 1.0 adds an inverse-distance term that spends
-    // a 20 m lamp within a few metres, where the original's weight is still 1. At 0 only Godot's
-    // range window remains, which OmniRange (below) lines up with the authored linear ramp.
-    private const float OmniAttenuation = 0.0f;
 
     // ---- the enhanced-only burst light (AddBurst), one TUNE block ----
     // Each burst's colour, peak, reach and decay are its BurstShape (EffectCatalogue.BurstLightShapes).
