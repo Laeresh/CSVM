@@ -46,7 +46,6 @@ public sealed class DogfightLobbyTests
     {
         var (host, _, _) = Lobbies(1);
 
-        Assert.False(host.SetMissionType(DogfightMissionType.CaptureTheFlag));
         Assert.False(host.SetMissionType(DogfightMissionType.ZeppelinVsZeppelin));
         Assert.False(host.SetOutlawed(NetPlaneRules.Flags, true));
         Assert.Equal((byte)DogfightMissionType.Deathmatch, host.Options.MissionType);
@@ -575,6 +574,67 @@ public sealed class DogfightLobbyTests
         Assert.Equal(host.Options.MinTeams, host.Options.MaxTeams);
         Assert.True(host.SetMaxTeams(99));
         Assert.Equal(DogfightLobby.MaxTeams, host.Options.MaxTeams);
+    }
+
+    [Fact]
+    public void CaptureTheFlagFixesTwoTeamsAndGreysTheTwoEnvironmentsWithNoFlags()
+    {
+        var (host, guests, _) = Lobbies(2);
+        Assert.True(host.SetEnvironment(0));
+
+        Assert.True(host.SetMissionType(DogfightMissionType.CaptureTheFlag));
+        Settle(host, guests);
+
+        // Above the Clouds has no MP2 map, so the pick moves to the first environment with one.
+        Assert.Equal(1, host.Options.Environment);
+        Assert.False(host.SetEnvironment(0));
+        Assert.False(host.SetEnvironment(5));
+        Assert.True(host.SetEnvironment(4));
+        Assert.True(host.Options.RestrictTeams);
+        Assert.Equal(DogfightLobby.CtfTeams, host.Options.MinTeams);
+        Assert.Equal(DogfightLobby.CtfTeams, host.Options.MaxTeams);
+        Assert.False(host.SetRestrictTeams(false));
+        Assert.False(host.SetMaxTeams(4));
+        Assert.True(host.SetFlagHomeToCapture(true));
+        Settle(host, guests);
+        Assert.True(guests[0].Options.FlagHomeToCapture);
+        var rules = DogfightLobby.RulesOf(guests[0].Options);
+        Assert.True(rules.CaptureTheFlag);
+        Assert.True(rules.FlagHomeToCapture);
+
+        // ABLE-TO-FAIL CONTROL: back on Deathmatch every environment and the team boxes are live.
+        Assert.True(host.SetMissionType(DogfightMissionType.Deathmatch));
+        Assert.True(host.SetEnvironment(0));
+        Assert.True(host.SetMaxTeams(4));
+        Assert.False(host.SetFlagHomeToCapture(false));
+        Assert.False(DogfightLobby.RulesOf(host.Options).CaptureTheFlag);
+    }
+
+    [Fact]
+    public void CaptureTheFlagRefusesATeamNumberedPastTheTwoFlags()
+    {
+        var (host, guests, _) = Lobbies(3);
+        Assert.True(host.SetMissionType(DogfightMissionType.CaptureTheFlag));
+        host.CreateTeam("One");
+        Settle(host, guests);
+        guests[0].CreateTeam("Two");
+        Settle(host, guests);
+        guests[1].CreateTeam("Three");
+        Settle(host, guests);
+        Assert.Equal(TeamLaunchRefusal.TooManyTeams, host.LaunchRefusal);
+
+        // Team 1 disbands, which leaves two teams standing, numbered 2 and 3.
+        host.LeaveTeam();
+        Settle(host, guests);
+        host.JoinTeam(guests[0].OwnTeam);
+        Settle(host, guests);
+        Assert.Equal(new byte[] { 2, 2, 3 }, host.Players.Select(p => p.Team).OrderBy(t => t));
+        Assert.Equal(TeamLaunchRefusal.TooFewTeams, host.LaunchRefusal);
+
+        // ABLE-TO-FAIL CONTROL: the same two teams launch a Deathmatch.
+        Assert.True(host.SetMissionType(DogfightMissionType.Deathmatch));
+        Assert.True(host.SetRestrictTeams(false));
+        Assert.Equal(TeamLaunchRefusal.None, host.LaunchRefusal);
     }
 
     private static (DogfightLobby Host, List<DogfightLobby> Guests, IReadOnlyList<LoopbackTransport> Mesh) Lobbies(

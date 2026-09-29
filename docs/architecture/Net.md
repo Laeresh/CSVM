@@ -35,7 +35,8 @@ These are the design rules every module below is shaped by, and every multiplaye
   airframe it flies. A Dogfight pilot may fly a custom plane when the host's Allow Custom Planes and
   outlaw list admit it, and a co-op host's own custom planes fly; every machine builds a custom plane
   from its owner's `NetPlaneBuild`. The lobby forms free-form named teams (`NetTeams.cs`) and each
-  seat carries its team; team play in flight, Capture the flag and Zeppelin vs are not built.
+  seat carries its team into a team Deathmatch or Capture the Flag; Zeppelin vs Zeppelin is not
+  built.
 - **Listen server.** One player hosts; there is no dedicated headless host.
 - **The player ceiling is 16.** `NetSeats.MaxPlayers`, with every seat-indexed table built
   `SeatCapacity` wide. The original has no coded cap (its pilot list is never counted against a
@@ -301,12 +302,13 @@ seat. Before the opener `CoopSeatFitMessage` gives a seat's fit and `CoopWingman
 wingman's; `CoopFilmMessage` names a film. [Layout](../org/multiplayer-messages.md).
 
 ## src/Net/NetDogfightMessages.cs
-The Multiplayer Lobby's five messages, all reliable and all kept in `NetLobby` rather than a
-session. `DogfightOptionsMessage` is the host's Mission Options under the round they belong to,
-`DogfightRosterMessage` is the whole player list, each row's team with it and the reading guest's
-own row marked, and `LobbyChatMessage` is one typed line under its speaker's name, which the host
-relays. `LobbyTeamActionMessage` is a guest's team action to its host and `LobbyTeamsMessage` the
-host's team names. A guest's plane and Ready ride `CoopPickMessage`. Layout:
+The Multiplayer Lobby's five messages, all reliable and kept in `NetLobby` rather than a session.
+`DogfightOptionsMessage` is the host's Mission Options under their round, `DogfightRosterMessage`
+the whole player list with each row's team and the reading guest's own row marked, and
+`LobbyChatMessage` one typed line, which the host relays. `LobbyTeamActionMessage` is a guest's
+team action to its host and `LobbyTeamsMessage` the host's team names. A guest's plane and Ready
+ride `CoopPickMessage`. Capture the Flag's two, in the session: `FlagRequestMessage`, a pilot's ask
+of its host, and `FlagTableMessage`, the host's flags. Layout:
 [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Net/NetTeams.cs

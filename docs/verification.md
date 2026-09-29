@@ -563,6 +563,10 @@ member, and it does not go here.
   the approach docked with none. `campaign-coop-hookup-seat` reads the table's own answer for the
   airframe name beside the two hooks, which tells an arm resolving the wrong aeroplane apart from
   an effect attached to the wrong rig.
+- **WORLD-50**, **Read a gamez node's `parent_indices` before calling it missing from the built
+  world: an empty list is a library root, which the world build never creates and no lookup finds.**
+  C1's `cs_flg_light1`, the carried flag, answered neither `AnimRuntime.FindNodes` nor a name walk
+  of the world root while `nodes.json` held it, and `SceneBuilder.BuildSubtree` built it.
 
 ## SHELL, Windows, PowerShell, and processes
 

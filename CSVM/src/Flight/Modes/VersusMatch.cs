@@ -211,7 +211,8 @@ public sealed class VersusMatch
     public bool OutOfLives(int playerIndex) => Lives > 0 && DeathsOf(playerIndex) >= Lives;
 
     /// <summary>The ranked number: <see cref="KillScore"/> per kill plus <see cref="SuicideScore"/>
-    /// per death with no killer. May go negative.</summary>
+    /// per death with no killer, plus a mode's own points (<see cref="AddScore"/>). May go negative.
+    /// </summary>
     public int ScoreOf(int playerIndex) => RowOf(playerIndex)?.Score ?? 0;
 
     /// <summary>Score still needed by <paramref name="playerIndex"/> to hit the threshold, 0 once
@@ -262,6 +263,18 @@ public sealed class VersusMatch
             victimRow.Score += SuicideScore;
         }
         CheckAlone();
+    }
+
+    /// <summary>Points a mode's own event scores <paramref name="playerIndex"/>, a flag brought home
+    /// in Capture the Flag. Completes the match once the seat's count reaches
+    /// <see cref="KillTarget"/>, as a kill does. No-op once <see cref="Completed"/>.</summary>
+    public void AddScore(int playerIndex, int points)
+    {
+        if (Completed || RowOf(playerIndex) is not { } row)
+            return;
+        row.Score += points;
+        if (Reached(playerIndex))
+            Complete();
     }
 
     /// <summary>A pilot who dropped out of the session. It stays on the scoreboard but no longer

@@ -82,6 +82,10 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>The maximum team count box, live while Restrict Number of Teams is ticked.</summary>
     public const string MaxTeamsKey = "MPL_E_MAXTEAMS";
 
+    /// <summary>Capture the Flag's own-flag-home rule, the host's option the original lacks. Shown
+    /// only while the type is Capture the Flag.</summary>
+    public const string FlagHomeKey = "MPL_C_FLAGHOME";
+
     /// <summary>The prefix of a team count box's arrows: <c>MIN+</c>, <c>MIN-</c>, <c>MAX+</c> and
     /// <c>MAX-</c> follow it.</summary>
     public const string TeamArrowPrefix = "MPL_B_TEAMS_";
@@ -627,6 +631,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                 return null;
             case TeamsKey:
                 lobby?.SetRestrictTeams(!lobby.Options.RestrictTeams);
+                return null;
+            case FlagHomeKey:
+                lobby?.SetFlagHomeToCapture(!lobby.Options.FlagHomeToCapture);
                 return null;
             case TeamKey:
                 PressTeam(lobby);
@@ -1216,8 +1223,16 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         rows.Add(Box(TimeKey, BoxText(TimeKey, lobby), PageX + 370f, PageY + 68f, 73f, 18f, live && DogfightLobby.Arms(options.Victory, DogfightVictory.Time)));
         rows.Add(Check(ScoreRadioKey, RadioArt, PageX + 241f, PageY + 92f, 120f, 12f, live));
         rows.Add(Box(ScoreKey, BoxText(ScoreKey, lobby), PageX + 370f, PageY + 92f, 73f, 18f, live && DogfightLobby.Arms(options.Victory, DogfightVictory.Score)));
-        rows.Add(Check(TeamsKey, CheckArt, PageX + 241f, PageY + 133f, 180f, 11f, live));
-        bool counts = live && options.RestrictTeams;
+        // Capture the Flag fixes the team count at two, as its type change's mail(5) and mail(1109)
+        // do. The remake's own-flag-home option stands under the boxes.
+        bool ctf = DogfightLobby.IsCtf(options);
+        rows.Add(Check(TeamsKey, CheckArt, PageX + 241f, PageY + 133f, 180f, 11f, live && !ctf));
+        bool counts = live && options.RestrictTeams && !ctf;
+        if (ctf)
+        {
+            rows.Add(Check(FlagHomeKey, CheckArt, PageX + 241f, PageY + 177f, 180f, 11f, live));
+        }
+
         rows.Add(Box(MinTeamsKey, BoxText(MinTeamsKey, lobby), PageX + 300f, PageY + 150f, 42f, 22f, counts));
         rows.Add(Arrow(TeamArrowPrefix + "MIN+", UpArt, PageX + 342f, PageY + 150f, counts && options.MinTeams < options.MaxTeams));
         rows.Add(Arrow(TeamArrowPrefix + "MIN-", DownArt, PageX + 342f, PageY + 161f, counts && options.MinTeams > 0));
@@ -1322,7 +1337,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                         items[i] = EnvironmentWord(i);
                     }
 
-                    return new DropdownList(items, lobby.Options.Environment, _ => true, i => lobby.SetEnvironment(i));
+                    return new DropdownList(items, lobby.Options.Environment,
+                        i => DogfightLobby.Offers((DogfightMissionType)lobby.Options.MissionType, i), i => lobby.SetEnvironment(i));
                 }
 
             case TypeKey:
@@ -1631,6 +1647,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             TimeRadioKey => options is { } time && DogfightLobby.Arms(time.Victory, DogfightVictory.Time),
             ScoreRadioKey => options is { } score && DogfightLobby.Arms(score.Victory, DogfightVictory.Score),
             TeamsKey => options?.RestrictTeams == true,
+            FlagHomeKey => options?.FlagHomeToCapture == true,
             LimitedLivesKey => options?.LimitedLives == true,
             AutoRespawnKey => options?.AutoRespawn == true,
             CustomPlanesKey => lobby?.Rules.AllowCustom == true,
@@ -1645,6 +1662,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             TimeRadioKey => (10105, "Time (mins):"),
             ScoreRadioKey => (10107, "Score"),
             TeamsKey => (10108, "Restrict Number of Teams"),
+
+            // No langui row words it, so the fallback is always what shows.
+            FlagHomeKey => (-1, "Own Flag Home to Capture"),
             LimitedLivesKey => (10110, "Limited Lives"),
             AutoRespawnKey => (10111, "Auto Respawn"),
             CustomPlanesKey => (10112, "Allow Custom Planes"),
@@ -1661,7 +1681,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         {
             float lift = row.Key == AutoRespawnKey ? 3f : 2f;
             layers.Lines.Add(_text.Line(id, word, row.X + (row.Key is TimeRadioKey or ScoreRadioKey ? 25f : 20f), row.Y - lift, 0f,
-                row.Enabled || row.Key is TimeRadioKey or ScoreRadioKey or TeamsKey or LimitedLivesKey or AutoRespawnKey or CustomPlanesKey or OutlawKey
+                row.Enabled || row.Key is TimeRadioKey or ScoreRadioKey or TeamsKey or FlagHomeKey or LimitedLivesKey or AutoRespawnKey or CustomPlanesKey or OutlawKey
                     ? Black
                     : TabDisabled));
         }

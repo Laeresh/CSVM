@@ -74,7 +74,7 @@ the `--gamez=`/`--textures=` override policy stays in `GameSession`, not here.
 Everything the command line settles about a session as one immutable, engine-free record:
 `Parse(args)` parses **and** resolves, so a consumer reads an answer instead of re-deriving one, and
 the pure arg parsers (`ParseVec3`, `ParsePlanes`, `ParseHold`, …) are public so they are testable.
-`SessionMode` is closed (Menu/Fly/Viewer/Freecam/AnimLab), with the `Stunt`, `Versus` and `Coop`
+`SessionMode` is closed (Menu/Fly/Viewer/Freecam/AnimLab), with the `Stunt`, `Versus` (and its `CaptureTheFlag`) and `Coop`
 modifiers and `SessionProbe` beside it. `FromMenu` and `FromCampaign` are the launchscreen's and the
 campaign cabin's counterparts to a command line, each carrying its own no-re-resolve rule on itself;
 a menu value that a spelled-out flag beats says so in an `*Explicit` field (`ScenarioExplicit`, `ViewModeExplicit` over the opening view, which keeps a `--view=` above the saved Default View even where both name chase, and `VsKillsExplicit`/`VsTimeExplicit` over Dogfight's kill target and time limit). The `WithSaved*` folds are how a saved option reaches a spec, each dropped under `--det`.

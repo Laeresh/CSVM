@@ -270,6 +270,7 @@ only `Airframe`, and nothing else in `Flight` names `Hangar`.
 - `src/Flight/Modes/StuntRace.cs`, splitscreen stunt race bookkeeping: one `Racer` per player, finish placings, standings, rematch reset.
 - `src/Flight/Modes/ScoreStore.cs`, stunt best-time persistence: `user://stunt_scores.json` keyed chapter/mission/plane, faster runs only.
 - `src/Flight/Modes/VersusMatch.cs`, Dogfight deathmatch bookkeeping: one signed score plus kills and deaths per player, team totals in a team match, the host-fed clock, threshold and time-out completion, standings.
+- `src/Flight/Modes/FlagMatch.cs`, Capture the Flag's rules, engine-free: the flags, the proximity asks and cooldowns, the host's decision, the drop and throw, the points.
 - `src/Flight/Modes/VersusSpawnRotation.cs`, Dogfight respawn placement: the per-seat spawn-list ledger and the roomy point a downed seat rotates onto.
 - `src/Flight/Modes/VersusHud.cs`, per-pane Dogfight status line: remaining time, this player's kills, the leader, and the hostile marker.
 - `src/Flight/Modes/PauseState.cs`, who is holding the sim clock and why: the pause owner and the results-board halt, engine-free.
@@ -657,6 +658,7 @@ delegate to, in six sub-namespaces, one folder each. `Launch` sits on top and no
 - `src/Session/World/SurfaceVehicleRuntime.cs`, builds and steps a mission's `mode ship` hulls: a library-root copy placed on the water, indexed on the runtime.
 - `src/Session/World/ZeppelinRuntime.cs`, runs a mission's zeppelins (`--zeppelins`): the placement, the net flight, the per-part damage and kill, the script's arms.
 - `src/Session/World/NetWorldLink.cs`, the host-owned world over the wire: AI aircraft as launch, pose, fire, hit, presence and death messages, zeppelin and surface-vehicle paths as periodic samples, destructible health, stage changes and deaths as events, and warp picks.
+- `src/Session/World/FlagRuntime.cs`, Capture the Flag in a network match: the mission's flags moved, asked for, decided, scored, spoken and posted on every machine.
 - `src/Session/World/NetCutsceneLink.cs`, the cutscene skip over the wire: a guest's skip asks the host, and the host's skip ends the named episode on every guest.
 - `src/Session/World/ZeppelinRuntime.Cannons.cs`, the broadside half of that partial: the cannon wiring, the target and arc gate, the anims and the rounds fired.
 - `src/Session/World/TurretEmplacementRuntime.cs`, the world AA emplacements: placed against the built world, in the shared aim pool, stepped after the airships.
@@ -812,7 +814,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/NetMessages.cs`, the message vocabulary: one struct per message, each declaring its type word and reliability class, over a shared four-byte header.
 - `src/Net/NetWorldMessages.cs`, the host-owned world's messages: an AI's pose, fire and hit claim, a generator launch, a zeppelin's and a surface vehicle's path sample, and the world event.
 - `src/Net/NetCoopMessages.cs`, the co-op boards' lobby messages: the host's flow one guest follows (screen, mission, round, Ready mask, hangar, result), the host's campaign films, its hangar with each plane's holder, and a guest's plane pick and Ready under a round.
-- `src/Net/NetDogfightMessages.cs`, the Multiplayer Lobby's messages: the host's options under a round, the player list, one chat line, and the team action and team list.
+- `src/Net/NetDogfightMessages.cs`, the Multiplayer Lobby's messages: the host's options under a round, the player list, one chat line, the team action and team list, and Capture the Flag's ask and flag table.
 - `src/Net/NetTeams.cs`, the team core every team mode shares: a host's free-form named teams and the team launch check.
 - `src/Net/NetPositionalMessages.cs`, the positional start: a landing row the host started and for which seat, the ladder holder, and a guest's held auto-land button.
 - `src/Net/NetMessageWriter.cs`, the writer and reader cursors every message is packed and unpacked through: little-endian primitives, quantised unit fields, fixed-width text.

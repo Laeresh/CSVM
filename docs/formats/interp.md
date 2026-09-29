@@ -105,7 +105,9 @@ x and z are 122 nodes, all vehicles, zero terrain.)
 chapters that ship an MP2 mission (C1, C2, C3, C4, C5) and are switched **off by every
 mission script except `mp2.gw`**. That is the whole CTF gate, no roster file is involved.
 `targets.zrd.json` in `MP2/zrdr/` references the same names, but it is the objective list,
-not the spawn signal.
+not the spawn signal. The carried flags `cs_flg_light1`/`cs_flg_light2` are library roots: their
+gamez records have no parent, so the world tree never holds them, and `player-flg_on_n` adds one to
+a carrier's `cf_light` ([`../org/multiplayer-ctf.md`](../org/multiplayer-ctf.md)).
 
 ### Command vocabulary (mission scripts)
 

@@ -158,6 +158,14 @@ public enum NetMessageType : ushort
     /// <summary>A Dogfight host's teams, each team's index and name, sent to every guest whenever
     /// they change.</summary>
     LobbyTeams = 0x0062,
+
+    /// <summary>A Capture the Flag pilot's ask of its host: take a flag, or bring the carried one
+    /// home. The original's <c>0x1c</c>.</summary>
+    FlagRequest = 0x0063,
+
+    /// <summary>A Capture the Flag host's flag table: each flag's state and holder, sent to every
+    /// guest whenever one moves. The original's <c>0x1d</c>.</summary>
+    FlagTable = 0x0064,
 }
 
 /// <summary>Which campaign film a <see cref="CoopFilmMessage"/> names.</summary>
@@ -1449,6 +1457,8 @@ public static class NetMessage
         NetMessageType.JoinPassword => JoinPasswordMessage.Reliability,
         NetMessageType.LobbyTeamAction => LobbyTeamActionMessage.Reliability,
         NetMessageType.LobbyTeams => LobbyTeamsMessage.Reliability,
+        NetMessageType.FlagRequest => FlagRequestMessage.Reliability,
+        NetMessageType.FlagTable => FlagTableMessage.Reliability,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "no such message type"),
     };
 

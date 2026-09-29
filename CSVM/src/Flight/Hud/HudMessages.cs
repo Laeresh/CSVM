@@ -83,6 +83,17 @@ public sealed partial class HudMessages : Control
     /// <summary>"Unknown", row 6007, the name a pilot record starts with and keeps if never named.</summary>
     public const string UnknownKey = "MSG_UNKNOWN";
 
+    /// <summary>"%1's Flag is Floating", row 195, a Capture the Flag carrier's drop with the flag's
+    /// team name (<c>FUN_0049ab50</c>).</summary>
+    public const string FlagFloatingKey = "MSG_TEAM_FLAG_FLOAT";
+
+    /// <summary>"%1 Flag Captured", row 200, a flag picked up (<c>FUN_0049a780</c>).</summary>
+    public const string FlagTakenKey = "MSG_FLAG_CAP";
+
+    /// <summary>"%1 Flag Is At Home Base", row 201, a flag back at its base (<c>FUN_0049a300</c>).
+    /// </summary>
+    public const string FlagHomeKey = "MSG_X_FLAG_HOME";
+
     // The placement, from FUN_00458a10: x is 0.5 of the display width (0x006032e0) with the
     // centring flag set (the text object's +0x1044, read at 0x005c7e4f), y is 0.2 of its height
     // (0x006034fc), and each further slot sits 18 px lower (FUN_00458530's `+ 0x12`). The 18 px and
@@ -259,6 +270,17 @@ public sealed partial class HudMessages : Control
         stack.Post(under, Side.Enemy);
         stack.Post(top, Side.Enemy);
     }
+
+    /// <summary>One Capture the Flag line: <paramref name="key"/>'s row with the flag's team name
+    /// filled in, one of <see cref="FlagFloatingKey"/>, <see cref="FlagTakenKey"/> and
+    /// <see cref="FlagHomeKey"/>.</summary>
+    public static string FlagLine(Messages? strings, string key, string team) =>
+        Messages.Fill(Text(strings, key), team);
+
+    /// <summary>Posts <see cref="FlagLine"/> into one pane's stack in its default colour. The
+    /// original posts every flag line the same way, on every machine (<c>FUN_004587d0</c>).</summary>
+    public static void PostFlagLine(HudMessages stack, Messages? strings, string key, string team) =>
+        stack.Post(FlagLine(strings, key, team), Side.Neutral);
 
     /// <summary>Posts reason 4's ending so "Game Over:" reads above "No Enemies Left", both in the
     /// stack's default colour.</summary>

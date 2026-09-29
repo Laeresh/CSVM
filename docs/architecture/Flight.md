@@ -704,6 +704,15 @@ marker and run clock into `screenshots/stunts/` and the thumbnail; `Settle` comp
 on the main thread and raises `ShotLanded`. The pixels come from the caller's `PaneRequest`
 (`DangerZonePhotograph` live, the pane headless, a synthetic frame in a suite).
 
+## src/Flight/Modes/FlagMatch.cs
+Capture the Flag's rules, engine-free: one flag per lobby team with its home, held, at home or
+floating. `Check` is a pilot's per-tick proximity ask with the 25 m reach and the two cooldowns,
+`Decide` the host's first-asker-wins decision, `TakeAhead` a guest's take before the answer, `Apply`
+the host's table on a guest, `Drop` a downed carrier's flag and `Advance` its 15 s throw arc, and
+`Points` what a flag brought home scores. The host's own-flag-home option gates a capture.
+`Session/World/FlagRuntime.cs` runs it in a match. Read `CaptureTheFlagTests.cs` and
+`docs/org/multiplayer-ctf.md`.
+
 ## src/Flight/Modes/ScoreStore.cs
 Stunt best-time persistence: one JSON object in `user://stunt_scores.json` keyed
 `chapter/mission/plane`, with `GetBest` and `RecordIfBest`, which never worsens a record and
@@ -728,7 +737,7 @@ on the time-out (leader wins, equal top scores draw), `Standings()` ranks by sco
 and deaths for display, and `Restart()` zeroes everything and re-arms completion. `ApplyScore` writes a seat's row as the host reports it,
 so a guest mirrors the host's board. `Replicate()` hands the clock, both limits and the ending to that host too: `Advance` then moves
 nothing and only `ApplyState` ends or re-arms a match. `OutOfLives` holds a spent pilot down, `Leave` marks a dropped one, fewer than two
-pilots with lives end the match as `AllAlone` (reason 4), and `NextWatched` picks the seat a spent pilot watches. `AssignTeams` makes a team match: a teammate kill scores as a suicide, the target reads a team's total (`TeamScoreOf`, `TeamStandings`) and reason 4 asks for two teams. Read `VersusMatchTests.cs`, `TeamDeathmatchTests.cs`, `VersusHud`, `VersusBoard` and `docs/org/multiplayer-scoring.md`.
+pilots with lives end the match as `AllAlone` (reason 4), and `NextWatched` picks the seat a spent pilot watches. `AssignTeams` makes a team match: a teammate kill scores as a suicide, the target reads a team's total (`TeamScoreOf`, `TeamStandings`) and reason 4 asks for two teams. `AddScore` takes a mode's own points, a Capture the Flag flag brought home. Read `VersusMatchTests.cs`, `TeamDeathmatchTests.cs`, `VersusHud`, `VersusBoard` and `docs/org/multiplayer-scoring.md`.
 
 ## src/Flight/Modes/VersusSpawnRotation.cs
 Where a Dogfight seat comes back, engine-free: it owns the per-seat spawn-list ledger the opening
@@ -755,7 +764,7 @@ a re-post of slot 0 refreshes it. `KillLine` words one death as the reading pane
 pilot by name, a wingman with no name, any other aeroplane by its title, anything else destroyed),
 `SideOf` picks the colour arm off the victim's team, `WordsKillLine` keeps a hull flown into the
 world off that line, `PostCrash`/`PostTimeExpired` are the two notices that are not a death, and
-`MatchKillLines` words a Dogfight death the same on every machine. All static, so a suite asserts
+`MatchKillLines` words a Dogfight death the same on every machine and `FlagLine` a Capture the Flag row. All static, so a suite asserts
 the decode with no `Control`. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md).
 
 ## src/Flight/Hud/PromptLine.cs

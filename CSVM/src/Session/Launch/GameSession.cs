@@ -349,6 +349,8 @@ public partial class GameSession : Node3D
     // advanced on the sim dt (never wall time). Null outside Versus, the Downed events then
     // simply have no subscriber. Freed with this node; flight holds no match state.
     private VersusMatch? _versus;
+    // Capture the Flag's flags over the match, null outside a --ctf network match.
+    private FlagRuntime? _flagPlay;
     // Built on the host alone in a network match, since two rotations diverge on first blood.
     // A guest holds none and takes every placement off the wire.
     private VersusSpawnRotation? _versusSpawns;
@@ -526,6 +528,9 @@ public partial class GameSession : Node3D
     /// <summary>The Dogfight scorekeeping, null outside <c>--vs</c>. On a guest it is the mirror
     /// of the host's, written from the score messages rather than counted here.</summary>
     internal VersusMatch? Versus => _versus;
+
+    /// <summary>Capture the Flag's flags, null outside a <c>--ctf</c> network match.</summary>
+    internal FlagRuntime? Flags => _flagPlay;
 
     /// <summary>Why the match stopped, as the host named it, <c>Running</c> until one does. The
     /// same value on every machine: the host writes it where it sends the state and a guest where
@@ -3057,7 +3062,14 @@ public partial class GameSession : Node3D
             // further down and every carried gunner report through one seam.
             _aiVoice.WatchTurrets(projectiles);
             RegisterPlayerVoices(_aiVoice);
+            if (_spec.CaptureTheFlag)
+            {
+                worldSounds.Prewarm(FlagRuntime.VoiceLines);
+            }
         }
+
+        // Capture the Flag, once the match, the wire and the radio stand.
+        WireFlags(state.WorldRuntime, state.Gamez, state.WorldScene, weaponMessages);
         // An anchored net rides its trailer target, so every follower built below takes a supplier
         // for the object its net names. The player is rig 0, anything else is a world node, and a
         // name that resolves to nothing leaves the net at its authored coordinates.
@@ -4829,8 +4841,10 @@ public partial class GameSession : Node3D
         }
 
         // A drop is the other thing that can leave a match without an opponent (reason 4). The
-        // host's step sends that ending; a guest's replicated match only marks the seat.
+        // host's step sends that ending; a guest's replicated match only marks the seat. A flag the
+        // seat carried floats, as a death's does (FUN_004995a0).
         _versus?.Leave(seat);
+        _flagPlay?.Downed(seat);
         string line = UI.Menu.CoopDoorText.Left(_netSeats[seat].Callsign);
         foreach (var rig in _rigs)
         {
@@ -4867,6 +4881,64 @@ public partial class GameSession : Node3D
         }
 
         Log.Info("core", $"net match state: {(net.IsHost ? $"host (both limits, the clock every {Net.MatchStateCadence.TickStepInterval} steps, and the ending as it happens)" : "guest (applying the host's clock, limits and ending, advancing none of its own)")}");
+    }
+
+    // Capture the Flag over a team match on the wire, with the flags the mission lays out for the
+    // lobby's teams. Every seat's death drops its flag on every machine.
+    private void WireFlags(AnimRuntime? world, GameZ gamez, SceneBuilder? scene, Messages? strings)
+    {
+        if (!_spec.CaptureTheFlag || _net is not { } net || _versus is not { } match || SeatTeams() is not { } teams)
+        {
+            return;
+        }
+
+        _flagPlay = FlagRuntime.Open(new FlagRuntimeInputs
+        {
+            Net = net,
+            SeatRigs = _seatRigs,
+            Panes = _rigs,
+            SeatTeams = teams,
+            IsLocal = seat => seat >= 0 && seat < _netSeats.Count && _netSeats[seat].IsLocal,
+            Match = match,
+            SendScore = SendScore,
+            FlagHomeToCapture = _spec.FlagHomeToCapture,
+            World = world,
+            WorldScene = _worldRoot,
+            BuildLoose = name => BuildLoose(gamez, scene, name),
+            Lights = _worldLights,
+            Radio = _radio,
+            Strings = strings,
+            GroundAt = GroundSampler(),
+        });
+        if (_flagPlay is not { } flags)
+        {
+            return;
+        }
+
+        foreach (var rig in _seatRigs)
+        {
+            int seat = rig.Index;
+            if (rig.Controller is { } pilot)
+            {
+                pilot.Downed += (_, _) => flags.Downed(seat);
+            }
+        }
+    }
+
+    // One library root of the chapter, built hidden and without collision under the world root. The
+    // caller parents it where the data's own animation would.
+    private Node3D? BuildLoose(GameZ gamez, SceneBuilder? scene, string name)
+    {
+        if (scene == null || _worldRoot == null || gamez.FindByName(name) is not { } node
+            || scene.BuildSubtree(node, collisionSkip: _ => true) is not { } built)
+        {
+            return null;
+        }
+
+        built.Transform = Transform3D.Identity;
+        built.Visible = false;
+        _worldRoot.AddChild(built);
+        return built;
     }
 
     // The host's match state as it stands now. The clock rides along because the tick is the one
@@ -4914,6 +4986,8 @@ public partial class GameSession : Node3D
     // match without saying so, at worst one step late.
     private void StepVersusMatch(float dt)
     {
+        // Ahead of the clock, so a flag that ends the match is sent out on this step.
+        _flagPlay?.Step(dt);
         _versus?.Advance(dt);
         HoldSpentPilots();
         if (_matchCadence is not { } cadence)
@@ -5436,6 +5510,7 @@ public partial class GameSession : Node3D
             SendMatchState();
             for (int seat = 0; seat < _seatRigs.Count; seat++)
                 SendScore(seat);
+            _flagPlay?.Restart();
             // On a wire the whole field is put back by grant, seat by seat, so a rematch places
             // every aeroplane from the one rotation. A guest grants nothing and waits.
             for (int seat = 0; seat < _seatRigs.Count; seat++)

@@ -28,7 +28,7 @@ Names only, deliberately: a gloss here would be a second description of the same
 exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One flag, one description.
 
 **Modes and content, what gets built**
-`--viewer` · `--fly` · `--stunt` · `--vs` · `--vs-kills` · `--vs-time` · `--vs-lives` · `--vs-no-respawn` · `--coop` · `--freecam` · `--anim-lab` · `--menu` · `--skip-intro` · `--intro` · `--chapter` · `--stage` · `--node` · `--plane` · `--players` · `--mission` · `--scenario` · `--ia` · `--campaign` · `--profiles` · `--play-anim` · `--movie` · `--presentation` · `--force-builtin`
+`--viewer` · `--fly` · `--stunt` · `--vs` · `--vs-kills` · `--vs-time` · `--vs-lives` · `--vs-no-respawn` · `--ctf` · `--coop` · `--freecam` · `--anim-lab` · `--menu` · `--skip-intro` · `--intro` · `--chapter` · `--stage` · `--node` · `--plane` · `--players` · `--mission` · `--scenario` · `--ia` · `--campaign` · `--profiles` · `--play-anim` · `--movie` · `--presentation` · `--force-builtin`
 
 **Multiplayer, the wire a match flies over**
 `--net-host` · `--net-join`
@@ -182,6 +182,11 @@ lines**.
 - `--vs-no-respawn` (with `--vs`, a downed pilot stays on the crash camera until it presses the
   respawn key itself, rather than coming back on the timer. The Multiplayer Lobby's Auto Respawn box
   unchecked is the same rule, and spelling this flag out beats the box)
+- `--ctf`, `--ctf=home` (with `--vs` over the wire, fly the match as Capture the Flag: each lobby
+  team's `cs_flag_n` flag is live, taken, carried, dropped and brought home, the host deciding and
+  scoring. Pair with `--mission=MP2`, the one mission that lays the flags out. `home` adds the host's
+  option that an enemy flag scores only while the carrier's own flag is at home. The Multiplayer
+  Lobby's Capture the Flag type sets both. Ignored without `--vs`, with a warning)
 - `--net-host[=port]`, `--net-host=address:port` (open a listen server and fly this session as its
   host, the scripted twin of the menu's multiplayer door over the same socket. A bare flag takes
   port 47500 on IPv4's wildcard, the stable global IPv6 address and `::1`, a number sets the port,

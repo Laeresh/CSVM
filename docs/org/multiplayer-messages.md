@@ -993,7 +993,7 @@ session.
 
 | Id | Message | Class | Carries |
 |---|---|---|---|
-| `0x53` | Dogfight options | reliable, host to each guest | round at 4, environment at 5, mission type at 6 (Capture the Flag 0, Deathmatch 1, Zeppelin vs Zeppelin 2), flags at 7 (bit 0 Score rather than Time, bit 1 Limited Lives, bit 2 Auto Respawn, bit 3 both Time and Score, bit 4 Restrict Number of Teams), minutes at 8, lives at 9, score at 10, team minimum at 12, team maximum at 13, two reserved bytes (16 bytes) |
+| `0x53` | Dogfight options | reliable, host to each guest | round at 4, environment at 5, mission type at 6 (Capture the Flag 0, Deathmatch 1, Zeppelin vs Zeppelin 2), flags at 7 (bit 0 Score rather than Time, bit 1 Limited Lives, bit 2 Auto Respawn, bit 3 both Time and Score, bit 4 Restrict Number of Teams, bit 5 Capture the Flag's own flag home to capture), minutes at 8, lives at 9, score at 10, team minimum at 12, team maximum at 13, two reserved bytes (16 bytes) |
 | `0x54` | Dogfight roster | reliable, host to each guest | round at 4, row count at 5, the reading guest's own row at 6, one reserved byte, then sixteen rows of 20 bytes: flags (bit 0 Ready, bit 1 host, bit 2 team captain), airframe, team number (0 for none), one reserved byte, the name in 16 bytes (328 bytes) |
 | `0x55` | Lobby chat | reliable, guest to host and host to each guest | the speaker's name in 16 bytes at 4, the line in 84 bytes at 20 (104 bytes) |
 | `0x5D` | Plane build | reliable, guest to host (its pick, seat `0xFF`) and host to each guest (every seat, at launch) | seat at 4, flags at 5 (bit 0 custom), then 26 bytes: airframe, engine, four armour presses (nose, tail, left, right), left and right hardpoints, four gun calibres (5 empty), twin mask, paint pattern, three colours, three shades, three decals, three spare; the name in 16 bytes (48 bytes) |
@@ -1073,6 +1073,20 @@ no name. The launch refusals, in order:
 |---|---|---|---|
 | `0x61` | Team action | reliable, guest to host | the action at 4 (the original's subtypes: join 1, leave 2, create 4), the team number at 5, two reserved bytes, the new team's name in 39 bytes UTF-8 at 8 (47 bytes) |
 | `0x62` | Team list | reliable, host to each guest | the team count at 4, three reserved bytes, then sixteen entries of 40 bytes: the team number and its name in 39 bytes (648 bytes) |
+
+A Capture the Flag match adds a sixth refusal: a team numbered above 2, which would fly with no
+flag, under 10519.
+
+### Capture the Flag
+
+The original's flag ask `0x1c` and flag table `0x1d` (above, and
+[`multiplayer-ctf.md`](multiplayer-ctf.md)) are minted anew, naming seats rather than player ids.
+Their ids stay the original's objective messages.
+
+| Id | Message | Class | Carries |
+|---|---|---|---|
+| `0x63` | Flag ask | reliable, guest to host | the flag's team number at 4, the ask at 5 (take 1, home 2), the asking seat at 6, one reserved byte (8 bytes) |
+| `0x64` | Flag table | reliable, host to every guest | the flag count at 4, three reserved bytes, then four rows of 4 bytes: the team number, the state (1 held, 2 at home, 3 floating) and the holding seat (`0xFF` none), one reserved byte (24 bytes) |
 
 ### LAN discovery
 

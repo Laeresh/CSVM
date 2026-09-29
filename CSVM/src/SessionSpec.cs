@@ -101,6 +101,11 @@ public readonly record struct ZepStageSpec(string Chapter, string Mission, strin
 /// </summary>
 public sealed record SessionSpec
 {
+    /// <summary>The mission a Capture the Flag launch flies. Each chapter that ships the flags lays
+    /// them out in <c>MP2</c>, and only <c>mp2.gw</c> leaves them on (docs/formats/interp.md).
+    /// </summary>
+    public const string CtfMission = "MP2";
+
     // The sim frame a bare `--crash` (no `=frame`) fires at, early enough that
     // the default `--frames=` screenshot lands mid-break-up rather than pre-impact.
     private const int DefaultCrashFrame = 5;
@@ -183,6 +188,13 @@ public sealed record SessionSpec
     public bool VsAutoRespawn { get; private set; } = true;
     /// <summary>Resolved. <c>--vs-no-respawn</c> was spelled out, so the flag beats a lobby's box.</summary>
     public bool VsAutoRespawnExplicit { get; private set; }
+    /// <summary><c>--ctf</c>: a network Dogfight flown as Capture the Flag, the mission's
+    /// <c>cs_flag_n</c> flags live for its lobby teams. Resolved false without <see cref="Versus"/>.
+    /// </summary>
+    public bool CaptureTheFlag { get; private set; }
+    /// <summary><c>--ctf=home</c>: <see cref="CaptureTheFlag"/> with the host's option that an enemy
+    /// flag scores only while the carrier's own flag stands at home.</summary>
+    public bool FlagHomeToCapture { get; private set; }
     /// <summary><c>--net-host</c>, <c>--net-host=port</c> or <c>--net-host=address:port</c>: open
     /// a listen server on that port and fly this session as its host. Null when the flag is
     /// absent. A scripted smoke is what it is for; a player opens the same socket from the menu's
@@ -1055,6 +1067,8 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--vs-time=")) { s.VsTimeMinutes = int.Parse(arg["--vs-time=".Length..]); s.VsTimeExplicit = true; }
             else if (arg.StartsWith("--vs-lives=")) { s.VsLives = Math.Max(0, int.Parse(arg["--vs-lives=".Length..])); s.VsLivesExplicit = true; }
             else if (arg == "--vs-no-respawn") { s.VsAutoRespawn = false; s.VsAutoRespawnExplicit = true; }
+            else if (arg == "--ctf") { s.CaptureTheFlag = true; }
+            else if (arg == "--ctf=home") { s.CaptureTheFlag = true; s.FlagHomeToCapture = true; }
             else if (arg == "--net-host") { s.NetHostPort = UI.Menu.NetPlayFeature.DefaultPort; }
             else if (arg.StartsWith("--net-host=")) { var h = ParseHost(arg["--net-host=".Length..]); s.NetHostBind = h.Bind; s.NetHostPort = h.Port; }
             else if (arg.StartsWith("--net-join=")) { s.NetJoin = arg["--net-join=".Length..]; }
@@ -1625,20 +1639,25 @@ public sealed record SessionSpec
         return (address.Length == 0 ? "*" : address, port);
     }
 
-    /// <summary>The spec for a launchscreen launch, one plane per player, derived from the pristine
-    /// command line <paramref name="cli"/>, never the last session's spec. ⚠ Does not re-resolve:
-    /// every menu-settable field must be written here, or the pristine base drops it. The 2-player
-    /// Dogfight lock is <see cref="UI.Screens.LaunchMenu"/>'s job. An <paramref name="iaDef"/> decides
-    /// <see cref="Scenario"/> and <see cref="Stunt"/> instead. The vs arguments are a screen's match
-    /// rules, null where none offers them (<see cref="VsKillsExplicit"/>); only the lobby sets lives.</summary>
+    /// <summary>The spec for a launchscreen launch, one plane per player, derived from the pristine command line
+    /// <paramref name="cli"/>, never the last session's spec. ⚠ Does not re-resolve: every menu-settable field must
+    /// be written here, or the pristine base drops it. The 2-player Dogfight lock is <see cref="UI.Screens.LaunchMenu"/>'s
+    /// job. An <paramref name="iaDef"/> decides <see cref="Scenario"/> and <see cref="Stunt"/> instead. The vs arguments
+    /// are a screen's match rules, null where none offers them (<see cref="VsKillsExplicit"/>). The lobby alone sets
+    /// lives, and its Capture the Flag flies <see cref="CtfMission"/>.</summary>
     public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
         MenuMode mode, InstantActionDef? iaDef = null, IReadOnlyList<LoadoutChoice?>? loadouts = null,
         IReadOnlyList<CustomPlaneDef?>? customPlanes = null, int? vsKills = null, int? vsTimeMinutes = null,
-        int? vsLives = null, bool? vsAutoRespawn = null, LoadoutChoice? iaWingmanLoadout = null)
+        int? vsLives = null, bool? vsAutoRespawn = null, LoadoutChoice? iaWingmanLoadout = null,
+        bool captureTheFlag = false, bool flagHomeToCapture = false)
     {
         var names = planeNodes.ToArray();
+        bool ctf = captureTheFlag && mode == MenuMode.Versus;
         return cli with
         {
+            CaptureTheFlag = ctf,
+            FlagHomeToCapture = ctf && flagHomeToCapture,
+            Mission = ctf ? CtfMission : cli.Mission,
             MenuLoadouts = loadouts ?? Array.Empty<LoadoutChoice?>(),
             MenuCustomPlanes = customPlanes ?? Array.Empty<CustomPlaneDef?>(),
             Chapter = chapter,
@@ -2073,6 +2092,13 @@ public sealed record SessionSpec
         {
             Warn("core", "--coop has no effect with --vs (its FFA is explicit); ignoring --coop");
             Coop = false;
+        }
+
+        if (CaptureTheFlag && !Versus)
+        {
+            Warn("core", "--ctf is a Dogfight mode; ignoring it without --vs");
+            CaptureTheFlag = false;
+            FlagHomeToCapture = false;
         }
 
         // A campaign sortie is co-op by construction: the authored AI teams assume one player side.

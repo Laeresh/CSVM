@@ -29,7 +29,10 @@ shipped data does not have to supply:
 `FUN_0046ecd0` dispatches an event id to one of three per-mode tables on the mode field at
 `+0x5c`. **Dogfight (modes 1 and 2) reaches `FUN_0046ed40`, which honours exactly three events**:
 1 (`score_suicide`), 2 (`score_kill`) and 6 (`score_turret_kill`). The flag and zeppelin events
-belong to the other two tables and cannot fire in a dogfight.
+belong to the other two tables and cannot fire in a dogfight. Capture the Flag (mode 3) reaches
+`FUN_0046ed90`, which honours those three and events 4 (`score_return_flag`) and 5
+(`score_enemy_flag`); Zeppelin vs Zeppelin (mode 4) reaches `FUN_0046ee20`, events 3, 7, 8 and 9.
+Where the flag events are raised is [`multiplayer-ctf.md`](multiplayer-ctf.md).
 
 ## Who the death is charged to
 

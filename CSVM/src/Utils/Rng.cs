@@ -69,6 +69,9 @@ public static class Rng
     // The Danger Zone photograph's eye scatter (DangerZonePhotograph). Its own stream, so a
     // zone crossed never shifts the static cameras' spots or anything else a run rolls.
     public const string Photograph = "photograph";
+    // Capture the Flag's throw draws, the elevation and speed of a dropped flag's arc (FlagRuntime).
+    // Its own stream, read through IntSeedFor, so a drop never shifts anything else a match rolls.
+    public const string Flags = "flags";
 
     private static readonly Dictionary<string, RandomNumberGenerator> Streams = new(StringComparer.Ordinal);
 

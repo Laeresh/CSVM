@@ -1,0 +1,317 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using CSVM.Flight.Modes;
+using CSVM.Net;
+using CSVM.Session;
+using CSVM.Session.Launch;
+using CSVM.UI.Screens;
+using CSVM.Utils;
+using Godot;
+
+namespace CSVM.Testing;
+
+/// <summary>Capture the Flag between whole sessions in one process, on
+/// <see cref="NetCombatSuites"/>'s rig and the chapter's <c>MP2</c> map. The host and the first
+/// guest fly lobby team 1 and the second guest team 2. Every flag rule is read on all three
+/// machines. The host decides, and each guest applies its table or floats a flag on its own.
+/// </summary>
+internal static class NetFlagSuites
+{
+    private const ulong HostSeed = 0xC0FFEE40UL;
+
+    private const int SettleSteps = 20;
+
+    // An ask, the host's decision and its table on every machine, with room to spare.
+    private const int AskSteps = 10;
+
+    // A death, the crash camera cut to QuickRespawn, the ask and the grant.
+    private const int GrantSteps = 120;
+
+    private const float QuickRespawn = 0.5f;
+
+    // Two captures end it and nothing short of them can: team 2 scores only by its flags.
+    private const int ScoreTarget = 2 * FlagMatch.CaptureScore;
+
+    // How high over a flag a pilot is put, inside the reach.
+    private const float Over = 15f;
+
+    // How high over the field a waiting pilot is parked. It is far above the throw's 80 m climb
+    // and every hill, with room for the loops it flies there.
+    private const float ParkHeight = 800f;
+
+    // Steady loops at full throttle. A loop comes back to the height it started at, so a parked
+    // pilot never descends into the hills.
+    private const string TrackedFlight = "--hold=0.3,0,0,1";
+
+    private static readonly int[] Teams = { 1, 1, 2 };
+
+    private static readonly Dictionary<int, string> TeamNames = new() { [1] = "Red Squadron", [2] = "Blue Angels" };
+
+    // Steps that outlast a cooldown, so the next ask of the same seat is not refused by it.
+    private static int CooledSteps => (int)(FlagMatch.HomeTakeCooldown / GameClock.FixedDt) + 10;
+
+    [Suite("net-capture-the-flag",
+        "three sessions on the chapter's MP2 map, two seats on lobby team 1 and one on team 2: every "
+        + "machine builds a flag per team at its cs_flag_n; a guest takes the enemy flag at its base, "
+        + "the flag hangs on its aeroplane on every machine and the base flag hides; bringing it home "
+        + "scores 5; a carrier's death floats the flag on every machine; a pilot catches its own "
+        + "floating flag and returning it scores 1; an uncaught flag goes home when its 15 s throw "
+        + "runs out, scoring nobody; and a second capture ends the match on the Score limit by team")]
+    internal static void AMatchOfFlagsAcrossThreeMachines(TestContext ctx)
+    {
+        var spec = Spec(ctx);
+        var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(4001));
+        var roster = NetCombatSuites.Roster(3).Select((seat, i) => seat with { TeamId = Teams[i] }).ToArray();
+        var ambient = NetCombatSuites.Ambient.Save();
+        var ends = new List<NetCombatSuites.Ends>();
+        try
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                ends.Add(NetCombatSuites.Ends.Open(ctx, spec, mesh[i], isHost: i == 0, HostSeed + (ulong)i,
+                    i == 0 ? roster : null, teamNames: TeamNames));
+            }
+
+            ctx.Check(ends.All(e => e.Built), $"three sessions build in one process ({string.Join(", ", ends.Select(e => e.Built))})");
+            if (!ends.All(e => e.Built))
+            {
+                return;
+            }
+
+            var peers = ends.Select(e => e.Session).ToArray();
+            if (!Built(ctx, peers))
+            {
+                return;
+            }
+
+            foreach (var rig in peers.SelectMany(p => p.SeatRigs))
+            {
+                if (rig.Controller is { } pilot)
+                {
+                    pilot.AutoRespawnAfter = QuickRespawn;
+                }
+            }
+
+            Lockstep(SettleSteps, peers);
+            for (int seat = 0; seat < 3; seat++)
+            {
+                Park(peers, seat);
+            }
+
+            Capture(ctx, peers);
+            Lockstep(CooledSteps, peers);
+            CatchAndReturn(ctx, peers);
+            Lockstep(CooledSteps, peers);
+            ThrowRunsOut(ctx, peers);
+            Lockstep(CooledSteps, peers);
+            SecondCapture(ctx, peers);
+        }
+        finally
+        {
+            foreach (var end in Enumerable.Reverse(ends))
+            {
+                end.Close();
+            }
+
+            ambient.Restore();
+        }
+    }
+
+    private static SessionSpec Spec(TestContext ctx)
+    {
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, SessionSpec.CtfMission);
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
+        ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{SessionSpec.CtfMission} zrdr");
+        return SessionSpec.Parse(new[]
+        {
+            "--vs", $"--chapter={ctx.Chapter}", $"--mission={SessionSpec.CtfMission}", "--players=1", "--mute",
+            "--no-pads", "--ctf", TrackedFlight, $"--vs-kills={ScoreTarget}",
+        });
+    }
+
+    // Two flags on every machine, at the same homes, each at its base with its carried twin hidden.
+    private static bool Built(TestContext ctx, GameSession[] peers)
+    {
+        var rows = peers.Select(p => p.Flags?.Flags.Rows).ToArray();
+        ctx.Check(rows.All(r => r is { Count: 2 } && r.All(f => f.State == FlagState.Home && f.Holder == FlagMatch.NoHolder)),
+            $"every machine builds two flags at home from cs_flag_1 and cs_flag_2 ({string.Join(" | ", rows.Select(Describe))})");
+        if (!rows.All(r => r is { Count: 2 }))
+        {
+            return false;
+        }
+
+        var homes = peers.Select(p => p.Flags!.Flags.HomeOf(1)).ToArray();
+        ctx.Check(homes.All(h => h.DistanceTo(homes[0]) < 0.01f) && homes[0].DistanceTo(peers[0].Flags!.Flags.HomeOf(2)) > 2f * FlagMatch.Reach,
+            $"and every machine stands team 1's flag on the same home, out of reach of team 2's ({string.Join(" | ", homes)})");
+        return true;
+    }
+
+    // The guest on team 2 takes team 1's flag at its base, and brings it to its own.
+    private static void Capture(TestContext ctx, GameSession[] peers)
+    {
+        Put(peers, seat: 2, peers[2].Flags!.Flags.HomeOf(1));
+        Lockstep(AskSteps, peers);
+        Held(ctx, peers, "the team 2 guest takes team 1's flag at its base", team: 1, holder: 2);
+        var spoken = peers.Select(p => string.Join(",", p.Flags!.Spoken)).ToArray();
+        ctx.Check(peers[0].Flags!.Spoken.Contains("snd_CTFlost") && peers[1].Flags!.Spoken.Contains("snd_CTFlost")
+                  && peers[2].Flags!.Spoken.Contains("snd_CTFstolen") && !peers[2].Flags!.Spoken.Contains("snd_CTFlost"),
+            $"team 1's machines hear their flag lost and team 2's hears it stolen ({string.Join(" | ", spoken)})");
+        ctx.Check(peers.All(p => p.Flags!.LinesPosted > 0),
+            $"and every machine posts the flag line ({string.Join(",", peers.Select(p => p.Flags!.LinesPosted))})");
+
+        // ABLE-TO-FAIL CONTROL: inside the take's cooldown the carrier at its own base asks nothing.
+        int before = peers[0].Versus!.ScoreOf(2);
+        Put(peers, seat: 2, peers[2].Flags!.Flags.HomeOf(2));
+        Lockstep(AskSteps, peers);
+        Held(ctx, peers, "ABLE-TO-FAIL CONTROL: at its own base inside the take's 5 s cooldown the flag stays held", team: 1, holder: 2);
+        Park(peers, seat: 2);
+        Lockstep(CooledSteps, peers);
+        Put(peers, seat: 2, peers[2].Flags!.Flags.HomeOf(2));
+        Lockstep(AskSteps, peers);
+        Home(ctx, peers, "carried to team 2's base it goes home on every machine", team: 1);
+        ctx.Check(peers.All(p => p.Versus!.ScoreOf(2) == before + FlagMatch.CaptureScore && p.Versus!.KillsOf(2) == 0),
+            $"and the capture scores its carrier {FlagMatch.CaptureScore} on every machine ({Scores(peers)})");
+        ctx.Check(peers.All(p => !p.Versus!.Completed),
+            $"ABLE-TO-FAIL CONTROL: one capture is short of the {ScoreTarget}-point target and the match runs ({Scores(peers)})");
+        Park(peers, seat: 2);
+    }
+
+    // The carrier goes down with the flag and it floats everywhere. The host's own pilot on team 1
+    // catches it and returns it.
+    private static void CatchAndReturn(TestContext ctx, GameSession[] peers)
+    {
+        Put(peers, seat: 2, peers[2].Flags!.Flags.HomeOf(1));
+        Lockstep(AskSteps, peers);
+        Held(ctx, peers, "taken again", team: 1, holder: 2);
+        Down(peers, victim: 2, killer: 0);
+        ctx.Check(peers.All(p => p.Flags!.Flags.RowOf(1) is { State: FlagState.Floating, Holder: FlagMatch.NoHolder }),
+            $"the carrier's death floats the flag on every machine ({Rows(peers)})");
+
+        // Over the flag rather than on it: a flag at rest lies against a base's buildings.
+        int before = peers[0].Versus!.ScoreOf(0);
+        if (peers[0].Flags!.Flags.FloatingAt(1) is { } floating)
+        {
+            var over = floating + (Vector3.Up * Over);
+            peers[0].SeatRigs[0].Controller!.RespawnAt(over, over + (Vector3.Right * 100f));
+        }
+
+        Lockstep(1, peers);
+        Park(peers, seat: 0);
+        Lockstep(AskSteps, peers);
+        Held(ctx, peers, "the host's team 1 pilot catches its own floating flag", team: 1, holder: 0);
+        ctx.Check(peers[0].Flags!.Spoken.Contains("snd_CTFscoreCapt") && !peers[2].Flags!.Spoken.Contains("snd_CTFscoreCapt"),
+            $"and its own team hears it caught ({string.Join(" | ", peers.Select(p => string.Join(",", p.Flags!.Spoken)))})");
+        Lockstep(CooledSteps, peers);
+        Put(peers, seat: 0, peers[0].Flags!.Flags.HomeOf(1));
+        Lockstep(AskSteps, peers);
+        Home(ctx, peers, "returned to its own base", team: 1);
+        ctx.Check(peers.All(p => p.Versus!.ScoreOf(0) == before + FlagMatch.ReturnScore),
+            $"and the return scores its carrier {FlagMatch.ReturnScore} on every machine ({Scores(peers)})");
+        Park(peers, seat: 0);
+    }
+
+    // A floating flag nobody catches goes home at the end of its throw, on the host's word.
+    private static void ThrowRunsOut(TestContext ctx, GameSession[] peers)
+    {
+        Put(peers, seat: 2, peers[2].Flags!.Flags.HomeOf(1));
+        Lockstep(AskSteps, peers);
+        Held(ctx, peers, "taken a third time", team: 1, holder: 2);
+        Down(peers, victim: 2, killer: 1);
+        var scores = peers.Select(p => Enumerable.Range(0, 3).Select(p.Versus!.ScoreOf).ToArray()).ToArray();
+        int flown = GrantSteps + AskSteps;
+        Lockstep((int)(FlagMatch.ThrowSeconds / GameClock.FixedDt) - flown - AskSteps, peers);
+        ctx.Check(peers.All(p => p.Flags!.Flags.RowOf(1) is { State: FlagState.Floating }),
+            $"ABLE-TO-FAIL CONTROL: short of its 15 s throw the flag still floats on every machine ({Rows(peers)})");
+        Lockstep(4 * AskSteps, peers);
+        Home(ctx, peers, "once the throw runs out", team: 1);
+        ctx.Check(peers.Select((p, i) => Enumerable.Range(0, 3).Select(p.Versus!.ScoreOf).SequenceEqual(scores[i])).All(same => same),
+            $"and a floating flag's return scores nobody ({Scores(peers)})");
+    }
+
+    // The second capture reaches the target on team 2's total and ends the match everywhere.
+    private static void SecondCapture(TestContext ctx, GameSession[] peers)
+    {
+        Put(peers, seat: 2, peers[2].Flags!.Flags.HomeOf(1));
+        Lockstep(AskSteps, peers);
+        Held(ctx, peers, "taken for the second capture", team: 1, holder: 2);
+        Park(peers, seat: 2);
+        Lockstep(CooledSteps, peers);
+        Put(peers, seat: 2, peers[2].Flags!.Flags.HomeOf(2));
+        Lockstep(AskSteps, peers);
+        ctx.Check(peers.All(p => p.Versus!.TeamScoreOf(2) == ScoreTarget && p.Versus!.Completed && p.MatchEnd == NetMatchEnd.ScoreTarget),
+            $"the second capture ends the match on the Score limit by team on every machine ({Scores(peers)}; {string.Join(", ", peers.Select(p => p.MatchEnd))})");
+        var titles = peers.Select(p => VersusBoard.Title(p.Versus!)).ToArray();
+        ctx.Check(titles.All(t => t == "BLUE ANGELS WINS"),
+            $"and every machine's board names the capturing team ({string.Join(" | ", titles)})");
+    }
+
+    private static void Held(TestContext ctx, GameSession[] peers, string what, int team, int holder)
+    {
+        ctx.Check(peers.All(p => p.Flags!.Flags.RowOf(team) is { State: FlagState.Held } row && row.Holder == holder),
+            $"{what}: seat {holder} holds team {team}'s flag on every machine ({Rows(peers)})");
+        ctx.Check(peers.All(p => p.SeatRigs[holder].Controller is { } pilot && p.Flags!.CarriedFlag(team) is { Visible: true } flag && pilot.IsAncestorOf(flag)),
+            $"and the flag hangs on seat {holder}'s aeroplane on every machine ({Hung(peers, team)})");
+    }
+
+    private static void Home(TestContext ctx, GameSession[] peers, string what, int team)
+    {
+        ctx.Check(peers.All(p => p.Flags!.Flags.RowOf(team) is { State: FlagState.Home, Holder: FlagMatch.NoHolder }),
+            $"{what}: team {team}'s flag stands at home on every machine ({Rows(peers)})");
+        ctx.Check(peers.All(p => p.Flags!.CarriedFlag(team) is not { Visible: true }),
+            $"and no machine still draws it away from its base ({Hung(peers, team)})");
+    }
+
+    // Where each machine's carried flag hangs and whether it draws, for a failure message.
+    private static string Hung(GameSession[] peers, int team) =>
+        string.Join(" | ", peers.Select(p => p.Flags!.CarriedFlag(team) is { } flag
+            ? $"{flag.GetParent()?.Name ?? "-"}/{flag.GetParent()?.GetParent()?.Name ?? "-"} visible={flag.Visible}"
+            : "no node"));
+
+    // A seat put over a point on the machine that flies it. Every other machine sees it by its pose.
+    private static void Put(GameSession[] peers, int seat, Vector3 at)
+    {
+        var over = at + (Vector3.Up * Over);
+        peers[seat].SeatRigs[seat].Controller!.RespawnAt(over, over + (Vector3.Right * 100f));
+    }
+
+    // A seat put high over the field while the suite waits out a cooldown or a throw. There it is
+    // out of every flag's reach and clear of the bases' buildings.
+    private static void Park(GameSession[] peers, int seat)
+    {
+        var home = peers[seat].Flags!.Flags.HomeOf(1);
+        var high = home + (Vector3.Up * ParkHeight) + ((Vector3.Left + Vector3.Forward) * (ParkHeight * seat));
+        peers[seat].SeatRigs[seat].Controller!.RespawnAt(high, high + (Vector3.Right * 100f));
+    }
+
+    private static void Down(GameSession[] peers, int victim, int killer)
+    {
+        var owner = peers[victim];
+        owner.SeatRigs[victim].Controller!.DebugForceCrash(owner.SeatRigs[killer].Controller!.PlayerIndex);
+        Lockstep(GrantSteps, peers);
+        Park(peers, victim);
+    }
+
+    private static void Lockstep(int steps, params GameSession[] sessions)
+    {
+        for (int i = 0; i < steps; i++)
+        {
+            foreach (var session in sessions)
+            {
+                session._PhysicsProcess(GameClock.FixedDt);
+            }
+        }
+    }
+
+    private static string Describe(IReadOnlyList<FlagRow>? rows) =>
+        rows == null ? "none" : string.Join(" ", rows.Select(r => $"{r.Team}:{r.State}/{r.Holder}"));
+
+    private static string Rows(GameSession[] peers) =>
+        string.Join(" | ", peers.Select(p => Describe(p.Flags?.Flags.Rows)));
+
+    private static string Scores(GameSession[] peers) =>
+        string.Join(" | ", peers.Select(p => string.Join(",", Enumerable.Range(0, 3).Select(p.Versus!.ScoreOf))
+            + $" teams {p.Versus!.TeamScoreOf(1)}/{p.Versus!.TeamScoreOf(2)}"));
+}
