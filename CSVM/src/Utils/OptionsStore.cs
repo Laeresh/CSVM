@@ -102,6 +102,12 @@ public sealed class OptionsDef
     /// original carving nothing in play.</summary>
     public bool? RocketCraters { get; set; }
 
+    /// <summary>Whether the cockpit engine loop takes the exterior views' throttle pitch
+    /// (<c>FlightAudio.CockpitLoopPitched</c>), a remake-only rule. ⚠ No screen offers this; the
+    /// key is set by hand. Nullable because null is "never set", which takes the flight's own
+    /// default rather than reading as off.</summary>
+    public bool? CockpitEnginePitch { get; set; }
+
     /// <summary>The difficulty word (<see cref="DifficultyWords"/>): the campaign
     /// selector's tier the launch reads when no flag names one.</summary>
     public string? Difficulty { get; set; }
@@ -295,6 +301,7 @@ public sealed class OptionsStore
             Write(w, "menuPresentation", def.MenuPresentation);
             Write(w, "graphicsMode", def.GraphicsMode);
             WriteFlag(w, "rocketCraters", def.RocketCraters);
+            WriteFlag(w, "cockpitEnginePitch", def.CockpitEnginePitch);
             Write(w, "difficulty", def.Difficulty);
             WriteFlag(w, "nearestAfterKill", def.NearestAfterKill);
             WriteFlag(w, "rumble", def.Rumble);
@@ -352,6 +359,7 @@ public sealed class OptionsStore
                 MenuPresentation = Read(root, "menuPresentation", ValidPresentations),
                 GraphicsMode = Read(root, "graphicsMode", ValidGraphicsModes),
                 RocketCraters = ReadFlag(root, "rocketCraters"),
+                CockpitEnginePitch = ReadFlag(root, "cockpitEnginePitch"),
                 Difficulty = Read(root, "difficulty", ValidDifficulties),
                 NearestAfterKill = ReadFlag(root, "nearestAfterKill"),
                 Rumble = ReadFlag(root, "rumble"),

@@ -91,7 +91,7 @@ holds **two** sound handles per vehicle. Both are positional or not by the sound
 | Slot | Definition key | Notes |
 |---|---|---|
 | 0 | `engine_sound` | pitch and volume off the player-global `engine_sound` throttle curves |
-| 0, in either first-person view | `cockpit_engine_sound` | swapped in while the camera is in the Cockpit (mode 6) or the Nose (mode 7) view. `FUN_004b18a0` reads the live mode at `0x004b18b8` (`[DAT_0064ef78 + 0x14c]`), and `CMP EDI,0x6` at `0x004b1960` and `CMP EDI,0x7` at `0x004b1965` both jump to `0x004b1993`, which stops a slot 0 holding def `+0x6c` and loads def `+0x70`; every other mode swaps `+0x70` back to `+0x6c` (`0x004b196a`). The swap runs only for the player's own aircraft (`CMP ESI,[0x0071c298]`) and only while vehicle `+0x2dc` is clear (`0x004b194e`). Listening at the controls of the original agrees. CSVM keys this to the pilot's SELECTED view being Cockpit or Nose (`EngineAudioCurves.SelectsCockpitLoop`), not the per-frame camera pose, so a held numpad key or look-behind does not retrigger it. No `*_cp` definition carries `FREQUENCY`, so the throttle pitch curve does not reach this one |
+| 0, in either first-person view | `cockpit_engine_sound` | swapped in while the camera is in the Cockpit (mode 6) or the Nose (mode 7) view. `FUN_004b18a0` reads the live mode at `0x004b18b8` (`[DAT_0064ef78 + 0x14c]`), and `CMP EDI,0x6` at `0x004b1960` and `CMP EDI,0x7` at `0x004b1965` both jump to `0x004b1993`, which stops a slot 0 holding def `+0x6c` and loads def `+0x70`; every other mode swaps `+0x70` back to `+0x6c` (`0x004b196a`). The swap runs only for the player's own aircraft (`CMP ESI,[0x0071c298]`) and only while vehicle `+0x2dc` is clear (`0x004b194e`). Listening at the controls of the original agrees. CSVM keys this to the pilot's SELECTED view being Cockpit or Nose (`EngineAudioCurves.SelectsCockpitLoop`), not the per-frame camera pose, so a held numpad key or look-behind does not retrigger it. No `*_cp` definition carries `FREQUENCY`, so the throttle pitch curve does not reach this one in the original; CSVM's `cockpitEnginePitch` option lets it (below, "The cockpit loop's pitch is a remake-only rule") |
 | 0, while damaged | `damaged_engine_sound[]` | the damage edge silences the slot and a random entry replaces the definition once the re-arm timer fires, then holds while the vehicle's disabled-systems mask is nonzero (below, "What makes an airframe damaged" and "The damaged engine's phases"); the entry's pitch range is drawn once and multiplies the throttle pitch curve, and on the shipped `snd_damagedengine` that product reaches nothing, since the definition carries no `FREQUENCY` flag ([sounds.md](sounds.md#a-definition-is-pitched-only-when-it-carries-frequency)); CSVM's port decision is that this wins over the cockpit swap when both apply, since no def authors a damaged cockpit variant and the interaction is not itself decoded |
 | 1 | `prop_sound` | the overspeed whine, off the player-global `prop_sound` speed curves |
 
@@ -110,6 +110,22 @@ plays for anybody. Every def does author `engine_sound` AND `cockpit_engine_soun
 carries both as the fallback every plane either inherits or overrides), and every def inherits
 `basic_airplane`'s single `damaged_engine_sound` entry, `cockpit_engine_sound` is fully reachable
 in the retail data and is now selected by CSVM too, once the pilot has a view to select it with (D31).
+
+### The cockpit loop's pitch is a remake-only rule
+
+The original's cockpit loop plays at one pitch whatever the throttle, because its buffer refuses
+every frequency write (above). A flat loop gives the pilot no audible thrust in the view flown most,
+so CSVM can pitch it: with the `cockpitEnginePitch` key in `user://options.json` true, or never set,
+the cockpit loop takes slot 0's own pitch expression unchanged, throttle curve, manoeuvre and
+attitude terms, boost pin and clamp included (`EngineAudioCurves.HealthySlotIsPitched`). False
+restores the original's flat loop. No screen offers the key, and a `--det` run ignores it.
+
+The curve needs no range of its own. It maps full throttle to 1.0, the WAV's own rate, so a
+level cockpit loop at full throttle sounds exactly as the original's does at every throttle; it
+falls to 0.6 at idle, as the exterior loop does, and reaches 1.2 only at the 1.5 clamp. The
+`*_cp` recordings were never played below their own rate in the original, so a narrower cockpit
+span is the fallback if the bottom of the curve sounds wrong at the controls. The damaged loop
+still answers by its own flag, so the option does not reach it.
 
 ### What makes an airframe damaged
 

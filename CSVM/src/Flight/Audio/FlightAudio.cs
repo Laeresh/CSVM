@@ -21,6 +21,10 @@ namespace CSVM.Flight.Audio;
 /// </summary>
 public partial class FlightAudio : Node
 {
+    /// <summary>The state of <see cref="CockpitLoopPitched"/> where nothing is saved: pitched, the
+    /// remake-only rule rather than the original's flat loop.</summary>
+    public const bool CockpitLoopPitchedDefault = true;
+
     /// <summary>Overall gain for this plane's own-ship mix. 1 for single player;
     /// splitscreen sets 1/√N so N simultaneous engine stacks don't sum to a wall of noise
     /// (equal-power, so 2P ≈ −3 dB each, 4P ≈ −6 dB). TUNE, pending a real 4P listen.</summary>
@@ -78,6 +82,12 @@ public partial class FlightAudio : Node
     private AudioStreamPlayer? _warningShot, _bulletHit, _windowHit;
     private System.Random? _cueRng;
 
+    /// <summary>Whether the cockpit loop takes the exterior views' throttle pitch
+    /// (<see cref="EngineAudioCurves.HealthySlotIsPitched"/>). Armed at boot from the saved
+    /// <c>cockpitEnginePitch</c> option, and <see cref="CockpitLoopPitchedDefault"/> where none is
+    /// saved or under <c>--det</c>. Read at every swap onto the healthy loop.</summary>
+    public static bool CockpitLoopPitched { get; set; } = CockpitLoopPitchedDefault;
+
     /// <summary>Which damage phase the engine slot is in (<see cref="EngineSlotPhase"/>), for the
     /// suite that walks the slot through the damage edge, the silence and the damaged loop.</summary>
     internal EngineSlotPhase EnginePhase => _enginePhase;
@@ -89,6 +99,13 @@ public partial class FlightAudio : Node
     /// included, before the silence floor. A suite holds a start against the curve's full level
     /// with it.</summary>
     internal float EngineGain => _engineGain;
+
+    /// <summary>The pitch scale the last <see cref="Update"/> wrote to the engine slot.</summary>
+    internal float EnginePitch => _engine?.PitchScale ?? 1f;
+
+    /// <summary>Whether the slot currently holds the <c>cockpit_engine_sound</c> stream.</summary>
+    internal bool EngineHoldsCockpitStream => _engine != null && _cockpitStream != null
+        && ReferenceEquals(_engine.Stream, _cockpitStream);
 
     /// <summary>Whether the slot currently holds the <c>damaged_engine_sound</c> stream.</summary>
     internal bool EngineHoldsDamagedStream => _engine != null && _damagedStream != null
@@ -519,7 +536,8 @@ public partial class FlightAudio : Node
         var (name, pitchMul) = EngineAudioCurves.EngineDefFor(
             _stats, false, Rng.Stream(Rng.FlightAudio), _engineCockpitView);
         _enginePitchMul = pitchMul;
-        _enginePitchable = EngineAudioCurves.SlotIsPitched(_defs, name);
+        _enginePitchable = EngineAudioCurves.HealthySlotIsPitched(
+            _defs, name, _engineCockpitView, CockpitLoopPitched);
         _engine!.Stop();
         _engine.Stream = _engineCockpitView ? _cockpitStream : _engineStream;
         if (play)
@@ -540,8 +558,9 @@ public partial class FlightAudio : Node
         _engine.Stop();
         _enginePhase = EngineSlotPhase.Healthy;
         _enginePitchMul = 1f;
-        _enginePitchable = EngineAudioCurves.SlotIsPitched(
-            _defs, _engineCockpitView ? _stats.CockpitEngineSound : _stats.EngineSound);
+        _enginePitchable = EngineAudioCurves.HealthySlotIsPitched(_defs,
+            _engineCockpitView ? _stats.CockpitEngineSound : _stats.EngineSound,
+            _engineCockpitView, CockpitLoopPitched);
         _engine.Stream = _engineCockpitView ? _cockpitStream : _engineStream;
     }
 
