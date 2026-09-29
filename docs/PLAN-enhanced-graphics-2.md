@@ -211,7 +211,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 | Item | Verdict | Follow-up |
 |---|---|---|
-| A1 | Edges smooth, no ghost trails on sprites | The sun's and moon's glint on water read too bright, the moon's most: the sun's `LightSpecular` is 0.35 by day and 0.1 at night under Enhanced (`WeatherRig.EnhancedSunSpecular`); the water material and its reflections are unchanged |
+| A1 | Edges smooth, no ghost trails on sprites | The sun's and moon's glint on water read too bright, the moon's most: the sun's `LightSpecular` is 0.35 by day and 0.1 at night under Enhanced (`WeatherRig.EnhancedSunSpecular`); the water material and its reflections are unchanged. The night value reads right at the controls over C5's sea, against 0.5 and 0.05 |
 | A1 | The aircraft's own shadow showed only in a narrow band of camera distance and altitude | The sun's angular size is 1.0°, the first cascade 0.12 of the shadow distance, the directional shadow map 8192 (`Launcher.EnableSunShadows`); a plane 40 m up now shows its shadow from the flyby distance where it had none |
 | A2 | 200% visibly sharpens the C5 skyline; its cost is the user's (decision 9) | none |
 | A3 | The water bands are gone | none |
