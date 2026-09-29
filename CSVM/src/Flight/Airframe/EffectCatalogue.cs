@@ -124,15 +124,15 @@ public static class EffectCatalogue
     // A superset of BurstLightAnimNames. The seeker's ground flare and the flash rocket's detonation
     // light the ground but carry no fireball, so they neither shimmer nor scorch. Under Enhanced each
     // replaces the authored light its def declares (AnimRuntime.LightReplacedAnimNames). The HE and
-    // torpedo defs author one `he_light` colour (1.0, 0.86, 0.29); these are redder, and the torpedo
-    // reads far heavier. TUNE, judged at the controls (docs/org/ordnanceTypes.md).
+    // torpedo defs author one `he_light` colour (1.0, 0.86, 0.29); these sit a little redder, and the
+    // torpedo reads far heavier. TUNE, judged at the controls (docs/org/ordnanceTypes.md).
     public static readonly IReadOnlyDictionary<string, WorldLights.BurstShape> BurstLightShapes =
         new Dictionary<string, WorldLights.BurstShape>(StringComparer.OrdinalIgnoreCase)
         {
-            ["he_ground_effect"] = new(new Color(1.0f, 0.62f, 0.24f), 4.0f, 180f, 0.29f),
-            ["large_fireball"] = new(new Color(1.0f, 0.62f, 0.24f), 4.0f, 180f, 0.29f),
-            ["small_fireball"] = new(new Color(1.0f, 0.62f, 0.24f), 2.5f, 120f, 0.25f),
-            ["torpedo_ground_effect"] = new(new Color(1.0f, 0.52f, 0.2f), 9.0f, 280f, 0.45f),
+            ["he_ground_effect"] = new(new Color(1.0f, 0.74f, 0.265f), 4.0f, 180f, 0.29f),
+            ["large_fireball"] = new(new Color(1.0f, 0.74f, 0.265f), 4.0f, 180f, 0.29f),
+            ["small_fireball"] = new(new Color(1.0f, 0.74f, 0.265f), 2.5f, 120f, 0.25f),
+            ["torpedo_ground_effect"] = new(new Color(1.0f, 0.69f, 0.245f), 9.0f, 280f, 0.45f),
             ["ballflare.flt"] = new(new Color(1.0f, 0.7f, 0.42f), 1.8f, 160f, 0.3f),
             ["flash_effect"] = new(new Color(0.72f, 0.84f, 1.0f), 14.0f, 350f, 0.22f),
         };

@@ -105,8 +105,8 @@ public sealed class WorldLights : IDisposable
     private const int OmniBudgetMedium = 48;
     private const int OmniBudgetLow = 32;
 
-    // TUNE: a fire light's colour in the data's sRGB, the orange of the fire flipbook's middle frames.
-    private static readonly Color FireColor = new(1f, 0.5f, 0.18f);
+    // TUNE: a fire light's colour in the data's sRGB, a warm orange a little redder than `he_light`.
+    private static readonly Color FireColor = new(1f, 0.68f, 0.235f);
 
     // Where Godot's range window, (1 - (d/r)^4)^2 at exponent 0, falls to half, as a fraction of
     // the range. The authored ramp is at half midway between its near and far range.

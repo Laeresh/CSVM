@@ -785,6 +785,11 @@ C1 tarmac under Enhanced; HE's range edge shows as a soft ring on flat ground. T
 captured (the scripted pose pitches away before it arms) and is owed at the controls with the other
 three.
 
+**Decision at the controls: halfway back toward the authored colour.** The redder shapes read too
+red in flight, so each warm burst colour sits midway between `he_light`'s (1.0, 0.86, 0.29) and the
+redder pick: HE and both fireballs (1.0, 0.74, 0.265), the torpedo (1.0, 0.69, 0.245). The seeker
+and flash colours are unchanged, and B16's fire light takes the same step, to (1.0, 0.68, 0.235).
+
 **Decision at the controls: the authored lights take the authored reach.** The same falloff hid
 every authored `LIGHT_STATE` light under Enhanced: a C1 airfield lamp authors a 7 m to 20 m linear
 ramp, and `OmniAttenuation` 1.0 had it spent within a few metres. Every pooled omni now runs at
@@ -1086,7 +1091,7 @@ Alpha-to-coverage (A4) does not apply to decals.
 under Enhanced the omni pool lights up to `OmniBudget` for `graphics.effectsLevel` (64 at high, 48
 at medium, 32 at low, every one TUNE). One significance sort orders both: the texture takes its
 head and the omnis a longer run of the same order. `WorldLights.AddFire` is one burning emitter's
-light: a warm orange (TUNE sRGB 1.0, 0.5, 0.18) at gain 1.5 scaled down while fewer than four fire
+light: a warm orange (TUNE sRGB 1.0, 0.68, 0.235, see B11's colour decision) at gain 1.5 scaled down while fewer than four fire
 particles live, with the B11 flicker (now one `Flicker` both lights share). Its reach is 2.5 times
 the fire particles' mean grown size, clamped to 8 to 45 m, and it stands a quarter of its reach
 above their centroid so the ground takes it at an angle. Its significance carries a 0.25 rank
