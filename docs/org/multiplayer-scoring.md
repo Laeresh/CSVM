@@ -73,8 +73,9 @@ end screen.
 `FUN_004136e0` reads the lobby's limit kind from `00642f94` and arms exactly one of them: kind 0
 writes the time limit to `0071c180` and sets the score-limit-off byte `0071c1a2`; kind 1 writes the
 score target to `0071c17c` and sets the time-limit-off byte `0071c1a1`. Each check is gated on the
-other's byte, so the original never runs a match that can end either way. The remake's Dogfight
-arms both rows at once, which is a remake decision and not a reading of this code.
+other's byte, so the original never runs a match that can end either way. The remake's lobby arms
+Time, Score or both as the host chooses, and with both the first one reached ends the match. That
+is a remake decision and not a reading of this code.
 
 ## Limited Lives
 

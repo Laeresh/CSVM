@@ -151,6 +151,13 @@ public enum NetMessageType : ushort
     /// <summary>A guest's answer to a host that asks a password, or the host's word that the answer
     /// admitted it. Only a session with a password sends it, and only before admission.</summary>
     JoinPassword = 0x0060,
+
+    /// <summary>A lobby guest's team action to its host: create, join or leave a team.</summary>
+    LobbyTeamAction = 0x0061,
+
+    /// <summary>A Dogfight host's teams, each team's index and name, sent to every guest whenever
+    /// they change.</summary>
+    LobbyTeams = 0x0062,
 }
 
 /// <summary>Which campaign film a <see cref="CoopFilmMessage"/> names.</summary>
@@ -1440,6 +1447,8 @@ public static class NetMessage
         NetMessageType.LobbyPlaneRules => LobbyPlaneRulesMessage.Reliability,
         NetMessageType.CoopHangar => CoopHangarMessage.Reliability,
         NetMessageType.JoinPassword => JoinPasswordMessage.Reliability,
+        NetMessageType.LobbyTeamAction => LobbyTeamActionMessage.Reliability,
+        NetMessageType.LobbyTeams => LobbyTeamsMessage.Reliability,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "no such message type"),
     };
 

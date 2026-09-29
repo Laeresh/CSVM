@@ -54,7 +54,7 @@ send call, and "To" is the fourth.
 | `0x15` | `FUN_00499a50` | `LAB_00499b30` | 6 + text | see note | 0 or one peer | chat. An all-chat goes out **unguaranteed** to everybody; a team chat is sent guaranteed, once per teammate, to each peer whose `+0x18` matches the sender's team slot |
 | `0x17` | `FUN_004996d0` | `FUN_00499730` | `0xc` | yes | 0 | the match end: a float clock at `+4` and the reason at `+8` |
 | `0x18` | `FUN_00413170` | lobby | `0x18` + text | mode-dependent | 0, one peer, or each peer | a lobby notice with a string; the third argument selects broadcast, per-team or single |
-| `0x1a` | `FUN_00413090`, `FUN_00413f70`, `FUN_004142c0`, `FUN_00414340`, `FUN_004143c0` | lobby | `0xc`, or 4 + payload from the last | yes | 0 | a lobby setting change; the subtype word at `+4` is 8, 8, 2, 1 and variable in builder order |
+| `0x1a` | `FUN_00413090`, `FUN_00413f70`, `FUN_004142c0`, `FUN_00414340`, `FUN_004143c0` | `FUN_00415b20` | `0xc`, or `0x38` for a create | yes | 0 | a team action; the subtype word at `+4` is 8 (disband), 8, 2 (leave), 1 (join) and 4 (create) in builder order, "Lobby teams" below |
 | `0x1c` | `FUN_0049a050` | `FUN_0049a170` | `0xc` | yes | the host (`DAT_0071d228`) | an objective or flag request, which only the host answers |
 | `0x1d` | `FUN_0049a240` | `FUN_0049a300` | 8 + `0xc` per row | yes | 0 | the objective table: a count at `+4`, then `(id, holder, state)` per row |
 | `0x1e` | `FUN_0049adf0` | `FUN_0049b0b0` | 6 + `0x1c` per zeppelin + `0x10` per event | **no** | 0 | the zeppelin state, below |
@@ -65,7 +65,7 @@ send call, and "To" is the fourth.
 | `0x23` | `FUN_0049bd00` | `LAB_0049bd70` | `0xc` | yes | one peer | the ping: two `GetTickCount` stamps, sent only to a peer whose id is at or above ours, so one side of each pair pings |
 | `0x24`, `0x25` | none found | `LAB_0049bde0` | | | | receive-only in this build, both on one handler |
 | `0x26` | `FUN_004134e0` | lobby, `FUN_00415940` | `0x30` + the packed outlaw list | **no** | 0 | the lobby settings block, below |
-| `0x27` | `FUN_004135f0` | lobby | 8 + `0x20` per player + a tail | yes | 0 | the lobby roster, below |
+| `0x27` | `FUN_004135f0` | lobby | 8 + `0x20` per team + the member ids | yes | 0 | the team roster, below |
 
 ⚠ **Types `0x02`, `0x03`, `0x05`, `0x06`, `0x07`, `0x0d` and `0x0e` never cross the wire.**
 `FUN_005b2820` and `FUN_005b24a0` build them on the stack from DirectPlay's own system messages
@@ -357,16 +357,19 @@ writes the new tick and the empty list as one rules change, so one round starts,
 and one `0x5E` reaches each guest. The model still takes a flag while the tick is clear, which
 reaches every guest; the screen's Select... greys then, as the original's does.
 
-## The lobby roster
+## The team roster
 
-`FUN_004135f0` sends type `0x27`, the widest message in the protocol and the only one the remake
-borrows an id from for a roster. A player count sits at `+4`, then `0x20` per player: the player
-index, a second dword, an 18-character name copied with `strncpy` and zero-terminated at `+0x1a`,
-a dword at `+0x1c`, and a variable tail of that player's own list. It is sent guaranteed to
-everybody, whole, every time anything changes; there is no delta form.
+[Evidence: decoded] `FUN_004135f0` sends type `0x27`, the widest message in the protocol. The count
+at `+4` is the team container's `+0x28`, the team count. Then comes `0x20` per team: the team number
+(`team+0x18`), the team's `+0x28`, the team name (`team+8`, 18 characters copied with `strncpy` and
+zero-terminated at `+0x1a`) and the member count (`team+0x34`). A tail of member player ids (the
+list at `team+0x30`) follows the teams, so the size is `(members + 8 * teams) * 4 + 8`. It is sent
+guaranteed to everybody, whole, every time anything changes; there is no delta form. Guests learn
+team membership from this message alone.
 
 `0x27` is the highest type word the program uses, which is why the remake mints its own ids above
-it.
+it. The remake's `0x27` is its seat roster, a different message under the original's id; its team
+list is minted at `0x62` ("Lobby teams").
 
 ## What the remake takes
 
@@ -376,7 +379,7 @@ score, `0x17` match state, `0x22` hit and `0x27` seat roster. Damage, spawn, the
 director transition, the join handshake and a seat's ask to be spawned again have no
 counterpart, so they are minted at `0x40`, `0x41`, `0x42`, `0x43` and `0x44`, above the ceiling
 above. The host-owned world's four (AI state, AI fire, a guest's hit claim on an AI, and a world
-event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, the start barrier's word at `0x5B`, a match's death notice at `0x5C`, the lobby's plane build and plane rules at `0x5D` and `0x5E`, the lobby's co-op hangar plane at `0x5F`, and the lobby's join password at `0x60`. The handshake carries the master seed, the host's clock and the seat the joining peer was
+event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, the start barrier's word at `0x5B`, a match's death notice at `0x5C`, the lobby's plane build and plane rules at `0x5D` and `0x5E`, the lobby's co-op hangar plane at `0x5F`, the lobby's join password at `0x60`, and the lobby's team action and team list at `0x61` and `0x62`. The handshake carries the master seed, the host's clock and the seat the joining peer was
 given; the original needs none of the three, because it draws from no shared stream and hands
 out no seat. The ask carries a seat and nothing else: the original's client takes its own
 respawn, while here the host owns every placement and answers the ask with a spawn event.
@@ -984,14 +987,14 @@ The debrief flow carries the host's result, which every guest's scrapbook shows.
 
 ### Dogfight lobby
 
-The Multiplayer Lobby runs over five more lobby messages, minted at `0x53` to `0x55`, `0x5D` and `0x5E`, with a
+The Multiplayer Lobby runs over five more lobby messages, minted at `0x53` to `0x55`, `0x5D` and `0x5E`, and the two of "Lobby teams" below, with a
 guest's plane and Ready riding the co-op pick at `0x51` under the lobby's own round. None reaches a
 session.
 
 | Id | Message | Class | Carries |
 |---|---|---|---|
-| `0x53` | Dogfight options | reliable, host to each guest | round at 4, environment at 5, mission type at 6 (Capture the Flag 0, Deathmatch 1, Zeppelin vs Zeppelin 2), flags at 7 (bit 0 Score rather than Time, bit 1 Limited Lives, bit 2 Auto Respawn), minutes at 8, lives at 9, score at 10 (12 bytes) |
-| `0x54` | Dogfight roster | reliable, host to each guest | round at 4, row count at 5, the reading guest's own row at 6, one reserved byte, then sixteen rows of 20 bytes: flags (bit 0 Ready, bit 1 host), airframe, two reserved bytes, the name in 16 bytes (328 bytes) |
+| `0x53` | Dogfight options | reliable, host to each guest | round at 4, environment at 5, mission type at 6 (Capture the Flag 0, Deathmatch 1, Zeppelin vs Zeppelin 2), flags at 7 (bit 0 Score rather than Time, bit 1 Limited Lives, bit 2 Auto Respawn, bit 3 both Time and Score, bit 4 Restrict Number of Teams), minutes at 8, lives at 9, score at 10, team minimum at 12, team maximum at 13, two reserved bytes (16 bytes) |
+| `0x54` | Dogfight roster | reliable, host to each guest | round at 4, row count at 5, the reading guest's own row at 6, one reserved byte, then sixteen rows of 20 bytes: flags (bit 0 Ready, bit 1 host, bit 2 team captain), airframe, team number (0 for none), one reserved byte, the name in 16 bytes (328 bytes) |
 | `0x55` | Lobby chat | reliable, guest to host and host to each guest | the speaker's name in 16 bytes at 4, the line in 84 bytes at 20 (104 bytes) |
 | `0x5D` | Plane build | reliable, guest to host (its pick, seat `0xFF`) and host to each guest (every seat, at launch) | seat at 4, flags at 5 (bit 0 custom), then 26 bytes: airframe, engine, four armour presses (nose, tail, left, right), left and right hardpoints, four gun calibres (5 empty), twin mask, paint pattern, three colours, three shades, three decals, three spare; the name in 16 bytes (48 bytes) |
 | `0x5E` | Plane rules | reliable, host to each guest | round at 4, flags at 5 (bit 0 Allow Custom Planes, bit 1 Outlaw Components), the outlaw list in the original's five-byte packing at 6, one reserved byte (12 bytes) |
@@ -1014,6 +1017,62 @@ pick against its rules before counting it Ready, which the original does not. An
 ammunition or rocket refuses Ready once and resets the fit, as the original does; the hardpoint
 counts are kept, since the pylons stay empty either way. A co-op launch sends the host's own custom
 planes, and its guests fly stock.
+
+### Lobby teams
+
+[Evidence: decoded] **The actions.** Every team action rides `0x1a` with a subtype word at `+4`,
+sent guaranteed to everybody; only the host acts on it, in `FUN_00415b20`:
+
+| Subtype | Builder | Bytes | Payload | Host action |
+|---|---|---|---|---|
+| 4 create | `FUN_004143c0` | `0x38` | creator id at `+0x10`, name at `+0x18` | `FUN_0046f250` mints the number, `FUN_00413c30` makes the team, the creator joins |
+| 1 join | `FUN_00414340` | `0xc` | team number at `+8` | `FUN_00413db0`: player `+8` takes the team, member list `+0x30` grows, lobby notice 4 (10503) |
+| 2 leave | `FUN_004142c0` | `0xc` | team number at `+8` | `FUN_00413e50` |
+| 8 disband | `FUN_00413f70` | `0xc` | team number at `+8` | a subtype 2 for every member, then `FUN_00413ef0` |
+
+After any of them the host sets the lobby's dirty bytes (`[0x64e724]+4`, `+5`), which resend `0x26`
+and the `0x27` team roster. `FUN_0046f250` mints the lowest number no team holds, counting from 1.
+The screen dispatcher `FUN_00407670` takes 1007 (create), which copies 16 characters of the name to
+`0x64316e` and calls `FUN_00413400`; a blank name there becomes "Default team name" (`0x61f614`).
+1008 is join (`FUN_004133e0`), and 1009 leave (`FUN_00413390`), which sends disband instead when the
+player record's byte `+0xd`, the captain flag, is set. Boot sends a disband for every team the
+booted player holds (`FUN_00413090`). In flight a pilot carries its team number
+(`FUN_0046f3c0(pilot+8)+0x18`, remote record `+0x3c`).
+
+[Evidence: script] **The screen.** `MULTIPLAYERLOBBY_READY.SCRIPT`'s team button (at 105, 325)
+reads Create Team (10056) when its pilot is on no team and no team row is picked, Join Team (10057)
+with a team row picked, and Leave Team (10058) on a team. It is live only while its pilot is not
+Ready. The player list has team rows (kind 1 from callback 5002) and player rows. Create Team runs
+`MULTIPLAYERTEAMMODAL.SCRIPT`: `mp_createteambackground.png` at 234, 99, the title 10552, one name
+box (label 10551, `FD` 12 characters) with OK and Cancel. OK refuses a blank name with 10512 through
+`$$A$$` 1042. `MULTIPLAYERLOBBY_MISSION.SCRIPT`'s LAUNCH! refuses 10519 while Restrict Number of
+Teams is ticked with fewer teams than the minimum box, and 10518 with more than the maximum, before
+it calls `$$A$$` 1013. The minimum box opens at 2 and the maximum at 4 (`SBA.XF`, `TBA.XF`, read as
+the opening values), a Deathmatch ranges them over 0 to 16, and each bounds the other. Capture the
+Flag and Zeppelin vs Zeppelin tick Restrict and hold both boxes at 2.
+
+[Evidence: weak negative] Langui 10520 ("There are not enough players in the game.") and 10547
+("You are not on a team.") have no reference in the scripts or as an immediate in the executable.
+
+**The remake.** `Net/NetTeams.cs` is the host's team book and every team mode's launch check. A
+guest's action goes to the host alone as `0x61`; the host acts on it against its own book and sends
+the outcome in the player list's team byte and the team list `0x62`, never in an answer to the
+guest. A captain's Leave Team disbands its team, and a captain who leaves the game or is booted
+takes its team with it. Each action posts the original's notices 10503 to 10505 as a chat line under
+no name. The launch refusals, in order:
+
+1. Restrict Number of Teams ticked with fewer teams than the minimum: 10519. With more than the
+   maximum: 10518. With no team standing the match is a free-for-all, and only this check applies.
+2. A team match with fewer than two players: 10520.
+3. A team match with one team: 10519.
+4. A player on no team in a team match: the remake's own line.
+5. Two teams whose sizes differ by more than one player: the remake's own line. A machine's
+   splitscreen seats fly on its team and count as players.
+
+| Id | Message | Class | Carries |
+|---|---|---|---|
+| `0x61` | Team action | reliable, guest to host | the action at 4 (the original's subtypes: join 1, leave 2, create 4), the team number at 5, two reserved bytes, the new team's name in 39 bytes UTF-8 at 8 (47 bytes) |
+| `0x62` | Team list | reliable, host to each guest | the team count at 4, three reserved bytes, then sixteen entries of 40 bytes: the team number and its name in 39 bytes (648 bytes) |
 
 ### LAN discovery
 

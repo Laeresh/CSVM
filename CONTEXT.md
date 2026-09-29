@@ -48,6 +48,13 @@ authors so a player cannot inherit an emplacement's side. A remake-only rule: th
 per-pilot team ladder. A co-op campaign does not use it: every human sits on team id `1`.
 _Avoid_: team band, emplacement band, pilot team offset
 
+**Lobby team**:
+A free-form named team players form in the Multiplayer Lobby, known by its team number from `1`
+(`0` for a player on no team), with a captain whose leave disbands it. `NetSeat.TeamId` carries the
+team number, which is not a team id and is never compared as one: lobby team `1` is not the
+player's side.
+_Avoid_: squadron, side, lobby team index
+
 ## Campaign co-op
 
 **Scripted player**:

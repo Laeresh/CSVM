@@ -19,8 +19,9 @@ public sealed record NetSeat
     /// </summary>
     public int SeatIndex { get; init; }
 
-    /// <summary>The side this pilot fights on, 0 in a free-for-all. Teams are handed out from 1,
-    /// which is what leaves block 0 of the spawn table to the un-teamed match.</summary>
+    /// <summary>The lobby team this pilot flies for, by its team number, 0 in a free-for-all. Teams
+    /// are numbered from 1, which leaves block 0 of the spawn table to the un-teamed match. It is
+    /// not a team id, so no hostility test reads it as one.</summary>
     public int TeamId { get; init; }
 
     /// <summary>Whether this machine simulates the seat. A local seat gets a pane, a camera, a

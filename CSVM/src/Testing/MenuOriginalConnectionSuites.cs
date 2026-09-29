@@ -317,6 +317,81 @@ internal static class MenuOriginalConnectionSuites
         }
     }
 
+    [Suite("menu-original-lobby-teams",
+        "The Multiplayer Lobby's teams over the loopback: the host's Create Team stands the CREATE "
+        + "TEAM box with OK greyed while empty, a name of spaces alone is refused, and a typed name "
+        + "creates the team, which reaches the guest as a team row under the host's row. The guest "
+        + "picks that row and its team button joins it, which every end's chat announces. Restrict "
+        + "Number of Teams makes the count boxes live on the host and greyed on the guest, whose arrows "
+        + "reach the guest's options. With one team LAUNCH! raises the original's refusal and hands "
+        + "nothing out. The guest's Leave Team and a team of its own let the launch go, and the host's "
+        + "field carries each seat's team")]
+    internal static void TheLobbyTeams(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var lan = new LoopbackLan();
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(84));
+        var gate = new ArrivalGate(mesh[0]);
+        var hostDoor = new NetPlayFeature(
+            (_, _, _) => gate,
+            (_, _) => throw new InvalidOperationException("the host does not join"),
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }),
+            lan.Bind);
+        var guestDoor = new NetPlayFeature(
+            (_, _, _) => throw new InvalidOperationException("the guest does not host"),
+            (_, _) =>
+            {
+                gate.Arrive(mesh[1].LocalPeer);
+                return new Hangup(mesh[1]);
+            },
+            lan: lan.Bind);
+        foreach (var door in new[] { hostDoor, guestDoor })
+        {
+            door.BindAddress = Loopback;
+            door.SearchAddress = Loopback;
+        }
+
+        var ends = new List<End>();
+        var hostExits = new List<MenuExit>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-lobby-teams");
+        try
+        {
+            var host = Open(ctx, layout, hostDoor, ends, hostExits);
+            var guest = Open(ctx, layout, guestDoor, ends);
+            if (host == null || guest == null || !HostTheLobby(ctx, host) || !JoinTheLobby(ctx, guest, ends))
+            {
+                return;
+            }
+
+            byte team = CreateTheTeam(ctx, host, guest, ends);
+            JoinTheTeam(ctx, host, guest, ends, team);
+            RestrictTheTeams(ctx, host, guest, ends);
+            LaunchOnTeams(ctx, host, guest, ends, hostExits, team);
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            hostDoor.Discard();
+            guestDoor.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
     [Suite("menu-original-builtin-host",
         "An Original guest against a Built-in Dogfight host over the loopback: the host's door opens "
         + "with its lobby unshown, the guest finds it on the games list and lands in the lobby, its "
@@ -1639,6 +1714,136 @@ internal static class MenuOriginalConnectionSuites
     }
 
     // The guest marked Ready, pressed twice where an outlawed ammunition or rocket refuses once.
+    // The host's Create Team: the box with OK greyed, a blank name refused, then a typed one, which
+    // reaches the guest as a team row. Returns the team's number.
+    private static byte CreateTheTeam(TestContext ctx, End host, End guest, List<End> ends)
+    {
+        ClickRow(ctx, host, OriginalLobbyScreen.TeamKey);
+        ctx.Check(host.Shell.Lobby.TeamBoxOpen && Row(host.Shell, OriginalTeamBox.OkKey) is { Enabled: false },
+            $"Create Team stands the CREATE TEAM box with OK greyed while the name is empty ({host.Shell.Lobby.TeamBoxOpen})");
+        TypeInto(host, new MenuCommands { Typed = "   " });
+        ClickRow(ctx, host, OriginalTeamBox.OkKey);
+        ctx.Check(host.Shell.Dialog?.Message == "Invalid team name." && host.Shell.Lobby.TeamBoxOpen && host.Door.Dogfight!.Teams.Count == 0,
+            $"a name of spaces alone raises the original's refusal and creates nothing ({host.Shell.Dialog?.Message})");
+        ClickRow(ctx, host, OriginalShell.DialogOkKey);
+        ClickRow(ctx, host, OriginalTeamBox.NameKey);
+        TypeInto(host, new MenuCommands { Typed = "Aces" });
+        ClickRow(ctx, host, OriginalTeamBox.OkKey);
+        for (int frame = 0; frame < 4; frame++)
+        {
+            Pump(ends.ToArray());
+        }
+
+        var lobby = host.Door.Dogfight!;
+        byte team = lobby.OwnTeam;
+        ctx.Check(!host.Shell.Lobby.TeamBoxOpen && team != 0 && lobby.Players[0].Captain,
+            $"OK creates the team with the host its captain ({team}, {lobby.Players[0].Captain})");
+        var heard = guest.Door.Dogfight!.Teams;
+        ctx.Check(heard.Count == 1 && heard[0].Name == "Aces" && Row(guest.Shell, OriginalLobbyScreen.TeamRowKey(team)) != null
+                  && Draws(guest.Shell.Compose(), OriginalLobbyScreen.TeamRowText("Aces", 1)),
+            $"the team reaches the guest as a pickable team row ({string.Join(", ", heard.Select(t => t.Name))})");
+        return team;
+    }
+
+    // The guest picks the team row and its team button joins; a Ready guest's button is greyed.
+    private static void JoinTheTeam(TestContext ctx, End host, End guest, List<End> ends, byte team)
+    {
+        ClickRow(ctx, guest, OriginalLobbyScreen.ReadyKey);
+        ctx.Check(Row(guest.Shell, OriginalLobbyScreen.TeamKey) is { Enabled: false },
+            $"ABLE-TO-FAIL CONTROL: a Ready guest's team button is greyed");
+        ClickRow(ctx, guest, OriginalLobbyScreen.ReadyKey);
+        ClickRow(ctx, guest, OriginalLobbyScreen.TeamRowKey(team));
+        ctx.Check(guest.Shell.Lobby.PickedTeam == team, $"a press picks the team row ({guest.Shell.Lobby.PickedTeam})");
+        ClickRow(ctx, guest, OriginalLobbyScreen.TeamKey);
+        for (int frame = 0; frame < 4; frame++)
+        {
+            Pump(ends.ToArray());
+        }
+
+        var hostLobby = host.Door.Dogfight!;
+        ctx.Check(guest.Door.Dogfight!.OwnTeam == team && hostLobby.Players[1].Team == team,
+            $"Join Team puts the guest on the team on both ends ({guest.Door.Dogfight!.OwnTeam}, {hostLobby.Players[1].Team})");
+        ctx.Check(hostLobby.Chat.Any(l => l.Text == "[Nathan joined team Aces.]") && guest.Door.Dogfight!.Chat.Any(l => l.Text == "[Nathan joined team Aces.]"),
+            $"and every end's chat announces it");
+    }
+
+    // Restrict Number of Teams: the count boxes live on the host only, an arrow reaching the guest.
+    private static void RestrictTheTeams(TestContext ctx, End host, End guest, List<End> ends)
+    {
+        ctx.Check(Row(host.Shell, OriginalLobbyScreen.MinTeamsKey) is { Enabled: false },
+            $"ABLE-TO-FAIL CONTROL: the count boxes are greyed while the tick is clear");
+        ClickRow(ctx, host, OriginalLobbyScreen.TeamsKey);
+        ctx.Check(Row(host.Shell, OriginalLobbyScreen.MinTeamsKey) is { Enabled: true } && Row(host.Shell, OriginalLobbyScreen.MaxTeamsKey) is { Enabled: true },
+            $"the tick makes both count boxes live on the host");
+        ClickRow(ctx, host, OriginalLobbyScreen.TeamArrowPrefix + "MAX+");
+        for (int frame = 0; frame < 4; frame++)
+        {
+            Pump(ends.ToArray());
+        }
+
+        var heard = guest.Door.Dogfight!.Options;
+        ctx.Check(heard is { RestrictTeams: true, MinTeams: DogfightOptionsMessage.DefaultMinTeams, MaxTeams: DogfightOptionsMessage.DefaultMaxTeams + 1 }
+                  && Row(guest.Shell, OriginalLobbyScreen.MinTeamsKey) is { Enabled: false },
+            $"the tick and the raised maximum reach the guest, whose boxes stay greyed ({heard.RestrictTeams}, {heard.MinTeams}, {heard.MaxTeams})");
+    }
+
+    // One team refuses LAUNCH!; the guest's own team lets it go, each seat carrying its team.
+    private static void LaunchOnTeams(TestContext ctx, End host, End guest, List<End> ends, List<MenuExit> exits, byte team)
+    {
+        ClickRow(ctx, host, OriginalLobbyScreen.ReadyKey);
+        ClickRow(ctx, guest, OriginalLobbyScreen.ReadyKey);
+        for (int frame = 0; frame < 4; frame++)
+        {
+            Pump(ends.ToArray());
+        }
+
+        int before = exits.Count;
+        ClickRow(ctx, host, OriginalLobbyScreen.LaunchKey);
+        ctx.Check(exits.Count == before && host.Shell.Dialog?.Message == "Each player must be on one of two teams to play.",
+            $"with one team LAUNCH! raises the original's refusal and hands nothing out ({host.Shell.Dialog?.Message})");
+        ClickRow(ctx, host, OriginalShell.DialogOkKey);
+
+        ClickRow(ctx, guest, OriginalLobbyScreen.ReadyKey);
+        ClickRow(ctx, guest, OriginalLobbyScreen.TeamKey);
+        for (int frame = 0; frame < 4; frame++)
+        {
+            Pump(ends.ToArray());
+        }
+
+        ctx.Check(guest.Door.Dogfight!.OwnTeam == 0 && host.Door.Dogfight!.Players[0].Team == team,
+            $"the guest's Leave Team leaves the captain's team standing ({guest.Door.Dogfight!.OwnTeam}, {host.Door.Dogfight!.Players[0].Team})");
+        ClickRow(ctx, guest, OriginalLobbyScreen.TeamKey);
+        TypeInto(guest, new MenuCommands { Typed = "Bandits" });
+        ClickRow(ctx, guest, OriginalTeamBox.OkKey);
+        for (int frame = 0; frame < 4; frame++)
+        {
+            Pump(ends.ToArray());
+        }
+
+        ClickRow(ctx, guest, OriginalLobbyScreen.ReadyKey);
+        for (int frame = 0; frame < 4; frame++)
+        {
+            Pump(ends.ToArray());
+        }
+
+        byte theirs = guest.Door.Dogfight!.OwnTeam;
+        ClickRow(ctx, host, OriginalLobbyScreen.LaunchKey);
+        var launch = exits.Skip(before).OfType<LaunchExit>().FirstOrDefault();
+        ctx.Check(launch?.Net != null && theirs != 0 && theirs != team,
+            $"with two teams of one LAUNCH! hands out the launch ({launch?.Chapter}, {theirs})");
+        if (launch?.Net is not { } wire)
+        {
+            return;
+        }
+
+        var planes = launch.Seats.Select(s => s.PlaneNode).ToList();
+        var fits = launch.Seats.Select(s => s.Fit).ToList();
+        var (roster, _) = CSVM.Session.Launch.Launcher.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load(), null,
+            host.Door.Dogfight!.TeamOfPeer);
+        ctx.Check(roster.Length == 2 && roster[0].TeamId == team && roster[1].TeamId == theirs,
+            $"the host's field carries each seat's team ({string.Join(", ", roster.Select(s => s.TeamId))})");
+    }
+
     private static void ReadyGuest(TestContext ctx, End host, End guest, List<End> ends, string when)
     {
         var lobby = guest.Door.Dogfight!;

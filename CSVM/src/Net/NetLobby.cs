@@ -44,9 +44,10 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     private readonly List<CoopHangarMessage?> _hangar = new();
 
     private readonly List<(int Peer, LobbyChatMessage Line)> _chat = new();
+    private readonly List<(int Peer, LobbyTeamActionMessage Action)> _teamActions = new();
 
-    // Wide enough for the widest lobby message, the Dogfight player list.
-    private readonly byte[] _scratch = new byte[DogfightRosterMessage.Size];
+    // Wide enough for the widest lobby message, the Dogfight team list.
+    private readonly byte[] _scratch = new byte[Math.Max(DogfightRosterMessage.Size, LobbyTeamsMessage.Size)];
     private INetTransportListener? _listener;
     private SessionAdvertMessage? _advertising;
 
@@ -166,6 +167,9 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
 
     /// <summary>The Dogfight host's latest player list, or null while none has arrived.</summary>
     public DogfightRosterMessage? DogfightRoster { get; private set; }
+
+    /// <summary>The Dogfight host's latest team list, or null while none has arrived.</summary>
+    public LobbyTeamsMessage? Teams { get; private set; }
 
     /// <summary>The advert this end hands out, or null while it hands out none.</summary>
     public SessionAdvertMessage? Advertising => _advertising;
@@ -318,6 +322,20 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         return lines;
     }
 
+    /// <summary>Hands over every team action a guest asked since the last call, with the peer that
+    /// asked it, and forgets them. Only a host acts on them.</summary>
+    public IReadOnlyList<(int Peer, LobbyTeamActionMessage Action)> TakeTeamActions()
+    {
+        if (_teamActions.Count == 0)
+        {
+            return Array.Empty<(int, LobbyTeamActionMessage)>();
+        }
+
+        var actions = _teamActions.ToArray();
+        _teamActions.Clear();
+        return actions;
+    }
+
     /// <summary>Drops every held payload. A guest does this whenever the host names a board. What
     /// trails in from a flight that ended is not the next flight's join answer.</summary>
     public void DropHeld() => _held.Clear();
@@ -415,6 +433,7 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         _picks.Remove(peer);
         _pickBuilds.Remove(peer);
         _unpicked.Remove(peer);
+        _teamActions.RemoveAll(asked => asked.Peer == peer);
         if (_listener != null && _bound.Remove(peer))
         {
             _listener.OnPeerDisconnected(peer);
@@ -591,13 +610,30 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         return true;
     }
 
-    // The Dogfight lobby's four messages. A chat inbox past the held depth drops its oldest line,
-    // so a lobby nobody reads cannot grow without bound.
+    // The Dogfight lobby's six messages. A chat or team action inbox past the held depth drops its
+    // oldest entry, so a lobby nobody reads cannot grow without bound.
     private bool TakeDogfight(int peer, ReadOnlySpan<byte> payload)
     {
         if (DogfightOptionsMessage.TryRead(payload, out var options))
         {
             DogfightOptions = options;
+            return true;
+        }
+
+        if (LobbyTeamsMessage.TryRead(payload, out var teams))
+        {
+            Teams = teams;
+            return true;
+        }
+
+        if (LobbyTeamActionMessage.TryRead(payload, out var action))
+        {
+            if (_teamActions.Count >= HeldPayloads)
+            {
+                _teamActions.RemoveAt(0);
+            }
+
+            _teamActions.Add((peer, action));
             return true;
         }
 

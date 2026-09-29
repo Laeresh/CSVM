@@ -1309,11 +1309,13 @@ public partial class Launcher : Node3D
     /// first, the first named by the wire's local callsign and any other by player tag. Each guest
     /// follows in the stock airframe, fit and name its lobby pick carried.
     /// ⚠ A guest with no pick on the wire flies the host's first airframe on the stock fit. That is
-    /// the Built-in Dogfight door's only rule.</summary>
+    /// the Built-in Dogfight door's only rule. Each seat takes its machine's lobby team from
+    /// <paramref name="teamOf"/>, by peer; none leaves every seat on 0.</summary>
     internal static (Net.NetSeat[] Roster, Net.CoopFit[] SeatFits) VersusLaunchField(
         Net.INetTransport wire, IReadOnlyList<string> planes, IReadOnlyList<LoadoutChoice?> fits, StockLoadouts stock,
-        Net.NetPlaneRules? rules = null)
+        Net.NetPlaneRules? rules = null, System.Func<int, byte>? teamOf = null)
     {
+        teamOf ??= _ => 0;
         var seats = new List<Net.NetSeat>(planes.Count + wire.Peers.Count);
         var seatFits = new List<Net.CoopFit>(seats.Capacity);
         var lobby = wire as Net.NetLobby;
@@ -1325,6 +1327,7 @@ public partial class Launcher : Node3D
             {
                 PeerId = wire.LocalPeer,
                 SeatIndex = seats.Count,
+                TeamId = teamOf(wire.LocalPeer),
                 IsLocal = true,
                 Callsign = i == 0 && hostName.Length > 0 ? hostName : UI.Boards.SplitScreen.PlayerTag(i),
                 PlaneNode = planes[i],
@@ -1349,6 +1352,7 @@ public partial class Launcher : Node3D
             {
                 PeerId = peer,
                 SeatIndex = seats.Count,
+                TeamId = teamOf(peer),
                 Callsign = name.Length > 0 ? name : $"guest {peer.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
                 PlaneNode = picked ? UI.Hangar.PlanePickerRoster.AirframeNode(chosen.Airframe) : planes[0],
                 Voice = picked ? chosen.Voice : (byte)0,
@@ -2767,7 +2771,8 @@ public partial class Launcher : Node3D
         }
 
         var rules = _lobbyFlight ? _netDoor!.Dogfight!.Rules : (Net.NetPlaneRules?)null;
-        (_netRoster, _coopSeatFits) = VersusLaunchField(_netWire, planes, fits, _coopStock ??= StockLoadouts.Load(), rules);
+        System.Func<int, byte>? teamOf = _lobbyFlight ? _netDoor!.Dogfight!.TeamOfPeer : null;
+        (_netRoster, _coopSeatFits) = VersusLaunchField(_netWire, planes, fits, _coopStock ??= StockLoadouts.Load(), rules, teamOf);
         _seatBuilds = SeatBuildsFor(_netRoster, customs, _netWire, rules);
         if (_lobbyFlight)
         {

@@ -437,6 +437,146 @@ public sealed class DogfightLobbyTests
         Assert.Equal(7, host.Options.Lives);
     }
 
+    [Fact]
+    public void BothLimitsArmTogetherAndTheLastOneCannotBeCleared()
+    {
+        var options = new DogfightOptionsMessage(1, 2, 1, DogfightVictory.Both, 5, 40, false, 3, true);
+        var rules = DogfightLobby.RulesOf(options);
+        Assert.Equal(40, rules.KillTarget);
+        Assert.Equal(5, rules.TimeLimitMinutes);
+
+        Assert.Equal(DogfightVictory.Both, DogfightLobby.Toggled(DogfightVictory.Time, DogfightVictory.Score));
+        Assert.Equal(DogfightVictory.Score, DogfightLobby.Toggled(DogfightVictory.Both, DogfightVictory.Time));
+        Assert.Equal(DogfightVictory.Time, DogfightLobby.Toggled(DogfightVictory.Both, DogfightVictory.Score));
+
+        // ABLE-TO-FAIL CONTROL: a press on the only armed limit leaves it armed.
+        Assert.Equal(DogfightVictory.Time, DogfightLobby.Toggled(DogfightVictory.Time, DogfightVictory.Time));
+        Assert.Equal(DogfightVictory.Score, DogfightLobby.Toggled(DogfightVictory.Score, DogfightVictory.Score));
+    }
+
+    [Fact]
+    public void GuestsFormTeamsThroughTheHostAndEveryEndReadsThem()
+    {
+        var (host, guests, _) = Lobbies(3, "Lucy");
+        Settle(host, guests);
+
+        Assert.True(guests[0].CreateTeam("Red Skulls"));
+        Settle(host, guests);
+        var teams = guests[1].Teams;
+        Assert.Single(teams);
+        Assert.Equal("Red Skulls", teams[0].Name);
+        Assert.Equal(teams[0].Number, guests[0].OwnTeam);
+        Assert.True(host.Players[1].Captain);
+
+        Assert.True(guests[1].JoinTeam(teams[0].Number));
+        Assert.True(host.CreateTeam("Blue"));
+        Settle(host, guests);
+        Assert.Equal(teams[0].Number, guests[1].OwnTeam);
+        Assert.Equal(2, host.Teams.Count);
+        Assert.Equal(host.OwnTeam, guests[0].Players[0].Team);
+        Assert.Contains(guests[0].Chat, line => line.Text == "[Lucy joined team Red Skulls.]");
+
+        // ABLE-TO-FAIL CONTROL: a pilot on a team can neither create nor join another.
+        Assert.False(guests[1].CreateTeam("Other"));
+        Assert.False(guests[1].JoinTeam(host.OwnTeam));
+    }
+
+    [Fact]
+    public void ACaptainsLeaveDisbandsItsTeamOnEveryEnd()
+    {
+        var (host, guests, _) = Lobbies(3, "Lucy");
+        Settle(host, guests);
+        guests[0].CreateTeam("Aces");
+        Settle(host, guests);
+        guests[1].JoinTeam(guests[0].OwnTeam);
+        Settle(host, guests);
+        Assert.Equal(2, host.Players.Count(p => p.Team != 0));
+
+        Assert.True(guests[0].LeaveTeam());
+        Settle(host, guests);
+        Assert.Empty(guests[1].Teams);
+        Assert.All(host.Players, p => Assert.Equal(0, p.Team));
+        Assert.Contains(host.Chat, line => line.Text == "[Aces disbanded.]");
+    }
+
+    [Fact]
+    public void ACaptainWhoLeavesTheGameTakesItsTeamWithIt()
+    {
+        var (host, guests, mesh) = Lobbies(3);
+        Settle(host, guests);
+        guests[1].CreateTeam("Gone");
+        Settle(host, guests);
+        guests[0].JoinTeam(guests[1].OwnTeam);
+        Settle(host, guests);
+        Assert.Single(host.Teams);
+
+        mesh[0].Disconnect(2);
+        Settle(host, guests);
+        Assert.Empty(host.Teams);
+        Assert.Equal(0, guests[0].OwnTeam);
+    }
+
+    [Fact]
+    public void AReadyPilotCannotChangeItsTeam()
+    {
+        var (host, guests, _) = Lobbies(2);
+        Settle(host, guests);
+        host.SetReady(true);
+        Assert.False(host.CreateTeam("Late"));
+        host.SetReady(false);
+        Assert.True(host.CreateTeam("Early"));
+        host.SetReady(true);
+        Assert.False(host.LeaveTeam());
+    }
+
+    [Fact]
+    public void TheLaunchIsRefusedOnUnevenTeamsAndOnRestrict()
+    {
+        var (host, guests, _) = Lobbies(4);
+        Settle(host, guests);
+        Assert.Equal(TeamLaunchRefusal.None, host.LaunchRefusal);
+
+        host.CreateTeam("Home");
+        guests[0].CreateTeam("Away");
+        Settle(host, guests);
+        guests[1].JoinTeam(host.OwnTeam);
+        guests[2].JoinTeam(host.OwnTeam);
+        Settle(host, guests);
+        Assert.Equal(TeamLaunchRefusal.Unbalanced, host.LaunchRefusal);
+
+        guests[2].LeaveTeam();
+        Settle(host, guests);
+        Assert.Equal(TeamLaunchRefusal.Teamless, host.LaunchRefusal);
+
+        guests[2].JoinTeam(guests[0].OwnTeam);
+        Settle(host, guests);
+        Assert.Equal(TeamLaunchRefusal.None, host.LaunchRefusal);
+
+        // Restrict Number of Teams to three or more refuses two teams.
+        Assert.False(host.SetMinTeams(3));
+        Assert.True(host.SetRestrictTeams(true));
+        Assert.True(host.SetMinTeams(3));
+        Settle(host, guests);
+        Assert.Equal(TeamLaunchRefusal.TooFewTeams, host.LaunchRefusal);
+        Assert.Equal(3, guests[0].Options.MinTeams);
+        Assert.True(guests[0].Options.RestrictTeams);
+    }
+
+    [Fact]
+    public void TheTeamCountBoxesHoldTheMinimumAtOrBelowTheMaximum()
+    {
+        var (host, _, _) = Lobbies(1);
+        Assert.True(host.SetRestrictTeams(true));
+        Assert.Equal(DogfightOptionsMessage.DefaultMinTeams, host.Options.MinTeams);
+        Assert.Equal(DogfightOptionsMessage.DefaultMaxTeams, host.Options.MaxTeams);
+        Assert.True(host.SetMinTeams(9));
+        Assert.Equal(host.Options.MaxTeams, host.Options.MinTeams);
+        Assert.True(host.SetMaxTeams(1));
+        Assert.Equal(host.Options.MinTeams, host.Options.MaxTeams);
+        Assert.True(host.SetMaxTeams(99));
+        Assert.Equal(DogfightLobby.MaxTeams, host.Options.MaxTeams);
+    }
+
     private static (DogfightLobby Host, List<DogfightLobby> Guests, IReadOnlyList<LoopbackTransport> Mesh) Lobbies(
         int players, string guestName = "", Func<INetTransport, INetTransport>? hostCarrier = null)
     {

@@ -811,14 +811,16 @@ public class NetMessagesTests
     }
 
     [Fact]
-    public void DogfightOptionsRoundTripEveryFieldInTwelveBytes()
+    public void DogfightOptionsRoundTripEveryFieldInSixteenBytes()
     {
-        Assert.Equal(12, DogfightOptionsMessage.Size);
+        Assert.Equal(16, DogfightOptionsMessage.Size);
         Span<byte> buffer = stackalloc byte[DogfightOptionsMessage.Size];
         foreach (var sent in new[]
         {
             new DogfightOptionsMessage(0, 0, 1, DogfightVictory.Time, 10, 40, false, 3, true),
             new DogfightOptionsMessage(255, 6, 2, DogfightVictory.Score, 99, 999, true, 99, false),
+            new DogfightOptionsMessage(9, 3, 1, DogfightVictory.Both, 15, 20, false, 3, true, true, 0, 16),
+            new DogfightOptionsMessage(9, 3, 1, DogfightVictory.Time, 15, 20, false, 3, true, false, 3, 5),
         })
         {
             Assert.Equal(DogfightOptionsMessage.Size, sent.Write(buffer));
@@ -841,21 +843,23 @@ public class NetMessagesTests
         var buffer = new byte[DogfightRosterMessage.Size];
         var sent = new DogfightRosterMessage(7, 1, new[]
         {
-            new DogfightLobbySeat("Host", 5, true, true),
-            new DogfightLobbySeat("Lucy", 1, false, false),
+            new DogfightLobbySeat("Host", 5, true, true, 2, true),
+            new DogfightLobbySeat("Lucy", 1, false, false, 2),
             new DogfightLobbySeat("Red Baron Jr", 10, true, false),
         });
         Assert.Equal(DogfightRosterMessage.Size, sent.Write(buffer));
         Assert.True(DogfightRosterMessage.TryRead(buffer, out var got));
         Assert.Equal(sent, got);
         Assert.Equal("Red Baron Jr", got.Rows[2].Name);
+        Assert.Equal((2, true), (got.Rows[0].Team, got.Rows[0].Captain));
+        Assert.Equal((2, false), (got.Rows[1].Team, got.Rows[1].Captain));
         Assert.Equal(0x54, (int)NetMessageType.DogfightRoster);
 
         // ABLE-TO-FAIL CONTROL: a different Ready mark is a different list.
         var other = new DogfightRosterMessage(7, 1, new[]
         {
-            new DogfightLobbySeat("Host", 5, true, true),
-            new DogfightLobbySeat("Lucy", 1, true, false),
+            new DogfightLobbySeat("Host", 5, true, true, 2, true),
+            new DogfightLobbySeat("Lucy", 1, true, false, 2),
             new DogfightLobbySeat("Red Baron Jr", 10, true, false),
         });
         Assert.NotEqual(sent, other);

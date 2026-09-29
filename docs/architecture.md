@@ -499,6 +499,7 @@ else in `UI`, and nothing names `Labs`.
 - `src/UI/Menu/Original/OriginalConnectionScreen.cs`, the Multiplayer Connection page and the LAN games list as one standalone module over the network door: the ways, the search, a join followed on a messagebox.
 - `src/UI/Menu/Original/OriginalLobbyScreen.cs`, the Multiplayer Lobby as one standalone module: its four tabs, the player list and Ready, chat, LAUNCH! and Leave Game.
 - `src/UI/Menu/Original/OriginalOutlawList.cs`, the lobby's outlaw list pane behind Select..., and the map from its rows to the outlaw flags.
+- `src/UI/Menu/Original/OriginalTeamBox.cs`, the lobby's CREATE TEAM box behind Create Team.
 - `src/UI/Menu/Original/OriginalNetInfoBox.cs`, the GAME INFORMATION and PLAYER INFORMATION boxes the shell stands over a page before a host or a join.
 - `src/UI/Menu/Original/OriginalPresentation.cs`, the Original presentation node: the shell drawn through `ComposedBoardView`, seats polled.
 - `src/UI/Menu/Original/OriginalArtSizes.cs`, the art measurer every `OriginalShell` host hands it: one art name answered with its pixel size, cached, a movie's read off its sequence header.
@@ -811,7 +812,8 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/NetMessages.cs`, the message vocabulary: one struct per message, each declaring its type word and reliability class, over a shared four-byte header.
 - `src/Net/NetWorldMessages.cs`, the host-owned world's messages: an AI's pose, fire and hit claim, a generator launch, a zeppelin's and a surface vehicle's path sample, and the world event.
 - `src/Net/NetCoopMessages.cs`, the co-op boards' lobby messages: the host's flow one guest follows (screen, mission, round, Ready mask, hangar, result), the host's campaign films, its hangar with each plane's holder, and a guest's plane pick and Ready under a round.
-- `src/Net/NetDogfightMessages.cs`, the Multiplayer Lobby's messages: the host's options under a round, the player list, and one chat line.
+- `src/Net/NetDogfightMessages.cs`, the Multiplayer Lobby's messages: the host's options under a round, the player list, one chat line, and the team action and team list.
+- `src/Net/NetTeams.cs`, the team core every team mode shares: a host's free-form named teams and the team launch check.
 - `src/Net/NetPositionalMessages.cs`, the positional start: a landing row the host started and for which seat, the ladder holder, and a guest's held auto-land button.
 - `src/Net/NetMessageWriter.cs`, the writer and reader cursors every message is packed and unpacked through: little-endian primitives, quantised unit fields, fixed-width text.
 - `src/Net/NetClockSlew.cs`, a guest's offset onto host time, walked to each fresh reading over a bounded window rather than written, with one-way readings read forward by half the measured round trip.

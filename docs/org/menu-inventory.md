@@ -533,8 +533,14 @@ constants rather than reading a layout.
   ratings; Select Ammo the Guns and Rockets sub-tabs (`MP_LOBBY_TABSMALL.PNG`), a box per gun slot
   or per wing cell. Boot, Create Team, the Ready box (`MP_B_CHECKBOXLARGE.PNG`) and its Ready? label,
   LAUNCH!, the chat box, Send and Leave Game stand on every tab.
-- **What is ours in the lobby.** Only Deathmatch flies, so Capture the Flag, Zeppelin vs Zeppelin,
-  the teams draw greyed. Boot is live on the host once it picks a guest's row in the player list
+- **What is ours in the lobby.** Only Deathmatch flies, so Capture the Flag and Zeppelin vs Zeppelin
+  draw greyed. The team button reads Create Team, Join Team with a team row picked, or Leave Team,
+  and is live while its pilot is not Ready; Create Team stands the CREATE TEAM box
+  (`MP_CREATETEAMBACKGROUND.PNG`). The player list draws each team's row in its team colour with
+  its members under it, then the players on no team. Restrict Number of Teams and its two count
+  boxes, with the script's arrows (`MP_B_SCROLLUP.PNG`, `MP_B_SCROLLDOWN.PNG`), are live on the
+  host. The victory radios arm Time, Score or both, and a press on the only armed one keeps it.
+  Boot is live on the host once it picks a guest's row in the player list
   (the picked row takes the script's fill, 209, 180, 120); the host's own row is not offered, and a
   guest's list offers none. The host's Allow Custom Planes and Outlaw Components are live, and
   Custom Planes lists the pilot's saved planes while custom planes are allowed. Select... (View...
@@ -707,6 +713,7 @@ which is why the required count is 94 layout names plus the five the scripts nam
 | `GN_B_ReturnToGame.Png` | 1 | optional | `[Preferences]`' in-flight way back; the menu's page offers `PC_B_ReturnMainMenu.png` instead |
 | `CR_AboutMessageBox.png` | 1 | **required** | the About box's own background, drawn by the credits screen's box |
 | the Connection page's and the games list's art (`MP_OPTIONSBACKGROUND.JPG`, `MP_GAMESBACKGROUND.JPG`, `MP_ERRORMESSAGEBACKGROUND.JPG`, `MP_GAMESALPHA.PNG`, the `MP_B_` radio, small, medium, large, exit and checkbox strips) | 10 | **required** | script-named, since the multiplayer scripts carry no layout; drawn art may not be classed optional |
+| the lobby's team art (`MP_CREATETEAMBACKGROUND.PNG`, `MP_B_SCROLLUP.PNG`, `MP_B_SCROLLDOWN.PNG`) | 3 | **required** | script-named: the CREATE TEAM box and the arrows of the team count boxes, which the Mission Options tab always draws |
 | `MessageBox`'s `MP_*` rows, its `MA_B_LEFT`/`MA_B_RIGHT`, and the art of every section outside the 23 | 3 + 27 | optional | the multiplayer error box's errors are raised in the shared box, and the About box is the one-button box, so its left and right rows never draw |
 | `ui_strings.json` + `RESOURCE.H` | 2 | optional | 152 symbols referenced, 149 resolve; `UiStrings` falls back to an empty table, so the screens draw with no words rather than not at all |
 | `SCRAPBOOK.CSV` | 1 | optional | 461 rows; the book's extent is the file's extent, and without it the book lists nothing |

@@ -34,7 +34,8 @@ These are the design rules every module below is shaped by, and every multiplaye
   own, its save is never touched, and it flies stock planes, since its own machine simulates the
   airframe it flies. A Dogfight pilot may fly a custom plane when the host's Allow Custom Planes and
   outlaw list admit it, and a co-op host's own custom planes fly; every machine builds a custom plane
-  from its owner's `NetPlaneBuild`. Capture the flag and Zeppelin vs are not built.
+  from its owner's `NetPlaneBuild`. The lobby forms free-form named teams (`NetTeams.cs`) and each
+  seat carries its team; team play in flight, Capture the flag and Zeppelin vs are not built.
 - **Listen server.** One player hosts; there is no dedicated headless host.
 - **The player ceiling is 16.** `NetSeats.MaxPlayers`, with every seat-indexed table built
   `SeatCapacity` wide. The original has no coded cap (its pilot list is never counted against a
@@ -216,8 +217,8 @@ a host opens and closes it on the way out. Read `RouterAccessTests.cs`.
 ## src/Net/NetLobby.cs
 A carrier's first listener and itself the `INetTransport` the session later binds. A host's
 `Advertise` reaches every peer on connect and on change; a guest keeps `Advert` and `Closed`. Lobby
-messages stay here (a host's `Picks` and `PickBuilds`, a guest's flow, fits, builds, rules, wingman
-and film); others are held up to `HeldPayloads` until a session binds. ⚠ A new round seen while bound
+messages stay here (a host's `Picks`, `PickBuilds` and team actions, a guest's flow, fits, builds,
+rules, teams, wingman and film); others are held up to `HeldPayloads` until a session binds. ⚠ A new round seen while bound
 marks `FlightOver` until the next bind, so the opener survives both unbinds a restart makes. It is
 the host's admission: a clashing build, a peer `AwaitingPassword`, and one `TurnedAway` (a banned
 address after `Boot`, a wrong password) stand off every peer list. Read `NetLobbyTests.cs` and
@@ -300,12 +301,22 @@ seat. Before the opener `CoopSeatFitMessage` gives a seat's fit and `CoopWingman
 wingman's; `CoopFilmMessage` names a film. [Layout](../org/multiplayer-messages.md).
 
 ## src/Net/NetDogfightMessages.cs
-The Multiplayer Lobby's three messages, all reliable and all kept in `NetLobby` rather than a
+The Multiplayer Lobby's five messages, all reliable and all kept in `NetLobby` rather than a
 session. `DogfightOptionsMessage` is the host's Mission Options under the round they belong to,
-`DogfightRosterMessage` is the whole player list with the reading guest's own row marked, and
-`LobbyChatMessage` is one typed line under its speaker's name, which the host relays. A guest's
-plane and Ready ride `CoopPickMessage`. Layout:
+`DogfightRosterMessage` is the whole player list, each row's team with it and the reading guest's
+own row marked, and `LobbyChatMessage` is one typed line under its speaker's name, which the host
+relays. `LobbyTeamActionMessage` is a guest's team action to its host and `LobbyTeamsMessage` the
+host's team names. A guest's plane and Ready ride `CoopPickMessage`. Layout:
 [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+
+## src/Net/NetTeams.cs
+The team core every Dogfight team mode shares, engine-free: `NetTeamBook`, a host's free-form named
+teams, each with a number minted lowest-free from 1, a captain and its members. `Create`, `Join`,
+`Leave`, `Disband` and `Keep` (members no longer seated) return the `NetTeamEvent`s a lobby posts as
+notices; a captain's leave or drop disbands its team. `Check` is the launch refusal every team mode
+asks (`TeamLaunchRefusal`): Restrict Number of Teams' bounds, two players and two teams, nobody
+teamless, and sizes within one, splitscreen seats weighed as players. `NetTeamAction` is the
+original's `0x1a` subtypes. Decode: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Net/NetPlaneMessages.cs
 Custom planes on the wire. `NetPlaneBuild` is one plane's airframe, engine, armour, hardpoints, guns
