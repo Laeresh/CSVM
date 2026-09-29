@@ -1798,8 +1798,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         }
     }
 
-    // The scores page: the headers over the last match's lines, best first. Hits % stays blank,
-    // since no end counts a pilot's hits.
+    // The scores page: the headers over the last match's lines, best first. A team match lists
+    // each team's line with its pilots indented under it. Hits % stays blank, since no end counts a
+    // pilot's hits.
     private void ComposeScores(DogfightLobby lobby, BoardLayers layers)
     {
         for (int i = 0; i < ScoreHeaderIds.Length; i++)
@@ -1808,11 +1809,13 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         }
 
         var scores = lobby.Scores;
+        bool teams = System.Linq.Enumerable.Any(scores, line => line.IsTeam);
         for (int i = 0; i < scores.Count && i < VisiblePlayers; i++)
         {
             float y = PageY + 69f + (ListPitch * i);
             var line = scores[i];
-            layers.Lines.Add(_text.Line(10575, string.Empty, PageX + 24f, y, 150f, Black, text: line.Name));
+            float indent = teams && !line.IsTeam ? 12f : 0f;
+            layers.Lines.Add(_text.Line(10575, string.Empty, PageX + 24f + indent, y, 150f - indent, Black, text: line.Name));
             int[] numbers = { line.Points, line.Kills, line.Deaths };
             for (int column = 0; column < numbers.Length; column++)
             {

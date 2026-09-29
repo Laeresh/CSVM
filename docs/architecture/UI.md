@@ -503,7 +503,7 @@ there the last finish is the mission's win, and the director's hold and wrap-up 
 ## src/UI/Screens/VersusBoard.cs
 The Dogfight results overlay on `ResultsBoard`'s shell: the winner in their own
 `SplitScreen.PlayerColor`, or a draw on a tie, over one ranked row per player with tag, score,
-kills and deaths from `VersusMatch.Standings()`. Score is the ranked column, kills alone do not
+kills and deaths from `VersusMatch.Standings()`; a team match heads it with the winning team's name (`Title`) and ranked team rows. Score is the ranked column, kills alone do not
 explain it. Whole-window, because the match ends for everybody at once.
 Wakes on `MatchCompleted` and retires on the rematch; the rows are populated only from that
 completion, so they stay the ones the match ended with even after `Restart()` zeroes the live
@@ -1412,7 +1412,7 @@ It lasts the joined session across flights and starts on `StarterAirframe`, the 
 The Multiplayer Lobby's state over a `Net/NetLobby.cs`, engine-free, one class for both ends.
 The host owns the options (environment, mission type, Time, Score or both, Restrict Number of Teams with its bounds, the lives rule), the plane `Rules` and the teams (a `Net/NetTeams.cs` book), and sends them to every guest; any option change advances the round and clears every Ready, its own included. `CreateTeam`, `JoinTeam` and `LeaveTeam` act on the host's book or ask the host, `Teams` and each row's team read the outcome, `LaunchRefusal` is the team launch check and `TeamOfPeer` a seat's team at launch.
 A guest reads the options and the host's player list, and sends its plane (a custom one as its `Build`), fit and Ready under the round it heard once a lobby screen `Show`s it; a changed pick clears its own Ready. `SetReady` runs the original's Ready check, and the host counts a guest Ready only on a plane its rules admit. `Say` sends one chat line, which the host relays; `Announce` posts a host's notice under no name, and `PeerAt` names the peer on a host's row.
-`CanLaunch` is the host's gate, every row Ready; `RulesOf` is the `VersusRules` a launch carries, lives clamped to 1..99, and `ChapterOf` the chapter an environment flies on. Setters refuse on a guest and for a greyed choice. `CheckBuiltInLaunch` gates a Built-in host's launch on its lobby guests, and `Land` holds a match's `Scores` and opens the next round.
+`CanLaunch` is the host's gate, every row Ready; `RulesOf` is the `VersusRules` a launch carries, lives clamped to 1..99, and `ChapterOf` the chapter an environment flies on. Setters refuse on a guest and for a greyed choice. `CheckBuiltInLaunch` gates a Built-in host's launch on its lobby guests, and `Land` holds a match's `Scores` (from `ScoresOf`, a team match's team lines with their pilots under them) and opens the next round.
 Wire: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Coverage: `CSVM.Tests/DogfightLobbyTests.cs`.
 
 ## src/UI/Menu/CoopDoorText.cs

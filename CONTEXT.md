@@ -52,7 +52,7 @@ _Avoid_: team band, emplacement band, pilot team offset
 A free-form named team players form in the Multiplayer Lobby, known by its team number from `1`
 (`0` for a player on no team), with a captain whose leave disbands it. `NetSeat.TeamId` carries the
 team number, which is not a team id and is never compared as one: lobby team `1` is not the
-player's side.
+player's side. A team Dogfight flies lobby team `N` as the team id `AimAssist.LobbyTeam(N)`.
 _Avoid_: squadron, side, lobby team index
 
 ## Campaign co-op

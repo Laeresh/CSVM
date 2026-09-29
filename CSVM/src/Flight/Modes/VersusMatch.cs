@@ -9,14 +9,21 @@ namespace CSVM.Flight.Modes;
 /// tie) or draw (rank 1, tied) and render score + kills + deaths per row.</summary>
 public readonly record struct VersusStanding(int PlayerIndex, int Kills, int Deaths, int Rank, int Score);
 
+/// <summary>One team's ranked line in <see cref="VersusMatch.TeamStandings"/>: its lobby team
+/// number and name, and its members' summed score, kills and deaths. It is ranked as
+/// <see cref="VersusStanding"/> ranks a player.</summary>
+public readonly record struct VersusTeamStanding(int Team, string Name, int Kills, int Deaths, int Rank, int Score);
+
 /// <summary>
 /// Deathmatch scorekeeping for splitscreen "Dogfight": per-player kills and deaths plus the match
 /// clock, host-fed exactly like <see cref="StuntRace"/>. A caller reports facts
 /// (<see cref="RegisterKill"/>, <see cref="RegisterDeath"/>, <see cref="Advance"/>) and this class
 /// turns them into standings and one completion event. It completes once, on the first of
 /// <see cref="KillTarget"/>, <see cref="TimeLimit"/> (either disabled at 0) and
-/// <see cref="AllAlone"/>, fewer than two pilots left with lives. It is deliberately not a Node
-/// and is freed with the session. ⚠ Zero engine dependency of any kind, not even <c>Log</c>, a
+/// <see cref="AllAlone"/>, fewer than two pilots left with lives. It is not a Node and is freed with
+/// the session; <see cref="AssignTeams"/> makes it a team match (docs/org/multiplayer-scoring.md,
+/// "Teams").
+/// ⚠ Zero engine dependency of any kind, not even <c>Log</c>, a
 /// <c>GD.Print</c> in this family once crashed the xUnit host. Keep it engine-free by construction.</summary>
 public sealed class VersusMatch
 {
@@ -30,6 +37,7 @@ public sealed class VersusMatch
     public const int SuicideScore = -1;
 
     private readonly Row[] _scores;
+    private readonly Dictionary<int, string> _teamNames = new();
 
     public VersusMatch(int playerCount, int killTarget = 5, float timeLimit = 300f, int lives = 0)
     {
@@ -80,8 +88,14 @@ public sealed class VersusMatch
     public bool Completed { get; private set; }
 
     /// <summary>True when the match ended because fewer than two pilots with lives were left, the
-    /// original's end reason 4 "No Enemies Left" (docs/org/multiplayer-scoring.md).</summary>
+    /// original's end reason 4 "No Enemies Left" (docs/org/multiplayer-scoring.md). In a
+    /// <see cref="Teamed"/> match, fewer than two teams.</summary>
     public bool AllAlone { get; private set; }
+
+    /// <summary>True once <see cref="AssignTeams"/> put some seat on a lobby team. The original's
+    /// team flag: the score target is then read against a team's total and the per-pilot check is
+    /// skipped (docs/org/multiplayer-scoring.md, "Teams").</summary>
+    public bool Teamed { get; private set; }
 
     /// <summary>The seat an out-of-lives pilot watches. It keeps the one it watches while that one
     /// flies, else takes the next flying seat after <paramref name="self"/>, else none. The
@@ -99,6 +113,95 @@ public sealed class VersusMatch
         return null;
     }
 
+    /// <summary>Puts each seat on its lobby team, 0 for none, and names the teams. A lobby team
+    /// number is never a hostility id (CONTEXT.md, "Lobby team"). Every machine assigns the same
+    /// teams from the seat roster, so a guest derives the same totals from the scores it is sent.
+    /// </summary>
+    public void AssignTeams(IReadOnlyList<int> teams, IReadOnlyDictionary<int, string>? names = null)
+    {
+        ArgumentNullException.ThrowIfNull(teams);
+        Teamed = false;
+        for (int i = 0; i < _scores.Length; i++)
+        {
+            _scores[i].Team = i < teams.Count ? Math.Max(0, teams[i]) : 0;
+            Teamed |= _scores[i].Team > 0;
+        }
+
+        _teamNames.Clear();
+        if (names != null)
+        {
+            foreach (var (team, name) in names)
+                _teamNames[team] = name;
+        }
+    }
+
+    /// <summary>The lobby team <paramref name="playerIndex"/> flies on, 0 for none.</summary>
+    public int TeamOf(int playerIndex) => RowOf(playerIndex)?.Team ?? 0;
+
+    /// <summary>A team's name as its lobby named it, else "Team" and its number.</summary>
+    public string TeamName(int team) =>
+        _teamNames.TryGetValue(team, out var name) && name.Length > 0
+            ? name
+            : "Team " + team.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>The sum of a team's members' scores, the number its score target is read against.
+    /// </summary>
+    public int TeamScoreOf(int team)
+    {
+        int total = 0;
+        foreach (var row in _scores)
+        {
+            if (team > 0 && row.Team == team)
+                total += row.Score;
+        }
+
+        return total;
+    }
+
+    /// <summary>Every team some seat flies on, ranked by total score as <see cref="Standings"/>
+    /// ranks players, equal totals sharing a rank and in team number order. Empty unless
+    /// <see cref="Teamed"/>.</summary>
+    public IEnumerable<VersusTeamStanding> TeamStandings()
+    {
+        var lines = new List<VersusTeamStanding>();
+        foreach (int team in TeamNumbers())
+        {
+            int kills = 0, deaths = 0;
+            foreach (var row in _scores)
+            {
+                if (row.Team != team)
+                    continue;
+                kills += row.Kills;
+                deaths += row.Deaths;
+            }
+
+            lines.Add(new VersusTeamStanding(team, TeamName(team), kills, deaths, 0, TeamScoreOf(team)));
+        }
+
+        // Insertion order is team number order, and a stable sort keeps it among equal totals.
+        var ranked = new List<VersusTeamStanding>(lines.Count);
+        foreach (var line in lines)
+        {
+            int at = ranked.Count;
+            while (at > 0 && ranked[at - 1].Score < line.Score)
+                at--;
+            ranked.Insert(at, line);
+        }
+
+        int rank = 0;
+        int lastScore = int.MinValue;
+        for (int i = 0; i < ranked.Count; i++)
+        {
+            if (ranked[i].Score != lastScore)
+            {
+                rank = i + 1;
+                lastScore = ranked[i].Score;
+            }
+
+            yield return ranked[i] with { Rank = rank };
+        }
+    }
+
     public int KillsOf(int playerIndex) => RowOf(playerIndex)?.Kills ?? 0;
 
     public int DeathsOf(int playerIndex) => RowOf(playerIndex)?.Deaths ?? 0;
@@ -112,19 +215,27 @@ public sealed class VersusMatch
     public int ScoreOf(int playerIndex) => RowOf(playerIndex)?.Score ?? 0;
 
     /// <summary>Score still needed by <paramref name="playerIndex"/> to hit the threshold, 0 once
-    /// there or when <see cref="KillTarget"/> is disabled.</summary>
+    /// there or when <see cref="KillTarget"/> is disabled. In a <see cref="Teamed"/> match it is
+    /// its team's total that must reach it.</summary>
     public int KillsRemaining(int playerIndex) =>
-        KillTarget > 0 ? Math.Max(0, KillTarget - ScoreOf(playerIndex)) : 0;
+        KillTarget > 0 ? Math.Max(0, KillTarget - Counted(playerIndex)) : 0;
 
     /// <summary>A weapon kill: +1 kill and <see cref="KillScore"/> to the shooter, +1 death to the
     /// victim. Completes the match once the shooter's score reaches <see cref="KillTarget"/>.
+    /// ⚠ A teammate's kill counts no kill and costs the shooter <see cref="SuicideScore"/>: the
+    /// original charges <c>score_suicide</c> to a killer on the victim's team slot.
     /// No-op once <see cref="Completed"/>.</summary>
     public void RegisterKill(int shooter, int victim)
     {
         if (Completed)
             return;
         var shooterRow = RowOf(shooter);
-        if (shooterRow != null)
+        bool teammate = shooter != victim && shooterRow is { Team: > 0 } && shooterRow.Team == TeamOf(victim);
+        if (shooterRow != null && teammate)
+        {
+            shooterRow.Score += SuicideScore;
+        }
+        else if (shooterRow != null)
         {
             shooterRow.Kills++;
             shooterRow.Score += KillScore;
@@ -132,7 +243,7 @@ public sealed class VersusMatch
         var victimRow = RowOf(victim);
         if (victimRow != null)
             victimRow.Deaths++;
-        if (Reached(shooterRow))
+        if (Reached(shooter))
             Complete();
         CheckAlone();
     }
@@ -177,7 +288,7 @@ public sealed class VersusMatch
         row.Score = score;
         row.Kills = kills;
         row.Deaths = deaths;
-        if (Reached(row))
+        if (Reached(playerIndex))
             Complete();
     }
 
@@ -259,28 +370,50 @@ public sealed class VersusMatch
         }
     }
 
-    /// <summary>Whether this row has taken the match. Never on a <see cref="Replicated"/> one: a
-    /// guest arming the target itself would hold its board before the host's.</summary>
-    private bool Reached(Row? row) =>
-        !Replicated && KillTarget > 0 && row != null && row.Score >= KillTarget;
+    // Whether this seat's line has taken the match. Never on a Replicated one: a guest arming the
+    // target itself would hold its board before the host's.
+    private bool Reached(int playerIndex) =>
+        !Replicated && KillTarget > 0 && RowOf(playerIndex) != null && Counted(playerIndex) >= KillTarget;
+
+    // The number the target is read against: the seat's own score, or its team's total in a team
+    // match. There the original skips the per-pilot check (FUN_00499270).
+    private int Counted(int playerIndex) =>
+        TeamOf(playerIndex) is > 0 and var team ? TeamScoreOf(team) : ScoreOf(playerIndex);
 
     private Row? RowOf(int playerIndex) =>
         playerIndex >= 0 && playerIndex < _scores.Length ? _scores[playerIndex] : null;
 
-    // Reason 4, run after every death and every drop as the original does. A match that opened
-    // with one pilot has no opponent to lose, and a replicated one hears its ending from the host.
+    private List<int> TeamNumbers()
+    {
+        var teams = new List<int>();
+        foreach (var row in _scores)
+        {
+            if (row.Team > 0 && !teams.Contains(row.Team))
+                teams.Add(row.Team);
+        }
+
+        teams.Sort();
+        return teams;
+    }
+
+    // Reason 4, run after every death and every drop as the original does. It asks for pilots with
+    // lives on two different teams, a teamless seat counting as a team of its own (FUN_004999f0).
+    // A match that opened with one pilot has no opponent to lose, and a replicated one hears its
+    // ending from the host.
     private void CheckAlone()
     {
         if (Completed || Replicated || _scores.Length < 2)
             return;
-        int standing = 0;
+        int? first = null;
         for (int i = 0; i < _scores.Length; i++)
         {
-            if (!_scores[i].Left && !OutOfLives(i))
-                standing++;
+            if (_scores[i].Left || OutOfLives(i))
+                continue;
+            int team = _scores[i].Team > 0 ? _scores[i].Team : -(i + 1);
+            if (first is { } seen && seen != team)
+                return;
+            first = team;
         }
-        if (standing >= 2)
-            return;
         AllAlone = true;
         Complete();
     }
@@ -299,5 +432,6 @@ public sealed class VersusMatch
         public int Deaths;
         public int Score;
         public bool Left;
+        public int Team;
     }
 }

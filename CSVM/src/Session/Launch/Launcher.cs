@@ -1442,8 +1442,20 @@ public partial class Launcher : Node3D
     /// </summary>
     internal static LobbyReturn? LobbyLanding(bool lobbyFlight, UI.Menu.DogfightLobby? lobby, Flight.Modes.VersusMatch? match) =>
         lobbyFlight && lobby is { Shown: true } && match is { Completed: true }
-            ? new LobbyReturn(UI.Menu.DogfightLobby.ScoresOf(match.Standings(), lobby.LaunchNames))
+            ? new LobbyReturn(UI.Menu.DogfightLobby.ScoresOf(match, lobby.LaunchNames))
             : null;
+
+    /// <summary>A lobby's team names by team number, the form a session reads them in.</summary>
+    internal static Dictionary<int, string> TeamNames(IReadOnlyList<Net.LobbyTeamName> teams)
+    {
+        var names = new Dictionary<int, string>();
+        foreach (var team in teams)
+        {
+            names[team.Number] = team.Name;
+        }
+
+        return names;
+    }
 
     /// <summary>Whether a lobby Dogfight guest's host left its flight. The door, stepped in
     /// flight, has failed on a close notice or a lost link.</summary>
@@ -1970,6 +1982,7 @@ public partial class Launcher : Node3D
             NetCoopWingman = _coopFlight && !_netIsHost && _netDoor is { } coopDoor
                 ? () => coopDoor.CoopWingman
                 : null,
+            NetTeamNames = _lobbyFlight && _netDoor?.Dogfight is { } teamLobby ? TeamNames(teamLobby.Teams) : null,
         });
         AddChild(_session);
         bool built = _session.StartSession();
@@ -3402,6 +3415,11 @@ public sealed class LauncherContext
     /// <summary>The campaign wingman's aeroplane as a co-op guest's host named it, null while the
     /// host named none. Set on a co-op guest only, whose director binds the wingman from it.</summary>
     public System.Func<Net.CoopWingmanMessage?>? NetCoopWingman { get; init; }
+
+    /// <summary>A team Dogfight's team names by lobby team number, as this machine's lobby held
+    /// them at the launch. A host reads its own book and a guest the names its host sent. Null
+    /// names each team by its number.</summary>
+    public IReadOnlyDictionary<int, string>? NetTeamNames { get; init; }
 
     /// <summary>The presentation this session's own boards take, already resolved: the menu's
     /// active one, or what the flags name on a CLI launch. A resolved answer rather than a flag,

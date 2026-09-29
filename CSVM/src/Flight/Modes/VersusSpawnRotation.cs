@@ -30,6 +30,11 @@ public sealed class VersusSpawnRotation
     private readonly int[] _held;
     private readonly bool[] _owedOpening;
 
+    // A team match's per-seat block of the whole table and each seat's lobby team. Both are null
+    // in a free-for-all, where every seat rotates over the whole list against everybody.
+    private readonly (int Start, int Count)[]? _blocks;
+    private readonly int[]? _teams;
+
     private VersusSpawnRotation(IReadOnlyList<SpawnPoint> spawns, int spawnBase, int seats, Random rng)
     {
         _spawns = spawns;
@@ -46,6 +51,26 @@ public sealed class VersusSpawnRotation
         }
     }
 
+    private VersusSpawnRotation(IReadOnlyList<SpawnPoint> spawns, IReadOnlyList<int> openings,
+        IReadOnlyList<(int Start, int Count)> blocks, IReadOnlyList<int> teams, Random rng)
+    {
+        _spawns = spawns;
+        _rng = rng;
+        int seats = openings.Count;
+        _opening = new int[seats];
+        _held = new int[seats];
+        _owedOpening = new bool[seats];
+        _blocks = new (int Start, int Count)[seats];
+        _teams = new int[seats];
+        for (int s = 0; s < seats; s++)
+        {
+            _opening[s] = Math.Clamp(openings[s], 0, spawns.Count - 1);
+            _held[s] = _opening[s];
+            _blocks[s] = s < blocks.Count ? blocks[s] : (0, spawns.Count);
+            _teams[s] = s < teams.Count ? teams[s] : 0;
+        }
+    }
+
     /// <summary>How many seats the rotation tracks.</summary>
     public int SeatCount => _held.Length;
 
@@ -58,6 +83,17 @@ public sealed class VersusSpawnRotation
         int seatCount, Random rng) =>
         spawns is { Count: > 0 } && seatCount > 0
             ? new VersusSpawnRotation(spawns, Math.Max(0, spawnBase), seatCount, rng)
+            : null;
+
+    /// <summary>The rotation for a team match over the whole <c>net.zrd</c> table. Each seat opens
+    /// on its own entry and comes back only inside its own block
+    /// (<see cref="SpawnPoints.TeamBlocks"/>). A seat's room is measured against the other
+    /// <paramref name="teams"/> alone, since a teammate beside the point is no camper. Null as
+    /// <see cref="For"/>.</summary>
+    public static VersusSpawnRotation? ForBlocks(IReadOnlyList<SpawnPoint>? spawns, IReadOnlyList<int> openings,
+        IReadOnlyList<(int Start, int Count)> blocks, IReadOnlyList<int> teams, Random rng) =>
+        spawns is { Count: > 0 } && openings.Count > 0
+            ? new VersusSpawnRotation(spawns, openings, blocks, teams, rng)
             : null;
 
     /// <summary>The spawn list index <paramref name="seat"/> holds, its opening point until a
@@ -99,17 +135,21 @@ public sealed class VersusSpawnRotation
     // second, so a list shorter than the field still answers rather than failing.
     private int Pick(int seat, IReadOnlyList<Vector3?> field, int? killer)
     {
+        var (first, count) = _blocks is { } blocks ? blocks[seat] : (0, _spawns.Count);
+        int end = Math.Min(_spawns.Count, first + count);
         var candidates = new List<int>(_spawns.Count);
-        for (int i = 0; i < _spawns.Count; i++)
+        for (int i = first; i < end; i++)
             if (i != _held[seat] && !HeldByLiving(seat, i, field))
                 candidates.Add(i);
         if (candidates.Count == 0)
-            for (int i = 0; i < _spawns.Count; i++)
+            for (int i = first; i < end; i++)
                 if (!HeldByLiving(seat, i, field))
                     candidates.Add(i);
         if (candidates.Count == 0)
-            for (int i = 0; i < _spawns.Count; i++)
+            for (int i = first; i < end; i++)
                 candidates.Add(i);
+        if (candidates.Count == 0)
+            candidates.Add(_held[seat]);
 
         var room = new float[candidates.Count];
         float best = 0f;
@@ -146,7 +186,7 @@ public sealed class VersusSpawnRotation
         float nearest = float.MaxValue;
         for (int s = 0; s < field.Count; s++)
         {
-            if (s == seat || field[s] is not { } other)
+            if (s == seat || field[s] is not { } other || Teammates(seat, s))
                 continue;
             float away = at.DistanceTo(other);
             if (killer is { } k && k == s)
@@ -155,4 +195,8 @@ public sealed class VersusSpawnRotation
         }
         return nearest;
     }
+
+    private bool Teammates(int seat, int other) =>
+        _teams is { } teams && seat < teams.Length && other < teams.Length
+        && teams[seat] > 0 && teams[seat] == teams[other];
 }

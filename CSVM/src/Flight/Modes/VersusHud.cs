@@ -113,9 +113,17 @@ public sealed partial class VersusHud : Control
     }
 
     // The sole rank-1 player's tag, or TIED while nobody leads (including 0-0 before the
-    // first kill).
+    // first kill). A team match names this pane's team and its total, then the leading team.
     private string LeaderText(VersusMatch match)
     {
+        if (match.Teamed)
+        {
+            int own = match.TeamOf(PlayerIndex);
+            string mine = own > 0 ? $"{match.TeamName(own)} {match.TeamScoreOf(own)}   " : "";
+            var teams = match.TeamStandings().Where(t => t.Rank == 1).ToList();
+            return mine + (teams.Count == 1 ? $"LEADER {teams[0].Name}" : "LEADER TIED");
+        }
+
         var leaders = match.Standings().Where(st => st.Rank == 1).ToList();
         return leaders.Count == 1 ? $"LEADER {SplitScreen.PlayerTag(leaders[0].PlayerIndex)}" : "LEADER TIED";
     }

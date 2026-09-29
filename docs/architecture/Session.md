@@ -66,7 +66,7 @@ only when neither is authored. Instant Action enemies are the exception, for the
 
 ## src/Session/Roster/SpawnPicker.cs
 Resolves each player's flight spawn: `LoadSpawnList` (which list the session walks, the mission's
-`ia.json` scenario or a Dogfight launch's `net.zrd` block), `ChooseSpawnBase` (the shared
+`ia.json` scenario or a Dogfight launch's `net.zrd` block, the whole table when `SeatTeams` names a team, which `PlanTeams` walks by team block), `ChooseSpawnBase` (the shared
 `--spawn=`-or-random list index), `ChooseSpawn` (a player's position and look-at from that list,
 `objectives.json`'s `PLAYER_INIT`, or the `--spawn-at=` debug override), `StartState` (the field's
 throttle and speed) and `LogSpawn`. Constructed once per session build. Also the plain

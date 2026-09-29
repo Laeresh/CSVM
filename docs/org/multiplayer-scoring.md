@@ -126,13 +126,41 @@ multiplayer branch at `0x47e1ed`), authored in the `RESET_STATE` of `player-play
 defs author as 0.0 and which [`anim-definitions.md`](../formats/anim-definitions.md) lists as
 undecoded. The real delay is open.
 
+## Teams
+
+A Deathmatch with teams formed is mode 2, and every team mode sets the team flag `0071d89c`
+([`multiplayer-spawn.md`](multiplayer-spawn.md), "Which mode uses teams"). Three rules change with it.
+
+**A teammate kill is a suicide.** [Evidence: decoded] The cause 1 row above: the killer is charged
+`score_suicide` when killer and victim share the team slot at remote record `+0x3c`. The victim's
+own score does not move.
+
+**The Score limit is a team's total.** [Evidence: decoded] `FUN_0046ea40`, with `0071d89c` set,
+walks the team list: each team's `+0x10` is set to its `+0x14` and then takes the `+0x1c` score of
+every pilot whose `+8` names that team (`0x46eaa2`..`0x46eaf0`), mirrored into the team's display
+record at `+0x38`. [Evidence: decoded, not re-read here] `FUN_00499270` then ends the match with
+reason 2 when a team's `+0x10` reaches the target `0071c17c`, and skips the per-pilot check while
+`0071d89c` is set. [Evidence: undecoded] The writers of a team's own `+0x14` term were not traced;
+no Deathmatch score event names a team.
+
+**Reason 4 is one team left.** [Evidence: decoded] `FUN_004999f0` compares the team slots, so a
+team match ends when every pilot with lives is on one team, however many of them there are.
+
 ## What the remake takes
 
 `Flight/Modes/VersusMatch.cs` keeps the same signed score: `KillScore` (+1) per kill, `SuicideScore`
 (-1) for a death with no killer, the kill-target row compared against the score rather than against
 raw kills, and standings ranked by score with a tie at the top rendered as a draw. Kills and deaths
 stay as separate display counters, which the original keeps in the pilot's career record rather
-than in the match. The team-kill arm has no counterpart: the remake's Dogfight is free-for-all.
+than in the match.
+
+A lobby launch with teams is a team match (`VersusMatch.AssignTeams`, from each seat's
+`NetSeat.TeamId`). A teammate kill costs the killer `SuicideScore` and counts no kill. A team's
+total is the sum of its members' scores, since nothing in the remake scores a team directly, and the
+Score limit is read against that total alone. Reason 4 asks for pilots with lives on two teams, a
+teamless seat counting as a team of its own. Every machine derives the totals from the per-seat
+scores, so the remake's `0x13`, one seat's score, carries no team count, unlike the original's
+table ([`multiplayer-messages.md`](multiplayer-messages.md)).
 
 The lives rule follows the decode above, with three differences. The count is clamped to 1..99
 (`DogfightLobby.ClampLives`), so the empty-box defect cannot launch. Ticking Limited Lives puts 3

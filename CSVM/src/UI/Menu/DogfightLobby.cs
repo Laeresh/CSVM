@@ -22,9 +22,9 @@ public enum DogfightMissionType : byte
 /// <summary>One line of the lobby's chat panel: who typed it and what.</summary>
 public readonly record struct DogfightChatLine(string Name, string Text);
 
-/// <summary>One pilot's line on the Game Scores page after a match: its name and its final points,
-/// kills and deaths.</summary>
-public readonly record struct DogfightScore(string Name, int Points, int Kills, int Deaths);
+/// <summary>One line on the Game Scores page after a match: a pilot's name, or a team's when
+/// <paramref name="IsTeam"/>, and its final points, kills and deaths.</summary>
+public readonly record struct DogfightScore(string Name, int Points, int Kills, int Deaths, bool IsTeam = false);
 
 /// <summary>
 /// The Multiplayer Lobby of a Dogfight, on both of its ends, engine-free. The host owns the Mission
@@ -295,6 +295,31 @@ public sealed class DogfightLobby
 
         lines.Sort((a, b) => a.Rank.CompareTo(b.Rank));
         return lines.ConvertAll(line => line.Line).ToArray();
+    }
+
+    /// <summary>The Game Scores lines for a finished match. A team match lists each team's totals,
+    /// best first, with its pilots under it best first. A free-for-all is
+    /// <see cref="ScoresOf(IEnumerable{CSVM.Flight.Modes.VersusStanding}, IReadOnlyList{string})"/>.
+    /// </summary>
+    public static DogfightScore[] ScoresOf(CSVM.Flight.Modes.VersusMatch match, IReadOnlyList<string> names)
+    {
+        ArgumentNullException.ThrowIfNull(match);
+        ArgumentNullException.ThrowIfNull(names);
+        if (!match.Teamed)
+        {
+            return ScoresOf(match.Standings(), names);
+        }
+
+        var lines = new List<DogfightScore>();
+        foreach (var team in match.TeamStandings())
+        {
+            lines.Add(new DogfightScore(team.Name, team.Score, team.Kills, team.Deaths, IsTeam: true));
+            lines.AddRange(ScoresOf(Members(match, team.Team), names));
+        }
+
+        // A seat on no team, which a team launch refuses, still gets its line.
+        lines.AddRange(ScoresOf(Members(match, 0), names));
+        return lines.ToArray();
     }
 
     /// <summary>Whether the Type box offers a mission type as live. Capture the Flag and Zeppelin vs
@@ -654,6 +679,20 @@ public sealed class DogfightLobby
         {
             SendPick();
         }
+    }
+
+    private static List<CSVM.Flight.Modes.VersusStanding> Members(CSVM.Flight.Modes.VersusMatch match, int team)
+    {
+        var members = new List<CSVM.Flight.Modes.VersusStanding>();
+        foreach (var standing in match.Standings())
+        {
+            if (match.TeamOf(standing.PlayerIndex) == team)
+            {
+                members.Add(standing);
+            }
+        }
+
+        return members;
     }
 
     private static bool Contains(IReadOnlyList<int> peers, int peer)

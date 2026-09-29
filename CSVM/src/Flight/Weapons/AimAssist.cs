@@ -187,6 +187,13 @@ public static class AimAssist
     /// the 22 no-<c>TEAM</c> emplacements default to and stop being engaged by them.</summary>
     public const int VersusTeamBand = 10;
 
+    /// <summary>Where a team Dogfight's lobby teams sit: lobby team N flies as this plus N. Above
+    /// <see cref="TeamOfPilot"/>'s band for a full sixteen-seat field and below
+    /// <see cref="WorldTeam"/>. ⚠ Never compare a lobby team number as a hostility id. Read raw,
+    /// lobby team 1 is <see cref="PlayerTeam"/> and lobby team 2 the no-<c>TEAM</c> emplacements'.
+    /// </summary>
+    public const int LobbyTeamBand = 40;
+
     /// <summary>The proximity fuse that puts a round in flight on the assist's ordnance list: the
     /// engine tests the def's <c>DETONATION_DISTANCE²</c> against 0.01, i.e. a fuse longer than
     /// 0.1 m, the 13 ordnance carriers in docs/formats/weapons.md. (The engine also admits a round
@@ -329,6 +336,10 @@ public static class AimAssist
         0 => PlayerTeam,
         _ => VersusTeamBand + shooterId,
     };
+
+    /// <summary>The hostility id of a lobby team (<see cref="LobbyTeamBand"/>), or null for a seat
+    /// on no team, which keeps its <see cref="TeamOfPilot"/> default.</summary>
+    public static int? LobbyTeam(int lobbyTeam) => lobbyTeam > 0 ? LobbyTeamBand + lobbyTeam : null;
 
     /// <summary>The launch scatter (<c>FUN_00460940</c> → <c>FUN_004608a0</c>, docs/org/aim-assist.md
     /// "The scatter cone"), the only scatter the original applies to a player's round: rotate the aim

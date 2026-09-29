@@ -352,6 +352,8 @@ public partial class GameSession : Node3D
     // Built on the host alone in a network match, since two rotations diverge on first blood.
     // A guest holds none and takes every placement off the wire.
     private VersusSpawnRotation? _versusSpawns;
+    // A team Dogfight's team names by lobby team number, as this machine's lobby held them.
+    private IReadOnlyDictionary<int, string>? _netTeamNames;
     // The spawn list the session was placed from, kept so a granted spawn resolves its entry
     // index against the same table on every peer. Null where the session walks no list.
     private IReadOnlyList<SpawnPoint>? _spawnList;
@@ -459,6 +461,7 @@ public partial class GameSession : Node3D
             : Array.Empty<Net.NetSeat>();
         _netSeatFit = ctx.NetSeatFit;
         _netSeatBuild = ctx.NetSeatBuild;
+        _netTeamNames = ctx.NetTeamNames;
         // Every guest binds the wingman from its host's word, and one with no word says so loudly.
         _netCoopWingman = ctx.NetTransport != null && !ctx.NetHost ? ctx.NetCoopWingman ?? (() => null) : null;
         _netClock = ctx.NetHandshake is { } handshake
@@ -528,6 +531,10 @@ public partial class GameSession : Node3D
     /// same value on every machine: the host writes it where it sends the state and a guest where
     /// it applies one.</summary>
     internal Net.NetMatchEnd MatchEnd => _matchEnd;
+
+    /// <summary>Each seat's opening entry in a team match's whole spawn table, null outside one.
+    /// </summary>
+    internal IReadOnlyList<int>? TeamOpenings => _spawnPicker?.SeatEntries;
 
     /// <summary>This guest's offset onto host time, null on a host and outside a network match.
     /// A suite reads its counters to tell a live reading from an untouched opening offset.
@@ -2461,8 +2468,11 @@ public partial class GameSession : Node3D
         // _cutscene.Playing is settled before the player's spawn is chosen. Only a campaign intro
         // withholds --pos=; every other --pos= flight keeps landing on it immediately.
         _spawnPicker.WithholdOverrideForCutscene = _campaign != null && _cutscene is { Playing: true };
+        // A team Dogfight walks its teams' blocks of the whole table instead of the free-for-all's.
+        _spawnPicker.SeatTeams = SeatTeams();
         var spawnList = _spawnPicker.LoadSpawnList(state.MissionZrdrPath, iaScenario);
         int spawnBase = _spawnPicker.ChooseSpawnBase(spawnList);
+        _spawnPicker.PlanTeams(spawnList, spawnBase);
         _spawnList = spawnList;
 
         // The weapons catalogue and stock loadouts, loaded once, and ONE shared projectile pool
@@ -2586,6 +2596,10 @@ public partial class GameSession : Node3D
         VersusMatch? versus = _spec.Versus
             ? new VersusMatch(_seatRigs.Count, _spec.VsKills, _spec.VsTimeMinutes * 60f, _spec.VsLives)
             : null;
+        if (versus != null && SeatTeams() is { } seatTeams)
+        {
+            versus.AssignTeams(seatTeams, _netTeamNames);
+        }
 
         // The original's HUD bitmap font, loaded once and shared across panes. Null when the rimage
         // atlas is absent, and its consumers are then simply not built.
@@ -2882,11 +2896,15 @@ public partial class GameSession : Node3D
             _versus = match;
             // Spawn rotation: a downed seat comes back on a point picked against the living field,
             // since a fixed spawn can be camped at. Its Rng comes off the master alone, so no pick
-            // here shifts Rng.Spawn. ⚠ Never on a guest: a second rotation diverges on first blood.
+            // here shifts Rng.Spawn. A team match rotates each seat inside its own team's block.
+            var rotationRng = new Random(Rng.IntSeedFor(Rng.VersusSpawn));
+
+            // ⚠ Never on a guest: a second rotation diverges on first blood.
             _versusSpawns = _netSeats.Count > 0 && _net is not { IsHost: true }
                 ? null
-                : VersusSpawnRotation.For(spawnList, spawnBase, _seatRigs.Count,
-                    new Random(Rng.IntSeedFor(Rng.VersusSpawn)));
+                : _spawnPicker.SeatEntries is { } openings && _spawnPicker.SeatBlocks is { } blocks
+                    ? VersusSpawnRotation.ForBlocks(spawnList, openings, blocks, SeatTeams()!, rotationRng)
+                    : VersusSpawnRotation.For(spawnList, spawnBase, _seatRigs.Count, rotationRng);
             // Who downed each seat last, which the rotation weighs heaviest: the Downed report
             // carries it, and the respawn that reads it happens seconds later.
             _lastKiller = new int?[_seatRigs.Count];
@@ -2920,8 +2938,8 @@ public partial class GameSession : Node3D
                             match.RegisterDeath(victim);
                     };
                 }
-            match.MatchCompleted += () => Log.Info("flight", $"dogfight: match complete, {string.Join(", ", match.Standings().Select(s => $"P{s.PlayerIndex + 1} {s.Score}pts {s.Kills}K/{s.Deaths}D (#{s.Rank})"))}");
-            Log.Info("flight", $"dogfight: {_seatRigs.Count} pilots, {(match.KillTarget > 0 ? $"first to {match.KillTarget} points" : "no kill target")}, {(match.TimeLimit > 0f ? $"{match.TimeLimit / 60f:0.#} min limit" : "no time limit")}");
+            match.MatchCompleted += () => Log.Info("flight", $"dogfight: match complete, {string.Join(", ", match.Standings().Select(s => $"P{s.PlayerIndex + 1} {s.Score}pts {s.Kills}K/{s.Deaths}D (#{s.Rank})"))}{string.Concat(match.TeamStandings().Select(t => $", team {t.Team} '{t.Name}' {t.Score}pts (#{t.Rank})"))}");
+            Log.Info("flight", $"dogfight: {_seatRigs.Count} pilots, {(match.KillTarget > 0 ? $"first to {match.KillTarget} points" : "no kill target")}, {(match.TimeLimit > 0f ? $"{match.TimeLimit / 60f:0.#} min limit" : "no time limit")}{(match.Teamed ? $", teams by seat {string.Join(",", Enumerable.Range(0, match.PlayerCount).Select(match.TeamOf))}" : "")}");
 
             // The match's shared results board: same construction as the race board above,
             // one CanvasLayer over the whole window (the match ends for everybody at once), R
@@ -5071,6 +5089,18 @@ public partial class GameSession : Node3D
 
         rotation.Choose(seat, LivingField(), seat < _lastKiller.Length ? _lastKiller[seat] : null);
         return (ushort)rotation.IndexOf(seat);
+    }
+
+    // Each seat's lobby team in a team Dogfight, by seat, or null for any other flight. Every
+    // machine reads the same roster, so every machine puts the same seats on the same teams.
+    private int[]? SeatTeams()
+    {
+        if (!_spec.Versus || !_netSeats.Any(seat => seat.TeamId > 0))
+        {
+            return null;
+        }
+
+        return _netSeats.Select(seat => seat.TeamId).ToArray();
     }
 
     // The grant, applied. Every peer runs this, the host on its own message, so one placement

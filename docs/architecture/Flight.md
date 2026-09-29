@@ -62,7 +62,7 @@ lead solver every other module in the namespace consumes rather than re-deriving
 would pick out of an `AimCandidateSet`, whose four lists are kept separately and filled by `ProjectilePool` and
 `DestructibleRegistry`, the structure one whole through `AddStructures` for the player and narrowed to the flagged
 mission-structure nodes through `AddMissionStructures` for an AI pilot; `FireDirection` is the whole fire call in one
-place and `Scatter` its launch cone. A static, engine-free class that reads no clock of its own, so it unit-tests
+place and `Scatter` its launch cone; `Hostile`, `TeamOfPilot` and `LobbyTeam` (a team Dogfight's band) own the team space. A static, engine-free class that reads no clock of its own, so it unit-tests
 without a `FlightController`, which owns one `GunAimSlot[]` per firable gun group. Read `FireControl.cs` next.
 
 ## src/Flight/Weapons/TargetRef.cs
@@ -579,7 +579,7 @@ these are pure over their arguments.
 Reads the flight spawn from a mission's OWN zrdr, a different archive than the shared `--zrdr`, in
 three schemas: `LoadIa` for the instant-action `spawn_points` per scenario, which only some folders
 carry and the original picks one of at random per launch, `LoadNetFreeForAll` for a multiplayer
-mission's `net.zrd` table, and `LoadPlayerInit` for the story objectives' `PLAYER_INIT`. The first
+mission's `net.zrd` free-for-all block (`LoadNetTable` the whole table, `TeamBlocks` each team seat's opening and block), and `LoadPlayerInit` for the story objectives' `PLAYER_INIT`. The first
 two yield `SpawnPoint(Position, HeadingDeg)`, the third a whole `PlayerStart`. A spawn's `Forward`
 is the nose axis its heading yaws to, so every placement reads one look-at point rather than
 restating the conversion. Schema: [../formats/spawns.md](../formats/spawns.md) and
@@ -728,20 +728,20 @@ on the time-out (leader wins, equal top scores draw), `Standings()` ranks by sco
 and deaths for display, and `Restart()` zeroes everything and re-arms completion. `ApplyScore` writes a seat's row as the host reports it,
 so a guest mirrors the host's board. `Replicate()` hands the clock, both limits and the ending to that host too: `Advance` then moves
 nothing and only `ApplyState` ends or re-arms a match. `OutOfLives` holds a spent pilot down, `Leave` marks a dropped one, fewer than two
-pilots with lives end the match as `AllAlone` (reason 4), and `NextWatched` picks the seat a spent pilot watches. Read `VersusMatchTests.cs`, `VersusHud`, `VersusBoard` and `docs/org/multiplayer-scoring.md`.
+pilots with lives end the match as `AllAlone` (reason 4), and `NextWatched` picks the seat a spent pilot watches. `AssignTeams` makes a team match: a teammate kill scores as a suicide, the target reads a team's total (`TeamScoreOf`, `TeamStandings`) and reason 4 asks for two teams. Read `VersusMatchTests.cs`, `TeamDeathmatchTests.cs`, `VersusHud`, `VersusBoard` and `docs/org/multiplayer-scoring.md`.
 
 ## src/Flight/Modes/VersusSpawnRotation.cs
 Where a Dogfight seat comes back, engine-free: it owns the per-seat spawn-list ledger the opening
 spawn sets (one living seat per point) and picks a respawn among the roomiest entries against the
 living field, weighing the killer at `KillerWeight` and drawing between everything within
 `RoomyShare` of the best, so the point rotates and no seat can be camped. `For` returns null when
-there is no list, `Restart` reopens a round on the opening points, and the draw comes from a
+there is no list, `ForBlocks` keeps each seat of a team match inside its team's block of the whole table and measures room against the other teams alone, `Restart` reopens a round on the opening points, and the draw comes from a
 caller-supplied `Random` so a pinned run replays. `GameSession` feeds it the live field; offline it hands the pick to `FlightController.RespawnPlacement`, and in a match only the host holds a rotation at all, its pick crossing the wire as a table entry.
 Off-engine coverage: `CSVM.Tests/VersusSpawnRotationTests.cs`; the suites are `versus-spawn-rotation` and `net-spawn-rotation`.
 
 ## src/Flight/Modes/VersusHud.cs
 The per-pane Dogfight HUD: a compact status line (remaining time, this pane's kills and deaths, the
-leader's tag) in `StuntRunHud`'s run-status slot, and one marker per living opponent rig, either an
+leader's tag, or in a team match this pane's team total and the leading team) in `StuntRunHud`'s run-status slot, and one marker per living opponent rig, either an
 on-screen tag or `EdgeMarker`'s arrow and bearing in that opponent's own `SplitScreen.PlayerColor`.
 `Build` binds the match and this pane's own camera; `HumanFlightAdapter` attaches the live rig list
 and `FlightController` feeds the pose each frame. A kill has no banner of its own here: `HudMessages`

@@ -113,8 +113,13 @@ two block kinds are not always in different places.
 `SpawnPoints.LoadNetFreeForAll` returns **block 0 only**, up to `SpawnPoints.NetBlock` (16)
 entries, and `SpawnPicker.LoadSpawnList` takes them only for a Dogfight launch (`--vs`) on a
 mission that ships no `ia.json`. That is the original's own gate: the un-teamed match is the one
-that reads block 0, and no other mode reads the file at all. The team blocks have no consumer here
-because the remake's Dogfight is free-for-all.
+that reads block 0, and no other mode reads the file at all.
+
+A team Dogfight reads the whole table instead (`SpawnPoints.LoadNetTable`). `SpawnPoints.TeamBlocks`
+opens a seat on lobby team N at block N's entry for its place among that team's seats, and a seat
+on no team, or on a team the map authors no block for, on block 0. A downed seat comes back inside
+its own block. The reader skips a node that is not four numbers, which would shift every block
+after it, where the original copies nodes without looking.
 
 ## Evidence & limits
 

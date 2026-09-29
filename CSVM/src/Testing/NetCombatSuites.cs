@@ -1329,7 +1329,8 @@ internal static class NetCombatSuites
             bool isHost, ulong seed, IReadOnlyList<NetSeat>? roster,
             IReadOnlyList<string>? airframes = null, Func<int, LoadoutChoice?>? seatFit = null,
             Func<CoopWingmanMessage?>? coopWingman = null,
-            Func<int, Flight.Hangar.CustomPlaneDef?>? seatBuild = null)
+            Func<int, Flight.Hangar.CustomPlaneDef?>? seatBuild = null,
+            IReadOnlyDictionary<int, string>? teamNames = null)
         {
             var pane = new SubViewport
             {
@@ -1373,6 +1374,7 @@ internal static class NetCombatSuites
                 NetSeatFit = seatFit,
                 NetCoopWingman = coopWingman,
                 NetSeatBuild = seatBuild,
+                NetTeamNames = teamNames,
             });
             pane.AddChild(session);
             return new Ends(pane, session, session.StartSession());

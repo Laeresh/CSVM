@@ -226,7 +226,9 @@ internal sealed class HumanFlightAdapter
             // A pause key belongs to a seat somebody is sitting at. A remote pilot's pause is
             // their own machine's business, and must not halt this one's simulation.
             AllowPause = !remote,
-            Team = _human.InstantActionActive || _human.Coop ? AimAssist.PlayerTeam : null,
+            // A team Dogfight's seat flies its lobby team, banded clear of every authored id.
+            Team = _human.InstantActionActive || _human.Coop ? AimAssist.PlayerTeam
+                : AimAssist.LobbyTeam(seat?.TeamId ?? 0),
             Shake = new PlaneShake(_aircraft.Shakes),
         });
         onCreated(controller);

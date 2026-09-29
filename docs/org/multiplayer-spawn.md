@@ -91,9 +91,10 @@ minus 8. Both readings are TUNE (`BL-1017`).
 
 ## What the remake takes
 
-The remake's Dogfight is the un-teamed match, so it takes the opening rule and the opening
-throttle and speed (`SpawnPicker.LoadSpawnList` and `SpawnPicker.StartState`, over
-`SpawnPoints.LoadNetFreeForAll`). It does **not** take the respawn rule: a centroid displacement
+The remake takes the opening rule and the opening throttle and speed (`SpawnPicker.LoadSpawnList`
+and `SpawnPicker.StartState`, over `SpawnPoints.LoadNetFreeForAll`), and in a team Dogfight the
+team's block of the whole table (`SpawnPoints.TeamBlocks`), walked by the seat's place in its team
+rather than by the original's pilot index. It does **not** take the respawn rule: a centroid displacement
 puts a returning pilot next to the pack, which is the camping problem
 `Flight/Modes/VersusSpawnRotation.cs` exists to solve, and that rotation stays as it is. The stunt
 race's abreast starting grid is selected only when a race exists and never touches a Dogfight:
