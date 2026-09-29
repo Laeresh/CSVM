@@ -21,7 +21,9 @@ internal static class MusicSuites
         + "their two takes instead of drawing at random, and a combat ping cuts prebattle to "
         + "battle at silence, ramps it to full in a quarter second, holds it 20 s and fades it "
         + "out over four; and the briefing's duck rides over that fade without touching it, "
-        + "holding the channel down while the screen shows and lifting when it goes")]
+        + "holding the channel down while the screen shows and lifting when it goes; a cinema's "
+        + "pause holds the track in place, a cue taken under it starts held, and the film's end "
+        + "releases it")]
     internal static void MusicStates(TestContext ctx)
     {
         var defs = SoundDefs.Load(ctx.ZrdrPath);
@@ -42,6 +44,7 @@ internal static class MusicSuites
             CheckStingersAlternate(ctx, music, rng, report);
             CheckBattleHold(ctx, music, rng, report);
             CheckDuck(ctx, music, rng, report);
+            CheckPause(ctx, music, rng, report);
         }
         finally
         {
@@ -180,6 +183,29 @@ internal static class MusicSuites
         }
 
         ctx.Check(music.Duck >= 0.999f, $"leaving the screen lifts the duck duck={music.Duck:0.###}");
+        music.Enter(MusicState.Silent, rng);
+    }
+
+    private static void CheckPause(TestContext ctx, MusicPlayer music, Random rng, StringBuilder report)
+    {
+        string? splash = music.Enter(MusicState.Menu, rng);
+        music.Paused = true;
+        for (int i = 0; i < 10; i++)
+        {
+            music.Tick(Step, rng);
+        }
+
+        report.AppendLine($"paused {splash ?? "(none)"} -> current={music.Current} paused={music.Paused}");
+        ctx.Check(music.Paused, $"a cinema's pause holds the channel across ticks paused={music.Paused}");
+        ctx.Check(music.Current == splash, $"the paused track keeps its place current={music.Current}");
+
+        // A cue that lands while a cinema shows must not be heard over it either.
+        music.Enter(MusicState.Prebattle, rng);
+        ctx.Check(music.Paused, $"a cue taken during the pause starts held current={music.Current}");
+
+        music.Paused = false;
+        ctx.Check(!music.Paused && music.Current.Length > 0,
+            $"the film's end releases the track current={music.Current}");
         music.Enter(MusicState.Silent, rng);
     }
 }

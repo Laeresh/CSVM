@@ -1190,7 +1190,23 @@ public partial class Launcher : Node3D
         }
 
         Log.Info("ui", $"cinema {name} playing skip={skip}");
-        cinema.Ended = then;
+
+        // Every film carries its own sound track, so the score must not play under it. The track
+        // waits where it stopped and resumes under the screen the film hands to.
+        if (_music != null)
+        {
+            _music.Paused = true;
+        }
+
+        cinema.Ended = () =>
+        {
+            if (_music != null)
+            {
+                _music.Paused = false;
+            }
+
+            then();
+        };
         _cinemaShown = cinema;
         AddChild(cinema);
     }
