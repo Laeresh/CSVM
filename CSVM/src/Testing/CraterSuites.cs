@@ -271,8 +271,8 @@ internal static class CraterSuites
 
             ctx.Check(Drop(tarmac), $"the rocket reaches the tarmac plate and plays an impact effect");
             ctx.Same(1, field.LiveMarks, $"the tarmac hit leaves exactly one scorch");
-            ctx.Check(Mathf.IsEqualApprox(field.RadiusOf(0), CraterShape.RimRadius * 0.35f, 1e-3f),
-                $"sized from the weapon's crater radius, a burst that carved nothing at 0.35 of it (radius={field.RadiusOf(0):0.00} m)");
+            ctx.Check(Mathf.IsEqualApprox(field.RadiusOf(0), CraterShape.RimRadius * 0.455f, 1e-3f),
+                $"sized from the weapon's crater radius, a burst that carved nothing at 0.455 of it (radius={field.RadiusOf(0):0.00} m)");
             var decal = field.NodeOf(0);
             ctx.Check(decal.Visible && Mathf.IsEqualApprox(decal.Size.X, field.RadiusOf(0) * 2f, 1e-3f)
                 && Mathf.IsEqualApprox(decal.Size.Z, field.RadiusOf(0) * 2f, 1e-3f),
@@ -291,8 +291,8 @@ internal static class CraterSuites
 
             GameSession.RegisterScorch(field, tarmac + new Vector3(300f, 0f, 0f), Vector3.Up, "he_ground_effect", carved: true);
             ctx.Same(3, field.LiveMarks, $"a hit that carved a bowl marks the ground it opened");
-            ctx.Check(Mathf.IsEqualApprox(field.RadiusOf(2), CraterShape.RimRadius * 0.85f, 1e-3f),
-                $"and rings the carve at 0.85 of the crater radius (radius={field.RadiusOf(2):0.00} m)");
+            ctx.Check(Mathf.IsEqualApprox(field.RadiusOf(2), CraterShape.RimRadius * 1.1f, 1e-3f),
+                $"and rings the carve at 1.1 of the crater radius (radius={field.RadiusOf(2):0.00} m)");
 
             // The crater field's refusal, borrowed: a hit inside a live mark refreshes it.
             live.SimStep(Dt);
@@ -352,7 +352,7 @@ internal static class CraterSuites
         ctx.Same(0, field.LiveMarks, $"every mark is gone once its life runs out");
         ctx.Check(!field.NodeOf(0).Visible, $"and its decal is hidden rather than left drawn");
         ctx.Same(16, field.PooledNodes, $"the pool keeps its nodes for the next burst rather than freeing them");
-        ctx.Note($"scorch: one decal per burst, cap 16, {CraterShape.RimRadius * 0.35f:0.0} m on bare ground and {CraterShape.RimRadius * 0.85f:0.0} m over a carve");
+        ctx.Note($"scorch: one decal per burst, cap 16, {CraterShape.RimRadius * 0.455f:0.0} m on bare ground and {CraterShape.RimRadius * 1.1f:0.0} m over a carve");
     }
 
     private static Vector3 Ground(TestContext ctx, List<StaticBody3D> plates, string name, Vector3 at, int surfaceId)

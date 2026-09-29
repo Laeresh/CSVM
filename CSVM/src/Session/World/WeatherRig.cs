@@ -39,6 +39,11 @@ public sealed class WeatherRig
     private const float FaithfulSunEnergy = 1.6f;
     private const float FaithfulAmbientEnergy = 0.9f;
 
+    // TUNE, enhanced mode only: the sun's specular by day and at night (EnhancedSunSpecular).
+    // Godot's own 0.5 made the sun's and above all the moon's glint on the water too bright.
+    private const float DaySunSpecular = 0.35f;
+    private const float NightSunSpecular = 0.1f;
+
     // ⚠ TUNE, enhanced mode only, and a PROXY the original never uses: it lights from SUNLIGHT and
     // darkens from FOG_COLOR independently, so nothing in the game reads one off the other. What
     // licenses it is that the two populations do not overlap: every zone under a night sky authors
@@ -247,6 +252,13 @@ public sealed class WeatherRig
         float ambient = night ? MathF.Min(fog.SunAmbient, NightAmbientCap) : fog.SunAmbient;
         return (diffuse * SunEnergyPerDiffuse, ambient * AmbientEnergyPerAuthored);
     }
+
+    /// <summary>The enhanced sun's <c>LightSpecular</c> for one zone: the strength of its direct
+    /// highlight on glossy surfaces, the water's glint above all. Lower at night, where the moon's
+    /// glint otherwise stands out against a dark sea. Reflections of the scenery are the water
+    /// material's own and do not read it.</summary>
+    public static float EnhancedSunSpecular(WeatherState.ZoneWeather fog) =>
+        IsNightZone(fog) ? NightSunSpecular : DaySunSpecular;
 
     /// <summary>The faithful path's Godot energies for one zone's authored SUNLIGHT. Each scalar
     /// scales its own day-level energy and is capped there, so a dim zone darkens what the scene
@@ -629,9 +641,10 @@ public sealed class WeatherRig
     // The energy/colour half of ApplyEnhancedLighting, shared by the session sun/env and every
     // registered clone, so the two can never drift onto different formulas.
     private static void ApplyEnhancedSunAndEnv(DirectionalLight3D sun, Godot.Environment? env,
-        float sunEnergy, Color sunColor, float ambientEnergy, Color ambientColor, Color skyColor)
+        float sunEnergy, float sunSpecular, Color sunColor, float ambientEnergy, Color ambientColor, Color skyColor)
     {
         sun.LightEnergy = sunEnergy;
+        sun.LightSpecular = sunSpecular;
         sun.LightColor = sunColor;
         if (env == null)
             return;
@@ -910,10 +923,11 @@ public sealed class WeatherRig
             _sun.DirectionalShadowFadeStart = EnhancedShadowFadeStart;
         }
         (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog);
-        ApplyEnhancedSunAndEnv(_sun, _env, sunEnergy, fog.SunColorDiffuse, ambientEnergy,
+        float sunSpecular = EnhancedSunSpecular(fog);
+        ApplyEnhancedSunAndEnv(_sun, _env, sunEnergy, sunSpecular, fog.SunColorDiffuse, ambientEnergy,
             fog.SunColorAmbient, fog.FogColor);
         foreach (var (sun, env) in _extraLighting)
-            ApplyEnhancedSunAndEnv(sun, env, sunEnergy, fog.SunColorDiffuse, ambientEnergy,
+            ApplyEnhancedSunAndEnv(sun, env, sunEnergy, sunSpecular, fog.SunColorDiffuse, ambientEnergy,
                 fog.SunColorAmbient, fog.FogColor);
     }
 

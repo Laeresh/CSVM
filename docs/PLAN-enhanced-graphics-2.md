@@ -211,16 +211,16 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 | Item | Verdict | Follow-up |
 |---|---|---|
-| A1 | Edges smooth, no ghost trails on sprites | The sun's and moon's glint on water is too bright, the moon's most: the sun light's specular drops under Enhanced, further at night; the water material stays |
-| A1 | The aircraft's own shadow shows only in a narrow band of camera distance and altitude | The sun's angular size 2.0° to 1.0°, the first cascade stretched to about 250 m, the directional shadow map doubled |
+| A1 | Edges smooth, no ghost trails on sprites | The sun's and moon's glint on water read too bright, the moon's most: the sun's `LightSpecular` is 0.35 by day and 0.1 at night under Enhanced (`WeatherRig.EnhancedSunSpecular`); the water material and its reflections are unchanged |
+| A1 | The aircraft's own shadow showed only in a narrow band of camera distance and altitude | The sun's angular size is 1.0°, the first cascade 0.12 of the shadow distance, the directional shadow map 8192 (`Launcher.EnableSunShadows`); a plane 40 m up now shows its shadow from the flyby distance where it had none |
 | A2 | 200% visibly sharpens the C5 skyline; its cost is the user's (decision 9) | none |
 | A3 | The water bands are gone | none |
 | A4 | The cockpit gauge faces are opaque with AA off | none |
 | A6 | Every method looks good; the world's low detail keeps them close | The Deck crashes at four panes and 67% (A7) |
 | B11 to B14, B16 | Pass | none |
-| B15 | The marks read small and light | Both radius factors × 1.3, peak alpha 0.75 to 0.95 |
-| C21 | The medium strength (0.10 / 0.20 / 0.45) | Ship medium |
-| C22 | C5's whiteout bank draws a hard horizontal edge and too prominent a skyline | Fade the bank's density out over a height above the zone |
+| B15 | The marks read small and light | The radius factors are 1.1 and 0.455, the peak alpha 0.95 (`ScorchField`) |
+| C21 | The medium strength | Ships: tint 0.10, rim 0.20, core shadow 0.45 (`FogVolumeClutter`) |
+| C22 | C5's whiteout bank draws a hard horizontal edge and too prominent a skyline | Open. The edge is not the bank's top face: carrying the bank 60, 120 and 250 m above the authored top with a density fade changed neither the edge nor the skyline |
 | All | C5 performance is poor under every AA method | A7 |
 
 ## Dependency and parallelism notes

@@ -26,11 +26,11 @@ public sealed partial class ScorchField : Node3D
     // load, the most one aircraft can put on the ground in a single pass.
     private const int PoolCap = 16;
 
-    private const float CraterRadiusScale = 0.85f; // × the weapon's crater radius, when one carved
-    private const float BurstRadiusScale = 0.35f;  // … and when the weapon carves nothing
+    private const float CraterRadiusScale = 1.1f;  // × the weapon's crater radius, when one carved
+    private const float BurstRadiusScale = 0.455f; // … and when the weapon carves nothing
     private const float LifeSeconds = 90f;         // mark to gone
     private const float HoldFraction = 0.55f;      // full darkness for this much of the life
-    private const float PeakAlpha = 0.75f;         // how much of the burn reaches the surface
+    private const float PeakAlpha = 0.95f;         // how much of the burn reaches the surface
     private const float MergeFraction = 0.5f;      // a hit this far inside a live mark refreshes it
     private const float BoxUp = 1.5f;              // projection box above the impact (m) …
     private const float BoxDown = 7f;              // … and below it, past the bowl's 2×DEPTH floor

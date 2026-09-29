@@ -63,13 +63,13 @@ public sealed partial class FogVolumeClutter : Node3D
     // chain (TextureArchive generates it), so this never silently falls back to level 0.
     private const float EnhancedRimBlurLod = 3f;
 
-    // TUNE: how far the sun-side edge lifts where nothing lies between it and the sun, and how far
-    // a texel behind the card's own bulk drops. Both apply only as the eye swings toward the sun,
-    // because that is the backlit half: a front-lit card is evenly bright and keeps the authored
-    // colour. ⚠ Keep the drop small. The scatter lays one repeated card on a regular lattice, so
-    // any strong per-card shading paints that lattice as a visible grid on the near deck.
-    private const float EnhancedRimGain = 0.15f;
-    private const float EnhancedCoreShadow = 0.25f;
+    // TUNE: how far the unoccluded sun-side edge lifts, and how far a texel behind the card's own
+    // bulk drops. Both apply only as the eye swings toward the sun, the backlit half. A front-lit
+    // card is evenly bright and keeps the authored colour. The pair is the medium strength the user picked from a shipped/medium/strong sweep.
+    // ⚠ Do not go past it. The scatter lays one repeated card on a regular lattice, and the strong
+    // step paints that lattice as a visible grid on the near deck.
+    private const float EnhancedRimGain = 0.2f;
+    private const float EnhancedCoreShadow = 0.45f;
 
     // TUNE: how far a card whose own authored face normal turns away from the sun darkens, on a
     // half-lambert ramp. Every shipped fvol face points upward (docs/org/cloudCards.md), so this

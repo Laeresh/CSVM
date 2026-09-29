@@ -85,7 +85,7 @@ public partial class Launcher : Node3D
     // TUNE. Fractions of EnhancedShadowMaxDistance, tighter than Godot's 0.1/0.2/0.5 because the
     // shadows a player reads are the aircraft's own and the buildings it passes, all inside the
     // first few hundred metres; the outer cascades only have to carry a skyline into the haze.
-    private const float EnhancedShadowSplit1 = 0.06f;
+    private const float EnhancedShadowSplit1 = 0.12f;
     private const float EnhancedShadowSplit2 = 0.17f;
     private const float EnhancedShadowSplit3 = 0.42f;
 
@@ -100,9 +100,13 @@ public partial class Launcher : Node3D
 
     // TUNE, judged at the controls. The sun's apparent size in degrees; the real sun is about
     // 0.5, softening a cast edge into a penumbra instead of a hard line. A 0.25/0.5/1.0/2.0
-    // sweep at the C1 waterfall lake held the edge at 4-6 px through 1.0. Only 2.0 opened it
-    // into a visibly soft ~18 px transition.
-    private const float EnhancedShadowAngularDistance = 2.0f;
+    // sweep at the C1 waterfall lake held the edge at 4-6 px through 1.0. The penumbra grows with
+    // the caster's height, and at 2.0 an aircraft 40 m up blurred its own shadow away.
+    private const float EnhancedShadowAngularDistance = 1.0f;
+
+    // TUNE: the directional shadow map's edge in texels, twice Godot's 4096. The aircraft's own
+    // shadow is the one read at the controls, and the first cascade now spans twice the metres.
+    private const int EnhancedShadowAtlasSize = 8192;
 
     // TUNE, judged at the controls: Godot's own default. Raising it alongside the angular distance
     // above widens the edge further.
@@ -2089,6 +2093,7 @@ public partial class Launcher : Node3D
         // carries, not in project.godot, where the faithful path would inherit it.
         RenderingServer.DirectionalSoftShadowFilterSetQuality(
             hard ? RenderingServer.ShadowQuality.Hard : EnhancedShadowFilterQuality);
+        RenderingServer.DirectionalShadowAtlasSetSize(EnhancedShadowAtlasSize, true);
     }
 
     // Ambient occlusion, which darkens the ambient term where geometry occludes it. The faithful
