@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
@@ -53,7 +54,8 @@ internal static class NetZeppelinVersusSuites
     [Suite("net-zeppelin-vs-zeppelin",
         "three sessions on the chapter's MP3 map, two seats on lobby team 2 listed first and one on "
         + "team 1: every machine flies multiplayer1zep for team 2 and multiplayer2zep for team 1, "
-        + "with each side's parts on its team and each seat opening beside its own hull; an enemy "
+        + "with each side's parts on its team and each seat opening beside its own hull; every pane "
+        + "reads its own hull as Defend and the other as Destroy under the team's name; an enemy "
         + "gas bag scores its killer 10 and its own side -10; a broadside cannon scores its bound bag "
         + "once; a downed seat returns by its hull above the spawn table; and the third bag of "
         + "multiplayer1zep ends the match for team 1 with 100 each that the Score limit never reads")]
@@ -100,6 +102,7 @@ internal static class NetZeppelinVersusSuites
             }
 
             Lockstep(SettleSteps, peers);
+            HullMarkers(ctx, peers);
             GasBags(ctx, peers);
             Returns(ctx, peers);
             HullLost(ctx, peers);
@@ -165,6 +168,29 @@ internal static class NetZeppelinVersusSuites
 
         ctx.Check(beside, $"and every seat opens nearer its own hull than the other, in the block the map lays round it ({string.Join(", ", near)} m own/other)");
         return true;
+    }
+
+    // Each pane reads its own side's hull as Defend and the other as Destroy, under the hull's team
+    // name. The map's table calls multiplayer1zep the enemy on every machine. Destroy takes the red.
+    private static void HullMarkers(TestContext ctx, GameSession[] peers)
+    {
+        var got = new List<string>();
+        bool right = true;
+        for (int machine = 0; machine < peers.Length; machine++)
+        {
+            var pool = NetTeamSuites.Cycles(peers[machine], machine);
+            int ownTeam = peers[machine].SeatRigs[machine].Controller!.Team;
+            foreach (var (node, team, name) in new[] { ("multiplayer1zep", 2, "Blue Angels"), ("multiplayer2zep", 1, "Red Squadron") })
+            {
+                var found = NetTeamSuites.RefOf(pool, s => s is ObjectiveSite site && site.Node.Equals(node, StringComparison.OrdinalIgnoreCase));
+                bool mine = Teams[machine] == team;
+                bool red = found is { } t && TargetHud.MarkerColor(t, ownTeam) == TargetHud.HudRed;
+                right &= found is { } f && f.Category == (mine ? "Defend" : "Destroy") && f.DisplayName == name && red != mine;
+                got.Add($"m{machine}:{node} {(found is { } g ? $"{g.Category}|{g.DisplayName}{(red ? " red" : "")}" : "missing")}");
+            }
+        }
+
+        ctx.Check(right, $"every pane reads its own side's hull as Defend and the other's as Destroy in red, each under its team's name, on every machine ({string.Join(", ", got)})");
     }
 
     // An enemy bag scores, a cannon scores its bound bag once, and a side's own bag costs.

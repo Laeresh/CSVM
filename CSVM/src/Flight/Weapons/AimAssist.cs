@@ -325,6 +325,12 @@ public static class AimAssist
     public static bool Hostile(int shooterTeam, int candidateTeam) =>
         shooterTeam != candidateTeam && shooterTeam != NeutralTeam && candidateTeam != NeutralTeam;
 
+    /// <summary>Whether something on <paramref name="team"/> reads as a friend to a viewer on
+    /// <paramref name="ownTeam"/>: the negation of <see cref="Hostile"/>. It is the one friend-or-foe
+    /// rule every marker and label asks, a team mode's zeppelins, flags and teammates included
+    /// (docs/org/targeting.md "Friend or foe").</summary>
+    public static bool Friendly(int ownTeam, int team) => !Hostile(ownTeam, team);
+
     /// <summary>The default team for a pilot index with no mission-assigned team: pilot 0 is
     /// <see cref="PlayerTeam"/>, every further pilot lands in <see cref="VersusTeamBand"/>, and a
     /// round nobody owns (<see cref="ProjectilePool.NoShooter"/>) is <see cref="NeutralTeam"/>.

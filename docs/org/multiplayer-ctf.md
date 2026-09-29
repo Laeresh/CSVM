@@ -118,13 +118,39 @@ Score limit, the Score limit read against a team's total, or on reason 4 when on
 
 - [Evidence: decoded] HUD lines, 5 s each (`FUN_004587d0`): rows 195, 200 and 201 with the team
   name. [Evidence: weak negative] Rows 7068..7076 are not referenced by the functions read here.
-- Three markers per flag, text from rows 7056..7061, 193/194 and 199; the carrier's tag row 198.
+- Three markers per flag and the carrier's tag, below.
 - [Evidence: decoded] Voice: `FUN_00495c40` loads `snd_CTFlost`, `snd_CTFstolen`,
   `snd_CTFscoreRec`, `snd_CTFscoreEnemy`, `snd_CTFscoreFlag` and `snd_CTFscoreCapt` (strings
   `00628f94`..`00628fe8`).
 - [Evidence: data] The carried flag is the billboard `cs_flg_lightn`, hung under the aircraft's
   `cf_light` by `player-flg_on_n`, with `flg_glow_n`'s white point light (range 4..14, ambient 0.3,
   diffuse 1). Every airframe model carries `cf_light`.
+
+## Markers
+
+[Evidence: decoded] `FUN_00495d40` draws no marker of its own. It finds three entries the map's
+`targets.zrd` already lists (`MSG_TRGT_FLAGBASE` on `ctf_n`, `MSG_TRGT_FLAG` on `cs_flag_n` and
+`cs_flg_lightn`) by node name in the target list `0071d338` (`FUN_004a2880`, `0x495e23`,
+`0x49608d`, `0x496270`) and rewrites each one's name `+0x10` and category `+0x38` (with its id at
+`+0x48`) for this machine. "Your" or "Enemy" below is whether the local pilot is on the flag's team
+(`FUN_0046f300`). The name line is the team's name on all three.
+
+| Marker | Record | Category | Selectable |
+|---|---|---|---|
+| `ctf_n`, the base | `+0x14` | 7060 "Your Base" / 7061 "Enemy Base" | always, from the table |
+| `cs_flag_n`, the flag at base | `+0x18` | 7056 "Your Flag At Base" / 7057 "Enemy Flag At Base" | while home |
+| `cs_flg_lightn`, the flag away | `+0x1c` | held: row 199 "%1 Flag Captured by %2" with Your/Enemy and the holder; floating: 193 "Your Flag Floating" / 194 "Enemy Flag Floating" | while away |
+
+Selectable is the entry's `+0x4d`. The build clears it on the away marker (`0x496242`); a take sets
+it there and clears it on the flag at base (`0x49aaad`..`0x49aacb`); a drop sets it again with the
+floating line (`0x49ad65`); a flag home swaps back (`0x49a5ee`..`0x49a60a`). The away marker's
+name is row 7055 formatted with the team name (`0x4960ae`), a row the shipped message table lacks.
+None of the categories is one `GetColor` draws red, so every flag marker is blue
+([`targeting.md`](targeting.md), "Colour").
+
+[Evidence: decoded] The carrier's tag is the carrier aircraft's own name line. A take names it row
+198 "%1  Holds %2 flag" with the pilot's name and Your/Enemy (`0x49a930`), and the flag leaving the
+aircraft puts the pilot's name back (`0x49a47b` on a holder change, `0x49abc1` on a drop).
 
 ## The lobby
 
@@ -154,5 +180,9 @@ points. `Session/World/FlagRuntime.cs` runs them in a network match. The differe
 - The host may require the capturing team's own flag at home, an option the original lacks.
 - The lobby refuses a Capture the Flag launch with a team numbered above 2, under 10519, since
   such a team would fly with no flag.
-- Not built: the three markers per flag, the carrier's tag (row 198), `ejectflag`, and
-  `score_turret_kill`.
+- The markers are the mission's own site entries labelled per pane rather than per machine
+  (`Flight/Modes/FlagMarkers.cs`), so splitscreen panes on two sides each read their own. The away
+  marker, which the world index cannot find, stands where the carried flag is. Its name line is
+  the team's name in place of the missing row 7055. The carrier's tag replaces the airframe name
+  the remake's aircraft marker prints, and names the pilot by its callsign.
+- Not built: `ejectflag` and `score_turret_kill`.

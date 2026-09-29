@@ -63,6 +63,15 @@ public sealed partial class TargetHud : Control
     /// or null on a pane with no weather bound, where the gate is its 2000 m cap alone.</summary>
     public System.Func<Vector2>? FogRange;
 
+    /// <summary>The hostile and destructive-objective colour, the decoded (200,0,0) in the HUD
+    /// palette's desaturation.</summary>
+    internal static readonly Color HudRed = new(1f, 0.55f, 0.55f);
+
+    /// <summary>The friendly-target colour. In the decode a friendly is GREEN, not blue
+    /// (docs/org/targeting.md "Colour"). This is its (0,255,0) in the HUD palette's desaturation, as
+    /// <see cref="HudRed"/> is (200,0,0). Shared with the Dogfight HUD's teammate marker.</summary>
+    internal static readonly Color HudGreen = new(0.6f, 1f, 0.6f);
+
     // 1440p reference metrics (scaled by HudMetrics, matches VersusHud's calibration).
     private const int RefMarkerFont = 14;
     private const float RefOnScreenLift = 22f; // gap above a plane's own projected point
@@ -98,12 +107,6 @@ public sealed partial class TargetHud : Control
     private const float RefLabelAbove = 30f;   // flipped, the block starts box top − 30
 
     private static readonly Color HudBlue = new(0.55f, 0.78f, 1f);
-    private static readonly Color HudRed = new(1f, 0.55f, 0.55f);
-
-    /// <summary>The friendly-target colour. The decode's own answer is a friendly is GREEN, not blue
-    /// (docs/org/targeting.md "Colour"); this is that (0,255,0) in the HUD palette's desaturation,
-    /// the same relationship <see cref="HudRed"/> has to the decoded (200,0,0).</summary>
-    private static readonly Color HudGreen = new(0.6f, 1f, 0.6f);
 
     private static readonly Color Shadow = new(0f, 0f, 0f, 0.75f);
 

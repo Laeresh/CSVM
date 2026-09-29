@@ -834,6 +834,11 @@ public partial class FlightController : Node3D
     /// null.</summary>
     public string? ObjectiveCategory { get; set; }
 
+    /// <summary>The name line a pane on a given team reads on this aircraft's marker while a mode
+    /// tags it. Null keeps the airframe's own name. A flag carrier is the one tag
+    /// (docs/org/multiplayer-ctf.md "Markers").</summary>
+    public Func<int, string>? MarkerName { get; set; }
+
     /// <summary>The weapon lab's hold: the airframe holds its pose while everything else in the
     /// session keeps running (props, guns, rounds, world sim). ⚠ NOT the P halt
     /// (<see cref="GameClock.Halted"/>), which stops the whole clock. Clearing it un-pins the

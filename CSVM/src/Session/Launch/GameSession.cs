@@ -3687,6 +3687,8 @@ public partial class GameSession : Node3D
                 MissionTargets.Load(state.MissionZrdrPath,
                     SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter)),
                 state.WorldRuntime);
+            // A team mode labels its flags and hulls by side over the table's own lines.
+            sites.Sides = key => _flagPlay?.SideOf(key) ?? _zvzPlay?.SideOf(key);
             flightRoster.SetTargetObjectives(into => sites.Collect(into));
             var modeSites = new List<AimCandidate>();
             sites.Collect(modeSites);
@@ -4929,6 +4931,7 @@ public partial class GameSession : Node3D
             Radio = _radio,
             Strings = strings,
             GroundAt = GroundSampler(),
+            CallsignOf = seat => seat >= 0 && seat < _netSeats.Count ? _netSeats[seat].Callsign : "",
         });
         if (_flagPlay is not { } flags)
         {

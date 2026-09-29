@@ -606,7 +606,8 @@ One live objective site as the targeting path sees it: the flagged `ObjectiveTar
 name, the two label lines its marker prints, its position this frame, and which of the record's two
 flags it stands on. ONE instance per site for as long as the mission flags it, because a selection
 is held by source identity. `TargetPool` labels it; `Session/Objectives/ObjectiveSites.cs` builds and refreshes
-the set. Decode: [../org/targeting.md](../org/targeting.md).
+the set. A team mode's `SiteSide` labels it by side instead, and `CategoryFor` answers per reading
+pane through `AimAssist.Friendly`. Decode: [../org/targeting.md](../org/targeting.md).
 
 ## src/Flight/Hud/MarkerDraw.cs
 The world marker's drawing primitives, shared by `TargetHud` and `StuntRunHud`: the shadowed
@@ -713,12 +714,21 @@ the host's table on a guest, `Drop` a downed carrier's flag and `Advance` its 15
 `Session/World/FlagRuntime.cs` runs it in a match. Read `CaptureTheFlagTests.cs` and
 `docs/org/multiplayer-ctf.md`.
 
+## src/Flight/Modes/FlagMarkers.cs
+Capture the Flag's target labels, engine-free: `MarkerOf` maps the `ctf_n`, `cs_flag_n` and
+`cs_flg_lightn` keys of the map's own `targets.zrd` to a flag's base, flag-at-base and flag-away
+markers, `Side` gives each a `SiteSide` for the flag's state (the at-base one on while home, the
+away one while held or floating), and `HolderTag` is the carrier's name line. Every line reads
+"Your" or "Enemy" through `AimAssist.Friendly`. `FlagRuntime` feeds the site feed from it. Read
+`TeamMarkerTests.cs` and `docs/org/multiplayer-ctf.md` "Markers".
+
 ## src/Flight/Modes/ZeppelinVersus.cs
 Zeppelin vs Zeppelin's rules, engine-free: `Sides` takes the first two lobby teams in seat order,
 hull 0 flying the first and hull 1 the second, and `SpawnBlocks` opens each side in the `net.zrd`
 block round its own hull. `Counts` lets each gas bag score once, at its own death or its bound
 broadside cannon's, and `Points` is 10 to an enemy and -10 on the killer's own hull.
-`RespawnPoint` is the return halfway between the field and the pilot's hull. The hull loss itself
+`RespawnPoint` is the return halfway between the field and the pilot's hull, and `HullSide` labels
+a hull's marker "Defend" to its side and "Destroy" to the other. The hull loss itself
 ends the match through `VersusMatch.EndOnHullLoss`. `Session/World/ZeppelinVersusRuntime.cs` runs
 it in a match. Read `ZeppelinVersusTests.cs` and `docs/org/multiplayer-zvz.md`.
 
@@ -760,7 +770,8 @@ Off-engine coverage: `CSVM.Tests/VersusSpawnRotationTests.cs`; the suites are `v
 ## src/Flight/Modes/VersusHud.cs
 The per-pane Dogfight HUD: a compact status line (remaining time, this pane's kills and deaths, the
 leader's tag, or in a team match this pane's team total and the leading team) in `StuntRunHud`'s run-status slot, and one marker per living opponent rig, either an
-on-screen tag or `EdgeMarker`'s arrow and bearing in that opponent's own `SplitScreen.PlayerColor`.
+on-screen tag or `EdgeMarker`'s arrow and bearing in that opponent's own `SplitScreen.PlayerColor`,
+a teammate's in `TargetHud`'s friendly green (`MarkerColor`).
 `Build` binds the match and this pane's own camera; `HumanFlightAdapter` attaches the live rig list
 and `FlightController` feeds the pose each frame. A kill has no banner of its own here: `HudMessages`
 words and shows it, the one message element the original has. The per-opponent marker is CSVM's splitscreen answer to the original's radar; the shape's

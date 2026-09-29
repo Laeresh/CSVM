@@ -170,6 +170,24 @@ internal sealed class ZeppelinVersusRuntime
         return ZeppelinVersus.RespawnPoint(others, hull, seat + 1, _in.RespawnRadius, _in.RespawnMargin, _in.GroundAt);
     }
 
+    /// <summary>How a hull's target marker reads, for the mission's site feed. It is named for its
+    /// side's team and reads "Defend" to that side and "Destroy" to the other
+    /// (<see cref="ZeppelinVersus.HullSide"/>). Null for a key that is no hull of this match.</summary>
+    public SiteSide? SideOf(string key)
+    {
+        for (int hull = 0; hull < 2; hull++)
+        {
+            if (string.Equals(_in.Zeppelins.NodeAt(hull), key, StringComparison.OrdinalIgnoreCase))
+            {
+                int team = _rules.TeamOfHull(hull);
+                return ZeppelinVersus.HullSide(AimAssist.LobbyTeam(team) ?? AimAssist.NeutralTeam,
+                    _in.Match.TeamName(team), _in.Strings);
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>A guest's copy of the host's objective ending, with the lobby team that won.</summary>
     public void TakeEnding(int winner) => _in.Match.EndOnHullLoss(_rules.OtherTeam(winner), winner);
 

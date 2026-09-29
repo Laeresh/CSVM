@@ -18,6 +18,7 @@ code), data (extracted files), inferred (not checked in code).
 |---|---|
 | `FUN_00413430` | At launch, records the first two teams in lobby order |
 | `FUN_00496490` | Puts each zeppelin on its side and marks it friend or foe |
+| `FUN_0049b4c0` | Relabels a hull's target entry: its team's name, "Defend" or "Destroy" |
 | `FUN_004c0680` region | A gas bag's damage; its death sends `0x1f` and scores |
 | `FUN_004c0900` region | A broadside cannon's damage; its death sends `0x20` and scores its bag |
 | `FUN_0049b740` | A gas bag's scoring event: the voice line, then the score on the host |
@@ -34,8 +35,18 @@ differs and writes it to `0x71c7b8` at `0x413466`. A first row on no team is tak
 
 [Evidence: decoded] `FUN_00496490` gives the zeppelin at list index `i` the team at
 `0x71c7b4 + 4i` (`0x4964e5`), so the first record, `multiplayer1zep`, flies the first team and
-`multiplayer2zep` the second. It marks each friend (`FUN_004830c0`) when that team is the local
-pilot's and foe (`FUN_0045c260`) otherwise.
+`multiplayer2zep` the second. It marks each friend (`FUN_004830c0`, team 1) when that team is the
+local pilot's and foe (`FUN_0045c260(0)`, team 2) otherwise. `FUN_0049bef0` keeps that value at the
+zeppelin's `+0xe0` and `FUN_004bf030` hands it to every entity and turret under the hull's node
+(`FUN_004bee80`).
+
+[Evidence: decoded] `FUN_0049b4c0(node, team)` then relabels the hull's entry in the target list,
+found by its node (`FUN_004a2850`). Its name `+0x10` becomes the team's name. Its category becomes
+8001 "Defend" when the entry's team matches the local aircraft's or either is 0, and 8002 "Destroy"
+otherwise (`0x49b50c`..`0x49b6d0`). The map's `targets.zrd` labels `multiplayer1zep`
+`MSG_TRGT_ZEP_ENEMY` with "Destroy" and `multiplayer2zep` `MSG_TRGT_ZEP_FRIEND` with "Defend" on
+every machine; the type line "Zeppelin" stays. So a pilot's own hull is blue and the other red
+([`targeting.md`](targeting.md), "Friend or foe").
 
 ## Scoring
 
@@ -107,4 +118,6 @@ the Score limit, and the winner is the side whose hull survived, both maintainer
 posts the original's two lines; in place of the unrecorded `snd_MP_mis_Won` and `snd_MP_mis_Lost`,
 the winners hear `snd_Zep_dest` and the losers `snd_Zep_lost`. The return is the decoded point,
 computed on the host and sent as `SpawnAtMessage`. A rematch is refused, since no world pool
-rebuilds. Event 9, the rearm and the friend-or-foe target labels are not taken.
+rebuilds. Each hull's marker is relabelled per pane rather than per machine
+(`ZeppelinVersus.HullSide`), so splitscreen panes on two sides each read their own hull as
+"Defend". Event 9 and the rearm are not taken.

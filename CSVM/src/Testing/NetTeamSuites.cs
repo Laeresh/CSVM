@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
 using CSVM.Net;
@@ -46,7 +47,8 @@ internal static class NetTeamSuites
     [Suite("net-team-deathmatch",
         "three sessions in one process, the host and one guest on lobby team 1 and the other guest on "
         + "team 2: each seat opens on its own team's net.zrd block and comes back inside it, teammates "
-        + "are not hostile and neither team flies on a raw lobby number, a teammate kill costs the "
+        + "are not hostile and neither team flies on a raw lobby number, every pane reads a teammate "
+        + "on the Ally cycle in the friendly green and the other team in red, a teammate kill costs the "
         + "killer a point and counts no kill, the host ends the match when a team's total reaches the "
         + "Score target though no pilot reached it alone, every machine's board names the winning "
         + "team, and after the rematch the drop of the other team's only pilot ends it on reason 4")]
@@ -81,6 +83,7 @@ internal static class NetTeamSuites
             Openings(ctx, table, peers);
             Lockstep(SettleSteps, peers);
             Hostility(ctx, peers);
+            Markers(ctx, peers);
             Kills(ctx, peers);
             Rematch(ctx, peers);
             LastTeamStanding(ctx, mesh, peers);
@@ -95,6 +98,27 @@ internal static class NetTeamSuites
             ambient.Restore();
         }
     }
+
+    /// <summary>What <paramref name="seat"/>'s own pane on <paramref name="peer"/> reads on its target
+    /// cycles. Every aeroplane and mission site is filed by the pool its selection rebuilds from.
+    /// Shared with the Capture the Flag and Zeppelin vs Zeppelin suites.</summary>
+    internal static TargetPool Cycles(GameSession peer, int seat)
+    {
+        var own = peer.SeatRigs[seat].Controller!;
+        var scan = new AimCandidateSet();
+        own.Projectiles?.CollectAircraft(scan);
+        var sites = new List<AimCandidate>();
+        own.TargetObjectives?.Invoke(sites);
+        var pool = new TargetPool();
+        pool.Rebuild(scan, null, own.Team, own, sites);
+        return pool;
+    }
+
+    /// <summary>The ref a pool files for a source <paramref name="source"/> accepts, on any cycle,
+    /// or null.</summary>
+    internal static TargetRef? RefOf(TargetPool pool, Func<object?, bool> source) =>
+        pool.Enemy.Concat(pool.Ally).Concat(pool.NonAircraft).Where(t => source(t.Source))
+            .Select(t => (TargetRef?)t).FirstOrDefault();
 
     // The opening placement, read before any step. Each seat stands on its team's block, walked by
     // its place in the team, on the same entry on every machine.
@@ -129,6 +153,40 @@ internal static class NetTeamSuites
             ctx.Check(teams.All(t => t > AimAssist.LobbyTeamBand && t != AimAssist.PlayerTeam && t != TurretDef.DefaultTeamId),
                 $"and no seat flies on its raw lobby number, the player's side or the emplacements' ({reading})");
         }
+    }
+
+    // Each machine's own pane on the other two seats. A teammate files on the Ally cycle, and its box
+    // and Dogfight marker take the friendly green. The other team's seat takes neither.
+    private static void Markers(TestContext ctx, GameSession[] peers)
+    {
+        var readings = new List<string>();
+        bool right = true, foes = true;
+        for (int machine = 0; machine < peers.Length; machine++)
+        {
+            var own = peers[machine].SeatRigs[machine].Controller!;
+            var pool = Cycles(peers[machine], machine);
+            for (int seat = 0; seat < peers.Length; seat++)
+            {
+                if (seat == machine)
+                {
+                    continue;
+                }
+
+                var other = peers[machine].SeatRigs[seat].Controller!;
+                bool mate = Teams[seat] == Teams[machine];
+                var found = RefOf(pool, s => ReferenceEquals(s, other));
+                bool green = found is { } t && TargetHud.MarkerColor(t, own.Team) == TargetHud.HudGreen;
+                bool hud = VersusHud.MarkerColor(own.Team, other.Team, seat) == TargetHud.HudGreen;
+                bool reads = found is { } f && f.Class == (mate ? TargetClass.Ally : TargetClass.Enemy)
+                    && green == mate && hud == mate;
+                right &= !mate || reads;
+                foes &= mate || reads;
+                readings.Add($"m{machine}:s{seat} {found?.Class.ToString() ?? "missing"} box={(green ? "green" : "not green")} hud={(hud ? "green" : "own colour")}");
+            }
+        }
+
+        ctx.Check(right, $"every machine's pane reads its teammate on the Ally cycle, its box and its Dogfight marker in the friendly green ({string.Join(", ", readings)})");
+        ctx.Check(foes, $"ABLE-TO-FAIL CONTROL: and the other team's seat on the Enemy cycle, never green ({string.Join(", ", readings)})");
     }
 
     // The scoring, killed on the machine that flies each victim and scored by the host alone.

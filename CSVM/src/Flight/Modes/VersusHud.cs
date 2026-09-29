@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Hud;
+using CSVM.Flight.Weapons;
 using CSVM.UI.Boards;
 using Godot;
 
@@ -65,6 +66,15 @@ public sealed partial class VersusHud : Control
         };
     }
 
+    /// <summary>One other seat's marker colour: the friendly green of <c>Target::GetColor</c> for a
+    /// teammate (<see cref="AimAssist.Friendly"/>), else that seat's identity colour. A free-for-all
+    /// flies every seat on its own team, so only a team match draws green.
+    /// ⚠ A pane with no aircraft bound (<paramref name="ownTeam"/> null) has no side, and every
+    /// seat keeps its identity colour there.</summary>
+    public static Color MarkerColor(int? ownTeam, int seatTeam, int seatIndex) =>
+        ownTeam is { } own && AimAssist.Friendly(own, seatTeam) ? TargetHud.HudGreen
+            : SplitScreen.PlayerColor(seatIndex);
+
     public override void _Process(double delta)
     {
         // Track the pane (resizable window / splitscreen layout) and repaint every frame, the
@@ -90,11 +100,18 @@ public sealed partial class VersusHud : Control
         if (Rigs == null)
             return;
         int markerFont = Mathf.Max(1, Mathf.RoundToInt(RefMarkerFont * s * HudMetrics.MarkerTextScale));
+        int? ownTeam = null;
+        foreach (var rig in Rigs)
+        {
+            if (rig.Index == PlayerIndex && rig.Controller is { } own)
+                ownTeam = own.Team;
+        }
+
         foreach (var opp in Rigs)
         {
             if (opp.Index == PlayerIndex || opp.Controller is not { Crashed: false } c)
                 continue; // this pane's own seat, or an opponent out of the fight for now
-            DrawOpponent(font, c.GlobalPosition, SplitScreen.PlayerColor(opp.Index),
+            DrawOpponent(font, c.GlobalPosition, MarkerColor(ownTeam, c.Team, opp.Index),
                 SplitScreen.PlayerTag(opp.Index), s, markerFont);
         }
     }

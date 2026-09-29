@@ -5,6 +5,7 @@ using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
+using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
 using CSVM.Net;
@@ -46,13 +47,16 @@ internal sealed class FlagRuntimeInputs
     public Messages? Strings { get; init; }
 
     public Func<Vector3, float?>? GroundAt { get; init; }
+
+    /// <summary>A seat's callsign, the name a carrier's tag and the away marker print.</summary>
+    public Func<int, string>? CallsignOf { get; init; }
 }
 
 /// <summary>
 /// Capture the Flag in a live network match: <see cref="FlagMatch"/>'s rules over the mission's
 /// <c>cs_flag_n</c> flags. Each machine checks its own seats against the flags and asks its host.
 /// The host decides, scores and sends its table. Every machine moves the flags, speaks the six
-/// <c>snd_CTF</c> lines and posts the flag lines from the changes. A downed carrier's flag floats on
+/// <c>snd_CTF</c> lines, posts the flag lines and labels the flag markers from the changes. A downed carrier's flag floats on
 /// every machine, and the host sends it home when its throw runs out.
 /// Decode: docs/org/multiplayer-ctf.md.
 /// </summary>
@@ -203,6 +207,25 @@ internal sealed class FlagRuntime
     /// <c>cs_flg_lightn</c>, or null for a team with none. For a suite to read.</summary>
     public Node3D? CarriedFlag(int team) => _props.TryGetValue(team, out var prop) ? prop.Carried : null;
 
+    /// <summary>How one of a flag's three target markers reads now, for the mission's site feed,
+    /// labelled by side (<see cref="FlagMarkers"/>). Null for a key naming no marker of a flag
+    /// this match built.</summary>
+    public SiteSide? SideOf(string key)
+    {
+        if (FlagMarkers.MarkerOf(key) is not { } marker || !_props.TryGetValue(marker.Team, out var prop)
+            || _flags.RowOf(marker.Team) is not { } row)
+        {
+            return null;
+        }
+
+        int team = marker.Team;
+        Vector3? at = marker.Marker != FlagMarker.Away ? null
+            : prop.Carried is { } flag && flag.IsInsideTree() ? flag.GlobalPosition
+            : _flags.FloatingAt(team) ?? HolderAt(row.Holder) ?? _flags.HomeOf(team);
+        return FlagMarkers.Side(marker.Marker, row, SideTeam(team), _in.Match.TeamName(team),
+            CallsignOf(row.Holder), _in.Strings, at);
+    }
+
     /// <summary>A seat went down on this machine's copy of the match: the flag it carried floats
     /// from where it hung. Every machine runs it for every seat, as <c>FUN_0049ab50</c> runs from
     /// the death handler.</summary>
@@ -280,6 +303,9 @@ internal sealed class FlagRuntime
 
         return null;
     }
+
+    // A flag's side as a hostility id: its lobby team, banded.
+    private static int SideTeam(int team) => AimAssist.LobbyTeam(team) ?? AimAssist.NeutralTeam;
 
     private void Wire()
     {
@@ -396,6 +422,11 @@ internal sealed class FlagRuntime
         }
 
         string team = _in.Match.TeamName(change.Team);
+        if (change.HolderBefore != change.HolderAfter)
+        {
+            Tag(change.HolderBefore, 0);
+        }
+
         switch (change.To)
         {
             case FlagState.Held:
@@ -411,6 +442,7 @@ internal sealed class FlagRuntime
                 }
 
                 Carry(prop, change.HolderAfter);
+                Tag(change.HolderAfter, change.Team);
                 Post(HudMessages.FlagTakenKey, team);
                 break;
             case FlagState.Home:
@@ -468,6 +500,30 @@ internal sealed class FlagRuntime
         flag.Position = Vector3.Zero;
         flag.Visible = true;
     }
+
+    // The carrier's name tag, row 198 by the reading pane's side. Team 0 puts the airframe's own
+    // name back once the flag leaves it, as FUN_0049a300 and FUN_0049ab50 restore the pilot's.
+    private void Tag(int seat, int team)
+    {
+        if (seat < 0 || seat >= _in.SeatRigs.Count || _in.SeatRigs[seat].Controller is not { } pilot)
+        {
+            return;
+        }
+
+        string holder = CallsignOf(seat);
+        int side = SideTeam(team);
+        pilot.MarkerName = team == 0 ? null : own => FlagMarkers.HolderTag(_in.Strings, holder, own, side);
+    }
+
+    // A seat's callsign, or the original's "Unknown" for a pilot never named.
+    private string CallsignOf(int seat) =>
+        seat >= 0 && _in.CallsignOf?.Invoke(seat) is { Length: > 0 } name ? name
+        : _in.Strings?.Get(HudMessages.UnknownKey) ?? HudMessages.UnknownKey;
+
+    private Vector3? HolderAt(int seat) =>
+        seat >= 0 && seat < _in.SeatRigs.Count && _in.SeatRigs[seat].Controller is { } pilot
+            ? pilot.WorldPosition
+            : null;
 
     // player-flg_throw_n's reparent to the world, kept where it hung.
     private void Loose(FlagProps prop)

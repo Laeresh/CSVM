@@ -145,8 +145,8 @@ their own record authors: `CollectFlagged` runs once per `TargetFlag`, over `tar
 curated list admitting a mission's chosen structures and no other destructible. A campaign director's script edits both with
 `ADD_`/`REMOVE_`; the director-free constructor is what Instant Action and the multiplayer modes
 take, their table unedited. World SITES only, one `Flight/Weapons/ObjectiveSite.cs` per `ObjectiveTarget.Key`, re-read every frame so
-a site tracks a moving node and reads `Live` off its `DestructibleRegistry` state; a roster block
-that flags itself rides its own aeroplane. Bound by `GameSession`; [../org/targeting.md](../org/targeting.md).
+a site tracks a moving node and reads `Live` off its `DestructibleRegistry` state; a roster block that flags itself
+rides its own aeroplane. `Sides` lets a team mode label, place or hide a key. Bound by `GameSession`; [../org/targeting.md](../org/targeting.md).
 
 ## src/Session/Campaign/CampaignHumanField.cs
 Engine-free objective rules over every joined human, represented by `HumanState` position, captured
@@ -233,7 +233,8 @@ own seats and asks the host (`FlagRequestMessage`); the host decides, scores thr
 `VersusMatch.AddScore` and sends its `FlagTableMessage`. Every machine moves the props from the
 changes, hanging the carried flag under the holder's `cf_light`, and speaks the `snd_CTF*` lines and
 posts the flag rows. A seat's death or drop floats its flag everywhere; the host sends it home when
-the throw runs out. Decode: [../org/multiplayer-ctf.md](../org/multiplayer-ctf.md).
+the throw runs out. `SideOf` labels the flags' three markers for the site feed, and the carrier
+carries its tag (`FlightController.MarkerName`). Decode: [../org/multiplayer-ctf.md](../org/multiplayer-ctf.md).
 
 ## src/Session/World/ZeppelinVersusRuntime.cs
 Zeppelin vs Zeppelin in a network match, built by `GameSession.WireZeppelinVersus` for a `--zvz`
@@ -242,7 +243,8 @@ hull 1 to the second (`SetTeam`), so aim and friend-or-foe follow them. Off
 `ZeppelinRuntime.PartDestroyed` the host scores each gas bag to the seat whose hit killed it, and
 every machine speaks the gas bag line. `ZeppelinKilled` ends the match on the host, and a guest
 takes the winner from the `0x17` state. `RespawnPoint` is the host's computed return, sent as
-`SpawnAtMessage`. Decode: [../org/multiplayer-zvz.md](../org/multiplayer-zvz.md).
+`SpawnAtMessage`. `SideOf` labels each hull's marker by side for the site feed. Decode:
+[../org/multiplayer-zvz.md](../org/multiplayer-zvz.md).
 
 ## src/Session/World/NetCutsceneLink.cs
 The cutscene skip over the wire, one per network session with a cutscene host. On the host it

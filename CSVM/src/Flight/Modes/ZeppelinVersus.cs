@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Flight.Weapons;
+using CSVM.Mech3;
 using Godot;
 
 namespace CSVM.Flight.Modes;
@@ -126,6 +128,15 @@ public sealed class ZeppelinVersus
             : RespawnFloor;
         return new SpawnPoint(new Vector3(x, y, z), Mathf.RadToDeg(HeadingBase - bearing));
     }
+
+    /// <summary>A hull's target marker by side, <c>FUN_0049b4c0</c>. The name line is its team's name.
+    /// The category reads "Defend" (row 8001) to its own side and "Destroy" (row 8002) to the other.
+    /// It replaces the <c>targets.zrd</c> lines, which call one hull the enemy on every machine. So a
+    /// hull is blue to its side and red to the other. <paramref name="sideTeam"/> is its hostility id.
+    /// </summary>
+    public static SiteSide HullSide(int sideTeam, string teamName, Messages? strings) =>
+        new(sideTeam, teamName, strings?.Get("MSG_OBJ_DEFEND") ?? "MSG_OBJ_DEFEND",
+            strings?.Get("MSG_OBJ_DESTROY") ?? "MSG_OBJ_DESTROY");
 
     /// <summary>The lobby team hull <paramref name="hull"/> flies, 0 for none. A third hull would
     /// wrap onto the sides, as the original's <c>i &amp; 1</c> does.</summary>
