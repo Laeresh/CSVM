@@ -91,9 +91,12 @@ public sealed class DogfightLobby
         "NW Boeing Field", "NW Lighthouse", "Sky Haven (Rockies)",
     };
 
-    private static readonly string[] EnvironmentChapters = { "C2B", "C3", "C2", "C5", "C1", "C1B", "C4" };
+    // ⚠ Above the Clouds is C1C, not Instant Action's clouds chapter C2B. The two ship the same MP1
+    // and MP3 layouts, so the data alone cannot tell them apart; the row's number (below) does.
+    private static readonly string[] EnvironmentChapters = { "C1C", "C3", "C2", "C5", "C1", "C1B", "C4" };
 
-    // The number each row writes to the environment global, the jump table at 0x413c08.
+    // The number each row writes to the environment global, the jump table at 0x413c08. Each is its
+    // row's chapter's world number.
     private static readonly int[] EnvironmentNumbers = { 3, 6, 4, 8, 1, 2, 7 };
 
     private readonly NetLobby _wire;
@@ -322,8 +325,8 @@ public sealed class DogfightLobby
 
     /// <summary>The environment number the original's session setup writes for an Environment row,
     /// which completes the row's <c>loading_m</c> dialog names (docs/org/loading-screen.md).
-    /// ⚠ Not the chapter's world number: Above the Clouds writes 3, C1C's, where this lobby flies
-    /// C2B, and <c>Loading.zrd</c> keys that row's dialogs by 3.</summary>
+    /// ⚠ Keyed by the row: <c>escape.zrd</c> numbers Above the Clouds 5, and this answers 3, the
+    /// number <c>Loading.zrd</c> keys that row's dialogs by.</summary>
     public static int EnvironmentNumber(int environment) =>
         EnvironmentNumbers[Math.Clamp(environment, 0, EnvironmentCount - 1)];
 
@@ -386,7 +389,7 @@ public sealed class DogfightLobby
     /// chapters with no <c>MP2</c> map, as the mission script's type change does.</summary>
     public static bool Offers(DogfightMissionType type, int environment) =>
         environment is >= 0 and < EnvironmentCount
-        && (type != DogfightMissionType.CaptureTheFlag || EnvironmentChapters[environment] is not ("C2B" or "C1B"));
+        && (type != DogfightMissionType.CaptureTheFlag || EnvironmentChapters[environment] is not ("C1C" or "C1B"));
 
     /// <summary>Whether <paramref name="options"/> fly Capture the Flag.</summary>
     public static bool IsCtf(DogfightOptionsMessage options) =>

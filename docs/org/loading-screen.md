@@ -283,8 +283,9 @@ pilot is on a team, else `d`. The screen draws the dialog as authored, its `load
 pictures its script places and every text, point rows included, from `messages.json`; the points
 printed there are the values `player.zrd` authors and the match scores
 ([`multiplayer-scoring.md`](multiplayer-scoring.md)). A splitscreen Dogfight is keyed the same
-way. The row is found from the chapter flown, so Above the Clouds reads `m3` while CSVM flies it
-on `C2B`, and a chapter no row names (a `--vs` launch on `C1C`) writes the mode's heading alone.
+way. The row is found from the chapter flown, so Above the Clouds, flown on `C1C` as the table
+says, reads `m3`, and a chapter no row names (a `--vs` launch on `C2B`) writes the mode's heading
+alone.
 
 **The campaign sheet is the mission's own dialog and nothing of ours.** `UI/Menu/EscapeDialog.cs`
 reads `Loading.zrd` the way it reads `escape.zrd`, `LoadSheet` resolves the launch's dialog key,

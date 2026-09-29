@@ -171,12 +171,12 @@ public sealed class DogfightLobbyTests
 
         // ABLE-TO-FAIL CONTROL: with no picked guest an unlisted map still goes, as it always has.
         var (alone, _, _) = Lobbies(1);
-        Assert.Null(alone.CheckBuiltInLaunch("C1C", rules));
+        Assert.Null(alone.CheckBuiltInLaunch("C2B", rules));
 
         Assert.Equal(DogfightLobby.GuestsNotReady, host.CheckBuiltInLaunch("C5", rules));
         guests[0].SetReady(true);
         Settle(host, guests);
-        Assert.Equal(DogfightLobby.MapUnlisted, host.CheckBuiltInLaunch("C1C", rules));
+        Assert.Equal(DogfightLobby.MapUnlisted, host.CheckBuiltInLaunch("C2B", rules));
         Assert.Null(host.CheckBuiltInLaunch("C5", rules));
         Settle(host, guests);
 
@@ -608,6 +608,38 @@ public sealed class DogfightLobbyTests
         Assert.True(host.SetMaxTeams(4));
         Assert.False(host.SetFlagHomeToCapture(false));
         Assert.False(DogfightLobby.RulesOf(host.Options).CaptureTheFlag);
+    }
+
+    /// <summary>Each Environment row flies the world its row's number names (0x413c08). Above the
+    /// Clouds is C1C, not Instant Action's C2B.</summary>
+    [Fact]
+    public void EachEnvironmentFliesTheChapterWhoseWorldNumberItsRowWrites()
+    {
+        Assert.Equal(
+            new[] { "C1C", "C3", "C2", "C5", "C1", "C1B", "C4" },
+            Enumerable.Range(0, DogfightLobby.EnvironmentCount).Select(DogfightLobby.ChapterOf));
+        Assert.Equal(0, DogfightLobby.EnvironmentOf("C1C"));
+        Assert.Equal(-1, DogfightLobby.EnvironmentOf("C2B"));
+    }
+
+    /// <summary>Every row's chapter ships MP1 for a Deathmatch and MP3 for Zeppelin vs Zeppelin. It
+    /// ships MP2 exactly where the Type box offers the row to Capture the Flag.</summary>
+    [ExtractedDataFact]
+    public void EveryEnvironmentShipsTheMapsOfTheTypesItOffers()
+    {
+        static bool Ships(string chapter, string mission)
+        {
+            string path = CSVM.SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, mission);
+            return System.IO.File.Exists(path) || System.IO.Directory.Exists(path);
+        }
+
+        for (int environment = 0; environment < DogfightLobby.EnvironmentCount; environment++)
+        {
+            string chapter = DogfightLobby.ChapterOf(environment);
+            Assert.True(Ships(chapter, "MP1"), $"{chapter} ships MP1");
+            Assert.True(Ships(chapter, "MP3"), $"{chapter} ships MP3");
+            Assert.Equal(DogfightLobby.Offers(DogfightMissionType.CaptureTheFlag, environment), Ships(chapter, "MP2"));
+        }
     }
 
     [Fact]
