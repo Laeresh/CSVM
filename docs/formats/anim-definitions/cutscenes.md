@@ -357,9 +357,15 @@ drawn in the archive's own shipped state: the node is ACTIVE in `planes.zbd`, th
 is what C1/M04's own intro relies on: its `pfighter11`..`pfighter13` (called by `scene1`,
 `playerdrop` and `playerthruclouds`) set the children, call `wing_lights_blink`, and fly the prop
 on an SI script, with no activation and no `OBJECT_ADD_CHILD` at all, so a prop built switched
-off shows that intro's launch and dive with the wingman missing. Where a script leaves it is where
-it stays after the handoff (`pfighter13` ends 95 m over the water past the dive), in this engine
-and the original alike. `player` is a bodiless marker, since the aeroplane
+off shows that intro's launch and dive with the wingman missing. Nothing in that mission switches
+it off again, and `pfighter13`'s last keyframe leaves it 95 m over the water at the end of the dive,
+beside where the players are handed back, while the roster's own `wingman_1` spawns 400 m away at
+`(-7453, 130, -2303)`. CSVM switches the prop off at every handoff, a skip included
+(`CutsceneController.Restore`), so no intro prop outlives its film. A generic intro's own data does
+the same in effect: its `RESET_STATE` detaches `piratefighter` to the world root, which the
+original's world walk does not draw. ⚠ Whether the original draws C1/M04's prop after the handoff is
+undecoded; the rule follows the at-the-controls report of a frozen aeroplane hanging beside the
+players there. `player` is a bodiless marker, since the aeroplane
 it stands for is the one the pilot flies and that model belongs to the flown `FlightController`.
 Every staged node's compiled pointer is rebased onto the chapter's own base, so the definition's
 symbol table binds the names it addresses. `OBJECT_ACTIVE_STATE [player, false]` stays callback 11's
