@@ -351,6 +351,8 @@ public partial class GameSession : Node3D
     private VersusMatch? _versus;
     // Capture the Flag's flags over the match, null outside a --ctf network match.
     private FlagRuntime? _flagPlay;
+    // Zeppelin vs Zeppelin's hulls over the match, null outside a --zvz network match.
+    private ZeppelinVersusRuntime? _zvzPlay;
     // Built on the host alone in a network match, since two rotations diverge on first blood.
     // A guest holds none and takes every placement off the wire.
     private VersusSpawnRotation? _versusSpawns;
@@ -531,6 +533,12 @@ public partial class GameSession : Node3D
 
     /// <summary>Capture the Flag's flags, null outside a <c>--ctf</c> network match.</summary>
     internal FlagRuntime? Flags => _flagPlay;
+
+    /// <summary>Zeppelin vs Zeppelin's hulls, null outside a <c>--zvz</c> network match.</summary>
+    internal ZeppelinVersusRuntime? ZvzPlay => _zvzPlay;
+
+    /// <summary>The mission's zeppelins, null in a flight that runs none.</summary>
+    internal ZeppelinRuntime? ZeppelinHulls => _zeppelins;
 
     /// <summary>Why the match stopped, as the host named it, <c>Running</c> until one does. The
     /// same value on every machine: the host writes it where it sends the state and a guest where
@@ -2474,7 +2482,7 @@ public partial class GameSession : Node3D
         // withholds --pos=; every other --pos= flight keeps landing on it immediately.
         _spawnPicker.WithholdOverrideForCutscene = _campaign != null && _cutscene is { Playing: true };
         // A team Dogfight walks its teams' blocks of the whole table instead of the free-for-all's.
-        _spawnPicker.SeatTeams = SeatTeams();
+        _spawnPicker.SeatTeams = SpawnTeams();
         var spawnList = _spawnPicker.LoadSpawnList(state.MissionZrdrPath, iaScenario);
         int spawnBase = _spawnPicker.ChooseSpawnBase(spawnList);
         _spawnPicker.PlanTeams(spawnList, spawnBase);
@@ -2515,6 +2523,7 @@ public partial class GameSession : Node3D
             // reports the struck collider, the runtime resolves it to a destructible and
             // spends the weapon's HEALTH_DAMAGE. Null runtime ⇒ impacts stay cosmetic.
             DamageSink = state.WorldRuntime != null ? state.WorldRuntime.DamageAt : null,
+            ShooterDamageSink = state.WorldRuntime != null ? state.WorldRuntime.DamageAt : null,
             // Route a CRATER weapon's ground strike to the mission's crater field. The pool asks only
             // for a node carrying can_modify, which no shipped node does (Mech3.CraterField).
             CraterSink = state.Craters != null ? state.Craters.TryCarve : null,
@@ -2908,7 +2917,7 @@ public partial class GameSession : Node3D
             _versusSpawns = _netSeats.Count > 0 && _net is not { IsHost: true }
                 ? null
                 : _spawnPicker.SeatEntries is { } openings && _spawnPicker.SeatBlocks is { } blocks
-                    ? VersusSpawnRotation.ForBlocks(spawnList, openings, blocks, SeatTeams()!, rotationRng)
+                    ? VersusSpawnRotation.ForBlocks(spawnList, openings, blocks, SpawnTeams()!, rotationRng)
                     : VersusSpawnRotation.For(spawnList, spawnBase, _seatRigs.Count, rotationRng);
             // Who downed each seat last, which the rotation weighs heaviest: the Downed report
             // carries it, and the respawn that reads it happens seconds later.
@@ -3065,6 +3074,11 @@ public partial class GameSession : Node3D
             if (_spec.CaptureTheFlag)
             {
                 worldSounds.Prewarm(FlagRuntime.VoiceLines);
+            }
+
+            if (_spec.ZeppelinVsZeppelin)
+            {
+                worldSounds.Prewarm(ZeppelinVersusRuntime.VoiceLines);
             }
         }
 
@@ -3244,7 +3258,7 @@ public partial class GameSession : Node3D
         // along their nets as kinematic world nodes. ⚠ Build them before --generators below, so a
         // zeppelin generator's min_altitude gate reads the flown host's live Y from the first step.
         bool iaZeppelinRun = iaRt?.IsZeppelinRun ?? false;
-        if (_spec.Zeppelins || iaZeppelinRun || _spec.Zep != null)
+        if (_spec.Zeppelins || iaZeppelinRun || _spec.Zep != null || _spec.ZeppelinVsZeppelin)
         {
             List<ZeppelinDef> zepDefs;
             try
@@ -3569,6 +3583,8 @@ public partial class GameSession : Node3D
 
         WireNetDirector();
         WireNetWorld(state.WorldRuntime);
+        // Zeppelin vs Zeppelin, once the hulls, their pools and the world's wire stand.
+        WireZeppelinVersus(state.ZrdrPath, weaponMessages);
         WireNetPositionalStarts(state.WorldRuntime);
         WireNetCutscenes();
 
@@ -4925,6 +4941,36 @@ public partial class GameSession : Node3D
         }
     }
 
+    // Zeppelin vs Zeppelin over a team match on the wire, the mission's two hulls one per side. The
+    // parts they lose are scored, and the first hull lost ends the match.
+    private void WireZeppelinVersus(string zrdrPath, Messages? strings)
+    {
+        if (!_spec.ZeppelinVsZeppelin || _net is not { } net || _versus is not { } match
+            || SeatTeams() is not { } teams || _zeppelins is not { } zeppelins)
+        {
+            return;
+        }
+
+        var (radius, margin) = ZeppelinVersusRuntime.LoadRespawnRing(zrdrPath);
+        _zvzPlay = ZeppelinVersusRuntime.Open(new ZeppelinVersusInputs
+        {
+            Net = net,
+            SeatRigs = _seatRigs,
+            Panes = _rigs,
+            SeatTeams = teams,
+            IsLocal = seat => seat >= 0 && seat < _netSeats.Count && _netSeats[seat].IsLocal,
+            SeatOfShooter = SeatOfShooter,
+            Match = match,
+            Zeppelins = zeppelins,
+            SendScore = SendScore,
+            Radio = _radio,
+            Strings = strings,
+            GroundAt = GroundSampler(),
+            RespawnRadius = radius,
+            RespawnMargin = margin,
+        });
+    }
+
     // One library root of the chapter, built hidden and without collision under the world root. The
     // caller parents it where the data's own animation would.
     private Node3D? BuildLoose(GameZ gamez, SceneBuilder? scene, string name)
@@ -4955,13 +5001,14 @@ public partial class GameSession : Node3D
         // last opponent went, a time-out when the clock ran out, and a score target otherwise.
         var was = _matchEnd;
         _matchEnd = !match.Completed ? Net.NetMatchEnd.Running
+            : match.ObjectiveWinner > 0 ? Net.NetMatchEnd.Objective
             : match.AllAlone ? Net.NetMatchEnd.NobodyLeft
             : match.TimeLimit > 0f && match.Elapsed >= match.TimeLimit ? Net.NetMatchEnd.TimeLimit
             : Net.NetMatchEnd.ScoreTarget;
         PostAllAlone(was);
         net.Broadcast(
             new Net.MatchStateMessage(match.TimeRemaining, match.TimeLimit, (short)match.KillTarget,
-                _matchEnd, (float)(_clock?.Time ?? 0.0)),
+                _matchEnd, (float)(_clock?.Time ?? 0.0), (byte)Math.Clamp(match.ObjectiveWinner, 0, byte.MaxValue)),
             Net.NetChannels.Events);
     }
 
@@ -4974,6 +5021,12 @@ public partial class GameSession : Node3D
 
         var was = _matchEnd;
         _matchEnd = state.End;
+        // The objective's winner and bonus land ahead of the ending, which is what the board reads.
+        if (state.End == Net.NetMatchEnd.Objective && state.Winner > 0)
+        {
+            _zvzPlay?.TakeEnding(state.Winner);
+        }
+
         PostAllAlone(was);
         _netClock?.Observe(state.HostClock, _clock?.Time ?? 0.0);
         _versus?.ApplyState(state.ScoreTarget, state.TimeLimitSeconds, state.RemainingSeconds,
@@ -5003,10 +5056,16 @@ public partial class GameSession : Node3D
         }
     }
 
-    // Reason 4 in words, on every machine the moment its end turns to it. The original's "Game
-    // Over:" and "No Enemies Left" lines go into each local pane's stack.
+    // Reasons 3 and 4 in words, on every machine the moment its end turns to one. The original's
+    // "Game Over:" and "No Enemies Left" lines go into each local pane's stack, and a lost hull
+    // posts and speaks its own.
     private void PostAllAlone(Net.NetMatchEnd was)
     {
+        if (_matchEnd == Net.NetMatchEnd.Objective && was != Net.NetMatchEnd.Objective)
+        {
+            _zvzPlay?.Announce();
+        }
+
         if (was == Net.NetMatchEnd.NobodyLeft || _matchEnd != Net.NetMatchEnd.NobodyLeft)
         {
             return;
@@ -5102,6 +5161,7 @@ public partial class GameSession : Node3D
         _spawnEntries = new int[_seatRigs.Count];
         System.Array.Fill(_spawnEntries, -1);
         net.On<Net.SpawnMessage>((_, spawn) => TakeSpawn(spawn));
+        net.On<Net.SpawnAtMessage>((_, spawn) => TakeSpawnAt(spawn));
         if (net.IsHost)
         {
             net.On<Net.SpawnRequestMessage>((_, ask) => GrantSpawn(ask.Seat, Net.NetSpawnKind.Respawn));
@@ -5147,9 +5207,42 @@ public partial class GameSession : Node3D
             return;
         }
 
+        // Zeppelin vs Zeppelin brings a seat back by its hull rather than off the table.
+        if (kind == Net.NetSpawnKind.Respawn && _zvzPlay?.RespawnPoint(seat) is { } point)
+        {
+            var at = new Net.SpawnAtMessage((byte)seat, point.Position, point.HeadingDeg);
+            net.Broadcast(at, Net.NetChannels.Events);
+            TakeSpawnAt(at);
+            return;
+        }
+
         var spawn = new Net.SpawnMessage((byte)seat, kind, RotatedEntry(seat));
         net.Broadcast(spawn, Net.NetChannels.Events);
         TakeSpawn(spawn);
+    }
+
+    // A computed return, applied on every peer as TakeSpawn applies a table entry.
+    private void TakeSpawnAt(in Net.SpawnAtMessage spawn)
+    {
+        if (spawn.Seat >= _seatRigs.Count || _seatRigs[spawn.Seat].Controller is not { } rig)
+        {
+            return;
+        }
+
+        if (spawn.Seat < _spawnAsked.Length)
+        {
+            _spawnAsked[spawn.Seat] = false;
+        }
+
+        if (spawn.Seat < _spawnEntries.Length)
+        {
+            _spawnEntries[spawn.Seat] = -1;
+        }
+
+        SpawnsTaken++;
+        var point = new SpawnPoint(spawn.Position, spawn.HeadingDeg);
+        rig.RespawnAt(point.Position, point.Position + point.Forward);
+        Log.Info("flight", $"net spawns: seat {spawn.Seat} placed at ({spawn.Position.X:0},{spawn.Position.Y:0},{spawn.Position.Z:0}) heading {spawn.HeadingDeg:0.#}°, by its hull");
     }
 
     // The rotation's pick for one seat, as an index into the spawn list every peer holds. No
@@ -5176,6 +5269,11 @@ public partial class GameSession : Node3D
 
         return _netSeats.Select(seat => seat.TeamId).ToArray();
     }
+
+    // The spawn table's block each seat walks. Zeppelin vs Zeppelin opens each side in the block the
+    // map lays around its own hull, whatever the side's lobby team number is.
+    private int[]? SpawnTeams() =>
+        _spec.ZeppelinVsZeppelin && SeatTeams() is { } teams ? ZeppelinVersus.SpawnBlocks(teams) : SeatTeams();
 
     // The grant, applied. Every peer runs this, the host on its own message, so one placement
     // rule serves the aeroplane's owner and every copy of it. ⚠ Through RespawnAt, never
@@ -5495,6 +5593,14 @@ public partial class GameSession : Node3D
         if (_netSeats.Count > 0 && _net is not { IsHost: true })
         {
             Log.Info("flight", $"dogfight: rematch is the host's to call, this guest waits for it");
+            return;
+        }
+
+        // ⚠ Refused while the hulls cannot be rebuilt: a rematch restores no world pool, so it would
+        // fly on the last round's burnt gas bags. The lobby is the way back.
+        if (_zvzPlay != null)
+        {
+            Log.Info("flight", $"dogfight: no rematch in Zeppelin vs Zeppelin, the hulls do not rebuild; return to the lobby");
             return;
         }
 

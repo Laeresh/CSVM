@@ -14,17 +14,24 @@ signed running total, so a penalty moves a pilot **away** from winning.
 The per-event amounts are config keys read by `FUN_004735b0`, each with a hard-coded fallback the
 shipped data does not have to supply:
 
-| Key | Global | Default |
-|---|---|---|
-| `score_suicide` | `0071c824` | **-1** (stored at `00473fc8`) |
-| `score_kill` | `0071c850` | **+1** (stored at `00473ff2`) |
-| `score_turret_kill` | `0071c7b0` | +1 |
-| `score_zep` | `0071c808` | +100 |
-| `score_zep_kill` | `0071d1d8` | +1 |
-| `score_gas_kill` | `0071c84c` | +10 |
-| `score_my_gas_kill` | `0071c7ec` | **-10** |
-| `score_return_flag` | `0071c7fc` | +1 |
-| `score_enemy_flag` | `0071c804` | +5 |
+| Key | Global | Default | Shipped `player.zrd` |
+|---|---|---|---|
+| `score_suicide` | `0071c824` | **-1** (stored at `00473fc8`) | -2 |
+| `score_kill` | `0071c850` | **+1** (stored at `00473ff2`) | 2 |
+| `score_turret_kill` | `0071c7b0` | +1 | not authored |
+| `score_zep` | `0071c808` | +100 | 10 |
+| `score_zep_kill` | `0071d1d8` | +1 | not authored |
+| `score_gas_kill` | `0071c84c` | +10 | not authored |
+| `score_my_gas_kill` | `0071c7ec` | **-10** | not authored |
+| `score_return_flag` | `0071c7fc` | +1 | 8 |
+| `score_enemy_flag` | `0071c804` | +5 | 10 |
+
+⚠ [Evidence: decoded] The keys are read from the loaded `player.zrd` (`FUN_004735b0` opens it at
+`0x4739fa` and keeps it in `ebp`, the node every `score_*` lookup from `0x473fb0` searches), and
+[Evidence: data] the shipped file authors the five values in the last column. So the original plays
+a kill for 2, a suicide for -2, a lost hull for 10 and the two flag events for 8 and 10; the
+defaults are only fallbacks. The remake scores the defaults, the values its team modes were decided
+on; whether to take the shipped ones is an open question on the tracker.
 
 `FUN_0046ecd0` dispatches an event id to one of three per-mode tables on the mode field at
 `+0x5c`. **Dogfight (modes 1 and 2) reaches `FUN_0046ed40`, which honours exactly three events**:
@@ -32,7 +39,8 @@ shipped data does not have to supply:
 belong to the other two tables and cannot fire in a dogfight. Capture the Flag (mode 3) reaches
 `FUN_0046ed90`, which honours those three and events 4 (`score_return_flag`) and 5
 (`score_enemy_flag`); Zeppelin vs Zeppelin (mode 4) reaches `FUN_0046ee20`, events 3, 7, 8 and 9.
-Where the flag events are raised is [`multiplayer-ctf.md`](multiplayer-ctf.md).
+Where the flag events are raised is [`multiplayer-ctf.md`](multiplayer-ctf.md), and the zeppelin
+events [`multiplayer-zvz.md`](multiplayer-zvz.md).
 
 ## Who the death is charged to
 
@@ -63,7 +71,7 @@ the end-screen line:
 |---|---|---|
 | 1 | `00496e28`, the network tick, when the remaining-time query `FUN_0046c580` drops below 1.0 | the clock ran out |
 | 2 | `00499343` / `004993ac`, inside the score broadcast, when a pilot's `+0x1c` reaches the target | somebody hit the score target |
-| 3 | `0049afc7` | a mode-specific objective |
+| 3 | `0049afc7` | a mode-specific objective, a Zeppelin vs Zeppelin hull lost |
 | 4 | `0049900f` / `004996a2`, after a death or a drop, when `FUN_004999f0` finds no two live pilots on different sides | nobody left to fight |
 
 ⚠ **A time-out has no overtime, no sudden death and no tiebreak.** Reason 1 sets the ended flag,
@@ -163,7 +171,11 @@ total is the sum of its members' scores, since nothing in the remake scores a te
 Score limit is read against that total alone. Reason 4 asks for pilots with lives on two teams, a
 teamless seat counting as a team of its own. Every machine derives the totals from the per-seat
 scores, so the remake's `0x13`, one seat's score, carries no team count, unlike the original's
-table ([`multiplayer-messages.md`](multiplayer-messages.md)).
+table ([`multiplayer-messages.md`](multiplayer-messages.md)). Zeppelin vs Zeppelin's lost hull is
+the one team award: `VersusMatch.EndOnHullLoss` gives every other team `score_zep` on the board's
+total (`TeamTotalOf`), never in the number the Score limit reads (`TeamScoreOf`), and ends the match
+as `NetMatchEnd.Objective` with the winning team named in the state
+([`multiplayer-zvz.md`](multiplayer-zvz.md)).
 
 The lives rule follows the decode above, with three differences. The count is clamped to 1..99
 (`DogfightLobby.ClampLives`), so the empty-box defect cannot launch. Ticking Limited Lives puts 3

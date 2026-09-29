@@ -28,7 +28,7 @@ Names only, deliberately: a gloss here would be a second description of the same
 exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One flag, one description.
 
 **Modes and content, what gets built**
-`--viewer` · `--fly` · `--stunt` · `--vs` · `--vs-kills` · `--vs-time` · `--vs-lives` · `--vs-no-respawn` · `--ctf` · `--coop` · `--freecam` · `--anim-lab` · `--menu` · `--skip-intro` · `--intro` · `--chapter` · `--stage` · `--node` · `--plane` · `--players` · `--mission` · `--scenario` · `--ia` · `--campaign` · `--profiles` · `--play-anim` · `--movie` · `--presentation` · `--force-builtin`
+`--viewer` · `--fly` · `--stunt` · `--vs` · `--vs-kills` · `--vs-time` · `--vs-lives` · `--vs-no-respawn` · `--ctf` · `--zvz` · `--coop` · `--freecam` · `--anim-lab` · `--menu` · `--skip-intro` · `--intro` · `--chapter` · `--stage` · `--node` · `--plane` · `--players` · `--mission` · `--scenario` · `--ia` · `--campaign` · `--profiles` · `--play-anim` · `--movie` · `--presentation` · `--force-builtin`
 
 **Multiplayer, the wire a match flies over**
 `--net-host` · `--net-join`
@@ -187,6 +187,11 @@ lines**.
   scoring. Pair with `--mission=MP2`, the one mission that lays the flags out. `home` adds the host's
   option that an enemy flag scores only while the carrier's own flag is at home. The Multiplayer
   Lobby's Capture the Flag type sets both. Ignored without `--vs`, with a warning)
+- `--zvz` (with `--vs` over the wire, fly the match as Zeppelin vs Zeppelin: the zeppelins run, the
+  first two lobby teams in seat order each fly one hull, the host scores every gas bag and cannon
+  downed and the first hull lost ends the match for the other side. Pair with `--mission=MP3`, the
+  mission that lays out `multiplayer1zep` and `multiplayer2zep`. The Multiplayer Lobby's Zeppelin vs
+  Zeppelin type sets it. Ignored without `--vs` or beside `--ctf`, with a warning)
 - `--net-host[=port]`, `--net-host=address:port` (open a listen server and fly this session as its
   host, the scripted twin of the menu's multiplayer door over the same socket. A bare flag takes
   port 47500 on IPv4's wildcard, the stable global IPv6 address and `::1`, a number sets the port,

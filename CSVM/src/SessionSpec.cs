@@ -106,6 +106,11 @@ public sealed record SessionSpec
     /// </summary>
     public const string CtfMission = "MP2";
 
+    /// <summary>The mission a Zeppelin vs Zeppelin launch flies. Every chapter lays out its two hulls,
+    /// <c>multiplayer1zep</c> and <c>multiplayer2zep</c>, in <c>MP3</c> (docs/org/multiplayer-zvz.md).
+    /// </summary>
+    public const string ZvzMission = "MP3";
+
     // The sim frame a bare `--crash` (no `=frame`) fires at, early enough that
     // the default `--frames=` screenshot lands mid-break-up rather than pre-impact.
     private const int DefaultCrashFrame = 5;
@@ -195,6 +200,10 @@ public sealed record SessionSpec
     /// <summary><c>--ctf=home</c>: <see cref="CaptureTheFlag"/> with the host's option that an enemy
     /// flag scores only while the carrier's own flag stands at home.</summary>
     public bool FlagHomeToCapture { get; private set; }
+    /// <summary><c>--zvz</c>: a network Dogfight flown as Zeppelin vs Zeppelin, the mission's two
+    /// hulls flown for its first two lobby teams. It switches the zeppelins on. Resolved false
+    /// without <see cref="Versus"/> or beside <see cref="CaptureTheFlag"/>.</summary>
+    public bool ZeppelinVsZeppelin { get; private set; }
     /// <summary><c>--net-host</c>, <c>--net-host=port</c> or <c>--net-host=address:port</c>: open
     /// a listen server on that port and fly this session as its host. Null when the flag is
     /// absent. A scripted smoke is what it is for; a player opens the same socket from the menu's
@@ -1069,6 +1078,7 @@ public sealed record SessionSpec
             else if (arg == "--vs-no-respawn") { s.VsAutoRespawn = false; s.VsAutoRespawnExplicit = true; }
             else if (arg == "--ctf") { s.CaptureTheFlag = true; }
             else if (arg == "--ctf=home") { s.CaptureTheFlag = true; s.FlagHomeToCapture = true; }
+            else if (arg == "--zvz") { s.ZeppelinVsZeppelin = true; }
             else if (arg == "--net-host") { s.NetHostPort = UI.Menu.NetPlayFeature.DefaultPort; }
             else if (arg.StartsWith("--net-host=")) { var h = ParseHost(arg["--net-host=".Length..]); s.NetHostBind = h.Bind; s.NetHostPort = h.Port; }
             else if (arg.StartsWith("--net-join=")) { s.NetJoin = arg["--net-join=".Length..]; }
@@ -1644,20 +1654,22 @@ public sealed record SessionSpec
     /// be written here, or the pristine base drops it. The 2-player Dogfight lock is <see cref="UI.Screens.LaunchMenu"/>'s
     /// job. An <paramref name="iaDef"/> decides <see cref="Scenario"/> and <see cref="Stunt"/> instead. The vs arguments
     /// are a screen's match rules, null where none offers them (<see cref="VsKillsExplicit"/>). The lobby alone sets
-    /// lives, and its Capture the Flag flies <see cref="CtfMission"/>.</summary>
+    /// lives and flies its team modes on <see cref="CtfMission"/> and <see cref="ZvzMission"/>.</summary>
     public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
         MenuMode mode, InstantActionDef? iaDef = null, IReadOnlyList<LoadoutChoice?>? loadouts = null,
         IReadOnlyList<CustomPlaneDef?>? customPlanes = null, int? vsKills = null, int? vsTimeMinutes = null,
         int? vsLives = null, bool? vsAutoRespawn = null, LoadoutChoice? iaWingmanLoadout = null,
-        bool captureTheFlag = false, bool flagHomeToCapture = false)
+        bool captureTheFlag = false, bool flagHomeToCapture = false, bool zeppelinVsZeppelin = false)
     {
         var names = planeNodes.ToArray();
         bool ctf = captureTheFlag && mode == MenuMode.Versus;
+        bool zvz = zeppelinVsZeppelin && !ctf && mode == MenuMode.Versus;
         return cli with
         {
             CaptureTheFlag = ctf,
             FlagHomeToCapture = ctf && flagHomeToCapture,
-            Mission = ctf ? CtfMission : cli.Mission,
+            ZeppelinVsZeppelin = zvz,
+            Mission = ctf ? CtfMission : zvz ? ZvzMission : cli.Mission,
             MenuLoadouts = loadouts ?? Array.Empty<LoadoutChoice?>(),
             MenuCustomPlanes = customPlanes ?? Array.Empty<CustomPlaneDef?>(),
             Chapter = chapter,
@@ -2099,6 +2111,12 @@ public sealed record SessionSpec
             Warn("core", "--ctf is a Dogfight mode; ignoring it without --vs");
             CaptureTheFlag = false;
             FlagHomeToCapture = false;
+        }
+
+        if (ZeppelinVsZeppelin && (!Versus || CaptureTheFlag))
+        {
+            Warn("core", "--zvz is a Dogfight mode of its own; ignoring it without --vs or beside --ctf");
+            ZeppelinVsZeppelin = false;
         }
 
         // A campaign sortie is co-op by construction: the authored AI teams assume one player side.

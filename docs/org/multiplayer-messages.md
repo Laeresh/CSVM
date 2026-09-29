@@ -379,7 +379,8 @@ score, `0x17` match state, `0x22` hit and `0x27` seat roster. Damage, spawn, the
 director transition, the join handshake and a seat's ask to be spawned again have no
 counterpart, so they are minted at `0x40`, `0x41`, `0x42`, `0x43` and `0x44`, above the ceiling
 above. The host-owned world's four (AI state, AI fire, a guest's hit claim on an AI, and a world
-event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, the start barrier's word at `0x5B`, a match's death notice at `0x5C`, the lobby's plane build and plane rules at `0x5D` and `0x5E`, the lobby's co-op hangar plane at `0x5F`, the lobby's join password at `0x60`, and the lobby's team action and team list at `0x61` and `0x62`. The handshake carries the master seed, the host's clock and the seat the joining peer was
+event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, the start barrier's word at `0x5B`, a match's death notice at `0x5C`, the lobby's plane build and plane rules at `0x5D` and `0x5E`, the lobby's co-op hangar plane at `0x5F`, the lobby's join password at `0x60`, and the lobby's team action and team list at `0x61` and `0x62`, Capture the Flag's ask and table at `0x63` and `0x64`, and Zeppelin
+vs Zeppelin's placed return at `0x65`. The handshake carries the master seed, the host's clock and the seat the joining peer was
 given; the original needs none of the three, because it draws from no shared stream and hands
 out no seat. The ask carries a seat and nothing else: the original's client takes its own
 respawn, while here the host owns every placement and answers the ask with a spawn event.
@@ -390,7 +391,9 @@ remaining time, both limits, the reason and the host's session clock, because a 
 no countdown of its own: it is told the clock, and that field is also the reading its
 `NetClockSlew` takes an offset from, since the periodic tick is the only message a running match
 repeats. Both limits ride even though the original arms exactly one, which costs four bytes a
-second and leaves an exclusive lobby nothing to change on the wire.
+second and leaves an exclusive lobby nothing to change on the wire. The byte after the reason names
+the winning lobby team under reason 3, a Zeppelin vs Zeppelin hull lost, and is 0 otherwise
+([`multiplayer-zvz.md`](multiplayer-zvz.md)).
 
 The clock ping is minted at `0x49` rather than taking `0x23`, though it has the original's shape:
 twelve bytes, two stamps, one peer, a ten-second timer (`Net/NetClockPing.cs`). The stamps
@@ -1087,6 +1090,15 @@ Their ids stay the original's objective messages.
 |---|---|---|---|
 | `0x63` | Flag ask | reliable, guest to host | the flag's team number at 4, the ask at 5 (take 1, home 2), the asking seat at 6, one reserved byte (8 bytes) |
 | `0x64` | Flag table | reliable, host to every guest | the flag count at 4, three reserved bytes, then four rows of 4 bytes: the team number, the state (1 held, 2 at home, 3 floating) and the holding seat (`0xFF` none), one reserved byte (24 bytes) |
+
+Zeppelin vs Zeppelin's return is a point rather than a table entry (`FUN_004969b0`'s mode 4 branch,
+[`multiplayer-zvz.md`](multiplayer-zvz.md)), so the host's answer to `0x44` there is minted anew
+beside `0x41`. The original's `0x1e` hull state is the remake's `0x4B` path and `0x48`'s pool
+events, and its `0x1f` and `0x20` part deaths ride the pool events as every destructible's do.
+
+| Id | Message | Class | Carries |
+|---|---|---|---|
+| `0x65` | Spawn at | reliable, host to all | the seat at 4, three reserved bytes, the position as three floats at 8, the heading in degrees at 20 (24 bytes) |
 
 ### LAN discovery
 

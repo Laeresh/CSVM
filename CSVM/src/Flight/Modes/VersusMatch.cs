@@ -36,8 +36,14 @@ public sealed class VersusMatch
     /// (<c>docs/org/multiplayer-scoring.md</c>).</summary>
     public const int SuicideScore = -1;
 
+    /// <summary>What a lost hull gives every other team in Zeppelin vs Zeppelin, <c>score_zep</c>'s
+    /// fallback. ⚠ Never add it to <see cref="TeamScoreOf"/>: the Score limit does not read it
+    /// (docs/org/multiplayer-zvz.md).</summary>
+    public const int HullLossBonus = 100;
+
     private readonly Row[] _scores;
     private readonly Dictionary<int, string> _teamNames = new();
+    private readonly Dictionary<int, int> _teamBonus = new();
 
     public VersusMatch(int playerCount, int killTarget = 5, float timeLimit = 300f, int lives = 0)
     {
@@ -96,6 +102,10 @@ public sealed class VersusMatch
     /// team flag: the score target is then read against a team's total and the per-pilot check is
     /// skipped (docs/org/multiplayer-scoring.md, "Teams").</summary>
     public bool Teamed { get; private set; }
+
+    /// <summary>The lobby team that won on a mode's objective, 0 for a match not ended that way. It is
+    /// the Zeppelin vs Zeppelin side whose hull survived, the original's end reason 3.</summary>
+    public int ObjectiveWinner { get; private set; }
 
     /// <summary>The seat an out-of-lives pilot watches. It keeps the one it watches while that one
     /// flies, else takes the next flying seat after <paramref name="self"/>, else none. The
@@ -158,9 +168,33 @@ public sealed class VersusMatch
         return total;
     }
 
-    /// <summary>Every team some seat flies on, ranked by total score as <see cref="Standings"/>
-    /// ranks players, equal totals sharing a rank and in team number order. Empty unless
-    /// <see cref="Teamed"/>.</summary>
+    /// <summary>A team's total as the board shows it: <see cref="TeamScoreOf"/> plus what the team
+    /// was given as a team, a lost enemy hull's <see cref="HullLossBonus"/>.</summary>
+    public int TeamTotalOf(int team) =>
+        TeamScoreOf(team) + (_teamBonus.TryGetValue(team, out int bonus) ? bonus : 0);
+
+    /// <summary>Zeppelin vs Zeppelin's end: <paramref name="losingTeam"/>'s hull is gone, every other
+    /// team takes <see cref="HullLossBonus"/> and <paramref name="winningTeam"/> wins (end reason 3).
+    /// Once per match. A replicated match takes it from the host's state and completes there.
+    /// </summary>
+    public void EndOnHullLoss(int losingTeam, int winningTeam)
+    {
+        if (ObjectiveWinner != 0 || (Completed && !Replicated))
+            return;
+        ObjectiveWinner = Math.Max(1, winningTeam);
+        foreach (int team in TeamNumbers())
+        {
+            if (team != losingTeam)
+                _teamBonus[team] = (_teamBonus.TryGetValue(team, out int had) ? had : 0) + HullLossBonus;
+        }
+
+        if (!Replicated)
+            Complete();
+    }
+
+    /// <summary>Every team some seat flies on, ranked by <see cref="TeamTotalOf"/> as
+    /// <see cref="Standings"/> ranks players, equal totals sharing a rank and in team number order.
+    /// Empty unless <see cref="Teamed"/>.</summary>
     public IEnumerable<VersusTeamStanding> TeamStandings()
     {
         var lines = new List<VersusTeamStanding>();
@@ -175,7 +209,7 @@ public sealed class VersusMatch
                 deaths += row.Deaths;
             }
 
-            lines.Add(new VersusTeamStanding(team, TeamName(team), kills, deaths, 0, TeamScoreOf(team)));
+            lines.Add(new VersusTeamStanding(team, TeamName(team), kills, deaths, 0, TeamTotalOf(team)));
         }
 
         // Insertion order is team number order, and a stable sort keeps it among equal totals.
@@ -338,9 +372,15 @@ public sealed class VersusMatch
         if (TimeLimit > 0f)
             Elapsed = Math.Clamp(TimeLimit - remainingSeconds, 0f, TimeLimit);
         if (ended)
+        {
             Complete();
+        }
         else
+        {
             Completed = false;
+            ObjectiveWinner = 0;
+            _teamBonus.Clear();
+        }
     }
 
     /// <summary>Rematch: every score/kill/death zeroed, the clock back to zero, completion
@@ -356,6 +396,8 @@ public sealed class VersusMatch
         Elapsed = 0f;
         Completed = false;
         AllAlone = false;
+        ObjectiveWinner = 0;
+        _teamBonus.Clear();
     }
 
     /// <summary>Every player ranked by score descending, ties sharing a rank, rank 1 alone is the

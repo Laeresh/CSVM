@@ -129,6 +129,12 @@ public sealed partial class ZeppelinRuntime : Node
     /// unobservable in this install (all 58 records author 12 or 14).</summary>
     public event Action<string>? ZeppelinEnginesDisabled;
 
+    /// <summary>Raised once per gas bag or record-authored cannon destroyed by damage. It carries the
+    /// hull's placement index and the gas bag the part counts toward, a cannon's bound bag. Then
+    /// whether it was a cannon, and the killing hit's shooter id, -1 for none. Zeppelin vs Zeppelin
+    /// scores off this.</summary>
+    public event Action<int, string, bool, int>? PartDestroyed;
+
     /// <summary>Zeppelins placed on a resolved net (a dormant <c>deactivated</c> one counts, it
     /// is placed and flies once a script layer wakes it).</summary>
     public int LiveCount => _live.Count;
@@ -185,6 +191,14 @@ public sealed partial class ZeppelinRuntime : Node
 
     /// <summary>Whether this zeppelin's kill has fired (false for an unknown node).</summary>
     public bool IsDead(string node) => Find(node)?.Dead ?? false;
+
+    /// <summary>The node of the zeppelin placed at <paramref name="index"/>, or null.</summary>
+    public string? NodeAt(int index) => index >= 0 && index < _live.Count ? _live[index].Def.Node : null;
+
+    /// <summary>Where the hull placed at <paramref name="index"/> stands now, or null.</summary>
+    public Vector3? HullPositionAt(int index) =>
+        index >= 0 && index < _live.Count && GodotObject.IsInstanceValid(_live[index].Host)
+            ? _live[index].Host.GlobalPosition : null;
 
     /// <summary>Instant Action's builder holds a zeppelin it has switched off (F12): the record
     /// stays placed, but motion/broadside/damage poll stop here. CSVM's stand-in for the
@@ -866,6 +880,10 @@ public sealed partial class ZeppelinRuntime : Node
                 string how = inst is { Status: DestructibleRegistry.State.Destroyed }
                     ? "destroyed" : "switched off by a script";
                 Log.Info("flight", $"zep: '{zep.Def.Node}' gasbag '{node}' {how}, survivors {damage.Survivors(zep.ZoneAlive)}/{damage.Required} required");
+                if (inst is { Status: DestructibleRegistry.State.Destroyed })
+                {
+                    PartDestroyed?.Invoke(_live.IndexOf(zep), node, false, inst.LastShooter);
+                }
             }
         }
 
@@ -885,6 +903,7 @@ public sealed partial class ZeppelinRuntime : Node
                 && zep.DeadZones.Add(cannon.Record.Cannon))
             {
                 Log.Info("flight", $"zep: '{zep.Def.Node}' cannon '{cannon.Record.Cannon}' destroyed (bound gasbag '{cannon.Record.Gasbag}', binding recorded, no decoded damage transfer)");
+                PartDestroyed?.Invoke(_live.IndexOf(zep), cannon.Record.Gasbag, true, cannon.Instance.LastShooter);
             }
         }
 

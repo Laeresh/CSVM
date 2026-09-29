@@ -958,6 +958,9 @@ member, and it does not go here.
   the player hears; a threshold on a product of scales can be partial or inert at the defaults.**
   The engine voice duck was written up as halving the engines, and with `SfxVolume` 0.5 and the
   authored limiter 0.4 in the product it lowers them by about 1.9 dB.
+- **SRC-21**, **A constant a config reader stores when a key is missing is a fallback, not the value
+  in play; open the file the reader loaded before citing it.** The multiplayer score table was read
+  as kill +1 and lost hull +100, and the shipped `player.zrd` authors 2 and 10.
 
 ## What this project cannot verify itself
 

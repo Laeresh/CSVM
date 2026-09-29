@@ -35,8 +35,7 @@ These are the design rules every module below is shaped by, and every multiplaye
   airframe it flies. A Dogfight pilot may fly a custom plane when the host's Allow Custom Planes and
   outlaw list admit it, and a co-op host's own custom planes fly; every machine builds a custom plane
   from its owner's `NetPlaneBuild`. The lobby forms free-form named teams (`NetTeams.cs`) and each
-  seat carries its team into a team Deathmatch or Capture the Flag; Zeppelin vs Zeppelin is not
-  built.
+  seat carries its team into a team Deathmatch, Capture the Flag or Zeppelin vs Zeppelin.
 - **Listen server.** One player hosts; there is no dedicated headless host.
 - **The player ceiling is 16.** `NetSeats.MaxPlayers`, with every seat-indexed table built
   `SeatCapacity` wide. The original has no coded cap (its pilot list is never counted against a
@@ -308,8 +307,8 @@ the whole player list with each row's team and the reading guest's own row marke
 `LobbyChatMessage` one typed line, which the host relays. `LobbyTeamActionMessage` is a guest's
 team action to its host and `LobbyTeamsMessage` the host's team names. A guest's plane and Ready
 ride `CoopPickMessage`. Capture the Flag's two, in the session: `FlagRequestMessage`, a pilot's ask
-of its host, and `FlagTableMessage`, the host's flags. Layout:
-[../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+of its host, and `FlagTableMessage`, the host's flags. Zeppelin vs Zeppelin's placed return is
+`NetMessages.cs`'s `SpawnAtMessage`. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Net/NetTeams.cs
 The team core every Dogfight team mode shares, engine-free: `NetTeamBook`, a host's free-form named

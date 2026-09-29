@@ -166,6 +166,10 @@ public enum NetMessageType : ushort
     /// <summary>A Capture the Flag host's flag table: each flag's state and holder, sent to every
     /// guest whenever one moves. The original's <c>0x1d</c>.</summary>
     FlagTable = 0x0064,
+
+    /// <summary>Where the host has placed a seat by a computed point rather than a table entry, a
+    /// Zeppelin vs Zeppelin return.</summary>
+    SpawnAt = 0x0065,
 }
 
 /// <summary>Which campaign film a <see cref="CoopFilmMessage"/> names.</summary>
@@ -800,6 +804,56 @@ public readonly record struct SpawnMessage(byte Seat, NetSpawnKind Kind, ushort 
 }
 
 /// <summary>
+/// Where the host has placed a seat on its return, as a point and a heading in degrees rather than
+/// a table entry. Reliable, and the answer to a <see cref="SpawnRequestMessage"/> where the return
+/// is computed. That is Zeppelin vs Zeppelin's, off the field and the seat's own hull
+/// (<c>docs/org/multiplayer-zvz.md</c>).</summary>
+public readonly record struct SpawnAtMessage(byte Seat, Vector3 Position, float HeadingDeg)
+    : INetMessage<SpawnAtMessage>
+{
+    /// <summary>The fixed width of the message, header included.</summary>
+    public const int Size = NetMessage.HeaderBytes + 20;
+
+    /// <inheritdoc/>
+    public static NetMessageType Type => NetMessageType.SpawnAt;
+
+    /// <inheritdoc/>
+    public static NetReliability Reliability => NetReliability.Reliable;
+
+    /// <inheritdoc/>
+    public static bool TryRead(ReadOnlySpan<byte> from, out SpawnAtMessage message)
+    {
+        message = default;
+        var reader = new NetMessageReader(from);
+        if (!reader.Is(Size) || reader.Type != Type)
+            return false;
+
+        byte seat = reader.ReadByte();
+        _ = reader.ReadByte();
+        _ = reader.ReadUInt16();
+        float x = reader.ReadSingle();
+        float y = reader.ReadSingle();
+        float z = reader.ReadSingle();
+        message = new SpawnAtMessage(seat, new Vector3(x, y, z), reader.ReadSingle());
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public int Write(Span<byte> into)
+    {
+        var writer = new NetMessageWriter(into, Type);
+        writer.WriteByte(Seat);
+        writer.WriteByte(0);
+        writer.WriteUInt16(0);
+        writer.WriteSingle(Position.X);
+        writer.WriteSingle(Position.Y);
+        writer.WriteSingle(Position.Z);
+        writer.WriteSingle(HeadingDeg);
+        return writer.Close();
+    }
+}
+
+/// <summary>
 /// A pilot asking the host to place it again: the whole of what a guest says about its own
 /// respawn. Reliable, and answered with a <see cref="SpawnMessage"/> for the same seat. It
 /// carries the seat and nothing else, because where and when the aeroplane comes back are the
@@ -882,15 +936,15 @@ public readonly record struct ScoreMessage(byte Seat, short Score, ushort Kills,
 
 /// <summary>
 /// The match clock, its limits and its ending, written only by the host. A guest applies this
-/// rather than advancing a clock of its own. That is what keeps two peers showing the same
-/// remaining time and the same end. <c>HostClock</c> is the host's session time at send, the
-/// remake's one addition to the original's <c>0x17</c>. The periodic tick is the only message a
-/// running match repeats, so it is what <see cref="NetClockSlew"/> reads its offset from. A
-/// float, not a double, costs 2.4e-4 s of step at the hour mark, far under what the slew calls
-/// settled.</summary>
+/// rather than advancing a clock of its own, which keeps two peers showing the same remaining time
+/// and the same end. <c>HostClock</c> is the host's session time at send, and <c>Winner</c> the lobby
+/// team an <see cref="NetMatchEnd.Objective"/> ending names, 0 otherwise. The periodic tick is the
+/// only message a running match repeats, so it is what <see cref="NetClockSlew"/> reads its offset
+/// from. A float, not a double, costs 2.4e-4 s of step at the hour mark, far under what the slew
+/// calls settled.</summary>
 public readonly record struct MatchStateMessage(
     float RemainingSeconds, float TimeLimitSeconds, short ScoreTarget, NetMatchEnd End,
-    float HostClock = 0f)
+    float HostClock = 0f, byte Winner = 0)
     : INetMessage<MatchStateMessage>
 {
     /// <summary>The fixed width of the message, header included.</summary>
@@ -914,8 +968,8 @@ public readonly record struct MatchStateMessage(
         float limit = reader.ReadSingle();
         short target = reader.ReadInt16();
         var end = (NetMatchEnd)reader.ReadByte();
-        _ = reader.ReadByte();
-        message = new MatchStateMessage(remaining, limit, target, end, reader.ReadSingle());
+        byte winner = reader.ReadByte();
+        message = new MatchStateMessage(remaining, limit, target, end, reader.ReadSingle(), winner);
         return true;
     }
 
@@ -927,7 +981,7 @@ public readonly record struct MatchStateMessage(
         writer.WriteSingle(TimeLimitSeconds);
         writer.WriteInt16(ScoreTarget);
         writer.WriteByte((byte)End);
-        writer.WriteByte(0);
+        writer.WriteByte(Winner);
         writer.WriteSingle(HostClock);
         return writer.Close();
     }
@@ -1459,6 +1513,7 @@ public static class NetMessage
         NetMessageType.LobbyTeams => LobbyTeamsMessage.Reliability,
         NetMessageType.FlagRequest => FlagRequestMessage.Reliability,
         NetMessageType.FlagTable => FlagTableMessage.Reliability,
+        NetMessageType.SpawnAt => SpawnAtMessage.Reliability,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "no such message type"),
     };
 

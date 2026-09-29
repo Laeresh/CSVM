@@ -43,9 +43,15 @@ public sealed partial class VersusBoard : ResultsBoard
     }
 
     /// <summary>The board's headline for a finished match: the one leader's name and WINS, or DRAW
-    /// on a tie at the top. A team match names the leading team by its lobby name.</summary>
+    /// on a tie at the top. A team match names the leading team by its lobby name. A match won on its
+    /// objective names the team that won it, whatever the totals.</summary>
     public static string Title(VersusMatch match)
     {
+        if (match.ObjectiveWinner > 0)
+        {
+            return $"{match.TeamName(match.ObjectiveWinner).ToUpperInvariant()} WINS";
+        }
+
         if (match.Teamed)
         {
             var teams = match.TeamStandings().Where(t => t.Rank == 1).ToList();

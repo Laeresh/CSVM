@@ -1223,11 +1223,12 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         rows.Add(Box(TimeKey, BoxText(TimeKey, lobby), PageX + 370f, PageY + 68f, 73f, 18f, live && DogfightLobby.Arms(options.Victory, DogfightVictory.Time)));
         rows.Add(Check(ScoreRadioKey, RadioArt, PageX + 241f, PageY + 92f, 120f, 12f, live));
         rows.Add(Box(ScoreKey, BoxText(ScoreKey, lobby), PageX + 370f, PageY + 92f, 73f, 18f, live && DogfightLobby.Arms(options.Victory, DogfightVictory.Score)));
-        // Capture the Flag fixes the team count at two, as its type change's mail(5) and mail(1109)
-        // do. The remake's own-flag-home option stands under the boxes.
+        // Capture the Flag and Zeppelin vs Zeppelin fix the team count at two, as their type change's
+        // mail(5) and mail(1109) do. The remake's own-flag-home option stands under the boxes.
         bool ctf = DogfightLobby.IsCtf(options);
-        rows.Add(Check(TeamsKey, CheckArt, PageX + 241f, PageY + 133f, 180f, 11f, live && !ctf));
-        bool counts = live && options.RestrictTeams && !ctf;
+        bool fixedTeams = DogfightLobby.FixesTeams(options);
+        rows.Add(Check(TeamsKey, CheckArt, PageX + 241f, PageY + 133f, 180f, 11f, live && !fixedTeams));
+        bool counts = live && options.RestrictTeams && !fixedTeams;
         if (ctf)
         {
             rows.Add(Check(FlagHomeKey, CheckArt, PageX + 241f, PageY + 177f, 180f, 11f, live));

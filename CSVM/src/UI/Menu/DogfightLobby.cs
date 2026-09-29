@@ -5,8 +5,8 @@ using CSVM.Net;
 
 namespace CSVM.UI.Menu;
 
-/// <summary>The three mission types the lobby's Type box lists, in the string table's order.
-/// Deathmatch and Capture the Flag are flown.</summary>
+/// <summary>The three mission types the lobby's Type box lists, in the string table's order. All
+/// three are flown.</summary>
 public enum DogfightMissionType : byte
 {
     /// <summary>Capture the Flag, two lobby teams on a chapter's <c>MP2</c> map.</summary>
@@ -15,7 +15,8 @@ public enum DogfightMissionType : byte
     /// <summary>Deathmatch, the Dogfight every lobby flies.</summary>
     Deathmatch = 1,
 
-    /// <summary>Zeppelin vs Zeppelin, drawn greyed.</summary>
+    /// <summary>Zeppelin vs Zeppelin, the first two lobby teams each flying a hull on a chapter's
+    /// <c>MP3</c> map.</summary>
     ZeppelinVsZeppelin = 2,
 }
 
@@ -342,10 +343,9 @@ public sealed class DogfightLobby
         return lines.ToArray();
     }
 
-    /// <summary>Whether the Type box offers a mission type as live. Zeppelin vs Zeppelin is drawn
-    /// greyed.</summary>
+    /// <summary>Whether the Type box offers a mission type as live. All three fly.</summary>
     public static bool Flies(DogfightMissionType type) =>
-        type is DogfightMissionType.Deathmatch or DogfightMissionType.CaptureTheFlag;
+        type is DogfightMissionType.Deathmatch or DogfightMissionType.CaptureTheFlag or DogfightMissionType.ZeppelinVsZeppelin;
 
     /// <summary>Whether the Environment box offers <paramref name="environment"/> under
     /// <paramref name="type"/>. Capture the Flag greys Above the Clouds and NW Lighthouse, the two
@@ -358,16 +358,25 @@ public sealed class DogfightLobby
     public static bool IsCtf(DogfightOptionsMessage options) =>
         options.MissionType == (byte)DogfightMissionType.CaptureTheFlag;
 
+    /// <summary>Whether <paramref name="options"/> fly Zeppelin vs Zeppelin.</summary>
+    public static bool IsZvz(DogfightOptionsMessage options) =>
+        options.MissionType == (byte)DogfightMissionType.ZeppelinVsZeppelin;
+
+    /// <summary>Whether <paramref name="options"/>' type fixes Restrict Number of Teams at two, as
+    /// Capture the Flag's and Zeppelin vs Zeppelin's type changes do.</summary>
+    public static bool FixesTeams(DogfightOptionsMessage options) => IsCtf(options) || IsZvz(options);
+
     /// <summary>The match rules a launch carries: the victory condition as a kill target, a match
-    /// clock or both, and the lives rule. They say too whether it flies Capture the Flag. A limit not
-    /// chosen is off. With both, the first one reached ends the match.</summary>
+    /// clock or both, and the lives rule. They say too which team mode it flies. A limit not chosen is
+    /// off. With both, the first one reached ends the match.</summary>
     public static VersusRules RulesOf(DogfightOptionsMessage options) => new(
         options.Victory != DogfightVictory.Time ? options.Score : 0,
         options.Victory != DogfightVictory.Score ? options.TimeMinutes : 0,
         options.LimitedLives ? ClampLives(options.Lives) : 0,
         options.AutoRespawn,
         IsCtf(options),
-        IsCtf(options) && options.FlagHomeToCapture);
+        IsCtf(options) && options.FlagHomeToCapture,
+        IsZvz(options));
 
     /// <summary>Whether <paramref name="victory"/> arms <paramref name="limit"/>, Time or Score.
     /// </summary>
@@ -406,8 +415,8 @@ public sealed class DogfightLobby
         Offers((DogfightMissionType)_options.MissionType, environment) && Change(_options with { Environment = (byte)environment });
 
     /// <summary>Picks the mission type. Refused on a guest and for a greyed type. Capture the Flag
-    /// ticks Restrict Number of Teams at two teams exactly, and moves off an environment it greys to
-    /// the first it offers.</summary>
+    /// and Zeppelin vs Zeppelin tick Restrict Number of Teams at two teams exactly. Capture the Flag
+    /// moves off an environment it greys to the first it offers.</summary>
     public bool SetMissionType(DogfightMissionType type)
     {
         if (!Flies(type))
@@ -415,7 +424,7 @@ public sealed class DogfightLobby
             return false;
         }
 
-        if (type != DogfightMissionType.CaptureTheFlag)
+        if (type == DogfightMissionType.Deathmatch)
         {
             return Change(_options with { MissionType = (byte)type });
         }
@@ -440,19 +449,19 @@ public sealed class DogfightLobby
     public bool SetVictory(DogfightVictory victory) =>
         victory is DogfightVictory.Time or DogfightVictory.Score or DogfightVictory.Both && Change(_options with { Victory = victory });
 
-    /// <summary>Checks or clears Restrict Number of Teams. Refused on a guest and in Capture the
-    /// Flag, which fixes it.</summary>
-    public bool SetRestrictTeams(bool restrict) => !IsCtf(_options) && Change(_options with { RestrictTeams = restrict });
+    /// <summary>Checks or clears Restrict Number of Teams. Refused on a guest and in a type that fixes
+    /// it (<see cref="FixesTeams"/>).</summary>
+    public bool SetRestrictTeams(bool restrict) => !FixesTeams(_options) && Change(_options with { RestrictTeams = restrict });
 
     /// <summary>Sets the minimum team count, held to 0 up to the maximum as the script's box binds
-    /// it. Refused on a guest, while Restrict Number of Teams is clear, and in Capture the Flag.</summary>
+    /// it. Refused on a guest, while Restrict Number of Teams is clear, and in a type fixing it.</summary>
     public bool SetMinTeams(int teams) =>
-        _options.RestrictTeams && !IsCtf(_options) && Change(_options with { MinTeams = (byte)Math.Clamp(teams, 0, _options.MaxTeams) });
+        _options.RestrictTeams && !FixesTeams(_options) && Change(_options with { MinTeams = (byte)Math.Clamp(teams, 0, _options.MaxTeams) });
 
     /// <summary>Sets the maximum team count, held to the minimum up to <see cref="MaxTeams"/>.
-    /// Refused on a guest, while Restrict Number of Teams is clear, and in Capture the Flag.</summary>
+    /// Refused on a guest, while Restrict Number of Teams is clear, and in a type fixing it.</summary>
     public bool SetMaxTeams(int teams) =>
-        _options.RestrictTeams && !IsCtf(_options) && Change(_options with { MaxTeams = (byte)Math.Clamp(teams, _options.MinTeams, MaxTeams) });
+        _options.RestrictTeams && !FixesTeams(_options) && Change(_options with { MaxTeams = (byte)Math.Clamp(teams, _options.MinTeams, MaxTeams) });
 
     /// <summary>Checks or clears Capture the Flag's own-flag-home rule: an enemy flag scores only
     /// while the carrier's own flag stands at its base. Refused on a guest and outside Capture the

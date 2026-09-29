@@ -72,6 +72,8 @@ public static class Rng
     // Capture the Flag's throw draws, the elevation and speed of a dropped flag's arc (FlagRuntime).
     // Its own stream, read through IntSeedFor, so a drop never shifts anything else a match rolls.
     public const string Flags = "flags";
+    // Zeppelin vs Zeppelin's radio variant picks (ZeppelinVersusRuntime), apart for the same reason.
+    public const string ZeppelinVersus = "zvz";
 
     private static readonly Dictionary<string, RandomNumberGenerator> Streams = new(StringComparer.Ordinal);
 

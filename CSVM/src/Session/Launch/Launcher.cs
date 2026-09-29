@@ -2645,7 +2645,8 @@ public partial class Launcher : Node3D
         TakeNetLaunch(launch, planes, fits, customs);
         _spec = SessionSpec.FromMenu(_cli, launch.Chapter, planes, launch.Mode, launch.InstantAction, fits, customs,
             launch.Match?.KillTarget, launch.Match?.TimeLimitMinutes, launch.Match?.Lives, launch.Match?.AutoRespawn,
-            launch.WingmanLoadout, launch.Match?.CaptureTheFlag == true, launch.Match?.FlagHomeToCapture == true);
+            launch.WingmanLoadout, launch.Match?.CaptureTheFlag == true, launch.Match?.FlagHomeToCapture == true,
+            launch.Match?.ZeppelinVsZeppelin == true);
         // Step the master so flying again is a new mission rather than a replay: without this every
         // relaunch re-derives the same spawn, opposition and liveries. ⚠ A pinned run must hold
         // still, which is what keeps the goldens and the perf harnesses reproducible.

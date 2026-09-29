@@ -67,6 +67,9 @@ public sealed partial class HudMessages : Control
     /// <summary>"No Enemies Left", row 7067, the second of them.</summary>
     public const string AllAloneKey = "MSG_MP_ALL_ALONE";
 
+    /// <summary>"Zeppelin Destroyed", row 7066, end reason 3's second line (<c>0x4997c1</c>).</summary>
+    public const string ZeppelinDestroyedKey = "MSG_MP_ZEP_DESTROYED";
+
     /// <summary>"Destroyed by %1", row 214, a Dogfight kill's second line with the killer's name
     /// (<c>FUN_0059cd70(.., 0x31, 0xd6, ..)</c> at <c>0x498d20</c>).</summary>
     public const string DestroyedByKey = "MSG_DESTROYED_BY_X";
@@ -287,6 +290,14 @@ public sealed partial class HudMessages : Control
     public static void PostAllAlone(HudMessages stack, Messages? strings)
     {
         stack.Post(Text(strings, AllAloneKey), Side.Neutral);
+        stack.Post(Text(strings, GameOverKey), Side.Neutral);
+    }
+
+    /// <summary>Posts reason 3's ending, "Game Over:" above "Zeppelin Destroyed", as
+    /// <see cref="PostAllAlone"/> posts reason 4's.</summary>
+    public static void PostHullLost(HudMessages stack, Messages? strings)
+    {
+        stack.Post(Text(strings, ZeppelinDestroyedKey), Side.Neutral);
         stack.Post(Text(strings, GameOverKey), Side.Neutral);
     }
 

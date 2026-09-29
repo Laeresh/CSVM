@@ -533,9 +533,9 @@ constants rather than reading a layout.
   ratings; Select Ammo the Guns and Rockets sub-tabs (`MP_LOBBY_TABSMALL.PNG`), a box per gun slot
   or per wing cell. Boot, Create Team, the Ready box (`MP_B_CHECKBOXLARGE.PNG`) and its Ready? label,
   LAUNCH!, the chat box, Send and Leave Game stand on every tab.
-- **What is ours in the lobby.** Deathmatch and Capture the Flag fly, and Zeppelin vs Zeppelin draws
-  greyed. Capture the Flag greys Above the Clouds and NW Lighthouse, ticks Restrict Number of Teams
-  at two and greys it, and shows an Own Flag Home to Capture checkbox under the team boxes, the
+- **What is ours in the lobby.** All three types fly. Capture the Flag and Zeppelin vs Zeppelin tick
+  Restrict Number of Teams at two and grey it, and Capture the Flag also greys Above the Clouds and
+  NW Lighthouse and shows an Own Flag Home to Capture checkbox under the team boxes, the
   remake's own option drawn in the checkbox art. The team button reads Create Team, Join Team with a team row picked, or Leave Team,
   and is live while its pilot is not Ready; Create Team stands the CREATE TEAM box
   (`MP_CREATETEAMBACKGROUND.PNG`). The player list draws each team's row in its team colour with

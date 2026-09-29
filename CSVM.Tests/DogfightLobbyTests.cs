@@ -46,7 +46,7 @@ public sealed class DogfightLobbyTests
     {
         var (host, _, _) = Lobbies(1);
 
-        Assert.False(host.SetMissionType(DogfightMissionType.ZeppelinVsZeppelin));
+        Assert.False(host.SetMissionType((DogfightMissionType)3));
         Assert.False(host.SetOutlawed(NetPlaneRules.Flags, true));
         Assert.Equal((byte)DogfightMissionType.Deathmatch, host.Options.MissionType);
 
@@ -635,6 +635,47 @@ public sealed class DogfightLobbyTests
         Assert.True(host.SetMissionType(DogfightMissionType.Deathmatch));
         Assert.True(host.SetRestrictTeams(false));
         Assert.Equal(TeamLaunchRefusal.None, host.LaunchRefusal);
+    }
+
+    [Fact]
+    public void ZeppelinVsZeppelinFixesTwoTeamsOnEveryEnvironmentAndLaunchesAnyTwoNumbers()
+    {
+        var (host, guests, _) = Lobbies(3);
+        Assert.True(host.SetEnvironment(0));
+
+        Assert.True(host.SetMissionType(DogfightMissionType.ZeppelinVsZeppelin));
+        Settle(host, guests);
+
+        // Every chapter ships MP3, so no environment is greyed.
+        Assert.Equal(0, host.Options.Environment);
+        Assert.True(host.SetEnvironment(5));
+        Assert.True(host.Options.RestrictTeams);
+        Assert.Equal(DogfightLobby.CtfTeams, host.Options.MinTeams);
+        Assert.Equal(DogfightLobby.CtfTeams, host.Options.MaxTeams);
+        Assert.False(host.SetRestrictTeams(false));
+        Assert.False(host.SetMinTeams(1));
+        Assert.False(host.SetFlagHomeToCapture(true));
+        var rules = DogfightLobby.RulesOf(guests[0].Options);
+        Assert.True(rules.ZeppelinVsZeppelin);
+        Assert.False(rules.CaptureTheFlag);
+
+        // Two teams numbered 2 and 3 launch: the sides follow lobby order, not the numbers.
+        host.CreateTeam("One");
+        Settle(host, guests);
+        guests[0].CreateTeam("Two");
+        Settle(host, guests);
+        guests[1].CreateTeam("Three");
+        Settle(host, guests);
+        Assert.Equal(TeamLaunchRefusal.TooManyTeams, host.LaunchRefusal);
+        host.LeaveTeam();
+        Settle(host, guests);
+        host.JoinTeam(guests[0].OwnTeam);
+        Settle(host, guests);
+        Assert.Equal(TeamLaunchRefusal.None, host.LaunchRefusal);
+
+        // ABLE-TO-FAIL CONTROL: back on Deathmatch the rules name no zeppelins.
+        Assert.True(host.SetMissionType(DogfightMissionType.Deathmatch));
+        Assert.False(DogfightLobby.RulesOf(host.Options).ZeppelinVsZeppelin);
     }
 
     private static (DogfightLobby Host, List<DogfightLobby> Guests, IReadOnlyList<LoopbackTransport> Mesh) Lobbies(

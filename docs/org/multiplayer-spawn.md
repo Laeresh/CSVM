@@ -100,7 +100,10 @@ and `SpawnPicker.StartState`, over `SpawnPoints.LoadNetFreeForAll`), and in a te
 team's block of the whole table (`SpawnPoints.TeamBlocks`), walked by the seat's place in its team
 rather than by the original's pilot index. It does **not** take the respawn rule: a centroid displacement
 puts a returning pilot next to the pack, which is the camping problem
-`Flight/Modes/VersusSpawnRotation.cs` exists to solve, and that rotation stays as it is. The stunt
+`Flight/Modes/VersusSpawnRotation.cs` exists to solve, and that rotation stays as it is. Zeppelin vs
+Zeppelin is the exception: its mode 4 branch pulls the return halfway toward the pilot's own hull,
+and the remake takes it whole there, `respawn_rad` and `respawn_el` read from `player.zrd` (1200 and
+100 shipped), as the maintainer decided ([`multiplayer-zvz.md`](multiplayer-zvz.md)). The stunt
 race's abreast starting grid is selected only when a race exists and never touches a Dogfight:
 four dogfighters 60 m apart on one heading is a head-on merge every round.
 

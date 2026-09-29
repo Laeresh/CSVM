@@ -1299,8 +1299,8 @@ internal static class MenuOriginalConnectionSuites
                   && Row(guest.Shell, OriginalLobbyScreen.TimeRadioKey) is { Enabled: false }
                   && guest.Door.Dogfight!.SetEnvironment(3) == false,
             $"a guest's option controls are greyed and its option set is refused");
-        ctx.Check(Row(host.Shell, OriginalLobbyScreen.TypeKey) is { Enabled: true } && host.Door.Dogfight!.SetMissionType(DogfightMissionType.ZeppelinVsZeppelin) == false,
-            $"the host's Type box is live but a greyed type is refused");
+        ctx.Check(Row(host.Shell, OriginalLobbyScreen.TypeKey) is { Enabled: true } && host.Door.Dogfight!.SetMissionType((DogfightMissionType)3) == false,
+            $"the host's Type box is live but a type past the box's three is refused");
         ClickRow(ctx, host, OriginalLobbyScreen.EnvironmentKey);
         ctx.Check(host.Shell.Lobby.OpenDropdown == OriginalLobbyScreen.EnvironmentKey, $"the Environment box opens its list ({host.Shell.Lobby.OpenDropdown})");
         ClickRow(ctx, host, OriginalLobbyScreen.EnvironmentKey + ":3");
