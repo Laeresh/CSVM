@@ -93,6 +93,9 @@ public sealed class DogfightLobby
 
     private static readonly string[] EnvironmentChapters = { "C2B", "C3", "C2", "C5", "C1", "C1B", "C4" };
 
+    // The number each row writes to the environment global, the jump table at 0x413c08.
+    private static readonly int[] EnvironmentNumbers = { 3, 6, 4, 8, 1, 2, 7 };
+
     private readonly NetLobby _wire;
     private readonly Func<string> _name;
     private readonly int _hostPeer;
@@ -242,6 +245,24 @@ public sealed class DogfightLobby
     /// <summary>The team this pilot is on, 0 for none.</summary>
     public byte OwnTeam => You < Players.Count ? Players[You].Team : (byte)0;
 
+    /// <summary>Whether any pilot on the list is on a team, which flies a Deathmatch as a team
+    /// one.</summary>
+    public bool Teamed
+    {
+        get
+        {
+            foreach (var row in Players)
+            {
+                if (row.Team != 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
     /// <summary>Why the host's launch is refused on its teams, or none. Each row counts one player,
     /// the host's row every seat its machine flies (<see cref="LocalSeats"/>).</summary>
     public TeamLaunchRefusal LaunchRefusal
@@ -298,6 +319,19 @@ public sealed class DogfightLobby
     /// <summary>The environment flown on <paramref name="chapter"/>, or -1 for a chapter the
     /// Environment box does not list.</summary>
     public static int EnvironmentOf(string chapter) => Array.IndexOf(EnvironmentChapters, chapter);
+
+    /// <summary>The environment number the original's session setup writes for an Environment row,
+    /// which completes the row's <c>loading_m</c> dialog names (docs/org/loading-screen.md).
+    /// ⚠ Not the chapter's world number: Above the Clouds writes 3, C1C's, where this lobby flies
+    /// C2B, and <c>Loading.zrd</c> keys that row's dialogs by 3.</summary>
+    public static int EnvironmentNumber(int environment) =>
+        EnvironmentNumbers[Math.Clamp(environment, 0, EnvironmentCount - 1)];
+
+    /// <summary>The original's 1-based multiplayer mode for a launch (docs/org/multiplayer-spawn.md).
+    /// Capture the Flag is 3 and Zeppelin vs Zeppelin 4. A Deathmatch is 2 once any pilot is on a
+    /// team, else 1.</summary>
+    public static int ModeOf(bool captureTheFlag, bool zeppelinVsZeppelin, bool teamed) =>
+        captureTheFlag ? 3 : zeppelinVsZeppelin ? 4 : teamed ? 2 : 1;
 
     /// <summary>The Game Scores lines for a match's standings, best first. Each seat is named from
     /// <paramref name="names"/>, the list as it stood at the launch, or by its player tag past it.

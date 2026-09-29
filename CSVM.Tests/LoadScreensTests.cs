@@ -16,7 +16,8 @@ namespace CSVM.Tests;
 public class LoadScreensTests
 {
     /// <summary>The mission-type letter that completes the dialog name, the exe's own five-entry
-    /// table. Free flight and dogfight are ours and resolve to none.</summary>
+    /// table. Free flight and a Dogfight carry no Instant Action mission type and resolve to none.
+    /// </summary>
     [Fact]
     public void EachMissionTypeNamesItsOwnDialogAndOurModesNameNone()
     {
@@ -219,6 +220,135 @@ public class LoadScreensTests
     {
         Assert.Empty(LoadScreens.Texts("stunt_flying", "unused", "no-zrdr", "no-messages"));
     }
+
+    /// <summary>A Dogfight's dialog name. It is the number the original's session setup writes for
+    /// the lobby row (0x413c08), then the mode letter (0x004a201c). Above the Clouds writes 3 although
+    /// the lobby flies it on C2B, and a chapter no row flies names none.</summary>
+    [Fact]
+    public void ADogfightNamesItsDialogByTheOriginalsEnvironmentNumberAndModeLetter()
+    {
+        Assert.Equal(
+            new[] { 3, 6, 4, 8, 1, 2, 7 },
+            Enumerable.Range(0, UI.Menu.DogfightLobby.EnvironmentCount)
+                .Select(UI.Menu.DogfightLobby.EnvironmentNumber));
+        Assert.Equal(
+            new[] { 'd', 't', 'c', 'z', 'd', 'd' },
+            new[] { 1, 2, 3, 4, 0, 5 }.Select(LoadScreens.MultiplayerLetter));
+        Assert.Equal("loading_m3d", LoadScreens.MultiplayerKey("C2B", false, false, false));
+        Assert.Equal("loading_m6t", LoadScreens.MultiplayerKey("c3", false, false, true));
+        Assert.Equal("loading_m4c", LoadScreens.MultiplayerKey("C2", true, false, true));
+        Assert.Equal("loading_m7z", LoadScreens.MultiplayerKey("C4", false, true, true));
+        Assert.Null(LoadScreens.MultiplayerKey("C1C", false, false, false));
+    }
+
+    /// <summary>Every dialog a lobby launch can name is in <c>Loading.zrd</c>, so no Dogfight falls
+    /// back to the bare heading. That is seven environments by four modes, less the two rows Capture
+    /// the Flag greys out.</summary>
+    [ExtractedDataFact]
+    public void EveryLobbyLaunchFindsItsOwnBriefing()
+    {
+        int boards = 0;
+        for (int environment = 0; environment < UI.Menu.DogfightLobby.EnvironmentCount; environment++)
+        {
+            string chapter = UI.Menu.DogfightLobby.ChapterOf(environment);
+            foreach (var (ctf, zvz, teamed) in new[]
+            {
+                (false, false, false), (false, false, true), (true, false, true), (false, true, true),
+            })
+            {
+                if (ctf && !UI.Menu.DogfightLobby.Offers(UI.Menu.DogfightMissionType.CaptureTheFlag, environment))
+                {
+                    continue;
+                }
+
+                var board = Briefing(LoadScreens.MultiplayerKey(chapter, ctf, zvz, teamed)!);
+                Assert.Equal("loadframempt", board.Pictures[0].Art.Name);
+                Assert.True(board.Lines.Count >= 8, $"{chapter} writes {board.Lines.Count} texts");
+                Assert.All(board.Lines, l => Assert.DoesNotContain("MSG_", l.Text));
+                boards++;
+            }
+        }
+
+        Assert.Equal(26, boards);
+    }
+
+    /// <summary>The Deathmatch briefing writes its heading, blurb, column heads and instructions. The
+    /// two point rows the shipped text prints stand beside them, over its own three photographs.
+    /// </summary>
+    [ExtractedDataFact]
+    public void TheDeathmatchBriefingWritesItsPointsBesideItsInstructions()
+    {
+        var board = Briefing("loading_m6d");
+
+        Assert.Equal("DEATHMATCH", board.Lines[0].Text);
+        Assert.Equal((60f, 35f), (board.Lines[0].X, board.Lines[0].Y));
+        Assert.Equal(("POINTS", "INSTRUCTIONS"), (board.Lines[2].Text, board.Lines[3].Text));
+        Assert.Equal(
+            new[] { ("2", 280f, 135f), ("-2", 280f, 215f) },
+            PointRows(board));
+        Assert.Equal(
+            new[] { ("MP-shotdown", 147f, 147f), ("MP-crash", 147f, 257f), ("mp-dangerzone2", 147f, 377f) },
+            board.Pictures.Where(p => p.Art.Name.StartsWith("MP-") || p.Art.Name.StartsWith("mp-"))
+                .Select(p => (p.Art.Name, p.X, p.Y)));
+        Assert.Equal((564f, 546f), At(board, "prog_blk"));
+    }
+
+    /// <summary>Each mode's own rows and photographs: team Deathmatch's, Capture the Flag's four point
+    /// rows beside its six instructions, and Zeppelin vs Zeppelin's three.</summary>
+    [ExtractedDataFact]
+    public void EachModesBriefingWritesItsOwnPointRows()
+    {
+        var team = Briefing("loading_m1t");
+        var ctf = Briefing("loading_m1c");
+        var zvz = Briefing("loading_m3z");
+
+        Assert.Equal("TEAM DEATHMATCH", team.Lines[0].Text);
+        Assert.Equal(new[] { "2", "-2" }, PointRows(team).Select(r => r.Text));
+        Assert.Equal("CAPTURE THE FLAG", ctf.Lines[0].Text);
+        Assert.Equal(
+            new[] { ("10", 280f, 215f), ("8", 280f, 365f), ("2", 280f, 445f), ("-2", 280f, 525f) },
+            PointRows(ctf));
+        Assert.Contains(ctf.Pictures, p => p.Art.Name == "MP-flagcapture");
+        Assert.Equal("ZEPPELIN vs. ZEPPELIN", zvz.Lines[0].Text);
+        Assert.Equal(new[] { "10", "2", "-2" }, PointRows(zvz).Select(r => r.Text));
+        Assert.Contains(zvz.Pictures, p => p.Art.Name == "MP-gasbag");
+    }
+
+    /// <summary>A briefing under a build draws one propeller at every frame, as the blackboard does.
+    /// The pumped board leaves the script's cycle out, and the still one keeps its first frame.
+    /// </summary>
+    [ExtractedDataFact]
+    public void TheBriefingDrawsOnePropellerWhetherPumpedOrStill()
+    {
+        var motion = LoadScreens.MotionFor(false, null);
+        var pumped = LoadScreens.For(
+            false, "DOGFIGHT", null, Zrdr(), MessagesPath(), pumped: true, briefing: "loading_m1d");
+        var still = Briefing("loading_m1d");
+
+        Assert.Equal(1, PropellerDraws(still, motion));
+        Assert.Equal((506f, 549f), At(still, "prp0"));
+        Assert.Equal(0, PropellerDraws(pumped, motion));
+        var painted = LoadScreens.Painted(pumped, motion, 236f, 12f, 0.5f, 3);
+        Assert.Equal(1, PropellerDraws(painted, motion));
+    }
+
+    /// <summary>A key the file does not carry keeps the heading rather than drawing the file's bare
+    /// default frame.</summary>
+    [ExtractedDataFact]
+    public void AnUnknownBriefingKeepsTheHeading()
+    {
+        var board = LoadScreens.For(false, "DOGFIGHT", null, Zrdr(), MessagesPath(), briefing: "loading_m9d");
+
+        Assert.Equal("DOGFIGHT", Assert.Single(board.Lines).Text);
+        Assert.Equal("loadframempt2", board.Pictures[0].Art.Name);
+    }
+
+    private static ComposedBoard Briefing(string key) =>
+        LoadScreens.For(false, "DOGFIGHT", null, Zrdr(), MessagesPath(), briefing: key);
+
+    // The point column: every text the dialog places at x 280.
+    private static (string Text, float X, float Y)[] PointRows(ComposedBoard board) =>
+        board.Lines.Where(l => l.X == 280f).Select(l => (l.Text, l.X, l.Y)).ToArray();
 
     private static System.Collections.Generic.IReadOnlyList<BoardLine> Texts(string missionType) =>
         LoadScreens.Texts(missionType, "unused", Zrdr(), MessagesPath());

@@ -65,8 +65,31 @@ The globals feeding them:
 The mission-type letter comes from a jump table at `0x004a14f0`, five entries wide with an index
 above 4 falling to the default: `0` to `a`, `1` to `d`, `2` to `z`, `3` to `d`, `4` to `s`. The
 multiplayer table at `0x004a201c` maps the mode minus one: `0` to `d`, `1` to `t`, `2` to `c`,
-`3` to `z`. A second copy of the Instant Action table sits at `0x004a202c` for the fall-through
-inside the multiplayer builder, and agrees entry for entry.
+`3` to `z`, and a mode outside 1 to 4 falls to `d`. A second copy of the Instant Action table sits
+at `0x004a202c` for the fall-through inside the multiplayer builder, and agrees entry for entry.
+
+The multiplayer environment number is written at `0x004139d1`, inside the session setup
+`FUN_004136e0` that also writes the mode ([`multiplayer-spawn.md`](multiplayer-spawn.md)). A jump
+table at `0x00413c08` maps the lobby's Environment row (`0x642f8c`, 0-based, the string table's
+order) to it, and `0x004638f0` then takes it as the world number the match loads, beside a mission
+number of 1, 2 for Capture the Flag or 3 for Zeppelin vs Zeppelin (`0x71c1ac`, the `MP1`..`MP3`
+folder):
+
+| Row | Environment | Number | World |
+|---|---|---|---|
+| 0 | Above the Clouds | 3 | `C1C` |
+| 1 | Hawai'ian Islands | 6 | `C3` |
+| 2 | Hollywood Studio | 4 | `C2` |
+| 3 | Manhattan | 8 | `C5` |
+| 4 | NW Boeing Field | 1 | `C1` |
+| 5 | NW Lighthouse | 2 | `C1B` |
+| 6 | Sky Haven (Rockies) | 7 | `C4` |
+
+⚠ **Above the Clouds is `C1C` in multiplayer and `C2B` in Instant Action.** The Instant Action
+launcher maps its clouds row to world 5 ([`../formats/instant-action.md`](../formats/instant-action.md));
+the multiplayer table above writes 3. `Loading.zrd` agrees with the table: its multiplayer dialogs
+are `m1`, `m2`, `m3`, `m4`, `m6`, `m7` and `m8`, with no `m3c` because Capture the Flag greys the
+row. `escape.zrd` numbers the same row 5 ([`pause-screen.md`](pause-screen.md)).
 
 `FUN_004639a0` gates the campaign-only widgets. When it holds, `FUN_004a1910` additionally binds
 `OBJECTIVESLIST` and `MEMENTO`; Instant Action and multiplayer screens carry neither, which is why
@@ -91,7 +114,26 @@ are authored artwork, not a runtime choice and not a capture of the player's own
 Multiplayer is the only family whose pictures vary, and they vary by game mode rather than by map:
 the `c` dialogs carry `MP-flagcapture`, `MP-flagreturn`, `MP-shotdown` and `MP-crash`; the `z`
 dialogs carry `MP-gasbag`, `MP-cannon`, `MP-torpedo` and `MP-zepdown`; `d` and `t` carry the same
-three as Instant Action. Campaign dialogs carry none of those photographs: they use the `loadframe`
+three as Instant Action. All of them stand at x 147 rather than Instant Action's 197, on the
+`loadframempt` background. The environment digit moves them in the `d` and `t` dialogs: `m1`, `m2`
+and `m3` place the three at y 157, 307 and 457, the others at 147, 257 and 377 beside a fourth
+`Pict` with an empty bitmap. `loading_m4t` alone binds its second point row to `MSG_BRF_DMS_PT2`
+rather than `MSG_BRF_DMT_PT2`; both read `-2`.
+
+Each multiplayer dialog writes `MSG_BRF_<mode>_HEAD1` (the mode's name, `loadListTitle` at 60, 35),
+`HEAD2` (the blurb, 295, 30, wrapped at 400), `HEAD3` and `HEAD4` (the POINTS and INSTRUCTIONS
+column heads at 268 and 370, y 82), then its instruction rows at x 360 with their point values at
+x 280 on the same line, all in `loadListbody`. `<mode>` is `DMS`, `DMT`, `CTF` or `ZVZ`, for
+`d`, `t`, `c` and `z`:
+
+| Mode | Instruction rows | Point rows (`_PT`, string ids) |
+|---|---|---|
+| `DMS` | 2 | kill 2, crash -2 (16646, 16647) |
+| `DMT` | 2 | kill 2, crash or teamkill -2 (16666, 16667) |
+| `CTF` | 6 | enemy flag home 10, own flag returned 8, kill 2, crash or teamkill -2 (16610..16613) |
+| `ZVZ` | 6 | enemy gas bag 10, kill 2, crash or teamkill -2 (16630..16632) |
+
+Campaign dialogs carry none of those photographs: they use the `loadframe`
 background with the parchment objectives list, place their bar at `90,548` with `prog_blkload` over
 `prog_redload`, and draw the mission's own chart, flags and icons out of the script decoded below.
 
@@ -232,7 +274,17 @@ hangs it over the build, through the campaign boards' own surface (`docs/org/cam
 the chart sheet for a campaign launch, the blackboard with its three centred photographs for
 everything else. An Instant Action launch reads `loading_i1<letter>` and writes its four texts at
 the positions and wrap widths in the table above; the environment digit is not plumbed, since it
-selects nothing bar the `loading_i6a` heading. The multiplayer family has no caller here.
+selects nothing bar the `loading_i6a` heading.
+
+**A Dogfight reads its own multiplayer dialog.** `LoadScreens.MultiplayerKey` numbers the lobby row
+through the table at `0x00413c08` and takes the letter from the mode `FUN_004136e0` would write:
+Capture the Flag and Zeppelin vs Zeppelin by the launch's type, a Deathmatch `t` once any lobby
+pilot is on a team, else `d`. The screen draws the dialog as authored, its `loadframempt`, the
+pictures its script places and every text, point rows included, from `messages.json`; the points
+printed there are the values `player.zrd` authors and the match scores
+([`multiplayer-scoring.md`](multiplayer-scoring.md)). A splitscreen Dogfight is keyed the same
+way. The row is found from the chapter flown, so Above the Clouds reads `m3` while CSVM flies it
+on `C2B`, and a chapter no row names (a `--vs` launch on `C1C`) writes the mode's heading alone.
 
 **The campaign sheet is the mission's own dialog and nothing of ours.** `UI/Menu/EscapeDialog.cs`
 reads `Loading.zrd` the way it reads `escape.zrd`, `LoadSheet` resolves the launch's dialog key,
@@ -263,9 +315,9 @@ runs a three-line blurb through the chalk rule under it, so the body widget carr
 13-pixel pitch and the renderer wraps to it rather than to the face's own metrics. Where the words
 break is still ours: a wider face takes a wider line.
 
-**Free flight and dogfight are ours rather than the original's**, and no shipped dialog describes
-either. Both take the mode's own name at `HEAD1`'s authored place and write nothing else, since the
-nearest dialog, the `d` family's, would state a win condition neither mode has.
+**Free flight is ours rather than the original's**, and no shipped dialog describes it. It takes
+the mode's own name at `HEAD1`'s authored place and writes nothing else, since the nearest
+dialog, the `d` family's, would state a win condition it does not have.
 
 **The bar fills and the propeller turns from a pump inside the blocking build**, which is the
 original's own shape rather than a threaded or incremental load. `Utils/LoadProgress.cs` holds the

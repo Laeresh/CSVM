@@ -5455,7 +5455,7 @@ public partial class GameSession : Node3D
 
         if (_campaign is not { } campaign)
         {
-            return BuildInstantActionPauseBoard(pauseState);
+            return BuildMultiplayerPauseBoard(pauseState) ?? BuildInstantActionPauseBoard(pauseState);
         }
 
         var (chapterNumber, missionNumber) = campaign.Address;
@@ -5474,10 +5474,32 @@ public partial class GameSession : Node3D
             () => PauseReadout(sheet, campaign, objectives, pauseState, runtime));
     }
 
-    // An Instant Action sortie's own sheet: ia_escape.zrd's blackboard for the sortie's chapter and
-    // mission type, which carries no map, memento or parchment and so needs no readout. Free flight
-    // and the dogfight are modes of ours that no shipped dialog describes, so they keep the Built-in
-    // board, the same split the load screen makes (docs/org/pause-screen.md).
+    // A Dogfight's briefing blackboard, under the key its load screen read: the chapter, the type and
+    // whether any seat is on a lobby team. It carries no map, memento or parchment, so no readout.
+    private UI.Menu.Original.OriginalPauseBoard? BuildMultiplayerPauseBoard(Flight.Modes.PauseState pauseState)
+    {
+        if (!_spec.Versus
+            || UI.Screens.LoadScreens.MultiplayerKey(
+                _spec.Chapter, _spec.CaptureTheFlag, _spec.ZeppelinVsZeppelin, SeatTeams() != null) is not { } key)
+        {
+            return null;
+        }
+
+        var sheet = UI.Boards.PauseSheet.LoadMultiplayer(_zrdrPath, _messagesPath, key);
+        if (sheet == null)
+        {
+            Log.Warn("ui", $"pause: no escape.zrd or Loading.zrd sheet for {_spec.Chapter} ({key})");
+            return null;
+        }
+
+        Log.Info("ui", $"pause: {_spec.Chapter} Dogfight draws {sheet.State.Key}");
+        return UI.Menu.Original.OriginalPauseBoard.Build(
+            pauseState, MenuInputFor, _dataRoot, sheet, () => UI.Boards.PauseReadout.Empty);
+    }
+
+    // An Instant Action sortie's own sheet: ia_escape.zrd's blackboard for its chapter and mission
+    // type. It carries no map, memento or parchment and so needs no readout. Free flight has no
+    // shipped dialog and keeps the Built-in board, as on the load screen (docs/org/pause-screen.md).
     private UI.Menu.Original.OriginalPauseBoard? BuildInstantActionPauseBoard(Flight.Modes.PauseState pauseState)
     {
         if (_iaDirector?.Runtime is not { } ia

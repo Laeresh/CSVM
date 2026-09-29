@@ -1731,19 +1731,33 @@ public partial class Launcher : Node3D
     // (docs/org/loading-screen.md).
     private void ShowLoadScreen(bool campaign, string? missionType, int? missionSeq = null)
     {
-        // The blackboard writes its dialog's own four texts, and takes this heading only when the
-        // mode is ours and no dialog describes it. The chart sheet writes no words of ours at all.
+        // The blackboard writes its dialog's own texts, and takes this heading only when no dialog
+        // describes the flight. The chart sheet writes no words of ours at all.
         string subject = campaign ? string.Empty : LaunchSubject().ToUpperInvariant();
         var sheet = campaign
             ? CampaignLoadSheet(missionSeq ?? _spec.CampaignMissionSeq ?? 0)
             : null;
         _loadLayer = new CanvasLayer { Name = "load_board", Layer = UI.Boards.HudLayers.Board };
+        string? briefing = campaign || missionType != null ? null : LaunchBriefing();
         var board = UI.Screens.LoadBoard.Build(
-            _dataRoot, _zrdrPath, _messagesPath, campaign, subject, missionType, sheet);
+            _dataRoot, _zrdrPath, _messagesPath, campaign, subject, missionType, sheet, briefing);
+        if (briefing != null)
+        {
+            Log.Info("ui", $"load screen: {_spec.Chapter} Dogfight reads {briefing}");
+        }
         board.CaptureDir = _spec.DebugLoad ?? string.Empty;
         _loadLayer.AddChild(board);
         AddChild(_loadLayer);
     }
+
+    // A Dogfight's multiplayer dialog, from its chapter, its type and whether a lobby pilot joined a
+    // team. The session's pause board resolves the same key off its seats. Null for anything else.
+    private string? LaunchBriefing() =>
+        _spec.Versus
+            ? UI.Screens.LoadScreens.MultiplayerKey(
+                _spec.Chapter, _spec.CaptureTheFlag, _spec.ZeppelinVsZeppelin,
+                _lobbyFlight && _netDoor?.Dogfight is { Teamed: true })
+            : null;
 
     // The chart sheet a story position resolves: the loading dialog the mission's own storage
     // address names, that mission's objectives for the parchment, and the profile's memento.

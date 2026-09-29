@@ -208,10 +208,15 @@ public sealed class EscapeDialog
     /// <c>loading_c61</c>; docs/formats/campaign-missions.md is the lookup.</summary>
     public static string CampaignKey(int campaign, int mission) => $"loading_c{campaign}{mission}";
 
-    /// <summary>The dialog key an Instant Action or multiplayer session resolves. The original's
-    /// builder has no multiplayer branch, so both take this form.</summary>
+    /// <summary>The dialog key an Instant Action session resolves.</summary>
     public static string InstantActionKey(int environment, char letter) =>
         $"loading_i{environment}{letter}";
+
+    /// <summary>The dialog key a multiplayer session's load screen resolves: the environment number
+    /// the original writes for the lobby's row, then the mode letter
+    /// (docs/org/loading-screen.md).</summary>
+    public static string MultiplayerKey(int environment, char letter) =>
+        $"loading_m{environment}{letter}";
 
     /// <summary>Loads a definition file from a shared zrdr scope. Every dialog is kept, including
     /// <c>default</c>, since a key that misses falls back to it the way the original's lookup

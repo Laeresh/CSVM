@@ -337,9 +337,9 @@ also the pump `Utils/LoadProgress.cs` repaints through, installed for its own tr
 ## src/UI/Screens/LoadScreens.cs
 What the load screen is made of, engine-free. `LoadSheet` is the campaign screen's authored half,
 one `Loading.zrd` dialog with its mission's objectives and the seated profile's own memento; `LoadScreens`
-composes either that chart sheet, through `MissionMap` the way `PauseScreens` does, or the Instant
-Action blackboard with the four texts its own `loading_i` dialog places; `DialogTexts` takes that composition by file and key, so an Instant Action pause writes its `ia_escape.zrd` dialog's texts through it. The mission type picks the
-blackboard's dialog by the exe's own letter; free flight and dogfight are ours, so they write the
+composes that chart sheet, through `MissionMap` the way `PauseScreens` does, the Instant
+Action blackboard with the four texts its own `loading_i` dialog places, or a Dogfight's `loading_m` briefing as authored, keyed by `MultiplayerKey` (the original's environment number and mode letter); `DialogTexts` takes that composition by file and key, so an Instant Action pause writes its `ia_escape.zrd` dialog's texts through it. The mission type picks the
+blackboard's dialog by the exe's own letter; free flight is ours, so it writes the
 mode's name and nothing else. `LoadMotion` is the moving half, the fill strip and the six propeller frames the sheet's own `Cycle` beat names, `Moving` places those two at a fraction and a frame, the clipped fill and the propeller face a pump presents on their own layer, and `Painted` re-lays the same pair into `Overlays` for a caller composing a whole board, so the still composition under them is never rewritten. A pumped composition (`For`'s `pumped`) leaves the still propeller frame to that layer, the sheet's `Cycle` element excluded by identity, so a build shows one propeller; a still capture keeps the one still frame. An absent extraction yields the frame and the bar rather than
 throwing, since this screen is shown while everything else is still loading. The dialogs, the beat
 sheet and the face mapping: [../org/loading-screen.md](../org/loading-screen.md).
@@ -347,7 +347,7 @@ sheet and the face mapping: [../org/loading-screen.md](../org/loading-screen.md)
 ## src/UI/Boards/PauseScreens.cs
 What the Original presentation's pause screen is made of, engine-free: the frame behind it, the
 mission's chart at its authored source crop, the pins and icons its dialog's script places, the
-objectives parchment, the memento, and the labelled button strips, the block's four plus the remake's own PHOTO MODE at the place that block leaves free. An Instant Action sortie's dialog carries none of that and draws the load screen's blackboard instead, its four texts composed through `LoadScreens` and its parchment left off by the dialog's own script.
+objectives parchment, the memento, and the labelled button strips, the block's four plus the remake's own PHOTO MODE at the place that block leaves free. An Instant Action sortie's dialog carries none of that and draws the load screen's blackboard instead, its four texts composed through `LoadScreens` and its parchment left off by the dialog's own script; a Dogfight's `LoadMultiplayer` sheet is its mode's `escape.zrd` briefing, or `Loading.zrd`'s where that file numbers the row differently, with no propeller.
 `PauseSheet` is the authored half, read once per sortie, and `PauseReadout` the live half, read afresh on every
 pause: its memento is the seated profile's own picture, `Rows` marks a note line by the runtime's answer for that line's own objective number, and
 `Icon` turns one world pose into the chart icon a session and a suite place alike, through the
@@ -367,7 +367,7 @@ or mouse scheme takes hold before the resume, as do the head turn and targeting 
 ## src/UI/Overlays/MissionMap.cs
 The one chart drawer every screen showing a mission's map shares, engine-free: the sheet as a
 cropped picture, a reveal's visible elements as pictures in placement order over two layers, its
-connector lines as strokes, and one icon placed by world position through the map's own window,
+cycling element (`Cycle`), its connector lines as strokes, and one icon placed by world position through the map's own window,
 turned so its drawn nose reads against the compass: the heading, less however far that bitmap's own
 art is drawn off the top of the sheet. It exists as one module because the original reaches all of
 it through one control class from two dialog constructors, so the briefing, the pause screen and
@@ -1412,7 +1412,7 @@ It lasts the joined session across flights and starts on `StarterAirframe`, the 
 The Multiplayer Lobby's state over a `Net/NetLobby.cs`, engine-free, one class for both ends.
 The host owns the options (environment, mission type, Time, Score or both, Restrict Number of Teams with its bounds, the lives rule), the plane `Rules` and the teams (a `Net/NetTeams.cs` book), and sends them to every guest; any option change advances the round and clears every Ready, its own included. `CreateTeam`, `JoinTeam` and `LeaveTeam` act on the host's book or ask the host, `Teams` and each row's team read the outcome, `LaunchRefusal` is the team launch check and `TeamOfPeer` a seat's team at launch.
 A guest reads the options and the host's player list, and sends its plane (a custom one as its `Build`), fit and Ready under the round it heard once a lobby screen `Show`s it; a changed pick clears its own Ready. `SetReady` runs the original's Ready check, and the host counts a guest Ready only on a plane its rules admit. `Say` sends one chat line, which the host relays; `Announce` posts a host's notice under no name, and `PeerAt` names the peer on a host's row.
-`CanLaunch` is the host's gate, every row Ready; `RulesOf` is the `VersusRules` a launch carries, lives clamped to 1..99, Capture the Flag with its option and Zeppelin vs Zeppelin, and `ChapterOf` the chapter an environment flies on. Capture the Flag fixes two teams numbered 1 and 2 and offers the five environments with an `MP2` map (`Offers`); Zeppelin vs Zeppelin fixes two teams of any number (`FixesTeams`) on all seven. Setters refuse on a guest and for a greyed choice. `CheckBuiltInLaunch` gates a Built-in host's launch on its lobby guests, and `Land` holds a match's `Scores` (from `ScoresOf`, a team match's team lines with their pilots under them) and opens the next round.
+`CanLaunch` is the host's gate, every row Ready; `RulesOf` is the `VersusRules` a launch carries, lives clamped to 1..99, Capture the Flag with its option and Zeppelin vs Zeppelin, and `ChapterOf` the chapter an environment flies on; `EnvironmentNumber` and `ModeOf` are the numbers the original's session setup writes for a row and a launch, and `Teamed` whether any pilot joined a team. Capture the Flag fixes two teams numbered 1 and 2 and offers the five environments with an `MP2` map (`Offers`); Zeppelin vs Zeppelin fixes two teams of any number (`FixesTeams`) on all seven. Setters refuse on a guest and for a greyed choice. `CheckBuiltInLaunch` gates a Built-in host's launch on its lobby guests, and `Land` holds a match's `Scores` (from `ScoresOf`, a team match's team lines with their pilots under them) and opens the next round.
 Wire: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Coverage: `CSVM.Tests/DogfightLobbyTests.cs`.
 
 ## src/UI/Menu/CoopDoorText.cs
