@@ -633,8 +633,8 @@ DI tiers stay derived, as the original derives them, from code 2's hull fraction
 from code 1's death. A guest's own copies raise nothing locally.
 
 No message carries the speaker's pilot either. The original hands a mission vehicle the local
-player's own voice (`FUN_00499c60`, net record `+0x78`, at `0x0047531e`), so its peers do not
-agree on it. The remake deals each AI a pilot from its accent's pool in registration order on every
+player's own voice (`FUN_00499c60`, the lobby record's `+0x78`, the player's chosen voice, at
+`0x0047531e`), so its peers do not agree on it. The remake deals each AI a pilot from its accent's pool in registration order on every
 end, the single-player rule, and the ends agree because they register the same AI in the same order
 ([`../formats/combat-voice.md`](../formats/combat-voice.md), "Which pilot of a pool an aircraft
 takes").
@@ -823,7 +823,11 @@ join or the lobby, and either box's Cancel goes back to the page under it.
 - **Voice** (10034): a drop-down of seven voices, strings 10039 to 10045, each row with a value in
   `WGA.LG[R].SF`: Nathan Zachary 48, Jack 2, Black Swan 24, Paladin Blake 29, Loyle Crawford 44,
   Gruff Male 26, Texan Male 31. The picked row is saved (index 4); its value goes to `$$AHA$$`.
-  What the value selects in flight is not decoded here.
+  [Evidence: decoded] The value is a pilot VO id, held in the `nVoice` setting (`0x00642f14`). It
+  travels as DirectPlay player data at `+0x4c`, written as the session opens (`FUN_00412b60`,
+  `0x00412bf2`) and copied into each peer's lobby record `+0x78` (`FUN_00414640`, `0x004147aa`), and
+  every aircraft of that player speaks as that pilot
+  ([`../formats/combat-voice.md`](../formats/combat-voice.md), "A player's own voice").
 - **Password** (10035): greyed unless callback 5003 answers otherwise (`gui_init`); the capture of
   a LAN TCP/IP game shows it greyed. What the callback reads is not decoded.
 
@@ -840,7 +844,11 @@ for a Dogfight. The game name is the advert's name, and the games list shows it 
 as they are. A host past its cap refuses a guest with the full notice, a Dogfight host as a co-op
 host does. The callsign names this machine's player in every roster, list and line. The voice
 rides the pick's flags byte, so the pick keeps its 36 bytes and a build a patch older reads the
-same pick without it. The password is held on the door and sent nowhere. The callsign, the voice
+same pick without it. At launch the host writes each seat's voice into bits 1 to 3 of that seat's
+flags byte in the seat roster `0x27`, beside the host bit, so every machine speaks every seat in its
+chosen voice; the entry keeps its 20 bytes, and a build a patch older reads the host bit alone. A
+co-op host's first seat carries Nathan Zachary's, the scripted player's, and a splitscreen seat
+carries none. The password is held on the door and sent nowhere. The callsign, the voice
 and the game name are remembered in `options.json` for the next session. The Player Information
 Password draws greyed and takes nothing: it most likely served MSN Gaming Zone, which the remake
 does not carry.

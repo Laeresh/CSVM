@@ -39,6 +39,11 @@ public sealed record NetSeat
     /// </summary>
     public string Livery { get; init; } = "";
 
+    /// <summary>The pilot voice this seat's player chose, in the pick's form: its place in the
+    /// Voice list plus one, 0 for none (<see cref="CoopPickMessage.Voice"/>). The roster carries
+    /// it to every machine, which speaks the seat's in-flight lines in it.</summary>
+    public byte Voice { get; init; }
+
     /// <summary>This pilot's match score, signed: a suicide costs a point, so it goes negative.
     /// </summary>
     public int Score { get; init; }

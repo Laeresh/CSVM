@@ -1391,7 +1391,7 @@ A host reads `StableIpv6` and `LanIpv4` as it opens; `GuestAddress` is what a gu
 
 ## src/UI/Menu/NetPlayerInfo.cs
 What the original asks before a network game opens, engine-free for both presentations: the game's name, password and Maximum # of Players, and the player's callsign and voice, with the scripts' limits. `ClampPlayers` holds the cap to the spinner's floor and the kind's cap, four humans for co-op and sixteen for a Dogfight. `IsValidName` is the original's name test.
-`PilotVoices` is the Voice list's seven voices with their speaker values and the pick's voice byte. `Remembered` and `Remember` read and write the callsign, the voice and the game name in `Utils/OptionsStore.cs` for the next session.
+`PilotVoices` is the Voice list's seven voices with their speaker values (pilot VO ids, `SpeakerFor` reads one off a voice byte) and the pick's voice byte; `CoopHost` is the voice a co-op host's first seat speaks in. `Remembered` and `Remember` read and write the callsign, the voice and the game name in `Utils/OptionsStore.cs` for the next session.
 The decode: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Coverage: `CSVM.Tests/NetPlayerInfoTests.cs`.
 
 ## src/UI/Menu/CoopHostFlow.cs

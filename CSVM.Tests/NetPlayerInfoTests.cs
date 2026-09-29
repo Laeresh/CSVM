@@ -61,6 +61,20 @@ public class NetPlayerInfoTests
         Assert.Equal(PilotVoices.Default, PilotVoices.Clamp(12));
     }
 
+    // A row's script value is the pilot VO id its player's aircraft speaks as. It is read off the
+    // byte a pick or a seat carries, Nathan Zachary 48 through Texan Male 31.
+    [Fact]
+    public void EveryVoiceByteSpeaksAsItsRowsPilot()
+    {
+        var spoken = System.Linq.Enumerable.Select(System.Linq.Enumerable.Range(1, 7), w => PilotVoices.SpeakerFor((byte)w));
+        Assert.Equal(new int?[] { 48, 2, 24, 29, 44, 26, 31 }, spoken);
+        Assert.Equal(48, PilotVoices.SpeakerFor(PilotVoices.Wire(PilotVoices.CoopHost)));
+
+        // ABLE-TO-FAIL CONTROL: no voice, and a byte past the list, speak as nobody.
+        Assert.Null(PilotVoices.SpeakerFor(CoopPickMessage.NoVoice));
+        Assert.Null(PilotVoices.SpeakerFor(8));
+    }
+
     [Fact]
     public void TheCallsignVoiceAndGameNameAreRememberedForTheNextSession()
     {

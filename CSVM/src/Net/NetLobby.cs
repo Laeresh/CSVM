@@ -141,6 +141,10 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     /// not the advert's name, which is the game's.</summary>
     public string LocalCallsign { get; set; } = "";
 
+    /// <summary>The pilot voice this machine's player chose, in the pick's form, 0 for none. A
+    /// Dogfight host's own first seat speaks in it.</summary>
+    public byte LocalVoice { get; set; }
+
     /// <summary>Payloads waiting for a listener. A guest's first held payload is the host's join
     /// answer, which is how a guest board learns that the host has launched.</summary>
     public int Held => _held.Count;

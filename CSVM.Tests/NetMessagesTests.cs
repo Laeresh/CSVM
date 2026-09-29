@@ -252,6 +252,34 @@ public class NetMessagesTests
             Assert.Equal(seats[i], got.Seats[i]);
     }
 
+    // Every seat's pilot voice rides bits 1 to 3 of its flags byte beside the host bit. The entry
+    // keeps its width, and an older reader, which reads bit 0 alone, still finds the host.
+    [Fact]
+    public void SeatRosterCarriesEachSeatsVoiceBesideTheHostBit()
+    {
+        var seats = new List<NetSeatEntry>
+        {
+            new(0, 1, 3, true, "host", Voice: 1),
+            new(1, 2, 0, false, "guest", Voice: CoopPickMessage.MaxVoice),
+            new(2, 2, 7, false, "quiet"),
+        };
+        var buffer = new byte[SeatRosterMessage.SizeFor(seats.Count)];
+        new SeatRosterMessage(5u, seats).Write(buffer);
+
+        Assert.True(SeatRosterMessage.TryRead(buffer, out var got));
+        Assert.Equal(new byte[] { 1, CoopPickMessage.MaxVoice, CoopPickMessage.NoVoice }, got.Seats.Select(s => s.Voice).ToArray());
+        Assert.Equal(new[] { true, false, false }, got.Seats.Select(s => s.IsHost).ToArray());
+        int flags = SeatRosterMessage.PrefixSize + 2;
+        Assert.Equal(1, buffer[flags] & 1);
+        Assert.Equal(1 | (1 << 1), buffer[flags]);
+
+        // ABLE-TO-FAIL CONTROL: a voice past the three bits is sent as none rather than spilling
+        // into the next field.
+        new SeatRosterMessage(5u, new List<NetSeatEntry> { new(0, 0, 0, false, "x", Voice: 9) }).Write(buffer);
+        Assert.True(SeatRosterMessage.TryRead(buffer.AsSpan(0, SeatRosterMessage.SizeFor(1)), out var clipped));
+        Assert.Equal(CoopPickMessage.NoVoice, clipped.Seats[0].Voice);
+    }
+
     // The callsign field is fixed width, so a long name has to lose its tail rather than the
     // roster losing its alignment.
     [Fact]

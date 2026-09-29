@@ -886,6 +886,7 @@ public sealed class NetPlayFeature : IMenuFeature
 
         _released = true;
         _transport.LocalCallsign = PlayerName;
+        _transport.LocalVoice = PilotVoices.Wire(Voice);
         if (IsCoopHost)
         {
             // A launch straight out of a flight is a restart, and a new round is how a guest in

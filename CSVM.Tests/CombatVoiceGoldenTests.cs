@@ -136,6 +136,28 @@ public class CombatVoiceGoldenTests
         Assert.Equal("snd_DA-Bail-A_id2_random", voice.PlayableFor(2, "DA-Bail"));
     }
 
+    // The Voice list's script values name pilots of the same id space the clip sets use. Each is a
+    // whole player-voice set: every family a player's aircraft speaks has clips, taunts included.
+    [ExtractedDataFact]
+    public void EveryPlayerVoiceIsAPilotWithAFullClipSet()
+    {
+        var voice = Voice(out _, out _);
+        string[] families = { "GL-AllyDwn", "GL-EnemyDwn", "GL-PlyrDwn", "DA", "DE", "DI-LowDmg", "DI-MedDmg", "DI-HighDmg", "TA-FailTail", "TA-FailShk" };
+        foreach (var row in CSVM.UI.Menu.PilotVoices.All)
+        {
+            Assert.Contains((int)row.Speaker, voice.PilotIds);
+            foreach (string family in families)
+            {
+                Assert.True(voice.ClipsFor(row.Speaker, family).Count > 0, $"{row.Name} (VO id {row.Speaker}) owns no {family} clip");
+            }
+            Assert.NotNull(voice.PlayableFor(row.Speaker, "GL-AllyDwn"));
+        }
+
+        // ABLE-TO-FAIL CONTROL: id 47, the announcer, ships no clip set, so the test can tell a
+        // player voice from any id number.
+        Assert.Empty(voice.ClipsFor(47, "GL-AllyDwn"));
+    }
+
     private static CombatVoice Voice(out Dictionary<string, SoundDef> defs,
         out Dictionary<string, SoundGroup> groups)
     {

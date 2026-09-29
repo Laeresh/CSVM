@@ -1257,6 +1257,7 @@ public partial class Launcher : Node3D
         IReadOnlyList<LoadoutChoice?> fits, StockLoadouts stock)
     {
         var guests = new List<(int Peer, string Plane, string Name)>();
+        var voices = new List<byte>();
         var seatFits = new List<Net.CoopFit>();
         for (int i = 0; i < planes.Count; i++)
         {
@@ -1268,12 +1269,24 @@ public partial class Launcher : Node3D
             if (System.Linq.Enumerable.Contains(wire.Peers, guest.Peer))
             {
                 guests.Add((guest.Peer, UI.Hangar.PlanePickerRoster.AirframeNode(guest.Airframe), guest.Name));
+                voices.Add(UI.Menu.PilotVoices.Wire(guest.Voice));
                 seatFits.Add(guest.Fit);
             }
         }
 
         string hostName = Net.SeatRosterMessage.Carried(door.PlayerName.Trim()).Trim();
-        return (Net.NetSeats.CoopField(wire.LocalPeer, planes, guests, hostName), seatFits.ToArray());
+        var roster = Net.NetSeats.CoopField(wire.LocalPeer, planes, guests, hostName);
+        // The host's first seat is the scripted player and speaks as Nathan Zachary. Its splitscreen
+        // seats have no voice, and each guest speaks in the voice its pick carried.
+        for (int seat = 0; seat < roster.Length; seat++)
+        {
+            int guest = seat - planes.Count;
+            byte voice = seat == 0 ? UI.Menu.PilotVoices.Wire(UI.Menu.PilotVoices.CoopHost)
+                : guest >= 0 && guest < voices.Count ? voices[guest] : (byte)0;
+            roster[seat] = roster[seat] with { Voice = voice };
+        }
+
+        return (roster, seatFits.ToArray());
     }
 
     /// <summary>A network Dogfight host's field and each seat's fit, by seat. Its own seats come
@@ -1299,6 +1312,8 @@ public partial class Launcher : Node3D
                 IsLocal = true,
                 Callsign = i == 0 && hostName.Length > 0 ? hostName : UI.Boards.SplitScreen.PlayerTag(i),
                 PlaneNode = planes[i],
+                // Only the first seat has a Player Information answer; a splitscreen seat has none.
+                Voice = i == 0 && lobby != null ? lobby.LocalVoice : (byte)0,
             });
             seatFits.Add(CampaignLoadout.FitOf(i < fits.Count ? fits[i] : null, stock));
         }
@@ -1320,6 +1335,7 @@ public partial class Launcher : Node3D
                 SeatIndex = seats.Count,
                 Callsign = name.Length > 0 ? name : $"guest {peer.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
                 PlaneNode = picked ? UI.Hangar.PlanePickerRoster.AirframeNode(chosen.Airframe) : planes[0],
+                Voice = picked ? chosen.Voice : (byte)0,
             });
             // The guest's own lobby flies its pick through the same rules, so both ends agree.
             seatFits.Add(picked ? rules?.Enforce(chosen.Fit) ?? chosen.Fit : default);

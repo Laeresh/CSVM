@@ -402,10 +402,11 @@ public interface INetMessage<TSelf>
     int Write(Span<byte> into);
 }
 
-/// <summary>One seat as the roster carries it. The callsign is a fixed-width UTF-8 field, so a
-/// roster's size depends only on how many seats there are.</summary>
+/// <summary>One seat as the roster carries it. The callsign is a fixed-width UTF-8 field. A
+/// roster's size therefore depends only on how many seats there are. <see cref="Voice"/> is the
+/// seat's pilot voice in the pick's form, 0 for none.</summary>
 public readonly record struct NetSeatEntry(
-    byte Seat, byte Team, byte Plane, bool IsHost, string Callsign);
+    byte Seat, byte Team, byte Plane, bool IsHost, string Callsign, byte Voice = 0);
 
 /// <summary>
 /// One aircraft's state as its owner has it: pose, motion, the lever and the surfaces. It is the
@@ -1154,6 +1155,10 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
     /// into four bits, so 16 is the widest roster its own protocol can name.</summary>
     public const int MaxSeats = 16;
 
+    // An entry's flags byte: bit 0 the host, bits 1 to 3 the seat's voice. An older reader reads
+    // the host bit alone and ignores the voice.
+    private const int VoiceShift = 1;
+
     private readonly NetSeatEntry[] _seats;
 
     /// <summary>The roster for <paramref name="seats"/> under <paramref name="seed"/>.</summary>
@@ -1224,7 +1229,8 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
             byte flags = reader.ReadByte();
             byte plane = reader.ReadByte();
             seats[i] = new NetSeatEntry(
-                seat, team, plane, (flags & 1) != 0, reader.ReadText(CallsignBytes));
+                seat, team, plane, (flags & 1) != 0, reader.ReadText(CallsignBytes),
+                (byte)((flags >> VoiceShift) & CoopPickMessage.MaxVoice));
         }
 
         message = new SeatRosterMessage(seats, seed);
@@ -1244,7 +1250,8 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
         {
             writer.WriteByte(seat.Seat);
             writer.WriteByte(seat.Team);
-            writer.WriteByte((byte)(seat.IsHost ? 1 : 0));
+            int voice = seat.Voice <= CoopPickMessage.MaxVoice ? seat.Voice : CoopPickMessage.NoVoice;
+            writer.WriteByte((byte)((seat.IsHost ? 1 : 0) | (voice << VoiceShift)));
             writer.WriteByte(seat.Plane);
             writer.WriteText(seat.Callsign, CallsignBytes);
         }

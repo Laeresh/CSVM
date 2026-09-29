@@ -26,6 +26,10 @@ public sealed partial class AiVoiceRuntime : Node
     /// player's health crosses 30 %).</summary>
     public const float PlayerHighDmgFraction = 0.30f;
 
+    /// <summary>How near a hostile player flown elsewhere must be to taunt a local player. Decoded:
+    /// <c>FUN_00470750</c>, the 1695.0 at <c>0x00607e78</c> (docs/formats/combat-voice.md).</summary>
+    public const float HumanTauntRange = 1695f;
+
     private readonly CombatVoice _voice;
     private readonly WorldSounds _sounds;
     private readonly MissionRadio _radio;
@@ -41,6 +45,10 @@ public sealed partial class AiVoiceRuntime : Node
     private readonly HashSet<(int Speaker, string Family)> _noClipLogged = new();
     private readonly Dictionary<int, float> _nextCallOut = new();
     private readonly Dictionary<int, int> _accentTurns = new();
+    private readonly HashSet<int> _remoteHumans = new();
+    private readonly HashSet<int> _tauntInRange = new();
+    private readonly Dictionary<int, float> _lastHull = new();
+    private int? _localTeam;
     private float _now;
 
     public AiVoiceRuntime(CombatVoice voice, WorldSounds sounds, MissionRadio radio, Random rng)
@@ -72,13 +80,18 @@ public sealed partial class AiVoiceRuntime : Node
     /// <summary>The mission clock the dispatch runs on, advanced by <see cref="Step"/>.</summary>
     public float Now => _now;
 
-    /// <summary>Advances the mission clock one sim step (the 2 s mute window and every cooldown
-    /// run on this, so a halted clock halts the chatter too), then raises the attack pair for
-    /// every pursuer holding a human. Called by SessionSimulation.</summary>
+    // The team the local player flies for, which the original's per-peer voice arms compare against.
+    private int LocalTeam => _localTeam ?? AimAssist.PlayerTeam;
+
+    /// <summary>Advances the mission clock one sim step. The 2 s mute window and every cooldown run
+    /// on it, so a halted clock halts the chatter too. It then raises the attack pair for every
+    /// pursuer holding a human, and the taunts of every hostile player flown elsewhere. Called by
+    /// SessionSimulation.</summary>
     public void Step(float dt)
     {
         _now += dt;
         RaiseAttackCallOuts();
+        RaiseHumanTaunts();
     }
 
     /// <summary>Takes an AI aircraft, voiced or not. ⚠ Hand over EVERY AI the session builds: the
@@ -129,15 +142,18 @@ public sealed partial class AiVoiceRuntime : Node
         };
     }
 
-    /// <summary>Registers a human rig as an event source; the player itself never speaks an AI
-    /// line. Its health crossing 30 % broadcasts <c>WA-HighDmg</c> to the flight. A kill of its
-    /// own addresses the gloat (id 24) to the rig itself and broadcasts <c>PR-EnemyDwn</c>
-    /// (id 16). The gloat is silent until a player rig resolves a voice set. A stunt run the rig
-    /// already carries is watched for its completed zones (id 15).</summary>
-    public void RegisterPlayer(FlightController rig)
+    /// <summary>Registers a human rig flown here as an event source. Its health crossing 30 %
+    /// broadcasts <c>WA-HighDmg</c> to the flight. A kill of its own addresses the gloat (id 24) to
+    /// the rig itself and broadcasts <c>PR-EnemyDwn</c> (id 16). The gloat speaks only for a rig
+    /// given a pilot <paramref name="voId"/>, a network player's chosen voice. A stunt run the rig
+    /// already carries is watched for its completed zones (id 15). The first rig names the local side.</summary>
+    public void RegisterPlayer(FlightController rig, int? voId = null, float talkerChance = 0f,
+        float constitutionChance = 0f)
     {
         _humans.Add(rig.PlayerIndex);
+        _localTeam ??= rig.Team;
         IndexAndWatchKills(rig);
+        RegisterHumanVoice(rig, voId, talkerChance, constitutionChance);
         _lastPlayerFraction[rig] = 1f;
         if (rig.Stunt is { } stunt)
         {
@@ -157,6 +173,18 @@ public sealed partial class AiVoiceRuntime : Node
             }
             _lastPlayerFraction[damaged] = fraction;
         };
+    }
+
+    /// <summary>Registers a network player's aircraft flown on another machine, speaking as pilot
+    /// <paramref name="voId"/> when its player chose a voice. This end derives its lines as each of
+    /// the original's peers does. They are the taunt pair, the DI tiers on the local side, the gloat
+    /// and the death cry (docs/formats/combat-voice.md, "A player's own voice").</summary>
+    public void RegisterRemotePlayer(FlightController rig, int? voId, float talkerChance,
+        float constitutionChance)
+    {
+        _remoteHumans.Add(rig.PlayerIndex);
+        IndexAndWatchKills(rig);
+        RegisterHumanVoice(rig, voId, talkerChance, constitutionChance);
     }
 
     /// <summary>Wires the <c>WA-Turret</c> site (id 0): every gunner in the session, carried or
@@ -189,6 +217,57 @@ public sealed partial class AiVoiceRuntime : Node
     /// The original derives it the same way, from the state message's health byte.</summary>
     internal void TakeHull(FlightController ai, float fraction) =>
         Play(_dispatcher.NotifyDamage(ai.PlayerIndex, fraction, _now));
+
+    /// <summary>The DI distress of a player flown elsewhere, off the hull fraction its owner sends.
+    /// The original raises it only for a remote on the local player's side, and only as the health
+    /// falls (<c>FUN_00498170</c>, <c>0x004985cf</c>).</summary>
+    internal void TakeRemotePlayerHull(FlightController rig, float fraction)
+    {
+        int id = rig.PlayerIndex;
+        float last = _lastHull.GetValueOrDefault(id, 1f);
+        _lastHull[id] = fraction;
+        if (!_remoteHumans.Contains(id) || fraction >= last || AimAssist.Hostile(rig.Team, LocalTeam))
+        {
+            return;
+        }
+
+        SyncAlive(rig);
+        Play(_dispatcher.NotifyDamage(id, fraction, _now));
+    }
+
+    /// <summary>The taunt pair of every hostile player flown elsewhere within range of a local
+    /// player, addressed to that player's aircraft. The original's per-remote update raises it every
+    /// frame (<c>FUN_00470750</c>, <c>0x00470822</c>, <c>0x00470849</c>). 25 waits one frame in
+    /// range, the <c>+0x1082</c> latch. The bearing broadcast after it is not raised. It elects from
+    /// the local flight's AI, and no network match of the remake puts AI beside a hostile player.</summary>
+    internal void RaiseHumanTaunts()
+    {
+        foreach (int id in _remoteHumans)
+        {
+            // An airframe swap frees the aircraft a seat was registered with.
+            if (!_byIndex.TryGetValue(id, out var remote) || !IsInstanceValid(remote)
+                || _dispatcher.Find(id) is not { } speaker)
+            {
+                continue;
+            }
+            var quarry = remote.InPlay ? NearestLocalHostile(remote) : null;
+            bool wasInRange = _tauntInRange.Contains(id);
+            if (quarry == null)
+            {
+                _tauntInRange.Remove(id);
+                continue;
+            }
+            _tauntInRange.Add(id);
+            if (AiVoiceDispatcher.TauntTriggerFor(remote.WorldPosition, remote.NoseDirection,
+                    quarry.WorldPosition) is not { } taunt
+                || (taunt == AiVoiceDispatcher.TaFailTail && !wasInRange)
+                || _now < speaker.NextAllowedAt(taunt))
+            {
+                continue;
+            }
+            SayAsPlayer(id, taunt);
+        }
+    }
 
     // One raise of the pair: the pursuer's own WA-Attack and the flight's bearing call-out. The
     // bearing is computed in the warned player's frame and broadcast on the player's side. The
@@ -328,6 +407,11 @@ public sealed partial class AiVoiceRuntime : Node
     // killer to speak. A kill by a human rig takes the player arm instead, 24 and then 16.
     private void OnDowned(FlightController victim, int? killer)
     {
+        if (_remoteHumans.Contains(victim.PlayerIndex))
+        {
+            OnRemotePlayerDowned(victim, killer);
+            return;
+        }
         if (killer is not { } shooter || shooter == victim.PlayerIndex)
         {
             return;
@@ -336,12 +420,21 @@ public sealed partial class AiVoiceRuntime : Node
         {
             return;
         }
+        if (_remoteHumans.Contains(shooter))
+        {
+            // The take-hit death branch's arm for a killer that is not the local player, in that
+            // player's own voice. It is 22 when the victim is on the local side, else 23.
+            SayAsPlayer(shooter, AimAssist.Hostile(victim.Team, LocalTeam)
+                ? AiVoiceDispatcher.GlEnemyDwn
+                : AiVoiceDispatcher.GlAllyDwn);
+            return;
+        }
         if (_humans.Contains(shooter))
         {
             // ⚠ Do not make the broadcast the else-branch of the addressed line: the decoded
             // null-slot test jumps INTO it, so 16 runs whether or not the player's own rig
             // resolved a voice set, and it always elects from the local player's team.
-            Play(_dispatcher.Dispatch(shooter, AiVoiceDispatcher.GlPlyrDwn, _now));
+            SayAsPlayer(shooter, AiVoiceDispatcher.GlPlyrDwn);
             Play(_dispatcher.Broadcast(AiVoiceDispatcher.PrEnemyDwn, AimAssist.PlayerTeam, _now));
             return;
         }
@@ -357,6 +450,79 @@ public sealed partial class AiVoiceRuntime : Node
             // Which AI scored is the host's to know, so a replicated killer's gloat is relayed.
             Say(killerAi, trigger);
         }
+    }
+
+    // A player flown elsewhere died, the death handler FUN_00498bf0's voice arm
+    // (docs/formats/combat-voice.md, "A player's own voice"). ⚠ Do not voice a kill by a player
+    // flown here. That arm returns before the gloat and the cry, so only the victim's machine speaks.
+    private void OnRemotePlayerDowned(FlightController victim, int? killer)
+    {
+        _lastHull.Remove(victim.PlayerIndex);
+        if (killer is { } local && _humans.Contains(local))
+        {
+            return;
+        }
+        bool victimOurs = !AimAssist.Hostile(victim.Team, LocalTeam);
+        if (killer is { } shooter && _remoteHumans.Contains(shooter) && shooter != victim.PlayerIndex
+            && AimAssist.Hostile(TeamOf(shooter), victim.Team))
+        {
+            bool killerOurs = !AimAssist.Hostile(TeamOf(shooter), LocalTeam);
+            if (victimOurs != killerOurs)
+            {
+                SayAsPlayer(shooter, victimOurs ? AiVoiceDispatcher.GlAllyDwn : AiVoiceDispatcher.GlEnemyDwn);
+            }
+        }
+        Play(_dispatcher.DeathCry(victim.PlayerIndex, victimOurs, _now));
+    }
+
+    // A player's own line, addressed to its aircraft and derived on this end, never relayed.
+    // Aliveness is read off the aircraft each time, since a player comes back from every death.
+    private void SayAsPlayer(int id, int trigger)
+    {
+        if (_byIndex.TryGetValue(id, out var rig))
+        {
+            SyncAlive(rig);
+        }
+        Play(_dispatcher.Dispatch(id, trigger, _now));
+    }
+
+    private void SyncAlive(FlightController rig)
+    {
+        if (_dispatcher.Find(rig.PlayerIndex) is { } speaker)
+        {
+            speaker.Alive = IsInstanceValid(rig) && rig.InPlay;
+        }
+    }
+
+    // A player's aircraft speaks as the pilot its player chose, or not at all. It is never elected
+    // for a broadcast, which walks the AI of the local flight.
+    private void RegisterHumanVoice(FlightController rig, int? voId, float talkerChance, float constitutionChance)
+    {
+        if (voId is not { } vo || _dispatcher.Find(rig.PlayerIndex) != null)
+        {
+            return;
+        }
+        _dispatcher.Register(rig.PlayerIndex, vo, rig.Team, isPlayer: true, talkerChance, constitutionChance);
+        _bySpeaker[rig.PlayerIndex] = rig;
+        Log.Info("sound", $"player voice: {rig.Name}: VO id {vo} (talker {talkerChance.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)})");
+    }
+
+    // The nearest player flown here that is in play, hostile to the remote, and in taunt range.
+    private FlightController? NearestLocalHostile(FlightController remote)
+    {
+        FlightController? nearest = null;
+        float best = HumanTauntRange * HumanTauntRange;
+        foreach (int id in _humans)
+        {
+            if (_byIndex.TryGetValue(id, out var local) && IsInstanceValid(local) && local.InPlay
+                && AimAssist.Hostile(remote.Team, local.Team)
+                && remote.WorldPosition.DistanceSquaredTo(local.WorldPosition) is var d && d <= best)
+            {
+                best = d;
+                nearest = local;
+            }
+        }
+        return nearest;
     }
 
     // ⚠ Subscribed for AI only: the struck aircraft is the speaker here, and a human rig speaks no

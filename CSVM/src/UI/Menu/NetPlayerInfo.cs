@@ -12,14 +12,20 @@ public readonly record struct PilotVoice(int StringId, string Name, byte Speaker
 /// <summary>
 /// The seven pilot voices of the original's Voice list, in its order
 /// (<c>MULTIPLAYERPLAYERMODAL.SCRIPT</c>, strings 10039 to 10045). A voice travels as its place in
-/// this list plus one, so both ends read it through the same table. What a speaker value selects in
-/// flight is not decoded here.
+/// this list plus one, so both ends read it through the same table. A row's speaker value is a pilot
+/// VO id, the number the voice clips and pools use. A player's aircraft speaks its combat lines as
+/// that pilot (<c>docs/formats/combat-voice.md</c>).
 /// </summary>
 public static class PilotVoices
 {
     /// <summary>The voice a player who never chose one has: the list's first row, which the
     /// script's list starts on.</summary>
     public const int Default = 0;
+
+    /// <summary>The voice a campaign co-op host's first seat speaks in, whatever it chose: Nathan
+    /// Zachary's, the list's first row. That seat is the scripted player, whose mission dialogue is
+    /// Nathan Zachary's own. A remake-only rule, since the original flies no campaign across a link.</summary>
+    public const int CoopHost = 0;
 
     private static readonly PilotVoice[] Table =
     {
@@ -45,6 +51,9 @@ public static class PilotVoices
 
     /// <summary>The voice a pick's voice byte names, or -1 for none.</summary>
     public static int FromWire(byte voice) => voice >= 1 && voice <= Table.Length ? voice - 1 : -1;
+
+    /// <summary>The pilot VO id a pick's or a seat's voice byte speaks as, or null for none.</summary>
+    public static int? SpeakerFor(byte voice) => FromWire(voice) is var place and >= 0 ? Table[place].Speaker : null;
 }
 
 /// <summary>

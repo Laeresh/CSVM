@@ -301,6 +301,7 @@
     "muzzle-light-first-person-point-term": 0.02,
     "net-ai-spawn": 10.0,
     "net-ai-voice": 7.0,
+    "net-player-voice": 8.0,
     "net-ai-world": 10.0,
     "net-aircraft-replication": 6.5,
     "net-blacke-warp": 3.73,

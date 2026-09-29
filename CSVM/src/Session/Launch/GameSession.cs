@@ -1544,8 +1544,11 @@ public partial class GameSession : Node3D
             {
                 extraAccents.AddRange(InstantActionRuntime.VoiceAccentIds(iaVoice.Runtime.Def));
             }
+            // Each network seat's chosen pilot speaks its lines at runtime too.
+            var seatPilots = _netSeats.Select(s => UI.Menu.PilotVoices.SpeakerFor(s.Voice))
+                .OfType<int>().ToList();
             voiceClips = CombatVoice.SessionPrewarmNames(
-                state.ZrdrPath, state.MissionZrdrPath, voiceDefs, voiceGroups, extraAccents);
+                state.ZrdrPath, state.MissionZrdrPath, voiceDefs, voiceGroups, extraAccents, seatPilots);
         }
         var session = WorldSession.Build(
             new WorldSession.Options
@@ -3020,7 +3023,7 @@ public partial class GameSession : Node3D
 
         // The voice dispatcher needs the world's WorldSounds (prewarmed
         // above) and the sound defs. Built before the --ai loop so spawns can register; the
-        // players register as damage sources only (WA-HighDmg's broadcast trigger).
+        // players register as event sources, and a network seat as its chosen pilot too.
         if (state.WorldRuntime?.Sounds is { } worldSounds
             && state.SoundDefs is { } vDefs && state.SoundGroups is { } vGroups)
         {
@@ -3035,13 +3038,7 @@ public partial class GameSession : Node3D
             // WA-Turret: subscribed to the pool, not to a turret list, so the emplacements built
             // further down and every carried gunner report through one seam.
             _aiVoice.WatchTurrets(projectiles);
-            foreach (var rig in _rigs)
-            {
-                if (rig.Controller is { } human)
-                {
-                    _aiVoice.RegisterPlayer(human);
-                }
-            }
+            RegisterPlayerVoices(_aiVoice);
         }
         // An anchored net rides its trailer target, so every follower built below takes a supplier
         // for the object its net names. The player is rig 0, anything else is a world node, and a
@@ -4364,6 +4361,7 @@ public partial class GameSession : Node3D
             && _seatRigs[damage.Seat].Controller is { RemoteOwned: true } rig)
         {
             rig.Visuals?.OnHullDamage(damage.Hull);
+            _aiVoice?.TakeRemotePlayerHull(rig, damage.Hull);
         }
     }
 
@@ -5976,6 +5974,54 @@ public partial class GameSession : Node3D
         int constitutionRating = constitutionOverride ?? _spec.AiAttackSkill ?? 5;
         _aiVoice.RegisterAi(ai, accentId, skills.At("talker_chance", talkerRating),
             skills.At("constitution_chance", constitutionRating));
+    }
+
+    // Every human aircraft joins the voice runtime. Outside a network match that is each pane's,
+    // voiceless. In one, every seat speaks on every machine as the pilot its roster voice names.
+    // It rolls the session's talker rating, the vehicle constructor's fallback for a def with none.
+    private void RegisterPlayerVoices(AiVoiceRuntime voice)
+    {
+        if (_netSeats.Count == 0)
+        {
+            foreach (var rig in _rigs)
+            {
+                if (rig.Controller is { } human)
+                {
+                    voice.RegisterPlayer(human);
+                }
+            }
+            return;
+        }
+
+        // A match may fly no AI, so the table the spawner loads on its first AI may not be read yet.
+        try
+        {
+            _aiSkills ??= _flightRoster?.AiSkills ?? AiSkills.Load(_zrdrPath);
+        }
+        catch (Exception e) when (e is IOException or InvalidDataException)
+        {
+            Log.Warn("sound", $"player voice: cannot load ai_skill_parameters, so no player speaks: {e.Message}");
+        }
+
+        int rating = _spec.AiAttackSkill ?? 5;
+        float talker = _aiSkills?.At("talker_chance", rating) ?? 0f;
+        float constitution = _aiSkills?.At("constitution_chance", rating) ?? 0f;
+        for (int seat = 0; seat < _netSeats.Count && seat < _seatRigs.Count; seat++)
+        {
+            if (_seatRigs[seat].Controller is not { } human)
+            {
+                continue;
+            }
+            int? voId = UI.Menu.PilotVoices.SpeakerFor(_netSeats[seat].Voice);
+            if (_netSeats[seat].IsLocal)
+            {
+                voice.RegisterPlayer(human, voId, talker, constitution);
+            }
+            else
+            {
+                voice.RegisterRemotePlayer(human, voId, talker, constitution);
+            }
+        }
     }
 
     // Maps the simulation's named phases onto this session's concrete owners.

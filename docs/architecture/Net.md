@@ -369,7 +369,7 @@ that carry it are the message vocabulary's.
 ## src/Net/NetSeat.cs
 One pilot's place in a match, shaped like the record the original allocates per player: the peer it
 is addressed by, its team, whether this machine flies it, its callsign, its airframe and paint, its
-seat index and its signed score. `Color` reads the seat's own entry in `NetSeats`. The seat index is
+pilot voice in the pick's form, its seat index and its signed score. The roster carries the voice to every machine. `Color` reads the seat's own entry in `NetSeats`. The seat index is
 the whole identity: a remote pilot indexes spawns, scores, markers and colours exactly as a
 splitscreen pane does, which is why the session orders its rigs by it. Read
 `docs/architecture/Session.md`'s `GameSession.cs` entry for where a seat becomes an aeroplane
