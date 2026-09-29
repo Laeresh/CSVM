@@ -179,7 +179,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 3. ☑ BL-803: the shadow-map bands on grazing surfaces under Enhanced
 4. ☑ Alpha-to-coverage on the cutout surfaces under Enhanced
 5. ☑ FSR 2.2 tried once as the alternative temporal pass, kept or parked on the user's verdict
-6. ◐ An Anti-aliasing row on the VIDEO page, and a Render Scale that follows it down to 50%
+6. ☑ An Anti-aliasing row on the VIDEO page, and a Render Scale that follows it down to 50%
+7. ☐ C5 and the last two campaign missions hold a frame budget under Enhanced
 
 ### Wave B, lit explosions
 
@@ -205,6 +206,22 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 31. ☐ An enhanced golden set under `--det`
 32. ☑ The perf reading over the finished stack, within 20% of the D31 baseline
+
+### Verdicts at the controls, Waves A to C
+
+| Item | Verdict | Follow-up |
+|---|---|---|
+| A1 | Edges smooth, no ghost trails on sprites | The sun's and moon's glint on water is too bright, the moon's most: the sun light's specular drops under Enhanced, further at night; the water material stays |
+| A1 | The aircraft's own shadow shows only in a narrow band of camera distance and altitude | The sun's angular size 2.0° to 1.0°, the first cascade stretched to about 250 m, the directional shadow map doubled |
+| A2 | 200% visibly sharpens the C5 skyline; its cost is the user's (decision 9) | none |
+| A3 | The water bands are gone | none |
+| A4 | The cockpit gauge faces are opaque with AA off | none |
+| A6 | Every method looks good; the world's low detail keeps them close | The Deck crashes at four panes and 67% (A7) |
+| B11 to B14, B16 | Pass | none |
+| B15 | The marks read small and light | Both radius factors × 1.3, peak alpha 0.75 to 0.95 |
+| C21 | The medium strength (0.10 / 0.20 / 0.45) | Ship medium |
+| C22 | C5's whiteout bank draws a hard horizontal edge and too prominent a skyline | Fade the bank's density out over a height above the zone |
+| All | C5 performance is poor under every AA method | A7 |
 
 ## Dependency and parallelism notes
 
@@ -609,7 +626,7 @@ at 1.0, which the setting's comment must say.
 hand (puffer, clouds, clutter); those hand-rolled billboards give wrong vectors and smear. That is
 likely the deciding defect, so look for it first.
 
-## A6 ◐ An Anti-aliasing row on the VIDEO page, and a Render Scale that follows it down to 50%
+## A6 ☑ An Anti-aliasing row on the VIDEO page, and a Render Scale that follows it down to 50%
 
 **Landed.** `Utils/AntiAliasingSetting.cs` replaces `TemporalPassSetting.cs` and its
 `graphics.temporal` key: the saved `antiAliasing` option, then the `graphics.antiAliasing` config key,
@@ -686,6 +703,52 @@ shaders (puffer, clouds, clutter) write no motion vectors; a lower input resolut
 on them, so look for smear on smoke and clouds first. The spyglass SubViewport and the panes take
 the same writes as the root viewport, or they disagree in sharpness (A2's trap); the transparent
 cockpit pass takes none (see the fix above).
+
+## A7 ☐ C5 and the last two campaign missions hold a frame budget under Enhanced
+
+**Goal.** Under Enhanced, C5 and the campaign's last two missions, CM23 "The Criminal Exodus"
+(`C5/M03`) and CM24 "Battle over Broadway" (`C5/M04`), run at 60 fps on the Steam Deck at 67% with
+TAA, one pane, and at 60 fps on the author's machine at 100% with four panes. The faithful path's
+frame cost does not rise and its goldens do not move.
+
+**Decisions (the user's).** C5 performance is poor whatever the AA method. Measure GPU and CPU
+(the per-frame script, AI and animation cost as well as the render passes) on C5 freeroam and on
+CM23 and CM24 flown with their own rosters, and fix what dominates. Explore general wins while
+there, including instancing: clutter already draws one MultiMesh per kind, and the world's placed
+geometry does not. Fix the Deck crash at four panes and 67% as part of the item.
+
+**Evidence (confidence: measured).** On the Deck (1280x800, C5 flight, the eg2 Linux export,
+`[perf]` windows): Original 105 fps (GPU 8.5 ms); Enhanced at 100% 26 to 43 fps by AA method (GPU
+27.6 to 45.7 ms); at 67% through FSR 1, 67 fps with TAA and 74 with AA off (GPU 13.4 to 14.8 ms);
+FSR 2.2 at 67% 46 fps. C1 under Enhanced with TAA runs 80 fps at 100% and 118 at 67%. Four panes
+at 100% run about 10 fps; four panes at 67% crash under both TAA and FSR 2.2 on Godot's "Too many
+mipmaps requested for texture format and dimensions (5), maximum allowed: (4)", a render buffer at
+a pane's roughly 430x270 internal size. On the author's machine C5 freecam at 200% gives 40 fps
+with GPU 25 ms. ⚠ `script_ms` is TIME_PROCESS, the worst pass of each second, not a per-frame cost
+(PERF-1); read `proc_ms`, `ai_ms` and `sim_ms`. ⚠ `gpu_ms` covers the main viewport only, so a
+four-pane figure is read from `frame_ms`. Every placed world node is its own MeshInstance3D, which
+is where a heavy pose's roughly 2,000 draw calls come from.
+
+**Approach.** Profile first, per pass and per system, with a paired A/B for every change: the
+Enhanced passes one at a time (`--no-ssao`, `--no-ssr`, `--no-glow`, `--no-soft-shadows`), the
+omni pool (B16 raised it to 64), clutter and map-edge instancing, the draw-call count, and the CPU
+phases. Then take the dominant costs in order, candidates being merging static world nodes that
+share a material, instancing repeated placed models, cheaper settings per effects level, and CPU
+hot paths the profile names. Fix the four-pane crash by keeping every render buffer above the size
+its mip chain needs. Measure on the Deck over ssh (the `~/CSVM-eg2` export and `deckperf.sh` runner,
+`XDG_DATA_HOME` redirected so the user's settings are untouched, a `config.json` beside the build
+for config keys), and on the author's machine through `RunTests.ps1 -Perf` and `--perf` runs.
+
+**Model recommendation.** high, delegated: it spans the render setup, the world build and the
+simulation.
+
+**Verify.** The `[perf]` figures before and after on the Deck and the author's machine at the poses
+above; the four-pane 67% run completes; faithful goldens zero movers; the complete `RunTests.ps1`.
+
+**⚠ Traps.** A merge or instancing change must keep every per-node behaviour the world relies on:
+zone gating (`ZoneGate` layers), destructible visibility, animation-driven transforms, the
+`node_bias` depth order and colliders. Perf windows taken while other probes run on the machine are
+noise; repeat and pair them.
 
 # Wave B, lit explosions
 
