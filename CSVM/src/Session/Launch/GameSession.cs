@@ -508,6 +508,10 @@ public partial class GameSession : Node3D
     /// <summary>The session's per-player rigs, the Launcher's F11 placement print reads them.</summary>
     internal List<PlayerRig> Rigs => _rigs;
 
+    /// <summary>The launch as this session resolved it. A campaign launch settles its chapter and
+    /// mission here, out of the story position, so the Launcher's own copy never names them.</summary>
+    internal SessionSpec Spec => _spec;
+
     /// <summary>One rig per seat: the panes, then one pane-less rig per remote pilot, in seat
     /// order. Identical to <see cref="Rigs"/> outside a network match.</summary>
     internal IReadOnlyList<PlayerRig> SeatRigs => _seatRigs;

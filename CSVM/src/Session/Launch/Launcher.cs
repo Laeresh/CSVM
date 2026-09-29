@@ -1047,7 +1047,7 @@ public partial class Launcher : Node3D
         // aircraft's placement. A deterministic --screenshot run then replays a hand-framed view.
         if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F11 })
         {
-            _captureDirector.PrintPlacement(_spec, _session?.Rigs ?? NoRigs, _camera, _orbit);
+            _captureDirector.PrintPlacement(_session?.Spec ?? _spec, _session?.Rigs ?? NoRigs, _camera, _orbit);
             return;
         }
         // F10 in the viewer: export the plane on screen, current livery and damage state baked
