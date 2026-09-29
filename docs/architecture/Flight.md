@@ -729,9 +729,18 @@ hull 0 flying the first and hull 1 the second, and `SpawnBlocks` opens each side
 block round its own hull. `Counts` lets each gas bag score once, at its own death or its bound
 cannon's, and `Points` is `score_gas_kill` to an enemy and `score_my_gas_kill` on the killer's
 own hull. `RespawnPoint` is the return by the pilot's hull, `HullSide` labels a hull's marker by
-side, and `BroadsideShooter` is the shooter id a hull's rounds carry. `VersusMatch.EndOnHullLoss`
-ends the match on the hull loss, and `Session/World/ZeppelinVersusRuntime.cs` runs it in a match.
-Read `ZeppelinVersusTests.cs` and `docs/org/multiplayer-zvz.md`.
+side and `RearmSide` its rearm base's, and `BroadsideShooter` is the shooter id a hull's rounds
+carry. `VersusMatch.EndOnHullLoss` ends the match on the hull loss, and
+`Session/World/ZeppelinVersusRuntime.cs` runs it. Read `ZeppelinVersusTests.cs` and `docs/org/multiplayer-zvz.md`.
+
+## src/Flight/Modes/RearmBases.cs
+The multiplayer rearm's rules, engine-free: `RuleFor` serves any base in either Deathmatch and only
+the pilot's own team's in Capture the Flag and Zeppelin vs Zeppelin, `NodeName` names base `n`'s
+node, and `ReadRadiusSquared` takes `player.zrd`'s `rearm_rad` squared or the executable's 625.
+`Enters` is one seat's step, true on the step it comes within the radius of a base serving it and
+latched until it is outside all of them. `Session/World/RearmRuntime.cs` runs it in a match and
+`FlightController.Rearm` is the restore. Read `RearmBasesTests.cs` and
+`docs/org/multiplayer-rearm.md`.
 
 ## src/Flight/Modes/ScoreStore.cs
 Stunt best-time persistence: one JSON object in `user://stunt_scores.json` keyed
@@ -1180,7 +1189,7 @@ text, dials and gates compose and assert here with no `Control` (`ComputeStallWa
 ## src/Flight/Airframe/FlightController.cs
 The flying-aircraft node: input through `FlightModel` to a transform (or, for an AI pilot publishing
 a `RailPose`, the danger-zone ribbon's pose in place of the model step, the sweep still run), plus
-weapon fire as `FireControl`'s engine adapter and the crash and respawn paths (`Respawn` takes what its `RespawnPlacement` hook answers, `RespawnAt` a pose handed to it instead, and `RespawnRequest` withholds the return altogether for a seat whose placement is somebody else's to grant). It keeps no rule it
+weapon fire as `FireControl`'s engine adapter and the crash and respawn paths (`Respawn` takes what its `RespawnPlacement` hook answers, `RespawnAt` a pose handed to it instead, and `RespawnRequest` withholds the return altogether for a seat whose placement is somebody else's to grant), and `Rearm`, a rearm base's in-flight restore of parts, damage stages and every slot. It keeps no rule it
 can delegate: the camera is `CameraController`'s, the pilot HUD `FlightHud`'s, this frame's stick
 one `IFlightInputSource`, the states an aircraft moves between `AircraftLifecycle`'s, and what a
 contact costs `AircraftContactResolver`'s. This node reads the devices, performs what each of those

@@ -275,6 +275,7 @@ only `Airframe`, and nothing else in `Flight` names `Hangar`.
 - `src/Flight/Modes/VersusMatch.cs`, Dogfight deathmatch bookkeeping: one signed score plus kills and deaths per player, team totals in a team match, the host-fed clock, threshold and time-out completion, standings.
 - `src/Flight/Modes/FlagMatch.cs`, Capture the Flag's rules, engine-free: the flags, the proximity asks and cooldowns, the host's decision, the drop and throw, the points.
 - `src/Flight/Modes/ZeppelinVersus.cs`, Zeppelin vs Zeppelin's rules, engine-free: the two sides and their hulls, what a dead gas bag or cannon scores, the return by the pilot's own hull.
+- `src/Flight/Modes/RearmBases.cs`, the multiplayer rearm's rules, engine-free: which bases serve a pilot, the radius, and each seat's once-per-entry latch.
 - `src/Flight/Modes/VersusSpawnRotation.cs`, Dogfight respawn placement: the per-seat spawn-list ledger and the roomy point a downed seat rotates onto.
 - `src/Flight/Modes/VersusHud.cs`, per-pane Dogfight status line: remaining time, this player's kills, the leader, and the hostile marker.
 - `src/Flight/Modes/PauseState.cs`, who is holding the sim clock and why: the pause owner and the results-board halt, engine-free.
@@ -664,6 +665,7 @@ delegate to, in six sub-namespaces, one folder each. `Launch` sits on top and no
 - `src/Session/World/NetWorldLink.cs`, the host-owned world over the wire: AI aircraft as launch, pose, fire, hit, presence and death messages, zeppelin and surface-vehicle paths as periodic samples, destructible health, stage changes and deaths as events, and warp picks.
 - `src/Session/World/FlagRuntime.cs`, Capture the Flag in a network match: the mission's flags moved, asked for, decided, scored, spoken and posted on every machine.
 - `src/Session/World/ZeppelinVersusRuntime.cs`, Zeppelin vs Zeppelin in a network match: the two hulls on their sides, the host scoring every dead part and ending on a lost hull.
+- `src/Session/World/RearmRuntime.cs`, the multiplayer rearm bases in a Dogfight: each machine's own seats restored in full on entering a base that serves them.
 - `src/Session/World/NetCutsceneLink.cs`, the cutscene skip over the wire: a guest's skip asks the host, and the host's skip ends the named episode on every guest.
 - `src/Session/World/NetChatLink.cs`, the in-flight chat over the wire and its keys: an all-chat to every machine, a team line to the typist's lobby team alone.
 - `src/Session/World/ZeppelinRuntime.Cannons.cs`, the broadside half of that partial: the cannon wiring, the target and arc gate, the anims and the rounds fired.

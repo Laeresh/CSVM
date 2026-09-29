@@ -961,6 +961,9 @@ member, and it does not go here.
 - **SRC-21**, **A constant a config reader stores when a key is missing is a fallback, not the value
   in play; open the file the reader loaded before citing it.** The multiplayer score table was read
   as kill +1 and lost hull +100, and the shipped `player.zrd` authors 2 and 10.
+- **SRC-22**, **When a reader leaves a global alone on a missing key, the value in play is the
+  global's initialised bytes; read them from `.data` before quoting a default.** The rearm radius
+  was written up as 624.0, and `0x628f10` holds 625.0, 25 m squared.
 
 ## What this project cannot verify itself
 

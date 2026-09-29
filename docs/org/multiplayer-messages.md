@@ -422,6 +422,11 @@ which the original has no need of because it never draws from a shared stream. T
 and motion dwords are not taken either; the remake spends 8 bytes on a quantised quaternion and
 12 on a float velocity, which is the trade `Net/NetMessages.cs`'s width budget exists to hold.
 
+The damage report `0x40` carries the victim's own hull fraction after it applied a hit, and every
+other machine stages that seat's damage from it. A fraction of 1 is a rearm on the owner's machine
+([`multiplayer-rearm.md`](multiplayer-rearm.md)), and every other machine takes the stages off its
+copy. The original's `FUN_0049b970` sends nothing for a rearm.
+
 ## The mission director
 
 `0x42` carries one event of the host's objectives graph as a code, an id and the host's clock,

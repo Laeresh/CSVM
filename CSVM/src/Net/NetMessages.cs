@@ -30,7 +30,7 @@ public enum NetMessageType : ushort
     /// <summary>The whole seat roster and the match seed.</summary>
     SeatRoster = 0x0027,
 
-    /// <summary>A victim's hull state after it applied damage.</summary>
+    /// <summary>A victim's hull state after it applied damage, or after a rearm restored it.</summary>
     Damage = 0x0040,
 
     /// <summary>Where the host has placed a seat, by spawn entry.</summary>
@@ -647,7 +647,8 @@ public readonly record struct HitMessage(
 /// <summary>
 /// The victim's own hull state once it has applied whatever hit it. Reliable, and the reason a
 /// lost or reordered hit cannot leave two peers disagreeing about how hurt an aircraft is.
-/// The owner's number is the number, and this is the owner saying it.</summary>
+/// The owner's number is the number, and this is the owner saying it. A full hull is a rearm base's
+/// restore (docs/org/multiplayer-rearm.md).</summary>
 public readonly record struct DamageMessage(
     byte Seat, byte Stage, ushort Flags, float Hull) : INetMessage<DamageMessage>
 {

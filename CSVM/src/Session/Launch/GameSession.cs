@@ -357,6 +357,8 @@ public partial class GameSession : Node3D
     private FlagRuntime? _flagPlay;
     // Zeppelin vs Zeppelin's hulls over the match, null outside a --zvz network match.
     private ZeppelinVersusRuntime? _zvzPlay;
+    // The multiplayer rearm bases, null outside a match whose world holds any.
+    private RearmRuntime? _rearmPlay;
     // Built on the host alone in a network match, since two rotations diverge on first blood.
     // A guest holds none and takes every placement off the wire.
     private VersusSpawnRotation? _versusSpawns;
@@ -551,6 +553,13 @@ public partial class GameSession : Node3D
 
     /// <summary>Zeppelin vs Zeppelin's hulls, null outside a <c>--zvz</c> network match.</summary>
     internal ZeppelinVersusRuntime? ZvzPlay => _zvzPlay;
+
+    /// <summary>The multiplayer rearm bases, null outside a match whose world holds any.</summary>
+    internal RearmRuntime? RearmPlay => _rearmPlay;
+
+    /// <summary>How many full-hull reports this machine applied to a seat flown elsewhere, each a
+    /// rearm on the seat's own machine. For a suite to read.</summary>
+    internal int RepairsTaken { get; private set; }
 
     /// <summary>The mission's zeppelins, null in a flight that runs none.</summary>
     internal ZeppelinRuntime? ZeppelinHulls => _zeppelins;
@@ -3617,6 +3626,7 @@ public partial class GameSession : Node3D
         WireNetWorld(state.WorldRuntime);
         // Zeppelin vs Zeppelin, once the hulls, their pools and the world's wire stand.
         WireZeppelinVersus(state.ZrdrPath, weaponMessages);
+        WireRearmBases(state.WorldRuntime, state.ZrdrPath, weaponMessages);
         WireNetPositionalStarts(state.WorldRuntime);
         WireNetCutscenes();
 
@@ -4480,13 +4490,23 @@ public partial class GameSession : Node3D
     }
 
     // The stage and flag words are sent zero and read as nothing. The damage stages this drives
-    // are the hull's, and a part-by-part ledger is not on the wire.
+    // are the hull's, and a part-by-part ledger is not on the wire. A full hull is a rearm on the
+    // owner's machine, which takes the stages off again, as its own Rearm did.
     private void TakeDamage(in Net.DamageMessage damage)
     {
         if (damage.Seat < _seatRigs.Count
             && _seatRigs[damage.Seat].Controller is { RemoteOwned: true } rig)
         {
-            rig.Visuals?.OnHullDamage(damage.Hull);
+            if (damage.Hull >= 1f)
+            {
+                rig.Visuals?.Reset();
+                RepairsTaken++;
+            }
+            else
+            {
+                rig.Visuals?.OnHullDamage(damage.Hull);
+            }
+
             _aiVoice?.TakeRemotePlayerHull(rig, damage.Hull);
         }
     }
@@ -5081,6 +5101,36 @@ public partial class GameSession : Node3D
         });
     }
 
+    // The rearm bases of any Dogfight, over the wire or split screen. Zeppelin vs Zeppelin rearms
+    // only at its hulls' own nodes, so a match that could not seat both hulls has no base at all.
+    private void WireRearmBases(AnimRuntime? world, string zrdrPath, Messages? strings)
+    {
+        if (_versus == null || world == null || (_spec.ZeppelinVsZeppelin && _zvzPlay == null))
+        {
+            return;
+        }
+
+        _rearmPlay = RearmRuntime.Open(new RearmRuntimeInputs
+        {
+            SeatRigs = _seatRigs,
+            IsLocal = seat => _netSeats.Count == 0 || (seat >= 0 && seat < _netSeats.Count && _netSeats[seat].IsLocal),
+            SeatTeams = SeatTeams(),
+            World = world,
+            CaptureTheFlag = _spec.CaptureTheFlag,
+            Zeppelins = _zvzPlay,
+            Hulls = _zeppelins,
+            RadiusSquared = RearmBases.LoadRadiusSquared(zrdrPath, why => Log.Warn("flight", $"rearm: player.zrd unreadable, the radius keeps its initialised value: {why}")),
+            Strings = strings,
+            Rearmed = seat =>
+            {
+                if (seat < _seatRigs.Count && _seatRigs[seat].Controller is { } restored)
+                {
+                    SendDamage(seat, restored);
+                }
+            },
+        });
+    }
+
     // One library root of the chapter, built hidden and without collision under the world root. The
     // caller parents it where the data's own animation would.
     private Node3D? BuildLoose(GameZ gamez, SceneBuilder? scene, string name)
@@ -5151,6 +5201,7 @@ public partial class GameSession : Node3D
     {
         // Ahead of the clock, so a flag that ends the match is sent out on this step.
         _flagPlay?.Step(dt);
+        _rearmPlay?.Step();
         _versus?.Advance(dt);
         HoldSpentPilots();
         if (_matchCadence is not { } cadence)

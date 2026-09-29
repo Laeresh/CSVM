@@ -128,10 +128,11 @@ otherwise, and faces the yaw `1.5708` (`0x608160`) less the bearing (`0x496b7f`)
 `0x628f08` and `0x628f0c` (`0x473f50`..`0x473f86`). [Evidence: data] The shipped `player.zrd`
 authors 1200 and 100.
 
-[Evidence: decoded, not re-read here] A rearm is offered only at the pilot's own team's node
-(`zep_rearm_node_1`/`_2`, the `MP3` targets' `other_target` entries) and only while that hull lives
-(`FUN_0049b970`). [Evidence: decoded] The node lookup `FUN_0049b920` answers nothing in mode 4 once
-the team's zeppelin has its dead byte `+6` set (`0x49b92e`..`0x49b94b`).
+[Evidence: decoded] A rearm is offered only at the pilot's own team's node (`zep_rearm_node_1` for
+the team at `0x71c7b4`, `_2` for the one at `0x71c7b8`, the `MP3` targets' `other_target` entries)
+and only while that hull lives: the node lookup `FUN_0049b920` answers nothing in mode 4 once the
+team's zeppelin has its dead byte `+6` set (`0x49b92e`..`0x49b94b`). Each base's marker reads its
+team's name over "Rearm". The whole rearm is [`multiplayer-rearm.md`](multiplayer-rearm.md).
 
 ## What the remake takes
 
@@ -147,7 +148,8 @@ the Score limit, and the winner is the side whose hull survived, both maintainer
 posts the original's two lines. The return is the decoded point, computed on the host and sent as
 `SpawnAtMessage`. A rematch is refused, since no world pool rebuilds. Each hull's marker is
 relabelled per pane rather than per machine (`ZeppelinVersus.HullSide`), so splitscreen panes on
-two sides each read their own hull as "Defend". The rearm is not taken.
+two sides each read their own hull as "Defend". The rearm is taken at each hull's own node while
+the hull lives (`Session/World/RearmRuntime.cs`).
 
 Both broadsides are engaged on every machine as the side setup engages them
 (`ZeppelinRuntime.SetCannonsEngaged`), and each round carries its hull's shooter id

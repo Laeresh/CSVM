@@ -874,6 +874,10 @@ public partial class FlightController : Node3D
     /// <see cref="Setup"/> included. The suites read it to tell a handoff from a respawn.</summary>
     public int RespawnCount { get; private set; }
 
+    /// <summary>The pylon the hardpoint selector points at, or -1 before fire control is built.
+    /// </summary>
+    public int SelectedPylon => _fire?.SelectedPylon ?? -1;
+
     /// <summary>Seconds left on this aircraft's engine-dead timer, zero when the engine runs. The
     /// choker's one observable, since nothing else on that path changes (see
     /// <see cref="TryChokeEngine"/>).</summary>
@@ -1429,6 +1433,22 @@ public partial class FlightController : Node3D
     {
         _grantedPlacement = (pos, lookAt);
         Respawn();
+    }
+
+    /// <summary>A multiplayer rearm base's restore, in flight. Every part is back to full health and
+    /// armour with the damage stages off, and every gun group and pylon back to its full load. The
+    /// selected pylon is kept, as the gun pick always is. Nothing else about the flight changes.
+    /// Decode: docs/org/multiplayer-rearm.md.</summary>
+    public void Rearm()
+    {
+        int pylon = _fire?.SelectedPylon ?? -1;
+        Damage?.Reset();
+        Visuals?.Reset();
+        RestockWeapons();
+        if (pylon >= 0)
+        {
+            _fire?.SelectPylon(pylon);
+        }
     }
 
     /// <summary>The first spawn's propellers, for the assemblers that attach the crash rig after
@@ -3278,6 +3298,14 @@ public partial class FlightController : Node3D
     // Refills every gun group to its full load and re-arms the dry warnings (respawn).
     private void RefillWeapons()
     {
+        RestockWeapons();
+        Projectiles?.Clear();
+    }
+
+    // Every slot back to its full load, the fire clocks and dry warnings reset, the gun loop off.
+    // The rounds already in the air are left to fly.
+    private void RestockWeapons()
+    {
         if (Loadout == null)
         {
             return;
@@ -3300,7 +3328,6 @@ public partial class FlightController : Node3D
             Audio?.StopGunLoop();
             WeaponAudio?.StopGunLoop();
         }
-        Projectiles?.Clear();
     }
 
     // Full stunt restart from the results scoreboard (R): fresh clock + every

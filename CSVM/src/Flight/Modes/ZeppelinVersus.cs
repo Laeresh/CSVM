@@ -143,6 +143,14 @@ public sealed class ZeppelinVersus
         new(sideTeam, teamName, strings?.Get("MSG_OBJ_DEFEND") ?? "MSG_OBJ_DEFEND",
             strings?.Get("MSG_OBJ_DESTROY") ?? "MSG_OBJ_DESTROY");
 
+    /// <summary>A hull's rearm base marker, as <c>FUN_00495980</c> relabels it in this mode. It reads
+    /// its team's name over "Rearm" (row 192) to either side (<c>0x495a8b</c>..<c>0x495bee</c>).</summary>
+    public static SiteSide RearmSide(int sideTeam, string teamName, Messages? strings)
+    {
+        string rearm = strings?.Get("MSG_REARM") ?? "MSG_REARM";
+        return new(sideTeam, teamName, rearm, rearm);
+    }
+
     /// <summary>The lobby team hull <paramref name="hull"/> flies, 0 for none. A third hull would
     /// wrap onto the sides, as the original's <c>i &amp; 1</c> does.</summary>
     public int TeamOfHull(int hull) => hull >= 0 ? _teams[hull & 1] : 0;
