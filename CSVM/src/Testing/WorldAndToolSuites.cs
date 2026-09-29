@@ -132,7 +132,8 @@ internal static class WorldAndToolSuites
     // materials actually carry. Able to fail: dropping the mode guard puts the token in both arms.
     [Suite("alpha-coverage-text",
         "Enhanced Graphics only: every cutout surface of the built world, and every clutter sprite "
-        + "card, carries the alpha-to-coverage render mode with the edge built-ins that feed it, no "
+        + "card, carries the alpha-to-coverage render mode with the edge built-ins that feed it, the "
+        + "edge offset at 0 so it sits on the scissor's own threshold, no "
         + "blended surface carries either, and the faithful presentation compiles the same world "
         + "with no coverage token anywhere")]
     internal static void AlphaCoverageText(TestContext ctx)
@@ -2685,10 +2686,10 @@ internal static class WorldAndToolSuites
                 spriteCards += sprite ? 1 : 0;
                 bool blend = code.Contains("blend_mix");
                 bool cutout = code.Contains("ALPHA_SCISSOR_THRESHOLD");
-                // Both halves or neither: the render mode alone is a no-op, because the opaque pass
-                // writes alpha 1 unless the edge built-in is set (docs/org/textures.md).
+                // Both halves or neither, since the render mode alone is a no-op. The edge is an offset
+                // on the scissor threshold, so only 0.0 keeps the faithful cut (docs/org/textures.md).
                 bool covered = code.Contains(SceneBuilder.CoverageMode.TrimStart(',', ' '))
-                    && code.Contains("ALPHA_ANTIALIASING_EDGE")
+                    && code.Contains("ALPHA_ANTIALIASING_EDGE = 0.0;")
                     && code.Contains("ALPHA_TEXTURE_COORDINATE");
                 bool token = code.Contains("alpha_to_coverage") || code.Contains("ALPHA_ANTIALIASING_EDGE");
                 if (blend)

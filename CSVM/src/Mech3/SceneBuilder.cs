@@ -217,11 +217,12 @@ public sealed class SceneBuilder
     /// step, so the plain mode ships (<c>docs/org/textures.md</c>).</summary>
     internal const string CoverageMode = ", alpha_to_coverage";
 
-    /// <summary>The fragment half of <see cref="CoverageMode"/>, and not optional: the opaque pass
+    /// <summary>The fragment half of <see cref="CoverageMode"/>, and not optional. The opaque pass
     /// writes alpha 1 unless the edge built-in is set, so the render mode alone changes no pixel.
-    /// The edge sits at the scissor's own threshold, which keeps the silhouette where the faithful
-    /// cut puts it and spends the samples on the ramp around it.</summary>
-    internal const string CoverageLines = "    ALPHA_ANTIALIASING_EDGE = 0.5;\n"
+    /// ⚠ The value is an OFFSET Godot adds to <c>ALPHA_SCISSOR_THRESHOLD</c>, not an alpha. At 0
+    /// the edge sits on the scissor's own 0.5, the faithful silhouette. At 0.5 it sits at 1.0,
+    /// which halves an opaque texel's coverage wherever the texture magnifies.</summary>
+    internal const string CoverageLines = "    ALPHA_ANTIALIASING_EDGE = 0.0;\n"
         + "    ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));";
 
     /// <summary>Multiplies every depth bias this builder emits. Each is a fraction of VIEW

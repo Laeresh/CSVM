@@ -477,8 +477,13 @@ mip chain the original sampled.
 
 Enhanced Graphics resolves the cutouts the rule leaves behind through coverage rather than a
 sharper cut: the scissored arm of every world, facade and clutter shader also takes
-`alpha_to_coverage` and writes `ALPHA_ANTIALIASING_EDGE` at the scissor's own 0.5, so the edge
-spends the project's four MSAA samples instead of stepping one bit per pixel. The render mode
+`alpha_to_coverage` and writes `ALPHA_ANTIALIASING_EDGE = 0.0`, so the edge spends the project's
+four MSAA samples instead of stepping one bit per pixel. ⚠ Godot adds that built-in to
+`ALPHA_SCISSOR_THRESHOLD` (`clamp(threshold + edge, 0, 1)` in its scene shader), so 0.0 is what
+puts the coverage edge on the scissor's own 0.5. Written as 0.5 it moved the edge to 1.0: an
+opaque texel then took half coverage wherever its texture magnified (mip 0), which veiled the C3
+dome's cloud puffs and cut them along a triangle's diagonal where one triangle of a quad sat at
+mip 0 and the other did not, and it eroded every cutout's silhouette. The render mode
 alone changes nothing, because Godot's opaque pass writes alpha 1 unless that edge built-in is
 set, and `alpha_to_coverage_and_one` hardens the result back toward the plain cut, which is why
 the plain mode ships. The faithful presentation emits none of it, so its shader text and the

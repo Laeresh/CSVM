@@ -517,6 +517,16 @@ shader key bit of its own, and its cutouts keep the scissor; the world keeps cov
 the hidden desktop with the user's saved options: every gauge face is opaque again, the world
 outside unchanged.
 
+**Fix at the controls: the edge is an offset, so it ships at 0.0.** On C3 at 5120x1440 the sky
+dome's cloud puffs drew half transparent, some cut along a straight diagonal. Godot adds
+`ALPHA_ANTIALIASING_EDGE` to `ALPHA_SCISSOR_THRESHOLD`, so the 0.5 above put the coverage edge at
+1.0: an opaque texel took half coverage wherever its texture magnified (mip 0), and the two
+triangles of a puff quad could fall either side of that. `CoverageLines` now writes 0.0, which is
+the scissor's own 0.5, the faithful silhouette. The landed paragraph's 0.3 trial therefore sat at
+an effective 0.8 and was judged against an eroded edge, not the faithful one; the vines and
+strands now take the faithful cut, a look for the user at the controls. The faithful path emits
+none of this. `alpha-coverage-text` now pins the value as well as the tokens.
+
 ## A5 ☑ FSR 2.2 tried once as the alternative temporal pass, kept or parked on the user's verdict
 
 **Verdict.** Neither pass is deleted: the player chooses. The anti-aliasing method becomes a VIDEO
