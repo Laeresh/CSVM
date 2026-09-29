@@ -5029,7 +5029,8 @@ public partial class GameSession : Node3D
     }
 
     // Capture the Flag over a team match on the wire, with the flags the mission lays out for the
-    // lobby's teams. Every seat's death drops its flag on every machine.
+    // lobby's teams. Every seat's death drops its flag on every machine, and so does the console's
+    // ejectflag typed into the chat.
     private void WireFlags(AnimRuntime? world, GameZ gamez, SceneBuilder? scene, Messages? strings)
     {
         if (!_spec.CaptureTheFlag || _net is not { } net || _versus is not { } match || SeatTeams() is not { } teams)
@@ -5068,6 +5069,11 @@ public partial class GameSession : Node3D
             {
                 pilot.Downed += (_, _) => flags.Downed(seat);
             }
+        }
+
+        if (_netChat is { } chat)
+        {
+            chat.EjectFlag = seat => flags.Eject(seat);
         }
     }
 

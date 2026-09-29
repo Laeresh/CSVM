@@ -24,6 +24,11 @@ internal sealed class NetChatLink
     /// <summary>The prompt a team line's entry opens under, "To Team:".</summary>
     internal const string TeamPromptKey = "MSG_SQUADRON_MESSAGE";
 
+    /// <summary>The developer console's command that lets the typist's carried flag go
+    /// (<c>0x0062329c</c>, compared at <c>0x0043f516</c>). The remake has no console window, so the
+    /// chat entry takes it (<c>docs/org/multiplayer-ctf.md</c>, "The drop and the throw").</summary>
+    internal const string EjectFlagCommand = "ejectflag";
+
     private readonly NetSession _net;
     private readonly Messages? _strings;
     private readonly HashSet<Key> _held = new();
@@ -44,6 +49,20 @@ internal sealed class NetChatLink
     /// <summary>Whether the keyboard belongs to the chat: a line is open, or a key pressed into one
     /// is still down. The typist's seat reads its keys idle for exactly as long.</summary>
     internal bool HoldsKeyboard => Chat.Typing || _held.Count > 0;
+
+    /// <summary>What <see cref="EjectFlagCommand"/> does for the seat that typed it. Unset outside
+    /// Capture the Flag, where the command is still taken and does nothing, as the original's does
+    /// for an aircraft carrying no flag.</summary>
+    internal Action<int>? EjectFlag { get; set; }
+
+    /// <summary>Whether <paramref name="line"/> is a console command rather than chat: its first word
+    /// is <see cref="EjectFlagCommand"/>, matched whole and case-sensitively as the original's
+    /// compare does. Words after it are ignored, since that command reads no argument.</summary>
+    internal static bool IsEjectFlag(string? line)
+    {
+        string[] words = (line ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return words.Length > 0 && words[0].Equals(EjectFlagCommand, StringComparison.Ordinal);
+    }
 
     /// <summary>Wires the chat to <paramref name="net"/>. <paramref name="strings"/> words the two
     /// prompts and the unknown sender, and each falls back to its key without it.</summary>
@@ -73,8 +92,8 @@ internal sealed class NetChatLink
         Chat.Open(toTeam, Text(toTeam ? TeamPromptKey : AllPromptKey));
     }
 
-    /// <summary>Closes the entry and sends what was typed, if anything. True when a line left.
-    /// </summary>
+    /// <summary>Closes the entry and sends what was typed, if anything. True when a line left. A
+    /// console command runs for the typist instead, and nothing is posted or sent.</summary>
     internal bool Submit()
     {
         bool team = Chat.ToTeam;
@@ -82,6 +101,13 @@ internal sealed class NetChatLink
         string? line = Chat.Submit();
         if (line == null || _typist == NetMessage.NoSeat)
         {
+            return false;
+        }
+
+        if (IsEjectFlag(line))
+        {
+            Log.Info("core", $"net chat: seat {_typist} runs the console's {EjectFlagCommand}");
+            EjectFlag?.Invoke(_typist);
             return false;
         }
 

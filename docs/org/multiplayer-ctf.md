@@ -24,6 +24,7 @@ code), script (a menu or anim script), data (extracted files), inferred (not che
 | `FUN_0049ab50` | A carrier's drop |
 | `FUN_0049a210` | A floating flag's throw ended: home on the host |
 | `FUN_00495c40` | Loads the six `snd_CTF*` voice lines |
+| `FUN_0043d640` | The developer console, whose `ejectflag` calls `FUN_0049ab50` |
 
 ## The flag record
 
@@ -102,6 +103,25 @@ posted for 5 s. It is not sent: every peer runs it, from the death handler `FUN_
 (`0x498fac`), from the peer-left handler `FUN_004995a0`, and from the console command `ejectflag`
 (`0x43f516`..`0x43f52c`), each in mode 3 only. State 3 is a state each machine reaches on its own.
 
+[Evidence: decoded] **`ejectflag`.** The command sits in the developer console `FUN_0043d640`,
+which compares the line's first word whole and case-sensitively against `0x0062329c` (`repe cmpsb`
+over 10 bytes, terminator included, `0x43f516`). It reads no argument and checks neither the mode
+nor the host: it calls `FUN_0049ab50` on the local aircraft `DAT_0071c298` and returns, printing
+nothing. The mode 3 gate is only that `FUN_0049ab50` does nothing unless `+0x720` holds a flag.
+Nothing is sent, so in the original the eject floats the flag on the typist's machine alone, and
+the other peers go on showing it held until the carrier dies or leaves.
+
+[Evidence: decoded] **Who can reach it.** The console is not a key. `FUN_0045cc20`, the command
+handler of the GameZ interpreter at `0x00719048` (vtable `0x00607af8`, the object that runs the
+`support\*.gw` scripts), hands a line to `FUN_0043d640` only while the byte at its `+4` is set
+(`0x45cc6e`). The only writer of that byte past the constructor's clear is `FUN_005bd170`
+(`0x5bd1c3`), which builds the "GameZ Interpreter" console window with a `"> "` prompt. That window
+is built by `FUN_0049f530`, whose only two callers are the `exit` commands of the interpreter
+(`0x45cc69`) and of the console (`0x43dbd8`), a toggle. [Evidence: data] None of the 98 shipped
+`.gw` scripts (`interp.json`) says `exit` or `ejectflag`. [Evidence: weak negative] No other
+reference to `FUN_0049f530` was found, so a retail player reaches `ejectflag` only through a
+script edit.
+
 [Evidence: data] `player-flg_throw_n` moves the flag from the carrier's `cf_light` to `world1`,
 then flies it by `OBJECT_MOTION`: gravity -7 (`COMPLEX`), elevation 75..85, speed 35..40, azimuth
 0, `RUN_TIME` 15 s, then `Callback 700 + n` ([`objectMotion.md`](objectMotion.md) reads those
@@ -158,8 +178,15 @@ aircraft puts the pilot's name back (`0x49a47b` on a holder change, `0x49abc1` o
 [Evidence: script] Choosing Capture the Flag in `MULTIPLAYERLOBBY_MISSION.SCRIPT` ticks Restrict
 Number of Teams, fixes and greys both count boxes, and greys Above the Clouds and NW Lighthouse,
 the two environments with no `MP2`. Langui 10519 reads "Each player must be on one of two teams to
-play.", and 10124 describes the mode. 10127 "Engine Nacelles Regeneration" and 10128 "Instant Flag
-Return" exist, but no lobby script creates a control for them.
+play." 10127 "Engine Nacelles Regeneration" and 10128 "Instant Flag Return" exist, but no lobby
+script creates a control for them.
+
+[Evidence: script] The type's description is the text box `KBA` under the Type box, at 25, 134 on
+the Mission Options page and 200 by 100 (`MULTIPLAYERLOBBY_MISSION.SCRIPT`, lines 108 to 114). It
+opens empty, and the type change (message 1097 from the Type box) fills it with
+`callback($$NB$$, id, KBA.PE)`: 10124 for Capture the Flag (type 0), 10123 for Deathmatch (1) and
+10125 for Zeppelin vs Zeppelin (2). The remake draws the current type's row there, wrapped to 200,
+from the moment the page opens (`UI/Menu/Original/OriginalLobbyScreen.cs`).
 
 ## What the remake takes
 
@@ -187,4 +214,10 @@ shipped). `Session/World/FlagRuntime.cs` runs them in a network match. The diffe
   marker, which the world index cannot find, stands where the carried flag is. Its name line is
   the team's name in place of the missing row 7055. The carrier's tag replaces the airframe name
   the remake's aircraft marker prints, and names the pilot by its callsign.
-- Not built: `ejectflag`.
+- `ejectflag` has no console window to be typed into, so the in-flight chat entry takes it: a line
+  whose first word is `ejectflag` runs the command for the typing seat and is neither posted nor
+  sent (`Session/World/NetChatLink.cs`). It floats the flag through the host on every machine,
+  where the original floats it on the typist's alone: a guest sends ask 3 in `0x63`, and the host,
+  taking it only from the machine flying the seat and only for the flag that seat carries, floats
+  it and sends the same ask to every guest. The command stays available whenever the chat is, not
+  only after a script edit.

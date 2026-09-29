@@ -13,8 +13,8 @@ public enum FlagState : byte
     /// <summary>It stands at its team's base.</summary>
     Home = 2,
 
-    /// <summary>A downed carrier ejected it and it is in its throw arc. Each machine reaches this
-    /// state on its own, so no table carries it.</summary>
+    /// <summary>A downed or ejecting carrier let it go and it is in its throw arc. Each machine
+    /// reaches this state on its own, so no table carries it.</summary>
     Floating = 3,
 }
 
@@ -27,6 +27,10 @@ public enum FlagAsk : byte
     /// <summary>Bring the carried flag home: its own team's flag returned, or an enemy's captured.
     /// </summary>
     Home = 2,
+
+    /// <summary>Let the carried flag go, the console's <c>ejectflag</c>. No original <c>0x1c</c>
+    /// word: the host relays it, since the original drops it on the typist's machine alone.</summary>
+    Eject = 3,
 }
 
 /// <summary>One flag as the host's table has it: its team, its state and the seat holding it. The
@@ -205,7 +209,7 @@ public sealed class FlagMatch
         return changes;
     }
 
-    /// <summary>The carrier <paramref name="seat"/> went down: its flag floats from
+    /// <summary>The carrier <paramref name="seat"/> went down or let go: its flag floats from
     /// <paramref name="at"/> at <paramref name="velocity"/>, and comes to rest no lower than
     /// <paramref name="floorY"/>. Run on every machine (<c>FUN_0049ab50</c>). Null when it carried
     /// nothing.</summary>

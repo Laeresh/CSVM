@@ -709,7 +709,7 @@ on the main thread and raises `ShotLanded`. The pixels come from the caller's `P
 Capture the Flag's rules, engine-free: one flag per lobby team with its home, held, at home or
 floating. `Check` is a pilot's per-tick proximity ask with the 25 m reach and the two cooldowns,
 `Decide` the host's first-asker-wins decision, `TakeAhead` a guest's take before the answer, `Apply`
-the host's table on a guest, `Drop` a downed carrier's flag and `Advance` its 15 s throw arc, and
+the host's table on a guest, `Drop` a downed or ejecting carrier's flag and `Advance` its 15 s throw arc, and
 `Points` what a flag brought home scores off the match's `MatchScores`. The host's own-flag-home
 option gates a capture.
 `Session/World/FlagRuntime.cs` runs it in a match. Read `CaptureTheFlagTests.cs` and

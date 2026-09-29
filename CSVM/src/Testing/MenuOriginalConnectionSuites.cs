@@ -137,7 +137,8 @@ internal static class MenuOriginalConnectionSuites
         + "opens the lobby as a Dogfight host under its callsign. The games list on a second session "
         + "reads that name, n/6, the Dogfight, its environment and Waiting. Join Game asks PLAYER "
         + "INFORMATION, and the guest's callsign stands in both lobby lists and its voice reaches the "
-        + "host in its pick. A joined guest lands in the lobby, the host's map, Time 5 and Limited Lives reach the guest, a guest's option "
+        + "host in its pick. A joined guest lands in the lobby, each of the three types is described under the Type box "
+        + "on both ends by its own langui line, the host's map, Time 5 and Limited Lives reach the guest, a guest's option "
         + "set is refused, a Ready guest's plane box stays live and its changed pick clears its Ready "
         + "on both ends, the guest's second stock plane and a non-default shell build its seat "
         + "in the host's field, one chat line arrives once on each end, a guest's line past the "
@@ -1301,6 +1302,7 @@ internal static class MenuOriginalConnectionSuites
             $"a guest's option controls are greyed and its option set is refused");
         ctx.Check(Row(host.Shell, OriginalLobbyScreen.TypeKey) is { Enabled: true } && host.Door.Dogfight!.SetMissionType((DogfightMissionType)3) == false,
             $"the host's Type box is live but a type past the box's three is refused");
+        TypeDescriptions(ctx, host, guest, ends);
         ClickRow(ctx, host, OriginalLobbyScreen.EnvironmentKey);
         ctx.Check(host.Shell.Lobby.OpenDropdown == OriginalLobbyScreen.EnvironmentKey, $"the Environment box opens its list ({host.Shell.Lobby.OpenDropdown})");
         ClickRow(ctx, host, OriginalLobbyScreen.EnvironmentKey + ":3");
@@ -1316,6 +1318,41 @@ internal static class MenuOriginalConnectionSuites
         ctx.Check(heard is { Environment: 3, TimeMinutes: 5, LimitedLives: true, Victory: DogfightVictory.Time },
             $"the guest reads the host's map, Time 5 and Limited Lives ({heard.Environment}, {heard.TimeMinutes}, {heard.LimitedLives}, {heard.Victory})");
         ctx.Check(host.Door.Advertising?.MissionSeq == 3, $"and the advert names the new environment ({host.Door.Advertising?.MissionSeq})");
+    }
+
+    // The page under the Type box describes the type on both ends, as the mission script's type change
+    // fills its text box. Langui 10123 is a Deathmatch, 10124 Capture the Flag and 10125 Zeppelin vs
+    // Zeppelin. The host goes back to a Deathmatch without teams for the rest of the suite.
+    private static void TypeDescriptions(TestContext ctx, End host, End guest, List<End> ends)
+    {
+        const string Deathmatch = "Dogfight to the death.";
+        const string Ctf = "Steal the opposing squadron's flag";
+        const string Zvz = "Protect your zeppelin";
+        ctx.Check(Draws(host.Shell.Compose(), Deathmatch) && Draws(guest.Shell.Compose(), Deathmatch),
+            $"both ends describe the Deathmatch under the Type box with langui 10123");
+        foreach (var (type, want) in new[] { (DogfightMissionType.CaptureTheFlag, Ctf), (DogfightMissionType.ZeppelinVsZeppelin, Zvz) })
+        {
+            host.Door.Dogfight!.SetMissionType(type);
+            for (int frame = 0; frame < 4; frame++)
+            {
+                Pump(ends.ToArray());
+            }
+
+            var boards = new[] { host.Shell.Compose(), guest.Shell.Compose() };
+            ctx.Check(boards.All(b => Draws(b, want) && !Draws(b, Deathmatch)),
+                $"{type} is described on both ends with its own line and not the Deathmatch's ({guest.Door.Dogfight!.Options.MissionType})");
+        }
+
+        host.Door.Dogfight!.SetMissionType(DogfightMissionType.Deathmatch);
+        host.Door.Dogfight!.SetRestrictTeams(false);
+        for (int frame = 0; frame < 4; frame++)
+        {
+            Pump(ends.ToArray());
+        }
+
+        var back = guest.Door.Dogfight!.Options;
+        ctx.Check(back is { MissionType: (byte)DogfightMissionType.Deathmatch, RestrictTeams: false } && Draws(guest.Shell.Compose(), Deathmatch),
+            $"and back on a Deathmatch without teams the guest reads 10123 again ({back.MissionType}, {back.RestrictTeams})");
     }
 
     // The guest's second stock plane and a shell of its own on its first gun, picked while Ready,

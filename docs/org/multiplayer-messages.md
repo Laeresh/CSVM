@@ -1152,7 +1152,7 @@ Their ids stay the original's objective messages.
 
 | Id | Message | Class | Carries |
 |---|---|---|---|
-| `0x63` | Flag ask | reliable, guest to host | the flag's team number at 4, the ask at 5 (take 1, home 2), the asking seat at 6, one reserved byte (8 bytes) |
+| `0x63` | Flag ask | reliable, guest to host; an eject also host to every guest | the flag's team number at 4, the ask at 5 (take 1, home 2, eject 3), the asking seat at 6, one reserved byte (8 bytes). Eject is the console's `ejectflag`, which the host relays as the drop every machine then runs |
 | `0x64` | Flag table | reliable, host to every guest | the flag count at 4, three reserved bytes, then four rows of 4 bytes: the team number, the state (1 held, 2 at home, 3 floating) and the holding seat (`0xFF` none), one reserved byte (24 bytes) |
 
 Zeppelin vs Zeppelin's return is a point rather than a table entry (`FUN_004969b0`'s mode 4 branch,

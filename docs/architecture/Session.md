@@ -231,10 +231,10 @@ Capture the Flag in a network match, built by `GameSession.WireFlags` for a `--c
 `FlagMatch` flag per lobby team whose `cs_flag_n` the mission world holds. Each machine checks its
 own seats and asks the host (`FlagRequestMessage`); the host decides, scores through
 `VersusMatch.AddScore` and sends its `FlagTableMessage`. Every machine moves the props from the
-changes, hanging the carried flag under the holder's `cf_light`, and speaks the `snd_CTF*` lines and
-posts the flag rows. A seat's death or drop floats its flag everywhere; the host sends it home when
-the throw runs out. `SideOf` labels the flags' three markers for the site feed, and the carrier
-carries its tag (`FlightController.MarkerName`). Decode: [../org/multiplayer-ctf.md](../org/multiplayer-ctf.md).
+changes, hangs the carried flag under the holder's `cf_light`, speaks the `snd_CTF*` lines and posts
+the flag rows. A death, a drop or `Eject` (the console's `ejectflag`, relayed by the host) floats a
+flag everywhere, and the host sends it home when the throw runs out. `SideOf` labels the three
+markers, and the carrier carries its tag. Decode: [../org/multiplayer-ctf.md](../org/multiplayer-ctf.md).
 
 ## src/Session/World/ZeppelinVersusRuntime.cs
 Zeppelin vs Zeppelin in a network match, built by `GameSession.WireZeppelinVersus` for a `--zvz`
@@ -267,7 +267,8 @@ The in-flight chat over the wire, one per network session. `Open` puts the entry
 prompt, `Submit` posts the echo and sends the line: a guest's to the host, which forwards an
 all-chat to every machine and a team line only to machines flying a seat on the typist's lobby
 team, once each. `TakeKey` is the typing seat's keys, and `HoldsKeyboard` keeps that seat's
-flight keys idle until every key pressed into a line is up. It owns the machine's
+flight keys idle until every key pressed into a line is up. A line whose first word is the original
+console's `ejectflag` is no chat: it runs `EjectFlag` for the typist. It owns the machine's
 `Flight/Hud/FlightChat.cs`. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Session/Campaign/NetPositionalStartLink.cs

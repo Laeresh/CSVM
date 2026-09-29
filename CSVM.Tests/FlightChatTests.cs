@@ -12,6 +12,7 @@ namespace CSVM.Tests;
 /// The in-flight chat: the panel's five lines and ten seconds, the entry's typing rules, the
 /// message on the wire, and the star's addressing. A team line reaches the machines flying the
 /// typist's lobby team and no other, once per machine, and an all-chat reaches every machine once.
+/// The console's <c>ejectflag</c> typed into the entry is no chat.
 /// </summary>
 [Trait("Tier", "Quick")]
 public sealed class FlightChatTests
@@ -194,6 +195,45 @@ public sealed class FlightChatTests
         Pump(sessions);
         Assert.Single(links[0].Chat.Lines);
         Assert.Equal(1, link.LinesSent);
+    }
+
+    [Fact]
+    public void TheConsolesEjectflagRunsForTheTypistAndLeavesNoChatLine()
+    {
+        var (sessions, links) = Field(teams: true);
+        var ejected = new System.Collections.Generic.List<int>();
+        links[1].EjectFlag = ejected.Add;
+        links[1].Open(3, team: false);
+        foreach (char c in "  ejectflag now ")
+        {
+            links[1].Chat.Type(c);
+        }
+
+        Assert.False(links[1].Submit());
+        Pump(sessions);
+        Assert.Equal(new[] { 3 }, ejected);
+        Assert.Empty(links[1].Chat.Lines);
+        Assert.Empty(links[0].Chat.Lines);
+        Assert.Equal(0, links[1].LinesSent);
+
+        // Outside Capture the Flag the hook is unset, and the command is still no chat line.
+        links[2].Open(2, team: false);
+        foreach (char c in NetChatLink.EjectFlagCommand)
+        {
+            links[2].Chat.Type(c);
+        }
+
+        Assert.False(links[2].Submit());
+        Pump(sessions);
+        Assert.Empty(links[0].Chat.Lines);
+
+        // ABLE-TO-FAIL CONTROL: the compare is whole-word and case-sensitive, so these are chat.
+        Assert.False(NetChatLink.IsEjectFlag("EjectFlag"));
+        Assert.False(NetChatLink.IsEjectFlag("ejectflags"));
+        Assert.False(NetChatLink.IsEjectFlag("please ejectflag"));
+        Say(links[1], sessions, seat: 1, team: false, "EjectFlag");
+        Assert.Equal(new[] { "Blue: EjectFlag" }, links[0].Chat.Lines);
+        Assert.Equal(new[] { 3 }, ejected);
     }
 
     // The host on seat 0 and two guests, the first flying seats 1 and 3. With teams, seats 0, 1 and
