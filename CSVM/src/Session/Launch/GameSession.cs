@@ -5776,20 +5776,30 @@ public partial class GameSession : Node3D
     // plane back to its own spawn. Mirrors RestartRace exactly.
     private void RestartMatch(VersusMatch match)
     {
+        // ⚠ Never rerun in place: that restores no world pool, so it would fly on the last round's
+        // burnt gas bags. The original's end takes every machine to the lobby, whose next launch
+        // builds the world afresh. Each machine goes there itself, a guest as much as the host.
+        if (_zvzPlay != null)
+        {
+            if (_menuDriven)
+            {
+                Log.Info("flight", $"dogfight: Zeppelin vs Zeppelin goes again from the lobby, whose next launch rebuilds both hulls");
+                _exitSession();
+            }
+            else
+            {
+                Log.Info("flight", $"dogfight: no rematch in Zeppelin vs Zeppelin outside the lobby, the hulls rebuild only at a launch");
+            }
+
+            return;
+        }
+
         // ⚠ On a wire the rematch is the host's alone. A guest restarting here would zero its own
         // board and fly a round nobody else is in. Its R therefore does nothing, and it waits for
         // the host's running state. Asking the host for one is BL-1026.
         if (_netSeats.Count > 0 && _net is not { IsHost: true })
         {
             Log.Info("flight", $"dogfight: rematch is the host's to call, this guest waits for it");
-            return;
-        }
-
-        // ⚠ Refused while the hulls cannot be rebuilt: a rematch restores no world pool, so it would
-        // fly on the last round's burnt gas bags. The lobby is the way back.
-        if (_zvzPlay != null)
-        {
-            Log.Info("flight", $"dogfight: no rematch in Zeppelin vs Zeppelin, the hulls do not rebuild; return to the lobby");
             return;
         }
 

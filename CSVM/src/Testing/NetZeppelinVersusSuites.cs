@@ -67,49 +67,25 @@ internal static class NetZeppelinVersusSuites
         + "once; a downed seat returns by its hull above the spawn table; a pilot a hull's broadside "
         + "downs costs it no score and sets that hull's side's term to score_zep_kill; and the third "
         + "bag of multiplayer1zep ends the match for team 1 with player.zrd's score_zep that the "
-        + "Score limit never reads")]
+        + "Score limit never reads; the board's Restart then takes every machine, guest and host, to "
+        + "the lobby rather than rerunning on the burnt hull, and the lobby's next launch flies both "
+        + "hulls whole on every machine, every part at full health, both broadsides engaged, the "
+        + "markers and both rearm bases back and every score and term at zero")]
     internal static void AMatchOfHullsAcrossThreeMachines(TestContext ctx)
     {
         var spec = Spec(ctx);
-        var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(4101));
         var roster = NetCombatSuites.Roster(3).Select((seat, i) => seat with { TeamId = Teams[i] }).ToArray();
         var ambient = NetCombatSuites.Ambient.Save();
         var ends = new List<NetCombatSuites.Ends>();
+        var exits = new int[3];
         try
         {
-            for (int i = 0; i < 3; i++)
-            {
-                ends.Add(NetCombatSuites.Ends.Open(ctx, spec, mesh[i], isHost: i == 0, HostSeed + (ulong)i,
-                    i == 0 ? roster : null, teamNames: TeamNames));
-            }
-
-            ctx.Check(ends.All(e => e.Built), $"three sessions build in one process ({string.Join(", ", ends.Select(e => e.Built))})");
-            if (!ends.All(e => e.Built))
+            if (Open(ctx, spec, roster, ends, exits, 4101) is not { } peers)
             {
                 return;
             }
 
-            var peers = ends.Select(e => e.Session).ToArray();
-            if (!Sides(ctx, peers))
-            {
-                return;
-            }
-
-            foreach (var rig in peers.SelectMany(p => p.SeatRigs))
-            {
-                if (rig.Controller is { } pilot)
-                {
-                    pilot.AutoRespawnAfter = QuickRespawn;
-                }
-            }
-
-            // The opening blocks stand a hundred metres over each hull, where a loop would ram it.
-            for (int seat = 0; seat < 3; seat++)
-            {
-                var high = new Vector3(ParkX - (ParkSpacing * seat), ParkHeight, ParkZ);
-                peers[seat].SeatRigs[seat].Controller!.RespawnAt(high, high + (Vector3.Right * 100f));
-            }
-
+            Park(peers);
             Lockstep(SettleSteps, peers);
             HullMarkers(ctx, peers);
             Broadsides(ctx, peers);
@@ -117,6 +93,27 @@ internal static class NetZeppelinVersusSuites
             Returns(ctx, peers);
             HullKill(ctx, peers);
             HullLost(ctx, peers);
+            ToTheLobby(ctx, peers, exits);
+
+            // The lobby's next launch builds every machine's session afresh. Here each takes a new
+            // carrier, since a suite's loopback end binds one listener for its life.
+            foreach (var end in Enumerable.Reverse(ends))
+            {
+                end.Close();
+            }
+
+            ends.Clear();
+            if (Open(ctx, spec, roster, ends, exits, 4102) is not { } again)
+            {
+                return;
+            }
+
+            // Read before a step, so no broadside of the new match can have touched a part yet.
+            WholeAgain(ctx, again);
+            Park(again);
+            Lockstep(SettleSteps, again);
+            HullMarkers(ctx, again);
+            Broadsides(ctx, again);
         }
         finally
         {
@@ -126,6 +123,48 @@ internal static class NetZeppelinVersusSuites
             }
 
             ambient.Restore();
+        }
+    }
+
+    // Three sessions on a fresh loopback mesh, each counting its own exits, with both hulls seated
+    // on every machine. Null when a build or the sides fail.
+    private static GameSession[]? Open(TestContext ctx, SessionSpec spec, NetSeat[] roster,
+        List<NetCombatSuites.Ends> ends, int[] exits, int meshSeed)
+    {
+        var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(meshSeed));
+        for (int i = 0; i < 3; i++)
+        {
+            int machine = i;
+            ends.Add(NetCombatSuites.Ends.Open(ctx, spec, mesh[i], isHost: i == 0, HostSeed + (ulong)i,
+                i == 0 ? roster : null, teamNames: TeamNames, exitSession: () => exits[machine]++));
+        }
+
+        ctx.Check(ends.All(e => e.Built), $"three sessions build in one process ({string.Join(", ", ends.Select(e => e.Built))})");
+        if (!ends.All(e => e.Built))
+        {
+            return null;
+        }
+
+        var peers = ends.Select(e => e.Session).ToArray();
+        return Sides(ctx, peers) ? peers : null;
+    }
+
+    // Quick returns, and every seat moved off its opening block, which stands a hundred metres over
+    // its hull where a loop would ram it.
+    private static void Park(GameSession[] peers)
+    {
+        foreach (var rig in peers.SelectMany(p => p.SeatRigs))
+        {
+            if (rig.Controller is { } pilot)
+            {
+                pilot.AutoRespawnAfter = QuickRespawn;
+            }
+        }
+
+        for (int seat = 0; seat < 3; seat++)
+        {
+            var high = new Vector3(ParkX - (ParkSpacing * seat), ParkHeight, ParkZ);
+            peers[seat].SeatRigs[seat].Controller!.RespawnAt(high, high + (Vector3.Right * 100f));
         }
     }
 
@@ -319,6 +358,42 @@ internal static class NetZeppelinVersusSuites
         ctx.Check(peers.All(p => p.ZvzPlay!.LinesPosted > 0) && peers[2].ZvzPlay!.Spoken.Contains("snd_Zep_dest")
                   && peers[0].ZvzPlay!.Spoken.Contains("snd_Zep_lost") && peers[1].ZvzPlay!.Spoken.Contains("snd_Zep_lost"),
             $"and every machine posts the ending, the winners hearing a zeppelin destroyed and the losers theirs lost ({Spoken(peers)})");
+    }
+
+    // The board's Restart on a guest and then the host, each on a finished match. The original's end
+    // takes every machine to the lobby, and a rerun in place would fly on the burnt hull.
+    private static void ToTheLobby(TestContext ctx, GameSession[] peers, int[] exits)
+    {
+        peers[2].SeatRigs[2].Controller!.RestartMatch!();
+        peers[0].SeatRigs[0].Controller!.RestartMatch!();
+        Lockstep(SettleSteps, peers);
+        ctx.Check(exits[2] == 1 && exits[0] == 1 && exits[1] == 0,
+            $"the Restart of a guest and of the host each takes that machine to the lobby, and no other ({string.Join(",", exits)} exits)");
+        ctx.Check(peers.All(p => p.Versus!.Completed && p.ZeppelinHulls!.IsDead("multiplayer1zep")),
+            $"ABLE-TO-FAIL CONTROL: nothing reruns in place, every machine's match still ended on its lost hull ({string.Join(", ", peers.Select(p => $"{p.Versus!.Completed}/{p.ZeppelinHulls!.IsDead("multiplayer1zep")}"))})");
+    }
+
+    // The lobby's next launch, a fresh session on every machine. Both hulls fly whole with every
+    // part at full health, both rearm bases stand, and every score and term is zero.
+    private static void WholeAgain(TestContext ctx, GameSession[] peers)
+    {
+        var hulls = new[] { "multiplayer1zep", "multiplayer2zep" };
+        var parts = peers.Select(p => p.NetWorld?.World?.Destructibles.All
+            .Where(inst => hulls.Any(h => string.Equals(inst.Owner, h, StringComparison.OrdinalIgnoreCase))).ToList()
+            ?? new List<DestructibleRegistry.Instance>()).ToArray();
+        ctx.Check(peers.All(p => hulls.All(h => !p.ZeppelinHulls!.IsDead(h) && p.ZeppelinHulls.SurvivorsOf(h) == 5)),
+            $"both hulls fly again with all five gas bags standing on every machine ({string.Join(" | ", peers.Select(p => string.Join(",", hulls.Select(h => $"{p.ZeppelinHulls!.IsDead(h)}:{p.ZeppelinHulls.SurvivorsOf(h)}"))))})");
+        ctx.Check(parts.All(list => list.Count > 0 && list.All(inst => inst.Status == DestructibleRegistry.State.Healthy && inst.Health >= inst.MaxHealth)),
+            $"and every part of both, the burnt bags and the downed cannon among them, stands at full health ({string.Join(" | ", parts.Select(l => $"{l.Count(i => i.Status == DestructibleRegistry.State.Healthy && i.Health >= i.MaxHealth)}/{l.Count}"))})");
+        ctx.Check(peers.All(p => Pool(p, "multiplayer1zep", "gasbag3") is { Status: DestructibleRegistry.State.Healthy }
+                                 && Pool(p, "multiplayer2zep", "lbroad1") is { Status: DestructibleRegistry.State.Healthy }),
+            $"ABLE-TO-FAIL CONTROL: the bag that lost the last match and the cannon downed in it are found and whole ({string.Join(", ", peers.Select(p => $"{Pool(p, "multiplayer1zep", "gasbag3")?.Status.ToString() ?? "none"}/{Pool(p, "multiplayer2zep", "lbroad1")?.Status.ToString() ?? "none"}"))})");
+        ctx.Check(peers.All(p => p.RearmPlay is { BaseCount: 2 } r && r.BaseAt(0)?.Team == 2 && r.BaseAt(1)?.Team == 1),
+            $"both hulls' rearm bases stand again, each serving its side ({string.Join(" | ", peers.Select(p => p.RearmPlay is { } r ? $"{r.BaseAt(0)?.Team}/{r.BaseAt(1)?.Team}" : "none"))})");
+        ctx.Check(peers.All(p => !p.Versus!.Completed && p.MatchEnd == NetMatchEnd.Running && p.Versus!.ObjectiveWinner == 0
+                                 && Enumerable.Range(0, 3).All(s => p.Versus!.ScoreOf(s) == 0)
+                                 && new[] { 1, 2 }.All(t => p.Versus!.TeamTermOf(t) == 0 && p.Versus!.TeamTotalOf(t) == 0)),
+            $"and the match runs from zero on every machine, every seat's score and both sides' terms ({Scores(peers)})");
     }
 
     // A part killed on the host in one seat's name, as the host's copy of that seat's round would.

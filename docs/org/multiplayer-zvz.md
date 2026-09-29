@@ -27,6 +27,10 @@ code), data (extracted files), inferred (not checked in code).
 | `FUN_00498bf0` | The `0x12` death handler; its cause 3 is a pilot killed by a zeppelin |
 | `FUN_004969b0` | The placement; its mode 4 branch is the return by the hull |
 | `FUN_00495c40` | Loads the zeppelin and match voice lines |
+| `FUN_00495310` | The net match start: the handlers, the mode setups, the ended state cleared |
+| `FUN_00496d40` | After the end's wait: the net game torn down and the lobby opened |
+| `FUN_00472c40` | The world's free, every zeppelin record deleted among it |
+| `FUN_004bd110` | Reads `zeppelins.zrd` into new zeppelin records |
 
 ## Sides
 
@@ -114,6 +118,26 @@ machine. `snd_Zep_lost` (`0x71d214`), `snd_MP_mis_Lost` (`0x71d218`) and `snd_MP
 defines `snd_Zep_lost` (`VO_id47_ZZ-Zep-Lost.wav`) but neither `snd_MP_mis_Won` nor
 `snd_MP_mis_Lost`, and the sound archives hold no such recording.
 
+## The next match
+
+[Evidence: decoded] The original has no rematch. The net tick `FUN_00496d60`, on every machine,
+once the ended state `0x71c190` is set, waits until the clock passes `0x71c19c` (the five-second
+wait of [`multiplayer-scoring.md`](multiplayer-scoring.md) "How a match ends"), sets the state to 5
+(`0x496e9c`..`0x496ebe`) and jumps to `FUN_00496d40` (`0x496ecf`). The `afteraction` command
+(`FUN_0043d640`, `0x43ef9e`) reaches the same function. It unregisters the net handlers (`FUN_004966c0`) and opens the lobby
+(`FUN_00419750` writes 10 to `0x64b348` and pushes `0x71d6b4`, the lobby object `FUN_00413430`
+reads the teams from), so every
+machine lands back in the lobby at the end.
+
+[Evidence: decoded] Every launch from the lobby then loads the mission whole. The load
+(`FUN_0046b8c0` and `FUN_0046b950`) first runs `FUN_00464970`, whose `FUN_00472c40` (`0x464a37`)
+frees the world: it clears the zeppelin list `0x71df80` through `FUN_004bd300` (`0x472c72`), which
+destructs and deletes every record. It then runs `FUN_00464680`, which reads `zeppelins.zrd` again
+through `FUN_004bd110` (`0x46489c`), each record a new `0xfc`-byte object (`0x4bd16d`). The net
+match start `FUN_00495310` runs the side setup `FUN_00496490` in mode 4 (`0x495733`) and clears the
+ended state (`0x495905`). So a second match on the same map flies two new hulls, every gas bag and
+cannon whole; no zeppelin record outlives its match.
+
 ## The return
 
 [Evidence: decoded] `FUN_004969b0`, past the opening placement and with two or more pilots, sums the
@@ -146,7 +170,10 @@ carrying the winning team. Every value is the match's `MatchScores`, read from `
 lost hull's `score_zep` is 10. It goes to every other team's term on the board's total and never to
 the Score limit, and the winner is the side whose hull survived, both maintainer decisions. The end
 posts the original's two lines. The return is the decoded point, computed on the host and sent as
-`SpawnAtMessage`. A rematch is refused, since no world pool rebuilds. Each hull's marker is
+`SpawnAtMessage`. The next match is the original's: the results board's Restart takes each
+machine, host and guest alike, to the lobby (`GameSession.RestartMatch`), whose next launch builds
+every machine's session and world afresh, both hulls whole. It never reruns in place, which would
+restore no world pool. A launch outside the lobby has no next match. Each hull's marker is
 relabelled per pane rather than per machine (`ZeppelinVersus.HullSide`), so splitscreen panes on
 two sides each read their own hull as "Defend". The rearm is taken at each hull's own node while
 the hull lives (`Session/World/RearmRuntime.cs`).
