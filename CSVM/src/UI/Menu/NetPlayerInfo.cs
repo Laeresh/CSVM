@@ -85,7 +85,8 @@ public sealed class NetPlayerInfo
     /// <summary>The game's name as the games list shows it.</summary>
     public string GameName { get; set; } = "";
 
-    /// <summary>The optional password a host sets. Nothing sends it.</summary>
+    /// <summary>The optional password: the one a host asks in Game Information, or the one a joining
+    /// player answers in Player Information. It is never remembered.</summary>
     public string Password { get; set; } = "";
 
     /// <summary>The Maximum # of Players spinner's value, before any cap.</summary>

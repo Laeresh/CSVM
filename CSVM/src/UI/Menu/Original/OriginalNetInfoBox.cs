@@ -24,7 +24,8 @@ public enum NetInfoPage
 /// it over whatever page asked, as it does a messagebox. A host answers Game Information and then
 /// Player Information, and a joining player answers Player Information alone. OK is greyed while
 /// the name box is empty, and a name of spaces alone raises the original's refusal. The Player
-/// Information Password draws greyed and takes nothing. The decode is in
+/// Information Password takes the join's password when the game asks one, and is greyed
+/// otherwise, as the script's callback 5003 opens it. The decode is in
 /// <c>docs/org/multiplayer-messages.md</c>, "Game and Player Information".
 /// </summary>
 public sealed class OriginalNetInfoBox
@@ -50,7 +51,8 @@ public sealed class OriginalNetInfoBox
     /// <summary>The Voice drop-down.</summary>
     public const string VoiceKey = "MPI_D_VOICE";
 
-    /// <summary>Player Information's Password box, greyed.</summary>
+    /// <summary>Player Information's Password box, live only for a join that may be asked one.
+    /// </summary>
     public const string PlayerPasswordKey = "MPI_E_PLAYERPASSWORD";
 
     /// <summary>OK, greyed while the name box is empty.</summary>
@@ -105,6 +107,7 @@ public sealed class OriginalNetInfoBox
     private Action<NetPlayerInfo>? _done;
     private int _focusBefore = -1;
     private bool _voiceOpen;
+    private bool _asksPassword;
 
     /// <summary>A box drawn for <paramref name="host"/> in the words of the string table under
     /// <paramref name="dataRoot"/>. The last OK hands the answers to <paramref name="remember"/>,
@@ -128,23 +131,35 @@ public sealed class OriginalNetInfoBox
     /// <summary>Whether the Voice list stands open under its box.</summary>
     public bool VoiceListOpen => _voiceOpen;
 
+    /// <summary>Whether Player Information's Password box takes a password: on a join that may be
+    /// asked one, never on a host's own box.</summary>
+    public bool JoinPasswordLive => Page == NetInfoPage.Player && _hosting == null && _asksPassword;
+
     /// <summary>Whether seat 0's typed characters feed one of the boxes. They do while an edit box
     /// has the focus and no list or messagebox stands over it.</summary>
     internal bool CapturingText =>
-        IsOpen && !_voiceOpen && !_host.DialogOpen && _host.FocusedKey is GameNameKey or PasswordKey or CallsignKey;
+        IsOpen && !_voiceOpen && !_host.DialogOpen
+        && (_host.FocusedKey is GameNameKey or PasswordKey or CallsignKey || (_host.FocusedKey == PlayerPasswordKey && JoinPasswordLive));
 
     /// <summary>Whether a key is one of the boxes' rows.</summary>
     public static bool Owns(string key) => key.StartsWith(Prefix, StringComparison.Ordinal);
 
     /// <summary>Stands the boxes over the page showing, starting from <paramref name="start"/>. A
     /// host's <paramref name="hosting"/> names the kind of game, whose cap the spinner keeps. It
-    /// opens on Game Information, and null opens Player Information alone. <paramref name="done"/>
-    /// takes the answers once the last OK stands.</summary>
-    public void Open(NetSessionKind? hosting, NetPlayerInfo start, Action<NetPlayerInfo> done)
+    /// opens on Game Information, and null opens Player Information alone. A join that
+    /// <paramref name="asksPassword"/> may be asked one leaves Player Information's Password box
+    /// live. <paramref name="done"/> takes the answers once the last OK stands.</summary>
+    public void Open(NetSessionKind? hosting, NetPlayerInfo start, Action<NetPlayerInfo> done, bool asksPassword = false)
     {
         ArgumentNullException.ThrowIfNull(start);
         _draft = start.Copy();
         _hosting = hosting;
+        _asksPassword = asksPassword;
+        if (hosting == null)
+        {
+            _draft.Password = string.Empty;
+        }
+
         _done = done ?? throw new ArgumentNullException(nameof(done));
         if (hosting is { } kind)
         {
@@ -217,7 +232,8 @@ public sealed class OriginalNetInfoBox
 
         rows.Add(Field(CallsignKey, _draft.Callsign, 262f, 180f, true));
         rows.Add(new OriginalRow(VoiceKey, VoiceWord(_draft.Voice), OriginalRowKind.Dropdown, 261f, 248f, FieldWidth, FieldHeight, true, 0, null));
-        rows.Add(Field(PlayerPasswordKey, string.Empty, 261f, 316f, false));
+        rows.Add(Field(PlayerPasswordKey, JoinPasswordLive ? new string(Mask, _draft.Password.Length) : string.Empty, 261f, 316f,
+            JoinPasswordLive));
         rows.Add(_text.Strip(OkKey, SmallArt, OkX, ButtonY, _draft.Callsign.Length > 0, 0, 74f, 37f));
         rows.Add(_text.Strip(CancelKey, MediumArt, CancelX, ButtonY, true, 0, 96f, 37f));
     }
@@ -252,6 +268,7 @@ public sealed class OriginalNetInfoBox
             case GameNameKey:
             case PasswordKey:
             case CallsignKey:
+            case PlayerPasswordKey:
             case OkKey:
                 Ok();
                 break;
@@ -322,13 +339,13 @@ public sealed class OriginalNetInfoBox
         string text = key switch
         {
             GameNameKey => _draft.GameName,
-            PasswordKey => _draft.Password,
+            PasswordKey or PlayerPasswordKey => _draft.Password,
             _ => _draft.Callsign,
         };
         int limit = key switch
         {
             GameNameKey => NetPlayerInfo.GameNameLimit,
-            PasswordKey => NetPlayerInfo.PasswordLimit,
+            PasswordKey or PlayerPasswordKey => NetPlayerInfo.PasswordLimit,
             _ => NetPlayerInfo.CallsignLimit,
         };
 
@@ -352,6 +369,7 @@ public sealed class OriginalNetInfoBox
                 _draft.GameName = text;
                 break;
             case PasswordKey:
+            case PlayerPasswordKey:
                 _draft.Password = text;
                 break;
             default:

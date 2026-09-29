@@ -62,10 +62,11 @@ These are the design rules every module below is shaped by, and every multiplaye
   network and reads Close Network while open; the NETWORK OPEN band shows the address and guest
   count, and a chip per guest its Ready mark. Close Network, or leaving the cabin for the main menu,
   returns every guest to the Connection screen with "Host closed the game". The game is advertised
-  as `<profile>'s campaign`, with no password. A guest joins from the Multiplayer Connection screen,
-  by LAN search into the games list or by Internet IP address. The Connection screen's Host opens
-  the Multiplayer Lobby, where Dogfight is the one live mode; co-op has no lobby. The Built-in
-  menu, off by default, keeps its own network boards.
+  under the name Game Information gives it, with an optional password the host checks before a
+  guest is admitted, and the host can boot a guest from the lobby or the cabin. A guest joins from
+  the Multiplayer Connection screen, by LAN search into the games list or by Internet IP address.
+  The Connection screen's Host opens the Multiplayer Lobby, where Dogfight is the one live mode;
+  co-op has no lobby. The Built-in menu, off by default, keeps its own network boards.
 - **A pause halts nothing.** In a network session the pause sheet is an overlay (`PauseState`):
   the world, the AI, the director, the net ticks and the pauser's own aeroplane run on, the
   aeroplane flying trimmed on a centred stick with its commands swallowed until the sheet closes.
@@ -81,9 +82,9 @@ The seam itself, and the two types it is spoken in. `NetReliability` is the thre
 payload can be sent under, `INetTransportListener` is what a transport tells its owner (a peer
 joined, a peer left, a payload landed), and `INetTransport` is the carrier: the peer roster,
 `Send` of a byte span with its class and channel, `Bind` of the one listener, `Disconnect`, and
-`Step`, which is the only place a payload is ever delivered. A session holds the interface and
-constructs neither implementation itself. Read `LoopbackTransport.cs` for the carrier the suites
-use.
+`Step`, which is the only place a payload is ever delivered. `INetPeerAddress` is the optional
+address a carrier names a peer by, the key a boot bans. A session holds the interface and constructs
+neither implementation itself. Read `LoopbackTransport.cs` for the carrier the suites use.
 
 ## src/Net/LoopbackConditions.cs
 One direction's wire conditions as a value: a latency, a symmetric jitter half-width about it, and
@@ -213,14 +214,14 @@ so a renewal in flight cannot put a mapping back. The door, `UI/Menu/NetPlayFeat
 a host opens and closes it on the way out. Read `RouterAccessTests.cs`.
 
 ## src/Net/NetLobby.cs
-A carrier's first listener and itself the `INetTransport` the session later binds, since a carrier
-binds only once. A host's `Advertise` sends a `SessionAdvertMessage` to every peer on connect and on
-each change; a guest keeps the latest in `Advert` and the host's closing word in `Closed`. Co-op
-board messages stay here too: a host keeps each guest's latest `CoopPick` and `PickBuilds`, a guest
-the latest flow, `SeatFits`, `SeatBuilds`, `PlaneRules`, `Wingman` and `Film`. Others are held (up to `HeldPayloads`) until a session binds, then replayed
-behind the peer announcement. ⚠ A new round seen while bound marks `FlightOver` until the next bind,
-so the opener survives both unbinds a restart makes. A peer whose build version does not play goes
-on `Clashing` and off every peer list. Read `NetLobbyTests.cs`.
+A carrier's first listener and itself the `INetTransport` the session later binds. A host's
+`Advertise` reaches every peer on connect and on change; a guest keeps `Advert` and `Closed`. Lobby
+messages stay here (a host's `Picks` and `PickBuilds`, a guest's flow, fits, builds, rules, wingman
+and film); others are held up to `HeldPayloads` until a session binds. ⚠ A new round seen while bound
+marks `FlightOver` until the next bind, so the opener survives both unbinds a restart makes. It is
+the host's admission: a clashing build, a peer `AwaitingPassword`, and one `TurnedAway` (a banned
+address after `Boot`, a wrong password) stand off every peer list. Read `NetLobbyTests.cs` and
+`NetLobbyAdmissionTests.cs`.
 
 ## src/Net/NetBuildVersion.cs
 MAJOR.MINOR of the build's SemVer string, which two peers compare before they play: builds a patch

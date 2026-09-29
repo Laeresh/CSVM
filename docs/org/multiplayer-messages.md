@@ -376,7 +376,7 @@ score, `0x17` match state, `0x22` hit and `0x27` seat roster. Damage, spawn, the
 director transition, the join handshake and a seat's ask to be spawned again have no
 counterpart, so they are minted at `0x40`, `0x41`, `0x42`, `0x43` and `0x44`, above the ceiling
 above. The host-owned world's four (AI state, AI fire, a guest's hit claim on an AI, and a world
-event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, the start barrier's word at `0x5B`, a match's death notice at `0x5C`, the lobby's plane build and plane rules at `0x5D` and `0x5E`, and the lobby's co-op hangar plane at `0x5F`. The handshake carries the master seed, the host's clock and the seat the joining peer was
+event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, the start barrier's word at `0x5B`, a match's death notice at `0x5C`, the lobby's plane build and plane rules at `0x5D` and `0x5E`, the lobby's co-op hangar plane at `0x5F`, and the lobby's join password at `0x60`. The handshake carries the master seed, the host's clock and the seat the joining peer was
 given; the original needs none of the three, because it draws from no shared stream and hands
 out no seat. The ask carries a seat and nothing else: the original's client takes its own
 respawn, while here the host owns every placement and answers the ask with a spawn event.
@@ -772,8 +772,8 @@ sees them.
 
 | Id | Message | Class | Carries |
 |---|---|---|---|
-| `0x4A` | Session advert | reliable, host to each guest | session kind (Dogfight 1, campaign co-op 2) at 4, campaign mission sequence or `0xFF` for none at 5, player count at 6, status at 7 (unknown 0, waiting 1, in mission 2, full 3), seat cap at 8, three reserved bytes, the game's name in 16 bytes UTF-8 zero padded at 12 (28 bytes) |
-| `0x4F` | Session closed | reliable, host to each guest | reason at 4 (unknown 0, closed 1, full 2, version mismatch 3), three reserved bytes, the host's build version at 8, the guest's as the host heard it at 12 (16 bytes) |
+| `0x4A` | Session advert | reliable, host to each guest | session kind (Dogfight 1, campaign co-op 2) at 4, campaign mission sequence or `0xFF` for none at 5, player count at 6, status at 7 (unknown 0, waiting 1, in mission 2, full 3), seat cap at 8, flags at 9 (bit 0 the host asks a password), two reserved bytes, the game's name in 16 bytes UTF-8 zero padded at 12 (28 bytes) |
+| `0x4F` | Session closed | reliable, host to each guest | reason at 4 (unknown 0, closed 1, full 2, version mismatch 3, booted 4, wrong password 5), three reserved bytes, the host's build version at 8, the guest's as the host heard it at 12 (16 bytes) |
 | `0x56` | Build version | reliable, each end to each peer on connect | the build version at 4 (8 bytes) |
 
 A guest that reads a closed reason tells the player the host closed the game, that the game was
@@ -828,8 +828,10 @@ join or the lobby, and either box's Cancel goes back to the page under it.
   `0x00412bf2`) and copied into each peer's lobby record `+0x78` (`FUN_00414640`, `0x004147aa`), and
   every aircraft of that player speaks as that pilot
   ([`../formats/combat-voice.md`](../formats/combat-voice.md), "A player's own voice").
-- **Password** (10035): greyed unless callback 5003 answers otherwise (`gui_init`); the capture of
-  a LAN TCP/IP game shows it greyed. What the callback reads is not decoded.
+- **Password** (10035): the join's password, greyed unless callback 5003 answers that the picked
+  game needs one (`gui_init`); the capture of a LAN TCP/IP game shows it greyed. OK copies it to
+  `$$ZGA$$` before the join (message 1074), and the join hands it to DirectPlay (below, "Boot and
+  the password"). Which field 5003 reads is not traced; the games list's own password mark is.
 
 [Evidence: decoded] The name test is `FUN_00407060`: `GetStringTypeExA` with `CT_CTYPE1` over the
 text, and the name passes as soon as one character carries a class outside space, blank and
@@ -848,10 +850,69 @@ same pick without it. At launch the host writes each seat's voice into bits 1 to
 flags byte in the seat roster `0x27`, beside the host bit, so every machine speaks every seat in its
 chosen voice; the entry keeps its 20 bytes, and a build a patch older reads the host bit alone. A
 co-op host's first seat carries Nathan Zachary's, the scripted player's, and a splitscreen seat
-carries none. The password is held on the door and sent nowhere. The callsign, the voice
-and the game name are remembered in `options.json` for the next session. The Player Information
-Password draws greyed and takes nothing: it most likely served MSN Gaming Zone, which the remake
-does not carry.
+carries none. The callsign, the voice and the game name are remembered in `options.json`
+for the next session; a password never is. Game Information's password is the one the host asks,
+and Player Information's is the one a join answers with. That box is live for a join to a game the
+list marks Need Password and for a join by typed address, whose advert is not known yet, and greyed
+on a host's own box.
+
+### Boot and the password
+
+[Evidence: decoded] **Boot.** The lobby's Boot is `KDA` in `MULTIPLAYERLOBBY_READY.SCRIPT` (string
+10054, `mp_b_small.png` at 19, 325), created greyed. The script's refresh (message 1301) makes it
+live only on the host (`$$OX$$`) while the picked player-list row is a player (row kind 0 or 2 from
+callback 5002; a team row is kind 1), and greys it otherwise. Its press calls `$$A$$` 1005 with the
+picked row's player id, then presses the picked row again, which lets the pick go. The screen-flow
+dispatcher `FUN_00407670` sends 1005 to `FUN_00413090`, which acts only on the host
+(`FUN_005b4210`) and never on the host's own player id (`this+0x160`). It posts lobby notice 1
+naming the player (`FUN_00413270`, message `0x18`, sent to everybody), sends a `0x1a` setting
+change of subtype 8 for each entry of the table at `0x6453a8` that the player holds, and destroys
+the player through `IDirectPlay4::DestroyPlayer` (`FUN_005b2480`, vtable `+0x24`). Every end shows
+notice 1 in its chat as langui 10500, "[%1!s! was booted from the game.]" (`FUN_00414120` posts
+message 1018, whose handler in `FUN_004084a0` formats `0x2903` plus the notice code). The original
+keeps no ban: DirectPlay would admit the booted player again. What a booted guest's own screen shows
+is not traced.
+
+[Evidence: decoded] **The games list's mark.** `FUN_00414b40` turns each enumerated session's state
+into the list's status: state 1 reads Ready (10089), 3 In Progress (10090), 2 **Need Password**
+(10141) with the entry's password flag set (`DAT_00642f40`), and anything else "???" (10091).
+`FUN_00402f40` writes the Status cell and puts Game Full (10140) over any of them once the player
+count reaches the cap.
+
+[Evidence: decoded] **The join's password.** `$$A$$` 1004 joins through `FUN_00412e30`, which puts
+`DAT_00642f10`, the Player Information password, into the join's session descriptor. `FUN_005b3bd0`
+copies it into `lpszPassword` when the session's flags carry `DPSESSION_PASSWORDREQUIRED` (`0x400`)
+and calls `IDirectPlay4::Open` (vtable `+0x60`) with `DPOPEN_JOIN | DPOPEN_RETURNSTATUS` (`0x81`).
+DirectPlay checks the password on the host. A refusal returns to 1004 as `DPERR_INVALIDPASSWORD`,
+which `FUN_005b1770` names `MSG_DPERR_INVALIDPASSWORD`, "Invalid Password" (messages 7041). Player
+Information shows that in a messagebox and goes back to the games list. Langui 10509, "The password
+is incorrect. Please try again.", has no reference as an immediate in the executable.
+
+The remake follows the original where it speaks and fills in what DirectPlay did for it:
+
+- **The mark.** The advert's byte 9 is a flags byte, bit 0 set when the host asks a password. It was
+  a reserved zero, so a build a patch older reads the rest unchanged. The games list reads Need
+  Password in the Status column unless the game is full, which reads Full.
+- **The check.** A host with a password holds every new peer off every peer list until it answers.
+  A guest answers an advert that asks a password with `0x60`, its typed password, once per
+  connection. The host compares it ordinally; a match is answered with `0x60` marked admitted, and
+  only then does the lobby list, seat and tell the guest anything. A wrong answer, or none within 10
+  seconds (a build a patch older sends none), is sent session closed reason 5 and hung up on after
+  the full notice's grace. The guest reads Invalid Password over the Connection page. A session with
+  no password sends no `0x60` at all.
+- **Boot.** Boot is live on the host while it has picked a guest's row; the host's own row is never
+  offered. The guest is sent session closed reason 4 and hung up on, and the lobby's chat on every
+  other end reads 10500, a chat line `0x55` under no name. The cabin's remake-only BOOT asks about
+  each co-op guest in player order, since a campaign board has no chat. The booted guest reads "You
+  were booted from the game" over the Connection page.
+- **The ban.** The remake adds one the original lacks: a boot bans the address the guest connected
+  from until the session closes, and a later connection from it is refused with reason 4 before its
+  password is asked. It is an address, so another player behind the same router is refused too, and
+  a carrier that names no address bans nothing.
+
+| Id | Message | Class | Carries |
+|---|---|---|---|
+| `0x60` | Join password | reliable, guest to host (the answer) and host to guest (the admission) | flags at 4 (bit 0 admitted), three reserved bytes, the password in 48 bytes UTF-8 zero padded at 8 (56 bytes) |
 
 ### Campaign co-op boards
 

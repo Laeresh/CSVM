@@ -31,6 +31,9 @@ internal static class MenuOriginalConnectionSuites
     private const string LobbyGame = "Friday Fliers";
     private const int LobbyCap = 6;
 
+    // The password the boot suite's host asks.
+    private const string LobbyPassword = "swordfish";
+
     [Suite("menu-original-connection",
         "The Original presentation's network doors over the loopback and an in-process LAN: the "
         + "cabin's HOST CO-OP asks GAME INFORMATION, whose Cancel opens nothing and whose cap of "
@@ -658,6 +661,373 @@ internal static class MenuOriginalConnectionSuites
         {
             responder.Dispose();
             search.Dispose();
+        }
+    }
+
+    [Suite("menu-original-boot",
+        "The Multiplayer Lobby's password and Boot over the loopback: a host types a password into "
+        + "GAME INFORMATION and its own PLAYER INFORMATION keeps the join's Password greyed. The games "
+        + "list reads Need Password, and Join Game leaves PLAYER INFORMATION's Password live. A wrong "
+        + "password is refused with Invalid Password on the Connection page before the host lists the "
+        + "guest, and the right one lands it in the lobby. Boot is greyed until the host picks the "
+        + "guest's row, then removes it: the guest lands on the Connection page told it was booted, "
+        + "the host's chat reads the original's notice, and the guest's return from the same machine "
+        + "is refused while a guest from another machine joins")]
+    internal static void TheBootAndThePassword(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        // Nathan's three connections come from one machine: the wrong password, the right one, and
+        // the return after the boot. Sheila's comes from another. A guest links only to its host.
+        var lan = new LoopbackLan();
+        var mesh = LoopbackTransport.Mesh(5, LoopbackConditions.Perfect, new Random(19));
+        Unlink(mesh);
+        mesh[4].Address = "192.168.1.23";
+        var gate = new ArrivalGate(mesh[0]);
+        var hostDoor = new NetPlayFeature(
+            (_, _, _) => gate,
+            (_, _) => throw new InvalidOperationException("the host does not join"),
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }),
+            lan.Bind);
+        var nathanDoor = Arriving(gate, lan, mesh[1], mesh[2], mesh[3]);
+        var sheilaDoor = Arriving(gate, lan, mesh[4]);
+        var doors = new[] { hostDoor, nathanDoor, sheilaDoor };
+        foreach (var door in doors)
+        {
+            door.BindAddress = Loopback;
+            door.SearchAddress = Loopback;
+        }
+
+        var ends = new List<End>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-boot");
+        try
+        {
+            var host = Open(ctx, layout, hostDoor, ends);
+            var nathan = Open(ctx, layout, nathanDoor, ends);
+            var sheila = Open(ctx, layout, sheilaDoor, ends);
+            if (host == null || nathan == null || sheila == null || !HostWithAPassword(ctx, host))
+            {
+                return;
+            }
+
+            var lobby = hostDoor.Dogfight!;
+            int most = JoinWithPassword(ctx, nathan, ends, "Nathan", "sword", lobby);
+            ctx.Check(nathan.Shell.Screen == OriginalScreen.Connection && nathan.Shell.Dialog?.Message == CoopDoorText.WrongPassword,
+                $"a wrong password is refused with the original's words over the Connection page ({nathan.Shell.Screen}, {nathan.Shell.Dialog?.Message})");
+            ctx.Check(most == 1 && hostDoor.Peers == 0,
+                $"and the host never lists the refused guest ({most} rows at most, {hostDoor.Peers} guests)");
+            ClickRow(ctx, nathan, OriginalShell.DialogOkKey);
+
+            JoinWithPassword(ctx, nathan, ends, "Nathan", LobbyPassword, lobby);
+            ctx.Check(nathan.Shell.Screen == OriginalScreen.Lobby && lobby.Players.Count == 2 && lobby.Players[1].Name == "Nathan",
+                $"the right password lands the guest in the lobby ({nathan.Shell.Screen}, {lobby.Players.Count} rows, {nathan.Shell.Dialog?.Message})");
+            BootFromTheLobby(ctx, host, nathan, ends);
+
+            JoinWithPassword(ctx, nathan, ends, "Nathan", LobbyPassword, lobby);
+            ctx.Check(nathan.Shell.Screen == OriginalScreen.Connection && nathan.Shell.Dialog?.Message == CoopDoorText.Booted && lobby.Players.Count == 1,
+                $"the booted guest's return from the same machine is refused ({nathan.Shell.Screen}, {nathan.Shell.Dialog?.Message}, {lobby.Players.Count} rows)");
+            JoinWithPassword(ctx, sheila, ends, "Sheila", LobbyPassword, lobby);
+            ctx.Check(sheila.Shell.Screen == OriginalScreen.Lobby && lobby.Players.Count == 2 && lobby.Players[1].Name == "Sheila",
+                $"ABLE-TO-FAIL CONTROL: a guest from another machine joins the same session ({sheila.Shell.Screen}, {lobby.Players.Count} rows)");
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            foreach (var door in doors)
+            {
+                door.Discard();
+            }
+
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
+    [Suite("menu-original-coop-boot",
+        "The cabin's BOOT over the loopback: the co-op host's BOOT is greyed with no guest seated, "
+        + "then asks about each guest in player order. No moves to the next and boots nobody, and Yes "
+        + "removes that guest, who lands on the Connection page told it was booted while the other "
+        + "stays seated. The booted guest's return from the same machine is refused until CLOSE "
+        + "NETWORK, after which a new session admits it")]
+    internal static void TheCoopBoot(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        // The second host wire is the session opened after CLOSE NETWORK, with a mesh of its own.
+        var lan = new LoopbackLan();
+        var mesh = LoopbackTransport.Mesh(4, LoopbackConditions.Perfect, new Random(23));
+        var next = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(29));
+        Unlink(mesh);
+        mesh[3].Address = "192.168.1.23";
+        var gate = new ArrivalGate(mesh[0]);
+        var nextGate = new ArrivalGate(next[0]);
+        var hostWires = new Queue<INetTransport>(new INetTransport[] { gate, nextGate });
+        var hostDoor = new NetPlayFeature(
+            (_, _, _) => hostWires.Dequeue(),
+            (_, _) => throw new InvalidOperationException("the host does not join"),
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }),
+            lan.Bind);
+        var nathanWires = new Queue<(ArrivalGate Gate, LoopbackTransport End)>(new[] { (gate, mesh[1]), (gate, mesh[2]), (nextGate, next[1]) });
+        var nathanDoor = new NetPlayFeature(
+            (_, _, _) => throw new InvalidOperationException("a guest does not host"),
+            (_, _) =>
+            {
+                var (to, end) = nathanWires.Dequeue();
+                to.Arrive(end.LocalPeer);
+                return new Hangup(end);
+            },
+            lan: lan.Bind);
+        var sheilaDoor = Arriving(gate, lan, mesh[3]);
+        var doors = new[] { hostDoor, nathanDoor, sheilaDoor };
+        foreach (var door in doors)
+        {
+            door.BindAddress = Loopback;
+            door.SearchAddress = Loopback;
+        }
+
+        var ends = new List<End>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-coop-boot");
+        try
+        {
+            var host = Open(ctx, layout, hostDoor, ends);
+            var nathan = Open(ctx, layout, nathanDoor, ends);
+            var sheila = Open(ctx, layout, sheilaDoor, ends);
+            if (host == null || nathan == null || sheila == null)
+            {
+                return;
+            }
+
+            host.Shell.Campaign.OpenCampaignOver(
+                CampaignAidProfiles.Store(seeded: true, progressed: true), CampaignAidProfiles.Planes());
+            host.Shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
+            OpenForTheMatch(ctx, host, hostDoor);
+            ctx.Check(Row(host.Shell, OriginalCampaignScreen.CoopBootKey) is { Enabled: false, Label: CoopDoorText.BootButton },
+                $"ABLE-TO-FAIL CONTROL: the cabin's BOOT is greyed while no guest is seated ({Row(host.Shell, OriginalCampaignScreen.CoopBootKey)?.Enabled})");
+            JoinThroughTheList(ctx, nathan, ends, 1, "the first guest");
+            JoinThroughTheList(ctx, sheila, ends, 2, "the second guest");
+            AskAndDecline(ctx, host, hostDoor, ends);
+            ClickRow(ctx, host, OriginalCampaignScreen.CoopBootKey);
+            ClickRow(ctx, host, OriginalShell.DialogYesKey);
+            for (int frame = 0; frame < 4; frame++)
+            {
+                Pump(ends.ToArray());
+            }
+
+            ctx.Check(nathan.Shell.Screen == OriginalScreen.Connection && nathan.Shell.Dialog?.Message == CoopDoorText.Booted,
+                $"Yes boots the first guest onto the Connection page, told why ({nathan.Shell.Screen}, {nathan.Shell.Dialog?.Message})");
+            ctx.Check(hostDoor.CoopGuests.Count == 1 && hostDoor.CoopGuests[0].Name == "Sheila" && sheila.Door.IsCoopGuest
+                      && !DrawsOver(host.Shell.Compose(), "Nathan" + LaunchMenu.RemoteChipMark),
+                $"and the other guest stays seated while the host's chips drop the booted one ({string.Join(", ", hostDoor.CoopGuests.Select(g => g.Name))})");
+            ClickRow(ctx, nathan, OriginalShell.DialogOkKey);
+            Rejoin(ctx, nathan, ends);
+            ctx.Check(nathan.Shell.Dialog?.Message == CoopDoorText.Booted && hostDoor.CoopGuests.Count == 1,
+                $"the booted guest's return from the same machine is refused ({nathan.Shell.Dialog?.Message}, {hostDoor.CoopGuests.Count} guests)");
+            ClickRow(ctx, nathan, OriginalShell.DialogOkKey);
+
+            // CLOSE NETWORK ends the session and its ban list; the next one admits the same machine.
+            ClickRow(ctx, host, OriginalCampaignScreen.CoopDoorKey);
+            OpenForTheMatch(ctx, host, hostDoor);
+            Rejoin(ctx, nathan, ends);
+            ctx.Check(nathan.Door.IsCoopGuest && hostDoor.CoopGuests.Count == 1 && nathan.Shell.Dialog == null,
+                $"a new session admits the machine the last one booted ({nathan.Door.Stage}, {hostDoor.CoopGuests.Count} guests, {nathan.Shell.Dialog?.Message})");
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            foreach (var door in doors)
+            {
+                door.Discard();
+            }
+
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
+    // The Connection page's Host with a password typed into GAME INFORMATION. The host's own PLAYER
+    // INFORMATION keeps the join's Password greyed. True when the lobby opened.
+    private static bool HostWithAPassword(TestContext ctx, End host)
+    {
+        ClickRow(ctx, host, OriginalShell.MultiplayerKey);
+        ClickRow(ctx, host, OriginalConnectionScreen.HostKey);
+        var box = host.Shell.NetInfo;
+        box.Draft.GameName = LobbyGame;
+        ClickRow(ctx, host, OriginalNetInfoBox.PasswordKey);
+        TypeInto(host, new MenuCommands { Typed = LobbyPassword });
+        ctx.Check(box.Draft.Password == LobbyPassword && Row(host.Shell, OriginalNetInfoBox.PasswordKey)?.Label == new string('*', LobbyPassword.Length),
+            $"GAME INFORMATION's Password box takes the typed password and shows it masked ({Row(host.Shell, OriginalNetInfoBox.PasswordKey)?.Label})");
+        ClickRow(ctx, host, OriginalNetInfoBox.OkKey);
+        ctx.Check(box.Page == NetInfoPage.Player && Row(host.Shell, OriginalNetInfoBox.PlayerPasswordKey) is { Enabled: false },
+            $"the host's own PLAYER INFORMATION keeps the join's Password greyed ({box.Page})");
+        box.Draft.Callsign = "Zachary";
+        ClickRow(ctx, host, OriginalNetInfoBox.OkKey);
+        Pump(host);
+        var door = host.Door;
+        ctx.Check(host.Shell.Screen == OriginalScreen.Lobby && door.Advertising is { Password: true } && door.Password == LobbyPassword,
+            $"Host opens the lobby and its advert says it asks a password ({host.Shell.Screen}, {door.Advertising?.Password})");
+        return host.Shell.Screen == OriginalScreen.Lobby && door.Dogfight != null;
+    }
+
+    // A guest's walk to the password lobby: Connect, the list's Need Password, Join Game with the
+    // password typed into PLAYER INFORMATION. Returns the most rows the host's list held meanwhile.
+    private static int JoinWithPassword(TestContext ctx, End guest, List<End> ends, string callsign, string password, DogfightLobby hostLobby)
+    {
+        var shell = guest.Shell;
+        if (shell.Screen != OriginalScreen.Connection)
+        {
+            ClickRow(ctx, guest, OriginalShell.MultiplayerKey);
+        }
+
+        ClickRow(ctx, guest, OriginalConnectionScreen.ConnectKey);
+        for (int frame = 0; frame < 6 && shell.Connection.Listed.Count == 0; frame++)
+        {
+            Pump(ends.ToArray());
+        }
+
+        if (shell.Connection.Listed.Count != 1)
+        {
+            ctx.Check(false, $"the search lists the one open game ({shell.Connection.Listed.Count})");
+            return 0;
+        }
+
+        var cells = shell.Connection.Cells(shell.Connection.Listed[0]);
+        ctx.Check(cells.Count == 5 && cells[4] == CoopDoorText.NeedPassword,
+            $"the games list marks the game Need Password ({string.Join(" | ", cells)})");
+        ClickRow(ctx, guest, OriginalConnectionScreen.GameKey(0));
+        ClickRow(ctx, guest, OriginalConnectionScreen.JoinKey);
+        var box = shell.NetInfo;
+        ctx.Check(box.Page == NetInfoPage.Player && Row(shell, OriginalNetInfoBox.PlayerPasswordKey) is { Enabled: true },
+            $"Join Game stands PLAYER INFORMATION with its Password live ({box.Page})");
+        box.Draft.Callsign = callsign;
+        ClickRow(ctx, guest, OriginalNetInfoBox.PlayerPasswordKey);
+        TypeInto(guest, new MenuCommands { Typed = password });
+        ctx.Check(box.Draft.Password == password, $"its Password box takes the typed password ({box.Draft.Password.Length} characters)");
+        ClickRow(ctx, guest, OriginalNetInfoBox.OkKey);
+        int most = 0;
+        for (int frame = 0; frame < 8; frame++)
+        {
+            Pump(ends.ToArray());
+            most = Math.Max(most, hostLobby.Players.Count);
+        }
+
+        return most;
+    }
+
+    // The host picks the guest's row and presses Boot, which is greyed until the row is picked.
+    private static void BootFromTheLobby(TestContext ctx, End host, End guest, List<End> ends)
+    {
+        var screen = host.Shell.Lobby;
+        ctx.Check(Row(host.Shell, OriginalLobbyScreen.BootKey) is { Enabled: false } && Row(host.Shell, OriginalLobbyScreen.PlayerKey(0)) == null,
+            $"ABLE-TO-FAIL CONTROL: Boot is greyed with no row picked, and the host's own row is not offered");
+        ctx.Check(Row(guest.Shell, OriginalLobbyScreen.PlayerKey(1)) == null && Row(guest.Shell, OriginalLobbyScreen.BootKey) is { Enabled: false },
+            $"a guest's list offers no row and its Boot stays greyed");
+        ClickRow(ctx, host, OriginalLobbyScreen.PlayerKey(1));
+        ctx.Check(screen.PickedPeer >= 0 && Row(host.Shell, OriginalLobbyScreen.BootKey) is { Enabled: true },
+            $"picking the guest's row makes Boot live ({screen.PickedPeer})");
+        ClickRow(ctx, host, OriginalLobbyScreen.BootKey);
+        for (int frame = 0; frame < 6; frame++)
+        {
+            Pump(ends.ToArray());
+        }
+
+        var lobby = host.Door.Dogfight!;
+        ctx.Check(guest.Shell.Screen == OriginalScreen.Connection && guest.Shell.Dialog?.Message == CoopDoorText.Booted,
+            $"Boot puts the guest on the Connection page, told it was booted ({guest.Shell.Screen}, {guest.Shell.Dialog?.Message})");
+        ctx.Check(lobby.Players.Count == 1 && lobby.Chat.Any(line => line.Text == "[Nathan was booted from the game.]")
+                  && Draws(host.Shell.Compose(), "[Nathan was booted from the game.]") && screen.PickedPeer < 0,
+            $"the host's list drops the guest and its chat reads the original's notice ({lobby.Players.Count} rows)");
+        ClickRow(ctx, guest, OriginalShell.DialogOkKey);
+    }
+
+    // BOOT asks about the first guest with Yes, No and Cancel; No asks about the second with Yes and
+    // No; No again boots nobody.
+    private static void AskAndDecline(TestContext ctx, End host, NetPlayFeature hostDoor, List<End> ends)
+    {
+        ClickRow(ctx, host, OriginalCampaignScreen.CoopBootKey);
+        ctx.Check(host.Shell.Dialog?.Message == CoopDoorText.BootQuestion("Nathan") && host.Shell.Dialog.Answers.Count == 3,
+            $"BOOT asks about the first guest with three answers ({host.Shell.Dialog?.Message})");
+        ClickRow(ctx, host, OriginalShell.DialogNoKey);
+        ctx.Check(host.Shell.Dialog?.Message == CoopDoorText.BootQuestion("Sheila") && host.Shell.Dialog.Answers.Count == 2,
+            $"No moves on to the last guest with two ({host.Shell.Dialog?.Message})");
+        ClickRow(ctx, host, OriginalShell.DialogNoKey);
+        Pump(ends.ToArray());
+        ctx.Check(host.Shell.Dialog == null && hostDoor.CoopGuests.Count == 2,
+            $"ABLE-TO-FAIL CONTROL: declining both boots nobody ({hostDoor.CoopGuests.Count} guests)");
+    }
+
+    // A co-op guest's plain rejoin through the list, followed until the host answers.
+    private static void Rejoin(TestContext ctx, End guest, List<End> ends)
+    {
+        if (guest.Shell.Screen != OriginalScreen.Connection)
+        {
+            ClickRow(ctx, guest, OriginalShell.MultiplayerKey);
+        }
+
+        ClickRow(ctx, guest, OriginalConnectionScreen.ConnectKey);
+        for (int frame = 0; frame < 6 && guest.Shell.Connection.Listed.Count == 0; frame++)
+        {
+            Pump(ends.ToArray());
+        }
+
+        ClickRow(ctx, guest, OriginalConnectionScreen.GameKey(0));
+        ClickRow(ctx, guest, OriginalConnectionScreen.JoinKey);
+        Answer(ctx, guest, "Nathan");
+        for (int frame = 0; frame < 6; frame++)
+        {
+            Pump(ends.ToArray());
+        }
+    }
+
+    // A guest door whose joins take the next of its wires, each arriving at the host's gate.
+    private static NetPlayFeature Arriving(ArrivalGate gate, LoopbackLan lan, params LoopbackTransport[] wires)
+    {
+        var queue = new Queue<LoopbackTransport>(wires);
+        return new NetPlayFeature(
+            (_, _, _) => throw new InvalidOperationException("a guest does not host"),
+            (_, _) =>
+            {
+                var end = queue.Dequeue();
+                gate.Arrive(end.LocalPeer);
+                return new Hangup(end);
+            },
+            lan: lan.Bind);
+    }
+
+    // The loopback links every end to every other; a real guest links only to its host, end 0.
+    private static void Unlink(IReadOnlyList<LoopbackTransport> mesh)
+    {
+        for (int i = 1; i < mesh.Count; i++)
+        {
+            for (int j = i + 1; j < mesh.Count; j++)
+            {
+                mesh[i].Disconnect(mesh[j].LocalPeer);
+            }
         }
     }
 
@@ -1854,7 +2224,7 @@ internal static class MenuOriginalConnectionSuites
 
     // The host's end of a mesh whose guests arrive one at a time. A peer joins its roster, and its
     // payloads cross, only once that peer has arrived.
-    private sealed class ArrivalGate : INetTransport, INetTransportListener
+    private sealed class ArrivalGate : INetTransport, INetTransportListener, INetPeerAddress
     {
         private readonly INetTransport _inner;
         private readonly HashSet<int> _arrived = new();
@@ -1865,6 +2235,8 @@ internal static class MenuOriginalConnectionSuites
         public int LocalPeer => _inner.LocalPeer;
 
         public IReadOnlyList<int> Peers => _inner.Peers.Where(_arrived.Contains).ToList();
+
+        public string? AddressOf(int peer) => _arrived.Contains(peer) ? (_inner as INetPeerAddress)?.AddressOf(peer) : null;
 
         public void Arrive(int peer)
         {

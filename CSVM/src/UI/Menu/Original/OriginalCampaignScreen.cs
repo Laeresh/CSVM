@@ -26,6 +26,9 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     /// <summary>The cabin's network door, Host Co-op while shut and Close Network while open.</summary>
     public const string CoopDoorKey = "NET_HOSTCOOP";
 
+    /// <summary>The co-op host's BOOT plaque beside the door, live while a guest is seated.</summary>
+    public const string CoopBootKey = "NET_BOOT";
+
     // The roster's own list colours, CAMPAIGN.SCRIPT's sub-script VB. The selection bar behind the
     // picked row is 0xff800000, the frame around the row under the pointer 0xffff0000.
     private const byte RosterBarRed = 0x80;
@@ -36,6 +39,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     // sits below the band's two lines (status and guest address), whose ground ends at y 49.
     private const float CoopDoorX = 14f;
     private const float CoopDoorY = 57f;
+    private const float CoopBootGap = 4f;
     private const float CoopBandY = 14f;
     private const float CoopBandSize = 13f;
     private const float CoopBandWidth = 520f;
@@ -450,6 +454,11 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
                     CoopDoorKey, open ? CoopDoorText.CloseNetworkButton : CoopDoorText.HostCoopButton, 0,
                     open || door.Stage is NetDoorStage.Shut or NetDoorStage.Failed, 0);
                 rows.Add(row with { X = CoopDoorX, Y = CoopDoorY });
+                if (open)
+                {
+                    var boot = _host.PlaqueRow(CoopBootKey, CoopDoorText.BootButton, 0, door.CoopGuests.Count > 0, 0);
+                    rows.Add(boot with { X = CoopDoorX, Y = CoopDoorY + row.Height + CoopBootGap });
+                }
             }
         }
     }
@@ -527,6 +536,12 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         if (row.Key == CoopDoorKey)
         {
             ToggleCoopDoor();
+            return null;
+        }
+
+        if (row.Key == CoopBootKey)
+        {
+            AskBoot(0);
             return null;
         }
 
@@ -1381,6 +1396,27 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         _ask(NetSessionKind.CampaignCoop, OpenCoopDoor);
     }
 
+    // BOOT asks about each seated guest in player order: Yes boots that one, No asks about the
+    // next, and Cancel asks no more. The original has no campaign across a link, so the question is
+    // the remake's own; the boot itself is the Dogfight lobby's.
+    private void AskBoot(int from)
+    {
+        if (_net() is not { IsCoopHost: true } net || from >= net.CoopGuests.Count)
+        {
+            return;
+        }
+
+        var guest = net.CoopGuests[from];
+        var boot = Yes(() => net.Boot(guest.Peer));
+        if (from + 1 < net.CoopGuests.Count)
+        {
+            _host.RaiseDialog(CoopDoorText.BootQuestion(guest.Name), DialogIcon.Query, boot, NoCentred(() => AskBoot(from + 1)), Cancel());
+            return;
+        }
+
+        _host.RaiseDialog(CoopDoorText.BootQuestion(guest.Name), DialogIcon.Query, boot, No());
+    }
+
     private void OpenCoopDoor()
     {
         if (_net() is not { } net || net.Stage is not (NetDoorStage.Shut or NetDoorStage.Failed))
@@ -1529,7 +1565,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
 
         for (int i = 0; i < rows.Count; i++)
         {
-            if (rows[i].Key == CoopDoorKey)
+            if (rows[i].Key is CoopDoorKey or CoopBootKey)
             {
                 bool pressed = !_host.DialogOpen && _host.PressedRow == i;
                 _host.ComposeGenericRow(rows[i], i == focus && !_host.DialogOpen, pressed, i, layers);
@@ -1715,6 +1751,13 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
 
     private OriginalDialogAnswer No() =>
         new(OriginalShell.DialogNoKey, CampaignBoards.DialogRightKey, DialogWord(103, "No"), null);
+
+    // The three-button box's No moves onto the centre slot, and Cancel takes the right one.
+    private OriginalDialogAnswer NoCentred(Action run) =>
+        new(OriginalShell.DialogNoKey, CampaignBoards.DialogCenterKey, DialogWord(103, "No"), run);
+
+    private OriginalDialogAnswer Cancel() =>
+        new(OriginalShell.DialogCancelKey, CampaignBoards.DialogRightKey, DialogWord(101, "Cancel"), null);
 
     private string DialogWord(int id, string fallback)
     {

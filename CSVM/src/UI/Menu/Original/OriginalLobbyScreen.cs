@@ -32,11 +32,11 @@ public enum LobbyTab
 
 /// <summary>
 /// The original's Multiplayer Lobby over <see cref="DogfightLobby"/>, drawn from the lobby scripts'
-/// own placements (<c>docs/org/menu-inventory.md</c>). The player list, Ready, chat and Leave Game
-/// stand on every tab. Only a Dogfight flies, so Capture the Flag, the zeppelin mode, the teams
-/// and Boot draw greyed. Select... opens the outlaw list over the tab page while Outlaw Components
-/// is ticked. The host's options lock while the host is Ready. Every pilot's own picks stay live,
-/// and changing one clears that pilot's Ready.
+/// own placements (<c>docs/org/menu-inventory.md</c>). The player list, Ready, chat, Boot and Leave
+/// Game stand on every tab, Boot removing the guest whose row a host picked. Only a Dogfight flies,
+/// so Capture the Flag, the zeppelin mode and the teams draw greyed. Select... opens the outlaw list
+/// over the tab page while Outlaw Components is ticked. The host's options lock while the host is
+/// Ready. Every pilot's own picks stay live, and changing one clears that pilot's Ready.
 /// </summary>
 public sealed class OriginalLobbyScreen : IOriginalScreenModule
 {
@@ -110,8 +110,13 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>The Rockets sub-tab.</summary>
     public const string RocketsTabKey = "MPL_TAB_ROCKETS";
 
-    /// <summary>Boot, greyed.</summary>
+    /// <summary>Boot, live on the host while a guest's row is picked. The script's KDA, which its
+    /// refresh 1301 mails live on the host with a player row picked; its press is <c>$$A$$</c> 1005.
+    /// </summary>
     public const string BootKey = "MPL_B_BOOT";
+
+    /// <summary>The prefix of a host's player list row, which a press picks for Boot.</summary>
+    public const string PlayerKeyPrefix = "MPL_R_PLAYER_";
 
     /// <summary>Create Team, greyed.</summary>
     public const string TeamKey = "MPL_B_TEAM";
@@ -194,6 +199,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private static readonly BoardTint LaunchBlink = new(255, 50, 25);
     private static readonly BoardTint OwnName = new(255, 0, 0);
 
+    // The picked row's fill, the script's KEA.NF on the player list (MULTIPLAYERLOBBY_READY.SCRIPT).
+    private static readonly (byte R, byte G, byte B) PickedRow = (209, 180, 120);
+
     private readonly Func<NetPlayFeature?> _net;
     private readonly IOriginalScreenHost _host;
     private readonly MultiplayerBoardText _text;
@@ -210,6 +218,10 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private double _clock;
     private int _blink;
     private int _heard;
+
+    // The peer whose row the host picked for Boot, -1 for none. Held by peer, so a row moving up
+    // when another guest leaves never boots the wrong pilot.
+    private int _picked = -1;
 
     /// <summary>A lobby module over the door <paramref name="net"/> answers. Its words come from the
     /// string table under <paramref name="dataRoot"/>, its fits from <paramref name="stock"/>. Seat
@@ -253,6 +265,10 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>The chat box's line as typed so far.</summary>
     public string ChatDraft => _chat;
 
+    /// <summary>The peer whose row the host picked for Boot, or -1 while none is picked or that
+    /// guest has left.</summary>
+    public int PickedPeer => Lobby is { IsHost: true } lobby && RowOf(lobby, _picked) > 0 ? _picked : -1;
+
     /// <summary>Whether seat 0's typed characters feed one of the lobby's boxes. That holds while
     /// the lobby shows with a box focused and nothing over it.</summary>
     internal bool CapturingText =>
@@ -263,6 +279,10 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
     // The lobby while the outlaw list stands over its tab page, else null.
     private DogfightLobby? Outlawing => _outlaw.IsOpen ? Lobby : null;
+
+    /// <summary>A host's player list row's key by its place in the list, the host's own being 0.
+    /// </summary>
+    public static string PlayerKey(int row) => PlayerKeyPrefix + row.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>A gun box's key by its zero-based slot.</summary>
     public static string GunKey(int slot) => GunKeyPrefix + slot.ToString(CultureInfo.InvariantCulture);
@@ -431,6 +451,14 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         }
 
         var lobby = Lobby;
+        if (OriginalWidgets.Indexed(row.Key, PlayerKeyPrefix) is { } listed)
+        {
+            // A second press on the picked row lets it go, as the script's row mailbox does.
+            int peer = lobby?.PeerAt(listed) ?? -1;
+            _picked = peer == _picked ? -1 : peer;
+            return null;
+        }
+
         if (OriginalOutlawList.Owns(row.Key))
         {
             _outlaw.Activate(lobby, row.Key);
@@ -507,6 +535,15 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                 return _net() is { } net && lobby is { CanLaunch: true } ? Exit(net, lobby) : null;
             case LeaveKey:
                 Leave();
+                return null;
+            case BootKey:
+                // The script re-presses the picked row after the boot, which lets the pick go.
+                if (PickedPeer >= 0)
+                {
+                    _net()?.Boot(_picked);
+                }
+
+                _picked = -1;
                 return null;
         }
 
@@ -683,6 +720,25 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
     private static bool IsBox(string key) => key is ChatKey or TimeKey or ScoreKey or LivesKey;
 
+    // The row the host's list names a peer on, or -1 while it names it on none.
+    private static int RowOf(DogfightLobby lobby, int peer)
+    {
+        if (peer < 0)
+        {
+            return -1;
+        }
+
+        for (int row = 1; row < lobby.Players.Count; row++)
+        {
+            if (lobby.PeerAt(row) == peer)
+            {
+                return row;
+            }
+        }
+
+        return -1;
+    }
+
     private static int BoxWidth(string key) => key == ScoreKey ? 3 : 2;
 
     private static string BoxValue(string key, DogfightLobby lobby) => key switch
@@ -768,6 +824,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
     private void Enter()
     {
+        _picked = -1;
         _open = null;
         _outlaw.Close();
         _typing = null;
@@ -800,6 +857,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
     private void Leave()
     {
+        _picked = -1;
         _open = null;
         _outlaw.Close();
         _typing = null;
@@ -864,7 +922,19 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             }
         }
 
-        rows.Add(_text.Strip(BootKey, SmallArt, 19f, 325f, false, 0, 74f, 37f));
+        // Only a host's guest rows are picked, since Boot is all a pick does while the teams and
+        // Mute stay greyed. The host's own row is never booted (FUN_00413090 refuses it).
+        if (lobby is { IsHost: true } && !_outlaw.IsOpen)
+        {
+            var players = lobby.Players;
+            for (int i = 1; i < players.Count && i < VisiblePlayers; i++)
+            {
+                rows.Add(new OriginalRow(PlayerKey(i), players[i].Name, OriginalRowKind.ListRow, ListX, ListY + (i * ListPitch),
+                    NameWidth + ListPitch, ListPitch, true, 0, null));
+            }
+        }
+
+        rows.Add(_text.Strip(BootKey, SmallArt, 19f, 325f, PickedPeer >= 0, 0, 74f, 37f));
         rows.Add(_text.Strip(TeamKey, LargeArt, 105f, 325f, false, 0, 131f, 37f));
         rows.Add(new OriginalRow(ReadyKey, string.Empty, OriginalRowKind.Radio, 250f, 325f, 58f, 37f,
             lobby is { HasOptions: true }, 0, new BoardArt(BoardArtLibrary.Ui, ReadyArt, 8)));
@@ -1148,6 +1218,22 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     // One widget in its state, and the words the script writes beside it.
     private void ComposeWidget(OriginalRow row, bool focused, bool pressed, BoardLayers layers)
     {
+        // A player row's name is the list's own line, so the row draws only its pick and focus.
+        if (OriginalWidgets.Indexed(row.Key, PlayerKeyPrefix) is { } listed)
+        {
+            if (Lobby is { } lobby && lobby.PeerAt(listed) is var peer and >= 0 && peer == _picked)
+            {
+                layers.Fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, PickedRow.R, PickedRow.G, PickedRow.B));
+            }
+
+            if (focused)
+            {
+                layers.Fills.Add(_host.FocusMark(row));
+            }
+
+            return;
+        }
+
         switch (row.Kind)
         {
             case OriginalRowKind.TextButton:

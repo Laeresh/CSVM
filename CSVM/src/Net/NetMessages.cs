@@ -147,6 +147,10 @@ public enum NetMessageType : ushort
     /// <summary>One plane of a co-op host's hangar and the seat that holds it, sent to every guest
     /// whenever it changes.</summary>
     CoopHangar = 0x005F,
+
+    /// <summary>A guest's answer to a host that asks a password, or the host's word that the answer
+    /// admitted it. Only a session with a password sends it, and only before admission.</summary>
+    JoinPassword = 0x0060,
 }
 
 /// <summary>Which campaign film a <see cref="CoopFilmMessage"/> names.</summary>
@@ -218,6 +222,14 @@ public enum NetCloseReason : byte
     /// <summary>The guest's build does not play with the host's: their MAJOR.MINOR versions
     /// differ.</summary>
     VersionMismatch = 3,
+
+    /// <summary>The host removed this guest, or refused its return to a session that removed it.
+    /// </summary>
+    Booted = 4,
+
+    /// <summary>The session asks a password and the guest's answer was wrong or never came.
+    /// </summary>
+    WrongPassword = 5,
 }
 
 /// <summary>What a <see cref="PositionalStartMessage"/> says. Each member names what the seat,
@@ -1003,12 +1015,12 @@ public readonly record struct HandshakeMessage(ulong Seed, double HostClock, byt
 /// <summary>
 /// A host's word about its open session, sent to every peer on connect and again on any change,
 /// and inside a LAN discovery reply. A join board reads it before a flight exists. So it
-/// names only the session: its kind, its campaign mission, its player count, its status, its seat
-/// cap and its host. Nothing about the world rides here. A guest reads it off the lobby, never off
-/// a session.</summary>
+/// names only the session: its kind, mission, player count, status, seat cap, host and password
+/// mark. Nothing about the world rides here. A guest reads
+/// it off the lobby, never off a session.</summary>
 public readonly record struct SessionAdvertMessage(
     NetSessionKind Kind, byte MissionSeq, byte Players, string Host,
-    NetSessionStatus Status = NetSessionStatus.Waiting, byte Cap = 0)
+    NetSessionStatus Status = NetSessionStatus.Waiting, byte Cap = 0, bool Password = false)
     : INetMessage<SessionAdvertMessage>
 {
     /// <summary>The fixed width of the message, header included.</summary>
@@ -1023,6 +1035,10 @@ public readonly record struct SessionAdvertMessage(
     /// <summary>How many missions one campaign chapter holds, the divisor the chapter reads by.
     /// </summary>
     public const int MissionsPerChapter = 5;
+
+    // The flags byte stands where a reserved byte stood, so a build a patch older reads the rest
+    // unchanged and ignores the mark.
+    private const byte PasswordFlag = 0x01;
 
     /// <inheritdoc/>
     public static NetMessageType Type => NetMessageType.SessionAdvert;
@@ -1052,7 +1068,7 @@ public readonly record struct SessionAdvertMessage(
         byte players = reader.ReadByte();
         byte status = reader.ReadByte();
         byte cap = reader.ReadByte();
-        _ = reader.ReadByte();
+        byte flags = reader.ReadByte();
         _ = reader.ReadUInt16();
         var known = kind is (byte)NetSessionKind.Dogfight or (byte)NetSessionKind.CampaignCoop
             ? (NetSessionKind)kind
@@ -1060,7 +1076,8 @@ public readonly record struct SessionAdvertMessage(
         var stands = status is >= (byte)NetSessionStatus.Waiting and <= (byte)NetSessionStatus.Full
             ? (NetSessionStatus)status
             : NetSessionStatus.Unknown;
-        message = new SessionAdvertMessage(known, seq, players, reader.ReadText(HostBytes), stands, cap);
+        message = new SessionAdvertMessage(
+            known, seq, players, reader.ReadText(HostBytes), stands, cap, (flags & PasswordFlag) != 0);
         return true;
     }
 
@@ -1073,7 +1090,7 @@ public readonly record struct SessionAdvertMessage(
         writer.WriteByte(Players);
         writer.WriteByte((byte)Status);
         writer.WriteByte(Cap);
-        writer.WriteByte(0);
+        writer.WriteByte(Password ? PasswordFlag : (byte)0);
         writer.WriteUInt16(0);
         writer.WriteText(Host ?? "", HostBytes);
         return writer.Close();
@@ -1115,7 +1132,7 @@ public readonly record struct SessionClosedMessage(
             || !NetBuildVersion.TryFromWords(reader.ReadUInt16(), reader.ReadUInt16(), out var guest))
             return false;
 
-        var known = reason is >= (byte)NetCloseReason.Closed and <= (byte)NetCloseReason.VersionMismatch
+        var known = reason is >= (byte)NetCloseReason.Closed and <= (byte)NetCloseReason.WrongPassword
             ? (NetCloseReason)reason
             : NetCloseReason.Unknown;
         message = new SessionClosedMessage(known, host, guest);
@@ -1131,6 +1148,58 @@ public readonly record struct SessionClosedMessage(
         writer.WriteUInt16(0);
         Host.Write(ref writer);
         Guest.Write(ref writer);
+        return writer.Close();
+    }
+}
+
+/// <summary>
+/// The password step of a join to a session whose advert asks one. The guest answers the advert
+/// with its player's password. The host answers a right one with <see cref="Admitted"/> set, before
+/// anything of the session reaches the guest. A wrong answer is
+/// sent away with <see cref="NetCloseReason.WrongPassword"/> instead. Like the advert it stays in
+/// the lobby, and a session without a password never sends it.
+/// </summary>
+public readonly record struct JoinPasswordMessage(bool Admitted, string Password)
+    : INetMessage<JoinPasswordMessage>
+{
+    /// <summary>The fixed width of the message, header included.</summary>
+    public const int Size = 8 + PasswordBytes;
+
+    /// <summary>How many bytes the password takes, UTF-8 and zero padded: room for the box's 14
+    /// characters at three bytes each.</summary>
+    public const int PasswordBytes = 48;
+
+    private const byte AdmittedFlag = 0x01;
+
+    /// <inheritdoc/>
+    public static NetMessageType Type => NetMessageType.JoinPassword;
+
+    /// <inheritdoc/>
+    public static NetReliability Reliability => NetReliability.Reliable;
+
+    /// <inheritdoc/>
+    public static bool TryRead(ReadOnlySpan<byte> from, out JoinPasswordMessage message)
+    {
+        message = default;
+        var reader = new NetMessageReader(from);
+        if (!reader.Is(Size) || reader.Type != Type)
+            return false;
+
+        byte flags = reader.ReadByte();
+        _ = reader.ReadByte();
+        _ = reader.ReadUInt16();
+        message = new JoinPasswordMessage((flags & AdmittedFlag) != 0, reader.ReadText(PasswordBytes));
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public int Write(Span<byte> into)
+    {
+        var writer = new NetMessageWriter(into, Type);
+        writer.WriteByte(Admitted ? AdmittedFlag : (byte)0);
+        writer.WriteByte(0);
+        writer.WriteUInt16(0);
+        writer.WriteText(Password ?? "", PasswordBytes);
         return writer.Close();
     }
 }
@@ -1370,6 +1439,7 @@ public static class NetMessage
         NetMessageType.PlaneBuild => PlaneBuildMessage.Reliability,
         NetMessageType.LobbyPlaneRules => LobbyPlaneRulesMessage.Reliability,
         NetMessageType.CoopHangar => CoopHangarMessage.Reliability,
+        NetMessageType.JoinPassword => JoinPasswordMessage.Reliability,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "no such message type"),
     };
 

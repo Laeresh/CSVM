@@ -508,7 +508,9 @@ constants rather than reading a layout.
   wears `MP_GAMESALPHA.PNG` cropped to that column at alpha 80, tinted F2D08B. An empty list is
   covered by the Searching box (`MP_ERRORMESSAGEBACKGROUND.JPG` at (254, 160), "Searching ..." in
   red, its Cancel at (404, 310)), and asks again every second; a filled one asks every five seconds
-  only while Auto refresh is checked.
+  only while Auto refresh is checked. A game that asks a password reads Need Password (10141) in its
+  Status column unless it is full ([multiplayer-messages.md](multiplayer-messages.md), "Boot and the
+  password").
 - **What is ours.** Only LAN TCP/IP, which searches, and Internet, which joins the typed address,
   are on the page, at the script's first two radio places (y 98 and 134) with its pitch, the IP
   Address box at (184, 151) and the Internet description at y 177. MSN Gaming Zone, LAN IPX and
@@ -532,7 +534,9 @@ constants rather than reading a layout.
   or per wing cell. Boot, Create Team, the Ready box (`MP_B_CHECKBOXLARGE.PNG`) and its Ready? label,
   LAUNCH!, the chat box, Send and Leave Game stand on every tab.
 - **What is ours in the lobby.** Only Deathmatch flies, so Capture the Flag, Zeppelin vs Zeppelin,
-  the teams and Boot draw greyed. The host's Allow Custom Planes and Outlaw Components are live, and
+  the teams draw greyed. Boot is live on the host once it picks a guest's row in the player list
+  (the picked row takes the script's fill, 209, 180, 120); the host's own row is not offered, and a
+  guest's list offers none. The host's Allow Custom Planes and Outlaw Components are live, and
   Custom Planes lists the pilot's saved planes while custom planes are allowed. Select... (View...
   on a guest) is live while Outlaw Components is ticked and opens the outlaw list
   (`MP_LOBBY_OUTLAWED.PNG`) over the tab page, laid out as

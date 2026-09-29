@@ -460,6 +460,38 @@ public sealed class DogfightLobby
     /// </summary>
     public void Note(string name, string text) => Add(new LobbyChatMessage(name ?? "", text ?? ""));
 
+    /// <summary>Posts a notice under no name in this host's chat and every seated guest's, as the
+    /// original posts its lobby notices (langui 10499 to 10506). Refused on a guest.</summary>
+    public bool Announce(string text)
+    {
+        if (!IsHost || string.IsNullOrEmpty(text))
+        {
+            return false;
+        }
+
+        var notice = new LobbyChatMessage("", text);
+        Add(notice);
+        foreach (int peer in SeatedPeers())
+        {
+            _wire.Tell(peer, notice);
+        }
+
+        return true;
+    }
+
+    /// <summary>The peer a host's player list row names. It is -1 for the host's own row, for a row
+    /// past the list, and on a guest.</summary>
+    public int PeerAt(int row)
+    {
+        if (!IsHost || row < 1)
+        {
+            return -1;
+        }
+
+        var peers = SeatedPeers();
+        return row - 1 < peers.Count ? peers[row - 1] : -1;
+    }
+
     /// <summary>One menu frame, after the socket was stepped. The host relays each guest's chat to the
     /// others and sends each guest its options and list when they change. A guest takes the host's
     /// chat and sends its own pick.</summary>

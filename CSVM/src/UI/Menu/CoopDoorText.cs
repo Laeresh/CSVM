@@ -38,6 +38,24 @@ public static class CoopDoorText
     /// <summary>A guest's word when the host had no seat left for it.</summary>
     public const string GameFull = "The game is full";
 
+    /// <summary>A guest's word when the host booted it, or refused its return after a boot. The
+    /// original's own notice (langui 10500) names the player to the others instead.</summary>
+    public const string Booted = "You were booted from the game";
+
+    /// <summary>A guest's word when the host refused its password: the original's messagebox text
+    /// for a wrong password, MSG_DPERR_INVALIDPASSWORD (7041).</summary>
+    public const string WrongPassword = "Invalid Password";
+
+    /// <summary>A guest's word while a host that asks a password has not admitted it yet.</summary>
+    public const string AwaitingAdmission = "Waiting for the host to accept the password ...";
+
+    /// <summary>The games list's Status for a game that asks a password, the original's langui
+    /// 10141.</summary>
+    public const string NeedPassword = "Need Password";
+
+    /// <summary>The co-op host's cabin plaque that boots a guest.</summary>
+    public const string BootButton = "BOOT";
+
     /// <summary>The question a co-op guest's Back asks on the host's boards.</summary>
     public const string LeaveQuestion = "Leave the co-op session?";
 
@@ -116,12 +134,15 @@ public static class CoopDoorText
     public static string Shortcode(SessionAdvertMessage advert) =>
         $"C{advert.Chapter.ToString(CultureInfo.InvariantCulture)}/M{advert.MissionInChapter.ToString("00", CultureInfo.InvariantCulture)}";
 
-    /// <summary>The games list's Status.</summary>
+    /// <summary>The games list's Status. A game that asks a password reads
+    /// <see cref="NeedPassword"/> unless it is full, as the original's list marks it
+    /// (FUN_00402f40).</summary>
     public static string Status(SessionAdvertMessage advert) => advert.Status switch
     {
+        NetSessionStatus.Full => "Full",
+        _ when advert.Password => NeedPassword,
         NetSessionStatus.Waiting => "Waiting",
         NetSessionStatus.InMission => "In mission",
-        NetSessionStatus.Full => "Full",
         _ => "",
     };
 
@@ -390,6 +411,13 @@ public static class CoopDoorText
 
     /// <summary>What every player is told when a guest's link drops mid-mission.</summary>
     public static string Left(string name) => $"{(name.Length > 0 ? name : "A guest")} left";
+
+    /// <summary>The lobby chat's notice that a player was booted, the original's langui 10500.
+    /// </summary>
+    public static string BootedLine(string name) => $"[{(name.Length > 0 ? name : "A guest")} was booted from the game.]";
+
+    /// <summary>The co-op host's question before its cabin's BOOT removes a guest.</summary>
+    public static string BootQuestion(string name) => $"Boot {(name.Length > 0 ? name : "this guest")} from the game?";
 
     private static string GameCalled(SessionAdvertMessage advert) =>
         advert.Host.Length > 0 ? $"game {advert.Host}, " : "";

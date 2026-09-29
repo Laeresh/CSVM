@@ -439,7 +439,8 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             () => _setup.Seats.Count > 0 ? _flightDevices(_setup.Seats[0]) : Array.Empty<int>(),
             () => profiles?.Invoke().LastPlayedPilotName,
             () => planes?.List() ?? Array.Empty<CSVM.Flight.Hangar.CustomPlaneDef>());
-        Connection = new OriginalConnectionScreen(() => _net, this, dataRoot, Lobby.OpenHost, (hosting, then) => AskNetInfo(hosting, then));
+        Connection = new OriginalConnectionScreen(
+            () => _net, this, dataRoot, Lobby.OpenHost, (hosting, then, password) => AskNetInfo(hosting, then, asksPassword: password));
         _modules = Hangar != null
             ? new IOriginalScreenModule[] { InstantAction, Options, Campaign, Hangar, Wrapup, JoinBoard, Connection, Lobby }
             : new IOriginalScreenModule[] { InstantAction, Options, Campaign, Wrapup, JoinBoard, Connection, Lobby };
@@ -699,9 +700,9 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// Information for a host of <paramref name="hosting"/>, Player Information alone for null.
     /// The last OK hands the answers to the door and runs <paramref name="then"/>; Cancel runs
     /// nothing. Without a door <paramref name="then"/> runs at once. They open on the remembered
-    /// answers, or on <paramref name="start"/> when given, which is the screenshot aids' pose.
-    /// </summary>
-    public void AskNetInfo(NetSessionKind? hosting, Action then, NetPlayerInfo? start = null)
+    /// answers or the aids' <paramref name="start"/>. A join that <paramref name="asksPassword"/>
+    /// may be asked one opens Player Information's Password box.</summary>
+    public void AskNetInfo(NetSessionKind? hosting, Action then, NetPlayerInfo? start = null, bool asksPassword = false)
     {
         ArgumentNullException.ThrowIfNull(then);
         if (_net is not { } net)
@@ -715,7 +716,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         {
             net.Take(info, hosting != null);
             then();
-        });
+        }, asksPassword);
     }
 
     /// <summary>Stands <paramref name="door"/> in for the network door, the screenshot aids' and
