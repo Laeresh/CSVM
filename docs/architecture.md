@@ -252,6 +252,8 @@ only `Airframe`, and nothing else in `Flight` names `Hangar`.
 - `src/Flight/Hud/MarkerDraw.cs`, the world marker's drawing primitives: reticle, edge arrow, centred text block and its clamped variant, marker blue and shadow.
 - `src/Flight/Hud/HudMessages.cs`, the centred HUD message stack a kill, a crash and the mission clock post into: four slots, one colour and five seconds each.
 - `src/Flight/Hud/PromptLine.cs`, a control prompt's own centred line, three tenths of the way down the pane in the landings rig's pale yellow: the auto-dock offer and the respawn prompt.
+- `src/Flight/Hud/FlightChat.cs`, one machine's in-flight chat, engine-free: the panel's five lines and ten seconds, and the entry a pilot types into.
+- `src/Flight/Hud/ChatPanel.cs`, one pane's drawing of the in-flight chat at the top left in the original's green, the entry in the typing pane.
 - `src/Flight/Hud/SpeedCue.cs`, chapter-authored pale smoke wisps emitted 60 m ahead of each player, density selected by camera altitude.
 - `src/Flight/Hud/ScreenSize.cs`, screen-space sizing for world sprites: the pixel-floor inversion, and the nearest-viewer floor one shared mesh takes.
 - `src/Flight/Hud/CompassTape.cs`, the top-centre heading tape from the game's own HUD textures, drawn as a cylindrical drum seen edge-on.
@@ -663,6 +665,7 @@ delegate to, in six sub-namespaces, one folder each. `Launch` sits on top and no
 - `src/Session/World/FlagRuntime.cs`, Capture the Flag in a network match: the mission's flags moved, asked for, decided, scored, spoken and posted on every machine.
 - `src/Session/World/ZeppelinVersusRuntime.cs`, Zeppelin vs Zeppelin in a network match: the two hulls on their sides, the host scoring every dead part and ending on a lost hull.
 - `src/Session/World/NetCutsceneLink.cs`, the cutscene skip over the wire: a guest's skip asks the host, and the host's skip ends the named episode on every guest.
+- `src/Session/World/NetChatLink.cs`, the in-flight chat over the wire and its keys: an all-chat to every machine, a team line to the typist's lobby team alone.
 - `src/Session/World/ZeppelinRuntime.Cannons.cs`, the broadside half of that partial: the cannon wiring, the target and arc gate, the anims and the rounds fired.
 - `src/Session/World/TurretEmplacementRuntime.cs`, the world AA emplacements: placed against the built world, in the shared aim pool, stepped after the airships.
 

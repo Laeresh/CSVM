@@ -254,6 +254,14 @@ skip input sends the ask and ends nothing locally, and hands each skip the host 
 `TakeSkip`, which ends only the episode the key and ordinal name. Layout and episode naming:
 [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
+## src/Session/World/NetChatLink.cs
+The in-flight chat over the wire, one per network session. `Open` puts the entry under a seat's
+prompt, `Submit` posts the echo and sends the line: a guest's to the host, which forwards an
+all-chat to every machine and a team line only to machines flying a seat on the typist's lobby
+team, once each. `TakeKey` is the typing seat's keys, and `HoldsKeyboard` keeps that seat's
+flight keys idle until every key pressed into a line is up. It owns the machine's
+`Flight/Hud/FlightChat.cs`. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+
 ## src/Session/Campaign/NetPositionalStartLink.cs
 The landing rows, the ladder switch and the code-raising range gates over the wire, one per network
 session with any of them bound. On the host it sends each row start, holder change and gate verdict

@@ -805,6 +805,19 @@ only where it sits, as `LineAnchor` over a pane size, static so a suite asserts 
 centres its own. `Prompt` is a `UI/Boards/ControlLine.cs`, not a string, so a pad seat's control draws as a
 glyph where the words go; `Line` is still the words. Decode: [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md) "The prompt's own placement".
 
+## src/Flight/Hud/FlightChat.cs
+One machine's in-flight chat in a network match, engine-free: the original's chat panel of five
+lines shown for ten seconds after the newest, and the entry a pilot types into under its "To All:"
+or "To Team:" prompt. `Echo` and `Received` word a line as the sender's own panel and every other
+panel show it. `Session/World/NetChatLink.cs` fills it and `ChatPanel.cs` draws it. Decode:
+[../org/multiplayer-messages.md](../org/multiplayer-messages.md) "In-flight chat".
+
+## src/Flight/Hud/ChatPanel.cs
+One pane's drawing of the machine's `FlightChat`, at the top left of the reading box in the
+original's `mpChat` green with its drop shadow, and the entry line under it in the pane whose seat
+reads the keyboard. It draws only: a splitscreen pane routes no input, so the keys are
+`Session/World/NetChatLink.cs`'s.
+
 ## src/Flight/Hud/TargetHud.cs
 The per-pane targeting HUD, built on every human pane in every flight session: the pilot's own
 selection from `TargetSelection` (objective sites included), a nearest AI-hostile fallback where no

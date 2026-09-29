@@ -170,6 +170,10 @@ public enum NetMessageType : ushort
     /// <summary>Where the host has placed a seat by a computed point rather than a table entry, a
     /// Zeppelin vs Zeppelin return.</summary>
     SpawnAt = 0x0065,
+
+    /// <summary>One line a pilot typed in flight, to everybody or to its lobby team. The original's
+    /// <c>0x15</c>.</summary>
+    FlightChat = 0x0066,
 }
 
 /// <summary>Which campaign film a <see cref="CoopFilmMessage"/> names.</summary>
@@ -766,6 +770,57 @@ public readonly record struct DeathNoticeMessage(byte VictimSeat, byte KillerSea
         writer.WriteUInt16((ushort)Cause);
         writer.WriteByte(Team);
         writer.WriteByte(0);
+        return writer.Close();
+    }
+}
+
+/// <summary>
+/// One line a pilot typed in flight and the seat that typed it, to everybody or to that seat's
+/// lobby team. The original's <c>0x15</c> carries only the text, since a peer-to-peer receiver
+/// knows its sender. Here the host relays, so the seat rides along and names the line. Reliable,
+/// though the original sends an all-chat unguaranteed (<c>docs/org/multiplayer-messages.md</c>).
+/// </summary>
+public readonly record struct FlightChatMessage(byte Seat, bool Team, string Text)
+    : INetMessage<FlightChatMessage>
+{
+    /// <summary>How many text bytes the message carries. The original's handler keeps 80 characters
+    /// of a line (<c>0x00499b5f</c>), and one more byte holds the terminator.</summary>
+    public const int TextBytes = 81;
+
+    /// <summary>The fixed width of the message, header included.</summary>
+    public const int Size = NetMessage.HeaderBytes + 4 + TextBytes;
+
+    private const byte TeamFlag = 0x01;
+
+    /// <inheritdoc/>
+    public static NetMessageType Type => NetMessageType.FlightChat;
+
+    /// <inheritdoc/>
+    public static NetReliability Reliability => NetReliability.Reliable;
+
+    /// <inheritdoc/>
+    public static bool TryRead(ReadOnlySpan<byte> from, out FlightChatMessage message)
+    {
+        message = default;
+        var reader = new NetMessageReader(from);
+        if (!reader.Is(Size) || reader.Type != Type)
+            return false;
+
+        byte seat = reader.ReadByte();
+        byte flags = reader.ReadByte();
+        reader.ReadUInt16();
+        message = new FlightChatMessage(seat, (flags & TeamFlag) != 0, reader.ReadText(TextBytes));
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public int Write(Span<byte> into)
+    {
+        var writer = new NetMessageWriter(into, Type);
+        writer.WriteByte(Seat);
+        writer.WriteByte(Team ? TeamFlag : (byte)0);
+        writer.WriteUInt16(0);
+        writer.WriteText(Text ?? "", TextBytes);
         return writer.Close();
     }
 }
@@ -1521,6 +1576,7 @@ public static class NetMessage
         NetMessageType.FlagRequest => FlagRequestMessage.Reliability,
         NetMessageType.FlagTable => FlagTableMessage.Reliability,
         NetMessageType.SpawnAt => SpawnAtMessage.Reliability,
+        NetMessageType.FlightChat => FlightChatMessage.Reliability,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "no such message type"),
     };
 

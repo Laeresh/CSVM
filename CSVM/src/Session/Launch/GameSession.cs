@@ -200,6 +200,8 @@ public partial class GameSession : Node3D
     // here rather than through key-repeat events, since the grace period is measured on wall
     // time regardless of the sim being halted.
     private readonly HoldToRepeat _stepHold = new(initialDelay: 0.3f, repeatInterval: 0f);
+    // The panel each local pane draws the in-flight chat in, empty outside a network match.
+    private readonly List<ChatPanel> _chatPanels = new();
 
     // The master seed every subsystem generator derives from (see Utils.Rng), resolved by the
     // Launcher once per process and re-applied here at each session build. A pinned run takes
@@ -227,6 +229,8 @@ public partial class GameSession : Node3D
     // AI aircraft and world pools over the wire, null outside a network match.
     private NetWorldLink? _netWorld;
     private NetPositionalStartLink? _netStarts;
+    // The in-flight chat over the wire, null outside a network match.
+    private NetChatLink? _netChat;
     // Why the match stopped, as the host named it. Written where the state is sent and where it
     // is applied, so every machine holds one reason for an end screen to read.
     private Net.NetMatchEnd _matchEnd;
@@ -537,6 +541,13 @@ public partial class GameSession : Node3D
 
     /// <summary>Capture the Flag's flags, null outside a <c>--ctf</c> network match.</summary>
     internal FlagRuntime? Flags => _flagPlay;
+
+    /// <summary>The in-flight chat over the wire, null outside a network match.</summary>
+    internal NetChatLink? NetChat => _netChat;
+
+    /// <summary>The chat panel each local pane draws, in pane order; empty outside a network match.
+    /// </summary>
+    internal IReadOnlyList<ChatPanel> ChatPanels => _chatPanels;
 
     /// <summary>Zeppelin vs Zeppelin's hulls, null outside a <c>--zvz</c> network match.</summary>
     internal ZeppelinVersusRuntime? ZvzPlay => _zvzPlay;
@@ -959,6 +970,17 @@ public partial class GameSession : Node3D
         }
     }
 
+    public override void _Input(InputEvent @event)
+    {
+        // Ahead of every other handler, so a letter typed into a chat line reaches no debug key,
+        // overlay or skip. Only the keys; the pointer stays with whoever reads it.
+        if (_netChat is { } chat && @event is InputEventKey key
+            && chat.TakeKey(key.Keycode, key.Pressed, (char)key.Unicode))
+        {
+            GetViewport()?.SetInputAsHandled();
+        }
+    }
+
     public override void _UnhandledInput(InputEvent @event)
     {
         // A cutscene skips on any input, as the original's state core does; a stick's is polled in
@@ -1029,6 +1051,8 @@ public partial class GameSession : Node3D
             // A guest's offset onto host time is walked, not written, so nothing reading a
             // replicated timestamp sees the correction land on one frame.
             _netClock?.Advance(delta);
+            // Wall time, so a line keeps its ten seconds whatever the sim clock is doing.
+            _netChat?.Chat.Advance((float)delta);
             if (clock.ParentDriven)
             {
                 DriveParentSimulation(clock);
@@ -2987,6 +3011,9 @@ public partial class GameSession : Node3D
         // over to the host, so the match has to stand first.
         WireNetMatch();
 
+        // The in-flight chat, once every local seat has its aeroplane to take the keys from.
+        WireNetChat();
+
         // --incoming: the incoming-fire test rig, a phantom shooter on every pilot's six, so both
         // cues and the shield are reachable with one player, no AI gunner needed.
         if (_spec.IncomingPass is float incomingPass)
@@ -4294,6 +4321,50 @@ public partial class GameSession : Node3D
         {
             rig.Downed += (_, killer) => ReportDeath(seat, killer);
         }
+    }
+
+    // The in-flight chat, in every network mode: one chat per machine, drawn in each local pane,
+    // typed into from the seat that reads the keyboard. A pad-only splitscreen seat reads it and
+    // types nothing, since a line takes a keyboard.
+    private void WireNetChat()
+    {
+        if (_net is not { } net || _netSeats.Count == 0)
+        {
+            return;
+        }
+
+        _netChat = NetChatLink.Open(net, _flightStrings);
+        foreach (var pane in _rigs)
+        {
+            var panel = new ChatPanel
+            {
+                Chat = _netChat.Chat,
+                ShowsEntry = pane.Controller is { UseKeyboard: true },
+                MouseFilter = Control.MouseFilterEnum.Ignore,
+                FocusMode = Control.FocusModeEnum.None,
+            };
+            var layer = new CanvasLayer { Name = "chat", Layer = HudLayers.Hud };
+            layer.AddChild(panel);
+            pane.HudParent.AddChild(layer);
+            _chatPanels.Add(panel);
+            WireSeatChat(pane.Index);
+        }
+
+        Log.Info("core", $"net chat: {_rigs.Count} pane(s), {(net.IsHost ? "host (relaying an all-chat to every machine and a team line to the typist's team)" : "guest (sending its lines to the host)")}");
+    }
+
+    // One local seat's keys into the chat. Per controller, like the combat wiring, so an airframe
+    // swap's replacement is wired again.
+    private void WireSeatChat(int seat)
+    {
+        if (_netChat is not { } chat || seat < 0 || seat >= _seatRigs.Count
+            || _seatRigs[seat].Controller is not { UseKeyboard: true } pilot)
+        {
+            return;
+        }
+
+        pilot.KeyboardHeld = () => chat.HoldsKeyboard;
+        pilot.ChatAsked += team => chat.Open(seat, team);
     }
 
     // One round this machine fired, told to the field so every other copy of the aeroplane
@@ -5766,6 +5837,8 @@ public partial class GameSession : Node3D
             {
                 WireSeatCombat(_seatRigs.IndexOf(owner));
             }
+
+            WireSeatChat(_seatRigs.IndexOf(owner));
 
             return result;
         }

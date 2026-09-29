@@ -430,6 +430,10 @@ public partial class FlightController : Node3D
     /// P2–P4 are pad-only (there is one keyboard).</summary>
     public bool UseKeyboard = true;
 
+    /// <summary>While this answers true the seat's keyboard and mouse read idle, as a pad-only
+    /// seat's do. A chat line being typed holds the keys, so its letters fly nothing.</summary>
+    public Func<bool>? KeyboardHeld;
+
     /// <summary>Where the HUD <see cref="CanvasLayer"/> is parented. Null (single player) keeps it
     /// a child of this node, i.e. the main viewport; splitscreen sets the player's SubViewport so
     /// the dials/compass draw in that player's pane only.</summary>
@@ -673,6 +677,7 @@ public partial class FlightController : Node3D
     // other arm.
     private IFlightInputSource? _suppliedInputSource;
     private bool _pausePrev;                     // previous frame's pause-key state (edge detection)
+    private (bool All, bool Team) _chatPrev;     // previous frame's two chat keys (edge detection)
     private bool _haltPrev;                      // previous frame's clock-halt state (orbit seeding)
     private bool _boardPrev;                     // previous frame's board-up state (re-entry latch)
     // A network pause's sheet is up over a flight that keeps running. The seat is then wholly
@@ -764,6 +769,10 @@ public partial class FlightController : Node3D
     /// fact report, not a score, this node knows no match rules; the session subscribes and scores
     /// when a match exists. Respawn emits nothing.</summary>
     public event Action<int, int?>? Downed;
+
+    /// <summary>Raised on a press of Chat to Everyone (false) or Chat to Team (true) by a seat that
+    /// reads the keyboard. Only a network session listens, which is the original's own gate.</summary>
+    public event Action<bool>? ChatAsked;
 
     /// <summary>Raised on every ground impact this aircraft performs, the fresh crash and a
     /// shot-down wreck's own landing alike. That is what the original's crash notice is posted off.
@@ -1121,6 +1130,10 @@ public partial class FlightController : Node3D
     // Both holds swallow the discrete commands, so every command read tests this rather than one
     // named setting. Only the stick asks which of the two it is.
     private bool CommandsHeld => EffectiveHold != FlightControlHold.None;
+
+    // Whether the keyboard reaches this seat's controls this frame: a keyboard seat whose keys no
+    // chat line is holding.
+    private bool KeyboardFlies => UseKeyboard && KeyboardHeld?.Invoke() != true;
 
     // The director's hold, widened to the whole seat while a network pause sheet is up.
     private FlightControlHold EffectiveHold => _sheetOverFlight ? FlightControlHold.All : ControlHold;
@@ -2360,6 +2373,9 @@ public partial class FlightController : Node3D
         // ⚠ Ahead of the inert return as well. A seat flagged inert mid-session must give the
         // pointer back, and this is the only frame that would notice.
         StepMouseCapture(halted || _sheetOverFlight);
+        // Ahead of the inert return too: a downed pilot watching the field still talks to it.
+        if (!halted && !_sheetOverFlight)
+            PollChatKeys();
         // Nothing left to draw, animate, interpolate or point a camera at while inert.
         if (Inert)
             return;
@@ -3685,8 +3701,9 @@ public partial class FlightController : Node3D
         _inputFrame = frame;
         // Splitscreen P2-P4 are pad-only and the field can change after construction, so the gate is
         // re-read rather than captured. The pad-half reader is never given the keyboard.
-        _bindings.ReadsKeyboard = UseKeyboard;
-        _keyActions.ReadsKeyboard = UseKeyboard;
+        bool keys = KeyboardFlies;
+        _bindings.ReadsKeyboard = keys;
+        _keyActions.ReadsKeyboard = keys;
         // A stick plugged or unplugged mid-flight moves seat 1's active profiles; the merge edits the
         // maps every resolver here reads.
         if (IsHumanPiloted && LocalPlayer == StickDeviceState.OwningSeat
@@ -3761,7 +3778,22 @@ public partial class FlightController : Node3D
     }
 
     // A key, but only for a player the keyboard flies (splitscreen P2–P4 are pad-only).
-    private bool KeyDown(Key key) => UseKeyboard && Input.IsKeyPressed(key);
+    private bool KeyDown(Key key) => KeyboardFlies && Input.IsKeyPressed(key);
+
+    // The two chat commands, edge-read off the keyboard half alone: typing a line takes a keyboard,
+    // so a pad-only seat opens none. While a line is open the keys read idle and no edge fires.
+    private void PollChatKeys()
+    {
+        if (ChatAsked == null)
+            return;
+        bool all = _keyActions.Held(InputAction.ChatEveryone);
+        bool team = _keyActions.Held(InputAction.ChatTeam);
+        if (all && !_chatPrev.All)
+            ChatAsked(false);
+        else if (team && !_chatPrev.Team)
+            ChatAsked(true);
+        _chatPrev = (all, team);
+    }
 
     // A +/- key pair as an axis, honoring UseKeyboard.
     private float KeyAxis(Key positive, Key negative) =>

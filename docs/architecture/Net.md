@@ -274,7 +274,7 @@ since a wildcard bind is what raises a firewall dialog.
 ## src/Net/NetMessages.cs
 The vocabulary: `NetMessageType` (one word per message), the death, spawn and match-end enums
 taken from the original's own values, `NetDirectorEvent` (the director message's codes and id
-layouts), `NetWorldEvent` (the world event's codes), `NetPositionalStart` (the positional start's kinds), `NetSessionKind`, and the message structs, the host's spawn grant, a seat's ask, the host's death notice, the clock ping and the lobby's `SessionAdvertMessage` among them. Each is a value type implementing `INetMessage<TSelf>`,
+layouts), `NetWorldEvent` (the world event's codes), `NetPositionalStart` (the positional start's kinds), `NetSessionKind`, and the message structs, the host's spawn grant, a seat's ask, the host's death notice, the clock ping, a typed line in flight (`FlightChatMessage`) and the lobby's `SessionAdvertMessage` among them. Each is a value type implementing `INetMessage<TSelf>`,
 which carries its type word and its `INetTransport.cs` reliability class as static abstracts, so
 a sender reads the class off the type without constructing anything. `NetMessage` holds what they
 share: the four-byte header, the no-seat and no-spawn-entry markers, the aircraft-state width
@@ -435,13 +435,13 @@ would be discarded as overtaken. `Count` is the layout's width. A seat past the 
 falls back to `Events`, which costs ordering rather than delivery.
 
 ## src/Net/NetSession.cs
-The one object a session owns to talk to its peers: it holds the transport, implements the
-listener, sends a typed message under the class the type declares, and routes an arrival to the
-handler registered on its type word. The only meaning it knows is the join, a host answering each
+The one object a session owns to talk to its peers: it holds the transport, sends a typed message
+under the class the type declares, and routes an arrival to the handler on its type word. The only meaning it knows is the join, a host answering each
 peer with the handshake (which names the seat) and then the roster; `On` refuses those two types,
 and a guest refuses a join `NetSeats.Validate` would throw on. The star's relay: `SendToSeat`
-addresses a seat through whoever owns it, and a host's `RelayToOthers` and `RelayToSeatOwner`
-forward an arrival's own bytes, never back to its sender. A suite reads the counters (`Sent`,
+addresses a seat through whoever owns it, and a host's `RelayToOthers`, `RelayToSeatOwner` and
+`RelayToPeers` (each machine a predicate admits, once) forward an arrival's own bytes, never back to
+its sender; `FliesOnTeam` answers a team line's addressing. A suite reads the counters (`Sent`,
 `Received`, `Relayed`, `DroppedUnknown`, `Malformed`) and `Instruments`, fed before any handler.
 
 ## src/Net/NetInstruments.cs
