@@ -165,6 +165,53 @@ internal static class NetRearmSuites
         });
     }
 
+    [Suite("net-lobby-deathmatch-mp1",
+        "a free-for-all Deathmatch launched through the menu's own spec, the host's command line "
+        + "naming --mission=IA1 and the guest's none: both fly the chapter's MP1, every seat opens on "
+        + "its own entry of net.zrd's free-for-all block, the same on both machines, and the rearm "
+        + "bases mp1.gw leaves on stand in the match and restore the guest's damaged, emptied aeroplane")]
+    internal static void ALobbyDeathmatchFliesMp1WithItsBases(TestContext ctx)
+    {
+        string[] args = { "--mute", "--no-pads", TrackedFlight };
+        var hostSpec = SessionSpec.FromMenu(SessionSpec.Parse(args.Append("--mission=IA1").ToArray()), ctx.Chapter,
+            new[] { "player_pfighter" }, MenuMode.Versus);
+        var guestSpec = SessionSpec.FromMenu(SessionSpec.Parse(args), ctx.Chapter, new[] { "player_pfighter" }, MenuMode.Versus);
+        ctx.Check(hostSpec.Mission == SessionSpec.DeathmatchMission && guestSpec.Mission == SessionSpec.DeathmatchMission
+                  && hostSpec is { Versus: true, CaptureTheFlag: false, ZeppelinVsZeppelin: false },
+            $"both machines' menu launches fly {ctx.Chapter}'s MP1 as a Deathmatch whatever their command lines name ({hostSpec.Mission}, {guestSpec.Mission})");
+
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, SessionSpec.DeathmatchMission);
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
+        ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{SessionSpec.DeathmatchMission} zrdr");
+        var block = SpawnPoints.LoadNetFreeForAll(missionZrdr);
+        if (block is not { Count: >= 2 })
+        {
+            throw new SuiteSkippedException($"{ctx.Chapter}/{SessionSpec.DeathmatchMission} authors no usable net.zrd block");
+        }
+
+        RunPair(ctx, hostSpec, new[] { 0, 0 }, 9003, peers =>
+        {
+            if (!Bases(ctx, peers, RearmRule.AnyBase, "rearm_node_1 and rearm_node_2"))
+            {
+                return;
+            }
+
+            var guest = peers[1].SeatRigs[1].Controller!;
+            Place(guest, peers[1].RearmPlay!.BaseAt(0)!.Value.Position + (Vector3.Down * UnderNode));
+            int pylon = Strip(guest);
+            Lockstep(1, peers);
+            Restored(ctx, peers, guest, pylon, "the guest at MP1's base");
+        }, guestSpec, opened: peers =>
+        {
+            var entries = peers.Select(p => p.SeatRigs.Select(r => BlockEntry(block, r.Controller)).ToArray()).ToArray();
+            ctx.Check(entries[0].All(i => i >= 0) && entries[0].Distinct().Count() == entries[0].Length
+                      && entries.All(e => e.SequenceEqual(entries[0])),
+                $"every seat opens on its own entry of net.zrd block 0, the same on both machines ({string.Join(" | ", entries.Select(e => string.Join(",", e)))})");
+        });
+    }
+
     private static SessionSpec ZvzSpec(TestContext ctx)
     {
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, SessionSpec.ZvzMission);
@@ -179,8 +226,25 @@ internal static class NetRearmSuites
         });
     }
 
-    // Two sessions on lobby teams, each seat parked high and apart before the body runs.
-    private static void RunPair(TestContext ctx, SessionSpec spec, int[] teams, int meshSeed, Action<GameSession[]> body)
+    // Which free-for-all entry a placed aeroplane stands on, horizontally, or -1.
+    private static int BlockEntry(IReadOnlyList<SpawnPoint> block, Node3D? placed)
+    {
+        for (int i = 0; placed != null && i < block.Count; i++)
+        {
+            var d = block[i].Position - placed.GlobalPosition;
+            if (Mathf.Abs(d.X) < 1f && Mathf.Abs(d.Z) < 1f)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    // Two sessions on lobby teams, each seat parked high and apart before the body runs. The guest
+    // builds from its own spec when one is given, and the opening placement is read before any step.
+    private static void RunPair(TestContext ctx, SessionSpec spec, int[] teams, int meshSeed, Action<GameSession[]> body,
+        SessionSpec? guestSpec = null, Action<GameSession[]>? opened = null)
     {
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(meshSeed));
         var roster = NetCombatSuites.Roster(2).Select((seat, i) => seat with { TeamId = teams[i] }).ToArray();
@@ -190,7 +254,7 @@ internal static class NetRearmSuites
         {
             for (int i = 0; i < 2; i++)
             {
-                ends.Add(NetCombatSuites.Ends.Open(ctx, spec, mesh[i], isHost: i == 0, HostSeed + (ulong)i,
+                ends.Add(NetCombatSuites.Ends.Open(ctx, i == 0 ? spec : guestSpec ?? spec, mesh[i], isHost: i == 0, HostSeed + (ulong)i,
                     i == 0 ? roster : null, teamNames: TeamNames));
             }
 
@@ -201,6 +265,7 @@ internal static class NetRearmSuites
             }
 
             var peers = ends.Select(e => e.Session).ToArray();
+            opened?.Invoke(peers);
             Lockstep(SettleSteps, peers);
             body(peers);
         }

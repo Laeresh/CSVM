@@ -104,7 +104,9 @@ damage stages and every slot, keeping the selected pylon. The restored seat's ow
 hull in the existing `0x40` damage report, and every other machine takes a full hull as the stages
 coming off again ([`multiplayer-messages.md`](multiplayer-messages.md)). Zeppelin vs Zeppelin reads
 the hull's side from `ZeppelinVersus` and offers a base only while its hull lives, and each base's
-marker reads its team's name over "Rearm". A base the mission switched off offers nothing. The door
+marker reads its team's name over "Rearm". A base the mission switched off offers nothing, which is
+why every menu Deathmatch flies the chapter's `MP1` (`SessionSpec.DeathmatchMission`), as the
+original's does ([`loading-screen.md`](loading-screen.md)): on `IA1` both plain nodes are off. The door
 is the mission's own anim data, which the world runtime plays like any other range poll
 ([`../formats/anim-definitions.md`](../formats/anim-definitions.md)); the rearm adds nothing to it.
 

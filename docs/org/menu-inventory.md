@@ -760,7 +760,7 @@ Each of these is a divergence a reader could mistake for a decode, so each is na
   door.** `[@MainMenu@]` authors Campaign, Instant Action, Multiplayer, Preferences, Credits and
   Quit. Built-in's Mode screen offers Free Flight, Instant Action, Dogfight, Campaign and Build
   Custom Plane. Free Flight is entirely ours; Dogfight is splitscreen where the original's
-  equivalent is network multiplayer; Original reaches plane construction where the original does,
+  equivalent is network multiplayer, and flies that match's map, the chapter's `MP1`; Original reaches plane construction where the original does,
   from the Instant Action screen's BUILD button and from the cabin, and has no top-level door.
 - **Original Free Flight has no original screen behind it.** There is no free-flight script, no
   free-flight art, and no free-flight entry in the Instant Action mission-type dropdown. The

@@ -101,6 +101,11 @@ public readonly record struct ZepStageSpec(string Chapter, string Mission, strin
 /// </summary>
 public sealed record SessionSpec
 {
+    /// <summary>The mission a Deathmatch launch flies, free-for-all or team. The original's session
+    /// setup loads mission 1 for both (docs/org/loading-screen.md), and only <c>mp1.gw</c> and
+    /// <c>mp2.gw</c> leave the plain rearm bases on (docs/org/multiplayer-rearm.md).</summary>
+    public const string DeathmatchMission = "MP1";
+
     /// <summary>The mission a Capture the Flag launch flies. Each chapter that ships the flags lays
     /// them out in <c>MP2</c>, and only <c>mp2.gw</c> leaves them on (docs/formats/interp.md).
     /// </summary>
@@ -1651,10 +1656,10 @@ public sealed record SessionSpec
 
     /// <summary>The spec for a launchscreen launch, one plane per player, derived from the pristine command line
     /// <paramref name="cli"/>, never the last session's spec. ⚠ Does not re-resolve: every menu-settable field must
-    /// be written here, or the pristine base drops it. The 2-player Dogfight lock is <see cref="UI.Screens.LaunchMenu"/>'s
-    /// job. An <paramref name="iaDef"/> decides <see cref="Scenario"/> and <see cref="Stunt"/> instead. The vs arguments
-    /// are a screen's match rules, null where none offers them (<see cref="VsKillsExplicit"/>). The lobby alone sets
-    /// lives and flies its team modes on <see cref="CtfMission"/> and <see cref="ZvzMission"/>.</summary>
+    /// be written here, or the pristine base drops it. An <paramref name="iaDef"/> decides <see cref="Scenario"/> and
+    /// <see cref="Stunt"/> instead. The vs arguments are a screen's match rules, null where none offers them.
+    /// ⚠ A Dogfight flies its type's map whatever <c>--mission</c> says, <see cref="DeathmatchMission"/>,
+    /// <see cref="CtfMission"/> or <see cref="ZvzMission"/>: the type is all a guest hears of the host's mission.</summary>
     public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
         MenuMode mode, InstantActionDef? iaDef = null, IReadOnlyList<LoadoutChoice?>? loadouts = null,
         IReadOnlyList<CustomPlaneDef?>? customPlanes = null, int? vsKills = null, int? vsTimeMinutes = null,
@@ -1669,7 +1674,7 @@ public sealed record SessionSpec
             CaptureTheFlag = ctf,
             FlagHomeToCapture = ctf && flagHomeToCapture,
             ZeppelinVsZeppelin = zvz,
-            Mission = ctf ? CtfMission : zvz ? ZvzMission : cli.Mission,
+            Mission = ctf ? CtfMission : zvz ? ZvzMission : mode == MenuMode.Versus ? DeathmatchMission : cli.Mission,
             MenuLoadouts = loadouts ?? Array.Empty<LoadoutChoice?>(),
             MenuCustomPlanes = customPlanes ?? Array.Empty<CustomPlaneDef?>(),
             Chapter = chapter,
