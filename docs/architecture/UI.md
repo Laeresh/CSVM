@@ -1244,7 +1244,7 @@ The original's Multiplayer Connection page and the LAN games list behind its Con
 `IOriginalScreenModule` over `NetPlayFeature`. The multiplayer scripts place their widgets inline,
 so every corner is the scripts' own rather than the layout's. Only LAN TCP/IP, which searches the
 network, and Internet, which joins the typed address, are offered; Build Custom Plane draws greyed,
-and Host and Create Game open `OriginalLobbyScreen` as a Dogfight's host. A join started here is followed on the shared messagebox over the page until it lands or
+and Host and Create Game open `OriginalLobbyScreen` as a Dogfight's host once the shell's `OriginalNetInfoBox` is answered, as every join is first. A join started here is followed on the shared messagebox over the page until it lands or
 fails. A game of another build version lists in grey with its version as its status, and Join
 Game refuses it in a box before any socket opens. Plaques draw as pictures, over a script's labels. The IP Address box cues each typed character and each paste with the edit box's keystroke or reject sound, and keeps the script's 150 pixels as a `KeepEnd` line that scrolls to the end of an IPv6 address.
 The geometry and strings: [../org/menu-inventory.md](../org/menu-inventory.md).
@@ -1259,6 +1259,11 @@ Leave Game closes the door and lands on the Connection page. The shell follows a
 The lobby's outlaw list pane, which `OriginalLobbyScreen` builds, draws and answers while it is open, and `OutlawRows`, the pure map from each of its five sub-tabs' rows to a `NetPlaneRules` flag and the string naming it.
 Every tick goes through `DogfightLobby.SetOutlawed`, so it starts a new round, clears every Ready and reaches every guest at once. Cancel restores the list the host opened with, and Accept only closes. The boxes are live only on a host that is not Ready, and a guest's pane has no Accept.
 An ammunition or rocket row reads ticked and ignores a click while its page's Outlaw All is set. Airframes and Rockets show four rows under a scroll bar. The decode: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+
+## src/UI/Menu/Original/OriginalNetInfoBox.cs
+The original's GAME INFORMATION and PLAYER INFORMATION boxes in their scripts' placements and art. `OriginalShell` stands them over whatever page asked (`AskNetInfo`), as it does a messagebox: their rows are the only rows, and a refusal's messagebox stands over them.
+A host answers Game Information (name, masked password, the Maximum spinner) and then Player Information (callsign, the Voice drop-down, a greyed password); a join answers Player Information alone. OK is greyed on an empty name, and a name of spaces raises langui 10510 or 10511.
+The last OK hands a `NetPlayerInfo` to the door and the options. The Connection page's Host, Create Game and joins and the cabin's HOST CO-OP ask them. The decode: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/UI/Menu/Original/OriginalPresentation.cs
 The Original presentation node, registered under `PresentationId.Original`: a `CanvasLayer` on the board layer holding one
@@ -1382,6 +1387,12 @@ In co-op the door seats guests and keeps the round of picks. `ShowCoop` names th
 `ShowCoopFilm` and `EndCoopFilm` share the host's campaign films (`CoopFilm` is a guest's latest word). `OfferCoopHangar` hands `HostFlow` the hangar with each plane's holder and the plane each seat flies, `CoopGuestPlanes` is every guest's pick as the host heard it, and `CoopHangar` is a guest's latest hangar words. A guest's own pick is `Pick` (`CoopGuestPick.cs`), and `LeaveCoopMission` tells the host at once that it walked out.
 `Dogfight` is the `DogfightLobby` either end stands in, unshown behind a Built-in host; `DogfightLaunchDue` tells a guest its host has launched, and a guest back from a match waits for the next round. `Version` is `Net/NetBuildVersion.cs`: either end refuses the other's version, with both on `Fault`.
 A host reads `StableIpv6` and `LanIpv4` as it opens; `GuestAddress` is what a guest types, and `CopyGuestAddress` hands it to `CopyText` (the launcher's clipboard, on Ctrl+C). Boards: `LaunchMenu.cs`.
+`Take` holds what the Game and Player Information boxes answered (`NetPlayerInfo.cs`): `PlayerName` is the callsign every pick carries and a host's first seat takes, `Voice` rides every pick, and a host's `GameName` and `MaxPlayers` are its advert's name and cap, past which it refuses a guest as full.
+
+## src/UI/Menu/NetPlayerInfo.cs
+What the original asks before a network game opens, engine-free for both presentations: the game's name, password and Maximum # of Players, and the player's callsign and voice, with the scripts' limits. `ClampPlayers` holds the cap to the spinner's floor and the kind's cap, four humans for co-op and sixteen for a Dogfight. `IsValidName` is the original's name test.
+`PilotVoices` is the Voice list's seven voices with their speaker values and the pick's voice byte. `Remembered` and `Remember` read and write the callsign, the voice and the game name in `Utils/OptionsStore.cs` for the next session.
+The decode: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Coverage: `CSVM.Tests/NetPlayerInfoTests.cs`.
 
 ## src/UI/Menu/CoopHostFlow.cs
 What a co-op host names to its guests, owned apart from the door: the board (`Screen`), the mission, the campaign's progress, the hangar it offers, the debrief's result (`ShowResult`) and the campaign film it shares (`FilmShown`).

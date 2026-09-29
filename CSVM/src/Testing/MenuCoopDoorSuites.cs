@@ -141,7 +141,7 @@ internal static class MenuCoopDoorSuites
         menu.Drive(Down);
         ctx.Check(door.IsCoopGuest, $"the join lands and the host's advert names a campaign ({door.Stage}, {door.Advert?.Kind})");
         ctx.Check(menu.ShownDetail.Contains("Campaign co-op, chapter", StringComparison.Ordinal)
-                  && menu.ShownDetail.Contains($"hosted by {CampaignAidProfiles.Pilot}", StringComparison.Ordinal),
+                  && menu.ShownDetail.Contains($"game {CampaignAidProfiles.Pilot}", StringComparison.Ordinal),
             $"the board names the session as campaign co-op ({menu.ShownDetail})");
         ctx.Check(menu.ShownRowText == CoopDoorText.WaitRow,
             $"and its way on leads to the wait, not to a map ({menu.ShownRowText})");

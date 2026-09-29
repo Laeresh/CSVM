@@ -167,17 +167,25 @@ public readonly record struct CoopFit(uint Ammo, ulong Ordnance)
 
 /// <summary>
 /// A co-op guest's answer on its flight check, under the round it answers. It names the airframe it
-/// flies, its fit, the guest's player name and whether it is Ready. On a campaign it also names the
-/// plane of the host's hangar it picked (<see cref="Plane"/>). A host counts a Ready only under its
-/// own current round. A Ready from before a mission change therefore never launches the next one.
-/// <see cref="Left"/> says the guest walked out of the flight under way. Kept in the lobby, so a
-/// flight's end cannot carry it into the next session.
+/// flies, its fit, the guest's callsign, its chosen pilot voice and whether it is Ready. On a
+/// campaign it also names the plane of the host's hangar it picked (<see cref="Plane"/>). A host
+/// counts a Ready only under its own current round, so a Ready from before a mission change never
+/// launches the next one. The Left flag says the guest walked out of the flight under way. It is
+/// kept in the lobby, so a flight's end cannot carry it into the next session.
 /// </summary>
 public readonly record struct CoopPickMessage(
     byte Epoch, bool Ready, byte Airframe, CoopFit Fit = default, string Name = "", bool Left = false,
-    byte Plane = CoopPickMessage.NoPlane)
+    byte Plane = CoopPickMessage.NoPlane, byte Voice = CoopPickMessage.NoVoice)
     : INetMessage<CoopPickMessage>
 {
+    /// <summary>The <see cref="Voice"/> of a player that chose none, as an older build's pick reads.
+    /// Any other value is the voice's place in the Voice list plus one, 1 to 7.</summary>
+    public const byte NoVoice = 0;
+
+    /// <summary>The largest <see cref="Voice"/> the flags byte carries: three bits above the Ready
+    /// and Left bits, which an older reader ignores.</summary>
+    public const byte MaxVoice = 7;
+
     /// <summary>The fixed width of the message, header included.</summary>
     public const int Size = NetMessage.HeaderBytes + 4 + CoopFit.Bytes + NameBytes;
 
@@ -189,6 +197,8 @@ public readonly record struct CoopPickMessage(
 
     /// <summary>The <see cref="Plane"/> of a guest that picked the shared stock Devastator.</summary>
     public const byte StockPlane = 0xFF;
+
+    private const int VoiceShift = 2;
 
     /// <inheritdoc/>
     public static NetMessageType Type => NetMessageType.CoopPick;
@@ -228,7 +238,8 @@ public readonly record struct CoopPickMessage(
         byte plane = reader.ReadByte();
         var fit = CoopFit.Read(ref reader);
         string name = reader.ReadText(NameBytes);
-        message = new CoopPickMessage(epoch, (flags & 1) != 0, airframe, fit, name, (flags & 2) != 0, plane);
+        byte voice = (byte)((flags >> VoiceShift) & MaxVoice);
+        message = new CoopPickMessage(epoch, (flags & 1) != 0, airframe, fit, name, (flags & 2) != 0, plane, voice);
         return true;
     }
 
@@ -237,7 +248,8 @@ public readonly record struct CoopPickMessage(
     {
         var writer = new NetMessageWriter(into, Type);
         writer.WriteByte(Epoch);
-        writer.WriteByte((byte)((Ready ? 1 : 0) | (Left ? 2 : 0)));
+        int voice = Voice <= MaxVoice ? Voice : NoVoice;
+        writer.WriteByte((byte)((Ready ? 1 : 0) | (Left ? 2 : 0) | (voice << VoiceShift)));
         writer.WriteByte(Airframe);
         writer.WriteByte(Plane);
         Fit.Write(ref writer);

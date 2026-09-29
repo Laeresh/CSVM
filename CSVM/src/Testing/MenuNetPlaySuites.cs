@@ -10,7 +10,8 @@ namespace CSVM.Testing;
 
 /// <summary>
 /// Built-in's multiplayer door, driven as a player drives it. The Mode screen's last row opens
-/// the board, and the board's five rows edit the port and the address and open a real socket.
+/// the board. Its ten rows edit the port, the address and the game's and player's information,
+/// and open a real socket.
 /// The status line under them says what the socket is doing. Continue walks on to the Dogfight
 /// map screen with one pilot seated, and backing out hangs up. The carrier is the shipped one
 /// bound to the loopback address, so nothing here reaches a network or a firewall.
@@ -29,7 +30,8 @@ internal static class MenuNetPlaySuites
 
     [Suite("menu-net-door",
         "Built-in's multiplayer door driven as a player drives it: the Mode screen's last row "
-        + "opens a five-row board, the port row steps, Host opens a real ENet socket on the "
+        + "opens a ten-row board, its cap and voice rows step inside their ranges, the port row steps, "
+        + "Host remembers the voice and opens a real ENet socket on the "
         + "loopback address and the status line reports it, Continue walks on to the Dogfight map "
         + "screen with one pilot seated, and Back off the board hangs up")]
     internal static void TheMultiplayerDoor(TestContext ctx)
@@ -40,16 +42,20 @@ internal static class MenuNetPlaySuites
         var menu = LaunchMenu.Build(ctx.ZrdrPath, ctx.DataRoot, host, seat.Input);
         var door = host.Features.Get<NetPlayFeature>();
         ctx.Host.AddChild(menu);
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-net-door");
         try
         {
             menu.ShowMenu();
             OpenBoard(ctx, menu);
+            InformationRows(ctx, menu, door);
             int port = HostAMatch(ctx, menu, door);
             if (port == 0)
             {
                 return;
             }
 
+            ctx.Check(CSVM.Utils.OptionsStore.UserOptions().Load().NetVoice == 1,
+                $"Host remembers the chosen voice for the next session ({CSVM.Utils.OptionsStore.UserOptions().Load().NetVoice})");
             Continue(ctx, menu);
             HangUp(ctx, menu, door);
         }
@@ -58,6 +64,7 @@ internal static class MenuNetPlaySuites
             door.Discard();
             ctx.Host.RemoveChild(menu);
             menu.QueueFree();
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
         }
     }
 
@@ -148,8 +155,8 @@ internal static class MenuNetPlaySuites
             $"and its description says what it is for ({menu.ShownDetail})");
 
         menu.Drive(Accept);
-        ctx.Check(menu.ShownScreen == "Network" && menu.ShownRowCount == 5,
-            $"Accept opens the board, five rows ({menu.ShownScreen}, {menu.ShownRowCount})");
+        ctx.Check(menu.ShownScreen == "Network" && menu.ShownRowCount == 10,
+            $"Accept opens the board, ten rows ({menu.ShownScreen}, {menu.ShownRowCount})");
         ctx.Check(menu.ShownHeading == "MULTIPLAYER"
                   && menu.ShownBreadcrumb == $"{LaunchMenu.NetworkRow}  ›  Map  ›  Aircraft",
             $"its heading and breadcrumb ({menu.ShownHeading}, {menu.ShownBreadcrumb})");
@@ -159,6 +166,44 @@ internal static class MenuNetPlaySuites
             $"and the status line says nothing is open ({menu.ShownDetail})");
         ctx.Check(menu.ShownFooter.Contains("Type / Backspace  Address", StringComparison.Ordinal),
             $"the footer names the address field, whose letters the cursor keymap gives up ({menu.ShownFooter})");
+    }
+
+    // The board's own Game and Player Information rows stand under Continue. The cap steps from
+    // the original's eight and stops at sixteen, and the voice steps through the seven. The cursor
+    // ends back on Host.
+    private static void InformationRows(TestContext ctx, LaunchMenu menu, NetPlayFeature door)
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            menu.Drive(Down);
+        }
+
+        ctx.Check(menu.ShownRow == 5 && menu.ShownRowText.StartsWith("Game name", StringComparison.Ordinal),
+            $"under Continue stands the game's name ({menu.ShownRow}, {menu.ShownRowText})");
+        menu.Drive(Down);
+        menu.Drive(Down);
+        ctx.Check(menu.ShownRowText == "Max players     8", $"the cap opens on the original's eight ({menu.ShownRowText})");
+        menu.Drive(Right);
+        ctx.Check(door.MaxPlayers == 9 && menu.ShownRowText == "Max players     9", $"and Right steps it ({door.MaxPlayers})");
+        for (int i = 0; i < 10; i++)
+        {
+            menu.Drive(Right);
+        }
+
+        ctx.Check(door.MaxPlayers == NetSeats.MaxPlayers, $"ABLE-TO-FAIL CONTROL: the cap stops at sixteen ({door.MaxPlayers})");
+        door.PlayerName = "Laeresh";
+        menu.Drive(Down);
+        ctx.Check(menu.ShownRowText == "Callsign        Laeresh", $"the callsign row shows the door's callsign ({menu.ShownRowText})");
+        menu.Drive(Down);
+        ctx.Check(menu.ShownRowText == "Voice           Nathan Zachary", $"the voice opens on the list's first ({menu.ShownRowText})");
+        menu.Drive(Right);
+        ctx.Check(door.Voice == 1 && menu.ShownRowText == "Voice           Jack", $"and Right picks the next ({door.Voice}, {menu.ShownRowText})");
+        for (int i = 0; i < 3; i++)
+        {
+            menu.Drive(Down);
+        }
+
+        ctx.Check(menu.ShownRow == 2, $"the rows wrap back onto Host ({menu.ShownRow})");
     }
 
     // Opening the socket, and the port row that decides where. Returns the port that opened, or
@@ -208,7 +253,11 @@ internal static class MenuNetPlaySuites
         // ABLE-TO-FAIL CONTROL. The fields belong to the player, not to the socket, so an open
         // door refuses to move the port under itself. A board that let this through would host
         // on one port and tell the player another. Down from the last row wraps onto the first.
-        menu.Drive(Down);
+        for (int i = 0; i < 6; i++)
+        {
+            menu.Drive(Down);
+        }
+
         menu.Drive(Right);
         ctx.Check(door.Port.ToString(CultureInfo.InvariantCulture) == port,
             $"ABLE-TO-FAIL CONTROL: the port row will not move while the socket is open ({door.Port.ToString(CultureInfo.InvariantCulture)})");

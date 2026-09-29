@@ -51,6 +51,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     private readonly Func<PlayerSeat, IReadOnlyList<int>> _flightDevices;
     private readonly string? _dataRoot;
     private readonly Func<NetPlayFeature?> _net;
+    private readonly Action<NetSessionKind?, Action> _ask;
 
     // The pages' host, mirrored to the screen showing and never walked (see the class summary).
     private CampaignFlow? _flow;
@@ -96,7 +97,10 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         Func<PlayerSeat, IReadOnlyList<int>>? flightDevices = null,
         string? dataRoot = null,
         // The network door the cabin's Host Co-op opens; null, or a door answering null, hides it.
-        Func<NetPlayFeature?>? net = null)
+        Func<NetPlayFeature?>? net = null,
+        // Stands the network boxes over the cabin before Host Co-op opens the door; null opens it
+        // at once.
+        Action<NetSessionKind?, Action>? ask = null)
     {
         _campaign = campaign;
         _setup = setup ?? throw new ArgumentNullException(nameof(setup));
@@ -108,6 +112,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         _flightDevices = flightDevices ?? (_ => Array.Empty<int>());
         _dataRoot = dataRoot;
         _net = net ?? (() => null);
+        _ask = ask ?? ((_, then) => then());
     }
 
     /// <summary>Whether a campaign is open on this module.</summary>
@@ -299,9 +304,12 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             return false;
         }
 
-        // The guest's own last pilot names it to the host. Read only, since a guest's saves are
-        // never touched.
-        net.PlayerName = _profiles?.Invoke().LastPlayedPilotName ?? string.Empty;
+        // The guest's callsign names it to the host, and a guest that joined without one goes by
+        // its own last pilot. Read only, since a guest's saves are never touched.
+        if (net.PlayerName.Length == 0)
+        {
+            net.PlayerName = _profiles?.Invoke().LastPlayedPilotName ?? string.Empty;
+        }
 
         // The door's pick is the guest's memory for the joined session, and a fresh join clears it.
         // Reopening from it is what carries the plane and its fit across flights and retries.
@@ -1349,9 +1357,9 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             No());
     }
 
-    // Host Co-op opens a campaign listen server for the seats the local players leave free and
-    // advertises the cabin's mission; Close Network hangs it up. A door the Connection page opened
-    // is left alone, its button drawn greyed.
+    // Host Co-op asks Game and Player Information first. It then opens a campaign listen server
+    // for the seats the local players leave free and advertises the cabin's mission. Close Network
+    // hangs it up. A door the Connection page opened is left alone, its button drawn greyed.
     private void ToggleCoopDoor()
     {
         if (_net() is not { } net)
@@ -1366,6 +1374,16 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         }
 
         if (net.Stage is not (NetDoorStage.Shut or NetDoorStage.Failed))
+        {
+            return;
+        }
+
+        _ask(NetSessionKind.CampaignCoop, OpenCoopDoor);
+    }
+
+    private void OpenCoopDoor()
+    {
+        if (_net() is not { } net || net.Stage is not (NetDoorStage.Shut or NetDoorStage.Failed))
         {
             return;
         }

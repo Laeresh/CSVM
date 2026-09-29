@@ -56,25 +56,28 @@ public static class CoopDoorText
     /// <summary>The name a Dogfight host's own address notes stand under in its lobby chat.</summary>
     public const string NoteName = "Network";
 
-    /// <summary>The games list's Game Name: the host's name and what it holds open.</summary>
+    /// <summary>The games list's Game Name: the name the host's Game Information box gave it, or
+    /// what it holds open when the advert names none.</summary>
     public static string GameName(SessionAdvertMessage advert)
     {
-        string what = advert.Kind switch
+        if (advert.Host.Length > 0)
         {
-            NetSessionKind.CampaignCoop => "campaign",
-            NetSessionKind.Dogfight => "dogfight",
-            _ => "game",
+            return advert.Host;
+        }
+
+        return advert.Kind switch
+        {
+            NetSessionKind.CampaignCoop => "Campaign",
+            NetSessionKind.Dogfight => "Dogfight",
+            _ => "Game",
         };
-        return advert.Host.Length > 0 ? $"{advert.Host}'s {what}" : Capital(what);
     }
 
     /// <summary>The games list's # of Players, as "2/4". An advert naming no cap takes its kind's.
     /// </summary>
     public static string PlayerCount(SessionAdvertMessage advert)
     {
-        int cap = advert.Cap > 0
-            ? advert.Cap
-            : advert.Kind == NetSessionKind.CampaignCoop ? NetPlayFeature.CoopHumans : NetSeats.MaxPlayers;
+        int cap = advert.Cap > 0 ? advert.Cap : NetPlayerInfo.PlayerCap(advert.Kind);
         return $"{advert.Players.ToString(CultureInfo.InvariantCulture)}/{cap.ToString(CultureInfo.InvariantCulture)}";
     }
 
@@ -174,7 +177,7 @@ public static class CoopDoorText
                 : $"{linked}. Waiting for the host to start.";
         }
 
-        string session = $"{SessionName(advert, missionName)}, {HostedBy(advert)}{Players(advert.Players)}";
+        string session = $"{SessionName(advert, missionName)}, {GameCalled(advert)}{Players(advert.Players)}";
         return advert.Kind == NetSessionKind.CampaignCoop
             ? $"{linked}. {session}. Continue, and wait there for the host's launch."
             : net.HostStarted
@@ -195,7 +198,7 @@ public static class CoopDoorText
         string state = net.HostStarted
             ? "The host has launched the mission."
             : "Waiting for the host to launch the mission.";
-        return $"{SessionName(advert, missionName)}. {Capital(HostedBy(advert))}{Players(advert.Players)} at {net.Address}. {state}";
+        return $"{SessionName(advert, missionName)}. {Capital(GameCalled(advert))}{Players(advert.Players)} at {net.Address}. {state}";
     }
 
     /// <summary>A campaign host's band: the port, the router's address and the guests on the
@@ -371,16 +374,16 @@ public static class CoopDoorText
             return "";
         }
 
-        string host = net.Advert is { Host.Length: > 0 } advert ? advert.Host : "The host";
+        // The advert names the game rather than its host, so the band says "the host".
         string doing = flow.Screen switch
         {
-            NetCoopScreen.Briefing => $"{host} is on the briefing",
+            NetCoopScreen.Briefing => "The host is on the briefing",
             NetCoopScreen.FlightCheck => net.CoopReady
-                ? $"Ready, waiting for {host} to launch"
+                ? "Ready, waiting for the host to launch"
                 : "Pick your plane and ammo, then press Ready",
-            NetCoopScreen.InMission => $"{host} is in a mission; you fly from the next briefing",
+            NetCoopScreen.InMission => "The host is in a mission; you fly from the next briefing",
             NetCoopScreen.Debrief => flow.Won ? "Mission won" : "Mission failed",
-            _ => $"{host} is in the cabin",
+            _ => "The host is in the cabin",
         };
         return $"CO-OP  {doing}";
     }
@@ -388,8 +391,8 @@ public static class CoopDoorText
     /// <summary>What every player is told when a guest's link drops mid-mission.</summary>
     public static string Left(string name) => $"{(name.Length > 0 ? name : "A guest")} left";
 
-    private static string HostedBy(SessionAdvertMessage advert) =>
-        advert.Host.Length > 0 ? $"hosted by {advert.Host}, " : "";
+    private static string GameCalled(SessionAdvertMessage advert) =>
+        advert.Host.Length > 0 ? $"game {advert.Host}, " : "";
 
     private static string Capital(string text) =>
         text.Length > 0 ? char.ToUpperInvariant(text[0]) + text[1..] : text;

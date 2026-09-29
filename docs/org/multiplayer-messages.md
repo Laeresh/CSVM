@@ -174,9 +174,10 @@ The remake posts these lines from the host's decision rather than from each mach
 report, since a relayed report never returns to the machine that sent it. The host scores the
 death, sends the scores, then sends `0x5C`, the death notice, and posts the lines itself; each
 guest posts them from the notice, after the lives line the scores produced. A pilot is named by
-its seat's callsign. A lobby host's first seat takes the name its advert carries, cut to the
-roster's width so every machine reads the same name, and its player tag only when that name is
-empty. A second local seat keeps its tag: the original's session-open paths make one local player
+its seat's callsign. A lobby host's first seat takes the host's own callsign (Player Information's,
+carried on the wire as `NetLobby.LocalCallsign`), cut to the roster's width so every machine reads
+the same name, and its player tag only when that callsign is empty. The advert's name is the
+game's, not the host's, and never names a seat. A second local seat keeps its tag: the original's session-open paths make one local player
 each, so it has no counterpart there. Cause 3 names the owner's seat, since the remake's Dogfight has no teams.
 Splitscreen Dogfight posts the same lines in every pane, named by player tag.
 
@@ -771,7 +772,7 @@ sees them.
 
 | Id | Message | Class | Carries |
 |---|---|---|---|
-| `0x4A` | Session advert | reliable, host to each guest | session kind (Dogfight 1, campaign co-op 2) at 4, campaign mission sequence or `0xFF` for none at 5, player count at 6, status at 7 (unknown 0, waiting 1, in mission 2, full 3), seat cap at 8, three reserved bytes, host name in 16 bytes UTF-8 zero padded at 12 (28 bytes) |
+| `0x4A` | Session advert | reliable, host to each guest | session kind (Dogfight 1, campaign co-op 2) at 4, campaign mission sequence or `0xFF` for none at 5, player count at 6, status at 7 (unknown 0, waiting 1, in mission 2, full 3), seat cap at 8, three reserved bytes, the game's name in 16 bytes UTF-8 zero padded at 12 (28 bytes) |
 | `0x4F` | Session closed | reliable, host to each guest | reason at 4 (unknown 0, closed 1, full 2, version mismatch 3), three reserved bytes, the host's build version at 8, the guest's as the host heard it at 12 (16 bytes) |
 | `0x56` | Build version | reliable, each end to each peer on connect | the build version at 4 (8 bytes) |
 
@@ -801,6 +802,49 @@ command line's `--net-host` and `--net-join` stand no lobby on the carrier and c
 of different minors recognise each other, so a change makes an older build read a newer one as
 silent or foreign instead of naming the mismatch.
 
+### Game and Player Information
+
+Before a network game opens the original asks two things, in `MULTIPLAYERHOSTMODAL.SCRIPT` (GAME
+INFORMATION, string 10032) and `MULTIPLAYERPLAYERMODAL.SCRIPT` (PLAYER INFORMATION, 10036). The
+Connection page's Host and the games list's Create Game open Game Information, whose OK opens
+Player Information; Join Game opens Player Information alone. Player Information's OK is the
+join or the lobby, and either box's Cancel goes back to the page under it.
+
+- **Game Name** (10027): an edit box of at most 14 characters (`SZ.FD`), prefilled from the saved
+  game name (setting callback `2142`, index 2). An empty name greys OK (`gui_execute` mails 1 to
+  the button). A refused name raises 10511, "Invalid game name.".
+- **Password (optional)** (10028): a masked box (`UZ.SC = 1`) with no length set in the script.
+- **Maximum # of Players** (10029): a spinner whose floor is `VZ.VF = 2`. Both doors set its
+  ceiling and value as they open it: `VZ.WF = 16`, `VZ.YF = 8`, or 2 and 2 for Modem-to-Modem
+  (`MULTIPLAYERMAIN.SCRIPT` and `MULTIPLAYERGAMESLIST.SCRIPT`, the `mail(1108)` refresh). It is not
+  saved.
+- **Callsign** (10033): at most 12 characters (`UGA.FD`), prefilled from the saved callsign
+  (index 1). An empty callsign greys OK, and a refused one raises 10510, "Invalid Callsign.".
+- **Voice** (10034): a drop-down of seven voices, strings 10039 to 10045, each row with a value in
+  `WGA.LG[R].SF`: Nathan Zachary 48, Jack 2, Black Swan 24, Paladin Blake 29, Loyle Crawford 44,
+  Gruff Male 26, Texan Male 31. The picked row is saved (index 4); its value goes to `$$AHA$$`.
+  What the value selects in flight is not decoded here.
+- **Password** (10035): greyed unless callback 5003 answers otherwise (`gui_init`); the capture of
+  a LAN TCP/IP game shows it greyed. What the callback reads is not decoded.
+
+[Evidence: decoded] The name test is `FUN_00407060`: `GetStringTypeExA` with `CT_CTYPE1` over the
+text, and the name passes as soon as one character carries a class outside space, blank and
+control (mask `0xff97`). So an empty name or one of spaces alone is refused. `FUN_00407670` calls it
+three times, at `0040820c` (the callsign), `0040824f` and `00408290`; the second is read as the
+game name's callback and the third is not tied to a box.
+
+The remake follows both boxes in the Original presentation (`UI/Menu/Original/OriginalNetInfoBox.cs`)
+and offers the same choices as rows of the Built-in Network board. The cabin's remake-only HOST
+CO-OP asks both boxes too. The cap is held to the kind's own: four humans for campaign co-op, sixteen
+for a Dogfight. The game name is the advert's name, and the games list shows it and the chosen cap
+as they are. A host past its cap refuses a guest with the full notice, a Dogfight host as a co-op
+host does. The callsign names this machine's player in every roster, list and line. The voice
+rides the pick's flags byte, so the pick keeps its 36 bytes and a build a patch older reads the
+same pick without it. The password is held on the door and sent nowhere. The callsign, the voice
+and the game name are remembered in `options.json` for the next session. The Player Information
+Password draws greyed and takes nothing: it most likely served MSN Gaming Zone, which the remake
+does not carry.
+
 ### Campaign co-op boards
 
 A co-op guest follows the host's boards through six more lobby messages, minted at `0x50` to
@@ -810,7 +854,7 @@ session.
 | Id | Message | Class | Carries |
 |---|---|---|---|
 | `0x50` | Co-op flow | reliable, host to each guest | screen at 4 (unknown 0, cabin 1, briefing 2, flight check 3, in mission 4, debrief 5), mission sequence at 5, round at 6, the guest's player number at 7, Ready mask by player number at 8, humans at 9, host's campaign progress at 10, flags at 11 (bit 0 won), hangar airframe mask at 12, the guest's local seats at 14, one reserved byte, objectives mask at 16, cash at 20 (24 bytes) |
-| `0x51` | Co-op pick | reliable, guest to host | round at 4, flags at 5 (bit 0 Ready, bit 1 left the flight), airframe at 6, the picked plane at 7 (0 none, `0xFF` the stock Devastator, else its place in the host's hangar plus one), the fit at 8, the player name at 20 (16 bytes, zero-padded; 36 bytes) |
+| `0x51` | Co-op pick | reliable, guest to host | round at 4, flags at 5 (bit 0 Ready, bit 1 left the flight, bits 2 to 4 the pilot voice's place in the Voice list plus one, 0 for none), airframe at 6, the picked plane at 7 (0 none, `0xFF` the stock Devastator, else its place in the host's hangar plus one), the fit at 8, the player name at 20 (16 bytes, zero-padded; 36 bytes) |
 | `0x52` | Co-op seat fit | reliable, host to each guest | seat at 4, three reserved bytes, the fit at 8 (20 bytes) |
 | `0x59` | Co-op wingman | reliable, host to each guest | wingman airframe at 4 (`0xFF` none), three reserved bytes, the fit at 8 (20 bytes) |
 | `0x5A` | Co-op film | reliable, host to each guest | ordinal at 4, playing at 5, film at 6 (chapter 1, closing 2), chapter at 7 (8 bytes) |
@@ -855,8 +899,9 @@ A guest plays the film it names and ends it on the host's end. A guest's own ski
 own film, since the host drives the boards. A guest joining while a film plays sees none, and a
 guest back from flight joins a film still playing. A launch ends a guest's film still up, so the
 guest flies with its host. A guest a patch older drops `0x5A` as unknown and plays no film.
-The name is the guest's last-played pilot, read without writing, and the host's roster calls
-the guest by it; a guest with none is called by its player number. A guest leaving the flight
+The name is the guest's callsign from Player Information, else its last-played pilot read without
+writing, and the host's roster calls the guest by it; a guest with neither is called by its player
+number. The host's own first seat takes the host's callsign the same way. A guest leaving the flight
 through its pause sheet sets the left flag, and the host takes its seat out at once, as it does
 for a dropped link.
 

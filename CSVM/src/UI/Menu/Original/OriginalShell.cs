@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using CSVM.Net;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
 using CSVM.UI.Screens;
@@ -348,6 +349,8 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     private readonly CinemaFilm _film = new();
     private readonly int[] _focus = new int[Enum.GetValues<OriginalScreen>().Length];
     private readonly Dictionary<string, (int Width, int Height)?> _sizes = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Func<CSVM.Utils.OptionsStore>? _netOptions;
+    private readonly Func<CSVM.Session.Campaign.CampaignProfileStore>? _profiles;
 
     // The network door, replaceable so a screenshot aid or a suite can stand in its own.
     private NetPlayFeature? _net;
@@ -404,7 +407,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         IJoinRoster? joinRoster = null,
         // The network door the Multiplayer plaque and the cabin's Host Co-op stand over; null
         // draws the plaque disabled and hides the cabin's button.
-        NetPlayFeature? net = null)
+        NetPlayFeature? net = null,
+        // Where the network boxes read and remember the callsign, the voice and the game name; null
+        // remembers nothing, which is what an engine-free test wants.
+        Func<CSVM.Utils.OptionsStore>? netOptions = null)
     {
         _layout = layout ?? throw new ArgumentNullException(nameof(layout));
         _free = free ?? throw new ArgumentNullException(nameof(free));
@@ -417,11 +423,14 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         _stock = stock;
         _controls = controls;
         _net = net;
+        _netOptions = netOptions;
+        _profiles = profiles;
         _campaignLayout = CampaignLayout.Over(layout);
+        NetInfo = new OriginalNetInfoBox(this, dataRoot, RememberNetInfo);
         InstantAction = new OriginalInstantActionScreen(_instantAction, _setup, planes, layout, measure, this, _stock);
         Options = new OriginalOptionsScreen(layout, this, options, screenSizes, screens, controls);
         Campaign = new OriginalCampaignScreen(
-            campaign, _setup, planes, _campaignLayout, this, profiles, _stock, _flightDevices, dataRoot, () => _net);
+            campaign, _setup, planes, _campaignLayout, this, profiles, _stock, _flightDevices, dataRoot, () => _net, (hosting, then) => AskNetInfo(hosting, then));
         Hangar = hangar != null ? new OriginalHangarScreen(hangar, planes, layout, measure, this) : null;
         Wrapup = new OriginalWrapupScreen(_campaignLayout, measure, this, InstantAction.OpenInstantAction);
         JoinBoard = new OriginalJoinBoard(layout, this, joinRoster);
@@ -430,7 +439,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             () => _setup.Seats.Count > 0 ? _flightDevices(_setup.Seats[0]) : Array.Empty<int>(),
             () => profiles?.Invoke().LastPlayedPilotName,
             () => planes?.List() ?? Array.Empty<CSVM.Flight.Hangar.CustomPlaneDef>());
-        Connection = new OriginalConnectionScreen(() => _net, this, dataRoot, Lobby.OpenHost);
+        Connection = new OriginalConnectionScreen(() => _net, this, dataRoot, Lobby.OpenHost, (hosting, then) => AskNetInfo(hosting, then));
         _modules = Hangar != null
             ? new IOriginalScreenModule[] { InstantAction, Options, Campaign, Hangar, Wrapup, JoinBoard, Connection, Lobby }
             : new IOriginalScreenModule[] { InstantAction, Options, Campaign, Wrapup, JoinBoard, Connection, Lobby };
@@ -493,7 +502,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         get
         {
             var lists = new List<OriginalList>();
-            if (_dialog != null)
+            if (_dialog != null || NetInfo.IsOpen)
             {
                 return lists;
             }
@@ -528,7 +537,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// screen.</summary>
     public bool CapturingText =>
         _dialog == null
-        && (TypingCheat || _screen == OriginalScreen.CampaignRoster || (Hangar?.CapturingText ?? false)
+        && (NetInfo.CapturingText || TypingCheat || _screen == OriginalScreen.CampaignRoster || (Hangar?.CapturingText ?? false)
             || Connection.CapturingText || Lobby.CapturingText);
 
     /// <summary>The hangar module behind the hangar screens, with its own state and inks, or null
@@ -565,6 +574,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// <summary>The module behind the Multiplayer Lobby, standing empty until a Dogfight is hosted
     /// or joined.</summary>
     public OriginalLobbyScreen Lobby { get; }
+
+    /// <summary>The GAME INFORMATION and PLAYER INFORMATION boxes. While one stands over a page its
+    /// rows are the only rows, as a messagebox's are, and a messagebox can stand over it.</summary>
+    public OriginalNetInfoBox NetInfo { get; }
 
     /// <summary>Which campaign board the screen showing wears, or null when it wears none; what
     /// the presentation picks the board's palette by. The campaign's own screens answer for
@@ -622,6 +635,12 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// stand on (<see cref="OnSeatWalk"/>) ends a seat walk in progress.</summary>
     public void Open(OriginalScreen screen)
     {
+        // A network box belongs to the page it was asked over.
+        if (screen != _screen)
+        {
+            NetInfo.Drop();
+        }
+
         _screen = screen;
         _hover = -1;
         _pressed = -1;
@@ -675,6 +694,29 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// <summary>A co-op or Dogfight guest's launch once its host has launched, taken after
     /// <see cref="StepNet"/>, or null.</summary>
     public MenuExit? TakeNetExit() => _net != null ? Lobby.GuestLaunch() ?? Campaign.GuestLaunch() : null;
+
+    /// <summary>Stands the network boxes over the page showing: Game Information then Player
+    /// Information for a host of <paramref name="hosting"/>, Player Information alone for null.
+    /// The last OK hands the answers to the door and runs <paramref name="then"/>; Cancel runs
+    /// nothing. Without a door <paramref name="then"/> runs at once. They open on the remembered
+    /// answers, or on <paramref name="start"/> when given, which is the screenshot aids' pose.
+    /// </summary>
+    public void AskNetInfo(NetSessionKind? hosting, Action then, NetPlayerInfo? start = null)
+    {
+        ArgumentNullException.ThrowIfNull(then);
+        if (_net is not { } net)
+        {
+            then();
+            return;
+        }
+
+        start ??= RememberedNetInfo(net);
+        NetInfo.Open(hosting, start, info =>
+        {
+            net.Take(info, hosting != null);
+            then();
+        });
+    }
 
     /// <summary>Stands <paramref name="door"/> in for the network door, the screenshot aids' and
     /// the suites' way to show a door they drive themselves.</summary>
@@ -759,11 +801,39 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         return Campaign.SeatedAirframe ?? HangarFeature.DefaultAirframe;
     }
 
-    // Typed characters and Backspace into whichever edit box is showing. The campaign roster's own
-    // rule applies first, else whichever the hangar owns. The name screen and the hub share the
-    // hangar name's character set and cap.
+    // The boxes open on what the options remember. With no store behind the shell, what the door
+    // already carries stands in, so a second ask this session opens on the first one's answers.
+    private NetPlayerInfo RememberedNetInfo(NetPlayFeature net)
+    {
+        var saved = _netOptions?.Invoke().Load() ?? new CSVM.Utils.OptionsDef();
+        var info = NetPlayerInfo.Remembered(saved, _profiles?.Invoke().LastPlayedPilotName);
+        if (_netOptions == null)
+        {
+            info.Callsign = net.PlayerName.Length > 0 ? net.PlayerName : info.Callsign;
+            info.GameName = net.GameName.Length > 0 ? net.GameName : info.GameName;
+            info.Voice = net.Voice >= 0 ? net.Voice : info.Voice;
+        }
+
+        return info;
+    }
+
+    private void RememberNetInfo(NetPlayerInfo info, bool game)
+    {
+        if (_netOptions?.Invoke() is not { } store)
+        {
+            return;
+        }
+
+        var saved = store.Load();
+        info.Remember(saved, game);
+        store.Save(saved);
+    }
+
+    // Typed characters and Backspace into whichever edit box is showing. A standing network box
+    // takes them first, then the campaign roster's own rule, else whichever the hangar owns. The
+    // name screen and the hub share the hangar name's character set and cap.
     private bool TypeName(MenuCommands commands, List<string> cues) =>
-        _screen switch
+        NetInfo.IsOpen ? NetInfo.TypeText(commands, cues) : _screen switch
         {
             OriginalScreen.CampaignRoster => Campaign.TypeName(commands, cues),
             OriginalScreen.Connection => Connection.TypeAddress(commands, cues),
@@ -945,7 +1015,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
                 focus = EnsureFocus(rows);
             }
             else if (pointer.Clicked && over < 0
-                && ((ModuleFor(_screen)?.CloseDropdown() ?? false) || CloseSeatCombo()))
+                && (NetInfo.IsOpen ? NetInfo.CloseDropdown() : (ModuleFor(_screen)?.CloseDropdown() ?? false) || CloseSeatCombo()))
             {
                 // A click off an open list closes it and picks nothing.
                 changed = true;
@@ -974,6 +1044,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             {
                 rows = Rows;
                 focus = EnsureFocus(rows);
+            }
+            else if (_dialog == null && NetInfo.IsOpen)
+            {
+                NetInfo.StepSideways(rows, focus, commands.MoveX);
             }
             else if (ModuleFor(_screen) is { } module && module.StepSideways(rows, focus, commands.MoveX))
             {
@@ -1024,8 +1098,8 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         int focus = EnsureFocus(rows);
         // Under a dialog the screen is drawn from its own rows with nothing focused. The dialog's
         // answers are the rows the pointer and the cursor see.
-        var screenRows = _dialog == null ? rows : BuildRows();
-        int screenFocus = _dialog == null ? focus : -1;
+        var screenRows = _dialog == null && !NetInfo.IsOpen ? rows : ScreenRows();
+        int screenFocus = _dialog == null && !NetInfo.IsOpen ? focus : -1;
         var layers = new BoardLayers();
         ComposeMovie(layers.Backdrop);
         var main = _layout.Screen(OriginalAvailability.MainMenuSection);
@@ -1065,6 +1139,12 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         if (!ownPage || _screen is OriginalScreen.Options or OriginalScreen.Credits)
         {
             ComposeRows(screenRows, screenFocus, layers);
+        }
+
+        // A network box stands over the page, and a messagebox over both.
+        if (NetInfo.IsOpen)
+        {
+            NetInfo.Compose(_dialog == null ? rows : BuildRows(), _dialog == null ? focus : -1, layers);
         }
 
         if (_dialog != null)
@@ -1483,6 +1563,13 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             return null;
         }
 
+        // A standing network box takes its own rows, which are the only rows while it stands.
+        if (NetInfo.IsOpen)
+        {
+            NetInfo.Activate(row.Key);
+            return null;
+        }
+
         switch (_screen)
         {
             case OriginalScreen.TopLevel:
@@ -1566,6 +1653,12 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             return null;
         }
 
+        if (NetInfo.IsOpen)
+        {
+            NetInfo.Back();
+            return null;
+        }
+
         if (_screen == OriginalScreen.TopLevel)
         {
             return new QuitExit();
@@ -1592,7 +1685,20 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         return null;
     }
 
+    // A standing network box's rows, else the screen's own.
     private IReadOnlyList<OriginalRow> BuildRows()
+    {
+        if (!NetInfo.IsOpen)
+        {
+            return ScreenRows();
+        }
+
+        var rows = new List<OriginalRow>();
+        NetInfo.Rows(rows);
+        return rows;
+    }
+
+    private IReadOnlyList<OriginalRow> ScreenRows()
     {
         var rows = new List<OriginalRow>();
         switch (_screen)

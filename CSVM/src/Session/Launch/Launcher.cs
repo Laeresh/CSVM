@@ -1250,7 +1250,7 @@ public partial class Launcher : Node3D
     }
 
     /// <summary>A co-op host's field and each seat's fit, by seat. Its own seats come first, with
-    /// the fits its launch carried. Then comes every seated guest still on the wire, in the plane,
+    /// the fits its launch carried, the first named by the door's callsign. Then comes every seated guest still on the wire, in the plane,
     /// fit and name its pick carried.</summary>
     internal static (Net.NetSeat[] Roster, Net.CoopFit[] SeatFits) CoopLaunchField(
         UI.Menu.NetPlayFeature door, Net.INetTransport wire, IReadOnlyList<string> planes,
@@ -1272,11 +1272,12 @@ public partial class Launcher : Node3D
             }
         }
 
-        return (Net.NetSeats.CoopField(wire.LocalPeer, planes, guests), seatFits.ToArray());
+        string hostName = Net.SeatRosterMessage.Carried(door.PlayerName.Trim()).Trim();
+        return (Net.NetSeats.CoopField(wire.LocalPeer, planes, guests, hostName), seatFits.ToArray());
     }
 
     /// <summary>A network Dogfight host's field and each seat's fit, by seat. Its own seats come
-    /// first, the first named as its advert names the host and any other by player tag. Each guest
+    /// first, the first named by the wire's local callsign and any other by player tag. Each guest
     /// follows in the stock airframe, fit and name its lobby pick carried.
     /// ⚠ A guest with no pick on the wire flies the host's first airframe on the stock fit. That is
     /// the Built-in Dogfight door's only rule.</summary>
@@ -1288,7 +1289,7 @@ public partial class Launcher : Node3D
         var seatFits = new List<Net.CoopFit>(seats.Capacity);
         var lobby = wire as Net.NetLobby;
         // Cut to the roster's width, so the host's kill lines read what each guest's copy reads.
-        string hostName = Net.SeatRosterMessage.Carried((lobby?.Advertising?.Host ?? "").Trim()).Trim();
+        string hostName = Net.SeatRosterMessage.Carried((lobby?.LocalCallsign ?? "").Trim()).Trim();
         for (int i = 0; i < planes.Count; i++)
         {
             seats.Add(new Net.NetSeat

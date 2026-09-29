@@ -27,12 +27,18 @@ internal static class MenuOriginalConnectionSuites
     private const float Dt = 1f / 60f;
     private const string Loopback = "127.0.0.1";
 
+    // The game the lobby's host names in GAME INFORMATION, and the cap it chooses there.
+    private const string LobbyGame = "Friday Fliers";
+    private const int LobbyCap = 6;
+
     [Suite("menu-original-connection",
         "The Original presentation's network doors over the loopback and an in-process LAN: the "
-        + "cabin's HOST CO-OP opens the carrier, the router mapping and the LAN answer, and CLOSE "
+        + "cabin's HOST CO-OP asks GAME INFORMATION, whose Cancel opens nothing and whose cap of "
+        + "sixteen is held to four, and then opens the carrier, the router mapping and the LAN answer, and CLOSE "
         + "NETWORK gives all three back, the Multiplayer plaque opens the Connection page, its "
         + "Connect over LAN TCP/IP lists the host as one row of five columns, Join Game lands the "
-        + "guest on the host's cabin, a second guest joins, a fourth human is seated and a fifth is "
+        + "guest on the host's cabin after PLAYER INFORMATION, a second guest joins, the host's chips "
+        + "name both guests by their callsigns, a fourth human is seated and a fifth is "
         + "refused as full, a silent drop tells a guest the host left, and CLOSE NETWORK tells the "
         + "other the host closed the game and puts it back on the Connection page")]
     internal static void TheConnectionPage(TestContext ctx)
@@ -83,6 +89,7 @@ internal static class MenuOriginalConnectionSuites
         }
 
         var ends = new List<End>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-connection");
         try
         {
             var host = Open(ctx, layout, doors[0], ends);
@@ -100,6 +107,9 @@ internal static class MenuOriginalConnectionSuites
             OpenForTheMatch(ctx, host, hostDoor);
             JoinThroughTheList(ctx, told, ends, 1, "the first guest");
             JoinThroughTheList(ctx, dropped, ends, 2, "the second guest");
+            Pump(ends.ToArray());
+            ctx.Check(DrawsOver(host.Shell.Compose(), "Nathan" + LaunchMenu.RemoteChipMark) && DrawsOver(host.Shell.Compose(), "Sheila" + LaunchMenu.RemoteChipMark),
+                $"the host's chips name each guest by its callsign ({string.Join(", ", hostDoor.CoopGuests.Select(g => g.Name))})");
             FillTheGame(ctx, ends, hostDoor, doors[3], doors[4]);
             DropOne(ctx, dropped, mesh[0], mesh[2].LocalPeer);
             CloseTheGame(ctx, host, told, ends, hostDoor, unmapped);
@@ -113,13 +123,18 @@ internal static class MenuOriginalConnectionSuites
 
             doors.ForEach(door => door.Discard());
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
         }
     }
 
     [Suite("menu-original-lobby",
-        "The Multiplayer Lobby over the loopback: the Connection page's Host opens it as a Dogfight "
-        + "host, the games list reads the Dogfight, its environment and Waiting, a joined guest "
-        + "lands in it, the host's map, Time 5 and Limited Lives reach the guest, a guest's option "
+        "The Multiplayer Lobby over the loopback: the Connection page's Host asks GAME INFORMATION, "
+        + "whose typed name and a cap stepped to six are advertised and remembered, then PLAYER "
+        + "INFORMATION, whose empty callsign greys OK and whose callsign of spaces is refused, and "
+        + "opens the lobby as a Dogfight host under its callsign. The games list on a second session "
+        + "reads that name, n/6, the Dogfight, its environment and Waiting. Join Game asks PLAYER "
+        + "INFORMATION, and the guest's callsign stands in both lobby lists and its voice reaches the "
+        + "host in its pick. A joined guest lands in the lobby, the host's map, Time 5 and Limited Lives reach the guest, a guest's option "
         + "set is refused, a Ready guest's plane box stays live and its changed pick clears its Ready "
         + "on both ends, the guest's second stock plane and a non-default shell build its seat "
         + "in the host's field, one chat line arrives once on each end, a guest's line past the "
@@ -171,6 +186,7 @@ internal static class MenuOriginalConnectionSuites
         }
 
         var ends = new List<End>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-lobby");
         var hostExits = new List<MenuExit>();
         var guestExits = new List<MenuExit>();
         try
@@ -183,7 +199,7 @@ internal static class MenuOriginalConnectionSuites
                 return;
             }
 
-            if (!HostTheLobby(ctx, host) || !JoinTheLobby(ctx, guest, ends) || !JoinTheLobby(ctx, leaver, ends))
+            if (!HostTheLobby(ctx, host) || !JoinTheLobby(ctx, guest, ends, mesh[1].LocalPeer, "Nathan", 5) || !JoinTheLobby(ctx, leaver, ends, -1, "Sheila"))
             {
                 return;
             }
@@ -212,6 +228,7 @@ internal static class MenuOriginalConnectionSuites
 
             doors.ForEach(door => door.Discard());
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
         }
     }
 
@@ -260,6 +277,7 @@ internal static class MenuOriginalConnectionSuites
         }
 
         var ends = new List<End>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-outlaw-list");
         try
         {
             var host = Open(ctx, layout, hostDoor, ends);
@@ -292,6 +310,7 @@ internal static class MenuOriginalConnectionSuites
             hostDoor.Discard();
             guestDoor.Discard();
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
         }
     }
 
@@ -339,6 +358,7 @@ internal static class MenuOriginalConnectionSuites
         }
 
         var ends = new List<End>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-builtin-host");
         var guestExits = new List<MenuExit>();
         try
         {
@@ -365,6 +385,7 @@ internal static class MenuOriginalConnectionSuites
 
             ClickRow(ctx, guest, OriginalConnectionScreen.GameKey(0));
             ClickRow(ctx, guest, OriginalConnectionScreen.JoinKey);
+            Answer(ctx, guest, "Laeresh");
             Frames(hostDoor, guest, 6);
             ctx.Check(guest.Shell.Screen == OriginalScreen.Lobby && guestDoor.Dogfight is { IsHost: false, HasOptions: true },
                 $"Join Game lands the guest in the Built-in host's lobby ({guest.Shell.Screen}, {guestDoor.Stage}, {guest.Shell.Dialog?.Message})");
@@ -404,6 +425,7 @@ internal static class MenuOriginalConnectionSuites
             hostDoor.Discard();
             guestDoor.Discard();
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
         }
     }
 
@@ -463,6 +485,7 @@ internal static class MenuOriginalConnectionSuites
         }
 
         var ends = new List<End>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-version");
         try
         {
             var guest = Open(ctx, layout, guestDoor, ends);
@@ -495,6 +518,7 @@ internal static class MenuOriginalConnectionSuites
             guestDoor.Discard();
             patched.Discard();
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
         }
     }
 
@@ -527,6 +551,7 @@ internal static class MenuOriginalConnectionSuites
             (address, port) => EnetTransport.Join(address, port));
         var reader = new BuiltInSeat(new MenuInput { Keyboard = true });
         var ends = new List<End>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-ipv6-address");
         EnetTransport? host = null;
         try
         {
@@ -566,6 +591,7 @@ internal static class MenuOriginalConnectionSuites
             bare.Discard();
             host?.Dispose();
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
         }
     }
 
@@ -635,24 +661,86 @@ internal static class MenuOriginalConnectionSuites
         }
     }
 
-    // The Connection page's Host, the door's advert and the lobby it opens. True when it opened.
+    // The Connection page's Host, its two boxes answered by keyboard and pointer, the door's advert
+    // and the lobby it opens. True when it opened.
     private static bool HostTheLobby(TestContext ctx, End host)
     {
         ClickRow(ctx, host, OriginalShell.MultiplayerKey);
         ctx.Check(Row(host.Shell, OriginalConnectionScreen.HostKey) is { Enabled: true },
             $"Host is live on the Connection page over the network door ({host.Shell.Screen})");
         ClickRow(ctx, host, OriginalConnectionScreen.HostKey);
-        Pump(host);
+        var box = host.Shell.NetInfo;
         var door = host.Door;
+        ctx.Check(box.Page == NetInfoPage.Game && host.Shell.Screen == OriginalScreen.Connection && door.Stage == NetDoorStage.Shut,
+            $"Host stands GAME INFORMATION over the Connection page before any socket opens ({box.Page}, {host.Shell.Screen}, {door.Stage})");
+        TypeInto(host, Erasing(NetPlayerInfo.GameNameLimit).Append(new MenuCommands { Typed = LobbyGame }).ToArray());
+        ctx.Check(box.Draft.GameName == LobbyGame && box.Draft.MaxPlayers == NetPlayerInfo.DefaultPlayers,
+            $"the Game Name box takes the typed name and the spinner opens on eight ({box.Draft.GameName}, {box.Draft.MaxPlayers})");
+        ClickRow(ctx, host, OriginalNetInfoBox.FewerKey);
+        ClickRow(ctx, host, OriginalNetInfoBox.FewerKey);
+        ctx.Check(box.Draft.MaxPlayers == LobbyCap, $"two presses of the spinner's down arrow make six ({box.Draft.MaxPlayers})");
+        ClickRow(ctx, host, OriginalNetInfoBox.OkKey);
+        ctx.Check(box.Page == NetInfoPage.Player && door.Stage == NetDoorStage.Shut,
+            $"OK hands on to PLAYER INFORMATION with the socket still shut ({box.Page}, {door.Stage})");
+        RefuseTheEmptyCallsign(ctx, host, "Zachary");
+        ClickRow(ctx, host, OriginalNetInfoBox.OkKey);
+        Pump(host);
         ctx.Check(host.Shell.Screen == OriginalScreen.Lobby && door.Dogfight is { IsHost: true },
             $"Host opens the lobby as a Dogfight's host ({host.Shell.Screen}, {door.Stage})");
-        ctx.Check(door.Advertising is { Kind: NetSessionKind.Dogfight, MissionSeq: 0, Status: NetSessionStatus.Waiting },
-            $"and advertises a waiting Dogfight on the first environment ({door.Advertising?.Kind}, {door.Advertising?.MissionSeq}, {door.Advertising?.Status})");
+        ctx.Check(door.Advertising is { Kind: NetSessionKind.Dogfight, MissionSeq: 0, Status: NetSessionStatus.Waiting, Host: LobbyGame, Cap: LobbyCap },
+            $"and advertises a waiting Dogfight on the first environment under its game's name and cap ({door.Advertising?.Kind}, {door.Advertising?.MissionSeq}, {door.Advertising?.Status}, {door.Advertising?.Host}, {door.Advertising?.Cap})");
+        ctx.Check(door.Dogfight?.Players.FirstOrDefault().Name == "Zachary" && Draws(host.Shell.Compose(), $"of {LobbyCap})"),
+            $"the host's own row goes by its callsign, and the list counts against the chosen cap ({door.Dogfight?.Players.FirstOrDefault().Name})");
+        ctx.Check(CSVM.Utils.OptionsStore.UserOptions().Load() is { NetCallsign: "Zachary", NetGameName: LobbyGame },
+            $"the callsign and the game's name are remembered for the next session ({CSVM.Utils.OptionsStore.UserOptions().Load().NetCallsign})");
         return host.Shell.Screen == OriginalScreen.Lobby;
     }
 
+    // PLAYER INFORMATION's OK is greyed while the callsign is empty, and a callsign of spaces alone
+    // raises the original's refusal. Then the callsign is typed into its box.
+    private static void RefuseTheEmptyCallsign(TestContext ctx, End end, string callsign)
+    {
+        var box = end.Shell.NetInfo;
+        ClickRow(ctx, end, OriginalNetInfoBox.CallsignKey);
+        TypeInto(end, Erasing(NetPlayerInfo.CallsignLimit).ToArray());
+        ctx.Check(box.Draft.Callsign.Length == 0 && Row(end.Shell, OriginalNetInfoBox.OkKey) is { Enabled: false },
+            $"an empty callsign greys OK ('{box.Draft.Callsign}')");
+        TypeInto(end, new MenuCommands { Typed = "   " });
+        ClickRow(ctx, end, OriginalNetInfoBox.OkKey);
+        ctx.Check(end.Shell.Dialog?.Message == "Invalid Callsign." && box.Page == NetInfoPage.Player && box.Draft.Callsign.Length == 0,
+            $"a callsign of spaces alone raises the refusal and empties the box ({end.Shell.Dialog?.Message}, '{box.Draft.Callsign}')");
+        ClickRow(ctx, end, OriginalShell.DialogOkKey);
+        ClickRow(ctx, end, OriginalNetInfoBox.CallsignKey);
+        TypeInto(end, new MenuCommands { Typed = callsign });
+        ctx.Check(box.Draft.Callsign == callsign && Row(end.Shell, OriginalNetInfoBox.OkKey) is { Enabled: true },
+            $"a typed callsign makes OK live ('{box.Draft.Callsign}')");
+    }
+
+    private static IEnumerable<MenuCommands> Erasing(int count) =>
+        Enumerable.Range(0, count).Select(_ => new MenuCommands { Erase = true });
+
+    // Answers the network boxes a press stood over the page: Game Information when it stands, then
+    // Player Information, each through its OK.
+    private static void Answer(TestContext ctx, End end, string callsign, string? game = null)
+    {
+        var box = end.Shell.NetInfo;
+        ctx.Check(box.IsOpen, $"the press stands a network box over the page ({end.Shell.Screen})");
+        if (box.Page == NetInfoPage.Game)
+        {
+            box.Draft.GameName = game ?? callsign;
+            ClickRow(ctx, end, OriginalNetInfoBox.OkKey);
+        }
+
+        if (box.Page == NetInfoPage.Player)
+        {
+            box.Draft.Callsign = callsign;
+            ClickRow(ctx, end, OriginalNetInfoBox.OkKey);
+        }
+    }
+
     // A guest's walk to the lobby: the plaque, Connect, the one row that reads as a Dogfight, Join.
-    private static bool JoinTheLobby(TestContext ctx, End guest, List<End> ends)
+    // Player Information is answered with a callsign and a voice the host then reads.
+    private static bool JoinTheLobby(TestContext ctx, End guest, List<End> ends, int peer = -1, string callsign = "Nathan", int voice = 5)
     {
         var shell = guest.Shell;
         ClickRow(ctx, guest, OriginalShell.MultiplayerKey);
@@ -669,11 +757,28 @@ internal static class MenuOriginalConnectionSuites
         }
 
         var cells = shell.Connection.Cells(shell.Connection.Listed[0]);
-        ctx.Check(cells.Count == 5 && cells[2] == "Dogfight" && cells[3] == DogfightLobby.EnvironmentName(0) && cells[4] == "Waiting"
-                  && cells[1].EndsWith($"/{NetSeats.MaxPlayers}", StringComparison.Ordinal),
-            $"the games list reads the Dogfight, its environment, n of cap and Waiting ({string.Join(" | ", cells)})");
+        ctx.Check(cells.Count == 5 && cells[0] == LobbyGame && cells[2] == "Dogfight" && cells[3] == DogfightLobby.EnvironmentName(0)
+                  && cells[4] == "Waiting" && cells[1].EndsWith($"/{LobbyCap}", StringComparison.Ordinal),
+            $"the games list reads the host's game name, the Dogfight, its environment, n of the chosen cap and Waiting ({string.Join(" | ", cells)})");
         ClickRow(ctx, guest, OriginalConnectionScreen.GameKey(0));
         ClickRow(ctx, guest, OriginalConnectionScreen.JoinKey);
+        var box = shell.NetInfo;
+        ctx.Check(box.Page == NetInfoPage.Player && shell.Screen == OriginalScreen.ConnectionGames && guest.Door.Stage == NetDoorStage.Shut,
+            $"Join Game stands PLAYER INFORMATION over the games list before the join ({box.Page}, {shell.Screen}, {guest.Door.Stage})");
+        if (peer >= 0)
+        {
+            RefuseTheEmptyCallsign(ctx, guest, callsign);
+            ClickRow(ctx, guest, OriginalNetInfoBox.VoiceKey);
+            ctx.Check(box.VoiceListOpen && Row(shell, OriginalNetInfoBox.VoiceKey + ":6") is { Label: "Texan Male" },
+                $"the Voice box opens the seven voices ({box.VoiceListOpen}, {Row(shell, OriginalNetInfoBox.VoiceKey + ":6")?.Label})");
+            ClickRow(ctx, guest, OriginalNetInfoBox.VoiceKey + ":" + voice.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            ClickRow(ctx, guest, OriginalNetInfoBox.OkKey);
+        }
+        else
+        {
+            Answer(ctx, guest, callsign);
+        }
+
         for (int frame = 0; frame < 6; frame++)
         {
             Pump(ends.ToArray());
@@ -681,6 +786,15 @@ internal static class MenuOriginalConnectionSuites
 
         ctx.Check(shell.Screen == OriginalScreen.Lobby && guest.Door.Dogfight is { IsHost: false, HasOptions: true },
             $"Join Game lands the guest in the lobby with the host's options ({shell.Screen}, {guest.Door.Stage}, {shell.Dialog?.Message})");
+        var hostList = ends[0].Door.Dogfight?.Players ?? Array.Empty<DogfightLobbySeat>();
+        ctx.Check(hostList.Any(row => row.Name == callsign) && guest.Door.Dogfight?.Players.Any(row => row.Name == callsign) == true,
+            $"the guest's callsign stands in the lobby's player list on both ends ({string.Join(", ", hostList.Select(row => row.Name))})");
+        if (peer >= 0)
+        {
+            ctx.Check(ends[0].Door.PickedVoice(peer) == voice,
+                $"the guest's voice reaches the host in its pick ({ends[0].Door.PickedVoice(peer)} for {voice})");
+        }
+
         return shell.Screen == OriginalScreen.Lobby;
     }
 
@@ -719,6 +833,8 @@ internal static class MenuOriginalConnectionSuites
         }
 
         ClickRow(ctx, leaver, OriginalConnectionScreen.CreateKey);
+        ctx.Check(shell.NetInfo.Page == NetInfoPage.Game, $"Create Game asks Game Information over the games list ({shell.NetInfo.Page})");
+        Answer(ctx, leaver, "Sheila", "Sheila's game");
         Pump(leaver);
         ctx.Check(shell.Screen == OriginalScreen.Lobby && leaver.Door.Dogfight is { IsHost: true },
             $"Create Game opens the lobby as a Dogfight's host ({shell.Screen}, {leaver.Door.Stage}, {shell.Dialog?.Message})");
@@ -1248,6 +1364,9 @@ internal static class MenuOriginalConnectionSuites
         ClickRow(ctx, guest, OriginalConnectionScreen.InternetKey);
         ctx.Check(guest.Door.Address == Loopback, $"the address box holds the loopback the host listens on ({guest.Door.Address})");
         ClickRow(ctx, guest, OriginalConnectionScreen.ConnectKey);
+        ctx.Check(opened() == 0 && shell.NetInfo.Page == NetInfoPage.Player,
+            $"a typed join asks Player Information before any socket opens ({opened()} opened, {shell.NetInfo.Page})");
+        Answer(ctx, guest, "Laeresh");
         Frames(hostDoor, guest, 6);
         ctx.Check(opened() == 1, $"the typed join opens its socket ({opened()} opened)");
         ctx.Check(guest.Door.Fault == "Host runs 0.7, you run 0.6" && shell.Dialog?.Message == guest.Door.Fault,
@@ -1355,6 +1474,7 @@ internal static class MenuOriginalConnectionSuites
         EraseAddress(guest);
         TypeKeys(ctx, guest, reader, typed);
         ClickRow(ctx, guest, OriginalConnectionScreen.ConnectKey);
+        Answer(ctx, guest, "Laeresh");
         Pump(guest);
         ctx.Check(guest.Shell.Dialog?.Message == $"Connecting to {typed} ...",
             $"Connect follows the join on a box naming the typed host and port ({guest.Shell.Screen}, {door.Stage}, {guest.Shell.Dialog?.Message})");
@@ -1543,7 +1663,17 @@ internal static class MenuOriginalConnectionSuites
             $"the cabin carries a live {CoopDoorText.HostCoopButton} plaque ({plaque?.Label})");
         ctx.Check(!Draws(host.Shell.Compose(), "NETWORK OPEN"), $"and draws no band while the door is shut");
         ClickRow(ctx, host, OriginalCampaignScreen.CoopDoorKey);
+        ctx.Check(host.Shell.NetInfo.Page == NetInfoPage.Game && door.Stage == NetDoorStage.Shut,
+            $"HOST CO-OP asks Game Information over the cabin before the door opens ({host.Shell.NetInfo.Page}, {door.Stage})");
+        ClickRow(ctx, host, OriginalNetInfoBox.CancelKey);
+        ctx.Check(!host.Shell.NetInfo.IsOpen && door.Stage == NetDoorStage.Shut && host.Shell.Screen == OriginalScreen.CampaignCabin,
+            $"ABLE-TO-FAIL CONTROL: its Cancel leaves the cabin with the door shut ({door.Stage}, {host.Shell.Screen})");
+        ClickRow(ctx, host, OriginalCampaignScreen.CoopDoorKey);
+        host.Shell.NetInfo.Draft.MaxPlayers = NetSeats.MaxPlayers;
+        Answer(ctx, host, "Zachary", CampaignAidProfiles.Pilot);
         ctx.Check(door.IsCoopHost && door.Answering, $"HOST CO-OP opens the carrier as a campaign host answering the LAN ({door.Stage}, {door.Answering})");
+        ctx.Check(door.Advertising?.Cap == NetPlayFeature.CoopHumans,
+            $"a cap of sixteen asked for a campaign is held to four humans ({door.Advertising?.Cap})");
         AwaitMapping(door);
         Pump(host);
         ctx.Check(Row(host.Shell, OriginalCampaignScreen.CoopDoorKey)?.Label == CoopDoorText.CloseNetworkButton
@@ -1558,6 +1688,8 @@ internal static class MenuOriginalConnectionSuites
     private static void OpenForTheMatch(TestContext ctx, End host, NetPlayFeature door)
     {
         ClickRow(ctx, host, OriginalCampaignScreen.CoopDoorKey);
+        host.Shell.NetInfo.Draft.MaxPlayers = NetPlayFeature.CoopHumans;
+        Answer(ctx, host, "Zachary", CampaignAidProfiles.Pilot);
         AwaitMapping(door);
         Pump(host);
         var advert = door.Advertising;
@@ -1592,7 +1724,7 @@ internal static class MenuOriginalConnectionSuites
 
         var cells = shell.Connection.Cells(listed[0]);
         ctx.Check(
-            cells.Count == 5 && cells[0] == $"{CampaignAidProfiles.Pilot}'s campaign" && cells[1] == $"{players}/4"
+            cells.Count == 5 && cells[0] == CampaignAidProfiles.Pilot && cells[1] == $"{players}/4"
             && cells[2] == "Campaign co-op" && cells[3].Length > 0 && cells[4] == "Waiting",
             $"its row reads five columns ({string.Join(" | ", cells)})");
         ctx.Check(shell.FocusedKey == OriginalConnectionScreen.GameKey(0), $"the cursor lands on the first game ({shell.FocusedKey})");
@@ -1600,6 +1732,7 @@ internal static class MenuOriginalConnectionSuites
         ClickRow(ctx, guest, OriginalConnectionScreen.GameKey(0));
         ctx.Check(Row(shell, OriginalConnectionScreen.JoinKey) is { Enabled: true }, $"and live once the row is picked");
         ClickRow(ctx, guest, OriginalConnectionScreen.JoinKey);
+        Answer(ctx, guest, who == "the first guest" ? "Nathan" : "Sheila");
         for (int frame = 0; frame < 4; frame++)
         {
             Pump(ends.ToArray());
@@ -1708,6 +1841,10 @@ internal static class MenuOriginalConnectionSuites
 
     private static bool Draws(ComposedBoard board, string text) =>
         board.Lines.Any(line => line.Text.Contains(text, StringComparison.Ordinal));
+
+    // A line in one of the panels standing over the page, where the seat strip is drawn.
+    private static bool DrawsOver(ComposedBoard board, string text) =>
+        board.Overlays.SelectMany(panel => panel.Lines).Any(line => line.Text == text);
 
     // One end of the wire: its menu host, the seat the suite drives, and the shell it shows.
     private sealed record End(MenuHost Host, ScriptedSeat Seat, OriginalShell Shell)

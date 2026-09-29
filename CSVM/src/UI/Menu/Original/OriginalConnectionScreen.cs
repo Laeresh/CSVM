@@ -17,7 +17,8 @@ namespace CSVM.UI.Menu.Original;
 /// (<c>docs/org/menu-inventory.md</c>). Only LAN TCP/IP, which searches, and Internet, which joins
 /// the typed address, are offered; the original's other three ways are left off the page. Build
 /// Custom Plane draws greyed, and Host and Create Game open the Multiplayer Lobby as a Dogfight's
-/// host. A join started here is followed on a messagebox over the page until it ends.
+/// host once Game and Player Information are answered. Every join answers Player Information
+/// first. A join started here is followed on a messagebox over the page until it ends.
 /// </summary>
 public sealed class OriginalConnectionScreen : IOriginalScreenModule
 {
@@ -144,6 +145,7 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
     private readonly IOriginalScreenHost _host;
     private readonly MultiplayerBoardText _text;
     private readonly Action _openLobby;
+    private readonly Action<NetSessionKind?, Action> _ask;
     private (string Address, int Port)? _picked;
     private double _sinceAsk;
     private int _heard;
@@ -155,10 +157,15 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
     /// <summary>A Connection module over the door <paramref name="net"/> answers, which is null on
     /// a shell with no multiplayer door. It reads its words from the string table under
     /// <paramref name="dataRoot"/> and calls back into <paramref name="host"/>. Host and Create Game
-    /// call <paramref name="openLobby"/>.</summary>
-    public OriginalConnectionScreen(Func<NetPlayFeature?> net, IOriginalScreenHost host, string? dataRoot, Action? openLobby = null)
+    /// call <paramref name="openLobby"/>. <paramref name="ask"/> stands the network boxes over the
+    /// page before a host or a join goes ahead. It takes a host's kind, or null, and what to run
+    /// after OK. Without it both go ahead at once.</summary>
+    public OriginalConnectionScreen(
+        Func<NetPlayFeature?> net, IOriginalScreenHost host, string? dataRoot, Action? openLobby = null,
+        Action<NetSessionKind?, Action>? ask = null)
     {
         _openLobby = openLobby ?? (() => { });
+        _ask = ask ?? ((_, then) => then());
         _net = net ?? throw new ArgumentNullException(nameof(net));
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _text = new MultiplayerBoardText(_host, dataRoot);
@@ -275,7 +282,7 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
                 break;
             case HostKey:
             case CreateKey:
-                _openLobby();
+                _ask(NetSessionKind.Dogfight, _openLobby);
                 break;
             case RefreshKey:
                 AutoRefresh = !AutoRefresh;
@@ -571,13 +578,17 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
             return;
         }
 
-        if (net.Stage is NetDoorStage.Failed)
+        // Every join passes Player Information first, as the original's Join Game does.
+        _ask(null, () =>
         {
-            net.Close();
-        }
+            if (net.Stage is NetDoorStage.Failed)
+            {
+                net.Close();
+            }
 
-        net.OpenJoin();
-        _following = true;
+            net.OpenJoin();
+            _following = true;
+        });
     }
 
     private void PickOrJoin(int index)
@@ -612,13 +623,16 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
             return;
         }
 
-        if (net.Stage is NetDoorStage.Failed)
+        _ask(null, () =>
         {
-            net.Close();
-        }
+            if (net.Stage is NetDoorStage.Failed)
+            {
+                net.Close();
+            }
 
-        net.JoinGame(game);
-        _following = true;
+            net.JoinGame(game);
+            _following = true;
+        });
     }
 
     private void BackToConnection()

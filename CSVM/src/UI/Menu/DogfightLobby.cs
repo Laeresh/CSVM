@@ -124,6 +124,14 @@ public sealed class DogfightLobby
         _hostPeer = hostPeer;
     }
 
+    /// <summary>Whether a host lists and tells a peer on the wire. Every peer is, unless the door
+    /// refused it, as it refuses a guest past its chosen cap.</summary>
+    public Func<int, bool> Seated { get; init; } = _ => true;
+
+    /// <summary>The voice byte this pilot's pick carries (<see cref="CoopPickMessage.Voice"/>).
+    /// </summary>
+    public Func<byte> Voice { get; init; } = () => CoopPickMessage.NoVoice;
+
     /// <summary>Whether this end owns the options and launches the match.</summary>
     public bool IsHost => _hostPeer < 0;
 
@@ -351,7 +359,7 @@ public sealed class DogfightLobby
     public string? CheckBuiltInLaunch(string chapter, VersusRules rules)
     {
         bool picked = false;
-        foreach (int peer in _wire.AllPeers)
+        foreach (int peer in SeatedPeers())
         {
             if (!_wire.Picks.TryGetValue(peer, out var pick))
             {
@@ -434,7 +442,7 @@ public sealed class DogfightLobby
         Add(message);
         if (IsHost)
         {
-            foreach (int peer in _wire.AllPeers)
+            foreach (int peer in SeatedPeers())
             {
                 _wire.Tell(peer, message);
             }
@@ -465,7 +473,7 @@ public sealed class DogfightLobby
                 continue;
             }
 
-            foreach (int peer in _wire.AllPeers)
+            foreach (int peer in SeatedPeers())
             {
                 if (peer != from)
                 {
@@ -495,6 +503,20 @@ public sealed class DogfightLobby
         }
 
         return false;
+    }
+
+    private List<int> SeatedPeers()
+    {
+        var peers = new List<int>();
+        foreach (int peer in _wire.AllPeers)
+        {
+            if (Seated(peer))
+            {
+                peers.Add(peer);
+            }
+        }
+
+        return peers;
     }
 
     // A guest counts as Ready only under this round and on a plane the rules admit. The guest's
@@ -598,7 +620,7 @@ public sealed class DogfightLobby
     private List<DogfightLobbySeat> HostRows()
     {
         var rows = new List<DogfightLobbySeat> { new(OwnName(), _airframe, Ready, true) };
-        var peers = _wire.AllPeers;
+        var peers = SeatedPeers();
         for (int i = 0; i < peers.Count; i++)
         {
             bool picked = _wire.Picks.TryGetValue(peers[i], out var pick);
@@ -617,7 +639,7 @@ public sealed class DogfightLobby
 
     private void SendToGuests()
     {
-        var peers = _wire.AllPeers;
+        var peers = SeatedPeers();
         var rows = HostRows();
         for (int i = 0; i < peers.Count; i++)
         {
@@ -672,7 +694,7 @@ public sealed class DogfightLobby
             _buildSent = _build?.Copy();
         }
 
-        var pick = new CoopPickMessage(options.Epoch, Ready, _airframe, _fit, OwnName());
+        var pick = new CoopPickMessage(options.Epoch, Ready, _airframe, _fit, OwnName(), Voice: Voice());
         if (_pickSent != pick)
         {
             _wire.Tell(_hostPeer, pick);

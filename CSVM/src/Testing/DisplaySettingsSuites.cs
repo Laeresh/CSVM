@@ -59,6 +59,9 @@ internal static class DisplaySettingsSuites
         ("AudioEffects", 50, false),
         ("AudioVoice", 25, false),
         ("InstallPath", Path.GetFullPath(Path.GetTempPath()), false),
+        ("NetCallsign", "Laeresh", false),
+        ("NetVoice", 5, false),
+        ("NetGameName", "DaRein", false),
     };
 
     [Suite("display-vsync",

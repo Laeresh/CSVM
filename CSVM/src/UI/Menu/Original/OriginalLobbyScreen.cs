@@ -274,8 +274,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     public bool Owns(OriginalScreen screen) => screen == OriginalScreen.Lobby;
 
     /// <summary>The Connection page's Host and the games list's Create Game: a listen server with
-    /// the lobby standing on it, under the pilot's own name. A socket that will not open says why
-    /// over the page it was asked from.</summary>
+    /// the lobby standing on it. The host goes by the callsign Player Information set, else by the
+    /// pilot's own name. A socket that will not open says why over the page it was asked from.</summary>
     public void OpenHost()
     {
         if (_net() is not { } net)
@@ -289,7 +289,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             net.Close();
         }
 
-        net.PlayerName = _pilotName() ?? string.Empty;
+        TakePilotName(net);
         net.OpenDogfightHost(NetSeats.MaxPlayers - 1);
         if (net.Dogfight == null)
         {
@@ -306,7 +306,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     {
         if (_net() is { } net)
         {
-            net.PlayerName = _pilotName() ?? string.Empty;
+            TakePilotName(net);
             net.Dogfight?.Show();
         }
 
@@ -756,6 +756,16 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private static string Item(DropdownList list) =>
         list.Current >= 0 && list.Current < list.Items.Count ? list.Items[list.Current] : string.Empty;
 
+    // The callsign Player Information set names the pilot, and a door that asked none goes by the
+    // pilot's own name.
+    private void TakePilotName(NetPlayFeature net)
+    {
+        if (net.PlayerName.Length == 0)
+        {
+            net.PlayerName = _pilotName() ?? string.Empty;
+        }
+    }
+
     private void Enter()
     {
         _open = null;
@@ -1097,9 +1107,10 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         var lobby = Lobby;
         var players = lobby?.Players ?? Array.Empty<DogfightLobbySeat>();
         layers.Lines.Add(_text.Line(10046, "MULTIPLAYER LOBBY", 60f, 22f, 0f, Black));
-        string count = _text.Strings.Format(10048, players.Count, NetSeats.MaxPlayers);
+        int cap = _net()?.SessionCap ?? NetSeats.MaxPlayers;
+        string count = _text.Strings.Format(10048, players.Count, cap);
         layers.Lines.Add(_text.Line(10048, string.Empty, 34f, 54f, 0f, Black,
-            text: count.Length > 0 ? count : $"Players ({players.Count} of {NetSeats.MaxPlayers})"));
+            text: count.Length > 0 ? count : $"Players ({players.Count} of {cap})"));
         layers.Lines.Add(_text.Line(10052, "Ready", 256f, 54f, 0f, Black));
         var face = _text.Regular(10575);
         float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;

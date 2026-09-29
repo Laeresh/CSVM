@@ -136,6 +136,11 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     /// <summary>The advert this end hands out, or null while it hands out none.</summary>
     public SessionAdvertMessage? Advertising => _advertising;
 
+    /// <summary>The callsign this machine's player flies under, which a host's roster names its own
+    /// first seat by. Empty for a player with none, whose seat then takes its player tag. It is
+    /// not the advert's name, which is the game's.</summary>
+    public string LocalCallsign { get; set; } = "";
+
     /// <summary>Payloads waiting for a listener. A guest's first held payload is the host's join
     /// answer, which is how a guest board learns that the host has launched.</summary>
     public int Held => _held.Count;

@@ -759,6 +759,30 @@ public class NetMessagesTests
     }
 
     [Fact]
+    public void APicksVoiceRidesTheFlagsByteBesideReadyAndLeftWithoutGrowingThePick()
+    {
+        Span<byte> buffer = stackalloc byte[CoopPickMessage.Size];
+        var fit = CoopFit.Of(new[] { 1, 0, 0, 0 }, null);
+        for (byte voice = CoopPickMessage.NoVoice; voice <= CoopPickMessage.MaxVoice; voice++)
+        {
+            var sent = new CoopPickMessage(6, true, 3, fit, "Laeresh", Left: true, Voice: voice);
+            Assert.Equal(CoopPickMessage.Size, sent.Write(buffer));
+            Assert.True(CoopPickMessage.TryRead(buffer, out var got));
+            Assert.Equal(sent, got);
+        }
+
+        // The voice sits in bits 2 to 4, so the Ready and Left bits an older reader takes are intact.
+        new CoopPickMessage(6, true, 3, Voice: 6).Write(buffer);
+        Assert.Equal(1 | (6 << 2), buffer[NetMessage.HeaderBytes + 1]);
+
+        // ABLE-TO-FAIL CONTROL: a voice past the three bits is written as none, never into Ready.
+        new CoopPickMessage(6, false, 3, Voice: 9).Write(buffer);
+        Assert.True(CoopPickMessage.TryRead(buffer, out var clipped));
+        Assert.Equal(CoopPickMessage.NoVoice, clipped.Voice);
+        Assert.False(clipped.Ready);
+    }
+
+    [Fact]
     public void DogfightOptionsRoundTripEveryFieldInTwelveBytes()
     {
         Assert.Equal(12, DogfightOptionsMessage.Size);

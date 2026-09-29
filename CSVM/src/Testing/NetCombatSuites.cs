@@ -361,8 +361,9 @@ internal static class NetCombatSuites
         "a host session and a guest session in one process: each Dogfight death posts the "
         + "original's kill lines once on both machines, the victim above Destroyed by the killer, "
         + "a death with no killer as Self-Destroyed and a turret owner's kill as Killed by its Turret. "
-        + "A lobby launch names the host's seat by its advert's name, so a host kill reads Destroyed by "
-        + "that name on both machines")]
+        + "A lobby launch names the host's seat by its callsign rather than its game's name, and the "
+        + "guest's seat by the callsign its pick carried, so each kill reads Destroyed by that callsign "
+        + "on both machines")]
     internal static void EveryMachinePostsTheKill(TestContext ctx)
     {
         var spec = MatchSpec(ctx, out _);
@@ -490,15 +491,20 @@ internal static class NetCombatSuites
             $"{what}: both machines post {string.Join(" / ", want)} once ({reading})");
     }
 
-    // A lobby Dogfight launched through both doors, its host named past the roster's width. The
-    // host's seat takes its advert's name, cut where the wire cuts it. Both machines then read the
-    // same name in a kill line.
+    // A lobby Dogfight launched through both doors, its host's callsign past the roster's width
+    // and its game named apart from it. The host's seat takes the callsign, cut where the wire cuts
+    // it, and the guest's seat the callsign its pick carried. Both machines then read those names
+    // in a kill line.
     private static void NamedHostKills(TestContext ctx, SessionSpec spec, int seed)
     {
         const string HostName = "Montgomery Fairweather";
+        const string GameName = "Friday Fliers";
+        const string GuestName = "Laeresh";
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(seed));
-        var hostDoor = new UI.Menu.NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[1]) { PlayerName = HostName };
+        var hostDoor = new UI.Menu.NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[1]);
+        hostDoor.Take(new UI.Menu.NetPlayerInfo { Callsign = HostName, GameName = GameName }, game: true);
         var guestDoor = new UI.Menu.NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[1]);
+        guestDoor.Take(new UI.Menu.NetPlayerInfo { Callsign = GuestName, Voice = 1 }, game: false);
         Ends? host = null;
         Ends? guest = null;
         try
@@ -506,6 +512,11 @@ internal static class NetCombatSuites
             hostDoor.OpenDogfightHost(1);
             guestDoor.OpenJoin();
             StepDoors(SettleSteps, hostDoor, guestDoor);
+            guestDoor.Dogfight?.Show();
+            StepDoors(SettleSteps, hostDoor, guestDoor);
+            ctx.Check(hostDoor.Advertising?.Host == GameName && hostDoor.Dogfight?.Players.Count == 2
+                      && hostDoor.Dogfight.Players[1].Name == GuestName,
+                $"[named host] the advert names the game and the host's list the guest's callsign ({hostDoor.Advertising?.Host}, {string.Join(", ", hostDoor.Dogfight?.Players.Select(p => p.Name) ?? Array.Empty<string>())})");
             var hostLaunch = hostDoor.BuildLaunch();
             if (!guestDoor.IsDogfightGuest || hostLaunch == null)
             {
@@ -517,7 +528,9 @@ internal static class NetCombatSuites
             var (roster, _) = Launcher.VersusLaunchField(hostLaunch.Transport, planes, new LoadoutChoice?[] { null }, StockLoadouts.Load());
             string named = SeatRosterMessage.Carried(HostName).Trim();
             ctx.Check(roster[0].Callsign == named && named.Length > 0 && named != HostName && HostName.StartsWith(named, StringComparison.Ordinal),
-                $"[named host] the host's seat takes its advert's name cut to the roster's width ({roster[0].Callsign})");
+                $"[named host] the host's seat takes its callsign, not the game's name, cut to the roster's width ({roster[0].Callsign})");
+            ctx.Check(roster.Length == 2 && roster[1].Callsign == GuestName,
+                $"[named host] and the guest's seat the callsign its pick carried ({(roster.Length > 1 ? roster[1].Callsign : "-")})");
             host = Ends.Open(ctx, spec, hostLaunch.Transport, isHost: true, HostSeed, roster,
                 UI.Hangar.PlanePickerRoster.StockAirframes);
             for (int i = 0; i < GrantSteps && !guestDoor.DogfightLaunchDue; i++)

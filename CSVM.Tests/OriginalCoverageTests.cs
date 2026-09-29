@@ -63,6 +63,13 @@ public class OriginalCoverageTests : IDisposable
     private static readonly string[] Build = { "MM_B_INSTANTACTION", OriginalInstantActionScreen.BuildKey };
     private static readonly string[] Hub = { "MM_B_INSTANTACTION", OriginalInstantActionScreen.BuildKey, TypeStep + BuildName, OriginalHangarScreen.NameOkKey };
 
+    // Host answers Game Information and Player Information before the lobby opens.
+    private static readonly string[] HostLobby =
+    {
+        OriginalShell.MultiplayerKey, OriginalConnectionScreen.HostKey, TypeStep + BuildName, OriginalNetInfoBox.OkKey,
+        TypeStep + BuildName, OriginalNetInfoBox.OkKey,
+    };
+
     // Out of the wallet-free hangar: CANCEL lands on the Instant Action screen, whose Exit leaves.
     private static readonly string[] CancelBuild = { OriginalHangarScreen.CancelBuildKey, OriginalInstantActionScreen.ExitKey };
 
@@ -114,13 +121,13 @@ public class OriginalCoverageTests : IDisposable
         new("multiplayer-games", OriginalScreen.ConnectionGames,
             new[] { OriginalShell.MultiplayerKey, OriginalConnectionScreen.ConnectKey },
             new[] { OriginalConnectionScreen.CancelKey, OriginalConnectionScreen.ExitKey }),
-        new("multiplayer-lobby", OriginalScreen.Lobby, new[] { OriginalShell.MultiplayerKey, OriginalConnectionScreen.HostKey },
+        new("multiplayer-lobby", OriginalScreen.Lobby, HostLobby,
             new[] { OriginalLobbyScreen.LeaveKey, OriginalConnectionScreen.ExitKey }),
         new("multiplayer-lobby-plane", OriginalScreen.Lobby,
-            new[] { OriginalShell.MultiplayerKey, OriginalConnectionScreen.HostKey, OriginalLobbyScreen.PlaneTabKey },
+            Then(HostLobby, OriginalLobbyScreen.PlaneTabKey),
             new[] { OriginalLobbyScreen.LeaveKey, OriginalConnectionScreen.ExitKey }),
         new("multiplayer-lobby-rockets", OriginalScreen.Lobby,
-            new[] { OriginalShell.MultiplayerKey, OriginalConnectionScreen.HostKey, OriginalLobbyScreen.AmmoTabKey, OriginalLobbyScreen.RocketsTabKey },
+            Then(HostLobby, OriginalLobbyScreen.AmmoTabKey, OriginalLobbyScreen.RocketsTabKey),
             new[] { OriginalLobbyScreen.LeaveKey, OriginalConnectionScreen.ExitKey }),
         new("campaign-roster", OriginalScreen.CampaignRoster, new[] { OriginalShell.CampaignKey }, new[] { "CancelProfile" }),
         new("campaign-cabin", OriginalScreen.CampaignCabin, Cabin, new[] { "ReturnToMainMenu" }),
