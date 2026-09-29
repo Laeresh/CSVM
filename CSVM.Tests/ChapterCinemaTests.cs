@@ -189,6 +189,41 @@ public class ChapterCinemaTests
         Assert.Equal(1, cinema.Cabins);
     }
 
+    [Fact]
+    public void AGuestsPlayOfTheHostsChapterIgnoresAndKeepsTheLatch()
+    {
+        var cinema = new Recorder();
+        var flow = new ChapterCinema(cinema.Play, cinema.Stop);
+        flow.OpenCabin(5, cinema.OpenedCabin);
+        cinema.Stop();
+
+        int handed = 0;
+        Assert.True(flow.Play(2, () => handed++));
+        Assert.Equal(2, cinema.Plays);
+        Assert.Equal("chap2", cinema.Name);
+        Assert.Equal(CinemaScreen.ChapterKeys, cinema.Skip);
+        Assert.Equal(2, flow.ChapterPlayed);
+
+        // The stop call ends it the way a skip does, and the hand-off still runs once.
+        flow.Stop();
+        cinema.Stop();
+        Assert.Equal(1, handed);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(6)]
+    public void AGuestsPlayOfAChapterTheStoryLacksPlaysNothing(int chapter)
+    {
+        var cinema = new Recorder();
+        int handed = 0;
+
+        Assert.False(new ChapterCinema(cinema.Play).Play(chapter, () => handed++));
+
+        Assert.Equal(0, cinema.Plays);
+        Assert.Equal(1, handed);
+    }
+
     // The stand-in for Launcher.PlayCinema: it records what it was asked for and hands the film's
     // end back to the caller, so a test decides when, and how often, the cinema stops.
     private sealed class Recorder

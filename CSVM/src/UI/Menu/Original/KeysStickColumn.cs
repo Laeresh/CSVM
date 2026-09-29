@@ -71,9 +71,10 @@ internal static class KeysStickColumn
     }
 
     /// <summary>The Stick cell's text: every stick binding's caption in the row's order, the first
-    /// being the one the clear gesture drops. An unnamed stick prints its control alone
-    /// (<see cref="StickLabels.Column(Binding)"/>). A cell too narrow for it scrolls.</summary>
-    public static string Text(IReadOnlyList<Binding> sticks) => Joined(sticks, StickLabels.Column);
+    /// being the one the clear gesture drops. An unnamed stick prints its control alone, and its model
+    /// too when another unnamed model shares the row (<see cref="StickLabels.Columns(IReadOnlyList{Binding})"/>).
+    /// A cell too narrow for it scrolls.</summary>
+    public static string Text(IReadOnlyList<Binding> sticks) => string.Join(Separator, StickLabels.Columns(sticks));
 
     /// <summary>Several bindings' captions as one cell's line, in their own order.</summary>
     public static string Joined(IEnumerable<Binding> bindings, Func<Binding, string> caption)

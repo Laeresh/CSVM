@@ -165,6 +165,11 @@ internal sealed class HumanRosterBindings
 
     /// <summary>The fit a seat flown elsewhere carries, by seat, or null for its stock fit.</summary>
     public Func<int, LoadoutChoice?>? SeatFit { get; init; }
+
+    /// <summary>The custom plane a seat flown elsewhere carries, by seat, or null for its stock
+    /// airframe. Its hit volumes and damage parts must match the owner's, since the shooter decides
+    /// hits.</summary>
+    public Func<int, CustomPlaneDef?>? SeatBuild { get; init; }
     public float MixGain { get; init; } = 1f;
 
     /// <summary>The pads each of this machine's players reads, indexed by local player, never by

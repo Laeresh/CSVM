@@ -289,7 +289,12 @@ derived from how long the phase took. The fill is the repaint's own pixel clip,
 `floor(fillWidth * fraction)` of `prog_red` over `prog_blk` on the blackboard and `prog_redload`
 over `prog_blkload` on the chart sheet; the propeller steps the `Cycle` beat's six bitmaps
 (`prp0`, `prp7`, `prp15`, `prp22`, `prp30`, `prp37`) at the authored 6 fps off the wall clock, on
-the campaign sheet at the beat's own `435,535`. The highest milestone is 0.90 and the screen is
+the campaign sheet at the beat's own `435,535`. The moving layer is the screen's only propeller:
+the board it stands over is composed without the still first frame (the blackboard's `prp0`, and
+on the chart sheet the script's `Cycle` element, left out by the element itself), and the layer
+opens on that first frame before the build reports its first step. The frames are transparent, so
+a still frame under the turning one would show its blades between them. A composition taken with
+no build behind it keeps the one still frame. The highest milestone is 0.90 and the screen is
 torn down there, so a full bar is never drawn. Only a launch through `Launcher.BeginLaunch` builds
 the board, so the pump exists for the three interactive launches alone and a CLI, scripted or
 golden run builds with nothing over it and gains no frame.

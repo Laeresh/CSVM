@@ -496,24 +496,52 @@ public sealed class WorldEffectsFactory
         return names;
     }
 
-    private static void CollectRestPoses(Node3D node, List<(Node3D, Transform3D)> into)
+    private static void CollectRestStates(Node3D node, List<(Node3D, Node3D?, Transform3D, bool)> into)
     {
-        into.Add((node, node.Transform));
+        into.Add((node, node.GetParent() as Node3D, node.Transform, node.Visible));
         foreach (var child in node.GetChildren())
             if (child is Node3D c)
             {
-                CollectRestPoses(c, into);
+                CollectRestStates(c, into);
             }
     }
 
-    private static void CollectVisibility(Node3D node, List<(Node3D, bool)> into)
+    // The child of every OBJECT_ADD_CHILD a bound def authors. That is the eject's `cpilot`, stood
+    // up on the seat's `pilot_pos` and taken down only once its SI script completes.
+    private static HashSet<string> AdoptedChildNames(AnimProgram bound)
     {
-        into.Add((node, node.Visible));
-        foreach (var child in node.GetChildren())
-            if (child is Node3D c)
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var def in bound.Defs)
+            foreach (var seq in def.Sequences)
+                foreach (var ev in seq.Events)
+                    if (ev.Kind == "ObjectAddChild" && ev.Data.Str("child") is { } child)
+                        names.Add(child);
+        return names;
+    }
+
+    // Every staged copy under the rig carrying one of those names. A copy's own subtree is not
+    // searched further, since its joints are collected with it.
+    private static List<Node3D> AdoptedTemplates(Node3D root, HashSet<string> names)
+    {
+        var found = new List<Node3D>();
+        if (names.Count == 0)
+            return found;
+        var queue = new Queue<Node>();
+        queue.Enqueue(root);
+        while (queue.Count > 0)
+        {
+            foreach (var child in queue.Dequeue().GetChildren())
             {
-                CollectVisibility(c, into);
+                string name = child.HasMeta(AnimRuntime.NameMeta)
+                    ? child.GetMeta(AnimRuntime.NameMeta).AsString()
+                    : child.Name.ToString();
+                if (child is Node3D n3d && names.Contains(name))
+                    found.Add(n3d);
+                else
+                    queue.Enqueue(child);
             }
+        }
+        return found;
     }
 
     // Built once per session (see the field): cullBackfaces and the sun term match PlaneBuilder's
@@ -627,7 +655,7 @@ public sealed class WorldEffectsFactory
         private readonly WorldSounds? _worldSounds;
         private readonly GameZ? _planesGamez;
         private readonly int _crashSeed;
-        private readonly List<(Node3D, Transform3D)> _restPoses = new();
+        private readonly List<(Node3D, Node3D?, Transform3D, bool)> _restStates = new();
 
         private Phase _phase;
         private int _slot;
@@ -809,9 +837,9 @@ public sealed class WorldEffectsFactory
             {
                 destroyed.Visible = false;
                 _crashRoot!.AddChild(destroyed);
-                // Every wreck node's rest pose, so respawn can re-home the flung pieces (a
-                // RESET_STATE re-poses only what it names, and the pieces have no reset event).
-                CollectRestPoses(destroyed, _restPoses);
+                // Every wreck node's rest state, so respawn can re-home the flung pieces. A
+                // RESET_STATE re-poses only what it names, and the pieces have no reset event.
+                CollectRestStates(destroyed, _restStates);
             }
         }
 
@@ -862,23 +890,25 @@ public sealed class WorldEffectsFactory
             // Bind only the closure of names that play ON this aircraft (CrashRigAnimNames), never the
             // full ~800-def world program, its ~150 generic-named defs would mis-anchor onto this
             // plane's parts and run their reset states on it.
-            crashRuntime.Bind(_controller,
-                _crashProgram.Subset(EffectCatalogue.CrashRigAnimNames(_crashDefs!, _destroyAnim,
-                    _controller.IsHumanPiloted)));
+            var bound = _crashProgram.Subset(EffectCatalogue.CrashRigAnimNames(_crashDefs!, _destroyAnim,
+                _controller.IsHumanPiloted));
+            crashRuntime.Bind(_controller, bound);
             _controller.AddChild(crashRuntime);
             _controller.DestroyDef = _destroyAnim;
             // Which of the two families owns the landing, asked of the data rather than of who is
             // flying: a def that takes the hull over also authors its own bounce sequences.
             _controller.DestroyDefFliesWreck = EffectCatalogue.FliesOwnHull(_crashProgram, _destroyAnim);
-            // The plane model's built visibility, so respawn can undo the crash def's healthy/markers
-            // hides (its RESET_STATE only restores dontmove). Captured pristine, before any crash.
-            var planeVis = new List<(Node3D, bool)>();
+            // The built state of every node the death defs play on, captured after the bind and
+            // before any crash. That is the airframe, the wreck and the templates a def adopts.
+            // ⚠ A snapshot taken at respawn would record the death's end pose.
             if (_controller.PlaneModel != null)
-                CollectVisibility(_controller.PlaneModel, planeVis);
+                CollectRestStates(_controller.PlaneModel, _restStates);
+            foreach (var adopted in AdoptedTemplates(_crashRoot!, AdoptedChildNames(bound)))
+                CollectRestStates(adopted, _restStates);
             // One call for the whole rig, so it cannot be half-bound. The anchor is the context node
             // both families play against: the ai_crash_* NAME `kestrel` resolves nowhere in a rig, so
             // Play falls back to it, the node the original's own caller supplies (org/vehicleDamage.md).
-            _controller.BindCrashRig(crashRuntime, _crashDefs, _crashRoot, _restPoses, planeVis);
+            _controller.BindCrashRig(crashRuntime, _crashDefs, _crashRoot, _restStates);
             // Phase 2 of the damage-visuals setup: the sink and the stops, which need a live rig
             // runtime and so cannot be wired where the object is built.
             WireDamageStages(_controller, crashRuntime, _crashProgram);
@@ -920,7 +950,7 @@ public sealed class WorldEffectsFactory
                 Log.Warn("anim", $"effect pools: crash root '{unknown}' is staged by no rig kind, it sizes nothing");
             }
             if (_verbose)
-                Log.Info("anim", $"data-crash: {_effectRoots} effect template cop(ies) over {_factory._pools.CrashDepthFor(_rootNames)} pool slot(s) + {_restPoses.Count} wreck node(s), crash runtime bound (scoped, no auto-start)");
+                Log.Info("anim", $"data-crash: {_effectRoots} effect template cop(ies) over {_factory._pools.CrashDepthFor(_rootNames)} pool slot(s) + {_restStates.Count} rest-state node(s), crash runtime bound (scoped, no auto-start)");
         }
     }
 }

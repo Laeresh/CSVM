@@ -78,11 +78,9 @@ public sealed class HeadLook
     public const float DiagonalElevation = Mathf.Pi / 4f;
 
     /// <summary>The pad look envelope: where a fully deflected right stick aims, left/right and
-    /// up/down. NOT decoded (the original binds no absolute stick), a UX call for this port, and
-    /// shared with <see cref="CameraController.PadLook"/> so the chase camera and the first-person
-    /// head cannot drift apart. ⚠ The pitch bound is the CHASE camera's gimbal margin, not the
-    /// head's: at 90° that camera sits over the plane and <c>Basis.LookingAt</c>'s up hint goes
-    /// parallel to the view. Widening it here gimbals chase.</summary>
+    /// up/down. NOT decoded, since the original binds no absolute stick; a UX call for this port.
+    /// Shared with <see cref="CameraController.PadSwing"/> so the chase camera and the first-person
+    /// head cannot drift apart.</summary>
     public const float PadLookYawMaxDeg = 150f, PadLookPitchMaxDeg = 60f;
 
     /// <summary>How fast the filtered look stick catches its raw position, 1/s, a time constant of
@@ -92,9 +90,10 @@ public sealed class HeadLook
     public const float PadAimSmoothRate = 25f;
 
     /// <summary>How far the look stick must leave centre before it aims anything, as a fraction of
-    /// full deflection, measured radially so no direction is favoured. Crossing it moves the aim by
-    /// 3° round and 1.2° up and down, under the wobble it gates out. TUNE, for the same reason
-    /// <see cref="PadAimSmoothRate"/> is.</summary>
+    /// full deflection, measured radially so no direction is favoured. It is subtracted from the
+    /// radius rather than gated, so the aim leaves centre continuously and full deflection still
+    /// reaches the envelope's edge. TUNE, for the same reason <see cref="PadAimSmoothRate"/> is.
+    /// </summary>
     public const float PadAimCentreBand = 0.02f;
 
     // How near a direction must be to dead ahead, and to a 45° diagonal, for the snap to lift the
@@ -452,14 +451,29 @@ public sealed class HeadLook
 
 /// <summary>What sits between the raw look stick and every view it aims: a radial centre band, then
 /// a first-order lag at <see cref="HeadLook.PadAimSmoothRate"/> on each component. The pair is the
-/// stick's own and carries no direction of its own, because the head reads it as right and up while
-/// the chase swing reads it as right and down.
+/// stick's own: the head reads it as right and up, the chase swing as right and down.
 /// ⚠ Ask <see cref="Active"/> whether the stick is being used, never the filtered pair. The lag
-/// never lands on its input exactly, so a held stick's pair is never its raw one, while inside the
-/// band the state is zeroed and both read exactly 0, which is what lets a reader's own return to
-/// centre start on the frame the stick was let go.</summary>
+/// never lands on its input exactly, so a held stick's pair is never its raw one. Without release
+/// rates the band zeroes the state, so a reader with its own return starts it on the frame the stick
+/// was let go. With them the pair itself eases home, for a reader that has no return of its own.
+/// </summary>
 public sealed class StickLookFilter
 {
+    // Below this a returning component is put on 0 exactly, about 0.015° of swing. A reader's
+    // identity pose is then reached, not approached forever.
+    private const float ReleaseRestBand = 1e-4f;
+
+    private readonly float _releaseRateX, _releaseRateY;
+
+    /// <summary>A filter whose released pair returns to 0 at the given rates, 1/s, per component.
+    /// Omitted, the band zeroes the pair at once.</summary>
+    public StickLookFilter(float releaseRateX = float.PositiveInfinity,
+        float releaseRateY = float.PositiveInfinity)
+    {
+        _releaseRateX = releaseRateX;
+        _releaseRateY = releaseRateY;
+    }
+
     /// <summary>The filtered deflection along the stick's first axis.</summary>
     public float X { get; private set; }
 
@@ -470,20 +484,47 @@ public sealed class StickLookFilter
     /// which is the whole test of whether it is claiming a view this frame.</summary>
     public bool Active { get; private set; }
 
-    /// <summary>Advance one frame over the raw pair. Inside the band the state is zeroed, so
-    /// nothing of a held deflection survives letting go.</summary>
+    /// <summary>Whether the pair is off centre at all, held or still returning.</summary>
+    public bool Swinging => X != 0f || Y != 0f;
+
+    /// <summary>Advance one frame over the raw pair. Inside the band the pair is released: zeroed,
+    /// or eased home at the release rates. A stick taken again mid-return resumes from there.
+    /// </summary>
     public void Step(float dt, float x, float y)
     {
-        if (Mathf.Sqrt((x * x) + (y * y)) <= HeadLook.PadAimCentreBand)
+        float radius = Mathf.Sqrt((x * x) + (y * y));
+        if (radius <= HeadLook.PadAimCentreBand)
         {
-            X = 0f;
-            Y = 0f;
+            X = Release(X, _releaseRateX, dt);
+            Y = Release(Y, _releaseRateY, dt);
             Active = false;
             return;
         }
 
-        X = HeadLook.Approach(X, x, HeadLook.PadAimSmoothRate, dt);
-        Y = HeadLook.Approach(Y, y, HeadLook.PadAimSmoothRate, dt);
+        // The band comes off the radius, so its edge reads centre and full deflection reads full.
+        float scale = (radius - HeadLook.PadAimCentreBand) / (radius * (1f - HeadLook.PadAimCentreBand));
+        X = HeadLook.Approach(X, Mathf.Clamp(x * scale, -1f, 1f), HeadLook.PadAimSmoothRate, dt);
+        Y = HeadLook.Approach(Y, Mathf.Clamp(y * scale, -1f, 1f), HeadLook.PadAimSmoothRate, dt);
         Active = true;
+    }
+
+    /// <summary>Drop any held or returning deflection at once, for a view that cuts in rather
+    /// than easing from the last pose this filter aimed.</summary>
+    public void Reset()
+    {
+        X = 0f;
+        Y = 0f;
+        Active = false;
+    }
+
+    private static float Release(float value, float rate, float dt)
+    {
+        if (float.IsPositiveInfinity(rate))
+        {
+            return 0f;
+        }
+
+        float next = HeadLook.Approach(value, 0f, rate, dt);
+        return Mathf.Abs(next) < ReleaseRestBand ? 0f : next;
     }
 }

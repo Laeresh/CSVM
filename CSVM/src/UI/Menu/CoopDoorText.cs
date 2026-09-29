@@ -211,7 +211,7 @@ public static class CoopDoorText
         }
 
         string port = net.Port.ToString(CultureInfo.InvariantCulture);
-        string where = net.PortMap switch
+        string where = net.Router.PortMap switch
         {
             { IsMapped: true } map => $"{map.ExternalAddress}:{map.Port.ToString(CultureInfo.InvariantCulture)}",
             { Outcome: UpnpPortMapOutcome.NoPublicAddress } => $"port {port}, LAN only: no public IPv4",
@@ -346,7 +346,7 @@ public static class CoopDoorText
     public static string HostPinholeStatus(NetPlayFeature net)
     {
         ArgumentNullException.ThrowIfNull(net);
-        if (net.Pinhole is not { } pinhole)
+        if (net.Router.Pinhole is not { } pinhole)
         {
             return "";
         }

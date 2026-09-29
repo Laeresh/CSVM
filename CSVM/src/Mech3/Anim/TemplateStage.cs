@@ -109,8 +109,6 @@ public sealed class TemplateStage<TNode>
 
     private Action<TNode> _indexSubtree = null!;
 
-    private Action _clearFindCache = null!;
-
     private Action<TNode> _applyResetStates = null!;
 
     public TemplateStage(
@@ -187,7 +185,6 @@ public sealed class TemplateStage<TNode>
         Func<IReadOnlyList<TNode?>, bool> stillAnimated,
         Func<TNode, string> nameOf,
         Action<TNode> indexSubtree,
-        Action clearFindCache,
         Action<TNode> applyResetStates)
     {
         _findAll = findAll;
@@ -198,7 +195,6 @@ public sealed class TemplateStage<TNode>
         _stillAnimated = stillAnimated;
         _nameOf = nameOf;
         _indexSubtree = indexSubtree;
-        _clearFindCache = clearFindCache;
         _applyResetStates = applyResetStates;
     }
 
@@ -575,15 +571,13 @@ public sealed class TemplateStage<TNode>
     }
 
     /// <summary>Indexes a lazily-built pooled copy for name resolution and applies its RESET_STATE
-    /// poses, the staging entry a copy passes through exactly once, when its provider builds it
-    /// (`facdsticks` is the worked example). The three steps are runtime services supplied as hooks: the
-    /// pointer-free index pass (a copy shares its source's compiled indices, so it must NOT join
-    /// the by-index map), the resolver's find-cache clear (ancestry is snapshotted at index time),
-    /// and the reset-state pass that puts the copy in its authored base pose.</summary>
+    /// poses. A copy passes through once, when its provider builds it (`facdsticks` is the example).
+    /// The index pass is pointer-free, since a copy shares its source's compiled indices.
+    /// ⚠ Never clear the find cache here; the resolver extends cached answers itself, and a clear
+    /// made every later lookup rescan.</summary>
     public void IndexPooledCopy(TNode subtree)
     {
         _indexSubtree(subtree);
-        _clearFindCache();
         _applyResetStates(subtree);
     }
 

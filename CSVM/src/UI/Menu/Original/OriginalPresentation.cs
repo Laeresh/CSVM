@@ -193,7 +193,8 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The aid value that opens the Multiplayer Lobby over the aids' loopback wire with two
     /// guests on it. Its first colon argument names the view: host (the default), guest (Ready) or
     /// waiting (a guest not yet Ready). The second names the tab: mission (the default), plane,
-    /// ammo, rockets or scores, which lands a finished match first.</summary>
+    /// ammo, rockets or scores, which lands a finished match first. Outlaw and outlaw-rockets open
+    /// the outlaw list on Airframes or Rockets, with two airframes and All Rockets outlawed.</summary>
     public const string LobbyAid = "lobby";
 
     /// <summary>The campaign aid values Original shares with Built-in, each over the scratch
@@ -1020,7 +1021,24 @@ public sealed class OriginalPresentation : IMenuPresentation
             _shell.Lobby.OpenGuest();
         }
 
+        bool outlaw = tab.StartsWith("outlaw", StringComparison.Ordinal);
+        if (outlaw && host.Dogfight is { } rules)
+        {
+            // Before the pose, whose Ready the rules change would otherwise clear.
+            rules.SetOutlawComponents(true);
+            rules.SetOutlawed(NetPlaneRules.AirframeFlag + 1, true);
+            rules.SetOutlawed(NetPlaneRules.AirframeFlag + 3, true);
+            rules.SetOutlawed(NetPlaneRules.AllRocketsFlag, true);
+        }
+
         NetDoorAid.PoseDogfight(host, guests);
+        if (outlaw)
+        {
+            _shell.Lobby.ShowOutlawList(tab == "outlaw-rockets" ? OutlawPage.Rockets : OutlawPage.Airframes);
+            _shell.StepNet(0.0);
+            return;
+        }
+
         if (tab == "scores")
         {
             // Game Scores fills only on the way back from a match, so every door lands one.
@@ -1219,7 +1237,8 @@ public sealed class OriginalPresentation : IMenuPresentation
     }
 
     // The guest as the host's boards leave it, three humans on the wire and this guest the second.
-    // The third is Ready on the check, so a shot shows another's mark beside this guest's own.
+    // The third is Ready on the check, so a shot shows another's mark beside this guest's own. The
+    // aid pilot's hangar is named first, so the guest stands on the first plane nobody holds.
     private void PoseCoopGuest(string board)
     {
         var host = CampaignAidProfiles.Store(seeded: true, progressed: true).Load(CampaignAidProfiles.Pilot);
@@ -1235,7 +1254,7 @@ public sealed class OriginalPresentation : IMenuPresentation
             _ => new CoopFlowMessage(NetCoopScreen.Cabin, flown, 1, 1, 0, 3, flown, false, airframes, 0, 0),
         };
 
-        _shell!.StandInNetDoor(NetDoorAid.CoopGuest(flow, ready: board == "ready"));
+        _shell!.StandInNetDoor(NetDoorAid.CoopGuest(flow, ready: board == "ready", NetDoorAid.HangarWords(host, 3)));
         _shell.Connection.OpenConnection();
         _shell.StepNet(0.0);
         if (board == "planeselection")

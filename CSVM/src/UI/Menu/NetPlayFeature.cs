@@ -1,8 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.Threading;
-using System.Threading.Tasks;
 using CSVM.Net;
 
 namespace CSVM.UI.Menu;
@@ -26,19 +23,21 @@ public enum NetDoorStage
     Failed,
 }
 
-/// <summary>One guest a co-op host seated: its peer and its player number. It also says whether
-/// the guest is Ready this round and names its airframe from the host's hangar. It carries the
-/// guest's fit and player name. <see cref="Left"/> says it walked out of the flight under way.</summary>
+/// <summary>One guest a co-op host seated: its peer and its player number. It says whether the
+/// guest is Ready this round. It names the hangar plane the host settled for it, with that plane's
+/// airframe, fit and build. It carries the guest's player name. <see cref="Left"/> says it walked out of the flight under way.</summary>
 public readonly record struct CoopGuest(
-    int Peer, int Slot, bool Ready, byte Airframe, CoopFit Fit = default, string Name = "", bool Left = false);
+    int Peer, int Slot, bool Ready, byte Airframe, CoopFit Fit = default, string Name = "", bool Left = false,
+    int Plane = Session.Campaign.CoopPlanePool.Stock, NetPlaneBuild? Build = null);
 
 /// <summary>
 /// The multiplayer door as a shared feature. It owns the port and the address a board edits, the
-/// socket it opens, and the link and port-mapping readouts it shows. The wire a launch carries
-/// away comes from here too. Nothing here names a carrier or an engine type: the two factories,
-/// the two port-mapping calls and the LAN socket arrive as delegates. The launcher therefore passes the real
-/// ENet carrier and a suite passes a loopback one. A presentation offers the four operations
-/// however it likes; the roster, the seats and the session are the launcher's.
+/// socket it opens, and the link readouts it shows. The wire a launch carries away comes from here
+/// too. Nothing here names a carrier or an engine type: the two factories and the LAN socket arrive
+/// as delegates, and the router as a <see cref="RouterAccess"/>. The launcher therefore passes the
+/// real ENet carrier and a suite passes a loopback one. A co-op host's boards are its
+/// <see cref="HostFlow"/>, a co-op guest's pick its <see cref="Pick"/>, and the roster, the seats
+/// and the session are the launcher's.
 /// </summary>
 public sealed class NetPlayFeature : IMenuFeature
 {
@@ -74,35 +73,15 @@ public sealed class NetPlayFeature : IMenuFeature
     /// <summary>What a LAN search asks at unless a suite points it elsewhere.</summary>
     public const string BroadcastAddress = LanBroadcast.Limited;
 
-    /// <summary>The airframe a co-op guest flies when its own pick is not one the host offers: the
-    /// campaign's first aeroplane, which every hangar holds.</summary>
-    public const byte StarterAirframe = 5;
-
     private readonly Func<int, int, string, INetTransport> _openHost;
     private readonly Func<string, int, INetTransport> _openJoin;
-    private readonly Func<int, UpnpPortMapResult>? _map;
-    private readonly Action<int>? _unmap;
     private readonly Func<string, int, ILanSocket>? _lan;
     private readonly List<int> _admitted = new();
     private readonly List<(int Peer, double Waited)> _refused = new();
-    private readonly Dictionary<int, CoopFlowMessage> _flowSent = new();
-    private readonly List<Task> _leases = new();
 
     private NetLobby? _transport;
     private DogfightLobby? _dogfight;
-    private NetCoopScreen _coopScreen = NetCoopScreen.Cabin;
-    private byte _coopSeq;
     private byte _epoch = 1;
-    private byte _progress;
-    private ushort _airframes;
-    private bool _won;
-    private int _objectives;
-    private int _cash;
-    private CoopPickMessage? _pickSent;
-    private byte _pickAirframe = StarterAirframe;
-    private bool _pickReady;
-    private CoopFit _pickFit;
-    private bool _pickLeft;
 
     // A guest back from a flight while its host still names that flight. Cleared once the host
     // names any other board or a flight under another round, which a restart is.
@@ -126,32 +105,24 @@ public sealed class NetPlayFeature : IMenuFeature
     private byte _missionSeq = SessionAdvertMessage.NoMission;
     private string _hostName = "";
     private int _localPlayers = 1;
-    private Task<UpnpPortMapResult>? _mapping;
-    private Task<UpnpPinholeResult>? _pinholing;
-    private CancellationTokenSource? _renewal;
     private bool _released;
     private double _joining;
-    private int _mappedPort;
-    private int _pinholePort;
     private DoorReading _seen;
 
     /// <summary>A door over the carrier <paramref name="openHost"/> and <paramref name="openJoin"/>
     /// build. The first takes a port, a guest count and a bind address, the second an address
-    /// and a port. The host's port mapping is <paramref name="map"/> and <paramref name="unmap"/>,
-    /// and with no mapper the board shows none. The LAN search's socket is bound by
-    /// <paramref name="lan"/> on an address and a port. With none there is no search and an open
-    /// door answers none.</summary>
+    /// and a port. A host asks <paramref name="router"/> for its port, and with none the board shows
+    /// no mapping. The LAN search's socket is bound by <paramref name="lan"/> on an address and a
+    /// port. With none there is no search and an open door answers none.</summary>
     public NetPlayFeature(
         Func<int, int, string, INetTransport> openHost,
         Func<string, int, INetTransport> openJoin,
-        Func<int, UpnpPortMapResult>? map = null,
-        Action<int>? unmap = null,
+        RouterAccess? router = null,
         Func<string, int, ILanSocket>? lan = null)
     {
         _openHost = openHost ?? throw new ArgumentNullException(nameof(openHost));
         _openJoin = openJoin ?? throw new ArgumentNullException(nameof(openJoin));
-        _map = map;
-        _unmap = unmap;
+        Router = router ?? new RouterAccess();
         _lan = lan;
     }
 
@@ -179,34 +150,28 @@ public sealed class NetPlayFeature : IMenuFeature
     public int Port { get; private set; } = DefaultPort;
 
     /// <summary>The address a join is aimed at, as typed. It may name its own port, which beats
-    /// <see cref="Port"/> for the join (<see cref="SplitAddress"/>).</summary>
+    /// <see cref="Port"/> for the join (<see cref="NetEndpoint.Parse"/>).</summary>
     public string Address { get; private set; } = DefaultAddress;
 
     /// <summary>The host and port a join opens on: <see cref="Address"/> split, with
-    /// <see cref="Port"/> where the address names none.</summary>
-    public (string Host, int Port) JoinTarget => SplitAddress(Address, Port);
-
-    /// <summary><see cref="JoinTarget"/> as a player writes it back, an IPv6 host bracketed.</summary>
-    public string JoinTargetText => Endpoint(JoinTarget.Host, JoinTarget.Port);
+    /// <see cref="Port"/> where the address names none. Its text is the address a player writes.
+    /// </summary>
+    public NetEndpoint JoinTarget => NetEndpoint.Parse(Address, Port);
 
     /// <summary>Why the last open failed, or "" when none has. Shown on the board rather than
     /// thrown: a taken port and a refused join are both things a player fixes and retries.</summary>
     public string Fault { get; private set; } = "";
 
-    /// <summary>The port mapping this host asked its router for, or null when none was asked for
-    /// or the answer has not landed yet.</summary>
-    public UpnpPortMapResult? PortMap { get; private set; }
+    /// <summary>The host's router: the port mapping and the IPv6 pinhole it asks for as it opens,
+    /// and gives back on <see cref="Close"/>.</summary>
+    public RouterAccess Router { get; }
 
-    /// <summary>The IPv6 pinhole a host asks its router for on its port, held and renewed on a
-    /// thread of its own beside the mapping's. Null asks for none.</summary>
-    public Func<int, UpnpPinholeResult>? OpenPinhole { get; init; }
+    /// <summary>What this co-op host names to its guests about its boards and its films.</summary>
+    public CoopHostFlow HostFlow { get; } = new();
 
-    /// <summary>The way a host's pinhole comes back down, given its port.</summary>
-    public Action<int>? ClosePinhole { get; init; }
-
-    /// <summary>The pinhole this host asked its router for, or null when none was asked for or the
-    /// answer has not landed yet.</summary>
-    public UpnpPinholeResult? Pinhole { get; private set; }
+    /// <summary>This co-op guest's pick from its host's hangar. It lasts the joined session across
+    /// flights, and a new join starts on the starter.</summary>
+    public CoopGuestPick Pick { get; } = new();
 
     /// <summary>Where a LAN search sends its query: the broadcast address by default. A suite sets
     /// the loopback, since a broadcast on the loopback proves nothing on Windows.</summary>
@@ -259,9 +224,9 @@ public sealed class NetPlayFeature : IMenuFeature
                 return Dial(v6);
             }
 
-            if (PortMap is { IsMapped: true } map)
+            if (Router.PortMap is { IsMapped: true } map)
             {
-                return Endpoint(map.ExternalAddress, map.Port);
+                return new NetEndpoint(map.ExternalAddress, map.Port).ToString();
             }
 
             return HostLanIpv4 is { } lan ? Dial(lan) : "";
@@ -356,9 +321,6 @@ public sealed class NetPlayFeature : IMenuFeature
     /// <summary>Whether a launch took this door's wire and has not handed it back yet.</summary>
     public bool Released => _released;
 
-    /// <summary>The board this co-op host last named to its guests.</summary>
-    public NetCoopScreen CoopScreen => _coopScreen;
-
     /// <summary>The round of picks under way on this host. It moves on whenever the host names a
     /// new mission or leaves the briefing and flight check, and a pick counts only under it.
     /// </summary>
@@ -383,7 +345,9 @@ public sealed class NetPlayFeature : IMenuFeature
     }
 
     /// <summary>The guests this co-op host seated, in player order: each one's player number, its
-    /// Ready mark under the current round, and the airframe it flies.</summary>
+    /// Ready mark under the current round, and the plane it flies. A guest flies its own fit on the
+    /// plane it picked, and the plane's stored fit on one the host's settling gave it instead.
+    /// </summary>
     public IReadOnlyList<CoopGuest> CoopGuests
     {
         get
@@ -393,13 +357,42 @@ public sealed class NetPlayFeature : IMenuFeature
             {
                 int peer = _admitted[i];
                 var pick = _transport!.Picks.TryGetValue(peer, out var sent) ? sent : default;
-                guests.Add(new CoopGuest(peer, _localPlayers + i, ReadyNow(peer), AirframeOf(peer),
-                    pick.Fit, pick.Name ?? "", pick.Left && pick.Epoch == _epoch));
+                int plane = HostFlow.PlaneOf(_localPlayers + i);
+                var word = HostFlow.HangarAt(plane);
+                byte airframe = word?.Airframe ?? CoopGuestPick.StarterAirframe;
+                var fit = word is { } flown && pick.PlaneIndex != plane ? flown.Fit : pick.Fit;
+                guests.Add(new CoopGuest(peer, _localPlayers + i, ReadyNow(peer), airframe,
+                    fit, pick.Name ?? "", pick.Left && pick.Epoch == _epoch, plane, word?.Build));
             }
 
             return guests;
         }
     }
+
+    /// <summary>The plane of the hangar each guest this co-op host seated picked, in player order,
+    /// as <see cref="CoopGuestPick.Plane"/> names one. What the host settles every seat's pick from.
+    /// </summary>
+    public IReadOnlyList<int> CoopGuestPlanes
+    {
+        get
+        {
+            var planes = new int[_admitted.Count];
+            for (int i = 0; i < planes.Length; i++)
+            {
+                planes[i] = _transport!.Picks.TryGetValue(_admitted[i], out var pick)
+                    ? pick.PlaneIndex
+                    : Session.Campaign.CoopPlanePool.Unpicked;
+            }
+
+            return planes;
+        }
+    }
+
+    /// <summary>The co-op host's hangar as this guest last heard it, each plane with the seat that
+    /// holds it. Empty on a door that is not a co-op guest's, and until the host has named it.
+    /// </summary>
+    public IReadOnlyList<CoopHangarMessage> CoopHangar =>
+        IsCoopGuest && _transport != null ? _transport.Hangar : Array.Empty<CoopHangarMessage>();
 
     /// <summary>The host's latest word about its boards as this co-op guest heard it, or null.
     /// </summary>
@@ -408,18 +401,6 @@ public sealed class NetPlayFeature : IMenuFeature
     /// <summary>How many co-op flows this guest has heard, so a board can tell news from a repeat.
     /// </summary>
     public int CoopFlows => _transport?.Flows ?? 0;
-
-    /// <summary>The airframe this co-op guest picked from its host's hangar. It lasts the joined
-    /// session across flights, and a new join starts on the starter.</summary>
-    public byte CoopPickAirframe => _pickAirframe;
-
-    /// <summary>Whether this co-op guest means to be Ready, sent or not yet sent. A new round of
-    /// picks clears it.</summary>
-    public bool CoopPickReady => _pickReady;
-
-    /// <summary>The fit this co-op guest's pick carries to its host. It lasts as long as
-    /// <see cref="CoopPickAirframe"/>, and a new join starts on the stock fit.</summary>
-    public CoopFit CoopPickFit => _pickFit;
 
     /// <summary>The name this end's player goes by, sent with a co-op guest's pick so the host's
     /// roster calls the guest by it. Empty when the player has none, and the roster then uses the
@@ -430,8 +411,21 @@ public sealed class NetPlayFeature : IMenuFeature
     public IReadOnlyDictionary<int, CoopFit> CoopSeatFits =>
         _transport?.SeatFits ?? (IReadOnlyDictionary<int, CoopFit>)new Dictionary<int, CoopFit>();
 
+    /// <summary>Each seat's custom plane as this guest's host launched it, by seat, null for a stock
+    /// seat.</summary>
+    public IReadOnlyDictionary<int, NetPlaneBuild?> SeatBuilds =>
+        _transport?.SeatBuilds ?? (IReadOnlyDictionary<int, NetPlaneBuild?>)new Dictionary<int, NetPlaneBuild?>();
+
+    /// <summary>The campaign wingman's aeroplane as this co-op guest's host launched it, or null
+    /// while the host has named none.</summary>
+    public CoopWingmanMessage? CoopWingman => IsCoopGuest ? _transport?.Wingman : null;
+
+    /// <summary>This co-op guest's host's latest film word, a start or an end, or null while the
+    /// host has shared no film.</summary>
+    public CoopFilmMessage? CoopFilm => IsCoopGuest ? _transport?.Film : null;
+
     /// <summary>Whether this co-op guest is Ready under the host's current round.</summary>
-    public bool CoopReady => _pickReady && CoopFlow is { } flow && _pickSent is { } sent && sent.Epoch == flow.Epoch;
+    public bool CoopReady => CoopFlow is { } flow && Pick.ReadyUnder(flow.Epoch);
 
     /// <summary>Whether this co-op guest's host has launched the mission it is seated for: the host
     /// names the flight and its session's opener is waiting here. A guest that arrived mid-mission
@@ -444,45 +438,9 @@ public sealed class NetPlayFeature : IMenuFeature
     public bool CoopFlightOver =>
         !IsCoopGuest || CoopFlow is not { Screen: NetCoopScreen.InMission } flow || (_flightEpoch is { } flown && flow.Epoch != flown);
 
-    /// <summary>Splits an address into the host and the port it names. An IPv6 address names its
-    /// port after a closing bracket. A bare address with more than one colon is all host, so its
-    /// last group is never read as a port. One colon splits a host from its port.
-    /// A port that is missing or out of range takes <paramref name="fallbackPort"/>.</summary>
-    public static (string Host, int Port) SplitAddress(string value, int fallbackPort)
-    {
-        string text = value ?? "";
-        int PortOf(string field) =>
-            int.TryParse(field, NumberStyles.Integer, CultureInfo.InvariantCulture, out int port)
-            && port is > 0 and < 65536
-                ? port
-                : fallbackPort;
-
-        int bracket = text.IndexOf("]:", StringComparison.Ordinal);
-        if (text.StartsWith('[') && bracket > 0)
-        {
-            return (text[1..bracket], PortOf(text[(bracket + 2)..]));
-        }
-
-        int colon = text.LastIndexOf(':');
-        if (colon > 0 && text.IndexOf(':') == colon)
-        {
-            return (text[..colon], PortOf(text[(colon + 1)..]));
-        }
-
-        return (text.Trim('[', ']'), fallbackPort);
-    }
-
-    /// <summary>A host and port written back as one address, bracketing a host with a colon in it.
-    /// </summary>
-    public static string Endpoint(string host, int port)
-    {
-        string number = port.ToString(CultureInfo.InvariantCulture);
-        return (host ?? "").Contains(':', StringComparison.Ordinal) ? $"[{host}]:{number}" : $"{host}:{number}";
-    }
-
     /// <summary><paramref name="host"/> as a guest types it for this door's port: bare on
     /// <see cref="DefaultPort"/>, which a join fills in, and with the port otherwise.</summary>
-    public string Dial(string host) => Port == DefaultPort ? host : Endpoint(host, Port);
+    public string Dial(string host) => Port == DefaultPort ? host : new NetEndpoint(host, Port).ToString();
 
     /// <summary>Copies <see cref="GuestAddress"/> to the clipboard. False, and nothing copied,
     /// while there is no address to give or no clipboard to put it on.</summary>
@@ -504,38 +462,10 @@ public sealed class NetPlayFeature : IMenuFeature
     /// and flight check. Every Ready then clears.</summary>
     public void ShowCoop(NetCoopScreen screen, int missionSeq, int progress, ushort airframes)
     {
-        byte seq = (byte)Math.Clamp(missionSeq, 0, byte.MaxValue);
-        bool picking = screen is NetCoopScreen.Briefing or NetCoopScreen.FlightCheck;
-        bool wasPicking = _coopScreen is NetCoopScreen.Briefing or NetCoopScreen.FlightCheck;
-        if (seq != _coopSeq || (screen != _coopScreen && !(picking && wasPicking)))
+        if (HostFlow.Show(screen, missionSeq, progress, airframes))
         {
             NextRound();
         }
-
-        _coopScreen = screen;
-        _coopSeq = seq;
-        _progress = (byte)Math.Clamp(progress, 0, byte.MaxValue);
-        _airframes = airframes;
-    }
-
-    /// <summary>The shared result a co-op host's debrief shows, named to every guest with the
-    /// board. It says whether the mission was won, its objectives met as a mask, and its cash.
-    /// </summary>
-    public void ShowCoopResult(bool won, int objectives, int cash)
-    {
-        _won = won;
-        _objectives = objectives;
-        _cash = cash;
-    }
-
-    /// <summary>This co-op guest's pick: <paramref name="airframe"/> from the host's hangar, whether
-    /// it is Ready, and the ammunition and ordnance it flies with. Reaches the host on the next
-    /// step, under the host's current round.</summary>
-    public void PickCoop(int airframe, bool ready, CoopFit fit = default)
-    {
-        _pickAirframe = (byte)Math.Clamp(airframe, 0, byte.MaxValue);
-        _pickReady = ready;
-        _pickFit = fit;
     }
 
     /// <summary>This co-op guest walks out of the flight under way. The host hears it at once and
@@ -551,7 +481,7 @@ public sealed class NetPlayFeature : IMenuFeature
 
         // The first follow settles the round, which would otherwise clear a mark set under it.
         FollowHost();
-        _pickLeft = true;
+        Pick.Leave();
         FollowHost();
     }
 
@@ -575,6 +505,65 @@ public sealed class NetPlayFeature : IMenuFeature
         }
     }
 
+    /// <summary>Sends every seated guest each seat's custom plane, null for a stock seat,
+    /// <paramref name="bySeat"/> indexed by seat. A host calls this at its launch beside
+    /// <see cref="TellSeatFits"/>, so a guest builds every custom plane before it reports loaded.
+    /// </summary>
+    public void TellSeatBuilds(IReadOnlyList<NetPlaneBuild?> bySeat)
+    {
+        ArgumentNullException.ThrowIfNull(bySeat);
+        if (_transport == null || !IsHost)
+        {
+            return;
+        }
+
+        foreach (int peer in IsCoopHost ? _admitted : _transport.AllPeers)
+        {
+            for (int seat = 0; seat < bySeat.Count && seat < PlaneBuildMessage.Mine; seat++)
+            {
+                _transport.Tell(peer, new PlaneBuildMessage((byte)seat, bySeat[seat]));
+            }
+        }
+    }
+
+    /// <summary>Sends every seated co-op guest the campaign wingman's aeroplane. A host calls this at
+    /// its launch, before the session's opener, beside <see cref="TellSeatFits"/>.</summary>
+    public void TellCoopWingman(CoopWingmanMessage wingman)
+    {
+        if (_transport == null || !IsCoopHost)
+        {
+            return;
+        }
+
+        foreach (int peer in _admitted)
+        {
+            _transport.Tell(peer, wingman);
+        }
+    }
+
+    /// <summary>Tells every seated co-op guest that this host's campaign film
+    /// <paramref name="film"/> has started, so each plays it too. A chapter film names its
+    /// <paramref name="chapter"/>. Nothing is sent from a door that is not a co-op host's.</summary>
+    public void ShowCoopFilm(NetCoopFilm film, int chapter = 0)
+    {
+        if (_transport == null || !IsCoopHost)
+        {
+            return;
+        }
+
+        TellFilm(HostFlow.StartFilm(film, chapter));
+    }
+
+    /// <summary>Tells every seated co-op guest that this host's film has stopped, played out or
+    /// skipped, so each guest's stops with it. Nothing is sent while no film is shared.</summary>
+    public void EndCoopFilm()
+    {
+        if (HostFlow.EndFilm() is { } ended && _transport != null && IsCoopHost)
+        {
+            TellFilm(ended);
+        }
+    }
+
     /// <summary>Takes back the wire a co-op or lobby launch carried away once its flight ends. The
     /// door then holds the link through the debrief or the lobby that follows. False when this door
     /// no longer holds that wire, in which case the caller disposes it.</summary>
@@ -587,7 +576,7 @@ public sealed class NetPlayFeature : IMenuFeature
 
         _transport.Unbind();
         _released = false;
-        _flowSent.Clear();
+        HostFlow.ClearSent();
         _flownFlow = IsCoopGuest;
         _flownEpoch = IsDogfightGuest ? _launchEpoch : null;
         return true;
@@ -701,6 +690,17 @@ public sealed class NetPlayFeature : IMenuFeature
             : SessionAdvertMessage.NoMission;
         _hostName = hostName ?? "";
         _localPlayers = Math.Max(1, localPlayers);
+    }
+
+    /// <summary>This co-op host's hangar in order, each plane with the seat holding it and its
+    /// build. The plane every seat flies is <paramref name="seatPlanes"/>, this machine's own seats
+    /// first. Every guest hears the hangar on the next <see cref="Step"/>, and a launch seats every
+    /// guest in its plane.</summary>
+    public void OfferCoopHangar(IReadOnlyList<CoopHangarMessage> hangar, IReadOnlyList<int> seatPlanes)
+    {
+        ArgumentNullException.ThrowIfNull(hangar);
+        ArgumentNullException.ThrowIfNull(seatPlanes);
+        HostFlow.ShowHangar(hangar, seatPlanes);
     }
 
     /// <summary>Starts a join to the typed address. The join lands on a later
@@ -845,7 +845,7 @@ public sealed class NetPlayFeature : IMenuFeature
             // A launch straight out of a flight is a restart, and a new round is how a guest in
             // that flight learns it is over. Until it answers under that round, what it sends is
             // the old flight's.
-            if (_coopScreen == NetCoopScreen.InMission)
+            if (HostFlow.Screen == NetCoopScreen.InMission)
             {
                 NextRound();
                 _transport.AwaitPicks();
@@ -853,7 +853,7 @@ public sealed class NetPlayFeature : IMenuFeature
 
             // Named before the session's opener is sent, so a guest knows the opener is this
             // flight's and not a stale one.
-            ShowCoop(NetCoopScreen.InMission, _coopSeq, _progress, _airframes);
+            ShowCoop(NetCoopScreen.InMission, HostFlow.MissionSeq, HostFlow.Progress, HostFlow.Airframes);
             SendFlows();
         }
         else if (CoopFlow is { } flow)
@@ -898,10 +898,8 @@ public sealed class NetPlayFeature : IMenuFeature
         _kind = NetSessionKind.Dogfight;
         Offer(SessionAdvertMessage.NoMission, "", 1);
         Stage = NetDoorStage.Shut;
-        PortMap = null;
-        Pinhole = null;
         ForgetHostAddress();
-        UnmapPort();
+        Router.Close();
     }
 
     /// <summary>Drops everything transient: the socket goes with the presentation that opened it,
@@ -927,36 +925,6 @@ public sealed class NetPlayFeature : IMenuFeature
         }
 
         return false;
-    }
-
-    // The mapping thread's whole life. It runs on after a launch takes the socket, since a match
-    // never steps this door. A lease that lapsed mid-match would shut every guest out.
-    // The pinhole's thread is the same shape, since both leases follow one set of rules.
-    private static void HoldLease<T>(Func<int, T> ask, Func<T, (bool Held, int Seconds)> granted, int port,
-        TaskCompletionSource<T> first, CancellationToken stop)
-    {
-        T latest;
-        try
-        {
-            latest = ask(port);
-        }
-        catch (Exception e)
-        {
-            first.SetException(e);
-            throw;
-        }
-
-        first.SetResult(latest);
-        var (isHeld, seconds) = granted(latest);
-        int held = isHeld ? seconds : 0;
-        var wait = UpnpLease.NextRenewal(isHeld, seconds, held);
-        while (wait != Timeout.InfiniteTimeSpan && !stop.WaitHandle.WaitOne(wait))
-        {
-            latest = ask(port);
-            (isHeld, seconds) = granted(latest);
-            held = isHeld ? seconds : held;
-            wait = UpnpLease.NextRenewal(isHeld, seconds, held);
-        }
     }
 
     // The step itself. Every return leaves the door in a state Step then reads.
@@ -991,7 +959,7 @@ public sealed class NetPlayFeature : IMenuFeature
             _transport.Step(dt);
         }
 
-        TakeMapping();
+        Router.Poll();
         if (Stage == NetDoorStage.Hosting)
         {
             RefuseClashing();
@@ -1071,11 +1039,11 @@ public sealed class NetPlayFeature : IMenuFeature
         }
         else if (_link?.LinkState == EnetLinkState.Down)
         {
-            Fail($"{JoinTargetText} refused the join");
+            Fail($"{JoinTarget} refused the join");
         }
         else if (_joining >= JoinTimeoutSeconds)
         {
-            Fail($"{JoinTargetText} did not answer in {JoinTimeoutSeconds:0} seconds");
+            Fail($"{JoinTarget} did not answer in {JoinTimeoutSeconds:0} seconds");
         }
     }
 
@@ -1108,7 +1076,10 @@ public sealed class NetPlayFeature : IMenuFeature
         Copies = 0;
         _transport.Advertise(CurrentAdvert());
         OpenResponder();
-        MapPort();
+
+        // Asked for where hosting opens, and away from the frame. The router renews its own
+        // leases until Close.
+        Router.Open(Port);
     }
 
     private IReadOnlyList<string> SearchTargets() =>
@@ -1146,7 +1117,7 @@ public sealed class NetPlayFeature : IMenuFeature
         int cap = coop ? CoopHumans : NetSeats.MaxPlayers;
         var status = players >= cap
             ? NetSessionStatus.Full
-            : _released || (coop && _coopScreen == NetCoopScreen.InMission) ? NetSessionStatus.InMission : NetSessionStatus.Waiting;
+            : _released || (coop && HostFlow.Screen == NetCoopScreen.InMission) ? NetSessionStatus.InMission : NetSessionStatus.Waiting;
         return new SessionAdvertMessage(_kind, seq, (byte)players, _hostName, status, (byte)cap);
     }
 
@@ -1218,79 +1189,28 @@ public sealed class NetPlayFeature : IMenuFeature
     private bool ReadyNow(int peer) =>
         _transport != null && _transport.Picks.TryGetValue(peer, out var pick) && pick.Epoch == _epoch && pick.Ready;
 
-    // A pick of an airframe the host's hangar does not hold, or no pick at all, flies the starter.
-    private byte AirframeOf(int peer)
-    {
-        if (_transport != null && _transport.Picks.TryGetValue(peer, out var pick) && Offers(pick.Airframe))
-        {
-            return pick.Airframe;
-        }
-
-        if (Offers(StarterAirframe) || _airframes == 0)
-        {
-            return StarterAirframe;
-        }
-
-        for (byte a = 0; a < 16; a++)
-        {
-            if (Offers(a))
-            {
-                return a;
-            }
-        }
-
-        return StarterAirframe;
-    }
-
-    private bool Offers(int airframe) => airframe is >= 0 and < 16 && (_airframes & (1 << airframe)) != 0;
-
     // Zero is skipped, so a pick a guest never sent (epoch 0) is never counted as current.
     private void NextRound() => _epoch = (byte)(_epoch == byte.MaxValue ? 1 : _epoch + 1);
 
-    // Each guest's flow differs only in its own player number; one goes out whenever it changed.
     private void SendFlows()
     {
-        if (_transport == null)
+        if (_transport != null)
         {
-            return;
-        }
-
-        byte mask = 0;
-        for (int i = 0; i < _admitted.Count; i++)
-        {
-            int slot = _localPlayers + i;
-            if (slot < 8 && ReadyNow(_admitted[i]))
-            {
-                mask |= (byte)(1 << slot);
-            }
-        }
-
-        byte humans = (byte)Math.Min(_localPlayers + _admitted.Count, byte.MaxValue);
-        for (int i = 0; i < _admitted.Count; i++)
-        {
-            int peer = _admitted[i];
-            var flow = new CoopFlowMessage(_coopScreen, _coopSeq, _epoch, (byte)(_localPlayers + i), mask, humans,
-                _progress, _won, _airframes, _objectives, _cash, (byte)Math.Min(_localPlayers, byte.MaxValue));
-            if (_flowSent.TryGetValue(peer, out var sent) && sent == flow)
-            {
-                continue;
-            }
-
-            _transport.Tell(peer, flow);
-            _flowSent[peer] = flow;
-        }
-
-        foreach (int peer in new List<int>(_flowSent.Keys))
-        {
-            if (!_admitted.Contains(peer))
-            {
-                _flowSent.Remove(peer);
-            }
+            HostFlow.Send(_transport, _admitted, _localPlayers, _epoch, ReadyNow);
         }
     }
 
-    // A guest's Ready belongs to one round: a new round clears it, and the pick goes out again
-    // under the new one. What trails in from a flight that ended is never the next one's opener.
+    // At once rather than on the next step, so a film's end reaches a guest before the board after it.
+    private void TellFilm(CoopFilmMessage film)
+    {
+        foreach (int peer in _admitted)
+        {
+            _transport!.Tell(peer, film);
+        }
+    }
+
+    // The pick follows the host's round. What trails in from a flight that ended is never the next
+    // one's opener.
     private void FollowHost()
     {
         if (_transport!.Flow is not { } flow)
@@ -1310,36 +1230,18 @@ public sealed class NetPlayFeature : IMenuFeature
             _transport.DropHeld();
         }
 
-        if (_pickSent is { } last && last.Epoch != flow.Epoch)
-        {
-            _pickReady = false;
-            _pickLeft = false;
-        }
-
-        var pick = new CoopPickMessage(flow.Epoch, _pickReady, _pickAirframe, _pickFit, PlayerName, _pickLeft);
-        if (_hostPeer >= 0 && _pickSent != pick)
+        if (Pick.Follow(flow.Epoch, PlayerName) is { } pick && _hostPeer >= 0)
         {
             _transport.Tell(_hostPeer, pick);
-            _pickSent = pick;
+            Pick.MarkSent(pick);
         }
     }
 
     private void ForgetCoop()
     {
-        _flowSent.Clear();
-        _coopScreen = NetCoopScreen.Cabin;
-        _coopSeq = 0;
-        _progress = 0;
-        _airframes = 0;
-        _won = false;
-        _objectives = 0;
-        _cash = 0;
+        HostFlow.Forget();
         NextRound();
-        _pickSent = null;
-        _pickReady = false;
-        _pickAirframe = StarterAirframe;
-        _pickFit = default;
-        _pickLeft = false;
+        Pick.Forget();
         _flownFlow = false;
     }
 
@@ -1397,98 +1299,6 @@ public sealed class NetPlayFeature : IMenuFeature
         _closing = null;
     }
 
-    // Asked for where hosting opens, and away from the frame. ⚠ Each call blocks for a gateway
-    // search, so the mapping and the pinhole each run on a dedicated thread, never the pool, which
-    // starves. The board shows each first answer on the step that finds it. Each thread renews its
-    // own lease until Close.
-    private void MapPort()
-    {
-        _mapping = _map is { } map ? Hold(map, r => (r.IsMapped, r.LeaseSeconds)) : null;
-        _pinholing = OpenPinhole is { } open ? Hold(open, r => (r.IsOpen, r.LeaseSeconds)) : null;
-    }
-
-    // One lease on its own thread, stopped by the door's one renewal token.
-    private Task<T> Hold<T>(Func<int, T> ask, Func<T, (bool Held, int Seconds)> granted)
-    {
-        int port = Port;
-        var first = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _renewal ??= new CancellationTokenSource();
-        var stop = _renewal.Token;
-        _leases.Add(Task.Factory.StartNew(() => HoldLease(ask, granted, port, first, stop), CancellationToken.None,
-            TaskCreationOptions.LongRunning, TaskScheduler.Default));
-        return first.Task;
-    }
-
-    // Stopped and waited for before the unmap, so a renewal in flight cannot put the mapping back.
-    private void StopRenewal()
-    {
-        _renewal?.Cancel();
-        foreach (var lease in _leases)
-        {
-            Task.WaitAny(lease);
-        }
-
-        _renewal?.Dispose();
-        _renewal = null;
-        _leases.Clear();
-    }
-
-    private void TakeMapping()
-    {
-        if (_pinholing is { IsCompleted: true })
-        {
-            var pinhole = _pinholing.Result;
-            _pinholing = null;
-            Pinhole = pinhole;
-            _pinholePort = pinhole.IsOpen ? pinhole.Port : 0;
-        }
-
-        if (_mapping is not { IsCompleted: true })
-        {
-            return;
-        }
-
-        var result = _mapping.Result;
-        _mapping = null;
-        PortMap = result;
-        _mappedPort = result.IsMapped ? result.Port : 0;
-    }
-
-    // The way back out, where the board or the launcher gives the port back. This one is not put
-    // on a thread: a mapping left behind is a door standing open in the player's own router. The
-    // wait falls on the way out of hosting, not in front of a player waiting to fly.
-    private void UnmapPort()
-    {
-        StopRenewal();
-        TakeMapping();
-        if (_mapping != null)
-        {
-            var landed = _mapping.Result;
-            _mapping = null;
-            _mappedPort = landed.IsMapped ? landed.Port : 0;
-        }
-
-        if (_pinholing != null)
-        {
-            var landed = _pinholing.Result;
-            _pinholing = null;
-            _pinholePort = landed.IsOpen ? landed.Port : 0;
-        }
-
-        if (_mappedPort != 0 && _unmap != null)
-        {
-            _unmap(_mappedPort);
-        }
-
-        if (_pinholePort != 0 && ClosePinhole != null)
-        {
-            ClosePinhole(_pinholePort);
-        }
-
-        _mappedPort = 0;
-        _pinholePort = 0;
-    }
-
     // A wire a launch carried away is the session's to close, so a failure in flight only lets go
     // of it. The launcher disposes it once Reclaim says the door no longer holds it.
     private void Fail(string why)
@@ -1522,7 +1332,7 @@ public sealed class NetPlayFeature : IMenuFeature
     }
 
     private DoorReading Read() => new(
-        _transport, _transport?.Changes ?? 0, _transport?.Held ?? 0, Stage, Fault, PortMap, Pinhole, _search,
+        _transport, _transport?.Changes ?? 0, _transport?.Held ?? 0, Stage, Fault, Router.PortMap, Router.Pinhole, _search,
         _search?.Changes ?? 0, SearchFault, Link, _admitted.Count, _dogfight, Copies);
 
     // Everything a board draws from this door that can move without an input event. The lobby's

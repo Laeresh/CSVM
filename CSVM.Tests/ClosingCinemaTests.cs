@@ -121,6 +121,23 @@ public class ClosingCinemaTests
         Assert.Equal(plays, ClosingCinema.PlaysAfter(seq, won));
     }
 
+    // A co-op guest plays the film its host plays, so the guest's own flown result is no gate.
+    [Fact]
+    public void AGuestsPlayOfTheHostsFilmHasNoGateAndItsStopHandsOffOnce()
+    {
+        var cinema = new Recorder();
+        var flow = new ClosingCinema(cinema.Play, cinema.Stop);
+
+        flow.Play(cinema.OpenedBook);
+        Assert.Equal("Final.MPG", cinema.Name);
+        Assert.Equal(CinemaScreen.ClosingKeys, cinema.Skip);
+        Assert.Equal(0, cinema.Books);
+
+        flow.Stop();
+        cinema.Stop();
+        Assert.Equal(1, cinema.Books);
+    }
+
     // The stand-in for Launcher.PlayCinema: it records what it was asked for and hands the film's
     // end back to the caller, so a test decides when, and how often, the cinema stops.
     private sealed class Recorder

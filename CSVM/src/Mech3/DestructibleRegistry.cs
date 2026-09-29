@@ -199,6 +199,8 @@ public sealed class DestructibleRegistry
     /// binds to, and the HP that actually falls as it takes fire.</summary>
     public sealed class Instance
     {
+        private Vector3? _localCentre;
+
         public Instance(AnimDefinition def, Node3D anchor, float maxHealth, Node3D? damageNode = null)
         {
             Def = def;
@@ -216,6 +218,14 @@ public sealed class DestructibleRegistry
         /// the def names none (docs/formats/destructibles.md). The piece the pool's HP stands for,
         /// which is why <see cref="Resolve"/> refuses the rest of the group around it.</summary>
         public Node3D DamageNode { get; }
+
+        /// <summary>Where this pool's object is, in world space: the centre of the box everything
+        /// under <see cref="DamageNode"/> draws, hidden parts included, else that node's origin.
+        /// It is the point the original publishes for a mission structure (docs/org/targeting.md
+        /// "Where a mission structure is"). The gun assist, the marker and the AI all read it.
+        /// ⚠ Do not read <see cref="Anchor"/>'s position instead. A crane's anchor is the joint on
+        /// the zeppelin, 23 m above the yellow striped arm the marker draws on.</summary>
+        public Vector3 Centre => DamageNode.GlobalTransform * (_localCentre ??= LocalCentre(DamageNode));
 
         public float MaxHealth { get; private set; }
         public float Health { get; set; }
@@ -299,6 +309,33 @@ public sealed class DestructibleRegistry
                 return;
             MaxHealth = maxHealth;
             Health = maxHealth;
+        }
+
+        // The box is taken once, in the damage node's own frame, as the original's is authored. A
+        // moving structure then carries it along without a mesh walk on every fire tick.
+        private static Vector3 LocalCentre(Node3D root)
+        {
+            Aabb? merged = null;
+            CollectMeshBoxes(root, Transform3D.Identity, ref merged);
+            return merged?.GetCenter() ?? Vector3.Zero;
+        }
+
+        private static void CollectMeshBoxes(Node node, Transform3D toRoot, ref Aabb? merged)
+        {
+            if (node is MeshInstance3D { Mesh: not null } mesh)
+            {
+                var box = toRoot * mesh.GetAabb();
+                merged = merged?.Merge(box) ?? box;
+            }
+
+            int children = node.GetChildCount();
+            for (int i = 0; i < children; i++)
+            {
+                if (node.GetChild(i) is Node3D child)
+                {
+                    CollectMeshBoxes(child, toRoot * child.Transform, ref merged);
+                }
+            }
         }
     }
 }

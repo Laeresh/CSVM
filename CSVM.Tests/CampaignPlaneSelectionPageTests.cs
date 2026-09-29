@@ -332,8 +332,8 @@ public class CampaignPlaneSelectionPageTests
         Assert.Null(flow.Modal);
     }
 
-    /// <summary>A guest's picker is one PILOT slot over that guest's own roster, the stock airframes
-    /// first and the seated profile's aircraft copied after them, and it draws no EXPORT: a guest
+    /// <summary>A guest's picker is one PILOT slot over that guest's own roster: a copy of each of
+    /// the seated profile's aircraft, then the stock Devastator. It draws no EXPORT, since a guest
     /// flies a session copy carrying the owner's plane name.</summary>
     [Fact]
     public void AGuestsPickerIsOneSlotOverTheirOwnRosterAndDrawsNoExport()
@@ -350,14 +350,15 @@ public class CampaignPlaneSelectionPageTests
         }
 
         var combo = page.Combo(0)!;
-        Assert.Equal(14, combo.Entries.Count); // 11 stock airframes + the profile's three
-        Assert.Equal("Airframe 0", combo.Entries[0]);
-        Assert.Equal("Gypsy Magic - Airframe 5", combo.Entries[11]);
-        Assert.Equal(5, combo.Selected); // the starter airframe the guest opened on
+        Assert.Equal(4, combo.Entries.Count); // the profile's three + the stock Devastator
+        Assert.Equal("Gypsy Magic - Airframe 5", combo.Entries[0]);
+        Assert.Equal("Airframe 5", combo.Entries[3]);
+        Assert.Equal(1, combo.Selected); // the first plane the seated player does not fly
     }
 
-    /// <summary>Langui 710 names a Pilot and a Wingman a guest's check has no concept
-    /// of, so the refusal is a line of ours. The pick reverts, exactly as the seated player's does.</summary>
+    /// <summary>Langui 710 names a Pilot and a Wingman, which a guest's check has no concept of. The
+    /// refusal is a line of ours naming the seat that flies the plane. The pick reverts, exactly as
+    /// the seated player's does.</summary>
     [Fact]
     public void AGuestPickingTheSeatedPlayersAircraftIsRefusedInItsOwnWordsAndReverts()
     {
@@ -365,15 +366,16 @@ public class CampaignPlaneSelectionPageTests
         var combo = page.Combo(0)!;
 
         Assert.True(page.Accept(0));
-        while (combo.Highlight != 11)
+        for (int guard = 0; guard < combo.Entries.Count && combo.Highlight != 0; guard++)
         {
-            combo.Move(1);
+            combo.Move(-1);
         }
 
+        Assert.Equal(0, combo.Highlight);
         Assert.True(page.Accept(0));
 
-        Assert.Equal("Each player must fly a different plane.", flow.Modal?.Message);
-        Assert.Equal(5, combo.Selected);
+        Assert.Equal("P1 is already flying this plane. Each player must fly a different plane.", flow.Modal?.Message);
+        Assert.Equal(1, combo.Selected);
         Assert.False(combo.Open);
     }
 
@@ -385,12 +387,12 @@ public class CampaignPlaneSelectionPageTests
         var page = GuestPage(out var flow, players: 3);
         var combo = page.Combo(0)!;
 
-        Assert.Equal(6, combo.Selected); // P2 opened on stock airframe 5, so P3 opened past it
+        Assert.Equal(2, combo.Selected); // P2 opened on The Knave, so P3 opened past it
 
         Assert.True(page.Step(0, -1));
 
-        Assert.Equal("Each player must fly a different plane.", flow.Modal?.Message);
-        Assert.Equal(6, combo.Selected);
+        Assert.Equal("P2 is already flying this plane. Each player must fly a different plane.", flow.Modal?.Message);
+        Assert.Equal(2, combo.Selected);
     }
 
     /// <summary>⚠ A guest's ACCEPT moves their own session-scoped pick and touches neither the
@@ -404,8 +406,8 @@ public class CampaignPlaneSelectionPageTests
         Assert.True(page.Accept(1)); // ACCEPT SELECTIONS
 
         var flown = flow.Field.Plane(1)!;
-        Assert.Equal(6, flown.Airframe);
-        Assert.True(flow.Field.IsStock(flown));
+        Assert.Equal("Blue Streak", flown.Name);
+        Assert.NotSame(flow.Profile!.Planes[2], flown);
         Assert.Equal(0, flow.Profile!.SelectedPlane);
         Assert.Equal(1, flow.Profile!.WingmanPlane);
         Assert.Equal(0, flow.Store.Load("Zachary")!.SelectedPlane);
@@ -422,8 +424,8 @@ public class CampaignPlaneSelectionPageTests
         Assert.True(page.Step(0, 1));
         Assert.True(page.Accept(2)); // CANCEL SELECTIONS
 
-        Assert.Equal(5, flow.Field.Plane(1)!.Airframe);
-        Assert.Equal(5, page.Combo(0)!.Selected);
+        Assert.Equal("The Knave", flow.Field.Plane(1)!.Name);
+        Assert.Equal(1, page.Combo(0)!.Selected);
     }
 
     // The Devastator's shipped stock fit, the one the two profile-seeded starters fly: three twin

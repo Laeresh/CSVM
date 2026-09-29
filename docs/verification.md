@@ -195,6 +195,11 @@ member, and it does not go here.
   themselves cannot separate the pattern from the texture it lies on: over the same pose the C2
   city frame's own detail buries it entirely.
 
+- **SHOT-43**, **Read shadow noise on an aircraft against the same pose with the sun's shadow
+  off, never off the frame alone.** The airframe skins carry rivet rows that read as the same dot
+  grid, so a frame-only figure scores the texture; at C3's spawn the shadow's own high-pass excess
+  over the red paint was 1.13 levels against a 3.48 texture floor (`AirframeShadowLookupOffset`).
+
 ## GOLD, golden images
 
 - **GOLD-1**, **Update moved hashes with the visual change, and explain each moved shot in the
@@ -271,6 +276,10 @@ member, and it does not go here.
   a scripted capture pins its shape and never its pacing; judge pacing in a `--no-det` run.** The
   chase camera's throttle transient fell to 1/e in 2.15 sim seconds either way, which was 1.11 wall
   seconds under `--det` at 114 fps against 2.15 wall seconds without it.
+- **DET-16**, **A unit that blocks on work it queued with `Task.Run` can wait past any bound: xUnit runs
+  tests on pool threads, so the item lands in the blocked thread's local queue, which other threads
+  steal from only when the global queue is empty. Give such work its own thread.** The extraction
+  worker's cancel test failed 4 of 13 full unit passes with the item never started after 10 s.
 
 ## PERF, performance
 
@@ -325,7 +334,11 @@ member, and it does not go here.
   a thread's allocation context charges that thread for what the context still held. Empty it with
   a forced collection before any window that must read zero.** The step is that remainder alone,
   always under 8 KB: with per-thread pads 512 bytes apart it moved 512 bytes in lockstep, and
-  28,800 windows opened on an emptied context charged nothing where seven charged without it.
+  28,800 windows opened on an emptied context charged nothing where seven charged without it. A
+  loop of windows too many to collect before each measures again, after a forced collection, only
+  a window over its bound, and keeps the least reading, with a negative control that allocates on
+  every read. The net-message fuzz read a zero-allocating reader as 3,992 bytes against a
+  2,048-byte bound once in about 30 full unit passes.
 - **PERF-30**, **A unit test asserts a wall-clock FLOOR, or a figure read off a clock it advances
   itself, never a fixed millisecond ceiling: a ceiling reads the scheduler on an oversubscribed
   machine, so raising it moves the threshold rather than removing the flake.** A six-walk mean
@@ -386,6 +399,17 @@ member, and it does not go here.
   busy-wait injected into each launch reads a 30 ms median and fails. The cost of the choice: a
   regression that blocks instead of computing reads as nothing, so the window's wall worst stays in
   the report.
+- **PERF-37**, **`physics_ms` is Godot's physics-tick time, and a session whose clock is not
+  parent-driven runs its whole simulation step inside `GameSession._PhysicsProcess`. A large
+  `physics_ms` is therefore the game's own C# code until a split shows the physics server's step.**
+  A zeppelin gasbag loss on CM20 read as 205 and 424 ms of `physics_ms`, and the report blamed a
+  collision rebuild. The same frames in a probe run, where the step lands in `script_ms`, read
+  `physics_ms` at 0.4 to 0.9 ms. Timing the dispatch put the cost on the first CALL_ANIMATION of
+  each library-root effect. Building the copy was under 1 ms; indexing it was 100 to 200 ms. The
+  index ran every RESET_STATE definition's whole-table name scan and then voided every memoized
+  lookup, so the frame after paid for the refill. `zeppelin-library-copy-hitch` holds both on the
+  thread clock (PERF-36). Unfixed, it reads 97 to 131 ms per copy and 18 to 22 ms to re-ask 200
+  names. Fixed, it reads 6.4 ms and 0.2 ms, under bars of 40 and 5 ms.
 
 ## LOG, logs, error censuses, and exit codes
 
@@ -872,6 +896,13 @@ member, and it does not go here.
   blended surface whose alpha is below one paints over a card's soft edge without erasing it, and an
   equality count reads that as zero.** A C1 ground strip sorted after a tree card read 0 erased
   pixels and 1125 reordered ones in the same pane.
+- **INSTR-96**, **Count leaked nodes as orphans left AFTER the harness frees what was queued, and
+  list them through `ClassDB.ClassCallStatic("Node", "get_orphan_node_ids")`: the C# binding
+  `Node.GetOrphanNodeIds` types the 64-bit ids as `int`, so none of them resolves.** Before the
+  flush the queued frees swamped a 26-node session leak with up to +7,219 in one menu suite; after
+  it every suite in the catalog leaves 0, `TestHarness.OrphanLeakTolerance` is 0, and a failing
+  suite's verdict names each new orphan root with its node count. A `Dispose()` on a node drops
+  only its C# wrapper, so a test node is freed with `Free()`.
 
 ## SRC, sources and documents
 

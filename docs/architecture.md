@@ -89,6 +89,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/Anim/OpacityWriter.cs`, a subtree's per-instance opacity: the instance parameter and the translucent twin override, never a shared-material edit.
 - `src/Mech3/Anim/NameResolver.cs`, name to node resolution: the index, wildcard matcher, scope tier chain, symbol authority, anchors and the bind census.
 - `src/Mech3/Anim/CutsceneFastForward.cs`, the rate one cutscene episode's own definitions run at while the player holds a key through a scene that offers no skip.
+- `src/Mech3/Anim/RangeGateAuthority.cs`, which machine answers a `PLAYER_RANGE` gate: the host for one whose call closure raises a `CALLBACK`, each machine for the rest.
 - `src/Mech3/SequenceRunner.cs`, the engine-free sequence interpreter (event clock, LOOP, IF/ELSEIF, WAIT_FOR_COMPLETION) behind the `ISequenceHost` seam.
 - `src/Mech3/DestructibleRegistry.cs`, live per-instance HP for `HEALTH>0` anim defs, one pool per `(def, anchor)`; `Resolve` maps a struck collider back.
 - `src/Mech3/ScriptedPath.cs`, resolves an authored waypoint path (`pp1` → the gamez `pp1_aipath` subtree) into ordered world-space waypoints.
@@ -317,6 +318,7 @@ else in `UI`, and nothing names `Labs`.
 - `src/UI/Boards/BoardMenuItem.cs`, the rows a board menu can offer: Resume, Photo, Restart, Exit.
 - `src/UI/Boards/BoardMenuView.cs`, draws a board menu's rows in the launchscreen's cursor idiom, inside the board style.
 - `src/UI/Boards/BoardMenuHost.cs`, menu, rows and reader kept together, so a board wires one in two lines.
+- `src/UI/Boards/BoardMenuPointer.cs`, the menu owner's pointer over a board menu: enter a row to move the cursor, release on the pressed row to fire it.
 - `src/UI/Boards/CursorRow.cs`, one centred list row and its cursor marker, shared by the launchscreen's lists and every board menu.
 - `src/UI/Boards/ControlGlyphs.cs`, the swappable per-control picture set, keyed by kind, index and sign the way a binding's control is.
 - `src/UI/Boards/ControlLine.cs`, one prompt line with a control in the message table's own `%1` slot, as words or as a glyph, and the hint row boards draw.
@@ -472,6 +474,8 @@ else in `UI`, and nothing names `Labs`.
 - `src/UI/Menu/FreeFlightFeature.cs`, Free Flight as a shared feature: the chapter roster, the pick, the launch gate and the typed exit.
 - `src/UI/Menu/InstantActionFeature.cs`, Instant Action as a shared feature: the decoded option sets, the typed setup state, the built def.
 - `src/UI/Menu/NetPlayFeature.cs`, the multiplayer door as a shared feature: the port and address, the socket, the link readouts, the session advert, the wire a launch takes.
+- `src/UI/Menu/CoopHostFlow.cs`, what a co-op host names to its guests: its board, mission, progress, hangar with each plane's holder, debrief result and shared film, each guest's words sent again only when they changed.
+- `src/UI/Menu/CoopGuestPick.cs`, a guest's own pick: airframe, fit, Ready and the walk-out mark, sent under the host's round.
 - `src/UI/Menu/DogfightLobby.cs`, the Multiplayer Lobby's state over the network lobby: the host's options and rounds, the player list, picks and Ready, chat, and the launch gate.
 - `src/UI/Menu/CoopDoorText.cs`, the words the campaign's network door is drawn in: the host's band, the advertised session's name, the join and waiting boards' status lines.
 - `src/UI/Menu/NetDoorAid.cs`, the loopback multiplayer doors the screenshot aids stand on: no socket, no router, a campaign host already advertising.
@@ -496,6 +500,7 @@ else in `UI`, and nothing names `Labs`.
 - `src/UI/Menu/Original/OriginalCampaignScreen.cs`, the campaign as one standalone module: the ten decoded screens over the shared board component.
 - `src/UI/Menu/Original/OriginalConnectionScreen.cs`, the Multiplayer Connection page and the LAN games list as one standalone module over the network door: the ways, the search, a join followed on a messagebox.
 - `src/UI/Menu/Original/OriginalLobbyScreen.cs`, the Multiplayer Lobby as one standalone module: its four tabs, the player list and Ready, chat, LAUNCH! and Leave Game.
+- `src/UI/Menu/Original/OriginalOutlawList.cs`, the lobby's outlaw list pane behind Select..., and the map from its rows to the outlaw flags.
 - `src/UI/Menu/Original/OriginalPresentation.cs`, the Original presentation node: the shell drawn through `ComposedBoardView`, seats polled.
 - `src/UI/Menu/Original/OriginalArtSizes.cs`, the art measurer every `OriginalShell` host hands it: one art name answered with its pixel size, cached, a movie's read off its sequence header.
 - `src/UI/Menu/Original/OriginalAvailability.cs`, Original's availability answer before entry: a refusal reason, or the loaded layout.
@@ -504,7 +509,7 @@ else in `UI`, and nothing names `Labs`.
 - `src/UI/Menu/Original/OriginalCues.cs`, the four cue names Original asks for: a rollover, a press, and an edit box's two sounds.
 - `src/UI/Menu/Original/PointerSeat.cs`, seat 0 with the mouse as its `MenuPointer`, the click a press edge and the wheel's steps; device reads injected.
 - `src/UI/Menu/InstantActionPresets.cs`, the Table of Contents: the 19 decoded preset scenarios by name, resolved to the setup screens' own cursor positions.
-- `src/UI/Menu/CampaignFlightField.cs`, a campaign sortie's humans: joined count, the check showing, each guest's pick, and the no-duplicate rule.
+- `src/UI/Menu/CampaignFlightField.cs`, a campaign sortie's humans: joined count, the check showing, and a copy of each guest's allocated plane.
 - `src/UI/Menu/BriefingScript.cs`, the reveal script, engine-free: the `Briefing.zrd` reader and the interpreter that runs a state's beat sheet.
 - `src/UI/Menu/EscapeDialog.cs`, the `escape.zrd` and `Loading.zrd` reader: the per-mission map with its crop and world window, the memento slot, and the shared parchment, icons and strips.
 - `src/UI/Menu/BriefingObjectives.cs`, the briefing's parchment note from a mission's `objectives.zrd`, ordered by priority, which a reveal opcode indexes.
@@ -582,7 +587,7 @@ The `--dump-*` probes, the capture loop, the golden-image hash and the glTF expo
 - `src/Tooling/EnvelopeMargins.cs`, one flight scenario's distance from every term that could bound it, plus the decoded branches it drove.
 - `src/Tooling/GoldenShot.cs`, the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Tooling/ProbeRunner.cs`, the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
-- `src/Tooling/CaptureDirector.cs`, the `--screenshot=`/`--shots=`/`--frames=` capture state machine + F11/F12, ticked from `_Process`.
+- `src/Tooling/CaptureDirector.cs`, the `--screenshot=`/`--shots=`/`--frames=` capture state machine, F11's camera-pose print and F12's save, ticked from `_Process`.
 - `src/Tooling/GltfExporter.cs`, exports the viewer plane subtree to glTF (mesh + livery + baked damage) for `--export-gltf=`/F10, on a throwaway duplicate.
 
 ### `src/Session/`, the launch/session layer
@@ -614,6 +619,7 @@ delegate to, in six sub-namespaces, one folder each. `Launch` sits on top and no
 - `src/Session/Campaign/CampaignDangerZones.cs`, a campaign mission's own danger zones: the `dzpathN` gates its script arms, tracked per human by the stunt gate rule, each carrying its mission's objective number.
 - `src/Session/Campaign/CampaignSnapshot.cs`, the Danger Zone photograph a campaign mission writes into the flying profile's directory under the scrapbook row's own `Snap_<mission>_<objective>` name.
 - `src/Session/Campaign/CampaignProfileStore.cs`, JSON persistence for one named campaign profile: funds, owned planes, mission records, awards and the destruction log.
+- `src/Session/Campaign/CoopPlanePool.cs`, the rule settling each co-op seat's own plane pick: one seat to a plane in seat order, the earlier seat winning a clash, the stock Devastator shared, and the wingman after every human.
 - `src/Session/Campaign/CampaignProgression.cs`, the rules that write a profile: an attempt's best-of merge, the monotonic position, the rewards and the skip offer.
 - `src/Session/Campaign/CampaignMementos.cs`, the cabin-wall pictures a profile may hang: the award table, which rows a profile holds, and the one bitmap name every screen draws.
 - `src/Session/Campaign/CampaignPersistLog.cs`, the cross-mission state log: what a mission left destroyed, carried silently into later missions of the same chapter.
@@ -623,7 +629,7 @@ delegate to, in six sub-namespaces, one folder each. `Launch` sits on top and no
 - `src/Session/Campaign/LandingApproachRuntime.cs`, the mid-mission cutscene trigger: `landings.zrd` rows tested against each flying human, and the auto-land offer.
 - `src/Session/Campaign/LadderSwitch.cs`, the rope-ladder switch as an engine-free rule and state machine, plus the co-op holder rule deciding which human owns it.
 - `src/Session/Campaign/LadderSwitchRuntime.cs`, that switch flown against the built world: the per-human attitude and sensor read, and the definitions it starts.
-- `src/Session/Campaign/NetPositionalStartLink.cs`, the landing rows and the ladder switch over the wire: the host decides over the whole field and a guest replays the start for the named seat.
+- `src/Session/Campaign/NetPositionalStartLink.cs`, the landing rows, the ladder switch and the code-raising range gates over the wire: the host decides over the whole field and a guest replays its decision.
 
 **`Session.Roster`**, who is flying and how each got an aeroplane.
 
@@ -723,7 +729,7 @@ filling only the models Godot's pad roster lacks.
 - `src/Sticks/StickSkip.cs`, seat 1's stick skip press and held state for cinemas, boot cards and in-world cutscenes, read off the stick rows alone.
 - `src/Sticks/StickProfiles.cs`, the engine side: `res://data/stick_profiles/`, `user://stick_profiles/`, and the one live set.
 - `src/Sticks/StickScreens.cs`, the rebinding screens' save split (player 1's stick rows to the profile files, never the keymap file) and the profiles folder opener.
-- `src/Sticks/StickLabels.cs`, a stick's caption prefix for the rebinding screens: its profile's short name, else `Stick` and its model (the Stick column drops the latter).
+- `src/Sticks/StickLabels.cs`, a stick's caption prefix for the rebinding screens: its profile's short name, else `Stick` and its model (the Stick column keeps the model only when two unnamed sticks share a row).
 - `src/Sticks/StickShape.cs`, the flight-stick shape test: three axes or more, axes 0 and 1 resting near centre in the roster's rest sample.
 - `src/Sticks/GenericStickDefault.cs`, the in-memory default for the one stick-shaped unprofiled model: X, Y, Rz, Z lever, two fire buttons, hat menus.
 
@@ -788,6 +794,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/EnetTransport.cs`, the shipped carrier: the seam over Godot's ENet peer, hosting on a port or joining by address, with every roster change and payload reported out of one poll.
 - `src/Net/SteamTransport.cs`, the Steam carrier's place in the seam with no SDK behind it: every way in throws "not built with the Steamworks SDK", and `SteamBuild` is the `CSVM_STEAM` define.
 - `src/Net/NetCarrier.cs`, which carrier a match runs over, chosen once: the door's registration and the command line both open through it, and a build define is the whole of the choice.
+- `src/Net/NetEndpoint.cs`, a host and port parsed from a typed or command-line address, a bare IPv6 address all host, and written back with the host bracketed.
 - `src/Net/UpnpPortMap.cs`, a best-effort port mapping through Godot's UPnP client: five outcomes a host can show, never a throw, and never required for a match to be joinable.
 - `src/Net/UpnpLease.cs`, the router mapping's rules behind a gateway seam: no add behind a non-public external address, a finite lease, the stale mapping cleared by exact port, and when the door renews.
 - `src/Net/IgdAddress.cs`, a gateway's external address read without the engine: its kind (public, private, carrier-shared, reserved) and the description and SOAP text a direct question is made of.
@@ -796,6 +803,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/UpnpPinhole.cs`, the IPv6 pinhole's rules behind a gateway seam: no add without a global address, a service and a status that allows it, a finite lease renewed by UniqueID, a crashed run's pinhole cleared only inside its lease.
 - `src/Net/IgdPinhole.cs`, the IPv6 firewall service's SSDP, description and SOAP text read without the engine, and the global-address check a pinhole needs.
 - `src/Net/UpnpPinholeMemory.cs`, the one IPv6 pinhole this machine last opened, with its lease end, kept in the user directory so the next run can clear what a crash left.
+- `src/Net/RouterAccess.cs`, a host's hold on its router: the port mapping and the IPv6 pinhole, each a lease renewed on its own thread and given back on close.
 - `src/Net/NetLobby.cs`, a carrier's first listener before any session binds it: the host's session advert and closing word out, the latest of each in, every other payload held for the session.
 - `src/Net/NetBuildVersion.cs`, the build's MAJOR.MINOR two peers compare before they play, patch ignored and unknown playing only with unknown, and the lobby's `0x56` message that carries it.
 - `src/Net/LanDiscovery.cs`, the LAN search's datagram pair outside the carrier: a query and a reply of one width, so a responder never amplifies, and the `ILanSocket` seam.
@@ -806,7 +814,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/LanDiscoverySocket.cs`, the shipped `ILanSocket` over Godot's UDP peer with broadcast allowed, the second type allowed to name a Godot networking type.
 - `src/Net/NetMessages.cs`, the message vocabulary: one struct per message, each declaring its type word and reliability class, over a shared four-byte header.
 - `src/Net/NetWorldMessages.cs`, the host-owned world's messages: an AI's pose, fire and hit claim, a generator launch, a zeppelin's and a surface vehicle's path sample, and the world event.
-- `src/Net/NetCoopMessages.cs`, the co-op boards' lobby messages: the host's flow one guest follows (screen, mission, round, Ready mask, hangar, result) and a guest's pick and Ready under a round.
+- `src/Net/NetCoopMessages.cs`, the co-op boards' lobby messages: the host's flow one guest follows (screen, mission, round, Ready mask, hangar, result), the host's campaign films, its hangar with each plane's holder, and a guest's plane pick and Ready under a round.
 - `src/Net/NetDogfightMessages.cs`, the Multiplayer Lobby's messages: the host's options under a round, the player list, and one chat line.
 - `src/Net/NetPositionalMessages.cs`, the positional start: a landing row the host started and for which seat, the ladder holder, and a guest's held auto-land button.
 - `src/Net/NetMessageWriter.cs`, the writer and reader cursors every message is packed and unpacked through: little-endian primitives, quantised unit fields, fixed-width text.

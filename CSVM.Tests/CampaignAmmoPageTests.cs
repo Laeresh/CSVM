@@ -329,6 +329,90 @@ public class CampaignAmmoPageTests
         Directory.Delete(profileDir, true);
     }
 
+    // The rows with no field draw nothing, so the cursor walks past them both ways, wrapping.
+    [Fact]
+    public void UpAndDownSkipTheSlotsThatHaveNoField()
+    {
+        var (flow, _, planes) = NewFlow(out string profileDir);
+        SeatBuilt1(flow, planes);
+        flow.GoTo(CampaignScreen.Ammo);
+
+        Assert.Equal(0, flow.Row);
+        var down = new List<int>();
+        for (int i = 0; i < 7; i++)
+        {
+            flow.Move(1);
+            down.Add(flow.Row);
+        }
+
+        Assert.Equal(new[] { 4, 8, 9, 10, AcceptRow, CancelRow, 0 }, down);
+        flow.Move(-1);
+        Assert.Equal(CancelRow, flow.Row);
+        Assert.All(new[] { 1, 2, 3, 5, 6, 7, 11 }, row => Assert.False(flow.Page.Focusable(row)));
+
+        Directory.Delete(profileDir, true);
+    }
+
+    // Which rows have a field follows the aircraft being fitted, so the answer is read live.
+    [Fact]
+    public void WhichSlotsTakeTheCursorFollowsTheAircraftBeingFitted()
+    {
+        var (flow, _, planes) = NewFlow(out string profileDir);
+        SeatBuilt1(flow, planes);
+        flow.GoTo(CampaignScreen.Ammo);
+        Assert.True(flow.Page.Focusable(0));
+
+        planes.Save(new CustomPlaneDef { Name = "Bare", Airframe = 5 });
+        flow.Profile!.Planes.Add(new OwnedPlane { Name = "Bare", Airframe = 5 });
+        flow.Profile.WingmanPlane = 1;
+        flow.SetAmmoSlot(1);
+
+        Assert.False(flow.Page.Focusable(0));
+        flow.FocusRow(0);
+        Assert.Equal(AcceptRow, flow.Row);
+
+        Directory.Delete(profileDir, true);
+    }
+
+    // A pointer moves the focus without the pad's axis, which an open list owns. Whatever moved
+    // it, the list left behind closes and only the focused row's may stand open.
+    [Fact]
+    public void MovingTheFocusOffAnOpenFieldClosesItsList()
+    {
+        var (flow, _, planes) = NewFlow(out string profileDir);
+        SeatBuilt1(flow, planes);
+        flow.GoTo(CampaignScreen.Ammo);
+        var page = flow.Page;
+
+        flow.FocusRow(4);
+        Assert.True(flow.Accept());
+        Assert.True(page.Combo(4)!.Open);
+
+        flow.FocusRow(8);
+        Assert.False(page.Combo(4)!.Open);
+        Assert.Null(flow.OpenCombo);
+
+        Assert.True(flow.Accept());
+        Assert.Same(page.Combo(8), flow.OpenCombo);
+        Assert.Single(Enumerable.Range(0, page.RowCount), row => page.Combo(row) is { Open: true });
+
+        Directory.Delete(profileDir, true);
+    }
+
+    // Built1: one gun (group 0), one left hardpoint and three right, seated as the pilot's plane.
+    private static void SeatBuilt1(CampaignFlow flow, CustomPlaneStore planes)
+    {
+        var built = new CustomPlaneDef { Name = "Built1", Airframe = 5, LeftHardpoints = 1, RightHardpoints = 3 };
+        built.Guns[0] = new GunChoice(2, Twin: false);
+        planes.Save(built);
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        profile.Planes.Clear();
+        profile.Planes.Add(new OwnedPlane { Name = "Built1", Airframe = 5 });
+        profile.SelectedPlane = 0;
+        flow.SelectProfile(profile);
+        flow.SetAmmoSlot(0);
+    }
+
     // The lines the page draws itself, matched on their words.
     private static List<BoardLine> CaptionsSaying(CampaignAmmoPage page, string words)
     {

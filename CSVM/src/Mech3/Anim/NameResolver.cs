@@ -62,7 +62,9 @@ public sealed class NameResolver<TNode>
     private readonly Dictionary<string, Func<string, bool>> _matcherCache =
         new(StringComparer.OrdinalIgnoreCase);
 
-    private readonly Dictionary<(string Pattern, TNode? Scope), List<TNode>> _findCache;
+    // Each answer carries the index length it covers, so rows appended since extend it instead of
+    // voiding it. Only DropFreed and DropNodes shrink the index, and both clear this outright.
+    private readonly Dictionary<(string Pattern, TNode? Scope), FindEntry> _findCache;
 
     // Caller-supplied identity, not TNode's inherited Equals, Godot object equality is unreliable
     // across proxy instances of the same native node. The engine keys by instance id.
@@ -127,7 +129,7 @@ public sealed class NameResolver<TNode>
         _stagingAdmits = stagingAdmits ?? ((_, _, _) => true);
         _privateCopyOf = privateCopyOf ?? (_ => default);
         _parentOf = new Dictionary<TNode, TNode?>(_identity);
-        _findCache = new Dictionary<(string, TNode?), List<TNode>>(new ScopeKeyComparer(_identity));
+        _findCache = new Dictionary<(string, TNode?), FindEntry>(new ScopeKeyComparer(_identity));
     }
 
     /// <summary>Every indexed row's node and source name, in <see cref="Add"/> order, for a
@@ -172,9 +174,9 @@ public sealed class NameResolver<TNode>
         }
     }
 
-    /// <summary>Drops every memoized <see cref="FindAll"/> answer, needed after <see cref="Add"/>
-    /// grows the index post-bootstrap, so a pattern already cached as "resolves to nothing" is
-    /// re-asked instead of standing stale.</summary>
+    /// <summary>Drops every memoized <see cref="FindAll"/> answer. Rows <see cref="Add"/> appends
+    /// no longer need it: a cached answer extends over them on its next query, and only the
+    /// appended rows are scanned.</summary>
     public void ClearFindCache() => _findCache.Clear();
 
     /// <summary>Drops every row naming a node the liveness test now rejects, with the ancestry
@@ -335,20 +337,26 @@ public sealed class NameResolver<TNode>
     /// <summary>Every indexed node matching a NAME pattern, optionally restricted to one node's
     /// subtree. Wildcards: <c>*</c> at most one digit, <c>#</c> a digit run including zero; a plain name
     /// compares case-insensitively, also against a <c>.flt</c>-stripped copy. Memoized on
-    /// <c>(pattern, scope)</c>, the returned list is read-only, the same instance on every repeat
-    /// query. ⚠ The scope filter reads each node's <see cref="Add"/>-time parent snapshot; a node
-    /// reparented afterwards silently misreads it.</summary>
+    /// <c>(pattern, scope)</c>, the returned list is read-only. A repeat query returns the same
+    /// instance until an appended row matches. ⚠ The scope filter reads each node's
+    /// <see cref="Add"/>-time parent snapshot; a node reparented afterwards silently misreads it.</summary>
     public List<TNode> FindAll(string pattern, TNode? scope)
     {
         var key = (pattern, scope);
-        if (_findCache.TryGetValue(key, out var hit))
+        bool cached = _findCache.TryGetValue(key, out var hit);
+        if (cached && hit.Covered == _index.Count)
         {
-            return hit;
+            return hit.Result;
         }
+
+        // ⚠ Copy before growing: a caller may still hold the list an earlier query returned.
         var match = Matcher(pattern);
-        var result = new List<TNode>();
-        foreach (var row in _index)
+        var result = cached ? hit.Result : new List<TNode>();
+        bool copied = !cached;
+        for (int i = cached ? hit.Covered : 0; i < _index.Count; i++)
         {
+            var row = _index[i];
+
             // A node freed since the last DropFreed is still in the index, and an airframe swap
             // frees the aircraft it staged. Handing it out would be handing out a disposed object.
             if (!_isLive(row.Node))
@@ -360,10 +368,15 @@ public sealed class NameResolver<TNode>
                     && match(row.SrcName[..^4]));
             if (matches && (scope is null || IsWithin(row.Node, scope)))
             {
+                if (!copied)
+                {
+                    result = new List<TNode>(result);
+                    copied = true;
+                }
                 result.Add(row.Node);
             }
         }
-        _findCache[key] = result;
+        _findCache[key] = new FindEntry(result, _index.Count);
         return result;
     }
 
@@ -491,6 +504,28 @@ public sealed class NameResolver<TNode>
         }
         node = ClaimedNode(idx, name, anchor);
         return true;
+    }
+
+    /// <summary>Whether <see cref="Anchors"/> could hand <paramref name="def"/> any node carrying
+    /// one of <paramref name="srcNames"/>: its NAME, its ANIMATION_ROOT_NAME (a lifted anchor's
+    /// child), or a NAME1 path's last element matches one. A necessary test only. It walks only the
+    /// names given, so a caller skips a definition without the whole-index scan of
+    /// <see cref="Anchors"/>.</summary>
+    public bool MayAnchorAmong(AnimDefinition def, IReadOnlyCollection<string> srcNames)
+    {
+        if (string.IsNullOrEmpty(def.Name))
+        {
+            foreach (var (_, path) in def.MultiTargets)
+            {
+                if (path.Count > 0 && AnyNameMatches(path[^1], srcNames))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return AnyNameMatches(def.Name, srcNames)
+            || (def.RootName is { } root && AnyNameMatches(root, srcNames));
     }
 
     /// <summary>The world node a compiled gamez index binds, narrowed to <paramref name="anchor"/>'s
@@ -882,6 +917,21 @@ public sealed class NameResolver<TNode>
 
     private TNode? ParentOf(TNode node) => _parentOf.TryGetValue(node, out var p) ? p : null;
 
+    // FindAll's own row test, applied to bare names: the pattern, or the name with `.flt` dropped.
+    private bool AnyNameMatches(string pattern, IReadOnlyCollection<string> srcNames)
+    {
+        var match = Matcher(pattern);
+        foreach (var srcName in srcNames)
+        {
+            if (match(srcName)
+                || (srcName.EndsWith(".flt", StringComparison.OrdinalIgnoreCase) && match(srcName[..^4])))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Wildcard NAME -> predicate: '*' matches at most one digit, '#' a run of digits (including
     // zero). Plain names compare exactly, case-insensitively. ⚠ '*' is not "any run": the original
     // stamps one digit per star (docs/org/sequences.md, the odometer), so a shared `crate**`
@@ -908,6 +958,8 @@ public sealed class NameResolver<TNode>
     }
 
     private readonly record struct IndexRow(TNode Node, string SrcName, int? GamezIndex);
+
+    private readonly record struct FindEntry(List<TNode> Result, int Covered);
 
     private sealed class ScopeKeyComparer : IEqualityComparer<(string Pattern, TNode? Scope)>
     {

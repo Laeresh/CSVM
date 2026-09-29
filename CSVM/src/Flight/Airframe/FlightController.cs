@@ -498,6 +498,12 @@ public partial class FlightController : Node3D
     /// here; this node holds no mission state and decides no rule.</summary>
     public bool Spectating;
 
+    /// <summary>This pilot's crash is final for the mission: a campaign human whose aircraft is
+    /// lost. Neither R nor <see cref="AutoRespawnAfter"/>'s timer brings the wreck back, and no
+    /// prompt offers it. Set by the campaign director, never from here; <c>--no-crash-loss</c>
+    /// leaves it unset.</summary>
+    public bool CrashIsFinal;
+
     /// <summary>The living aircraft an out-of-lives Dogfight pilot watches in chase view, or null
     /// to hold the crash camera. Picked by the session (<see cref="VersusMatch.NextWatched"/>).</summary>
     public FlightController? Watching;
@@ -554,9 +560,9 @@ public partial class FlightController : Node3D
     // The desktop mouse this seat holds while it flies, and the virtual cursor standing in for the
     // OS one for as long as it does. Idle on every seat that never takes it (MouseCaptureAllowed).
     private readonly MouseCapture _mouse = new();
-    // The look stick as the CHASE swing reads it. Its own filter rather than the head's, because
-    // that swing is rigid and instant and takes the stick on the frames the head is not given it.
-    private readonly StickLookFilter _chaseLook = new();
+    // The look stick as the CHASE swing reads it. It has its own filter because that swing has no
+    // return of its own. A released stick eases home at the head's decoded rates.
+    private readonly StickLookFilter _chaseLook = new(HeadLook.AzimuthSmoothRate, HeadLook.ElevationSmoothRate);
     private readonly AimCandidateSet _aimCandidates = new(); // rebuilt once per fire call (B4/B5)
     private readonly AimCandidateSet _gunnerScan = new();    // the AI gunner's acquisition scan (D14)
     private readonly AimCandidateSet _rescoreScan = new();   // the aircraft-only walk the re-score's withdrawal reads
@@ -603,6 +609,13 @@ public partial class FlightController : Node3D
     // what turns the carried gunners' running counters into a fired-this-tick edge.
     private readonly PadRumble _rumble;
     private int _turretShots;
+
+    // Set by any frame another camera placed, so the chase comes back unswung rather than easing.
+    private bool _chaseLookStale;
+
+    // The stick half _stickAxes last polled. The lever reads its bindings from it one by one, since a
+    // resolved row cannot tell a centred stick from an unplugged one.
+    private IDeviceState _stickSide;
 
     // The message table this seat's control prompts take their wording from, null on a rig built
     // with none (which then reads the prompt's own data-less stand-in).
@@ -670,13 +683,11 @@ public partial class FlightController : Node3D
     // held and the look controls are muted, so the sheet's menu keys fly nothing.
     private bool _sheetOverFlight;
     private ImmediateMesh? _probe;              // debug collision-probe line
-    // The rest pose of every node the crash def flings (the destroyed wreck's pieceN meshes) and
-    // the BUILT visibility of every plane-model node, both captured before the first crash so
-    // Respawn can undo what the def did: a RESET_STATE re-poses only the nodes it names and
-    // restores only dontmove, so neither the flung pieces nor the built-hidden torn panels and
-    // wingtip flares come back without these two snapshots. Bound with the rest of the crash rig.
-    private IReadOnlyList<(Node3D Node, Transform3D RestPose)>? _crashRestPoses;
-    private IReadOnlyList<(Node3D Node, bool Visible)>? _crashPlaneVisibility;
+    // The built parent, pose and visibility of every node the death defs play on, captured before
+    // the first crash. That covers the airframe, the wreck and the adopted eject pilot. A
+    // RESET_STATE re-poses only what it names, so Respawn undoes the rest from this. Bound with the
+    // rest of the crash rig.
+    private IReadOnlyList<(Node3D Node, Node3D? Parent, Transform3D RestPose, bool Visible)>? _crashRestStates;
     private AnimRuntime? _crashRuntime;          // the bound rig; reached through CrashRuntime, which forces the build below
     private Node3D? _crashAnchor;                // the rig's `player` anchor, bound with it
     private Node3D? _viewCameraProxy;            // the rig-local `camera1`; see EnsureViewCameraProxy
@@ -749,6 +760,7 @@ public partial class FlightController : Node3D
         _stickAxes = new PlayerActions(map, false);
         _padsAlone = StickSplit.WithoutSticks(_seatState);
         _sticksAlone = StickSplit.SticksOnly(_seatState);
+        _stickSide = _sticksAlone;
     }
 
     /// <summary>Raised once per crash, at <see cref="Crash"/>: (victim <see cref="PlayerIndex"/>,
@@ -973,6 +985,11 @@ public partial class FlightController : Node3D
     /// its ground-impact def, whichever the airframe authors.</summary>
     public bool WreckFalling => _lifecycle.WreckFalling;
 
+    /// <summary>Whether R, pad Y or the armed timer would bring this pilot back once crashed. The
+    /// crashed step and the HUD's respawn prompt both read this one answer, so the prompt cannot
+    /// offer a respawn the step refuses.</summary>
+    public bool RespawnOffered => !Spectating && !CrashIsFinal && !CommandsHeld;
+
     /// <summary>An aircraft that has been BUILT but held completely out of the session, not
     /// stepped, drawn, collidable, hittable, or a targeting candidate. The original's wave
     /// sequencer builds waves 2-4 this way (docs/formats/instant-action.md "The ace and the
@@ -991,6 +1008,8 @@ public partial class FlightController : Node3D
             // down, and a cutscene takes any key or pad button.
             if (!value)
                 SwallowInputHeldThroughReentry();
+            else
+                StopPositionalLoops();
             ApplyPresence();
             InertChanged?.Invoke(this);
         }
@@ -1331,17 +1350,18 @@ public partial class FlightController : Node3D
         // on the frame an aeroplane is placed, which is the frame the deferral exists to spare.
         if (_crashRuntime != null)
         {
-            // Hard-stop the played def, re-hide the wreck (its RESET_STATE), and re-home the flung
-            // pieces below (no reset event re-poses them; without this respawn leaves just the prop).
+            // Hard-stop the played def and re-hide the wreck (its RESET_STATE). Then put back what no
+            // reset event names: the flung pieces, the rotor, and an eject cut short on the seat.
             _crashRuntime.ResetToBaseState();
-            if (_crashRestPoses != null)
-                foreach (var (node, rest) in _crashRestPoses)
+            if (_crashRestStates != null)
+                foreach (var (node, parent, rest, vis) in _crashRestStates)
                 {
-                    node.Transform = rest;
-                }
-            if (_crashPlaneVisibility != null)
-                foreach (var (node, vis) in _crashPlaneVisibility)
-                {
+                    if (parent != null && node.GetParent() != parent)
+                        AnimRuntime.Reparent(node, parent);
+                    // ⚠ Only a pose the rig itself wrote. A rig built mid-flight snapshots the
+                    // control surfaces deflected, and their own animator owns them.
+                    if (_crashRuntime.HasPosed(node))
+                        node.Transform = rest;
                     node.Visible = vis;
                 }
         }
@@ -1416,18 +1436,17 @@ public partial class FlightController : Node3D
         finish();
     }
 
-    /// <summary>Binds this plane's crash rig: the runtime the crash and destroy defs play on, the
-    /// def vector the struck surface indexes, the anchor they play against, and the two snapshots a
-    /// respawn restores. One call rather than six assignments, so a rig cannot be half-bound.</summary>
+    /// <summary>Binds this plane's crash rig: the runtime its crash and destroy defs play on, the
+    /// def vector a struck surface indexes, and their anchor. Also the built-state snapshot a
+    /// respawn restores. One call rather than four assignments, so a rig cannot be
+    /// half-bound.</summary>
     public void BindCrashRig(AnimRuntime runtime, SurfaceDefTable? defs, Node3D? anchor,
-        IReadOnlyList<(Node3D Node, Transform3D RestPose)>? restPoses,
-        IReadOnlyList<(Node3D Node, bool Visible)>? planeVisibility)
+        IReadOnlyList<(Node3D Node, Node3D? Parent, Transform3D RestPose, bool Visible)>? restStates)
     {
         _crashRuntime = runtime;
         _crashAnchor = anchor;
         _lifecycle.CrashDefs = defs;
-        _crashRestPoses = restPoses;
-        _crashPlaneVisibility = planeVisibility;
+        _crashRestStates = restStates;
     }
 
     /// <summary>Builds this rig's own <c>camera1</c>, the node the canopy-hole overlay poses
@@ -1478,12 +1497,12 @@ public partial class FlightController : Node3D
         return drew;
     }
 
-    /// <summary>The inverse of building inert: re-home this aircraft at <paramref name="pos"/>
-    /// with its nose on <paramref name="lookAt"/>, put it back in play and respawn it there, the
-    /// original's teleport-then-reactivate, in one call. <see cref="Respawn"/> does the rest of the
-    /// work it always does (spawn speed and throttle, a healthy repaired airframe, full ammo, the
-    /// start choreography), so a wave arrives flying rather than parked. Calling this on an
-    /// aircraft already in play is simply that teleport-and-reset.</summary>
+    /// <summary>The inverse of building inert, the original's teleport-then-reactivate. It re-homes
+    /// this aircraft at <paramref name="pos"/>, facing <paramref name="lookAt"/>, and respawns it.
+    /// <see cref="Respawn"/> restores speed, airframe, ammo and the start choreography, so a wave
+    /// arrives flying. On an aircraft already in play it is that teleport-and-reset.</summary>
+    // ⚠ Never reseat the patrol walk here. The original's activation writes no net field
+    // (FUN_004b0f40), so a woken or teleported aircraft walks on from its spawn seat.
     public void Activate(Vector3 pos, Vector3 lookAt, Vector3? launchVelocity = null,
         bool carrierDrop = false, float? launchThrottle = null)
     {
@@ -1494,10 +1513,6 @@ public partial class FlightController : Node3D
             _spawnAttitude = Basis.LookingAt(dir.Normalized(), Vector3.Up);
         Inert = false;
         ArmSpawnTimers(carrierDrop);
-        // The original snaps an activated vehicle to its net's nearest node (FUN_004b0f40 →
-        // FUN_00432010), which is what makes a teleported wave patrol where it ARRIVED rather
-        // than fly back to wherever it was parked.
-        Pilot?.Patrol?.Reseat();
         Respawn();
         if (launchVelocity is { } velocity)
             _model.SetVelocity(velocity);
@@ -2014,10 +2029,9 @@ public partial class FlightController : Node3D
 
         if (Crashed)
         {
-            // ⚠ Out of lives, or held through an ending, neither R nor AutoRespawnAfter's timer
-            // may bring the pilot back. It is checked here rather than by clearing
-            // AutoRespawnAfter, which R overrides. A hull that dies inside a hold keeps falling.
-            if (Spectating || CommandsHeld)
+            // ⚠ Refused here, not by clearing AutoRespawnAfter, which R overrides. The HUD prompt
+            // reads the same answer. A hull that dies inside a hold keeps falling.
+            if (!RespawnOffered)
             {
                 StepWreckFall(dt);
                 return;
@@ -2356,11 +2370,13 @@ public partial class FlightController : Node3D
         {
             // The lab's free camera has the view, every camera write here would fight it,
             // and an AI rig has no camera at all.
+            _chaseLookStale = true;
         }
         else if (orbiting)
         {
             // The orbit camera runs on wall time on purpose: a held airframe is a stopped subject
             // with the world still running, and the point is to look around it.
+            _chaseLookStale = true;
             var (yawIn, pitchIn, zoomIn) = OrbitInput();
             _cam.Orbit((float)delta, _model.Position, yawIn, pitchIn, zoomIn);
         }
@@ -2374,6 +2390,7 @@ public partial class FlightController : Node3D
         {
             // The crash camera holds the pose Crash() cut to, except the DEATH camera, which is
             // stepped to keep the falling wreck framed. A spent pilot watches a living aircraft.
+            _chaseLookStale = true;
             var watched = Spectating && Watching is { } w && IsInstanceValid(w) && !w.Crashed ? w : null;
             if (watched != null)
             {
@@ -2432,27 +2449,25 @@ public partial class FlightController : Node3D
             }
             else
             {
-                // The one head, on the chase camera's own floor, so the snap cluster, the centre
-                // key and the mouse swing this view exactly as they aim the cockpit. The pad is
-                // left out: it keeps the absolute PadLook path below, in both views.
+                // The one head on the chase camera's own floor: the snap cluster, centre key and
+                // mouse swing this view as they aim the cockpit. The pad is left out: it
+                // swings the finished chase pose absolutely (CameraController.PadSwing).
                 _cam.StepHead(simDt, HeadLookRead(includePad: false), HeadLook.ChaseElevationFloor);
                 var (lookX, lookY) = PadLookInput();
+                // A view that cut away took the swing with it, so the chase comes back unswung.
+                if (_chaseLookStale)
+                {
+                    _chaseLook.Reset();
+                    _chaseLookStale = false;
+                }
                 _chaseLook.Step(simDt, lookX, lookY);
-                if (_chaseLook.Active)
-                {
-                    // E42: the right stick swings the view around the plane instead of
-                    // the usual chase pose, see CameraController.PadLook.
-                    _cam.PadLook(_renderPose, _chaseLook.X, _chaseLook.Y);
-                    logged = CameraView.PadLook;
-                }
-                else
-                {
-                    // Fed simDt, not wall time, so a scripted flight capture stays frame-rate
-                    // independent; fed the DRAWN pose, same rule as the rigid views above.
-                    _cam.Chase(simDt, _renderPose.Origin, _renderPose.Basis);
-                    logged = _cam.Head.Settled ? CameraView.Chase : CameraView.Look;
-                }
+                // Fed simDt, not wall time, so a scripted flight capture stays frame-rate
+                // independent; fed the DRAWN pose, same rule as the rigid views above.
+                _cam.Chase(simDt, _renderPose.Origin, _renderPose.Basis, _chaseLook.X, _chaseLook.Y);
+                logged = _chaseLook.Swinging ? CameraView.PadLook
+                    : _cam.Head.Settled ? CameraView.Chase : CameraView.Look;
             }
+            _chaseLookStale |= logged is not (CameraView.Chase or CameraView.Look or CameraView.PadLook);
             // Keyed to the pose this frame actually took, not to the selection, a look-behind
             // puts the camera outside the aircraft and must bring its body back while held.
             Cockpit?.Apply(_cam.ViewMode, firstPersonPose);
@@ -2499,7 +2514,7 @@ public partial class FlightController : Node3D
             // the original's swap is a camera-mode gate, and a held numpad key or look-behind is a
             // pose, not a mode change (⚠ table row 2 traces the analogous head-look case).
             Audio?.Update(simDt, engineDrive, speedFrac, healthFrac, _model.EngineDead,
-                ViewMode == PilotViewMode.Cockpit);
+                EngineAudioCurves.SelectsCockpitLoop(ViewMode));
             EngineAudio?.Update(simDt, engineDrive, speedFrac, healthFrac, _model.EngineDead);
             if (SpeedCue != null && _viewCamera != null)
             {
@@ -2529,23 +2544,29 @@ public partial class FlightController : Node3D
         }
     }
 
-    internal void DetachRosterBindings(ProjectilePool pool)
+    /// <summary>Drops this aircraft's roster registrations and takes down its HUD layers, any readout
+    /// never attached to them, and its speed cue. With <paramref name="freeNow"/> set, those detached nodes are freed in place rather than
+    /// at the frame's end. ⚠ Do not queue them at a session's own teardown. The in-engine suites run inside one
+    /// frame, so that queue never flushes and every session's HUD and cue puffers outlive it.</summary>
+    internal void DetachRosterBindings(ProjectilePool pool, bool freeNow)
     {
         if (Body != null)
             pool.UnregisterAircraft(Body);
+        // A rolled-back aircraft never ran _Ready, so no canvas holds the readouts built for it.
+        _pilotHud.DiscardUnattached(freeNow);
+        VersusHud = FlightHud.Loose(VersusHud, freeNow);
+        Scoreboard = FlightHud.Loose(Scoreboard, freeNow);
         if (_hudCanvas != null && GodotObject.IsInstanceValid(_hudCanvas))
         {
-            _hudCanvas.GetParent()?.RemoveChild(_hudCanvas);
-            _hudCanvas.QueueFree();
+            Discard(_hudCanvas, freeNow);
             _hudCanvas = null;
         }
         if (_messageCanvas != null && GodotObject.IsInstanceValid(_messageCanvas))
         {
-            _messageCanvas.GetParent()?.RemoveChild(_messageCanvas);
-            _messageCanvas.QueueFree();
+            Discard(_messageCanvas, freeNow);
             _messageCanvas = null;
         }
-        SpeedCue?.Dispose();
+        SpeedCue?.Dispose(freeNow);
         SpeedCue = null;
         if (WindStreaks is { } streaks)
         {
@@ -2559,6 +2580,15 @@ public partial class FlightController : Node3D
         PauseState = null;
         TargetSubParts = null;
         TargetObjectives = null;
+
+        static void Discard(Node node, bool freeNow)
+        {
+            node.GetParent()?.RemoveChild(node);
+            if (freeNow)
+                node.Free();
+            else
+                node.QueueFree();
+        }
     }
 
     /// <summary>Whether static world geometry blocks the segment, the turret gunners' cached
@@ -2837,7 +2867,8 @@ public partial class FlightController : Node3D
         _keyActions.Poll(keyboardSide);
         _padActions.Poll(padSide);
         _padAxes.Poll(StickSplit.WithoutSticks(padSide));
-        _stickAxes.Poll(StickSplit.SticksOnly(padSide));
+        _stickSide = StickSplit.SticksOnly(padSide);
+        _stickAxes.Poll(_stickSide);
         if (_bindings.ObserveDevice(_keyActions.Current, _padActions.Current, _stickAxes.Current))
             ComposeControlPrompts();
     }
@@ -2953,7 +2984,7 @@ public partial class FlightController : Node3D
             AvailableLoadFactor = _model.AvailableLoadFactor,
             Stalled = _model.isStalled(),
             AutoLandOffered = AutoLandOffered,
-            RespawnOffered = !Spectating && !CommandsHeld,
+            RespawnOffered = RespawnOffered,
             WallDt = wallDt,
             SimDt = simDt,
             DamageSummary = _pilotHud.DrawsTextBlock ? Damage?.Summary() : null,
@@ -3420,8 +3451,7 @@ public partial class FlightController : Node3D
         Audio?.OnCrash();
         // An AI aircraft's loops end here and stay ended: the animation's own authored sound
         // events are what is audible from now on, and no wreck respawns to restart them.
-        EngineAudio?.Stop();
-        WeaponAudio?.Stop();
+        StopPositionalLoops();
         // The engine wind-down cue layers over the explosion, replacing the loops' abrupt cut with
         // snd_propstop.
         Audio?.OnEngineStop();
@@ -3433,6 +3463,17 @@ public partial class FlightController : Node3D
         ExhaustSmoke?.Reset();
         SpeedCue?.Reset();
         WindStreaks?.Reset();
+    }
+
+    // Every world-positioned loop this aircraft owns, stopped now. A downed or inert host takes no
+    // further tick, so a turret's unexpired lease or a held gun loop would sound until the session ends.
+    // The next live tick restarts whatever is still wanted.
+    private void StopPositionalLoops()
+    {
+        foreach (var turret in Turrets)
+            turret.Voice?.Stop();
+        EngineAudio?.Stop();
+        WeaponAudio?.Stop();
     }
 
     // The authored crash camera: hard-cut to the static elevated vantage and hide the HUD, both
@@ -3641,7 +3682,8 @@ public partial class FlightController : Node3D
         _keyActions.Poll(_padMutedState);
         _padActions.Poll(_seatState);
         _padAxes.Poll(_padsAlone);
-        _stickAxes.Poll(_sticksAlone);
+        _stickSide = _sticksAlone;
+        _stickAxes.Poll(_stickSide);
         // A prompt names the device the seat last took input from, so a handover recomposes it.
         if (_bindings.ObserveDevice(_keyActions.Current, _padActions.Current, _stickAxes.Current))
         {
@@ -4069,7 +4111,7 @@ public partial class FlightController : Node3D
             case DestructibleRegistry.Instance inst:
                 live = inst.Status != DestructibleRegistry.State.Destroyed
                     && GodotObject.IsInstanceValid(inst.Anchor) && inst.Anchor.IsInsideTree();
-                position = live ? inst.Anchor.GlobalPosition : Vector3.Zero;
+                position = live ? inst.Centre : Vector3.Zero;
                 velocity = Vector3.Zero;
                 forward = Vector3.Zero;
                 return true;
@@ -4098,7 +4140,7 @@ public partial class FlightController : Node3D
                 return true;
             case DestructibleRegistry.Instance inst when GodotObject.IsInstanceValid(inst.Anchor)
                 && inst.Anchor.IsInsideTree():
-                position = inst.Anchor.GlobalPosition;
+                position = inst.Centre;
                 return true;
             default:
                 position = Vector3.Zero;
@@ -4730,7 +4772,7 @@ public partial class FlightController : Node3D
         float? position = AnalogAxes.LeverPosition(
             _padActions.Map.Bindings(InputAction.ThrottleLever),
             _padAxes.Value(InputAction.ThrottleLever),
-            _stickAxes.Value(InputAction.ThrottleLever),
+            _stickSide,
             sticks);
         return AnalogAxes.StepLever(_leverTakeover, position, otherCommand);
     }
@@ -5059,7 +5101,7 @@ public partial class FlightController : Node3D
 
     // One frame of head-look input, in HeadLook's own conventions. Read here for the same reason
     // the look-around stick is: the camera never learns about pads, mice or key layouts. The
-    // chase camera clears `includePad`, since the stick places that view itself (PadLook).
+    // chase camera clears `includePad`, since the stick swings that view itself (PadSwing).
     private HeadLookInput HeadLookRead(bool includePad = true)
     {
         if (_sheetOverFlight)

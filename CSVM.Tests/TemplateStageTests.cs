@@ -593,7 +593,6 @@ public class TemplateStageTests
                 roots => roots.Any(r => r != null && Animating.Contains(r)),
                 n => n.Label,
                 _ => { },
-                () => { },
                 _ => { });
         }
 

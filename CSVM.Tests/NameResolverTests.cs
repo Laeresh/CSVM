@@ -142,17 +142,54 @@ public class NameResolverTests
     }
 
     [Fact]
-    public void ClearFindCacheRevisitsAPatternAddedAfterTheFirstQuery()
+    public void AMemoizedAnswerExtendsOverRowsAppendedAfterIt()
     {
         var resolver = new NameResolver<TestNode>();
+        var early = Node("late_arrival");
+        resolver.Add(early, "late_arrival", null);
+        var before = resolver.FindAll("late_arrival", null);
+        var miss = resolver.FindAll("never_there", null);
 
-        Assert.Empty(resolver.FindAll("late_arrival", null));
+        var late = Node("late_arrival");
+        resolver.Add(late, "late_arrival", null);
+        resolver.Add(Node("other"), "other", null);
 
-        resolver.Add(Node("late_arrival"), "late_arrival", null);
-        Assert.Empty(resolver.FindAll("late_arrival", null)); // still the stale memoized miss
+        Assert.Equal(new[] { early, late }, resolver.FindAll("late_arrival", null));
+        Assert.Equal(new[] { early }, before); // a list already handed out is never grown
+        Assert.Same(miss, resolver.FindAll("never_there", null));
+    }
 
-        resolver.ClearFindCache();
-        Assert.Single(resolver.FindAll("late_arrival", null));
+    [Fact]
+    public void AnAppendedAnswerMatchesAColdScanInOrderAndScope()
+    {
+        var root = Node("pool");
+        var rows = new List<(TestNode, string, TestNode?)> { (root, "pool", null) };
+        var warm = new NameResolver<TestNode>();
+        warm.Add(root, "pool", null);
+        Assert.Empty(warm.FindAll("fire#", root));
+        Assert.Empty(warm.FindAll("fire#", null));
+        for (int i = 0; i < 4; i++)
+        {
+            var n = Node($"fire{i}");
+            rows.Add((n, $"fire{i}.flt", i % 2 == 0 ? root : null));
+            warm.Add(n, $"fire{i}.flt", i % 2 == 0 ? root : null);
+        }
+
+        var cold = Build(rows.ToArray());
+
+        Assert.Equal(cold.FindAll("fire#", root), warm.FindAll("fire#", root));
+        Assert.Equal(cold.FindAll("fire#", null), warm.FindAll("fire#", null));
+    }
+
+    [Fact]
+    public void MayAnchorAmongAdmitsOnlyADefinitionNamingOneOfTheNames()
+    {
+        var resolver = new NameResolver<TestNode>();
+        var names = new HashSet<string>(StringComparer.Ordinal) { "cgleng_destroyed.flt", "fire2" };
+
+        Assert.True(resolver.MayAnchorAmong(Def("cgleng_destroyed"), names));
+        Assert.True(resolver.MayAnchorAmong(Def("fire*"), names));
+        Assert.False(resolver.MayAnchorAmong(Def("gasbag4"), names));
     }
 
     // ---- a NAME path walks one scoped segment at a time (through the public tier surface:

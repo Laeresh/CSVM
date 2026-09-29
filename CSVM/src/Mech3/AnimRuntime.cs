@@ -314,6 +314,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// session with no host leaves it false and reads live, as it always has.</summary>
     internal bool PlayerRangeHeld;
 
+    /// <summary>Which machine answers each range gate: the host for a gate that raises a mission
+    /// code, every end for the rest. A network session wires its two seams.</summary>
+    internal RangeGateAuthority RangeGates = new();
+
     /// <summary>Where the player is, for a <c>PLAYER_RANGE</c> condition with no
     /// <see cref="PlayerPositions"/> wired (a lab, a unit test). Supplied by the session (the
     /// flown aircraft, or the spectator camera); absent → the viewport camera, and failing
@@ -747,7 +751,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             TemplateStillAnimated,
             NameOf,
             s => IndexWorld(s, indexByPointer: false),
-            () => _resolver.ClearFindCache(),
             ApplyResetStatesWithin);
     }
 
@@ -2144,6 +2147,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return rest;
     }
 
+    /// <summary>Whether this runtime has ever posed or moved the node, i.e. holds a rest pose for
+    /// it. A respawn re-poses only these, and leaves nodes other animators drive alone.</summary>
+    internal bool HasPosed(Node3D node) => _rest.ContainsKey(node);
+
     // Thin forwards into the pose family, kept here because their callers name this runtime:
     // MotionRuntime.Create reads the landing-resume mark as `rt.ConsumeLandingResume`, the
     // `ground-contact` suite arms it through `runtime.MarkLandingResume`, and OpacityFade and the
@@ -2433,6 +2440,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         _root = worldRoot;
         _program = program;
         _callTargets = null;
+        RangeGates.Bind(program.ByAnimName);
         // ⚠ Hand these flags over before the first Add/Anchors call; they are construction-time
         // facts about this runtime. The census covers the bootstrap passes only.
         _resolver.NameResolveFallback = NameResolveFallback;
@@ -2725,11 +2733,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     // Re-runs the quiet-stage RESET_STATE posing pass (bootstrap pass 1) for whatever now anchors
     // within a subtree added after the fact, IndexStage's (and IndexPooledCopy's) own tail.
+    // ⚠ Keep the name prefilter. Anchors scans the whole node table per definition. Unfiltered, a
+    // library copy built mid-flight paid that for every reset definition, about 150 ms.
     private void ApplyResetStatesWithin(Node3D subtree)
     {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        void Collect(Node3D n)
+        {
+            names.Add(NameOf(n));
+            for (int i = 0, count = n.GetChildCount(); i < count; i++)
+                if (n.GetChild(i) is Node3D c)
+                    Collect(c);
+        }
+        Collect(subtree);
         foreach (var def in _program.Defs)
         {
-            if (def.ResetState == null)
+            if (def.ResetState == null || !_resolver.MayAnchorAmong(def, names))
                 continue;
             foreach (var a in Anchors(def))
                 if (a != null && (a == subtree || subtree.IsAncestorOf(a)))
@@ -3722,8 +3741,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             // condition is the runtime flag itself.
             "HwRender" => true,
             "PlayerFirstPerson" => FirstPersonView?.Invoke() ?? false,
-            "PlayerRange" => anchor != null
-                             && NearestPlayerDistanceSquared(WorldPos(anchor)) <= num,
+            "PlayerRange" => anchor != null && PlayerInRange(def, anchor, num),
             // ANIM_HEALTH gates damage effects: "if this object has been worn down to N".
             // Read against the LIVE per-instance HP, not the def's authored value, so a
             // tower damaged to 30 smokes while its undamaged siblings do not.
@@ -4231,6 +4249,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         foreach (var p in RangePositions())
             d2 = Mathf.Min(d2, point.DistanceSquaredTo(p));
         return d2 == float.MaxValue ? point.DistanceSquaredTo(PlayerPos()) : d2;
+    }
+
+    // A PLAYER_RANGE gate's answer, from whichever machine RangeGates says owns it. C4/M03's
+    // blacke_drop is the one shipped gate whose closure raises a code (docs/org/multiplayer-messages.md).
+    // ⚠ Do not read a host-decided gate locally on a guest; the two ends would start it apart.
+    private bool PlayerInRange(AnimDefinition def, Node3D anchor, float radiusSq)
+    {
+        if (!RangeGates.HostDecides(def))
+        {
+            return NearestPlayerDistanceSquared(WorldPos(anchor)) <= radiusSq;
+        }
+
+        string gate = RangeGateAuthority.GateName(def, anchor.Name, radiusSq);
+        return RangeGates.HostVerdict is { } host
+            ? host(gate)
+            : RangeGates.Decide(gate, NearestPlayerDistanceSquared(WorldPos(anchor)) <= radiusSq);
     }
 
     private Node3D? ConditionNode(object? reference, AnimDefinition def, Node3D? anchor)

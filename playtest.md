@@ -309,7 +309,8 @@ reasons that have nothing to do with any of these checks.
 
 - `PT-133` `[Own]` **The HUD's reading box is the right width at the controls on a 32:9 screen.**
   The dials, the SPD/ALT/THR block and the pause screen's objectives panel measure from a 16:9 box
-  centred in the pane rather than from the pane's own edges, that box is the frame every one of
+  centred in a full-screen view rather than from the screen's own edges (a splitscreen pane is its
+  own box), that box is the frame every one of
   those offsets was measured in (`HUD.png`, 2556x1440). Whether the width reads right on a
   5120-wide screen, where the two columns end up 1280 px in from each edge, is a judgement no
   instrument makes. Fly it with the window fullscreen (Options → VIDEO → Display Mode) so the pane

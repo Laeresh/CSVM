@@ -82,15 +82,16 @@ public class CoopDoorTextTests
         var door = new NetPlayFeature(
             (_, _, _) => mesh[0],
             (_, _) => mesh[0],
-            port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, "203.0.113.24", "mapped"),
-            _ => { });
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, "203.0.113.24", "mapped"),
+                _ => { }));
         Assert.Equal("", CoopDoorText.HostBand(door));
 
         door.OpenCoopHost(14);
         Assert.Equal($"NETWORK OPEN  port {NetPlayFeature.DefaultPort}  2 guests", CoopDoorText.HostBand(door));
 
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
-        while (door.PortMap == null && DateTime.UtcNow < deadline)
+        while (door.Router.PortMap == null && DateTime.UtcNow < deadline)
         {
             door.Step(0.016);
             System.Threading.Thread.Sleep(1);
@@ -144,10 +145,11 @@ public class CoopDoorTextTests
     private static string HostBandOver(UpnpPortMapResult answer)
     {
         var mesh = LoopbackTransport.Mesh(1, Clean, new Random(3));
-        var door = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0], port => answer with { Port = port }, _ => { });
+        var door = new NetPlayFeature(
+            (_, _, _) => mesh[0], (_, _) => mesh[0], new RouterAccess(port => answer with { Port = port }, _ => { }));
         door.OpenCoopHost(14);
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
-        while (door.PortMap == null && DateTime.UtcNow < deadline)
+        while (door.Router.PortMap == null && DateTime.UtcNow < deadline)
         {
             door.Step(0.016);
             System.Threading.Thread.Sleep(1);

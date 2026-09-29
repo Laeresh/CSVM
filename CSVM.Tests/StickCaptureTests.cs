@@ -142,6 +142,45 @@ public class StickCaptureTests
         Assert.Equal(BindingControl.FullAxis(2, inverted, StickCapture.FlightDeadzone), binding.Control);
     }
 
+    /// <summary>R's lever rests at -0.57 and reaches full at -1, a travel of 0.43, short of the move
+    /// threshold. On the lever row that push captures it inverted; on any other row it does not.</summary>
+    [Theory]
+    [InlineData(InputAction.ThrottleLever, true)]
+    [InlineData(InputAction.PitchUp, false)]
+    [InlineData(InputAction.FireGuns, false)]
+    public void ALeverRestingNearItsFullEndIsCapturedPushedToFull(InputAction row, bool captured)
+    {
+        using var rig = new Rig();
+        rig.Native.SetAxis(2, 2, LeverRestR);
+        var capture = rig.Arm(row);
+
+        Assert.Null(capture.Poll(rig.Seat));
+        rig.Native.SetAxis(2, 2, -32768);
+        var binding = capture.Poll(rig.Seat);
+
+        if (captured)
+            Assert.Equal(new Binding(VkbR.Device, BindingControl.FullAxis(2, true, StickCapture.FlightDeadzone)), binding);
+        else
+            Assert.Null(binding);
+    }
+
+    /// <summary>A lever twitching toward the end it rests near is not captured. The R stops short of
+    /// that end's band, and one parked at the end stops short of the least travel.</summary>
+    [Theory]
+    [InlineData(-0.57f, -0.85f)]
+    [InlineData(-0.95f, -1f)]
+    [InlineData(0.9f, 1f)]
+    public void ALeverTwitchingTowardTheEndItRestsNearDoesNotTrigger(float rest, float twitch)
+    {
+        using var rig = new Rig();
+        rig.Native.SetAxis(2, 2, Raw(rest));
+        var capture = rig.Arm(InputAction.ThrottleLever);
+
+        Assert.Null(capture.Poll(rig.Seat));
+        rig.Native.SetAxis(2, 2, Raw(twitch));
+        Assert.Null(capture.Poll(rig.Seat));
+    }
+
     /// <summary>A lever parked far off centre, twitching by less than the move threshold, is never
     /// captured on any row. A zero-relative rest band would latch it or mask it forever.</summary>
     [Theory]
@@ -332,6 +371,34 @@ public class StickCaptureTests
         Assert.Equal("Button 5", StickLabels.Column(new Binding(VkbL.Device, BindingControl.Button(4)), names));
         Assert.Equal("Axis 2 inverted", StickLabels.Column(new Binding(VkbL.Device, BindingControl.FullAxis(1, true, 0.02f)), names));
         Assert.Equal("Hat Up", StickLabels.Column(new Binding(VkbL.Device, BindingControl.Hat(0, HatDirection.Up)), _ => "  "));
+    }
+
+    [Fact]
+    public void TwoUnnamedSticksOnOneRowKeepTheirModelsInTheStickColumn()
+    {
+        var row = new[]
+        {
+            new Binding(VkbR.Device, BindingControl.Button(4)),
+            new Binding(VkbL.Device, BindingControl.Button(4)),
+            new Binding(VkbL.Device, BindingControl.Hat(0, HatDirection.Up)),
+        };
+
+        Assert.Equal(new[] { "231D/0200 Button 5", "231D/0201 Button 5", "231D/0201 Hat Up" }, StickLabels.Columns(row, _ => "  "));
+        Assert.Equal(new[] { "R Button 5", "Button 5", "Hat Up" }, StickLabels.Columns(row, m => m == VkbR ? "R" : null));
+        Assert.Equal(new[] { "R Button 5", "L Button 5", "L Hat Up" }, StickLabels.Columns(row, m => m == VkbR ? "R" : "L"));
+    }
+
+    [Fact]
+    public void OneUnnamedStickOnARowPrintsItsControlAlone()
+    {
+        var row = new[]
+        {
+            new Binding(VkbL.Device, BindingControl.Button(4)),
+            new Binding(VkbL.Device, BindingControl.FullAxis(1, true, 0.02f)),
+        };
+
+        Assert.Equal(new[] { "Button 5", "Axis 2 inverted" }, StickLabels.Columns(row, _ => null));
+        Assert.Empty(StickLabels.Columns(Array.Empty<Binding>(), _ => null));
     }
 
     [Fact]

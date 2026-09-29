@@ -35,17 +35,14 @@ public readonly record struct AirframeSwapOrder(AirframeSwapCode Airframe, strin
 public readonly record struct AirframeSwapResult(bool Swapped, Flight.Airframe.FlightController? Hidden);
 
 /// <summary>What one mid-mission airframe swap replaces on a player's rig: the planes.zbd node to
-/// build, and the flight state the replacement starts in, lifted off the aircraft being left.
-/// ⚠ Four things a swap deliberately does NOT rebuild. A custom plane, whose bought armour and
-/// pylon counts belong to the airframe the pilot bought rather than to the one a mission handed
-/// them. The sortie's Ammo Selection picks, for the same reason: each case writes the handed-over
-/// airframe's own weapon ids over every slot, slug guns and <c>wep_06</c> pylons. A stunt run,
-/// which belongs to the pilot. And the spawn list, since the aircraft being left is where the
-/// replacement begins. <c>Scheme</c> is null outside a resolved 967 capture, and null inside one
-/// whose captured rig painted nothing; <c>ShippedSkins</c> carries that null, so the rebuild draws
-/// the captured rig's own result rather than this pilot's default livery. <c>Build</c> is the
-/// custom plane the replacement flies in place of the airframe's stock fit (965's Blue Streak);
-/// null keeps the stock one.</summary>
+/// build, and the flight state lifted off the aircraft being left.
+/// ⚠ A swap deliberately does NOT rebuild a custom plane or the sortie's Ammo Selection picks,
+/// which belong to the airframe the pilot left. Each case writes its own weapon ids over every
+/// slot, slug guns and <c>wep_06</c> pylons. Nor a stunt run, which belongs to the pilot, or the
+/// spawn list, since the aircraft being left is where the replacement begins. <c>Scheme</c> is the
+/// captured aircraft's livery on a 966 or 967 swap, and <c>ShippedSkins</c> makes a null one stand
+/// rather than the pilot's default livery. <c>Build</c> is the custom plane flown in place of the
+/// airframe's stock fit (965's Blue Streak); null keeps the stock one.</summary>
 internal sealed record AirframeSwapRequest(
     string PlaneNode, FlightStart Start, Mech3.PaintScheme? Scheme = null, bool ShippedSkins = false,
     Flight.Hangar.CustomPlaneDef? Build = null);
@@ -95,12 +92,12 @@ public static class AirframeSwapCodes
 }
 
 /// <summary>
-/// The things codes 966 and 967 do past rebuilding the player's rig: the capture animation's
-/// own aircraft hands its damage and its roster group to the new hull (967 alone), and the
+/// The things codes 966 and 967 do past rebuilding the player's rig. The captured aircraft's
+/// livery rides the new hull (both), and its damage and roster group ride it (967 alone). The
 /// aeroplane the player just left goes to <c>wingman_4</c>.
-/// ⚠ Neither behaviour is asked for by anything in the shipped data. Both are keyed on chapter
-/// and mission strings inside the executable, so a search of the data for a trigger comes back
-/// empty and that emptiness is NOT evidence they do not exist. Decode:
+/// ⚠ No shipped data asks for the damage carry or the hand-over; both live in the executable,
+/// the hand-over keyed on chapter and mission strings. So a search of the data for a
+/// trigger comes back empty, and that emptiness is NOT evidence they do not exist. Decode:
 /// docs/formats/anim-definitions/cutscenes.md, "The airframe swap codes 965, 966 and 967".
 /// </summary>
 public static class AirframeHandover
@@ -120,6 +117,11 @@ public static class AirframeHandover
     // The capture case. 966 measures the outgoing sums and hands them over exactly as 967 does,
     // but scales nothing and hides nothing: it has no capture animation to read.
     private const int CaptureCode = 967;
+
+    // CM19's Warhawk. Its definition is rooted on the player marker, so no live rig names the
+    // aircraft taken. The paint comes off the Black Hat def CM19's own Warhawk blocks fly.
+    private const int WarhawkCode = 966;
+    private const string WarhawkPaintDef = "bhatwarhawk";
 
     // The chapter/mission pairs the original resolves the name in, lower case as the exe holds
     // them. Nothing in the data says these two are special.
@@ -144,6 +146,17 @@ public static class AirframeHandover
 
         return false;
     }
+
+    /// <summary>Whether this code paints the new hull in the captured aircraft's livery (966 and
+    /// 967). Neither is in the executable: both are the user's own reading of the original at the
+    /// controls (docs/formats/anim-definitions/cutscenes.md).</summary>
+    public static bool CarriesCapturedPaint(AirframeSwapCode airframe) =>
+        airframe.Code is CaptureCode or WarhawkCode;
+
+    /// <summary>The militia def whose scheme stands in when the swap names no live rig to read the
+    /// paint off (966's <c>bhatwarhawk</c>), or null.</summary>
+    public static string? CapturedPaintDef(AirframeSwapCode airframe) =>
+        airframe.Code == WarhawkCode ? WarhawkPaintDef : null;
 
     /// <summary>Whether this code carries the captured aircraft's damage into the new hull and
     /// hides that aircraft.</summary>

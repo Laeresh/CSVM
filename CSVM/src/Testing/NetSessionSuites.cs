@@ -548,13 +548,19 @@ internal static class NetSessionSuites
 
     // The join's own traffic, then the contract a replication feature uses. Register a handler,
     // send a typed message, and have it applied from inside the receiving session's step.
+    // ⚠ The host built first, so its start hold follows the join's two payloads. It lands inside the
+    // guest's join pump, and the guest must take it there: an unknown word here is that race.
     private static void Traffic(TestContext ctx, GameSession host, GameSession guest)
     {
         var link = host.NetLink!;
         var far = guest.NetLink!;
         string counters = $"sent {link.Sent}, received {far.Received}, unknown {far.DroppedUnknown}, malformed {far.Malformed}";
-        ctx.Check(link.Sent == 2 && far.Received == 2 && far.DroppedUnknown == 0 && far.Malformed == 0,
-            $"the join is two reliable payloads and nothing else ({counters})");
+        ctx.Check(link.Sent == 3 && far.Received == 3 && far.DroppedUnknown == 0 && far.Malformed == 0,
+            $"the join is two reliable payloads, then the host's start hold, and none is unknown ({counters})");
+        byte hostRound = host.StartGate?.Round ?? 0;
+        byte guestRound = guest.StartGate?.Round ?? 0;
+        ctx.Check(hostRound != 0 && guestRound == hostRound,
+            $"and the guest's start gate took that hold's round from inside its join (host {hostRound}, guest {guestRound})");
 
         int seen = 0;
         var got = default(ScoreMessage);

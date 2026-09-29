@@ -22,8 +22,8 @@ stored-name quirks (20-char truncation prefix match, legacy `.-N` renames, the f
 doubled period) and classifies each texture's alpha twice, for two unrelated readers:
 `LastHadAlpha`/`LastAlphaIsSoft`, off the decoded pixels and the named soft-alpha families (`IsNamedSoftAlpha`), which scissor-versus-blend keys on, and `LastAlphaClass` from the extractor's
 manifest, the one reader that sees the `Simple` textures. That manifest also supplies
-`RenderFlags`, whose bit 2 (`IsAdditive`) is the whole sprite-blend rule.
-`Build` is the one construction path (decode, classify, drop-in, mip chain), `Find` caches it, `BuildMipped` hands it to `--dump-mips` un-cached, and `MipBias` reads the chapter's authored LOD
+`RenderFlags`, whose bit 2 (`IsAdditive`) is the whole sprite-blend rule, and whose bit 3 decides `TruncatesAlpha`, the faithful path's 4-bit alpha that `PlanePainter` also applies.
+`Build` is the one construction path (decode, classify, drop-in, mip chain, alpha truncation), `Find` caches it, `BuildMipped` hands it to `--dump-mips` un-cached, and `MipBias` reads the chapter's authored LOD
 bias for `Launcher`. [../org/textures.md](../org/textures.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../formats/gamez.md](../formats/gamez.md).
 
 ## src/Mech3/SceneBuilder.cs
@@ -494,7 +494,7 @@ kill, `ApplyDamageStages`, `RunDeathSequence`, `CarryState`; a host publishes ea
 with a frame budget, which never splits one def), the range-deferred start sweep
 and the vehicle/library-root index, and hands every construction site a sealed `TemplateStage`. Its
 range gates read the players through `RangePositions`: the last pose they flew, while
-`PlayerRangeHeld` says a cutscene is posing their aeroplanes. `FastForward` is the per-definition
+`PlayerRangeHeld` says a cutscene is posing their aeroplanes, and `RangeGates` says which machine answers each gate (`Anim/RangeGateAuthority.cs`). `FastForward` is the per-definition
 rate a held key raises a cutscene to (`Anim/CutsceneFastForward.cs`), which `Advance` spends as repeated passes of the instance walk. `CollectLateStarts` and `CatchUp` step only the instances started in between, with their motions, for a guest's late director event. `SuppressedMotionAnims` names the definitions whose `OBJECT_MOTION` events this runtime drops, for a pose another writer owns, which also ends a definition that motion was sustaining (docs/verification.md, INSTR-74). What binds a member is on that member:
 the pool-slot checkout reset, the prewarm's scope, the mission-trigger closure, the undercover
 probe's decode, the death call's site follow. Each dispatch axis is a sibling module; the router keeps the case labels and the public fields callers configure: `SequenceRunner.cs`, `Anim/MotionSet.cs`, `Anim/NameResolver.cs`, `Anim/EmitterDirector.cs`, `Anim/SoundChannel.cs`, `Anim/LightChannel.cs`, `Anim/PoseChannel.cs`, `Anim/TemplateStage.cs`. Decode: docs/org/sequences.md.
@@ -570,7 +570,8 @@ edits the prototype material the rack copies share. The fade shader itself is
 
 ## src/Mech3/Anim/NameResolver.cs
 Name to node resolution as one public module, generic over the node type (`NameResolver<TNode>`):
-the index, the wildcard `Matcher`, the memoized `FindAll`, the scoped tier chain
+the index, the wildcard `Matcher`, the memoized `FindAll` (an answer extends over appended rows
+rather than being voided by them), the scoped tier chain
 (`Resolve`/`ResolveScoped`), the symbol authority (`SymbolClaims`/`NarrowToSymbolRoot`), `Anchors`
 (NAME match, symbol narrowing, root lift) and the bind census. Node identity is
 constructor-supplied, never the node type's inherited `Equals`; `DropFreed` retires the rows naming a freed node and `DropNodes` those naming a live subtree a second staging replaces, since a name resolves to whichever claimant was indexed first. `AdmissibleStaging` filters every tier, the owner's verdict on one pooled
@@ -585,6 +586,14 @@ owned by nobody but `CutsceneController`, which scopes it per episode and hands 
 rate as repeated passes of the instance walk. A remake-only rule, so both constants are design
 choices rather than decoded figures. Read `Session/World/CutsceneController.cs` next; the reasoning is
 docs/formats/anim-definitions/cutscenes.md, "Handoff and skip".
+
+## src/Mech3/Anim/RangeGateAuthority.cs
+Which machine answers a `PLAYER_RANGE` gate. `HostDecides` walks a definition's `CALL_ANIMATION`
+closure once per world and answers true when it reaches a `CALLBACK`; `Decide` records the deciding
+end's verdict and raises `Decided` on a change; a set `HostVerdict` replaces the local read on a
+guest. Engine-free: `AnimRuntime.RangeGates` holds one per runtime and binds it to the program at
+bootstrap, and `Session/Campaign/NetPositionalStartLink.cs` wires the two seams in network co-op.
+The census of shipped gates and the wire kind: docs/org/multiplayer-messages.md, "Positional starts".
 
 ## src/Mech3/Anim/TemplateStage.cs
 The effect-template stage as one module (`TemplateStage<TNode>`): pool-slot arithmetic (`SlotOf`,
@@ -612,9 +621,9 @@ anchor)` pair seeded from the authored `HEALTH`, plus a coarse healthy/damaged/d
 `DamageStage`. Built in `AnimRuntime`'s bootstrap, read by `ANIM_HEALTH` evaluation, escalated by `ApplyDamageStages`,
 damaged via `DamageAt`. `Resolve(struck)` climbs to the nearest claiming pool, which answers for its damage node and
 everything under it (what the original stamps its handler over) and, through its anchor alone, for nothing. `Instance`
-carries what a mission record authors (`Team`, `Owner`, `Gasbag`, `Dormant`, `Reseed`) and caches the anchor's own name and its gamez
-ancestor names for `TargetPool` under the parent's id, so an authored re-parent re-reads them and a per-tick ranking
-ask does not. Schema: docs/formats/destructibles.md; teams docs/org/targeting.md.
+carries its `Centre` (the damage node's box centre, the one position every reader takes), what a mission record
+authors (`Team`, `Owner`, `Gasbag`, `Dormant`, `Reseed`), and the anchor's name and gamez ancestors for `TargetPool`,
+cached under the parent's id. Schema: docs/formats/destructibles.md; teams and position docs/org/targeting.md.
 
 ## src/Mech3/WavFile.cs
 Pure-C# WAV parser with an MS ADPCM to PCM16 decoder (`DecodeMsAdpcm`), no Godot dependencies:

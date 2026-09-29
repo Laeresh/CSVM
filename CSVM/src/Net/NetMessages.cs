@@ -119,6 +119,49 @@ public enum NetMessageType : ushort
     /// <summary>A skip of one shared cutscene episode: a guest's ask, or the host's word that it
     /// skipped.</summary>
     CutsceneSkip = 0x0058,
+
+    /// <summary>The campaign wingman's airframe and fit, sent by a co-op host to every guest at a
+    /// launch.</summary>
+    CoopWingman = 0x0059,
+
+    /// <summary>A campaign film a co-op host started or ended, sent to every guest so each plays
+    /// the same film and ends it with the host's.</summary>
+    CoopFilm = 0x005A,
+
+    /// <summary>The start of a network flight: a guest's word that its world is built, or the
+    /// host's word that every machine starts.</summary>
+    StartGate = 0x005B,
+
+    /// <summary>The host's word on a match death, sent to every guest so each posts the same kill
+    /// lines.</summary>
+    DeathNotice = 0x005C,
+
+    /// <summary>One seat's custom plane build: a guest's own with its pick, or each seat's from
+    /// the host at a launch.</summary>
+    PlaneBuild = 0x005D,
+
+    /// <summary>A Dogfight host's plane rules: Allow Custom Planes, Outlaw Components and the
+    /// outlaw list.</summary>
+    LobbyPlaneRules = 0x005E,
+
+    /// <summary>One plane of a co-op host's hangar and the seat that holds it, sent to every guest
+    /// whenever it changes.</summary>
+    CoopHangar = 0x005F,
+}
+
+/// <summary>Which campaign film a <see cref="CoopFilmMessage"/> names.</summary>
+public enum NetCoopFilm : byte
+{
+    /// <summary>A film this build does not know.</summary>
+    Unknown = 0,
+
+    /// <summary>A chapter's film, played in front of the cabin; the message names the chapter.
+    /// </summary>
+    Chapter = 1,
+
+    /// <summary>The closing film, played in front of the book after the last mission is won.
+    /// </summary>
+    Closing = 2,
 }
 
 /// <summary>Which board a co-op host stands on, the screen a <see cref="CoopFlowMessage"/> names.
@@ -192,6 +235,11 @@ public enum NetPositionalStart : byte
     /// <summary>A guest's auto-land button, sent to the host whenever it changes while an auto row
     /// is offered to that seat. The seat is the guest's own.</summary>
     AutoLandHeld = 3,
+
+    /// <summary>The host's verdict on a range gate whose definition raises a mission code, sent
+    /// whenever it changes. The row is the gate name's hash, the held flag the verdict, and the
+    /// seat is <see cref="NetMessage.NoSeat"/>.</summary>
+    RangeGate = 4,
 }
 
 /// <summary>What kind of session a host holds open, the word a join board names it by.</summary>
@@ -236,6 +284,11 @@ public enum NetWorldEvent : ushort
     /// <summary>A guest's link dropped mid-mission and its aeroplane left the field. The subject is
     /// that guest's seat.</summary>
     SeatLeft = 6,
+
+    /// <summary>A host AI raised a combat-voice trigger. The subject is the admission ordinal of the
+    /// AI the line is about. The argument packs the trigger in bits 0 to 7, a broadcast flag in bit
+    /// 15 and the broadcast's team in bits 16 to 31.</summary>
+    AiVoice = 7,
 }
 
 /// <summary>Why a pilot died, the original's own cause word
@@ -633,6 +686,47 @@ public readonly record struct DeathMessage(
         writer.WriteByte(KillerSeat);
         writer.WriteUInt16((ushort)Cause);
         writer.WriteUInt32(SourceId);
+        return writer.Close();
+    }
+}
+
+/// <summary>
+/// A match death as the host decided it, sent to every guest so each posts the kill lines once.
+/// The owner's <see cref="DeathMessage"/> is relayed to everyone but its reporter, so it cannot
+/// be the post. Reliable. The cause is the one the host scored, so a death with no seat to charge
+/// reads <see cref="NetDeathCause.Suicide"/>.</summary>
+public readonly record struct DeathNoticeMessage(byte VictimSeat, byte KillerSeat, NetDeathCause Cause)
+    : INetMessage<DeathNoticeMessage>
+{
+    /// <summary>The fixed width of the message, header included.</summary>
+    public const int Size = 8;
+
+    /// <inheritdoc/>
+    public static NetMessageType Type => NetMessageType.DeathNotice;
+
+    /// <inheritdoc/>
+    public static NetReliability Reliability => NetReliability.Reliable;
+
+    /// <inheritdoc/>
+    public static bool TryRead(ReadOnlySpan<byte> from, out DeathNoticeMessage message)
+    {
+        message = default;
+        var reader = new NetMessageReader(from);
+        if (!reader.Is(Size) || reader.Type != Type)
+            return false;
+
+        message = new DeathNoticeMessage(
+            reader.ReadByte(), reader.ReadByte(), (NetDeathCause)reader.ReadUInt16());
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public int Write(Span<byte> into)
+    {
+        var writer = new NetMessageWriter(into, Type);
+        writer.WriteByte(VictimSeat);
+        writer.WriteByte(KillerSeat);
+        writer.WriteUInt16((ushort)Cause);
         return writer.Close();
     }
 }
@@ -1094,6 +1188,19 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
     /// <summary>How wide a roster of <paramref name="seats"/> seats is.</summary>
     public static int SizeFor(int seats) => PrefixSize + (EntrySize * seats);
 
+    /// <summary>What of <paramref name="callsign"/> an entry carries: the longest whole-character
+    /// prefix whose UTF-8 fits the field beside its terminator. A host names its own seats by it,
+    /// so its roster reads what every guest's copy reads.</summary>
+    public static string Carried(string? callsign)
+    {
+        if (string.IsNullOrEmpty(callsign))
+            return "";
+
+        Span<byte> field = stackalloc byte[CallsignBytes - 1];
+        System.Text.Encoding.UTF8.GetEncoder().Convert(callsign.AsSpan(), field, true, out _, out int used, out _);
+        return System.Text.Encoding.UTF8.GetString(field[..used]);
+    }
+
     /// <inheritdoc/>
     public static bool TryRead(ReadOnlySpan<byte> from, out SeatRosterMessage message)
     {
@@ -1249,6 +1356,13 @@ public static class NetMessage
         NetMessageType.BuildVersion => BuildVersionMessage.Reliability,
         NetMessageType.DestructibleHit => DestructibleHitMessage.Reliability,
         NetMessageType.CutsceneSkip => CutsceneSkipMessage.Reliability,
+        NetMessageType.CoopWingman => CoopWingmanMessage.Reliability,
+        NetMessageType.CoopFilm => CoopFilmMessage.Reliability,
+        NetMessageType.StartGate => StartGateMessage.Reliability,
+        NetMessageType.DeathNotice => DeathNoticeMessage.Reliability,
+        NetMessageType.PlaneBuild => PlaneBuildMessage.Reliability,
+        NetMessageType.LobbyPlaneRules => LobbyPlaneRulesMessage.Reliability,
+        NetMessageType.CoopHangar => CoopHangarMessage.Reliability,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "no such message type"),
     };
 

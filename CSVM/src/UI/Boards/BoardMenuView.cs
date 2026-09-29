@@ -86,6 +86,26 @@ public sealed partial class BoardMenuView : VBoxContainer
         }
     }
 
+    /// <summary>The row whose drawn line holds the point, in canvas pixels, or -1 for none: the hit
+    /// test a <see cref="BoardMenuPointer"/> reads this view through.</summary>
+    public int RowAt(float x, float y)
+    {
+        var at = new Vector2(x, y);
+        for (int i = 0; i < _rows.Length; i++)
+        {
+            if (_rows[i].GetGlobalRect().HasPoint(at))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>A row's drawn line in canvas pixels, for a suite that points at it.</summary>
+    public Rect2 RowRect(int row) =>
+        row >= 0 && row < _rows.Length ? _rows[row].GetGlobalRect() : default;
+
     // Over the seat's OWN bindings rather than the shipped defaults, since nothing else on a board
     // names the cursor's controls. Separate hints and not one sentence: a seat names one device at
     // a time, and each item is composed through that gate. No way back is advertised, since only a

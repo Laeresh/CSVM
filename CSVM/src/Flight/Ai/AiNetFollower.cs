@@ -176,10 +176,28 @@ public sealed class AiNetFollower
     /// follower that offset only its current target would seat itself on the wrong node.</summary>
     public Vector3 NodePosition(int index) => Net.Nodes[index].Position + LiveOffset();
 
+    /// <summary>Where the net's trailer carries a vehicle standing at <paramref name="position"/>:
+    /// the live offset added in X and Z, Y kept. The original's activation writes this over the
+    /// vehicle's position (<c>FUN_00432010</c> from <c>FUN_004b0f40</c>, docs/org/aiPilot.md).
+    /// The identity on an unanchored walk or an unresolved target.</summary>
+    public Vector3 Carry(Vector3 position) => position + LiveOffset();
+
+    /// <summary>Seats the walk now, from <paramref name="position"/> and <paramref name="heading"/>,
+    /// instead of on the first <see cref="Update"/>. The original seats a spawned vehicle's net at
+    /// its placement (<c>FUN_00475fc0</c>, docs/org/aiPilot.md), and activation never reseats it.
+    /// A woken or teleported vehicle walks on from its spawn seat.</summary>
+    /// <param name="position">Where the vehicle stands.</param>
+    /// <param name="heading">The vehicle's nose, which picks the first edge.</param>
+    public void Seat(Vector3 position, Vector3 heading)
+    {
+        Reseat();
+        Update(position, heading);
+    }
+
     /// <summary>Drops the walk back to "nearest node next", so the next <see cref="Update"/>
-    /// re-seats from wherever the follower now is: the original's activation snap
-    /// (<c>FUN_004b0f40</c> into <c>FUN_00432010</c>) and its danger-zone exit
-    /// (<c>FUN_00490590</c>) alike, both decoded in this module's architecture.md entry.</summary>
+    /// re-seats from wherever the follower now is. The danger-zone exit (<c>FUN_00490590</c>) is
+    /// the decoded caller, in this module's entry. An activation never reseats (docs/org/aiPilot.md).
+    /// </summary>
     /// <param name="avoidFrom">One end of an edge the next seat pick must refuse, −1 for none.</param>
     /// <param name="avoidTo">The other end of that edge.</param>
     public void Reseat(int avoidFrom = -1, int avoidTo = -1)

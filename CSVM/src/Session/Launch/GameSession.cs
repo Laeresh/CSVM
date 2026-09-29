@@ -210,10 +210,17 @@ public partial class GameSession : Node3D
     // readonly: a guest's roster arrives over the wire, between construction and the build.
     private IReadOnlyList<Net.NetSeat> _netSeats;
     private Func<int, Flight.Weapons.LoadoutChoice?>? _netSeatFit;
+    private Func<int, Flight.Hangar.CustomPlaneDef?>? _netSeatBuild;
+    private Func<Net.CoopWingmanMessage?>? _netCoopWingman;
     // How this guest reads the host's session clock, null on a host and outside a match. Built
     // from the handshake, whose seed is already in _masterSeed by then.
     private Net.NetClockSlew? _netClock;
     private Net.NetClockPing? _netPing;
+    // The start barrier, null outside a network match. While it holds, the clock is start-held
+    // and only the wire is stepped.
+    private Net.NetStartGate? _startGate;
+    // Whether this machine's world is built, so a guest answers the host's hold word only then.
+    private bool _startBuilt;
     // When the host repeats the match state, null on a guest and outside a match. A guest never
     // holds one, which is what makes the host the only writer of the clock.
     private Net.MatchStateCadence? _matchCadence;
@@ -451,6 +458,9 @@ public partial class GameSession : Node3D
             ? seats.OrderBy(s => s.SeatIndex).ToArray()
             : Array.Empty<Net.NetSeat>();
         _netSeatFit = ctx.NetSeatFit;
+        _netSeatBuild = ctx.NetSeatBuild;
+        // Every guest binds the wingman from its host's word, and one with no word says so loudly.
+        _netCoopWingman = ctx.NetTransport != null && !ctx.NetHost ? ctx.NetCoopWingman ?? (() => null) : null;
         _netClock = ctx.NetHandshake is { } handshake
             ? new Net.NetClockSlew(handshake.HostClock)
             : null;
@@ -528,6 +538,14 @@ public partial class GameSession : Node3D
     /// suite reads what it asked or answered.</summary>
     internal Net.NetClockPing? NetPing => _netPing;
 
+    /// <summary>This session's start barrier, null outside a network match. A suite reads why and
+    /// after how long it opened.</summary>
+    internal Net.NetStartGate? StartGate => _startGate;
+
+    /// <summary>Whether the flight is built but waits for every machine to load. The launcher keeps
+    /// its load screen up for as long as this holds.</summary>
+    internal bool StartHeld => _clock is { StartHeld: true };
+
     /// <summary>What is holding this session's world, null before the build. A results board's
     /// wake raises <see cref="PauseState.Ended"/> here, so this is where a suite reads whether the
     /// wrap-up board is holding a machine.</summary>
@@ -563,6 +581,10 @@ public partial class GameSession : Node3D
     /// <summary>The network match's world link, null outside one. The harness suites read the
     /// admitted AI and the applied events off it.</summary>
     internal NetWorldLink? NetWorld => _netWorld;
+
+    /// <summary>The AI combat voice, null when the session built no sound defs. The harness suites
+    /// raise and count its call-outs.</summary>
+    internal AiVoiceRuntime? AiVoice => _aiVoice;
 
     /// <summary>The cutscene host, null outside a flown world. A suite drives its airframe swap
     /// seam the way a replayed definition's code does.</summary>
@@ -602,6 +624,7 @@ public partial class GameSession : Node3D
         }
 
         WireNetClock();
+        WireStartGate();
         // Published as the ambient Current so WorldSession, which the test harness also drives with
         // no session around it, can record its phases blind.
         _startup = new StartupProfile(_spec.ModeName, Time.GetTicksMsec())
@@ -636,11 +659,10 @@ public partial class GameSession : Node3D
         };
         GameClock.Current = _clock;
         LoadProgress.Report(LoadStep.Scaffold);
-        // Every world camera outside the cockpit interior draws at the one decoded base
-        // (CameraController.ExternalFovDeg). The 50 is the static viewer's own framing, which
-        // shows a model rather than the world and is not one of the original's views.
-        _camera.Fov = _spec.Fly || _spec.Freecam || _spec.AnimLab
-            ? CameraController.ExternalFovDeg : 50f;
+        // World cameras outside the cockpit draw at the decoded base, and the viewer's 50 frames
+        // a model. A free camera's own angle option replays a cockpit view an F11 line printed.
+        _camera.Fov = _spec.Fov ?? (_spec.Fly || _spec.Freecam || _spec.AnimLab
+            ? CameraController.ExternalFovDeg : 50f);
         // One rig per rendered view, before anything camera-anchored is built (the skydome and
         // weather visuals below are per-rig). Single player reuses the main-viewport camera.
         BuildRigs(_spec.Fly ? _spec.Players : 1);
@@ -711,7 +733,7 @@ public partial class GameSession : Node3D
         // lives on InstantActionDirector.TryCreate.
         _iaDirector = InstantActionDirector.TryCreate(_spec);
         // The campaign's sibling, on the same "a load failure flies without a mission" contract.
-        _campaign = CampaignDirector.TryCreate(_spec, _zrdrPath, state.MissionZrdrPath);
+        _campaign = CampaignDirector.TryCreate(_spec, _zrdrPath, state.MissionZrdrPath, _netCoopWingman);
         if (_campaign is { } campaign)
         {
             // The mission's own WAKEUP_SOUND_GROUP is what cues every campaign track, so the
@@ -874,6 +896,7 @@ public partial class GameSession : Node3D
         _simulation = new SessionSimulation(new SessionSimulationRuntime(this));
         _startup?.EndBuild();
         InSession = true;
+        HoldStart();
         LoadProgress.Report(LoadStep.Finished);
         return true;
     }
@@ -917,7 +940,7 @@ public partial class GameSession : Node3D
         // A cutscene skips on any input, as the original's state core does; a stick's is polled in
         // PollStickSkip. ⚠ Escape is exempt: it is the way out of the session. ⚠ Pads count only
         // where this session reads pads at all, since a pad reports button 0 pressed on arrival.
-        if (_cutscene is { Playing: true }
+        if (_cutscene is { Playing: true } && !StartHeld
             && (@event is InputEventKey { Pressed: true, Echo: false, Keycode: not Key.Escape }
                 || (!_spec.PadsDisabled && @event is InputEventJoypadButton { Pressed: true })))
         {
@@ -1054,14 +1077,24 @@ public partial class GameSession : Node3D
     /// </summary>
     public override void _PhysicsProcess(double delta)
     {
-        if (delta <= 0.0 || _clock is not { ParentDriven: false })
+        if (delta <= 0.0 || _clock is not { } clock)
+            return;
+        // Ahead of the mode check: a held start steps the wire from here in every clock mode. The
+        // parent-driven loop runs no steps while held.
+        bool wireStepped = clock.StartHeld;
+        if (wireStepped && !StepStartHold(clock, delta))
+            return;
+        if (clock.ParentDriven)
             return;
         // Before the step, never after: everything below reads world poses, and a follower or a
         // held pose seeded from a drawn one would feed the interpolation back into the simulation.
         RenderPoses.Restore();
         // Before the step, so everything that arrived is already applied when the phases run.
-        _net?.Step(delta);
-        _netPing?.Step();
+        if (!wireStepped)
+        {
+            _net?.Step(delta);
+            _netPing?.Step();
+        }
         _simulation?.Step((float)delta);
     }
 
@@ -2684,6 +2717,7 @@ public partial class GameSession : Node3D
             RigCount = _seatRigs.Count,
             NetSeats = _netSeats,
             SeatFit = _netSeatFit,
+            SeatBuild = _netSeatBuild,
             MixGain = mixGain,
             PadAssignment = padAssignment,
             PauseState = _pauseState!,
@@ -2975,6 +3009,18 @@ public partial class GameSession : Node3D
         // ⚠ The roster hook too: an aircraft a wave releases never passes through the _rigs loop.
         void PostKillLine(FlightController victim, int victimId, int? killer)
         {
+            // A seat's death in a match takes the Dogfight death lines, which post on every death,
+            // crashes included. On the wire the host's notice posts them, never this report.
+            if (_versus is { } m && victimId >= 0 && victimId < m.PlayerCount)
+            {
+                if (_netSeats.Count == 0)
+                {
+                    PostSplitScreenDeath(victimId, killer is int k && k >= 0 && k < m.PlayerCount ? k : null);
+                }
+
+                return;
+            }
+
             if (!HudMessages.WordsKillLine(victim))
             {
                 return;
@@ -2986,16 +3032,7 @@ public partial class GameSession : Node3D
                 {
                     continue;
                 }
-                // Dogfight words a death by seat, so the gate is the VICTIM being one. The decoded
-                // post reads nothing off the killer, and an unattributed death (a mid-air, the
-                // ground) still posts its line. An AI in a match keeps the decoded wording.
-                if (_versus is { } m && victimId >= 0 && victimId < m.PlayerCount)
-                {
-                    int? seat = killer is int k && k >= 0 && k < m.PlayerCount ? k : null;
-                    stack.Post(VersusHud.KillLine(seat, victimId),
-                        HudMessages.SideOf(victim.Team, viewer.Team));
-                    continue;
-                }
+                // An AI in a match keeps the single-player wording.
                 HudMessages.PostKill(stack, weaponMessages, victim, viewer.Team,
                     ReferenceEquals(victim, viewer), _pilotName);
             }
@@ -3545,7 +3582,7 @@ public partial class GameSession : Node3D
 
         WireNetDirector();
         WireNetWorld(state.WorldRuntime);
-        WireNetPositionalStarts();
+        WireNetPositionalStarts(state.WorldRuntime);
         WireNetCutscenes();
 
         // F15 / --debug-targets: who is aiming at whom. Reads the live gunners through closures
@@ -3958,7 +3995,8 @@ public partial class GameSession : Node3D
     // of the controller's own tick, which is where a declined press's held state is re-read.
     private void PollStickSkip()
     {
-        if (_stickSkip is not { } stick || _cutscene == null)
+        // No skip while the start is held: the film has not begun on the machines still loading.
+        if (_stickSkip is not { } stick || _cutscene == null || StartHeld)
         {
             return;
         }
@@ -4078,6 +4116,9 @@ public partial class GameSession : Node3D
             return true;
         }
 
+        // A host built first sends its hold at once, so it can land inside this pump.
+        // ⚠ Claim the start words before pumping, or that hold is dropped as unknown.
+        net.On<Net.StartGateMessage>(TakeStartWord);
         for (int i = 0; i < NetJoinSteps && !net.Joined; i++)
         {
             net.Step(GameClock.FixedDt);
@@ -4198,6 +4239,8 @@ public partial class GameSession : Node3D
         net.On<Net.DamageMessage>((_, damage) => TakeDamage(damage));
         net.On<Net.DeathMessage>((_, death) => TakeDeath(death));
         net.On<Net.ScoreMessage>((_, score) => TakeScore(score));
+        net.On<Net.DeathNoticeMessage>((_, notice) =>
+            PostDeathNotice(notice.VictimSeat, notice.KillerSeat, notice.Cause));
         if (net.IsHost)
         {
             // A hit is addressed to one machine, everything else is news for the whole field.
@@ -4418,7 +4461,8 @@ public partial class GameSession : Node3D
 
         int victim = death.VictimSeat;
         int killer = death.KillerSeat < match.PlayerCount ? death.KillerSeat : -1;
-        if (killer < 0 || death.Cause == Net.NetDeathCause.Suicide)
+        bool charged = killer >= 0 && death.Cause != Net.NetDeathCause.Suicide;
+        if (!charged)
         {
             match.RegisterDeath(victim);
         }
@@ -4433,12 +4477,78 @@ public partial class GameSession : Node3D
             SendScore(killer);
         }
 
+        // Sent between the scores and the ending on one reliable channel. Every machine then posts
+        // the lives line, the kill lines and the ending in the original's order.
+        var notice = new Net.DeathNoticeMessage((byte)victim,
+            charged ? (byte)killer : Net.NetMessage.NoSeat,
+            charged ? death.Cause : Net.NetDeathCause.Suicide);
+        _net.Broadcast(notice, Net.NetChannels.Events);
+        PostDeathNotice(notice.VictimSeat, notice.KillerSeat, notice.Cause);
+
         // ⚠ The ending goes out AFTER the scores that settled the round, never from the match's
         // completion event, which fires before them. A guest whose match already reads completed
         // drops every score behind it, and its board would then name a different winner.
         if (match.Completed && _matchEnd == Net.NetMatchEnd.Running)
         {
             SendMatchState();
+        }
+    }
+
+    // A splitscreen match's death in every pane, the seats named by their player tags. The match
+    // handler subscribed first, so the death is already counted for the lives line.
+    private void PostSplitScreenDeath(int victim, int? killer)
+    {
+        PostLivesLines();
+        foreach (var pane in _rigs)
+        {
+            if (pane.Controller?.MessageStack is { } stack)
+            {
+                HudMessages.PostMatchKill(stack, _flightStrings,
+                    killer != null ? HudMessages.MatchDeath.Killer : HudMessages.MatchDeath.NoKiller,
+                    UI.Boards.SplitScreen.PlayerTag(victim),
+                    killer is int k ? UI.Boards.SplitScreen.PlayerTag(k) : null);
+            }
+        }
+    }
+
+    // A match death as the host decided it, posted into every local pane once: the host from its
+    // own scoring, a guest from the notice. The dying pilot's lives line goes in first, below.
+    private void PostDeathNotice(int victim, int killer, Net.NetDeathCause cause)
+    {
+        PostLivesLines();
+        var death = cause switch
+        {
+            Net.NetDeathCause.Suicide => HudMessages.MatchDeath.NoKiller,
+            Net.NetDeathCause.ZeppelinPart => HudMessages.MatchDeath.Zeppelin,
+            Net.NetDeathCause.TurretOwner => HudMessages.MatchDeath.Turret,
+            _ => HudMessages.MatchDeath.Killer,
+        };
+        string? victimName = victim < _netSeats.Count ? _netSeats[victim].Callsign : null;
+        string? killerName = killer < _netSeats.Count ? _netSeats[killer].Callsign : null;
+        foreach (var pane in _rigs)
+        {
+            if (pane.Controller?.MessageStack is { } stack)
+            {
+                HudMessages.PostMatchKill(stack, _flightStrings, death, victimName, killerName);
+            }
+        }
+    }
+
+    // Every seat's lives line still owed, ahead of the kill lines, since the original's handler
+    // posts it first. The match step's own pass then finds nothing left to post.
+    private void PostLivesLines()
+    {
+        if (_versus is not { Lives: > 0 } match)
+        {
+            return;
+        }
+
+        for (int seat = 0; seat < _seatRigs.Count; seat++)
+        {
+            if (_seatRigs[seat].Controller is { } pilot)
+            {
+                PostLivesLeft(match, seat, pilot);
+            }
         }
     }
 
@@ -4487,6 +4597,141 @@ public partial class GameSession : Node3D
         }
     }
 
+    // The start barrier, armed before the build so no word is dropped as unknown. A host waits on
+    // every machine flying a seat that is still linked; a guest waits on its host.
+    private void WireStartGate()
+    {
+        if (_net is not { } net || _netSeats.Count == 0)
+        {
+            return;
+        }
+
+        var linked = net.Peers;
+        _startGate = net.IsHost
+            ? Net.NetStartGate.Host(_netSeats.Where(s => !s.IsLocal && linked.Contains(s.PeerId))
+                .Select(s => s.PeerId).Distinct())
+            : _startGate ?? Net.NetStartGate.Guest(net.HostPeer);
+        net.On<Net.StartGateMessage>(TakeStartWord);
+        net.PeerLeft += peer => _startGate?.TakeLeft(peer);
+    }
+
+    // A host answers a guest that loads after the start at once, so a late machine is never held.
+    // A loaded word under another round opens nothing: it may be an earlier flight's on this link.
+    // The host names its round in reply, and a guest that did not know it yet answers again.
+    private void TakeStartWord(int peer, Net.StartGateMessage word)
+    {
+        // A guest's word can precede its roster, which names the host, so the sender stands in.
+        if (_net is { IsHost: false })
+        {
+            _startGate ??= Net.NetStartGate.Guest(peer);
+        }
+
+        if (_startGate is not { } gate || _net is not { } net)
+        {
+            return;
+        }
+
+        if (net.IsHost && word.Word == Net.NetStartWord.Loaded)
+        {
+            if (!gate.Current(word.Round))
+            {
+                SendHold(peer);
+            }
+            else if (!gate.Open)
+            {
+                gate.TakeLoaded(peer, word.Round);
+            }
+            else
+            {
+                net.Send(peer, new Net.StartGateMessage(Net.NetStartWord.Start, gate.Round), Net.NetChannels.Events);
+            }
+        }
+        else if (!net.IsHost && word.Word == Net.NetStartWord.Hold)
+        {
+            if (gate.TakeHold(word.Round) && _startBuilt)
+            {
+                SendLoaded();
+            }
+        }
+        else if (!net.IsHost && word.Word == Net.NetStartWord.Start)
+        {
+            gate.TakeStart(word.Round);
+        }
+    }
+
+    // The last act of the build. Holding here, rather than in the launcher, freezes the mission
+    // clock, the AI and the world events along with the aeroplanes.
+    private void HoldStart()
+    {
+        if (_startGate is not { } gate || _clock is not { } clock || _net is not { } net)
+        {
+            return;
+        }
+
+        _startBuilt = true;
+        clock.StartHeld = !gate.Open;
+        if (net.IsHost)
+        {
+            foreach (int peer in gate.Waiting)
+            {
+                SendHold(peer);
+            }
+        }
+        else if (!gate.Open)
+        {
+            SendLoaded();
+        }
+
+        Log.Info("core", $"net start: {(gate.Open ? $"nobody to wait for ({gate.Release})" : net.IsHost ? $"holding for {gate.Waiting.Count} machine(s) to load, round {gate.Round}" : "loaded, holding for the host's start")}");
+    }
+
+    // Under the round this guest heard, 0 before any hold word reached it. The host takes only
+    // its own round, so it tells this word from one an earlier flight on this link sent.
+    private void SendLoaded()
+    {
+        if (_net is { } net && _startGate is { } gate)
+        {
+            net.Send(net.HostPeer, new Net.StartGateMessage(Net.NetStartWord.Loaded, gate.Round), Net.NetChannels.Events);
+        }
+    }
+
+    private void SendHold(int peer)
+    {
+        if (_net is { } net && _startGate is { } gate)
+        {
+            net.Send(peer, new Net.StartGateMessage(Net.NetStartWord.Hold, gate.Round), Net.NetChannels.Events);
+        }
+    }
+
+    // One physics tick of a held start: the wire only. True when the barrier opened on this tick,
+    // so the caller runs the tick's simulation step too.
+    private bool StepStartHold(GameClock clock, double delta)
+    {
+        RenderPoses.Restore();
+        _net?.Step(delta);
+        _netPing?.Step();
+        if (_startGate is not { } gate)
+        {
+            clock.StartHeld = false;
+            return true;
+        }
+
+        gate.Step(delta);
+        if (!gate.Open)
+        {
+            return false;
+        }
+
+        clock.StartHeld = false;
+        if (_net is { IsHost: true } net)
+        {
+            net.Broadcast(new Net.StartGateMessage(Net.NetStartWord.Start, gate.Round), Net.NetChannels.Events);
+        }
+
+        Log.Info("core", $"net start: released ({gate.Release}) after {gate.WaitedSeconds:0.00} s");
+        return true;
+    }
+
     // The campaign's objectives over the wire, once the graph is armed. The host's graph runs the
     // mission and says what it did; a guest's replays that and decides nothing, the way a guest's
     // match does. ⚠ Nothing is sent from here: the join stays the two payloads it is counted as.
@@ -4510,17 +4755,18 @@ public partial class GameSession : Node3D
         Log.Info("core", $"net director: {(net.IsHost ? $"host (every transition of {graph.Count} objective(s), and the ending, as they happen)" : $"guest (replaying the host's transitions over {graph.Count} objective(s), evaluating none of its own)")}");
     }
 
-    // The landing rows and the ladder switch over the wire. The host decides them off every seat,
-    // and a guest replays those decisions and reports its own auto-land button.
-    private void WireNetPositionalStarts()
+    // The landing rows, the ladder switch and the mission-code range gates over the wire. The host
+    // decides them off every seat, and a guest replays those decisions and reports its own
+    // auto-land button.
+    private void WireNetPositionalStarts(AnimRuntime? world)
     {
-        if (_net is not { } net || _netSeats.Count == 0 || (_landings == null && _ladder == null))
+        if (_net is not { } net || _netSeats.Count == 0 || (_landings == null && _ladder == null && world == null))
         {
             return;
         }
 
-        _netStarts = NetPositionalStartLink.Open(net, () => _seatRigs, _landings, _ladder);
-        Log.Info("core", $"net positional starts: {(net.IsHost ? $"host (landing rows and the ladder decided over {_seatRigs.Count} seats)" : "guest (replaying the host's row starts and holder, reporting its own auto-land button)")}");
+        _netStarts = NetPositionalStartLink.Open(net, () => _seatRigs, _landings, _ladder, world);
+        Log.Info("core", $"net positional starts: {(net.IsHost ? $"host (landing rows, the ladder and mission-code range gates decided over {_seatRigs.Count} seats)" : "guest (replaying the host's row starts, holder and range gates, reporting its own auto-land button)")}");
     }
 
     // The cutscene skip over the wire: any player's skip ends the shared episode on every machine,
@@ -4570,6 +4816,11 @@ public partial class GameSession : Node3D
         if (_generators != null)
         {
             _netWorld.FollowGenerators(_generators, () => AiPlanes);
+        }
+
+        if (_aiVoice != null)
+        {
+            _netWorld.FollowVoice(_aiVoice);
         }
 
         Log.Info("core", $"net world: {(net.IsHost ? $"host (flying every AI and deciding every world hit, {world?.Destructibles.Count ?? 0} pool(s))" : "guest (AI replicated from the host, world pools spending nothing of their own)")}");
@@ -5444,9 +5695,9 @@ public partial class GameSession : Node3D
         }
         _photoPilot = null;
         RestoreBoards();
-        // The sheet's pointer too, for the reason the options leaf re-primes it. A mouse button
-        // still down as the mode is left reads as a fresh click on the strip it rests over.
-        _originalPause?.Reprime();
+        // The board's pointer too, for the reason the options leaf re-primes it. A mouse button
+        // still down as the mode is left reads as a fresh click on the row it rests over.
+        ReprimePauseBoard();
         // ⚠ Prime every board reader: MenuInput POLLS raw keys, so the Escape still under the
         // player's finger would read as a fresh press on the board that just returned and dismiss
         // the pause it was meant to reopen (BL-279's mechanism, docs/architecture.md).
@@ -5502,7 +5753,7 @@ public partial class GameSession : Node3D
 
         _pauseBoard.ProcessMode = ProcessModeEnum.Inherit;
         _pauseBoard.Visible = _pauseState?.Paused ?? false;
-        _originalPause?.Reprime();
+        ReprimePauseBoard();
         // ⚠ Prime every board reader and re-seed every pause edge, ExitPhotoMode's own hazard: the
         // Escape that left the leaf is still under the player's finger, and would otherwise dismiss
         // the sheet that just came back or resume the mission behind it.
@@ -5511,6 +5762,13 @@ public partial class GameSession : Node3D
             rig.Controller?.EndPauseLeaf();
             MenuInputFor(rig.Index).Prime();
         }
+    }
+
+    // Both presentations' pause boards read the mouse, so whichever one is in use is re-primed.
+    private void ReprimePauseBoard()
+    {
+        _originalPause?.Reprime();
+        (_pauseBoard as PauseBoard)?.Reprime();
     }
 
     // ⚠ Suspending a board is hide AND stop processing, not hide alone. A board left processing

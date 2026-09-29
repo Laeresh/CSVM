@@ -221,7 +221,7 @@ internal static class HudKillLineSuites
     }
 
     // The two lines that are not a death: the local player's crash notice and the mission clock's
-    // pair, plus the Dogfight wording for a death no killer owns.
+    // pair. The Dogfight death lines follow, with and without a killer.
     private static void Notices(TestContext ctx, HudMessages stack, Messages strings)
     {
         string crash = strings.Get(HudMessages.CrashKey);
@@ -243,9 +243,16 @@ internal static class HudKillLineSuites
             $"…both in the stack's default colour side={stack.SideAt(0)}/{stack.SideAt(1)}");
         stack.Clear();
 
-        string unowned = VersusHud.KillLine(null, 1);
-        ctx.Check(unowned == "P2 DOWN",
-            $"a Dogfight death no killer owns still words itself, with no killer named: '{unowned}'");
+        HudMessages.PostMatchKill(stack, strings, HudMessages.MatchDeath.NoKiller, "P2", null);
+        ctx.Check(stack.LineAt(0) == "P2 Self-Destroyed" && stack.LineAt(1) == null,
+            $"a Dogfight death no killer owns still words itself, with no killer named: '{stack.LineAt(0) ?? "<none>"}'");
+        stack.Clear();
+
+        HudMessages.PostMatchKill(stack, strings, HudMessages.MatchDeath.Killer, "P2", "P1");
+        ctx.Check(stack.LineAt(0) == "P2" && stack.LineAt(1) == "Destroyed by P1"
+                  && stack.SideAt(0) == HudMessages.Side.Enemy && stack.SideAt(1) == HudMessages.Side.Enemy,
+            $"a Dogfight kill reads the victim over its killer, both in the enemy arm: '{stack.LineAt(0) ?? "<none>"}' / '{stack.LineAt(1) ?? "<none>"}' side={stack.SideAt(0)}/{stack.SideAt(1)}");
+        stack.Clear();
     }
 
     // The three colour arms, tested in the decoded order: the enemy test runs first, so a pane on

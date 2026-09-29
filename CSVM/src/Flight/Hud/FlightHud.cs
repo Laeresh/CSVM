@@ -53,9 +53,9 @@ public struct FlightHudState
     /// does something right now.</summary>
     public bool AutoLandOffered;
 
-    /// <summary>Whether the respawn button would actually bring this pilot back right now: false
-    /// for a pilot out of lives and for a seat whose controls the session is holding, both of which
-    /// swallow the press. A prompt naming a control that does nothing is the same defect as a
+    /// <summary>Whether the respawn button would actually bring this pilot back right now, copied
+    /// from <c>FlightController.RespawnOffered</c>. It is false out of lives, after a final
+    /// campaign crash, and for a held seat. A prompt naming a control that does nothing is the same defect as a
     /// prompt naming the wrong control.</summary>
     public bool RespawnOffered;
 
@@ -364,6 +364,26 @@ public sealed class FlightHud
         return new MissileGaugeReadout(true, selectedHp.Index - 1, selectedHp.Ammo, selectedHp.Weapon.Name);
     }
 
+    /// <summary>Frees <paramref name="node"/> when it has no parent and answers null, or answers it
+    /// unchanged. A parented node belongs to whatever holds it.</summary>
+    public static T? Loose<T>(T? node, bool freeNow)
+        where T : Node
+    {
+        if (node == null || !GodotObject.IsInstanceValid(node) || node.GetParent() != null)
+        {
+            return node;
+        }
+        if (freeNow)
+        {
+            node.Free();
+        }
+        else
+        {
+            node.QueueFree();
+        }
+        return null;
+    }
+
     /// <summary>Builds the text block and parents every readout onto <paramref name="canvas"/> in
     /// the shipped draw order. <paramref name="versusHud"/> and <paramref name="scoreboard"/> are
     /// the two board-adjacent readouts the flight node still owns; they are threaded through
@@ -413,6 +433,19 @@ public sealed class FlightHud
             canvas.AddChild(scoreboard); // end-of-run results, drawn over everything
         if (FontTest != null)
             canvas.AddChild(FontTest); // --hud-font-test: the bitmap-font proof overlay
+    }
+
+    /// <summary>Frees every readout assembly built that <see cref="Attach"/> never parented, and
+    /// drops the reference. An aircraft removed before its first frame in the tree leaves all
+    /// of them loose, and no canvas teardown reaches a node with no parent.</summary>
+    public void DiscardUnattached(bool freeNow)
+    {
+        Compass = Loose(Compass, freeNow);
+        Gauges = Loose(Gauges, freeNow);
+        Reticle = Loose(Reticle, freeNow);
+        StuntRun = Loose(StuntRun, freeNow);
+        TargetHud = Loose(TargetHud, freeNow);
+        FontTest = Loose(FontTest, freeNow);
     }
 
     /// <summary>Binds the two weapon gauges to their persistent state, only for a system this
@@ -728,9 +761,9 @@ public sealed class FlightHud
         // (HudMetrics). PaneFactor is exactly 1 in single player, so the original 22 px at
         // (16,10) is untouched there; re-applied only when the factor actually changes.
         float paneFactor = HudMetrics.PaneFactor(_text);
-        // ⚠ x measures from the reading box, not the pane: on a pane wider than the reference
-        // frame this block would otherwise stand at the far left, a screen away from the dials it
-        // belongs with. The box's left edge is 0 at 16:9 and under, so nothing moves there.
+        // ⚠ x measures from the reading box, not the pane. On a wide full-screen view this block
+        // would otherwise stand a screen away from its dials. The box's left edge is 0 at 16:9
+        // and under, and in any split pane.
         float left = HudMetrics.ReadingBox(_text).Position.X;
         if (!Mathf.IsEqualApprox(paneFactor, _paneFactor) || !Mathf.IsEqualApprox(left, _textLeft))
         {

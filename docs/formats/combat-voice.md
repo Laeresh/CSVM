@@ -260,7 +260,9 @@ reaches). There the condition is explicit rather than implied: the actor is not 
 player's side (`FUN_004952f0`, the record's `+0x3c` against the local record's) and sits within
 **1695 m** of the player, and the same taunt pair and bearing broadcast follow (`0x00470822`,
 `0x00470849`, `0x004708e0`). That range belongs to the multiplayer path alone; the single-player
-driver applies none.
+driver applies none. The remake's guest does not derive the pair this way; the host relays its AI's
+raises instead ([`../org/multiplayer-messages.md`](../org/multiplayer-messages.md), "AI voice
+across the link").
 
 ### The taunt pair 25 and 26 is the pursuer's own geometry
 
@@ -319,7 +321,7 @@ are spoken by the killer, not by the aircraft that died.
 | ids | status | site / reason |
 |---|---|---|
 | 0 | wired | the gunner's own acquisition (`Flight/Weapons/TurretController.cs`), carried mount and world emplacement alike: the first tick it holds a human player as its acquired target, by the entry's own `DETECTION_RANGE` and the shared target picker, with a clear sight line by its own rule. The report leaves through `ProjectilePool.TurretAcquiredPlayer`, the seam both turret families are built against, and `AiVoiceRuntime.WatchTurrets` broadcasts on the warned player's team |
-| 1–12, 14 | wired | the decoded sites above: the pursuer speaks `WA-Attack` and the flight broadcasts the bearing call-out computed in the warned player's frame, raised together while the pursuer's gunner holds a human quarry (`AiVoiceRuntime.RaiseAttackCallOuts`, off the sim clock, not off a mode edge). The original raises them every frame from the weapon pass and the combat driver; the remake raises at the 15 s slot-cooldown interval, since no slot can speak twice inside it. Losing the human re-arms the raise, so a fresh engagement speaks at once, and the mode machine's patrol→pursue commit raises the pair as well when it falls after the mute window. Rows 25 and 26 ride the same raise, ahead of `WA-Attack`, as they do in the original's own block |
+| 1–12, 14 | wired | the decoded sites above: the pursuer speaks `WA-Attack` and the flight broadcasts the bearing call-out computed in the warned player's frame, raised together while the pursuer is in play, hostile to the human its gunner holds, and holding one (`AiVoiceRuntime.RaiseAttackCallOuts`, off the sim clock, not off a mode edge). A downed pursuer's gunner keeps its target, and the original's combat driver never runs for a downed aircraft, so `InPlay` gates the raise; the hostility test mirrors the multiplayer path's explicit side check. The original raises them every frame from the weapon pass and the combat driver; the remake raises at the 15 s slot-cooldown interval, since no slot can speak twice inside it. Losing the human re-arms the raise, so a fresh engagement speaks at once, and the mode machine's patrol→pursue commit raises the pair as well when it falls after the mute window. Rows 25 and 26 ride the same raise, ahead of `WA-Attack`, as they do in the original's own block |
 | 13 | wired | a human rig's summary health crossing 30 % on the projectile hit path (decoded threshold), broadcast |
 | 17–19 | wired | the speaker's own summary health on the projectile hit path, 70/50/30 % most-severe-first (decoded) |
 | 20–21 | wired | `FlightController.Downed`, with force: id 20 (`DA`) when the dying aircraft's `Team` is `AimAssist.PlayerTeam`, id 21 (`DE`) otherwise (`AiVoiceRuntime.RegisterAi`). Free flight and `--vs` still give every AI its own default team, so `DA` stays dormant there in practice, it fires once a mission places an AI on the player's team |

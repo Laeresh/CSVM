@@ -1,6 +1,11 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
+using System.Text.RegularExpressions;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
+using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
 using Xunit;
 
@@ -32,7 +37,7 @@ public class CampaignCabinPageTests
         profile.Memento = "MS_P_Mom.jpg";
         var flow = Opened(out _, profile);
 
-        Assert.Contains(flow.Page.Pictures, p => p.Art.Name == "ms_p_mom");
+        Assert.Contains(flow.Page.Pictures, p => p.Art.Name == "SCRAPBOOK/MS_P_Mom.jpg");
 
         flow.FocusRow(4);
         flow.Accept();
@@ -136,6 +141,45 @@ public class CampaignCabinPageTests
         profile.MissionsCompleted = missionsCompleted;
 
         Assert.Equal(pins, CampaignCabinPage.MapPinCount(profile));
+    }
+
+    [Fact]
+    public void TheMementoIsTheWholeScrapbookFileShrunkAndTiltedAboutThePanesCorner()
+    {
+        var flow = Opened(out _);
+        var pictures = new List<BoardPicture>(flow.Page.Pictures);
+
+        var memento = Assert.Single(pictures, p => p.Art.Name.StartsWith("SCRAPBOOK/", StringComparison.Ordinal));
+        var frame = Assert.Single(
+            pictures, p => p.Art.Name.Equals("PC_Mementopicframe.png", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(("SCRAPBOOK/" + CampaignMementos.Seeded, 169f, 325f), (memento.Art.Name, memento.X, memento.Y));
+        Assert.Equal((CampaignCabinPage.MementoScale, CampaignCabinPage.MementoRevs, true), (memento.Scale, memento.Revs, memento.FromCorner));
+        Assert.Null(memento.Crop);
+        Assert.Equal((0f, 0f), (memento.Width, memento.Height));
+        Assert.True(pictures.IndexOf(memento) < pictures.IndexOf(frame), "the frame draws over the picture's edges");
+    }
+
+    /// <summary>The scale and the tilt are read back from the shipped script's <c>pc_memento</c>
+    /// pane. Its <c>GK</c>, <c>HK</c> and <c>JK</c> are what <c>CTL.SCRIPT</c> hands to
+    /// <c>scale()</c> and <c>rotate()</c>.</summary>
+    [ExtractedDataFact]
+    public void TheMementosScaleAndTiltAreTheCabinScriptsOwn()
+    {
+        var path = Extraction.RofTree.Under(TestData.DataRoot!, "ASSETS/SCRIPTS/PASSENGERCABIN.SCRIPT");
+        string script = File.ReadAllText(path);
+        var pane = Regex.Match(script, @"(\w+)\.YC\s*=\s*""pc_memento""");
+        Assert.True(pane.Success, "the script names a pc_memento pane");
+
+        int Property(string key)
+        {
+            var match = Regex.Match(script, $@"\b{pane.Groups[1].Value}\.{key}\s*=\s*(-?\d+)");
+            Assert.True(match.Success, $"the pane sets {key}");
+            return int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
+        }
+
+        Assert.Equal(Property("GK"), Property("HK"));
+        Assert.Equal(Property("GK") / 100f, CampaignCabinPage.MementoScale, 5);
+        Assert.Equal(-Property("JK") / 360f, CampaignCabinPage.MementoRevs, 5);
     }
 
     private static MissionAttempt Attempt(int seq) =>

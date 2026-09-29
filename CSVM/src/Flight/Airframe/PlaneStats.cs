@@ -299,12 +299,11 @@ public sealed class PlaneStats
     public SoundCurve EngineVolume = new(0.1f, 1f, 1f, 1f);
     public SoundCurve EnginePitch = new(0.1f, 0.6f, 1f, 1f);
 
-    /// <summary>vehicle.json <c>cockpit_engine_sound</c>, the engine def the original swaps onto
-    /// the engine slot while the pilot's SELECTED view is the full Cockpit (mode 6), not the Nose
-    /// view, confirmed at the controls of the original, and back on leaving it. Selected by
-    /// <see cref="Audio.EngineAudioCurves.EngineDefFor"/> and driven by <c>FlightAudio</c>
-    /// (<c>BL-161</c>, closed by D31); a held numpad key or look-behind is a per-frame pose and does
-    /// not retrigger the swap, only a change of selection does.</summary>
+    /// <summary>vehicle.json <c>cockpit_engine_sound</c>, the engine slot's def in the Cockpit
+    /// (mode 6) and Nose (mode 7) views.
+    /// Selected by <see cref="Audio.EngineAudioCurves.SelectsCockpitLoop"/> and
+    /// <see cref="Audio.EngineAudioCurves.EngineDefFor"/>, driven by <c>FlightAudio</c>. A held
+    /// numpad key or look-behind is a per-frame pose and does not retrigger the swap.</summary>
     public string? CockpitEngineSound;
 
     /// <summary>vehicle.json <c>prop_sound</c>, the overspeed dive whine's def. ⚠ Stays null

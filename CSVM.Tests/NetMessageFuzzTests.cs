@@ -22,6 +22,10 @@ public sealed class NetMessageFuzzTests
     // 1.2 KiB, the widest any reader needs; every fixed-width message allocates nothing.
     private const long AllocationBound = 2048;
 
+    // Emptied-context measurements a window over the bound gets. A charge only ever adds to the
+    // reader's own bytes, so the least reading stands.
+    private const int MeasurementRetries = 3;
+
     private const int FuzzSeed = 0x0D33;
 
     // Random bodies tried per length under a header naming the message. Enough that the roster's
@@ -45,6 +49,16 @@ public sealed class NetMessageFuzzTests
         Assert.Equal(declared.Length, found.Count);
         Assert.Equal(declared.OrderBy(t => t), found.OrderBy(t => t));
         Assert.Equal(found.Count, found.Distinct().Count());
+    }
+
+    // The negative control for the re-measurement in Probe. A reader that allocates on every read
+    // still fails, so the retries drop only a charge that does not repeat.
+    [Fact]
+    public void A_reader_allocating_past_the_bound_on_every_read_fails_the_probe()
+    {
+        var bytes = new byte[NetMessage.HeaderBytes];
+        var failure = Assert.ThrowsAny<Xunit.Sdk.XunitException>(() => Probe(new Allocating(), bytes, "the control"));
+        Assert.Contains("Allocating allocated", failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -220,9 +234,17 @@ public sealed class NetMessageFuzzTests
     // Reads one payload with the allocation measured, and checks what it accepted. True when it read.
     private static bool Probe(Subject subject, ReadOnlySpan<byte> bytes, string what)
     {
-        long before = GC.GetAllocatedBytesForCurrentThread();
-        bool read = subject.Read(bytes);
-        long used = GC.GetAllocatedBytesForCurrentThread() - before;
+        long used = Allocated(subject, bytes, out bool read);
+
+        // A retired allocation context charges this window its unused remainder (docs/verification.md
+        // PERF-29). A collection per read is too slow here, so only a window over the bound is
+        // measured again on an emptied context.
+        for (int retry = 0; used > AllocationBound && retry < MeasurementRetries; retry++)
+        {
+            GC.Collect(0, GCCollectionMode.Forced, true);
+            used = Math.Min(used, Allocated(subject, bytes, out _));
+        }
+
         Assert.True(used <= AllocationBound, $"{subject.Name} allocated {used} bytes reading {what}");
         if (read)
         {
@@ -230,6 +252,15 @@ public sealed class NetMessageFuzzTests
         }
 
         return read;
+    }
+
+    // The thread's allocated bytes across one read. A reader is a pure function of its bytes, so its
+    // own share repeats exactly on a second read.
+    private static long Allocated(Subject subject, ReadOnlySpan<byte> bytes, out bool read)
+    {
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        read = subject.Read(bytes);
+        return GC.GetAllocatedBytesForCurrentThread() - before;
     }
 
     // What a reader accepts must be a value, not a view of the bytes. Written out, it is exactly as
@@ -418,5 +449,27 @@ public sealed class NetMessageFuzzTests
                 host.RelayToOthers<T>();
             }
         }
+    }
+
+    // A reader that refuses everything and allocates twice the bound doing it. Only its read runs.
+    private sealed class Allocating : Subject
+    {
+        public override NetMessageType Type => throw new NotSupportedException();
+
+        public override string Name => nameof(Allocating);
+
+        public override bool Read(ReadOnlySpan<byte> bytes)
+        {
+            GC.KeepAlive(new byte[AllocationBound * 2]);
+            return false;
+        }
+
+        public override int ReadAndWrite(ReadOnlySpan<byte> bytes, Span<byte> into) => throw new NotSupportedException();
+
+        public override int WriteDefault(Span<byte> into) => throw new NotSupportedException();
+
+        public override void Route(NetSession session) => throw new NotSupportedException();
+
+        public override void Relay(NetSession host) => throw new NotSupportedException();
     }
 }

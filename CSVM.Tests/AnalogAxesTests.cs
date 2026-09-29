@@ -154,7 +154,7 @@ public class AnalogAxesTests
     [Fact]
     public void AnUnboundLeverHasNoPosition()
     {
-        Assert.Null(AnalogAxes.LeverPosition(Array.Empty<Binding>(), 0f, 0f, null));
+        Assert.Null(AnalogAxes.LeverPosition(Array.Empty<Binding>(), 0f, new Seat(), null));
     }
 
     [Fact]
@@ -162,7 +162,27 @@ public class AnalogAxesTests
     {
         var row = new[] { new Binding(DefaultBindings.AnyPad, BindingControl.Axis(5, 1, 0f)) };
 
-        Assert.Equal(0.7f, AnalogAxes.LeverPosition(row, 0.7f, 0f, null));
+        Assert.Equal(0.7f, AnalogAxes.LeverPosition(row, 0.7f, new Seat(), null));
+    }
+
+    /// <summary>A lever bound on two stick models reads the one still plugged in. The unplugged
+    /// model's axis reads centred, and taking it as half throttle would hold the lever at half or
+    /// more.</summary>
+    [Fact]
+    public void ALeverOnTwoStickModelsReadsOnlyTheConnectedOne()
+    {
+        var native = new FakeStickNative();
+        native.Plug(1, "L", VkbL);
+        using var roster = new StickRoster(native, Array.Empty<StickModel>, () => false);
+        roster.Update();
+        var row = new[]
+        {
+            new Binding(VkbL.Device, BindingControl.FullAxis(2, inverted: false, 0f)),
+            new Binding(VkbR.Device, BindingControl.FullAxis(2, inverted: false, 0f)),
+        };
+        var seat = new Seat().Axis(VkbL.Device, 2, -0.5f);
+
+        Assert.Equal(0.25f, AnalogAxes.LeverPosition(row, 0f, seat, roster));
     }
 
     /// <summary>An engaged stick lever whose stick is unplugged lets go, instead of reading its
@@ -177,19 +197,19 @@ public class AnalogAxesTests
         var row = new[] { new Binding(VkbL.Device, BindingControl.FullAxis(2, inverted: false, 0f)) };
         var takeover = new LeverTakeover();
 
-        Assert.Null(Step(takeover, row, 0.9f, roster));
-        Assert.Equal(0.6f, Step(takeover, row, 0.6f, roster));
+        Assert.Null(Step(takeover, row, 1f, roster));
+        Assert.Equal(0.75f, Step(takeover, row, 0.5f, roster));
         Assert.True(takeover.Engaged);
 
         native.Unplug(1);
         roster.Update();
-        Assert.Null(AnalogAxes.LeverPosition(row, 0f, 0.5f, roster));
-        Assert.Null(Step(takeover, row, 0.5f, roster));
+        Assert.Null(AnalogAxes.LeverPosition(row, 0f, new Seat(), roster));
+        Assert.Null(Step(takeover, row, 0f, roster));
         Assert.False(takeover.Engaged);
 
         native.Plug(2, "L", VkbL);
         roster.Update();
-        Assert.Null(Step(takeover, row, 0.3f, roster));
+        Assert.Null(Step(takeover, row, -0.5f, roster));
         Assert.False(takeover.Engaged);
     }
 
@@ -202,7 +222,7 @@ public class AnalogAxesTests
             new Binding(VkbL.Device, BindingControl.FullAxis(2, inverted: false, 0f)),
         };
 
-        Assert.Equal(0.2f, AnalogAxes.LeverPosition(row, 0.2f, 0.5f, null));
+        Assert.Equal(0.2f, AnalogAxes.LeverPosition(row, 0.2f, new Seat(), null));
     }
 
     [Fact]
@@ -211,8 +231,10 @@ public class AnalogAxesTests
         Assert.False(AnalogAxes.Connected(null, VkbL));
     }
 
-    private static float? Step(LeverTakeover takeover, Binding[] row, float stickValue, StickRoster roster) =>
-        AnalogAxes.StepLever(takeover, AnalogAxes.LeverPosition(row, 0f, stickValue, roster), otherCommand: false);
+    // One tick of a lever on the left stick's axis 2, at raw travel rather than lever position.
+    private static float? Step(LeverTakeover takeover, Binding[] row, float raw, StickRoster roster) =>
+        AnalogAxes.StepLever(
+            takeover, AnalogAxes.LeverPosition(row, 0f, new Seat().Axis(VkbL.Device, 2, raw), roster), otherCommand: false);
 
     // FlightController's StickCurve as it stood before the stick split, kept verbatim as the
     // reference the pad share must match exactly.

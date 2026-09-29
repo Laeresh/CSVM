@@ -132,11 +132,12 @@ public sealed class WorldSession
         LoadProgress.Report(LoadStep.WorldScene);
         s.Root = root;
         // The original's material texture flipbooks (animated water/surf/wake/splash and the
-        // walking crowd). Parented to the world so a session teardown takes it too.
+        // walking crowd). Parented to the world so a session teardown takes it too. It is parented
+        // even with no flipbook, since the gun's water splash registers its own in flight.
+        builder.Cycler.Debug = o.DebugAnim;
+        root.AddChild(builder.Cycler);
         if (builder.Cycler.Count > 0)
         {
-            builder.Cycler.Debug = o.DebugAnim;
-            root.AddChild(builder.Cycler);
             Log.Info("world", $"texture cycles: {builder.Cycler.Count} animated material(s): {string.Join(", ", builder.Cycler.Summary)}");
         }
         s.CloudDeck = builder.CloudDeck;     // the cloudlayer overcast, moved to follow the player

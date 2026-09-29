@@ -131,6 +131,44 @@ public class TextureArchiveTests
             System.Array.ConvertAll(frames, archive.IsAdditive));
     }
 
+    // The original's ARGB4444 upload keeps an alpha byte's top four bits, and a card reads the
+    // nibble back by replication (docs/org/textures.md).
+
+    [Fact]
+    public void AlphaKeepsItsTopNibbleExpandedByReplication()
+    {
+        var texels = new byte[] { 25, 247, 0, 7, 25, 247, 0, 29, 9, 9, 9, 128, 9, 9, 9, 255, 1, 2, 3, 15 };
+        TextureArchive.TruncateAlphaToNibble(texels, 4);
+        // Colour bytes are untouched; below 16 draws nothing, 16 to 31 draws one step.
+        Assert.Equal(new byte[] { 25, 247, 0, 0, 25, 247, 0, 17, 9, 9, 9, 136, 9, 9, 9, 255, 1, 2, 3, 0 }, texels);
+    }
+
+    [Fact]
+    public void TruncationNeverMovesAnAlphaAcrossTheScissorThreshold()
+    {
+        // A cutout scissors at 0.5, and every byte keeps its side of 127.5 after truncation.
+        for (int a = 0; a < 256; a++)
+        {
+            var texel = new byte[] { 0, (byte)a };
+            TextureArchive.TruncateAlphaToNibble(texel, 2);
+            Assert.Equal(a > 127, texel[1] > 127);
+            Assert.Equal(0, texel[1] % 17);
+        }
+    }
+
+    [Fact]
+    public void OnlyAnAlphaPlaneTextureWithoutBitThreeUploadsFourBitAlpha()
+    {
+        using var archive = new TextureArchive(UploadDir());
+        Assert.True(archive.UploadsFourBitAlpha("probe_full"));
+        Assert.True(archive.UploadsFourBitAlpha("probe_full_add.tif"));
+        // Bit 3 takes ARGB8888 (cloud1, cloud2, rotorblur); Simple and None take no 4-bit alpha.
+        Assert.False(archive.UploadsFourBitAlpha("probe_full_unk8"));
+        Assert.False(archive.UploadsFourBitAlpha("probe_simple"));
+        Assert.False(archive.UploadsFourBitAlpha("probe_opaque"));
+        Assert.False(archive.UploadsFourBitAlpha("probe_absent"));
+    }
+
     // A disposed archive refuses a read from a folder exactly as it does from a zip. The battery
     // reads unpacked folders and a player's install reads zips, so any leniency in the folder shape
     // hides a closed-archive read from every suite.
@@ -242,6 +280,27 @@ public class TextureArchiveTests
             infos.Append($"{{\"name\":\"{name}\",\"alpha\":\"None\",\"stretch\":\"{spelling}\"}}");
         }
         File.WriteAllText(Path.Combine(dir, "manifest.json"), $"{{\"texture_infos\":[{infos}]}}");
+        return dir;
+    }
+
+    // One texture per alpha class and render-flags pairing the upload branches on.
+    private static string UploadDir()
+    {
+        var dir = TestData.TempDir();
+        var infos = new System.Collections.Generic.List<string>();
+        foreach (var (name, alpha, stretch) in new[]
+                 {
+                     ("probe_full", "Full", "None"),
+                     ("probe_full_add", "Full", "Unk4"),
+                     ("probe_full_unk8", "Full", "Unk8"),
+                     ("probe_simple", "Simple", "None"),
+                     ("probe_opaque", "None", "None"),
+                 })
+        {
+            File.WriteAllBytes(Path.Combine(dir, name + ".png"), System.Array.Empty<byte>());
+            infos.Add($"{{\"name\":\"{name}\",\"alpha\":\"{alpha}\",\"stretch\":\"{stretch}\"}}");
+        }
+        File.WriteAllText(Path.Combine(dir, "manifest.json"), $"{{\"texture_infos\":[{string.Join(",", infos)}]}}");
         return dir;
     }
 

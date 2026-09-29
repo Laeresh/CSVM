@@ -58,8 +58,9 @@ internal static class MenuOriginalConnectionSuites
         var hostDoor = new NetPlayFeature(
             (_, _, _) => hostWires.Dequeue(),
             (_, _) => throw new InvalidOperationException("the host does not join"),
-            port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
-            unmapped.Add,
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                unmapped.Add),
             lan.Bind);
         var doors = new List<NetPlayFeature> { hostDoor };
         for (int i = 1; i < mesh.Count; i++)
@@ -144,8 +145,9 @@ internal static class MenuOriginalConnectionSuites
         var hostDoor = new NetPlayFeature(
             (_, _, _) => gate,
             (_, _) => throw new InvalidOperationException("the host does not join"),
-            port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
-            _ => { },
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }),
             lan.Bind);
         var doors = new List<NetPlayFeature> { hostDoor };
         for (int i = 1; i < mesh.Count; i++)
@@ -213,6 +215,84 @@ internal static class MenuOriginalConnectionSuites
         }
     }
 
+    [Suite("menu-original-outlaw-list",
+        "The Multiplayer Lobby's outlaw list over the loopback: Select... is greyed on both ends while "
+        + "Outlaw Components is clear, and the host's list still reaches the guest then. Once ticked, "
+        + "the host's Select... opens the list over the tab page with the tabs greyed, and one tick of "
+        + "an airframe, a gun calibre, an ammunition, a rocket past the scroll, All Ammo, All Rockets and "
+        + "nitro each reaches the guest with every Ready cleared. A rocket row under All Rockets stays "
+        + "ticked and ignores a click, Cancel puts the opening list back and Accept keeps it, a Ready "
+        + "host's list is read-only, and the guest's View... opens it read-only with no Accept")]
+    internal static void TheOutlawList(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var lan = new LoopbackLan();
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(71));
+        var gate = new ArrivalGate(mesh[0]);
+        var hostDoor = new NetPlayFeature(
+            (_, _, _) => gate,
+            (_, _) => throw new InvalidOperationException("the host does not join"),
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }),
+            lan.Bind);
+        var guestDoor = new NetPlayFeature(
+            (_, _, _) => throw new InvalidOperationException("the guest does not host"),
+            (_, _) =>
+            {
+                gate.Arrive(mesh[1].LocalPeer);
+                return new Hangup(mesh[1]);
+            },
+            lan: lan.Bind);
+        foreach (var door in new[] { hostDoor, guestDoor })
+        {
+            door.BindAddress = Loopback;
+            door.SearchAddress = Loopback;
+        }
+
+        var ends = new List<End>();
+        try
+        {
+            var host = Open(ctx, layout, hostDoor, ends);
+            var guest = Open(ctx, layout, guestDoor, ends);
+            if (host == null || guest == null || !HostTheLobby(ctx, host) || !JoinTheLobby(ctx, guest, ends))
+            {
+                return;
+            }
+
+            EditedWithTheTickClear(ctx, host, guest, ends);
+            ClickRow(ctx, host, OriginalLobbyScreen.OutlawKey);
+            Pump(ends.ToArray());
+            ClickRow(ctx, host, OriginalLobbyScreen.SelectKey);
+            ctx.Check(host.Shell.Lobby is { OutlawListOpen: true, OutlawPage: OutlawPage.Airframes }
+                      && Row(host.Shell, OriginalLobbyScreen.PlaneTabKey) is { Enabled: false },
+                $"with the tick set the host's Select... opens the list on Airframes, the tabs greyed ({host.Shell.Lobby.OutlawListOpen}, {host.Shell.Lobby.OutlawPage})");
+            TickEachKind(ctx, host, guest, ends);
+            AllRocketsCoversItsRows(ctx, host, ends);
+            CancelAndAccept(ctx, host, guest, ends);
+            ViewedReadOnly(ctx, host, guest, ends);
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            hostDoor.Discard();
+            guestDoor.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+        }
+    }
+
     [Suite("menu-original-builtin-host",
         "An Original guest against a Built-in Dogfight host over the loopback: the host's door opens "
         + "with its lobby unshown, the guest finds it on the games list and lands in the lobby, its "
@@ -238,8 +318,9 @@ internal static class MenuOriginalConnectionSuites
         var hostDoor = new NetPlayFeature(
             (_, _, _) => gate,
             (_, _) => throw new InvalidOperationException("the host does not join"),
-            port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
-            _ => { },
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }),
             lan.Bind);
         var guestDoor = new NetPlayFeature(
             (_, _, _) => throw new InvalidOperationException("the guest does not host"),
@@ -349,8 +430,9 @@ internal static class MenuOriginalConnectionSuites
         var hostDoor = new NetPlayFeature(
             (_, _, _) => gate,
             (_, _) => throw new InvalidOperationException("the host does not join"),
-            port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
-            _ => { },
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }),
             lan.Bind)
         { Version = NetBuildVersion.Parse("0.7.0") };
         int opened = 0;
@@ -919,6 +1001,147 @@ internal static class MenuOriginalConnectionSuites
         GuestLaunch(ctx, wire, roster, guest, guestExits);
     }
 
+    // The list changed on the host with Outlaw Components clear. Select... is greyed on both ends,
+    // and the flag still reaches the guest and clears its Ready.
+    private static void EditedWithTheTickClear(TestContext ctx, End host, End guest, List<End> ends)
+    {
+        ctx.Check(Row(host.Shell, OriginalLobbyScreen.SelectKey) is { Enabled: false } && Row(guest.Shell, OriginalLobbyScreen.SelectKey) is { Enabled: false },
+            $"Select... is greyed on both ends while Outlaw Components is clear");
+        ClickRow(ctx, host, OriginalLobbyScreen.SelectKey);
+        ctx.Check(!host.Shell.Lobby.OutlawListOpen, $"ABLE-TO-FAIL CONTROL: and a click on the host's opens nothing");
+        var here = host.Door.Dogfight!;
+        var there = guest.Door.Dogfight!;
+        ReadyGuest(ctx, host, guest, ends, "before the list changes with the tick clear");
+        ctx.Check(here.SetOutlawed(NetPlaneRules.NitroFlag, true), $"the host's list takes a flag with the tick clear");
+        SettleEnds(ends);
+        ctx.Check(there.Rules is { Outlawing: false } && there.Rules.Has(NetPlaneRules.NitroFlag) && !there.Ready && here.Players.All(p => !p.Ready),
+            $"and it reaches the guest with every Ready cleared ({there.Rules.Outlawing}, {there.Rules.Has(NetPlaneRules.NitroFlag)}, {string.Join(",", here.Players.Select(p => p.Ready))})");
+        here.SetOutlawed(NetPlaneRules.NitroFlag, false);
+        SettleEnds(ends);
+    }
+
+    // One tick of each kind on the host's list. Before each the guest is Ready, and after it the
+    // guest holds the flag and nobody is Ready. The rocket stands past the window's first four rows.
+    private static void TickEachKind(TestContext ctx, End host, End guest, List<End> ends)
+    {
+        var here = host.Door.Dogfight!;
+        var there = guest.Door.Dogfight!;
+        var mounted = NetPlaneBuild.Stock(there.Airframe).Guns;
+        int calibre = Enumerable.Range(0, 5).First(c => Array.IndexOf(mounted, (byte)c) < 0);
+        int airframe = (there.Airframe + 5) % 11;
+        var ticks = new (OutlawPage Page, string Key, int Flag, string What)[]
+        {
+            (OutlawPage.Airframes, OriginalOutlawList.RowKey(airframe), NetPlaneRules.AirframeFlag + airframe, "an airframe"),
+            (OutlawPage.Guns, OriginalOutlawList.RowKey(calibre), NetPlaneRules.GunFlag + calibre, "a gun calibre"),
+            (OutlawPage.Ammo, OriginalOutlawList.RowKey(3), NetPlaneRules.AmmoFlag + 3, "an ammunition"),
+            (OutlawPage.Rockets, OriginalOutlawList.RowKey(4), NetPlaneRules.RocketFlag + 4, "a rocket past the scroll"),
+            (OutlawPage.Ammo, OriginalOutlawList.AllKey, NetPlaneRules.AllAmmoFlag, "All Ammo"),
+            (OutlawPage.Rockets, OriginalOutlawList.AllKey, NetPlaneRules.AllRocketsFlag, "All Rockets"),
+            (OutlawPage.Engines, OriginalOutlawList.RowKey(0), NetPlaneRules.NitroFlag, "nitro"),
+        };
+
+        foreach (var (page, key, flag, what) in ticks)
+        {
+            ReadyGuest(ctx, host, guest, ends, $"before {what} is ticked");
+            ClickRow(ctx, host, OriginalOutlawList.TabKey(page));
+            for (int step = 0; step < 11 && Row(host.Shell, key) == null && Row(host.Shell, OriginalOutlawList.DownKey) is { Enabled: true }; step++)
+            {
+                ClickRow(ctx, host, OriginalOutlawList.DownKey);
+            }
+
+            ClickRow(ctx, host, key);
+            SettleEnds(ends);
+            ctx.Check(here.Rules.Has(flag) && there.Rules.Has(flag) && !there.Ready && here.Players.All(p => !p.Ready),
+                $"{what} ticked on the host's list reaches the guest with every Ready cleared (flag {flag}, {there.Rules.Has(flag)}, {string.Join(",", here.Players.Select(p => p.Ready))})");
+        }
+    }
+
+    // Under All Rockets every rocket row reads ticked, and a click on one writes nothing.
+    private static void AllRocketsCoversItsRows(TestContext ctx, End host, List<End> ends)
+    {
+        var here = host.Door.Dogfight!;
+        ClickRow(ctx, host, OriginalOutlawList.TabKey(OutlawPage.Rockets));
+        int epoch = here.Options.Epoch;
+        ClickRow(ctx, host, OriginalOutlawList.RowKey(0));
+        SettleEnds(ends);
+        ctx.Check(!here.Rules.Has(NetPlaneRules.RocketFlag) && here.Options.Epoch == epoch
+                  && OutlawRows.Ticked(here.Rules, OutlawPage.Rockets, 0),
+            $"under All Rockets a rocket row reads ticked and a click on it writes nothing ({here.Rules.Has(NetPlaneRules.RocketFlag)}, epoch {epoch} to {here.Options.Epoch})");
+    }
+
+    // Accept keeps the list, and Cancel puts back the one the host opened with, on both ends.
+    private static void CancelAndAccept(TestContext ctx, End host, End guest, List<End> ends)
+    {
+        var here = host.Door.Dogfight!;
+        var there = guest.Door.Dogfight!;
+        ulong accepted = here.Rules.Outlawed;
+        ClickRow(ctx, host, OriginalOutlawList.AcceptKey);
+        ctx.Check(!host.Shell.Lobby.OutlawListOpen && here.Rules.Outlawed == accepted,
+            $"Accept takes the list down and keeps it ({host.Shell.Lobby.OutlawListOpen})");
+        int row = Enumerable.Range(0, OutlawRows.Window).First(r => r != here.Airframe && r != there.Airframe && !here.Rules.Has(NetPlaneRules.AirframeFlag + r));
+        ClickRow(ctx, host, OriginalLobbyScreen.SelectKey);
+        ClickRow(ctx, host, OriginalOutlawList.RowKey(row));
+        SettleEnds(ends);
+        ctx.Check(there.Rules.Has(NetPlaneRules.AirframeFlag + row), $"ABLE-TO-FAIL CONTROL: a reopened list's tick reaches the guest (airframe {row})");
+        ClickRow(ctx, host, OriginalOutlawList.CancelKey);
+        SettleEnds(ends);
+        ctx.Check(!host.Shell.Lobby.OutlawListOpen && here.Rules.Outlawed == accepted && there.Rules.Outlawed == accepted,
+            $"Cancel puts back the list the host opened with, on both ends ({here.Rules.Outlawed:X}, {there.Rules.Outlawed:X}, {accepted:X})");
+    }
+
+    // The guest's View... and a Ready host's Select... open the list read-only. The guest's has no
+    // Accept, the host's draws it greyed, and Cancel closes either with the list as it stood.
+    private static void ViewedReadOnly(TestContext ctx, End host, End guest, List<End> ends)
+    {
+        var here = host.Door.Dogfight!;
+        ulong list = here.Rules.Outlawed;
+        ctx.Check(Row(guest.Shell, OriginalLobbyScreen.SelectKey) is { Enabled: true } && Draws(guest.Shell.Compose(), "View..."),
+            $"the guest's plaque reads View... and is live while the tick is set");
+        ClickRow(ctx, guest, OriginalLobbyScreen.SelectKey);
+        ctx.Check(guest.Shell.Lobby.OutlawListOpen && Row(guest.Shell, OriginalOutlawList.AcceptKey) == null
+                  && Row(guest.Shell, OriginalOutlawList.RowKey(0)) is { Enabled: false } && Row(guest.Shell, OriginalOutlawList.CancelKey) is { Enabled: true },
+            $"View... opens the list on the guest with its boxes greyed, no Accept and a live Cancel ({guest.Shell.Lobby.OutlawListOpen})");
+        ClickRow(ctx, guest, OriginalOutlawList.CancelKey);
+        ctx.Check(!guest.Shell.Lobby.OutlawListOpen, $"the guest's Cancel takes it down");
+
+        for (int press = 0; press < 2 && !here.Ready; press++)
+        {
+            here.SetReady(true);
+        }
+
+        SettleEnds(ends);
+        ClickRow(ctx, host, OriginalLobbyScreen.SelectKey);
+        ctx.Check(here.Ready && host.Shell.Lobby.OutlawListOpen && Row(host.Shell, OriginalOutlawList.AcceptKey) is { Enabled: false }
+                  && Row(host.Shell, OriginalOutlawList.RowKey(0)) is { Enabled: false },
+            $"a Ready host's Select... opens the list read-only with Accept greyed ({here.Ready}, {host.Shell.Lobby.OutlawListOpen})");
+        ClickRow(ctx, host, OriginalOutlawList.CancelKey);
+        SettleEnds(ends);
+        ctx.Check(!host.Shell.Lobby.OutlawListOpen && here.Rules.Outlawed == list && here.Ready,
+            $"and its Cancel closes it with the list and the host's Ready as they stood ({here.Rules.Outlawed:X}, {here.Ready})");
+    }
+
+    // The guest marked Ready, pressed twice where an outlawed ammunition or rocket refuses once.
+    private static void ReadyGuest(TestContext ctx, End host, End guest, List<End> ends, string when)
+    {
+        var lobby = guest.Door.Dogfight!;
+        for (int press = 0; press < 2 && !lobby.Ready; press++)
+        {
+            lobby.SetReady(true);
+        }
+
+        SettleEnds(ends);
+        ctx.Check(lobby.Ready && host.Door.Dogfight!.Players[1].Ready,
+            $"ABLE-TO-FAIL CONTROL: the guest's Ready reaches the host {when} ({lobby.Ready}, {string.Join(",", lobby.ReadyRefusals)})");
+    }
+
+    private static void SettleEnds(List<End> ends)
+    {
+        for (int frame = 0; frame < 4; frame++)
+        {
+            Pump(ends.ToArray());
+        }
+    }
+
     // The Built-in host's wire taken out and its field built off the guest's pick. The session
     // opener then launches the guest on the host's map and time in its own pick.
     private static void HostTheBuiltInLaunch(TestContext ctx, NetPlayFeature hostDoor, End guest, List<MenuExit> guestExits, string chapter)
@@ -935,6 +1158,8 @@ internal static class MenuOriginalConnectionSuites
         var (roster, _) = CSVM.Session.Launch.Launcher.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load());
         ctx.Check(roster.Length == 2 && roster[1].PlaneNode == PlanePickerRoster.AirframeNode(2),
             $"the host's roster builds the guest's seat on its pick ({string.Join(", ", roster.Select(s => s.PlaneNode))})");
+        ctx.Check(roster.Length == 2 && roster[0].Callsign == SplitScreen.PlayerTag(0),
+            $"a host whose advert names nobody is seated under its player tag ({roster.FirstOrDefault()?.Callsign})");
         int before = guestExits.Count;
         _ = NetSession.Host((NetLobby)wire.Transport, roster, 7UL);
         for (int frame = 0; frame < 4 && guestExits.Count == before; frame++)
@@ -1018,7 +1243,7 @@ internal static class MenuOriginalConnectionSuites
         string typed = TypeKeys(ctx, guest, reader, Reported);
         ctx.Check(typed == Reported && door.Address == Reported,
             $"ABLE-TO-FAIL CONTROL: the whole {Reported.Length}-character address arrives and the box keeps it ('{typed}' typed, '{door.Address}' kept)");
-        ctx.Check(door.JoinTarget == (Host, 47500),
+        ctx.Check(door.JoinTarget == new NetEndpoint(Host, 47500),
             $"the door joins the bare host on the typed port ({door.JoinTarget.Host}, {door.JoinTarget.Port})");
 
         var line = guest.Shell.Compose().Lines.FirstOrDefault(l => l.Text == door.Address);
@@ -1117,7 +1342,7 @@ internal static class MenuOriginalConnectionSuites
 
         door.TypeAddress(Bare);
         door.StepPort(port - door.Port);
-        ctx.Check(door.JoinTarget == (Bare, port),
+        ctx.Check(door.JoinTarget == new NetEndpoint(Bare, port),
             $"a bare IPv6 address keeps its last group in the host and joins on the board's port ({door.JoinTarget.Host}, {door.JoinTarget.Port})");
         int before = host.Peers.Count;
         door.OpenJoin();
@@ -1411,7 +1636,7 @@ internal static class MenuOriginalConnectionSuites
     private static void AwaitMapping(NetPlayFeature door)
     {
         var waited = System.Diagnostics.Stopwatch.StartNew();
-        while (door.PortMap == null && waited.Elapsed.TotalSeconds < 20.0)
+        while (door.Router.PortMap == null && waited.Elapsed.TotalSeconds < 20.0)
         {
             door.Step(0.0);
             System.Threading.Thread.Sleep(1);

@@ -21,6 +21,14 @@ public sealed class CampaignCabinPage : CampaignPage
     /// that leaves this flow standing while the hangar runs over the profile's wallet.</summary>
     public const int PlaneConstructionRow = 2;
 
+    /// <summary>The memento pane's <c>scale()</c>, <c>PASSENGERCABIN.SCRIPT</c>'s 20 percent on both
+    /// axes, taken about the pane's corner (docs/formats/campaign-screens.md, "The cabin").</summary>
+    public const float MementoScale = 0.2f;
+
+    /// <summary>The memento pane's <c>rotate()</c>, the script's 3 degrees, as a Godot spin. The
+    /// negative sign turns it counter-clockwise on screen, the direction CAP-44 shows.</summary>
+    public const float MementoRevs = -3f / 360f;
+
     // PC_D_MISSIONS, the dropdown PASSENGERCABIN.SCRIPT creates deactivated and the cabin's typed
     // word activates: LAYOUT.CSV's own X, Y, width, item height and 24 displayed rows.
     private const float MissionListX = 300f;
@@ -36,14 +44,6 @@ public sealed class CampaignCabinPage : CampaignPage
     // 1200-1219 mission-results block has no "campaign finished" row, and uiData 2600 (the
     // original's own gate) is a boolean with no accompanying message string.
     private const string FinishedReason = "Every mission in the campaign has been completed.";
-
-    // The memento's window inside PC_Mementopicframe, chosen rather than read: it is the block each
-    // hangar photograph keys out for it, where the layout's PC_MEMENTO pane sits at 169,325 with
-    // no size. The frame's own border covers the edges either way.
-    private const int MementoX = 179;
-    private const int MementoY = 330;
-    private const int MementoWidth = 73;
-    private const int MementoHeight = 84;
 
     // The five buttons, in the original's own creation order (docs/formats/campaign-screens.md,
     // "The cabin"). SAVE GAME is deactivated there and never drawn here.
@@ -87,10 +87,11 @@ public sealed class CampaignCabinPage : CampaignPage
     /// page can hand a caller that wants pixels.</remarks>
     public override HangarArt? Art => CabinScene();
 
-    /// <summary>The scene as the original layers it: the pilot's own aircraft first, then the
-    /// painted cabin over it, whose colour-keyed hole is where the window is. The photograph ships
-    /// as JPG, which the shell's own loader reads. The panes' positions and the two fixed bitmaps
-    /// are <c>[@PassengerCabin@]</c>'s <c>PC_PLANE</c>, <c>PC_BACKGROUND</c> and <c>PC_FRAME</c>.</summary>
+    /// <summary>The scene as the original layers it: the pilot's aircraft, the memento, then the
+    /// painted cabin with its colour-keyed window hole. The photograph ships
+    /// as JPG, which the shell's own loader reads. The panes' positions and the fixed bitmaps are
+    /// <c>[@PassengerCabin@]</c>'s <c>PC_PLANE</c>, <c>PC_MEMENTO</c>, <c>PC_BACKGROUND</c>,
+    /// <c>PC_FRAME</c>.</summary>
     public override IReadOnlyList<BoardPicture> Pictures
     {
         get
@@ -104,11 +105,12 @@ public sealed class CampaignCabinPage : CampaignPage
                 pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, photo), planeX, planeY));
             }
 
-            // The memento, over the hangar photograph's own keyed-out block for it and under the
-            // painting: whichever picture the profile hangs, which the chooser writes.
+            // The memento, the whole scrapbook file the pane loads, shrunk and tilted about the
+            // pane's corner. It sits under the painting, and the frame's border covers its edges.
+            var (mementoX, mementoY) = layout.At(section, "PC_MEMENTO", 169, 325);
             pictures.Add(new BoardPicture(
-                new BoardArt(BoardArtLibrary.Rimage, CampaignMementos.Bitmap(CampaignMementos.Current(Flow.Profile))),
-                MementoX, MementoY, 0, false, 1f, 0f, MementoWidth, MementoHeight));
+                new BoardArt(BoardArtLibrary.Ui, "SCRAPBOOK/" + CampaignMementos.Current(Flow.Profile)),
+                mementoX, mementoY, Revs: MementoRevs, Scale: MementoScale, FromCorner: true));
             var (backX, backY) = layout.At(section, "PC_BACKGROUND", 0, 0);
             pictures.Add(new BoardPicture(
                 layout.Art(section, "PC_BACKGROUND", new BoardArt(BoardArtLibrary.Ui, "PC_BackGround.png")), backX, backY));

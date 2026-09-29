@@ -12,11 +12,11 @@ the session clock, world root, panes, seats, mode runtimes and resource lifetime
 `WorldSession`, and effects staging to `WorldEffectsFactory`. `_rigs` is the pane list every camera-anchored system reads; `_seatRigs` is the whole field, a network match's
 guests included, and sizes the roster, the spawn walk, the versus board, the respawn rotation, the human-aircraft step and a campaign's human field (`HumanField`), so a guest flown elsewhere counts at its interpolated pose, and a co-op campaign of more than one seat starts on `StartGrid` whatever its local pane count; `TakeGuestLeft` retires a seat whose guest walked out. A context transport opens a `Net.NetSession` in
 the constructor, before the world, so a host can answer a join it has not built for yet; `AwaitNetJoin` pumps that wire until the host's seed, seat and roster have landed,
-ahead of `Rng.Reset` and the seat sizing, and the handshake's clock opens the `NetClockSlew` advanced each frame, which `WireNetClock`'s `NetClockPing` round trip corrects from the first step. After the synchronous build it constructs one
+ahead of `Rng.Reset` and the seat sizing, and the handshake's clock opens the `NetClockSlew` advanced each frame, which `WireNetClock`'s `NetClockPing` round trip corrects from the first step. `WireStartGate` arms the `NetStartGate` before the build (a guest claims its words before the join's pump, where a host's early hold lands), whose last act holds the clock on it (`GameClock.StartHeld`) until every machine has loaded, with only the wire stepped meanwhile. After the synchronous build it constructs one
 `SessionSimulation`, which owns the step order; both step paths step the wire first, so an arrival is applied on the step after it landed, and the human-aircraft phase
 puts every seat flown here on the wire on the `AircraftStateCadence` as the SIM pose, while a sample for a seat flown elsewhere reaches that seat's own pose buffer.
 `WireNetCombat` puts combat on the same wire: an owner's fire event spawns the round on every peer, the shooter's machine decides a hit and addresses the victim's owner,
-that owner applies the damage and reports its own death (a match from its own `Downed` handler, any other mission from the one `WireNetCombat` adds, which is what plays a guest's wreck in a host's campaign field), and the host alone scores it and relays each of those between guests. `WireNetSpawns` puts placement on it under one rule: the OPENING spawn is the shared seed's own walk over the mission table and crosses no wire, while every later return is GRANTED, a downed seat asking the host and the host's single rotation answering the whole field with a table entry every peer applies through the same call the owner would have made locally. `WireNetMatch` makes the host the only writer of the match itself: it sends the clock, both limits and the ending as one reliable message, change-driven (a rematch, an ending) plus a `MatchStateCadence` tick a second that carries the host's session clock into every guest's `NetClockSlew`, and a guest hands its `VersusMatch` over rather than advancing a clock or arming a limit of its own. ⚠ The ending is sent AFTER the scores that settled the round and never from the match's completion event, which fires before them. The scoreboard itself is never sent: every machine derives it from the scores it was already sent seat by seat. `WireNetDirector` puts a campaign mission's objective graph on the same wire through `NetDirectorLink.cs`: the host's graph publishes every event it raises and a guest's is replicated, so it follows them and decides nothing. `WireNetWorld` hands the AI aircraft and the world's destructible pools to `NetWorldLink.cs`, admitted from the capture phase and sent after the AI phase: the host flies every AI and spends every world hit, and a guest's AI fly from the host's samples while its pools spend nothing of their own. The landing trigger and the ladder switch read `_seatRigs`, and `WireNetPositionalStarts` hands their decisions to `NetPositionalStartLink.cs`; an airframe swap wires its replacement for combat again through `WireSeatCombat`, since that wiring is per controller.
+that owner applies the damage and reports its own death (a match from its own `Downed` handler, any other mission from the one `WireNetCombat` adds, which is what plays a guest's wreck in a host's campaign field), and the host alone scores it and relays each of those between guests. A match death's kill lines follow the host's scoring as a death notice, so every machine posts them once. `WireNetSpawns` puts placement on it under one rule: the OPENING spawn is the shared seed's own walk over the mission table and crosses no wire, while every later return is GRANTED, a downed seat asking the host and the host's single rotation answering the whole field with a table entry every peer applies through the same call the owner would have made locally. `WireNetMatch` makes the host the only writer of the match itself: it sends the clock, both limits and the ending as one reliable message, change-driven (a rematch, an ending) plus a `MatchStateCadence` tick a second that carries the host's session clock into every guest's `NetClockSlew`, and a guest hands its `VersusMatch` over rather than advancing a clock or arming a limit of its own. ⚠ The ending is sent AFTER the scores that settled the round and never from the match's completion event, which fires before them. The scoreboard itself is never sent: every machine derives it from the scores it was already sent seat by seat. `WireNetDirector` puts a campaign mission's objective graph on the same wire through `NetDirectorLink.cs`: the host's graph publishes every event it raises and a guest's is replicated, so it follows them and decides nothing. `WireNetWorld` hands the AI aircraft and the world's destructible pools to `NetWorldLink.cs`, admitted from the capture phase and sent after the AI phase: the host flies every AI and spends every world hit, and a guest's AI fly from the host's samples while its pools spend nothing of their own. The landing trigger and the ladder switch read `_seatRigs`, and `WireNetPositionalStarts` hands their decisions to `NetPositionalStartLink.cs`; an airframe swap wires its replacement for combat again through `WireSeatCombat`, since that wiring is per controller.
 Under a Versus lives rule a pilot out of lives is held spectating and its respawn refused (`VersusMatch.OutOfLives`). A guest builds no rotation of its own, and a field larger than the table is served by that rotation relaxing its one-living-seat-per-point rule rather than failing. `AllAircraft` combines the roster's AI view with the ordered rig controllers, and `OrderWaveAirframes` with `StepOwedLoad` puts the coming waves behind the load screen.
 Exit frees the session subtree atomically and releases only the non-node resources it owns; the prohibitions that keep these rules true sit on the members they bind. Read `SessionSimulation.cs` next.
 
@@ -38,7 +38,13 @@ menu as one `MenuHost` built on the first show, the presentation resolution, the
 the frame pacing and the window's screen, mode and size at startup and on an Options apply (`Utils/VSyncSetting.cs`, `Utils/MonitorSetting.cs`, `Utils/DisplayModeSetting.cs`, `Utils/ResolutionSetting.cs`), the enhanced presentation's sun shadow and screen-space passes with the `SessionSpec.EnhancedPasses` doors that leave one out,
 and the sink every menu exit takes ([../menu-presentations.md](../menu-presentations.md)); with no
 extraction or a stale stamp it shows `UI/Screens/NoGameDataScreen.cs` before any sound archive opens, and enters the menu from it in the same process. Each launch hands the session one `LauncherContext`, the settled paths, the persistent nodes, the process services and the match's wire (`NetTransport` with `NetHost` and `NetAirframes` beside it, or `NetSeats` and `NetHandshake` where a caller has them already), never a new argument, which is a `SessionSpec` change. The wire arrives from the `UI/Menu/NetPlayFeature.cs` door the launcher registers, or from `--net-host`/`--net-join` on a headless run, which waits for the link before it launches; both open through `Net/NetCarrier.cs`, so which carrier a build ships is not this file's to know; the launcher steps neither, since the session owns a wire from the moment it takes it, but it does give the router's port back when the flight ends. `LaunchSession`, `ReturnToMenu`, `RestartSession` and
-`BeginLaunch`/`RunOwedLaunch` are every path a session starts or ends on (the load screen stays up past the build while the session's owed build steps run one a frame through `GameSession.StepOwedLoad`, which is what makes it a yield of several frames; a CLI launch has no screen and drains them inside `LaunchSession`), a flight left early comes back to the screen it was launched from (settled by the launch through `MenuReturnDestination.ForLaunch`, not by the exit press), and what the persistent `WorldEnvironment` draws behind all of it is `Utils/WorldBackdrop.cs`'s: black while the menu owns the screen and at the quits that still draw, the sky again at every launch. A co-op campaign's field is `CoopLaunchField`: the host's roster names each guest and keeps each seat's `CoopFit`, and every machine resolves a seat's loadout through `CoopSeatFitFor` into the context's `NetSeatFit`, while `CoopGuestFlightOver` ends a guest's flight when the host's boards leave the mission. A lobby Dogfight's field is `VersusLaunchField`, each guest's stock plane and fit read off the lobby's picks, and `LobbyLanding` returns a completed one to that lobby's Game Scores with the door kept open.
+`BeginLaunch`/`RunOwedLaunch` are every path a session starts or ends on (the load screen stays up past the build while the session's owed build steps run one a frame through `GameSession.StepOwedLoad`, which is what makes it a yield of several frames, and while a network start is held, with a fresh start cover after it; a CLI launch has no screen and drains them inside `LaunchSession`), a flight left early comes back to the screen it was launched from (settled by the launch through `MenuReturnDestination.ForLaunch`, not by the exit press), and what the persistent `WorldEnvironment` draws behind all of it is `Utils/WorldBackdrop.cs`'s: black while the menu owns the screen and at the quits that still draw, the sky again at every launch. A co-op campaign's field is `CoopLaunchField`: the host's roster names each guest and keeps each seat's `CoopFit`, and every machine resolves a seat's loadout through `CoopSeatFitFor` into the context's `NetSeatFit`, while `CoopGuestFlightOver` ends a guest's flight when the host's boards leave the mission. A lobby Dogfight's field is `VersusLaunchField`, the host's first seat named as its advert names the host (its player tag when that is empty), each guest's plane and fit read off the lobby's picks under the host's plane rules; every seat's custom plane goes through `SeatBuildsFor` and `SeatBuildFor` into the context's `NetSeatBuild`, and `LobbyLanding` returns a completed one to that lobby's Game Scores with the door kept open.
+
+## src/Session/Launch/CustomPlaneWire.cs
+The bridge between a saved `CustomPlaneDef` and the `Net/NetPlaneMessages.cs` build the wire
+carries. `Build` copies every field that decides how the plane flies, takes hits or looks; `Def`
+reads one back held to the decoded ranges, which is what every machine, the owner's included, flies.
+The ammunition and ordnance picks stay behind, since the seat's `CoopFit` carries them.
 
 ## src/Session/Launch/TuningWarmup.cs
 The startup pass that fills `Config`'s key registry before `Config.ReportOrphans` and
@@ -91,7 +97,7 @@ The engine side of one Instant Action mission, behind `GameSession`'s one nullab
 field: a plain sealed class that builds no node of its own, so every actor it makes parents under
 the handed world root. `TryCreate` takes the wizard's def or `--ia=<path>`; `BuildActors` is the
 contiguous actor phase (the chapter's first patrol net, the ace, the wingman fan and its escort
-chain, every configured wave built inert at the world origin, each actor named on its `AiSpawn.PilotName`: the ace's `ace_name`, a wave's `enemy_name`, a wingman slot's fixed pilot); `Step` ticks the sequencer and activates what it returns; `WireEndConditions` routes each mode's own win signal, the lives
+chain, every configured wave built inert at the world origin, each actor's walk seated where it spawns and kept on activation, each actor named on its `AiSpawn.PilotName`: the ace's `ace_name`, a wave's `enemy_name`, a wingman slot's fixed pilot); `Step` ticks the sequencer and activates what it returns; `WireEndConditions` routes each mode's own win signal, the lives
 ledger and the whole-window wrap-up board, snapshotting the four counters at the ending and holding the pilots' seats (not the world, not the cameras) until the hold runs out and the board is due: a win keeps the stick and loses the commands, a loss loses both, and a hull lost inside the hold spends no life and takes no pane. The decoded rules stay engine-free in
 `InstantActionRuntime.cs` and `InstantActionWaves.cs`; this class owns every `ia:` log line.
 
@@ -186,11 +192,11 @@ animation. `Replicate` hands the graph to another machine's: it then evaluates n
 The engine side of one campaign mission and the sibling of `InstantActionDirector`: a plain sealed
 class building no node of its own. `ResolveSpec` runs in `GameSession`'s constructor and turns a
 `--campaign=<profile>:<seq>` position into a chapter and mission; `BuildRoster` plans and spawns
-the `aiv` blocks through `CampaignRoster.cs`; `Attach` arms the graph once every runtime a
+the `aiv` blocks through `CampaignRoster.cs`, seating each netted one's walk where it spawns, and a wake moves an off-path block by its net's trailer (`AiNetFollower.Carry`); `Attach` arms the graph once every runtime a
 directive can touch is up; `BindCallbackHost` takes the `CALLBACK` slot ahead of the generator
 runtime's, where 801 to 803 reactivate the lowest-numbered still-deactivated Black Hat of their
 family, CM19's only launch path; `WarpDrawn` raises the world stream's `WARP_VEHICLE` pick, and `TakeWarpsFromHost` makes a guest director wait for the host's instead of drawing; 968 takes C4/M03's escorting wingman out of the world as that mission's docking film says her name; `Step` runs the graph, the escort repair, the music and the danger-zone tracker, whose completed zones photograph into the profile through `CampaignSnapshot`, raise the flight's praise line through `WorldInputs.DangerZoneSpoken` and make `DangerZoneMask`, the id 18 to 30 half of the completed-objective mask. The
-nested `World` is the `IObjectiveWorld`, a directive with no seam here a named no-op, and `WidenGroupEngagement` is where an awake `DEDG` reaches its group's live members; `Memento` is the picture the flying profile hangs, which the pause sheet's own slot takes; mission end records the attempt, folds the persist log into the profile and holds before the cabin behind `LeavingFade`, the ramp `UI.Screens.MissionEndFade` paints. A replicated graph's end builds the result and holds the world the same way but records nothing, since the attempt is the host's; `HasStore` says whether this director writes a profile at all, which a co-op guest's never does. Debrief: [../org/debrief.md](../org/debrief.md).
+nested `World` is the `IObjectiveWorld`, a directive with no seam here a named no-op, and `WidenGroupEngagement` is where an awake `DEDG` reaches its group's live members; `Memento` is the picture the flying profile hangs, which the pause sheet's own slot takes; mission end records the attempt, folds the persist log into the profile and holds before the cabin behind `LeavingFade`, the ramp `UI.Screens.MissionEndFade` paints. A replicated graph's end builds the result and holds the world the same way but records nothing, since the attempt is the host's; `HasStore` says whether this director writes a profile at all, which a co-op guest's never does. A guest's `TryCreate` binds `wingman_1` from the host's co-op wingman word (`CoopWingmanOf` writes it), never from its own default profile. A human's death under the loss rule pins that aircraft `CrashIsFinal`, so neither the respawn button nor its prompt reaches the wreck. Debrief: [../org/debrief.md](../org/debrief.md).
 
 ## src/Session/Objectives/NetDirectorLink.cs
 The objectives graph over the wire, a static pair of calls with no state of its own. `Publish`
@@ -218,7 +224,7 @@ and hull path each half second. `FollowZeppelins` puts a guest's zeppelins on th
 placement index, `FollowVehicles` its hulls by spawn index and `NameKey` hash plus the host's
 `WARP_VEHICLE` picks, and `FollowGenerators` has it build the host's generator launches at the
 host's ordinals. Pools go out off `DestructibleDamaged` at once and `DestructibleChipped` once per
-seat tick, and apply through `ApplyReplicatedHealth`. Layouts: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+seat tick, and apply through `ApplyReplicatedHealth`. `FollowVoice` relays each `AiVoiceRuntime.Raised` by ordinal as world event 7, which a guest hands to `TakeRaise`, and feeds a guest's hull events to `TakeHull`. Layouts: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Session/World/NetCutsceneLink.cs
 The cutscene skip over the wire, one per network session with a cutscene host. On the host it
@@ -229,12 +235,13 @@ skip input sends the ask and ends nothing locally, and hands each skip the host 
 [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Session/Campaign/NetPositionalStartLink.cs
-The landing rows and the ladder switch over the wire, one per network session with either runtime
-bound. On the host it sends each row start and holder change from `LandingApproachRuntime.Started`
-and `LadderSwitchRuntime.HolderChanged`, and gives a guest's copy the held auto-land button that
-seat's own machine reports. On a guest it replicates both runtimes, starts the row the host named
-for that seat's rig, takes the host's holder, and `Step` reports its own seats' held button when it
-changes. Kinds and replay mapping: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+The landing rows, the ladder switch and the code-raising range gates over the wire, one per network
+session with any of them bound. On the host it sends each row start, holder change and gate verdict
+from `LandingApproachRuntime.Started`, `LadderSwitchRuntime.HolderChanged` and
+`RangeGateAuthority.Decided`, and gives a guest's copy the held auto-land button that seat's own
+machine reports. On a guest it replicates both runtimes, starts the row the host named for that
+seat's rig, takes the host's holder, answers each gate with the host's verdict, and `Step` reports
+its own seats' held button when it changes. Kinds and replay mapping: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Session/Campaign/CampaignProgression.cs
 The campaign's progression rules over a profile: recording one mission attempt with the original's
@@ -266,6 +273,15 @@ identity: `Save` writes a loaded profile back to its `Folder`, and a file whose 
 another folder (a copy, a hand rename) is read under the folder's name with a warning. `ForSession`
 is a launch's store, `--profiles=` or `user://Profiles/`. Format: [../formats/saved-games.md](../formats/saved-games.md).
 
+## src/Session/Campaign/CoopPlanePool.cs
+The rule that settles a co-op campaign sortie's own plane picks, for splitscreen seats and network
+guests alike. `Resolve` runs the picks in seat order: a seat keeps a pick no earlier seat holds,
+compared by name, and otherwise takes the first free plane, else `Stock` (the shared stock
+Devastator, `StockAirframe`), so on a same-moment clash the earlier seat wins. `Wingman` comes after
+every human: its saved plane while no seat holds it, else the first free plane, else `Stock`.
+Engine-free: the host settles, and the wire carries only the answer. Wire: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+Coverage: `CSVM.Tests/CoopPlanePoolTests.cs`.
+
 ## src/Session/Campaign/ChapterCinema.cs
 Which film plays before a campaign chapter, and the one handoff to the passenger cabin that
 follows it. The chapter is `seq / 5 + 1` over the profile's own position, so no screen passes a
@@ -273,7 +289,7 @@ chapter number in, and chapter N plays `chapN.mpg`. `CampaignCabinPage.MapPinCou
 story chapter for the cabin map's pins; `CampaignSequence.Chapter` is a different number, the world
 folder. Playing is a `UI/Screens/CinemaHandoff.cs` `CinemaPlay` the caller supplies, `Launcher.PlayCinema`
 being what it is handed, which leaves the film to `UI/Screens/CinemaScreen.cs` and keeps every decision here
-testable with no engine present; the cabin opens through that file's `Once`. `Launcher` holds the process's one instance and hands it to `Menu/CampaignFeature.cs`, which is how both presentations' cabin doors reach it (`UI/Campaign/CampaignFlow.cs`, `UI/Menu/Original/OriginalCampaignScreen.cs`). Films: [../formats/cinemas.md](../formats/cinemas.md).
+testable with no engine present; the cabin opens through that file's `Once`. `Launcher` holds the process's one instance and hands it to `Menu/CampaignFeature.cs`, which is how both presentations' cabin doors reach it (`UI/Campaign/CampaignFlow.cs`, `UI/Menu/Original/OriginalCampaignScreen.cs`). A co-op guest's `Play` plays the chapter its host named and leaves the latch alone, and `Stop` (`Launcher.StopCinema`) ends it when the host's film ends. Films: [../formats/cinemas.md](../formats/cinemas.md).
 
 ## src/Session/Campaign/ClosingCinema.cs
 Whether the campaign's closing film plays before the scrapbook a flown mission opens, and the one
@@ -283,7 +299,7 @@ reaches the book with no film, which is what the original's own script does when
 answers false. Nothing is latched and completion state decides nothing, so the flown result travels
 with the menu return (`Menu/MenuReturnDestination.cs`). The film is the `FinalCinema` layout row's
 name and the skip set is Escape and the left mouse alone, narrower than `ChapterCinema.cs`'s on
-purpose; playing is a `UI/Screens/CinemaHandoff.cs` `CinemaPlay` (`Launcher.PlayCinema`) whose `Once` opens the book, and `Launcher` holds the one instance and hands it to `Menu/CampaignFeature.cs`. Films: [../formats/cinemas.md](../formats/cinemas.md).
+purpose; playing is a `UI/Screens/CinemaHandoff.cs` `CinemaPlay` (`Launcher.PlayCinema`) whose `Once` opens the book, and `Launcher` holds the one instance and hands it to `Menu/CampaignFeature.cs`. A co-op guest's `Play` has no gate, since the film is its host's, and `Stop` ends it with the host's. Films: [../formats/cinemas.md](../formats/cinemas.md).
 
 ## src/Session/Campaign/CampaignPersistLog.cs
 The cross-mission state log: what a campaign mission left destroyed, carried into later missions
@@ -307,13 +323,12 @@ plane flown from Instant Action carries its fit, and a co-op seat's `Net.CoopFit
 
 ## src/Session/Roster/AirframeSwap.cs
 The three `CALLBACK` codes that hand the player a different airframe in mid mission, and what each
-names: the vehicle def the stats and the stock fit come from, the planes.zbd node the model is
-built from, an optional special-plane award template, and whether the rebuild draws the airframe's
-shipped skins instead of the pilot's paint. `AirframeSwapOrder` is one raised swap (the airframe,
-the raising definition's root, and the episode owner whose rig it lands on) and
-`AirframeSwapResult` reports whether an aircraft was replaced and which one left the world. A swap
-is always to the player's OWN rig, and what it deliberately does not rebuild is stated at the
-request record. Callback table: [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
+names: the def, the planes.zbd node, an optional award template, and whether the rebuild draws
+shipped skins. `AirframeSwapOrder` is one raised swap (airframe, raising root, episode owner) and
+`AirframeSwapResult` says whether an aircraft was replaced and which one left the world. A swap is
+always to the player's OWN rig; what it does not rebuild is stated at the request record.
+`AirframeHandover` splits what a capture carries: the captured livery rides 966 and 967 (966 falls
+back to `bhatwarhawk`'s scheme with no live rig), its damage and roster group 967 alone. Callback table: [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
 
 ## src/Session/Campaign/CampaignRoster.cs
 The engine-free half of the campaign roster spawner: `CampaignRosterPlan.Build` turns
@@ -443,8 +458,8 @@ and ticked on the sim clock: an accented AI spawn is registered as a speaker on 
 rig as a damage source whose rounds draw the ally distress out of a teammate they strike, and the mode machine and death report of EVERY aircraft handed over are watched, accented or not,
 because the bearing call-out, the taunt, the killer's gloat and the flight's enemy-down call on a player kill are spoken by an aircraft other than the one the event reached.
 An evade episode's end speaks the successful-shake taunt, and only once the machine's own evade flag has cleared.
-`Step` raises the rest of the pursue path for every AI whose gunner holds a human, at the slot cooldown's own interval rather than on a mode edge, so a commit inside the mute window is not lost: the taunt the pursuer's own nose against that human picks, its `WA-Attack`, and the flight's bearing call-out.
-`RegisterAi` also mirrors `InPlay` into the speaker's liveness, the only place the engine-free dispatcher and a controller meet.
+`Step` raises the rest of the pursue path for every AI in play whose gunner holds a hostile human, at the slot cooldown's own interval rather than on a mode edge, so a commit inside the mute window is not lost: the taunt the pursuer's own nose against that human picks, its `WA-Attack`, and the flight's bearing call-out.
+`RegisterAi` also mirrors `InPlay` into the speaker's liveness, the only place the engine-free dispatcher and a controller meet. A replicated AI (`RemoteOwned`) raises nothing here: the raises that read the flying end's own state fire `Raised` for the network link to relay, and a guest replays them through `TakeRaise` and derives the DI tiers through `TakeHull`.
 Lines play flat through `MissionRadio.Speak` (the queue the objective callouts share) with the speaker id that answers the "already talking" hook; every roll and first "no clip" refusal prints an `ai voice:` line. `WatchTurrets` adds the one non-aircraft source, a gunner's acquisition of a human player off the shared `ProjectilePool`, broadcast on that player's team, and `DangerZoneCompleted` the other, the flight's praise for a player's run through the gates, which the campaign's own completion report raises. [../formats/combat-voice.md](../formats/combat-voice.md).
 
 ## src/Session/Roster/FlightRoster.cs
@@ -512,7 +527,7 @@ the prop choreography, and on a human rig the canopy holes, whose `PLAYER_1ST_PE
 and handed to their runtime sealed, and both pre-warm their emitters after the bind so a first burst
 finds its puffers already made; `EnsureWorldEffects` hands the effects runtime the world's `WorldLights` as a contributor, so a burst's authored `LIGHT_STATE` renders on both presentations. `BeginFlightCrashRuntime` opens the crash build as a handle a caller
 steps a phase at a time (`CrashRigQueue.cs`), where the pre-warm itself repeats a slice at a time so a rig's two hundred emitters never
-land on one frame, and `BuildFlightCrashRuntime` is the one-call form. The names it binds are `Flight/Airframe/EffectCatalogue.cs`; the slot mechanism is `Mech3/TemplateStage.cs`.
+land on one frame, and `BuildFlightCrashRuntime` is the one-call form. The bind step also snapshots the built parent, pose and visibility of the airframe, the wreck and every template a bound def adopts (`OBJECT_ADD_CHILD`'s child, the eject's `cpilot`), which is what a respawn restores. The names it binds are `Flight/Airframe/EffectCatalogue.cs`; the slot mechanism is `Mech3/TemplateStage.cs`.
 
 ## src/Session/World/WeatherRig.cs
 Applies the flown mission's weather, driving each rig's skydome, whiteout, deck regime and zone gate every frame, plus the one session-wide `ObjectZoneGate.cs` pass; the whiteout is one pane-filling overlay per rig, carrying the cloud band and the fog-volume curtain on `HudLayers.Whiteout`, under that pane's own cockpit pass, so the window whites out and the interior stays clear.

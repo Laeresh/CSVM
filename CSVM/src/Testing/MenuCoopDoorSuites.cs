@@ -45,8 +45,9 @@ internal static class MenuCoopDoorSuites
         var hostDoor = new NetPlayFeature(
             (_, _, _) => hostWires.Dequeue(),
             (_, _) => throw new InvalidOperationException("the host does not join"),
-            port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
-            unmapped.Add);
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                unmapped.Add));
         var guestDoor = new NetPlayFeature(
             (_, _, _) => throw new InvalidOperationException("the guest does not host"),
             (_, _) => mesh[1]);
@@ -212,7 +213,7 @@ internal static class MenuCoopDoorSuites
     private static void AwaitMapping(NetPlayFeature door)
     {
         var waited = System.Diagnostics.Stopwatch.StartNew();
-        while (door.PortMap == null && waited.Elapsed.TotalSeconds < 20.0)
+        while (door.Router.PortMap == null && waited.Elapsed.TotalSeconds < 20.0)
         {
             door.Step(0.0);
             System.Threading.Thread.Sleep(1);

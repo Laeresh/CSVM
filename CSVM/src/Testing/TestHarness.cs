@@ -40,6 +40,11 @@ public static class TestHarness
     /// out of <c>.scratch/</c> into the shard's own subdirectory.</summary>
     public const int ReportSchema = 3;
 
+    /// <summary>How many orphan nodes a suite may leave past its teardown before it fails. Every
+    /// suite in the catalog leaves none, so one stray node fails the suite that dropped it and its
+    /// verdict names the root. Measurement: docs/verification.md INSTR-96.</summary>
+    public const int OrphanLeakTolerance = 0;
+
     /// <summary>The engine errors this project currently emits that are not the harness's to fix.
     /// Every entry names the open item that owns it; when that item lands, the entry is deleted and
     /// the cap does the rest.</summary>
@@ -127,6 +132,7 @@ public static class TestHarness
             // Every suite starts from the same stream positions, so its verdict is a function of
             // the suite rather than of how many draws its predecessors left in this one process.
             Rng.Rewind();
+            var orphansAtStart = TestContext.OrphanNodeIdSet();
             var watch = System.Diagnostics.Stopwatch.StartNew();
             SuiteStatus status;
             string detail = suite.What;
@@ -153,8 +159,19 @@ public static class TestHarness
                 // suite's aircraft would strike them though it never asked for a world. Inside the
                 // watch, so the disposal is charged to the suite that built the world.
                 ctx.EvictCollidableWorlds();
+                ctx.FreeQueuedNodes();
             }
             watch.Stop();
+            // Measured after the flush, so only nodes the suite dropped without freeing count.
+            int orphansLeft = TestContext.OrphanNodeCount() - orphansAtStart.Count;
+            string orphanRoots = orphansLeft != 0 ? TestContext.DescribeNewOrphans(orphansAtStart) : "";
+            if (orphansLeft > OrphanLeakTolerance && status != SuiteStatus.Skip)
+            {
+                string leak = $"left {orphansLeft} orphan node(s) past its teardown, over the tolerance of {OrphanLeakTolerance}: {orphanRoots}";
+                ctx.Failures.Add(leak);
+                Log.Error("test", $"FAIL {leak}");
+                status = SuiteStatus.Fail;
+            }
             double wallSeconds = watch.Elapsed.TotalSeconds;
             double buildSeconds = ctx.WorldBuildSeconds;
             double disposalSeconds = ctx.DisposalSeconds;
@@ -179,6 +196,7 @@ public static class TestHarness
                 DisposalSeconds = disposalSeconds,
                 RestSeconds = restSeconds,
                 OverrunSeconds = overrunSeconds,
+                OrphansLeft = orphansLeft,
             });
             totals += ctx.WorldBuildPhases;
             totalBuildSeconds += buildSeconds;
@@ -197,7 +215,10 @@ public static class TestHarness
                   + $" other={ctx.WorldBuildPhases.OtherMs / 1000.0:0.00}s)"
                   + $" disposal={disposalSeconds:0.00}s rest={restSeconds:0.00}s"
                 : "";
-            Log.Info("test", $"suite {suite.Name} {status.ToString().ToUpperInvariant()} in {wallSeconds:0.00}s{phaseSuffix}");
+            // Every leftover is reported, under the tolerance too, so a small new leak is visible
+            // in the run that brings it in.
+            string orphanSuffix = orphansLeft != 0 ? $" orphans_left={orphansLeft} [{orphanRoots}]" : "";
+            Log.Info("test", $"suite {suite.Name} {status.ToString().ToUpperInvariant()} in {wallSeconds:0.00}s{phaseSuffix}{orphanSuffix}");
         }
         var releaseWatch = System.Diagnostics.Stopwatch.StartNew();
         ctx.ReleaseWorlds();
@@ -542,6 +563,7 @@ public static class TestHarness
             json.AppendLine($"      \"disposalSeconds\": {Sec(r.DisposalSeconds)},");
             json.AppendLine($"      \"restSeconds\": {Sec(r.RestSeconds)},");
             json.AppendLine($"      \"overrunSeconds\": {Sec(r.OverrunSeconds)},");
+            json.AppendLine($"      \"orphansLeft\": {r.OrphansLeft},");
             json.AppendLine($"      \"detail\": {Quote(r.Detail)},");
             json.AppendLine($"      \"counts\": {{{string.Join(", ", r.Counts.Select(kv => $"{Quote(kv.Key)}: {kv.Value}"))}}},");
             json.AppendLine($"      \"failures\": [{string.Join(", ", r.Failures.Select(Quote))}],");
@@ -958,6 +980,28 @@ public sealed class TestContext
         }
     }
 
+    /// <summary>The live orphan node count, the figure <see cref="FreeQueuedNodes"/> returns a suite to.
+    /// Zero in a release export, where the engine lists no orphans.</summary>
+    internal static int OrphanNodeCount() => OrphanNodeIds().Count;
+
+    /// <summary>The live orphan node ids, the snapshot <see cref="DescribeNewOrphans"/> diffs against.</summary>
+    internal static HashSet<ulong> OrphanNodeIdSet() => new(OrphanNodeIds());
+
+    /// <summary>Names each new orphan subtree root absent from <paramref name="before"/> with its
+    /// node count. The verdict line then points at the code that dropped it.</summary>
+    internal static string DescribeNewOrphans(HashSet<ulong> before)
+    {
+        var roots = new List<string>();
+        foreach (ulong id in OrphanNodeIds())
+        {
+            if (!before.Contains(id) && GodotObject.InstanceFromId(id) is Node node && node.GetParent() == null)
+            {
+                roots.Add($"{node.GetType().Name} '{node.Name}' ({CountSubtree(node)})");
+            }
+        }
+        return string.Join(", ", roots);
+    }
+
     /// <summary>Clears everything a suite may leave behind on this context: the build knobs and the
     /// world-build/disposal attribution. Called once per suite in <see cref="TestHarness.Run"/>, the
     /// same lifetime <see cref="Failures"/>/<see cref="Notes"/>/<see cref="Counts"/> already have.
@@ -965,14 +1009,6 @@ public sealed class TestContext
     /// before it, and therefore of which shard it landed in.</summary>
     internal void ResetForSuite()
     {
-        // Suites run back to back inside one frame, so a predecessor's QueueFree'd rigs are still
-        // under the host: a same-named spawn is renamed @Node3D@N and a lookup by name finds the
-        // dead one. Free them now, the flush the frame end would have done between suites.
-        foreach (var child in Host.GetChildren())
-        {
-            if (child.IsQueuedForDeletion())
-                child.Free();
-        }
         EmitterFactory = null;
         Ambience = null;
         ExtraPrewarmSoundNames = null;
@@ -1004,6 +1040,31 @@ public sealed class TestContext
         }
     }
 
+    /// <summary>Does between two suites what a frame end does between two frames. It frees every
+    /// node still waiting on a <c>QueueFree</c>: the host's queued children and every queued orphan.
+    /// A node nobody queued is kept, so a cache's out-of-tree template survives.
+    /// ⚠ Run it only between suites; inside one, a caller may still read what it queued.</summary>
+    internal void FreeQueuedNodes()
+    {
+        // A predecessor's queued rig left under the host makes a same-named spawn @Node3D@N, and a
+        // lookup by name then finds the dead one.
+        foreach (var child in Host.GetChildren())
+        {
+            if (child.IsQueuedForDeletion())
+            {
+                child.Free();
+            }
+        }
+        foreach (ulong id in OrphanNodeIds())
+        {
+            // Null once an ancestor freed earlier in this loop took the node with it.
+            if (GodotObject.InstanceFromId(id) is Node node && node.IsQueuedForDeletion())
+            {
+                node.Free();
+            }
+        }
+    }
+
     internal void ReleaseWorlds()
     {
         foreach (var w in _worlds.Values)
@@ -1011,6 +1072,28 @@ public sealed class TestContext
             w.Destroy();
         }
         _worlds.Clear();
+    }
+
+    // Through ClassDB rather than Node.GetOrphanNodeIds: that binding types the ids as 32-bit
+    // ints, so no id it returns resolves to its node. Empty in a release export.
+    private static List<ulong> OrphanNodeIds()
+    {
+        var ids = new List<ulong>();
+        foreach (var id in ClassDB.ClassCallStatic("Node", "get_orphan_node_ids").AsGodotArray())
+        {
+            ids.Add(id.AsUInt64());
+        }
+        return ids;
+    }
+
+    private static int CountSubtree(Node node)
+    {
+        int count = 1;
+        foreach (var child in node.GetChildren(includeInternal: true))
+        {
+            count += CountSubtree(child);
+        }
+        return count;
     }
 
     // Times one Destroy() call. Never attributed to a suite when it happens outside one (the
@@ -1171,6 +1254,10 @@ public sealed class SuiteResult
     /// <summary>How far <c>BuildSeconds + DisposalSeconds</c> overran <see cref="Seconds"/>, zero
     /// on a clean measurement. See <see cref="PhaseAttribution.Overrun"/>.</summary>
     public double OverrunSeconds { get; init; }
+
+    /// <summary>How many more orphan nodes the process held after this suite's teardown and the
+    /// queued-free flush than before it started. Zero in a release export, which lists no orphans.</summary>
+    public int OrphansLeft { get; init; }
 }
 
 /// <summary>A native engine error the run is known to emit and that no suite here caused. Each

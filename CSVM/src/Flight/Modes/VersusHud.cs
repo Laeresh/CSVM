@@ -65,15 +65,6 @@ public sealed partial class VersusHud : Control
         };
     }
 
-    /// <summary>The line a Downed report anywhere in the match posts to the message stack: killer
-    /// named when it was a weapon kill, a plain "DOWN" otherwise, which is a hull spent by a ram or
-    /// by anything else with no seat to credit. Static, since the stack it lands in belongs to the
-    /// reading pane, not to this one.</summary>
-    public static string KillLine(int? killer, int victim) =>
-        killer is int k
-            ? $"{SplitScreen.PlayerTag(k)} DOWNED {SplitScreen.PlayerTag(victim)}"
-            : $"{SplitScreen.PlayerTag(victim)} DOWN";
-
     public override void _Process(double delta)
     {
         // Track the pane (resizable window / splitscreen layout) and repaint every frame, the

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CSVM.Flight.Airframe;
+using CSVM.Flight.Camera;
 using CSVM.Mech3;
 using Godot;
 
@@ -161,19 +162,23 @@ public static class EngineAudioCurves
     public static bool StartsDamagedLoop(EngineSlotPhase from, EngineSlotPhase next, bool loopSounding) =>
         next == EngineSlotPhase.Damaged && !(from == EngineSlotPhase.Damaged && loopSounding);
 
-    /// <summary>The engine slot's definition and its pitch multiplier: damaged swaps onto
-    /// <c>damaged_engine_sound</c> at a drawn multiplier; else <paramref name="cockpitView"/>
-    /// (own-ship only, the full Cockpit view, since the original leaves the Nose view on the plain
-    /// def) swaps onto <c>cockpit_engine_sound</c> at multiplier 1; else the plain
-    /// <c>engine_sound</c>. Damaged wins because no def authors a damaged cockpit variant.</summary>
+    /// <summary>Whether the pilot's selected view puts the own-ship engine slot on
+    /// <c>cockpit_engine_sound</c>. The original swaps in camera modes 6 and 7 alike, so Cockpit and
+    /// Nose both do. Decode: docs/formats/vehicle.md, "The engine audio's slots".</summary>
+    public static bool SelectsCockpitLoop(PilotViewMode selected) => PilotView.IsFirstPerson(selected);
+
+    /// <summary>The engine slot's definition and its pitch multiplier. Damaged takes
+    /// <c>damaged_engine_sound</c> at a drawn multiplier. Else <paramref name="firstPersonView"/>
+    /// (own-ship, <see cref="SelectsCockpitLoop"/>) takes <c>cockpit_engine_sound</c> at 1. Else
+    /// the plain <c>engine_sound</c>. Damaged wins because no def authors a damaged cockpit variant.</summary>
     public static (string Name, float PitchMul) EngineDefFor(
-        PlaneStats stats, bool damaged, RandomNumberGenerator rng, bool cockpitView = false)
+        PlaneStats stats, bool damaged, RandomNumberGenerator rng, bool firstPersonView = false)
     {
         if (damaged && stats.DamagedEngineSound is { } damagedName)
         {
             return (damagedName, DamagedPitchMul(stats, stats.DamagedEnginePitchRandom ? rng.Randf() : 0f));
         }
-        if (cockpitView && stats.CockpitEngineSound is { } cockpitName)
+        if (firstPersonView && stats.CockpitEngineSound is { } cockpitName)
         {
             return (cockpitName, 1f);
         }

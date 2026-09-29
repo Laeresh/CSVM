@@ -153,21 +153,22 @@ public static class LoadScreens
         "prp0", "prp7", "prp15", "prp22", "prp30", "prp37",
     };
 
-    /// <summary>The board for one launch. <paramref name="campaign"/> picks the paper sheet over the
-    /// blackboard, the split the original makes, and takes <paramref name="sheet"/> as its whole
-    /// content. <paramref name="missionType"/> names the Instant Action dialog to read, or is null
-    /// for a mode of ours, which takes <paramref name="subject"/> as its heading instead; neither
-    /// reaches the campaign sheet, which writes no words of ours.</summary>
+    /// <summary>The board for one launch. The campaign flag picks the paper sheet, whole content
+    /// <paramref name="sheet"/>, over the blackboard. The mission type names the blackboard's
+    /// dialog, or is null for a mode of ours, which writes <paramref name="subject"/> instead.
+    /// A pumped board leaves the still propeller out, for a moving layer that draws the cycle.
+    /// ⚠ Shown without that layer, a pumped board draws no propeller at all.</summary>
     public static ComposedBoard For(
         bool campaign,
         string subject,
         string? missionType,
         string zrdrPath,
         string messagesPath,
-        LoadSheet? sheet = null) =>
+        LoadSheet? sheet = null,
+        bool pumped = false) =>
         campaign
-            ? CampaignSheet(sheet)
-            : Blackboard(Texts(missionType, subject, zrdrPath, messagesPath));
+            ? CampaignSheet(sheet, pumped)
+            : Blackboard(Texts(missionType, subject, zrdrPath, messagesPath), pumped);
 
     /// <summary>The two moving pieces of one launch's screen, found once because a build reports
     /// its steps ten times a second and a composition is not worth redoing per step.</summary>
@@ -190,10 +191,10 @@ public static class LoadScreens
             cycle?.At.X ?? 0f, cycle?.At.Y ?? 0f, cycle?.Center ?? false);
     }
 
-    /// <summary>The two pictures that move while a build holds the frame loop: the lit strip
-    /// clipped to <see cref="LoadProgress.FillPixels"/> of <paramref name="fillArtWidth"/>, and the
-    /// propeller cycle's current frame over the still one. Either may be absent, an unstarted bar
-    /// lights nothing and a sheet that did not read carries no cycle.</summary>
+    /// <summary>The two pictures that move while a build holds the frame loop. One is the lit
+    /// strip, clipped to <see cref="LoadProgress.FillPixels"/> of its width. The other is the
+    /// cycle's current frame, standing in for the still one a pumped board leaves out.
+    /// Either may be absent: an unstarted bar lights nothing, an unread sheet has no cycle.</summary>
     public static IReadOnlyList<BoardPicture> Moving(
         LoadMotion motion, float fillArtWidth, float fillArtHeight, float fraction, int frame)
     {
@@ -219,8 +220,8 @@ public static class LoadScreens
 
     /// <summary>The still board with the build's own progress over it: the lit strip clipped to
     /// <see cref="LoadProgress.FillPixels"/> of <paramref name="fillArtWidth"/>, and the cycle's
-    /// current frame over the still one. An overlay, so the composition under it is untouched and
-    /// a screen with no build behind it draws exactly what it always did.</summary>
+    /// current frame. An overlay, so the composition under it is untouched; hand it a pumped
+    /// composition, or the still frame shows through the turning one.</summary>
     public static ComposedBoard Painted(
         ComposedBoard still, LoadMotion motion,
         float fillArtWidth, float fillArtHeight, float fraction, int frame)
@@ -297,13 +298,12 @@ public static class LoadScreens
         return lines;
     }
 
-    // The campaign screen, through the same drawer PauseScreens uses: the mission's chart at its
-    // authored crop, the pins, device icons and propeller its script places, the parchment, the
-    // memento over its shadow, and the unlit bar.
+    // The campaign screen, through the same drawer PauseScreens uses. It draws the chart at its
+    // authored crop, what the script places, the parchment, the memento and the unlit bar.
     // ⚠ Place no ownship or zeppelin icon here: the load dialog's constructor binds neither, and
     // the pause screen's is the only one that does (docs/org/pause-screen.md).
     // An unreadable sheet leaves the frame and the bar standing, which is all this screen promises.
-    private static ComposedBoard CampaignSheet(LoadSheet? sheet)
+    private static ComposedBoard CampaignSheet(LoadSheet? sheet, bool pumped)
     {
         var backdrop = new List<BoardPicture>
         {
@@ -327,8 +327,10 @@ public static class LoadScreens
                     list.BackgroundAt.X, list.BackgroundAt.Y));
             }
 
-            MissionMap.Elements(pictures, sheet.Reveal, back: true);
-            MissionMap.Elements(pictures, sheet.Reveal, back: false);
+            // Pumped, the cycle element stays out by identity: the moving layer draws its frames.
+            var cycle = pumped ? Cycle(sheet) : null;
+            MissionMap.Elements(pictures, sheet.Reveal, back: true, except: cycle);
+            MissionMap.Elements(pictures, sheet.Reveal, back: false, except: cycle);
             AddMemento(pictures, sheet);
             if (sheet.Shared.Objectives != null && sheet.ObjectivesTitle.Length > 0)
             {
@@ -414,24 +416,29 @@ public static class LoadScreens
         }
     }
 
-    // The Instant Action screen: the blackboard, its three authored photographs each centred on
-    // its own coordinate, the unlit lamp bar and one still propeller frame beside it.
-    private static ComposedBoard Blackboard(IReadOnlyList<BoardLine> lines) =>
-        new(
-            new[]
-            {
-                new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, "loadframempt2"), 0, 0),
-                new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, "MP-shotdown"), 197, 157, 0, true),
-                new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, "MP-crash"), 197, 307, 0, true),
-                new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, "mp-dangerzone2"), 197, 457, 0, true),
-                new BoardPicture(
-                    new BoardArt(BoardArtLibrary.Rimage, Propeller[0]),
-                    ChalkPropellerX, ChalkPropellerY),
-                new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, ChalkBarArt), ChalkBarX, ChalkBarY),
-            },
-            Array.Empty<BoardStroke>(),
-            lines,
-            Array.Empty<BoardPlaque>());
+    // The Instant Action screen: the blackboard, its three centred photographs, the unlit lamp
+    // bar and one still propeller frame beside it. A pumped screen leaves
+    // that frame to its moving layer.
+    private static ComposedBoard Blackboard(IReadOnlyList<BoardLine> lines, bool pumped)
+    {
+        var pictures = new List<BoardPicture>
+        {
+            new(new BoardArt(BoardArtLibrary.Rimage, "loadframempt2"), 0, 0),
+            new(new BoardArt(BoardArtLibrary.Rimage, "MP-shotdown"), 197, 157, 0, true),
+            new(new BoardArt(BoardArtLibrary.Rimage, "MP-crash"), 197, 307, 0, true),
+            new(new BoardArt(BoardArtLibrary.Rimage, "mp-dangerzone2"), 197, 457, 0, true),
+        };
+        if (!pumped)
+        {
+            pictures.Add(new BoardPicture(
+                new BoardArt(BoardArtLibrary.Rimage, Propeller[0]), ChalkPropellerX, ChalkPropellerY));
+        }
+
+        pictures.Add(new BoardPicture(
+            new BoardArt(BoardArtLibrary.Rimage, ChalkBarArt), ChalkBarX, ChalkBarY));
+        return new ComposedBoard(
+            pictures, Array.Empty<BoardStroke>(), lines, Array.Empty<BoardPlaque>());
+    }
 
     // Every Text the named dialog's script places, in script order, as its own property dict. An
     // unreadable or absent extraction yields none, since a board must still come up without one.

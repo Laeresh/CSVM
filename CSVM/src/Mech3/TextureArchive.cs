@@ -648,6 +648,10 @@ public sealed class TextureArchive : IDisposable
     // The decode, the other bits and the install-wide census are in docs/org/textures.md.
     private const int AdditiveTransparentBit = 0x04;
 
+    // Bit 3 of the same word: an alpha-plane texture carrying it uploads as ARGB8888.
+    // Every other one uploads as ARGB4444, keeping four bits of alpha (docs/org/textures.md).
+    private const int FullAlphaUploadBit = 0x08;
+
     // Texture names referenced by gamez meshes that ship in NO archive of a retail
     // install, verified absent across all extracted chapters. The
     // original engine tolerates them (renders neutral), so we do too: a quiet gray
@@ -912,6 +916,37 @@ public sealed class TextureArchive : IDisposable
         return bias;
     }
 
+    /// <summary>Keeps the top four bits of every alpha byte, mip levels included. They expand back
+    /// by nibble replication (<c>a4 * 17</c>), as a card reads a 4-bit channel. Colour bytes
+    /// are untouched. A format with no 8-bit alpha channel is left alone.</summary>
+    public static void TruncateAlphaToNibble(Image img)
+    {
+        int stride = img.GetFormat() switch
+        {
+            Image.Format.Rgba8 => 4,
+            Image.Format.La8 => 2,
+            _ => 0,
+        };
+        if (stride == 0)
+        {
+            return;
+        }
+
+        var data = img.GetData();
+        TruncateAlphaToNibble(data, stride);
+        img.SetData(img.GetWidth(), img.GetHeight(), img.HasMipmaps(), img.GetFormat(), data);
+    }
+
+    /// <summary>The byte form of <see cref="TruncateAlphaToNibble(Image)"/>: alpha is the last byte
+    /// of each <paramref name="stride"/>-byte texel.</summary>
+    public static void TruncateAlphaToNibble(byte[] texels, int stride)
+    {
+        for (int i = stride - 1; i < texels.Length; i += stride)
+        {
+            texels[i] = (byte)((texels[i] >> 4) * 17);
+        }
+    }
+
     /// <summary>True when the name is one the original draws nothing for (see AbsentAndUndrawn)
     /// AND this archive cannot resolve it, so the caller drops the polygon instead of surfacing it.
     /// ⚠ Both halves are required: the chapters that DO ship the texture must keep drawing it, so
@@ -938,6 +973,26 @@ public sealed class TextureArchive : IDisposable
     /// (docs/org/textures.md). Unknown reads as alpha-mixed, the engine's own fallback.</summary>
     public bool IsAdditive(string materialTextureName) =>
         (RenderFlags(materialTextureName) & AdditiveTransparentBit) != 0;
+
+    /// <summary>True when the original uploads this texture as ARGB4444, keeping four bits of alpha:
+    /// an alpha-plane texture without render-flags bit 3 (docs/org/textures.md). A name the archive
+    /// cannot resolve reads false.</summary>
+    public bool UploadsFourBitAlpha(string materialTextureName)
+    {
+        if (Resolve(Path.GetFileNameWithoutExtension(materialTextureName)) is not { } resolved)
+        {
+            return false;
+        }
+
+        // Without a manifest an image carrying no alpha passes too, which is harmless: 255 stays 255.
+        return AlphaClassOf(Path.GetFileNameWithoutExtension(resolved), hasPixelAlpha: true) == AlphaClass.Full
+            && (RenderFlags(materialTextureName) & FullAlphaUploadBit) == 0;
+    }
+
+    /// <summary>True when this build truncates the texture's alpha: faithful graphics and
+    /// <see cref="UploadsFourBitAlpha"/>. Enhanced mode keeps the full 8-bit alpha.</summary>
+    public bool TruncatesAlpha(string materialTextureName) =>
+        !GraphicsMode.Enhanced && UploadsFourBitAlpha(materialTextureName);
 
     public ImageTexture? Find(string materialTextureName)
     {
@@ -1260,6 +1315,12 @@ public sealed class TextureArchive : IDisposable
                 AuthoredMipsInstalled += authoredLevels;
                 AuthoredMipTextures++;
             }
+        }
+        // Last, so every level is truncated as the original converts each level it uploads. The
+        // alpha class and softness above stay read off the raw 8-bit alpha.
+        if (LastHadAlpha && TruncatesAlpha(baseName))
+        {
+            TruncateAlphaToNibble(img);
         }
         return img;
     }

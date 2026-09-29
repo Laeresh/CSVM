@@ -377,7 +377,7 @@ internal static class AiWaveLaunchHitchSuites
     // ⚠ Do not bar these frames on wall time; it reads the machine's load, not the launch. Wall time
     // counts descheduled time and the console writes blocked on the runner's pipe (PERF-36). A
     // blocking wait therefore reads as nothing here, and the wall worst is reported beside it.
-    private static class ThreadCpuClock
+    internal static class ThreadCpuClock
     {
         public static readonly string Source = OperatingSystem.IsWindows() ? "thread cycles" : "wall";
 

@@ -224,7 +224,7 @@ internal static class MenuOriginalCampaignSuites
         ctx.Same(7, awarded.Count, $"a fresh profile holds the pictures the campaign starts with");
         string seeded = CampaignMementos.Seeded;
         string second = awarded[1];
-        ctx.Check(Draws(shell.Compose(), CampaignMementos.Bitmap(seeded)), $"and the cabin hangs the seeded pin-up");
+        ctx.Check(Draws(shell.Compose(), "SCRAPBOOK/" + seeded), $"and the cabin hangs the seeded pin-up");
         Click(host, seat, Pointer(fit, plaque.X + 5f, plaque.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.CampaignMemento && shell.Rows.Count == 4,
             $"CHANGE MEMENTO opens the chooser's four plaques ({shell.Screen}, {shell.Rows.Count})");
@@ -234,7 +234,7 @@ internal static class MenuOriginalCampaignSuites
         ctx.Check(store.Load(Pilot)?.Memento.Length == 0, $"and nothing is written before the commit");
         var cancel = Row(shell, nameof(BoardButton.CancelMemento))!;
         Click(host, seat, Pointer(fit, cancel.X + 5f, cancel.Y + 5f, pressed: true, clicked: true));
-        ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && Draws(shell.Compose(), CampaignMementos.Bitmap(seeded)),
+        ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && Draws(shell.Compose(), "SCRAPBOOK/" + seeded),
             $"CANCEL CHANGES leaves the cabin hanging what it hung ({shell.Screen})");
         Click(host, seat, Pointer(fit, plaque.X + 5f, plaque.Y + 5f, pressed: true, clicked: true));
         ctx.Check(Draws(shell.Compose(), "SCRAPBOOK/" + seeded), $"the chooser opens again on that picture rather than on the step CANCEL threw away");
@@ -243,7 +243,7 @@ internal static class MenuOriginalCampaignSuites
         Click(host, seat, Pointer(fit, accept.X + 5f, accept.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && store.Load(Pilot)?.Memento == second,
             $"ACCEPT CHANGES returns to the cabin with the chosen name in the profile ({shell.Screen}, {store.Load(Pilot)?.Memento})");
-        ctx.Check(Draws(shell.Compose(), CampaignMementos.Bitmap(second)), $"and the cabin hangs the chosen picture");
+        ctx.Check(Draws(shell.Compose(), "SCRAPBOOK/" + second), $"and the cabin hangs the chosen picture");
     }
 
     // One press of the chooser's forward arrow, read fresh: the plaque is rebuilt every frame.
@@ -484,6 +484,36 @@ internal static class MenuOriginalCampaignSuites
         ctx.Check(shell.FocusedKey == "ReturnToCabin", $"the pointer over the way out takes the focus back ({shell.FocusedKey})");
     }
 
+    // With a group's list open, a click on a rocket field closes that list and opens the rocket
+    // field's own, so one list stands. The pad then walks only the rows that draw a field.
+    private static void ClickAnotherField(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, int group)
+    {
+        var page = shell.Campaign.Content;
+        var rocket = shell.Rows.FirstOrDefault(r => r.Key == "FIELD:4" && r.Enabled);
+        if (page == null || rocket == null)
+        {
+            ctx.Check(false, $"ammo selection shows the first rocket field ({page != null})");
+            return;
+        }
+
+        Click(host, seat, Pointer(fit, rocket.X + 4f, rocket.Y + 4f, pressed: true, clicked: true));
+        int open = Enumerable.Range(0, page.RowCount).Count(row => page.Combo(row) is { Open: true });
+        ctx.Check(!page.Combo(group)!.Open && page.Combo(4) is { Open: true } && open == 1,
+            $"a click on another field closes the open list and opens its own ({open} open, focus {shell.FocusedKey})");
+        Press(host, seat, Back);
+
+        var keys = new List<string>();
+        for (int i = 0; i < page.RowCount; i++)
+        {
+            Press(host, seat, Down);
+            keys.Add(shell.FocusedKey);
+        }
+
+        var stranded = keys.Where(key => shell.Rows.FirstOrDefault(r => r.Key == key) is not { Visible: true }).ToList();
+        ctx.Check(stranded.Count == 0, $"Down never stops on a slot with no field ({string.Join(",", keys)})");
+        Click(host, seat, Pointer(fit, rocket.X + 4f, rocket.Y + 4f, pressed: true, clicked: true));
+    }
+
     // Whichever results tab the card is not showing: the two are offered next to each other, Best
     // to Date first, and only the shown one presses an authored button.
     private static OriginalRow? UnselectedTab(OriginalShell shell)
@@ -548,6 +578,7 @@ internal static class MenuOriginalCampaignSuites
         ctx.Check(store.Load(Pilot)!.Planes[0].Ammo[group] == 0, $"nothing is written before ACCEPT");
         Press(host, seat, Accept);
         ctx.Check(shell.Rows.Count > rows.Count && shell.Focus == field, $"Accept on the field opens its list under the box, the focus staying on the field ({shell.Rows.Count} rows)");
+        ClickAnotherField(ctx, host, seat, shell, fit, group);
         Press(host, seat, Back);
         ctx.Check(shell.Screen == OriginalScreen.CampaignAmmo && shell.Rows.Count == rows.Count, $"Back closes the list and stays ({shell.Rows.Count} rows)");
         var accept = Row(shell, "AcceptLoadout")!;
@@ -818,9 +849,10 @@ internal static class MenuOriginalCampaignSuites
 
         shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignAmmo);
         closed = shell.Rows.Count;
-        shell.Campaign.RunAidScript("4da");
+        // The starter's empty fourth gun group takes no cursor, so three downs reach the first rocket field.
+        shell.Campaign.RunAidScript("3da");
         ctx.Check(shell.Rows.Count > closed && shell.FocusedKey == "FIELD:4",
-            $"4da steps four rows down the ammo screen and stands that rocket list open ({closed} -> {shell.Rows.Count} rows, focus {shell.FocusedKey})");
+            $"3da steps past the empty gun group to the first rocket field and stands its list open ({closed} -> {shell.Rows.Count} rows, focus {shell.FocusedKey})");
 
         // The one verb Original cannot spell, since it binds no secondary press: refused whole, so
         // not even the two downs before it move the cursor and the run ends without a shot.

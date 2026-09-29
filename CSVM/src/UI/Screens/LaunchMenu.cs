@@ -957,6 +957,9 @@ public sealed partial class LaunchMenu : CanvasLayer
             {
                 walked++;
             }
+
+            // The walk skips the page's re-entry, so the cursor opens where a guest's own would.
+            flow.FocusRow(flow.Page.OpeningRow);
         }
 
         _aidGuest = 0;
@@ -4154,7 +4157,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
 
         string link = net.Link is { } state ? $", link {state.ToString().ToLowerInvariant()}" : "";
-        string mapped = net.PortMap is { } map ? $" {CoopDoorText.RouterStatus(map)}" : "";
+        string mapped = net.Router.PortMap is { } map ? $" {CoopDoorText.RouterStatus(map)}" : "";
         string pinhole = CoopDoorText.HostPinholeStatus(net);
         mapped += pinhole.Length > 0 ? $" {pinhole}" : "";
         string address = CoopDoorText.HostAddressStatus(net);
@@ -4163,7 +4166,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             NetDoorStage.Hosting =>
                 $"Hosting on port {net.Port.ToString(CultureInfo.InvariantCulture)}{link}, {net.Peers.ToString(CultureInfo.InvariantCulture)} joined.{where}{mapped}",
-            NetDoorStage.Joining => $"Joining {net.JoinTargetText}{link}",
+            NetDoorStage.Joining => $"Joining {net.JoinTarget}{link}",
             NetDoorStage.Joined => CoopDoorText.JoinedStatus(net, link, MissionName),
             NetDoorStage.Failed => $"That did not open: {net.Fault}",
             _ => "Host a match, or type an address and join one. The host picks the map.",

@@ -393,6 +393,7 @@ internal static class SurfaceVehicleSuites
                 $"the launch builds one hull named '{GenLaunch}' on '{def.Nets[0]}'");
             if (vessels.ByName(GenLaunch) is not { } boat || first is not { } start)
             {
+                generators.Free();
                 return;
             }
             var at = boat.Position;
@@ -462,6 +463,7 @@ internal static class SurfaceVehicleSuites
             ctx.Check(moved > 50f && moved <= PathFollower.TaxiSpeed * runS + 1f,
                 $"the hull runs the take-off path at the taxi law's speed: {moved:0.#} m in {runS:0} s");
             ctx.Check(boat.Position.X < at.X, $"…westward down esg31's path, the way the points run");
+            generators.Free();
             vessels.Free();
         });
     }

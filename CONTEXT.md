@@ -169,7 +169,8 @@ result, the solo stunt result.
 _Avoid_: end screen, endscreen, game over screen, wrap-up screen
 
 **Board menu**:
-The cursor and item list a board carries, driven by pad or keyboard rather than Godot focus.
+The cursor and item list a board carries, driven by pad, keyboard or the menu owner's mouse rather
+than Godot focus.
 _Avoid_: pause menu (it appears on results boards too), overlay menu, button list
 
 **Menu owner**:

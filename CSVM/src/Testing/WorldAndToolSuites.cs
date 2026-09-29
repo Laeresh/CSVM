@@ -11,6 +11,7 @@ using CSVM.Tooling;
 using CSVM.UI.Boards;
 using CSVM.UI.Labs;
 using CSVM.UI.Screens;
+using CSVM.Utils;
 using Godot;
 
 using static CSVM.Testing.SuiteConstants;
@@ -148,6 +149,89 @@ internal static class WorldAndToolSuites
         {
             Utils.GraphicsMode.Resolve(wasEnhanced
                 ? Utils.GraphicsMode.EnhancedWord : Utils.GraphicsMode.Default);
+        }
+    }
+
+    // Enhanced mode keys the opaque sky sprites' backdrops, since its tonemap moves them off the
+    // sky's colour. Able to fail: an unkeyed copy keeps the corner opaque, and a looser name match
+    // keys C2's moonbackdrop scenery.
+    [Suite("sky-sprite-backdrop-key",
+        "C4's moon1 and C5's star1 key to a transparent corner and an opaque figure, and the sky "
+        + "sprite match takes those two stems only, leaving C2's moonbackdrop and moonsurface and "
+        + "the flare textures alone")]
+    internal static void SkySpriteBackdropKey(TestContext ctx)
+    {
+        foreach (var (chapter, name) in new[] { ("C4", "moon1.tif"), ("C5", "star1.tif") })
+        {
+            string path = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
+            ctx.RequireData(path, $"{chapter} textures");
+            using var textures = new TextureArchive(path);
+            var tex = textures.Find(name);
+            ctx.Check(tex != null && !textures.LastHadAlpha, $"{chapter} {name} resolves opaque");
+            if (tex == null)
+            {
+                continue;
+            }
+            var img = SceneBuilder.ColorKeyed(tex).GetImage();
+            float peak = 0f;
+            for (int y = 0; y < img.GetHeight(); y++)
+            {
+                for (int x = 0; x < img.GetWidth(); x++)
+                {
+                    peak = Mathf.Max(peak, img.GetPixel(x, y).A);
+                }
+            }
+            int w = img.GetWidth() - 1, h = img.GetHeight() - 1;
+            float corners = Mathf.Max(Mathf.Max(img.GetPixel(0, 0).A, img.GetPixel(w, 0).A),
+                Mathf.Max(img.GetPixel(0, h).A, img.GetPixel(w, h).A));
+            ctx.Check(corners == 0f, $"{chapter} {name} keys its corners transparent max={corners:F3}");
+            ctx.Check(peak >= 0.99f, $"{chapter} {name} keeps its figure opaque peak={peak:F3}");
+        }
+
+        foreach (var (name, sky) in new[]
+        {
+            ("moon1.tif", true), ("STAR1.TIF", true), ("moonbackdrop.tif", false),
+            ("moonsurface.tif", false), ("flare_green.tif", false), ("lflare1.tif", false),
+        })
+        {
+            ctx.Check(WorldBuilder.IsSkySpriteTexture(name) == sky, $"{name} is a sky sprite={sky}");
+        }
+    }
+
+    // Faithful graphics keeps four bits of an alpha-plane texture's alpha, as the original's ARGB4444
+    // upload does. Able to fail: without the truncation flare_green keeps its corner alpha of 7, and
+    // with bit 3 ignored cloud1 loses its 8-bit alpha.
+    [Suite("texture-alpha-nibble",
+        "under faithful graphics C5's flare_green keeps only 4-bit alpha on every mip level and its "
+        + "corner fringe draws nothing, cloud1 (render-flags bit 3) keeps its 8-bit alpha, and "
+        + "enhanced graphics leaves flare_green's alpha whole")]
+    internal static void TextureAlphaNibble(TestContext ctx)
+    {
+        string path = SessionPaths.ChapterTextures(ctx.DataRoot, "C5");
+        ctx.RequireData(path, $"C5 textures");
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        try
+        {
+            GraphicsMode.Resolve(GraphicsMode.Default);
+            using (var faithful = new TextureArchive(path))
+            {
+                var (flare, flareCorner) = AlphaCensus(faithful.BuildMipped("flare_green.tif", out _));
+                ctx.Check(flare.Total > 0 && flare.OffNibble == 0,
+                    $"faithful flare_green alpha is 4-bit on every level off={flare.OffNibble} of {flare.Total}");
+                ctx.Same(0, flareCorner, $"faithful flare_green's corner alpha");
+                var (cloud, _) = AlphaCensus(faithful.BuildMipped("cloud1.tif", out _));
+                ctx.Check(cloud.OffNibble > 0, $"faithful cloud1 keeps 8-bit alpha off={cloud.OffNibble} of {cloud.Total}");
+            }
+
+            GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
+            using var enhanced = new TextureArchive(path);
+            var (whole, wholeCorner) = AlphaCensus(enhanced.BuildMipped("flare_green.tif", out _));
+            ctx.Check(whole.OffNibble > 0 && wholeCorner == 7,
+                $"enhanced flare_green keeps 8-bit alpha off={whole.OffNibble} corner={wholeCorner}");
+        }
+        finally
+        {
+            GraphicsMode.Resolve(wasEnhanced ? GraphicsMode.EnhancedWord : GraphicsMode.Default);
         }
     }
 
@@ -2137,12 +2221,12 @@ internal static class WorldAndToolSuites
         ctx.Check(main.AudioListenerEnable3D,
             $"the main viewport is a 3D audio listener (the untouched 1P path)");
 
-        // The default the rig has to override, proved rather than assumed.
-        using (var bare = new SubViewport())
-        {
-            ctx.Check(!bare.AudioListenerEnable3D,
-                $"a fresh SubViewport is NOT an audio listener, so each pane must set it");
-        }
+        // The default the rig has to override, proved rather than assumed. Freed, not disposed:
+        // Dispose drops only the managed wrapper and leaves the node alive.
+        var bare = new SubViewport();
+        ctx.Check(!bare.AudioListenerEnable3D,
+            $"a fresh SubViewport is NOT an audio listener, so each pane must set it");
+        bare.Free();
 
         for (int players = 2; players <= SplitScreen.MaxPlayers; players++)
         {
@@ -2691,6 +2775,29 @@ internal static class WorldAndToolSuites
         }
         Walk(node);
         return found;
+    }
+
+    // Counts a texture's alpha bytes over its whole mip chain, and those off a replicated nibble.
+    // The top-left base texel's alpha comes back beside the counts.
+    private static ((int Total, int OffNibble) Counts, int Corner) AlphaCensus(Image? img)
+    {
+        if (img == null || img.GetFormat() != Image.Format.Rgba8)
+        {
+            return ((0, 0), -1);
+        }
+
+        var data = img.GetData();
+        int total = 0, off = 0;
+        for (int i = 3; i < data.Length; i += 4)
+        {
+            total++;
+            if (data[i] % 17 != 0)
+            {
+                off++;
+            }
+        }
+
+        return ((total, off), data[3]);
     }
 
     // Visible map-scale meshes under a world root, the cloud deck's excepted.

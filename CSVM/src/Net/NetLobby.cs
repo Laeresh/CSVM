@@ -28,7 +28,10 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     private readonly List<int> _bound = new();
     private readonly Dictionary<int, CoopPickMessage> _picks = new();
     private readonly Dictionary<int, CoopFit> _seatFits = new();
+    private readonly Dictionary<int, NetPlaneBuild> _pickBuilds = new();
+    private readonly Dictionary<int, NetPlaneBuild?> _seatBuilds = new();
     private readonly List<int> _unpicked = new();
+    private readonly List<CoopHangarMessage?> _hangar = new();
 
     private readonly List<(int Peer, LobbyChatMessage Line)> _chat = new();
 
@@ -79,10 +82,50 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     /// <summary>Each connected guest's latest co-op pick, by peer.</summary>
     public IReadOnlyDictionary<int, CoopPickMessage> Picks => _picks;
 
+    /// <summary>The co-op host's hangar as its latest words name it, in hangar order. Empty until
+    /// every plane of it has arrived.</summary>
+    public IReadOnlyList<CoopHangarMessage> Hangar
+    {
+        get
+        {
+            var planes = new List<CoopHangarMessage>(_hangar.Count);
+            foreach (var plane in _hangar)
+            {
+                if (plane is not { } word)
+                {
+                    return Array.Empty<CoopHangarMessage>();
+                }
+
+                planes.Add(word);
+            }
+
+            return planes;
+        }
+    }
+
     /// <summary>Each seat's fit as the co-op host last launched it, by seat. A launch names every
     /// seat again, so an entry from an earlier flight is always overwritten before it is read.
     /// </summary>
     public IReadOnlyDictionary<int, CoopFit> SeatFits => _seatFits;
+
+    /// <summary>Each connected guest's custom plane, by peer. A guest on a stock pick has none.
+    /// </summary>
+    public IReadOnlyDictionary<int, NetPlaneBuild> PickBuilds => _pickBuilds;
+
+    /// <summary>Each seat's custom plane as the host last launched it, by seat, null for a stock
+    /// seat. A launch names every seat again, as it does its fit.</summary>
+    public IReadOnlyDictionary<int, NetPlaneBuild?> SeatBuilds => _seatBuilds;
+
+    /// <summary>The Dogfight host's latest plane rules, or null while none has arrived.</summary>
+    public LobbyPlaneRulesMessage? PlaneRules { get; private set; }
+
+    /// <summary>The campaign wingman's aeroplane as the co-op host last launched it, or null while
+    /// no host has named one. Every launch names it again before its opener.</summary>
+    public CoopWingmanMessage? Wingman { get; private set; }
+
+    /// <summary>The co-op host's latest film word, a start or an end, or null while none has
+    /// arrived.</summary>
+    public CoopFilmMessage? Film { get; private set; }
 
     /// <summary>The Dogfight host's latest Mission Options, or null while none has arrived.</summary>
     public DogfightOptionsMessage? DogfightOptions { get; private set; }
@@ -105,7 +148,8 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     public bool Bound => _listener != null;
 
     /// <summary>Whether the co-op host opened another flight while a session was bound here. That
-    /// session then hears nothing more, and what arrives is held for the next bind.</summary>
+    /// session then hears nothing more, and what arrives is held for the next bind. The mark stands
+    /// until that bind, however often the carrier is unbound meanwhile.</summary>
     public bool FlightOver => _flightOver;
 
     /// <inheritdoc/>
@@ -201,7 +245,8 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
             _held.Clear();
         }
 
-        _flightOver = false;
+        // ⚠ The mark outlives this unbind, since a freed session unbinds and its door unbinds again.
+        // Were it cleared here, that second unbind would drop the opener. The next bind clears it.
         _boundFlow = null;
     }
 
@@ -276,6 +321,7 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         _clashing.Remove(peer);
         _held.RemoveAll(held => held.Peer == peer);
         _picks.Remove(peer);
+        _pickBuilds.Remove(peer);
         _unpicked.Remove(peer);
         if (_listener != null && _bound.Remove(peer))
         {
@@ -357,12 +403,39 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
             return true;
         }
 
+        if (CoopHangarMessage.TryRead(payload, out var hangar))
+        {
+            // Each word names the hangar's size, so one from a smaller hangar drops the planes past it.
+            while (_hangar.Count > hangar.Count)
+            {
+                _hangar.RemoveAt(_hangar.Count - 1);
+            }
+
+            while (_hangar.Count < hangar.Count)
+            {
+                _hangar.Add(null);
+            }
+
+            if (hangar.Index < _hangar.Count)
+            {
+                _hangar[hangar.Index] = hangar;
+            }
+
+            return true;
+        }
+
         if (CoopPickMessage.TryRead(payload, out var pick))
         {
             // A guest picks only on a board, so whatever it sent before is a flight's that ended.
             _picks[peer] = pick;
             _held.RemoveAll(held => held.Peer == peer);
             _unpicked.Remove(peer);
+            return true;
+        }
+
+        if (PlaneBuildMessage.TryRead(payload, out var built))
+        {
+            TakeBuild(peer, built);
             return true;
         }
 
@@ -374,6 +447,18 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         if (CoopSeatFitMessage.TryRead(payload, out var seatFit))
         {
             _seatFits[seatFit.Seat] = seatFit.Fit;
+            return true;
+        }
+
+        if (CoopWingmanMessage.TryRead(payload, out var wingman))
+        {
+            Wingman = wingman;
+            return true;
+        }
+
+        if (CoopFilmMessage.TryRead(payload, out var film))
+        {
+            Film = film;
             return true;
         }
 
@@ -402,7 +487,7 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         return true;
     }
 
-    // The Dogfight lobby's three messages. A chat inbox past the held depth drops its oldest line,
+    // The Dogfight lobby's four messages. A chat inbox past the held depth drops its oldest line,
     // so a lobby nobody reads cannot grow without bound.
     private bool TakeDogfight(int peer, ReadOnlySpan<byte> payload)
     {
@@ -415,6 +500,12 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         if (DogfightRosterMessage.TryRead(payload, out var roster))
         {
             DogfightRoster = roster;
+            return true;
+        }
+
+        if (LobbyPlaneRulesMessage.TryRead(payload, out var rules))
+        {
+            PlaneRules = rules;
             return true;
         }
 
@@ -445,9 +536,27 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         _clashing.Add(peer);
         _held.RemoveAll(held => held.Peer == peer);
         _picks.Remove(peer);
+        _pickBuilds.Remove(peer);
         if (_listener != null && _bound.Remove(peer))
         {
             _listener.OnPeerDisconnected(peer);
+        }
+    }
+
+    // A guest's own build goes with its pick, by peer. A host's build names a seat of its launch.
+    private void TakeBuild(int peer, PlaneBuildMessage built)
+    {
+        if (built.Seat != PlaneBuildMessage.Mine)
+        {
+            _seatBuilds[built.Seat] = built.Build;
+        }
+        else if (built.Build is { } build)
+        {
+            _pickBuilds[peer] = build;
+        }
+        else
+        {
+            _pickBuilds.Remove(peer);
         }
     }
 

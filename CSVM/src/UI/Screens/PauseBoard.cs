@@ -7,14 +7,13 @@ using Godot;
 namespace CSVM.UI.Screens;
 
 /// <summary>
-/// The shared pause board and its menu, <see cref="ResultsBoard"/>'s chrome on the same
-/// WHOLE-window CanvasLayer shape, since pausing stops the game for everybody at once, but not its
-/// shell: pausing is a held clock, not an ended run, so this board follows
-/// <see cref="PauseState.Changed"/> instead of the halt-and-retire contract. Names the pausing
-/// player (their own <see cref="SplitScreen.PlayerColor"/>) and hands them the cursor:
-/// <see cref="PauseState"/> lets only that player resume, so only that player's pad drives the
-/// menu. Everyone else's input is ignored while it is up rather than fighting over a cursor whose
-/// Restart and Exit decide the whole session.
+/// The shared pause board and its menu, on <see cref="ResultsBoard"/>'s WHOLE-window chrome, since
+/// pausing stops the game for everybody at once. It does not take that board's shell: pausing is a
+/// held clock, not an ended run, so it follows <see cref="PauseState.Changed"/> instead. It names
+/// the pausing player in their own <see cref="SplitScreen.PlayerColor"/> and hands them the cursor,
+/// since <see cref="PauseState"/> lets only that player resume. Everyone else's input is ignored
+/// rather than fighting over a cursor whose Restart and Exit decide the whole session. The pauser's
+/// mouse shares that cursor on <see cref="BoardMenuPointer"/>'s rule when they hold the keyboard seat.
 /// </summary>
 public sealed partial class PauseBoard : Control
 {
@@ -23,12 +22,17 @@ public sealed partial class PauseBoard : Control
     private const int TitleFont = 30;
     private const int ContextFont = 18;
 
+    // The owner's pointer over the rows. A flight's released capture leaves the pointer at the
+    // window's middle, where the rows stand, so its first sight marks a row and moves nothing.
+    private readonly BoardMenuPointer _pointer = new() { SettlesFirstSight = true };
+
     private PauseState _state = null!;
     private string _exitLabel = "";
     private Func<int, MenuInput> _inputFor = null!;
     private CenterContainer _center = null!;
     private PanelContainer? _panel;
     private BoardMenuHost? _host;
+    private MenuInput? _input;
 
     /// <summary>Rerun the running mode in place, chosen from the menu. Null leaves the row off, as
     /// <see cref="Preferences"/> does: a network guest cannot restart its host's flight.</summary>
@@ -48,6 +52,17 @@ public sealed partial class PauseBoard : Control
     /// before the board sees one.</summary>
     public Action? Preferences { get; set; }
 
+    /// <summary>The pointer in canvas pixels and whether its button is down, or null for no pointer
+    /// this frame. Defaults to the pausing seat's mouse, which only the keyboard seat holds. A pad
+    /// player's pause is then driven by the pad alone. A suite replaces it to point by hand.</summary>
+    public Func<(float X, float Y, bool Pressed)?> PointerSource { get; set; } = () => null;
+
+    /// <summary>The row the cursor stands on, or -1 before the first pause.</summary>
+    public int FocusedRow => _host?.Menu.Index ?? -1;
+
+    /// <summary>The menu's rows as drawn, for a suite that reads or points at them.</summary>
+    public BoardMenuView? Rows => _host?.View;
+
     /// <summary>Builds the (hidden) board and subscribes to the shared pause state. Add it to a
     /// CanvasLayer above the splitscreen panes; it wakes on <see cref="PauseState.Changed"/> and
     /// hides itself the same way. <paramref name="inputFor"/> answers with a player's own menu
@@ -61,11 +76,17 @@ public sealed partial class PauseBoard : Control
             _inputFor = inputFor,
         };
         board._center = ResultsBoard.BuildShell(board);
+        board.PointerSource = board.SeatPointer;
         state.Changed += board.OnChanged;
         return board;
     }
 
     public override void _ExitTree() => _state.Changed -= OnChanged;
+
+    /// <summary>Re-reads the pointer's button and drops any row a press had taken hold of. The
+    /// session calls it when a screen that stood over this board closes. ⚠ Do not skip it: the
+    /// button still down from that screen's last click would fire the row under the pointer.</summary>
+    public void Reprime() => _pointer.Prime(PointerSource()?.Pressed ?? false);
 
     public override void _Process(double delta)
     {
@@ -73,8 +94,12 @@ public sealed partial class PauseBoard : Control
         Position = Vector2.Zero;
         Size = GetViewportRect().Size;
 
-        if (Visible)
-            _host?.Poll((float)delta);
+        if (!Visible || _host is not { } host)
+            return;
+        host.Poll((float)delta);
+        // The poll may have run an action that took the board away, and then the pointer reads nothing.
+        if (Visible && _pointer.Step(host.Menu, PointerSource(), host.View.RowAt))
+            host.View.Refresh();
     }
 
     private void OnChanged()
@@ -145,7 +170,19 @@ public sealed partial class PauseBoard : Control
         menu.Activated += OnActivated;
         menu.Dismissed += () => _state.ForceResume();
         // No control hints under it, since the original's pause sheet carries none.
-        _host = BoardMenuHost.Build(menu, _inputFor(owner), s, legend: false);
+        _input = _inputFor(owner);
+        _host = BoardMenuHost.Build(menu, _input, s, legend: false);
         body.AddChild(_host.View);
+        _pointer.Prime(PointerSource()?.Pressed ?? false);
+    }
+
+    // The pausing seat's mouse in canvas pixels. Only a seat that reads the keyboard holds one
+    // (MenuInput's rule for seat 0), and a captured pointer reports no position worth pointing with.
+    private (float X, float Y, bool Pressed)? SeatPointer()
+    {
+        if (_input is not { Keyboard: true } || !IsInsideTree() || Input.MouseMode == Input.MouseModeEnum.Captured)
+            return null;
+        var at = GetGlobalMousePosition();
+        return (at.X, at.Y, Input.IsMouseButtonPressed(MouseButton.Left));
     }
 }

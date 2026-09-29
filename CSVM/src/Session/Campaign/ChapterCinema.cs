@@ -22,11 +22,17 @@ public sealed class ChapterCinema
     public const int MissionsPerChapter = 5;
 
     private readonly CinemaPlay _play;
+    private readonly Action? _stop;
 
     private int _played;
 
-    /// <summary>Builds a chapter cinema over the call that puts one on screen.</summary>
-    public ChapterCinema(CinemaPlay play) => _play = play;
+    /// <summary>Builds a chapter cinema over the call that puts one on screen and, where given,
+    /// <paramref name="stop"/>, the call that ends the one showing.</summary>
+    public ChapterCinema(CinemaPlay play, Action? stop = null)
+    {
+        _play = play;
+        _stop = stop;
+    }
 
     /// <summary>The chapter last handed to <see cref="CinemaPlay"/>, or 0 when none has been. It
     /// is what keeps a second visit to the same cabin from replaying the film.</summary>
@@ -69,4 +75,25 @@ public sealed class ChapterCinema
         _play(NameOf(chapter), CinemaHandoff.Once(showCabin), CinemaScreen.ChapterKeys);
         return true;
     }
+
+    /// <summary>Plays <paramref name="chapter"/>'s film whatever the latch holds, as a co-op guest
+    /// does when its host plays one, and runs <paramref name="then"/> when it stops. The latch is
+    /// left alone, since the film was the host's. False, with <paramref name="then"/> run at once,
+    /// for a chapter the story does not hold.</summary>
+    public bool Play(int chapter, Action then)
+    {
+        ArgumentNullException.ThrowIfNull(then);
+        if (chapter < 1 || chapter > ChapterOf(CampaignSequence.MissionCount - 1))
+        {
+            then();
+            return false;
+        }
+
+        _play(NameOf(chapter), CinemaHandoff.Once(then), CinemaScreen.ChapterKeys);
+        return true;
+    }
+
+    /// <summary>Ends the film showing now, as a skip does. Nothing happens without a stop call.
+    /// </summary>
+    public void Stop() => _stop?.Invoke();
 }

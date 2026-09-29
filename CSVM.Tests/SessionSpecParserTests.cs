@@ -362,7 +362,7 @@ public class SessionSpecParserTests
     public void AJoinValueSplitsIntoAnAddressAndAPort(string value, string address, int port)
     {
         var parsed = SessionSpec.ParseJoin(value);
-        Assert.Equal(address, parsed.Address);
+        Assert.Equal(address, parsed.Host);
         Assert.Equal(port, parsed.Port);
     }
 

@@ -24,7 +24,7 @@ public class NetPlayFeatureTests
         Assert.Equal(NetPlayFeature.DefaultPort, door.Port);
         Assert.Equal(NetPlayFeature.DefaultAddress, door.Address);
         Assert.Equal("", door.Fault);
-        Assert.Null(door.PortMap);
+        Assert.Null(door.Router.PortMap);
         Assert.Null(door.Link);
         Assert.False(door.CanLaunch);
         Assert.False(door.IsHost);
@@ -139,7 +139,7 @@ public class NetPlayFeatureTests
     [InlineData("[::1]:99999", "::1", 47600)]
     public void ATypedAddressSplitsIntoTheHostAndPortTheJoinOpensOn(string typed, string host, int port)
     {
-        Assert.Equal((host, port), NetPlayFeature.SplitAddress(typed, 47600));
+        Assert.Equal(new NetEndpoint(host, port), NetEndpoint.Parse(typed, 47600));
     }
 
     /// <summary>The join reaches the carrier as the split host and port, and the board's words
@@ -168,7 +168,7 @@ public class NetPlayFeatureTests
         door.OpenJoin();
 
         Assert.Equal((host, port), asked);
-        Assert.Equal(shown, door.JoinTargetText);
+        Assert.Equal(shown, door.JoinTarget.ToString());
     }
 
     [Fact]
@@ -179,12 +179,13 @@ public class NetPlayFeatureTests
         var door = new NetPlayFeature(
             (_, _, _) => LoopbackTransport.Mesh(1, Clean, new Random(1))[0],
             (_, _) => throw new InvalidOperationException("a host does not join"),
-            port =>
-            {
-                asked++;
-                return mapped with { Port = port };
-            },
-            _ => { });
+            new RouterAccess(
+                port =>
+                {
+                    asked++;
+                    return mapped with { Port = port };
+                },
+                _ => { }));
 
         door.OpenHost(7);
         Assert.Equal(NetDoorStage.Hosting, door.Stage);
@@ -195,16 +196,16 @@ public class NetPlayFeatureTests
         // the open. The wait is a wall-clock deadline. The pool thread running the mapping
         // starves under the parallel unit run, where a fixed step count failed.
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
-        while (door.PortMap == null && DateTime.UtcNow < deadline)
+        while (door.Router.PortMap == null && DateTime.UtcNow < deadline)
         {
             door.Step(0.016);
             System.Threading.Thread.Sleep(1);
         }
 
         Assert.Equal(1, asked);
-        Assert.True(door.PortMap!.Value.IsMapped);
-        Assert.Equal(NetPlayFeature.DefaultPort, door.PortMap!.Value.Port);
-        Assert.Equal("203.0.113.9", door.PortMap!.Value.ExternalAddress);
+        Assert.True(door.Router.PortMap!.Value.IsMapped);
+        Assert.Equal(NetPlayFeature.DefaultPort, door.Router.PortMap!.Value.Port);
+        Assert.Equal("203.0.113.9", door.Router.PortMap!.Value.ExternalAddress);
     }
 
     [Fact]
@@ -396,8 +397,9 @@ public class NetPlayFeatureTests
         var door = new NetPlayFeature(
             (_, _, _) => mesh[0],
             (_, _) => mesh[0],
-            port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, "198.51.100.4", "mapped"),
-            given.Add);
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, "198.51.100.4", "mapped"),
+                given.Add));
 
         door.StepPort(3);
         door.OpenHost(7);
@@ -676,7 +678,7 @@ public class NetPlayFeatureTests
         Assert.False(host.CoopAllReady);
         Assert.False(Assert.Single(host.CoopGuests).Ready);
 
-        guest.PickCoop(5, true);
+        guest.Pick.Set(5, true);
         Pump(host, guest);
         var seated = Assert.Single(host.CoopGuests);
         Assert.True(host.CoopAllReady);
@@ -696,13 +698,13 @@ public class NetPlayFeatureTests
         Assert.NotEqual(round, host.CoopEpoch);
         Assert.False(host.CoopAllReady);
         Pump(host, guest);
-        Assert.False(guest.CoopPickReady);
+        Assert.False(guest.Pick.Ready);
         Assert.False(guest.CoopReady);
 
         // A new mission clears it the same way.
         host.ShowCoop(NetCoopScreen.Briefing, 3, 2, 0b10_0000);
         Pump(host, guest);
-        guest.PickCoop(5, true);
+        guest.Pick.Set(5, true);
         Pump(host, guest);
         Assert.True(host.CoopAllReady);
         host.ShowCoop(NetCoopScreen.Briefing, 4, 2, 0b10_0000);
@@ -710,18 +712,24 @@ public class NetPlayFeatureTests
     }
 
     [Fact]
-    public void APickTheHostsHangarDoesNotHoldFliesTheStarter()
+    public void AGuestFliesTheHangarPlaneTheHostSettledForItsSeatNotThePickedAirframe()
     {
         var (host, guest) = CoopPair(59);
         host.ShowCoop(NetCoopScreen.FlightCheck, 3, 2, 0b1010_0000);
-        guest.PickCoop(9, true);
+        guest.Pick.Set(9, true);
         Pump(host, guest);
-        Assert.Equal(NetPlayFeature.StarterAirframe, Assert.Single(host.CoopGuests).Airframe);
+        Assert.Equal(CoopGuestPick.StarterAirframe, Assert.Single(host.CoopGuests).Airframe);
 
-        // ABLE-TO-FAIL CONTROL: an airframe the hangar holds is flown as picked.
-        guest.PickCoop(7, true);
+        // ABLE-TO-FAIL CONTROL: once the host settles seat 1 on a hangar plane, its airframe flies.
+        var hangar = new[]
+        {
+            new CoopHangarMessage(0, 2, 0, 3, Name: "Mine"),
+            new CoopHangarMessage(1, 2, 1, 7, Name: "Yours"),
+        };
+        host.OfferCoopHangar(hangar, new[] { 0, 1 });
         Pump(host, guest);
         Assert.Equal(7, Assert.Single(host.CoopGuests).Airframe);
+        Assert.Equal(2, guest.CoopHangar.Count);
     }
 
     [Fact]
@@ -729,7 +737,7 @@ public class NetPlayFeatureTests
     {
         var (host, guest) = CoopPair(61);
         host.ShowCoop(NetCoopScreen.FlightCheck, 3, 2, 0b10_0000);
-        guest.PickCoop(5, true);
+        guest.Pick.Set(5, true);
         Pump(host, guest);
 
         // ABLE-TO-FAIL CONTROL: a door on its boards is not in a mission.
@@ -739,7 +747,7 @@ public class NetPlayFeatureTests
         var launch = host.BuildLaunch()!;
         var roster = NetSeats.Field(launch.Transport.LocalPeer, new[] { "plane" }, launch.Transport.Peers, "plane");
         var session = NetSession.Host(launch.Transport, roster, seed: 5);
-        Assert.Equal(NetCoopScreen.InMission, host.CoopScreen);
+        Assert.Equal(NetCoopScreen.InMission, host.HostFlow.Screen);
         host.Step(0.016);
         Assert.Equal(NetSessionStatus.InMission, host.Advertising!.Value.Status);
 
@@ -772,7 +780,7 @@ public class NetPlayFeatureTests
         var (host, guest) = CoopPair(67);
         host.ShowCoop(NetCoopScreen.FlightCheck, 3, 2, 0b10_0000);
         var fit = CoopFit.Of(new[] { 3, 1 }, new[] { 0, 7 });
-        guest.PickCoop(5, true, fit);
+        guest.Pick.Set(5, true, fit);
         Pump(host, guest);
 
         // ABLE-TO-FAIL CONTROL: a guest with no player name is seated with none.
@@ -795,11 +803,63 @@ public class NetPlayFeatureTests
     }
 
     [Fact]
+    public void TheHostsLaunchNamesItsWingmanToTheGuestAndOnlyAGuestReadsIt()
+    {
+        var (host, guest) = CoopPair(69);
+        host.ShowCoop(NetCoopScreen.FlightCheck, 3, 2, 0b10_0000);
+        guest.Pick.Set(5, true);
+        Pump(host, guest);
+
+        // ABLE-TO-FAIL CONTROL: before the launch no wingman has been named.
+        Assert.Null(guest.CoopWingman);
+        var launch = host.BuildLaunch()!;
+        var wingman = new CoopWingmanMessage(7, CoopFit.Of(new[] { 2, 2 }, null));
+        host.TellCoopWingman(wingman);
+        launch.Transport.Step(0.016);
+        guest.Step(0.016);
+        Assert.Equal(wingman, guest.CoopWingman);
+        Assert.Null(host.CoopWingman);
+    }
+
+    [Fact]
+    public void TheHostsFilmReachesTheGuestAndItsEndFollowsUnderTheSameOrdinal()
+    {
+        var (host, guest) = CoopPair(70);
+        host.ShowCoop(NetCoopScreen.Debrief, 4, 5, 0b10_0000);
+        Pump(host, guest);
+
+        // ABLE-TO-FAIL CONTROL: an end with no film shared sends nothing.
+        host.EndCoopFilm();
+        Pump(host, guest);
+        Assert.Null(guest.CoopFilm);
+
+        host.ShowCoopFilm(NetCoopFilm.Chapter, 2);
+        Pump(host, guest);
+        var started = guest.CoopFilm;
+        Assert.Equal(new CoopFilmMessage(1, true, NetCoopFilm.Chapter, 2), started);
+        Assert.Equal(started, host.HostFlow.FilmShown);
+        Assert.Null(host.CoopFilm);
+
+        host.EndCoopFilm();
+        Pump(host, guest);
+        Assert.Equal(new CoopFilmMessage(1, false, NetCoopFilm.Chapter, 2), guest.CoopFilm);
+        Assert.Null(host.HostFlow.FilmShown);
+
+        host.ShowCoopFilm(NetCoopFilm.Closing);
+        Pump(host, guest);
+        Assert.Equal(new CoopFilmMessage(2, true, NetCoopFilm.Closing, 0), guest.CoopFilm);
+
+        // A guest's door shares nothing, since only a host's film is anybody else's.
+        guest.ShowCoopFilm(NetCoopFilm.Chapter, 3);
+        Assert.Null(guest.HostFlow.FilmShown);
+    }
+
+    [Fact]
     public void AGuestWalkingOutOfItsFlightIsHeardAtOnceAndOnlyForThatFlight()
     {
         var (host, guest) = CoopPair(71);
         host.ShowCoop(NetCoopScreen.FlightCheck, 3, 2, 0b10_0000);
-        guest.PickCoop(5, true);
+        guest.Pick.Set(5, true);
         Pump(host, guest);
 
         // ABLE-TO-FAIL CONTROL: a guest on its boards has no flight to leave.

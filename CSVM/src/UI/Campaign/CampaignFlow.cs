@@ -122,7 +122,7 @@ public interface ICampaignPage
 
     /// <summary>The drop-down list row <paramref name="row"/> is, or null when it is not one. ⚠ A
     /// combo may only be open while its own row is focused: the flow finds the open one by asking
-    /// the focused row, so a page that leaves one open behind a moved cursor strands it.</summary>
+    /// the focused row. Every cursor move collapses the other rows' combos, so a page need not.</summary>
     CampaignCombo? Combo(int row);
 
     /// <summary>A second, smaller picture for the focused row, or null for none.</summary>
@@ -383,6 +383,7 @@ public sealed class CampaignFlow
         Message = string.Empty;
         Row = (((Row + dir) % count) + count) % count;
         Settle(dir);
+        CollapseUnfocused();
         return true;
     }
 
@@ -720,7 +721,22 @@ public sealed class CampaignFlow
     private int ClampedRow()
     {
         Row = Math.Clamp(Row, 0, Math.Max(0, Page.RowCount - 1));
-        return Settle(1);
+        Settle(1);
+        CollapseUnfocused();
+        return Row;
+    }
+
+    // Closes every open combo but the focused row's. ⚠ Do not narrow this to the row just left.
+    // A pointer moves the focus any distance, and the shell mirrors it here only afterwards.
+    private void CollapseUnfocused()
+    {
+        for (int row = 0; row < Page.RowCount; row++)
+        {
+            if (row != Row && Page.Combo(row) is { Open: true } combo)
+            {
+                combo.Collapse();
+            }
+        }
     }
 
     // Walks the cursor along dir until it stands on a row the page takes focus on, one lap at most:

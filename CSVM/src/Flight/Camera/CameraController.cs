@@ -171,6 +171,11 @@ public sealed class CameraController
     private bool _trailSeeded;
     private float _fovWidenDeg;
 
+    // The chase aim before the look stick's swing, and the swung basis Chase last wrote, null when
+    // unswung. The lag continues from the first only while the camera still holds the second.
+    private Basis _chaseAim = Basis.Identity;
+    private Basis? _swungWrite;
+
     private float _orbitYaw, _orbitPitch, _orbitDist; // free orbit-camera state while paused
     private CameraView _viewPrev = CameraView.Chase; // the view the last logged frame was drawn from
 
@@ -319,24 +324,18 @@ public sealed class CameraController
         _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, Vector3.Up);
     }
 
-    /// <summary>Analog look-around: the right stick swings the view around the plane at the dynamic
-    /// radius every forward-facing external pose shares, through the same <see cref="ChaseSwing"/>
-    /// geometry the head swings it by. Pre-curved, dead-zoned and <see cref="StickLookFilter"/>ed,
-    /// so both axes at 0 reduce to the ordinary chase direction and no stick noise reaches this
-    /// pose. Rigid and instant, and releasing it lets <see cref="Chase"/> resume. ⚠ Its own path,
-    /// not the head's: the stick aims ABSOLUTELY in both views (docs/controls.md).</summary>
-    public void PadLook(in Transform3D renderPose, float stickX, float stickY)
-    {
-        float yaw = Mathf.DegToRad(stickX * HeadLook.PadLookYawMaxDeg);
-        float pitch = Mathf.DegToRad(-stickY * HeadLook.PadLookPitchMaxDeg);  // stick up = look up
-        var dir = ChaseSwing(pitch, yaw) * new Vector3(0f, BaseUp, BaseBack).Normalized();
-        _camera.Position = renderPose.Origin + (renderPose.Basis * (dir * EffectiveRadius));
-        _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, Vector3.Up);
-    }
-
-    // Kept beside the two methods that swing by it rather than up with the constructor, the same
+    // Kept beside the methods that swing by it rather than up with the constructor, the same
     // SA1204 trade FirstPersonPose below makes.
 #pragma warning disable SA1204
+    /// <summary>The analog look-around's swing, in the PLANE's frame: the filtered right stick over
+    /// the shared <see cref="HeadLook.PadLookYawMaxDeg"/>/<see cref="HeadLook.PadLookPitchMaxDeg"/>
+    /// envelope, through <see cref="ChaseSwing"/>. Stick right carries the camera to starboard and
+    /// stick up looks up. A centred stick returns the exact identity. ⚠ The stick aims ABSOLUTELY,
+    /// never through the head (docs/controls.md).</summary>
+    public static Basis PadSwing(float stickX, float stickY) =>
+        ChaseSwing(Mathf.DegToRad(-stickY * HeadLook.PadLookPitchMaxDeg),
+            Mathf.DegToRad(stickX * HeadLook.PadLookYawMaxDeg));
+
     /// <summary>The chase rig's swing, in the PLANE's frame: elevation about the plane's right
     /// axis, then azimuth about its up axis, off the angle pair <see cref="FirstPersonPose"/> aims
     /// the head with. The offset, the image up and the look-ahead point all turn by it, so the
@@ -585,13 +584,13 @@ public sealed class CameraController
         }
     }
 
-    /// <summary>Chase camera: ride the plane exactly, smoothing only the plane-frame OFFSET
-    /// toward the dynamic radius, then slerp orientation toward a look-at ahead of the nose. The
-    /// head's <see cref="ChaseSwing"/> turns the offset and that look-at point together, which is
-    /// how the snap cluster and the mouse swing this camera; a settled head leaves the pose alone.
-    /// ⚠ Takes SIM dt, but the DRAWN pose, riding the plane exactly means a sim/render
-    /// pose gap becomes visible plane jitter, which a world-position lerp would instead mask.</summary>
-    public void Chase(float dt, Vector3 planePos, Basis attitude)
+    /// <summary>Chase camera: ride the plane exactly, easing only the plane-frame OFFSET toward the
+    /// dynamic radius, then slerp toward a look-at ahead of the nose. The head's
+    /// <see cref="ChaseSwing"/> turns offset and look-at together; a settled head leaves the pose
+    /// alone. The look stick's <see cref="PadSwing"/> then turns the finished pose about the plane.
+    /// ⚠ Takes SIM dt but the DRAWN pose; a sim/render pose gap then shows as plane jitter, which a
+    /// world-position lerp would mask.</summary>
+    public void Chase(float dt, Vector3 planePos, Basis attitude, float stickX = 0f, float stickY = 0f)
     {
         // The enhanced presentation builds the whole rig off the lagged attitude, so the camera
         // hangs behind a roll or a yaw at its own radius and springs back; the faithful path takes
@@ -600,9 +599,14 @@ public sealed class CameraController
         var swing = ChaseSwing(Head.Elevation, Head.Azimuth);
         float tPos = 1f - Mathf.Exp(-CamSmooth * dt);
         _offset = _offset.Lerp(DesiredOffset(chaseAttitude, swing, out var camUp), tPos);
-        _camera.Position = planePos + _offset;
+        // ⚠ Do not fold the stick into _offset or the aim. The lag would trail it, and the offset
+        // lerp would cut a chord inward. A centred stick skips the turn entirely. It turns in the
+        // same frame as the rest of the rig, so under Enhanced it swings about the lagged attitude.
+        bool swung = stickX != 0f || stickY != 0f;
+        var stick = swung ? chaseAttitude * PadSwing(stickX, stickY) * chaseAttitude.Inverse() : Basis.Identity;
+        _camera.Position = planePos + (swung ? stick * _offset : _offset);
 
-        var toTarget = planePos + (chaseAttitude * (swing * LookAhead)) - _camera.Position;
+        var toTarget = planePos + (chaseAttitude * (swing * LookAhead)) - (planePos + _offset);
         if (toTarget.LengthSquared() < 1e-6f)
             return; // camera sitting on the look target (degenerate), keep last orientation
         // Basis.LookingAt needs the up not parallel to the view direction; the plane's up is ⟂
@@ -612,8 +616,11 @@ public sealed class CameraController
         float tRot = 1f - Mathf.Exp(-CamRotSmooth * dt);
         // GetRotationQuaternion re-orthonormalizes each side; Basis.Slerp's raw feed lets
         // orthonormality drift compound frame over frame until it trips the "not normalized" assert.
-        var current = _camera.Basis.GetRotationQuaternion();
-        _camera.Basis = new Basis(current.Slerp(desired.GetRotationQuaternion(), tRot));
+        // A swung camera eases on from the unswung aim, but only while it still holds that write.
+        var from = _swungWrite is { } written && _camera.Basis == written ? _chaseAim : _camera.Basis;
+        _chaseAim = new Basis(from.GetRotationQuaternion().Slerp(desired.GetRotationQuaternion(), tRot));
+        _camera.Basis = swung ? stick * _chaseAim : _chaseAim;
+        _swungWrite = swung ? _camera.Basis : null;
     }
 
     /// <summary>The chase view of another aircraft, the out-of-lives pilot's spectating camera. A

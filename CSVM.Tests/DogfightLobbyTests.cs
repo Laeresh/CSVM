@@ -48,8 +48,7 @@ public sealed class DogfightLobbyTests
 
         Assert.False(host.SetMissionType(DogfightMissionType.CaptureTheFlag));
         Assert.False(host.SetMissionType(DogfightMissionType.ZeppelinVsZeppelin));
-        Assert.False(host.SetAllowCustomPlanes(true));
-        Assert.False(host.SetOutlawComponents(true));
+        Assert.False(host.SetOutlawed(NetPlaneRules.Flags, true));
         Assert.Equal((byte)DogfightMissionType.Deathmatch, host.Options.MissionType);
 
         // ABLE-TO-FAIL CONTROL: the live type is accepted.
@@ -190,6 +189,102 @@ public sealed class DogfightLobbyTests
         Assert.Equal(2, heard.Lives);
         Assert.False(heard.AutoRespawn);
         Assert.True(guests[0].Ready);
+    }
+
+    [Fact]
+    public void ANewLobbyRefusesACustomPlaneAtReadyUntilTheHostAllowsThem()
+    {
+        var (host, guests, _) = Lobbies(2);
+        var guest = guests[0];
+        var build = new NetPlaneBuild { Name = "Bee", Airframe = 2, Engine = 1 };
+        Assert.True(guest.PickCustom(build, default));
+        Settle(host, guests);
+
+        Assert.Equal(PlaneRefusal.CustomBarred, guest.Refusal);
+        Assert.False(guest.SetReady(true));
+        Assert.False(guest.Ready);
+        Assert.False(guests[0].SetAllowCustomPlanes(true));
+
+        Assert.True(host.SetAllowCustomPlanes(true));
+        Settle(host, guests);
+        Assert.True(guest.Rules.AllowCustom);
+        Assert.True(guest.SetReady(true));
+        Settle(host, guests);
+        Assert.True(host.Players[1].Ready);
+        Assert.Equal(build, ((NetLobby)Steps[host][0]).PickBuilds[1]);
+    }
+
+    [Fact]
+    public void ARulesChangeClearsEveryReadyAndAnOutlawedPartIsRefused()
+    {
+        var (host, guests, _) = Lobbies(2);
+        var guest = guests[0];
+        host.SetAllowCustomPlanes(true);
+        var build = new NetPlaneBuild { Name = "Bee", Airframe = 2, Engine = 4 };
+        build.Guns[0] = 1;
+        guest.PickCustom(build, default);
+        Settle(host, guests);
+        Assert.True(guest.SetReady(true));
+        Settle(host, guests);
+        Assert.True(host.Players[1].Ready);
+
+        // Outlawing nitro with the list not in force changes nothing a pick is judged on.
+        Assert.True(host.SetOutlawed(NetPlaneRules.NitroFlag, true));
+        Settle(host, guests);
+        Assert.Equal(PlaneRefusal.None, guest.Refusal);
+        Assert.False(host.Players[1].Ready);
+
+        Assert.True(host.SetOutlawComponents(true));
+        Settle(host, guests);
+        Assert.Equal(PlaneRefusal.Engine, guest.Refusal);
+        Assert.False(guest.SetReady(true));
+
+        // ABLE-TO-FAIL CONTROL: a stock engine under the same list is admitted.
+        build.Engine = NetPlaneBuild.StockEngine;
+        guest.PickCustom(build, default);
+        Assert.Equal(PlaneRefusal.None, guest.Refusal);
+        host.SetOutlawed(NetPlaneRules.GunFlag + 1, true);
+        Settle(host, guests);
+        Assert.Equal(PlaneRefusal.Gun, guest.Refusal);
+    }
+
+    [Fact]
+    public void AnOutlawedAmmunitionRefusesReadyOnceAndResetsEveryGunToNone()
+    {
+        var (host, guests, _) = Lobbies(2);
+        var guest = guests[0];
+        var fit = CoopFit.Of(new[] { 3, 0 }, new[] { 5 });
+        guest.Pick(1, fit);
+        host.SetOutlawed(NetPlaneRules.AmmoFlag + 3, true);
+        Settle(host, guests);
+        Assert.Equal(fit, guest.LaunchFit);
+
+        host.SetOutlawComponents(true);
+        Settle(host, guests);
+        Assert.Equal(NetPlaneRules.NoAmmo, guest.LaunchFit.AmmoAt(1));
+        Assert.False(guest.SetReady(true));
+        Assert.Equal(new[] { PlaneRefusal.Ammo }, guest.ReadyRefusals);
+        Assert.Equal(NetPlaneRules.NoAmmo, guest.Fit.AmmoAt(0));
+        Assert.Equal(5, guest.Fit.OrdnanceAt(0));
+
+        // ABLE-TO-FAIL CONTROL: the reset fit is Ready at the second press, and the host sees it.
+        Assert.True(guest.SetReady(true));
+        Assert.Empty(guest.ReadyRefusals);
+        Settle(host, guests);
+        Assert.True(host.Players[1].Ready);
+    }
+
+    [Fact]
+    public void OutlawAllRocketsResetsThePylonsWithoutRefusingReady()
+    {
+        var (host, guests, _) = Lobbies(2);
+        guests[0].Pick(1, CoopFit.Of(null, new[] { 5, 3 }));
+        host.SetOutlawComponents(true);
+        host.SetOutlawed(NetPlaneRules.AllRocketsFlag, true);
+        Settle(host, guests);
+
+        Assert.True(guests[0].SetReady(true));
+        Assert.Equal(NetPlaneRules.NoRocket + 1, guests[0].Fit.OrdnanceAt(1));
     }
 
     [Fact]

@@ -8,10 +8,10 @@ using Godot;
 
 namespace CSVM.Tooling;
 
-/// <summary>The `--screenshot=`/`--shots=`/`--frames=` capture state machine, plus F11/F12's
-/// placement print and ad-hoc save: constructed once in `_Ready` from the launch spec (a
-/// --screenshot burst is a process-scoped capture, never re-armed by a menu relaunch), then
-/// `Tick()`ed from the tail of `_Process`. Reads camera/orbit/rigs, passed in per call, no
+/// <summary>The `--screenshot=`/`--shots=`/`--frames=` capture state machine, plus F11's pose
+/// print and F12's ad-hoc save. Built once in `_Ready` from the launch spec, then `Tick()`ed from
+/// the tail of `_Process`. A --screenshot burst is process-scoped, never re-armed by a menu
+/// relaunch. Reads camera/orbit/rigs, passed in per call, no
 /// back-reference to the host node. The saved line reports the frame the shot landed on and which
 /// counter named it; `docs/tooling.md` holds the contract the golden harness reads it under.</summary>
 public sealed class CaptureDirector
@@ -54,11 +54,22 @@ public sealed class CaptureDirector
         string.Format(System.Globalization.CultureInfo.InvariantCulture,
             "{0:0.#####},{1:0.#####},{2:0.#####}", v.X, v.Y, v.Z);
 
-    /// <summary>The one folder every ad-hoc capture lands in, whichever screen took it: the repo's
-    /// git-ignored Screenshots/ (rendered frames are game-derived). Menu shots go here too, so a
-    /// pilot has one place to look and one place to attach a picture to a report from.</summary>
+    /// <summary>The one folder every ad-hoc capture lands in, whichever screen took it: see
+    /// <see cref="ShotDirFor"/>. Menu shots go here too, so a pilot has one place to look and one
+    /// place to attach a picture to a report from. Exported is the launcher's own editor test.</summary>
     public static string ShotDir() =>
-        Path.GetFullPath(Path.Combine(ProjectSettings.GlobalizePath("res://"), "..", "Screenshots"));
+        ShotDirFor(ProjectSettings.GlobalizePath("res://"),
+            Path.GetDirectoryName(OS.GetExecutablePath()) ?? string.Empty, !OS.HasFeature("editor"));
+
+    /// <summary>The repo's git-ignored Screenshots/ beside <c>CSVM/</c> (rendered frames are
+    /// game-derived) for an editor-hosted run, and Screenshots/ inside the executable's own folder
+    /// for an exported build. Pure, so both branches are assertable without an engine.
+    /// ⚠ Never derive the exported case from <paramref name="resDir"/>: there res:// is the pck,
+    /// and climbing out of it writes into the folder above the build.</summary>
+    public static string ShotDirFor(string resDir, string exeDir, bool exported) =>
+        exported
+            ? Path.GetFullPath(Path.Combine(exeDir, "Screenshots"))
+            : Path.GetFullPath(Path.Combine(resDir, "..", "Screenshots"));
 
     /// <summary>Save <paramref name="viewport"/>'s current frame to a timestamped PNG under
     /// <see cref="ShotDir"/>. Bound to F12 in the orbit viewer, in free flight and on the menu
@@ -81,6 +92,31 @@ public sealed class CaptureDirector
         }
 
         return path;
+    }
+
+    /// <summary>The F11 lines for <paramref name="panes"/>. Each pane gets a camera line in
+    /// <paramref name="cameraMode"/>'s form, then its aircraft's --fly line where it flies one.
+    /// Several panes are labelled by player. The fov option is appended only when the camera drew
+    /// at an angle other than <paramref name="baseFovDeg"/>, the one the free camera takes.</summary>
+    public static List<string> PlacementLines(string cameraMode, string world, IReadOnlyList<PanePose> panes,
+        float baseFovDeg)
+    {
+        var lines = new List<string>();
+        for (int i = 0; i < panes.Count; i++)
+        {
+            var pane = panes[i];
+            string who = panes.Count > 1 ? $"P{i + 1} " : string.Empty;
+            string fov = Mathf.Abs(pane.FovDeg - baseFovDeg) > 0.005f
+                ? string.Format(System.Globalization.CultureInfo.InvariantCulture, " --fov={0:0.###}", pane.FovDeg)
+                : string.Empty;
+            lines.Add($"placement {who}camera: {cameraMode} {world} --pos=\"{Vec3Arg(pane.Eye)}\" --direction=\"{DirArg(pane.Forward.Normalized())}\"{fov}");
+            if (pane.Aircraft is { } plane)
+            {
+                lines.Add($"placement {who}aircraft: --fly {world} --pos=\"{Vec3Arg(plane.Origin)}\" --direction=\"{DirArg(-plane.Basis.Z.Normalized())}\"");
+            }
+        }
+
+        return lines;
     }
 
     /// <summary>The capture block at the tail of `_Process`. Nothing built yet: only shoot once a
@@ -155,27 +191,42 @@ public sealed class CaptureDirector
         }
     }
 
-    /// <summary>Print the mode's SUBJECT placement as ready-to-paste arguments (F11, any mode),
-    /// the same pair that placed it, so a pose found by hand reproduces in a deterministic
-    /// --screenshot run. In flight that subject is the PLANE (player 1's position and nose), not
-    /// the chase camera, because that is what --pos/--direction place there. The orbit view prints
-    /// --lookat rather than --direction: its framed point is a pivot, and only the point
-    /// reproduces the orbit radius as well as the angle.</summary>
+    /// <summary>Print ready-to-paste arguments that reproduce what is on screen (F11, any mode),
+    /// so a pose found by hand reproduces in a deterministic --screenshot run. Every world mode
+    /// prints the pose of the camera that drew each pane, and flight adds each aircraft's
+    /// placement for --fly. The orbit view prints --lookat instead: its framed point is a pivot,
+    /// and only a point reproduces the orbit radius too.</summary>
     public void PrintPlacement(SessionSpec spec, List<PlayerRig> rigs, Camera3D camera, OrbitCamera orbit)
     {
-        if (spec.Fly && rigs.Count > 0 && rigs[0].Controller is { } controller)
+        if (!(spec.Fly || spec.Freecam || spec.AnimLab))
         {
-            var xform = controller.GlobalTransform;
-            Log.Info("core", $"placement: --pos=\"{Vec3Arg(xform.Origin)}\" --direction=\"{DirArg(-xform.Basis.Z)}\"");
+            Log.Info("core", $"placement: --pos=\"{Vec3Arg(camera.GlobalPosition)}\" --lookat=\"{Vec3Arg(orbit.OrbitCenter)}\"");
             return;
         }
-        var pos = camera.GlobalPosition;
-        if (spec.Freecam || spec.AnimLab || spec.Fly)
+        var panes = new List<PanePose>();
+        if (spec.Fly && rigs.Count > 0)
         {
-            Log.Info("core", $"placement: --pos=\"{Vec3Arg(pos)}\" --direction=\"{DirArg(-camera.GlobalTransform.Basis.Z)}\"");
-            return;
+            foreach (var rig in rigs)
+            {
+                panes.Add(PoseOf(rig.Camera, rig.Controller?.GlobalTransform));
+            }
         }
-        Log.Info("core", $"placement: --pos=\"{Vec3Arg(pos)}\" --lookat=\"{Vec3Arg(orbit.OrbitCenter)}\"");
+        else
+        {
+            panes.Add(PoseOf(camera, null));
+        }
+        string world = spec.EmptyStage ? "--stage=empty" : $"--chapter={spec.Chapter}";
+        foreach (var line in PlacementLines(spec.AnimLab ? "--anim-lab" : "--freecam", world, panes,
+                     CameraController.ExternalFovDeg))
+        {
+            Log.Info("core", $"{line}");
+        }
+    }
+
+    private static PanePose PoseOf(Camera3D camera, Transform3D? aircraft)
+    {
+        var xform = camera.GlobalTransform;
+        return new PanePose(xform.Origin, -xform.Basis.Z, camera.Fov, aircraft);
     }
 
     // Runs wherever the pane hands its frame over, a worker for a live readback.
@@ -233,4 +284,8 @@ public sealed class CaptureDirector
         var origin = _shotPivot + rot * (baseX.Origin - _shotPivot);
         camera.GlobalTransform = new Transform3D(rot * baseX.Basis, origin);
     }
+
+    /// <summary>One pane at the F11 press: its camera's eye, forward and vertical angle, and the
+    /// aircraft it flies (null for none).</summary>
+    public readonly record struct PanePose(Vector3 Eye, Vector3 Forward, float FovDeg, Transform3D? Aircraft);
 }

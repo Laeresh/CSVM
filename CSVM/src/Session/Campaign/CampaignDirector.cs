@@ -79,12 +79,6 @@ public sealed class CampaignDirector
     private readonly HashSet<string> _leaderlessReported = new(StringComparer.Ordinal);
     private readonly Dictionary<string, FlightController> _roster = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, RosterSpawnPlan> _rosterPlans = new(StringComparer.OrdinalIgnoreCase);
-
-    // A block's actual placement, apart from its authored plan: a world node override at spawn,
-    // or the authored pose otherwise. WAKEUP_ENEMIES re-places a deactivated block here, not at
-    // the plan's authored pose, so a script-moved block wakes where it now stands.
-    private readonly Dictionary<string, (Vector3 Position, Vector3 Forward)> _rosterPlacedPose =
-        new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, SurfaceVehicle> _vessels = new(StringComparer.OrdinalIgnoreCase);
 
     // A guest's two WARP_VEHICLE halves, keyed by the vehicle's name hash: the directive its graph
@@ -347,10 +341,31 @@ public sealed class CampaignDirector
         return spec.WithSeatedAircraft(node, custom, CampaignLoadout.For(plane, StockLoadouts.Load()));
     }
 
-    /// <summary>Construction, the shape <see cref="InstantAction.InstantActionDirector.TryCreate"/> has: null
-    /// outside a campaign launch, and a profile that cannot be loaded warns and flies without a
-    /// director rather than aborting the launch.</summary>
-    public static CampaignDirector? TryCreate(SessionSpec spec, string zrdrPath, string missionZrdrPath)
+    /// <summary>What a co-op host tells its guests the wingman flies. That is the airframe and
+    /// stored fit of <paramref name="profile"/>'s wingman plane, as <see cref="BindWingman"/> reads them.
+    /// <see cref="Net.CoopWingmanMessage.NoAirframe"/> when the profile owns no plane there.</summary>
+    public static Net.CoopWingmanMessage CoopWingmanOf(CampaignProfileDef profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        int at = profile.WingmanPlane;
+        if (at < 0 || at >= profile.Planes.Count
+            || profile.Planes[at].Airframe is < 0 or >= Net.CoopWingmanMessage.NoAirframe)
+        {
+            return new Net.CoopWingmanMessage(Net.CoopWingmanMessage.NoAirframe, default);
+        }
+
+        var plane = profile.Planes[at];
+        return new Net.CoopWingmanMessage((byte)plane.Airframe, Net.CoopFit.Of(plane.Ammo, plane.Ordnance));
+    }
+
+    /// <summary>Construction, the shape <see cref="InstantAction.InstantActionDirector.TryCreate"/> has.
+    /// It is null outside a campaign launch. A profile that cannot be loaded warns and flies without
+    /// a director rather than aborting the launch. Only a co-op guest passes
+    /// <paramref name="hostWingman"/>, so its wingman flies the aeroplane its host named. A host
+    /// whose humans hold the saved wingman plane flies the one the cabin settled instead
+    /// (<see cref="SessionSpec.CampaignWingman"/>).</summary>
+    public static CampaignDirector? TryCreate(SessionSpec spec, string zrdrPath, string missionZrdrPath,
+        Func<Net.CoopWingmanMessage?>? hostWingman = null)
     {
         if (spec.CampaignProfile == null || spec.CampaignMissionSeq is not { } seq)
         {
@@ -382,7 +397,19 @@ public sealed class CampaignDirector
         Log.Info("core", $"campaign: '{profile.Name}' flying {mission.ChapterFolder}/{mission.MissionFolder}, {script.Objectives.Count} objective(s)");
         var director = new CampaignDirector(script, mission, profile, store, missionZrdrPath,
             CampaignSequence.PreviousInSameChapter(CampaignSequence.Load(zrdrPath), seq)?.Seq);
-        director.BindWingman();
+        if (hostWingman != null)
+        {
+            director.BindHostWingman(hostWingman());
+        }
+        else if (spec.CampaignWingman is { } settled)
+        {
+            director.BindHostWingman(settled);
+        }
+        else
+        {
+            director.BindWingman();
+        }
+
         return director;
     }
 
@@ -437,17 +464,18 @@ public sealed class CampaignDirector
     }
 
     /// <summary>Seats a pilot on a patrol net: the assignment <c>SET_AI_NET</c> makes and the one a
-    /// lost leader makes. The escort buffer goes with it, since a net outranks wingman mode, and a
-    /// fresh walk seats itself at the node nearest wherever the aeroplane IS, so a mid-flight swap
-    /// captures the new route instead of restarting it. ⚠ Re-baseline the machine on the vehicle's
-    /// own ranges BEFORE the net's volumes: <see cref="CampaignRosterPlan.ApplyVolumes"/> skips a
-    /// radius the net authors as zero, and a stale gate keeps a bomb-run escort in patrol.</summary>
+    /// lost leader makes. A net outranks wingman mode, so the escort buffer goes with it. The fresh
+    /// walk is seated at once where the aeroplane IS (<c>FUN_00475fc0</c>), asleep or flying.
+    /// ⚠ Re-baseline the machine on the vehicle's own ranges BEFORE the net's volumes. A radius the
+    /// net authors as zero is skipped by <see cref="CampaignRosterPlan.ApplyVolumes"/>, and a stale
+    /// gate keeps a bomb-run escort in patrol.</summary>
     internal static void SeatOnNet(FlightController rig, AiPilot pilot, AiNet net,
         NetTrailerTargets? trailers, float minAiActiveDist)
     {
         pilot.Escort = null;
         pilot.Patrol = new AiNetFollower(net, Utils.Rng.NewSystemRandom(Utils.Rng.Ai),
             trailerTarget: trailers?.For(net));
+        pilot.Patrol.Seat(rig.WorldPosition, rig.NoseDirection);
         if (pilot.Machine is { } gates && rig.Stats is { } defs)
         {
             gates.AttackRange = defs.AiAttackRange;
@@ -536,7 +564,6 @@ public sealed class CampaignDirector
             }
             _roster[spawn.Name] = rig;
             _rosterPlans[spawn.Name] = spawn;
-            _rosterPlacedPose[spawn.Name] = (pos, fwd);
             RegisterObjectiveMarker(spawn.Name, spawn);
             rig.Group = spawn.Group;
             rig.Downed += (_, killer) => CreditKill(spawn, killer);
@@ -551,11 +578,18 @@ public sealed class CampaignDirector
             bool placed = false;
             if (spawn.TaxiPath is { } taxi && _paths != null)
             {
-                placed = PlaceOnPath(rig, spawn.Name, taxi);
+                placed = PlaceOnPath(rig, spawn.Name, taxi, seatWalk: true);
                 if (!placed)
                 {
                     Log.Info("core", $"campaign: roster '{spawn.Name}' authors taxi path '{taxi}', which this world does not carry: it flies");
                 }
+            }
+
+            // Every netted block is seated where it spawns, deactivated or not (FUN_0047c210), so a
+            // later wake walks on from here (docs/org/aiPilot.md "Activation keeps the walk").
+            if (!placed)
+            {
+                pilot.Patrol?.Seat(rig.WorldPosition, rig.NoseDirection);
             }
 
             // A downward probe against the built terrain collision, at the placed position: names
@@ -863,6 +897,10 @@ public sealed class CampaignDirector
             return;
         }
 
+        // Pinned on every seat's death, the last included: no seat that loses its aircraft flies
+        // again, and the HUD's respawn prompt reads the same pin.
+        human.CrashIsFinal = true;
+
         var (seats, down) = FieldDown();
         if (down < seats)
         {
@@ -937,11 +975,12 @@ public sealed class CampaignDirector
         graph.EndAfterPlayerLost();
     }
 
-    // A path-driven aircraft: held (no flight integration) and re-pinned to the follower's pose
-    // every tick, which is the original's exclusive movement-law switch; the handoff un-holds it
-    // and re-activates it at the speed the path left it (docs/org/flightModel.md "The
-    // scripted-path follower").
-    private bool PlaceOnPath(FlightController rig, string name, string taxi)
+    // A path-driven aircraft is held and re-pinned to the follower's pose every tick, the original's
+    // exclusive movement-law switch. The handoff un-holds it at the speed the path left it
+    // (docs/org/flightModel.md "The scripted-path follower"). A spawn placement seats the patrol
+    // walk at the path's start and the handoff keeps it (docs/org/aiPilot.md "A path vehicle's net
+    // seat"). A warp placement (FUN_004940d0) seats nothing, so its vehicle keeps the walk it had.
+    private bool PlaceOnPath(FlightController rig, string name, string taxi, bool seatWalk = false)
     {
         bool placed = _paths!.Place(name, taxi, rig,
             onComplete: speed =>
@@ -958,6 +997,10 @@ public sealed class CampaignDirector
         if (placed)
         {
             rig.Held = true;
+            if (seatWalk)
+            {
+                rig.Pilot?.Patrol?.Seat(rig.WorldPosition, rig.NoseDirection);
+            }
         }
         return placed;
     }
@@ -1056,6 +1099,37 @@ public sealed class CampaignDirector
         WingmanNode = UI.Hangar.PlanePickerRoster.AirframeNode(plane.Airframe);
         WingmanFit = CampaignLoadout.For(plane, StockLoadouts.Load());
         Log.Info("core", $"campaign: {WingmanName} flies '{plane.Name}' as {WingmanNode}, bound for the roster spawn");
+    }
+
+    // A wingman the host named: a co-op guest's, or the host's own when a human holds the saved
+    // plane. ⚠ Never fall back to this machine's profile on a guest. Its default Devastator
+    // would carry other hit volumes and damage parts than the host's aeroplane.
+    private void BindHostWingman(Net.CoopWingmanMessage? told)
+    {
+        if (!_mission.Wingman)
+        {
+            return;
+        }
+
+        if (told is not { } wingman)
+        {
+            GD.PushWarning($"campaign: the co-op host named no aeroplane for {WingmanName}; it flies its " +
+                         "block's own def here, which need not match the host's");
+            Log.Warn("core", $"campaign: the co-op host named no aeroplane for {WingmanName}, flying its block's own def");
+            return;
+        }
+
+        if (!wingman.Binds)
+        {
+            Log.Info("core", $"campaign: the co-op host binds no aeroplane for {WingmanName}, flying its block's own def");
+            return;
+        }
+
+        WingmanNode = UI.Hangar.PlanePickerRoster.AirframeNode(wingman.Airframe);
+        // A stock fit reads back as null from the wire, and as an empty choice from a profile.
+        // The empty choice keeps the two machines' spawns identical.
+        WingmanFit = CampaignLoadout.For(wingman.Fit, StockLoadouts.Load()) ?? new LoadoutChoice();
+        Log.Info("core", $"campaign: {WingmanName} flies the host's airframe {wingman.Airframe} as {WingmanNode}, bound for the roster spawn");
     }
 
     // The music channel's battle detector: the decoded five-second proximity scan, which runs only
@@ -1365,7 +1439,7 @@ public sealed class CampaignDirector
     // script that moved it keeps the move. False when the name is no dormant roster block.
     private bool ActivateDormantRoster(string name)
     {
-        if (!_roster.TryGetValue(name, out var rig) || !_rosterPlans.TryGetValue(name, out var plan)
+        if (!_roster.TryGetValue(name, out var rig) || !_rosterPlans.ContainsKey(name)
             || !rig.Inert)
         {
             return false;
@@ -1379,10 +1453,15 @@ public sealed class CampaignDirector
             return true;
         }
 
-        var (pos, fwd) = _rosterPlacedPose.TryGetValue(name, out var placed)
-            ? placed
-            : (plan.Position, plan.Forward);
-        rig.Activate(pos, pos + fwd);
+        // Off a path, the net's trailer carries the wake position (FUN_004b0f40). The walk seated at
+        // spawn is kept (docs/org/aiPilot.md "Activation keeps the walk").
+        var at = rig.WorldPosition;
+        if (_paths?.IsPlaced(name) != true && rig.Pilot?.Patrol is { } walk)
+        {
+            at = walk.Carry(at);
+        }
+
+        rig.Activate(at, at + rig.NoseDirection);
         return true;
     }
 
@@ -1736,9 +1815,9 @@ public sealed class CampaignDirector
 
         public void WakeupEnemies(IReadOnlyList<string> names)
         {
-            // The partner of BOTH deactivated flags (docs/formats/objectives.md): the roster's,
-            // which puts an inert aircraft back in play at its placed pose, and a zeppelin record's,
-            // which puts a hidden airship into the world. A name is one or the other, never both.
+            // The partner of BOTH deactivated flags (docs/formats/objectives.md). The roster's puts
+            // an inert aircraft back in play, and a zeppelin record's shows a hidden airship.
+            // A name is one or the other, never both.
             int aircraft = 0, zeppelins = 0, vessels = 0;
             foreach (var name in names)
             {

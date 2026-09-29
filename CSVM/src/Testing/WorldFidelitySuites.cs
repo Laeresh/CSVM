@@ -150,6 +150,7 @@ internal static class WorldFidelitySuites
                 $"the credited launch identifies its template and starts on the hull's take-off path");
             ctx.Check(runway != null && runway.GlobalPosition.DistanceTo(submarine.GlobalPosition) > 1f,
                 $"that path point is the deck ahead of the hull's origin, not the origin itself");
+            generators.Free();
         });
     }
 
@@ -924,6 +925,7 @@ internal static class WorldFidelitySuites
             // name from the next suite's spawn.
             FlightController? launched = null;
             var spawned = new List<FlightController>();
+            AiGeneratorRuntime? generators = null;
             try
             {
                 var spec = SessionSpec.Parse(Array.Empty<string>());
@@ -944,7 +946,7 @@ internal static class WorldFidelitySuites
                     null, ctx.Host, resources,
                     new FlightWorldBindings { Projectiles = pool, Gamez = planesGamez, ChapterZrdrPath = chapterZrdr },
                     new HumanRosterBindings());
-                var generators = new AiGeneratorRuntime(new[] { def },
+                generators = new AiGeneratorRuntime(new[] { def },
                     (name, scope) => world.Runtime.FindNodes(name, scope) is { Count: > 0 } hits ? hits[0] : null,
                     nets, ctx.PlaneName,
                     (EnemyGeneratorDef d, Vector3 pos, Vector3 look, AiPilot pilot) =>
@@ -983,6 +985,7 @@ internal static class WorldFidelitySuites
                 {
                     rig.Free();
                 }
+                generators?.Free();
                 pool.Free();
                 textures.Dispose();
             }

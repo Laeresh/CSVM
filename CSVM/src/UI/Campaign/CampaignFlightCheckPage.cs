@@ -52,14 +52,13 @@ internal readonly record struct FlightCheckState(
 
 /// <summary>
 /// The flight check screen (<c>Campaign Flight Check.png</c>, <c>FLIGHTCHECK.SCRIPT</c>,
-/// <c>docs/formats/campaign-screens.md</c>): the mission title, a PILOT row and, when the mission's
-/// <c>cm_sequence</c> wingman flag is set, a WINGMAN row, CHANGE AMMO per row (into
-/// <see cref="CampaignScreen.Ammo"/>), CHANGE PLANE where the slot's own rules allow, RETURN TO BRIEFING
-/// and FLY MISSION. The row list carries only these actionable items; each plane's dense text
-/// (title, both eight-row lists) and the objectives note live in <see cref="Detail"/>, the split
-/// <see cref="CampaignRosterPage"/> uses for its own descriptive text. CHANGE PLANE opens
-/// <see cref="CampaignScreen.PlaneSelection"/> on the row's own slot, a guest's check and the
-/// seated player's alike, so one place enforces the duplicate rule. With guests joined this one
+/// <c>docs/formats/campaign-screens.md</c>). It shows the mission title and a PILOT row, plus a
+/// WINGMAN row when the mission's <c>cm_sequence</c> wingman flag is set. Each row has CHANGE AMMO
+/// (into <see cref="CampaignScreen.Ammo"/>) and CHANGE PLANE where the slot's own rules allow,
+/// then RETURN TO BRIEFING and FLY MISSION. Each plane's dense text (title, both eight-row lists)
+/// and the objectives note live in <see cref="Detail"/>, as on <see cref="CampaignRosterPage"/>,
+/// not in the row list. CHANGE PLANE opens <see cref="CampaignScreen.PlaneSelection"/> on the row's own slot for a guest and
+/// the seated player alike, so one place enforces the duplicate rule. With guests joined this one
 /// page draws the whole sequence, a player at a time (<see cref="CampaignFlightField"/>).
 /// </summary>
 public sealed class CampaignFlightCheckPage : CampaignPage
@@ -426,7 +425,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     {
         var profile = Flow.Profile ?? EmptyProfile;
         var pilot = Player > 0 ? Flow.Field.Plane(Player) : PlaneAt(profile, profile.SelectedPlane);
-        var wing = Player == 0 && HasWingman ? PlaneAt(profile, profile.WingmanPlane) : null;
+        var wing = Player == 0 && HasWingman ? WingmanPlane(profile) : null;
         return new FlightCheckState(
             Flow.Profile, Flow.MissionSeq, Player, HasWingman,
             Flow.Feature.ChangePlaneAllowed(PilotSlot), Flow.Feature.ChangePlaneAllowed(WingmanSlot),
@@ -435,18 +434,19 @@ public sealed class CampaignFlightCheckPage : CampaignPage
             Flow.Feature.IsGuest, Flow.Feature.GuestReady);
     }
 
-    // Every row this screen draws, composed from the profile and the mission's wingman flag: the
-    // PILOT block, its two action rows, the WINGMAN block and its own two action rows when the
+    // Every row this screen draws, composed from the profile and the mission's wingman flag. The
+    // PILOT block and its two action rows come first. The WINGMAN block and its two follow when the
     // mission carries a wingman, then RETURN TO BRIEFING and FLY MISSION. A guest's own check draws
-    // one PILOT block and no wingman: the wingman is the seated profile's.
+    // one PILOT block and no wingman, since the wingman is the seated profile's.
     private List<FlightRow> BuildRows()
     {
         var profile = Flow.Profile ?? EmptyProfile;
         var rows = new List<FlightRow>();
         if (Player > 0)
         {
-            // A guest picks out of the stock eleven and copies, so neither of FLIGHTCHECK.SCRIPT's
-            // plane-change gates applies: both are rules about the seated profile's own aircraft.
+            // A guest picks out of copies of the hangar and the stock Devastator. Neither of
+            // FLIGHTCHECK.SCRIPT's plane-change gates applies, since both are rules about the
+            // seated profile's own aircraft.
             AddSlot(rows, Flow.Field.Plane(Player), slot: PilotSlot, heading: "PILOT", changePlane: true);
         }
         else
@@ -455,7 +455,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
                 changePlane: Flow.Feature.ChangePlaneAllowed(PilotSlot));
             if (HasWingman)
             {
-                AddSlot(rows, PlaneAt(profile, profile.WingmanPlane), slot: WingmanSlot, heading: "WINGMAN",
+                AddSlot(rows, WingmanPlane(profile), slot: WingmanSlot, heading: "WINGMAN",
                     changePlane: Flow.Feature.ChangePlaneAllowed(WingmanSlot));
             }
         }
@@ -472,6 +472,10 @@ public sealed class CampaignFlightCheckPage : CampaignPage
         profile.Planes.Count > 0
             ? profile.Planes[Math.Clamp(index, 0, profile.Planes.Count - 1)]
             : null;
+
+    // The plane the wingman flies, which is not its saved one while a human holds that.
+    private OwnedPlane? WingmanPlane(CampaignProfileDef profile) =>
+        Flow.Feature.FlownWingmanPlane ?? PlaneAt(profile, profile.WingmanPlane);
 
     private void AddSlot(List<FlightRow> rows, OwnedPlane? plane, int slot, string heading, bool changePlane)
     {
@@ -649,6 +653,13 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     // instance because a hangar visit replaces that instance (CampaignFeature.Resume).
     private CustomPlaneDef? BuildFor(OwnedPlane plane)
     {
+        // A network guest's planes are its host's, and so are the builds. Only the host's hangar
+        // words carry them, since this machine's store knows nothing of that hangar.
+        if (Flow.Feature.IsGuest)
+        {
+            return Flow.Feature.GuestBuildOf(plane);
+        }
+
         if (Flow.Field.IsStock(plane))
         {
             return null;
