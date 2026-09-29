@@ -9,27 +9,18 @@ namespace CSVM.Effects;
 /// Enhanced Graphics only: a soft volumetric bank inside each authored <c>fvol*</c> volume, under
 /// the cloud cards <see cref="FogVolumeClutter"/> lays over the same geometry. Each volume's bounds
 /// go down as <see cref="FogVolume"/> boxes over one shared <see cref="FogMaterial"/>, filling the
-/// Environment's froxel fog, so the sun scatters through the deck and the in-volume whiteout reads
-/// as being inside cloud rather than as a flat colour.
-/// ⚠ Nothing here is authored. The original renders no volumetric fog at all, so every constant is
-/// TUNE; what the data gives is the volumes' own bounds, the zone colour and the whiteout's own
-/// interior depth. The faithful path builds nothing and leaves the Environment flag off, so no
-/// pinned shot can move. Volumes and their bounds: docs/formats/fogvol.md.
+/// Environment's froxel fog, so the sun scatters through the deck.
+/// ⚠ Nothing here is authored: the original renders no volumetric fog, so every constant is TUNE
+/// over the volumes' own bounds and the zone colour. The faithful path builds nothing
+/// and leaves the Environment flag off, so no pinned shot can move. Volumes and their bounds: docs/formats/fogvol.md.
 /// </summary>
 public sealed partial class FogVolumeBanks : Node3D
 {
-    // ⚠ TUNE, enhanced only, in extinction per metre, for a chapter whose fogvol.zrd does not arm
-    // the in-volume whiteout (every deck chapter but C5). The authored deck slab is about 120 m
-    // thick, so a climb straight through one scatters out about a fifth of what is behind it and
-    // the cards keep their shape; at twice this the underside of the deck washes to a flat tint of
-    // the sun's own colour, which is the bank drawing itself instead of the cloud it sits in.
-    private const float AmbientDensity = 0.002f;
-
-    // ⚠ TUNE: the optical depth an armed chapter's bank reaches over the same metres the whiteout
-    // curtain takes to hand off (interior_fog_fade_dist, 16 m in C5). At 1 the bank scatters out
-    // about two thirds of the light over that depth, which is what keeps the curtain and the air
-    // under it reading as one cloud instead of an overlay that lifts into clear air.
-    private const float WhiteoutAgreementDepth = 1f;
+    // ⚠ TUNE, enhanced only, in extinction per metre. The authored deck slab is about 120 m thick.
+    // A climb straight through one scatters out about a fifth of what is behind it, and the cards
+    // keep their shape. At twice this the deck's underside washes to a flat sun-coloured tint,
+    // the bank drawing itself instead of its cloud.
+    private const float BankDensity = 0.002f;
 
     // ⚠ Keep at 0, and the tiling below is why: an edge fade softens every box face it is given,
     // including the faces where two tiles of one authored volume meet, which would draw that grid
@@ -52,10 +43,9 @@ public sealed partial class FogVolumeBanks : Node3D
     // haze the same metres twice.
     private const float GlobalDensity = 0f;
 
-    // ⚠ TUNE, metres, the froxel buffer's whole reach: fog past it is not computed at all. Long
-    // enough that a bank read from just outside its own volume still fills the frame, short enough
-    // that the far slices stay small; the camera-anchored horizon dome sits kilometres out and so
-    // is never inside it, which is what keeps its own fog arm from being fogged a second time.
+    // ⚠ TUNE, metres, the froxel buffer's reach. Long enough that a bank read from just outside
+    // its own volume still fills the frame, short enough that the far slices stay small. Geometry
+    // past it is not spared: it reads the last slice, so the horizon dome takes the whole bank.
     private const float FroxelLength = 1024f;
 
     // TUNE: how hard the froxel slices bunch toward the camera, Godot's own default. The bank's
@@ -71,9 +61,9 @@ public sealed partial class FogVolumeBanks : Node3D
     // night bank lit by the capped sun alone goes black and stops reading as cloud.
     private const float FroxelAmbientInject = 1f;
 
-    // ⚠ Keep at 1. Godot applies this factor to a FogVolume as well as to the background, so a
-    // lower value fades the banks out exactly where this item is judged, looking up at the deck
-    // against the sky. The horizon dome is geometry and is not the background, so it is unaffected.
+    // ⚠ Keep at 1. Godot applies this factor to a FogVolume as well as to the background. A lower
+    // value fades the banks out where this item is judged, looking up at the deck against the sky.
+    // The horizon dome is geometry, so this factor does not reach it.
     private const float FroxelSkyAffect = 1f;
 
     // ⚠ TUNE, and the whole per-frame cost of the pass: the froxel buffer is size x size x depth
@@ -83,8 +73,6 @@ public sealed partial class FogVolumeBanks : Node3D
     private const int FroxelVolumeDepth = 64;
 
     private readonly FogMaterial _material = new();
-    private Color _authoredColor;
-    private bool _authoredColorWritten;
 
     /// <summary>How many banks were built, one per authored volume. The count a suite pins against
     /// the chapter's own <c>fvol*</c> census.</summary>
@@ -94,25 +82,27 @@ public sealed partial class FogVolumeBanks : Node3D
     /// authored volume is wider than <see cref="MaxTileExtent"/>, which the deck slabs all are.</summary>
     public int TileCount { get; private set; }
 
-    /// <summary>The extinction per metre every bank carries, resolved once from the chapter's own
-    /// whiteout arming (<see cref="AmbientDensity"/> or the whiteout agreement).</summary>
+    /// <summary>The extinction per metre every bank carries.</summary>
     public float Density => _material.Density;
 
     /// <summary>The scattering colour last written, linear, as the renderer takes it. Published
     /// because a material property cannot be read back off a running renderer any other way.</summary>
     public Color Albedo => _material.Albedo;
 
-    /// <summary>Builds one bank per authored volume, or null when there is nothing to build: the
-    /// faithful presentation, or a chapter with no <c>fvol*</c> volume. Add the result to the world
-    /// root at identity, the boxes carry absolute world coordinates.</summary>
+    /// <summary>Builds one bank per authored volume. Returns null on the faithful presentation, for a
+    /// chapter with no <c>fvol*</c> volume, and where <c>fogvol.zrd</c> arms the whiteout. Add the
+    /// result to the world root at identity, the boxes carry absolute world coordinates.</summary>
     public static FogVolumeBanks? Create(IReadOnlyList<FogVolumeBox> volumes, FogVolumeSpec? spec)
     {
-        if (!GraphicsMode.Enhanced || volumes.Count == 0)
+        // ⚠ No bank where the whiteout is armed (C5's street prisms). The lit world writes its own
+        // FOG and so takes no froxel fog. The bank reaches only the horizon dome and the sky.
+        // They go black behind a city that keeps its zone fog: a hard edge and a skyline.
+        if (!GraphicsMode.Enhanced || volumes.Count == 0 || FogVolumeWhiteout.From(spec, volumes).Armed)
         {
             return null;
         }
         var banks = new FogVolumeBanks { Name = "fog_volume_banks" };
-        banks.Build(volumes, FogVolumeWhiteout.From(spec, volumes));
+        banks.Build(volumes);
         return banks;
     }
 
@@ -140,42 +130,21 @@ public sealed partial class FogVolumeBanks : Node3D
         RenderingServer.EnvironmentSetVolumetricFogVolumeSize(FroxelVolumeSize, FroxelVolumeDepth);
     }
 
-    /// <summary>The scattering colour for one applied zone, the zone's own <c>FOG_COLOR</c>, unless
-    /// the chapter's <c>fogvol.zrd</c> authors its own whiteout colour, which the curtain over the
-    /// same volumes is painted with. Called on every zone apply, so a mid-flight zone change carries
-    /// the bank with it.</summary>
+    /// <summary>The scattering colour for one applied zone, the zone's own <c>FOG_COLOR</c>. Called
+    /// on every zone apply, so a mid-flight zone change carries the bank with it.</summary>
     public void ApplyZone(Color zoneFogColor)
     {
-        var color = _authoredColorWritten ? _authoredColor : zoneFogColor;
         // ⚠ Linearise: the authored value is a DX7 framebuffer colour, and a material albedo is
         // taken by the renderer as it stands, the same conversion WeatherRig.WriteSkyColor makes.
-        _material.Albedo = color.SrgbToLinear();
+        _material.Albedo = zoneFogColor.SrgbToLinear();
     }
 
-    // The bank's extinction per metre. Where the chapter arms the in-volume whiteout, the curtain
-    // already says over how many metres the inside of a volume becomes cloud, so the bank reaches
-    // its own agreed optical depth over exactly that distance rather than carrying a second,
-    // unrelated number. Everywhere else there is no such statement and the ambient TUNE stands.
-    private static float DensityFor(FogVolumeWhiteout whiteout)
+    private void Build(IReadOnlyList<FogVolumeBox> volumes)
     {
-        if (!whiteout.Armed || whiteout.InteriorFadeDist <= 0f)
-        {
-            return AmbientDensity;
-        }
-        return Mathf.Max(AmbientDensity, WhiteoutAgreementDepth / whiteout.InteriorFadeDist);
-    }
-
-    private void Build(IReadOnlyList<FogVolumeBox> volumes, FogVolumeWhiteout whiteout)
-    {
-        _material.Density = DensityFor(whiteout);
+        _material.Density = BankDensity;
         _material.EdgeFade = BankEdgeFade;
         _material.HeightFalloff = BankHeightFalloff;
         _material.Emission = Colors.Black;
-        if (whiteout is { Armed: true, Color: { } authored })
-        {
-            _authoredColor = authored;
-            _authoredColorWritten = true;
-        }
         // A sane albedo before any zone is applied: a session with no weather.json never reaches
         // ApplyZone, and a black-albedo bank scatters nothing at all.
         ApplyZone(Colors.White);

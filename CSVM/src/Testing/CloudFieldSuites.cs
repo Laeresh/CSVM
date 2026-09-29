@@ -58,7 +58,7 @@ internal static class CloudFieldSuites
     };
 
     // Per chapter: how many fvol volumes the gamez ships and whether its fogvol.zrd arms the
-    // in-volume whiteout, which is what decides where the enhanced bank takes its density from.
+    // in-volume whiteout. The arming decides whether the chapter builds an enhanced bank.
     // The counts are docs/formats/fogvol.md's own census.
     private static readonly (string Chapter, int Volumes, bool Armed)[] BankChapters =
     {
@@ -133,9 +133,9 @@ internal static class CloudFieldSuites
         "the enhanced volumetric bank under the cloud cards: one bank per authored fvol volume "
         + "and none at all on the faithful presentation, where the Environment's froxel pass is "
         + "left off; each bank tiles its own volume's bounds exactly, in boxes no wider than the "
-        + "engine still renders; the scattering colour follows the applied zone, or the chapter's "
-        + "own authored whiteout colour where fogvol.zrd arms one; and an armed chapter's density "
-        + "is the whiteout's own interior depth rather than the ambient TUNE")]
+        + "engine still renders; the scattering colour follows the applied zone; and a chapter "
+        + "whose fogvol.zrd arms the in-volume whiteout builds no bank, since the lit city takes "
+        + "no froxel fog and a bank there would black out only the backdrop behind it")]
     internal static void CloudBanks(TestContext ctx)
     {
         foreach (var (chapter, expectVolumes, armed) in BankChapters)
@@ -172,12 +172,18 @@ internal static class CloudFieldSuites
         ctx.Check(!Utils.GraphicsMode.Enhanced, $"the graphics setting is back on the faithful presentation");
     }
 
-    // One chapter's enhanced banks: the count, the tiling, the froxel arm, the zone colour and the
-    // density the chapter's own data asks for.
+    // One chapter's enhanced banks: the count, the tiling, the froxel arm and the zone colour.
+    // Where the chapter arms the whiteout, no bank at all.
     private static void CheckBanks(TestContext ctx, string chapter, IReadOnlyList<FogVolumeBox> volumes,
         FogVolumeSpec? spec, FogVolumeWhiteout whiteout, Godot.Environment env)
     {
         var banks = Effects.FogVolumeBanks.Create(volumes, spec);
+        if (whiteout.Armed)
+        {
+            ctx.Check(banks == null, $"{chapter} builds no volumetric bank where the whiteout is armed");
+            banks?.Free();
+            return;
+        }
         ctx.Check(banks != null, $"{chapter} builds volumetric banks under Enhanced Graphics");
         if (banks == null)
         {
@@ -191,22 +197,12 @@ internal static class CloudFieldSuites
             ctx.Check(env.VolumetricFogEnabled && env.VolumetricFogDensity == 0f,
                 $"{chapter} arms the froxel pass with no global density, the banks carrying it all");
             CheckBankBoxes(ctx, chapter, banks, volumes);
-            // The zone colour arrives from the rig's own apply, and the authored whiteout colour
-            // outranks it wherever the chapter painted its curtain with one.
+            // The zone colour arrives from the rig's own apply.
             var zone = new Color(0.25f, 0.5f, 0.75f);
             banks.ApplyZone(zone);
-            var want = (whiteout is { Armed: true, Color: { } authored } ? authored : zone).SrgbToLinear();
+            var want = zone.SrgbToLinear();
             ctx.Check(banks.Albedo.IsEqualApprox(want), $"{chapter} bank scatters in {want} (zone {zone})");
-            if (whiteout.Armed)
-            {
-                ctx.Check(Mathf.IsEqualApprox(banks.Density, 1f / whiteout.InteriorFadeDist),
-                    $"{chapter} bank density {banks.Density:0.####} /m over the whiteout's own {whiteout.InteriorFadeDist:0.#} m interior fade");
-            }
-            else
-            {
-                ctx.Check(banks.Density > 0f && banks.Density < 1f / whiteout.InteriorFadeDist,
-                    $"{chapter} bank density {banks.Density:0.####} /m, the ambient TUNE, under any armed chapter's own");
-            }
+            ctx.Check(banks.Density > 0f, $"{chapter} bank density {banks.Density:0.####} /m");
         }
         finally
         {

@@ -220,7 +220,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 | B11 to B14, B16 | Pass | none |
 | B15 | The marks read small and light | The radius factors are 1.1 and 0.455, the peak alpha 0.95 (`ScorchField`) |
 | C21 | The medium strength | Ships: tint 0.10, rim 0.20, core shadow 0.45 (`FogVolumeClutter`) |
-| C22 | C5's whiteout bank draws a hard horizontal edge and too prominent a skyline | Open. The edge is not the bank's top face: carrying the bank 60, 120 and 250 m above the authored top with a density fade changed neither the edge nor the skyline |
+| C22 | C5's whiteout bank draws a hard horizontal edge and too prominent a skyline | The lit city takes no froxel fog, so the bank blackened only the dome behind it. An armed chapter builds no bank (`FogVolumeBanks.Create`); C5's street pose is now flat zone grey like the Original, and C1's banks are byte-identical |
 | All | C5 performance is poor under every AA method | A7 |
 
 ## Dependency and parallelism notes
@@ -1339,8 +1339,19 @@ the metres the authored `csky_fog_*` ramp already grades, so the two would haze 
 with `VolumetricFogDensity` at 0 the froxel pass exists only where a volume stands. `SkyAffect` stays
 at 1: Godot applies it to `FogVolume`s as well as to the background, so a lower value would fade the
 banks out exactly where this item is judged, against the sky. The froxel buffer stays at Godot's own
-64 x 64 x 64 over a 1,024 m length, which also keeps the camera-anchored horizon dome (kilometres
-out) outside the pass, so its own fog arm is never fogged a second time.
+64 x 64 x 64 over a 1,024 m length. ⚠ Geometry past that length is not outside the pass: it reads
+the last froxel slice, so the horizon dome (authored `fog: false`, Godot's default fog path) takes
+the whole bank. C1's look depends on that; exempting the dome takes C1's deck pose from mean 127
+to 157.
+
+**No bank where the whiteout is armed (C5).** The lit world arm writes its own `FOG`, which takes
+every lit world surface out of Godot's volumetric fog. A bank over C5's city therefore reached only
+the dome and the sky behind it, and the chapter's near-black `[16,16,16]` whiteout albedo turned
+them to 0 while the city kept its zone fog at 18. The result was a hard horizontal edge (the far
+outline of the zone-3 ground meshes, which `--no-zone-cull` moves to the horizon) and a skyline of
+fogged lit buildings standing out against the black. `Create` returns nothing for an armed chapter,
+so C5 runs without the froxel pass and its frame at the street pose is byte-identical to one with no
+banks; C1's deck pose is byte-identical before and after.
 
 **Boxes, not the volume's own mesh, and tiled.** Godot 4 has no mesh-shaped fog volume at all
 (`FogVolumeShape` is Ellipsoid, Cone, Cylinder, Box or World), so the shape is a box over the
@@ -1352,11 +1363,8 @@ banks at all; at 2,048 m the bank renders whether or not the camera stands over 
 bounds go down as a grid of tiles no wider than that, seamlessly because the edge fade is 0: C1's
 nine pieces become 36 boxes, C5's seventeen prisms 57.
 
-**Density.** Where `fogvol.zrd` arms `fog_zone`, the bank reaches an optical depth of 1 over the same
-`interior_fog_fade_dist` metres the whiteout curtain hands off in, so the two agree instead of
-carrying two unrelated numbers: C5's 16 m gives 0.0625 per metre. Everywhere else there is no
-authored statement about the inside of a cloud and one ambient TUNE stands, shipped at **0.002 per
-metre**: a climb straight through the 120 m deck scatters out about a fifth of what is behind it and
+**Density.** There is no authored statement about the inside of a cloud, so one TUNE stands,
+shipped at **0.002 per metre**: a climb straight through the 120 m deck scatters out about a fifth of what is behind it and
 the cards keep their shape. At 0.004 the underside of the deck washes to a flat tint of the sun's own
 colour, which is the bank drawing itself instead of the cloud it sits in; the montage carries 0.002,
 0.004 and 0.01 at two poses for the user to overrule this.
@@ -1382,10 +1390,8 @@ show: from under the deck the bank is unmistakable, it deepens the underside and
 sun-scatter glow where the sun is, and the density steps separate cleanly there. What it cannot
 show: from above the deck the cards hide the bank almost entirely (decision 5, and the shots differ
 by about one level of 255), and no shafts appear anywhere, because the cloud cards are alpha-blended
-billboards that cast no shadow, so there is nothing to break the light into beams. ⚠ C5's bank is
-nearly a pure absorber, since the chapter's authored whiteout colour is `[16,16,16]`: through the
-armed zone at night it takes the frame mean from 25 to 14. That is the agreement the item asked for,
-and it is also the one reading most likely to be judged too strong.
+billboards that cast no shadow, so there is nothing to break the light into beams. C5 builds no
+bank, for the reason above.
 
 **Original approach (kept for reference).**
 
