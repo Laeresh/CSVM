@@ -126,8 +126,8 @@ internal static class WorldAndToolSuites
         }
     }
 
-    // The coverage arm is Enhanced-only, so the faithful text has to be asserted as UNCHANGED: the
-    // pinned goldens are faithful --det runs and a token leaking into that arm would repin them all.
+    // The coverage arm is Enhanced-only, so the faithful text has to be asserted as UNCHANGED. A
+    // token leaking into that arm would repin every faithful golden.
     // Read off a built world rather than off the generator, since what ships is the text the
     // materials actually carry. Able to fail: dropping the mode guard puts the token in both arms.
     [Suite("alpha-coverage-text",

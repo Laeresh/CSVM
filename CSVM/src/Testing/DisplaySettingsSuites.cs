@@ -777,8 +777,8 @@ internal static class DisplaySettingsSuites
     }
 
     // What ViewportQuality writes, read back off a viewport rather than trusted. The control is an
-    // untouched SubViewport: native has to leave the subject reading exactly what Godot built, since
-    // the pinned goldens are faithful --det runs and those drop the saved word.
+    // untouched SubViewport: native has to leave the subject reading exactly what Godot built. The
+    // faithful goldens are --det runs, and those drop the saved word.
     private static void ViewportScale(TestContext ctx)
     {
         var control = new SubViewport();
