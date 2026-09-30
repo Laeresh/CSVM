@@ -22,8 +22,8 @@ public static class ViewportQuality
 
     /// <summary>Put <paramref name="viewport"/> on the anti-aliasing method and the render scale the
     /// run resolved. ⚠ Nothing is written for <see cref="AntiAliasingMethod.Off"/> at
-    /// <see cref="RenderScaleSetting.Native"/>, the faithful default. The pinned goldens are
-    /// faithful <c>--det</c> runs, and they have to read back Godot's own defaults.</summary>
+    /// <see cref="RenderScaleSetting.Native"/>, the faithful default. The faithful goldens are
+    /// <c>--det</c> runs, and they have to read back Godot's own defaults.</summary>
     public static void Apply(Viewport viewport)
     {
         // ⚠ A transparent viewport (the cockpit pass) takes neither. Godot's TAA and FSR resolves

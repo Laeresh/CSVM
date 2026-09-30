@@ -204,7 +204,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D, the net and the reading
 
-31. ☐ An enhanced golden set under `--det`
+31. ☑ An enhanced golden set under `--det`
 32. ☑ The perf reading over the finished stack, within 20% of the D31 baseline
 
 ### Verdicts at the controls, Waves A to C
@@ -1664,7 +1664,37 @@ direction factor; leave it out of the lag. Do not touch `ExternalRadius`/`DistTr
 
 # Wave D, the net and the reading
 
-## D31 ☐ An enhanced golden set under `--det`
+## D31 ☑ An enhanced golden set under `--det`
+
+**Landed.** Five `--graphics=enhanced` shots join `analysis/goldens/manifest.json`, pinned with the
+whole stack on and nothing turned off for stability: TAA, SSAO, the screen-space reflection, glow,
+the volumetric banks and the Ultra shadow rung `--det` forces. `c1-lake-enhanced` is a freecam over
+the waterfall lake (the blurred water reflection, conifer shadows on shadowless terrain).
+`c5-city-night-enhanced` is the faithful `c5-city-night` pose under Enhanced (the lit facades and
+the authored lights on the omni pool, no bank). `c1-cloud-deck-enhanced` is the faithful
+`c1-cloud-field` pose (the rendered puffs, the lit card shading, the banks under the cards).
+`c1-rocket-hit-enhanced` is B11's rocket pose at frame 90, two HE bursts on the dirt beside the
+airfield with the burst light, bloom, smoke, shimmer and scorch pools live. `c1-cockpit-enhanced` is
+the faithful `c1-cockpit` flight under Enhanced, the transparent cockpit pass on MSAA over a TAA
+world. The C5 pose stands well outside the whiteout: C5 builds no Enhanced bank, the whiteout
+overlay is the same on both presentations, and a pose inside a street volume renders a flat grey
+16 to 18 that pins little. `analysis/goldens/README.md` names the set and its frame sensitivity,
+and `RunTests.ps1 -Graphics`'s help says the goldens carry their own flag. Three comments that
+called every golden faithful now say "the faithful goldens".
+
+**Verified.** Each shot rendered one hash over five `RunProbe.ps1` launches on the default render
+thread and the same hash over two more under `--render-thread safe`, so TAA's jitter is
+deterministic under `--det` here and no fix was needed. Frame N against N+1: lake 23.53 %, C5
+24.69 %, deck 5.77 %, rocket hit 94.08 %, cockpit 41.10 %. The freecam figures are the temporal
+pass's own jitter: with TAA forced off in a throwaway build, the C5 pose moves 0.01 % and the lake
+1.04 % (its falls scrolling), so each hash pins the jitter phase, and that phase repeats run to
+run. The complete `RunTests.ps1` PASS: build, units **5973 passed, 0 failed, 3 skipped of 5976**,
+engine **493 passed, 0 failed**, engine errors clean, goldens **24 shots hash-identical** at 4
+workers; the goldens stage alone again on the same tree, **24 hash-identical**. The 19 faithful
+hashes are unchanged, and the faithful `c5-city-night` rendered through the same probe script
+matched its pinned hash. `CheckGoldenProse.ps1` clean.
+
+**Original approach (kept for reference).**
 
 **Goal.** A small `--graphics=enhanced` golden set pins the finished stack so later changes cannot
 silently move it.
