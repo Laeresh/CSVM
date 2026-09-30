@@ -1991,7 +1991,7 @@ public sealed partial class ProjectilePool : Node3D
         if (!_splashFadeTwins.TryGetValue(sm, out var twin))
         {
             var fadeShader = SceneBuilder.FadeShaderFor(sh);
-            twin = fadeShader != null ? (ShaderMaterial)sm.Duplicate() : null;
+            twin = fadeShader != null ? SceneBuilder.Track((ShaderMaterial)sm.Duplicate()) : null;
             if (twin != null)
                 twin.Shader = fadeShader;
             _splashFadeTwins[sm] = twin;

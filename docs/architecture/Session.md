@@ -50,10 +50,11 @@ The ammunition and ordnance picks stay behind, since the seat's `CoopFit` carrie
 The enhanced graphics mode on a running process. On one sun and one Environment, in both directions:
 PSSM sun shadows at the `ShadowQualitySetting` level, SSAO, SSR, glow, the AgX tonemap and the
 mission-coloured sky, with the `SessionSpec.EnhancedPasses` doors; the off direction writes a fresh
-object's defaults back. `Switch` is the whole live mode switch the launcher and the
-`graphics-live-switch` suite run: shaders, sun, Environment, the clutter fade, the display quality
-(`ReapplyDisplayQuality`), then `GameSession.ApplyGraphicsMode`, which opens with `FollowAlphaDepth`
-(textures, then atlases, then painted skins). `ApplyViewDistance` is the live View Distance. Every magnitude is TUNE; `Utils/SunShadow.cs` carries the sun into the cockpit pass.
+object's defaults back. `Switch` is the whole live mode switch the launcher and the suites run:
+shaders, sun, Environment, clutter fade, display quality, then `GameSession.ApplyGraphicsMode`, which
+opens with `FollowAlphaDepth` (textures, atlases, painted skins). Its log line carries
+`Utils/SwitchProfile.cs`'s steps; `HasSwitched` lets a later load warm the other mode's shaders.
+`ApplyViewDistance` is the live View Distance; `Utils/SunShadow.cs` carries the sun to the cockpit.
 
 ## src/Session/Launch/TuningWarmup.cs
 The startup pass that fills `Config`'s key registry before `Config.ReportOrphans` and

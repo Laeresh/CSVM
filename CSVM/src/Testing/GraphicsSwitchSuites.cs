@@ -24,6 +24,9 @@ internal static class GraphicsSwitchSuites
     // on a commit, so a reading taken before one would show the pool the switch left.
     private const int Steps = 3;
 
+    // Every shader text a reading met, by its census key, for the mismatch artifact.
+    private static readonly Dictionary<string, string> TextByKey = new(StringComparer.Ordinal);
+
     [Suite("graphics-live-switch",
         "a whole flight session switched Enhanced to Original to Enhanced reads as a fresh Enhanced "
         + "session, and its Original half as a fresh Original one: the enhanced-only layers (scorch "
@@ -76,6 +79,7 @@ internal static class GraphicsSwitchSuites
 
                 Same(ctx, "Original after a switch from Enhanced", freshOriginal, switchedOriginal);
                 Same(ctx, "Enhanced after a round trip through Original", freshEnhanced, roundTrip);
+                WriteMismatchedTexts(ctx, freshOriginal, switchedOriginal, freshEnhanced, roundTrip);
                 ctx.Check(freshEnhanced.Layers != freshOriginal.Layers && freshEnhanced.Shaders != freshOriginal.Shaders,
                     $"ABLE-TO-FAIL CONTROL: the two modes' fresh readings differ ({freshEnhanced.Layers} against {freshOriginal.Layers})");
                 ctx.Check(freshOriginal.AlphaLevels is > 0 and <= 16 && freshEnhanced.AlphaLevels > 16,
@@ -165,6 +169,72 @@ internal static class GraphicsSwitchSuites
         {
             Restore(wasEnhanced);
         }
+    }
+
+    [Suite("graphics-shader-twins",
+        "after the load warm-up has compiled the other mode's twin of every cache shader, a live "
+        + "switch to Original and back makes no new shader and rewrites no shader's text, so Godot "
+        + "compiles nothing new: it only moves each material onto the twin it already compiled, "
+        + "and no drawn material is left on the other mode's twin, the cockpit gauges' own copies "
+        + "and the fade twins included")]
+    internal static void ShaderTwins(TestContext ctx)
+    {
+        RequireData(ctx);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        bool wasDrawn = Mech3.SceneBuilder.EnhancedDrawn;
+        var rig = Open(ctx, enhanced: true);
+        try
+        {
+            if (!rig.Built)
+            {
+                ctx.Check(false, $"the Enhanced session builds");
+                return;
+            }
+
+            // What the launcher sets on the first Enhanced frame, which a suite never draws.
+            Mech3.SceneBuilder.EnhancedDrawn = true;
+            int warmed = Mech3.SceneBuilder.WarmOtherMode();
+            ctx.Check(Mech3.SceneBuilder.OtherModeWarm,
+                $"the warm-up leaves every cache shader with its Original twin ({warmed} made now)");
+            int made = Mech3.SceneBuilder.TwinsMade;
+            int rewrites = Mech3.SceneBuilder.TextRewrites;
+            Switch(rig, false);
+            int staleOriginal = StaleMaterials(rig);
+            Switch(rig, true);
+            int staleEnhanced = StaleMaterials(rig);
+            ctx.Check(Mech3.SceneBuilder.TwinsMade == made,
+                $"the two switches make no new shader ({Mech3.SceneBuilder.TwinsMade - made} made)");
+            ctx.Check(Mech3.SceneBuilder.TextRewrites == rewrites,
+                $"and rewrite no shader's text ({Mech3.SceneBuilder.TextRewrites - rewrites} rewritten)");
+            ctx.Check(staleOriginal == 0 && staleEnhanced == 0,
+                $"no drawn material stays on the other mode's twin ({staleOriginal} under Original, {staleEnhanced} under Enhanced)");
+        }
+        finally
+        {
+            rig.Close();
+            Mech3.SceneBuilder.EnhancedDrawn = wasDrawn;
+            Restore(wasEnhanced);
+        }
+    }
+
+    // Drawn materials whose cache shader is not the standing mode's twin.
+    private static int StaleMaterials(Rig rig)
+    {
+        int stale = 0;
+        Walk(rig.Session, node =>
+        {
+            if (node is not GeometryInstance3D geometry)
+                return;
+            foreach (var material in Materials(geometry))
+            {
+                if (Mech3.SceneBuilder.FamilyOf(material.Shader) != null
+                    && !ReferenceEquals(Mech3.SceneBuilder.ForMode(material.Shader), material.Shader))
+                {
+                    stale++;
+                }
+            }
+        });
+        return stale;
     }
 
     // The process back on the mode and fade the suite found, its shaders' text included.
@@ -297,7 +367,9 @@ internal static class GraphicsSwitchSuites
             {
                 foreach (var material in Materials(geometry))
                 {
-                    Count(shaders, material.Shader.Code.GetHashCode().ToString("x8", CultureInfo.InvariantCulture));
+                    string key = material.Shader.Code.GetHashCode().ToString("x8", CultureInfo.InvariantCulture) + ":" + (Mech3.SceneBuilder.FamilyOf(material.Shader) ?? geometry.GetType().Name);
+                    Count(shaders, key);
+                    TextByKey[key] = material.Shader.Code;
                     if (material.Shader.Code.Contains("csky_cloud_puffs", StringComparison.Ordinal))
                         Count(puffs, PuffFlags(material));
                 }
@@ -434,6 +506,25 @@ internal static class GraphicsSwitchSuites
         visit(node);
         for (int i = 0, count = node.GetChildCount(); i < count; i++)
             Walk(node.GetChild(i), visit);
+    }
+
+    // The text of every shader one reading of a pair holds and the other does not. A failure then
+    // shows what differs rather than two hashes.
+    private static void WriteMismatchedTexts(TestContext ctx, params Reading[] pairs)
+    {
+        var text = new StringBuilder();
+        for (int i = 0; i + 1 < pairs.Length; i += 2)
+        {
+            var a = pairs[i].Shaders.Split(' ').ToHashSet(StringComparer.Ordinal);
+            var b = pairs[i + 1].Shaders.Split(' ').ToHashSet(StringComparer.Ordinal);
+            foreach (var entry in a.Except(b).Concat(b.Except(a)))
+            {
+                string key = entry[..entry.LastIndexOf('x')];
+                text.AppendLine($"==== {entry} ({(a.Contains(entry) ? "fresh" : "switched")})").AppendLine(TextByKey.GetValueOrDefault(key, "?"));
+            }
+        }
+        if (text.Length > 0)
+            ctx.WriteArtifact("test-graphics-live-switch-shaders.txt", text.ToString());
     }
 
     // Field by field, so a failure names the half that moved rather than one long line.

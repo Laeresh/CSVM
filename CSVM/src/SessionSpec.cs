@@ -844,6 +844,16 @@ public sealed record SessionSpec
     /// readout (<c>F14</c>) at launch, the scripted twin for a deterministic screenshot of it.
     /// Null = flag absent (off); no value = compact.</summary>
     public string? DebugFps { get; private set; }
+
+    /// <summary><c>--debug-shaders</c>: the shader census, the frames after a live switch and every
+    /// frame over 33 ms with the pipelines it compiled (<c>Tooling/ShaderDiagnostics.cs</c>).</summary>
+    public bool DebugShaders { get; private set; }
+
+    /// <summary><c>--shader-warmup=auto|load|off</c>: whether a load compiles the other graphics
+    /// mode's shaders, so a live switch only swaps them. The default <c>auto</c> does so once this
+    /// process has switched.</summary>
+    public string ShaderWarmup { get; private set; } = "auto";
+
     /// <summary><b>Resolved.</b> Null outside <c>--freecam</c>/<c>--anim-lab</c>: the shared
     /// selection lives in the two world-observation modes, the viewer's LMB is already the orbit
     /// drag, and flight has no cursor.</summary>
@@ -1176,6 +1186,19 @@ public sealed record SessionSpec
             else if (arg == "--debug-names") { s.DebugNames ??= "meshes"; }
             else if (arg.StartsWith("--debug-names=")) { s.DebugNames = arg["--debug-names=".Length..]; }
             else if (arg == "--debug-fps") { s.DebugFps ??= "compact"; }
+            else if (arg == "--debug-shaders") { s.DebugShaders = true; }
+            else if (arg.StartsWith("--shader-warmup="))
+            {
+                string want = arg["--shader-warmup=".Length..];
+                if (want is "auto" or "load" or "off")
+                {
+                    s.ShaderWarmup = want;
+                }
+                else
+                {
+                    notes.Add(new Note("world", $"--shader-warmup={want} is not one of auto/load/off, keeping {s.ShaderWarmup}"));
+                }
+            }
             else if (arg.StartsWith("--debug-fps=")) { s.DebugFps = arg["--debug-fps=".Length..]; }
             else if (arg == "--debug-select") { s.DebugSelect ??= ""; }
             else if (arg.StartsWith("--debug-select=")) { s.DebugSelect = arg["--debug-select=".Length..]; }

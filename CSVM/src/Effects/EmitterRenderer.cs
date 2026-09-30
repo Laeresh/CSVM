@@ -329,8 +329,8 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
     {
         Mech3.SceneBuilder.EnsureCurrentText();
         if (!ShaderVariants.TryGetValue((mix, soft), out var shader))
-            ShaderVariants[(mix, soft)] = shader = Mech3.SceneBuilder.RegenerableShader(() => VariantCode(mix, soft, GraphicsMode.Enhanced));
-        return shader;
+            ShaderVariants[(mix, soft)] = shader = Mech3.SceneBuilder.RegenerableShader(() => VariantCode(mix, soft, GraphicsMode.Enhanced), "emitter");
+        return Mech3.SceneBuilder.ForMode(shader);
     }
 
     // One variant's text under a graphics mode, a pure function of its three arguments.
@@ -384,10 +384,10 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         public static Layer Build(MultiMeshEmitterRenderer owner, Node3D parent, int capacity,
             float cullMargin, bool additive)
         {
-            var mat = new ShaderMaterial
+            var mat = Mech3.SceneBuilder.Track(new ShaderMaterial
             {
                 Shader = ShaderFor(!additive, owner._softParticles),
-            };
+            });
             mat.SetShaderParameter("atlas", owner._atlas);
             mat.SetShaderParameter("frame_count", (float)owner._frameCount);
             var layer = new Layer();

@@ -862,6 +862,7 @@ public partial class GameSession : Node3D
         try
         {
             sw = Stopwatch.StartNew();
+            SceneBuilder.ReleaseUnusedMaterials();
             LoadArchives(state);
             LoadProgress.Report(LoadStep.Archives);
             // The SOUND archive is scoped to this build everywhere but the lab, whose node owns its
@@ -955,6 +956,10 @@ public partial class GameSession : Node3D
         }
 
         FinishFraming(state);
+        // By default only once this process has switched. The warm-up costs what one switch does,
+        // and a player who never switches would pay it at every load.
+        if (_spec.ShaderWarmup == "load" || (_spec.ShaderWarmup == "auto" && EnhancedLook.HasSwitched))
+            WarmShadersNow();
         _simulation = new SessionSimulation(new SessionSimulationRuntime(this));
         _startup?.EndBuild();
         InSession = true;
@@ -972,12 +977,19 @@ public partial class GameSession : Node3D
         bool enhanced = GraphicsMode.Enhanced;
         // First: every step below that builds anything bakes from the archive's textures.
         EnhancedLook.FollowAlphaDepth(_sessionTextures);
+        SwitchProfile.Mark("alpha");
         _worldScene?.FollowGraphicsMode();
+        SwitchProfile.Mark("world");
         _clutter?.Recut();
+        SwitchProfile.Mark("clutter");
         _cloudField?.FollowGraphicsMode();
+        SwitchProfile.Mark("cloudfield");
         _worldLights?.FollowGraphicsMode();
+        SwitchProfile.Mark("lights");
         _worldEffectsFactory?.FollowGraphicsMode();
+        SwitchProfile.Mark("effects");
         FollowCloudBanks();
+        SwitchProfile.Mark("banks");
         foreach (var rig in _rigs)
         {
             if (rig.Controller?.CockpitPass?.Env is { } env)
@@ -986,8 +998,11 @@ public partial class GameSession : Node3D
                 Effects.FogVolumeBanks.ApplyFroxelFog(env, _cloudBanks != null);
             }
         }
+        SwitchProfile.Mark("cockpit");
         FollowWindStreaks();
+        SwitchProfile.Mark("streaks");
         FollowSun();
+        SwitchProfile.Mark("zone");
         if (enhanced)
         {
             Drop(_groundShadows);
@@ -1010,6 +1025,7 @@ public partial class GameSession : Node3D
                 _scorches = null;
             }
         }
+        SwitchProfile.Mark("shadows");
     }
 
     /// <summary>A live View Distance change under Enhanced cuts the clutter cells again. Their size
@@ -1545,6 +1561,15 @@ public partial class GameSession : Node3D
         _gatedScan.AddRange(AllAircraft());
         _zeppelins?.CollectHosts(_gatedScan);
         return _gatedScan;
+    }
+
+    // The whole warm-up at once, while the load screen is still up (--shader-warmup=load).
+    private void WarmShadersNow()
+    {
+        long start = Stopwatch.GetTimestamp();
+        int twins = SceneBuilder.WarmOtherMode();
+        int cards = _cloudField?.WarmOtherMode() ?? 0;
+        Log.Info("world", $"shader warm-up: other mode's twins={twins} cloud_cards={cards} at load ms={Stopwatch.GetElapsedTime(start).TotalMilliseconds:0.0}");
     }
 
     // Loads the session's core archives (gamez, textures, sounds, sound defs/groups) and routes the
