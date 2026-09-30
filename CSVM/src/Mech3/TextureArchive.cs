@@ -1060,7 +1060,7 @@ public sealed class TextureArchive : IDisposable
         {
             if (Build(baseName, out _, out _) is { } img)
             {
-                tex.Update(img);
+                TextureUpload.Replace(tex, img);
                 bytes += img.GetDataSize();
             }
         }

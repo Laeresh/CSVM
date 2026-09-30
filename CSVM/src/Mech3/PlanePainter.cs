@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -292,7 +293,7 @@ public sealed class PlanePainter
             }
             if (img != null)
             {
-                made.Update(img);
+                TextureUpload.Replace(made, img);
                 repainted++;
             }
         }

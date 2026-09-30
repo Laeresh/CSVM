@@ -280,7 +280,7 @@ public sealed partial class Puffer : Node3D
                 continue;
             if (BakeImage(names, textures, sequenced).Atlas is { } image)
             {
-                entry.Atlas.Update(image);
+                TextureUpload.Replace(entry.Atlas, image);
                 baked++;
             }
         }
