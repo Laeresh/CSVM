@@ -63,11 +63,14 @@ public sealed record OptionsApplyExit(
     string? ViewDistance) : MenuExit;
 
 /// <summary>Dogfight's match rules as a screen set them. The kill target ends a match early and the
-/// match clock runs in MINUTES. A 0 on either disables that limit. The lives are the deaths a pilot
+/// match clock runs in MINUTES, a 0 on either disabling that limit. The lives are the deaths a pilot
 /// has before it stays down, 0 for no limit. Without auto-respawn a downed pilot waits for its own
-/// press. The consumer applies them under the command line, so an
-/// explicit flag still wins.</summary>
-public sealed record VersusRules(int KillTarget, int TimeLimitMinutes, int Lives = 0, bool AutoRespawn = true);
+/// press. The two team modes are <paramref name="CaptureTheFlag"/>, with <paramref name="FlagHomeToCapture"/>
+/// its own-flag-home rule, and <paramref name="ZeppelinVsZeppelin"/>. The consumer applies them under the
+/// command line, so an explicit flag still wins.
+/// </summary>
+public sealed record VersusRules(int KillTarget, int TimeLimitMinutes, int Lives = 0, bool AutoRespawn = true,
+    bool CaptureTheFlag = false, bool FlagHomeToCapture = false, bool ZeppelinVsZeppelin = false);
 
 /// <summary>The open wire a network launch carries: the transport the door opened and whether
 /// this machine owns the match. The consumer takes it over whole, stepping and closing it from

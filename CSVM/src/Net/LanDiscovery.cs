@@ -32,8 +32,10 @@ public readonly record struct LanGame(
 /// </summary>
 public static class LanDiscovery
 {
-    /// <summary>The port every responder listens on. The game port plus one, unregistered.</summary>
-    public const int Port = 47501;
+    /// <summary>The shipped port a responder listens on, the shipped game port plus one and
+    /// unregistered. A socket opens on <see cref="NetPorts.Lan"/>, which a test process moves.
+    /// </summary>
+    public const int Port = NetPorts.ShippedGame + NetPorts.LanOffset;
 
     /// <summary>The wire version this build speaks. A datagram of any other is not answered.
     /// ⚠ Do not raise it for a new build version. A build of another minor is listed and marked

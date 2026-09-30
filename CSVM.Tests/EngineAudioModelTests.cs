@@ -522,6 +522,26 @@ public class EngineAudioModelTests
         Assert.False(EngineAudioCurves.SlotIsPitched(null, "snd_normal"));
     }
 
+    /// <summary>The cockpit pitch option reaches the cockpit loop and nothing else. Off, the
+    /// FREQUENCY flag decides as it does for every slot. On, the cockpit loop is pitched without the
+    /// flag, while the plain loop still answers by its flag and a missing name stays unpitched.</summary>
+    [Fact]
+    public void TheCockpitPitchOptionReachesOnlyTheCockpitLoop()
+    {
+        var defs = new Dictionary<string, SoundDef>
+        {
+            ["snd_normal"] = new SoundDef { Name = "snd_normal", Frequency = true },
+            ["snd_cockpit"] = new SoundDef { Name = "snd_cockpit", Frequency = false },
+        };
+
+        Assert.False(EngineAudioCurves.HealthySlotIsPitched(defs, "snd_cockpit", cockpitLoop: true, pitchCockpitLoop: false));
+        Assert.True(EngineAudioCurves.HealthySlotIsPitched(defs, "snd_cockpit", cockpitLoop: true, pitchCockpitLoop: true));
+        Assert.True(EngineAudioCurves.HealthySlotIsPitched(defs, "snd_normal", cockpitLoop: false, pitchCockpitLoop: false));
+        Assert.True(EngineAudioCurves.HealthySlotIsPitched(defs, "snd_normal", cockpitLoop: false, pitchCockpitLoop: true));
+        Assert.False(EngineAudioCurves.HealthySlotIsPitched(defs, "snd_cockpit", cockpitLoop: false, pitchCockpitLoop: true));
+        Assert.False(EngineAudioCurves.HealthySlotIsPitched(defs, null, cockpitLoop: true, pitchCockpitLoop: true));
+    }
+
     /// <summary>...and two SEPARATELY loaded airframes never share one. Each load is its own
     /// definition, so an unrelated plane's timer must not move when this one's does.</summary>
     [ExtractedDataFact]

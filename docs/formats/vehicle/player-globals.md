@@ -32,6 +32,8 @@ in **metres**, not a trigger range, and the design's named emitter list, ground,
 zeppelins, is the outcome of a rule that never tests vehicle type, not the rule itself.
 `ai_groundblow` scales a *different* law on the AI path, so it is not the player term's magnitude);
 `rogue` (three `[fameThreshold, soundName]` steps warning a player who is shooting allies);
+`voiceover_volume_limiter 0.4` (the level a queued voice line holds every engine slot down to,
+decoded and implemented, see [A voice line ducks every engine](../vehicle.md#a-voice-line-ducks-every-engine));
 `respawn_rad`/`respawn_el` (multiplayer respawn ring); `score_kill`/`_zep`/`_suicide`/
 `_return_flag`/`_enemy_flag` (multiplayer scoring); `min_ai_active_dist` 2000 m, the AI
 activation radius, and the fallback for every roster whose own volume fields are unauthored (all of

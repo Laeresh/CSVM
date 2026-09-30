@@ -67,6 +67,9 @@ public sealed partial class HudMessages : Control
     /// <summary>"No Enemies Left", row 7067, the second of them.</summary>
     public const string AllAloneKey = "MSG_MP_ALL_ALONE";
 
+    /// <summary>"Zeppelin Destroyed", row 7066, end reason 3's second line (<c>0x4997c1</c>).</summary>
+    public const string ZeppelinDestroyedKey = "MSG_MP_ZEP_DESTROYED";
+
     /// <summary>"Destroyed by %1", row 214, a Dogfight kill's second line with the killer's name
     /// (<c>FUN_0059cd70(.., 0x31, 0xd6, ..)</c> at <c>0x498d20</c>).</summary>
     public const string DestroyedByKey = "MSG_DESTROYED_BY_X";
@@ -82,6 +85,21 @@ public sealed partial class HudMessages : Control
 
     /// <summary>"Unknown", row 6007, the name a pilot record starts with and keeps if never named.</summary>
     public const string UnknownKey = "MSG_UNKNOWN";
+
+    /// <summary>"%1's Flag is Floating", row 195, a Capture the Flag carrier's drop with the flag's
+    /// team name (<c>FUN_0049ab50</c>).</summary>
+    public const string FlagFloatingKey = "MSG_TEAM_FLAG_FLOAT";
+
+    /// <summary>"%1 Flag Captured", row 200, a flag picked up (<c>FUN_0049a780</c>).</summary>
+    public const string FlagTakenKey = "MSG_FLAG_CAP";
+
+    /// <summary>"%1 Flag Is At Home Base", row 201, a flag back at its base (<c>FUN_0049a300</c>).
+    /// </summary>
+    public const string FlagHomeKey = "MSG_X_FLAG_HOME";
+
+    /// <summary>"Rearmed!", row 7077, a rearm base's restore (<c>0x49ba99</c>, <c>0x49bbb9</c>).
+    /// </summary>
+    public const string RearmedKey = "MSG_MP_REARMED";
 
     // The placement, from FUN_00458a10: x is 0.5 of the display width (0x006032e0) with the
     // centring flag set (the text object's +0x1044, read at 0x005c7e4f), y is 0.2 of its height
@@ -231,6 +249,11 @@ public sealed partial class HudMessages : Control
     public static void PostLivesLeft(HudMessages stack, Messages? strings, int livesLeft) =>
         stack.Post(LivesLine(strings, livesLeft), Side.Enemy);
 
+    /// <summary>Posts "Rearmed!" into the rearmed pilot's own pane, in the <c>DAT_006eba60</c>
+    /// colour <c>FUN_0049b970</c> passes (<c>0x49ba8d</c>).</summary>
+    public static void PostRearmed(HudMessages stack, Messages? strings) =>
+        stack.Post(Text(strings, RearmedKey), Side.Enemy);
+
     /// <summary>The lines one Dogfight death posts, top line first. That is the victim's name over
     /// the killer's line, or one Self-Destroyed line when nobody killed it. Every machine
     /// composes the same pair, since the names are the pilots' own and not the viewer's.
@@ -260,11 +283,30 @@ public sealed partial class HudMessages : Control
         stack.Post(top, Side.Enemy);
     }
 
+    /// <summary>One Capture the Flag line: <paramref name="key"/>'s row with the flag's team name
+    /// filled in, one of <see cref="FlagFloatingKey"/>, <see cref="FlagTakenKey"/> and
+    /// <see cref="FlagHomeKey"/>.</summary>
+    public static string FlagLine(Messages? strings, string key, string team) =>
+        Messages.Fill(Text(strings, key), team);
+
+    /// <summary>Posts <see cref="FlagLine"/> into one pane's stack in its default colour. The
+    /// original posts every flag line the same way, on every machine (<c>FUN_004587d0</c>).</summary>
+    public static void PostFlagLine(HudMessages stack, Messages? strings, string key, string team) =>
+        stack.Post(FlagLine(strings, key, team), Side.Neutral);
+
     /// <summary>Posts reason 4's ending so "Game Over:" reads above "No Enemies Left", both in the
     /// stack's default colour.</summary>
     public static void PostAllAlone(HudMessages stack, Messages? strings)
     {
         stack.Post(Text(strings, AllAloneKey), Side.Neutral);
+        stack.Post(Text(strings, GameOverKey), Side.Neutral);
+    }
+
+    /// <summary>Posts reason 3's ending, "Game Over:" above "Zeppelin Destroyed", as
+    /// <see cref="PostAllAlone"/> posts reason 4's.</summary>
+    public static void PostHullLost(HudMessages stack, Messages? strings)
+    {
+        stack.Post(Text(strings, ZeppelinDestroyedKey), Side.Neutral);
         stack.Post(Text(strings, GameOverKey), Side.Neutral);
     }
 

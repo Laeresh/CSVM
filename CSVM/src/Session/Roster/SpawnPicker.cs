@@ -47,12 +47,30 @@ public sealed class SpawnPicker : IFlightStarts
     /// multiplayer throttle and speed (docs/formats/net-spawns.md).</summary>
     public bool NetSpawns { get; private set; }
 
+    /// <summary>Each seat's lobby team, 0 for none, set before <see cref="LoadSpawnList"/> by a
+    /// team Dogfight. With any team on it the list is the whole <c>net.zrd</c> table and every
+    /// seat walks its team's block (<see cref="PlanTeams"/>). Null flies the free-for-all block.
+    /// </summary>
+    public IReadOnlyList<int>? SeatTeams { get; set; }
+
+    /// <summary>Each seat's opening entry in a team match's whole table, null otherwise.</summary>
+    public int[]? SeatEntries { get; private set; }
+
+    /// <summary>The table block each seat comes back within in a team match, null otherwise.
+    /// </summary>
+    public (int Start, int Count)[]? SeatBlocks { get; private set; }
+
+    private bool Teamed => SeatTeams != null && System.Linq.Enumerable.Any(SeatTeams, t => t > 0);
+
     /// <summary>The one spawn list the session walks: the mission's <c>ia.json</c> entries for
-    /// <paramref name="scenario"/>, else a Dogfight launch's <c>net.zrd</c> free-for-all block,
-    /// else null, which leaves <see cref="ChooseSpawn"/> on PLAYER_INIT. Sets
-    /// <see cref="NetSpawns"/> for the rest of the session, so call it once per launch.</summary>
+    /// <paramref name="scenario"/>, else a Dogfight launch's <c>net.zrd</c> free-for-all block. With
+    /// neither it is null, which leaves <see cref="ChooseSpawn"/> on PLAYER_INIT. A team match takes the whole
+    /// table. Sets <see cref="NetSpawns"/> for the rest of the session, so call it once per launch.
+    /// </summary>
     public List<SpawnPoint>? LoadSpawnList(string missionZrdrPath, string scenario)
     {
+        SeatEntries = null;
+        SeatBlocks = null;
         NetSpawns = false;
         // The empty stage has no mission, so there is nothing to read: ChooseSpawn takes the
         // --pos/default override placed over the grid origin.
@@ -64,10 +82,24 @@ public sealed class SpawnPicker : IFlightStarts
         // Dogfight on a multiplayer map: an MP mission ships no ia.json, and its own table is
         // what the original opens a deathmatch on. ⚠ Only this mode may read it; every campaign
         // mission ships a placeholder table the original never looks at.
-        if (!_spec.Versus || SpawnPoints.LoadNetFreeForAll(missionZrdrPath) is not { Count: > 0 } net)
+        var table = !_spec.Versus ? null
+            : Teamed ? SpawnPoints.LoadNetTable(missionZrdrPath)
+            : SpawnPoints.LoadNetFreeForAll(missionZrdrPath);
+        if (table is not { Count: > 0 } net)
             return ia;
         NetSpawns = true;
         return net;
+    }
+
+    /// <summary>A team match's opening entries and respawn blocks over the whole table
+    /// <see cref="LoadSpawnList"/> answered, from <paramref name="spawnBase"/>. A no-op outside
+    /// one, which leaves every seat on the plain walk.</summary>
+    public void PlanTeams(IReadOnlyList<SpawnPoint>? spawns, int spawnBase)
+    {
+        if (!NetSpawns || !Teamed || spawns is not { Count: > 0 })
+            return;
+        (SeatEntries, SeatBlocks) = SpawnPoints.TeamBlocks(spawns.Count, SeatTeams!, spawnBase);
+        Log.Info("flight", $"net.zrd: team match over {spawns.Count} entries, openings {string.Join(",", SeatEntries)}");
     }
 
     /// <summary>The spawn index player 1 starts from: --spawn=N if given, else a random pick per
@@ -165,7 +197,9 @@ public sealed class SpawnPicker : IFlightStarts
 
         if (spawns is { Count: > 0 })
         {
-            int i = (spawnBase + playerIndex) % spawns.Count;
+            int i = SeatEntries is { } entries && playerIndex < entries.Length
+                ? entries[playerIndex]
+                : (spawnBase + playerIndex) % spawns.Count;
             string list = NetSpawns ? "net.zrd" : ScenarioOverride ?? _spec.Scenario;
             return LogSpawn($"{tag}{list} #{i} of {spawns.Count}", spawns[i]);
         }

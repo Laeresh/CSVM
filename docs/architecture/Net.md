@@ -34,7 +34,8 @@ These are the design rules every module below is shaped by, and every multiplaye
   own, its save is never touched, and it flies stock planes, since its own machine simulates the
   airframe it flies. A Dogfight pilot may fly a custom plane when the host's Allow Custom Planes and
   outlaw list admit it, and a co-op host's own custom planes fly; every machine builds a custom plane
-  from its owner's `NetPlaneBuild`. Capture the flag and Zeppelin vs are not built.
+  from its owner's `NetPlaneBuild`. The lobby forms free-form named teams (`NetTeams.cs`) and each
+  seat carries its team into a team Deathmatch, Capture the Flag or Zeppelin vs Zeppelin.
 - **Listen server.** One player hosts; there is no dedicated headless host.
 - **The player ceiling is 16.** `NetSeats.MaxPlayers`, with every seat-indexed table built
   `SeatCapacity` wide. The original has no coded cap (its pilot list is never counted against a
@@ -62,10 +63,11 @@ These are the design rules every module below is shaped by, and every multiplaye
   network and reads Close Network while open; the NETWORK OPEN band shows the address and guest
   count, and a chip per guest its Ready mark. Close Network, or leaving the cabin for the main menu,
   returns every guest to the Connection screen with "Host closed the game". The game is advertised
-  as `<profile>'s campaign`, with no password. A guest joins from the Multiplayer Connection screen,
-  by LAN search into the games list or by Internet IP address. The Connection screen's Host opens
-  the Multiplayer Lobby, where Dogfight is the one live mode; co-op has no lobby. The Built-in
-  menu, off by default, keeps its own network boards.
+  under the name Game Information gives it, with an optional password the host checks before a
+  guest is admitted, and the host can boot a guest from the lobby or the cabin. A guest joins from
+  the Multiplayer Connection screen, by LAN search into the games list or by Internet IP address.
+  The Connection screen's Host opens the Multiplayer Lobby, where Dogfight is the one live mode;
+  co-op has no lobby. The Built-in menu, off by default, keeps its own network boards.
 - **A pause halts nothing.** In a network session the pause sheet is an overlay (`PauseState`):
   the world, the AI, the director, the net ticks and the pauser's own aeroplane run on, the
   aeroplane flying trimmed on a centred stick with its commands swallowed until the sheet closes.
@@ -81,9 +83,9 @@ The seam itself, and the two types it is spoken in. `NetReliability` is the thre
 payload can be sent under, `INetTransportListener` is what a transport tells its owner (a peer
 joined, a peer left, a payload landed), and `INetTransport` is the carrier: the peer roster,
 `Send` of a byte span with its class and channel, `Bind` of the one listener, `Disconnect`, and
-`Step`, which is the only place a payload is ever delivered. A session holds the interface and
-constructs neither implementation itself. Read `LoopbackTransport.cs` for the carrier the suites
-use.
+`Step`, which is the only place a payload is ever delivered. `INetPeerAddress` is the optional
+address a carrier names a peer by, the key a boot bans. A session holds the interface and constructs
+neither implementation itself. Read `LoopbackTransport.cs` for the carrier the suites use.
 
 ## src/Net/LoopbackConditions.cs
 One direction's wire conditions as a value: a latency, a symmetric jitter half-width about it, and
@@ -136,6 +138,15 @@ or `--net-join` names it: a port follows a closing bracket or a lone colon, so a
 is all host, and a missing or out-of-range port takes the fallback. `ToString` writes it back with
 an IPv6 host bracketed. The menu door's `JoinTarget` and `SessionSpec.ParseJoin` both parse through
 it; the carriers' `Join` still takes the host and the port apart.
+
+## src/Net/NetPorts.cs
+The ports this process opens by default. `Game` is where a menu door's port row starts and what a
+bare `--net-host` or `--net-join` takes; `Lan` is where a LAN responder listens and a search asks.
+Both stand at the shipped pair (`ShippedGame`, one above it for LAN) until the launcher calls `Use`
+with `--net-port-base`, which `RunTests.ps1` passes each engine shard. `Block` is the span a base
+reserves, which `Testing/SuitePorts.cs` divides among the suites that open sockets. The shipped
+constants stay where a port every build fills in is named: `NetPlayFeature.DefaultPort` for a bare
+address and `LanDiscovery.Port`.
 
 ## src/Net/UpnpPortMap.cs
 A best-effort port mapping through Godot's UPnP client, so a host behind a router is reachable
@@ -213,14 +224,14 @@ so a renewal in flight cannot put a mapping back. The door, `UI/Menu/NetPlayFeat
 a host opens and closes it on the way out. Read `RouterAccessTests.cs`.
 
 ## src/Net/NetLobby.cs
-A carrier's first listener and itself the `INetTransport` the session later binds, since a carrier
-binds only once. A host's `Advertise` sends a `SessionAdvertMessage` to every peer on connect and on
-each change; a guest keeps the latest in `Advert` and the host's closing word in `Closed`. Co-op
-board messages stay here too: a host keeps each guest's latest `CoopPick` and `PickBuilds`, a guest
-the latest flow, `SeatFits`, `SeatBuilds`, `PlaneRules`, `Wingman` and `Film`. Others are held (up to `HeldPayloads`) until a session binds, then replayed
-behind the peer announcement. ⚠ A new round seen while bound marks `FlightOver` until the next bind,
-so the opener survives both unbinds a restart makes. A peer whose build version does not play goes
-on `Clashing` and off every peer list. Read `NetLobbyTests.cs`.
+A carrier's first listener and itself the `INetTransport` the session later binds. A host's
+`Advertise` reaches every peer on connect and on change; a guest keeps `Advert` and `Closed`. Lobby
+messages stay here (a host's `Picks`, `PickBuilds` and team actions, a guest's flow, fits, builds,
+rules, teams, wingman and film); others are held up to `HeldPayloads` until a session binds. ⚠ A new round seen while bound
+marks `FlightOver` until the next bind, so the opener survives both unbinds a restart makes. It is
+the host's admission: a clashing build, a peer `AwaitingPassword`, and one `TurnedAway` (a banned
+address after `Boot`, a wrong password) stand off every peer list. Read `NetLobbyTests.cs` and
+`NetLobbyAdmissionTests.cs`.
 
 ## src/Net/NetBuildVersion.cs
 MAJOR.MINOR of the build's SemVer string, which two peers compare before they play: builds a patch
@@ -238,7 +249,7 @@ than it was sent and cannot amplify a forged-source flood. Layout:
 [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Net/LanResponder.cs
-An open door's answer to a search, over a socket bound on `LanDiscovery.Port` only while the door
+An open door's answer to a search, over a socket bound on `NetPorts.Lan` only while the door
 hosts. `Poll` answers each well-formed query with the door's advert and game port, to the address
 the query came from, and reads at most `QueriesPerPoll` a frame so a flood costs bounded work.
 Anything that is not a whole query of this version is read and dropped unanswered.
@@ -272,7 +283,7 @@ since a wildcard bind is what raises a firewall dialog.
 ## src/Net/NetMessages.cs
 The vocabulary: `NetMessageType` (one word per message), the death, spawn and match-end enums
 taken from the original's own values, `NetDirectorEvent` (the director message's codes and id
-layouts), `NetWorldEvent` (the world event's codes), `NetPositionalStart` (the positional start's kinds), `NetSessionKind`, and the message structs, the host's spawn grant, a seat's ask, the host's death notice, the clock ping and the lobby's `SessionAdvertMessage` among them. Each is a value type implementing `INetMessage<TSelf>`,
+layouts), `NetWorldEvent` (the world event's codes), `NetPositionalStart` (the positional start's kinds), `NetSessionKind`, and the message structs, the host's spawn grant, a seat's ask, the host's death notice, the clock ping, a typed line in flight (`FlightChatMessage`) and the lobby's `SessionAdvertMessage` among them. Each is a value type implementing `INetMessage<TSelf>`,
 which carries its type word and its `INetTransport.cs` reliability class as static abstracts, so
 a sender reads the class off the type without constructing anything. `NetMessage` holds what they
 share: the four-byte header, the no-seat and no-spawn-entry markers, the aircraft-state width
@@ -299,12 +310,23 @@ seat. Before the opener `CoopSeatFitMessage` gives a seat's fit and `CoopWingman
 wingman's; `CoopFilmMessage` names a film. [Layout](../org/multiplayer-messages.md).
 
 ## src/Net/NetDogfightMessages.cs
-The Multiplayer Lobby's three messages, all reliable and all kept in `NetLobby` rather than a
-session. `DogfightOptionsMessage` is the host's Mission Options under the round they belong to,
-`DogfightRosterMessage` is the whole player list with the reading guest's own row marked, and
-`LobbyChatMessage` is one typed line under its speaker's name, which the host relays. A guest's
-plane and Ready ride `CoopPickMessage`. Layout:
-[../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+The Multiplayer Lobby's five messages, all reliable and kept in `NetLobby` rather than a session.
+`DogfightOptionsMessage` is the host's Mission Options under their round, `DogfightRosterMessage`
+the whole player list with each row's team and the reading guest's own row marked, and
+`LobbyChatMessage` one typed line, which the host relays. `LobbyTeamActionMessage` is a guest's
+team action to its host and `LobbyTeamsMessage` the host's team names. A guest's plane and Ready
+ride `CoopPickMessage`. Capture the Flag's two, in the session: `FlagRequestMessage`, a pilot's ask
+of its host, and `FlagTableMessage`, the host's flags. Zeppelin vs Zeppelin's placed return is
+`NetMessages.cs`'s `SpawnAtMessage`. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+
+## src/Net/NetTeams.cs
+The team core every Dogfight team mode shares, engine-free: `NetTeamBook`, a host's free-form named
+teams, each with a number minted lowest-free from 1, a captain and its members. `Create`, `Join`,
+`Leave`, `Disband` and `Keep` (members no longer seated) return the `NetTeamEvent`s a lobby posts as
+notices; a captain's leave or drop disbands its team. `Check` is the launch refusal every team mode
+asks (`TeamLaunchRefusal`): Restrict Number of Teams' bounds, two players and two teams, nobody
+teamless, and sizes within one, splitscreen seats weighed as players. `NetTeamAction` is the
+original's `0x1a` subtypes. Decode: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Net/NetPlaneMessages.cs
 Custom planes on the wire. `NetPlaneBuild` is one plane's airframe, engine, armour, hardpoints, guns
@@ -369,7 +391,7 @@ that carry it are the message vocabulary's.
 ## src/Net/NetSeat.cs
 One pilot's place in a match, shaped like the record the original allocates per player: the peer it
 is addressed by, its team, whether this machine flies it, its callsign, its airframe and paint, its
-seat index and its signed score. `Color` reads the seat's own entry in `NetSeats`. The seat index is
+pilot voice in the pick's form, its seat index and its signed score. The roster carries the voice to every machine. `Color` reads the seat's own entry in `NetSeats`. The seat index is
 the whole identity: a remote pilot indexes spawns, scores, markers and colours exactly as a
 splitscreen pane does, which is why the session orders its rigs by it. Read
 `docs/architecture/Session.md`'s `GameSession.cs` entry for where a seat becomes an aeroplane
@@ -422,13 +444,13 @@ would be discarded as overtaken. `Count` is the layout's width. A seat past the 
 falls back to `Events`, which costs ordering rather than delivery.
 
 ## src/Net/NetSession.cs
-The one object a session owns to talk to its peers: it holds the transport, implements the
-listener, sends a typed message under the class the type declares, and routes an arrival to the
-handler registered on its type word. The only meaning it knows is the join, a host answering each
+The one object a session owns to talk to its peers: it holds the transport, sends a typed message
+under the class the type declares, and routes an arrival to the handler on its type word. The only meaning it knows is the join, a host answering each
 peer with the handshake (which names the seat) and then the roster; `On` refuses those two types,
 and a guest refuses a join `NetSeats.Validate` would throw on. The star's relay: `SendToSeat`
-addresses a seat through whoever owns it, and a host's `RelayToOthers` and `RelayToSeatOwner`
-forward an arrival's own bytes, never back to its sender. A suite reads the counters (`Sent`,
+addresses a seat through whoever owns it, and a host's `RelayToOthers`, `RelayToSeatOwner` and
+`RelayToPeers` (each machine a predicate admits, once) forward an arrival's own bytes, never back to
+its sender; `FliesOnTeam` answers a team line's addressing. A suite reads the counters (`Sent`,
 `Received`, `Relayed`, `DroppedUnknown`, `Malformed`) and `Instruments`, fed before any handler.
 
 ## src/Net/NetInstruments.cs

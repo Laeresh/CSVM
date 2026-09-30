@@ -11,9 +11,8 @@ namespace CSVM.Mech3;
 ///
 /// Propellers have several representations under <c>dontmove</c> (see <see cref="PropParts"/>).
 /// The default (exterior) build keeps the still <c>staticpropN</c> disc and drops the blur
-/// layers; the <c>spinningProps</c> build (free flight) keeps BOTH rather than choosing one, so a
-/// <c>Flight.Airframe.PropAnimator</c> can spin the blur discs while the startprops/stopprops
-/// choreography cross-fades between them and the static disc at spawn and at engine stop.
+/// layers. The <c>spinningProps</c> build (free flight) keeps BOTH, for
+/// <c>Flight.Airframe.PropAnimator</c> to spin and the spinprops/stopprops pair to switch between.
 /// The <c>nitropropN</c> boost disc is built hidden in a flight build, for the nitro_boost def.
 /// </summary>
 public sealed class PlaneBuilder

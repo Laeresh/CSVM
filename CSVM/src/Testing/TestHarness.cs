@@ -523,7 +523,8 @@ public static class TestHarness
         json.AppendLine($"  \"selector\": {Quote(selector)},");
         json.AppendLine($"  \"shard\": {{\"index\": {plan.Index}, \"count\": {plan.Count}, "
                         + $"\"selectedTotal\": {plan.SelectedTotal}, \"weights\": {Quote(plan.WeightsSource)}, "
-                        + $"\"unweighted\": [{string.Join(", ", plan.Unweighted.Select(Quote))}]}},");
+                        + $"\"unweighted\": [{string.Join(", ", plan.Unweighted.Select(Quote))}], "
+                        + $"\"netPortBase\": {CSVM.Net.NetPorts.Base.ToString(CultureInfo.InvariantCulture)}}},");
         json.AppendLine($"  \"chapter\": {Quote(ctx.Chapter)},");
         json.AppendLine($"  \"mission\": {Quote(ctx.Mission)},");
         json.AppendLine($"  \"dataRoot\": {Quote(ctx.DataRoot)},");

@@ -273,6 +273,8 @@ stored for the `wep_%02d` path, while the wingman's go to `FUN_00444300`, which 
 `wep_%2d`. Ids `0` to `4` resolve to weapon numbers 5 to 9, which that format renders with a
 leading space, and the catalog lookup is an exact name match, so those five ordnance types would
 find nothing on the wingman's pylons. The original cannot be run here to see what that looks like.
+What the rest of that rebuild gives the wingman, and what CSVM binds instead, is in
+[`../org/aiPilot/aiWeapons.md`](../org/aiPilot/aiWeapons.md#the-wingmans-fit).
 
 ### The mission-result array
 

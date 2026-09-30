@@ -55,6 +55,22 @@ public static class MissionMap
         }
     }
 
+    /// <summary>The reveal's cycling element, found by its frame list rather than by its authored
+    /// id, or null for a reveal with none. Only a load screen's script authors one, the propeller
+    /// (docs/org/loading-screen.md).</summary>
+    public static BriefingElement? Cycle(BriefingReveal? reveal)
+    {
+        foreach (var element in reveal?.Elements ?? Array.Empty<BriefingElement>())
+        {
+            if (element.Frames.Count > 0)
+            {
+                return element;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>The connector lines a reveal has drawn, at most one per mission on the shipped
     /// data.</summary>
     public static IReadOnlyList<BoardStroke> Strokes(BriefingReveal? reveal)

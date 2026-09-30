@@ -9,28 +9,32 @@ using Godot;
 namespace CSVM.Flight.Audio;
 
 /// <summary>
-/// Own-plane sound, all from the player's own game data: the plane's engine loop (per-plane WAV via
-/// vehicle.json 'engine_sound', throttle-driven pitch and volume, cut on the damage edge and then
-/// swapped for 'damaged_engine_sound' once the re-arm timer fires (<see cref="EngineSlotPhase"/>), and for 'cockpit_engine_sound' while the pilot's SELECTED view is
-/// Cockpit or Nose, <see cref="EngineAudioCurves.EngineDefFor"/> is the one precedence rule both
-/// swaps share), the overspeed whine ('prop_sound', which no shipped def names), the
-/// airframe rattle (player.json 'rattle', a gate at full level past fd_speed), plus the one-shots
-/// (snd_propstart/snd_propstop). Non-positional players: these are what the pilot hears, and
-/// <see cref="Ai.AiEngineAudio"/> is the positional twin every other aircraft carries (own-ship only,
-/// an AI rig has no selected view, so it never reads 'cockpit_engine_sound').
+/// Own-plane sound from the player's own game data, non-positional because it is what the pilot
+/// hears. The engine loop is vehicle.json 'engine_sound', with throttle-driven pitch and volume.
+/// Two swaps replace it (<see cref="EngineSlotPhase"/>): the damaged loop after the re-arm timer,
+/// and the cockpit loop while the SELECTED view is Cockpit or Nose.
+/// Both swaps share one precedence rule, <see cref="EngineAudioCurves.EngineDefFor"/>.
+/// Beside it run the overspeed whine ('prop_sound', named by no shipped def), the rattle
+/// (player.json 'rattle') and the snd_propstop and crash one-shots.
+/// The positional twin every other aircraft carries is <see cref="Ai.AiEngineAudio"/>, which has
+/// no cockpit loop, since an AI rig has no selected view.
 /// </summary>
 public partial class FlightAudio : Node
 {
+    /// <summary>The state of <see cref="CockpitLoopPitched"/> where nothing is saved: pitched, the
+    /// remake-only rule rather than the original's flat loop.</summary>
+    public const bool CockpitLoopPitchedDefault = true;
+
     /// <summary>Overall gain for this plane's own-ship mix. 1 for single player;
     /// splitscreen sets 1/√N so N simultaneous engine stacks don't sum to a wall of noise
     /// (equal-power, so 2P ≈ −3 dB each, 4P ≈ −6 dB). TUNE, pending a real 4P listen.</summary>
     public float MixGain = 1f;
 
+    /// <summary>The session's engine duck, shared with every AI engine; null plays the slots
+    /// unducked, as a lab or a suite without a radio does.</summary>
+    public EngineVoiceDuck? VoiceDuck;
+
     private const float SilenceThreshold = 0.002f;
-    // s for the loop to fade to full behind snd_propstart. Sourced from startprops' authored prop
-    // cross-fade (plane_props.zrd.json, OBJECT_OPACITY_FROM_TO RUN_TIME 2.0 on staticpropN→propN)
-    //, the nearest authored duration. TUNE pending a listen A/B.
-    private const float EngineStartRamp = 2.0f;
 
     private readonly List<(string name, AudioStreamWav stream, float volume)> _crashSounds = new();
 
@@ -52,11 +56,11 @@ public partial class FlightAudio : Node
     private float _groundExpVol = 1f, _waterExpVol = 1f;
     private AudioStreamPlayer? _grazeGround, _grazeWater;
     private float _grazeGroundVol = 1f, _grazeWaterVol = 1f;
-    private AudioStreamPlayer? _propStart, _propStop;
-    private float _propStartVol = 1f, _propStopVol = 1f;
+    private AudioStreamPlayer? _propStop;
+    private float _propStopVol = 1f;
     private AudioStreamPlayer? _dzCamera;
     private float _dzCameraVol = 1f;
-    private float _engineRamp = 1f; // 0→1 gain envelope while the engine catches after a start
+    private float _engineGain;       // the linear gain Update last wrote to the engine slot
 
     // Gun firing: kept references so the looped firing sound + empty-clip cue can be built
     // on demand from any caliber's LOOPED_SOUND_NAME. Own-ship, non-positional (like the engine).
@@ -78,6 +82,12 @@ public partial class FlightAudio : Node
     private AudioStreamPlayer? _warningShot, _bulletHit, _windowHit;
     private System.Random? _cueRng;
 
+    /// <summary>Whether the cockpit loop takes the exterior views' throttle pitch
+    /// (<see cref="EngineAudioCurves.HealthySlotIsPitched"/>). Armed at boot from the saved
+    /// <c>cockpitEnginePitch</c> option, and <see cref="CockpitLoopPitchedDefault"/> where none is
+    /// saved or under <c>--det</c>. Read at every swap onto the healthy loop.</summary>
+    public static bool CockpitLoopPitched { get; set; } = CockpitLoopPitchedDefault;
+
     /// <summary>Which damage phase the engine slot is in (<see cref="EngineSlotPhase"/>), for the
     /// suite that walks the slot through the damage edge, the silence and the damaged loop.</summary>
     internal EngineSlotPhase EnginePhase => _enginePhase;
@@ -85,8 +95,17 @@ public partial class FlightAudio : Node
     /// <summary>Whether the engine slot is sounding, read off the live player.</summary>
     internal bool EngineSounding => _engine is { Playing: true };
 
-    /// <summary>The engine slot's start ramp, 0 to 1; a respawn restarts it and a damaged start does not.</summary>
-    internal float EngineRampLevel => _engineRamp;
+    /// <summary>The linear gain the last <see cref="Update"/> wrote to the engine slot, voice duck
+    /// included, before the silence floor. A suite holds a start against the curve's full level
+    /// with it.</summary>
+    internal float EngineGain => _engineGain;
+
+    /// <summary>The pitch scale the last <see cref="Update"/> wrote to the engine slot.</summary>
+    internal float EnginePitch => _engine?.PitchScale ?? 1f;
+
+    /// <summary>Whether the slot currently holds the <c>cockpit_engine_sound</c> stream.</summary>
+    internal bool EngineHoldsCockpitStream => _engine != null && _cockpitStream != null
+        && ReferenceEquals(_engine.Stream, _cockpitStream);
 
     /// <summary>Whether the slot currently holds the <c>damaged_engine_sound</c> stream.</summary>
     internal bool EngineHoldsDamagedStream => _engine != null && _damagedStream != null
@@ -127,10 +146,9 @@ public partial class FlightAudio : Node
             _whine = MakeLoop(archive, defs, whineName, out _whineVol);
         _rattle = MakeLoop(archive, defs, stats.RattleSound, out _rattleVol);
 
-        // Prop start/stop one-shots (both non-looped, no VOLUME field → base gain 1.0):
-        // snd_propstart plays as the engine ramps in on (re)spawn; snd_propstop is the
-        // wind-down for a future landing/shutdown (see OnEngineStop).
-        _propStart = MakeOneShot(archive, defs, "snd_propstart", out _propStartVol);
+        // The engine-stop one-shot (non-looped, no VOLUME field, so base gain 1.0; see
+        // OnEngineStop). ⚠ No snd_propstart player: the original plays that cue nowhere, and a
+        // spawn's engine is already running (docs/org/ordnanceTypes.md).
         _propStop = MakeOneShot(archive, defs, "snd_propstop", out _propStopVol);
 
         // The stunt run's camera sting, a flat SFX definition no SOUND_GROUPS entry and no world
@@ -235,27 +253,33 @@ public partial class FlightAudio : Node
     public void Update(float dt, in EngineDrive drive, float speedFrac, float healthFrac,
         bool engineDead = false, bool firstPersonView = false)
     {
-        if (_engineRamp < 1f)
-            _engineRamp = Mathf.Min(1f, _engineRamp + dt / EngineStartRamp);
         UpdateEngineSlot(dt, EngineAudioCurves.EngineDamaged(healthFrac, engineDead), firstPersonView);
+        float duck = VoiceDuck?.Gain ?? 1f;
+        float engineCurve = 0f, whineCurve = 0f;
         // Out is the damaged engine's silence, not a stopped loop to restart.
-        if (_engine != null && _enginePhase != EngineSlotPhase.Out)
+        bool live = _engine != null && _enginePhase != EngineSlotPhase.Out;
+        if (live)
         {
-            if (_enginePhase == EngineSlotPhase.Healthy && !_engine.Playing)
-                StartEngine(); // respawn after a crash: propstart + fresh volume ramp-in
+            if (_enginePhase == EngineSlotPhase.Healthy && !_engine!.Playing)
+                StartEngine(); // the respawn after a crash
             var (pitch, volume) = EngineAudioCurves.Engine(
                 _stats, drive, _enginePitchMul, _enginePitchable);
-            _engine.PitchScale = pitch;
+            _engine!.PitchScale = pitch;
             float baseVol = _enginePhase == EngineSlotPhase.Damaged ? _damagedVol
                 : _engineCockpitView ? _cockpitVol : _engineVol;
-            _engine.VolumeDb = Mathf.LinearToDb(Mathf.Max(SilenceThreshold,
-                volume * baseVol * _engineRamp * MixGain));
+            engineCurve = volume;
+            _engineGain = volume * baseVol * MixGain * duck;
+            _engine.VolumeDb = Mathf.LinearToDb(Mathf.Max(SilenceThreshold, _engineGain));
         }
         if (_whine != null)
         {
             var (pitch, volume) = EngineAudioCurves.Whine(_stats, speedFrac);
-            UpdateLoop(_whine, volume * _whineVol * MixGain, pitch);
+            whineCurve = volume;
+            UpdateLoop(_whine, volume * _whineVol * MixGain * duck, pitch);
         }
+        // After both slots are written, as the original steps it. An Out slot does not step.
+        if (live)
+            VoiceDuck?.Step(dt, _stats.VoiceoverVolumeLimiter, engineCurve, whineCurve);
         UpdateLoop(_rattle, EngineAudioCurves.Rattle(_stats, speedFrac) * _rattleVol * MixGain, 1f);
     }
 
@@ -360,19 +384,18 @@ public partial class FlightAudio : Node
         Log.Info("sound", $"stunt capture: snd_dangerzone_camera MixGain={MixGain:0.00} vol={gain:0.000}");
     }
 
-    /// <summary>Engine wind-down: plays snd_propstop and kills the loops. Layers over the crash
-    /// explosion one-shot (<see cref="OnCrash"/>) rather than replacing it, FlightController
-    /// calls both from the same crash/destruction moment, snd_propstop right after the boom, so
-    /// the loops end on the authored cue instead of a cut. The loop-restart hook in
-    /// <see cref="Update"/> is what fires snd_propstart again on the next respawn; nothing here
-    /// needs to prevent that.</summary>
+    /// <summary>Engine wind-down: plays snd_propstop and kills the loops. It layers over the crash
+    /// explosion one-shot (<see cref="OnCrash"/>) rather than replacing it. FlightController calls
+    /// both at the same moment, snd_propstop right after the boom, so the loops end on the cue.
+    /// The loop-restart hook in <see cref="Update"/> starts the loop again on the next
+    /// respawn.</summary>
     public void OnEngineStop()
     {
         ResetEngineSlot();
         _whine?.Stop();
         _rattle?.Stop();
         // D32: fires right after OnCrash's boom, the same crash instant, MixGain for
-        // the same pile-up reason, not the "your prop" respawn cue StartEngine plays below.
+        // the same pile-up reason.
         float gain = _propStopVol * MixGain;
         PlayOneShot(_propStop, gain);
         Log.Info("sound", $"engine stop: snd_propstop MixGain={MixGain:0.00} vol={gain:0.000}");
@@ -477,7 +500,6 @@ public partial class FlightAudio : Node
             _enginePitchable = EngineAudioCurves.SlotIsPitched(_defs, name);
             _engine.Stop();
             _engine.Stream = _damagedStream;
-            _engineRamp = 1f; // the original starts it at full level, with no start cue
             _engine.Play();
             Log.Info("sound", $"engine sound: slot 0 -> {name} pitchMul={_enginePitchMul:0.000} pitched={_enginePitchable}");
         }
@@ -514,7 +536,8 @@ public partial class FlightAudio : Node
         var (name, pitchMul) = EngineAudioCurves.EngineDefFor(
             _stats, false, Rng.Stream(Rng.FlightAudio), _engineCockpitView);
         _enginePitchMul = pitchMul;
-        _enginePitchable = EngineAudioCurves.SlotIsPitched(_defs, name);
+        _enginePitchable = EngineAudioCurves.HealthySlotIsPitched(
+            _defs, name, _engineCockpitView, CockpitLoopPitched);
         _engine!.Stop();
         _engine.Stream = _engineCockpitView ? _cockpitStream : _engineStream;
         if (play)
@@ -524,8 +547,8 @@ public partial class FlightAudio : Node
         Log.Info("sound", $"engine sound: slot 0 -> {name} pitchMul={_enginePitchMul:0.000} pitched={_enginePitchable}");
     }
 
-    // A dead aircraft's slot goes back to healthy and silent, so the respawn's own start cue is
-    // what brings it back rather than a leftover damaged phase.
+    // A dead aircraft's slot goes back to healthy and silent. The respawn's own start then brings
+    // it back, not a leftover damaged phase.
     private void ResetEngineSlot()
     {
         if (_engine == null)
@@ -535,8 +558,9 @@ public partial class FlightAudio : Node
         _engine.Stop();
         _enginePhase = EngineSlotPhase.Healthy;
         _enginePitchMul = 1f;
-        _enginePitchable = EngineAudioCurves.SlotIsPitched(
-            _defs, _engineCockpitView ? _stats.CockpitEngineSound : _stats.EngineSound);
+        _enginePitchable = EngineAudioCurves.HealthySlotIsPitched(_defs,
+            _engineCockpitView ? _stats.CockpitEngineSound : _stats.EngineSound,
+            _engineCockpitView, CockpitLoopPitched);
         _engine.Stream = _engineCockpitView ? _cockpitStream : _engineStream;
     }
 
@@ -570,14 +594,8 @@ public partial class FlightAudio : Node
         return player;
     }
 
-    // Spin the engine loop up from silence behind snd_propstart. Used for the
-    // initial spawn (here) and every respawn (via the loop-restart hook in Update).
-    private void StartEngine()
-    {
-        _engineRamp = 0f;
-        _engine?.Play();
-        // Stays at raw volume, deliberately unlike the crash-boom family, a respawn does not
-        // pile up with other rigs' at one instant.
-        PlayOneShot(_propStart, _propStartVol);
-    }
+    // Starts the loop for the spawn (here) and every respawn (the restart hook in Update). ⚠ No
+    // fade and no start cue: the original's healthy start is FUN_004b1470(0, 1.0), at full level.
+    // That frame's curve volume is written on the same pass (docs/formats/vehicle.md).
+    private void StartEngine() => _engine?.Play();
 }

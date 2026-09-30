@@ -519,6 +519,12 @@ public partial class Launcher : Node3D
         {
             Log.Warn("core", $"deprecated flag={old} use={replacement}");
         }
+        // Before any door is built or suite runs: a door reads the game port as it is constructed.
+        if (_spec.NetPortBase is { } netPortBase)
+        {
+            Net.NetPorts.Use(netPortBase);
+            Log.Info("core", $"net ports: game {Net.NetPorts.Game} lan {Net.NetPorts.Lan} (--net-port-base)");
+        }
         // Ahead of --dump-config, same reason as _hitchMonitor: registers the two
         // hitchSidecar.* keys. The fallback path only matters if Log.Open itself failed.
         string hitchLogPath = Log.SinkPath
@@ -591,6 +597,11 @@ public partial class Launcher : Node3D
         // run drops the key, keeping every golden clear of a bowl; the flag survives it, for a probe.
         CraterGate.Enabled = _spec.Craters
             || (!_spec.Det && OptionsStore.UserOptions().Load().RocketCraters == true);
+        // The cockpit loop's throttle pitch, a remake-only rule. ⚠ No screen offers it; the saved key
+        // is its one door. A --det run drops the key, so a suite states the rule it tests.
+        bool? savedCockpitPitch = _spec.Det ? null : OptionsStore.UserOptions().Load().CockpitEnginePitch;
+        Flight.Audio.FlightAudio.CockpitLoopPitched = savedCockpitPitch ?? Flight.Audio.FlightAudio.CockpitLoopPitchedDefault;
+        Log.Info("sound", $"cockpit engine pitch: pitched={Flight.Audio.FlightAudio.CockpitLoopPitched} via={(savedCockpitPitch.HasValue ? "options.json" : "default")}");
         // Before the first PreferUnzipped call and process-wide, so every later resolution (the
         // chapter paths in StartSession, the menu pages' own lookups) takes the same asset shape.
         SessionPaths.ForceZipped = _spec.ZipAssets;
@@ -982,7 +993,7 @@ public partial class Launcher : Node3D
         // aircraft's placement. A deterministic --screenshot run then replays a hand-framed view.
         if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F11 })
         {
-            _captureDirector.PrintPlacement(_spec, _session?.Rigs ?? NoRigs, _camera, _orbit);
+            _captureDirector.PrintPlacement(_session?.Spec ?? _spec, _session?.Rigs ?? NoRigs, _camera, _orbit);
             return;
         }
         // F10 in the viewer: export the plane on screen, current livery and damage state baked
@@ -1153,7 +1164,23 @@ public partial class Launcher : Node3D
         }
 
         Log.Info("ui", $"cinema {name} playing skip={skip}");
-        cinema.Ended = then;
+
+        // Every film carries its own sound track, so the score must not play under it. The track
+        // waits where it stopped and resumes under the screen the film hands to.
+        if (_music != null)
+        {
+            _music.Paused = true;
+        }
+
+        cinema.Ended = () =>
+        {
+            if (_music != null)
+            {
+                _music.Paused = false;
+            }
+
+            then();
+        };
         _cinemaShown = cinema;
         AddChild(cinema);
     }
@@ -1213,13 +1240,14 @@ public partial class Launcher : Node3D
     }
 
     /// <summary>A co-op host's field and each seat's fit, by seat. Its own seats come first, with
-    /// the fits its launch carried. Then comes every seated guest still on the wire, in the plane,
+    /// the fits its launch carried, the first named by the door's callsign. Then comes every seated guest still on the wire, in the plane,
     /// fit and name its pick carried.</summary>
     internal static (Net.NetSeat[] Roster, Net.CoopFit[] SeatFits) CoopLaunchField(
         UI.Menu.NetPlayFeature door, Net.INetTransport wire, IReadOnlyList<string> planes,
         IReadOnlyList<LoadoutChoice?> fits, StockLoadouts stock)
     {
         var guests = new List<(int Peer, string Plane, string Name)>();
+        var voices = new List<byte>();
         var seatFits = new List<Net.CoopFit>();
         for (int i = 0; i < planes.Count; i++)
         {
@@ -1231,36 +1259,54 @@ public partial class Launcher : Node3D
             if (System.Linq.Enumerable.Contains(wire.Peers, guest.Peer))
             {
                 guests.Add((guest.Peer, UI.Hangar.PlanePickerRoster.AirframeNode(guest.Airframe), guest.Name));
+                voices.Add(UI.Menu.PilotVoices.Wire(guest.Voice));
                 seatFits.Add(guest.Fit);
             }
         }
 
-        return (Net.NetSeats.CoopField(wire.LocalPeer, planes, guests), seatFits.ToArray());
+        string hostName = Net.SeatRosterMessage.Carried(door.PlayerName.Trim()).Trim();
+        var roster = Net.NetSeats.CoopField(wire.LocalPeer, planes, guests, hostName);
+        // The host's first seat is the scripted player and speaks as Nathan Zachary. Its splitscreen
+        // seats have no voice, and each guest speaks in the voice its pick carried.
+        for (int seat = 0; seat < roster.Length; seat++)
+        {
+            int guest = seat - planes.Count;
+            byte voice = seat == 0 ? UI.Menu.PilotVoices.Wire(UI.Menu.PilotVoices.CoopHost)
+                : guest >= 0 && guest < voices.Count ? voices[guest] : (byte)0;
+            roster[seat] = roster[seat] with { Voice = voice };
+        }
+
+        return (roster, seatFits.ToArray());
     }
 
     /// <summary>A network Dogfight host's field and each seat's fit, by seat. Its own seats come
-    /// first, the first named as its advert names the host and any other by player tag. Each guest
+    /// first, the first named by the wire's local callsign and any other by player tag. Each guest
     /// follows in the stock airframe, fit and name its lobby pick carried.
     /// ⚠ A guest with no pick on the wire flies the host's first airframe on the stock fit. That is
-    /// the Built-in Dogfight door's only rule.</summary>
+    /// the Built-in Dogfight door's only rule. Each seat takes its machine's lobby team from
+    /// <paramref name="teamOf"/>, by peer; none leaves every seat on 0.</summary>
     internal static (Net.NetSeat[] Roster, Net.CoopFit[] SeatFits) VersusLaunchField(
         Net.INetTransport wire, IReadOnlyList<string> planes, IReadOnlyList<LoadoutChoice?> fits, StockLoadouts stock,
-        Net.NetPlaneRules? rules = null)
+        Net.NetPlaneRules? rules = null, System.Func<int, byte>? teamOf = null)
     {
+        teamOf ??= _ => 0;
         var seats = new List<Net.NetSeat>(planes.Count + wire.Peers.Count);
         var seatFits = new List<Net.CoopFit>(seats.Capacity);
         var lobby = wire as Net.NetLobby;
         // Cut to the roster's width, so the host's kill lines read what each guest's copy reads.
-        string hostName = Net.SeatRosterMessage.Carried((lobby?.Advertising?.Host ?? "").Trim()).Trim();
+        string hostName = Net.SeatRosterMessage.Carried((lobby?.LocalCallsign ?? "").Trim()).Trim();
         for (int i = 0; i < planes.Count; i++)
         {
             seats.Add(new Net.NetSeat
             {
                 PeerId = wire.LocalPeer,
                 SeatIndex = seats.Count,
+                TeamId = teamOf(wire.LocalPeer),
                 IsLocal = true,
                 Callsign = i == 0 && hostName.Length > 0 ? hostName : UI.Boards.SplitScreen.PlayerTag(i),
                 PlaneNode = planes[i],
+                // Only the first seat has a Player Information answer; a splitscreen seat has none.
+                Voice = i == 0 && lobby != null ? lobby.LocalVoice : (byte)0,
             });
             seatFits.Add(CampaignLoadout.FitOf(i < fits.Count ? fits[i] : null, stock));
         }
@@ -1280,8 +1326,10 @@ public partial class Launcher : Node3D
             {
                 PeerId = peer,
                 SeatIndex = seats.Count,
+                TeamId = teamOf(peer),
                 Callsign = name.Length > 0 ? name : $"guest {peer.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
                 PlaneNode = picked ? UI.Hangar.PlanePickerRoster.AirframeNode(chosen.Airframe) : planes[0],
+                Voice = picked ? chosen.Voice : (byte)0,
             });
             // The guest's own lobby flies its pick through the same rules, so both ends agree.
             seatFits.Add(picked ? rules?.Enforce(chosen.Fit) ?? chosen.Fit : default);
@@ -1368,8 +1416,20 @@ public partial class Launcher : Node3D
     /// </summary>
     internal static LobbyReturn? LobbyLanding(bool lobbyFlight, UI.Menu.DogfightLobby? lobby, Flight.Modes.VersusMatch? match) =>
         lobbyFlight && lobby is { Shown: true } && match is { Completed: true }
-            ? new LobbyReturn(UI.Menu.DogfightLobby.ScoresOf(match.Standings(), lobby.LaunchNames))
+            ? new LobbyReturn(UI.Menu.DogfightLobby.ScoresOf(match, lobby.LaunchNames))
             : null;
+
+    /// <summary>A lobby's team names by team number, the form a session reads them in.</summary>
+    internal static Dictionary<int, string> TeamNames(IReadOnlyList<Net.LobbyTeamName> teams)
+    {
+        var names = new Dictionary<int, string>();
+        foreach (var team in teams)
+        {
+            names[team.Number] = team.Name;
+        }
+
+        return names;
+    }
 
     /// <summary>Whether a lobby Dogfight guest's host left its flight. The door, stepped in
     /// flight, has failed on a close notice or a lost link.</summary>
@@ -1645,19 +1705,33 @@ public partial class Launcher : Node3D
     // (docs/org/loading-screen.md).
     private void ShowLoadScreen(bool campaign, string? missionType, int? missionSeq = null)
     {
-        // The blackboard writes its dialog's own four texts, and takes this heading only when the
-        // mode is ours and no dialog describes it. The chart sheet writes no words of ours at all.
+        // The blackboard writes its dialog's own texts, and takes this heading only when no dialog
+        // describes the flight. The chart sheet writes no words of ours at all.
         string subject = campaign ? string.Empty : LaunchSubject().ToUpperInvariant();
         var sheet = campaign
             ? CampaignLoadSheet(missionSeq ?? _spec.CampaignMissionSeq ?? 0)
             : null;
         _loadLayer = new CanvasLayer { Name = "load_board", Layer = UI.Boards.HudLayers.Board };
+        string? briefing = campaign || missionType != null ? null : LaunchBriefing();
         var board = UI.Screens.LoadBoard.Build(
-            _dataRoot, _zrdrPath, _messagesPath, campaign, subject, missionType, sheet);
+            _dataRoot, _zrdrPath, _messagesPath, campaign, subject, missionType, sheet, briefing);
+        if (briefing != null)
+        {
+            Log.Info("ui", $"load screen: {_spec.Chapter} Dogfight reads {briefing}");
+        }
         board.CaptureDir = _spec.DebugLoad ?? string.Empty;
         _loadLayer.AddChild(board);
         AddChild(_loadLayer);
     }
+
+    // A Dogfight's multiplayer dialog, from its chapter, its type and whether a lobby pilot joined a
+    // team. The session's pause board resolves the same key off its seats. Null for anything else.
+    private string? LaunchBriefing() =>
+        _spec.Versus
+            ? UI.Screens.LoadScreens.MultiplayerKey(
+                _spec.Chapter, _spec.CaptureTheFlag, _spec.ZeppelinVsZeppelin,
+                _lobbyFlight && _netDoor?.Dogfight is { Teamed: true })
+            : null;
 
     // The chart sheet a story position resolves: the loading dialog the mission's own storage
     // address names, that mission's objectives for the parchment, and the profile's memento.
@@ -1897,6 +1971,7 @@ public partial class Launcher : Node3D
             NetCoopWingman = _coopFlight && !_netIsHost && _netDoor is { } coopDoor
                 ? () => coopDoor.CoopWingman
                 : null,
+            NetTeamNames = _lobbyFlight && _netDoor?.Dogfight is { } teamLobby ? TeamNames(teamLobby.Teams) : null,
         });
         AddChild(_session);
         bool built = _session.StartSession();
@@ -2500,7 +2575,8 @@ public partial class Launcher : Node3D
         TakeNetLaunch(launch, planes, fits, customs);
         _spec = SessionSpec.FromMenu(_cli, launch.Chapter, planes, launch.Mode, launch.InstantAction, fits, customs,
             launch.Match?.KillTarget, launch.Match?.TimeLimitMinutes, launch.Match?.Lives, launch.Match?.AutoRespawn,
-            launch.WingmanLoadout);
+            launch.WingmanLoadout, launch.Match?.CaptureTheFlag == true, launch.Match?.FlagHomeToCapture == true,
+            launch.Match?.ZeppelinVsZeppelin == true);
         // Step the master so flying again is a new mission rather than a replay: without this every
         // relaunch re-derives the same spawn, opposition and liveries. ⚠ A pinned run must hold
         // still, which is what keeps the goldens and the perf harnesses reproducible.
@@ -2529,7 +2605,7 @@ public partial class Launcher : Node3D
             }
             else
             {
-                var (address, joinPort) = SessionSpec.ParseJoin(_spec.NetJoin!);
+                var (address, joinPort) = SessionSpec.ParseJoin(_spec.NetJoin!, Net.NetPorts.Game);
                 _netWire = Net.NetCarrier.Join(address, joinPort);
                 _netIsHost = false;
             }
@@ -2639,7 +2715,8 @@ public partial class Launcher : Node3D
         }
 
         var rules = _lobbyFlight ? _netDoor!.Dogfight!.Rules : (Net.NetPlaneRules?)null;
-        (_netRoster, _coopSeatFits) = VersusLaunchField(_netWire, planes, fits, _coopStock ??= StockLoadouts.Load(), rules);
+        System.Func<int, byte>? teamOf = _lobbyFlight ? _netDoor!.Dogfight!.TeamOfPeer : null;
+        (_netRoster, _coopSeatFits) = VersusLaunchField(_netWire, planes, fits, _coopStock ??= StockLoadouts.Load(), rules, teamOf);
         _seatBuilds = SeatBuildsFor(_netRoster, customs, _netWire, rules);
         if (_lobbyFlight)
         {
@@ -3281,6 +3358,11 @@ public sealed class LauncherContext
     /// <summary>The campaign wingman's aeroplane as a co-op guest's host named it, null while the
     /// host named none. Set on a co-op guest only, whose director binds the wingman from it.</summary>
     public System.Func<Net.CoopWingmanMessage?>? NetCoopWingman { get; init; }
+
+    /// <summary>A team Dogfight's team names by lobby team number, as this machine's lobby held
+    /// them at the launch. A host reads its own book and a guest the names its host sent. Null
+    /// names each team by its number.</summary>
+    public IReadOnlyDictionary<int, string>? NetTeamNames { get; init; }
 
     /// <summary>The presentation this session's own boards take, already resolved: the menu's
     /// active one, or what the flags name on a CLI launch. A resolved answer rather than a flag,

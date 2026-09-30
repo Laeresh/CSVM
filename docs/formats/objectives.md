@@ -133,7 +133,7 @@ immediately on its first eligible tick.
 | `DANGER_ZONES_COMPLETED` | `[zone, ...]` | Names danger zones ([missions.md](missions.md)). When the player completes a zone, the zone module walks every **awake** objective and flags matching names (`FUN_00446990` at 0x446a72); the condition is true when `DANGER_ZONES_COMPLETION_COUNT` names are flagged, default all (`FUN_00469ab0`). Zones completed while the objective is dormant or napping do not count for it. |
 | `DANGER_ZONES_COMPLETION_COUNT` | `[k]` | Required count for the zone list. |
 | `DEDG` | `[group, max]`, parser accepts optional 3rd string `generator` | True when the number of live vehicles whose AI group equals `group` (vehicle +0x388, the roster `group` field) is at or below `max` (`FUN_00465910` / `FUN_004658d0`); an optional generator name adds that generator's remaining capacity (+0x80) to the live count, so unspawned members block completion. `DEDG [2,0]` is "group 2 wiped out"; `[1,2]` is "group 1 down to two". "Live" is the dead byte `+0x91d` being clear (`FUN_00465850`), and the activate/deactivate primitive `FUN_004b0f40` sets that byte together with `+0x945`, so a roster member shipped `deactivated` is not counted until `WAKEUP_ENEMIES` puts it in play; C2/M01 relies on this, its `DEDG [1, 2]` gates falling to two while seven group-1 blocks are still parked. A cutscene's AI park (code 913, `FUN_0041f250`) is different: it sets the hold flag `+0x354`, pushes the next-think time out and deactivates the scene node, and never touches `+0x91d`, so a parked vehicle still counts; C3/M05 relies on that, its wing walk parking the last Balmoral for 19 s under a `DEDG [5, 0]` that naps the instant loss (CSVM: `FlightController.Deactivated`, inert without `Parked`). Side effect: every counted member's engagement volume is widened each tick to 9,000 m radius (stored squared, as 8.1e7) and ±9,000 m altitude (`FUN_00465850`), so a DEDG-watched group never disengages by distance. Each of the three fields is a floor the write only raises, and the walk sits behind both the awake gate and the OR-chain's short circuit, so a napped or retired objective stops widening and nothing ever narrows the volume back. A clause whose group is 0 or whose max is negative widens nothing, since `FUN_00465910` returns before the walk. CSVM applies the radius (`Session/Campaign/CampaignRoster.cs`'s `WidenForDedg`, reached through the graph's world seam); the altitude bands have no consumer there. The name is not expanded anywhere in the binary; the mechanics above are the full decoded meaning. |
-| `TRAVELERS` | `[who, "APPROACHING", where, radius, count]`, optional `"DELETE_ON_SUCCESS"` | Proximity condition (`FUN_00465b40`). `who` is either a gamez node name (the shipped files mostly use `player`) or an integer AI group. `where` is a node name or a literal `[x,y,z]`. Node form: true when the subject node is inside (`APPROACHING`) or outside (any other word; nothing else is authored) `radius` meters of the reference; with `DELETE_ON_SUCCESS` the vehicle standing on the node is deleted, or the node deactivated, as the condition fires. Group form: each tick, every live group member inside (or outside) the radius adds 1 to a running tally, `DELETE_ON_SUCCESS` deletes the counted members (never the player), and the condition is true when the tally reaches `count` (default 1). Without deletion a loitering member re-counts every tick. Radius is stored squared; `count` sits in the 5th slot. See ["TRAVELERS and the roster"](#travelers-and-the-roster) for what a name may address. |
+| `TRAVELERS` | `[who, "APPROACHING", where, radius, count]`, optional `"DELETE_ON_SUCCESS"` | Proximity condition (`FUN_00465b40`). `who` is either a gamez node name (the shipped files mostly use `player`) or an integer AI group. `where` is a node name or a literal `[x,y,z]`. Node form: true when the subject node is inside (`APPROACHING`) or outside (any other word; nothing else is authored) `radius` meters of the reference, and never while the subject's node is inactive; with `DELETE_ON_SUCCESS` the vehicle standing on the node is deleted, or the node deactivated when no vehicle stands on it, as the condition fires. Group form: each tick, every live group member inside (or outside) the radius adds 1 to a running tally, `DELETE_ON_SUCCESS` deletes the counted members (never the player) whether or not the tally is reached, and the condition is true when the tally reaches `count` (default 1). Without deletion a loitering member re-counts every tick. Radius is stored squared; `count` sits in the 5th slot. See ["TRAVELERS and the roster"](#travelers-and-the-roster) for what a name may address, and ["DELETE_ON_SUCCESS"](#delete_on_success) for the deletion. |
 | `COUNTER … TEST_COMPLETE` | see below | Parsed, authored nowhere; see [unauthored keywords](#keywords-the-parser-accepts-that-no-mission-authors). |
 
 `COMPLETED_ZEPCANNONS` and `COMPLETED_STOPPOINT`, despite the names, are **completion
@@ -154,10 +154,48 @@ That distinction decides `C4/M02`. Each of its four search locations wakes a spo
 two-second window. Those four spot checks are the **only** objectives that wake `OBJECTIVE24`,
 the mission's PRIMARY 1. A reference that never resolves is a mission that cannot be finished.
 
-⚠ **Deactivation is not consulted on the node form.** `C4/M02` warps Blacke at five seconds and
-spots him while he is still deactivated; `WAKEUP_ENEMIES` puts him in the air only from
-`OBJECTIVE17`, which is downstream of the spot check. The group form's liveness rule is `DEDG`'s
-and does not carry here.
+⚠ **Deactivation is not consulted on the node form's reference, only on its subject.** `C4/M02`
+warps Blacke at five seconds and spots him while he is still deactivated; he is the reference of
+`TRAVELERS player APPROACHING bhatgyro_1`, and `WAKEUP_ENEMIES` puts him in the air only from
+`OBJECTIVE17`, which is downstream of the spot check. The subject is the other way round:
+`FUN_00465b40` tests the node form only while the subject's node carries its active bit (node
+`+0x24` bit 2), and deactivating a vehicle (`FUN_004b0f40`) and a cutscene's AI park both clear
+that bit, so a dormant or parked subject never satisfies the clause. The group form's liveness
+rule is `DEDG`'s and does not carry here.
+
+A reference named `player` is the player's own node. `C5/M02` authors it eighteen times, as
+`<vehicle> LEAVING player 2000 DELETE_ON_SUCCESS`; with more than one human flying, CSVM reads it
+as the nearest human, the same reading as a `player` subject.
+
+### DELETE_ON_SUCCESS
+
+The parser (`FUN_00466b70`, the only reader of the string at `0x626350`) sets the flag at
+objective `+0x5bc` when the `TRAVELERS` list carries the string after its `count`, beside the
+squared radius at `+0x5b0` and the count at `+0x5b4`; no other directive takes it. The
+evaluator `FUN_00465b40` acts on it as the condition fires:
+
+- **Node form.** The subject node's vehicle is looked up in the vehicle list (`FUN_004afee0`,
+  the entry whose node pointer at `+0xc` is the subject) and removed (`FUN_0047bab0`). When no
+  vehicle stands on the node, the node is deactivated instead (`gwNodeSetActive`, `FUN_004cca30`
+  with 0).
+- **Group form.** After the tally, every live member of the group inside (or outside) the radius,
+  the player's own vehicle excepted (`FUN_00465a70`), is removed with `FUN_0047bab0`, one at a
+  time until none is left.
+
+`FUN_0047bab0` is the vehicle's removal from the world, not a destruction: no destroy choreography
+runs. It sets the dead byte `+0x91d` if it was clear (and then drops the counter at `+0x88` of the
+record the vehicle's `+0x94` points at), unlinks the vehicle from the vehicle list, deactivates its
+node, and then either detaches the node from every parent (`FUN_004cd800`) and frees the vehicle,
+or, for a node without flag `0x10000000` at `+0x28`, leaves the node deactivated and flagged
+`0x8000000`. Every later lookup by name therefore misses it: a
+`WAKEUP_ENEMIES`, a `DEDG` walk and a node-form `TRAVELERS` alike.
+
+The shipped data authors three forms, all over roster aircraft: a node-form literal point (`C2/M02`
+`OBJECTIVE44` and `45`, `C5/M01` `OBJECTIVE20`, CM21's Cabbie), a node form against the `player`
+reference (the eighteen of `C5/M02`), and a group form against a node (`C2/M05` `OBJECTIVE35`). CSVM
+deactivates the aircraft rather than freeing it, since its admission ordinal names it on the
+network, and a latch keeps every later name lookup from finding it; in co-op only the host's graph
+evaluates the condition, and the presence change reaches each guest's copy.
 
 ### Wake actions
 

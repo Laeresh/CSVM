@@ -145,6 +145,20 @@ public class SessionSpecMenuTests
         Assert.False(beaten.VsAutoRespawn);
     }
 
+    /// <summary>Every menu Dogfight flies the chapter's MP1 map, split screen or on the wire. A
+    /// <c>--mission</c> cannot move it, since a guest hears the host's mission type and not its command line.</summary>
+    [Fact]
+    public void AMenuDeathmatchFliesMp1WhateverTheCommandLineNames()
+    {
+        Assert.Equal("MP1", SessionSpec.DeathmatchMission);
+        Assert.Equal(SessionSpec.DeathmatchMission, Menu(Cli(), "C3", MenuMode.Versus, "player_bhawk").Mission);
+        Assert.Equal(SessionSpec.DeathmatchMission, Menu(Cli("--mission=IA1"), "C1", MenuMode.Versus, "player_bhawk", "player_fury").Mission);
+
+        // ABLE-TO-FAIL CONTROL: free flight and Danger Zones still fly the command line's mission.
+        Assert.Equal("IA1", Menu(Cli(), "C3", MenuMode.Free, "player_bhawk").Mission);
+        Assert.Equal("M02", Menu(Cli("--mission=M02"), "C3", MenuMode.Stunt, "player_bhawk").Mission);
+    }
+
     /// <summary>A tester who pinned a scenario alongside a bare launch keeps it, in all three
     /// modes, the re-derivation is a default, not an override.</summary>
     [Fact]

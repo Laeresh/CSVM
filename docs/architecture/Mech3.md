@@ -701,10 +701,10 @@ grammar and flag/key meanings are in docs/formats/sounds.md. `LoadGroups` parses
 
 ## src/Mech3/CombatVoice.cs
 The combat-voice resolver: roster `accentID` (slot 65) to a `voice.zrd` ACCENT row, to a pilot VO
-id pool, to clip defs. `PlayableFor(voId, family)` returns the one name to hand
+id pool dealt in order by `PilotFor(accent, turn)`, to clip defs. `PlayableFor(voId, family)` returns the one name to hand
 `MissionRadio.Speak`: the shipped `snd_<FAMILY>-A_id<N>_random` variant group where one is
 authored, else the bare def. `SessionPrewarmNames` is the flight session's mission-roster prewarm
-set, reached through `WorldSession.Options.VoiceClipNames` with CLI and Instant Action accents joined in. Dispatch
+set, reached through `WorldSession.Options.VoiceClipNames` with CLI and Instant Action accents and the network seats' chosen pilots joined in. Dispatch
 sits above this seam, in `Flight/Ai/AiVoiceDispatcher.cs` (the rules) and `Session/Roster/AiVoiceRuntime.cs`
 (the wiring), never in it. Decode: docs/formats/combat-voice.md.
 

@@ -10,6 +10,7 @@ using CSVM.Mech3.Anim;
 using CSVM.Session.Campaign;
 using CSVM.Session.Objectives;
 using CSVM.Session.Roster;
+using CSVM.Session.World;
 using CSVM.Utils;
 using Godot;
 
@@ -47,7 +48,8 @@ internal static class CampaignCabbieSuites
     [Suite("campaign-cabbie-run",
         "CM21's Cabbie (autogyro_1) spawned from C5/M01's own aiv roster into its built world with "
         + "the colliders up: placed on its rooftop taxi path pp1, its M1Cabbie walk is seated at the "
-        + "placement (node 2, flying toward node 11) and survives the wake and the take-off, so it "
+        + "placement (node 2, flying toward node 11) and survives the wake and the take-off, whose "
+        + "handoff re-runs no respawn and plays neither startprops nor snd_propstart, so it "
         + "flies the 400 m circuit to the tagged node 4, locks dzpath33 and runs it low between the "
         + "buildings, sampled as altitude above the ground under it")]
     internal static void CampaignCabbieRun(TestContext ctx)
@@ -95,7 +97,7 @@ internal static class CampaignCabbieSuites
                 var playerStats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
                 var player = Rig(ctx, world.Runtime, planesGamez, textures, playerStats, live, ctx.PlaneName,
                     playerPose.Position, playerPose.Position + playerPose.Forward, human: true, pilot: null,
-                    FlightRoster.ShooterIdBase, AimAssist.PlayerTeam);
+                    FlightRoster.ShooterIdBase, AimAssist.PlayerTeam, out _);
                 player.Held = true;
                 rigs.Add(player);
 
@@ -124,7 +126,16 @@ internal static class CampaignCabbieSuites
                             ReturnRange = stats.AiReturnRange,
                         };
                         var rig = Rig(ctx, world.Runtime, planesGamez, textures, stats, live, plan.PlaneNode, pos,
-                            look, human: false, pilot, FlightRoster.ShooterIdBase + 1, plan.Team ?? AimAssist.PlayerTeam);
+                            look, human: false, pilot, FlightRoster.ShooterIdBase + 1, plan.Team ?? AimAssist.PlayerTeam,
+                            out var builder, spinningProps: true);
+                        // The crash rig the AI assembler binds, so the propeller definitions the wake
+                        // and the handoff could play have a runtime to be read off.
+                        new WorldEffectsFactory(SessionSpec.Parse(Array.Empty<string>()), ctx.Host, () => Vector3.Zero)
+                            .BuildFlightCrashRuntime(rig, builder, plan.PlaneNode, world.Gamez,
+                                world.Session.Builder.Scene, textures, world.Session.Program, verbose: false,
+                                planesGamez: planesGamez);
+                        rig.CrashRuntime!.ManualAdvance = true;
+                        rig.SpinPropsAtSpawn();
                         rig.Inert = plan.Inert;
                         rigs.Add(rig);
                         return rig;
@@ -145,8 +156,10 @@ internal static class CampaignCabbieSuites
                 ctx.Same(SeatNode, walk.LegStartIndex, $"the placement seats the walk on node {SeatNode}");
                 ctx.Same(FirstTarget, walk.CurrentIndex, $"…flying toward node {FirstTarget}");
 
+                // Read before the wake, which can activate the Cabbie inside this very call.
+                int spawnRespawns = cabbie.RespawnCount;
                 director.Graph?.Wake(TaxiObjective);
-                Fly(ctx, cabbie, rigs, live, director, world.Runtime, report);
+                Fly(ctx, cabbie, rigs, live, director, world.Runtime, report, spawnRespawns);
             }
             finally
             {
@@ -163,7 +176,8 @@ internal static class CampaignCabbieSuites
     }
 
     private static void Fly(TestContext ctx, FlightController cabbie, List<FlightController> rigs,
-        ProjectilePool live, CampaignDirector director, AnimRuntime runtime, StringBuilder report)
+        ProjectilePool live, CampaignDirector director, AnimRuntime runtime, StringBuilder report,
+        int spawnRespawns)
     {
         var pilot = cabbie.Pilot!;
         var ground = new GodotWorldQuery(cabbie);
@@ -175,6 +189,8 @@ internal static class CampaignCabbieSuites
         float sinceSample = SampleEveryS;
         int steps = (int)(RunS / StepDt);
         int step = 0;
+        int heldRespawns = cabbie.RespawnCount;
+        int handoffRespawns = -1;
         for (; step < steps && !flown; step++)
         {
             live.SimStep(StepDt);
@@ -187,11 +203,17 @@ internal static class CampaignCabbieSuites
             }
             director.Step(StepDt);
             runtime.Advance(StepDt);
+            cabbie.CrashRuntime?.Advance(StepDt);
 
             if (!released && director.Paths?.IsFrozen(Cabbie) == false && !cabbie.Held)
             {
                 released = true;
-                report.AppendLine(Log.Format($"t={step * StepDt:0.0}s handed off at {cabbie.WorldPosition}, walk {pilot.Patrol!.LegStartIndex} -> {pilot.Patrol.CurrentIndex}"));
+                handoffRespawns = cabbie.RespawnCount;
+                report.AppendLine(Log.Format($"t={step * StepDt:0.0}s handed off at {cabbie.WorldPosition}, walk {pilot.Patrol!.LegStartIndex} -> {pilot.Patrol.CurrentIndex}, respawns {spawnRespawns} at spawn, {heldRespawns} on the path, {handoffRespawns} after the handoff"));
+            }
+            else if (!released)
+            {
+                heldRespawns = cabbie.RespawnCount;
             }
 
             bool onRail = pilot.Machine?.Mode == AiMode.NavigatingDangerZone
@@ -230,6 +252,11 @@ internal static class CampaignCabbieSuites
         report.AppendLine(Log.Format($"ran {step * StepDt:0} s, lowest clearance {lowest:0} m, lowest on the net {lowestOnNet:0} m"));
 
         ctx.Check(released, $"OBJECTIVE{TaxiObjective} woke '{Cabbie}' and its take-off handed it to the flight model");
+        ctx.Check(heldRespawns > spawnRespawns,
+            $"…the wake on the roof respawned it ({spawnRespawns} at spawn, {heldRespawns} on the path)");
+        ctx.Same(heldRespawns, handoffRespawns,
+            $"…and the handoff re-ran no respawn, since FUN_0048a110 only clears the path flag");
+        SpawnPropsSuites.CheckSilentSpawn(ctx, cabbie, "the wake and the handoff");
         ctx.Check(!cabbie.Crashed, $"'{Cabbie}' flew without ramming anything (at {cabbie.WorldPosition})");
         ctx.Check(locked, $"'{Cabbie}' reached the tagged node and locked '{StreetRun}'");
         ctx.Check(flown, $"…and flew it end to end");
@@ -266,9 +293,11 @@ internal static class CampaignCabbieSuites
     // One aircraft on the suite's own stage, the shape CampaignRacerSuites.Rig builds.
     private static FlightController Rig(TestContext ctx, AnimRuntime runtime, GameZ planesGamez,
         TextureArchive textures, PlaneStats stats, ProjectilePool live, string planeNode, Vector3 pos,
-        Vector3 lookAt, bool human, AiPilot? pilot, int shooterId, int team)
+        Vector3 lookAt, bool human, AiPilot? pilot, int shooterId, int team, out PlaneBuilder builder,
+        bool spinningProps = false)
     {
-        var model = new PlaneBuilder(planesGamez, textures).Build(planeNode);
+        builder = new PlaneBuilder(planesGamez, textures, spinningProps: spinningProps);
+        var model = builder.Build(planeNode);
         var rig = new FlightController
         {
             PlaneModel = model,

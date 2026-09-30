@@ -129,8 +129,85 @@ id set the clip survey found. The row count coincidentally sits near the trigger
 unrelated tables and conflating them will mis-key every lookup. Row shape: `[accentId, voId, …]`;
 rows 0–10 hold 2–3-id pools, rows 11–34 a single id.
 
-In multiplayer the accent lookup is skipped and the voice set is handed in directly, so a remake's
-single-player path is the one that needs `accentID`.
+### Which pilot of a pool an aircraft takes
+
+**The pool is dealt in order, not drawn.** The vehicle constructor (`FUN_0047c210`) copies the
+def's accent into `vehicle + 0x980` and calls the voice setup `FUN_00477790` (`0x0047d74f`). In
+single player that asks `FUN_004b4af0` for the accent's pilot, and `FUN_004b47a0` answers with the
+id under the accent row's cursor (row `+0x14`), then advances the cursor, wrapping from the pool's
+end to its start. No random stream is read. The cursor starts on the pool's first id: the
+`voice.zrd` loader `FUN_004b4cd0` rewinds it after every id it adds (`FUN_004b4a70`), and the
+mission vehicle loader `FUN_004735b0` runs that loader (`0x004735d7`) after `FUN_004b4e40` has
+cleared the table, so each mission starts every accent afresh. The Nth aircraft a mission builds on
+an accent therefore takes the pool's `N mod size`-th id, in authored order. A dealt id with no clips
+is not skipped: its slots stay null and that aircraft is silent (accent 0 deals 18, 35, 37, and the
+aircraft dealt 35 says nothing).
+
+**In multiplayer the accent is not read at all.** `FUN_00477790` tests the multiplayer flag
+(`FUN_00440ad0`) and takes the VO id its caller hands in. A remote player's vehicle
+(`FUN_00497990`, the call at `0x00497c84`) is handed that player's own net record `+0x78`. A
+mission vehicle (`FUN_004735b0`, `0x0047531e`) is handed `FUN_00499c60`, which is the *local*
+player's record `+0x78`, defaulting to 1. So in the original's network games every peer voices every
+mission AI in its own player's voice, and two peers do not agree unless their players picked the
+same voice. The remake keeps the single-player deal on every end instead, below. What `+0x78` holds
+is the player's chosen voice, next.
+
+### A player's own voice
+
+**The Voice list's value is a pilot VO id.** Player Information's seven rows carry `WGA.LG[R].SF`
+48, 2, 24, 29, 44, 26 and 31 (Nathan Zachary, Jack, Black Swan, Paladin Blake, Loyle Crawford,
+Gruff Male, Texan Male), ids of the same space the `voice.zrd` pools and the `snd_id<N>_*` sets use.
+All seven own a whole set, the player's own praise families (`PR-EngineDst`, `PR-ObjDst`,
+`PR-ZepDst`) included. The picked value is the `nVoice` setting (`0x00642f14`, registered at
+`0x00401470`, its name at `0x00619314`).
+
+**It reaches each peer as DirectPlay player data, not in a game message.** Opening a session,
+`FUN_00412b60` reads the local player's 80-byte player data, writes `nVoice` at `+0x4c`
+(`0x00412bf2`) and sets it back through `FUN_005b31f0` (SetPlayerData, which DirectPlay delivers to
+every peer guaranteed). `FUN_00414470`, the plane pick, rewrites the data around it and leaves
+`+0x4c` as it stands. Each peer's `FUN_00414640` builds the lobby record of an arriving player and
+copies data `+0x4c` into record `+0x78` (`0x004147aa`).
+
+**Every aircraft of a player speaks as that pilot.** In multiplayer `FUN_00477790` fills the 29
+slots from the VO id its caller hands in (`FUN_004b4b20`: the `snd_%s_id%d_random` group, else the
+bare `snd_id%d_%s` def). A remote player's aircraft is handed that player's record `+0x78`
+(`FUN_00497990`, read at `0x00497c55`, the call at `0x00497c84`). The local player's own aircraft is
+the first vehicle the mission loader builds (`FUN_004735b0`, which makes it the player at
+`0x00475397`), so it takes `FUN_00499c60`, its own record's `+0x78`. The talker chance is the
+vehicle constructor's, off the def's talker rating or, with none, the session's skill rating
+(`0x0047d170`..`0x0047d1d3`).
+
+**Each peer derives a remote player's lines itself** and queues them on the one flat voice channel.
+Nothing is sent. Read on the machine that hears the line, with "local side" the local player's team:
+
+| ids | when | site |
+|---|---|---|
+| 25, 26 | a remote player hostile to the local player and within 1695 m of them, off the remote's own nose; 25 only from its second frame in range | `FUN_00470750`, `0x00470822`, `0x00470849` |
+| 17–19 | a remote on the local side whose health falls through 70, 50 or 30 % | `FUN_00498170`, `0x004985cf` |
+| 22, 23 | a remote killer's gloat: 22 when it is hostile and the victim on the local side, 23 when it is on the local side and the victim hostile | `FUN_00498bf0`, `0x00498f36`, `0x00498f63` |
+| 20, 21 | a remote victim's cry, forced: 20 on the local side, 21 otherwise | `FUN_00498bf0`, `0x00498f67`, `0x00498f9a` |
+| 22 | the local player shot down by a remote hostile: the take-hit death branch runs on the victim's own machine with no multiplayer gate, so the killer gloats there when the two aircraft's team fields differ | `FUN_004b9bc0`, `0x004ba14c` |
+| 24 | the local player's own aircraft, on a kill the local take-hit decides | `0x004ba173` |
+
+⚠ **The death report's voice arm returns before the gloat and the cry when the victim or the killer
+is the local player** (`0x00498ef5`, `0x00498f07`, against `DAT_0071c7ac`). A player therefore
+never hears their own death cry, and their machine says nothing when they down a remote player: that
+death arrives by `0x12` from the victim's machine, where the take-hit decided it. A remote aircraft's
+team is built as 1 or 2 against the local player's (`FUN_00497990`, the `+0x3c` comparison passed to
+`FUN_00426d00`), so in a match without teams every remote is hostile, and the 22/23 arm of the
+report never fires. What the local aircraft's own team field holds in a network game was not read.
+
+The remake speaks a network player's lines the same way (`Session/Roster/AiVoiceRuntime.cs`). The
+choice travels in the co-op pick to the host and in the seat roster to every machine
+([`../org/multiplayer-messages.md`](../org/multiplayer-messages.md)), each machine registers every
+seat's aircraft as that pilot at the session's skill rating, never elected for a broadcast, and
+derives the table above for the seats flown elsewhere. The bearing broadcast that follows a remote's
+taunt in `FUN_00470750` is not raised: it elects from the local flight's AI, and no network match of
+the remake puts AI beside a hostile player. A campaign co-op host's first seat speaks as Nathan
+Zachary whatever it chose, the scripted player whose mission dialogue is his. Every human in co-op is
+on one side, so there the lines are a teammate's DI tiers and death cry, a guest's `GL-EnemyDwn` on
+an AI it downs, and a player's own 24. A splitscreen seat has no Player Information answer and so no
+voice, as a local splitscreen session has none.
 
 ### The clips are sounds.json entries, and the data picks the variants itself
 
@@ -164,7 +241,8 @@ The extraction shows:
   wingmen"); its other four slots and all thirteen militia wave accents reach live ids.
 
 **Runtime (`CSVM/src/Mech3/CombatVoice.cs`).** The chain above is a queryable service:
-`accentID` → pool → `PilotFor` (random pick, clipless ids skipped) → `PlayableFor(voId, family)`,
+`accentID` → pool → `PilotFor(accent, turn)` (the deal above, a dealt id with no clip def
+answering null) → `PlayableFor(voId, family)`,
 which returns the `_random` group when authored, else the bare def; both feed
 `MissionRadio.Speak`, the flat Voice-bus queue the objective callouts share, because the original
 queues a combat line on that one channel with no position ([sounds.md](sounds.md), "There is one
@@ -176,6 +254,20 @@ mission roster's own accents (`CombatVoice.SessionPrewarmNames`, wired through
 21 of 53 missions author none. Prewarming everything was measured at 1,258 streams / 60.7 MB PCM
 / ~0.7 s and rejected. E16's dispatch (the gate, cooldowns and elections below) sits on top of
 this seam.
+
+`AiVoiceRuntime.RegisterAi` counts the turn per accent in the order the session hands its AI over,
+from 0 in each session, which is the original's per-mission deal. In a network session this is also
+what keeps the voices together: a host and its guests register the same AI in the same order (the
+order their admission ordinals already depend on), so every end deals every AI the same pilot with
+nothing on the wire. A pick drawn from each end's own voice stream would part as soon as one end
+rolls a line the other does not. This departs from the original's network rule above,
+which voices every mission AI in the local player's own voice. That rule is a remake-only departure
+kept on purpose: every network map's roster (`MP<n>`'s `aiv.zrd`, 21 of them) authors the one
+`player` block and no AI, so in the original the rule voices only the local player's own aircraft,
+while the remake's campaign co-op flies whole
+authored rosters whose accents name distinct pilots, the named aces among them. Voicing those in each
+player's own voice would make every wingman and ace sound like the player on that machine, and no
+two machines would agree.
 
 ## Whether a line actually plays
 
@@ -325,7 +417,7 @@ are spoken by the killer, not by the aircraft that died.
 | 13 | wired | a human rig's summary health crossing 30 % on the projectile hit path (decoded threshold), broadcast |
 | 17–19 | wired | the speaker's own summary health on the projectile hit path, 70/50/30 % most-severe-first (decoded) |
 | 20–21 | wired | `FlightController.Downed`, with force: id 20 (`DA`) when the dying aircraft's `Team` is `AimAssist.PlayerTeam`, id 21 (`DE`) otherwise (`AiVoiceRuntime.RegisterAi`). Free flight and `--vs` still give every AI its own default team, so `DA` stays dormant there in practice, it fires once a mission places an AI on the player's team |
-| 22–24 | wired | the same `FlightController.Downed` report read for its killer (`AiVoiceRuntime.OnDowned`), the decoded order of the two predicates: friendly over shooter and victim and no gloat is chosen, else friendly over the victim and `AimAssist.PlayerTeam` picks 22, hostile picks 23, and the killer speaks it. A kill by a rig registered through `RegisterPlayer` takes the decoded player arm instead: 24 is addressed to that rig, and row 16 broadcasts after it. No player rig resolves a voice set today, so 24 is silent in practice, which is the original's own behaviour for a player vehicle with a null slot. A killer that resolved no voice of its own is silent |
+| 22–24 | wired | the same `FlightController.Downed` report read for its killer (`AiVoiceRuntime.OnDowned`), the decoded order of the two predicates: friendly over shooter and victim and no gloat is chosen, else friendly over the victim and `AimAssist.PlayerTeam` picks 22, hostile picks 23, and the killer speaks it. A kill by a rig registered through `RegisterPlayer` takes the decoded player arm instead: 24 is addressed to that rig, and row 16 broadcasts after it. Outside a network match no player rig resolves a voice set, so 24 is silent there, which is the original's own behaviour for a player vehicle with a null slot; a network seat speaks it in its chosen voice ("A player's own voice"). A killer that resolved no voice of its own is silent |
 | 16 | wired | the second call of the same player arm (`AiVoiceRuntime.OnDowned`): the local player's kill of a hostile broadcasts it, elected on `AimAssist.PlayerTeam` rather than on the killer's or the victim's side. It runs unconditionally after row 24's addressed line, never as its else-branch, because the decoded null-slot test jumps into the broadcast. This is the reliable half of a player kill: 17 pilot ids ship a playable `PR-EnemyDwn` set |
 | 25–26 | wired | the decoded site above, on the same raise as rows 1–12 and 14 and addressed to the pursuer (`AiVoiceRuntime.RaiseAttackCallOut` through `AiVoiceDispatcher.TauntTriggerFor`): the cosine between the pursuer's nose and the line to the human it holds picks 26 above `TauntNoseCos` and 25 below `-TauntTailCos`, and neither between them. A pursuer in its own evade reaction is refused, as the decoded block's `+0xba` read refuses it; a pilot with no mode machine counts as not evading |
 | 27 | wired | the speaker's evade episode ending with the flag already cleared, the pursuer shaken ("fires as the reaction flag clears", decoded, and the original raises it where it clears the flag and nowhere else). An episode the speaker leaves with the flag still up says nothing here; that geometry is the pursuer's own row 26. A target lost mid-reaction reads as a shake, the flag's own clear rule with no pursuer left to test |

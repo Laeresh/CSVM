@@ -467,6 +467,11 @@ member, and it does not go here.
   numeric format (`:0.0`, `ToString("0.#")`) OUTSIDE a `Log.*` call, in a summary property, a
   `reason` argument, a list entry or a `StringBuilder.Append`, and give each one `Log.Format` or
   `FormattableString.Invariant`.
+- **LOG-24**, **A socket suite that passes alone can fail beside a sibling shard; take its port from
+  `Testing/SuitePorts.cs`, since a walk past a busy port still leaves the bind's engine `ERROR` line.**
+  With the old fixed ports held by another process,
+  `lan-discovery` failed and three `Couldn't create an ENet host` lines failed the run, though
+  every walking suite then found a free port.
 
 ## WORLD, world data and runtime traps
 
@@ -586,6 +591,10 @@ member, and it does not go here.
   the approach docked with none. `campaign-coop-hookup-seat` reads the table's own answer for the
   airframe name beside the two hooks, which tells an arm resolving the wrong aeroplane apart from
   an effect attached to the wrong rig.
+- **WORLD-50**, **Read a gamez node's `parent_indices` before calling it missing from the built
+  world: an empty list is a library root, which the world build never creates and no lookup finds.**
+  C1's `cs_flg_light1`, the carried flag, answered neither `AnimRuntime.FindNodes` nor a name walk
+  of the world root while `nodes.json` held it, and `SceneBuilder.BuildSubtree` built it.
 
 ## SHELL, Windows, PowerShell, and processes
 
@@ -926,6 +935,11 @@ member, and it does not go here.
   it every suite in the catalog leaves 0, `TestHarness.OrphanLeakTolerance` is 0, and a failing
   suite's verdict names each new orphan root with its node count. A `Dispose()` on a node drops
   only its C# wrapper, so a test node is freed with `Free()`.
+- **INSTR-97**, **A session suite that steps only `_PhysicsProcess` never plays a film out: the
+  world's animation and the cutscene host advance in the frame, so the film holds until a skip and
+  whatever a played-out film leaves in the world is never seen. Advance the world runtime and tick
+  the cutscene beside each step.** With both added, CM09's opening film handed off by itself after
+  3193 steps on host and guest and left its wingman prop drawn about 50 m from the seats on both.
 
 ## SRC, sources and documents
 
@@ -973,6 +987,16 @@ member, and it does not go here.
   objective number was written up as coming from the mission graph because `dzones.zrd` was said to
   carry no objective id; its `objective_numbers` key carries exactly that id, and the pairs match
   the shipped `Snap_<mission>_<objective>` scrapbook rows mission for mission.
+- **SRC-20**, **Evaluate a decoded compare at the shipped option and data values before saying what
+  the player hears; a threshold on a product of scales can be partial or inert at the defaults.**
+  The engine voice duck was written up as halving the engines, and with `SfxVolume` 0.5 and the
+  authored limiter 0.4 in the product it lowers them by about 1.9 dB.
+- **SRC-21**, **A constant a config reader stores when a key is missing is a fallback, not the value
+  in play; open the file the reader loaded before citing it.** The multiplayer score table was read
+  as kill +1 and lost hull +100, and the shipped `player.zrd` authors 2 and 10.
+- **SRC-22**, **When a reader leaves a global alone on a missing key, the value in play is the
+  global's initialised bytes; read them from `.data` before quoting a default.** The rearm radius
+  was written up as 624.0, and `0x628f10` holds 625.0, 25 m squared.
 
 ## What this project cannot verify itself
 

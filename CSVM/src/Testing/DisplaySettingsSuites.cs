@@ -50,6 +50,7 @@ internal static class DisplaySettingsSuites
         ("DefaultView", "cockpit", false),
         ("AutoHeadTurn", true, false),
         ("RocketCraters", true, false),
+        ("CockpitEnginePitch", false, false),
         ("MonitorIndex", "3", true),
         ("Resolution", "1920x1080", true),
         ("DisplayMode", DisplayWords.Borderless, true),
@@ -62,6 +63,9 @@ internal static class DisplaySettingsSuites
         ("AudioEffects", 50, false),
         ("AudioVoice", 25, false),
         ("InstallPath", Path.GetFullPath(Path.GetTempPath()), false),
+        ("NetCallsign", "Laeresh", false),
+        ("NetVoice", 5, false),
+        ("NetGameName", "DaRein", false),
     };
 
     [Suite("display-vsync",

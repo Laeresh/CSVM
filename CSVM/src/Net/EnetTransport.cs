@@ -45,7 +45,7 @@ public interface INetLink
 /// ⚠ This is the only type under <c>CSVM/</c> that may name a Godot networking type;
 /// <c>CSVM.Tests/NetNamespaceDependencyTests.cs</c> asserts that over compiled metadata.
 /// </summary>
-public sealed class EnetTransport : INetTransport, INetLink, IDisposable
+public sealed class EnetTransport : INetTransport, INetLink, INetPeerAddress, IDisposable
 {
     /// <summary>How many channels a connection carries, 0 to one below this. ENet fixes the count
     /// during its handshake, so both ends ask for the same number. It is the reliable events
@@ -306,6 +306,21 @@ public sealed class EnetTransport : INetTransport, INetLink, IDisposable
             }
 
             socket.Peer.DisconnectPeer(peer);
+        }
+    }
+
+    /// <inheritdoc/>
+    public string? AddressOf(int peer)
+    {
+        lock (_gate)
+        {
+            if (_closed || !_owner.TryGetValue(peer, out var socket))
+            {
+                return null;
+            }
+
+            string? address = socket.Peer.GetPeer(peer)?.GetRemoteAddress();
+            return string.IsNullOrEmpty(address) ? null : address;
         }
     }
 

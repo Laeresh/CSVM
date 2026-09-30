@@ -111,7 +111,7 @@ public sealed class OriginalAssetManifest
     /// <summary>The manifest schema. Bump it when the derivation changes what Original needs: the
     /// composed-section table, the rows Original does not draw or draws optionally, the
     /// script-named files, or what <see cref="Check"/> accepts as a readable file.</summary>
-    public const int Schema = 10;
+    public const int Schema = 11;
 
     /// <summary>The extraction stamp schema Original refuses to read a tree below: the loaders'
     /// own expectation, which the decoded menu layout's first reader raised, so a tree extracted
@@ -141,7 +141,7 @@ public sealed class OriginalAssetManifest
         "MP_B_CHECKBOXLARGE.PNG", "MP_LOBBY_BACKGROUND.JPG", "MP_LOBBY_MISSION.PNG", "MP_LOBBY_PLANE.PNG",
         "MP_LOBBY_AMMO.PNG", "MP_LOBBY_STATSCREEN.PNG", "MP_LOBBY_TABLARGE.PNG", "MP_LOBBY_TABSMALL.PNG",
         "MP_B_RADIO8STATESSM.PNG", "MP_B_CHECKBOX8STATES.PNG", "MP_B_CHECKBOX.PNG", "MP_B_LISTBOXARROW.PNG",
-        "MP_PLANEICONSTOPFRONT.PNG",
+        "MP_PLANEICONSTOPFRONT.PNG", "MP_B_SCROLLUP.PNG", "MP_B_SCROLLDOWN.PNG", "MP_CREATETEAMBACKGROUND.PNG",
     };
 
     // Rows of a composed section whose art Original never draws, each with why. The keys are

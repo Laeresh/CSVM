@@ -87,35 +87,40 @@ public static class SpawnPoints
     /// table: up to <see cref="NetBlock"/> <c>[x, y, z, heading°]</c> entries, the same record
     /// <c>ia.json</c> authors. Null when the file is absent or holds no entries, which is every
     /// campaign mission (their copies are an unread placeholder).</summary>
-    public static List<SpawnPoint>? LoadNetFreeForAll(string missionZrdrPath)
+    public static List<SpawnPoint>? LoadNetFreeForAll(string missionZrdrPath) =>
+        LoadNet(missionZrdrPath, NetBlock);
+
+    /// <summary>Loads a multiplayer mission's whole <c>net.zrd</c> table in file order, every
+    /// block: block 0 the free-for-all's and block N lobby team N's, <see cref="NetBlock"/> entries
+    /// each. A team match walks it through <see cref="TeamBlocks"/>. Null as
+    /// <see cref="LoadNetFreeForAll"/>.</summary>
+    public static List<SpawnPoint>? LoadNetTable(string missionZrdrPath) =>
+        LoadNet(missionZrdrPath, int.MaxValue);
+
+    /// <summary>Each seat's opening entry in a whole table of <paramref name="tableCount"/>
+    /// entries, and the block it comes back within. A seat on lobby team N walks block N by its
+    /// place among that team's seats. The original adds <c>team × 16</c> to a pilot's slot. A
+    /// seat on no team, or on a team whose block the map does not author, walks block 0 from
+    /// <paramref name="spawnBase"/> (docs/formats/net-spawns.md).</summary>
+    public static (int[] Openings, (int Start, int Count)[] Blocks) TeamBlocks(int tableCount,
+        IReadOnlyList<int> teams, int spawnBase)
     {
-        if (string.IsNullOrEmpty(missionZrdrPath))
-            return null;
-
-        List<object?> root;
-        try
+        var openings = new int[teams.Count];
+        var blocks = new (int Start, int Count)[teams.Count];
+        var placed = new Dictionary<int, int>();
+        for (int seat = 0; seat < teams.Count; seat++)
         {
-            root = Zrdr.LoadFile(missionZrdrPath, "net.json");
-        }
-        catch (IOException)
-        {
-            return null;
+            int block = teams[seat] > 0 && teams[seat] * NetBlock < tableCount ? teams[seat] : 0;
+            int start = block * NetBlock;
+            int count = System.Math.Max(1, System.Math.Min(NetBlock, tableCount - start));
+            int ordinal = placed.TryGetValue(block, out int before) ? before : 0;
+            placed[block] = ordinal + 1;
+            int walk = block == 0 ? System.Math.Max(0, spawnBase) + ordinal : ordinal;
+            openings[seat] = start + (walk % count);
+            blocks[seat] = (start, count);
         }
 
-        // One flat group, or a bare null where the mission authors no table at all.
-        if (root.Count == 0 || root[0] is not List<object?> nodes)
-            return null;
-
-        var spawns = new List<SpawnPoint>();
-        foreach (var n in nodes)
-        {
-            if (spawns.Count >= NetBlock)
-                break;
-            if (n is List<object?> a && a.Count >= 4
-                && a[0] is float x && a[1] is float y && a[2] is float z && a[3] is float h)
-                spawns.Add(new SpawnPoint(new Vector3(x, y, z), h));
-        }
-        return spawns.Count > 0 ? spawns : null;
+        return (openings, blocks);
     }
 
     /// <summary>Loads a mission's objectives.json <c>PLAYER_INIT</c> block
@@ -156,5 +161,36 @@ public static class SpawnPoints
         float throttle = pi.Count > 3 && pi[3] is float t ? t : DefaultThrottleFrac;
         float speed = pi.Count > 4 && pi[4] is float s ? s * SpeedScale : DefaultSpeedMps;
         return new PlayerStart(new SpawnPoint(new Vector3(x, y, z), yaw), throttle, speed);
+    }
+
+    private static List<SpawnPoint>? LoadNet(string missionZrdrPath, int limit)
+    {
+        if (string.IsNullOrEmpty(missionZrdrPath))
+            return null;
+
+        List<object?> root;
+        try
+        {
+            root = Zrdr.LoadFile(missionZrdrPath, "net.json");
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+
+        // One flat group, or a bare null where the mission authors no table at all.
+        if (root.Count == 0 || root[0] is not List<object?> nodes)
+            return null;
+
+        var spawns = new List<SpawnPoint>();
+        foreach (var n in nodes)
+        {
+            if (spawns.Count >= limit)
+                break;
+            if (n is List<object?> a && a.Count >= 4
+                && a[0] is float x && a[1] is float y && a[2] is float z && a[3] is float h)
+                spawns.Add(new SpawnPoint(new Vector3(x, y, z), h));
+        }
+        return spawns.Count > 0 ? spawns : null;
     }
 }

@@ -254,6 +254,8 @@ only `Airframe`, and nothing else in `Flight` names `Hangar`.
 - `src/Flight/Hud/MarkerDraw.cs`, the world marker's drawing primitives: reticle, edge arrow, centred text block and its clamped variant, marker blue and shadow.
 - `src/Flight/Hud/HudMessages.cs`, the centred HUD message stack a kill, a crash and the mission clock post into: four slots, one colour and five seconds each.
 - `src/Flight/Hud/PromptLine.cs`, a control prompt's own centred line, three tenths of the way down the pane in the landings rig's pale yellow: the auto-dock offer and the respawn prompt.
+- `src/Flight/Hud/FlightChat.cs`, one machine's in-flight chat, engine-free: the panel's five lines and ten seconds, and the entry a pilot types into.
+- `src/Flight/Hud/ChatPanel.cs`, one pane's drawing of the in-flight chat at the top left in the original's green, the entry in the typing pane.
 - `src/Flight/Hud/SpeedCue.cs`, chapter-authored pale smoke wisps emitted 60 m ahead of each player, density selected by camera altitude.
 - `src/Flight/Hud/ScreenSize.cs`, screen-space sizing for world sprites: the pixel-floor inversion, and the nearest-viewer floor one shared mesh takes.
 - `src/Flight/Hud/CompassTape.cs`, the top-centre heading tape from the game's own HUD textures, drawn as a cylindrical drum seen edge-on.
@@ -264,14 +266,18 @@ only `Airframe`, and nothing else in `Flight` names `Hangar`.
 
 - `src/Flight/Modes/DangerZoneRibbon.cs`, one `dzpathN` route as a metre-parameterised spline with lanes, a pilot's cursor on it, and the rail integrator.
 - `src/Flight/Modes/DangerZoneRibbons.cs`, a mission's ribbon set off the chapter gamez with its inactive list; one per session, lanes being occupancy-counted.
-- `src/Flight/Modes/SpawnPoints.cs`, flight spawn from the mission's own zrdr: ia.json `spawn_points`, or objectives.json PLAYER_INIT as fallback.
+- `src/Flight/Modes/SpawnPoints.cs`, flight spawn from the mission's own zrdr: ia.json `spawn_points`, a multiplayer `net.zrd` table by block, or objectives.json PLAYER_INIT as fallback.
 - `src/Flight/Modes/StuntMission.cs`, Stunt Flying state: ia.json `dzones` → a danger-zone run with completion, clock and splits, one per pilot.
 - `src/Flight/Modes/StuntRunHud.cs`, the stunt run's readouts: clock and zones cleared, intro banner, cleared flash, completion or race placing; one per player.
 - `src/Flight/Modes/StuntCapture.cs`, the Danger Zone camera: one latched photograph per marker per run, written beside the saves with its sting.
 - `src/Flight/Modes/DangerZonePhotograph.cs`, the Danger Zone camera's own eye: the decoded pose ahead of the aircraft looking back, on a viewport sharing the pane's world.
 - `src/Flight/Modes/StuntRace.cs`, splitscreen stunt race bookkeeping: one `Racer` per player, finish placings, standings, rematch reset.
 - `src/Flight/Modes/ScoreStore.cs`, stunt best-time persistence: `user://stunt_scores.json` keyed chapter/mission/plane, faster runs only.
-- `src/Flight/Modes/VersusMatch.cs`, Dogfight deathmatch bookkeeping: one signed score plus kills and deaths per player, the host-fed clock, threshold and time-out completion, standings.
+- `src/Flight/Modes/MatchScores.cs`, what each network match scoring event is worth: `player.zrd`'s nine `score_*` keys, each with the executable's fallback.
+- `src/Flight/Modes/VersusMatch.cs`, Dogfight deathmatch bookkeeping: one signed score plus kills and deaths per player, team totals in a team match, the host-fed clock, threshold and time-out completion, standings.
+- `src/Flight/Modes/FlagMatch.cs`, Capture the Flag's rules, engine-free: the flags, the proximity asks and cooldowns, the host's decision, the drop and throw, the points.
+- `src/Flight/Modes/ZeppelinVersus.cs`, Zeppelin vs Zeppelin's rules, engine-free: the two sides and their hulls, what a dead gas bag or cannon scores, the return by the pilot's own hull.
+- `src/Flight/Modes/RearmBases.cs`, the multiplayer rearm's rules, engine-free: which bases serve a pilot, the radius, and each seat's once-per-entry latch.
 - `src/Flight/Modes/VersusSpawnRotation.cs`, Dogfight respawn placement: the per-seat spawn-list ledger and the roomy point a downed seat rotates onto.
 - `src/Flight/Modes/VersusHud.cs`, per-pane Dogfight status line: remaining time, this player's kills, the leader, and the hostile marker.
 - `src/Flight/Modes/PauseState.cs`, who is holding the sim clock and why: the pause owner and the results-board halt, engine-free.
@@ -293,6 +299,7 @@ only `Airframe`, and nothing else in `Flight` names `Hangar`.
 - `src/Flight/Audio/AudioListeners.cs`, where the session's ears are, the one nearest-human seam every positional flight-audio cull measures from.
 - `src/Flight/Audio/WeaponAudioCues.cs`, the weapon-sound selection both audio paths share: a definition name to a resolved cue with its `RANGE` pair and the one cull distance past it.
 - `src/Flight/Audio/EngineAudioCurves.cs`, the engine-slot definition choice and curve maths both audio paths share.
+- `src/Flight/Audio/EngineVoiceDuck.cs`, the one session-wide gain that lowers every engine slot while a radio line is on air.
 
 ### `src/Effects/`, particle systems
 
@@ -476,6 +483,7 @@ else in `UI`, and nothing names `Labs`.
 - `src/UI/Menu/FreeFlightFeature.cs`, Free Flight as a shared feature: the chapter roster, the pick, the launch gate and the typed exit.
 - `src/UI/Menu/InstantActionFeature.cs`, Instant Action as a shared feature: the decoded option sets, the typed setup state, the built def.
 - `src/UI/Menu/NetPlayFeature.cs`, the multiplayer door as a shared feature: the port and address, the socket, the link readouts, the session advert, the wire a launch takes.
+- `src/UI/Menu/NetPlayerInfo.cs`, what the Game and Player Information boxes ask: the game's name, password and cap, the callsign and voice, the cap clamp and their remembered values.
 - `src/UI/Menu/CoopHostFlow.cs`, what a co-op host names to its guests: its board, mission, progress, hangar with each plane's holder, debrief result and shared film, each guest's words sent again only when they changed.
 - `src/UI/Menu/CoopGuestPick.cs`, a guest's own pick: airframe, fit, Ready and the walk-out mark, sent under the host's round.
 - `src/UI/Menu/DogfightLobby.cs`, the Multiplayer Lobby's state over the network lobby: the host's options and rounds, the player list, picks and Ready, chat, and the launch gate.
@@ -503,6 +511,8 @@ else in `UI`, and nothing names `Labs`.
 - `src/UI/Menu/Original/OriginalConnectionScreen.cs`, the Multiplayer Connection page and the LAN games list as one standalone module over the network door: the ways, the search, a join followed on a messagebox.
 - `src/UI/Menu/Original/OriginalLobbyScreen.cs`, the Multiplayer Lobby as one standalone module: its four tabs, the player list and Ready, chat, LAUNCH! and Leave Game.
 - `src/UI/Menu/Original/OriginalOutlawList.cs`, the lobby's outlaw list pane behind Select..., and the map from its rows to the outlaw flags.
+- `src/UI/Menu/Original/OriginalTeamBox.cs`, the lobby's CREATE TEAM box behind Create Team.
+- `src/UI/Menu/Original/OriginalNetInfoBox.cs`, the GAME INFORMATION and PLAYER INFORMATION boxes the shell stands over a page before a host or a join.
 - `src/UI/Menu/Original/OriginalPresentation.cs`, the Original presentation node: the shell drawn through `ComposedBoardView`, seats polled.
 - `src/UI/Menu/Original/OriginalArtSizes.cs`, the art measurer every `OriginalShell` host hands it: one art name answered with its pixel size, cached, a movie's read off its sequence header.
 - `src/UI/Menu/Original/OriginalAvailability.cs`, Original's availability answer before entry: a refusal reason, or the loaded layout.
@@ -576,6 +586,7 @@ determinism repo-wide; read `docs/verification.md` first.
 
 - `src/Testing/TestHarness.cs`, `--run-tests`: the suite registry, `TestContext`, the PASS/FAIL/SKIP table, `test-report.json` and the process exit code.
 - `src/Testing/SuiteShards.cs`, the `shard:<index>/<count>` term and the deterministic weighted division behind it, over `analysis/engine-suite-weights.json`.
+- `src/Testing/SuitePorts.cs`, where each socket-opening suite opens its socket: an offset into this process's `--net-port-base` block, so concurrent shards never share a port.
 - `src/Testing/PhaseAttribution.cs`, buckets a build's `StartupProfile` phases into archive/decode, sound preparation and world construction for the report.
 - `src/Testing/CountingEmitterFactory.cs`, the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
 - `src/Testing/RecordingEmitterRenderer.cs`, the no-GPU `IEmitterRenderer` fake: keeps a `Puffer`'s particles instead of drawing, so its modes are testable.
@@ -667,7 +678,11 @@ delegate to, in six sub-namespaces, one folder each. `Launch` sits on top and no
 - `src/Session/World/SurfaceVehicleRuntime.cs`, builds and steps a mission's `mode ship` hulls: a library-root copy placed on the water, indexed on the runtime.
 - `src/Session/World/ZeppelinRuntime.cs`, runs a mission's zeppelins (`--zeppelins`): the placement, the net flight, the per-part damage and kill, the script's arms.
 - `src/Session/World/NetWorldLink.cs`, the host-owned world over the wire: AI aircraft as launch, pose, fire, hit, presence and death messages, zeppelin and surface-vehicle paths as periodic samples, destructible health, stage changes and deaths as events, and warp picks.
+- `src/Session/World/FlagRuntime.cs`, Capture the Flag in a network match: the mission's flags moved, asked for, decided, scored, spoken and posted on every machine.
+- `src/Session/World/ZeppelinVersusRuntime.cs`, Zeppelin vs Zeppelin in a network match: the two hulls on their sides, the host scoring every dead part and ending on a lost hull.
+- `src/Session/World/RearmRuntime.cs`, the multiplayer rearm bases in a Dogfight: each machine's own seats restored in full on entering a base that serves them.
 - `src/Session/World/NetCutsceneLink.cs`, the cutscene skip over the wire: a guest's skip asks the host, and the host's skip ends the named episode on every guest.
+- `src/Session/World/NetChatLink.cs`, the in-flight chat over the wire and its keys: an all-chat to every machine, a team line to the typist's lobby team alone.
 - `src/Session/World/ZeppelinRuntime.Cannons.cs`, the broadside half of that partial: the cannon wiring, the target and arc gate, the anims and the rounds fired.
 - `src/Session/World/TurretEmplacementRuntime.cs`, the world AA emplacements: placed against the built world, in the shared aim pool, stepped after the airships.
 
@@ -802,6 +817,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/SteamTransport.cs`, the Steam carrier's place in the seam with no SDK behind it: every way in throws "not built with the Steamworks SDK", and `SteamBuild` is the `CSVM_STEAM` define.
 - `src/Net/NetCarrier.cs`, which carrier a match runs over, chosen once: the door's registration and the command line both open through it, and a build define is the whole of the choice.
 - `src/Net/NetEndpoint.cs`, a host and port parsed from a typed or command-line address, a bare IPv6 address all host, and written back with the host bracketed.
+- `src/Net/NetPorts.cs`, the game and LAN discovery ports this process opens by default: the shipped pair, or the pair `--net-port-base` moves for a test process.
 - `src/Net/UpnpPortMap.cs`, a best-effort port mapping through Godot's UPnP client: five outcomes a host can show, never a throw, and never required for a match to be joinable.
 - `src/Net/UpnpLease.cs`, the router mapping's rules behind a gateway seam: no add behind a non-public external address, a finite lease, the stale mapping cleared by exact port, and when the door renews.
 - `src/Net/IgdAddress.cs`, a gateway's external address read without the engine: its kind (public, private, carrier-shared, reserved) and the description and SOAP text a direct question is made of.
@@ -822,7 +838,8 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/NetMessages.cs`, the message vocabulary: one struct per message, each declaring its type word and reliability class, over a shared four-byte header.
 - `src/Net/NetWorldMessages.cs`, the host-owned world's messages: an AI's pose, fire and hit claim, a generator launch, a zeppelin's and a surface vehicle's path sample, and the world event.
 - `src/Net/NetCoopMessages.cs`, the co-op boards' lobby messages: the host's flow one guest follows (screen, mission, round, Ready mask, hangar, result), the host's campaign films, its hangar with each plane's holder, and a guest's plane pick and Ready under a round.
-- `src/Net/NetDogfightMessages.cs`, the Multiplayer Lobby's messages: the host's options under a round, the player list, and one chat line.
+- `src/Net/NetDogfightMessages.cs`, the Multiplayer Lobby's messages: the host's options under a round, the player list, one chat line, the team action and team list, and Capture the Flag's ask and flag table.
+- `src/Net/NetTeams.cs`, the team core every team mode shares: a host's free-form named teams and the team launch check.
 - `src/Net/NetPositionalMessages.cs`, the positional start: a landing row the host started and for which seat, the ladder holder, and a guest's held auto-land button.
 - `src/Net/NetMessageWriter.cs`, the writer and reader cursors every message is packed and unpacked through: little-endian primitives, quantised unit fields, fixed-width text.
 - `src/Net/NetClockSlew.cs`, a guest's offset onto host time, walked to each fresh reading over a bounded window rather than written, with one-way readings read forward by half the measured round trip.

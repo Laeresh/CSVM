@@ -143,6 +143,13 @@ not safe (LOG-13). **The stage's verdict is the merge of every shard's report**,
 via each suite's `index`: counts sum, the error allowlist's caps are re-checked against the SUMMED
 counts, and **a shard exiting 0 with no report FAILS the stage**.
 
+**Every shard opens its sockets from its own `--net-port-base`.** The stage first claims a slot, a
+lock file under `%TEMP%\csvm-net-ports\` held until every shard exits, so a second run from another
+worktree takes another slot. Shard `k` of slot `s` gets base `40000 + (10 * s + k - 1) * 100`: seven
+slots of ten shards, below the shipped 47500/47501 a game played on this machine holds and below
+Windows' ephemeral range. `-Shards` above 10 is refused. Each report's `shard.netPortBase` must equal
+the base its shard was handed and differ from every other shard's, or the stage fails (LOG-24).
+
 **`test-report.json`'s schema is versioned** (`"schema"`, bumped when a field changes meaning or
 goes). Besides the per-suite rows and their registry `index`, it holds a `binary` block
 (the loaded `CSVM.dll`'s path and MD5), the run's `selector`, a `shard` block and a `phaseTotals`
@@ -567,8 +574,8 @@ can:
   without its bit fails here too ("Permission denied" starting the process), and a missing runtime
   file in `data_CSVM_linuxbsd_x86_64/` fails the launch.
 - **engine** (skipped by `-NoSuites`): `--run-tests=shard:<i>/<n>` over that same zips-only root,
-  the shape every player's install reads, in `-Shards` processes (default 6).
-  The suite list is the harness registry's and the division is `analysis/engine-suite-weights.json`,
+  the shape every player's install reads, in `-Shards` processes (default 6), shard `k` with
+  `--net-port-base=30000 + (k - 1) * 100`, below Linux's ephemeral range. The suite list is the harness registry's and the division is `analysis/engine-suite-weights.json`,
   copied in beside the exe where the harness looks for it; the merge refuses a missing report, a
   suite run twice, a coverage short of the registry, and an unexpected engine error line.
 

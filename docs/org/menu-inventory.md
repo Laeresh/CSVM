@@ -301,6 +301,7 @@ named in it; `WaveEdit` is the twelfth and has no aid, which is the warning unde
 | `campaign-coop-guest[:board]` | Original only: a co-op guest joined to a loopback host, standing on the board the host names (`cabin` by default, `briefing`, `flightcheck`, `ready`, `debrief`), the host's rows greyed and the guest band drawn, on the first plane of the host's hangar no earlier seat flies, with its own plane and ammo pickers; `ready` is the check after the guest's Ready, `debrief` the host's won result | `Campaign` |
 | `campaign-coop-ready` | Original only: a co-op host's flight check with two guests, the first Ready and the second not, so FLY MISSION is greyed and the strip's chips say Ready | `Campaign` |
 | `connection` | Original only: the Multiplayer Connection page | out of scope |
+| `connection:gameinfo`, `connection:playerinfo` | Original only: the Connection page with GAME INFORMATION or PLAYER INFORMATION standing over it on the aids' sample answer (game and callsign Zachary, eight players, Gruff Male), over an in-process door | out of scope |
 | `connection-games[:searching]` | Original only: the LAN games list over an in-process LAN answering with five sample games, one of another build version, or with none so the Searching box stands | out of scope |
 | `lobby[:host\|guest[:mission\|plane\|ammo\|rockets\|scores\|outlaw\|outlaw-rockets]]` | Original only: the Multiplayer Lobby as its host or first guest, over an in-process wire with two guests, Time 5 and Limited Lives set, the first guest Ready and one chat line from each, on the named tab; `outlaw` and `outlaw-rockets` open the outlaw list on Airframes or Rockets with two airframes and All Rockets outlawed | out of scope |
 | `network-coopjoin` | the Network board of a guest joined over the loopback to a campaign host, the session named in its status | `Network` |
@@ -507,7 +508,9 @@ constants rather than reading a layout.
   wears `MP_GAMESALPHA.PNG` cropped to that column at alpha 80, tinted F2D08B. An empty list is
   covered by the Searching box (`MP_ERRORMESSAGEBACKGROUND.JPG` at (254, 160), "Searching ..." in
   red, its Cancel at (404, 310)), and asks again every second; a filled one asks every five seconds
-  only while Auto refresh is checked.
+  only while Auto refresh is checked. A game that asks a password reads Need Password (10141) in its
+  Status column unless it is full ([multiplayer-messages.md](multiplayer-messages.md), "Boot and the
+  password").
 - **What is ours.** Only LAN TCP/IP, which searches, and Internet, which joins the typed address,
   are on the page, at the script's first two radio places (y 98 and 134) with its pitch, the IP
   Address box at (184, 151) and the Internet description at y 177. MSN Gaming Zone, LAN IPX and
@@ -530,13 +533,24 @@ constants rather than reading a layout.
   ratings; Select Ammo the Guns and Rockets sub-tabs (`MP_LOBBY_TABSMALL.PNG`), a box per gun slot
   or per wing cell. Boot, Create Team, the Ready box (`MP_B_CHECKBOXLARGE.PNG`) and its Ready? label,
   LAUNCH!, the chat box, Send and Leave Game stand on every tab.
-- **What is ours in the lobby.** Only Deathmatch flies, so Capture the Flag, Zeppelin vs Zeppelin,
-  the teams and Boot draw greyed. The host's Allow Custom Planes and Outlaw Components are live, and
+- **What is ours in the lobby.** All three types fly. Capture the Flag and Zeppelin vs Zeppelin tick
+  Restrict Number of Teams at two and grey it, and Capture the Flag also greys Above the Clouds and
+  NW Lighthouse and shows an Own Flag Home to Capture checkbox under the team boxes, the
+  remake's own option drawn in the checkbox art. The team button reads Create Team, Join Team with a team row picked, or Leave Team,
+  and is live while its pilot is not Ready; Create Team stands the CREATE TEAM box
+  (`MP_CREATETEAMBACKGROUND.PNG`). The player list draws each team's row in its team colour with
+  its members under it, then the players on no team. Restrict Number of Teams and its two count
+  boxes, with the script's arrows (`MP_B_SCROLLUP.PNG`, `MP_B_SCROLLDOWN.PNG`), are live on the
+  host. The victory radios arm Time, Score or both, and a press on the only armed one keeps it.
+  Boot is live on the host once it picks a guest's row in the player list
+  (the picked row takes the script's fill, 209, 180, 120); the host's own row is not offered, and a
+  guest's list offers none. The host's Allow Custom Planes and Outlaw Components are live, and
   Custom Planes lists the pilot's saved planes while custom planes are allowed. Select... (View...
   on a guest) is live while Outlaw Components is ticked and opens the outlaw list
   (`MP_LOBBY_OUTLAWED.PNG`) over the tab page, laid out as
   [`multiplayer-messages.md`](multiplayer-messages.md) decodes it; each tick reaches every guest at
-  once, and the list is read-only on a guest and on a Ready host. A completed match's Exit lands every pilot back in the same lobby on Game Scores,
+  once, the list is read-only on a guest and on a Ready host, and a toggle of Outlaw Components
+  empties it. A completed match's Exit lands every pilot back in the same lobby on Game Scores,
   which shows that match's name, points, kills and deaths best first (Hits % stays blank), with
   every Ready cleared for the next round. Game Scores is greyed until a match has landed. The own
   name is drawn red in the list and the chat, and the player list shows its first eleven rows with
@@ -701,6 +715,7 @@ which is why the required count is 94 layout names plus the five the scripts nam
 | `GN_B_ReturnToGame.Png` | 1 | optional | `[Preferences]`' in-flight way back; the menu's page offers `PC_B_ReturnMainMenu.png` instead |
 | `CR_AboutMessageBox.png` | 1 | **required** | the About box's own background, drawn by the credits screen's box |
 | the Connection page's and the games list's art (`MP_OPTIONSBACKGROUND.JPG`, `MP_GAMESBACKGROUND.JPG`, `MP_ERRORMESSAGEBACKGROUND.JPG`, `MP_GAMESALPHA.PNG`, the `MP_B_` radio, small, medium, large, exit and checkbox strips) | 10 | **required** | script-named, since the multiplayer scripts carry no layout; drawn art may not be classed optional |
+| the lobby's team art (`MP_CREATETEAMBACKGROUND.PNG`, `MP_B_SCROLLUP.PNG`, `MP_B_SCROLLDOWN.PNG`) | 3 | **required** | script-named: the CREATE TEAM box and the arrows of the team count boxes, which the Mission Options tab always draws |
 | `MessageBox`'s `MP_*` rows, its `MA_B_LEFT`/`MA_B_RIGHT`, and the art of every section outside the 23 | 3 + 27 | optional | the multiplayer error box's errors are raised in the shared box, and the About box is the one-button box, so its left and right rows never draw |
 | `ui_strings.json` + `RESOURCE.H` | 2 | optional | 152 symbols referenced, 149 resolve; `UiStrings` falls back to an empty table, so the screens draw with no words rather than not at all |
 | `SCRAPBOOK.CSV` | 1 | optional | 461 rows; the book's extent is the file's extent, and without it the book lists nothing |
@@ -745,7 +760,7 @@ Each of these is a divergence a reader could mistake for a decode, so each is na
   door.** `[@MainMenu@]` authors Campaign, Instant Action, Multiplayer, Preferences, Credits and
   Quit. Built-in's Mode screen offers Free Flight, Instant Action, Dogfight, Campaign and Build
   Custom Plane. Free Flight is entirely ours; Dogfight is splitscreen where the original's
-  equivalent is network multiplayer; Original reaches plane construction where the original does,
+  equivalent is network multiplayer, and flies that match's map, the chapter's `MP1`; Original reaches plane construction where the original does,
   from the Instant Action screen's BUILD button and from the cabin, and has no top-level door.
 - **Original Free Flight has no original screen behind it.** There is no free-flight script, no
   free-flight art, and no free-flight entry in the Instant Action mission-type dropdown. The

@@ -324,9 +324,9 @@ public sealed class WorldEffectsFactory
 
     /// <summary>Builds the per-plane crash runtime: <c>player_crash_*</c> for a human rig,
     /// <c>ai_crash_*</c> for an AI plane (<see cref="EffectCatalogue.CrashDefTableFor"/>). Builds
-    /// the effect-template roots and the plane's wreck under a <c>player</c> crash root, then binds
+    /// the effect-template roots and the plane's wreck under a <c>player</c> crash root. Then binds
     /// a non-auto-start <see cref="AnimRuntime"/> to the controller, scoped so every anchor is unique.
-    /// ⚠ <c>startprops</c>/<c>stopprops</c> never resolve on any airframe, so callers pass the plane
+    /// ⚠ <c>spinprops</c>/<c>stopprops</c> never resolve on any airframe, so callers pass the plane
     /// model as fallback anchor; <paramref name="planesGamez"/> is the second stage source.</summary>
     public void BuildFlightCrashRuntime(FlightController controller, PlaneBuilder planeBuilder,
         string planeName, GameZ gamez, SceneBuilder worldScene, TextureArchive textures,
@@ -902,11 +902,14 @@ public sealed class WorldEffectsFactory
                 // BOUNCE reads a real struck surface rather than a guess.
                 crashRuntime.SurfaceIsWater = body => ProjectilePool.SurfaceIsWater(body as Node);
             }
+            // The def's own propeller pair. Its anchors are airframe names, so the stage closure above
+            // needs no template for it.
+            var propAnims = new[] { _controller.SpinPropsAnim, _controller.StopPropsAnim };
             // Bind only the closure of names that play ON this aircraft (CrashRigAnimNames), never the
             // full ~800-def world program, its ~150 generic-named defs would mis-anchor onto this
             // plane's parts and run their reset states on it.
             var bound = _crashProgram.Subset(EffectCatalogue.CrashRigAnimNames(_crashDefs!, _destroyAnim,
-                _controller.IsHumanPiloted));
+                _controller.IsHumanPiloted, propAnims));
             crashRuntime.Bind(_controller, bound);
             _controller.AddChild(crashRuntime);
             _controller.DestroyDef = _destroyAnim;

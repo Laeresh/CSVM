@@ -106,7 +106,7 @@
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "13abc63cb0bf999b221af14dafb0deee",
+      "hash": "9e9fef4d7c72db7e86bf1f758426442b",
       "exercises": "player_crash_default five steps in: corrected pre-crash attitude, crash rig and airframe, texture-flag puffers, ranged tumble, vector pieces, flydirt delta, pooled repeats, the crash notice and respawn prompt over the hidden HUD, on lit C1 scenery.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
@@ -120,14 +120,14 @@
     {
       "name": "c1-stunt-marker",
       "frame": 90,
-      "hash": "34db8da07d1f9513d3d28ab670faf94e",
+      "hash": "1cfac38f9e0120653cdfe9fe2873020b",
       "exercises": "A stunt run's Danger Zone off screen on the pilot's own target cycle: the spyglass disc at the marker anchor, the shaft leaving its rim under the 20-by-10 head, the label in the objective's blue, the run clock, the plane's ground shadow below.",
       "args": ["--chapter=C1", "--stunt", "--plane=player_fury", "--pos=-5300,300,-6300", "--direction=0,0,-1", "--det", "--mute"]
     },
     {
       "name": "campaign-4p-grid",
       "frame": 120,
-      "hash": "bd0ca77ebc3b49265e24ea4e8062cde6",
+      "hash": "521ce4a96eac81a44ee813b9527f79a6",
       "exercises": "Four humans launch a co-op campaign mission on StartGrid with no profile to load, so no director: four render targets, HUDs, gauges and target labels, the lit C1 world, the player-shaped shadow under each pane's own pilot; frame-sensitive 73.79%.",
       "args": ["--campaign=csvm-golden:6", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
     },

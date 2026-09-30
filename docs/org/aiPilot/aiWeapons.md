@@ -23,6 +23,7 @@ turret's 0.4-second cadence sounds continuous while still emitting one projectil
 ## Contents
 
 - [The weapon list, and who builds it](#the-weapon-list-and-who-builds-it)
+  - [The wingman's fit](#the-wingmans-fit)
 - [The `weapons` 5-tuple, decoded](#the-weapons-5-tuple-decoded)
 - [The trigger routine](#the-trigger-routine)
 - [The fire routine, and the aim gate](#the-fire-routine-and-the-aim-gate)
@@ -59,10 +60,64 @@ Two builders exist and they do not agree:
   the def parser `FUN_00479240`, so **this is the path every AI aircraft, boat and truck takes**.
   Every field comes from the authored 5-tuple.
 - **`FUN_00444300`** builds one slot from a weapon id with **hardcoded** numbers: 1 m minimum,
-  900 m maximum, a 0.5 s gun interval (1.0 s in one caller branch) and a **20 s ordnance interval**.
-  Its only caller is `FUN_00443de0`, the campaign loadout build for the player and `wingman_1`.
+  900 m maximum, a 0.5 s gun interval (1.0 s for a single mount) and a **20 s ordnance interval**.
+  Its only caller is `FUN_00443de0`, which rebuilds the vehicle named `wingman_1` from the hangar
+  record ([The wingman's fit](#the-wingmans-fit)).
 
-So the player and their wingman fly engine constants; everyone else flies authored data.
+So the wingman flies the hangar pick on engine constants; every other AI flies its def's authored
+data.
+
+### The wingman's fit
+
+`FUN_00443de0` is the in-mission weapon wiring. It runs at the tail of the player placement
+`FUN_0047f1f0` (callers `FUN_00480480` and the hand-over callback `FUN_0047e080`), and only while
+the `Network` flag `FUN_00440ad0` reads zero, so on every single-player spawn and respawn. After
+wiring the player it looks up the vehicle named `wingman_1` by case-insensitive name
+(`FUN_004aff10`, string at `0x006239fc`) and, when one exists:
+
+- **clears its weapon list** (`FUN_004442a0`: end pointer back to begin, selection cleared), so
+  the slots `FUN_004b59b0` built from the AI def's `weapons` block are discarded whatever they were;
+- reads the wingman's plane record: the campaign profile's plane at index `DAT_0064b680` when the
+  campaign flag `DAT_0071bb80` is 1, the Instant Action wingman record at `0x0064acc0` otherwise;
+- for each of the four gun slots, resolves `FUN_00443d70(gun id, ammunition)` to
+  `wep_{caliber + ammo}` ([`../../formats/saved-games.md`](../../formats/saved-games.md)). A slot
+  whose turret bit (`0x10 << slot` of record `+0x84`) is set goes to the turret gunner lists at
+  vehicle `+0x610`/`+0x620` through `FUN_004aab00`; every other slot is built by `FUN_00444300`
+  with the slot's twin bit (`1 << slot`) as its third argument;
+- for each of the eight pylon cells, resolves `FUN_004440f0(cell)` and builds it by
+  `FUN_00444300` with the third argument 1.
+
+`FUN_00444300` then fills the slot:
+
+| Field | Gun, twin mount | Gun, single mount | Ordnance |
+|---|---|---|---|
+| rounds (`+0x08`) | `CLUSTER_SIZE` (weapon extension `+0x0c`, `FUN_004bad90`) | half of it, truncated (the float `0.5` at `0x006032e0`) | `CLUSTER_SIZE` |
+| refire (`+0x14`) | 0.5 s | 1.0 s | 20 s (`0x41a00000`) |
+| window (`+0x18`, `+0x1c`) | 1 m to 900 m (`0x3f800000`, `0x4945c100` = 900²) | same | same |
+
+The AI's own gates then use these slots exactly as they use an authored one: the trigger routine
+and the shot routine read no difference between a def slot and a wingman slot. Guns and ordnance
+are still told apart by the weapon def's `CANNON` flag alone.
+
+⚠ **The ordnance lookup formats `wep_%2d`, not `wep_%02d`** (`0x00623a08`), and the catalogue
+lookup `FUN_005abfd0` is an exact string compare. Cells naming ids 0 to 4 (armour-piercing,
+high-explosive, flak, sonic and flash rockets, `wep_05` to `wep_09`) format `wep_ 5` to `wep_ 9`,
+find nothing, and build no slot. The gun ids are two digits and unaffected. Read statically, the
+original's wingman therefore carries only rear flash, smoke, choker, beeper, seeker and torpedo
+rounds, and none of the stock high-explosive load. **CSVM departs from this deliberately**: the
+maintainer's ruling is that the wingman flies the fit picked for it in the hangar, so every picked
+row binds, those five included.
+
+CSVM's side is `Loadout.BindWingman`: the fit laid over the airframe's stock table and bound as a
+player's, with the 1 to 900 m window on every slot and 20 s on every pylon. In a campaign the spawn
+carrying a fit is the roster's `wingman_1` alone; an enemy on the same airframe carries none, and
+its `weapons` block stays its only armament. Instant Action hands its one wingman fit to every
+wingman of the flight, where the original rebuilds `wingman_1` only, and an unedited fit reaches
+the spawn as none, so those wingmen keep the stock table's fit on the rocketeer's default gates. Two of the table's quantities have no consumer here:
+an AI gun's cadence is its weapon's own fire rate for every AI, so the 0.5 s and 1.0 s refire are
+not carried, and the wingman flies its airframe's stock build, whose wing mounts are all twinned,
+so no gun takes the halved magazine. The original's `Network` gate has no counterpart either: a
+co-op host binds its pick and hands it to the guest, and both machines fly it.
 
 ## The `weapons` 5-tuple, decoded
 
@@ -376,8 +431,11 @@ rarer still for the 89 mook blocks whose only authored skill is `dead_eye 1`.
 | `FUN_0041f420` | the AI fire decision: gates, weapon selection, sets trigger bytes |
 | `FUN_004b6820` | the shot routine: aim gate, ordnance lockout and dice, spawns the round |
 | `FUN_004b59b0` | builds a vehicle's weapon slots from the def's `weapons` 5-tuples |
-| `FUN_00444300` | builds one slot with hardcoded ranges/intervals, player and `wingman_1` only |
-| `FUN_00443de0` | the campaign loadout build that calls it |
+| `FUN_00444300` | builds one wingman slot with hardcoded ranges/intervals |
+| `FUN_00443de0` | the in-mission weapon wiring: the player, then `wingman_1` rebuilt from its plane record |
+| `FUN_00443d70` | a gun slot's id and ammunition to its weapon number |
+| `FUN_004440f0` | a pylon cell's ordnance id to its weapon number |
+| `FUN_0047f1f0` | the player placement whose tail runs the wiring when `Network` is zero |
 | `FUN_004b20d0` | selects the current weapon (`+0x950`); refreshes the HUD when it is the player |
 | `FUN_0041afe0` | the per-mount lead solver: writes the desired direction `+0x78` and the has-solution flag `+0x84` |
 | `FUN_00460e30` | the constant-speed intercept, in the `u = 1/t` form ([`aim-assist.md`](../aim-assist.md)) |

@@ -39,10 +39,10 @@ public class CoopDoorTextTests
     }
 
     [Fact]
-    public void TheGamesListNamesTheHostsGameItsPlayersOfItsCapAndItsMission()
+    public void TheGamesListNamesTheGameItsPlayersOfItsCapAndItsMission()
     {
         var coop = new SessionAdvertMessage(NetSessionKind.CampaignCoop, 7, 2, "Zachary", NetSessionStatus.Waiting, 4);
-        Assert.Equal("Zachary's campaign", CoopDoorText.GameName(coop));
+        Assert.Equal("Zachary", CoopDoorText.GameName(coop));
         Assert.Equal("Campaign", CoopDoorText.GameName(coop with { Host = "" }));
         Assert.Equal("2/4", CoopDoorText.PlayerCount(coop));
         Assert.Equal($"2/{NetPlayFeature.CoopHumans}", CoopDoorText.PlayerCount(coop with { Cap = 0 }));
@@ -54,7 +54,8 @@ public class CoopDoorTextTests
         Assert.Equal("C2/M03", CoopDoorText.Shortcode(coop));
 
         var dogfight = new SessionAdvertMessage(NetSessionKind.Dogfight, SessionAdvertMessage.NoMission, 5, "Lucy");
-        Assert.Equal("Lucy's dogfight", CoopDoorText.GameName(dogfight));
+        Assert.Equal("Lucy", CoopDoorText.GameName(dogfight));
+        Assert.Equal("Dogfight", CoopDoorText.GameName(dogfight with { Host = "" }));
         Assert.Equal($"5/{NetSeats.MaxPlayers}", CoopDoorText.PlayerCount(dogfight));
         Assert.Equal("", CoopDoorText.Environment(dogfight, _ => "x", _ => true));
     }
@@ -133,11 +134,11 @@ public class CoopDoorTextTests
 
         string joined = CoopDoorText.JoinedStatus(door, "", seq => $"M{seq + 1}");
         Assert.Contains("Campaign co-op, chapter 2, mission 3: M8", joined, StringComparison.Ordinal);
-        Assert.Contains("hosted by Zachary", joined, StringComparison.Ordinal);
+        Assert.Contains("game Zachary", joined, StringComparison.Ordinal);
         Assert.Contains("3 players", joined, StringComparison.Ordinal);
 
         string waiting = CoopDoorText.WaitingStatus(door, seq => $"M{seq + 1}");
-        Assert.Contains("Hosted by Zachary", waiting, StringComparison.Ordinal);
+        Assert.Contains("Game Zachary", waiting, StringComparison.Ordinal);
         Assert.EndsWith("Waiting for the host to launch the mission.", waiting, StringComparison.Ordinal);
     }
 

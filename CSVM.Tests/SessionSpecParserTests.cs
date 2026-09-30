@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Threading;
 using CSVM;
 using CSVM.Mech3;
+using CSVM.Net;
+using CSVM.UI.Menu;
 using Godot;
 using Xunit;
 
@@ -413,6 +415,55 @@ public class SessionSpecParserTests
         var guest = SessionSpec.Parse(new[] { "--vs", "--net-join=127.0.0.1:47600" });
         Assert.Null(guest.NetHostPort);
         Assert.Equal("127.0.0.1:47600", guest.NetJoin);
+    }
+
+    /// <summary>The port base reaches the spec, and a bare host port takes it whichever flag comes
+    /// first. Its absence leaves the shipped pair, so a player's launch is unchanged.</summary>
+    [Fact]
+    public void ThePortBaseMovesTheBareHostPort()
+    {
+        var shipped = SessionSpec.Parse(new[] { "--vs", "--net-host" });
+        Assert.Null(shipped.NetPortBase);
+        Assert.Equal(NetPlayFeature.DefaultPort, shipped.NetHostPort);
+
+        var before = SessionSpec.Parse(new[] { "--net-port-base=40100", "--vs", "--net-host" });
+        var after = SessionSpec.Parse(new[] { "--vs", "--net-host=127.0.0.1", "--net-port-base=40100" });
+        Assert.Equal(40100, before.NetPortBase);
+        Assert.Equal(40100, before.NetHostPort);
+        Assert.Equal(40100, after.NetHostPort);
+        Assert.Equal("127.0.0.1", after.NetHostBind);
+
+        var named = SessionSpec.Parse(new[] { "--net-port-base=40100", "--net-host=127.0.0.1:47600" });
+        Assert.Equal(47600, named.NetHostPort);
+        Assert.Equal(new NetEndpoint("127.0.0.1", 40100), SessionSpec.ParseJoin("127.0.0.1", 40100));
+    }
+
+    /// <summary>A base whose block would leave the port range, or that is no number, is refused
+    /// with a warning and the shipped pair stands.</summary>
+    [Theory]
+    [InlineData("1023")]
+    [InlineData("65500")]
+    [InlineData("forty")]
+    [InlineData("")]
+    public void AnUnusablePortBaseIsRefused(string value)
+    {
+        var s = SessionSpec.Parse(new[] { $"--net-port-base={value}" });
+        Assert.Null(s.NetPortBase);
+        Assert.Contains(s.Warnings, w => w.Category == "core" && w.Message.StartsWith("--net-port-base:", System.StringComparison.Ordinal));
+    }
+
+    /// <summary>The shipped pair the base replaces: the game port the door and a bare address
+    /// fill in, and the discovery port one above it. A base's whole block fits the port range.
+    /// </summary>
+    [Fact]
+    public void TheShippedPairAndTheBaseBounds()
+    {
+        Assert.Equal(47500, NetPorts.ShippedGame);
+        Assert.Equal(NetPorts.ShippedGame, NetPlayFeature.DefaultPort);
+        Assert.Equal(NetPorts.ShippedGame + NetPorts.LanOffset, LanDiscovery.Port);
+        Assert.True(NetPorts.IsBase(NetPorts.MinBase) && NetPorts.IsBase(NetPorts.MaxBase));
+        Assert.False(NetPorts.IsBase(NetPorts.MinBase - 1) || NetPorts.IsBase(NetPorts.MaxBase + 1));
+        Assert.Equal(65535, NetPorts.MaxBase + NetPorts.Block - 1);
     }
 
     /// <summary>The enhanced-pass bisect doors: none closed by default, each flag closes its own

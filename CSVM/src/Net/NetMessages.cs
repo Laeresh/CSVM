@@ -30,7 +30,7 @@ public enum NetMessageType : ushort
     /// <summary>The whole seat roster and the match seed.</summary>
     SeatRoster = 0x0027,
 
-    /// <summary>A victim's hull state after it applied damage.</summary>
+    /// <summary>A victim's hull state after it applied damage, or after a rearm restored it.</summary>
     Damage = 0x0040,
 
     /// <summary>Where the host has placed a seat, by spawn entry.</summary>
@@ -147,6 +147,33 @@ public enum NetMessageType : ushort
     /// <summary>One plane of a co-op host's hangar and the seat that holds it, sent to every guest
     /// whenever it changes.</summary>
     CoopHangar = 0x005F,
+
+    /// <summary>A guest's answer to a host that asks a password, or the host's word that the answer
+    /// admitted it. Only a session with a password sends it, and only before admission.</summary>
+    JoinPassword = 0x0060,
+
+    /// <summary>A lobby guest's team action to its host: create, join or leave a team.</summary>
+    LobbyTeamAction = 0x0061,
+
+    /// <summary>A Dogfight host's teams, each team's index and name, sent to every guest whenever
+    /// they change.</summary>
+    LobbyTeams = 0x0062,
+
+    /// <summary>A Capture the Flag pilot's ask of its host: take a flag, or bring the carried one
+    /// home. The original's <c>0x1c</c>.</summary>
+    FlagRequest = 0x0063,
+
+    /// <summary>A Capture the Flag host's flag table: each flag's state and holder, sent to every
+    /// guest whenever one moves. The original's <c>0x1d</c>.</summary>
+    FlagTable = 0x0064,
+
+    /// <summary>Where the host has placed a seat by a computed point rather than a table entry, a
+    /// Zeppelin vs Zeppelin return.</summary>
+    SpawnAt = 0x0065,
+
+    /// <summary>One line a pilot typed in flight, to everybody or to its lobby team. The original's
+    /// <c>0x15</c>.</summary>
+    FlightChat = 0x0066,
 }
 
 /// <summary>Which campaign film a <see cref="CoopFilmMessage"/> names.</summary>
@@ -218,6 +245,14 @@ public enum NetCloseReason : byte
     /// <summary>The guest's build does not play with the host's: their MAJOR.MINOR versions
     /// differ.</summary>
     VersionMismatch = 3,
+
+    /// <summary>The host removed this guest, or refused its return to a session that removed it.
+    /// </summary>
+    Booted = 4,
+
+    /// <summary>The session asks a password and the guest's answer was wrong or never came.
+    /// </summary>
+    WrongPassword = 5,
 }
 
 /// <summary>What a <see cref="PositionalStartMessage"/> says. Each member names what the seat,
@@ -402,10 +437,11 @@ public interface INetMessage<TSelf>
     int Write(Span<byte> into);
 }
 
-/// <summary>One seat as the roster carries it. The callsign is a fixed-width UTF-8 field, so a
-/// roster's size depends only on how many seats there are.</summary>
+/// <summary>One seat as the roster carries it. The callsign is a fixed-width UTF-8 field. A
+/// roster's size therefore depends only on how many seats there are. <see cref="Voice"/> is the
+/// seat's pilot voice in the pick's form, 0 for none.</summary>
 public readonly record struct NetSeatEntry(
-    byte Seat, byte Team, byte Plane, bool IsHost, string Callsign);
+    byte Seat, byte Team, byte Plane, bool IsHost, string Callsign, byte Voice = 0);
 
 /// <summary>
 /// One aircraft's state as its owner has it: pose, motion, the lever and the surfaces. It is the
@@ -548,15 +584,17 @@ public readonly record struct FireMessage(
 }
 
 /// <summary>
-/// The shooter's claim that one of its rounds landed. Reliable, because the victim's client is
-/// the only place the damage is applied, and a lost claim is a hit that never happened. The
-/// weapon is an index into the shared weapon catalogue. The <see cref="Damage"/> field is the
-/// share of that weapon's authored pair the round carries, 1 for a direct strike and the blast
-/// falloff otherwise. The struck collision shape is <see cref="Part"/>, or -1 for a shapeless one.
-/// The <see cref="LocalImpact"/> point is in the victim's own body space, so the victim resolves
-/// the same zone however far it has flown since.</summary>
+/// The shooter's claim that one of its rounds landed, reliable since the victim's client alone
+/// applies damage. The weapon is an index into the shared weapon catalogue. The
+/// <see cref="Damage"/> field is the share of that weapon's authored pair the round carries, 1 for
+/// a direct strike and the blast falloff otherwise. The struck collision shape is
+/// <see cref="Part"/>, or -1 for a shapeless one. The <see cref="LocalImpact"/> point is in the
+/// victim's own body space, so the victim resolves the same zone however far it has flown since.
+/// The <see cref="Hull"/> byte names the zeppelin whose broadside fired an unowned round, by
+/// placement index, and is <see cref="NetMessage.NoSeat"/> otherwise.</summary>
 public readonly record struct HitMessage(
-    byte VictimSeat, byte ShooterSeat, ushort Weapon, float Damage, short Part, Vector3 LocalImpact)
+    byte VictimSeat, byte ShooterSeat, ushort Weapon, float Damage, short Part, Vector3 LocalImpact,
+    byte Hull = NetMessage.NoSeat)
     : INetMessage<HitMessage>
 {
     /// <summary>The fixed width of the message, header included.</summary>
@@ -580,10 +618,11 @@ public readonly record struct HitMessage(
         byte shooter = reader.ReadByte();
         ushort weapon = reader.ReadUInt16();
         short part = reader.ReadInt16();
-        _ = reader.ReadUInt16();
+        byte hull = reader.ReadByte();
+        _ = reader.ReadByte();
         float damage = reader.ReadSingle();
         var impact = new Vector3(reader.ReadSingle(), reader.ReadSingle(), reader.ReadSingle());
-        message = new HitMessage(victim, shooter, weapon, damage, part, impact);
+        message = new HitMessage(victim, shooter, weapon, damage, part, impact, hull);
         return true;
     }
 
@@ -595,7 +634,8 @@ public readonly record struct HitMessage(
         writer.WriteByte(ShooterSeat);
         writer.WriteUInt16(Weapon);
         writer.WriteInt16(Part);
-        writer.WriteUInt16(0);
+        writer.WriteByte(Hull);
+        writer.WriteByte(0);
         writer.WriteSingle(Damage);
         writer.WriteSingle(LocalImpact.X);
         writer.WriteSingle(LocalImpact.Y);
@@ -607,7 +647,8 @@ public readonly record struct HitMessage(
 /// <summary>
 /// The victim's own hull state once it has applied whatever hit it. Reliable, and the reason a
 /// lost or reordered hit cannot leave two peers disagreeing about how hurt an aircraft is.
-/// The owner's number is the number, and this is the owner saying it.</summary>
+/// The owner's number is the number, and this is the owner saying it. A full hull is a rearm base's
+/// restore (docs/org/multiplayer-rearm.md).</summary>
 public readonly record struct DamageMessage(
     byte Seat, byte Stage, ushort Flags, float Hull) : INetMessage<DamageMessage>
 {
@@ -694,12 +735,13 @@ public readonly record struct DeathMessage(
 /// A match death as the host decided it, sent to every guest so each posts the kill lines once.
 /// The owner's <see cref="DeathMessage"/> is relayed to everyone but its reporter, so it cannot
 /// be the post. Reliable. The cause is the one the host scored, so a death with no seat to charge
-/// reads <see cref="NetDeathCause.Suicide"/>.</summary>
-public readonly record struct DeathNoticeMessage(byte VictimSeat, byte KillerSeat, NetDeathCause Cause)
+/// reads <see cref="NetDeathCause.Suicide"/>. A zeppelin's kill names the lobby team of the hull
+/// that fired in <see cref="Team"/>, 0 for every other cause.</summary>
+public readonly record struct DeathNoticeMessage(byte VictimSeat, byte KillerSeat, NetDeathCause Cause, byte Team = 0)
     : INetMessage<DeathNoticeMessage>
 {
     /// <summary>The fixed width of the message, header included.</summary>
-    public const int Size = 8;
+    public const int Size = 10;
 
     /// <inheritdoc/>
     public static NetMessageType Type => NetMessageType.DeathNotice;
@@ -716,7 +758,7 @@ public readonly record struct DeathNoticeMessage(byte VictimSeat, byte KillerSea
             return false;
 
         message = new DeathNoticeMessage(
-            reader.ReadByte(), reader.ReadByte(), (NetDeathCause)reader.ReadUInt16());
+            reader.ReadByte(), reader.ReadByte(), (NetDeathCause)reader.ReadUInt16(), reader.ReadByte());
         return true;
     }
 
@@ -727,6 +769,59 @@ public readonly record struct DeathNoticeMessage(byte VictimSeat, byte KillerSea
         writer.WriteByte(VictimSeat);
         writer.WriteByte(KillerSeat);
         writer.WriteUInt16((ushort)Cause);
+        writer.WriteByte(Team);
+        writer.WriteByte(0);
+        return writer.Close();
+    }
+}
+
+/// <summary>
+/// One line a pilot typed in flight and the seat that typed it, to everybody or to that seat's
+/// lobby team. The original's <c>0x15</c> carries only the text, since a peer-to-peer receiver
+/// knows its sender. Here the host relays, so the seat rides along and names the line. Reliable,
+/// though the original sends an all-chat unguaranteed (<c>docs/org/multiplayer-messages.md</c>).
+/// </summary>
+public readonly record struct FlightChatMessage(byte Seat, bool Team, string Text)
+    : INetMessage<FlightChatMessage>
+{
+    /// <summary>How many text bytes the message carries. The original's handler keeps 80 characters
+    /// of a line (<c>0x00499b5f</c>), and one more byte holds the terminator.</summary>
+    public const int TextBytes = 81;
+
+    /// <summary>The fixed width of the message, header included.</summary>
+    public const int Size = NetMessage.HeaderBytes + 4 + TextBytes;
+
+    private const byte TeamFlag = 0x01;
+
+    /// <inheritdoc/>
+    public static NetMessageType Type => NetMessageType.FlightChat;
+
+    /// <inheritdoc/>
+    public static NetReliability Reliability => NetReliability.Reliable;
+
+    /// <inheritdoc/>
+    public static bool TryRead(ReadOnlySpan<byte> from, out FlightChatMessage message)
+    {
+        message = default;
+        var reader = new NetMessageReader(from);
+        if (!reader.Is(Size) || reader.Type != Type)
+            return false;
+
+        byte seat = reader.ReadByte();
+        byte flags = reader.ReadByte();
+        reader.ReadUInt16();
+        message = new FlightChatMessage(seat, (flags & TeamFlag) != 0, reader.ReadText(TextBytes));
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public int Write(Span<byte> into)
+    {
+        var writer = new NetMessageWriter(into, Type);
+        writer.WriteByte(Seat);
+        writer.WriteByte(Team ? TeamFlag : (byte)0);
+        writer.WriteUInt16(0);
+        writer.WriteText(Text ?? "", TextBytes);
         return writer.Close();
     }
 }
@@ -767,6 +862,56 @@ public readonly record struct SpawnMessage(byte Seat, NetSpawnKind Kind, ushort 
         writer.WriteByte(Seat);
         writer.WriteByte((byte)Kind);
         writer.WriteUInt16(EntryIndex);
+        return writer.Close();
+    }
+}
+
+/// <summary>
+/// Where the host has placed a seat on its return, as a point and a heading in degrees rather than
+/// a table entry. Reliable, and the answer to a <see cref="SpawnRequestMessage"/> where the return
+/// is computed. That is Zeppelin vs Zeppelin's, off the field and the seat's own hull
+/// (<c>docs/org/multiplayer-zvz.md</c>).</summary>
+public readonly record struct SpawnAtMessage(byte Seat, Vector3 Position, float HeadingDeg)
+    : INetMessage<SpawnAtMessage>
+{
+    /// <summary>The fixed width of the message, header included.</summary>
+    public const int Size = NetMessage.HeaderBytes + 20;
+
+    /// <inheritdoc/>
+    public static NetMessageType Type => NetMessageType.SpawnAt;
+
+    /// <inheritdoc/>
+    public static NetReliability Reliability => NetReliability.Reliable;
+
+    /// <inheritdoc/>
+    public static bool TryRead(ReadOnlySpan<byte> from, out SpawnAtMessage message)
+    {
+        message = default;
+        var reader = new NetMessageReader(from);
+        if (!reader.Is(Size) || reader.Type != Type)
+            return false;
+
+        byte seat = reader.ReadByte();
+        _ = reader.ReadByte();
+        _ = reader.ReadUInt16();
+        float x = reader.ReadSingle();
+        float y = reader.ReadSingle();
+        float z = reader.ReadSingle();
+        message = new SpawnAtMessage(seat, new Vector3(x, y, z), reader.ReadSingle());
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public int Write(Span<byte> into)
+    {
+        var writer = new NetMessageWriter(into, Type);
+        writer.WriteByte(Seat);
+        writer.WriteByte(0);
+        writer.WriteUInt16(0);
+        writer.WriteSingle(Position.X);
+        writer.WriteSingle(Position.Y);
+        writer.WriteSingle(Position.Z);
+        writer.WriteSingle(HeadingDeg);
         return writer.Close();
     }
 }
@@ -854,15 +999,15 @@ public readonly record struct ScoreMessage(byte Seat, short Score, ushort Kills,
 
 /// <summary>
 /// The match clock, its limits and its ending, written only by the host. A guest applies this
-/// rather than advancing a clock of its own. That is what keeps two peers showing the same
-/// remaining time and the same end. <c>HostClock</c> is the host's session time at send, the
-/// remake's one addition to the original's <c>0x17</c>. The periodic tick is the only message a
-/// running match repeats, so it is what <see cref="NetClockSlew"/> reads its offset from. A
-/// float, not a double, costs 2.4e-4 s of step at the hour mark, far under what the slew calls
-/// settled.</summary>
+/// rather than advancing a clock of its own, which keeps two peers showing the same remaining time
+/// and the same end. <c>HostClock</c> is the host's session time at send, and <c>Winner</c> the lobby
+/// team an <see cref="NetMatchEnd.Objective"/> ending names, 0 otherwise. The periodic tick is the
+/// only message a running match repeats, so it is what <see cref="NetClockSlew"/> reads its offset
+/// from. A float, not a double, costs 2.4e-4 s of step at the hour mark, far under what the slew
+/// calls settled.</summary>
 public readonly record struct MatchStateMessage(
     float RemainingSeconds, float TimeLimitSeconds, short ScoreTarget, NetMatchEnd End,
-    float HostClock = 0f)
+    float HostClock = 0f, byte Winner = 0)
     : INetMessage<MatchStateMessage>
 {
     /// <summary>The fixed width of the message, header included.</summary>
@@ -886,8 +1031,8 @@ public readonly record struct MatchStateMessage(
         float limit = reader.ReadSingle();
         short target = reader.ReadInt16();
         var end = (NetMatchEnd)reader.ReadByte();
-        _ = reader.ReadByte();
-        message = new MatchStateMessage(remaining, limit, target, end, reader.ReadSingle());
+        byte winner = reader.ReadByte();
+        message = new MatchStateMessage(remaining, limit, target, end, reader.ReadSingle(), winner);
         return true;
     }
 
@@ -899,7 +1044,7 @@ public readonly record struct MatchStateMessage(
         writer.WriteSingle(TimeLimitSeconds);
         writer.WriteInt16(ScoreTarget);
         writer.WriteByte((byte)End);
-        writer.WriteByte(0);
+        writer.WriteByte(Winner);
         writer.WriteSingle(HostClock);
         return writer.Close();
     }
@@ -1002,12 +1147,12 @@ public readonly record struct HandshakeMessage(ulong Seed, double HostClock, byt
 /// <summary>
 /// A host's word about its open session, sent to every peer on connect and again on any change,
 /// and inside a LAN discovery reply. A join board reads it before a flight exists. So it
-/// names only the session: its kind, its campaign mission, its player count, its status, its seat
-/// cap and its host. Nothing about the world rides here. A guest reads it off the lobby, never off
-/// a session.</summary>
+/// names only the session: its kind, mission, player count, status, seat cap, host and password
+/// mark. Nothing about the world rides here. A guest reads
+/// it off the lobby, never off a session.</summary>
 public readonly record struct SessionAdvertMessage(
     NetSessionKind Kind, byte MissionSeq, byte Players, string Host,
-    NetSessionStatus Status = NetSessionStatus.Waiting, byte Cap = 0)
+    NetSessionStatus Status = NetSessionStatus.Waiting, byte Cap = 0, bool Password = false)
     : INetMessage<SessionAdvertMessage>
 {
     /// <summary>The fixed width of the message, header included.</summary>
@@ -1022,6 +1167,10 @@ public readonly record struct SessionAdvertMessage(
     /// <summary>How many missions one campaign chapter holds, the divisor the chapter reads by.
     /// </summary>
     public const int MissionsPerChapter = 5;
+
+    // The flags byte stands where a reserved byte stood, so a build a patch older reads the rest
+    // unchanged and ignores the mark.
+    private const byte PasswordFlag = 0x01;
 
     /// <inheritdoc/>
     public static NetMessageType Type => NetMessageType.SessionAdvert;
@@ -1051,7 +1200,7 @@ public readonly record struct SessionAdvertMessage(
         byte players = reader.ReadByte();
         byte status = reader.ReadByte();
         byte cap = reader.ReadByte();
-        _ = reader.ReadByte();
+        byte flags = reader.ReadByte();
         _ = reader.ReadUInt16();
         var known = kind is (byte)NetSessionKind.Dogfight or (byte)NetSessionKind.CampaignCoop
             ? (NetSessionKind)kind
@@ -1059,7 +1208,8 @@ public readonly record struct SessionAdvertMessage(
         var stands = status is >= (byte)NetSessionStatus.Waiting and <= (byte)NetSessionStatus.Full
             ? (NetSessionStatus)status
             : NetSessionStatus.Unknown;
-        message = new SessionAdvertMessage(known, seq, players, reader.ReadText(HostBytes), stands, cap);
+        message = new SessionAdvertMessage(
+            known, seq, players, reader.ReadText(HostBytes), stands, cap, (flags & PasswordFlag) != 0);
         return true;
     }
 
@@ -1072,7 +1222,7 @@ public readonly record struct SessionAdvertMessage(
         writer.WriteByte(Players);
         writer.WriteByte((byte)Status);
         writer.WriteByte(Cap);
-        writer.WriteByte(0);
+        writer.WriteByte(Password ? PasswordFlag : (byte)0);
         writer.WriteUInt16(0);
         writer.WriteText(Host ?? "", HostBytes);
         return writer.Close();
@@ -1114,7 +1264,7 @@ public readonly record struct SessionClosedMessage(
             || !NetBuildVersion.TryFromWords(reader.ReadUInt16(), reader.ReadUInt16(), out var guest))
             return false;
 
-        var known = reason is >= (byte)NetCloseReason.Closed and <= (byte)NetCloseReason.VersionMismatch
+        var known = reason is >= (byte)NetCloseReason.Closed and <= (byte)NetCloseReason.WrongPassword
             ? (NetCloseReason)reason
             : NetCloseReason.Unknown;
         message = new SessionClosedMessage(known, host, guest);
@@ -1130,6 +1280,58 @@ public readonly record struct SessionClosedMessage(
         writer.WriteUInt16(0);
         Host.Write(ref writer);
         Guest.Write(ref writer);
+        return writer.Close();
+    }
+}
+
+/// <summary>
+/// The password step of a join to a session whose advert asks one. The guest answers the advert
+/// with its player's password. The host answers a right one with <see cref="Admitted"/> set, before
+/// anything of the session reaches the guest. A wrong answer is
+/// sent away with <see cref="NetCloseReason.WrongPassword"/> instead. Like the advert it stays in
+/// the lobby, and a session without a password never sends it.
+/// </summary>
+public readonly record struct JoinPasswordMessage(bool Admitted, string Password)
+    : INetMessage<JoinPasswordMessage>
+{
+    /// <summary>The fixed width of the message, header included.</summary>
+    public const int Size = 8 + PasswordBytes;
+
+    /// <summary>How many bytes the password takes, UTF-8 and zero padded: room for the box's 14
+    /// characters at three bytes each.</summary>
+    public const int PasswordBytes = 48;
+
+    private const byte AdmittedFlag = 0x01;
+
+    /// <inheritdoc/>
+    public static NetMessageType Type => NetMessageType.JoinPassword;
+
+    /// <inheritdoc/>
+    public static NetReliability Reliability => NetReliability.Reliable;
+
+    /// <inheritdoc/>
+    public static bool TryRead(ReadOnlySpan<byte> from, out JoinPasswordMessage message)
+    {
+        message = default;
+        var reader = new NetMessageReader(from);
+        if (!reader.Is(Size) || reader.Type != Type)
+            return false;
+
+        byte flags = reader.ReadByte();
+        _ = reader.ReadByte();
+        _ = reader.ReadUInt16();
+        message = new JoinPasswordMessage((flags & AdmittedFlag) != 0, reader.ReadText(PasswordBytes));
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public int Write(Span<byte> into)
+    {
+        var writer = new NetMessageWriter(into, Type);
+        writer.WriteByte(Admitted ? AdmittedFlag : (byte)0);
+        writer.WriteByte(0);
+        writer.WriteUInt16(0);
+        writer.WriteText(Password ?? "", PasswordBytes);
         return writer.Close();
     }
 }
@@ -1153,6 +1355,10 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
     /// <summary>The most seats this message can carry. The original's spawn slot packs its index
     /// into four bits, so 16 is the widest roster its own protocol can name.</summary>
     public const int MaxSeats = 16;
+
+    // An entry's flags byte: bit 0 the host, bits 1 to 3 the seat's voice. An older reader reads
+    // the host bit alone and ignores the voice.
+    private const int VoiceShift = 1;
 
     private readonly NetSeatEntry[] _seats;
 
@@ -1224,7 +1430,8 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
             byte flags = reader.ReadByte();
             byte plane = reader.ReadByte();
             seats[i] = new NetSeatEntry(
-                seat, team, plane, (flags & 1) != 0, reader.ReadText(CallsignBytes));
+                seat, team, plane, (flags & 1) != 0, reader.ReadText(CallsignBytes),
+                (byte)((flags >> VoiceShift) & CoopPickMessage.MaxVoice));
         }
 
         message = new SeatRosterMessage(seats, seed);
@@ -1244,7 +1451,8 @@ public readonly struct SeatRosterMessage : INetMessage<SeatRosterMessage>
         {
             writer.WriteByte(seat.Seat);
             writer.WriteByte(seat.Team);
-            writer.WriteByte((byte)(seat.IsHost ? 1 : 0));
+            int voice = seat.Voice <= CoopPickMessage.MaxVoice ? seat.Voice : CoopPickMessage.NoVoice;
+            writer.WriteByte((byte)((seat.IsHost ? 1 : 0) | (voice << VoiceShift)));
             writer.WriteByte(seat.Plane);
             writer.WriteText(seat.Callsign, CallsignBytes);
         }
@@ -1363,6 +1571,13 @@ public static class NetMessage
         NetMessageType.PlaneBuild => PlaneBuildMessage.Reliability,
         NetMessageType.LobbyPlaneRules => LobbyPlaneRulesMessage.Reliability,
         NetMessageType.CoopHangar => CoopHangarMessage.Reliability,
+        NetMessageType.JoinPassword => JoinPasswordMessage.Reliability,
+        NetMessageType.LobbyTeamAction => LobbyTeamActionMessage.Reliability,
+        NetMessageType.LobbyTeams => LobbyTeamsMessage.Reliability,
+        NetMessageType.FlagRequest => FlagRequestMessage.Reliability,
+        NetMessageType.FlagTable => FlagTableMessage.Reliability,
+        NetMessageType.SpawnAt => SpawnAtMessage.Reliability,
+        NetMessageType.FlightChat => FlightChatMessage.Reliability,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "no such message type"),
     };
 

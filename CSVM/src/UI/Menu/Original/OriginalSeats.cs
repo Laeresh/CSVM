@@ -173,11 +173,20 @@ public sealed partial class OriginalShell
         return seat.Confirmed ? $"{name}  READY" : seat.Locked ? name : "choosing";
     }
 
-    private static CampaignChip Chip(int seat, bool own, bool ready)
+    // A player with a callsign is chipped by it, the chip widened a pitch for every three
+    // characters past the player tag's two.
+    private static CampaignChip Chip(int seat, bool own, bool ready, string callsign = "")
     {
         string mark = ready ? LaunchMenu.ReadyChipMark : own ? "" : LaunchMenu.RemoteChipMark;
         int pitches = ready ? ReadyChipPitches : mark.Length > 0 ? RemoteChipPitches : 1;
-        return new CampaignChip(SplitScreen.PlayerTag(seat) + mark, seat, pitches, own, ready);
+        string name = callsign.Trim();
+        if (name.Length == 0)
+        {
+            return new CampaignChip(SplitScreen.PlayerTag(seat) + mark, seat, pitches, own, ready);
+        }
+
+        pitches += (Math.Max(0, name.Length - 2) + 2) / 3;
+        return new CampaignChip(name + mark, seat, pitches, own, ready);
     }
 
     // Built-in's chip row in the Original presentation's own space, drawn over a campaign board
@@ -247,7 +256,7 @@ public sealed partial class OriginalShell
             {
                 bool own = slot == flow.Slot;
                 bool ready = own ? guest.CoopReady : flow.IsReady(slot);
-                chips.Add(Chip(slot, own, ready));
+                chips.Add(Chip(slot, own, ready, own ? guest.PlayerName : ""));
             }
 
             return chips;
@@ -265,7 +274,7 @@ public sealed partial class OriginalShell
             {
                 if (chips.Count < NetSeats.MaxPlayers)
                 {
-                    chips.Add(Chip(chips.Count, false, coop.Ready));
+                    chips.Add(Chip(chips.Count, false, coop.Ready, coop.Name));
                 }
             }
         }

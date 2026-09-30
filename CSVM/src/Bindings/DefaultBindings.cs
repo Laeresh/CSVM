@@ -194,6 +194,11 @@ public static class DefaultBindings
         b.Keys(InputAction.TrackTarget, Key.L);
         b.Keys(InputAction.SmoothLookMode, Key.J);
 
+        // The two chat commands on the original's own grave key, Shift taking the team line. The
+        // keyboard only: a line is typed, so no pad control opens one.
+        b.Keys(InputAction.ChatEveryone, Key.Quoteleft);
+        b.Mod(InputAction.ChatTeam, KeyModifiers.Shift, Key.Quoteleft);
+
         // The graphics-mode switch, this port's own action. Keyboard only: it is a comparison
         // tool, and the pad has no free control to spend on it.
         b.Keys(InputAction.ToggleGraphicsMode, Key.G);

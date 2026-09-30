@@ -226,7 +226,7 @@ public sealed class TargetPool
     /// than vanishing); the source supplies only the strings and the health figures. This is the one
     /// place in the targeting path that reads a concrete source type at all.</summary>
     private static TargetRef Describe(AimCandidate c, AimTargetKind kind, TargetClass cls,
-        bool objective)
+        bool objective, int ownTeam)
     {
         string name = NameOf(c.Source);
         switch (kind)
@@ -239,11 +239,14 @@ public sealed class TargetPool
             case AimTargetKind.Vehicle:
                 var plane = c.Source as FlightController;
                 var dmg = plane?.Damage;
+                // A mode's tag (a flag carrier's) replaces the name line while it stands, read by
+                // the selecting pane's own side.
+                string? tag = plane?.MarkerName?.Invoke(ownTeam);
                 // The MARKER prints the airframe's common name (plane type alone, decision 10),
                 // not the node name the selection is held and pinned by. A rig with no flight model
                 // bound has no airframe to name, and falls back to that node name.
                 return TargetRef.ForAircraft(c, cls, name,
-                    plane?.Stats is { } stats ? PlaneRoster.PlaneDisplayName(stats) : null,
+                    tag ?? (plane?.Stats is { } stats ? PlaneRoster.PlaneDisplayName(stats) : null),
                     dmg == null ? null : TargetRef.Fraction(dmg.WholeHealth, dmg.WholeHealthMax),
                     dmg == null ? null : TargetRef.Fraction(dmg.WholeArmor, dmg.WholeArmorMax),
                     objective, plane?.ObjectiveTypeLabel, plane?.ObjectiveCategory);
@@ -263,8 +266,8 @@ public sealed class TargetPool
                 // name come off the target table rather than off a health model it has none of.
                 if (c.Source is ObjectiveSite site)
                 {
-                    return TargetRef.ForStructure(c, cls, name, site.TypeLabel, site.Category,
-                        objective, displayName: site.DisplayName);
+                    return TargetRef.ForStructure(c, cls, name, site.TypeLabel,
+                        site.CategoryFor(ownTeam), objective, displayName: site.DisplayName);
                 }
 
                 // A Danger Zone is labelled off the same targets.zrd triple every other objective
@@ -315,6 +318,6 @@ public sealed class TargetPool
             return;
         }
 
-        Add(Describe(c, kind, cls, objective));
+        Add(Describe(c, kind, cls, objective, ownTeam));
     }
 }

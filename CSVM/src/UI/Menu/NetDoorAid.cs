@@ -50,6 +50,16 @@ public static class NetDoorAid
             NetSessionKind.Dogfight, 5, 2, "Oskar", NetSessionStatus.Waiting, NetSeats.MaxPlayers), OtherVersion),
     };
 
+    /// <summary>The answers the network boxes' aids are posed with. The host's game stands at the
+    /// spinner's opening eight, and its callsign on the Gruff Male voice.</summary>
+    public static NetPlayerInfo SamplePlayer() => new()
+    {
+        GameName = HostName,
+        Callsign = HostName,
+        Voice = 5,
+        MaxPlayers = NetPlayerInfo.DefaultPlayers,
+    };
+
     /// <summary>A shut door whose host opens onto a loopback wire with <paramref name="guests"/>
     /// peers already on it, and whose router maps any port asked for.</summary>
     public static NetPlayFeature Host(int guests, out Func<int> unmapped) => Host(guests, out unmapped, out _);

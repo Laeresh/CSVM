@@ -54,7 +54,7 @@ public sealed class CoopGuestPick
 
     // A guest's Ready belongs to one round: a new round clears it, and the pick goes out again
     // under the new one. Null when the host already has this pick.
-    internal CoopPickMessage? Follow(byte round, string name)
+    internal CoopPickMessage? Follow(byte round, string name, byte voice = CoopPickMessage.NoVoice)
     {
         if (_sent is { } last && last.Epoch != round)
         {
@@ -62,7 +62,7 @@ public sealed class CoopGuestPick
             _left = false;
         }
 
-        var pick = new CoopPickMessage(round, Ready, Airframe, Fit, name, _left, CoopPickMessage.PlaneByte(Plane));
+        var pick = new CoopPickMessage(round, Ready, Airframe, Fit, name, _left, CoopPickMessage.PlaneByte(Plane), voice);
         return _sent == pick ? null : pick;
     }
 

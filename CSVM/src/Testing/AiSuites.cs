@@ -2459,7 +2459,7 @@ internal static class AiSuites
 
             // The chain's worked example: accent 12 is a single-id pool, VO id 2 (the pilot with
             // the full bearing set). Prewarm that pilot exactly as a mission roster would.
-            int? pilot = voice.PilotFor(12, new System.Random(1));
+            int? pilot = voice.PilotFor(12, 0);
             ctx.Check(pilot == 2, $"accent 12 resolves to VO id 2 got={pilot?.ToString() ?? "null"}");
             var subset = voice.PrewarmNames(new[] { 12 });
             var sw = System.Diagnostics.Stopwatch.StartNew();

@@ -166,6 +166,8 @@ public static class BindingLabels
         InputAction.Nitro => "Use Nitro-Booster",
         InputAction.AutoLand => "Auto-Dock",
         InputAction.Pause => "Pause/Quit/Objectives",
+        InputAction.ChatEveryone => "Chat to Everyone",
+        InputAction.ChatTeam => "Chat to Team",
         _ => ThrottleFraction(action),
     };
 

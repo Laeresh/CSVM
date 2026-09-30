@@ -91,7 +91,7 @@ holds **two** sound handles per vehicle. Both are positional or not by the sound
 | Slot | Definition key | Notes |
 |---|---|---|
 | 0 | `engine_sound` | pitch and volume off the player-global `engine_sound` throttle curves |
-| 0, in either first-person view | `cockpit_engine_sound` | swapped in while the camera is in the Cockpit (mode 6) or the Nose (mode 7) view. `FUN_004b18a0` reads the live mode at `0x004b18b8` (`[DAT_0064ef78 + 0x14c]`), and `CMP EDI,0x6` at `0x004b1960` and `CMP EDI,0x7` at `0x004b1965` both jump to `0x004b1993`, which stops a slot 0 holding def `+0x6c` and loads def `+0x70`; every other mode swaps `+0x70` back to `+0x6c` (`0x004b196a`). The swap runs only for the player's own aircraft (`CMP ESI,[0x0071c298]`) and only while vehicle `+0x2dc` is clear (`0x004b194e`). Listening at the controls of the original agrees. CSVM keys this to the pilot's SELECTED view being Cockpit or Nose (`EngineAudioCurves.SelectsCockpitLoop`), not the per-frame camera pose, so a held numpad key or look-behind does not retrigger it. No `*_cp` definition carries `FREQUENCY`, so the throttle pitch curve does not reach this one |
+| 0, in either first-person view | `cockpit_engine_sound` | swapped in while the camera is in the Cockpit (mode 6) or the Nose (mode 7) view. `FUN_004b18a0` reads the live mode at `0x004b18b8` (`[DAT_0064ef78 + 0x14c]`), and `CMP EDI,0x6` at `0x004b1960` and `CMP EDI,0x7` at `0x004b1965` both jump to `0x004b1993`, which stops a slot 0 holding def `+0x6c` and loads def `+0x70`; every other mode swaps `+0x70` back to `+0x6c` (`0x004b196a`). The swap runs only for the player's own aircraft (`CMP ESI,[0x0071c298]`) and only while vehicle `+0x2dc` is clear (`0x004b194e`). Listening at the controls of the original agrees. CSVM keys this to the pilot's SELECTED view being Cockpit or Nose (`EngineAudioCurves.SelectsCockpitLoop`), not the per-frame camera pose, so a held numpad key or look-behind does not retrigger it. No `*_cp` definition carries `FREQUENCY`, so the throttle pitch curve does not reach this one in the original; CSVM's `cockpitEnginePitch` option lets it (below, "The cockpit loop's pitch is a remake-only rule") |
 | 0, while damaged | `damaged_engine_sound[]` | the damage edge silences the slot and a random entry replaces the definition once the re-arm timer fires, then holds while the vehicle's disabled-systems mask is nonzero (below, "What makes an airframe damaged" and "The damaged engine's phases"); the entry's pitch range is drawn once and multiplies the throttle pitch curve, and on the shipped `snd_damagedengine` that product reaches nothing, since the definition carries no `FREQUENCY` flag ([sounds.md](sounds.md#a-definition-is-pitched-only-when-it-carries-frequency)); CSVM's port decision is that this wins over the cockpit swap when both apply, since no def authors a damaged cockpit variant and the interaction is not itself decoded |
 | 1 | `prop_sound` | the overspeed whine, off the player-global `prop_sound` speed curves |
 
@@ -110,6 +110,22 @@ plays for anybody. Every def does author `engine_sound` AND `cockpit_engine_soun
 carries both as the fallback every plane either inherits or overrides), and every def inherits
 `basic_airplane`'s single `damaged_engine_sound` entry, `cockpit_engine_sound` is fully reachable
 in the retail data and is now selected by CSVM too, once the pilot has a view to select it with (D31).
+
+### The cockpit loop's pitch is a remake-only rule
+
+The original's cockpit loop plays at one pitch whatever the throttle, because its buffer refuses
+every frequency write (above). A flat loop gives the pilot no audible thrust in the view flown most,
+so CSVM can pitch it: with the `cockpitEnginePitch` key in `user://options.json` true, or never set,
+the cockpit loop takes slot 0's own pitch expression unchanged, throttle curve, manoeuvre and
+attitude terms, boost pin and clamp included (`EngineAudioCurves.HealthySlotIsPitched`). False
+restores the original's flat loop. No screen offers the key, and a `--det` run ignores it.
+
+The curve needs no range of its own. It maps full throttle to 1.0, the WAV's own rate, so a
+level cockpit loop at full throttle sounds exactly as the original's does at every throttle; it
+falls to 0.6 at idle, as the exterior loop does, and reaches 1.2 only at the 1.5 clamp. The
+`*_cp` recordings were never played below their own rate in the original, so a narrower cockpit
+span is the fallback if the bottom of the curve sounds wrong at the controls. The damaged loop
+still answers by its own flag, so the option does not reach it.
 
 ### What makes an airframe damaged
 
@@ -207,6 +223,15 @@ of slot 0 and one cue. There is no sputter or restart sound on the slot.
   `FUN_004b1470(0, 1.0)` on that same frame and stores the multiplier 1.0 at `0x004b1b33`. There is no
   wait in this direction. Bit `0x1` clears on a heal because `FUN_004b8180` rewrites it from the
   whole-vehicle fraction against `def+0xbc` (`0x004b82af` sets, `0x004b82bd` clears).
+- **Spawn and respawn.** The healthy start is the same call. The per-frame vehicle update
+  `FUN_004897c0` runs `FUN_004b18a0` every frame, and while the slot-0 handle `veh+0x70` is zero
+  the healthy arm starts slot 0 and slot 1 with `FUN_004b1470(0, 1.0)` and `FUN_004b1470(1, 1.0)`
+  (`0x004b1b72` to `0x004b1b88`), then writes that frame's curve volume through `FUN_005978f0` at
+  `0x004b1e21`. A dead player's frame stops and zeroes all four handles (`FUN_004b1510`, called at
+  `0x004b1910`), so the first frame after a respawn takes the same start. `FUN_004b1470` hands its
+  gain straight to the play call (`FUN_00593590` or `FUN_00593b80`, then `FUN_00593680`), which
+  converts it to decibels and nothing more, so there is no per-vehicle fade at any start. The only
+  other factor on the level is the voice-over duck below, which a start does not reset.
 - **The cull.** An AI past the 2000-unit cull skips the timer altogether, so a culled damaged engine
   is Out with a frozen timer until it comes back in range.
 - **Bit `0x2` does not add a phase.** Only the choker sets it (`FUN_004b9bc0`, `0x004b9e34`); no graze
@@ -260,6 +285,60 @@ two coefficients as a matched pair that both landed.
 Boost short-circuits both curves rather than scaling them: with the boost flag `+0x947` set
 (`0x004b1c51`), `tVol` is replaced by **1.17** and `tPitch` by **1.25** outright, which is what the
 `1.5` clamp headroom above 1.0 exists for.
+
+### A voice line ducks every engine
+
+The volume `FUN_004b18a0` writes to either slot is `sfxLevel · G · volume`, where `G` is one global
+float at `0x0062ae24` (read at `0x004b1e0d` and `0x004b1f2f`; the image holds 1.0). All nine
+references to `G` are in this routine. After both slots are written it asks `FUN_00597590`
+(`0x004b1f65`) whether the sound queue has an item on air (`DAT_00639eb4`, the queue pump in
+[sounds.md](sounds.md)), and steps `G`:
+
+```
+L = voiceover_volume_limiter                      ; 0x0071c3a0
+if a queued voice is on air:
+    if slot0Volume > L or slot1Volume > L:  G = max(G - (1 - L)·dt, L)          ; 0x004b1f92..0x004b1fc9
+else if G < 1:
+    G = min(G + (1 - L)·0.1667·dt, 1.0)                                       ; 0x004b1feb..0x004b201e
+```
+
+`L` is **0.4** in the install. `FUN_004735b0` stores the compiled `0x3f000000` (0.5) at
+`0x00473e60` and overwrites it at `0x00473e7c` when `player.zrd` authors the root key
+`voiceover_volume_limiter` (string at `0x0062768c`), which it does, as `[0.4]`. `0.1667` is the
+float at `0x00608b94`, so the recovery runs at 0.1/s against a fall of 0.6/s.
+
+⚠ **The fall is a limiter on the written level, not a fixed duck to `L`.** `sfxLevel` is
+`FUN_00440650`, the `SfxVolume` option (`*DAT_0064f6dc`, default 0.5 from `FUN_0043fb50`), and the
+shipped engine volume curve is flat 1.0, so the level the compare reads is `SfxVolume · G`. At the
+shipped 0.5 it stands above 0.4 only while `G > 0.8`: a line takes `G` from 1.0 to 0.8 in a third
+of a second, the engine's written level from 0.5 to 0.4 (about 1.9 dB), and the recovery takes two
+seconds. At `SfxVolume` 1.0 the fall runs to the floor `G = L` in one second and recovers over six.
+At `SfxVolume` 0.4 or below it never moves.
+
+- **What counts as on air.** `FUN_00597590` is `DAT_00639eb4 != 0`. The pump `FUN_00593110` sets
+  it when it starts a queued item and clears it the frame it finds that voice stopped, before the
+  0.3 s gap; `FUN_00591f40` and `FUN_00592170` clear it on a flush. Only a definition carrying
+  `QUEUE` enters that list, so a mission's objective VO and every combat voice line both duck the
+  engines, and nothing else does. An objective cue's 1 s start delay is not air time.
+- **What is ducked.** All nine references to `G` are in this routine, which writes slot 0 (the
+  engine, cockpit or damaged loop) and slot 1 (the whine) and nothing else. The rattle, the nitro
+  loop, gunfire, one-shots and world sounds keep their level. A vehicle outside mode class 0 and 4
+  branches at `0x004b193e` to `0x004b202d`, which writes slot 0 without `G` and returns unstepped.
+- **Who steps it.** `G` is global and each aircraft's call steps it once, after writing its own
+  slots at the current `G`. A culled AI returns before the step (`0x004b1b47`), and so does a
+  damaged slot waiting on its re-arm timer, whose handle is zero (`0x004b1b17`). The fall runs only
+  for an aircraft whose own written level is above `L`, the recovery for every one that steps, so
+  company speeds both.
+- **Spawns.** A spawn or respawn does not touch `G`, so a start under a radio call starts at
+  whatever level the duck stands at.
+
+CSVM ports it as `EngineVoiceDuck`: one per session, stepped by the pilot's `FlightAudio` and every
+in-range `AiEngineAudio` after each writes its slots, on `MissionRadio.OnAir`. The `SfxVolume`
+counterpart is the Effects bus gain (`AudioMix.EffectsGain`, 0.5 at the shipped Effects level of 50
+under Master 100). Neither the definition's `VOLUME` nor the splitscreen `MixGain` is in the compare,
+since the original's level carries neither. The original has one listener; in splitscreen the one
+gain lowers every pane's engines together, and each pane's own aircraft steps it like one more
+in-range aircraft would.
 
 ## Destroyable parts
 

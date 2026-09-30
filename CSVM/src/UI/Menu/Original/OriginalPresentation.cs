@@ -190,6 +190,14 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// Searching box stands.</summary>
     public const string ConnectionSearchingAid = "searching";
 
+    /// <summary>The <see cref="ConnectionAid"/> argument that stands GAME INFORMATION over the page,
+    /// posed with the aids' sample game.</summary>
+    public const string GameInfoAid = "gameinfo";
+
+    /// <summary>The <see cref="ConnectionAid"/> argument that stands PLAYER INFORMATION over the
+    /// page, posed with the aids' sample callsign and voice.</summary>
+    public const string PlayerInfoAid = "playerinfo";
+
     /// <summary>The aid value that opens the Multiplayer Lobby over the aids' loopback wire with two
     /// guests on it. Its first colon argument names the view: host (the default), guest (Ready) or
     /// waiting (a guest not yet Ready). The second names the tab: mission (the default), plane,
@@ -400,7 +408,8 @@ public sealed class OriginalPresentation : IMenuPresentation
                 screens: MonitorSetting.Screens,
                 controls: host.Features.TryGet<ControlsFeature>(out var controls) ? controls : null,
                 joinRoster: _devices,
-                net: host.Features.TryGet<NetPlayFeature>(out var net) ? net : null);
+                net: host.Features.TryGet<NetPlayFeature>(out var net) ? net : null,
+                netOptions: OptionsStore.UserOptions);
             _controlsSeats = host.Features.TryGet<ControlsFeature>(out var rebinds) ? new MenuControlsSeats(rebinds) : null;
             _palette = PaletteFor(_shell.Inks);
             _preferencesPalette = PaletteFor(_shell.PreferencesInks, _shell.Inks);
@@ -564,6 +573,14 @@ public sealed class OriginalPresentation : IMenuPresentation
                     break;
                 case ConnectionAid:
                     _shell.Connection.OpenConnection();
+                    break;
+                case ConnectionAid + ":" + GameInfoAid:
+                case ConnectionAid + ":" + PlayerInfoAid:
+                    // The aids' own door, so the pose never reads or writes the player's options.
+                    _shell.StandInNetDoor(NetDoorAid.Searching(silent: true));
+                    _shell.Connection.OpenConnection();
+                    _shell.AskNetInfo(aid.EndsWith(GameInfoAid, StringComparison.Ordinal) ? NetSessionKind.Dogfight : null,
+                        () => { }, NetDoorAid.SamplePlayer());
                     break;
                 case ConnectionGamesAid:
                 case ConnectionGamesAid + ":" + ConnectionSearchingAid:

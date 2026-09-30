@@ -100,7 +100,7 @@ public class OriginalManifestTests : IDisposable
                 "MP_B_CHECKBOXLARGE.PNG", "MP_LOBBY_BACKGROUND.JPG", "MP_LOBBY_MISSION.PNG", "MP_LOBBY_PLANE.PNG",
                 "MP_LOBBY_AMMO.PNG", "MP_LOBBY_STATSCREEN.PNG", "MP_LOBBY_TABLARGE.PNG", "MP_LOBBY_TABSMALL.PNG",
                 "MP_B_RADIO8STATESSM.PNG", "MP_B_CHECKBOX8STATES.PNG", "MP_B_CHECKBOX.PNG", "MP_B_LISTBOXARROW.PNG",
-                "MP_PLANEICONSTOPFRONT.PNG",
+                "MP_PLANEICONSTOPFRONT.PNG", "MP_B_SCROLLUP.PNG", "MP_B_SCROLLDOWN.PNG", "MP_CREATETEAMBACKGROUND.PNG",
             },
             Names(manifest, OriginalAssetNeed.Required));
         Assert.Equal(
@@ -128,7 +128,7 @@ public class OriginalManifestTests : IDisposable
         var report = OriginalAssetManifest.Derive(MenuLayout.Parse(LayoutJson)).Check(_root);
 
         Assert.True(report.Complete, report.Reason);
-        Assert.Equal(31, report.RequiredCount);
+        Assert.Equal(34, report.RequiredCount);
         Assert.Equal(5, report.OptionalCount);
         Assert.Null(report.Reason);
         Assert.Null(report.Degraded);

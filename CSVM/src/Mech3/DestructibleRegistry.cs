@@ -243,6 +243,11 @@ public sealed class DestructibleRegistry
         /// candidate pass drops these; every other channel keeps them.</summary>
         public bool Gasbag { get; set; }
 
+        /// <summary>The shooter id of the last hit spent on this pool. It is -1 for a hit nobody
+        /// fired: a ram, a script's kill or a caller naming no shooter. The original credits a part's
+        /// death to the attacker of the one hit that took it to zero.</summary>
+        public int LastShooter { get; set; } = -1;
+
         /// <summary>Out of play: the pool exists, but its object is not in the world yet, a
         /// mission's <c>deactivated</c> zeppelin before its script wakes it. Refused as a target
         /// and by <c>AnimRuntime.DamageAt</c> while set. ⚠ Not a death state: <see cref="Status"/>
