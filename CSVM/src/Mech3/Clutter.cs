@@ -67,6 +67,10 @@ public sealed class ClutterBuilder
     // shapes, so CollisionObject3D._update_shapes() would clear the body and re-add nothing.
     private const float CollisionRegion = 1024f;
 
+    // One sprite shader per variant the decoration models actually ask for, process-wide so a live
+    // mode switch can rewrite each in place. Main thread only, like the builder.
+    private static readonly Dictionary<int, Shader> SpriteShaders = new();
+
     private readonly GameZ _gamez;
     private readonly TextureArchive _textures;
     private readonly SceneBuilder? _scene;
@@ -86,9 +90,6 @@ public sealed class ClutterBuilder
     // target through the engine's global model table, i.e. to ONE model however many templates
     // mention it; first-seen wins here, which is the same statement over a deterministic walk.
     private readonly Dictionary<string, Kind> _kindsByModel = new(StringComparer.OrdinalIgnoreCase);
-
-    // One sprite shader per (lit, fogged) pair the decoration models actually ask for.
-    private readonly Dictionary<int, Shader> _shaders = new();
 
     // Shared collision shapes of the last collidable Build, keyed by decoration MeshIndex.
     private Dictionary<int, ConcavePolygonShape3D>? _solidShapes;
@@ -512,20 +513,20 @@ public sealed class ClutterBuilder
     public void FollowActivation(Node3D world) =>
         Activation = ClutterActivation.Bind(world, ExportedKinds);
 
+    /// <summary>Draws every exported kind again under the graphics mode and the clutter fade scale
+    /// standing now (<see cref="ClutterInstances.Recut"/>). A live mode switch calls it, and so does a
+    /// live View Distance change, which moves the cells' visibility ranges.</summary>
+    public void Recut()
+    {
+        foreach (var kind in ExportedKinds ?? System.Array.Empty<KindExport>())
+            kind.Instances?.Recut();
+    }
+
     // A kind's node under the clutter root. The faithful path keeps its one MultiMesh; Enhanced cuts
     // it into map cells (ClutterInstances), so a pane skips the cells out of its reach.
     private static ClutterInstances Drawn(Node3D root, MultiMeshInstance3D whole,
-        IReadOnlyList<Transform3D> placements, IReadOnlyList<Color> fades)
-    {
-        if (!GraphicsMode.Enhanced)
-        {
-            root.AddChild(whole);
-            return ClutterInstances.Whole(whole.Multimesh!);
-        }
-        var (group, instances) = ClutterInstances.Cells(whole, placements, fades, EffectsLevel.RegisteredScaleSq);
-        root.AddChild(group);
-        return instances;
-    }
+        IReadOnlyList<Transform3D> placements, IReadOnlyList<Color> fades) =>
+        ClutterInstances.Draw(root, whole, placements, fades);
 
     // Any billboard kind is a placeable card: C1's CylindricalY trees and bushes, and C5's
     // SphericalY poleflare glows beside their CylindricalY lightpole posts.
@@ -1202,14 +1203,15 @@ public sealed class ClutterBuilder
 
     // ---------------------------------------------------------------- rendering
 
-    // Key bits: 1 lit, 2 fogged, 4 clampUv, 8 spherical, 16 blend, 32 enhanced mode, which the
-    // cutout variant spends on the coverage render mode. Next free bit is 64.
+    // Key bits: 1 lit, 2 fogged, 4 clampUv, 8 spherical, 16 blend. Next free bit is 32.
+    // ⚠ Keep the graphics mode out of the key: the cutout variant's coverage lines follow it
+    // through SceneBuilder.RegenerateShaders, one process-lifetime Shader per key.
     private Shader SpriteShader(bool lit, bool fogged, bool clampUv, bool spherical, bool blend)
     {
-        int key = (lit ? 1 : 0) | (fogged ? 2 : 0) | (clampUv ? 4 : 0) | (spherical ? 8 : 0) | (blend ? 16 : 0)
-            | (GraphicsMode.Enhanced ? 32 : 0);
-        if (!_shaders.TryGetValue(key, out var shader))
-            _shaders[key] = shader = new Shader { Code = ShaderCode(lit, fogged, clampUv, spherical, blend) };
+        int key = (lit ? 1 : 0) | (fogged ? 2 : 0) | (clampUv ? 4 : 0) | (spherical ? 8 : 0) | (blend ? 16 : 0);
+        SceneBuilder.EnsureCurrentText();
+        if (!SpriteShaders.TryGetValue(key, out var shader))
+            SpriteShaders[key] = shader = SceneBuilder.RegenerableShader(() => ShaderCode(lit, fogged, clampUv, spherical, blend));
         return shader;
     }
 

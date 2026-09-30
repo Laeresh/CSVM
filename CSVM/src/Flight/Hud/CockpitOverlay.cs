@@ -198,6 +198,9 @@ public sealed partial class CockpitOverlay : CanvasLayer
                 Name = "interior_sun",
                 LightEnergy = sun.LightEnergy,
                 LightColor = sun.LightColor,
+                // The zone's specular, which the enhanced zone apply writes on the sun before this
+                // pass is registered to take it. The faithful sun keeps Godot's default.
+                LightSpecular = sun.LightSpecular,
             };
             // Copied off the live sun, which by this point in the build already carries the flown
             // zone's settings (WeatherRig.Build runs ahead of BuildCockpitPasses). Clamped to this

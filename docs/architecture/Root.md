@@ -52,13 +52,34 @@ Both Options screens expose the mode as a two-way row saved into the menu plan's
 ([../menu-presentations.md](../menu-presentations.md)); every reader in this codebase consults the
 resolved `GraphicsMode.Enhanced` boolean only, so neither the store nor the screens reach any of
 them. An Apply switches the running world, over a paused flight as well, and the Toggle Graphics
-Mode flight action (`G` by default) flips it and saves it the same way (`Launcher.SwitchGraphicsMode`).
-Nothing is rebuilt: the three shader caches key on everything but the mode, and
-`SceneBuilder.RegenerateShaders` rewrites each cached shader and fade twin in place, so every
-material holding one follows. The launcher re-dresses the sun and Environment
-(`Session/Launch/EnhancedLook.cs`), and the session copies the look into each cockpit pass, re-lights
-its zone and builds or frees the ground shadow. `WorldLights` reads the flag on every commit. The
-switch recompiles the changed shaders, which costs a hitch.
+Mode flight action (`G` by default) flips it and saves it the same way; `--debug-graphics-switch=`
+is the scripted twin. The sequence is `EnhancedLook.Switch`, and a world switched away and back reads
+as a fresh session in that mode (the `graphics-live-switch` suite). The world is not rebuilt: the
+shader caches key on everything but the mode, and `SceneBuilder.RegenerateShaders` rewrites each
+cached shader and fade twin in place, so every material holding one follows. The switch recompiles
+the changed shaders, which costs a hitch.
+
+What follows the switch, and how:
+
+- Rewritten in place: every `SceneBuilder`, `Clutter` and puffer shader, the cloud field's card
+  shaders (`FogVolumeClutter.FollowGraphicsMode`), the sky sprites' keyed copies, and the puffer
+  fire gain and smoke grade, read per particle.
+- Re-dressed: the sun (shadows at the `ShadowQualitySetting` level, the atlas and filter, its
+  specular and colour), the Environment's SSAO, SSR, glow, tonemap, sky and froxel fog, each cockpit
+  pass's copy of both, and the weather zone, written again last (fog push, energies, shadow distance).
+- Re-resolved: the clutter fade scale, the anti-aliasing method whose default follows the mode, and
+  the render scale, on every live 3D viewport (`ViewportQuality.ReapplyAll`).
+- Built or freed: the ground shadow, the scorch field, the volumetric banks, the heat shimmer pool,
+  the world lights' omni pool and burst lights, and the clutter's cells (`ClutterInstances.Recut`).
+  A seat's wind streak field leaves the tree and comes back, still stepped, so its drift carries over.
+- Read per use already: the chase camera's trail and speed widening, the rocket ring's orientation,
+  the muzzle flash's point term and the spyglass picture's minimum size.
+
+What waits for the next mission load: a texture's alpha depth. The faithful path uploads an
+alpha-plane texture at the original's 16 alpha levels and Enhanced keeps 256, decided when the
+archive decodes it and baked into the puffer atlases and painted skins built from it. After a
+switch those textures keep the depth the mission loaded with, which shows as slightly coarser or
+finer soft edges on cloud, smoke and foliage sprites until the next load.
 
 ## src/Pads.cs
 Single source of truth for which gamepads exist: every reader goes through it rather than

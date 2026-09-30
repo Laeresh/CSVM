@@ -243,6 +243,15 @@ public sealed class WorldLights : IDisposable
             FireColor.SrgbToLinear() * gain, FireLiftFraction * reach, reach, reach, FireRankWeight));
     }
 
+    /// <summary>A live switch to the faithful mode drops every live burst light, which that mode
+    /// never registers, so none reaches its data texture. The omni pool follows on the next
+    /// <see cref="Commit"/>, and the fire lights are asked for per frame.</summary>
+    public void FollowGraphicsMode()
+    {
+        if (!GraphicsMode.Enhanced)
+            _bursts.Clear();
+    }
+
     /// <summary>Registers a submitter that <see cref="Commit"/> asks for its lights every frame,
     /// before the fade and the budget, so its lights rank against the owner's in one set.
     /// Registering the same delegate again is a no-op.</summary>

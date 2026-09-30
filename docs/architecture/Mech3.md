@@ -38,7 +38,7 @@ trimesh per surface class and soil and by sidedness, both halves on one body reg
 `WorldCollision`; `MissionStructureTeamMeta` is the channel `DestructibleRegistry` reads a pool's
 team through. A textured surface takes `csky_world_light` on its `lighting` flag alone, and every
 mip-mapped arm fetches through `SampleAlbedo`, the one `csky_sample_albedo` carrying the chapter's
-LOD bias, reused by `Clutter` and `MeshLab`. `AlphaOf` reads back the transparency verdict a built material's shader was generated for, the registry `HiddenAlpha` (`--hide-alpha`) drops a class by, dropping the surface rather than the instance so the classes isolate from each other. A blended world surface lying within `GroundLayerMinUp` of level (a terrain strip, a road, a shadow decal; never the caller's blend list, the cloud deck and sky) takes `GroundLayerRenderPriority` and draws ahead of every other transparent draw, so a clutter card standing on it composites over it: the card kinds are chapter-wide MultiMeshes whose one sort key is the forest's centre, so the depth sort put a nearer strip over the card's soft edge. A `sunVertexLit` builder (the in-flight aircraft) draws original mode's shaded arm unshaded, with the original's per-vertex sun term, whose ambient half is the Danger Zone photograph's fill at an armed `PhotoEyeParam` eye. Under Enhanced Graphics the cutout arm also takes `CoverageMode` and the `CoverageLines` built-ins that feed it, so a scissored edge resolves through the project's MSAA samples. Arms and selection: [Root.md](Root.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
+LOD bias, reused by `Clutter` and `MeshLab`. `AlphaOf` reads back the transparency verdict a built material's shader was generated for, the registry `HiddenAlpha` (`--hide-alpha`) drops a class by, dropping the surface rather than the instance so the classes isolate from each other. A blended world surface lying within `GroundLayerMinUp` of level (a terrain strip, a road, a shadow decal; never the caller's blend list, the cloud deck and sky) takes `GroundLayerRenderPriority` and draws ahead of every other transparent draw, so a clutter card standing on it composites over it: the card kinds are chapter-wide MultiMeshes whose one sort key is the forest's centre, so the depth sort put a nearer strip over the card's soft edge. A `sunVertexLit` builder (the in-flight aircraft) draws original mode's shaded arm unshaded, with the original's per-vertex sun term, whose ambient half is the Danger Zone photograph's fill at an armed `PhotoEyeParam` eye. Under Enhanced Graphics the cutout arm also takes `CoverageMode` and the `CoverageLines` built-ins that feed it, so a scissored edge resolves through the project's MSAA samples. The shader caches key on everything but the graphics mode: `RegenerateShaders` rewrites every cached shader, fade twin and other builder's `RegenerableShader` on a live switch, `EnsureCurrentText` does it on a lookup that finds the mode moved, and `FollowGraphicsMode` swaps the sky sprites' keyed copies (`KeyedBackdropTexture`). Arms and selection: [Root.md](Root.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
 
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame
@@ -195,7 +195,7 @@ MultiMesh per kind, turned toward the camera as that kind's own `FacadeMode` say
 data under `EffectsLevel`, and samples through `SceneBuilder.SampleAlbedo` for the chapter's mip bias. `TemplateNames` reads `AddClutterTemplates` unfiltered, the per-polygon `no_clutter` gate deciding
 which patch a district dresses; `OverrideTemplateNames` is `--clutter-templates=`'s replacement.
 A decoration is a node chain, and `FirstWithMesh` hands back the translation down to the node carrying the mesh, so a stamp lands where the chain puts the drawn card: C5's lamp glow rides 4.75 m up its post. A solid decoration's chain carries SEVERAL meshes, which `ExtraMeshes` collects (nearest LOD only, each in the drawn mesh's frame) so `Kind.ExtraParts` draws and collides the whole building: 12 of C5's city blocks hold two street walls and a roof cap on further nodes, and drawing the first mesh alone leaves them open on two sides.
-Placement runtime: [../org/clutter.md](../org/clutter.md); authored side: [../formats/clutter.md](../formats/clutter.md), [../formats/templates.md](../formats/templates.md).
+`Recut` draws every kind again after a live graphics-mode switch or View Distance change, and the sprite shaders follow the mode through `SceneBuilder.RegenerableShader`. Placement runtime: [../org/clutter.md](../org/clutter.md); authored side: [../formats/clutter.md](../formats/clutter.md), [../formats/templates.md](../formats/templates.md).
 
 ## src/Mech3/ClutterActivation.cs
 Keeps every clutter stamp drawn exactly while the world node it was stamped from is visible in the
@@ -211,7 +211,9 @@ the kind's single MultiMesh (`Whole`). Under Enhanced Graphics `Cells` cuts it i
 cells about twice the kind's farthest fade across, each its own node with a visibility range at that
 fade, so a pane draws only the cells in reach instead of every stamp in the chapter. Reads and
 writes take the clutter root's frame, which keeps `ClutterActivation` and the suites off the cells;
-`ClutterCull` walks the cells as ordinary MultiMeshes. Read `Clutter.cs`.
+`ClutterCull` walks the cells as ordinary MultiMeshes. `Draw` keeps the builder's node as a
+prototype, so `Recut` draws the kind again, whole or cut, after a live mode switch or View Distance
+change, keeping any stamp since hidden or flattened. Read `Clutter.cs`.
 
 ## src/Mech3/ClutterTemplates.cs
 The chapter's `templates.zrd` (`ClutterTemplateSpec.Load`/`.Parse`): one `ClutterKindProps` per
@@ -470,7 +472,7 @@ to the NEAREST viewer handed in (`AnimRuntime.LightViewerPositions`, from `GameS
 owns the frame (`Begin`/`Add`/`Commit`); the world-effects runtime contributes through `AddSource`, so a burst ranks
 against the beacons in one set. With a parent `Node3D` in enhanced mode, `Commit` mirrors the same rank onto pooled
 `OmniLight3D` nodes ([Root.md](Root.md)), up to `OmniBudget` for the effects level while the texture keeps `MaxActive`. Enhanced alone, `AddBurst` adds an explosion flash in a per-def `BurstShape`, lifted and unattenuated, aged on `Begin`'s dt and
-dying with its effect, which replaces the burst def's own authored light (`AnimRuntime.LightReplacedAnimNames`). `AddFire` is one burning emitter's light, ranked below the rest.
+dying with its effect, which replaces the burst def's own authored light (`AnimRuntime.LightReplacedAnimNames`). `AddFire` is one burning emitter's light, ranked below the rest. The pool reads the mode on every commit, and `FollowGraphicsMode` drops the live bursts on a switch to the faithful path.
 
 ## src/Mech3/MissionSetup.cs
 Parses + applies the per-mission `.gw` interp script that decides which world entities a mission

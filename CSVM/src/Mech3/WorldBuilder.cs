@@ -88,10 +88,10 @@ public sealed class WorldBuilder
         _scene.Cycler = Cycler;
         _scene.DebugClutterFlag = debugClutterFlag;
         _scene.HiddenAlpha = hiddenAlpha;
-        // Enhanced mode only. Its tonemap and emissive scale move a backdrop off the sky's colour,
-        // so the quad shows. The faithful path draws the backdrop opaque, as the original does
-        // (it never enables a colour key, docs/org/textures.md).
-        _scene.KeyedBackdropTexture = GraphicsMode.Enhanced ? IsSkySpriteTexture : null;
+        // Keyed under Enhanced alone, whose tonemap and emissive scale move a backdrop off the sky's
+        // colour so the quad shows. The faithful path draws it opaque, as the original does (no
+        // colour key, docs/org/textures.md). Named in both modes so a live switch can swap it.
+        _scene.KeyedBackdropTexture = IsSkySpriteTexture;
     }
 
     /// <summary>Which mission of the chapter this world is being built for, 1-based, forwarded to

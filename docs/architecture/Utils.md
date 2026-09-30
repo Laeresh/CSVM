@@ -260,7 +260,7 @@ The anti-aliasing method, a VIDEO page display setting over `DisplayWords.AntiAl
 `taa` or `fsr2`. `Resolve` layers the saved `antiAliasing` word, then the `graphics.antiAliasing` config key, then
 `DefaultFor` the graphics mode, which is `off` under Original and `taa` under Enhanced; an unknown config word warns and
 falls back. A chosen method is written whichever mode won, since only the default follows the mode. `SavedWord` holds the
-`--det` guard. The resolve runs once at launch after `GraphicsMode.Resolve` and lands in the static `Method`, whose one
+`--det` guard. The resolve runs at launch after `GraphicsMode.Resolve`, and again on a live mode switch or an Options apply, landing in the static `Method`, whose one
 reader is `ViewportQuality.Apply`; `Launcher`'s `[world] graphics mode:` line announces the word and its source. FSR 2.2
 refuses a render scale above native, which `RenderScaleSetting.ClampFor` applies.
 
@@ -278,7 +278,7 @@ level stands where it does, and the cost of each: `analysis/screen-dither/FINDIN
 What `AntiAliasingSetting` and `RenderScaleSetting` write on a 3D viewport, gathered here because
 there are four viewports to write them on: the root viewport `Session/Launch/Launcher.cs` owns, and the SubViewports
 `Flight/Hud/CockpitOverlay.cs`, `Flight/Camera/SpyglassView.cs` and `UI/Boards/SplitScreen.cs` build. `Apply` runs once per viewport at
-construction. FXAA and SMAA go to `ScreenSpaceAA`, TAA to `UseTaa`. Below native the scale runs through
+construction and remembers it weakly; `ReapplyAll` writes the settings resolved now on every one still alive (a live mode switch, an Options apply). FXAA and SMAA go to `ScreenSpaceAA`, TAA to `UseTaa`. Below native the scale runs through
 `Scaling3DModeEnum.Fsr2` under `fsr2` and `Fsr` otherwise, and above native through `Bilinear`, the one mode Godot
 supersamples in. At native only `fsr2` writes a scaling mode, `Fsr2` at 1.0, which runs as anti-aliasing alone. `off` at
 native writes nothing, so a faithful `--det` run reads back Godot's own defaults. MSAA stays `project.godot`'s.
@@ -345,7 +345,7 @@ without it. The words are `DisplayWords.RenderScaleChoices`, percentages of nati
 saved `renderScale` word, then the `graphics.renderScale` config key, then native; an unknown word reads as never set and
 a key spelling native reads as the default. The winner is then clamped under the anti-aliasing word: `fsr2` pulls a scale
 above native to 100 (`ClampFor`, which the VIDEO page applies when FSR 2.2 is picked) and `ChoicesFor` offers it only 50
-to 100. `SavedWord` holds the `--det` guard. The resolve runs once at launch and lands in the static `Scale`, whose one
+to 100. `SavedWord` holds the `--det` guard. The resolve runs at launch and on a live apply, landing in the static `Scale`, whose one
 reader is `ViewportQuality.Apply`; `Launcher`'s `[world] graphics mode:` line announces it and any clamp.
 
 ## src/Utils/ScriptedWindow.cs

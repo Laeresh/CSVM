@@ -47,13 +47,13 @@ reads one back held to the decoded ranges, which is what every machine, the owne
 The ammunition and ordnance picks stay behind, since the seat's `CoopFit` carries them.
 
 ## src/Session/Launch/EnhancedLook.cs
-The enhanced graphics mode's settings on one sun and one Environment, in both directions: PSSM sun
-shadows, SSAO, SSR, glow, the AgX tonemap and the mission-coloured sky, with the
-`SessionSpec.EnhancedPasses` doors that leave a pass out. The off direction writes a fresh object's
-defaults back, which is what the faithful path builds with. Every magnitude is TUNE. `ApplySun` is
-the one writer of the sun's shadow setup, so a shadow setting re-applies through it. Callers are
-`Launcher` at startup and on a live switch, and `GameSession.ApplyGraphicsMode` for each cockpit
-pass's Environment; `Utils/SunShadow.cs` carries the sun's shadows into the pass's own light.
+The enhanced graphics mode on a running process. On one sun and one Environment, in both directions:
+PSSM sun shadows at the `ShadowQualitySetting` level, SSAO, SSR, glow, the AgX tonemap and the
+mission-coloured sky, with the `SessionSpec.EnhancedPasses` doors; the off direction writes a fresh
+object's defaults back. `Switch` is the whole live mode switch the launcher and the
+`graphics-live-switch` suite run: shaders, sun, Environment, the clutter fade, the display quality
+(`ReapplyDisplayQuality`), then `GameSession.ApplyGraphicsMode`. `ApplyViewDistance` is the live
+View Distance. Every magnitude is TUNE; `Utils/SunShadow.cs` carries the sun into the cockpit pass.
 
 ## src/Session/Launch/TuningWarmup.cs
 The startup pass that fills `Config`'s key registry before `Config.ReportOrphans` and
@@ -534,7 +534,7 @@ runtime for impacts and destruction, and the per-plane crash runtime, which desp
 every def that plays ON one aircraft (the crash-def vector, the destroy def, the panel damage shims,
 the prop choreography, and on a human rig the canopy holes, whose `PLAYER_1ST_PERSON` branch this rig's own pilot answers). Both stages are built in pool slots sized from `data/effect_pools.json`
 and handed to their runtime sealed, and both pre-warm their emitters after the bind so a first burst
-finds its puffers already made; `EnsureWorldEffects` hands the effects runtime the world's `WorldLights` as a contributor, so a burst's authored `LIGHT_STATE` renders on both presentations. `BeginFlightCrashRuntime` opens the crash build as a handle a caller
+finds its puffers already made; `EnsureWorldEffects` hands the effects runtime the world's `WorldLights` as a contributor, so a burst's authored `LIGHT_STATE` renders on both presentations, and `FollowGraphicsMode` re-reads the replaced-light set and frees the heat shimmer on a live switch. `BeginFlightCrashRuntime` opens the crash build as a handle a caller
 steps a phase at a time (`CrashRigQueue.cs`), where the pre-warm itself repeats a slice at a time so a rig's two hundred emitters never
 land on one frame, and `BuildFlightCrashRuntime` is the one-call form. The bind step also snapshots the built parent, pose and visibility of the airframe, the wreck and every template a bound def adopts (`OBJECT_ADD_CHILD`'s child, the eject's `cpilot`), which is what a respawn restores. The names it binds are `Flight/Airframe/EffectCatalogue.cs`; the slot mechanism is `Mech3/TemplateStage.cs`.
 

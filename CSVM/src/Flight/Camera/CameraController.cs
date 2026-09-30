@@ -445,13 +445,17 @@ public sealed class CameraController
 
     /// <summary>Advance the enhanced presentation's chase cues one frame: the lagged attitude
     /// <see cref="Chase"/> builds its pose from, and the widening <see cref="RestoreExternalFov"/>
-    /// adds. ⚠ Call it on every flown frame, whichever view draws, or a view change springs a lag
-    /// left behind by the frames the chase camera did not hold. Writes nothing on the faithful
-    /// path, which is what keeps that presentation's pose and FOV bit-identical.</summary>
+    /// adds. ⚠ Call it on every flown frame, whichever view draws. Otherwise a view change springs a
+    /// lag left behind by the frames the chase camera did not hold. On the faithful path it holds
+    /// both cues at rest, which keeps that presentation's pose and FOV bit-identical.</summary>
     public void StepEnhancedCues(float dt, Basis attitude, float speedFraction)
     {
         if (!GraphicsMode.Enhanced)
         {
+            // A live switch away from Enhanced leaves both cues as a faithful flight holds them. No
+            // widening, and a trail that seeds afresh on the way back.
+            _trailSeeded = false;
+            _fovWidenDeg = 0f;
             return;
         }
         _trailAttitude = _trailSeeded

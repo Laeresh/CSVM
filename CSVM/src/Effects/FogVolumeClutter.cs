@@ -127,6 +127,10 @@ public sealed partial class FogVolumeClutter : Node3D
         .Replace("CEILING", Literal(EnhancedAlbedoCeiling))
         .Replace("SOFT_METRES", Literal(EnhancedSoftFadeMetres));
 
+    // Each kind's shader with the authored flags its text was written for. A live mode switch
+    // writes it again under the other mode (FollowGraphicsMode).
+    private readonly List<(Shader Shader, bool Lit, bool Fogged)> _shaders = new();
+
     /// <summary>Sprites placed, summed over every kind, the authored volumes' own placements
     /// plus the map-edge continuation (<see cref="ExtensionCount"/>). Zero means nothing was
     /// built and <see cref="Create"/> returned null.</summary>
@@ -191,6 +195,19 @@ public sealed partial class FogVolumeClutter : Node3D
         }
         field.Build(gamez, kinds);
         return field;
+    }
+
+    /// <summary>Writes every card shader again under the standing graphics mode: the enhanced grade
+    /// and soft edge on, or the faithful text back. A live mode switch calls it; the field's
+    /// placements and fades belong to neither mode, so nothing else changes.</summary>
+    public void FollowGraphicsMode()
+    {
+        foreach (var (shader, lit, fogged) in _shaders)
+        {
+            string code = ShaderCode(lit, fogged, GraphicsMode.Enhanced);
+            if (code != shader.Code)
+                shader.Code = code;
+        }
     }
 
     // The gamez side of one clutter alternative: the sprite card its template root carries.
@@ -722,10 +739,9 @@ public sealed partial class FogVolumeClutter : Node3D
             {
                 meshCache[kind.MeshIndex] = mesh = BuildCardMesh(gamez, kind.MeshIndex);
             }
-            var mat = new ShaderMaterial
-            {
-                Shader = new Shader { Code = ShaderCode(kind.Lit, kind.Fogged, GraphicsMode.Enhanced) },
-            };
+            var shader = new Shader { Code = ShaderCode(kind.Lit, kind.Fogged, GraphicsMode.Enhanced) };
+            _shaders.Add((shader, kind.Lit, kind.Fogged));
+            var mat = new ShaderMaterial { Shader = shader };
             if (kind.Texture != null)
             {
                 mat.SetShaderParameter("albedo_tex", kind.Texture);

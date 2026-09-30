@@ -1,3 +1,4 @@
+using CSVM.Mech3;
 using CSVM.Session.World;
 using CSVM.Utils;
 using Godot;
@@ -99,6 +100,59 @@ public static class EnhancedLook
     // over it, so a world with no weather.json still reflects a plausible sky.
     private static readonly Color DefaultSkyColor = new(0.69f, 0.69f, 0.69f);
 
+
+    /// <summary>The live graphics-mode switch, the one sequence the launcher runs and the round-trip
+    /// suite drives. It sets the flag, regenerates the shaders and re-dresses <paramref name="sun"/>
+    /// and <paramref name="env"/>. Then the clutter fade and the display quality are resolved again,
+    /// and <paramref name="session"/> rebuilds what the two modes build differently. A no-op when the
+    /// mode already stands.</summary>
+    public static void Switch(bool enhanced, DirectionalLight3D sun, Godot.Environment? env,
+        EnhancedPasses skipped, bool det, GameSession? session, string why)
+    {
+        if (enhanced == GraphicsMode.Enhanced)
+            return;
+        GraphicsMode.Set(enhanced);
+        SceneBuilder.RegenerateShaders();
+        ApplySun(sun, enhanced, skipped);
+        if (env != null)
+            ApplyEnvironment(env, enhanced, skipped);
+        WriteClutterFadeScale();
+        ReapplyDisplayQuality(det, why);
+        session?.ApplyGraphicsMode();
+        Log.Info("world", $"graphics mode: {GraphicsMode.Key}={(enhanced ? "enhanced" : "original")} (switched live by {why})");
+    }
+
+    /// <summary>The View Distance on the running world: the clutter fade's scale, and the clutter
+    /// cells cut again at it. It moves nothing in original mode, but is resolved there too, so a
+    /// later switch to Enhanced opens at the saved reach.</summary>
+    public static void ApplyViewDistance(string? word, GameSession? session)
+    {
+        ViewDistance.Set(word);
+        if (!WriteClutterFadeScale())
+            return;
+        session?.FollowClutterFade();
+        Log.Info("world", $"view distance: {word}, clutter reach x{ViewDistance.ClutterReach():0.#} (applied live)");
+    }
+
+    /// <summary>The clutter fade's squared scale under the fog push and the View Distance reach, both
+    /// identity in original mode. An infinite reach makes it 0, the never-fades scale.</summary>
+    public static float ClutterFadeScaleSq() =>
+        EffectsLevel.ResolveClutterFadeScaleSq(WeatherRig.EnhancedFogScale() * ViewDistance.ClutterReach());
+
+    /// <summary>The anti-aliasing method and the render scale resolved again from the sources the
+    /// startup reads, and written on every live 3D viewport. The method's default follows the mode.
+    /// </summary>
+    public static void ReapplyDisplayQuality(bool det, string why)
+    {
+        bool enhanced = GraphicsMode.Enhanced;
+        var antiAliasing = AntiAliasingSetting.Resolve(AntiAliasingSetting.SavedWord(det),
+            Config.GetString(AntiAliasingSetting.Key, AntiAliasingSetting.DefaultFor(enhanced)), enhanced);
+        var renderScale = RenderScaleSetting.Resolve(RenderScaleSetting.SavedWord(det),
+            Config.GetString(RenderScaleSetting.Key, RenderScaleSetting.Default), antiAliasing.Word);
+        ViewportQuality.ReapplyAll();
+        Log.Info("world", $"display quality: render_scale={renderScale.Word}% source={renderScale.Source} anti_aliasing={antiAliasing.Word} aa_source={antiAliasing.Source} (applied live by {why})");
+    }
+
     /// <summary>The session sun's shadow maps, on at the resolved shadow quality or back to a fresh
     /// light's defaults. ⚠ Also sets the renderer-wide soft-shadow filter and shadow atlas, which
     /// belong to this light alone; the off direction puts back the project's own pair.</summary>
@@ -199,5 +253,16 @@ public static class EnhancedLook
         env.TonemapExposure = enhanced ? TonemapExposure : fresh.TonemapExposure;
         env.TonemapAgxWhite = enhanced ? TonemapAgxWhite : fresh.TonemapAgxWhite;
         env.TonemapAgxContrast = enhanced ? TonemapAgxContrast : fresh.TonemapAgxContrast;
+    }
+
+    // The clutter fade's scale on the shader global and on EffectsLevel, which the clutter cells
+    // read when they are cut. Returns whether the scale moved.
+    private static bool WriteClutterFadeScale()
+    {
+        float scaleSq = ClutterFadeScaleSq();
+        bool moved = scaleSq != EffectsLevel.RegisteredScaleSq;
+        RenderingServer.GlobalShaderParameterSet(EffectsLevel.ShaderParam, scaleSq);
+        EffectsLevel.RegisteredScaleSq = scaleSq;
+        return moved;
     }
 }

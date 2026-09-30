@@ -124,8 +124,8 @@ public sealed partial class Puffer : Node3D
     private int _liveCount;
     private int _drawnCount;
 
-    // Enhanced only: which atlas columns are fire sprites. Null on the faithful path and for an
-    // emitter with none, which then does no fire work at all. _burning is what the ambience holds.
+    // Which atlas columns are fire sprites, null for an emitter with none, which then does no fire
+    // work at all. Only Enhanced counts them, read per frame. _burning is what the ambience holds.
     private bool[]? _fireColumns;
     private bool _burning;
 
@@ -401,6 +401,8 @@ public sealed partial class Puffer : Node3D
         var fireSum = Vector3.Zero;
         float fireSize = 0f;
         int fires = 0;
+        // Enhanced alone lights a fire, read per frame so a live switch reaches a burning emitter.
+        var fireColumns = GraphicsMode.Enhanced ? _fireColumns : null;
         for (int i = 0; i < _liveCount; i++)
         {
             ref var p = ref _particles[i];
@@ -426,11 +428,11 @@ public sealed partial class Puffer : Node3D
             //, see docs/org/puffer.md. Distance gate before any draw work: discarded means unwritten.
             var world = nodeOrigin + p.Pos;
             // Counted before the distance gate: an undrawn fire still lights what is around it.
-            if (_fireColumns != null)
+            if (fireColumns != null)
             {
                 float fireFrac = p.Age > 0f ? p.Age / p.Life : 0f;
                 int column = (int)(flipbook ? FrameFor(fireFrac) : p.Frame);
-                if (column < _fireColumns.Length && _fireColumns[column])
+                if (column < fireColumns.Length && fireColumns[column])
                 {
                     fireSum += world;
                     fireSize += p.BaseSize * Mathf.Lerp(1f, _state.GrowthFactor, fireFrac);
@@ -470,6 +472,8 @@ public sealed partial class Puffer : Node3D
 
         _renderer.Show(drawn);
         _drawnCount = drawn;
+        // Every emitter with fire columns publishes, the faithful frames zero fires. A switch away
+        // from Enhanced then puts out the light an emitter was burning.
         if (_fireColumns != null)
             PublishFire(fireSum, fireSize, fires);
 
@@ -770,8 +774,7 @@ public sealed partial class Puffer : Node3D
         _state = state;
         _renderer = renderer;
         _ambience = ambience ?? EffectAmbience.Still;
-        _fireColumns = GraphicsMode.Enhanced && fireColumns != null && Array.IndexOf(fireColumns, true) >= 0
-            ? fireColumns : null;
+        _fireColumns = fireColumns != null && Array.IndexOf(fireColumns, true) >= 0 ? fireColumns : null;
         Name = "puffer_" + state.Name;
         _burstSizeScale = Config.GetFloat("puffer.burstSizeScale", SizeScaleDefault);
         _trailSizeScale = Config.GetFloat("puffer.trailSizeScale", SizeScaleDefault);

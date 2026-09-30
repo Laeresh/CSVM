@@ -166,6 +166,8 @@ public partial class Launcher : Node3D
     private OptionsApplyExit? _pendingApply;
     // A seat's graphics-mode action, acted on at the top of the next frame for the same reason.
     private bool _pendingGraphicsToggle;
+    // How many of --debug-graphics-switch's frames have fired, process-scoped like the capture.
+    private int _debugSwitchesDone;
     // The --menu= aid, held for the cold start alone: the first presentation created reads it and
     // the first ShowMenu consumes it, so no return from flight and no switch re-enters its screen.
     private string? _menuAid;
@@ -678,7 +680,7 @@ public partial class Launcher : Node3D
         Utils.ViewportQuality.Apply(GetViewport());
         // The clutter fade's squared distance scale, 0 when the fade is off. Enhanced mode pushes
         // the fade out with the fog and further by the View Distance (ClutterFadeScaleSq).
-        float clutterFadeScaleSq = ClutterFadeScaleSq();
+        float clutterFadeScaleSq = EnhancedLook.ClutterFadeScaleSq();
         RenderingServer.GlobalShaderParameterAdd(Utils.EffectsLevel.ShaderParam,
             RenderingServer.GlobalShaderParameterType.Float, clutterFadeScaleSq);
         Utils.EffectsLevel.RegisteredScaleSq = clutterFadeScaleSq;
@@ -1090,6 +1092,15 @@ public partial class Launcher : Node3D
                 SwitchGraphicsMode(!GraphicsMode.Enhanced, "the graphics-mode action");
                 SaveGraphicsMode();
             }
+        }
+
+        // --debug-graphics-switch: the same flip at each named sim frame, unsaved.
+        if (_session is { InSession: true } && GameClock.Current is { } simClock
+            && _debugSwitchesDone < _spec.DebugGraphicsSwitch.Count
+            && simClock.Frame >= _spec.DebugGraphicsSwitch[_debugSwitchesDone])
+        {
+            _debugSwitchesDone++;
+            SwitchGraphicsMode(!GraphicsMode.Enhanced, $"--debug-graphics-switch at sim frame {simClock.Frame}");
         }
 
         // Dropped here rather than by the cover itself, so one node owns both screens a launch
@@ -2308,10 +2319,10 @@ public partial class Launcher : Node3D
     }
 
     // The options file's one writer, shared by the menu's apply above and by the pause leaf's.
-    // The display settings, the mix and the graphics mode apply now (SwitchGraphicsMode).
-    // ⚠ The render scale, the anti-aliasing method, the opening view and the difficulty are saved
-    // and no more, so do not rebuild anything here. The pause leaf puts the head turn and targeting
-    // switch on the seats flying now (PausePreferences.FeedGameOptions).
+    // The display settings, the mix, the view distance and the graphics mode apply now.
+    // ⚠ The opening view and the difficulty are saved and no more, so do not rebuild anything for
+    // them here. The pause leaf puts the head turn and targeting switch on the seats flying now
+    // (PausePreferences.FeedGameOptions).
     private void PersistOptions(OptionsApplyExit applied)
     {
         var store = OptionsStore.UserOptions();
@@ -2365,28 +2376,17 @@ public partial class Launcher : Node3D
             ApplyShadowQuality(_sun);
         }
 
+        // The render scale and the anti-aliasing method reach every 3D viewport now as well.
+        EnhancedLook.ReapplyDisplayQuality(_spec.Det, "options");
         // ⚠ The carve is NOT re-armed here. No screen offers it, so the saved key is untouched by an
         // apply and the gate keeps what boot gave it (see the arming above).
         Log.Info("ui", $"options applied: {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");
     }
 
-    // The live graphics-mode switch: the flag, then every consumer that read it at build. The
-    // shaders are rewritten in place, the session sun and Environment re-dressed, the clutter fade
-    // re-scaled, and the session re-lights its zone and swaps the passes the two modes build
-    // differently. Godot recompiles each changed shader, so a switch costs a hitch.
-    private void SwitchGraphicsMode(bool enhanced, string why)
-    {
-        if (enhanced == GraphicsMode.Enhanced)
-            return;
-        GraphicsMode.Set(enhanced);
-        SceneBuilder.RegenerateShaders();
-        EnhancedLook.ApplySun(_sun, enhanced, _spec.SkippedPasses);
-        if (_env != null)
-            EnhancedLook.ApplyEnvironment(_env, enhanced, _spec.SkippedPasses);
-        RenderingServer.GlobalShaderParameterSet(Utils.EffectsLevel.ShaderParam, ClutterFadeScaleSq());
-        _session?.ApplyGraphicsMode();
-        Log.Info("world", $"graphics mode: {GraphicsMode.Key}={(enhanced ? "enhanced" : "original")} (switched live by {why})");
-    }
+    // The live graphics-mode switch on this process's sun, Environment and session
+    // (EnhancedLook.Switch). Godot recompiles each changed shader, so a switch costs a hitch.
+    private void SwitchGraphicsMode(bool enhanced, string why) =>
+        EnhancedLook.Switch(enhanced, _sun, _env, _spec.SkippedPasses, _spec.Det, _session, why);
 
     // The resolved shadow level on the world sun and the renderer. An Options apply re-runs it, so a
     // level changes mid-flight; the cockpit pass follows on its next Sync.
@@ -2405,23 +2405,8 @@ public partial class Launcher : Node3D
         store.Save(options);
     }
 
-    // The view distance on the running world: one global, the clutter fade's scale. It moves
-    // nothing in original mode, but is resolved there too so a later switch to enhanced opens at
-    // the saved reach.
-    private void ApplyViewDistance(string? word)
-    {
-        float before = ViewDistance.ClutterReach();
-        ViewDistance.Set(word);
-        if (ViewDistance.ClutterReach() == before)
-            return;
-        RenderingServer.GlobalShaderParameterSet(Utils.EffectsLevel.ShaderParam, ClutterFadeScaleSq());
-        Log.Info("world", $"view distance: {word}, clutter reach x{ViewDistance.ClutterReach():0.#} (applied live)");
-    }
-
-    // The clutter fade's squared scale under the fog push and the View Distance reach, both
-    // identity in original mode. An infinite reach makes it 0, the never-fades scale.
-    private float ClutterFadeScaleSq() =>
-        Utils.EffectsLevel.ResolveClutterFadeScaleSq(WeatherRig.EnhancedFogScale() * ViewDistance.ClutterReach());
+    // The view distance on the running world (EnhancedLook.ApplyViewDistance).
+    private void ApplyViewDistance(string? word) => EnhancedLook.ApplyViewDistance(word, _session);
 
     // The in-flight Preferences leaf both pause boards open. It takes the decoded layout the
     // Original presentation composes from, and the menu's audio service for its cues. The host's

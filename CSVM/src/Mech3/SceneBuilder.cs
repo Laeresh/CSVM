@@ -254,9 +254,10 @@ public sealed class SceneBuilder
     internal bool NoAlphaCoverage;
 
     /// <summary>Names the sky sprites whose opaque texture paints the sky's own colour as a
-    /// backdrop: the moon and the star field. Their materials take <see cref="ColorKeyed"/>'s copy
-    /// and blend, so only the figure draws. Null keys nothing, which is the faithful path.
-    /// ⚠ Set before building, like <see cref="DepthBiasScale"/>: it decides the material.</summary>
+    /// backdrop: the moon and the star field. Under Enhanced their materials take
+    /// <see cref="ColorKeyed"/>'s copy and blend, so only the figure draws. The faithful path keeps
+    /// the opaque texture, and <see cref="FollowGraphicsMode"/> swaps between the two. Null keys
+    /// nothing. ⚠ Set before building, like <see cref="DepthBiasScale"/>: it decides the material.</summary>
     internal Func<string, bool>? KeyedBackdropTexture;
 
     /// <summary>The world's conflict ranks (<see cref="ConflictRank"/>), set by the caller before
@@ -400,6 +401,11 @@ void fragment() {
     private static readonly Dictionary<Shader, Func<string>> Regenerable = new();
     private static readonly Dictionary<Shader, Shader?> FadeTwins = new();
 
+    // The mode the regenerable text was last written for, null before the first write. A getter
+    // finding it stale rewrites every shader first (EnsureCurrentText). A suite resolving the mode
+    // directly then still builds with that mode's own text.
+    private static bool? _textEnhanced;
+
     private readonly GameZ _gamez;
     private readonly TextureArchive _textures;
     private readonly bool _fullbright;
@@ -444,6 +450,8 @@ void fragment() {
     private readonly Dictionary<(int Material, int Axis, bool Lit, bool Fogged, bool ClampUv), Material> _cylindricalMaterialCache = new();
     // One keyed copy per KeyedBackdropTexture texture, shared by every material that samples it.
     private readonly Dictionary<string, ImageTexture> _keyedBackdrops = new(StringComparer.OrdinalIgnoreCase);
+    // Every material KeyedBackdropTexture names, with its look under both modes (FollowGraphicsMode).
+    private readonly List<KeyedSwap> _keyedSwaps = new();
     // Every textured material this builder made, paired with the texture name it resolved
     // from, the registry a live repaint needs (the viewer's livery lab re-runs the paint
     // and swaps each material's albedo in place, instead of rebuilding the whole aircraft
@@ -685,6 +693,7 @@ void fragment() {
     /// follows; any other source gets a fresh one, which its caller memoizes.</summary>
     internal static Shader? FadeShaderFor(Shader source)
     {
+        EnsureCurrentText();
         if (FadeTwins.TryGetValue(source, out var known))
             return known;
         var twin = FadeCode(source.Code) is { } code ? new Shader { Code = code } : null;
@@ -701,6 +710,7 @@ void fragment() {
     /// thread only, like the caches.</summary>
     internal static void RegenerateShaders()
     {
+        _textEnhanced = GraphicsMode.Enhanced;
         foreach (var (shader, code) in Regenerable)
         {
             string next = code();
@@ -721,9 +731,19 @@ void fragment() {
     /// outside this builder whose text reads <see cref="GraphicsMode.Enhanced"/>.</summary>
     internal static Shader RegenerableShader(Func<string> code)
     {
+        EnsureCurrentText();
         var shader = new Shader { Code = code() };
         Regenerable[shader] = code;
         return shader;
+    }
+
+    /// <summary>Rewrites every regenerable shader when the mode moved since their text was last
+    /// written. Every cache getter calls it before a lookup, so a cached shader is never handed out
+    /// carrying the other mode's text.</summary>
+    internal static void EnsureCurrentText()
+    {
+        if (_textEnhanced != GraphicsMode.Enhanced)
+            RegenerateShaders();
     }
 
     /// <summary>The surface class one texture name names, <c>"water"</c>, <c>"buildings"</c>, or
@@ -813,6 +833,20 @@ void fragment() {
         var mesh = new ArrayMesh();
         st.Commit(mesh);
         return mesh;
+    }
+
+    /// <summary>Puts each sky sprite's look for the standing graphics mode back on its material. That
+    /// is the keyed, blended copy under Enhanced and the opaque texture on the faithful path. The
+    /// live mode switch calls it after <see cref="RegenerateShaders"/>.</summary>
+    internal void FollowGraphicsMode()
+    {
+        bool enhanced = GraphicsMode.Enhanced;
+        foreach (var swap in _keyedSwaps)
+        {
+            swap.Material.Shader = enhanced ? swap.KeyedShader : swap.PlainShader;
+            swap.Material.SetShaderParameter("albedo_tex", enhanced ? swap.KeyedTex : swap.PlainTex);
+            NoteAlpha(swap.Material, enhanced || swap.PlainBlend, !enhanced && swap.PlainScissor);
+        }
     }
 
     /// <summary>The cross-node draw-order tie-break for one gamez node. Every instance uniform
@@ -1589,8 +1623,14 @@ void fragment() {
         Material mat;
         if (tex != null)
         {
-            tex = KeyedBackdrop(texName!, tex) ?? tex;
-            var billboard = BillboardMaterial(tex, blend: true, scissor: false, glow: true, lit: true, fogged: fogged, clampUv: clampUv);
+            var keyed = KeyedBackdrop(texName!, tex);
+            var billboard = BillboardMaterial(keyed != null && GraphicsMode.Enhanced ? keyed : tex, blend: true,
+                scissor: false, glow: true, lit: true, fogged: fogged, clampUv: clampUv);
+            if (keyed != null)
+            {
+                var shader = billboard.Shader;
+                NoteKeyed(new KeyedSwap(billboard, shader, tex, true, false, shader, keyed));
+            }
             RegisterCycle(_gamez.Materials[materialIndex], billboard); // same albedo_tex, see GetCylindricalMaterial
             mat = billboard;
         }
@@ -1614,10 +1654,18 @@ void fragment() {
         {
             bool blend = _textures.LastHadAlpha && _textures.LastAlphaIsSoft;
             bool scissor = _textures.LastHadAlpha && !blend;
-            if (KeyedBackdrop(texName!, tex) is { } keyed)
+            var (plainTex, plainBlend, plainScissor) = (tex, blend, scissor);
+            var keyed = KeyedBackdrop(texName!, tex);
+            if (keyed != null && GraphicsMode.Enhanced)
                 (tex, blend, scissor) = (keyed, true, false);
             bool glow = texName != null && _glowTexture != null && _glowTexture(texName);
             var billboard = CylindricalBillboardMaterial(tex, axis, blend, scissor, glow, lit, fogged, clampUv);
+            if (keyed != null)
+            {
+                NoteKeyed(new KeyedSwap(billboard,
+                    GetCylindricalShader(axis, plainBlend, plainScissor, glow, lit, fogged, clampUv), plainTex, plainBlend, plainScissor,
+                    GetCylindricalShader(axis, true, false, glow, lit, fogged, clampUv), keyed));
+            }
             // A billboard shader samples the same albedo_tex, so a flipbook drives it identically,
             // and the fire cycles land HERE rather than on the bias path: fire1/fire2/flame01 are
             // all Facade/CylindricalY meshes (EffectCycles).
@@ -1736,7 +1784,9 @@ void fragment() {
             bool blend = _textures.LastHadAlpha
                 && (_textures.LastAlphaIsSoft || (_blendTexture != null && _blendTexture(texName)));
             bool scissor = _textures.LastHadAlpha && !blend;
-            if (KeyedBackdrop(texName, tex) is { } keyed)
+            var (plainTex, plainBlend, plainScissor) = (tex, blend, scissor);
+            var keyed = KeyedBackdrop(texName, tex);
+            if (keyed != null && GraphicsMode.Enhanced)
                 (tex, blend, scissor) = (keyed, true, false);
             // Cloud sprites face the camera and take a billboard material: no depth bias, since a
             // free-floating sprite has nothing coplanar to fight, but the SAME cylindrical fog, so
@@ -1745,9 +1795,25 @@ void fragment() {
             {
                 var billboard = BillboardMaterial(tex, blend, scissor, glow: false, lit: lit, fogged: fogged, clampUv: clampUv);
                 RegisterCycle(src, billboard); // same albedo_tex, see GetCylindricalMaterial
+                if (keyed != null)
+                {
+                    NoteKeyed(new KeyedSwap(billboard,
+                        GetBillboardShader(plainBlend, plainScissor, false, lit, fogged, clampUv), plainTex, plainBlend, plainScissor,
+                        GetBillboardShader(true, false, false, lit, fogged, clampUv), keyed));
+                }
                 return billboard;
             }
-            var textured = BiasMaterial(priority, rank, noClutter, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade, ClassifySurface(texName) == "water");
+            bool water = ClassifySurface(texName) == "water";
+            var textured = BiasMaterial(priority, rank, noClutter, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade, water);
+            if (keyed != null)
+            {
+                bool scrolls = scroll != Vector2.Zero;
+                NoteKeyed(new KeyedSwap(textured,
+                    GetBiasShader(!_fullbright, true, plainBlend, plainScissor, doubleSided, scrolls, clampUv, lit, fogged, edgeClamp, clutterFade, water),
+                    plainTex, plainBlend, plainScissor,
+                    GetBiasShader(!_fullbright, true, true, false, doubleSided, scrolls, clampUv, lit, fogged, edgeClamp, clutterFade, water),
+                    keyed));
+            }
             _texturedMaterials.Add((textured, texName)); // for a live repaint, see Repaint()
             RegisterCycle(src, textured);
             return textured;
@@ -1757,6 +1823,9 @@ void fragment() {
         return BiasMaterial(priority, rank, noClutter, doubleSided, null, color, blend: color.A < 1f, scissor: false,
             scroll: Vector2.Zero, clampUv: false, lit: lit, fogged: fogged, pass: pass, clutterFade: clutterFade);
     }
+
+    // Keeps a sky sprite's two looks, and puts the standing mode's on its material.
+    private void NoteKeyed(KeyedSwap swap) => _keyedSwaps.Add(swap);
 
     // Records the verdict a world material's shader was generated for. Every constructor that can
     // make a blended or scissored surface calls it. The depth_draw_never variants live on the
@@ -1790,7 +1859,9 @@ void fragment() {
         bias += pass * OverlayPassBias;
         bias = Mathf.Clamp(bias * DepthBiasScale, -MaxScaledBias, MaxScaledBias);
         mat.SetShaderParameter("depth_bias", bias);
-        if (!_fullbright && GraphicsMode.Enhanced && ShadowLookupOffset != 0f)
+        // Written under either mode. The faithful shader declares no such uniform and ignores it,
+        // and a live switch to Enhanced finds it already on the material.
+        if (!_fullbright && ShadowLookupOffset != 0f)
             mat.SetShaderParameter("shadow_lookup_offset", ShadowLookupOffset);
         if (tex != null)
             mat.SetShaderParameter("albedo_tex", tex);
@@ -1829,6 +1900,7 @@ void fragment() {
             | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (debugClutter ? 4096 : 0)
             | (water ? 16384 : 0) | (sunVertexLit ? 32768 : 0) | (gammaBlend ? 65536 : 0)
             | (noAlphaCoverage ? 131072 : 0);
+        EnsureCurrentText();
         if (BiasShaders.TryGetValue(key, out var cached))
             return cached;
 
@@ -2105,6 +2177,7 @@ void fragment() {{");
         lit |= glow;
         int key = (blend ? 1 : 0) | (scissor ? 2 : 0) | (glow ? 4 : 0) | (lit ? 0 : 8) | (fogged ? 0 : 16)
             | (clampUv ? 32 : 0);
+        EnsureCurrentText();
         if (BillboardShaders.TryGetValue(key, out var cached))
             return cached;
 
@@ -2214,6 +2287,7 @@ void fragment() {{
         lit |= glow; // a glow variant already ignores csky_world_light, same key
         int key = (axis == CylAxis.X ? 1 : 0) | (blend ? 2 : 0) | (scissor ? 4 : 0) | (glow ? 8 : 0)
             | (lit ? 0 : 16) | (fogged ? 0 : 32) | (clampUv ? 64 : 0);
+        EnsureCurrentText();
         if (CylindricalShaders.TryGetValue(key, out var cached))
             return cached;
 
@@ -2293,4 +2367,9 @@ void fragment() {{
         return sb.ToString();
     }
 #pragma warning restore SA1204
+
+    // One sky sprite's material under both modes. The plain texture keeps its own alpha verdict,
+    // and the keyed copy takes the blend shader Enhanced draws it through.
+    private sealed record KeyedSwap(ShaderMaterial Material, Shader PlainShader, ImageTexture PlainTex,
+        bool PlainBlend, bool PlainScissor, Shader KeyedShader, ImageTexture KeyedTex);
 }
