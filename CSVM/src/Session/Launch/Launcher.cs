@@ -253,7 +253,7 @@ public partial class Launcher : Node3D
     // The --debug-net readout, null without the flag, and the wall time since it last refreshed.
     private UI.Overlays.NetReadout? _netReadout;
     private double _sinceNetReadout;
-    private Rid _viewportRid;
+    private MeasuredRenderTime _renderTime = null!;
     // The previous frame's QPC stamp, so the monitor is fed a raw wall cost rather than Godot's
     // post-processed `delta`. 0 on the first frame, which reports 0 ms and trips nothing.
     private long _lastFrameStamp;
@@ -435,8 +435,9 @@ public partial class Launcher : Node3D
         // Measured render time is opt-in per viewport and reads 0 until it is, so it is enabled once
         // here rather than per frame from ReportPerf (which used to own the call): the hitch record
         // needs the CPU/GPU split on every frame, not only on a --perf run.
-        _viewportRid = GetViewport().GetViewportRid();
-        RenderingServer.ViewportSetMeasureRenderTime(_viewportRid, true);
+        var viewportRid = GetViewport().GetViewportRid();
+        RenderingServer.ViewportSetMeasureRenderTime(viewportRid, true);
+        _renderTime = new MeasuredRenderTime(viewportRid);
 
 
         // An editor run's window is created without focus (no_focus in project.godot). An
@@ -3134,18 +3135,22 @@ public partial class Launcher : Node3D
 
     // Samples the engine's eight per-frame counters once, for both instruments. The two
     // `TIME_*` monitors are seconds and are converted here, so everything downstream of this
-    // is in milliseconds. Read at priority -999, so (like `delta` itself) these describe the
-    // frame that just ended rather than the one being built; the two agree with each other, which
-    // is what a hitch record needs.
-    private FrameCounters ReadFrameCounters() => new(
-        ScriptMs: 1000 * Performance.GetMonitor(Performance.Monitor.TimeProcess),
-        RenderCpuMs: RenderingServer.ViewportGetMeasuredRenderTimeCpu(_viewportRid),
-        GpuMs: RenderingServer.ViewportGetMeasuredRenderTimeGpu(_viewportRid),
-        PhysicsMs: 1000 * Performance.GetMonitor(Performance.Monitor.TimePhysicsProcess),
-        Draws: (long)Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame),
-        Prims: (long)Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame),
-        Nodes: (long)Performance.GetMonitor(Performance.Monitor.ObjectNodeCount),
-        MemBytes: (long)Performance.GetMonitor(Performance.Monitor.MemoryStatic));
+    // is in milliseconds. Read at priority -999, like `delta` they describe the frame that just
+    // ended, which is what a hitch record needs. The render pair is one draw older under the
+    // separate render thread.
+    private FrameCounters ReadFrameCounters()
+    {
+        var (renderCpuMs, gpuMs) = _renderTime.Read();
+        return new(
+            ScriptMs: 1000 * Performance.GetMonitor(Performance.Monitor.TimeProcess),
+            RenderCpuMs: renderCpuMs,
+            GpuMs: gpuMs,
+            PhysicsMs: 1000 * Performance.GetMonitor(Performance.Monitor.TimePhysicsProcess),
+            Draws: (long)Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame),
+            Prims: (long)Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame),
+            Nodes: (long)Performance.GetMonitor(Performance.Monitor.ObjectNodeCount),
+            MemBytes: (long)Performance.GetMonitor(Performance.Monitor.MemoryStatic));
+    }
 
     // --hitch-inject=: burns wall time synchronously for about `ms`, so a stall of known
     // magnitude exists to verify against. The busy-wait form proves the timing path; `alloc`

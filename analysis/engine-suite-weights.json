@@ -394,6 +394,7 @@
     "ranked-pool-carried-turret-dedup": 0.291,
     "remote-airframe": 1.09,
     "render-poses": 0.003,
+    "render-thread-handoffs": 0.13,
     "repeat-call-slots": 0.009,
     "results-board-shell": 0.035,
     "ring-death-effects-follow-hull": 0.699,

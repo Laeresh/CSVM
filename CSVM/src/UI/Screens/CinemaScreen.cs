@@ -86,7 +86,6 @@ public sealed partial class CinemaScreen : Node
     private CanvasLayer? _layer;
     private ColorRect? _ground;
     private TextureRect? _screen;
-    private Image? _image;
     private ImageTexture? _texture;
     private AudioStreamPlayer? _player;
     private AudioStreamGeneratorPlayback? _sink;
@@ -148,9 +147,7 @@ public sealed partial class CinemaScreen : Node
     /// <inheritdoc/>
     public override void _Ready()
     {
-        _image = Image.CreateFromData(
-            _cinema.Width, _cinema.Height, false, Image.Format.Rgba8, _cinema.Pixels);
-        _texture = ImageTexture.CreateFromImage(_image);
+        _texture = TextureUpload.Create(_cinema.Width, _cinema.Height, Image.Format.Rgba8, _cinema.Pixels);
         _ground = new ColorRect { Color = Colors.Black, MouseFilter = Control.MouseFilterEnum.Ignore };
         _ground.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _screen = new TextureRect
@@ -200,10 +197,9 @@ public sealed partial class CinemaScreen : Node
         }
 
         PushSound();
-        if (_cinema.Advance(delta, PlayedFrames()) && _image != null && _texture != null)
+        if (_cinema.Advance(delta, PlayedFrames()) && _texture != null)
         {
-            _image.SetData(_cinema.Width, _cinema.Height, false, Image.Format.Rgba8, _cinema.Pixels);
-            _texture.Update(_image);
+            TextureUpload.Replace(_texture, _cinema.Width, _cinema.Height, Image.Format.Rgba8, _cinema.Pixels);
         }
 
         Fit();

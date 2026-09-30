@@ -143,12 +143,37 @@ site vocabulary, the seeded call sites and the attribution terms a record carrie
 ## src/Utils/PaneReadback.cs
 One frame of a viewport read back without stalling the frame that asks: the Danger Zone camera's
 own viewport (`Flight/Modes/DangerZonePhotograph.cs`), a pilot's pane where no frames draw, and the
-screenshot key's frame. A synchronous `GetImage` plus a PNG encode of a 5120x1440 pane costs the
-frame that runs them over a second. The request copies the viewport's render target through
-`RenderingDevice.TextureGetDataAsync`, whose callback arrives after the device's frame queue, and
-a worker builds the image (RGB8 for an opaque viewport, as `GetImage` answers) and runs the
-caller's continuation, which encodes there too and defers to the main thread for anything touching
-the scene. No rendering device, or a render target other than RGBA8, falls back to the synchronous read.
+screenshot key's frame, where a synchronous `GetImage` and encode of a 5120x1440 pane cost over a
+second. It copies the render target through `RenderingDevice.TextureGetDataAsync`, on the render
+thread since only that thread may call the device, and a worker builds the image (RGB8 for an
+opaque viewport, as `GetImage` answers) and runs the caller's continuation, which defers to the main
+thread for anything touching the scene. No rendering device, or a render target other than RGBA8,
+falls back to the synchronous read.
+
+## src/Utils/MeasuredRenderTime.cs
+The root viewport's measured render CPU and GPU times for `Launcher`'s per-frame counter read, which
+feeds `HitchMonitor`, the perf readout and `--perf`. Under the separate render thread Godot's two
+getters each wait for the previous draw, so a call queued on the render thread publishes the pair
+and the frame takes the latest one, a draw older than a synchronous read. On one thread the read is
+direct. Why the wait matters: `docs/verification.md` PERF-43.
+
+## src/Utils/SceneCopy.cs
+A node subtree's copy for the three places that duplicate one in play: the splitscreen cloud decks
+(`Session/Launch/GameSession.cs`), the staged chute figures (`Mech3/WorldSession.cs`) and the glTF
+export (`Tooling/GltfExporter.cs`). `Duplicate()` builds each geometry node's property list, which
+under the separate render thread queues a call that writes into the caller's finished stack frame
+and kills the process. The copy reads a geometry node's properties off its class, then its
+metadata, surface materials and blend shapes; other nodes copy through their own list. Instance
+uniforms stay behind, as under `Duplicate()`.
+
+## src/Utils/TextureUpload.cs
+New pixels for a texture the game repaints while it runs: the ground shadow's silhouette, the world
+light table, the cinema and the menu movies. Each upload builds its own `Image`, because under the
+separate render thread the update is queued and read later, and an Image refilled in place with
+`SetData` swaps its buffer under that reader. `Create` makes the texture and `Replace` hands it the
+next picture, holding each Image by a second native reference until the render thread lets go, so
+that thread never swaps the C# wrapper's GC handle, a swap that corrupts the managed heap when it
+races the main thread's.
 
 ## src/Utils/WallCostBank.cs
 One `--perf` cost meter: the open/close bracket, the banked wall milliseconds, the worst single
@@ -185,7 +210,7 @@ server's step), and the gap after the process pass, split at the rendering serve
 `frame_pre_draw` and `frame_post_draw` signals into the end-of-frame flush (deferred calls, every
 queued `_Draw`, transform notifications), the draw with its present, and the idle rest. `--perf`
 hooks the two signals and prints the four terms per frame, so they and the two pass terms sum to
-`frame_ms`. Rules: `docs/verification.md` PERF-40.
+`frame_ms`. Rules: `docs/verification.md` PERF-40, and PERF-43 for the separate render thread.
 
 ## src/Utils/AiStepCost.cs
 The wall cost of the flight roster's AI walks and how many aircraft they walked, banked by an

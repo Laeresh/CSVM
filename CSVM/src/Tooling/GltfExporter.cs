@@ -10,7 +10,7 @@ namespace CSVM.Tooling;
 /// and live particle emitters (smoke/fire/trails) are not part of the tree it reads.
 ///
 /// The viewer plane goes through the <c>--export-gltf=</c> CLI one-shot and F10; NodeLab can
-/// export its current selection, or its export set as one file. The work happens on a throwaway <c>Duplicate()</c>, so the live
+/// export its current selection, or its export set as one file. The work happens on a throwaway <see cref="SceneCopy"/>, so the live
 /// scene is never mutated.</summary>
 public sealed class GltfExporter
 {
@@ -33,10 +33,10 @@ public sealed class GltfExporter
             Log.Error("core", $"gltf export failed: no node or no path");
             return Error.InvalidParameter;
         }
-        // Duplicate so material overrides and node pruning below never touch the live tree. The
-        // ArrayMesh resources are shared with it, so the winding fix below builds a new mesh rather
-        // than editing one, and skins are overridden on the NODE.
-        return Write((Node3D)plane.Duplicate(), path);
+        // Copied so material overrides and node pruning below never touch the live tree. The copy
+        // shares the ArrayMesh resources, so the winding fix builds a new mesh rather than editing
+        // one, and skins are overridden on the NODE.
+        return Write(SceneCopy.Of(plane), path);
     }
 
     /// <summary>Writes several live subtrees into one glTF under a single root, each at its world
@@ -52,7 +52,7 @@ public sealed class GltfExporter
             {
                 continue;
             }
-            var copy = (Node3D)node.Duplicate();
+            var copy = SceneCopy.Of(node);
             copy.Transform = node.GlobalTransform;
             root.AddChild(copy);
             kept++;

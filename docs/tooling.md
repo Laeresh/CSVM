@@ -749,3 +749,6 @@ hang a session. **`-Resolution WxH`** is forwarded as Godot's own `--resolution`
 which is the only way a scripted capture lands at a size a player runs: the project ships
 1280x720, and a saved size cannot raise it because `--screenshot` implies `--det`, which drops
 every saved option (DET-8). A resolution-sensitive artefact is invisible at the default size.
+**`-EngineArgs`** forwards any other Godot option ahead of the `--`, as a string array:
+`-EngineArgs '--render-thread','safe'` A/Bs the project's separate render thread, and
+`-EngineArgs '--log-file','<path>'` keeps every native ERROR line in one file.
