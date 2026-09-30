@@ -277,24 +277,24 @@ The original's graphics EffectsLevel option as a config key (`graphics.effectsLe
 [../formats/templates.md](../formats/templates.md). A second key, `graphics.clutterFarFade`, is the
 remake's own switch: false resolves the global to a never-fades scale, so clutter draws out to the
 fog instead of ending at the authored metres. Enhanced mode scales it by
-`WeatherRig.EnhancedFogScale()` squared. Read `ClutterBuilder` and `MapEdgeExtender` next.
+`WeatherRig.EnhancedFogScale()` times `ViewDistance.ClutterReach()`, squared. Read `ClutterBuilder` and `MapEdgeExtender` next.
 
 ## src/Utils/GraphicsMode.cs
 The opt-in enhanced-lighting mode's setting (`original` or `enhanced`, default `original`),
-resolved once by `Launcher._Ready` into the single boolean `GraphicsMode.Enhanced` every later
-scene builder reads, so the sources can be layered without touching a reader. The order mirrors
-`PresentationResolution`'s: `--graphics=` beats the saved `graphicsMode` option (`OptionsStore`),
-which beats the `graphics.mode` config key, which beats the default; an unknown word at any layer
-warns and falls back. `--det` drops both machine-state layers and keeps only an explicit
-`--graphics=`, which is how a golden or a deterministic capture pins the mode on purpose. The mode
-itself is written up as a divergence in `docs/architecture/Root.md`.
+resolved by `Launcher._Ready` into the single boolean `GraphicsMode.Enhanced` every scene builder
+reads. `Set` is the live switch, called only by `Launcher.SwitchGraphicsMode`, which then brings the
+built world into line. `--graphics=` beats the saved `graphicsMode` option (`OptionsStore`), which
+beats the `graphics.mode` config key, which beats the default; an unknown word at any layer warns
+and falls back. `--det` drops both machine-state layers and keeps only an explicit `--graphics=`,
+which is how a golden or a deterministic capture pins the mode on purpose. The mode itself is
+written up as a divergence in `docs/architecture/Root.md`.
 
 ## src/Utils/AntiAliasingSetting.cs
 The anti-aliasing method, a VIDEO page display setting over `DisplayWords.AntiAliasingChoices`: `off`, `fxaa`, `smaa`,
 `taa` or `fsr2`. `Resolve` layers the saved `antiAliasing` word, then the `graphics.antiAliasing` config key, then
 `DefaultFor` the graphics mode, which is `off` under Original and `taa` under Enhanced; an unknown config word warns and
 falls back. A chosen method is written whichever mode won, since only the default follows the mode. `SavedWord` holds the
-`--det` guard. The resolve runs once at launch after `GraphicsMode.Resolve` and lands in the static `Method`, whose one
+`--det` guard. The resolve runs at launch after `GraphicsMode.Resolve`, and again on a live mode switch or an Options apply, landing in the static `Method`, whose one
 reader is `ViewportQuality.Apply`; `Launcher`'s `[world] graphics mode:` line announces the word and its source. FSR 2.2
 refuses a render scale above native, which `RenderScaleSetting.ClampFor` applies.
 
@@ -312,10 +312,26 @@ split-screen panes share the world's one sun. Why each level stands where it doe
 What `AntiAliasingSetting` and `RenderScaleSetting` write on a 3D viewport, gathered here because
 there are four viewports to write them on: the root viewport `Session/Launch/Launcher.cs` owns, and the SubViewports
 `Flight/Hud/CockpitOverlay.cs`, `Flight/Camera/SpyglassView.cs` and `UI/Boards/SplitScreen.cs` build. `Apply` runs once per viewport at
-construction. FXAA and SMAA go to `ScreenSpaceAA`, TAA to `UseTaa`. Below native the scale runs through
+construction and remembers it weakly; `ReapplyAll` writes the settings resolved now on every one still alive (a live mode switch, an Options apply). FXAA and SMAA go to `ScreenSpaceAA`, TAA to `UseTaa`. Below native the scale runs through
 `Scaling3DModeEnum.Fsr2` under `fsr2` and `Fsr` otherwise, and above native through `Bilinear`, the one mode Godot
 supersamples in. At native only `fsr2` writes a scaling mode, `Fsr2` at 1.0, which runs as anti-aliasing alone. `off` at
 native writes nothing, so a faithful `--det` run reads back Godot's own defaults. MSAA stays `project.godot`'s.
+
+## src/Utils/ViewDistance.cs
+Enhanced mode's view distance: four saved words (`normal`, `far`, `veryfar`, `unlimited`), one
+label table beside them, resolving to how much further the clutter draws than the fade enhanced
+mode already gives it: 1x, 2x, 4x or no fade. The fog never moves with it, the early chapters'
+haze being part of their scenery; C5's city blocks fade well inside theirs. The faithful path keeps
+the decoded fade. The Built-in Options screen offers it under the graphics row, dead until Enhanced
+is chosen. `Resolve` layers `--view-distance`, the saved word (never under `--det`), the
+`graphics.viewDistance` key and the default Far, the largest step four C5 panes run at Normal's
+cost. `Launcher` folds `ClutterReach` into the clutter fade global at startup and on every apply.
+
+## src/Utils/SunShadow.cs
+The shadow settings one `DirectionalLight3D` hands another, clamped to the receiving pass's far
+plane: `Flight/Hud/CockpitOverlay.cs`'s own sun takes the session sun's at build and on a live
+graphics-mode switch, and `Session/Launch/EnhancedLook.cs` resets the session sun from a fresh light
+through it. Below Flight and Session so both share one field list.
 
 ## src/Utils/VSyncSetting.cs
 The frame pacing, one setting carrying both whether the loop waits for the screen and the cap it
@@ -364,7 +380,7 @@ without it. The words are `DisplayWords.RenderScaleChoices`, percentages of nati
 saved `renderScale` word, then the `graphics.renderScale` config key, then native; an unknown word reads as never set and
 a key spelling native reads as the default. The winner is then clamped under the anti-aliasing word: `fsr2` pulls a scale
 above native to 100 (`ClampFor`, which the VIDEO page applies when FSR 2.2 is picked) and `ChoicesFor` offers it only 50
-to 100. `SavedWord` holds the `--det` guard. The resolve runs once at launch and lands in the static `Scale`, whose one
+to 100. `SavedWord` holds the `--det` guard. The resolve runs at launch and on a live apply, landing in the static `Scale`, whose one
 reader is `ViewportQuality.Apply`; `Launcher`'s `[world] graphics mode:` line announces it and any clamp.
 
 ## src/Utils/ScriptedWindow.cs
@@ -373,7 +389,7 @@ the native window handle. Fully static, one call site in `Launcher._Ready` right
 block, where the same predicate drives both window hiding and the interactive run's focus request.
 
 ## src/Utils/OptionsStore.cs
-Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode and difficulty words, the six
+Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode, view distance and difficulty words, the six
 display settings (monitor index, resolution, display mode, V-Sync, render scale, anti-aliasing), the Enhanced shadow quality, the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn, the remembered install folder (fully qualified or dropped), and the network callsign, voice and game name the Game and Player Information boxes remember. One file, `user://options.json`,
 independent of `Session/Campaign/CampaignProfileStore.cs`. A missing or malformed file reads as empty, an unknown version invalidates it, an
 unknown value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump

@@ -729,6 +729,10 @@ public sealed class TextureArchive : IDisposable
     private readonly Dictionary<string, string> _byBaseName = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ImageTexture?> _cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, (bool HasAlpha, bool Soft, AlphaClass Class)> _alphaInfo = new(StringComparer.OrdinalIgnoreCase);
+
+    // Every cached texture whose alpha depth depends on the graphics mode, by base name. A live
+    // switch uploads each one again at the other depth (FollowAlphaDepth).
+    private readonly Dictionary<string, ImageTexture> _depthFollowers = new(StringComparer.OrdinalIgnoreCase);
     // Archive base name -> the extractor's own alpha class, off the extraction manifest. Empty when
     // the tree ships PNGs alone, which is why every read of it falls back to the pixel test.
     private readonly Dictionary<string, AlphaClass> _alphaClasses = new(StringComparer.OrdinalIgnoreCase);
@@ -849,6 +853,10 @@ public sealed class TextureArchive : IDisposable
     /// extractor's field, so it holds for the <see cref="AlphaClass.Simple"/> textures a pixel
     /// test misses. Falls back to the pixel test only where no manifest ships.</summary>
     public AlphaClass LastAlphaClass { get; private set; }
+
+    /// <summary>The textures whose alpha depth follows the graphics mode, as <see cref="Find"/>
+    /// handed them out.</summary>
+    public IReadOnlyCollection<ImageTexture> AlphaDepthFollowers => _depthFollowers.Values;
 
     /// <summary>Textures the extraction manifest classified, and how many of those carry an alpha
     /// channel. Zero means no manifest shipped and <see cref="LastAlphaClass"/> is running on the
@@ -1026,7 +1034,39 @@ public sealed class TextureArchive : IDisposable
         }
         _cache[baseName] = tex;
         _alphaInfo[baseName] = (LastHadAlpha, LastAlphaIsSoft, LastAlphaClass);
+        if (tex != null && LastHadAlpha && UploadsFourBitAlpha(baseName))
+        {
+            _depthFollowers[baseName] = tex;
+        }
         return tex;
+    }
+
+    /// <summary>True when <see cref="Find"/> has handed out this texture and its alpha depth
+    /// follows the graphics mode.</summary>
+    public bool FollowsAlphaDepth(string materialTextureName) =>
+        _depthFollowers.ContainsKey(Path.GetFileNameWithoutExtension(materialTextureName));
+
+    /// <summary>Uploads every texture whose alpha depth follows the graphics mode again at the
+    /// standing mode's depth, in place, so every material holding one follows. Decodes each from
+    /// the archive as <see cref="Find"/> first did. Returns the bytes uploaded.
+    /// ⚠ Never move the truncation into a shader instead. Cutting after filtering is not the same
+    /// pixels as cutting before, and the faithful goldens would move.</summary>
+    public long FollowAlphaDepth()
+    {
+        var last = (LastHadAlpha, LastAlphaIsSoft, LastAlphaClass);
+        var counters = (AuthoredMipsInstalled, AuthoredMipTextures, AuthoredMipsRefused);
+        long bytes = 0;
+        foreach (var (baseName, tex) in _depthFollowers)
+        {
+            if (Build(baseName, out _, out _) is { } img)
+            {
+                TextureUpload.Replace(tex, img);
+                bytes += img.GetDataSize();
+            }
+        }
+        (LastHadAlpha, LastAlphaIsSoft, LastAlphaClass) = last;
+        (AuthoredMipsInstalled, AuthoredMipTextures, AuthoredMipsRefused) = counters;
+        return bytes;
     }
 
     /// <summary>The exact <see cref="Image"/> <see cref="Find"/> installs, freshly decoded, alpha

@@ -149,11 +149,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The Options screen's stepper rows, above the Controls door and the apply row. The screen
     // is a form the cursor walks top to bottom. First the five gameplay settings: the three the
     // Original presentation's GAME OPTIONS page draws, in its order, then the targeting switch
-    // and the rumble. Then the graphics mode, the six display settings and the shadow quality in the
-    // order the Original presentation's VIDEO page draws them. Then the four volume levels in the
-    // order its AUDIO page draws them, then the two doors.
-    private const int OptionsStepperRows = 17;
-    // How many Options rows show at once. Nineteen rows do not fit the band at 720p, and a band
+    // and the rumble. Then the graphics mode, its view distance, the six display settings and the
+    // shadow quality in the order the Original presentation's VIDEO page draws them. Then the four
+    // volume levels in the order its AUDIO page draws them, then the two doors.
+    private const int OptionsStepperRows = 18;
+    // How many Options rows show at once. Twenty rows do not fit the band at 720p, and a band
     // sized to all of them shrinks every row. The screen is windowed at the Controls list's
     // height, which is known to fit.
     private const int OptionsWindow = ControlsWindow;
@@ -268,7 +268,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     // config key deciding, rather than overruling it with a default of this screen's own.
     private bool? _autoHeadTurnChoice;
     private string _graphicsChoice = GraphicsMode.Default;
-    // The six display settings, stepped by the six rows under the graphics one. Each is stored as
+    private string? _viewDistanceChoice;
+    // The six display settings, stepped by the six rows under the view distance. Each is stored as
     // the word the options file carries, never as a row index. A screen unplugged or a size the
     // monitor stopped offering then meets the resolver's own forgiving read, not a stale position.
     private string? _monitorChoice, _resolutionChoice, _displayModeChoice, _vsyncChoice, _renderScaleChoice, _antiAliasingChoice, _shadowQualityChoice;
@@ -1753,7 +1754,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         switch (_screen)
         {
             case Screen.Options:
-                // The seventeen choice rows are steppers; the doors under them have nothing to step.
+                // The eighteen choice rows are steppers; the doors under them have nothing to step.
                 switch (_optionsIndex)
                 {
                     case 0: StepDifficultyChoice(dir); return true;
@@ -1762,17 +1763,18 @@ public sealed partial class LaunchMenu : CanvasLayer
                     case 3: ToggleNearestAfterKillChoice(); return true;
                     case 4: ToggleRumbleChoice(); return true;
                     case 5: ToggleGraphicsChoice(); return true;
-                    case 6: StepMonitorChoice(dir); return true;
-                    case 7: StepResolutionChoice(dir); return true;
-                    case 8: StepDisplayModeChoice(dir); return true;
-                    case 9: StepVSyncChoice(dir); return true;
-                    case 10: StepRenderScaleChoice(dir); return true;
-                    case 11: StepAntiAliasingChoice(dir); return true;
-                    case 12: StepShadowQualityChoice(dir); return true;
-                    case 13: _audioMasterChoice = StepLevel(_audioMasterChoice, AudioMix.DefaultMaster, dir); return true;
-                    case 14: _audioMusicChoice = StepLevel(_audioMusicChoice, AudioMix.DefaultMusic, dir); return true;
-                    case 15: _audioEffectsChoice = StepLevel(_audioEffectsChoice, AudioMix.DefaultEffects, dir); return true;
-                    case 16: _audioVoiceChoice = StepLevel(_audioVoiceChoice, AudioMix.DefaultVoice, dir); return true;
+                    case 6: StepViewDistanceChoice(dir); return true;
+                    case 7: StepMonitorChoice(dir); return true;
+                    case 8: StepResolutionChoice(dir); return true;
+                    case 9: StepDisplayModeChoice(dir); return true;
+                    case 10: StepVSyncChoice(dir); return true;
+                    case 11: StepRenderScaleChoice(dir); return true;
+                    case 12: StepAntiAliasingChoice(dir); return true;
+                    case 13: StepShadowQualityChoice(dir); return true;
+                    case 14: _audioMasterChoice = StepLevel(_audioMasterChoice, AudioMix.DefaultMaster, dir); return true;
+                    case 15: _audioMusicChoice = StepLevel(_audioMusicChoice, AudioMix.DefaultMusic, dir); return true;
+                    case 16: _audioEffectsChoice = StepLevel(_audioEffectsChoice, AudioMix.DefaultEffects, dir); return true;
+                    case 17: _audioVoiceChoice = StepLevel(_audioVoiceChoice, AudioMix.DefaultVoice, dir); return true;
                     default: return false;
                 }
             case Screen.Network:
@@ -1896,7 +1898,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                         Difficulty.Word(_difficultyChoice), _monitorChoice, _resolutionChoice,
                         _displayModeChoice, _vsyncChoice, _renderScaleChoice, _antiAliasingChoice, _shadowQualityChoice, _audioMasterChoice,
                         _audioMusicChoice, _audioEffectsChoice, _audioVoiceChoice, _nearestAfterKillChoice,
-                        _rumbleChoice, _defaultViewChoice, _autoHeadTurnChoice));
+                        _rumbleChoice, _defaultViewChoice, _autoHeadTurnChoice, _viewDistanceChoice));
                 }
 
                 break;
@@ -3196,6 +3198,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         _defaultViewChoice = saved.DefaultView;
         _autoHeadTurnChoice = saved.AutoHeadTurn;
         _graphicsChoice = saved.GraphicsMode ?? GraphicsMode.Default;
+        _viewDistanceChoice = saved.ViewDistance;
         _monitorChoice = saved.MonitorIndex;
         _resolutionChoice = saved.Resolution;
         _savedResolution = saved.Resolution;
@@ -3552,6 +3555,25 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string GraphicsChoiceLabel() =>
         _graphicsChoice == GraphicsMode.EnhancedWord ? "Enhanced" : "Original";
 
+    // Dead under Original, as the resolution row is under borderless: the faithful world keeps the
+    // decoded fade. Clamped at both ends, so a held arrow settles on Normal or Unlimited.
+    private void StepViewDistanceChoice(int dir)
+    {
+        if (_graphicsChoice != GraphicsMode.EnhancedWord)
+        {
+            return;
+        }
+
+        _viewDistanceChoice = ViewDistance.Words[Math.Clamp(ViewDistance.Index(_viewDistanceChoice) + dir, 0, ViewDistance.Words.Length - 1)];
+    }
+
+    private string ViewDistanceChoiceLabel() => ViewDistance.Label(_viewDistanceChoice);
+
+    // The row says why it does not step rather than refusing in silence.
+    private string ViewDistanceDetail() => _graphicsChoice == GraphicsMode.EnhancedWord
+        ? "How far buildings and scenery draw before they fade; the haze stays. Applies at once."
+        : "Enhanced Graphics only: choose Enhanced above to set how far buildings and scenery draw.";
+
     // The monitor and resolution rows ask the engine on every read rather than holding a list from
     // when the screen opened, since a monitor can be plugged in while the row stands focused and the
     // sizes are the standing screen's own. A saved index no screen answers to draws as the screen
@@ -3686,18 +3708,10 @@ public sealed partial class LaunchMenu : CanvasLayer
             : "Select the window size. The list is what the screen the window stands on can hold.";
     }
 
-    // The graphics row's detail says whether a restart is still owed: the mode is resolved once at
-    // launch, so a choice that differs from the running one reaches the world on the next start,
-    // and a player who saved it and came back would otherwise read the unchanged world as a
-    // failed switch.
-    private string GraphicsDetail()
-    {
-        bool running = GraphicsMode.Enhanced;
-        bool chosen = _graphicsChoice == GraphicsMode.EnhancedWord;
-        return chosen == running
-            ? "Original is the faithful world; Enhanced lights it. Takes effect on the next start."
-            : $"Original is the faithful world; Enhanced lights it. This run is {(running ? "Enhanced" : "Original")}; restart to apply.";
-    }
+    // The graphics row's detail. The apply switches the running world (Launcher.SwitchGraphicsMode),
+    // so no restart is owed and the line does not read the running mode.
+    private string GraphicsDetail() =>
+        "Original is the faithful world; Enhanced lights it. Applies at once.";
 
     // What this screen is, the middle band's first line.
     private string Heading()
@@ -4216,18 +4230,19 @@ public sealed partial class LaunchMenu : CanvasLayer
                 3 => $"Nearest target after a kill: {NearestAfterKillChoiceLabel()}",
                 4 => $"Controller rumble: {RumbleChoiceLabel()}",
                 5 => $"Graphics: {GraphicsChoiceLabel()}",
-                6 => $"Monitor: {MonitorChoiceLabel()}",
-                7 => $"Resolution: {ResolutionChoiceLabel()}",
-                8 => $"Display mode: {DisplayModeChoiceLabel()}",
-                9 => $"V-Sync: {VSyncChoiceLabel()}",
-                10 => $"Render scale: {RenderScaleChoiceLabel()}",
-                11 => $"Anti-aliasing: {AntiAliasingChoiceLabel()}",
-                12 => $"Shadow quality: {ShadowQualityChoiceLabel()}",
-                13 => $"Master volume: {LevelLabel(_audioMasterChoice, AudioMix.DefaultMaster)}",
-                14 => $"Music volume: {LevelLabel(_audioMusicChoice, AudioMix.DefaultMusic)}",
-                15 => $"Effects volume: {LevelLabel(_audioEffectsChoice, AudioMix.DefaultEffects)}",
-                16 => $"Voice volume: {LevelLabel(_audioVoiceChoice, AudioMix.DefaultVoice)}",
-                17 => ControlsRow,
+                6 => $"View distance (Enhanced only): {ViewDistanceChoiceLabel()}",
+                7 => $"Monitor: {MonitorChoiceLabel()}",
+                8 => $"Resolution: {ResolutionChoiceLabel()}",
+                9 => $"Display mode: {DisplayModeChoiceLabel()}",
+                10 => $"V-Sync: {VSyncChoiceLabel()}",
+                11 => $"Render scale: {RenderScaleChoiceLabel()}",
+                12 => $"Anti-aliasing: {AntiAliasingChoiceLabel()}",
+                13 => $"Shadow quality: {ShadowQualityChoiceLabel()}",
+                14 => $"Master volume: {LevelLabel(_audioMasterChoice, AudioMix.DefaultMaster)}",
+                15 => $"Music volume: {LevelLabel(_audioMusicChoice, AudioMix.DefaultMusic)}",
+                16 => $"Effects volume: {LevelLabel(_audioEffectsChoice, AudioMix.DefaultEffects)}",
+                17 => $"Voice volume: {LevelLabel(_audioVoiceChoice, AudioMix.DefaultVoice)}",
+                18 => ControlsRow,
                 _ => "Apply and restart the menu",
             },
             Screen.Controls => $"{ControlsRowLabel(index)}   {ControlsRowValue(index)}",
@@ -4620,18 +4635,19 @@ public sealed partial class LaunchMenu : CanvasLayer
             3 => "Take the nearest target after a kill instead of the first of the list.",
             4 => "Rumble the gamepad for guns, launches, hits, the nitro and a dive past the rated maximum.",
             5 => GraphicsDetail(),
-            6 => "Select the monitor the game opens on. Applied on the way out, before the size.",
-            7 => ResolutionDetail(),
-            8 => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
-            9 => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
-            10 => "Render the world below native to spare the GPU, or above it for cleaner edges. Takes effect on the next start.",
-            11 => "Select how edges are smoothed. FSR 2.2 also upscales a Render Scale below 100%. Takes effect on the next start.",
-            12 => DisplaySettingRows.ShadowQualityDetail(_graphicsChoice),
-            13 => "Set the overall volume of all sounds. Heard once the choices are applied.",
-            14 => "Set the volume of the in-game music. Heard once the choices are applied.",
-            15 => "Set the volume of the sound effects. Heard once the choices are applied.",
-            16 => "Set the volume of the voices. Heard once the choices are applied.",
-            17 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
+            6 => ViewDistanceDetail(),
+            7 => "Select the monitor the game opens on. Applied on the way out, before the size.",
+            8 => ResolutionDetail(),
+            9 => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
+            10 => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
+            11 => "Render the world below native to spare the GPU, or above it for cleaner edges. Applies at once.",
+            12 => "Select how edges are smoothed. FSR 2.2 also upscales a Render Scale below 100%. Applies at once.",
+            13 => DisplaySettingRows.ShadowQualityDetail(_graphicsChoice),
+            14 => "Set the overall volume of all sounds. Heard once the choices are applied.",
+            15 => "Set the volume of the in-game music. Heard once the choices are applied.",
+            16 => "Set the volume of the sound effects. Heard once the choices are applied.",
+            17 => "Set the volume of the voices. Heard once the choices are applied.",
+            18 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
             _ => "Saves every choice and restarts the menu at its top level; unfinished setup is discarded.",
         },
         Screen.Controls => ControlsDetail(focus),

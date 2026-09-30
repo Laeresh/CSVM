@@ -754,12 +754,10 @@ public class OriginalOptionsTests
         Assert.Equal("Screen 0", Row(host, OriginalOptionsScreen.MonitorKey).Label);
     }
 
-    /// <summary>The graphics row's description reads the choice against the running mode. A saved
-    /// word the world has not picked up says a restart is owed, rather than repeating the
-    /// next-start note. Which of the two words is the running one depends on the process, so the
-    /// fact checks that exactly one of them owes the restart.</summary>
+    /// <summary>The graphics row's description owes no restart for either saved word, since the
+    /// apply switches the running world.</summary>
     [Fact]
-    public void TheGraphicsRowSaysWhenARestartIsStillOwed()
+    public void TheGraphicsRowOwesNoRestart()
     {
         var saved = new OptionsDef { GraphicsMode = GraphicsMode.EnhancedWord };
         var host = Host(() => saved);
@@ -770,11 +768,8 @@ public class OriginalOptionsTests
         host.Module.OpenVideo();
         string original = Compose(host).Lines.Single(l => l.Text.StartsWith("Select the lit world.", StringComparison.Ordinal)).Text;
 
-        var owed = new[] { enhanced, original }.Where(t => t.EndsWith("restart to apply.", StringComparison.Ordinal)).ToList();
-        var settled = new[] { enhanced, original }.Where(t => t.EndsWith("Takes effect on the next start.", StringComparison.Ordinal)).ToList();
-        Assert.Single(owed);
-        Assert.Single(settled);
-        Assert.Contains(GraphicsMode.Enhanced ? "This run is enhanced" : "This run is original", owed[0]);
+        Assert.Equal(enhanced, original);
+        Assert.DoesNotContain("restart", enhanced, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -29,10 +29,9 @@ internal static class DisplaySettingsSuites
     // it, so the check reads the same on the hidden test desktop and at the controls.
     private const string CustomSize = "640x480";
 
-    // Where the size row stands on the built-in Options screen. Seven rows stand over it:
-    // difficulty, the opening view, the automatic head turn, the targeting switch, the rumble
-    // toggle, the graphics mode and the monitor.
-    private const int BuiltInResolutionRow = 7;
+    // Where the size row stands on the built-in Options screen, under eight rows. They are the five
+    // gameplay rows, the graphics mode, the view distance and the monitor.
+    private const int BuiltInResolutionRow = 8;
 
     // Every field OptionsDef carries, with a value the store validates and whether it is a display
     // setting, which is what makes it something no deterministic run may read. The list is compared
@@ -44,6 +43,7 @@ internal static class DisplaySettingsSuites
     {
         ("MenuPresentation", "original", false),
         ("GraphicsMode", GraphicsMode.EnhancedWord, false),
+        ("ViewDistance", "veryfar", true),
         ("Difficulty", Flight.Hangar.Difficulty.Word(Flight.Hangar.Difficulty.Hard), false),
         ("NearestAfterKill", true, false),
         ("Rumble", false, false),

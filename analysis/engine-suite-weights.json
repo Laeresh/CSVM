@@ -227,6 +227,8 @@
     "generator-sub-kill-disables-bay": 1.164,
     "generator-takeoff-run": 1.569,
     "gltf-export": 0.433,
+    "graphics-live-switch": 15.3,
+    "graphics-view-distance": 6.9,
     "graze-bounce": 0.361,
     "ground-contact": 0.022,
     "gun-voice-reach": 2.49,

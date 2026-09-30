@@ -18,6 +18,16 @@ namespace CSVM.Tests;
 [Trait("Tier", "Quick")]
 public class SessionSpecParserTests
 {
+    /// <summary>The View Distance flag takes one of its four words and drops anything else, and the
+    /// graphics-switch aid takes whole sim frames in ascending order.</summary>
+    [Fact]
+    public void TheViewDistanceAndGraphicsSwitchFlagsParse()
+    {
+        Assert.Equal("veryfar", SessionSpec.Parse(new[] { "--view-distance=veryfar" }).ViewDistance);
+        Assert.Null(SessionSpec.Parse(new[] { "--view-distance=farthest" }).ViewDistance);
+        Assert.Equal(new long[] { 5, 15 }, SessionSpec.ParseFrameList("15, 5,x,-3"));
+    }
+
     [Fact]
     public void AVectorIsThreeInvariantCultureFloats()
     {

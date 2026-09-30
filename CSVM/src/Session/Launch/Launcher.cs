@@ -64,88 +64,6 @@ public partial class Launcher : Node3D
     // three child buses alone.
     private const int MasterBus = 0;
 
-    // TUNE, and the FALLBACK only: a flown mission overwrites this per zone from its own pushed-out
-    // fog near (WeatherRig.ApplyEnhancedLighting), so shadows end where that zone's haze ramp
-    // begins. This value is what a session with no weather.json gets, and it sits in the middle of
-    // the pushed-near range the shipped zones resolve to (2000-4200 m).
-    private const float EnhancedShadowMaxDistance = 3000f;
-
-    // TUNE, paired with the distance above and judged the same way (WeatherRig.ApplyEnhancedLighting
-    // sets the flown-mission copy). Fades the last cascade out before this fallback distance rather
-    // than cutting at a hard edge.
-    private const float EnhancedShadowFadeStart = 0.8f;
-
-    // TUNE, judged at the controls. Lower values put dithered acne over lit surfaces at C1's 25°
-    // sun, and higher ones dissolve a hangar's shadow. These keep the building and aircraft
-    // silhouettes. The ground and the water cast no shadow (WorldBuilder.IsShadowlessGround), so
-    // neither can band itself.
-    private const float EnhancedShadowBias = 0.05f;
-    private const float EnhancedShadowNormalBias = 1.25f;
-
-    // TUNE. Fractions of EnhancedShadowMaxDistance, tighter than Godot's 0.1/0.2/0.5 because the
-    // shadows a player reads are the aircraft's own and the buildings it passes, all inside the
-    // first few hundred metres; the outer cascades only have to carry a skyline into the haze.
-    private const float EnhancedShadowSplit1 = 0.12f;
-    private const float EnhancedShadowSplit2 = 0.17f;
-    private const float EnhancedShadowSplit3 = 0.42f;
-
-    // TUNE. Screen-space reflection on the glossy water arm: the step count buys reflection length
-    // along the ray, the fades hide where a ray runs off the screen or past the depth buffer.
-    // The fade-out exponent is the lever on the border and aircraft flicker, since it dims a ray
-    // before it is lost. Depth tolerance measures inert here, from this value up to 8.0.
-    private const int EnhancedSsrMaxSteps = 64;
-    private const float EnhancedSsrFadeIn = 0.15f;
-    private const float EnhancedSsrFadeOut = 2.5f;
-    private const float EnhancedSsrDepthTolerance = 0.2f;
-
-    // TUNE, judged at the controls on C2/C5. Godot's own default (1.0 m) reads a building's own
-    // trim but misses the wider contact shading a street canyon wants at this world's scale
-    // (buildings tens of metres tall, streets a similar width); this radius picks up a block's
-    // base and a hangar's corner without darkening open tarmac.
-    private const float EnhancedSsaoRadius = 2.5f;
-
-    // TUNE, judged at the controls: Godot's defaults (intensity 2.0, power 1.5) already read as
-    // grounded contact shading rather than a grey wash at this radius, so both are kept.
-    private const float EnhancedSsaoIntensity = 2.0f;
-    private const float EnhancedSsaoPower = 1.5f;
-
-    // TUNE, Godot defaults: detail keeps small-scale creases (window mullions, girders) from
-    // being swallowed by the coarse term above; horizon and sharpness are the denoise pair that
-    // keeps the depth-buffer edges from shimmering worse than the effect is worth.
-    private const float EnhancedSsaoDetail = 0.5f;
-    private const float EnhancedSsaoHorizon = 0.06f;
-    private const float EnhancedSsaoSharpness = 0.98f;
-
-    // TUNE, judged at the controls against C21's contract (only the glow-arm sprites exceed 1.0
-    // in the HDR buffer). A threshold of 1.0 blooms exactly them; bloom stays 0 so nothing below
-    // threshold glows, and screen blend keeps a flare's halo additive without blowing its own
-    // core out further.
-    private const float EnhancedGlowHdrThreshold = 1.0f;
-    private const float EnhancedGlowBloom = 0.0f;
-    private const float EnhancedGlowIntensity = 0.9f;
-    private const float EnhancedGlowStrength = 1.1f;
-    private const Godot.Environment.GlowBlendModeEnum EnhancedGlowBlendMode =
-        Godot.Environment.GlowBlendModeEnum.Screen;
-
-    // TUNE. Scale and cap on the values the glow pass reads before it thresholds them; wide enough
-    // that a saturated flare core (255 before the tonemap) still separates from its own falloff.
-    private const float EnhancedGlowHdrScale = 2.0f;
-    private const float EnhancedGlowHdrLuminanceCap = 8.0f;
-
-    // TUNE, judged at the controls against a C4 horizon, a C1 horizon and C5 at night: AgX rolls
-    // off the far-ridge washout the authored sun energy produces (Wave B) while keeping the night
-    // city's contrast, where Filmic read flatter. Exposure stays neutral; the AgX-specific white
-    // point is what recovers the horizon rather than the general TonemapWhite, which AgX ignores.
-    private const Godot.Environment.ToneMapper EnhancedTonemapMode = Godot.Environment.ToneMapper.Agx;
-    private const float EnhancedTonemapExposure = 1.0f;
-    private const float EnhancedTonemapAgxWhite = 6.0f;
-    private const float EnhancedTonemapAgxContrast = 1.0f;
-
-    // The zone default FOG_COLOR (Flight/Airframe/Weather.cs's no-weather zone), which is the colour a
-    // horizon dome fades into at eye level. Enhanced mode's sky until a flown zone writes its own
-    // over it, so a world with no weather.json still reflects a plausible sky.
-    private static readonly Color EnhancedDefaultSkyColor = new(0.69f, 0.69f, 0.69f);
-
     // What F11's placement print receives at the launchscreen, where no session (and no rigs)
     // exists, the same empty list the pre-split root held after a teardown.
     private static readonly List<PlayerRig> NoRigs = new();
@@ -246,6 +164,10 @@ public partial class Launcher : Node3D
     // An Options apply, acted on at the top of the next frame: the exit arrives inside the active
     // presentation's own tick, which is no place to free it.
     private OptionsApplyExit? _pendingApply;
+    // A seat's graphics-mode action, acted on at the top of the next frame for the same reason.
+    private bool _pendingGraphicsToggle;
+    // How many of --debug-graphics-switch's frames have fired, process-scoped like the capture.
+    private int _debugSwitchesDone;
     // The --menu= aid, held for the cold start alone: the first presentation created reads it and
     // the first ShowMenu consumes it, so no return from flight and no switch re-enters its screen.
     private string? _menuAid;
@@ -743,8 +665,11 @@ public partial class Launcher : Node3D
         // After the --det block, so ClearOverrides has dropped a config graphics.mode; ahead of the
         // clutter fade, which needs the mode to follow the pushed fog. ⚠ --det reads no saved
         // option either: options.json is one machine's state (docs/cli.md's --graphics bullet).
-        string? savedGraphics = _spec.Det ? null : OptionsStore.UserOptions().Load().GraphicsMode;
-        bool graphicsEnhanced = Utils.GraphicsMode.Resolve(_spec.GraphicsMode, savedGraphics);
+        var savedOptions = _spec.Det ? null : OptionsStore.UserOptions().Load();
+        bool graphicsEnhanced = Utils.GraphicsMode.Resolve(_spec.GraphicsMode, savedOptions?.GraphicsMode);
+        // The view distance under the same --det rule, a machine's own state a capture must not read.
+        var viewDistance = Utils.ViewDistance.Resolve(_spec.ViewDistance, savedOptions?.ViewDistance,
+            Config.GetString(Utils.ViewDistance.Key, Utils.ViewDistance.Default));
         // Display settings rather than the mode's, so each is written whichever presentation won;
         // only the method's default follows the mode. They share the mode's line because all three
         // reach the same viewports, so a softer or slower run than expected is read off one line.
@@ -766,14 +691,13 @@ public partial class Launcher : Node3D
             Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
         string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
         string clamped = renderScale.Clamped ? " clamped_by=fsr2" : string.Empty;
-        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={renderScale.Source}{clamped} anti_aliasing={antiAliasing.Word} aa_source={antiAliasing.Source} shadow_quality={shadowQuality.Word} shadow_source={shadowQuality.Source}");
+        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={renderScale.Source}{clamped} anti_aliasing={antiAliasing.Word} aa_source={antiAliasing.Source} shadow_quality={shadowQuality.Word} shadow_source={shadowQuality.Source} view_distance={viewDistance.Word} view_source={viewDistance.Source}");
         // The window's own viewport takes the render flags here, before any scene builds. The
         // three SubViewports take them at construction.
         Utils.ViewportQuality.Apply(GetViewport());
-        // The graphics EffectsLevel's one global: the clutter fade's squared distance scale, 0 when
-        // the fade is off. Enhanced mode pushes the fade out by the fog range's own factor (the
-        // scale shrinks) so clutter reaches the pushed haze; original mode's factor is identity.
-        float clutterFadeScaleSq = Utils.EffectsLevel.ResolveClutterFadeScaleSq(WeatherRig.EnhancedFogScale());
+        // The clutter fade's squared distance scale, 0 when the fade is off. Enhanced mode pushes
+        // the fade out with the fog and further by the View Distance (ClutterFadeScaleSq).
+        float clutterFadeScaleSq = EnhancedLook.ClutterFadeScaleSq();
         RenderingServer.GlobalShaderParameterAdd(Utils.EffectsLevel.ShaderParam,
             RenderingServer.GlobalShaderParameterType.Float, clutterFadeScaleSq);
         Utils.EffectsLevel.RegisteredScaleSq = clutterFadeScaleSq;
@@ -1180,6 +1104,27 @@ public partial class Launcher : Node3D
         {
             _pendingApply = null;
             ApplyOptions(applied);
+        }
+
+        // The graphics-mode action, a frame after the seat that fired it, so no switch runs inside a
+        // controller's own _Process. Saved like the Options row.
+        if (_pendingGraphicsToggle)
+        {
+            _pendingGraphicsToggle = false;
+            if (_session is { InSession: true })
+            {
+                SwitchGraphicsMode(!GraphicsMode.Enhanced, "the graphics-mode action");
+                SaveGraphicsMode();
+            }
+        }
+
+        // --debug-graphics-switch: the same flip at each named sim frame, unsaved.
+        if (_session is { InSession: true } && GameClock.Current is { } simClock
+            && _debugSwitchesDone < _spec.DebugGraphicsSwitch.Count
+            && simClock.Frame >= _spec.DebugGraphicsSwitch[_debugSwitchesDone])
+        {
+            _debugSwitchesDone++;
+            SwitchGraphicsMode(!GraphicsMode.Enhanced, $"--debug-graphics-switch at sim frame {simClock.Frame}");
         }
 
         // Dropped here rather than by the cover itself, so one node owns both screens a launch
@@ -2011,6 +1956,7 @@ public partial class Launcher : Node3D
             Presentation = SessionPresentation,
             ExitSession = ExitSession,
             RestartSession = RestartSession,
+            ToggleGraphicsMode = () => _pendingGraphicsToggle = true,
             PauseOptions = BuildPauseOptions,
             CampaignMissionEnded = _menuDriven
                 ? (profile, result) => _pendingDebrief = (profile, result)
@@ -2085,7 +2031,7 @@ public partial class Launcher : Node3D
         };
         // Enhanced mode alone: a lit world has surfaces a shadow pass can land on.
         if (GraphicsMode.Enhanced)
-            EnableSunShadows(_sun);
+            EnhancedLook.ApplySun(_sun, true, _spec.SkippedPasses);
         AddChild(_sun);
         // The modal day pair under this bearing, after the AddChild so the bearing is the one the
         // light wears in the tree. A session with no weather.json never reaches ApplyZone, and
@@ -2112,117 +2058,9 @@ public partial class Launcher : Node3D
         // anything to work on. The cockpit pass duplicates this Environment
         // (CockpitOverlay.NewOverlay) and inherits the settings.
         if (GraphicsMode.Enhanced)
-        {
-            UseMissionSky(_env);
-            if (!Skipped(EnhancedPasses.Ssao))
-            {
-                EnableAmbientOcclusion(_env);
-            }
-            if (!Skipped(EnhancedPasses.Ssr))
-            {
-                EnableWaterReflections(_env);
-            }
-            if (!Skipped(EnhancedPasses.Glow))
-            {
-                EnableGlow(_env);
-            }
-            UseFilmicTonemap(_env);
-        }
+            EnhancedLook.ApplyEnvironment(_env, true, _spec.SkippedPasses);
         AddChild(new WorldEnvironment { Environment = _env });
     }
-
-    // Enhanced mode alone: the sky a reflection reads is the mission's own colour, not Godot's
-    // procedural gradient. The dome is gamez geometry drawn over the background, so this is
-    // normally unseen; what it feeds is the glossy water's specular. WeatherRig.WriteSkyColor
-    // writes the flown zone's own FOG_COLOR over the default here on every zone apply. The ambient
-    // is colour-sourced already, built that way above, so a flat panorama reaches reflection alone.
-    private void UseMissionSky(Godot.Environment env)
-    {
-        env.Sky = new Sky { SkyMaterial = new PanoramaSkyMaterial() };
-        WeatherRig.WriteSkyColor(env, EnhancedDefaultSkyColor);
-    }
-
-    // Every setting here is TUNE: nothing in the original authors a shadow map, so there is no
-    // decoded magnitude to match. Four splits because the useful range spans an aircraft's own
-    // shadow a few metres below it and a skyline several kilometres out.
-    private void EnableSunShadows(DirectionalLight3D sun)
-    {
-        sun.ShadowEnabled = true;
-        sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits;
-        sun.DirectionalShadowMaxDistance = EnhancedShadowMaxDistance;
-        sun.DirectionalShadowFadeStart = EnhancedShadowFadeStart;
-        sun.DirectionalShadowSplit1 = EnhancedShadowSplit1;
-        sun.DirectionalShadowSplit2 = EnhancedShadowSplit2;
-        sun.DirectionalShadowSplit3 = EnhancedShadowSplit3;
-        sun.DirectionalShadowBlendSplits = true;
-        sun.ShadowBias = EnhancedShadowBias;
-        sun.ShadowNormalBias = EnhancedShadowNormalBias;
-        ApplyShadowQuality(sun);
-    }
-
-    // The resolved shadow level on the world sun and the renderer: whether the sun casts, its
-    // penumbra, the filter and the atlas. An Options apply re-runs it, so a level changes mid-flight.
-    // The split-screen panes share this sun, and the cockpit pass follows it on its next Sync.
-    private void ApplyShadowQuality(DirectionalLight3D sun) =>
-        Utils.ShadowQualitySetting.ApplyTo(sun, Utils.ShadowQualitySetting.Sun, GraphicsMode.Enhanced,
-            Skipped(EnhancedPasses.SoftShadows));
-
-    // Ambient occlusion, which darkens the ambient term where geometry occludes it. The faithful
-    // path's world is fullbright, so this pass would find nothing there to occlude.
-    private void EnableAmbientOcclusion(Godot.Environment env)
-    {
-        env.SsaoEnabled = true;
-        env.SsaoRadius = EnhancedSsaoRadius;
-        env.SsaoIntensity = EnhancedSsaoIntensity;
-        env.SsaoPower = EnhancedSsaoPower;
-        env.SsaoDetail = EnhancedSsaoDetail;
-        env.SsaoHorizon = EnhancedSsaoHorizon;
-        env.SsaoSharpness = EnhancedSsaoSharpness;
-    }
-
-    // Screen-space reflection, for the one glossy population in the world: the water surfaces
-    // SceneBuilder.ClassifySurface names. Every other enhanced surface is matte, so nothing else
-    // can reflect. ⚠ SSR reflects only what the camera already draws; content off-screen or behind
-    // the near plane has no reflection at all.
-    private void EnableWaterReflections(Godot.Environment env)
-    {
-        env.SsrEnabled = true;
-        env.SsrMaxSteps = EnhancedSsrMaxSteps;
-        env.SsrFadeIn = EnhancedSsrFadeIn;
-        env.SsrFadeOut = EnhancedSsrFadeOut;
-        env.SsrDepthTolerance = EnhancedSsrDepthTolerance;
-    }
-
-    // Enhanced mode alone. A lit world's real light energy feeds the HDR colour buffer, and only
-    // C21's glow-arm sprites and the puffer fire flipbook bloom out of it.
-    // MultiMeshEmitterRenderer lifts the fire_f01-fire_f06 columns alone over this threshold.
-    private void EnableGlow(Godot.Environment env)
-    {
-        env.GlowEnabled = true;
-        env.GlowHdrThreshold = EnhancedGlowHdrThreshold;
-        env.GlowBloom = EnhancedGlowBloom;
-        env.GlowIntensity = EnhancedGlowIntensity;
-        env.GlowStrength = EnhancedGlowStrength;
-        env.GlowBlendMode = EnhancedGlowBlendMode;
-        env.GlowHdrScale = EnhancedGlowHdrScale;
-        env.GlowHdrLuminanceCap = EnhancedGlowHdrLuminanceCap;
-    }
-
-    // Enhanced mode alone: without it the HDR values a lit world produces clip instead of rolling
-    // off. It is not a pass a bisect door closes, since every enhanced frame's exposure depends on
-    // it. The cockpit pass duplicates this Environment at build time (CockpitOverlay.NewOverlay),
-    // so its own tonemap matches the world pass exactly.
-    private void UseFilmicTonemap(Godot.Environment env)
-    {
-        env.TonemapMode = EnhancedTonemapMode;
-        env.TonemapExposure = EnhancedTonemapExposure;
-        env.TonemapAgxWhite = EnhancedTonemapAgxWhite;
-        env.TonemapAgxContrast = EnhancedTonemapAgxContrast;
-    }
-
-    // Whether this run asked for that enhanced pass to be left out. Closing one door at a time
-    // bisects a full-screen artefact to the pass that draws it; docs/cli.md holds them.
-    private bool Skipped(EnhancedPasses pass) => (_spec.SkippedPasses & pass) != 0;
 
     // The launchscreen, after the boot sequence when this launch plays one. Both a boot with data
     // and the extraction screen's hand-back come through here, so they reach the same menu.
@@ -2570,16 +2408,16 @@ public partial class Launcher : Node3D
     }
 
     // The options file's one writer, shared by the menu's apply above and by the pause leaf's.
-    // It saves every choice the screen took. The display settings and the mix are applied now.
-    // ⚠ The graphics word, the render scale, the anti-aliasing method, the opening view and the
-    // difficulty are saved and no more. Each is read once, at launch or when a flight is built, so
-    // do not rebuild anything here. The head turn and targeting switch are saved for the next sortie and put on the seats
-    // flying now by the pause leaf itself (PausePreferences.FeedGameOptions).
+    // The display settings, the mix, the view distance and the graphics mode apply now.
+    // ⚠ The opening view and the difficulty are saved and no more, so do not rebuild anything for
+    // them here. The pause leaf puts the head turn and targeting switch on the seats flying now
+    // (PausePreferences.FeedGameOptions).
     private void PersistOptions(OptionsApplyExit applied)
     {
         var store = OptionsStore.UserOptions();
         var options = store.Load();
         options.GraphicsMode = applied.Graphics;
+        options.ViewDistance = applied.ViewDistance;
         options.Difficulty = applied.Difficulty;
         options.NearestAfterKill = applied.NearestAfterKill;
         options.Rumble = applied.Rumble;
@@ -2612,20 +2450,55 @@ public partial class Launcher : Node3D
         // The haptics toggle takes effect now for the same reason. A pilot turning it off over the
         // pause sheet flies the rest of the sortie with a quiet pad.
         PadRumble.Enabled = !_spec.Det && applied.Rumble != false;
+        ApplyViewDistance(applied.ViewDistance);
         // The shadow level reaches the flying world now; --shadow-quality still beats the saved word.
         string shadowFallback = Utils.ShadowQualitySetting.DefaultFor(_spec.Det);
         var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality, applied.ShadowQuality,
             Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
-        if (IsInstanceValid(_sun))
+        Log.Info("world", $"shadow quality applied: {shadowQuality.Word} source={shadowQuality.Source}");
+        // A mode switch dresses the sun at the new level itself; otherwise the level alone moves.
+        if (GraphicsMode.TryParse(applied.Graphics, out bool enhanced) && enhanced != GraphicsMode.Enhanced)
+        {
+            SwitchGraphicsMode(enhanced, "options");
+        }
+        else if (IsInstanceValid(_sun))
         {
             ApplyShadowQuality(_sun);
         }
 
-        Log.Info("world", $"shadow quality applied: {shadowQuality.Word} source={shadowQuality.Source}");
+        // The render scale and the anti-aliasing method reach every 3D viewport now as well.
+        EnhancedLook.ReapplyDisplayQuality(_spec.Det, "options");
         // ⚠ The carve is NOT re-armed here. No screen offers it, so the saved key is untouched by an
         // apply and the gate keeps what boot gave it (see the arming above).
         Log.Info("ui", $"options applied: {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");
     }
+
+    // The live graphics-mode switch on this process's sun, Environment and session
+    // (EnhancedLook.Switch). Godot recompiles each changed shader, so a switch costs a hitch.
+    private void SwitchGraphicsMode(bool enhanced, string why) =>
+        EnhancedLook.Switch(enhanced, _sun, _env, _spec.SkippedPasses, _spec.Det, _session, why);
+
+    // The resolved shadow level on the world sun and the renderer. An Options apply re-runs it, so a
+    // level changes mid-flight; the cockpit pass follows on its next Sync.
+    private void ApplyShadowQuality(DirectionalLight3D sun) =>
+        EnhancedLook.ApplyShadowQuality(sun, GraphicsMode.Enhanced, _spec.SkippedPasses);
+
+    // G's save, the one field it changes. Never under --det, whose runs must not write the player's
+    // options (the same rule the startup read keeps).
+    private void SaveGraphicsMode()
+    {
+        if (_spec.Det)
+            return;
+        var store = OptionsStore.UserOptions();
+        var options = store.Load();
+        options.GraphicsMode = GraphicsMode.Enhanced ? GraphicsMode.EnhancedWord : GraphicsMode.Default;
+        store.Save(options);
+    }
+
+    // The view distance on the running world (EnhancedLook.ApplyViewDistance), resolved again with the
+    // applied word in the saved slot, so --view-distance still beats it.
+    private void ApplyViewDistance(string? word) => EnhancedLook.ApplyViewDistance(Utils.ViewDistance.Resolve(
+        _spec.ViewDistance, word, Config.GetString(Utils.ViewDistance.Key, Utils.ViewDistance.Default)).Word, _session);
 
     // The in-flight Preferences leaf both pause boards open. It takes the decoded layout the
     // Original presentation composes from, and the menu's audio service for its cues. The host's
@@ -3511,6 +3384,11 @@ public sealed class LauncherContext
     /// opposition lives in the world, so putting it back means rebuilding the world, which only
     /// the Launcher can do.</summary>
     public required System.Action RestartSession { get; init; }
+
+    /// <summary>The graphics-mode action a seat's controller fires: the Launcher switches the
+    /// running world at the top of its next frame and saves the choice. Null leaves the action inert.
+    /// </summary>
+    public System.Action? ToggleGraphicsMode { get; init; }
 
     /// <summary>Builds the in-flight Preferences leaf either pause board opens over the held world,
     /// or answers null where the install carries no decoded menu layout for it to compose from. A

@@ -291,6 +291,11 @@ public partial class FlightController : Node3D
     /// work). Invoked when a player presses R on the shared results board.</summary>
     public Action? RestartRace;
 
+    /// <summary>What <see cref="InputAction.ToggleGraphicsMode"/> does, set by the session for a
+    /// seat somebody sits at: the launcher's live switch, which is process-wide rather than this
+    /// plane's. Null leaves the action inert, as on an AI or a suite's bare rig.</summary>
+    public Action? ToggleGraphicsMode;
+
     /// <summary>The dogfight this plane is one seat of, or null outside <c>--vs</c>. Set, once
     /// <see cref="VersusMatch.Completed"/> the results board is up and any player's R there means
     /// "rematch" instead of "respawn me", checked before the crash branch, exactly the same
@@ -682,6 +687,7 @@ public partial class FlightController : Node3D
     private IFlightInputSource? _suppliedInputSource;
     private bool _pausePrev;                     // previous frame's pause-key state (edge detection)
     private (bool All, bool Team) _chatPrev;     // previous frame's two chat keys (edge detection)
+    private bool _graphicsTogglePrev;            // the same edge for ToggleGraphicsMode
     private bool _haltPrev;                      // previous frame's clock-halt state (orbit seeding)
     private bool _boardPrev;                     // previous frame's board-up state (re-entry latch)
     // A network pause's sheet is up over a flight that keeps running. The seat is then wholly
@@ -2395,6 +2401,7 @@ public partial class FlightController : Node3D
         bool halted = false;
         if (AllowPause || !Inert)
             halted = PollPauseAndHalt(clock);
+        PollGraphicsModeToggle();
         // ⚠ Ahead of the inert return as well. A seat flagged inert mid-session must give the
         // pointer back, and this is the only frame that would notice.
         StepMouseCapture(halted || _sheetOverFlight);
@@ -3884,6 +3891,17 @@ public partial class FlightController : Node3D
     // behind it.
     private bool PauseTogglePressed() =>
         AllowPause && !InPhotoMode && !InPauseLeaf && _actions.Held(InputAction.Pause);
+
+    // The graphics-mode action's edge, polled beside the pause so it works over a halted sim too.
+    // ⚠ Silent under photo mode and the options leaf, whose pages own the keyboard.
+    private void PollGraphicsModeToggle()
+    {
+        bool down = ToggleGraphicsMode != null && !InPhotoMode && !InPauseLeaf
+            && _actions.Held(InputAction.ToggleGraphicsMode);
+        if (down && !_graphicsTogglePrev)
+            ToggleGraphicsMode!();
+        _graphicsTogglePrev = down;
+    }
 
     // One frame of the pause key, and the halt it mirrors into the shared clock. Polled from
     // _Process, not the sim step: a halted sim takes no steps and could never resume itself.

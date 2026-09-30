@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using Godot;
 
 namespace CSVM.Utils;
@@ -6,13 +8,18 @@ namespace CSVM.Utils;
 /// What the resolved <see cref="AntiAliasingSetting"/> and <see cref="RenderScaleSetting"/> write on
 /// a 3D viewport. Four viewports take them: the launcher's root one and the SubViewports of the
 /// cockpit pass, the spyglass picture and the splitscreen panes.
-/// Each calls <see cref="Apply"/> once at construction, after the resolvers have run.
+/// Each calls <see cref="Apply"/> once at construction, after the resolvers have run. A live mode
+/// switch or an Options apply calls <see cref="ReapplyAll"/>, which writes every live one again.
 /// A later render setting is one more write here rather than a fifth edit at each site. MSAA is not
 /// this module's: the project setting carries it, and the three SubViewports copy it
 /// themselves.
 /// </summary>
 public static class ViewportQuality
 {
+    // Every viewport Apply wrote, so a live change can reach them all. Weak, since a pane or a pass
+    // goes with its session and nothing here may keep it.
+    private static readonly List<WeakReference<Viewport>> Applied = new();
+
     /// <summary>Put <paramref name="viewport"/> on the anti-aliasing method and the render scale the
     /// run resolved. ⚠ Nothing is written for <see cref="AntiAliasingMethod.Off"/> at
     /// <see cref="RenderScaleSetting.Native"/>, the faithful default. The pinned goldens are
@@ -24,6 +31,7 @@ public static class ViewportQuality
         // the world. It keeps the project's MSAA, which covers the interior's edges.
         if (viewport.TransparentBg)
             return;
+        Track(viewport);
         var method = AntiAliasingSetting.Method;
         float scale = RenderScaleSetting.Scale;
         switch (method)
@@ -59,5 +67,39 @@ public static class ViewportQuality
             viewport.Scaling3DMode = Viewport.Scaling3DModeEnum.Fsr2;
             viewport.Scaling3DScale = RenderScaleSetting.Native;
         }
+    }
+
+    /// <summary>Puts every viewport <see cref="Apply"/> has written back on Godot's defaults, then
+    /// on the settings resolved now. A method or a scale the run moved off leaves nothing behind,
+    /// and the result is what a fresh <see cref="Apply"/> on a new viewport writes.</summary>
+    public static void ReapplyAll()
+    {
+        var live = new List<Viewport>();
+        for (int i = Applied.Count - 1; i >= 0; i--)
+        {
+            if (Applied[i].TryGetTarget(out var viewport) && GodotObject.IsInstanceValid(viewport))
+                live.Add(viewport);
+            else
+                Applied.RemoveAt(i);
+        }
+        foreach (var viewport in live)
+        {
+            viewport.ScreenSpaceAA = Viewport.ScreenSpaceAAEnum.Disabled;
+            viewport.UseTaa = false;
+            viewport.Scaling3DMode = Viewport.Scaling3DModeEnum.Bilinear;
+            viewport.Scaling3DScale = RenderScaleSetting.Native;
+            Apply(viewport);
+        }
+    }
+
+    // Remembered once, however often Apply writes it.
+    private static void Track(Viewport viewport)
+    {
+        foreach (var weak in Applied)
+        {
+            if (weak.TryGetTarget(out var known) && known == viewport)
+                return;
+        }
+        Applied.Add(new WeakReference<Viewport>(viewport));
     }
 }

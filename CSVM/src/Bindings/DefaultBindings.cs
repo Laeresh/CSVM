@@ -198,6 +198,10 @@ public static class DefaultBindings
         // keyboard only: a line is typed, so no pad control opens one.
         b.Keys(InputAction.ChatEveryone, Key.Quoteleft);
         b.Mod(InputAction.ChatTeam, KeyModifiers.Shift, Key.Quoteleft);
+
+        // The graphics-mode switch, this port's own action. Keyboard only: it is a comparison
+        // tool, and the pad has no free control to spend on it.
+        b.Keys(InputAction.ToggleGraphicsMode, Key.G);
         return b;
     }
 

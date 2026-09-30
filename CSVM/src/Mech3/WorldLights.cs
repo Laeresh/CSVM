@@ -126,8 +126,9 @@ public sealed class WorldLights : IDisposable
     // Begin/Commit, and a second Begin/Commit pair on the same set would erase its lights.
     private readonly List<Action<WorldLights>> _sources = new();
 
-    // Non-null only in enhanced mode with a parent given; null keeps original mode's point term
-    // the only consumer and creates not one node, per the mode's zero-footprint contract.
+    // Where the omnis go. Read against GraphicsMode.Enhanced on every Commit rather than at
+    // construction, so a live switch grows the pool or frees it; original mode keeps not one node,
+    // per the mode's zero-footprint contract.
     private readonly Node3D? _omniParent;
 
     // The most omnis the Enhanced pool lights at once, never below MaxActive.
@@ -148,7 +149,7 @@ public sealed class WorldLights : IDisposable
     /// nothing, leaving the data-texture point term exactly as it was.</summary>
     public WorldLights(Node3D? parent = null, int? omniBudget = null)
     {
-        _omniParent = GraphicsMode.Enhanced ? parent : null;
+        _omniParent = parent;
         _omniBudget = Math.Max(MaxActive, omniBudget ?? OmniBudget(Config.GetString(EffectsLevel.Key, EffectsLevel.Default)));
     }
 
@@ -242,6 +243,15 @@ public sealed class WorldLights : IDisposable
             FireColor.SrgbToLinear() * gain, FireLiftFraction * reach, reach, reach, FireRankWeight));
     }
 
+    /// <summary>A live switch to the faithful mode drops every live burst light, which that mode
+    /// never registers, so none reaches its data texture. The omni pool follows on the next
+    /// <see cref="Commit"/>, and the fire lights are asked for per frame.</summary>
+    public void FollowGraphicsMode()
+    {
+        if (!GraphicsMode.Enhanced)
+            _bursts.Clear();
+    }
+
     /// <summary>Registers a submitter that <see cref="Commit"/> asks for its lights every frame,
     /// before the fade and the budget, so its lights rank against the owner's in one set.
     /// Registering the same delegate again is a no-op.</summary>
@@ -305,8 +315,10 @@ public sealed class WorldLights : IDisposable
             _committedFactors.Add(_pending[i].Factor);
         }
 
-        if (_omniParent != null)
+        if (OmnisOn())
             UpdateOmnis(Math.Min(live, _omniBudget));
+        else if (_omniPool.Count > 0)
+            FreeOmnis();
 
         if (n == 0)
         {
@@ -353,7 +365,7 @@ public sealed class WorldLights : IDisposable
             return;
         _loggedSubmitted = _lastCount;
         _loggedOmnis = OmniCount;
-        Log.Info("world", $"anim/debug: world lights {_lastCount} rendered of {LiveCount} live{(_pending.Count > MaxActive ? $" (budget {MaxActive}; the rest are past the distance fade)" : "")}{(_omniParent != null ? $" (enhanced: {OmniCount} omni of budget {_omniBudget})" : "")}");
+        Log.Info("world", $"anim/debug: world lights {_lastCount} rendered of {LiveCount} live{(_pending.Count > MaxActive ? $" (budget {MaxActive}; the rest are past the distance fade)" : "")}{(OmnisOn() ? $" (enhanced: {OmniCount} omni of budget {_omniBudget})" : "")}");
     }
 
     /// <summary>Drops the world's lights, called when a session is torn down, so the next
@@ -371,9 +383,18 @@ public sealed class WorldLights : IDisposable
         _lastCount = 0;
         OmniCount = 0;
         _texture = null;
+        FreeOmnis();
+    }
+
+    // Whether this set mirrors onto real lights now: enhanced mode, and a parent to hold them.
+    private bool OmnisOn() => GraphicsMode.Enhanced && _omniParent != null;
+
+    private void FreeOmnis()
+    {
         foreach (var omni in _omniPool)
             omni.Free();
         _omniPool.Clear();
+        OmniCount = 0;
     }
 
     // Enhanced mode: mirrors _pending[0..n) onto a pool of real OmniLight3D nodes. The pool grows

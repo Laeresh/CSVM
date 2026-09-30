@@ -383,6 +383,21 @@ public sealed class WorldEffectsFactory
         _shimmer.Spawn(at, stillBurning);
     }
 
+    /// <summary>A live graphics-mode switch. The world-effects runtime takes the replaced-light set of
+    /// the mode now standing. The faithful mode frees the heat shimmer pool, which it never builds.
+    /// Enhanced builds a fresh one at its next fireball, as a fresh session does.</summary>
+    internal void FollowGraphicsMode()
+    {
+        if (_worldEffects != null)
+            _worldEffects.LightReplacedAnimNames = ReplacedLightAnimNames();
+        if (!GraphicsMode.Enhanced && _shimmer != null)
+        {
+            _shimmer.GetParent()?.RemoveChild(_shimmer);
+            _shimmer.QueueFree();
+            _shimmer = null;
+        }
+    }
+
     // Every template root either rig kind stages, for the pool-config drift check alone. Derived
     // the same way the live one is, so a root this rig does not stage still counts as known.
     private static List<string> BothRigKindsStageRoots(AnimProgram program, GameZ gamez,

@@ -125,6 +125,10 @@ public sealed class OptionsDef
 
     public string? GraphicsMode { get; set; }
 
+    /// <summary>How far enhanced mode draws the clutter before its fade, a
+    /// <see cref="Utils.ViewDistance"/> word.</summary>
+    public string? ViewDistance { get; set; }
+
     /// <summary>Whether a rocket warhead's ground burst carves the terrain
     /// (<c>CraterGate</c>). ⚠ No screen offers this. The carve is remake-only chrome
     /// the menu does not advertise. This key, hand-set in the file, is one of its two doors and
@@ -292,6 +296,8 @@ public sealed class OptionsStore
         GraphicsMode.EnhancedWord,
     };
 
+    private static readonly HashSet<string> ValidViewDistances = new(ViewDistance.Words, StringComparer.Ordinal);
+
     // The three campaign words alone. The command line's wider vocabulary (Instant Action's names,
     // bare digits) is a convenience this file never carries. A file reads back only what the
     // options screens write.
@@ -350,6 +356,7 @@ public sealed class OptionsStore
             w.WriteNumber("version", Version);
             Write(w, "menuPresentation", def.MenuPresentation);
             Write(w, "graphicsMode", def.GraphicsMode);
+            Write(w, "viewDistance", def.ViewDistance);
             WriteFlag(w, "rocketCraters", def.RocketCraters);
             WriteFlag(w, "cockpitEnginePitch", def.CockpitEnginePitch);
             Write(w, "difficulty", def.Difficulty);
@@ -411,6 +418,7 @@ public sealed class OptionsStore
             {
                 MenuPresentation = Read(root, "menuPresentation", ValidPresentations),
                 GraphicsMode = Read(root, "graphicsMode", ValidGraphicsModes),
+                ViewDistance = Read(root, "viewDistance", ValidViewDistances),
                 RocketCraters = ReadFlag(root, "rocketCraters"),
                 CockpitEnginePitch = ReadFlag(root, "cockpitEnginePitch"),
                 Difficulty = Read(root, "difficulty", ValidDifficulties),

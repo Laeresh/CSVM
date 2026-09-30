@@ -983,6 +983,16 @@ public sealed record SessionSpec
     /// the config key, including under <c>--det</c>, the same rule <see cref="GraphicsMode"/> keeps.</summary>
     public string? ShadowQuality { get; private set; }
 
+    /// <summary><c>--view-distance=normal|far|veryfar|unlimited</c>, how far Enhanced draws the
+    /// clutter before its fade. Null when not given, and for an unknown word with a warning. Beats
+    /// the saved option and the config key, including under <c>--det</c>.</summary>
+    public string? ViewDistance { get; private set; }
+
+    /// <summary><c>--debug-graphics-switch=N[,N...]</c>: the sim frames at which the running session
+    /// flips the graphics mode, as the Toggle Graphics Mode action does but unsaved. The scripted
+    /// twin of the live switch, so a capture shows a world after a round trip. Empty = none.</summary>
+    public IReadOnlyList<long> DebugGraphicsSwitch { get; private set; } = Array.Empty<long>();
+
     // ---- Everything else ------------------------------------------------------------------------
 
     public bool Mute { get; private set; }
@@ -1143,6 +1153,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--debug-wingmen=")) { s.DebugWingmen = int.Parse(arg["--debug-wingmen=".Length..]); }
             else if (arg.StartsWith("--debug-preset=")) { s.DebugPreset = int.Parse(arg["--debug-preset=".Length..]); }
             else if (arg.StartsWith("--debug-pointer=")) { s.DebugPointer = ParseDebugPointer(arg["--debug-pointer=".Length..]); }
+            else if (arg.StartsWith("--debug-graphics-switch=")) { s.DebugGraphicsSwitch = ParseFrameList(arg["--debug-graphics-switch=".Length..]); }
             else if (arg.StartsWith("--debug-marquee=")) { s.DebugMarquee = double.TryParse(arg["--debug-marquee=".Length..], NumberStyles.Float, CultureInfo.InvariantCulture, out double phase) ? Math.Max(0d, phase) : null; }
             else if (arg.StartsWith("--paint=")) { s.PaintNames = arg["--paint=".Length..].Split(',', StringSplitOptions.TrimEntries); }
             else if (arg.StartsWith("--paint-color=")) { s.PaintColorOverride = ParsePaintColors(arg["--paint-color=".Length..]); }
@@ -1521,6 +1532,18 @@ public sealed record SessionSpec
                 else
                 {
                     notes.Add(new Note("world", $"--shadow-quality={want} is not one of {string.Join("/", Utils.ShadowQualitySetting.Words)}, keeping the saved option's value"));
+                }
+            }
+            else if (arg.StartsWith("--view-distance="))
+            {
+                string want = arg["--view-distance=".Length..];
+                if (Utils.ViewDistance.IsWord(want))
+                {
+                    s.ViewDistance = want;
+                }
+                else
+                {
+                    notes.Add(new Note("world", $"--view-distance={want} is not one of {string.Join("/", Utils.ViewDistance.Words)}, keeping the saved option's value"));
                 }
             }
             else if (arg == "--dump-mips") { s.DumpMips = true; }
@@ -1929,6 +1952,20 @@ public sealed record SessionSpec
         }
         steps.Sort((a, b) => a.Item1.CompareTo(b.Item1));
         return steps.ToArray();
+    }
+
+    /// <summary>Parse <c>--debug-graphics-switch=</c>: comma-separated sim frames, ascending, a word
+    /// that is not a whole number dropped.</summary>
+    public static long[] ParseFrameList(string spec)
+    {
+        var frames = new List<long>();
+        foreach (string part in spec.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (long.TryParse(part, NumberStyles.Integer, CultureInfo.InvariantCulture, out long frame) && frame >= 0)
+                frames.Add(frame);
+        }
+        frames.Sort();
+        return frames.ToArray();
     }
 
     /// <summary>Parse <c>--paint-color=</c>: up to three '/'-separated byte triples (body / dark

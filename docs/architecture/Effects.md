@@ -13,7 +13,7 @@ bit) into an `IEmitterRenderer` (`EmitterRenderer.cs`); this class owns only the
 The authored state picks burst, distance-trail or sustained mode; callers drive it through
 `Emit`/`Stop`, `Burst` and the hard-kill `Clear`, and `CreateWith` reaches all three with no atlas,
 archive or GPU. `_Process` writes the frame's draws farthest-first against pane 0. `BirthAlpha` is
-an opacity each particle keeps from birth, 1 except on the code-built exhaust trail. The distance fade, the accumulator, the pools and the two unauthored-interval constants carry their own constraint. Keys and decode: [../formats/effects.md](../formats/effects.md), [../org/puffer.md](../org/puffer.md).
+an opacity each particle keeps from birth, 1 except on the code-built exhaust trail. `FollowAlphaDepth` bakes an archive's atlases again in place when their frames change depth on a live switch. The distance fade, the accumulator, the pools and the two unauthored-interval constants carry their own constraint. Keys and decode: [../formats/effects.md](../formats/effects.md), [../org/puffer.md](../org/puffer.md).
 
 ## src/Effects/WorldWind.cs
 Two types delivering the mission's authored wind to every puffer. `WorldWind` is the gust model, a
@@ -36,7 +36,7 @@ hand the factory in through `WorldSession.Options`. A texture-less state is a st
 `Puffer`'s lower seam. `IEmitterRenderer` takes live particles (`Attach` sizes the pool, `Grow`
 re-sizes it, `Write` per particle, `Show` publishes the frame), reaching the three emitter modes
 without a GPU via `RecordingEmitterRenderer`. `MultiMeshEmitterRenderer` draws them as MultiMeshes of camera-billboarded quads, over one
-process-wide unit quad and one compiled shader per blend, soft and graphics-mode triple, and owns that shader: quad-rim fade, flipbook column from
+process-wide unit quad and one compiled shader per blend and soft pair, whose text follows a live graphics-mode switch (`SceneBuilder.RegenerableShader`) while the per-column gain and grade are read per particle, and owns that shader: quad-rim fade, flipbook column from
 per-instance custom data, the soft-particle depth fade, `csky_srgb_to_linear` on the `COLORS` ramp, the two per-column marks Enhanced Graphics grades by (`IsFireSprite`, an ALBEDO gain over the glow threshold that the mixed alpha's clamp carries through; `IsSmokeSprite`, a `csky_sun_dir` gradient across the quad in the mix variant alone, clamped under that threshold: the faithful text carries neither term), the
 mission's distance fog off the sky's globals, and a mixed alpha that lands on DX7's byte-space mix. Blend arrives per atlas column from `Puffer.Create`,
 keeping this seam free of `TextureArchive`; a column set spanning both draws one MultiMesh per
@@ -50,7 +50,7 @@ MultiMesh per sprite kind, plus a map-edge continuation
 resolve through `ClutterBuilder.FindTemplateRoot`. `BandData` packs each sprite's own face normal
 and the one draw both `far_fade_range` pairs are interpolated with into a custom-data slot, which
 `csky_clutter_fade_alpha_angled` turns into the view-angle fade; that draw takes its own
-`Rng.CloudBands` stream. The shipped field is that decoded lattice plus a remake-only X/Z offset per card (`ShippedJitter`, 30 m, overridden by `--cloud-jitter=`), drawn off `Rng.CloudJitter` and reaching no other population. The quad is posed by `csky_facade_spherical` (`shaders/csky_facade.gdshaderinc`), a world-up look-at standing in for the original's SphericalY tracker, which reads the eye's position and not its basis, so neither the camera's roll nor a sideways move turns a card ([../org/cloudCards.md](../org/cloudCards.md)). A `lighting: true` card (C1C, C2B, C5) carries its three authored normals and takes the original's per-vertex `AMBIENT + DIFFUSE x max(N.L, 0)` through that same pose off `WeatherRig`'s uncollapsed globals, never `csky_world_light` ([../org/vertexLighting.md](../org/vertexLighting.md)). Under `GraphicsMode.Enhanced` alone, `ShaderCode` layers a grade by the global `csky_sun_dir` over either variant, leaving the faithful and lit text byte-identical, and draws both kinds from the deck pool of rendered puffs (`Mech3/CloudPuffs.cs`), tinted by the authored mask's colour, each card picking its puff, tilt, mirror and size off a hash of its own position. Gating: `GameSession`/`WorldBuilder`/`WeatherRig`. Schema: [../formats/fogvol.md](../formats/fogvol.md).
+`Rng.CloudBands` stream. The shipped field is that decoded lattice plus a remake-only X/Z offset per card (`ShippedJitter`, 30 m, overridden by `--cloud-jitter=`), drawn off `Rng.CloudJitter` and reaching no other population. The quad is posed by `csky_facade_spherical` (`shaders/csky_facade.gdshaderinc`), a world-up look-at standing in for the original's SphericalY tracker, which reads the eye's position and not its basis, so neither the camera's roll nor a sideways move turns a card ([../org/cloudCards.md](../org/cloudCards.md)). A `lighting: true` card (C1C, C2B, C5) carries its three authored normals and takes the original's per-vertex `AMBIENT + DIFFUSE x max(N.L, 0)` through that same pose off `WeatherRig`'s uncollapsed globals, never `csky_world_light` ([../org/vertexLighting.md](../org/vertexLighting.md)). Under `GraphicsMode.Enhanced` alone, `ShaderCode` layers a grade by the global `csky_sun_dir` over either variant, leaving the faithful and lit text byte-identical, and draws both kinds from the deck pool of rendered puffs (`Mech3/CloudPuffs.cs`), tinted by the authored mask's colour, each card picking its puff, tilt, mirror and size off a hash of its own position. `FollowGraphicsMode` writes each kind's text, pool and cull margin again on a live switch. Gating: `GameSession`/`WorldBuilder`/`WeatherRig`. Schema: [../formats/fogvol.md](../formats/fogvol.md).
 
 ## src/Effects/FogVolumeBanks.cs
 Enhanced Graphics only: the soft volumetric bank standing inside each authored `fvol*` volume, under
@@ -76,7 +76,7 @@ Remake-only wind streaks, a layer OVER the authored speed cue (`Flight/Hud/Speed
 replacement: one MultiMesh of thin procedural quads in a camera-centred wrap box on
 `Precipitation`'s pattern, aligned to the aircraft's world velocity, with the same near and rim
 fades. `Create` returns null unless `GraphicsMode.Enhanced`; `HumanFlightAdapter` gives each player
-pane its own and `FlightController` drives it. `Update` is the whole law: opacity zero below a
+pane its own, `FlightController` drives it, and a live switch takes it out of the tree and back. `Update` is the whole law: opacity zero below a
 cruise fraction of `PlaneStats.FdSpeed`, rising with the speed fraction plus a term on
 `FlightModel.LoadFactorDemand`, length growing with airspeed, and the drift accumulated on the CPU
 rather than off a clock, since the rate changes with airspeed. Every constant is TUNE.

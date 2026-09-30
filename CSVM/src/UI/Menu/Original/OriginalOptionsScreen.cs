@@ -449,12 +449,12 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             s => DisplaySettingRows.WordIndex(CSVM.Utils.DisplayWords.VSyncChoices, s._vsync, CSVM.Utils.VSyncSetting.Default),
             (s, i) => s._vsync = CSVM.Utils.DisplayWords.VSyncChoices[i]),
         new(RenderScaleKey, "Render Scale", "VP_T_ObjectsTitle", "VP_D_Objects", "VP_T_ObjectsDESC",
-            _ => "Render the world below native to spare the GPU, or above it for cleaner edges. Takes effect on the next start.",
+            _ => "Render the world below native to spare the GPU, or above it for cleaner edges. Applies at once.",
             OriginalRowKind.Dropdown, s => DisplaySettingRows.RenderScaleLabels(s.RenderScaleWords),
             s => DisplaySettingRows.WordIndex(s.RenderScaleWords, s._renderScale, CSVM.Utils.RenderScaleSetting.Default),
             (s, i) => s._renderScale = s.RenderScaleWords[i]),
         new(AntiAliasingKey, "Anti-aliasing", "VP_T_LightTitle", "VP_D_DLight", "VP_T_LightDESC",
-            _ => "Select how edges are smoothed. FSR 2.2 also upscales a Render Scale below 100%. Takes effect on the next start.",
+            _ => "Select how edges are smoothed. FSR 2.2 also upscales a Render Scale below 100%. Applies at once.",
             OriginalRowKind.Dropdown, _ => DisplaySettingRows.AntiAliasingLabels,
             s => DisplaySettingRows.WordIndex(CSVM.Utils.DisplayWords.AntiAliasingChoices, s.AntiAliasingWord, s.AntiAliasingWord),
             (s, i) => s.PickAntiAliasing(CSVM.Utils.DisplayWords.AntiAliasingChoices[i])),
@@ -517,12 +517,14 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         },
     };
 
-    // The Other tab's own flight rows, in the original's Other page order. The rest of that tab is
-    // whatever the seven groups leave over, which is every menu and free-camera action.
+    // The Other tab's own flight rows, in the original's Other page order, then this port's
+    // graphics-mode switch. The rest of that tab is whatever the seven groups leave over, which is
+    // every menu and free-camera action.
     private static readonly InputAction[] KeysOtherFlightGroup =
     {
         InputAction.AutoLand, InputAction.Nitro, InputAction.Respawn, InputAction.Pause,
         InputAction.ChatEveryone, InputAction.ChatTeam,
+        InputAction.ToggleGraphicsMode,
     };
 
     private static readonly string[] KeysTabNames =
@@ -550,6 +552,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private int _keysTab;
     private int _keysTop;
     private string _graphics = CSVM.Utils.GraphicsMode.Default;
+    // The view distance as saved, null while never set, which resolves to Normal.
+    private string? _viewDistance;
     private int _difficulty = CSVM.Flight.Hangar.Difficulty.Normal;
     // The targeting setting as saved, null while never set, which the consumer reads as off. It is
     // held nullable rather than as the checkbox's own 0/1. A page that never showed it then hands
@@ -655,6 +659,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
 
     /// <summary>The graphics mode word the VIDEO page would apply.</summary>
     public string GraphicsChoice => _graphics;
+
+    /// <summary>The view-distance word the VIDEO page would apply, null while never set.</summary>
+    public string? ViewDistanceChoice => _viewDistance;
 
     /// <summary>The screen index (<see cref="CSVM.Utils.MonitorSetting.Word"/>'s spelling) the
     /// VIDEO page would apply, or null while nothing has been saved and no row has been
@@ -1072,6 +1079,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     {
         var saved = _options?.Invoke();
         _graphics = saved?.GraphicsMode ?? CSVM.Utils.GraphicsMode.Default;
+        _viewDistance = saved?.ViewDistance;
         _difficulty = CSVM.Flight.Hangar.Difficulty.Parse(saved?.Difficulty) ?? CSVM.Flight.Hangar.Difficulty.Normal;
         _nearestAfterKill = saved?.NearestAfterKill;
         _rumble = saved?.Rumble;
@@ -1098,7 +1106,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         new(_graphics, CSVM.Flight.Hangar.Difficulty.Word(_difficulty),
             _monitorIndex, _resolution, _displayMode, _vsync, _renderScale, _antiAliasing, _shadowQuality,
             _audioMaster, _audioMusic, _audioEffects, _audioVoice, _nearestAfterKill, _rumble,
-            _defaultView, _autoHeadTurn);
+            _defaultView, _autoHeadTurn, _viewDistance);
 
     // Back from a page: the saved settings are read again, so an edit the player declined is gone.
     private void BackToPreferences()
@@ -1954,18 +1962,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             : "Select the window size.";
     }
 
-    // The graphics row's description says whether a restart is still owed. The mode is resolved
-    // once at launch. A choice that differs from the running one reaches the world on the next
-    // start, and nothing on the page can show it sooner. A player who saved it and came back would
-    // otherwise see the box checked and a world unchanged. They would read that as a failed switch.
-    private string GraphicsDescription()
-    {
-        bool running = CSVM.Utils.GraphicsMode.Enhanced;
-        bool chosen = _graphics == CSVM.Utils.GraphicsMode.EnhancedWord;
-        return chosen == running
-            ? "Select the lit world. Takes effect on the next start."
-            : $"Select the lit world. This run is {(running ? "enhanced" : "original")}; restart to apply.";
-    }
+    // The graphics row's description. The apply switches the running world
+    // (Launcher.SwitchGraphicsMode), over a paused flight as well, so no restart is owed.
+    private string GraphicsDescription() => "Select the lit world. Applies at once.";
 
     // The screen's sizes and the one a saved size it lacks falls back to. They are read through the
     // reader on every access, like the screens below. The list is widened with the size the options

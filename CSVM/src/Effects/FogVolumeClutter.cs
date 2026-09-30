@@ -135,6 +135,13 @@ public sealed partial class FogVolumeClutter : Node3D
         .Replace("CEILING", Literal(EnhancedAlbedoCeiling))
         .Replace("SOFT_METRES", Literal(EnhancedSoftFadeMetres));
 
+    // Each kind with its material and node. A live mode switch writes them again under the other
+    // mode (FollowGraphicsMode).
+    private readonly List<(Kind Kind, ShaderMaterial Material, MultiMeshInstance3D Node)> _drawn = new();
+
+    // The archive the kinds' masks come from, read again on a first switch to Enhanced for the tint.
+    private TextureArchive? _textures;
+
     /// <summary>Sprites placed, summed over every kind, the authored volumes' own placements
     /// plus the map-edge continuation (<see cref="ExtensionCount"/>). Zero means nothing was
     /// built and <see cref="Create"/> returned null.</summary>
@@ -197,8 +204,39 @@ public sealed partial class FogVolumeClutter : Node3D
             field.QueueFree();
             return null;
         }
+        field._textures = textures;
         field.Build(gamez, kinds);
         return field;
+    }
+
+    /// <summary>Writes every card again under the standing graphics mode: the enhanced grade, soft
+    /// edge and deck pool on, or the faithful text back. A live mode switch calls it. The field's
+    /// placements and fades belong to neither mode, so nothing else changes.</summary>
+    public void FollowGraphicsMode()
+    {
+        bool enhanced = GraphicsMode.Enhanced;
+        foreach (var (kind, mat, node) in _drawn)
+        {
+            if (enhanced && _textures != null)
+            {
+                TrySwapInPuff(kind, _textures);
+            }
+            bool pooled = enhanced && kind.Pool != null;
+            string code = ShaderCode(kind.Lit, kind.Fogged, enhanced, pooled);
+            if (code != mat.Shader.Code)
+            {
+                mat.Shader.Code = code;
+            }
+            if (enhanced)
+            {
+                mat.SetShaderParameter("rim_lod", kind.RimLod);
+            }
+            if (pooled)
+            {
+                CloudPuffs.Apply(mat, kind.Pool!, kind.PuffTint);
+            }
+            node.ExtraCullMargin = CullMargin(kind, pooled);
+        }
     }
 
     /// <summary>True when a kind of this template name draws from the rendered pool under Enhanced
@@ -237,9 +275,9 @@ public sealed partial class FogVolumeClutter : Node3D
                     Fogged = mesh.Fog,
                     Radius = CardRadius(mesh),
                 };
-                if (GraphicsMode.Enhanced && texture != null && kind.Texture != null)
+                if (GraphicsMode.Enhanced)
                 {
-                    SwapInPuff(kind, textures.FindImage(texture));
+                    TrySwapInPuff(kind, textures);
                 }
                 kinds.Add(kind);
             }
@@ -248,18 +286,28 @@ public sealed partial class FogVolumeClutter : Node3D
     }
 
     // Draws the kind from the deck pool in place of its mask. The mask's colour and peak opacity
-    // become the tint, and the rim sample deepens by the size ratio.
-    private static void SwapInPuff(Kind kind, Image? mask)
+    // become the tint, and the rim sample deepens by the size ratio. Tried once per kind.
+    private static void TrySwapInPuff(Kind kind, TextureArchive textures)
     {
+        if (kind.PuffTried || kind.Texture == null)
+        {
+            return;
+        }
+        kind.PuffTried = true;
         if (!DrawsRenderedPuffs(kind.Name) || CloudPuffs.Deck() is not { } pool
-            || CloudPuffs.MaskTint(mask) is not { } tint)
+            || textures.FindImage(kind.TextureName) is not { } mask || CloudPuffs.MaskTint(mask) is not { } tint)
         {
             return;
         }
         kind.PuffTint = tint;
-        kind.RimLod = EnhancedRimBlurLod + Mathf.Log(pool.GetWidth() / (float)mask!.GetWidth()) / Mathf.Log(2f);
+        kind.RimLod = EnhancedRimBlurLod + Mathf.Log(pool.GetWidth() / (float)mask.GetWidth()) / Mathf.Log(2f);
         kind.Pool = pool;
     }
+
+    // The billboard swings vertices outside the instances' static AABB, and a pooled card is
+    // drawn up to the pool's largest size on top.
+    private static float CullMargin(Kind kind, bool pooled) =>
+        kind.Radius * Mathf.Max(kind.Block.ScaleRange.Y, 1f) * (pooled ? CloudPuffs.MaxSize : 1f);
 
     private static GameZNode? FirstWithMesh(GameZ gamez, GameZNode node)
     {
@@ -796,16 +844,16 @@ public sealed partial class FogVolumeClutter : Node3D
                 mm.SetInstanceTransform(i, kind.Placements[i]);
                 mm.SetInstanceCustomData(i, kind.Bands[i]);
             }
-            AddChild(new MultiMeshInstance3D
+            var node = new MultiMeshInstance3D
             {
                 Multimesh = mm,
                 MaterialOverride = mat,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-                // The billboard swings vertices outside the instances' static AABB.
-                ExtraCullMargin = kind.Radius * Mathf.Max(kind.Block.ScaleRange.Y, 1f)
-                    * (kind.Pool != null ? CloudPuffs.MaxSize : 1f),
+                ExtraCullMargin = CullMargin(kind, kind.Pool != null),
                 Name = kind.Name,
-            });
+            };
+            AddChild(node);
+            _drawn.Add((kind, mat, node));
             parts.Add($"{kind.Name} x{kind.Placements.Count} ({kind.TextureName}{(kind.Pool != null ? " as the rendered puff pool" : string.Empty)}, "
                       + $"fade {kind.Block.FarFadeNear.X:0}-{kind.Block.FarFadeNear.Y:0}"
                       + $"..{kind.Block.FarFade.X:0}-{kind.Block.FarFade.Y:0} m)");
@@ -836,5 +884,6 @@ public sealed partial class FogVolumeClutter : Node3D
         public Color PuffTint = Colors.White;
         public float RimLod = EnhancedRimBlurLod;
         public Texture2DArray? Pool;
+        public bool PuffTried;
     }
 }

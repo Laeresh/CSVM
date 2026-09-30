@@ -41,6 +41,18 @@ public static class TextureUpload
         texture.Update(image);
     }
 
+    /// <summary>Replaces <paramref name="texture"/>'s pixels with <paramref name="image"/>, mip chain
+    /// included, which must keep the texture's size, format and mips. The image is held here until
+    /// the render thread lets go.
+    /// ⚠ Hand over a fresh Image and never touch it again.</summary>
+    public static void Replace(ImageTexture texture, Image image)
+    {
+        Release();
+        InFlight.Add(image);
+        Pending.Add((image, image.GetReferenceCount()));
+        texture.Update(image);
+    }
+
     // Frees, on this thread, every Image the render thread no longer references.
     private static void Release()
     {

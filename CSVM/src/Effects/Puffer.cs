@@ -124,8 +124,8 @@ public sealed partial class Puffer : Node3D
     private int _liveCount;
     private int _drawnCount;
 
-    // Enhanced only: which atlas columns are fire sprites. Null on the faithful path and for an
-    // emitter with none, which then does no fire work at all. _burning is what the ambience holds.
+    // Which atlas columns are fire sprites, null for an emitter with none, which then does no fire
+    // work at all. Only Enhanced counts them, read per frame. _burning is what the ambience holds.
     private bool[]? _fireColumns;
     private bool _burning;
 
@@ -262,6 +262,34 @@ public sealed partial class Puffer : Node3D
         puffer.Init(state, renderer, activeDuration, sustained, ambience, fade, fireColumns);
         return puffer;
     }
+
+    /// <summary>Bakes again, in place, every atlas of <paramref name="textures"/> that holds a
+    /// frame whose alpha depth follows the graphics mode. The archive has already uploaded those
+    /// frames at the standing mode's depth. The dark-death verdict stays the one the emitters
+    /// were built with. Returns the atlases baked.</summary>
+    public static int FollowAlphaDepth(TextureArchive textures)
+    {
+        if (!AtlasCache.TryGetValue(textures, out var cache))
+            return 0;
+        int baked = 0;
+        foreach (var (key, entry) in cache)
+        {
+            bool sequenced = key.StartsWith("seq:", StringComparison.Ordinal);
+            var names = key[(key.IndexOf(':') + 1)..].Split('\n');
+            if (!names.Any(textures.FollowsAlphaDepth))
+                continue;
+            if (BakeImage(names, textures, sequenced).Atlas is { } image)
+            {
+                TextureUpload.Replace(entry.Atlas, image);
+                baked++;
+            }
+        }
+        return baked;
+    }
+
+    /// <summary>The atlases baked from <paramref name="textures"/>, for an instrument to read.</summary>
+    public static IEnumerable<ImageTexture> AtlasesOf(TextureArchive textures) =>
+        AtlasCache.TryGetValue(textures, out var cache) ? cache.Values.Select(v => v.Atlas).ToList() : new List<ImageTexture>();
 
     /// <summary>Loads a named PUFFER_STATE from a zrdr effects reader and builds its
     /// emitter under <paramref name="parent"/>; null (logged by <see cref="PufferState.Load"/>) when
@@ -401,6 +429,8 @@ public sealed partial class Puffer : Node3D
         var fireSum = Vector3.Zero;
         float fireSize = 0f;
         int fires = 0;
+        // Enhanced alone lights a fire, read per frame so a live switch reaches a burning emitter.
+        var fireColumns = GraphicsMode.Enhanced ? _fireColumns : null;
         for (int i = 0; i < _liveCount; i++)
         {
             ref var p = ref _particles[i];
@@ -426,11 +456,11 @@ public sealed partial class Puffer : Node3D
             //, see docs/org/puffer.md. Distance gate before any draw work: discarded means unwritten.
             var world = nodeOrigin + p.Pos;
             // Counted before the distance gate: an undrawn fire still lights what is around it.
-            if (_fireColumns != null)
+            if (fireColumns != null)
             {
                 float fireFrac = p.Age > 0f ? p.Age / p.Life : 0f;
                 int column = (int)(flipbook ? FrameFor(fireFrac) : p.Frame);
-                if (column < _fireColumns.Length && _fireColumns[column])
+                if (column < fireColumns.Length && fireColumns[column])
                 {
                     fireSum += world;
                     fireSize += p.BaseSize * Mathf.Lerp(1f, _state.GrowthFactor, fireFrac);
@@ -470,6 +500,8 @@ public sealed partial class Puffer : Node3D
 
         _renderer.Show(drawn);
         _drawnCount = drawn;
+        // Every emitter with fire columns publishes, the faithful frames zero fires. A switch away
+        // from Enhanced then puts out the light an emitter was burning.
         if (_fireColumns != null)
             PublishFire(fireSum, fireSize, fires);
 
@@ -514,6 +546,13 @@ public sealed partial class Puffer : Node3D
     private static (ImageTexture? Atlas, bool DiesDark) BakeAtlas(IReadOnlyList<string> names,
         TextureArchive textures, bool sequenced)
     {
+        var (image, diesDark) = BakeImage(names, textures, sequenced);
+        return (image == null ? null : ImageTexture.CreateFromImage(image), diesDark);
+    }
+
+    private static (Image? Atlas, bool DiesDark) BakeImage(IReadOnlyList<string> names,
+        TextureArchive textures, bool sequenced)
+    {
         if (names.Count == 0)
             return (null, false);
         var frames = new Image[names.Count];
@@ -540,8 +579,7 @@ public sealed partial class Puffer : Node3D
             lastLum = MeanLuminance(f);
             meanLum += lastLum / frames.Length;
         }
-        return (ImageTexture.CreateFromImage(atlas),
-            (sequenced ? lastLum : meanLum) < SmokeLuminance);
+        return (atlas, (sequenced ? lastLum : meanLum) < SmokeLuminance);
     }
 
     // A sprite's mean luminance weighted by its own alpha, what it actually
@@ -770,8 +808,7 @@ public sealed partial class Puffer : Node3D
         _state = state;
         _renderer = renderer;
         _ambience = ambience ?? EffectAmbience.Still;
-        _fireColumns = GraphicsMode.Enhanced && fireColumns != null && Array.IndexOf(fireColumns, true) >= 0
-            ? fireColumns : null;
+        _fireColumns = fireColumns != null && Array.IndexOf(fireColumns, true) >= 0 ? fireColumns : null;
         Name = "puffer_" + state.Name;
         _burstSizeScale = Config.GetFloat("puffer.burstSizeScale", SizeScaleDefault);
         _trailSizeScale = Config.GetFloat("puffer.trailSizeScale", SizeScaleDefault);
