@@ -899,6 +899,17 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
+    /// <summary>The mission structures a turret on <paramref name="team"/> can pick, the narrowing
+    /// <see cref="AimCandidateSet.AddTurretStructures"/> makes. A turret scans once per tick, so the
+    /// whole registry's engine calls per gun are what this saves.</summary>
+    public void CollectTurretStructures(AimCandidateSet into, int team)
+    {
+        if (Structures != null)
+        {
+            into.AddTurretStructures(Structures, team);
+        }
+    }
+
     /// <summary>Appends every registered aircraft's carried turrets and every world emplacement to
     /// the assist's candidate set. A carried turret rides its host's velocity and team; the host's
     /// own scan rejects it through that team gate, never through Self. An emplacement stays listed

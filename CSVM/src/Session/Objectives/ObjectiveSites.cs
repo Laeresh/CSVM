@@ -54,6 +54,8 @@ public sealed class ObjectiveSites
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Node3D> _nodes = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _live = new();
+    private readonly Dictionary<string, (Node3D Node, List<(MeshInstance3D Mesh, Aabb Local)> Meshes)> _meshes =
+        new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Reads a campaign director, the mission's target table and the world's node index.
     /// The director's graph may not exist yet; <see cref="Collect"/> polls for it and offers
@@ -276,6 +278,37 @@ public sealed class ObjectiveSites
         }
     }
 
+    private static bool AllValid(List<(MeshInstance3D Mesh, Aabb Local)> meshes)
+    {
+        foreach (var (mesh, _) in meshes)
+        {
+            if (!GodotObject.IsInstanceValid(mesh))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    // The same walk and the same meshes CollectMeshBoxes reads, each with its own mesh's box.
+    private static void ListMeshes(Node node, List<(MeshInstance3D, Aabb)> into)
+    {
+        if (node is MeshInstance3D { Mesh: not null } mesh)
+        {
+            into.Add((mesh, mesh.GetAabb()));
+        }
+
+        int children = node.GetChildCount();
+        for (int i = 0; i < children; i++)
+        {
+            if (node.GetChild(i) is Node3D child)
+            {
+                ListMeshes(child, into);
+            }
+        }
+    }
+
     private void Offer(string node, ObjectiveGraph? graph, bool objective, List<AimCandidate> into)
     {
         if (Where(node) is not { } at)
@@ -311,7 +344,29 @@ public sealed class ObjectiveSites
             return point;
         }
 
-        return Resolve(key) is { } node ? SiteAnchor(node) : null;
+        if (Resolve(key) is not { } node)
+        {
+            return null;
+        }
+
+        // The meshes are listed once per resolved node and re-read live, so a part the site's own
+        // script moves moves the marker. The walk itself was the cost: a zeppelin site is several
+        // hundred meshes, read once per site per pane per frame.
+        if (!_meshes.TryGetValue(key, out var site) || !ReferenceEquals(site.Node, node) || !AllValid(site.Meshes))
+        {
+            site = (node, new List<(MeshInstance3D, Aabb)>());
+            ListMeshes(node, site.Meshes);
+            _meshes[key] = site;
+        }
+
+        Aabb? merged = null;
+        foreach (var (mesh, local) in site.Meshes)
+        {
+            var box = mesh.GlobalTransform * local;
+            merged = merged?.Merge(box) ?? box;
+        }
+
+        return merged?.GetCenter() ?? node.GlobalPosition;
     }
 
     // Cached: FindNodes walks the world index by name and this runs once per pane per frame.

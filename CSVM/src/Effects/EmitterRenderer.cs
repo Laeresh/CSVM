@@ -371,6 +371,11 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         private MultiMesh _mm = null!;
         private int _written;
 
+        // The buffer's size and the count last published, kept here so a frame asks the engine
+        // for neither.
+        private int _capacity;
+        private int _shown;
+
         public int Drawn { get; private set; }
 
         public static Layer Build(MultiMeshEmitterRenderer owner, Node3D parent, int capacity,
@@ -392,6 +397,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
                 InstanceCount = capacity,
                 VisibleInstanceCount = 0,
             };
+            layer._capacity = capacity;
             layer._mmi = new MultiMeshInstance3D
             {
                 Multimesh = layer._mm,
@@ -413,17 +419,19 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         {
             // Setting InstanceCount reallocates the buffer and clears every slot; the emitter's next
             // frame writes all its live ones back before Show, so nothing drawn is lost for longer.
-            if (_mm != null && capacity > _mm.InstanceCount)
+            if (_mm != null && capacity > _capacity)
             {
                 _mm.VisibleInstanceCount = 0;
+                _shown = 0;
                 _mm.InstanceCount = capacity;
+                _capacity = capacity;
             }
         }
 
         public void Write(Vector3 position, float size, float frame, float alpha, Color color,
             float gain, float shade)
         {
-            if (_mm == null || _written >= _mm.InstanceCount)
+            if (_mm == null || _written >= _capacity)
                 return;
             int index = _written++;
             _mm.SetInstanceTransform(index,
@@ -434,8 +442,13 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
 
         public void Publish()
         {
-            if (_mm != null)
+            // Written only on a change: every idle emitter publishes 0 every frame, and each write
+            // is an engine call.
+            if (_mm != null && _written != _shown)
+            {
                 _mm.VisibleInstanceCount = _written;
+                _shown = _written;
+            }
             Drawn = _written;
             _written = 0;
         }

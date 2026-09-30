@@ -3667,6 +3667,10 @@ public partial class FlightController : Node3D
         if (frame == _inputFrame)
             return;
         _inputFrame = frame;
+        // An AI rig is bound to no keyboard and no pad, so its resolve always reads neutral, which
+        // is the readers' state before any poll. A mission flies twenty of them.
+        if (!IsHumanPiloted)
+            return;
         // Splitscreen P2-P4 are pad-only and the field can change after construction, so the gate is
         // re-read rather than captured. The pad-half reader is never given the keyboard.
         _bindings.ReadsKeyboard = UseKeyboard;

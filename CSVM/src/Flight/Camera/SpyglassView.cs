@@ -12,6 +12,11 @@ namespace CSVM.Flight.Camera;
 /// </summary>
 public sealed partial class SpyglassView : SubViewport
 {
+    /// <summary>The smallest internal side, in pixels, the picture renders at.
+    /// ⚠ Do not lower it under 64. Godot's ambient-occlusion depth chain takes a quarter of this
+    /// size with five mip levels, and a smaller buffer fails to allocate, which crashes the Deck.</summary>
+    public const int MinInternalSide = 64;
+
     private Camera3D _camera = null!;
     private Camera3D? _pane;
     private uint _ownLayer;
@@ -34,7 +39,7 @@ public sealed partial class SpyglassView : SubViewport
     /// visual layer this pane's own aeroplane is drawn on, which the picture never shows.</summary>
     public static SpyglassView Build(Camera3D? pane, uint ownLayer)
     {
-        int side = Mathf.RoundToInt(Spyglass.RefWindow);
+        int side = RenderSide(Mathf.RoundToInt(Spyglass.RefWindow));
         var view = new SpyglassView
         {
             Name = "spyglass_view",
@@ -63,11 +68,20 @@ public sealed partial class SpyglassView : SubViewport
     /// (docs/org/spyglass.md).</summary>
     public static uint DiscMask(uint paneMask, uint ownLayer) => paneMask & ~ownLayer;
 
+    /// <summary>The square the picture renders at for a disc <paramref name="side"/> pixels across.
+    /// Under Enhanced Graphics it is raised so the internal buffer never falls under
+    /// <see cref="MinInternalSide"/>; the disc samples by normalised UV, so that only supersamples
+    /// it. The faithful path runs no occlusion pass and keeps the disc's own size.</summary>
+    public static int RenderSide(int side) => Utils.GraphicsMode.Enhanced
+        ? Mathf.Max(side, Mathf.CeilToInt(MinInternalSide / Utils.RenderScaleSetting.Scale))
+        : side;
+
     /// <summary>Point the picture and start it rendering. <paramref name="side"/> is the disc's
     /// drawn diameter in device pixels, so the texture is rasterised at the size it is shown at.
     /// </summary>
     public void Aim(Transform3D pose, float fovDeg, int side)
     {
+        side = RenderSide(side);
         if (side > 0 && Size.X != side)
         {
             Size = new Vector2I(side, side);

@@ -411,6 +411,15 @@ member, and it does not go here.
   thread clock (PERF-36). Unfixed, it reads 97 to 131 ms per copy and 18 to 22 ms to re-ask 200
   names. Fixed, it reads 6.4 ms and 0.2 ms, under bars of 40 and 5 ms.
 
+- **PERF-38**, **A scripted `--campaign=` run spends its first minute in the mission's intro
+  cutscene, so read `ai_planes` before crediting a window to the mission: 0 means the film, not
+  the fight.** CM24 under `--det` read 8.5 ms frames for 30 sim seconds of intro, and 17 to 23 ms
+  once the film was skipped and 22 AI planes flew.
+- **PERF-39**, **`gpu_ms` and `render_cpu_ms` measure the root viewport alone, so a splitscreen
+  frame's cost is every pane's measured time summed; a `frame_ms` that stays flat while that sum
+  moves says the frame is CPU-bound.** Four-pane CM24 held 31.7 ms frames while the panes' GPU sum
+  ran from 11.3 to 19.5 ms across shadow settings.
+
 ## LOG, logs, error censuses, and exit codes
 
 - **LOG-1**, **An empty report may mean the mode did not build the feature.**

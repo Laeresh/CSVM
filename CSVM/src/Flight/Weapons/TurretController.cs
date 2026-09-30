@@ -716,7 +716,6 @@ public sealed class TurretController
         TargetSource = null;
         _scan.Clear();
         _pool.CollectVehicleList(_scan);
-        _pool.CollectMissionStructures(_scan);
         var here = WorldPosition;
         float best = float.MaxValue;
         bool aircraftInReach = false;
@@ -756,6 +755,7 @@ public sealed class TurretController
         // Walked after the vehicles against the same running best, ties going to it, which is the
         // decoded pass order. A gasbag is the one class this pass drops. A structure is marked
         // where it stands and never leads, so its velocity is zero.
+        _pool.CollectTurretStructures(_scan, _team);
         foreach (var c in _scan.Structures)
         {
             if (!c.Live || !AimAssist.Hostile(_team, c.Team)

@@ -191,7 +191,7 @@ measurements: [../formats/world-structure.md](../formats/world-structure.md). Re
 Stamps the boot-script clutter templates across placed polygons carrying the template's ground texture,
 one stamp per integer UV repeat of the polygon's UV lattice: sprites become one fullbright billboard
 MultiMesh per kind, turned toward the camera as that kind's own `FacadeMode` says, solids go through
-`SceneBuilder.SharedMesh`, `ClassifyBillboard` the split. A card blends or scissors on the archive's own alpha verdict, one shader variant each. The scissored variant takes `SceneBuilder.CoverageMode` under Enhanced Graphics, and the blended variant writes its body's depth through a prepass: a kind is one MultiMesh, a single draw in buffer order that sorts nothing, so a card writing no depth at all is painted over by every later card and kind whatever their distances. `BlendCardKinds`/`ScissorCardKinds` count the kinds each way, the census an `--hide-alpha` isolation is read against, and a hidden class builds no MultiMesh for its kinds. Every stamp carries its far fade as MultiMesh custom
+`SceneBuilder.SharedMesh`, `ClassifyBillboard` the split. A card blends or scissors on the archive's own alpha verdict, one shader variant each. The scissored variant takes `SceneBuilder.CoverageMode` under Enhanced Graphics, and the blended variant writes its body's depth through a prepass: a kind is one MultiMesh (one per map cell under Enhanced, `ClutterInstances`), a single draw in buffer order that sorts nothing, so a card writing no depth at all is painted over by every later card and kind whatever their distances. `BlendCardKinds`/`ScissorCardKinds` count the kinds each way, the census an `--hide-alpha` isolation is read against, and a hidden class builds no MultiMesh for its kinds. Every stamp carries its far fade as MultiMesh custom
 data under `EffectsLevel`, and samples through `SceneBuilder.SampleAlbedo` for the chapter's mip bias. `TemplateNames` reads `AddClutterTemplates` unfiltered, the per-polygon `no_clutter` gate deciding
 which patch a district dresses; `OverrideTemplateNames` is `--clutter-templates=`'s replacement.
 A decoration is a node chain, and `FirstWithMesh` hands back the translation down to the node carrying the mesh, so a stamp lands where the chain puts the drawn card: C5's lamp glow rides 4.75 m up its post. A solid decoration's chain carries SEVERAL meshes, which `ExtraMeshes` collects (nearest LOD only, each in the drawn mesh's frame) so `Kind.ExtraParts` draws and collides the whole building: 12 of C5's city blocks hold two street walls and a roof cap on further nodes, and drawing the first mesh alone leaves them open on two sides.
@@ -204,6 +204,14 @@ syncs on its `VisibilityChanged` and `TreeEntered`, so a mission script's area v
 `NodeSetActive` or a record born inactive hides the trees with the ground. A hidden stamp collapses
 its basis and switches off its shared shape as a crater's victim does, and a show restores only
 what this hid. `Version` lets `MapEdgeExtender`'s copies follow their source stamps. Read `ClutterCull.cs`.
+
+## src/Mech3/ClutterInstances.cs
+One clutter kind's drawn instances behind the kind's own placement index. The faithful path keeps
+the kind's single MultiMesh (`Whole`). Under Enhanced Graphics `Cells` cuts it into square map
+cells about twice the kind's farthest fade across, each its own node with a visibility range at that
+fade, so a pane draws only the cells in reach instead of every stamp in the chapter. Reads and
+writes take the clutter root's frame, which keeps `ClutterActivation` and the suites off the cells;
+`ClutterCull` walks the cells as ordinary MultiMeshes. Read `Clutter.cs`.
 
 ## src/Mech3/ClutterTemplates.cs
 The chapter's `templates.zrd` (`ClutterTemplateSpec.Load`/`.Parse`): one `ClutterKindProps` per

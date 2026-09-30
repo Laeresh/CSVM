@@ -426,12 +426,14 @@ public sealed class ClutterBuilder
             var mmi = kind.Solid ? BuildSolidInstance(kind) : BuildKindInstance(kind);
             if (mmi == null)
                 continue;
-            root.AddChild(mmi);
+            var mesh = (ArrayMesh)mmi.Multimesh!.Mesh;
+            var material = mmi.MaterialOverride;
+            var drawn = Drawn(root, mmi, kind.Instances, kind.Fades);
             exported.Add(new KindExport
             {
                 Texture = kind.Label,
-                Mesh = (ArrayMesh)mmi.Multimesh!.Mesh,
-                Material = mmi.MaterialOverride,
+                Mesh = mesh,
+                Material = material,
                 Solid = kind.Solid,
                 NodeBias = NodeBiasOf(kind),
                 Width = kind.Width,
@@ -440,7 +442,7 @@ public sealed class ClutterBuilder
                 Placements = kind.Instances,
                 Fades = kind.Fades,
                 Owners = kind.Owners,
-                Instances = mmi.Multimesh,
+                Instances = drawn,
             });
             exportedMesh.Add(kind.MeshIndex);
             exportedFrom.Add((kind, 0));
@@ -456,12 +458,14 @@ public sealed class ClutterBuilder
                     var placements = Composed(kind.Instances, local);
                     if (BuildSolidPart(kind, meshIndex, placements) is not { } partMmi)
                         continue;
-                    root.AddChild(partMmi);
+                    var partMesh = (ArrayMesh)partMmi.Multimesh!.Mesh;
+                    var partMaterial = partMmi.MaterialOverride;
+                    var partDrawn = Drawn(root, partMmi, placements, kind.Fades);
                     exported.Add(new KindExport
                     {
                         Texture = kind.Label,
-                        Mesh = (ArrayMesh)partMmi.Multimesh!.Mesh,
-                        Material = partMmi.MaterialOverride,
+                        Mesh = partMesh,
+                        Material = partMaterial,
                         Solid = true,
                         NodeBias = NodeBiasOf(kind),
                         Width = kind.Width,
@@ -470,7 +474,7 @@ public sealed class ClutterBuilder
                         Placements = placements,
                         Fades = kind.Fades,
                         Owners = kind.Owners,
-                        Instances = partMmi.Multimesh,
+                        Instances = partDrawn,
                     });
                     exportedMesh.Add(meshIndex);
                     exportedFrom.Add((kind, part + 1));
@@ -507,6 +511,21 @@ public sealed class ClutterBuilder
     /// <paramref name="world"/> is the built world the stamping nodes live under.</summary>
     public void FollowActivation(Node3D world) =>
         Activation = ClutterActivation.Bind(world, ExportedKinds);
+
+    // A kind's node under the clutter root. The faithful path keeps its one MultiMesh; Enhanced cuts
+    // it into map cells (ClutterInstances), so a pane skips the cells out of its reach.
+    private static ClutterInstances Drawn(Node3D root, MultiMeshInstance3D whole,
+        IReadOnlyList<Transform3D> placements, IReadOnlyList<Color> fades)
+    {
+        if (!GraphicsMode.Enhanced)
+        {
+            root.AddChild(whole);
+            return ClutterInstances.Whole(whole.Multimesh!);
+        }
+        var (group, instances) = ClutterInstances.Cells(whole, placements, fades, EffectsLevel.RegisteredScaleSq);
+        root.AddChild(group);
+        return instances;
+    }
 
     // Any billboard kind is a placeable card: C1's CylindricalY trees and bushes, and C5's
     // SphericalY poleflare glows beside their CylindricalY lightpole posts.
@@ -1434,8 +1453,8 @@ public sealed class ClutterBuilder
         // ClutterActivation hides it with.
         public IReadOnlyList<int> Owners = null!;
 
-        // The map's own MultiMesh of these placements, indexed as Placements is.
-        public MultiMesh? Instances;
+        // The map's own drawn instances of these placements, indexed as Placements is.
+        public ClutterInstances? Instances;
 
         // Parallel to Placements, solid kinds in a collidable build only: the region body and
         // shape slot each placement's shared shape was attached at.

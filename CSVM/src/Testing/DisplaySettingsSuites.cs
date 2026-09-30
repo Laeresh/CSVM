@@ -137,7 +137,10 @@ internal static class DisplaySettingsSuites
         + "under original, taa under enhanced), --det drops the saved word, fsr2 clamps a scale above "
         + "native to 100 and narrows the row to 50..100, picking fsr2 on the page moves a saved 200 "
         + "to 100, and each method's viewport write is read back: fxaa and smaa as ScreenSpaceAA, taa "
-        + "as UseTaa, fsr2 as FSR 2.2 at 1.0 at native and at 0.67 below it, fsr at 0.67 otherwise")]
+        + "as UseTaa, fsr2 as FSR 2.2 at 1.0 at native and at 0.67 below it, fsr at 0.67 otherwise. "
+        + "The spyglass picture renders at its disc's own size on the faithful path, and under enhanced "
+        + "it is raised so its internal buffer never drops under the side the ambient-occlusion depth "
+        + "chain needs, at native and below it")]
     internal static void DisplayRenderScale(TestContext ctx)
     {
         // The process's own scale, which every later suite's SubViewport would take: this suite
@@ -163,6 +166,7 @@ internal static class DisplaySettingsSuites
             ViewportScale(ctx);
             AntiAliasingPrecedence(ctx);
             ViewportAntiAliasing(ctx);
+            SpyglassFloor(ctx);
         }
         finally
         {
@@ -824,6 +828,36 @@ internal static class DisplaySettingsSuites
             $"and no other method clamps it ({Describe(other)})");
         ctx.Check(string.Join(",", RenderScaleSetting.ChoicesFor(DisplayWords.AntiAliasingFsr2)) == "50,67,77,100",
             $"the fsr2 row offers 50 to 100 ({string.Join(",", RenderScaleSetting.ChoicesFor(DisplayWords.AntiAliasingFsr2))})");
+    }
+
+    // A four-pane disc on a Deck is 80 px. Below native its internal buffer would fall under the
+    // occlusion chain's floor, which is the four-pane crash this floor exists for.
+    private static void SpyglassFloor(TestContext ctx)
+    {
+        const int disc = 80;
+        const int small = 46;
+        RenderScaleSetting.Resolve("50", RenderScaleSetting.Default);
+        ctx.Same(small, Flight.Camera.SpyglassView.RenderSide(small),
+            $"the faithful path renders the spyglass at its disc's own size at any scale");
+        GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
+        try
+        {
+            foreach (var word in new[] { "100", "77", "67", "50" })
+            {
+                var plan = RenderScaleSetting.Resolve(word, RenderScaleSetting.Default);
+                foreach (int size in new[] { disc, small })
+                {
+                    int side = Flight.Camera.SpyglassView.RenderSide(size);
+                    ctx.Check(side >= size && side * plan.Scale >= Flight.Camera.SpyglassView.MinInternalSide - 0.01f,
+                        $"enhanced at {word}%: a {size} px disc renders at {side} px, {side * plan.Scale:0.#} px inside, at least {Flight.Camera.SpyglassView.MinInternalSide}");
+                }
+            }
+        }
+        finally
+        {
+            GraphicsMode.Resolve(GraphicsMode.Default);
+            RenderScaleSetting.Resolve(null, RenderScaleSetting.Default);
+        }
     }
 
     // Each method's write, read back off a freshly built viewport against an untouched control. A

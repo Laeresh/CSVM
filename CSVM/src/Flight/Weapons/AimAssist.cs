@@ -507,6 +507,27 @@ public sealed class AimCandidateSet
         }
     }
 
+    /// <summary><see cref="AddStructures"/> narrowed to what a turret on <paramref name="team"/> can
+    /// pick: a live, hostile pool that is not a gasbag. Those reads are plain fields and run before
+    /// the anchor's engine calls, so a scan over a large registry pays for the hostile few alone.
+    /// The turret's own pass drops the rest, so what it picks is unchanged.</summary>
+    public void AddTurretStructures(DestructibleRegistry registry, int team)
+    {
+        foreach (var inst in registry.All)
+        {
+            if (inst.Dormant || inst.Gasbag || inst.Status == DestructibleRegistry.State.Destroyed
+                || !AimAssist.Hostile(team, inst.Team ?? AimAssist.NeutralTeam))
+            {
+                continue;
+            }
+            if (!inst.Anchor.IsInsideTree() || !inst.Anchor.IsVisibleInTree())
+            {
+                continue;
+            }
+            AddStructure(inst.Centre, inst.Team ?? AimAssist.NeutralTeam, live: true, inst);
+        }
+    }
+
     /// <summary>The original's own <c>MStructList</c>, which is narrower than every destructible:
     /// the original builds one object per scene node carrying the mission-structure flag and sets
     /// the acquisition byte <c>+0x8d</c> on those alone, so a pool no mission structure stands on

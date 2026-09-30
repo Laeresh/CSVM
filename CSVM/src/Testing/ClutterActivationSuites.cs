@@ -32,6 +32,35 @@ internal static class ClutterActivationSuites
         ctx.WriteArtifact("test-clutter-activation.txt", report.ToString());
     }
 
+    [Suite("clutter-cells",
+        "Enhanced Graphics' clutter cells draw exactly the stamps the kind's one MultiMesh draws: " +
+        "every placement is in exactly one cell and reads back at its own transform, a write through " +
+        "the index lands on that stamp alone, a crater under a cell collapses the stamp the index reads, " +
+        "every cell's visibility range reaches past the fade of every stamp it holds, and a scale of 0 " +
+        "(clutter that never fades) gives no cell a range")]
+    internal static void ClutterCells(TestContext ctx)
+    {
+        var report = new StringBuilder();
+        ctx.WithWorld(Chapter, collision: false, Mission, world =>
+        {
+            var exports = world.Session.Clutter?.ExportedKinds;
+            ClutterBuilder.KindExport? largest = null;
+            foreach (var export in exports ?? new List<ClutterBuilder.KindExport>())
+            {
+                if (largest == null || export.Placements.Count > largest.Placements.Count)
+                {
+                    largest = export;
+                }
+            }
+            ctx.Check(largest != null, $"{Chapter} exports a clutter kind to cut into cells");
+            if (largest != null)
+            {
+                Cells(ctx, largest, report);
+            }
+        });
+        ctx.WriteArtifact("test-clutter-cells.txt", report.ToString());
+    }
+
     private static void Drive(TestContext ctx, TestWorld world, StringBuilder report)
     {
         var clutter = world.Session.Clutter;
@@ -259,6 +288,93 @@ internal static class ClutterActivationSuites
             }
         }
         return (0, 0);
+    }
+
+    private static void Cells(TestContext ctx, ClutterBuilder.KindExport kind, StringBuilder report)
+    {
+        const float scaleSq = 0.25f;
+        var (group, cells) = ClutterInstances.Cells(Whole(kind), kind.Placements, kind.Fades, scaleSq);
+        ctx.Host.AddChild(group);
+        try
+        {
+            report.AppendLine(CultureInfo.InvariantCulture,
+                $"{kind.Texture}: {kind.Placements.Count} placements in {cells.CellCount} cells");
+            ctx.Check(cells.CellCount > 1, $"the kind spans more than one cell cells={cells.CellCount}");
+            int stored = 0, misread = 0, beyond = 0;
+            foreach (var node in group.GetChildren())
+            {
+                if (node is not MultiMeshInstance3D { Multimesh: { } mm } cell)
+                {
+                    continue;
+                }
+                stored += mm.InstanceCount;
+                for (int s = 0; s < mm.InstanceCount; s++)
+                {
+                    // The stamp's own fade under the scale, from the cell's origin. An unranged cell
+                    // is never cut, and a stamp that never fades must sit in one.
+                    var at = cell.Position + mm.GetInstanceTransform(s).Origin;
+                    float far2 = mm.GetInstanceCustomData(s).G;
+                    float range = cell.VisibilityRangeEnd;
+                    if (range > 0f && (far2 <= 0f || range < cell.Position.DistanceTo(at) + Mathf.Sqrt(far2 / scaleSq)))
+                    {
+                        beyond++;
+                    }
+                }
+            }
+            for (int i = 0; i < kind.Placements.Count; i++)
+            {
+                var read = cells.GetInstanceTransform(i);
+                if (!read.Origin.IsEqualApprox(kind.Placements[i].Origin) || !read.Basis.IsEqualApprox(kind.Placements[i].Basis))
+                {
+                    misread++;
+                }
+            }
+            ctx.Same(kind.Placements.Count, stored, $"every placement is stored in exactly one cell");
+            ctx.Same(0, misread, $"every placement reads back at its own transform through the index");
+            ctx.Same(0, beyond, $"every cell's range reaches past the fade of every stamp it holds");
+
+            int victim = kind.Placements.Count / 2;
+            var placed = kind.Placements[victim];
+            cells.SetInstanceTransform(victim, new Transform3D(placed.Basis.Scaled(Vector3.Zero), placed.Origin));
+            bool others = cells.GetInstanceTransform(victim == 0 ? 1 : 0).Basis.Determinant() != 0f;
+            ctx.Check(cells.GetInstanceTransform(victim).Basis.Determinant() == 0f && others,
+                $"a write through the index collapses that stamp alone");
+            cells.SetInstanceTransform(victim, placed);
+            int killed = ClutterCull.Destroy(group, CraterShape.At(placed.Origin, radius: 0.01f));
+            ctx.Check(killed > 0 && cells.GetInstanceTransform(victim).Basis.Determinant() == 0f,
+                $"a crater over a cell collapses the stamp its index reads killed={killed}");
+        }
+        finally
+        {
+            group.QueueFree();
+        }
+
+        var (never, _) = ClutterInstances.Cells(Whole(kind), kind.Placements, kind.Fades, 0f);
+        bool ranged = false;
+        foreach (var node in never.GetChildren())
+        {
+            ranged |= node is GeometryInstance3D { VisibilityRangeEnd: > 0f };
+        }
+        ctx.Check(!ranged, $"a never-fading scale leaves every cell unranged");
+        never.Free();
+    }
+
+    // A stand-in for the kind's one MultiMesh, built from its export as the builder builds it.
+    private static MultiMeshInstance3D Whole(ClutterBuilder.KindExport kind)
+    {
+        var mm = new MultiMesh
+        {
+            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+            UseCustomData = true,
+            Mesh = kind.Mesh,
+            InstanceCount = kind.Placements.Count,
+        };
+        for (int i = 0; i < kind.Placements.Count; i++)
+        {
+            mm.SetInstanceTransform(i, kind.Placements[i]);
+            mm.SetInstanceCustomData(i, kind.Fades[i]);
+        }
+        return new MultiMeshInstance3D { Name = "cells_probe", Multimesh = mm, MaterialOverride = kind.Material };
     }
 
     // The nearest node at or above this one that is itself switched off: the one a script hid.

@@ -137,6 +137,7 @@
     "cloud-band-object-gate": 0.05,
     "cloud-field-fade": 4.46,
     "clutter-activation": 4.73,
+    "clutter-cells": 1.89,
     "clutter-card-depth": 2.0,
     "clutter-card-pose": 1.2,
     "clutter-determinism": 0.583,

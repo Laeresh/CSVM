@@ -180,7 +180,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 4. ☑ Alpha-to-coverage on the cutout surfaces under Enhanced
 5. ☑ FSR 2.2 tried once as the alternative temporal pass, kept or parked on the user's verdict
 6. ☑ An Anti-aliasing row on the VIDEO page, and a Render Scale that follows it down to 50%
-7. ☐ C5 and the last two campaign missions hold a frame budget under Enhanced
+7. ◐ C5 and the last two campaign missions hold a frame budget under Enhanced
 
 ### Wave B, lit explosions
 
@@ -704,7 +704,53 @@ on them, so look for smear on smoke and clouds first. The spyglass SubViewport a
 the same writes as the root viewport, or they disagree in sharpness (A2's trap); the transparent
 cockpit pass takes none (see the fix above).
 
-## A7 ☐ C5 and the last two campaign missions hold a frame budget under Enhanced
+## A7 ◐ C5 and the last two campaign missions hold a frame budget under Enhanced
+
+**Landed.** Seven changes, each taken from a profile on the author's machine:
+- **Clutter cells, Enhanced only.** `Mech3/ClutterInstances.cs` cuts each clutter kind's MultiMesh
+  into map cells about twice the kind's farthest fade across, each a node with a visibility range at
+  that fade (`EffectsLevel.RegisteredScaleSq` carries the fade scale, since Godot reads a global back
+  only in the editor). `KindExport.Instances` is the index map, so `ClutterActivation`, craters and
+  the suites address a placement as before. C5 drew all 177,000 stamps in every view: 2.66 M
+  primitives per pane. The faithful path keeps the one MultiMesh, since cells blend cards in
+  another order.
+- **Mission CPU.** `ObjectiveSites` lists a site's meshes once per resolved node and re-reads their
+  live transforms, instead of walking a zeppelin's subtree per pane per frame; a part the site's
+  own script moves still moves the marker. A turret narrows the structure pool to live, hostile, non-gasbag pools before the
+  engine calls (`AimCandidateSet.AddTurretStructures`) and skips it when the aircraft-first rule
+  already answered. An AI rig resolves no input bindings. `ObjectZoneGate` writes a mesh's layer
+  only when its zone changes. An idle emitter layer stops re-publishing its count.
+- **The four-pane crash.** Under Enhanced the spyglass picture renders at no less than 64 internal
+  pixels (`SpyglassView.RenderSide`). At four panes on 1280x800 its 80 px disc fell to 54 at 67%,
+  and Godot's ambient-occlusion depth chain, a quarter of that with five mips, failed to allocate.
+  The faithful path runs no occlusion pass and keeps the disc's own size.
+
+**Verified.** The complete `RunTests.ps1` on the item worktree, exit 0: units **5798 passed, 0
+failed, 3 skipped of 5801**, engine **466 suites passed, 0 failed** (the new `clutter-cells` and
+the spyglass floor in `display-render-scale` among them), goldens **19 shots hash-identical**.
+`CheckCommentCaps.ps1`, `CheckDocEntries.ps1` and `CheckEncoding.ps1` clean. Paired `[perf]` runs
+on the author's machine (RTX 5080, 7800X3D), before the change and after it, `--det`, CM23 and CM24
+with their rosters over a `--profiles=` store and their intro skipped (PERF-38):
+
+| Run | frame_ms | proc_ms | gpu_ms | draws | prims |
+|---|---|---|---|---|---|
+| CM24, 1 pane, 1280x800 | 14.4 to 18.0 → 10.5 | 8.2 to 10.4 → 4.4 | 5.0 → 2.7 | 4,833 → 4,356 | 5.59 M → 0.62 M |
+| CM23, 1 pane, 1280x800 | 9.8 → 8.7 | 6.2 → 3.5 | 3.9 → 1.5 | 1,854 → 1,644 | 2.67 M → 0.25 M |
+| C5 flight, 1 pane, 1280x800 | capped at 8.3 | 1.7 → 1.7 | 4.8 → 2.2 | 956 → 823 | 2.66 M → 0.17 M |
+| C5 flight, 4 panes, 5120x1440 | 38.5 → 20.2 | 3.7 → 3.5 | | 12,934 → 11,041 | 22.9 M → 1.4 M |
+| CM24, 4 panes, 5120x1440 | 46.3 → 29.5 to 34.7 | 15.3 → 6.2 to 7.0 | | 27,258 → 21,770 to 25,216 | 25.6 M → 2.6 to 3.1 M |
+| CM24 faithful, 1 pane | 13.8 → 9.7 | 8.8 → 4.3 | 2.5 → 2.5 | 3,132 → 3,132 | unchanged |
+
+Enhanced C5 shots at a freecam pose and in flight differ from the unchunked build on 4 and 49
+pixels by one level. The four-pane C5 run at 67% and at 50%, under TAA and under FSR 2.2, logs no
+mipmap error where the unfixed build logged four. **Owed:** every Deck figure, since the Deck did
+not answer ssh; the four-pane 60 fps target on the author's machine, which the sun's soft shadow
+stands in the way of on the GPU (four-pane CM24, all panes' GPU time: 19.5 ms with Soft Ultra, 17.3
+with Soft High, 12.9 with Soft Medium, 11.3 with the penumbra off, 8.9 with no sun shadow; the 8192
+atlas against 4096 is 0.3 ms) and about 22,000 draw calls stand in the way of on the CPU (the
+frame holds at 31.7 ms whichever shadow setting, PERF-39). The filter quality is the user's
+judgement, since the comment on `EnhancedShadowFilterQuality` binds it while the sun is wider than
+0.5°.
 
 **Goal.** Under Enhanced, C5 and the campaign's last two missions, CM23 "The Criminal Exodus"
 (`C5/M03`) and CM24 "Battle over Broadway" (`C5/M04`), run at 60 fps on the Steam Deck at 67% with
