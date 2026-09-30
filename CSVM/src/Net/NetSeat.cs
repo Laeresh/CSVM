@@ -19,8 +19,9 @@ public sealed record NetSeat
     /// </summary>
     public int SeatIndex { get; init; }
 
-    /// <summary>The side this pilot fights on, 0 in a free-for-all. Teams are handed out from 1,
-    /// which is what leaves block 0 of the spawn table to the un-teamed match.</summary>
+    /// <summary>The lobby team this pilot flies for, by its team number, 0 in a free-for-all. Teams
+    /// are numbered from 1, which leaves block 0 of the spawn table to the un-teamed match. It is
+    /// not a team id, so no hostility test reads it as one.</summary>
     public int TeamId { get; init; }
 
     /// <summary>Whether this machine simulates the seat. A local seat gets a pane, a camera, a
@@ -38,6 +39,11 @@ public sealed record NetSeat
     /// <summary>The paint this seat chose, empty where it takes the session's own livery draw.
     /// </summary>
     public string Livery { get; init; } = "";
+
+    /// <summary>The pilot voice this seat's player chose, in the pick's form: its place in the
+    /// Voice list plus one, 0 for none (<see cref="CoopPickMessage.Voice"/>). The roster carries
+    /// it to every machine, which speaks the seat's in-flight lines in it.</summary>
+    public byte Voice { get; init; }
 
     /// <summary>This pilot's match score, signed: a suicide costs a point, so it goes negative.
     /// </summary>

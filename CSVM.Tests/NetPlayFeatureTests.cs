@@ -474,6 +474,105 @@ public class NetPlayFeatureTests
     }
 
     [Fact]
+    public void ADogfightHostAdvertisesItsGameNameAndChosenCapAndRefusesAGuestPastIt()
+    {
+        var mesh = LoopbackTransport.Mesh(4, Clean, new Random(43));
+        var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]);
+        host.Take(new NetPlayerInfo { GameName = "Friday Fliers", Callsign = "Laeresh", MaxPlayers = 3 }, game: true);
+        host.OpenDogfightHost(NetSeats.MaxPlayers - 1);
+        var guests = new List<NetPlayFeature>();
+        for (int i = 1; i < mesh.Count; i++)
+        {
+            int end = i;
+            var guest = new NetPlayFeature((_, _, _) => mesh[end], (_, _) => mesh[end]) { PlayerName = $"G{i}" };
+            guest.OpenJoin();
+            guests.Add(guest);
+        }
+
+        for (int frame = 0; frame < 4; frame++)
+        {
+            host.Step(0.016);
+            guests.ForEach(guest => guest.Step(0.016));
+        }
+
+        var advert = host.Advertising!.Value;
+        Assert.Equal("Friday Fliers", advert.Host);
+        Assert.Equal(3, advert.Cap);
+        Assert.Equal(NetSessionStatus.Full, advert.Status);
+        Assert.Equal(3, host.SessionCap);
+        Assert.Equal(2, host.Peers);
+        Assert.Equal(3, host.Dogfight!.Players.Count);
+        Assert.Equal("Laeresh", host.Dogfight.Players[0].Name);
+        var refused = guests.FindAll(guest => guest.Stage == NetDoorStage.Failed);
+        Assert.Single(refused);
+        Assert.Equal(CoopDoorText.GameFull, refused[0].Fault);
+
+        // ABLE-TO-FAIL CONTROL: a host that chose no cap seats the Dogfight's sixteen.
+        var open = new NetPlayFeature((_, _, _) => LoopbackTransport.Mesh(1, Clean, new Random(44))[0], (_, _) => mesh[0]);
+        open.OpenDogfightHost(NetSeats.MaxPlayers - 1);
+        Assert.Equal(NetSeats.MaxPlayers, open.Advertising!.Value.Cap);
+    }
+
+    [Fact]
+    public void ACoopHostsChosenCapIsHeldToFourAndSeatsNoGuestPastIt()
+    {
+        var alone = LoopbackTransport.Mesh(1, Clean, new Random(46));
+        var wide = new NetPlayFeature((_, _, _) => alone[0], (_, _) => alone[0]);
+        wide.Take(new NetPlayerInfo { GameName = "Zachary", Callsign = "Zachary", MaxPlayers = 16 }, game: true);
+        wide.OpenCoopHost(NetSeats.MaxPlayers - 1);
+        wide.Offer(3, "Nathan", 1);
+        Assert.Equal(NetPlayFeature.CoopHumans, wide.Advertising!.Value.Cap);
+        Assert.Equal("Zachary", wide.Advertising!.Value.Host);
+
+        var mesh = LoopbackTransport.Mesh(4, Clean, new Random(47));
+        var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]) { MaxPlayers = 2 };
+        host.OpenCoopHost(NetSeats.MaxPlayers - 1);
+        host.Offer(3, "Nathan", 1);
+        var guests = new List<NetPlayFeature>();
+        for (int i = 1; i < mesh.Count; i++)
+        {
+            int end = i;
+            var guest = new NetPlayFeature((_, _, _) => mesh[end], (_, _) => mesh[end]);
+            guest.OpenJoin();
+            guests.Add(guest);
+        }
+
+        for (int frame = 0; frame < 4; frame++)
+        {
+            host.Step(0.016);
+            guests.ForEach(guest => guest.Step(0.016));
+        }
+
+        Assert.Equal(2, host.Advertising!.Value.Cap);
+        Assert.Single(host.CoopGuests);
+        Assert.Equal(2, guests.FindAll(guest => guest.Stage == NetDoorStage.Failed).Count);
+    }
+
+    [Fact]
+    public void AGuestsVoiceReachesTheHostInItsPick()
+    {
+        var mesh = LoopbackTransport.Mesh(2, Clean, new Random(59));
+        var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]);
+        var guest = new NetPlayFeature((_, _, _) => mesh[1], (_, _) => mesh[1]);
+        guest.Take(new NetPlayerInfo { Callsign = "Laeresh", Voice = 5 }, game: false);
+        host.OpenDogfightHost(NetSeats.MaxPlayers - 1);
+        guest.OpenJoin();
+        Pump(host, guest);
+        guest.Dogfight!.Show();
+        Pump(host, guest);
+
+        int peer = mesh[1].LocalPeer;
+        Assert.Equal(5, host.PickedVoice(peer));
+        Assert.Equal("Laeresh", host.Dogfight!.Players[1].Name);
+
+        // ABLE-TO-FAIL CONTROL: a guest that chose no voice sends none.
+        guest.Voice = -1;
+        guest.Dogfight.Pick(3, default);
+        Pump(host, guest);
+        Assert.Equal(-1, host.PickedVoice(peer));
+    }
+
+    [Fact]
     public void AHostRefusesAGuestOfAnotherMinorWithBothVersionsAndSeatsOneAPatchApart()
     {
         // The loopback links every end to every other, and a real guest links only to its host.

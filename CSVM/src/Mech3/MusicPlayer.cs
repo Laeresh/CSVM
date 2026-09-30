@@ -90,6 +90,7 @@ public sealed partial class MusicPlayer : Node
     private float _fadeRate;
     private float _battleHold;
     private float _duck = 1f;
+    private bool _paused;
 
     public MusicPlayer(IReadOnlyDictionary<string, SoundDef> defs,
         IReadOnlyDictionary<string, SoundGroup>? groups = null)
@@ -123,6 +124,19 @@ public sealed partial class MusicPlayer : Node
     /// <summary>Where the duck ramp has reached: 1 while nothing ducks, <see cref="DuckLevel"/>
     /// once a ducking screen has held it there.</summary>
     public float Duck => _duck;
+
+    /// <summary>Whether the channel is held still while a cinema plays its own score. The track
+    /// keeps its place and resumes from there when this clears, and a repeat is never counted
+    /// while it is set.</summary>
+    public bool Paused
+    {
+        get => _player.StreamPaused;
+        set
+        {
+            _paused = value;
+            _player.StreamPaused = value;
+        }
+    }
 
     /// <summary>Whether the original's proximity scan would ping: it counts other vehicles inside
     /// <see cref="BattleScanRadiusM"/> of the player and fires above <see cref="BattleScanMinNearby"/>
@@ -188,6 +202,7 @@ public sealed partial class MusicPlayer : Node
         _target = 1f;
         _fadeRate = 0f;
         _player.Play();
+        _player.StreamPaused = _paused;
         Log.Info("sound", $"music play cue={name} wav={def.WavName} loop={(loopForever ? "forever" : _loopsLeft.ToString())}");
         return def.WavName;
     }
@@ -358,7 +373,9 @@ public sealed partial class MusicPlayer : Node
 
     private void StepLoop()
     {
-        if (_wav.Length == 0 || _loopForever || _player.Playing || _loopsLeft <= 1)
+        // A paused stream reads as not playing, so without the pause test a held track would be
+        // counted as ended and restarted from the top.
+        if (_wav.Length == 0 || _loopForever || _paused || _player.Playing || _loopsLeft <= 1)
         {
             return;
         }

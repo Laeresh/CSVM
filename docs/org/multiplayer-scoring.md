@@ -14,22 +14,34 @@ signed running total, so a penalty moves a pilot **away** from winning.
 The per-event amounts are config keys read by `FUN_004735b0`, each with a hard-coded fallback the
 shipped data does not have to supply:
 
-| Key | Global | Default |
-|---|---|---|
-| `score_suicide` | `0071c824` | **-1** (stored at `00473fc8`) |
-| `score_kill` | `0071c850` | **+1** (stored at `00473ff2`) |
-| `score_turret_kill` | `0071c7b0` | +1 |
-| `score_zep` | `0071c808` | +100 |
-| `score_zep_kill` | `0071d1d8` | +1 |
-| `score_gas_kill` | `0071c84c` | +10 |
-| `score_my_gas_kill` | `0071c7ec` | **-10** |
-| `score_return_flag` | `0071c7fc` | +1 |
-| `score_enemy_flag` | `0071c804` | +5 |
+| Key | Global | Default | Shipped `player.zrd` |
+|---|---|---|---|
+| `score_suicide` | `0071c824` | **-1** (stored at `00473fc8`) | -2 |
+| `score_kill` | `0071c850` | **+1** (stored at `00473ff2`) | 2 |
+| `score_turret_kill` | `0071c7b0` | +1 | not authored |
+| `score_zep` | `0071c808` | +100 | 10 |
+| `score_zep_kill` | `0071d1d8` | +1 | not authored |
+| `score_gas_kill` | `0071c84c` | +10 | not authored |
+| `score_my_gas_kill` | `0071c7ec` | **-10** | not authored |
+| `score_return_flag` | `0071c7fc` | +1 | 8 |
+| `score_enemy_flag` | `0071c804` | +5 | 10 |
+
+⚠ [Evidence: decoded] The keys are read from the loaded `player.zrd` (`FUN_004735b0` opens it at
+`0x4739fa` and keeps it in `ebp`, the node every `score_*` lookup from `0x473fb0` searches), and
+[Evidence: data] the shipped file authors the five values in the last column. So the original plays
+a kill for 2, a suicide for -2, a lost hull for 10 and the two flag events for 8 and 10; the
+defaults are only fallbacks. [Evidence: decoded] Each fallback is stored only on a missing key
+(`0x473fd0` to `0x47411b`), and each integer is the value node's `+0xc`. The default Score limit
+of 40 is therefore twenty kills in the original.
 
 `FUN_0046ecd0` dispatches an event id to one of three per-mode tables on the mode field at
 `+0x5c`. **Dogfight (modes 1 and 2) reaches `FUN_0046ed40`, which honours exactly three events**:
 1 (`score_suicide`), 2 (`score_kill`) and 6 (`score_turret_kill`). The flag and zeppelin events
-belong to the other two tables and cannot fire in a dogfight.
+belong to the other two tables and cannot fire in a dogfight. Capture the Flag (mode 3) reaches
+`FUN_0046ed90`, which honours those three and events 4 (`score_return_flag`) and 5
+(`score_enemy_flag`); Zeppelin vs Zeppelin (mode 4) reaches `FUN_0046ee20`, events 3, 7, 8 and 9.
+Where the flag events are raised is [`multiplayer-ctf.md`](multiplayer-ctf.md), and the zeppelin
+events [`multiplayer-zvz.md`](multiplayer-zvz.md).
 
 ## Who the death is charged to
 
@@ -41,7 +53,8 @@ at `+0xc`:
 |---|---|---|
 | 1 | the killer argument is non-zero | `score_kill` to the killer, **or `score_suicide` to the killer** when killer and victim share the team slot at **remote record `+0x3c`**, the `0x1090`-byte record `FUN_00499d80` looks up, not the pilot record |
 | 2 | no killer at all | `score_suicide` to the pilot who died |
-| 3, 4 | a zeppelin part or a turret owner | that owner's event |
+| 3 | a zeppelin | event 9 with the zeppelin's team (`0x498e1c`): that team's `+0x14` term is set to `score_zep_kill`; the victim is charged nothing |
+| 4 | a turret owner | event 6, `score_turret_kill`, to the owner, or `score_suicide` to the owner when it shares the victim's team slot (`0x498e89`..`0x498ea9`) |
 
 ⚠ **There is no last-damager memory anywhere on this path.** The credited killer is the attacker of
 the one damage event that took the hull to zero, read straight off the damage call's own argument
@@ -60,7 +73,7 @@ the end-screen line:
 |---|---|---|
 | 1 | `00496e28`, the network tick, when the remaining-time query `FUN_0046c580` drops below 1.0 | the clock ran out |
 | 2 | `00499343` / `004993ac`, inside the score broadcast, when a pilot's `+0x1c` reaches the target | somebody hit the score target |
-| 3 | `0049afc7` | a mode-specific objective |
+| 3 | `0049afc7` | a mode-specific objective, a Zeppelin vs Zeppelin hull lost |
 | 4 | `0049900f` / `004996a2`, after a death or a drop, when `FUN_004999f0` finds no two live pilots on different sides | nobody left to fight |
 
 ⚠ **A time-out has no overtime, no sudden death and no tiebreak.** Reason 1 sets the ended flag,
@@ -73,8 +86,9 @@ end screen.
 `FUN_004136e0` reads the lobby's limit kind from `00642f94` and arms exactly one of them: kind 0
 writes the time limit to `0071c180` and sets the score-limit-off byte `0071c1a2`; kind 1 writes the
 score target to `0071c17c` and sets the time-limit-off byte `0071c1a1`. Each check is gated on the
-other's byte, so the original never runs a match that can end either way. The remake's Dogfight
-arms both rows at once, which is a remake decision and not a reading of this code.
+other's byte, so the original never runs a match that can end either way. The remake's lobby arms
+Time, Score or both as the host chooses, and with both the first one reached ends the match. That
+is a remake decision and not a reading of this code.
 
 ## Limited Lives
 
@@ -125,13 +139,50 @@ multiplayer branch at `0x47e1ed`), authored in the `RESET_STATE` of `player-play
 defs author as 0.0 and which [`anim-definitions.md`](../formats/anim-definitions.md) lists as
 undecoded. The real delay is open.
 
+## Teams
+
+A Deathmatch with teams formed is mode 2, and every team mode sets the team flag `0071d89c`
+([`multiplayer-spawn.md`](multiplayer-spawn.md), "Which mode uses teams"). Three rules change with it.
+
+**A teammate kill is a suicide.** [Evidence: decoded] The cause 1 row above: the killer is charged
+`score_suicide` when killer and victim share the team slot at remote record `+0x3c`. The victim's
+own score does not move.
+
+**The Score limit is a team's total.** [Evidence: decoded] `FUN_0046ea40`, with `0071d89c` set,
+walks the team list: each team's `+0x10` is set to its `+0x14` and then takes the `+0x1c` score of
+every pilot whose `+8` names that team (`0x46eaa2`..`0x46eaf0`), mirrored into the team's display
+record at `+0x38`. [Evidence: decoded, not re-read here] `FUN_00499270` then ends the match with
+reason 2 when a team's `+0x10` reaches the target `0071c17c`, and skips the per-pilot check while
+`0071d89c` is set. [Evidence: decoded] A team's own `+0x14` term is written only by mode 4's table
+`FUN_0046ee20`: event 3 adds `score_zep` to every team whose `+0x18` differs from the lost hull's
+(`0x46eeb3`..`0x46eed8`), and event 9 sets the named team's term to `score_zep_kill`
+(`0x46ee99`..`0x46eead`, the team found by `FUN_0046e0f0`). No Deathmatch score event names a team.
+
+**Reason 4 is one team left.** [Evidence: decoded] `FUN_004999f0` compares the team slots, so a
+team match ends when every pilot with lives is on one team, however many of them there are.
+
 ## What the remake takes
 
-`Flight/Modes/VersusMatch.cs` keeps the same signed score: `KillScore` (+1) per kill, `SuicideScore`
-(-1) for a death with no killer, the kill-target row compared against the score rather than against
-raw kills, and standings ranked by score with a tie at the top rendered as a draw. Kills and deaths
-stay as separate display counters, which the original keeps in the pilot's career record rather
-than in the match. The team-kill arm has no counterpart: the remake's Dogfight is free-for-all.
+`Flight/Modes/MatchScores.cs` reads the nine keys from `player.zrd` at session build, each with
+the fallback above, so every mode, the free-for-all Dogfight included, scores the shipped values.
+`Flight/Modes/VersusMatch.cs` keeps the same signed score: `score_kill` per kill, `score_suicide`
+for a death with no killer, `score_turret_kill` to a turret's owner, the kill-target row compared
+against the score rather than against raw kills, and standings ranked by score with a tie at the
+top rendered as a draw. Kills and deaths stay as separate display counters, which the original
+keeps in the pilot's career record rather than in the match.
+
+A lobby launch with teams is a team match (`VersusMatch.AssignTeams`, from each seat's
+`NetSeat.TeamId`). A teammate kill costs the killer `score_suicide` and counts no kill. A team's
+total is the sum of its members' scores, and the Score limit is read against that total alone.
+Reason 4 asks for pilots with lives on two teams, a teamless seat counting as a team of its own.
+Every machine derives the totals from the per-seat scores, so the remake's `0x13`, one seat's
+score, carries no team count, unlike the original's table
+([`multiplayer-messages.md`](multiplayer-messages.md)). The team's own term (`TeamTermOf`) is
+written only by Zeppelin vs Zeppelin: `VersusMatch.EndOnHullLoss` adds `score_zep` to every other
+team's term and `RegisterZeppelinKill` sets the term of a side whose hull downed a pilot. Both show
+on the board's total (`TeamTotalOf`), never in the number the Score limit reads (`TeamScoreOf`).
+A hull loss ends the match as `NetMatchEnd.Objective` with the winning team named in the state
+([`multiplayer-zvz.md`](multiplayer-zvz.md)).
 
 The lives rule follows the decode above, with three differences. The count is clamped to 1..99
 (`DogfightLobby.ClampLives`), so the empty-box defect cannot launch. Ticking Limited Lives puts 3

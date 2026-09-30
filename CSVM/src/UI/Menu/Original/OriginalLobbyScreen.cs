@@ -32,11 +32,11 @@ public enum LobbyTab
 
 /// <summary>
 /// The original's Multiplayer Lobby over <see cref="DogfightLobby"/>, drawn from the lobby scripts'
-/// own placements (<c>docs/org/menu-inventory.md</c>). The player list, Ready, chat and Leave Game
-/// stand on every tab. Only a Dogfight flies, so Capture the Flag, the zeppelin mode, the teams
-/// and Boot draw greyed. Select... opens the outlaw list over the tab page while Outlaw Components
-/// is ticked. The host's options lock while the host is Ready. Every pilot's own picks stay live,
-/// and changing one clears that pilot's Ready.
+/// own placements (<c>docs/org/menu-inventory.md</c>). The player list, Ready, chat, Boot and Leave
+/// Game stand on every tab, Boot removing the guest whose row a host picked. Only a Dogfight flies,
+/// so Capture the Flag, the zeppelin mode and the teams draw greyed. Select... opens the outlaw list
+/// over the tab page while Outlaw Components is ticked. The host's options lock while the host is
+/// Ready. Every pilot's own picks stay live, and changing one clears that pilot's Ready.
 /// </summary>
 public sealed class OriginalLobbyScreen : IOriginalScreenModule
 {
@@ -73,8 +73,26 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>The Score box.</summary>
     public const string ScoreKey = "MPL_E_SCORE";
 
-    /// <summary>Restrict Number of Teams, greyed.</summary>
+    /// <summary>Restrict Number of Teams, live on the host.</summary>
     public const string TeamsKey = "MPL_C_TEAMS";
+
+    /// <summary>The minimum team count box, live while Restrict Number of Teams is ticked.</summary>
+    public const string MinTeamsKey = "MPL_E_MINTEAMS";
+
+    /// <summary>The maximum team count box, live while Restrict Number of Teams is ticked.</summary>
+    public const string MaxTeamsKey = "MPL_E_MAXTEAMS";
+
+    /// <summary>Capture the Flag's own-flag-home rule, the host's option the original lacks. Shown
+    /// only while the type is Capture the Flag.</summary>
+    public const string FlagHomeKey = "MPL_C_FLAGHOME";
+
+    /// <summary>The prefix of a team count box's arrows: <c>MIN+</c>, <c>MIN-</c>, <c>MAX+</c> and
+    /// <c>MAX-</c> follow it.</summary>
+    public const string TeamArrowPrefix = "MPL_B_TEAMS_";
+
+    /// <summary>The prefix of a player list's team row, followed by the team's number, which a press
+    /// picks for Join Team.</summary>
+    public const string TeamRowKeyPrefix = "MPL_R_TEAM_";
 
     /// <summary>The Limited Lives checkbox.</summary>
     public const string LimitedLivesKey = "MPL_C_LIVES";
@@ -110,10 +128,17 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>The Rockets sub-tab.</summary>
     public const string RocketsTabKey = "MPL_TAB_ROCKETS";
 
-    /// <summary>Boot, greyed.</summary>
+    /// <summary>Boot, live on the host while a guest's row is picked. The script's KDA, which its
+    /// refresh 1301 mails live on the host with a player row picked; its press is <c>$$A$$</c> 1005.
+    /// </summary>
     public const string BootKey = "MPL_B_BOOT";
 
-    /// <summary>Create Team, greyed.</summary>
+    /// <summary>The prefix of a host's player list row, which a press picks for Boot.</summary>
+    public const string PlayerKeyPrefix = "MPL_R_PLAYER_";
+
+    /// <summary>The team button: Create Team on no team, Join Team with a team row picked, Leave
+    /// Team on a team. Live while this pilot is not Ready, as the script's <c>GDA</c> gates it.
+    /// </summary>
     public const string TeamKey = "MPL_B_TEAM";
 
     /// <summary>The large Ready checkbox.</summary>
@@ -143,6 +168,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private const string CheckArt = "MP_B_CHECKBOX8STATES.PNG";
     private const string MarkArt = "MP_B_CHECKBOX.PNG";
     private const string ArrowArt = "MP_B_LISTBOXARROW.PNG";
+    private const string UpArt = "MP_B_SCROLLUP.PNG";
+    private const string DownArt = "MP_B_SCROLLDOWN.PNG";
+    private const float MemberIndent = 12f;
     private const string TabLargeArt = "MP_LOBBY_TABLARGE.PNG";
     private const string TabSmallArt = "MP_LOBBY_TABSMALL.PNG";
     private const string IconArt = "MP_PLANEICONSTOPFRONT.PNG";
@@ -194,6 +222,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private static readonly BoardTint LaunchBlink = new(255, 50, 25);
     private static readonly BoardTint OwnName = new(255, 0, 0);
 
+    // The picked row's fill, the script's KEA.NF on the player list (MULTIPLAYERLOBBY_READY.SCRIPT).
+    private static readonly (byte R, byte G, byte B) PickedRow = (209, 180, 120);
+
     private readonly Func<NetPlayFeature?> _net;
     private readonly IOriginalScreenHost _host;
     private readonly MultiplayerBoardText _text;
@@ -202,7 +233,14 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private readonly Func<string?> _pilotName;
     private readonly Func<IReadOnlyList<CustomPlaneDef>> _customs;
     private readonly OriginalOutlawList _outlaw;
+    private readonly OriginalTeamBox _teamBox;
     private string? _open;
+
+    // The team row picked for Join Team, 0 for none. A pick is a team or a player, never both.
+    private byte _pickedTeam;
+
+    // The name the last Create Team took, which the box opens on next, as the script's 2142 keeps it.
+    private string _lastTeamName = string.Empty;
     private int _listTop;
     private string _chat = string.Empty;
     private string? _typing;
@@ -210,6 +248,10 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private double _clock;
     private int _blink;
     private int _heard;
+
+    // The peer whose row the host picked for Boot, -1 for none. Held by peer, so a row moving up
+    // when another guest leaves never boots the wrong pilot.
+    private int _picked = -1;
 
     /// <summary>A lobby module over the door <paramref name="net"/> answers. Its words come from the
     /// string table under <paramref name="dataRoot"/>, its fits from <paramref name="stock"/>. Seat
@@ -226,9 +268,17 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         _host = host ?? throw new ArgumentNullException(nameof(host));
         _text = new MultiplayerBoardText(_host, dataRoot);
         _outlaw = new OriginalOutlawList(_text);
+        _teamBox = new OriginalTeamBox(_host, _text);
         _stock = stock ?? (() => null);
         _pads = pads ?? (() => Array.Empty<int>());
         _pilotName = pilotName ?? (() => null);
+    }
+
+    private enum TeamButtonAction
+    {
+        Create,
+        Join,
+        Leave,
     }
 
     /// <summary>The tab showing.</summary>
@@ -253,16 +303,53 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>The chat box's line as typed so far.</summary>
     public string ChatDraft => _chat;
 
+    /// <summary>The peer whose row the host picked for Boot, or -1 while none is picked or that
+    /// guest has left.</summary>
+    public int PickedPeer => Lobby is { IsHost: true } lobby && RowOf(lobby, _picked) > 0 ? _picked : -1;
+
+    /// <summary>Whether the CREATE TEAM box stands over the lobby.</summary>
+    public bool TeamBoxOpen => _teamBox.IsOpen;
+
+    /// <summary>The team row picked for Join Team, 0 while none is picked or that team is gone.
+    /// </summary>
+    public byte PickedTeam => Lobby is { } lobby && HasTeam(lobby, _pickedTeam) ? _pickedTeam : (byte)0;
+
     /// <summary>Whether seat 0's typed characters feed one of the lobby's boxes. That holds while
-    /// the lobby shows with a box focused and nothing over it.</summary>
+    /// the lobby shows with a box focused and nothing over it, or the CREATE TEAM box's name.
+    /// </summary>
     internal bool CapturingText =>
-        _host.Screen == OriginalScreen.Lobby && !_host.DialogOpen && _open == null && IsBox(_host.FocusedKey);
+        _host.Screen == OriginalScreen.Lobby && !_host.DialogOpen && _open == null
+        && (_teamBox.IsOpen ? _teamBox.CapturingText : IsBox(_host.FocusedKey));
 
 
     private DogfightLobby? Lobby => _net()?.Dogfight;
 
     // The lobby while the outlaw list stands over its tab page, else null.
     private DogfightLobby? Outlawing => _outlaw.IsOpen ? Lobby : null;
+
+    /// <summary>A host's player list row's key by its place in the list, the host's own being 0.
+    /// </summary>
+    public static string PlayerKey(int row) => PlayerKeyPrefix + row.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>A player list's team row's key by the team's number.</summary>
+    public static string TeamRowKey(int team) => TeamRowKeyPrefix + team.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>What a team row reads: the team's name and its member count, the players' own
+    /// splitscreen seats not counted.</summary>
+    public static string TeamRowText(string name, int members) =>
+        $"{name} ({members.ToString(CultureInfo.InvariantCulture)})";
+
+    /// <summary>The line a refused launch raises, the original's langui 10518 to 10520 or the
+    /// remake's own for a teamless player or unbalanced teams. Empty for none.</summary>
+    public static string RefusalFallback(TeamLaunchRefusal refusal) => refusal switch
+    {
+        TeamLaunchRefusal.TooManyTeams => "There are too many teams.",
+        TeamLaunchRefusal.TooFewTeams => "Each player must be on one of two teams to play.",
+        TeamLaunchRefusal.NotEnoughPlayers => "There are not enough players in the game.",
+        TeamLaunchRefusal.Teamless => "Every player must be on a team to play.",
+        TeamLaunchRefusal.Unbalanced => "The teams must not differ by more than one player.",
+        _ => string.Empty,
+    };
 
     /// <summary>A gun box's key by its zero-based slot.</summary>
     public static string GunKey(int slot) => GunKeyPrefix + slot.ToString(CultureInfo.InvariantCulture);
@@ -274,8 +361,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     public bool Owns(OriginalScreen screen) => screen == OriginalScreen.Lobby;
 
     /// <summary>The Connection page's Host and the games list's Create Game: a listen server with
-    /// the lobby standing on it, under the pilot's own name. A socket that will not open says why
-    /// over the page it was asked from.</summary>
+    /// the lobby standing on it. The host goes by the callsign Player Information set, else by the
+    /// pilot's own name. A socket that will not open says why over the page it was asked from.</summary>
     public void OpenHost()
     {
         if (_net() is not { } net)
@@ -289,7 +376,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             net.Close();
         }
 
-        net.PlayerName = _pilotName() ?? string.Empty;
+        TakePilotName(net);
         net.OpenDogfightHost(NetSeats.MaxPlayers - 1);
         if (net.Dogfight == null)
         {
@@ -306,7 +393,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     {
         if (_net() is { } net)
         {
-            net.PlayerName = _pilotName() ?? string.Empty;
+            TakePilotName(net);
             net.Dogfight?.Show();
         }
 
@@ -351,10 +438,28 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         }
     }
 
-    /// <summary>The showing tab's rows, or the open list's items alone while one stands open.</summary>
+    /// <summary>Stands the CREATE TEAM box over the lobby, as the team button's Create Team does.
+    /// Nothing opens without a lobby or while this pilot may not create a team.</summary>
+    public void ShowTeamBox()
+    {
+        if (Lobby is { } lobby && TeamButton(lobby) == TeamButtonAction.Create && !lobby.Ready)
+        {
+            _open = null;
+            _teamBox.Open(_lastTeamName);
+        }
+    }
+
+    /// <summary>The showing tab's rows, or the open list's items alone while one stands open, or
+    /// the CREATE TEAM box's alone while it stands.</summary>
     public void BuildRows(List<OriginalRow> rows)
     {
         ArgumentNullException.ThrowIfNull(rows);
+        if (_teamBox.IsOpen)
+        {
+            _teamBox.Rows(rows);
+            return;
+        }
+
         if (OpenList() is { } drop)
         {
             _listTop = OriginalDropLists.Top(drop, _listTop, _host.FocusedRow);
@@ -424,13 +529,55 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     {
         ArgumentNullException.ThrowIfNull(row);
         _typing = null;
+        var lobby = Lobby;
+        if (OriginalTeamBox.Owns(row.Key))
+        {
+            if (_teamBox.Activate(row.Key) is { } name)
+            {
+                _lastTeamName = name;
+                lobby?.CreateTeam(name);
+            }
+
+            if (!_teamBox.IsOpen)
+            {
+                _host.FocusKey(TeamKey);
+            }
+
+            return null;
+        }
+
         if (row.Key.IndexOf(':', StringComparison.Ordinal) is var colon and > 0)
         {
             PickFromList(row.Key[..colon], row.Key[(colon + 1)..]);
             return null;
         }
 
-        var lobby = Lobby;
+        if (OriginalWidgets.Indexed(row.Key, PlayerKeyPrefix) is { } listed)
+        {
+            // A second press on the picked row lets it go, as the script's row mailbox does.
+            int peer = lobby?.PeerAt(listed) ?? -1;
+            _picked = peer == _picked ? -1 : peer;
+            _pickedTeam = 0;
+            return null;
+        }
+
+        if (OriginalWidgets.Indexed(row.Key, TeamRowKeyPrefix) is { } team)
+        {
+            _pickedTeam = team == _pickedTeam ? (byte)0 : (byte)team;
+            _picked = -1;
+            return null;
+        }
+
+        if (row.Key.StartsWith(TeamArrowPrefix, StringComparison.Ordinal) && lobby != null)
+        {
+            string arrow = row.Key[TeamArrowPrefix.Length..];
+            int by = arrow.EndsWith('+') ? 1 : -1;
+            _ = arrow.StartsWith("MIN", StringComparison.Ordinal)
+                ? lobby.SetMinTeams(lobby.Options.MinTeams + by)
+                : lobby.SetMaxTeams(lobby.Options.MaxTeams + by);
+            return null;
+        }
+
         if (OriginalOutlawList.Owns(row.Key))
         {
             _outlaw.Activate(lobby, row.Key);
@@ -477,10 +624,19 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                 lobby?.SetOutlawComponents(!lobby.Rules.Outlawing);
                 return null;
             case TimeRadioKey:
-                lobby?.SetVictory(DogfightVictory.Time);
+                lobby?.SetVictory(DogfightLobby.Toggled(lobby.Options.Victory, DogfightVictory.Time));
                 return null;
             case ScoreRadioKey:
-                lobby?.SetVictory(DogfightVictory.Score);
+                lobby?.SetVictory(DogfightLobby.Toggled(lobby.Options.Victory, DogfightVictory.Score));
+                return null;
+            case TeamsKey:
+                lobby?.SetRestrictTeams(!lobby.Options.RestrictTeams);
+                return null;
+            case FlagHomeKey:
+                lobby?.SetFlagHomeToCapture(!lobby.Options.FlagHomeToCapture);
+                return null;
+            case TeamKey:
+                PressTeam(lobby);
                 return null;
             case LimitedLivesKey:
                 lobby?.SetLimitedLives(!lobby.Options.LimitedLives);
@@ -504,9 +660,24 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
                 return null;
             case LaunchKey:
+                if (lobby is { CanLaunch: true } && lobby.LaunchRefusal is var refusal and not TeamLaunchRefusal.None)
+                {
+                    RefuseLaunch(refusal);
+                    return null;
+                }
+
                 return _net() is { } net && lobby is { CanLaunch: true } ? Exit(net, lobby) : null;
             case LeaveKey:
                 Leave();
+                return null;
+            case BootKey:
+                // The script re-presses the picked row after the boot, which lets the pick go.
+                if (PickedPeer >= 0)
+                {
+                    _net()?.Boot(_picked);
+                }
+
+                _picked = -1;
                 return null;
         }
 
@@ -524,6 +695,13 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// leaves the game as Leave Game does.</summary>
     public bool Back()
     {
+        if (_teamBox.IsOpen)
+        {
+            _teamBox.Close();
+            _host.FocusKey(TeamKey);
+            return true;
+        }
+
         if (CloseDropdown())
         {
             return true;
@@ -550,8 +728,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         // The widgets are rebuilt closed, so the page under an open list is drawn as it stands.
         var widgets = new List<OriginalRow>();
         Widgets(widgets);
-        string focused = _open ?? (focus >= 0 && focus < rows.Count && !_host.DialogOpen ? rows[focus].Key : string.Empty);
-        int pressedAt = _host.DialogOpen || _open != null ? -1 : _host.PressedRow;
+        bool boxed = _teamBox.IsOpen;
+        string focused = boxed ? string.Empty : _open ?? (focus >= 0 && focus < rows.Count && !_host.DialogOpen ? rows[focus].Key : string.Empty);
+        int pressedAt = _host.DialogOpen || _open != null || boxed ? -1 : _host.PressedRow;
         string pressed = pressedAt >= 0 && pressedAt < rows.Count ? rows[pressedAt].Key : string.Empty;
 
         layers.Backdrop.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, Background), 0f, 0f));
@@ -583,6 +762,11 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         if (_open != null)
         {
             ComposeOpenList(rows, focus, layers);
+        }
+
+        if (boxed)
+        {
+            _teamBox.Compose(rows, _host.DialogOpen ? -1 : focus, layers);
         }
 
         if (_host.SeatPanel(false) is { } strip)
@@ -624,9 +808,14 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>Typed characters and Backspace into the focused box. The chat box takes printable
     /// characters up to its width. The number boxes take digits, and a value inside the box's range
     /// is set as it is typed.</summary>
-    internal bool TypeText(MenuCommands commands)
+    internal bool TypeText(MenuCommands commands, List<string>? cues = null)
     {
         ArgumentNullException.ThrowIfNull(commands);
+        if (_teamBox.IsOpen)
+        {
+            return CapturingText && _teamBox.TypeText(commands, cues ?? new List<string>());
+        }
+
         if (!CapturingText || Lobby is not { } lobby || (commands.Typed.Length == 0 && !commands.Erase))
         {
             return false;
@@ -674,6 +863,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             {
                 TimeKey => lobby.SetTimeMinutes(value),
                 ScoreKey => lobby.SetScore(value),
+                MinTeamsKey => lobby.SetMinTeams(value),
+                MaxTeamsKey => lobby.SetMaxTeams(value),
                 _ => lobby.SetLives(value),
             };
         }
@@ -681,7 +872,81 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         return true;
     }
 
-    private static bool IsBox(string key) => key is ChatKey or TimeKey or ScoreKey or LivesKey;
+    private static bool IsBox(string key) => key is ChatKey or TimeKey or ScoreKey or LivesKey or MinTeamsKey or MaxTeamsKey;
+
+    private static bool HasTeam(DogfightLobby lobby, byte team)
+    {
+        foreach (var named in lobby.Teams)
+        {
+            if (named.Number == team && team != 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // A team count box's arrow, the script's BG and CG beside the box: 16 by 11, four frames.
+    private static OriginalRow Arrow(string key, string art, float x, float y, bool enabled) =>
+        new(key, string.Empty, OriginalRowKind.Button, x, y, 16f, 11f, enabled, 1, new BoardArt(BoardArtLibrary.Ui, art, 4));
+
+    // The player list as drawn: each team's row followed by its members, then every player on no
+    // team. The ready script's rows of kind 1 and kind 0 stand so. Player is the index into Players,
+    // -1 for a team row.
+    private static List<ListEntry> ListEntries(DogfightLobby lobby)
+    {
+        var players = lobby.Players;
+        var entries = new List<ListEntry>(players.Count + lobby.Teams.Count);
+        var listed = new bool[players.Count];
+        foreach (var team in lobby.Teams)
+        {
+            int members = 0;
+            foreach (var player in players)
+            {
+                members += player.Team == team.Number ? 1 : 0;
+            }
+
+            entries.Add(new ListEntry(team.Number, -1, TeamRowText(team.Name, members)));
+            for (int i = 0; i < players.Count; i++)
+            {
+                if (players[i].Team == team.Number)
+                {
+                    listed[i] = true;
+                    entries.Add(new ListEntry(team.Number, i, players[i].Name));
+                }
+            }
+        }
+
+        for (int i = 0; i < players.Count; i++)
+        {
+            if (!listed[i])
+            {
+                entries.Add(new ListEntry(0, i, players[i].Name));
+            }
+        }
+
+        return entries;
+    }
+
+    // The row the host's list names a peer on, or -1 while it names it on none.
+    private static int RowOf(DogfightLobby lobby, int peer)
+    {
+        if (peer < 0)
+        {
+            return -1;
+        }
+
+        for (int row = 1; row < lobby.Players.Count; row++)
+        {
+            if (lobby.PeerAt(row) == peer)
+            {
+                return row;
+            }
+        }
+
+        return -1;
+    }
 
     private static int BoxWidth(string key) => key == ScoreKey ? 3 : 2;
 
@@ -689,6 +954,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     {
         TimeKey => lobby.Options.TimeMinutes.ToString(CultureInfo.InvariantCulture),
         ScoreKey => lobby.Options.Score.ToString(CultureInfo.InvariantCulture),
+        MinTeamsKey => lobby.Options.MinTeams.ToString(CultureInfo.InvariantCulture),
+        MaxTeamsKey => lobby.Options.MaxTeams.ToString(CultureInfo.InvariantCulture),
         _ => lobby.Options.Lives.ToString(CultureInfo.InvariantCulture),
     };
 
@@ -710,6 +977,11 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         foreach (var player in lobby.Players)
         {
             hash.Add(player);
+        }
+
+        foreach (var team in lobby.Teams)
+        {
+            hash.Add(team);
         }
 
         return hash.ToHashCode() | 1;
@@ -756,8 +1028,64 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private static string Item(DropdownList list) =>
         list.Current >= 0 && list.Current < list.Items.Count ? list.Items[list.Current] : string.Empty;
 
+    // What the team button does for this pilot, the ready script's 1200 to 1202. It is Leave Team on
+    // a team, Join Team with a team row picked, else Create Team.
+    private TeamButtonAction TeamButton(DogfightLobby lobby) =>
+        lobby.OwnTeam != 0 ? TeamButtonAction.Leave : PickedTeam != 0 ? TeamButtonAction.Join : TeamButtonAction.Create;
+
+    private void PressTeam(DogfightLobby? lobby)
+    {
+        if (lobby == null || lobby.Ready)
+        {
+            return;
+        }
+
+        switch (TeamButton(lobby))
+        {
+            case TeamButtonAction.Leave:
+                lobby.LeaveTeam();
+                break;
+            case TeamButtonAction.Join:
+                lobby.JoinTeam(PickedTeam);
+                _pickedTeam = 0;
+                break;
+            default:
+                ShowTeamBox();
+                break;
+        }
+    }
+
+    // The team refusals raise the original's OK messagebox, as the mission script's LAUNCH! does.
+    private void RefuseLaunch(TeamLaunchRefusal refusal)
+    {
+        int id = refusal switch
+        {
+            TeamLaunchRefusal.TooManyTeams => 10518,
+            TeamLaunchRefusal.TooFewTeams => 10519,
+            TeamLaunchRefusal.NotEnoughPlayers => 10520,
+            _ => 0,
+        };
+
+        string text = id != 0 ? _text.Word(id, RefusalFallback(refusal)) : RefusalFallback(refusal);
+        _host.RaiseDialog(text, DialogIcon.Warning,
+            new OriginalDialogAnswer(OriginalShell.DialogOkKey, CampaignBoards.DialogCenterKey, _text.Word(100, "OK"), null));
+    }
+
+    // The callsign Player Information set names the pilot, and a door that asked none goes by the
+    // pilot's own name.
+    private void TakePilotName(NetPlayFeature net)
+    {
+        if (net.PlayerName.Length == 0)
+        {
+            net.PlayerName = _pilotName() ?? string.Empty;
+        }
+    }
+
     private void Enter()
     {
+        _picked = -1;
+        _pickedTeam = 0;
+        _teamBox.Drop();
         _open = null;
         _outlaw.Close();
         _typing = null;
@@ -790,6 +1118,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
     private void Leave()
     {
+        _picked = -1;
+        _pickedTeam = 0;
+        _teamBox.Drop();
         _open = null;
         _outlaw.Close();
         _typing = null;
@@ -821,6 +1152,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
     private OriginalRow Box(string key, string label, float x, float y, float width, float height, bool enabled, int column = 1) =>
         new(key, label, OriginalRowKind.TextField, x, y, width, height, enabled, column, null);
+
 
     // Every widget of the showing tab and its frame, in focus order. The tabs and the page come
     // first, then the player list's plaques, the chat line and Leave Game. The outlaw list stands
@@ -854,8 +1186,25 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             }
         }
 
-        rows.Add(_text.Strip(BootKey, SmallArt, 19f, 325f, false, 0, 74f, 37f));
-        rows.Add(_text.Strip(TeamKey, LargeArt, 105f, 325f, false, 0, 131f, 37f));
+        // A team row is picked by anyone, for Join Team. A player row is picked only on the host,
+        // for Boot; the host's own row is never booted (FUN_00413090 refuses it).
+        if (lobby != null && !_outlaw.IsOpen)
+        {
+            var entries = ListEntries(lobby);
+            for (int slot = 0; slot < entries.Count && slot < VisiblePlayers; slot++)
+            {
+                var entry = entries[slot];
+                string key = entry.Player < 0 ? TeamRowKey(entry.Team) : PlayerKey(entry.Player);
+                if (entry.Player < 0 || (lobby.IsHost && entry.Player >= 1))
+                {
+                    rows.Add(new OriginalRow(key, entry.Text, OriginalRowKind.ListRow, ListX, ListY + (slot * ListPitch),
+                        NameWidth + ListPitch, ListPitch, true, 0, null));
+                }
+            }
+        }
+
+        rows.Add(_text.Strip(BootKey, SmallArt, 19f, 325f, PickedPeer >= 0, 0, 74f, 37f));
+        rows.Add(_text.Strip(TeamKey, LargeArt, 105f, 325f, lobby is { Ready: false } && !_outlaw.IsOpen, 0, 131f, 37f));
         rows.Add(new OriginalRow(ReadyKey, string.Empty, OriginalRowKind.Radio, 250f, 325f, 58f, 37f,
             lobby is { HasOptions: true }, 0, new BoardArt(BoardArtLibrary.Ui, ReadyArt, 8)));
         rows.Add(Box(ChatKey, _chat, 88f, 552f, 481f, 18f, lobby != null, 0));
@@ -871,10 +1220,26 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         rows.Add(Drop(TypeKey, TypeWord(options.MissionType), PageX + 25f, PageY + 108f, 175f, 22f, live));
         rows.Add(_text.Strip(LaunchKey, LargeArt, PageX + 47f, PageY + 284f, lobby.CanLaunch, 1, 131f, 37f));
         rows.Add(Check(TimeRadioKey, RadioArt, PageX + 241f, PageY + 70f, 120f, 12f, live));
-        rows.Add(Box(TimeKey, BoxText(TimeKey, lobby), PageX + 370f, PageY + 68f, 73f, 18f, live && options.Victory == DogfightVictory.Time));
+        rows.Add(Box(TimeKey, BoxText(TimeKey, lobby), PageX + 370f, PageY + 68f, 73f, 18f, live && DogfightLobby.Arms(options.Victory, DogfightVictory.Time)));
         rows.Add(Check(ScoreRadioKey, RadioArt, PageX + 241f, PageY + 92f, 120f, 12f, live));
-        rows.Add(Box(ScoreKey, BoxText(ScoreKey, lobby), PageX + 370f, PageY + 92f, 73f, 18f, live && options.Victory == DogfightVictory.Score));
-        rows.Add(Check(TeamsKey, CheckArt, PageX + 241f, PageY + 133f, 180f, 11f, false));
+        rows.Add(Box(ScoreKey, BoxText(ScoreKey, lobby), PageX + 370f, PageY + 92f, 73f, 18f, live && DogfightLobby.Arms(options.Victory, DogfightVictory.Score)));
+        // Capture the Flag and Zeppelin vs Zeppelin fix the team count at two, as their type change's
+        // mail(5) and mail(1109) do. The remake's own-flag-home option stands under the boxes.
+        bool ctf = DogfightLobby.IsCtf(options);
+        bool fixedTeams = DogfightLobby.FixesTeams(options);
+        rows.Add(Check(TeamsKey, CheckArt, PageX + 241f, PageY + 133f, 180f, 11f, live && !fixedTeams));
+        bool counts = live && options.RestrictTeams && !fixedTeams;
+        if (ctf)
+        {
+            rows.Add(Check(FlagHomeKey, CheckArt, PageX + 241f, PageY + 177f, 180f, 11f, live));
+        }
+
+        rows.Add(Box(MinTeamsKey, BoxText(MinTeamsKey, lobby), PageX + 300f, PageY + 150f, 42f, 22f, counts));
+        rows.Add(Arrow(TeamArrowPrefix + "MIN+", UpArt, PageX + 342f, PageY + 150f, counts && options.MinTeams < options.MaxTeams));
+        rows.Add(Arrow(TeamArrowPrefix + "MIN-", DownArt, PageX + 342f, PageY + 161f, counts && options.MinTeams > 0));
+        rows.Add(Box(MaxTeamsKey, BoxText(MaxTeamsKey, lobby), PageX + 387f, PageY + 150f, 42f, 22f, counts));
+        rows.Add(Arrow(TeamArrowPrefix + "MAX+", UpArt, PageX + 429f, PageY + 150f, counts && options.MaxTeams < DogfightLobby.MaxTeams));
+        rows.Add(Arrow(TeamArrowPrefix + "MAX-", DownArt, PageX + 429f, PageY + 161f, counts && options.MaxTeams > options.MinTeams));
         rows.Add(Check(LimitedLivesKey, CheckArt, PageX + 241f, PageY + 192f, 110f, 11f, live));
         rows.Add(Box(LivesKey, BoxText(LivesKey, lobby), PageX + 360f, PageY + 193f, 25f, 22f, live && options.LimitedLives));
         rows.Add(Check(AutoRespawnKey, CheckArt, PageX + 241f, PageY + 207f, 110f, 11f, live));
@@ -973,7 +1338,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                         items[i] = EnvironmentWord(i);
                     }
 
-                    return new DropdownList(items, lobby.Options.Environment, _ => true, i => lobby.SetEnvironment(i));
+                    return new DropdownList(items, lobby.Options.Environment,
+                        i => DogfightLobby.Offers((DogfightMissionType)lobby.Options.MissionType, i), i => lobby.SetEnvironment(i));
                 }
 
             case TypeKey:
@@ -1097,20 +1463,34 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         var lobby = Lobby;
         var players = lobby?.Players ?? Array.Empty<DogfightLobbySeat>();
         layers.Lines.Add(_text.Line(10046, "MULTIPLAYER LOBBY", 60f, 22f, 0f, Black));
-        string count = _text.Strings.Format(10048, players.Count, NetSeats.MaxPlayers);
+        int cap = _net()?.SessionCap ?? NetSeats.MaxPlayers;
+        string count = _text.Strings.Format(10048, players.Count, cap);
         layers.Lines.Add(_text.Line(10048, string.Empty, 34f, 54f, 0f, Black,
-            text: count.Length > 0 ? count : $"Players ({players.Count} of {NetSeats.MaxPlayers})"));
+            text: count.Length > 0 ? count : $"Players ({players.Count} of {cap})"));
         layers.Lines.Add(_text.Line(10052, "Ready", 256f, 54f, 0f, Black));
         var face = _text.Regular(10575);
         float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
         var mark = new BoardArt(BoardArtLibrary.Ui, MarkArt, 4);
-        for (int i = 0; i < players.Count && i < VisiblePlayers; i++)
+        var entries = lobby != null ? ListEntries(lobby) : new List<ListEntry>();
+        for (int slot = 0; slot < entries.Count && slot < VisiblePlayers; slot++)
         {
-            float y = ListY + (i * ListPitch);
-            var colour = lobby != null && i == lobby.You ? OwnName : Black;
-            layers.Lines.Add(new BoardLine(players[i].Name, ListX + 2f, y + ((ListPitch - size) / 2f), NameWidth - 4f, size,
+            var entry = entries[slot];
+            float y = ListY + (slot * ListPitch);
+            if (entry.Player < 0)
+            {
+                // A team row takes its team's colour, the table the original indexes by team slot.
+                uint rgb = NetSeats.SeatColor((entry.Team - 1) % NetSeats.SeatCapacity);
+                var tint = new BoardTint((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
+                layers.Lines.Add(new BoardLine(entry.Text, ListX + 2f, y + ((ListPitch - size) / 2f), NameWidth - 4f, size,
+                    BoardInk.Row, -1, Face: face, Colour: tint));
+                continue;
+            }
+
+            float indent = entry.Team != 0 ? MemberIndent : 0f;
+            var colour = lobby != null && entry.Player == lobby.You ? OwnName : Black;
+            layers.Lines.Add(new BoardLine(entry.Text, ListX + 2f + indent, y + ((ListPitch - size) / 2f), NameWidth - 4f - indent, size,
                 BoardInk.Row, -1, Face: face, Colour: colour));
-            layers.Pictures.Add(new BoardPicture(mark, ListX + NameWidth, y + 6f, players[i].Ready ? 3 : 1));
+            layers.Pictures.Add(new BoardPicture(mark, ListX + NameWidth, y + 6f, players[entry.Player].Ready ? 3 : 1));
         }
     }
 
@@ -1137,6 +1517,37 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     // One widget in its state, and the words the script writes beside it.
     private void ComposeWidget(OriginalRow row, bool focused, bool pressed, BoardLayers layers)
     {
+        // A player row's name is the list's own line, so the row draws only its pick and focus.
+        if (OriginalWidgets.Indexed(row.Key, PlayerKeyPrefix) is { } listed)
+        {
+            if (Lobby is { } lobby && lobby.PeerAt(listed) is var peer and >= 0 && peer == _picked)
+            {
+                layers.Fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, PickedRow.R, PickedRow.G, PickedRow.B));
+            }
+
+            if (focused)
+            {
+                layers.Fills.Add(_host.FocusMark(row));
+            }
+
+            return;
+        }
+
+        if (OriginalWidgets.Indexed(row.Key, TeamRowKeyPrefix) is { } team)
+        {
+            if (team != 0 && team == PickedTeam)
+            {
+                layers.Fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, PickedRow.R, PickedRow.G, PickedRow.B));
+            }
+
+            if (focused)
+            {
+                layers.Fills.Add(_host.FocusMark(row));
+            }
+
+            return;
+        }
+
         switch (row.Kind)
         {
             case OriginalRowKind.TextButton:
@@ -1234,8 +1645,10 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         var options = lobby?.Options;
         bool on = row.Key switch
         {
-            TimeRadioKey => options?.Victory == DogfightVictory.Time,
-            ScoreRadioKey => options?.Victory == DogfightVictory.Score,
+            TimeRadioKey => options is { } time && DogfightLobby.Arms(time.Victory, DogfightVictory.Time),
+            ScoreRadioKey => options is { } score && DogfightLobby.Arms(score.Victory, DogfightVictory.Score),
+            TeamsKey => options?.RestrictTeams == true,
+            FlagHomeKey => options?.FlagHomeToCapture == true,
             LimitedLivesKey => options?.LimitedLives == true,
             AutoRespawnKey => options?.AutoRespawn == true,
             CustomPlanesKey => lobby?.Rules.AllowCustom == true,
@@ -1250,6 +1663,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             TimeRadioKey => (10105, "Time (mins):"),
             ScoreRadioKey => (10107, "Score"),
             TeamsKey => (10108, "Restrict Number of Teams"),
+
+            // No langui row words it, so the fallback is always what shows.
+            FlagHomeKey => (-1, "Own Flag Home to Capture"),
             LimitedLivesKey => (10110, "Limited Lives"),
             AutoRespawnKey => (10111, "Auto Respawn"),
             CustomPlanesKey => (10112, "Allow Custom Planes"),
@@ -1266,7 +1682,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         {
             float lift = row.Key == AutoRespawnKey ? 3f : 2f;
             layers.Lines.Add(_text.Line(id, word, row.X + (row.Key is TimeRadioKey or ScoreRadioKey ? 25f : 20f), row.Y - lift, 0f,
-                row.Enabled || row.Key is TimeRadioKey or ScoreRadioKey or LimitedLivesKey or AutoRespawnKey or CustomPlanesKey or OutlawKey
+                row.Enabled || row.Key is TimeRadioKey or ScoreRadioKey or TeamsKey or FlagHomeKey or LimitedLivesKey or AutoRespawnKey or CustomPlanesKey or OutlawKey
                     ? Black
                     : TabDisabled));
         }
@@ -1288,7 +1704,12 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             GunsTabKey => (10120, "Guns"),
             RocketsTabKey => (10121, "Rockets"),
             BootKey => (10054, "Boot"),
-            TeamKey => (10056, "Create Team"),
+            TeamKey => Lobby is { } lobby ? TeamButton(lobby) switch
+            {
+                TeamButtonAction.Leave => (10058, "Leave Team"),
+                TeamButtonAction.Join => (10057, "Join Team"),
+                _ => (10056, "Create Team"),
+            } : (10056, "Create Team"),
             SendKey => (10061, "Send"),
             LeaveKey => (10062, "Leave Game"),
             _ => (0, string.Empty),
@@ -1358,15 +1779,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         layers.Lines.Add(_text.Line(10100, "Lives", PageX + 241f, PageY + 170f, 0f, Black));
         layers.Lines.Add(_text.Line(10101, "Planes", PageX + 241f, PageY + 227f, 0f, Black));
 
-        // The team count spinners, greyed with the checkbox they belong to.
-        foreach (float x in new[] { PageX + 300f, PageX + 387f })
-        {
-            layers.Fills.Add(new BoardFill(x, PageY + 150f, 42f, 22f, 181, 174, 156));
-            layers.Fills.Add(new BoardFill(x, PageY + 150f, 42f, 22f, 0, 0, 0, Border: true));
-            layers.Lines.Add(_text.Line(10105, string.Empty, x, PageY + 154f, 30f, TabDisabled, BoardJustify.Center, "2"));
-        }
-
-        layers.Lines.Add(_text.Line(10109, "to", PageX + 360f, PageY + 154f, 0f, Black));
+        // The team count boxes are widgets; "to" stands between them, 20 left of the second.
+        layers.Lines.Add(_text.Line(10109, "to", PageX + 367f, PageY + 154f, 0f, Black));
     }
 
     private void ComposePlane(DogfightLobby lobby, BoardLayers layers)
@@ -1405,8 +1819,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         }
     }
 
-    // The scores page: the headers over the last match's lines, best first. Hits % stays blank,
-    // since no end counts a pilot's hits.
+    // The scores page: the headers over the last match's lines, best first. A team match lists
+    // each team's line with its pilots indented under it. Hits % stays blank, since no end counts a
+    // pilot's hits.
     private void ComposeScores(DogfightLobby lobby, BoardLayers layers)
     {
         for (int i = 0; i < ScoreHeaderIds.Length; i++)
@@ -1415,11 +1830,13 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         }
 
         var scores = lobby.Scores;
+        bool teams = System.Linq.Enumerable.Any(scores, line => line.IsTeam);
         for (int i = 0; i < scores.Count && i < VisiblePlayers; i++)
         {
             float y = PageY + 69f + (ListPitch * i);
             var line = scores[i];
-            layers.Lines.Add(_text.Line(10575, string.Empty, PageX + 24f, y, 150f, Black, text: line.Name));
+            float indent = teams && !line.IsTeam ? 12f : 0f;
+            layers.Lines.Add(_text.Line(10575, string.Empty, PageX + 24f + indent, y, 150f - indent, Black, text: line.Name));
             int[] numbers = { line.Points, line.Kills, line.Deaths };
             for (int column = 0; column < numbers.Length; column++)
             {
@@ -1478,6 +1895,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
         layers.Overlays.Add(new BoardPanel(fills, Array.Empty<BoardPicture>(), lines));
     }
+
+    private readonly record struct ListEntry(byte Team, int Player, string Text);
 
     private sealed record DropdownList(IReadOnlyList<string> Items, int Current, Func<int, bool> Allowed, Action<int> Select);
 }

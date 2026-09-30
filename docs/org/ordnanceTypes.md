@@ -1281,12 +1281,28 @@ stale handle behind. `FUN_004b1630` is the mirror without a callback: release `+
 `+0x6c8` is empty and `def+0x18c` (`spin_props_anim`) is set, start that into `+0x6c8`. Both keys are
 authored, parsed by `FUN_00479240` at `0x0047b13c` and `0x0047b163` from the strings at `0x006280dc`
 and `0x006280ec` and resolved by name through `FUN_00523820`. Twenty-three defs author the pair: 21
-name `spinprops`, the two autogyro chains name `agyro_rotors`, and all 23 name `stopprops`.
+name `spinprops`, the two autogyro chains name `agyro_rotors`, and all 23 name `stopprops`. Through
+`kind_of` that covers 71 of `vehicle.zrd`'s 75 defs: 65 resolve `spinprops`/`stopprops`, the six
+autogyro defs (`pautogyro`, `autogyro`, `secgyro`, `bhatgyro`, `rautogyro`, `wautogyro`) resolve
+`agyro_rotors`/`stopprops`, and the four that resolve neither are the two base defs
+`basic_airplane` and `player_airplane` and the two hulls `patrolboat` and `t_truck`.
+
+**The start runs the definition's `RESET_STATE` first.** `FUN_004edda0` reaches the definition start
+`FUN_004ed8c0`, which calls `FUN_004ed340(def, 0, …)` before it queues the instance whenever bit
+`0x20` of the definition's flag word `+0x9c` is set, the bit a `RESET_TIME` key sets
+([compiled-archives.md](../formats/anim-definitions/compiled-archives.md)); that call steps the
+reset body at `+0xd0`. All three propeller definitions author `RESET_TIME`, but only `agyro_rotors`
+carries a `RESET_STATE`, and it is the only place that definition activates `prop1`, `prop1b`,
+`rotor1` and `rotor1b` (its sequences deactivate `nitroprop1`, `staticprop1` and `staticrotor1` and
+spin the four discs). So an autogyro coming out of a choke gets its propeller back from that reset.
 
 **A choke therefore sounds and looks like more than a definition swap.** `stopprops`
 (`plane_props.zrd.json`) is a one-shot: a `SOUND` event on `snd_propstop`, `staticprop1` through
 `staticprop3` activated and faded from 0 to 1 opacity over 2.0 s, and `prop1`/`prop1b` through
-`prop3`/`prop3b` faded from 1 to 0 over 1.5 s and then deactivated. `snd_propstop` is
+`prop3`/`prop3b` faded from 1 to 0 over 1.5 s and then deactivated. Its `slow_rotorN` sequences
+turn each `staticpropN` down to rest: `XYZ_ROTATION` `0,0,800` decelerating by 400 over 2.0 s, a
+0.5 s swing back and a 0.25 s settle. `spinprops` touches no transform, so in CSVM a respawn leaves
+that angle as it is and the still blade shows at its resting angle the next time it appears. `snd_propstop` is
 `propstop.wav`, `PURGEABLE` (not looped), `3D`, range 200 to 420, so
 it plays positionally at the choked aircraft whoever is flying it. The blur discs cross-fade to a
 still blade over a second and a half while slot 0 is silent: the same edge stops the engine loop, and
@@ -1297,7 +1313,9 @@ still blade over a second and a half while slot 0 is silent: the same edge stops
 activates `propN`/`propNb`, deactivates `staticpropN` and `nitropropN`, and starts an endless
 `XYZ_ROTATION` of `0,0,-220` on each `propN` and `0,0,60` on each `propNb`. The install's
 `startprops`, which does carry `snd_propstart` and a three-stage spin-up ramp, is named by no def and
-appears as no string in the image, so nothing in the retail game plays it.
+appears as no string in the image, so nothing in the retail game plays it. No mission animation,
+cutscene or objective names it either: every scripted scene that starts propellers calls
+`spinprops`. CSVM keeps `startprops` loadable in the crash rig beside the pair and plays it nowhere.
 
 **Neither function touches thrust, particles or the engine loop.** The thrust cut is the flight
 model's own read of the mask bit (`0x0048fdd0`, [flightModel.md](flightModel.md)), the loop swap is
@@ -1334,20 +1352,30 @@ spin at build time comes from the `start_anims` tail rather than from the mask s
 `FUN_004b1580` releases both slots without playing anything, and the anim teardown `FUN_0047b9c0`
 reaches it.
 
-**CSVM runs the pair on both of the choke's edges.** `FlightController.TryChokeEngine` plays
-`stopprops` through `CrashRuntime` on the rising edge and `SimStep` plays `spinprops` when the
+**CSVM runs the pair on both of the choke's edges.** The pair is the airframe def's own
+(`PlaneStats.SpinPropsAnim`/`StopPropsAnim`, read down the chain the vehicle spawns as, with
+`spinprops`/`stopprops` for a chain naming none), and the crash rig binds it beside the fixed
+propeller definitions. `FlightController.TryChokeEngine` plays the stop definition through
+`CrashRuntime` on the rising edge and `SimStep` plays the spin definition when the
 engine-out timer clears, the same `Play`/`Stop` call shape the nitro edges use, on the human rig and
-the AI one alike, and `PlaneBuilder` keeps `staticpropN` in the flight build for it. `spinprops` runs
+the AI one alike, and `PlaneBuilder` keeps `staticpropN` in the flight build for it. Both are played
+with their `RESET_STATE`, as the original's start runs it. The spin definition runs
 with its `OBJECT_MOTION` suppressed (`AnimRuntime.SuppressedMotionAnims`), because `PropAnimator`
 already turns those discs procedurally at the same `-220`/`60` rates and two writers on one transform
 is one too many; the restart also puts the discs' opacity back, which the wind-down took to zero and
 the definition itself never writes. The stop call refuses while the stopped presentation already
 holds the slot, which is the original's own `+0x6cc` occupancy test, and is what keeps a choked
-aircraft's later crash from replaying the fade and re-firing `snd_propstop`. The sites that reach
-`start_anims` need no new call here: mission start and the airframe swap both build their aircraft
-through `HumanFlightAdapter.Assemble` or `AiFlightAssembler`, which replay the spawn choreography
-already. CSVM plays `startprops` there where the original plays `spinprops`, a divergence in the
-spawn sound rather than in the choke.
+aircraft's later crash from replaying the fade and re-firing `snd_propstop`.
+
+**The spawn is the `start_anims` tail, so it is the spin definition too**, `agyro_rotors` on an
+autogyro and `spinprops` on every other airframe. `FlightController.Respawn` plays
+it on every respawn and activation, and `SpinPropsAtSpawn` plays it on the first spawn once
+`HumanFlightAdapter.Assemble` or `AiFlightAssembler` has attached the crash rig. Mission start,
+Instant Action, the airframe swap and every wake therefore open on the blur discs at once, with no
+spin-up, no smoke and no `snd_propstart`, and the own-ship `FlightAudio` plays no `snd_propstart`
+either. The scripted-path handoff (`FUN_0048a110`) never reaches `FUN_004b0f40`, so
+`FlightController.ReleaseHeld` hands a path vehicle to the flight model without a respawn and plays
+nothing.
 
 **The death runs it from the once-per-death shutdown, beside the cue.** `EndFlightSystems` is the
 one site that ends a spent aircraft's flight systems, so `FlightAudio.OnEngineStop` and the
@@ -1357,10 +1385,12 @@ shot down, rammed or flown into the world, and whether or not its airframe def b
 That is also the original's order, the death routine's own `stopprops` call standing ahead of the
 def's destroy anim, so the destroy choreography deactivates the healthy hull's propeller nodes over
 a wind-down that has already run rather than being undone by it. A wreck's ground contact raises
-nothing further, its death having already spent the slot. `Respawn` takes `stopprops` off the slot
-before it replays `startprops`, or a hull that went down with its propellers stopped would fly again
-with the stop definition still fading `staticpropN` in under the start one fading it out. The suite
-is `prop-slot-edges`.
+nothing further, its death having already spent the slot. `Respawn` takes the stop definition off
+the slot before it plays the spin definition, or a hull that went down with its propellers stopped
+would fly again with the stop definition still fading `staticpropN` in over the spinning discs. The
+suites are `prop-slot-edges`, `spawn-props-silent`, `spawn-props-by-def` (the autogyro's
+`agyro_rotors` beside a Warhawk's `spinprops`, through a choke) and, for the handoff,
+`campaign-cabbie-run`.
 
 ## Two answers this routine gives to other items
 
@@ -1533,7 +1563,10 @@ engine sees; its per-polygon test (`FUN_004c9a00`) was not opened.
   installer `FUN_004ee160`, the death routine `FUN_004b82d0`, the spawn/reset `FUN_0047b790` and the
   slot teardown `FUN_004b1580`; their two def keys were traced from the parse sites at `0x0047b13c`
   and `0x0047b163` to the authored `spinprops`/`stopprops`/`agyro_rotors` names in the shipped data,
-  so "What the mask's bit-2 edges run" is decoded rather than inferred from the names.
+  so "What the mask's bit-2 edges run" is decoded rather than inferred from the names. The start
+  `FUN_004edda0` → `FUN_004edc50` → `FUN_004ed8c0` and its reset step `FUN_004ed340` were read for
+  the `RESET_STATE` paragraph; the step's inner walker `FUN_004ecbb0` was not opened, and its role
+  is read from `docs/org/sequences.md`'s account of the `+0xd0` reset body.
   `FUN_0048f5e0` **was** read in full, along with the surface integrator `FUN_0048f7d0` that damps
   the rate pair it writes and the def parser at `0x0047af60`..`0x0047afc6` that builds `+0xa0` from
   `mass`, so the knockback above is read rather than inferred. That `mode` `tank` ships nowhere

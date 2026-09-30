@@ -73,15 +73,21 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// in place of <see cref="RemoteChipMark"/>.</summary>
     public const string ReadyChipMark = " ready";
 
-    // The multiplayer door's five rows, in the order they are drawn. Two fields a player edits,
-    // two ways a socket opens, and the way on to the map. The door's own state is the feature's;
-    // these are this screen's row numbers alone.
+    // The multiplayer door's ten rows, in the order they are drawn. Two fields a player edits,
+    // two ways a socket opens, and the way on to the map. Then the original's Game and Player
+    // Information: the game's name, password and cap, and the callsign and voice. The door's own
+    // state is the feature's; these are this screen's row numbers alone.
     private const int NetPortRow = 0;
     private const int NetAddressRow = 1;
     private const int NetHostRow = 2;
     private const int NetJoinRow = 3;
     private const int NetContinueRow = 4;
-    private const int NetworkRows = 5;
+    private const int NetGameNameRow = 5;
+    private const int NetPasswordRow = 6;
+    private const int NetPlayersRow = 7;
+    private const int NetCallsignRow = 8;
+    private const int NetVoiceRow = 9;
+    private const int NetworkRows = 10;
 
     // Base metrics at 720p, scaled up on taller viewports (like StuntScoreboard). All TUNE.
     private const int TitleFont = 40;
@@ -328,6 +334,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // A character reached a plane's name since the last frame, so the menu owes a redraw that no
     // polled input asked for.
     private bool _typed;
+    private bool _netSeeded;
     // The hangar page's art, as the one texture the shell owns: rebuilt only when
     // the page hands over a different decoded image, since Rebuild runs on every keypress.
     private TgaImage? _hangarArtSource;
@@ -1041,7 +1048,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         // every other seat's frame is read from its own source. Text capture is set before the
         // poll: the PLANENAME screen's letter aliases must be dead for the frame that reads them.
         var seat = _host.Seats[0];
-        seat.CapturingText = NamePage() != null || AddressField() != null;
+        seat.CapturingText = NamePage() != null || AddressField() != null || NetNameRow() >= 0;
         Apply(WithPointer(seat.Poll((float)delta)));
         for (int i = 1; i < _slots.Count; i++)
             _slots[i].Frame = _slots[i].Seat.Source.Poll((float)delta);
@@ -1103,6 +1110,12 @@ public sealed partial class LaunchMenu : CanvasLayer
         if (AddressField() is { } net)
         {
             TypeAddress(net, key);
+            return;
+        }
+
+        if (NetNameRow() is var nameRow and >= 0 && _net is { } door)
+        {
+            TypeNetName(door, nameRow, key);
             return;
         }
 
@@ -1763,15 +1776,28 @@ public sealed partial class LaunchMenu : CanvasLayer
                     default: return false;
                 }
             case Screen.Network:
-                // The port is the door's one stepper. The address is typed, and the three rows
-                // under it are presses.
-                if (_coopWait || _netIndex != NetPortRow)
+                // The port, the cap and the voice step. The address and the names are typed, and
+                // the three rows under the address are presses.
+                if (_coopWait || _net is not { } door)
                 {
                     return false;
                 }
 
-                _net?.StepPort(dir);
-                return true;
+                switch (_netIndex)
+                {
+                    case NetPortRow:
+                        door.StepPort(dir);
+                        return true;
+                    case NetPlayersRow:
+                        door.MaxPlayers = NetPlayerInfo.ClampPlayers(NetSessionKind.Dogfight, ShownCap(door) + dir);
+                        return true;
+                    case NetVoiceRow:
+                        int voices = PilotVoices.All.Count;
+                        door.Voice = (((PilotVoices.Clamp(door.Voice) + dir) % voices) + voices) % voices;
+                        return true;
+                    default:
+                        return false;
+                }
             case Screen.Chapter:
                 // Only the two Dogfight rows under the map list step; a map row has nothing
                 // sideways, and MatchRowCount is 0 in the other two modes.
@@ -1892,6 +1918,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 
                 if (_modeIndex == Modes.Length + 3)
                 {
+                    SeedNetInfo();
                     _screen = Screen.Network;
                     _netIndex = _net is { Stage: NetDoorStage.Shut } or null ? NetHostRow : NetContinueRow;
                     break;
@@ -1998,6 +2025,80 @@ public sealed partial class LaunchMenu : CanvasLayer
     private NetPlayFeature? AddressField() =>
         _screen == Screen.Network && !_coopWait && _netIndex == NetAddressRow ? _net : null;
 
+    // The door's name row under the cursor, the game's name, its password or the callsign, or -1.
+    private int NetNameRow() =>
+        _screen == Screen.Network && !_coopWait && _net != null
+        && _netIndex is NetGameNameRow or NetPasswordRow or NetCallsignRow ? _netIndex : -1;
+
+    // The door takes what the options remember once, before the board or the campaign's door
+    // first shows it. Original's boxes open on the same answers.
+    private void SeedNetInfo()
+    {
+        if (_netSeeded || _net is not { } net)
+        {
+            return;
+        }
+
+        _netSeeded = true;
+        net.Take(NetPlayerInfo.Remembered(OptionsStore.UserOptions().Load()), game: true);
+    }
+
+    // A host or a join keeps the callsign, the voice and the game's name for the next session.
+    private void RememberNetInfo(NetPlayFeature net)
+    {
+        var store = OptionsStore.UserOptions();
+        var saved = store.Load();
+        new NetPlayerInfo { Callsign = net.PlayerName, Voice = PilotVoices.Clamp(net.Voice), GameName = net.GameName }
+            .Remember(saved, game: true);
+        store.Save(saved);
+    }
+
+    // One keypress into a name row, under the Original boxes' limits and character rule.
+    private void TypeNetName(NetPlayFeature net, int row, InputEventKey key)
+    {
+        string text = row switch
+        {
+            NetGameNameRow => net.GameName,
+            NetPasswordRow => net.Password,
+            _ => net.PlayerName,
+        };
+        int limit = row switch
+        {
+            NetGameNameRow => NetPlayerInfo.GameNameLimit,
+            NetPasswordRow => NetPlayerInfo.PasswordLimit,
+            _ => NetPlayerInfo.CallsignLimit,
+        };
+
+        string before = text;
+        if (key.Keycode == Key.Backspace)
+        {
+            text = text.Length > 0 ? text[..^1] : text;
+        }
+        else if (key.Unicode > 0 && NetPlayerInfo.Takes((char)key.Unicode) && text.Length < limit)
+        {
+            text += (char)key.Unicode;
+        }
+
+        switch (row)
+        {
+            case NetGameNameRow:
+                net.GameName = text;
+                break;
+            case NetPasswordRow:
+                net.Password = text;
+                break;
+            default:
+                net.PlayerName = text;
+                break;
+        }
+
+        if (text != before)
+        {
+            _typed = true;
+            GetViewport().SetInputAsHandled();
+        }
+    }
+
     // One keypress into the address. Redrawn on the next frame rather than here, because Rebuild
     // replaces the very controls the event is being dispatched through.
     private void TypeAddress(NetPlayFeature net, InputEventKey key)
@@ -2048,11 +2149,13 @@ public sealed partial class LaunchMenu : CanvasLayer
                 HandleMoveX(1);
                 break;
             case NetHostRow:
+                RememberNetInfo(net);
                 net.OpenHost(NetSeats.MaxPlayers - 1);
                 _netIndex = net.Stage == NetDoorStage.Hosting ? NetContinueRow : NetHostRow;
                 _error = net.Fault;
                 break;
             case NetJoinRow:
+                RememberNetInfo(net);
                 net.OpenJoin();
                 _error = net.Fault;
                 break;
@@ -2660,6 +2763,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             return;
         }
 
+        SeedNetInfo();
         net.Close();
         net.OpenCoopHost(NetSeats.MaxPlayers - _slots.Count);
         OfferCoopMission(flow);
@@ -4154,13 +4258,23 @@ public sealed partial class LaunchMenu : CanvasLayer
     // does go. The waiting board's one row replaces all five.
     private string NetworkRowText(int index) => _coopWait ? CoopDoorText.LeaveRow : index switch
     {
-        NetPortRow => $"Port            {(_net?.Port ?? NetPlayFeature.DefaultPort).ToString(CultureInfo.InvariantCulture)}",
+        NetPortRow => $"Port            {(_net?.Port ?? NetPorts.Game).ToString(CultureInfo.InvariantCulture)}",
         NetAddressRow => $"Address         {_net?.Address ?? NetPlayFeature.DefaultAddress}",
         NetHostRow => "Host a match",
         NetJoinRow => "Join that address",
+        NetGameNameRow => $"Game name       {_net?.GameName}",
+        NetPasswordRow => $"Password        {new string('*', _net?.Password.Length ?? 0)}",
+        NetPlayersRow => $"Max players     {(_net is { } door ? ShownCap(door) : NetPlayerInfo.DefaultPlayers).ToString(CultureInfo.InvariantCulture)}",
+        NetCallsignRow => $"Callsign        {_net?.PlayerName}",
+        NetVoiceRow => $"Voice           {PilotVoices.All[PilotVoices.Clamp(_net?.Voice ?? PilotVoices.Default)].Name}",
         _ when _net is { } net && net.IsCoopGuest => CoopDoorText.WaitRow,
         _ => "Continue → Map",
     };
+
+    // The cap the board's row shows: the chosen one inside the spinner's range, or a Dogfight's
+    // sixteen where none was chosen. A campaign door holds it to four when it opens.
+    private int ShownCap(NetPlayFeature door) =>
+        door.MaxPlayers > 0 ? NetPlayerInfo.ClampPlayers(NetSessionKind.Dogfight, door.MaxPlayers) : NetSeats.MaxPlayers;
 
     // The line under the door's rows: what the socket is doing, who is on it, and what the
     // router said. This is the whole readout, so a player who cannot fly can see why.
@@ -4428,7 +4542,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             // W/A/S/D are dead on the address row (MenuInput.TextEntry), so the arrows are named
             // alone, as the hangar's own name screen names them.
             Screen.Network when _coopWait => "↑↓  Navigate",
-            Screen.Network => "↑↓  Choose row       ←→  Port       Type / Backspace  Address",
+            Screen.Network => "↑↓  Choose row       ←→  Port, players, voice       Type / Backspace  Address, names",
             // Dogfight's map screen carries the two match rows, whose stepper is an unbound axis
             // nobody can guess at. Free Flight's map screen has nothing sideways and says so.
             Screen.Chapter when MatchRowCount > 0 => "↑↓  Choose map or rule       ←→  Change",

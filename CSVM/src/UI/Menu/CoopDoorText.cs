@@ -38,6 +38,24 @@ public static class CoopDoorText
     /// <summary>A guest's word when the host had no seat left for it.</summary>
     public const string GameFull = "The game is full";
 
+    /// <summary>A guest's word when the host booted it, or refused its return after a boot. The
+    /// original's own notice (langui 10500) names the player to the others instead.</summary>
+    public const string Booted = "You were booted from the game";
+
+    /// <summary>A guest's word when the host refused its password: the original's messagebox text
+    /// for a wrong password, MSG_DPERR_INVALIDPASSWORD (7041).</summary>
+    public const string WrongPassword = "Invalid Password";
+
+    /// <summary>A guest's word while a host that asks a password has not admitted it yet.</summary>
+    public const string AwaitingAdmission = "Waiting for the host to accept the password ...";
+
+    /// <summary>The games list's Status for a game that asks a password, the original's langui
+    /// 10141.</summary>
+    public const string NeedPassword = "Need Password";
+
+    /// <summary>The co-op host's cabin plaque that boots a guest.</summary>
+    public const string BootButton = "BOOT";
+
     /// <summary>The question a co-op guest's Back asks on the host's boards.</summary>
     public const string LeaveQuestion = "Leave the co-op session?";
 
@@ -56,25 +74,28 @@ public static class CoopDoorText
     /// <summary>The name a Dogfight host's own address notes stand under in its lobby chat.</summary>
     public const string NoteName = "Network";
 
-    /// <summary>The games list's Game Name: the host's name and what it holds open.</summary>
+    /// <summary>The games list's Game Name: the name the host's Game Information box gave it, or
+    /// what it holds open when the advert names none.</summary>
     public static string GameName(SessionAdvertMessage advert)
     {
-        string what = advert.Kind switch
+        if (advert.Host.Length > 0)
         {
-            NetSessionKind.CampaignCoop => "campaign",
-            NetSessionKind.Dogfight => "dogfight",
-            _ => "game",
+            return advert.Host;
+        }
+
+        return advert.Kind switch
+        {
+            NetSessionKind.CampaignCoop => "Campaign",
+            NetSessionKind.Dogfight => "Dogfight",
+            _ => "Game",
         };
-        return advert.Host.Length > 0 ? $"{advert.Host}'s {what}" : Capital(what);
     }
 
     /// <summary>The games list's # of Players, as "2/4". An advert naming no cap takes its kind's.
     /// </summary>
     public static string PlayerCount(SessionAdvertMessage advert)
     {
-        int cap = advert.Cap > 0
-            ? advert.Cap
-            : advert.Kind == NetSessionKind.CampaignCoop ? NetPlayFeature.CoopHumans : NetSeats.MaxPlayers;
+        int cap = advert.Cap > 0 ? advert.Cap : NetPlayerInfo.PlayerCap(advert.Kind);
         return $"{advert.Players.ToString(CultureInfo.InvariantCulture)}/{cap.ToString(CultureInfo.InvariantCulture)}";
     }
 
@@ -113,12 +134,15 @@ public static class CoopDoorText
     public static string Shortcode(SessionAdvertMessage advert) =>
         $"C{advert.Chapter.ToString(CultureInfo.InvariantCulture)}/M{advert.MissionInChapter.ToString("00", CultureInfo.InvariantCulture)}";
 
-    /// <summary>The games list's Status.</summary>
+    /// <summary>The games list's Status. A game that asks a password reads
+    /// <see cref="NeedPassword"/> unless it is full, as the original's list marks it
+    /// (FUN_00402f40).</summary>
     public static string Status(SessionAdvertMessage advert) => advert.Status switch
     {
+        NetSessionStatus.Full => "Full",
+        _ when advert.Password => NeedPassword,
         NetSessionStatus.Waiting => "Waiting",
         NetSessionStatus.InMission => "In mission",
-        NetSessionStatus.Full => "Full",
         _ => "",
     };
 
@@ -174,7 +198,7 @@ public static class CoopDoorText
                 : $"{linked}. Waiting for the host to start.";
         }
 
-        string session = $"{SessionName(advert, missionName)}, {HostedBy(advert)}{Players(advert.Players)}";
+        string session = $"{SessionName(advert, missionName)}, {GameCalled(advert)}{Players(advert.Players)}";
         return advert.Kind == NetSessionKind.CampaignCoop
             ? $"{linked}. {session}. Continue, and wait there for the host's launch."
             : net.HostStarted
@@ -195,7 +219,7 @@ public static class CoopDoorText
         string state = net.HostStarted
             ? "The host has launched the mission."
             : "Waiting for the host to launch the mission.";
-        return $"{SessionName(advert, missionName)}. {Capital(HostedBy(advert))}{Players(advert.Players)} at {net.Address}. {state}";
+        return $"{SessionName(advert, missionName)}. {Capital(GameCalled(advert))}{Players(advert.Players)} at {net.Address}. {state}";
     }
 
     /// <summary>A campaign host's band: the port, the router's address and the guests on the
@@ -371,16 +395,16 @@ public static class CoopDoorText
             return "";
         }
 
-        string host = net.Advert is { Host.Length: > 0 } advert ? advert.Host : "The host";
+        // The advert names the game rather than its host, so the band says "the host".
         string doing = flow.Screen switch
         {
-            NetCoopScreen.Briefing => $"{host} is on the briefing",
+            NetCoopScreen.Briefing => "The host is on the briefing",
             NetCoopScreen.FlightCheck => net.CoopReady
-                ? $"Ready, waiting for {host} to launch"
+                ? "Ready, waiting for the host to launch"
                 : "Pick your plane and ammo, then press Ready",
-            NetCoopScreen.InMission => $"{host} is in a mission; you fly from the next briefing",
+            NetCoopScreen.InMission => "The host is in a mission; you fly from the next briefing",
             NetCoopScreen.Debrief => flow.Won ? "Mission won" : "Mission failed",
-            _ => $"{host} is in the cabin",
+            _ => "The host is in the cabin",
         };
         return $"CO-OP  {doing}";
     }
@@ -388,8 +412,15 @@ public static class CoopDoorText
     /// <summary>What every player is told when a guest's link drops mid-mission.</summary>
     public static string Left(string name) => $"{(name.Length > 0 ? name : "A guest")} left";
 
-    private static string HostedBy(SessionAdvertMessage advert) =>
-        advert.Host.Length > 0 ? $"hosted by {advert.Host}, " : "";
+    /// <summary>The lobby chat's notice that a player was booted, the original's langui 10500.
+    /// </summary>
+    public static string BootedLine(string name) => $"[{(name.Length > 0 ? name : "A guest")} was booted from the game.]";
+
+    /// <summary>The co-op host's question before its cabin's BOOT removes a guest.</summary>
+    public static string BootQuestion(string name) => $"Boot {(name.Length > 0 ? name : "this guest")} from the game?";
+
+    private static string GameCalled(SessionAdvertMessage advert) =>
+        advert.Host.Length > 0 ? $"game {advert.Host}, " : "";
 
     private static string Capital(string text) =>
         text.Length > 0 ? char.ToUpperInvariant(text[0]) + text[1..] : text;

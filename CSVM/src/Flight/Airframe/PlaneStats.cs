@@ -299,6 +299,11 @@ public sealed class PlaneStats
     public SoundCurve EngineVolume = new(0.1f, 1f, 1f, 1f);
     public SoundCurve EnginePitch = new(0.1f, 0.6f, 1f, 1f);
 
+    /// <summary>player.json <c>voiceover_volume_limiter</c>, the level a voice line holds every
+    /// engine slot down to (<see cref="Audio.EngineVoiceDuck"/>). The fallback is the executable's
+    /// compiled 0.5; the install authors 0.4. Decode: docs/formats/vehicle.md.</summary>
+    public float VoiceoverVolumeLimiter = 0.5f;
+
     /// <summary>vehicle.json <c>cockpit_engine_sound</c>, the engine slot's def in the Cockpit
     /// (mode 6) and Nose (mode 7) views.
     /// Selected by <see cref="Audio.EngineAudioCurves.SelectsCockpitLoop"/> and
@@ -314,6 +319,15 @@ public sealed class PlaneStats
     public SoundCurve WhineVolume = new(1f, 0f, 1.1f, 0.5f);
     public SoundCurve WhinePitch = new(1f, 0.65f, 1.2f, 1.25f);
     public string RattleSound = "snd_planeshake";
+
+    /// <summary>vehicle.json <c>spin_props_anim</c>, the definition the spawn and the choke's restart
+    /// start on the propeller slot: <c>spinprops</c> on every fixed-wing chain, <c>agyro_rotors</c>
+    /// on the autogyro's. Null when the chain names none (docs/org/ordnanceTypes.md).</summary>
+    public string? SpinPropsAnim;
+
+    /// <summary>vehicle.json <c>stop_props_anim</c>, the wind-down the choke and the death start:
+    /// <c>stopprops</c> on every shipped chain. Null when the chain names none.</summary>
+    public string? StopPropsAnim;
 
     /// <summary>player.json <c>rattle.speed_range[0]</c>, the speed as a fraction of fd_speed the
     /// rattle loop starts at, and the whole of the original's law for it. ⚠ Do not add the block's
@@ -654,6 +668,19 @@ public sealed class PlaneStats
         stats.VehicleArmor = PropOpt("armor");
         stats.VehicleHealth = PropOpt("health");
 
+        // Off the def the vehicle spawns as, which is the record the original's two slot routines
+        // read at def+0x18c and def+0x190.
+        string? SpawnStr(string key)
+        {
+            foreach (var d in damageChain)
+                if (d.Str(key) is { Length: > 0 } s)
+                    return s;
+            return null;
+        }
+
+        stats.SpinPropsAnim = SpawnStr("spin_props_anim");
+        stats.StopPropsAnim = SpawnStr("stop_props_anim");
+
         // Off the damage chain, because the def the vehicle SPAWNS as is what the original copies
         // these off: an AI variant's own chain for an AI aeroplane, and the player chain, where
         // player_airplane authors the -300, for a flown one.
@@ -933,6 +960,7 @@ public sealed class PlaneStats
                 stats.WhineVolume = Curve(prop, "min_speed_volume", "max_speed_volume", stats.WhineVolume);
                 stats.WhinePitch = Curve(prop, "min_speed_pitch", "max_speed_pitch", stats.WhinePitch);
             }
+            stats.VoiceoverVolumeLimiter = player.Float("voiceover_volume_limiter", stats.VoiceoverVolumeLimiter);
             if (player.Dict("rattle") is { } rattle)
             {
                 stats.RattleSound = rattle.Str("sound") ?? stats.RattleSound;

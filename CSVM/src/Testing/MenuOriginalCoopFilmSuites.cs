@@ -71,6 +71,7 @@ internal static class MenuOriginalCoopFilmSuites
         var guestExits = new List<MenuExit>();
         End? host = null;
         End? guest = null;
+        string? options = MenuSuiteHost.ScratchOptions(ctx, Suite);
         try
         {
             host = Open(ctx, layout, hostDoor, hostStore, hostExits);
@@ -85,6 +86,7 @@ internal static class MenuOriginalCoopFilmSuites
             ctx.Check(host.Chapter.Plays == 0 && host.Shell.Screen == OriginalScreen.CampaignCabin,
                 $"a host seated inside a chapter opens the cabin with no film ({host.Chapter.Plays}, {host.Shell.Screen})");
             ClickRow(ctx, host, OriginalCampaignScreen.CoopDoorKey);
+            MenuSuiteHost.AnswerNetInfo(host.Shell, key => ClickRow(ctx, host, key), HostPilot);
             AwaitMapping(hostDoor);
             ClickRow(ctx, guest, OriginalShell.MultiplayerKey);
             guest.Door.OpenJoin();
@@ -103,6 +105,7 @@ internal static class MenuOriginalCoopFilmSuites
             hostDoor.Discard();
             guestDoor.Discard();
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
             MenuSuiteHost.DropScratchPlanes(ctx, Suite);
             if (Directory.Exists(root))
             {

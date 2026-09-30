@@ -337,9 +337,9 @@ also the pump `Utils/LoadProgress.cs` repaints through, installed for its own tr
 ## src/UI/Screens/LoadScreens.cs
 What the load screen is made of, engine-free. `LoadSheet` is the campaign screen's authored half,
 one `Loading.zrd` dialog with its mission's objectives and the seated profile's own memento; `LoadScreens`
-composes either that chart sheet, through `MissionMap` the way `PauseScreens` does, or the Instant
-Action blackboard with the four texts its own `loading_i` dialog places; `DialogTexts` takes that composition by file and key, so an Instant Action pause writes its `ia_escape.zrd` dialog's texts through it. The mission type picks the
-blackboard's dialog by the exe's own letter; free flight and dogfight are ours, so they write the
+composes that chart sheet, through `MissionMap` the way `PauseScreens` does, the Instant
+Action blackboard with the four texts its own `loading_i` dialog places, or a Dogfight's `loading_m` briefing as authored, keyed by `MultiplayerKey` (the original's environment number and mode letter); `DialogTexts` takes that composition by file and key, so an Instant Action pause writes its `ia_escape.zrd` dialog's texts through it. The mission type picks the
+blackboard's dialog by the exe's own letter; free flight is ours, so it writes the
 mode's name and nothing else. `LoadMotion` is the moving half, the fill strip and the six propeller frames the sheet's own `Cycle` beat names, `Moving` places those two at a fraction and a frame, the clipped fill and the propeller face a pump presents on their own layer, and `Painted` re-lays the same pair into `Overlays` for a caller composing a whole board, so the still composition under them is never rewritten. A pumped composition (`For`'s `pumped`) leaves the still propeller frame to that layer, the sheet's `Cycle` element excluded by identity, so a build shows one propeller; a still capture keeps the one still frame. An absent extraction yields the frame and the bar rather than
 throwing, since this screen is shown while everything else is still loading. The dialogs, the beat
 sheet and the face mapping: [../org/loading-screen.md](../org/loading-screen.md).
@@ -347,7 +347,7 @@ sheet and the face mapping: [../org/loading-screen.md](../org/loading-screen.md)
 ## src/UI/Boards/PauseScreens.cs
 What the Original presentation's pause screen is made of, engine-free: the frame behind it, the
 mission's chart at its authored source crop, the pins and icons its dialog's script places, the
-objectives parchment, the memento, and the labelled button strips, the block's four plus the remake's own PHOTO MODE at the place that block leaves free. An Instant Action sortie's dialog carries none of that and draws the load screen's blackboard instead, its four texts composed through `LoadScreens` and its parchment left off by the dialog's own script.
+objectives parchment, the memento, and the labelled button strips, the block's four plus the remake's own PHOTO MODE at the place that block leaves free. An Instant Action sortie's dialog carries none of that and draws the load screen's blackboard instead, its four texts composed through `LoadScreens` and its parchment left off by the dialog's own script; a Dogfight's `LoadMultiplayer` sheet is its mode's `escape.zrd` briefing, or `Loading.zrd`'s where that file numbers the row differently, with no propeller.
 `PauseSheet` is the authored half, read once per sortie, and `PauseReadout` the live half, read afresh on every
 pause: its memento is the seated profile's own picture, `Rows` marks a note line by the runtime's answer for that line's own objective number, and
 `Icon` turns one world pose into the chart icon a session and a suite place alike, through the
@@ -367,7 +367,7 @@ or mouse scheme takes hold before the resume, as do the head turn and targeting 
 ## src/UI/Overlays/MissionMap.cs
 The one chart drawer every screen showing a mission's map shares, engine-free: the sheet as a
 cropped picture, a reveal's visible elements as pictures in placement order over two layers, its
-connector lines as strokes, and one icon placed by world position through the map's own window,
+cycling element (`Cycle`), its connector lines as strokes, and one icon placed by world position through the map's own window,
 turned so its drawn nose reads against the compass: the heading, less however far that bitmap's own
 art is drawn off the top of the sheet. It exists as one module because the original reaches all of
 it through one control class from two dialog constructors, so the briefing, the pause screen and
@@ -503,7 +503,7 @@ there the last finish is the mission's win, and the director's hold and wrap-up 
 ## src/UI/Screens/VersusBoard.cs
 The Dogfight results overlay on `ResultsBoard`'s shell: the winner in their own
 `SplitScreen.PlayerColor`, or a draw on a tie, over one ranked row per player with tag, score,
-kills and deaths from `VersusMatch.Standings()`. Score is the ranked column, kills alone do not
+kills and deaths from `VersusMatch.Standings()`; a team match heads it with the winning team's name (`Title`) and ranked team rows. Score is the ranked column, kills alone do not
 explain it. Whole-window, because the match ends for everybody at once.
 Wakes on `MatchCompleted` and retires on the rematch; the rows are populated only from that
 completion, so they stay the ones the match ended with even after `Restart()` zeroes the live
@@ -1229,7 +1229,7 @@ caret, the inventory's plane line on the middle of the dashed box the background
 
 ## src/UI/Menu/Original/OriginalCampaignScreen.cs
 The Original campaign, one standalone module over the shared `CampaignFeature`: the profile screen,
-the cabin, the table of contents, the flight check, ammo and plane selection, the book, a scrap's
+the cabin (with a co-op host's HOST CO-OP and BOOT), the table of contents, the flight check, ammo and plane selection, the book, a scrap's
 zoom and the briefing. What each screen draws is the shared board component, so the module hosts
 the Built-in campaign pages in a `CampaignFlow` of its own and copies every composed layer into the
 board it hands back, the cabin's painting going down as backdrop so the mission pull-down's paper stands over it; that flow is never walked, its screen and cursor mirroring this module's. The
@@ -1244,14 +1244,14 @@ The original's Multiplayer Connection page and the LAN games list behind its Con
 `IOriginalScreenModule` over `NetPlayFeature`. The multiplayer scripts place their widgets inline,
 so every corner is the scripts' own rather than the layout's. Only LAN TCP/IP, which searches the
 network, and Internet, which joins the typed address, are offered; Build Custom Plane draws greyed,
-and Host and Create Game open `OriginalLobbyScreen` as a Dogfight's host. A join started here is followed on the shared messagebox over the page until it lands or
+and Host and Create Game open `OriginalLobbyScreen` as a Dogfight's host once the shell's `OriginalNetInfoBox` is answered, as every join is first. A join started here is followed on the shared messagebox over the page until it lands or
 fails. A game of another build version lists in grey with its version as its status, and Join
-Game refuses it in a box before any socket opens. Plaques draw as pictures, over a script's labels. The IP Address box cues each typed character and each paste with the edit box's keystroke or reject sound, and keeps the script's 150 pixels as a `KeepEnd` line that scrolls to the end of an IPv6 address.
+Game refuses it in a box before any socket opens. A game that asks a password reads Need Password, and its Player Information takes one. Plaques draw as pictures, over a script's labels. The IP Address box cues each typed character and each paste with the edit box's keystroke or reject sound, and keeps the script's 150 pixels as a `KeepEnd` line that scrolls to the end of an IPv6 address.
 The geometry and strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalLobbyScreen.cs
 The original's Multiplayer Lobby, one `IOriginalScreenModule` over the door's `DogfightLobby`, with its four tabs (Mission Options, Select Plane, Select Ammo, Game Scores) in the scripts' own placements and art.
-The host's option controls are live until it is Ready, a guest's are drawn greyed with the host's values, and what the lobby does not fly (Capture the Flag, the zeppelin mode, teams, Boot) draws greyed. The Lives box is live only while Limited Lives is ticked. Select... (View... on a guest) is live while Outlaw Components is ticked and stands `OriginalOutlawList` over the tab page with the tabs greyed.
+The host's option controls are live until it is Ready, a guest's are drawn greyed with the host's values, and all three types fly; Capture the Flag greys the two environments with no flags and the team count, and adds the own-flag-home box, and Zeppelin vs Zeppelin greys the team count. A host picks a guest's row in the player list, and Boot removes that guest. The player list draws each team's row over its members; the team button creates (standing `OriginalTeamBox`), joins the picked team row or leaves, while its pilot is not Ready. Restrict Number of Teams and its count boxes are live on the host, the victory radios arm Time, Score or both, and a refused LAUNCH! raises the original's 10518 to 10520 or the remake's own line. The Lives box is live only while Limited Lives is ticked. Select... (View... on a guest) is live while Outlaw Components is ticked and stands `OriginalOutlawList` over the tab page with the tabs greyed. A toggle of Outlaw Components empties the list.
 Every player picks a stock plane, or one of its saved custom planes while the host allows them, and its ammunition, live at all times. Ready is live once the options have been heard, and a refused Ready raises the original's langui 10517 dialog with each reason. `Land` stands a completed match's peers back here on Game Scores, which is greyed until then. LAUNCH! is live on the host once every row is Ready, and hands the shell a Versus `LaunchExit` on the environment's chapter with the lobby's rules and the door's wire; `GuestLaunch` is a guest's same exit once its host has launched.
 Leave Game closes the door and lands on the Connection page. The shell follows a Dogfight guest into this screen and out of it when the link ends. Geometry and strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
@@ -1259,6 +1259,14 @@ Leave Game closes the door and lands on the Connection page. The shell follows a
 The lobby's outlaw list pane, which `OriginalLobbyScreen` builds, draws and answers while it is open, and `OutlawRows`, the pure map from each of its five sub-tabs' rows to a `NetPlaneRules` flag and the string naming it.
 Every tick goes through `DogfightLobby.SetOutlawed`, so it starts a new round, clears every Ready and reaches every guest at once. Cancel restores the list the host opened with, and Accept only closes. The boxes are live only on a host that is not Ready, and a guest's pane has no Accept.
 An ammunition or rocket row reads ticked and ignores a click while its page's Outlaw All is set. Airframes and Rockets show four rows under a scroll bar. The decode: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+
+## src/UI/Menu/Original/OriginalNetInfoBox.cs
+The original's GAME INFORMATION and PLAYER INFORMATION boxes in their scripts' placements and art. `OriginalShell` stands them over whatever page asked (`AskNetInfo`), as it does a messagebox: their rows are the only rows, and a refusal's messagebox stands over them.
+A host answers Game Information (name, masked password, the Maximum spinner) and then Player Information (callsign, the Voice drop-down, a greyed password); a join answers Player Information alone, its password live when the game may ask one. OK is greyed on an empty name, and a name of spaces raises langui 10510 or 10511.
+The last OK hands a `NetPlayerInfo` to the door and the options. The Connection page's Host, Create Game and joins and the cabin's HOST CO-OP ask them. The decode: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+
+## src/UI/Menu/Original/OriginalTeamBox.cs
+The original's CREATE TEAM box in `MULTIPLAYERTEAMMODAL.SCRIPT`'s placements and art, which `OriginalLobbyScreen` stands over its page: while it is open its rows are the lobby's only rows. One Team Name box of 12 characters, OK greyed while it is empty, and Cancel. A name of spaces raises langui 10512 and empties the box; an accepted name goes back to the lobby, which creates the team through `DogfightLobby.CreateTeam`. The decode: [../org/multiplayer-messages.md](../org/multiplayer-messages.md), "Lobby teams".
 
 ## src/UI/Menu/Original/OriginalPresentation.cs
 The Original presentation node, registered under `PresentationId.Original`: a `CanvasLayer` on the board layer holding one
@@ -1382,6 +1390,12 @@ In co-op the door seats guests and keeps the round of picks. `ShowCoop` names th
 `ShowCoopFilm` and `EndCoopFilm` share the host's campaign films (`CoopFilm` is a guest's latest word). `OfferCoopHangar` hands `HostFlow` the hangar with each plane's holder and the plane each seat flies, `CoopGuestPlanes` is every guest's pick as the host heard it, and `CoopHangar` is a guest's latest hangar words. A guest's own pick is `Pick` (`CoopGuestPick.cs`), and `LeaveCoopMission` tells the host at once that it walked out.
 `Dogfight` is the `DogfightLobby` either end stands in, unshown behind a Built-in host; `DogfightLaunchDue` tells a guest its host has launched, and a guest back from a match waits for the next round. `Version` is `Net/NetBuildVersion.cs`: either end refuses the other's version, with both on `Fault`.
 A host reads `StableIpv6` and `LanIpv4` as it opens; `GuestAddress` is what a guest types, and `CopyGuestAddress` hands it to `CopyText` (the launcher's clipboard, on Ctrl+C). Boards: `LaunchMenu.cs`.
+`Take` holds what the Game and Player Information boxes answered (`NetPlayerInfo.cs`): `PlayerName` is the callsign every pick carries and a host's first seat takes, `Voice` rides every pick, and a host's `GameName` and `MaxPlayers` are its advert's name and cap, past which it refuses a guest as full. `Password` is the one a host asks before admitting a guest, or a guest's answer, and `Boot` removes a seated guest and bans its address until the door closes.
+
+## src/UI/Menu/NetPlayerInfo.cs
+What the original asks before a network game opens, engine-free for both presentations: the game's name, password and Maximum # of Players, and the player's callsign and voice, with the scripts' limits. `ClampPlayers` holds the cap to the spinner's floor and the kind's cap, four humans for co-op and sixteen for a Dogfight. `IsValidName` is the original's name test.
+`PilotVoices` is the Voice list's seven voices with their speaker values (pilot VO ids, `SpeakerFor` reads one off a voice byte) and the pick's voice byte; `CoopHost` is the voice a co-op host's first seat speaks in. `Remembered` and `Remember` read and write the callsign, the voice and the game name in `Utils/OptionsStore.cs` for the next session.
+The decode: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Coverage: `CSVM.Tests/NetPlayerInfoTests.cs`.
 
 ## src/UI/Menu/CoopHostFlow.cs
 What a co-op host names to its guests, owned apart from the door: the board (`Screen`), the mission, the campaign's progress, the hangar it offers, the debrief's result (`ShowResult`) and the campaign film it shares (`FilmShown`).
@@ -1396,9 +1410,9 @@ It lasts the joined session across flights and starts on `StarterAirframe`, the 
 
 ## src/UI/Menu/DogfightLobby.cs
 The Multiplayer Lobby's state over a `Net/NetLobby.cs`, engine-free, one class for both ends.
-The host owns the options (environment, mission type, victory condition, time or score, the lives rule) and the plane `Rules`, and sends them to every guest; any change advances the round and clears every Ready, its own included.
-A guest reads the options and the host's player list, and sends its plane (a custom one as its `Build`), fit and Ready under the round it heard once a lobby screen `Show`s it; a changed pick clears its own Ready. `SetReady` runs the original's Ready check, and the host counts a guest Ready only on a plane its rules admit. `Say` sends one chat line, which the host relays.
-`CanLaunch` is the host's gate, every row Ready; `RulesOf` is the `VersusRules` a launch carries, lives clamped to 1..99, and `ChapterOf` the chapter an environment flies on. Setters refuse on a guest and for a greyed choice. `CheckBuiltInLaunch` gates a Built-in host's launch on its lobby guests, and `Land` holds a match's `Scores` and opens the next round.
+The host owns the options (environment, mission type, Time, Score or both, Restrict Number of Teams with its bounds, the lives rule), the plane `Rules` and the teams (a `Net/NetTeams.cs` book), and sends them to every guest; any option change advances the round and clears every Ready, its own included. `CreateTeam`, `JoinTeam` and `LeaveTeam` act on the host's book or ask the host, `Teams` and each row's team read the outcome, `LaunchRefusal` is the team launch check and `TeamOfPeer` a seat's team at launch.
+A guest reads the options and the host's player list, and sends its plane (a custom one as its `Build`), fit and Ready under the round it heard once a lobby screen `Show`s it; a changed pick clears its own Ready. `SetReady` runs the original's Ready check, and the host counts a guest Ready only on a plane its rules admit. `Say` sends one chat line, which the host relays; `Announce` posts a host's notice under no name, and `PeerAt` names the peer on a host's row.
+`CanLaunch` is the host's gate, every row Ready; `RulesOf` is the `VersusRules` a launch carries, lives clamped to 1..99, Capture the Flag with its option and Zeppelin vs Zeppelin, and `ChapterOf` the chapter an environment flies on, the world its row's number names (Above the Clouds is `C1C`); `EnvironmentNumber` and `ModeOf` are the numbers the original's session setup writes for a row and a launch, and `Teamed` whether any pilot joined a team. Capture the Flag fixes two teams numbered 1 and 2 and offers the five environments with an `MP2` map (`Offers`); Zeppelin vs Zeppelin fixes two teams of any number (`FixesTeams`) on all seven. Setters refuse on a guest and for a greyed choice. `CheckBuiltInLaunch` gates a Built-in host's launch on its lobby guests, and `Land` holds a match's `Scores` (from `ScoresOf`, a team match's team lines with their pilots under them) and opens the next round.
 Wire: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Coverage: `CSVM.Tests/DogfightLobbyTests.cs`.
 
 ## src/UI/Menu/CoopDoorText.cs
@@ -1407,7 +1421,7 @@ The words the network door is drawn in, engine-free and built off the door alone
 (`RouterStatus`, `PinholeStatus`; `HostPinholeStatus` omits an address already named), what a
 guest types (`HostAddressStatus` on the board, `HostAddressNotes` in a Dogfight host's lobby), an
 advert's session (`SessionName`), the join and waiting boards' status (`JoinedStatus`,
-`WaitingStatus`), the games list's cells with a version mark (`Status`), the refusal naming both
+`WaitingStatus`), the games list's cells with a version and a Need Password mark (`Status`), the booted and wrong-password refusals, the refusal naming both
 versions (`VersionMismatch`), and those boards' rows and presses. The mission's long name comes in
 as a delegate, since only the caller holds the langui table.
 

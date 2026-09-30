@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Effects;
 using CSVM.Flight.Airframe;
+using CSVM.Flight.Audio;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Hangar;
 using CSVM.Flight.Hud;
@@ -140,6 +141,10 @@ internal sealed class FlightWorldBindings
     public SoundArchive? Sounds { get; init; }
     public Dictionary<string, SoundDef>? SoundDefs { get; init; }
     public Dictionary<string, SoundGroup>? SoundGroups { get; init; }
+
+    /// <summary>The session's one engine duck, handed to every engine voice the roster builds, own
+    /// ship and AI alike. A radio line lowers them all through the same gain.</summary>
+    public EngineVoiceDuck? VoiceDuck { get; init; }
     public string ChapterZrdrPath { get; init; } = "";
     public string MissionZrdrPath { get; init; } = "";
     public bool DebugCollision { get; init; }

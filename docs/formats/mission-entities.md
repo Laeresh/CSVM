@@ -23,7 +23,7 @@ instances; the rest are conditional.
 | `max_rate_yaw`, `max_rate_pitch` | °/s | turn-rate limits |
 | `min_pitch` / `max_pitch` | ° | ±30 throughout |
 | `net` | name | the AI "net" (roster/behaviour group) it belongs to |
-| `targets` | node names | who it shoots at once the script engages the cannons, `player`, or another zeppelin (`piratezep`, `dantezep`, …); inert without `COMPLETED_ZEPCANNONS` (see [Broadside firing](#broadside-firing)). ⚠ The 8 IA1 files author `targets, null`, key present, no list, so the "47" key census is 39 name lists + 8 nulls |
+| `targets` | node names | who it shoots at once the script engages the cannons, `player`, or another zeppelin (`piratezep`, `dantezep`, …); inert until `COMPLETED_ZEPCANNONS` or the Zeppelin vs Zeppelin side setup engages it (see [Broadside firing](#broadside-firing)). ⚠ The 8 IA1 files author `targets, null`, key present, no list, so the "47" key census is 39 name lists + 8 nulls |
 | `healthy` | `[[zoneNode, "panels"], …]` | the **critical** zones; second field is `"panels"` on all 316 entries |
 | `num_healthy_required` | 2–5 | how many of those must **survive**; drop below and the zeppelin dies. Confirmed against the engine, see [below](#the-kill-threshold-counts-survivors). Defaults to **1** when a `healthy` list is present, and is clamped at load to the length of that list |
 | `engines` | node names | the engine nacelles (12 or 14: `leng11`…`reng42`) |
@@ -269,10 +269,13 @@ binary rather than inferred:
   design document instead describes a rolled hit chance ramping from 20 % at maximum range to
   100 % near 200 m. **Nothing like that roll is in the shipped fire path**, treat the design's
   curve as design-era and do not implement it.
-- ⚠ **A broadside is inert until the objective script engages it.** The zeppelin object's byte
-  `+0xc` is zeroed by the constructor (`FUN_004bd460`, `0x004bd46x`), never touched by the record
-  parser `FUN_004bd8d0`, and written by exactly one routine: `FUN_0046a0b0`, the
-  `COMPLETED_ZEPCANNONS` completion action ([objectives.md](objectives.md)). The per-frame
+- ⚠ **A broadside is inert until the objective script or Zeppelin vs Zeppelin engages it.** The
+  zeppelin object's byte `+0xc` is zeroed by the constructor (`FUN_004bd460`, `0x004bd46x`), never
+  touched by the record parser `FUN_004bd8d0`, and written by two routines: `FUN_0046a0b0`, the
+  `COMPLETED_ZEPCANNONS` completion action ([objectives.md](objectives.md)), and the Zeppelin vs
+  Zeppelin side setup `FUN_00496490`, which writes 1 to every record of the `0x71df80` roster
+  (`mov eax, 1` at `0x4965e2`, `mov byte ptr [esi+0xc], al` at `0x4965e9`,
+  [`../org/multiplayer-zvz.md`](../org/multiplayer-zvz.md) "Broadsides"). The per-frame
   zeppelin update `FUN_004bf9d0` branches on it at `0x004bfa2x`: non-zero runs `FUN_004c0250`,
   the pass that walks the cannon vector (`+0x5c..+0x60`) and calls the fire routine
   `FUN_004bfe00` on every live cannon (that routine is also where a stowed cannon is told to
@@ -317,11 +320,12 @@ What the remake's implementation (M4 F19, `Flight/Airframe/ZeppelinBroadside.cs`
 - **Side alternation is geometric.** The two 45°-half-angle cones sit on opposite normals, so
   at most one side ever bears; the volley changes sides only when the target crosses the hull
   axis. No alternation schedule exists to decode.
-- **Zeppelin-vs-zeppelin is live data in three missions.** The gasbag-pick arm runs where a
-  script engages a record whose target is another zeppelin: C2B/M04, C4/M05 and C5/M04. The
-  other mutually-targeting pairs (C1B/M03's `vostokzep` ↔ `piratezep`, every chapter's MP3
-  `multiplayer1zep` ↔ `multiplayer2zep`) author the lists but no `COMPLETED_ZEPCANNONS`, so
-  they never fire in a shipped session.
+- **Zeppelin-vs-zeppelin is live data in three missions and the multiplayer mode.** The
+  gasbag-pick arm runs where a script engages a record whose target is another zeppelin: C2B/M04,
+  C4/M05 and C5/M04. Every chapter's MP3 pair (`multiplayer1zep` ↔ `multiplayer2zep`) authors no
+  `COMPLETED_ZEPCANNONS` and is engaged by the Zeppelin vs Zeppelin side setup instead, so both
+  hulls fire in that mode. C1B/M03's `vostokzep` ↔ `piratezep` authors the lists and nothing
+  engages it, so it never fires in a shipped session.
 
 ### Engine loss
 

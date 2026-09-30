@@ -138,8 +138,8 @@ internal static class NetCustomPlaneSuites
             Outlaw(ctx, hostDoor, guestDoor, NetPlaneRules.GunFlag + build.Guns[3], PlaneRefusal.Gun, "one of its gun calibres");
             Outlaw(ctx, hostDoor, guestDoor, NetPlaneRules.GunFlag + 4, PlaneRefusal.None, "a calibre it does not mount");
 
-            host.SetOutlawed(NetPlaneRules.AirframeFlag + build.Airframe, true);
             host.SetOutlawComponents(false);
+            host.SetOutlawed(NetPlaneRules.AirframeFlag + build.Airframe, true);
             StepDoors(SettleSteps, hostDoor, guestDoor);
             ctx.Check(guest.Refusal == PlaneRefusal.None,
                 $"[gates] an outlaw list counts only while Outlaw Components is checked ({guest.Refusal})");

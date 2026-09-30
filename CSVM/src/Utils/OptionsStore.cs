@@ -132,6 +132,12 @@ public sealed class OptionsDef
     /// original carving nothing in play.</summary>
     public bool? RocketCraters { get; set; }
 
+    /// <summary>Whether the cockpit engine loop takes the exterior views' throttle pitch
+    /// (<c>FlightAudio.CockpitLoopPitched</c>), a remake-only rule. ⚠ No screen offers this; the
+    /// key is set by hand. Nullable because null is "never set", which takes the flight's own
+    /// default rather than reading as off.</summary>
+    public bool? CockpitEnginePitch { get; set; }
+
     /// <summary>The difficulty word (<see cref="DifficultyWords"/>): the campaign
     /// selector's tier the launch reads when no flag names one.</summary>
     public string? Difficulty { get; set; }
@@ -216,6 +222,19 @@ public sealed class OptionsDef
     /// pre-fills the next picker (<c>Extraction.RememberedInstall</c>). Not a display setting and
     /// never read by a golden shot.</summary>
     public string? InstallPath { get; set; }
+
+    /// <summary>The network callsign the Player Information box last took, which prefills it next
+    /// session. At most <see cref="OptionsStore.NameLimit"/> characters. Not a display setting.
+    /// </summary>
+    public string? NetCallsign { get; set; }
+
+    /// <summary>The pilot voice the Player Information box last took, as its place in the Voice
+    /// list, 0 to <see cref="OptionsStore.MaxVoice"/>.</summary>
+    public int? NetVoice { get; set; }
+
+    /// <summary>The game name the Game Information box last took, which prefills it next session.
+    /// </summary>
+    public string? NetGameName { get; set; }
 }
 
 /// <summary>
@@ -245,6 +264,13 @@ public sealed class OptionsStore
     /// <see cref="MaxDimension"/> exists. A shaped index can still name a screen that is not
     /// plugged in.</summary>
     public const int MaxMonitorIndex = 63;
+
+    /// <summary>The longest network name a file may carry, the Game Name box's limit and so the
+    /// longer of the two boxes'. A longer one reads as never set.</summary>
+    public const int NameLimit = 14;
+
+    /// <summary>The last place in the Voice list's seven voices.</summary>
+    public const int MaxVoice = 6;
 
     private const string FileName = "options.json";
     private const string TempFileName = "options.json.tmp";
@@ -325,6 +351,7 @@ public sealed class OptionsStore
             Write(w, "menuPresentation", def.MenuPresentation);
             Write(w, "graphicsMode", def.GraphicsMode);
             WriteFlag(w, "rocketCraters", def.RocketCraters);
+            WriteFlag(w, "cockpitEnginePitch", def.CockpitEnginePitch);
             Write(w, "difficulty", def.Difficulty);
             WriteFlag(w, "nearestAfterKill", def.NearestAfterKill);
             WriteFlag(w, "rumble", def.Rumble);
@@ -342,6 +369,17 @@ public sealed class OptionsStore
             WriteLevel(w, "audioEffects", def.AudioEffects);
             WriteLevel(w, "audioVoice", def.AudioVoice);
             Write(w, "installPath", def.InstallPath);
+            Write(w, "netCallsign", def.NetCallsign);
+            if (def.NetVoice is { } voice)
+            {
+                w.WriteNumber("netVoice", voice);
+            }
+            else
+            {
+                w.WriteNull("netVoice");
+            }
+
+            Write(w, "netGameName", def.NetGameName);
             w.WriteEndObject();
         }
 
@@ -374,6 +412,7 @@ public sealed class OptionsStore
                 MenuPresentation = Read(root, "menuPresentation", ValidPresentations),
                 GraphicsMode = Read(root, "graphicsMode", ValidGraphicsModes),
                 RocketCraters = ReadFlag(root, "rocketCraters"),
+                CockpitEnginePitch = ReadFlag(root, "cockpitEnginePitch"),
                 Difficulty = Read(root, "difficulty", ValidDifficulties),
                 NearestAfterKill = ReadFlag(root, "nearestAfterKill"),
                 Rumble = ReadFlag(root, "rumble"),
@@ -391,6 +430,12 @@ public sealed class OptionsStore
                 AudioEffects = ReadLevel(root, "audioEffects"),
                 AudioVoice = ReadLevel(root, "audioVoice"),
                 InstallPath = ReadShaped(root, "installPath", Path.IsPathFullyQualified),
+                NetCallsign = ReadShaped(root, "netCallsign", static v => v.Length <= NameLimit),
+                NetVoice = root.TryGetProperty("netVoice", out var voice) && voice.ValueKind == JsonValueKind.Number
+                    && voice.TryGetInt32(out int place) && place >= 0 && place <= MaxVoice
+                        ? place
+                        : null,
+                NetGameName = ReadShaped(root, "netGameName", static v => v.Length <= NameLimit),
             };
         }
         catch (JsonException)

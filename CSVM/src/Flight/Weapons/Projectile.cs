@@ -50,6 +50,11 @@ public sealed partial class ProjectilePool : Node3D
     /// viewer, a chapter with no anim runtime), where impacts stay purely cosmetic.</summary>
     public System.Func<Node?, float, bool>? DamageSink;
 
+    /// <summary><see cref="DamageSink"/> with the round's shooter id, taken in its place when set, so
+    /// a destructible remembers whose hit killed it (<c>AnimRuntime.DamageAt</c>'s shooter form).
+    /// </summary>
+    public System.Func<Node?, float, int, bool>? ShooterDamageSink;
+
     /// <summary>The zeppelin routing gate (M4 F18): asked before weapon damage reaches
     /// <see cref="DamageSink"/> for a struck body, with the firing weapon. False refuses the
     /// DAMAGE only, the impact effect and sound still play. Wired to
@@ -2606,18 +2611,20 @@ public sealed partial class ProjectilePool : Node3D
         // The F18 zeppelin gate, per struck body: a refused body takes no damage while the
         // impact effect/sound above played normally.
         bool Gated(Node? body) => WorldDamageGate != null && !WorldDamageGate(body, weapon);
+        bool Sink(Node? body, float damage) =>
+            ShooterDamageSink != null ? ShooterDamageSink(body, damage, shooter) : DamageSink!(body, damage);
 
         if (!outcome.HasBlastDamage)
         {
             if (DamageSink != null && fullDamage > 0f && !Gated(struck))
-                DamageSink(struck, fullDamage);
+                Sink(struck, fullDamage);
             return;
         }
 
         // The ray contact is the detonation centre even when the collider's transform origin is far
         // away (large chapter meshes), so preserve full direct-hit damage and exclude it below.
         if (DamageSink != null && struck != null && !Gated(struck))
-            DamageSink(struck, fullDamage);
+            Sink(struck, fullDamage);
 
         // The falloff denominator is the engine's stored square (weapon +0x40), never a root of
         // the authored radius taken here.
@@ -2659,7 +2666,7 @@ public sealed partial class ProjectilePool : Node3D
             if (c.Plane != null)
                 c.Plane.TakeProjectileHit(weapon, c.NearPoint, c.ShapeIdx, shooter, damageScale: share);
             else if (share > 0f && !Gated(c.Body))
-                DamageSink!(c.Body, fullDamage * share);
+                Sink(c.Body, fullDamage * share);
             accepted++;
         }
         _blastCandidates.Clear();

@@ -46,8 +46,7 @@ public sealed class DogfightLobbyTests
     {
         var (host, _, _) = Lobbies(1);
 
-        Assert.False(host.SetMissionType(DogfightMissionType.CaptureTheFlag));
-        Assert.False(host.SetMissionType(DogfightMissionType.ZeppelinVsZeppelin));
+        Assert.False(host.SetMissionType((DogfightMissionType)3));
         Assert.False(host.SetOutlawed(NetPlaneRules.Flags, true));
         Assert.Equal((byte)DogfightMissionType.Deathmatch, host.Options.MissionType);
 
@@ -172,12 +171,12 @@ public sealed class DogfightLobbyTests
 
         // ABLE-TO-FAIL CONTROL: with no picked guest an unlisted map still goes, as it always has.
         var (alone, _, _) = Lobbies(1);
-        Assert.Null(alone.CheckBuiltInLaunch("C1C", rules));
+        Assert.Null(alone.CheckBuiltInLaunch("C2B", rules));
 
         Assert.Equal(DogfightLobby.GuestsNotReady, host.CheckBuiltInLaunch("C5", rules));
         guests[0].SetReady(true);
         Settle(host, guests);
-        Assert.Equal(DogfightLobby.MapUnlisted, host.CheckBuiltInLaunch("C1C", rules));
+        Assert.Equal(DogfightLobby.MapUnlisted, host.CheckBuiltInLaunch("C2B", rules));
         Assert.Null(host.CheckBuiltInLaunch("C5", rules));
         Settle(host, guests);
 
@@ -235,6 +234,7 @@ public sealed class DogfightLobbyTests
         Assert.False(host.Players[1].Ready);
 
         Assert.True(host.SetOutlawComponents(true));
+        Assert.True(host.SetOutlawed(NetPlaneRules.NitroFlag, true));
         Settle(host, guests);
         Assert.Equal(PlaneRefusal.Engine, guest.Refusal);
         Assert.False(guest.SetReady(true));
@@ -260,6 +260,7 @@ public sealed class DogfightLobbyTests
         Assert.Equal(fit, guest.LaunchFit);
 
         host.SetOutlawComponents(true);
+        host.SetOutlawed(NetPlaneRules.AmmoFlag + 3, true);
         Settle(host, guests);
         Assert.Equal(NetPlaneRules.NoAmmo, guest.LaunchFit.AmmoAt(1));
         Assert.False(guest.SetReady(true));
@@ -272,6 +273,53 @@ public sealed class DogfightLobbyTests
         Assert.Empty(guest.ReadyRefusals);
         Settle(host, guests);
         Assert.True(host.Players[1].Ready);
+    }
+
+    [Fact]
+    public void TogglingOutlawComponentsEitherWayEmptiesTheListInOneRound()
+    {
+        RulesCounter? counter = null;
+        var (host, guests, _) = Lobbies(2, hostCarrier: inner => counter = new RulesCounter(inner));
+        var guest = guests[0];
+        host.SetOutlawed(NetPlaneRules.AirframeFlag + 4, true);
+        host.SetOutlawed(NetPlaneRules.NitroFlag, true);
+        host.SetOutlawed(NetPlaneRules.AllAmmoFlag, true);
+        Settle(host, guests);
+        Assert.True(host.SetReady(true));
+        Assert.True(guest.SetReady(true));
+        Settle(host, guests);
+        Assert.All(host.Players, p => Assert.True(p.Ready));
+        int epoch = host.Options.Epoch;
+        int sent = counter!.Sent;
+
+        Assert.True(host.SetOutlawComponents(true));
+        Settle(host, guests);
+        Assert.Equal(new NetPlaneRules(false, true, 0), host.Rules);
+        Assert.Equal(host.Rules, guest.Rules);
+        Assert.Equal(epoch + 1, host.Options.Epoch);
+        Assert.Equal(sent + 1, counter.Sent);
+        Assert.False(host.Ready);
+        Assert.False(guest.Ready);
+        Assert.All(host.Players, p => Assert.False(p.Ready));
+
+        // Clearing the tick empties a list set under it too.
+        host.SetOutlawed(NetPlaneRules.GunFlag + 2, true);
+        host.SetOutlawed(NetPlaneRules.RocketFlag + 5, true);
+        Settle(host, guests);
+        epoch = host.Options.Epoch;
+        sent = counter.Sent;
+        Assert.True(host.SetOutlawComponents(false));
+        Settle(host, guests);
+        Assert.Equal(default(NetPlaneRules), guest.Rules);
+        Assert.Equal(epoch + 1, guest.Options.Epoch);
+        Assert.Equal(sent + 1, counter.Sent);
+
+        // ABLE-TO-FAIL CONTROL: setting the tick it already holds keeps the list and the round.
+        host.SetOutlawed(NetPlaneRules.NitroFlag, true);
+        epoch = host.Options.Epoch;
+        Assert.True(host.SetOutlawComponents(false));
+        Assert.True(host.Rules.Has(NetPlaneRules.NitroFlag));
+        Assert.Equal(epoch, host.Options.Epoch);
     }
 
     [Fact]
@@ -388,11 +436,285 @@ public sealed class DogfightLobbyTests
         Assert.Equal(7, host.Options.Lives);
     }
 
+    [Fact]
+    public void BothLimitsArmTogetherAndTheLastOneCannotBeCleared()
+    {
+        var options = new DogfightOptionsMessage(1, 2, 1, DogfightVictory.Both, 5, 40, false, 3, true);
+        var rules = DogfightLobby.RulesOf(options);
+        Assert.Equal(40, rules.KillTarget);
+        Assert.Equal(5, rules.TimeLimitMinutes);
+
+        Assert.Equal(DogfightVictory.Both, DogfightLobby.Toggled(DogfightVictory.Time, DogfightVictory.Score));
+        Assert.Equal(DogfightVictory.Score, DogfightLobby.Toggled(DogfightVictory.Both, DogfightVictory.Time));
+        Assert.Equal(DogfightVictory.Time, DogfightLobby.Toggled(DogfightVictory.Both, DogfightVictory.Score));
+
+        // ABLE-TO-FAIL CONTROL: a press on the only armed limit leaves it armed.
+        Assert.Equal(DogfightVictory.Time, DogfightLobby.Toggled(DogfightVictory.Time, DogfightVictory.Time));
+        Assert.Equal(DogfightVictory.Score, DogfightLobby.Toggled(DogfightVictory.Score, DogfightVictory.Score));
+    }
+
+    [Fact]
+    public void GuestsFormTeamsThroughTheHostAndEveryEndReadsThem()
+    {
+        var (host, guests, _) = Lobbies(3, "Lucy");
+        Settle(host, guests);
+
+        Assert.True(guests[0].CreateTeam("Red Skulls"));
+        Settle(host, guests);
+        var teams = guests[1].Teams;
+        Assert.Single(teams);
+        Assert.Equal("Red Skulls", teams[0].Name);
+        Assert.Equal(teams[0].Number, guests[0].OwnTeam);
+        Assert.True(host.Players[1].Captain);
+
+        Assert.True(guests[1].JoinTeam(teams[0].Number));
+        Assert.True(host.CreateTeam("Blue"));
+        Settle(host, guests);
+        Assert.Equal(teams[0].Number, guests[1].OwnTeam);
+        Assert.Equal(2, host.Teams.Count);
+        Assert.Equal(host.OwnTeam, guests[0].Players[0].Team);
+        Assert.Contains(guests[0].Chat, line => line.Text == "[Lucy joined team Red Skulls.]");
+
+        // ABLE-TO-FAIL CONTROL: a pilot on a team can neither create nor join another.
+        Assert.False(guests[1].CreateTeam("Other"));
+        Assert.False(guests[1].JoinTeam(host.OwnTeam));
+    }
+
+    [Fact]
+    public void ACaptainsLeaveDisbandsItsTeamOnEveryEnd()
+    {
+        var (host, guests, _) = Lobbies(3, "Lucy");
+        Settle(host, guests);
+        guests[0].CreateTeam("Aces");
+        Settle(host, guests);
+        guests[1].JoinTeam(guests[0].OwnTeam);
+        Settle(host, guests);
+        Assert.Equal(2, host.Players.Count(p => p.Team != 0));
+
+        Assert.True(guests[0].LeaveTeam());
+        Settle(host, guests);
+        Assert.Empty(guests[1].Teams);
+        Assert.All(host.Players, p => Assert.Equal(0, p.Team));
+        Assert.Contains(host.Chat, line => line.Text == "[Aces disbanded.]");
+    }
+
+    [Fact]
+    public void ACaptainWhoLeavesTheGameTakesItsTeamWithIt()
+    {
+        var (host, guests, mesh) = Lobbies(3);
+        Settle(host, guests);
+        guests[1].CreateTeam("Gone");
+        Settle(host, guests);
+        guests[0].JoinTeam(guests[1].OwnTeam);
+        Settle(host, guests);
+        Assert.Single(host.Teams);
+
+        mesh[0].Disconnect(2);
+        Settle(host, guests);
+        Assert.Empty(host.Teams);
+        Assert.Equal(0, guests[0].OwnTeam);
+    }
+
+    [Fact]
+    public void AReadyPilotCannotChangeItsTeam()
+    {
+        var (host, guests, _) = Lobbies(2);
+        Settle(host, guests);
+        host.SetReady(true);
+        Assert.False(host.CreateTeam("Late"));
+        host.SetReady(false);
+        Assert.True(host.CreateTeam("Early"));
+        host.SetReady(true);
+        Assert.False(host.LeaveTeam());
+    }
+
+    [Fact]
+    public void TheLaunchIsRefusedOnUnevenTeamsAndOnRestrict()
+    {
+        var (host, guests, _) = Lobbies(4);
+        Settle(host, guests);
+        Assert.Equal(TeamLaunchRefusal.None, host.LaunchRefusal);
+
+        host.CreateTeam("Home");
+        guests[0].CreateTeam("Away");
+        Settle(host, guests);
+        guests[1].JoinTeam(host.OwnTeam);
+        guests[2].JoinTeam(host.OwnTeam);
+        Settle(host, guests);
+        Assert.Equal(TeamLaunchRefusal.Unbalanced, host.LaunchRefusal);
+
+        guests[2].LeaveTeam();
+        Settle(host, guests);
+        Assert.Equal(TeamLaunchRefusal.Teamless, host.LaunchRefusal);
+
+        guests[2].JoinTeam(guests[0].OwnTeam);
+        Settle(host, guests);
+        Assert.Equal(TeamLaunchRefusal.None, host.LaunchRefusal);
+
+        // Restrict Number of Teams to three or more refuses two teams.
+        Assert.False(host.SetMinTeams(3));
+        Assert.True(host.SetRestrictTeams(true));
+        Assert.True(host.SetMinTeams(3));
+        Settle(host, guests);
+        Assert.Equal(TeamLaunchRefusal.TooFewTeams, host.LaunchRefusal);
+        Assert.Equal(3, guests[0].Options.MinTeams);
+        Assert.True(guests[0].Options.RestrictTeams);
+    }
+
+    [Fact]
+    public void TheTeamCountBoxesHoldTheMinimumAtOrBelowTheMaximum()
+    {
+        var (host, _, _) = Lobbies(1);
+        Assert.True(host.SetRestrictTeams(true));
+        Assert.Equal(DogfightOptionsMessage.DefaultMinTeams, host.Options.MinTeams);
+        Assert.Equal(DogfightOptionsMessage.DefaultMaxTeams, host.Options.MaxTeams);
+        Assert.True(host.SetMinTeams(9));
+        Assert.Equal(host.Options.MaxTeams, host.Options.MinTeams);
+        Assert.True(host.SetMaxTeams(1));
+        Assert.Equal(host.Options.MinTeams, host.Options.MaxTeams);
+        Assert.True(host.SetMaxTeams(99));
+        Assert.Equal(DogfightLobby.MaxTeams, host.Options.MaxTeams);
+    }
+
+    [Fact]
+    public void CaptureTheFlagFixesTwoTeamsAndGreysTheTwoEnvironmentsWithNoFlags()
+    {
+        var (host, guests, _) = Lobbies(2);
+        Assert.True(host.SetEnvironment(0));
+
+        Assert.True(host.SetMissionType(DogfightMissionType.CaptureTheFlag));
+        Settle(host, guests);
+
+        // Above the Clouds has no MP2 map, so the pick moves to the first environment with one.
+        Assert.Equal(1, host.Options.Environment);
+        Assert.False(host.SetEnvironment(0));
+        Assert.False(host.SetEnvironment(5));
+        Assert.True(host.SetEnvironment(4));
+        Assert.True(host.Options.RestrictTeams);
+        Assert.Equal(DogfightLobby.CtfTeams, host.Options.MinTeams);
+        Assert.Equal(DogfightLobby.CtfTeams, host.Options.MaxTeams);
+        Assert.False(host.SetRestrictTeams(false));
+        Assert.False(host.SetMaxTeams(4));
+        Assert.True(host.SetFlagHomeToCapture(true));
+        Settle(host, guests);
+        Assert.True(guests[0].Options.FlagHomeToCapture);
+        var rules = DogfightLobby.RulesOf(guests[0].Options);
+        Assert.True(rules.CaptureTheFlag);
+        Assert.True(rules.FlagHomeToCapture);
+
+        // ABLE-TO-FAIL CONTROL: back on Deathmatch every environment and the team boxes are live.
+        Assert.True(host.SetMissionType(DogfightMissionType.Deathmatch));
+        Assert.True(host.SetEnvironment(0));
+        Assert.True(host.SetMaxTeams(4));
+        Assert.False(host.SetFlagHomeToCapture(false));
+        Assert.False(DogfightLobby.RulesOf(host.Options).CaptureTheFlag);
+    }
+
+    /// <summary>Each Environment row flies the world its row's number names (0x413c08). Above the
+    /// Clouds is C1C, not Instant Action's C2B.</summary>
+    [Fact]
+    public void EachEnvironmentFliesTheChapterWhoseWorldNumberItsRowWrites()
+    {
+        Assert.Equal(
+            new[] { "C1C", "C3", "C2", "C5", "C1", "C1B", "C4" },
+            Enumerable.Range(0, DogfightLobby.EnvironmentCount).Select(DogfightLobby.ChapterOf));
+        Assert.Equal(0, DogfightLobby.EnvironmentOf("C1C"));
+        Assert.Equal(-1, DogfightLobby.EnvironmentOf("C2B"));
+    }
+
+    /// <summary>Every row's chapter ships MP1 for a Deathmatch and MP3 for Zeppelin vs Zeppelin. It
+    /// ships MP2 exactly where the Type box offers the row to Capture the Flag.</summary>
+    [ExtractedDataFact]
+    public void EveryEnvironmentShipsTheMapsOfTheTypesItOffers()
+    {
+        static bool Ships(string chapter, string mission)
+        {
+            string path = CSVM.SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, mission);
+            return System.IO.File.Exists(path) || System.IO.Directory.Exists(path);
+        }
+
+        for (int environment = 0; environment < DogfightLobby.EnvironmentCount; environment++)
+        {
+            string chapter = DogfightLobby.ChapterOf(environment);
+            Assert.True(Ships(chapter, "MP1"), $"{chapter} ships MP1");
+            Assert.True(Ships(chapter, "MP3"), $"{chapter} ships MP3");
+            Assert.Equal(DogfightLobby.Offers(DogfightMissionType.CaptureTheFlag, environment), Ships(chapter, "MP2"));
+        }
+    }
+
+    [Fact]
+    public void CaptureTheFlagRefusesATeamNumberedPastTheTwoFlags()
+    {
+        var (host, guests, _) = Lobbies(3);
+        Assert.True(host.SetMissionType(DogfightMissionType.CaptureTheFlag));
+        host.CreateTeam("One");
+        Settle(host, guests);
+        guests[0].CreateTeam("Two");
+        Settle(host, guests);
+        guests[1].CreateTeam("Three");
+        Settle(host, guests);
+        Assert.Equal(TeamLaunchRefusal.TooManyTeams, host.LaunchRefusal);
+
+        // Team 1 disbands, which leaves two teams standing, numbered 2 and 3.
+        host.LeaveTeam();
+        Settle(host, guests);
+        host.JoinTeam(guests[0].OwnTeam);
+        Settle(host, guests);
+        Assert.Equal(new byte[] { 2, 2, 3 }, host.Players.Select(p => p.Team).OrderBy(t => t));
+        Assert.Equal(TeamLaunchRefusal.TooFewTeams, host.LaunchRefusal);
+
+        // ABLE-TO-FAIL CONTROL: the same two teams launch a Deathmatch.
+        Assert.True(host.SetMissionType(DogfightMissionType.Deathmatch));
+        Assert.True(host.SetRestrictTeams(false));
+        Assert.Equal(TeamLaunchRefusal.None, host.LaunchRefusal);
+    }
+
+    [Fact]
+    public void ZeppelinVsZeppelinFixesTwoTeamsOnEveryEnvironmentAndLaunchesAnyTwoNumbers()
+    {
+        var (host, guests, _) = Lobbies(3);
+        Assert.True(host.SetEnvironment(0));
+
+        Assert.True(host.SetMissionType(DogfightMissionType.ZeppelinVsZeppelin));
+        Settle(host, guests);
+
+        // Every chapter ships MP3, so no environment is greyed.
+        Assert.Equal(0, host.Options.Environment);
+        Assert.True(host.SetEnvironment(5));
+        Assert.True(host.Options.RestrictTeams);
+        Assert.Equal(DogfightLobby.CtfTeams, host.Options.MinTeams);
+        Assert.Equal(DogfightLobby.CtfTeams, host.Options.MaxTeams);
+        Assert.False(host.SetRestrictTeams(false));
+        Assert.False(host.SetMinTeams(1));
+        Assert.False(host.SetFlagHomeToCapture(true));
+        var rules = DogfightLobby.RulesOf(guests[0].Options);
+        Assert.True(rules.ZeppelinVsZeppelin);
+        Assert.False(rules.CaptureTheFlag);
+
+        // Two teams numbered 2 and 3 launch: the sides follow lobby order, not the numbers.
+        host.CreateTeam("One");
+        Settle(host, guests);
+        guests[0].CreateTeam("Two");
+        Settle(host, guests);
+        guests[1].CreateTeam("Three");
+        Settle(host, guests);
+        Assert.Equal(TeamLaunchRefusal.TooManyTeams, host.LaunchRefusal);
+        host.LeaveTeam();
+        Settle(host, guests);
+        host.JoinTeam(guests[0].OwnTeam);
+        Settle(host, guests);
+        Assert.Equal(TeamLaunchRefusal.None, host.LaunchRefusal);
+
+        // ABLE-TO-FAIL CONTROL: back on Deathmatch the rules name no zeppelins.
+        Assert.True(host.SetMissionType(DogfightMissionType.Deathmatch));
+        Assert.False(DogfightLobby.RulesOf(host.Options).ZeppelinVsZeppelin);
+    }
+
     private static (DogfightLobby Host, List<DogfightLobby> Guests, IReadOnlyList<LoopbackTransport> Mesh) Lobbies(
-        int players, string guestName = "")
+        int players, string guestName = "", Func<INetTransport, INetTransport>? hostCarrier = null)
     {
         var mesh = LoopbackTransport.Mesh(players, Clean, new Random(players));
-        var hostWire = new NetLobby(mesh[0]);
+        var hostWire = new NetLobby(hostCarrier?.Invoke(mesh[0]) ?? mesh[0]);
         var host = new DogfightLobby(hostWire, () => "Host");
         var guests = new List<DogfightLobby>();
         var wires = new List<NetLobby> { hostWire };
@@ -423,5 +745,35 @@ public sealed class DogfightLobbyTests
                 guests[i].Step();
             }
         }
+    }
+
+    // The host's carrier, counting the plane rules messages it sends.
+    private sealed class RulesCounter : INetTransport
+    {
+        private readonly INetTransport _inner;
+
+        public RulesCounter(INetTransport inner) => _inner = inner;
+
+        public int Sent { get; private set; }
+
+        public int LocalPeer => _inner.LocalPeer;
+
+        public IReadOnlyList<int> Peers => _inner.Peers;
+
+        public void Bind(INetTransportListener listener) => _inner.Bind(listener);
+
+        public void Send(int peer, ReadOnlySpan<byte> payload, NetReliability reliability, int channel = 0)
+        {
+            if (NetMessage.TryReadHeader(payload, out var type, out _) && type == NetMessageType.LobbyPlaneRules)
+            {
+                Sent++;
+            }
+
+            _inner.Send(peer, payload, reliability, channel);
+        }
+
+        public void Disconnect(int peer) => _inner.Disconnect(peer);
+
+        public void Step(double dt) => _inner.Step(dt);
     }
 }

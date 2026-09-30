@@ -1812,7 +1812,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// armour pool (docs/formats/destructibles.md). At zero it marks the instance destroyed and
     /// runs the death sequence. Returns true when the hit landed on a destructible. A dormant pool
     /// is out of the world, so the hit finds nothing and returns false, whatever the caller.</summary>
-    public bool DamageAt(Node? struck, float healthDamage)
+    public bool DamageAt(Node? struck, float healthDamage) => DamageAt(struck, healthDamage, -1);
+
+    /// <summary><see cref="DamageAt(Node, float)"/> for a hit <paramref name="shooter"/> fired, which
+    /// the pool keeps as its <see cref="DestructibleRegistry.Instance.LastShooter"/>. A replicated
+    /// world records nothing, since it spends nothing.</summary>
+    public bool DamageAt(Node? struck, float healthDamage, int shooter)
     {
         var inst = _destructibles.Resolve(struck);
         if (inst == null)
@@ -1825,6 +1830,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return true;   // already dead, the death sequence owns it from here
         if (DamageReplicated)
             return true;   // struck, but another machine decides what it cost
+        inst.LastShooter = shooter;
         SpendHealth(inst, inst.Health - Math.Max(0f, healthDamage), healthDamage);
         return true;
     }
@@ -3913,6 +3919,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return own;
         own.Health = 0f;
         own.Status = DestructibleRegistry.State.Destroyed;
+        own.LastShooter = -1;
         // In the `damage:` family on purpose, since this kill spends no HP. Without a line of its
         // own, a sweep for what died reads a demolished part as one nobody ever touched.
         Log.Info("anim", $"damage: {NameOf(own.Anchor)} DESTROYED by a call to '{target.AnimName ?? target.Name}', death sequence run");

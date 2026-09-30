@@ -41,6 +41,17 @@ public interface INetTransportListener
 }
 
 /// <summary>
+/// A carrier that can name the network address a peer reached it from, the key a host's ban list
+/// holds a booted guest by. A carrier without addresses leaves a boot unable to refuse a return.
+/// </summary>
+public interface INetPeerAddress
+{
+    /// <summary>The address <paramref name="peer"/> connected from, without a port, or null when
+    /// the carrier does not know it.</summary>
+    string? AddressOf(int peer);
+}
+
+/// <summary>
 /// The carrier a session sends bytes over, with no idea what the bytes mean. It offers the peer
 /// roster, one send per payload with its reliability class, and a listener the arrivals and
 /// roster changes are reported to. Payloads are byte spans, so the message vocabulary sits

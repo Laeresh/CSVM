@@ -227,7 +227,9 @@ internal sealed class HumanFlightAdapter
             // A pause key belongs to a seat somebody is sitting at. A remote pilot's pause is
             // their own machine's business, and must not halt this one's simulation.
             AllowPause = !remote,
-            Team = _human.InstantActionActive || _human.Coop ? AimAssist.PlayerTeam : null,
+            // A team Dogfight's seat flies its lobby team, banded clear of every authored id.
+            Team = _human.InstantActionActive || _human.Coop ? AimAssist.PlayerTeam
+                : AimAssist.LobbyTeam(seat?.TeamId ?? 0),
             Shake = new PlaneShake(_aircraft.Shakes),
         });
         onCreated(controller);
@@ -408,7 +410,7 @@ internal sealed class HumanFlightAdapter
         // that pilot is sitting in theirs, on their own machine.
         if (!remote && _world.Sounds != null && _world.SoundDefs != null)
         {
-            var audio = new FlightAudio { MixGain = _human.MixGain };
+            var audio = new FlightAudio { MixGain = _human.MixGain, VoiceDuck = _world.VoiceDuck };
             audio.Setup(_world.Sounds, _world.SoundDefs, stats, _aircraft.WeaponDefs, _world.SoundGroups);
             controller.Audio = audio;
             controller.AddChild(audio);
@@ -609,9 +611,9 @@ internal sealed class HumanFlightAdapter
             _worldEffects.BuildFlightCrashRuntime(controller, planeBuilder, planeName, _world.Gamez,
                 _world.WorldScene, _aircraft.Textures, _world.CrashProgram, verbose,
                 worldSounds: _world.WorldRuntime?.Sounds, planesGamez: _aircraft.PlanesGamez);
-            // The start choreography for the very first spawn: Respawn() plays this same def on
-            // every later respawn, but Setup() above called Respawn() before this runtime existed.
-            controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);
+            // The very first spawn's propellers: Respawn() spins them on every later respawn, but
+            // Setup() above called Respawn() before this runtime existed.
+            controller.SpinPropsAtSpawn();
         }
 
         // This pilot's own airframe onto its own visual layer, LAST, so everything the lines above

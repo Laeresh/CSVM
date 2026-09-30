@@ -25,10 +25,11 @@ public enum NetDoorStage
 
 /// <summary>One guest a co-op host seated: its peer and its player number. It says whether the
 /// guest is Ready this round. It names the hangar plane the host settled for it, with that plane's
-/// airframe, fit and build. It carries the guest's player name. <see cref="Left"/> says it walked out of the flight under way.</summary>
+/// airframe, fit and build. It carries the guest's callsign and its chosen voice's place, -1 for
+/// none. <see cref="Left"/> says it walked out of the flight under way.</summary>
 public readonly record struct CoopGuest(
     int Peer, int Slot, bool Ready, byte Airframe, CoopFit Fit = default, string Name = "", bool Left = false,
-    int Plane = Session.Campaign.CoopPlanePool.Stock, NetPlaneBuild? Build = null);
+    int Plane = Session.Campaign.CoopPlanePool.Stock, NetPlaneBuild? Build = null, int Voice = -1);
 
 /// <summary>
 /// The multiplayer door as a shared feature. It owns the port and the address a board edits, the
@@ -41,9 +42,10 @@ public readonly record struct CoopGuest(
 /// </summary>
 public sealed class NetPlayFeature : IMenuFeature
 {
-    /// <summary>The port a host opens on unless the board is stepped off it. Unregistered and
-    /// arbitrary: the original carried no port of its own, since DirectPlay chose one.</summary>
-    public const int DefaultPort = 47500;
+    /// <summary>The shipped game port, the one every build fills in for a bare address. A door
+    /// opens on <see cref="NetPorts.Game"/>, which equals it unless a test process moved it.
+    /// </summary>
+    public const int DefaultPort = NetPorts.ShippedGame;
 
     /// <summary>The address a join opens on. This machine, so a board with nothing typed into it
     /// still names something that can answer.</summary>
@@ -146,8 +148,9 @@ public sealed class NetPlayFeature : IMenuFeature
     /// bind is what makes Windows put a firewall dialog on somebody's screen.</summary>
     public string BindAddress { get; set; } = "*";
 
-    /// <summary>The port a host opens on, and the port a join is aimed at.</summary>
-    public int Port { get; private set; } = DefaultPort;
+    /// <summary>The port a host opens on, and the port a join is aimed at. It starts on
+    /// <see cref="NetPorts.Game"/> as the door is built.</summary>
+    public int Port { get; private set; } = NetPorts.Game;
 
     /// <summary>The address a join is aimed at, as typed. It may name its own port, which beats
     /// <see cref="Port"/> for the join (<see cref="NetEndpoint.Parse"/>).</summary>
@@ -293,10 +296,17 @@ public sealed class NetPlayFeature : IMenuFeature
 
     /// <summary>Whether this door is a guest linked to a host holding a campaign mission open.
     /// </summary>
-    public bool IsCoopGuest => Stage == NetDoorStage.Joined && Advert is { Kind: NetSessionKind.CampaignCoop };
+    public bool IsCoopGuest =>
+        Stage == NetDoorStage.Joined && Advert is { Kind: NetSessionKind.CampaignCoop } && !AwaitingAdmission;
 
     /// <summary>Whether this door is a guest linked to a host holding a Dogfight open.</summary>
-    public bool IsDogfightGuest => Stage == NetDoorStage.Joined && Advert is { Kind: NetSessionKind.Dogfight };
+    public bool IsDogfightGuest =>
+        Stage == NetDoorStage.Joined && Advert is { Kind: NetSessionKind.Dogfight } && !AwaitingAdmission;
+
+    /// <summary>Whether this guest is linked to a host whose advert asks a password and has not
+    /// admitted it yet. It follows none of the host's boards meanwhile.</summary>
+    public bool AwaitingAdmission =>
+        Stage == NetDoorStage.Joined && Advert is { Password: true } && _transport is { Admitted: false };
 
     /// <summary>The Multiplayer Lobby this door stands in, or null. A host has one once
     /// <see cref="OpenDogfightHost"/> opened it. A Dogfight guest has one once linked.</summary>
@@ -362,7 +372,7 @@ public sealed class NetPlayFeature : IMenuFeature
                 byte airframe = word?.Airframe ?? CoopGuestPick.StarterAirframe;
                 var fit = word is { } flown && pick.PlaneIndex != plane ? flown.Fit : pick.Fit;
                 guests.Add(new CoopGuest(peer, _localPlayers + i, ReadyNow(peer), airframe,
-                    fit, pick.Name ?? "", pick.Left && pick.Epoch == _epoch, plane, word?.Build));
+                    fit, pick.Name ?? "", pick.Left && pick.Epoch == _epoch, plane, word?.Build, PilotVoices.FromWire(pick.Voice)));
             }
 
             return guests;
@@ -402,10 +412,32 @@ public sealed class NetPlayFeature : IMenuFeature
     /// </summary>
     public int CoopFlows => _transport?.Flows ?? 0;
 
-    /// <summary>The name this end's player goes by, sent with a co-op guest's pick so the host's
-    /// roster calls the guest by it. Empty when the player has none, and the roster then uses the
-    /// player number.</summary>
+    /// <summary>The callsign this end's player goes by. A guest's pick carries it to the host's
+    /// roster, and a host's own first seat takes it. Empty when the player has none, and the roster
+    /// then uses the player number.</summary>
     public string PlayerName { get; set; } = "";
+
+    /// <summary>The pilot voice this end's player chose, as its place in
+    /// <see cref="PilotVoices.All"/>, or -1 for none. It rides every pick this end sends.</summary>
+    public int Voice { get; set; } = -1;
+
+    /// <summary>The name this host's advert gives its game. Empty advertises the host's own name,
+    /// as a door opened without the Game Information box does.</summary>
+    public string GameName { get; set; } = "";
+
+    /// <summary>The Maximum # of Players this host chose, 0 for its kind's cap. It is held to
+    /// <see cref="NetPlayerInfo.ClampPlayers"/> whenever it is read.</summary>
+    public int MaxPlayers { get; set; }
+
+    /// <summary>The optional password: the one a host asks of every guest before admitting it, or
+    /// the one a guest answers a host that asks. Empty asks nothing. A host's advert says only that
+    /// it asks one, and the password itself leaves only in a guest's answer.</summary>
+    public string Password { get; set; } = "";
+
+    /// <summary>How many players the session this door stands in seats: this host's chosen cap,
+    /// else the cap its host's advert names.</summary>
+    public int SessionCap =>
+        IsHost ? HostCap : Advert is { Cap: > 0 } advert ? advert.Cap : NetPlayerInfo.PlayerCap(Advert?.Kind ?? _kind);
 
     /// <summary>Each seat's fit as this co-op guest's host launched it, by seat.</summary>
     public IReadOnlyDictionary<int, CoopFit> CoopSeatFits =>
@@ -437,6 +469,50 @@ public sealed class NetPlayFeature : IMenuFeature
     /// host names a board or a flight other than the one this guest launched into.</summary>
     public bool CoopFlightOver =>
         !IsCoopGuest || CoopFlow is not { Screen: NetCoopScreen.InMission } flow || (_flightEpoch is { } flown && flow.Epoch != flown);
+
+    // The cap this host's advert names and its admission keeps: the chosen one inside its kind's.
+    private int HostCap => MaxPlayers > 0 ? NetPlayerInfo.ClampPlayers(_kind, MaxPlayers) : NetPlayerInfo.PlayerCap(_kind);
+
+    /// <summary>Takes what the Game and Player Information boxes answered. The callsign, the voice
+    /// and the password are always taken: a host's from Game Information, a joining player's from
+    /// Player Information. The game's name and cap are taken when <paramref name="game"/> says the
+    /// host's box was shown.</summary>
+    public void Take(NetPlayerInfo info, bool game)
+    {
+        ArgumentNullException.ThrowIfNull(info);
+        PlayerName = info.Callsign.Trim();
+        Voice = PilotVoices.Clamp(info.Voice);
+        Password = info.Password;
+        if (game)
+        {
+            GameName = info.GameName.Trim();
+            MaxPlayers = info.MaxPlayers;
+        }
+    }
+
+    /// <summary>Removes the connected guest at <paramref name="peer"/> from this host's session, as
+    /// the original's Boot does. The guest is told why and hung up on. Its address is banned until
+    /// the session closes, and a Dogfight lobby posts the original's notice. False on a door that is
+    /// not hosting and for a peer that is not a seated guest.</summary>
+    public bool Boot(int peer)
+    {
+        if (!IsHost || _transport == null || Refused(peer) || !Contains(_transport.AllPeers, peer))
+        {
+            return false;
+        }
+
+        string name = _transport.Picks.TryGetValue(peer, out var pick) && pick.Name is { Length: > 0 } named ? named : "";
+        _transport.Boot(peer);
+        _admitted.Remove(peer);
+        RefuseTurnedAway();
+        _dogfight?.Announce(CoopDoorText.BootedLine(name));
+        return true;
+    }
+
+    /// <summary>The voice a guest's latest pick carried to this host, as its place in
+    /// <see cref="PilotVoices.All"/>, or -1 when the guest sent none.</summary>
+    public int PickedVoice(int peer) =>
+        _transport != null && _transport.Picks.TryGetValue(peer, out var pick) ? PilotVoices.FromWire(pick.Voice) : -1;
 
     /// <summary><paramref name="host"/> as a guest types it for this door's port: bare on
     /// <see cref="DefaultPort"/>, which a join fills in, and with the port otherwise.</summary>
@@ -649,7 +725,7 @@ public sealed class NetPlayFeature : IMenuFeature
         OpenHost(maxGuests, NetSessionKind.Dogfight);
         if (_transport != null && Stage == NetDoorStage.Hosting)
         {
-            _dogfight = new DogfightLobby(_transport, () => PlayerName);
+            _dogfight = new DogfightLobby(_transport, () => PlayerName) { Seated = peer => !Refused(peer) };
         }
     }
 
@@ -717,7 +793,7 @@ public sealed class NetPlayFeature : IMenuFeature
         try
         {
             var (host, port) = JoinTarget;
-            _transport = new NetLobby(_openJoin(host, port), Version);
+            _transport = new NetLobby(_openJoin(host, port), Version, joinPassword: Password);
         }
         catch (Exception e) when (e is InvalidOperationException or ArgumentException)
         {
@@ -771,7 +847,7 @@ public sealed class NetPlayFeature : IMenuFeature
         {
             try
             {
-                _search = new LanSearch(_lan(BindAddress, 0), SearchTargets, LanDiscovery.Port);
+                _search = new LanSearch(_lan(BindAddress, 0), SearchTargets, NetPorts.Lan);
             }
             catch (Exception e) when (e is InvalidOperationException or ArgumentException)
             {
@@ -840,6 +916,8 @@ public sealed class NetPlayFeature : IMenuFeature
         }
 
         _released = true;
+        _transport.LocalCallsign = PlayerName;
+        _transport.LocalVoice = PilotVoices.Wire(Voice);
         if (IsCoopHost)
         {
             // A launch straight out of a flight is a restart, and a new round is how a guest in
@@ -963,10 +1041,15 @@ public sealed class NetPlayFeature : IMenuFeature
         if (Stage == NetDoorStage.Hosting)
         {
             RefuseClashing();
+            RefuseTurnedAway();
             if (_kind == NetSessionKind.CampaignCoop)
             {
                 Admit();
                 SendFlows();
+            }
+            else
+            {
+                RefuseOverCap();
             }
 
             HangUpRefused(dt);
@@ -984,6 +1067,8 @@ public sealed class NetPlayFeature : IMenuFeature
             {
                 NetCloseReason.Full => CoopDoorText.GameFull,
                 NetCloseReason.VersionMismatch => CoopDoorText.VersionMismatch(closed.Host, closed.Guest),
+                NetCloseReason.Booted => CoopDoorText.Booted,
+                NetCloseReason.WrongPassword => CoopDoorText.WrongPassword,
                 _ => CoopDoorText.HostClosed,
             });
             return;
@@ -1011,7 +1096,7 @@ public sealed class NetPlayFeature : IMenuFeature
             }
             else if (IsDogfightGuest)
             {
-                _dogfight ??= new DogfightLobby(_transport, () => PlayerName, _hostPeer);
+                _dogfight ??= new DogfightLobby(_transport, () => PlayerName, _hostPeer) { Voice = () => PilotVoices.Wire(Voice) };
                 if (_flownEpoch is { } flown)
                 {
                     // The host names a new round only once its own match is freed, so everything
@@ -1059,7 +1144,7 @@ public sealed class NetPlayFeature : IMenuFeature
         EndLinger();
         try
         {
-            _transport = new NetLobby(_openHost(Port, maxGuests, BindAddress), Version);
+            _transport = new NetLobby(_openHost(Port, maxGuests, BindAddress), Version, Password);
         }
         catch (Exception e) when (e is InvalidOperationException or ArgumentException)
         {
@@ -1098,7 +1183,7 @@ public sealed class NetPlayFeature : IMenuFeature
 
         try
         {
-            _responder = new LanResponder(_lan(BindAddress, LanDiscovery.Port), Version);
+            _responder = new LanResponder(_lan(BindAddress, NetPorts.Lan), Version);
         }
         catch (Exception e) when (e is InvalidOperationException or ArgumentException)
         {
@@ -1114,11 +1199,35 @@ public sealed class NetPlayFeature : IMenuFeature
         bool coop = _kind == NetSessionKind.CampaignCoop;
         // A Built-in host picks its map after the lobby opened, so its advert names none.
         byte seq = coop ? _missionSeq : _dogfight is { Shown: true } lobby ? lobby.Options.Environment : SessionAdvertMessage.NoMission;
-        int cap = coop ? CoopHumans : NetSeats.MaxPlayers;
+        int cap = HostCap;
         var status = players >= cap
             ? NetSessionStatus.Full
             : _released || (coop && HostFlow.Screen == NetCoopScreen.InMission) ? NetSessionStatus.InMission : NetSessionStatus.Waiting;
-        return new SessionAdvertMessage(_kind, seq, (byte)players, _hostName, status, (byte)cap);
+        string name = GameName.Length > 0 ? GameName : _hostName;
+        return new SessionAdvertMessage(_kind, seq, (byte)players, name, status, (byte)cap, _transport?.AsksPassword ?? false);
+    }
+
+    // A Dogfight host seats guests up to its chosen cap in arrival order, and refuses one past it
+    // as a campaign host does. The lobby never lists a refused guest.
+    private void RefuseOverCap()
+    {
+        int seated = _localPlayers;
+        foreach (int peer in _transport!.AllPeers)
+        {
+            if (Refused(peer))
+            {
+                continue;
+            }
+
+            if (seated < HostCap)
+            {
+                seated++;
+                continue;
+            }
+
+            _transport.Farewell(peer, NetCloseReason.Full);
+            _refused.Add((peer, 0.0));
+        }
     }
 
     // A campaign host seats guests in arrival order up to the cap. One past it is told the game is
@@ -1127,7 +1236,7 @@ public sealed class NetPlayFeature : IMenuFeature
     {
         var peers = _transport!.AllPeers;
         _admitted.RemoveAll(peer => !Contains(peers, peer));
-        int seats = Math.Max(0, CoopHumans - _localPlayers);
+        int seats = Math.Max(0, HostCap - _localPlayers);
         for (int i = 0; i < peers.Count; i++)
         {
             int peer = peers[i];
@@ -1156,6 +1265,20 @@ public sealed class NetPlayFeature : IMenuFeature
             if (!Refused(peer))
             {
                 _transport.Farewell(peer, NetCloseReason.VersionMismatch);
+                _refused.Add((peer, 0.0));
+            }
+        }
+    }
+
+    // A peer the lobby turned away, booted or answering the password wrongly, is told why and hung
+    // up on after the same grace.
+    private void RefuseTurnedAway()
+    {
+        foreach (var (peer, why) in _transport!.TurnedAway)
+        {
+            if (!Refused(peer))
+            {
+                _transport.Farewell(peer, why);
                 _refused.Add((peer, 0.0));
             }
         }
@@ -1230,7 +1353,7 @@ public sealed class NetPlayFeature : IMenuFeature
             _transport.DropHeld();
         }
 
-        if (Pick.Follow(flow.Epoch, PlayerName) is { } pick && _hostPeer >= 0)
+        if (Pick.Follow(flow.Epoch, PlayerName, PilotVoices.Wire(Voice)) is { } pick && _hostPeer >= 0)
         {
             _transport.Tell(_hostPeer, pick);
             Pick.MarkSent(pick);

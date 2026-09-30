@@ -42,8 +42,34 @@ internal static class NetCoopMissionSuites
 
     private const string GuestName = "Lucy";
 
+    // Lucy's place in the Voice list, Black Swan.
+    private const int GuestVoice = 2;
+
+    // CM21: OBJECTIVE28 wakes the Cabbie and releases his taxi. OBJECTIVE20 removes him within
+    // 1000 m of its point, which is read off the host's own script.
+    private const string Cabbie = "autogyro_1";
+    private const int CabbieWake = 28;
+    private const int CabbieDelivered = 20;
+
+    // The longest the Cabbie's rooftop taxi run is given to hand him to the flight model.
+    private const int CabbieTaxiSteps = 60 * 60;
+
+    // CM09's own opening film, which alone flies the wingman prop on its scripts and leaves it
+    // wherever the last one stops. It plays for about 53 s; the budget is well past that.
+    private const string IntroFilm = "mission_intro_animation";
+    private const int IntroSteps = 60 * 120;
+
+    // The prop sits at the world origin until the film's first script poses it. It then flies
+    // thousands of metres out, so this only rules out a prop that never moved.
+    private const float PropFlownM = 1000f;
+
+    // How long each seat is watched after the film, and how far it has to fly in that time. A seat
+    // cruises near 90 m/s, so a frozen or pinned aeroplane is the only way to fall short.
+    private const int TravelSteps = 120;
+    private const float SeatTravelM = 50f;
+
     // The wingman suite's host profile and its wingman pick, the Fury, which no profile-less director
-    // binds. The ammunition rides the wire, though the Fury's AI def authors its own guns.
+    // binds. The armour-piercing ammunition rides the wire and outranks the Fury's AI def's guns.
     private const string WingHost = "WingHost";
     private const byte WingAirframe = 7;
     private static readonly int[] WingAmmo = { 2, 2, 2, 2 };
@@ -55,7 +81,8 @@ internal static class NetCoopMissionSuites
 
     [Suite("net-coop-mission",
         "a co-op campaign mission flown by a host and two guests, one process, lossy loopback: each "
-        + "guest is seated under its player name or its player number, every machine builds each "
+        + "guest is seated under its player name or its player number and in its chosen voice, the "
+        + "host's seat in Nathan Zachary's, every machine builds each "
         + "seat with its own pilot's ammunition, a guest's director has no profile store and the "
         + "user's profiles are untouched, a guest walking out through its pause sheet leaves at "
         + "once, the host alone ends the mission and a guest holds its result, Retry clears every "
@@ -74,6 +101,7 @@ internal static class NetCoopMissionSuites
         var lucy = Door(mesh[1]);
         var third = Door(mesh[2]);
         lucy.PlayerName = GuestName;
+        lucy.Voice = GuestVoice;
         var ambient = NetCombatSuites.Ambient.Save();
         try
         {
@@ -166,8 +194,9 @@ internal static class NetCoopMissionSuites
         "a co-op campaign mission whose host profile flies its wingman in a picked aeroplane, host and "
         + "one guest over a lossy loopback: the host's launch names the pick to the guest, and the "
         + "guest builds the host-owned wingman in the same airframe, def, damage parts and fit as the "
-        + "host rather than the Devastator a profile-less director binds; every other roster block "
-        + "flies the same def on both machines")]
+        + "host rather than the Devastator a profile-less director binds, its guns firing the picked "
+        + "ammunition over its AI def's own; every other roster block flies the same def and weapons "
+        + "on both machines")]
     internal static void CCoopWingmanFliesTheHostsPick(TestContext ctx)
     {
         var mission = WingmanMission(ctx);
@@ -236,6 +265,312 @@ internal static class NetCoopMissionSuites
         }
     }
 
+    [Suite("net-coop-cabbie-delivered",
+        "CM21 flown by a host and one guest over a lossy loopback: the host's wake of OBJECTIVE28 "
+        + "puts the Cabbie (autogyro_1) in play on both machines, and once the host's Cabbie is "
+        + "within 1000 m of OBJECTIVE20's point the host's director completes it and removes him, "
+        + "and the guest's copy leaves the world off the host's presence event while the guest's "
+        + "own director, which evaluates nothing, removes nothing")]
+    internal static void DCoopCabbieLeavesEveryMachine(TestContext ctx)
+    {
+        var mission = CabbieMission(ctx);
+        var stock = StockLoadouts.Load();
+        var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.03, 0.01, 0.25), new Random(2406));
+        var host = Door(mesh[0]);
+        var guest = Door(mesh[1]);
+        var ambient = NetCombatSuites.Ambient.Save();
+        Ends? hostEnd = null;
+        Ends? guestEnd = null;
+        try
+        {
+            host.OpenCoopHost(NetPlayFeature.CoopHumans - 1);
+            host.Offer(mission.Seq, "Host", 1);
+            guest.OpenJoin();
+            Pump(SettleSteps, host, guest);
+            Select(host, mission);
+            Pump(SettleSteps, host, guest);
+            guest.Pick.Set(CoopGuestPick.StarterAirframe, true);
+            Pump(SettleSteps, host, guest);
+            if (!guest.IsCoopGuest || !host.CoopAllReady)
+            {
+                ctx.Check(false, $"the guest joins the host's campaign door and is Ready ({guest.Stage}, ready {host.CoopAllReady})");
+                return;
+            }
+
+            hostEnd = Launch(ctx, mission, stock, host, HostAmmo, out _);
+            guestEnd = Follow(ctx, mission, stock, guest, default, hostEnd, host);
+            if (!hostEnd.Built || !guestEnd.Built)
+            {
+                ctx.Check(false, $"both campaign sessions build (host {hostEnd.Built}, guest {guestEnd.Built})");
+                return;
+            }
+
+            CabbieLeaves(ctx, hostEnd, guestEnd, host, guest);
+        }
+        finally
+        {
+            guestEnd?.Close();
+            hostEnd?.Close();
+            ambient.Restore();
+            guest.Discard();
+            host.Discard();
+        }
+    }
+
+    [Suite("net-coop-intro-field",
+        "CM09 flown by a host and one guest over a lossy loopback, its bespoke opening film played "
+        + "out on both machines with the world's animation stepped: the film's wingman prop "
+        + "(piratefighter) flies in it on each machine, and once the film hands off, neither machine "
+        + "still draws that prop, every drawn human aeroplane is one of the two seats, and each seat "
+        + "flies on rather than hanging where the film left it")]
+    internal static void ECoopIntroLeavesNoStrayAeroplane(TestContext ctx)
+    {
+        var mission = IntroMission(ctx);
+        var stock = StockLoadouts.Load();
+        var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.03, 0.01, 0.25), new Random(2407));
+        var host = Door(mesh[0]);
+        var guest = Door(mesh[1]);
+        var ambient = NetCombatSuites.Ambient.Save();
+        Ends? hostEnd = null;
+        Ends? guestEnd = null;
+        var report = new System.Text.StringBuilder();
+        try
+        {
+            host.OpenCoopHost(NetPlayFeature.CoopHumans - 1);
+            host.Offer(mission.Seq, "Host", 1);
+            guest.OpenJoin();
+            Pump(SettleSteps, host, guest);
+            Select(host, mission);
+            Pump(SettleSteps, host, guest);
+            guest.Pick.Set(CoopGuestPick.StarterAirframe, true);
+            Pump(SettleSteps, host, guest);
+            if (!guest.IsCoopGuest || !host.CoopAllReady)
+            {
+                ctx.Check(false, $"the guest joins the host's campaign door and is Ready ({guest.Stage}, ready {host.CoopAllReady})");
+                return;
+            }
+
+            hostEnd = Launch(ctx, mission, stock, host, HostAmmo, out _);
+            guestEnd = Follow(ctx, mission, stock, guest, default, hostEnd, host);
+            if (!hostEnd.Built || !guestEnd.Built)
+            {
+                ctx.Check(false, $"both campaign sessions build (host {hostEnd.Built}, guest {guestEnd.Built})");
+                return;
+            }
+
+            IntroHandsOffClean(ctx, new[] { hostEnd, guestEnd }, new[] { host, guest }, report);
+        }
+        finally
+        {
+            ctx.WriteArtifact("test-net-coop-intro-field.txt", report.ToString());
+            guestEnd?.Close();
+            hostEnd?.Close();
+            ambient.Restore();
+            guest.Discard();
+            host.Discard();
+        }
+    }
+
+    // Both machines play the film to its own end, then fly on. What each machine draws afterwards
+    // is read off its own tree, since the stray was seen on one machine alone.
+    private static void IntroHandsOffClean(TestContext ctx, Ends[] ends, NetPlayFeature[] doors,
+        System.Text.StringBuilder report)
+    {
+        var runtimes = ends.Select(e => e.Session.NetWorld?.World).ToArray();
+        var props = runtimes.Select(r => r?.FindNodes(AircraftStage.PropNode) is { Count: > 0 } found ? found[0] : null)
+            .ToArray();
+        if (props.Any(p => p == null))
+        {
+            ctx.Check(false, $"both machines stage the intro's '{AircraftStage.PropNode}' in a world runtime ({props.Count(p => p != null)} of {ends.Length})");
+            return;
+        }
+
+        ctx.Check(ends.All(e => e.Session.Cutscene is { Playing: true, Anim: IntroFilm }),
+            $"ABLE-TO-FAIL CONTROL: both machines open on '{IntroFilm}' ({string.Join(", ", ends.Select(e => e.Session.Cutscene?.Anim))})");
+        var flown = new float[ends.Length];
+        int steps = 0;
+        for (; steps < IntroSteps && ends.Any(e => e.Session.Cutscene is { Playing: true }); steps++)
+        {
+            FlyAnimated(ends, doors, runtimes);
+            for (int e = 0; e < ends.Length; e++)
+            {
+                if (props[e]!.IsVisibleInTree())
+                {
+                    flown[e] = Mathf.Max(flown[e], AnimRuntime.WorldTransform(props[e]!, out _).Origin.Length());
+                }
+            }
+        }
+
+        report.AppendLine($"film over after {steps} step(s); the prop drawn up to {string.Join(" / ", flown.Select(f => $"{f:0} m"))} off the origin");
+        ctx.Check(ends.All(e => e.Session.Cutscene is not { Playing: true }),
+            $"the film hands off by itself on both machines ({steps} step(s))");
+        ctx.Check(flown.All(f => f > PropFlownM),
+            $"ABLE-TO-FAIL CONTROL: the film's wingman prop flies in it on both machines ({string.Join(" / ", flown.Select(f => $"{f:0} m"))} off the origin)");
+
+        Fly(SettleSteps, ends, doors);
+        var from = ends.Select(Drawn).ToArray();
+        for (int i = 0; i < TravelSteps; i++)
+        {
+            FlyAnimated(ends, doors, runtimes);
+        }
+
+        for (int e = 0; e < ends.Length; e++)
+        {
+            string who = e == 0 ? "host" : "guest";
+            var seats = ends[e].Session.SeatRigs.Select(r => r.Controller).ToArray();
+            var humans = Drawn(ends[e]).Where(d => d.Rig.IsHumanPiloted).ToArray();
+            var travel = humans.Select(h => from[e].FirstOrDefault(f => ReferenceEquals(f.Rig, h.Rig)).At.DistanceTo(h.At))
+                .ToArray();
+            string reading = string.Join(", ", humans.Select((h, i) =>
+                $"{h.Rig.Name} seat {Array.IndexOf(seats, h.Rig)} {travel[i]:0} m"));
+            report.AppendLine($"{who}: prop drawn {props[e]!.IsVisibleInTree()} at {AnimRuntime.WorldTransform(props[e]!, out _).Origin}; {reading}");
+            ctx.Check(!props[e]!.IsVisibleInTree(),
+                $"the {who} draws no '{AircraftStage.PropNode}' once the film has handed off (at {AnimRuntime.WorldTransform(props[e]!, out _).Origin})");
+            ctx.Check(humans.Length == seats.Length && humans.All(h => seats.Contains(h.Rig)),
+                $"every human aeroplane the {who} draws is one of its {seats.Length} seats ({reading})");
+            ctx.Check(travel.All(t => t > SeatTravelM),
+                $"and each flies on over {TravelSteps} steps on the {who}, none hanging where the film left it ({reading})");
+        }
+    }
+
+    // Every FlightController drawn in one machine's tree, with where it is drawn.
+    private static List<(FlightController Rig, Vector3 At)> Drawn(Ends end)
+    {
+        var found = new List<(FlightController, Vector3)>();
+        var stack = new Stack<Node>();
+        stack.Push(end.Session);
+        while (stack.Count > 0)
+        {
+            var node = stack.Pop();
+            if (node is FlightController { PlaneModel.Visible: true } rig && rig.IsVisibleInTree())
+            {
+                found.Add((rig, rig.GlobalTransform.Origin));
+            }
+
+            foreach (var child in node.GetChildren())
+            {
+                stack.Push(child);
+            }
+        }
+
+        return found;
+    }
+
+    // A step on every end as a frame runs it: the fixed step, the door, the world's animation and
+    // the cutscene host last. The animation and the cutscene tick belong to the frame, not the step.
+    private static void FlyAnimated(Ends[] ends, NetPlayFeature[] doors, AnimRuntime?[] runtimes)
+    {
+        for (int e = 0; e < ends.Length; e++)
+        {
+            ends[e].Session._PhysicsProcess(GameClock.FixedDt);
+            doors[e].Step(GameClock.FixedDt);
+            runtimes[e]?.Advance(GameClock.FixedDt);
+            ends[e].Session.Cutscene?.Tick();
+        }
+    }
+
+    private static CampaignMission IntroMission(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>()
+            .FirstOrDefault(m => m!.Value.ChapterFolder.Equals("C1", StringComparison.OrdinalIgnoreCase)
+                                 && m.Value.MissionFolder.Equals("M04", StringComparison.OrdinalIgnoreCase))
+            ?? throw new SuiteSkippedException($"cm_sequence carries no C1/M04");
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, "C1"), $"C1 textures");
+        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, "C1"), $"C1 gamez");
+        return mission;
+    }
+
+
+    // The host alone decides the delivery. Its removal is a presence change, which is the one
+    // message that takes the guest's copy out.
+    private static void CabbieLeaves(TestContext ctx, Ends hostEnd, Ends guestEnd, NetPlayFeature hostDoor,
+        NetPlayFeature guestDoor)
+    {
+        var ends = new[] { hostEnd, guestEnd };
+        var doors = new[] { hostDoor, guestDoor };
+        if (ends.Any(e => e.Session.Cutscene is { Playing: true }))
+        {
+            hostEnd.Session.Cutscene?.Skip();
+            for (int i = 0; i < SkipWindowSteps && ends.Any(e => e.Session.Cutscene is { Playing: true }); i++)
+            {
+                FlyOnce(ends, doors);
+            }
+        }
+
+        // A step on each end admits the roster, which is what hands the guest's copies to the host.
+        // The humans then hold where they stand, so nothing but the script moves during the legs.
+        Fly(SettleSteps, ends, doors);
+        foreach (var end in ends)
+        {
+            foreach (var rig in end.Session.Rigs)
+            {
+                if (rig.Controller is { } pilot)
+                {
+                    pilot.Held = true;
+                }
+            }
+        }
+
+        var hostDirector = hostEnd.Session.Campaign;
+        var guestDirector = guestEnd.Session.Campaign;
+        var mine = hostDirector?.Roster.GetValueOrDefault(Cabbie);
+        var theirs = guestDirector?.Roster.GetValueOrDefault(Cabbie);
+        if (hostDirector?.Graph is not { } graph || guestDirector?.Graph is not { } replica
+            || mine == null || theirs == null)
+        {
+            ctx.Check(false, $"both machines spawn '{Cabbie}' under a campaign director (host {mine != null}, guest {theirs != null})");
+            return;
+        }
+
+        ctx.Check(mine.Inert && theirs.Inert && theirs.RemoteOwned && !replica.CompletedOf(CabbieDelivered),
+            $"'{Cabbie}' ships deactivated on both machines, the guest's copy owned by the host (remote {theirs.RemoteOwned})");
+        graph.Wake(CabbieWake);
+        int steps = 0;
+        for (; steps < CabbieTaxiSteps && (theirs.Inert || hostDirector.Paths?.IsPlaced(Cabbie) == true); steps++)
+        {
+            FlyOnce(ends, doors);
+        }
+
+        ctx.Check(mine.InPlay && theirs.InPlay && !graph.CompletedOf(CabbieDelivered),
+            $"ABLE-TO-FAIL CONTROL: the host's wake puts him in play on both machines and off his taxi path, undelivered ({steps} step(s))");
+
+        var delivery = hostDirector.Script.Objectives.FirstOrDefault(d => d.Number == CabbieDelivered)?.Travelers;
+        if (delivery?.WherePoint is not { Length: 3 } p || !delivery.DeleteOnSuccess)
+        {
+            throw new SuiteSkippedException($"C5/M01 OBJECTIVE{CabbieDelivered} no longer authors the Cabbie's delivery");
+        }
+
+        mine.WarpTo(new Vector3(p[0], p[1], p[2]), 0f, 0f);
+        mine.Held = true;
+        steps = 0;
+        for (; steps < SkipWindowSteps && (!graph.CompletedOf(CabbieDelivered) || !theirs.Inert); steps++)
+        {
+            FlyOnce(ends, doors);
+        }
+
+        ctx.Check(graph.CompletedOf(CabbieDelivered) && mine.Deactivated && hostDirector.Removed.Contains(Cabbie),
+            $"on the point the host completes OBJECTIVE{CabbieDelivered} and removes him");
+        ctx.Check(theirs.Inert && replica.CompletedOf(CabbieDelivered),
+            $"and the guest's copy leaves the world with the host's objective replayed ({steps} step(s))");
+        ctx.Check(guestDirector.Removed.Count == 0,
+            $"…taken out by the host's word, never by a removal the guest's own director decided");
+    }
+
+    private static CampaignMission CabbieMission(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>()
+            .FirstOrDefault(m => m!.Value.ChapterFolder.Equals("C5", StringComparison.OrdinalIgnoreCase)
+                                 && m.Value.MissionFolder.Equals("M01", StringComparison.OrdinalIgnoreCase))
+            ?? throw new SuiteSkippedException($"cm_sequence carries no C5/M01");
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, "C5"), $"C5 textures");
+        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, "C5"), $"C5 gamez");
+        return mission;
+    }
+
     // The host-owned wingman on both machines: the picked airframe, one def, one set of damage
     // parts and one fit. The host's own copy is the able-to-fail control that the profile was read.
     private static void WingmanMatches(TestContext ctx, Ends host, Ends guest)
@@ -256,6 +591,14 @@ internal static class NetCoopMissionSuites
         string theirs = Airframe(guestWing);
         ctx.Check(mine == theirs,
             $"the guest's wingman carries the host's def, damage parts and fit (host {mine} | guest {theirs})");
+
+        // The pick, not the def's own block: the AI def's gun is a wep_130, the pick a matrix id.
+        var picked = StockLoadouts.Load().ForModel(want)?.Guns
+            .Select(g => StockLoadouts.GunWeaponId(g.Caliber, CampaignLoadout.AmmoNames[WingAmmo[g.Slot - 1]]))
+            .ToArray() ?? Array.Empty<string>();
+        var flown = hostWing.Loadout?.Guns.Select(g => g.Weapon.Id).ToArray() ?? Array.Empty<string>();
+        ctx.Check(picked.Length > 0 && flown.SequenceEqual(picked),
+            $"the host's wingman fires the picked ammunition [{string.Join(",", picked)}] rather than its AI def's guns ([{string.Join(",", flown)}])");
     }
 
     // Every block both machines spawned flies one def on both, so no other host-owned aeroplane
@@ -273,15 +616,17 @@ internal static class NetCoopMissionSuites
     }
 
     // One aeroplane's identity as hits and damage see it: its def, its AI def, its damage parts and
-    // their pools, and its first gun's rounds.
+    // their pools. Then the weapon every gun and pylon it bound fires.
     private static string Airframe(FlightController rig)
     {
         string parts = rig.Damage is { } damage
             ? string.Join(",", damage.Parts.Keys.OrderBy(k => k, StringComparer.Ordinal))
               + Log.Format($"@{damage.WholeHealthMax:0.#}/{damage.WholeArmorMax:0.#}")
             : "none";
-        string ammo = rig.Loadout?.Def is { Guns.Count: > 0 } def ? def.Guns[0].Ammo ?? "" : "";
-        return $"{rig.Stats?.DefName}/{rig.Stats?.AiDefName}/{parts}/{ammo}";
+        string weapons = rig.Loadout is { } loadout
+            ? string.Join(",", loadout.Guns.Select(g => g.Weapon.Id).Concat(loadout.Hardpoints.Select(h => $"{h.Index}:{h.Weapon.Id}")))
+            : "";
+        return $"{rig.Stats?.DefName}/{rig.Stats?.AiDefName}/{parts}/{weapons}";
     }
 
     private static CampaignMission WingmanMission(TestContext ctx)
@@ -516,6 +861,12 @@ internal static class NetCoopMissionSuites
                                 && e.Session.NetSeats[1].Callsign == GuestName
                                 && e.Session.NetSeats[2].Callsign == "P3"),
             $"each machine seats the named guest as {GuestName} and the unnamed one as P3 ({string.Join(" | ", names)})");
+        // The host's seat is the scripted player and speaks as Nathan Zachary. Lucy speaks in the
+        // voice she chose, and the third guest chose none.
+        var voices = ends.Select(e => string.Join(",", e.Session.NetSeats.Select(s => s.Voice))).ToArray();
+        byte[] want = { PilotVoices.Wire(PilotVoices.CoopHost), PilotVoices.Wire(GuestVoice), CoopPickMessage.NoVoice };
+        ctx.Check(ends.All(e => e.Session.NetSeats.Select(s => s.Voice).SequenceEqual(want)),
+            $"each machine seats the host as Nathan Zachary, {GuestName} in her chosen voice and the third with none ({string.Join(" | ", voices)})");
     }
 
     // A seat's rounds on every machine are its own pilot's pick. The third guest flies stock, so

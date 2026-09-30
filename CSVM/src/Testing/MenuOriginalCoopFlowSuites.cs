@@ -80,6 +80,7 @@ internal static class MenuOriginalCoopFlowSuites
         var exits = new List<MenuExit>();
         End? host = null;
         End? guest = null;
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-coop-flow");
         try
         {
             host = Open(ctx, layout, hostDoor, CampaignAidProfiles.Store(seeded: true, progressed: true), exits);
@@ -97,6 +98,7 @@ internal static class MenuOriginalCoopFlowSuites
             host.Shell.Campaign.OpenCampaignOver(hostStore, CampaignAidProfiles.Planes());
             host.Shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
             ClickRow(ctx, host, OriginalCampaignScreen.CoopDoorKey);
+            MenuSuiteHost.AnswerNetInfo(host.Shell, key => ClickRow(ctx, host, key), "Zachary", CampaignAidProfiles.Pilot);
             AwaitMapping(hostDoor);
             Join(ctx, host, guest);
             FollowTheBoards(ctx, host, guest);
@@ -113,6 +115,7 @@ internal static class MenuOriginalCoopFlowSuites
             hostDoor.Discard();
             guestDoor.Discard();
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
         }
 
         var after = Snapshot(guestDir);

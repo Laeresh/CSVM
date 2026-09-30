@@ -357,9 +357,15 @@ drawn in the archive's own shipped state: the node is ACTIVE in `planes.zbd`, th
 is what C1/M04's own intro relies on: its `pfighter11`..`pfighter13` (called by `scene1`,
 `playerdrop` and `playerthruclouds`) set the children, call `wing_lights_blink`, and fly the prop
 on an SI script, with no activation and no `OBJECT_ADD_CHILD` at all, so a prop built switched
-off shows that intro's launch and dive with the wingman missing. Where a script leaves it is where
-it stays after the handoff (`pfighter13` ends 95 m over the water past the dive), in this engine
-and the original alike. `player` is a bodiless marker, since the aeroplane
+off shows that intro's launch and dive with the wingman missing. Nothing in that mission switches
+it off again, and `pfighter13`'s last keyframe leaves it 95 m over the water at the end of the dive,
+beside where the players are handed back, while the roster's own `wingman_1` spawns 400 m away at
+`(-7453, 130, -2303)`. CSVM switches the prop off at every handoff, a skip included
+(`CutsceneController.Restore`), so no intro prop outlives its film. A generic intro's own data does
+the same in effect: its `RESET_STATE` detaches `piratefighter` to the world root, which the
+original's world walk does not draw. ⚠ Whether the original draws C1/M04's prop after the handoff is
+undecoded; the rule follows the at-the-controls report of a frozen aeroplane hanging beside the
+players there. `player` is a bodiless marker, since the aeroplane
 it stands for is the one the pilot flies and that model belongs to the flown `FlightController`.
 Every staged node's compiled pointer is rebased onto the chapter's own base, so the definition's
 symbol table binds the names it addresses. `OBJECT_ACTIVE_STATE [player, false]` stays callback 11's
@@ -969,7 +975,8 @@ Each case does the same five things, in this order.
    `wingman_4` (`0x00627b34`) and then the chapter/mission pair against `c3`/`m05` and `c4`/`m04`
    (`0x00627b40`–`0x00627b4c`), holding nothing everywhere else. Only inside that arm does it give
    the record **the player's own aircraft type and livery** (`DAT_0071daec`, with airframe id 0xb
-   substituted by 5, and the paint pair at `DAT_0071daf0`/`DAT_0071daf4`). Both cases then give it
+   substituted by 5, named as its `w<plane>` def through `FUN_00426d60` at `0x004750b4`, and the
+   paint pair at `DAT_0071daf0`/`DAT_0071daf4`). Both cases then give it
    the section sums measured in step 1 (`+0x2c8` armour, `+0x2d0` structure) and reveal it
    (`FUN_004b0f40(0)`, which clears the hidden bit `+0x945` and the three cutscene flags and
    reactivates the scene node). **Only 967 places it**: 100 m along the bearing `yaw − 45°` with its
@@ -1004,12 +1011,15 @@ three codes. Three divergences, each deliberate:
 - **The airframe and livery are decided at the roster spawn, not at the swap.** The original writes
   them at mission start and so does CSVM (`CampaignRosterPlan.Build`'s `handover` argument), which
   is why `wingman_4` is a Devastator in `player_fortune` paint everywhere else and the player's own
-  aeroplane in these two missions.
+  aeroplane, flying that airframe's `w<plane>` def, in these two missions.
 - **The handed-over sums are capped at the receiving aircraft's own maxima.** The original needs no
   cap: its `wingman_4` flies the player's airframe, so the sums cannot exceed its pools. CSVM reads
   one airframe's pools as a zone sum on a human rig and as the AI def's authored pair on an AI one
   (`docs/org/vehicleDamage.md`), so an undamaged hand-over lands at the receiver's full pools rather
-  than at the player's larger number.
+  than at the player's larger number. The receiver's pair is its `w<plane>` def's, which authors no
+  `armor` or `health` and so inherits its base def's (`wfury` 72/72 from `fury`), and the Devastator's
+  `wingman` its own 100/100. The def's `wingman` class also exempts the pair from the ±5 % spawn
+  jitter a `jet` takes, so the cap is exactly the authored pair.
 - **967's rebuild carries the captured aircraft's own `PaintScheme` onto the player's new hull**
   (`BL-543`, `BL-554`). This is NOT in the executable: case 967 (`FUN_0047e080`, `0x3c7`) rebuilds
   through `FUN_0047fd50(s_pbalmoral, s_player_balmoral)`, which reads no paint field off the

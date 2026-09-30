@@ -81,6 +81,11 @@ public sealed class ObjectiveSites
         _runtime = runtime;
     }
 
+    /// <summary>A team mode's labelling of a target key by side, null for a key the mode leaves to
+    /// its record. Capture the Flag's bases and flags and Zeppelin vs Zeppelin's hulls read this
+    /// way; every other session leaves it unset.</summary>
+    public Func<string, SiteSide?>? Sides { get; set; }
+
     /// <summary>The target keys carrying one flag: <c>targets.zrd</c>'s own entries carrying it,
     /// less those a completed objective's <c>REMOVE_</c> directive names, plus everything the
     /// matching <c>ADD_</c> has added. A null script and graph are the director-free modes, the
@@ -198,7 +203,13 @@ public sealed class ObjectiveSites
         CollectFlagged(TargetFlag.OtherTarget, _director?.Script, graph, _targets, _live);
         for (int i = 0; i < _live.Count; i++)
         {
-            Offer(_live[i], graph, objective: i < objectives, into);
+            // A side the mode has taken off the cycle is the original's cleared +0x4d, a flag's
+            // marker for a state the flag is not in.
+            var side = Sides?.Invoke(_live[i]);
+            if (side is not { Shown: false })
+            {
+                Offer(_live[i], graph, objective: i < objectives, side, into);
+            }
         }
     }
 
@@ -309,9 +320,10 @@ public sealed class ObjectiveSites
         }
     }
 
-    private void Offer(string node, ObjectiveGraph? graph, bool objective, List<AimCandidate> into)
+    private void Offer(string node, ObjectiveGraph? graph, bool objective, SiteSide? side,
+        List<AimCandidate> into)
     {
-        if (Where(node) is not { } at)
+        if ((side?.At ?? Where(node)) is not { } at)
         {
             return;
         }
@@ -323,12 +335,12 @@ public sealed class ObjectiveSites
             // A record naming a mission-structure node stamps its flags onto the object that
             // node already built and keeps its team; one naming any other node builds its own,
             // and the original builds those neutral, which is almost every site.
-            Team = (resolved is { } site
+            Team = side?.Team ?? (resolved is { } site
                 ? DestructibleRegistry.MissionStructureTeamOf(site)
                 : null) ?? AimAssist.NeutralTeam,
             Live = LiveDespiteState(resolved is { } n ? _runtime?.Destructibles.Resolve(n)?.Status : null),
             ConeOverride = AimAssist.NoConeOverride,
-            Source = SiteFor(node, graph, at, objective),
+            Source = SiteFor(node, graph, at, objective, side),
         });
     }
 
@@ -397,7 +409,8 @@ public sealed class ObjectiveSites
 
     // The strings are re-read every frame because SET_HELP_LABEL rewrites a live site's category;
     // the instance itself survives that, since it is the identity the selection is held by.
-    private ObjectiveSite SiteFor(string key, ObjectiveGraph? graph, Vector3 at, bool objective)
+    private ObjectiveSite SiteFor(string key, ObjectiveGraph? graph, Vector3 at, bool objective,
+        SiteSide? side)
     {
         if (!_sites.TryGetValue(key, out var site))
         {
@@ -418,9 +431,11 @@ public sealed class ObjectiveSites
         // The script's own SET_HELP_LABEL outranks targets.zrd's authored label.
         string category = Text(graph != null && graph.HelpLabels.TryGetValue(key, out var written)
             ? written : info.HelpLabel);
-        site.DisplayName = name.Length > 0 ? name : site.Target.Node;
+        site.DisplayName = side is { Name.Length: > 0 } named ? named.Name
+            : name.Length > 0 ? name : site.Target.Node;
         site.TypeLabel = typeLabel.Length > 0 ? typeLabel : null;
         site.Category = category.Length > 0 ? category : null;
+        site.Side = side;
         site.Position = at;
         site.Objective = objective;
         return site;

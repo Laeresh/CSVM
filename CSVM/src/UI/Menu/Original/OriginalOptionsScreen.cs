@@ -522,6 +522,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private static readonly InputAction[] KeysOtherFlightGroup =
     {
         InputAction.AutoLand, InputAction.Nitro, InputAction.Respawn, InputAction.Pause,
+        InputAction.ChatEveryone, InputAction.ChatTeam,
     };
 
     private static readonly string[] KeysTabNames =

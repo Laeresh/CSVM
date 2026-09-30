@@ -67,7 +67,8 @@ public sealed class TravelersSpec
     /// <summary>The tally the condition must reach.</summary>
     public int Count = 1;
 
-    /// <summary>`DELETE_ON_SUCCESS`: the counted vehicle is deleted as the condition fires.</summary>
+    /// <summary>`DELETE_ON_SUCCESS`: the counted vehicle leaves the world as the condition fires,
+    /// never the player (docs/formats/objectives.md).</summary>
     public bool DeleteOnSuccess;
 }
 

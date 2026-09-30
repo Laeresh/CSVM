@@ -20,12 +20,11 @@ public readonly record struct PauseObjective(string Text, bool Completed);
 public readonly record struct PauseWorldIcon(string Bitmap, float WorldX, float WorldZ, float Revs);
 
 /// <summary>
-/// The pause screen's authored half: the dialog its mission resolves to, the shared block every
-/// dialog in the file borrows, the reveal that places the pins and picks the parchment's rows, and
-/// the strips with their labels, in the order a cursor walks them. <c>InstantAction</c> says which
-/// file it was read from, and <c>Texts</c> holds the words an Instant Action dialog writes on the
-/// blackboard, empty for a campaign one. Built once per sortie, since none of it changes while the
-/// sortie runs. Decode: docs/org/pause-screen.md.
+/// The pause screen's authored half: the mission's dialog, the file's shared block, the reveal
+/// that places pins and picks parchment rows, and the strips.
+/// <c>InstantAction</c> says the dialog is a blackboard, an Instant Action or a multiplayer one.
+/// <c>Texts</c> holds the words it writes there, empty for a campaign one. Built once per sortie,
+/// since none of it changes while the sortie runs. Decode: docs/org/pause-screen.md.
 /// </summary>
 public sealed record PauseSheet(
     EscapeState State,
@@ -66,17 +65,7 @@ public sealed record PauseSheet(
             return null;
         }
 
-        var strips = new List<EscapeButton?>();
-        var labels = new List<string>();
-        foreach (string key in PauseScreens.ButtonKeys)
-        {
-            strips.Add(shared.Button(key));
-            labels.Add(EscapeDialog.Label(messages, shared.Button(key)?.LabelKey ?? string.Empty));
-        }
-
-        strips.Insert(PauseScreens.PhotoRow, PauseScreens.PhotoStrip(shared));
-        labels.Insert(PauseScreens.PhotoRow, PauseScreens.PhotoLabel);
-
+        var (strips, labels) = StripsOf(shared, messages);
         return new PauseSheet(
             state,
             shared,
@@ -88,6 +77,65 @@ public sealed record PauseSheet(
                 ? LoadScreens.DialogTexts(zrdrPath, file, state.Key, messages)
                 : Array.Empty<BoardLine>(),
             strips);
+    }
+
+    /// <summary>A Dogfight's briefing blackboard: <c>escape.zrd</c>'s <c>loading_m</c> dialog under
+    /// the key the load screen reads, with its texts and that file's strips. Where
+    /// <c>escape.zrd</c> carries no dialog of that name, <c>Loading.zrd</c>'s own stands in. Null
+    /// when neither file carries it, which leaves the Built-in board (docs/org/pause-screen.md).
+    /// </summary>
+    public static PauseSheet? LoadMultiplayer(string zrdrPath, string messagesPath, string dialogKey)
+    {
+        EscapeDialog escape;
+        EscapeDialog loading;
+        Messages messages;
+        try
+        {
+            escape = EscapeDialog.Load(zrdrPath, EscapeDialog.CampaignFile);
+            loading = EscapeDialog.Load(zrdrPath, EscapeDialog.LoadingFile);
+            messages = Messages.Load(messagesPath);
+        }
+        catch (Exception e) when (e is IOException or JsonException)
+        {
+            return null;
+        }
+
+        // Asked by name, never through Find: a miss must not settle for the file's bare default.
+        bool own = escape.States.ContainsKey(dialogKey);
+        string file = own ? EscapeDialog.CampaignFile : EscapeDialog.LoadingFile;
+        if (!(own ? escape : loading).States.TryGetValue(dialogKey, out var state)
+            || escape.Shared is not { } shared)
+        {
+            return null;
+        }
+
+        var (strips, labels) = StripsOf(shared, messages);
+        return new PauseSheet(
+            state,
+            shared,
+            EscapeDialog.Settled(state.Steps),
+            EscapeDialog.Label(messages, shared.Objectives?.TitleKey ?? string.Empty),
+            labels,
+            true,
+            LoadScreens.DialogTexts(zrdrPath, file, state.Key, messages),
+            strips);
+    }
+
+    // The block's strips in walk order with their labels, the remake's photo strip among them.
+    private static (List<EscapeButton?> Strips, List<string> Labels) StripsOf(
+        EscapeShared shared, Messages messages)
+    {
+        var strips = new List<EscapeButton?>();
+        var labels = new List<string>();
+        foreach (string key in PauseScreens.ButtonKeys)
+        {
+            strips.Add(shared.Button(key));
+            labels.Add(EscapeDialog.Label(messages, shared.Button(key)?.LabelKey ?? string.Empty));
+        }
+
+        strips.Insert(PauseScreens.PhotoRow, PauseScreens.PhotoStrip(shared));
+        labels.Insert(PauseScreens.PhotoRow, PauseScreens.PhotoLabel);
+        return (strips, labels);
     }
 }
 
@@ -267,8 +315,11 @@ public static class PauseScreens
                 list.BackgroundAt.X, list.BackgroundAt.Y));
         }
 
-        MissionMap.Elements(pictures, sheet.Reveal, back: true);
-        MissionMap.Elements(pictures, sheet.Reveal, back: false);
+        // A load screen's propeller has nothing to turn for on a halted mission. No escape.zrd
+        // script authors one; a multiplayer sheet borrowing Loading.zrd's dialog does.
+        var cycle = MissionMap.Cycle(sheet.Reveal);
+        MissionMap.Elements(pictures, sheet.Reveal, back: true, except: cycle);
+        MissionMap.Elements(pictures, sheet.Reveal, back: false, except: cycle);
         AddWorldIcons(pictures, sheet, readout);
         AddMemento(pictures, sheet, readout);
 

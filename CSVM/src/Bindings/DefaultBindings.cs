@@ -193,6 +193,11 @@ public static class DefaultBindings
         b.Keys(InputAction.SnapLookMode, Key.K);
         b.Keys(InputAction.TrackTarget, Key.L);
         b.Keys(InputAction.SmoothLookMode, Key.J);
+
+        // The two chat commands on the original's own grave key, Shift taking the team line. The
+        // keyboard only: a line is typed, so no pad control opens one.
+        b.Keys(InputAction.ChatEveryone, Key.Quoteleft);
+        b.Mod(InputAction.ChatTeam, KeyModifiers.Shift, Key.Quoteleft);
         return b;
     }
 

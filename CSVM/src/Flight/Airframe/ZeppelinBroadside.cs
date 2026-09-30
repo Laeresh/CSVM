@@ -28,13 +28,13 @@ public enum ZeppelinCannonState
     Retracting,
 }
 
-/// <summary>The zeppelin broadside law (M4 F19), pure and engine-free (docs/architecture.md): the
-/// script-owned engage flag (<see cref="CannonsEngaged"/>, off until <c>COMPLETED_ZEPCANNONS</c>),
-/// the decoded 90° firing arc, the per-cannon stowed → deploy → ready → fire machine with its own
-/// re-fire timer, and the zeppelin-vs-zeppelin gasbag pick. Hit resolution is BALLISTIC: <see
-/// cref="TryAim"/> is a lead/intercept solve, and a target with no solution is SKIPPED, never
-/// rolled against. <see cref="StowAfterIdleSeconds"/> and the two fallback timings are invented,
-/// named as such; no shipped record reaches them.</summary>
+/// <summary>The zeppelin broadside law (M4 F19), pure and engine-free (docs/architecture.md). It
+/// holds the engage flag (<see cref="CannonsEngaged"/>, off until a script or Zeppelin vs Zeppelin
+/// sets it) and the decoded 90° firing arc. Each cannon runs a stowed, deploy, ready, fire machine
+/// with its own re-fire timer, and the zeppelin-vs-zeppelin arm picks a gasbag. Hit resolution is
+/// BALLISTIC: <see cref="TryAim"/> is a lead/intercept solve, and a target with no solution is
+/// SKIPPED, never rolled against. The two fallback timings and <see cref="StowAfterIdleSeconds"/>
+/// are invented, named as such; no shipped record reaches them.</summary>
 public sealed class ZeppelinBroadside
 {
     /// <summary>The decoded arc gate: <c>dot(toTarget, sideNormal) &gt; 0.707</c>, a 45°
@@ -94,10 +94,10 @@ public sealed class ZeppelinBroadside
     /// <summary>All cannons, left side first, in record order.</summary>
     public IReadOnlyList<Cannon> Cannons { get; }
 
-    /// <summary>The decoded zeppelin byte <c>+0xc</c>: zero at construction, written only by the
-    /// objective script's <c>COMPLETED_ZEPCANNONS</c>. While clear the per-frame pass never
-    /// reaches the fire routine (so nothing deploys or fires) and a ready cannon is retracted
-    /// outright; the record's <c>targets</c> list is inert until a script sets it.</summary>
+    /// <summary>The decoded zeppelin byte <c>+0xc</c>, zero at construction. The objective script's
+    /// <c>COMPLETED_ZEPCANNONS</c> writes it, and Zeppelin vs Zeppelin's side setup sets it on every
+    /// hull. While clear the per-frame pass never reaches the fire routine (so
+    /// nothing deploys or fires) and a ready cannon is retracted outright.</summary>
     public bool CannonsEngaged { get; set; }
 
     /// <summary>The sign of the hull-local X axis that points out of the RIGHT broadside. +1

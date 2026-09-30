@@ -108,12 +108,25 @@ public class CombatVoiceGoldenTests
     }
 
     [ExtractedDataFact]
+    public void ASeveralPilotAccentDealsItsPoolInAuthoredOrder()
+    {
+        var voice = Voice(out _, out _);
+        // Accent 1's pool is {26, 27, 28}: its fourth aircraft wraps to the first pilot.
+        Assert.Equal(new int?[] { 26, 27, 28, 26 },
+            Enumerable.Range(0, 4).Select(turn => voice.PilotFor(1, turn)).ToArray());
+        // Accent 0 deals the def-only id 35 second, a pilot with no WAVs, as the original deals it.
+        Assert.Equal(new int?[] { 18, 35, 37 },
+            Enumerable.Range(0, 3).Select(turn => voice.PilotFor(0, turn)).ToArray());
+    }
+
+    [ExtractedDataFact]
     public void TheWorkedExampleChainResolvesEndToEnd()
     {
         var voice = Voice(out _, out var groups);
         // accent 12 (Jack/Ilsa per the survey) → the single-id pool {2} → id2's clips.
         Assert.Equal(new[] { 2 }, voice.Pool(12));
-        Assert.Equal(2, voice.PilotFor(12, new System.Random(1)));
+        Assert.Equal(2, voice.PilotFor(12, 0));
+        Assert.Equal(2, voice.PilotFor(12, 5));
         string? playable = voice.PlayableFor(2, "DI-LowDmg");
         Assert.Equal("snd_DI-LowDmg-A_id2_random", playable);
         Assert.True(groups.ContainsKey(playable!));
@@ -121,6 +134,28 @@ public class CombatVoiceGoldenTests
         // DA/DE resolve per sub-family; the root alone is deliberately not playable.
         Assert.Null(voice.PlayableForTrigger(2, 20));
         Assert.Equal("snd_DA-Bail-A_id2_random", voice.PlayableFor(2, "DA-Bail"));
+    }
+
+    // The Voice list's script values name pilots of the same id space the clip sets use. Each is a
+    // whole player-voice set: every family a player's aircraft speaks has clips, taunts included.
+    [ExtractedDataFact]
+    public void EveryPlayerVoiceIsAPilotWithAFullClipSet()
+    {
+        var voice = Voice(out _, out _);
+        string[] families = { "GL-AllyDwn", "GL-EnemyDwn", "GL-PlyrDwn", "DA", "DE", "DI-LowDmg", "DI-MedDmg", "DI-HighDmg", "TA-FailTail", "TA-FailShk" };
+        foreach (var row in CSVM.UI.Menu.PilotVoices.All)
+        {
+            Assert.Contains((int)row.Speaker, voice.PilotIds);
+            foreach (string family in families)
+            {
+                Assert.True(voice.ClipsFor(row.Speaker, family).Count > 0, $"{row.Name} (VO id {row.Speaker}) owns no {family} clip");
+            }
+            Assert.NotNull(voice.PlayableFor(row.Speaker, "GL-AllyDwn"));
+        }
+
+        // ABLE-TO-FAIL CONTROL: id 47, the announcer, ships no clip set, so the test can tell a
+        // player voice from any id number.
+        Assert.Empty(voice.ClipsFor(47, "GL-AllyDwn"));
     }
 
     private static CombatVoice Voice(out Dictionary<string, SoundDef> defs,

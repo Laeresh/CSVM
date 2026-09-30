@@ -26,6 +26,9 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     /// <summary>The cabin's network door, Host Co-op while shut and Close Network while open.</summary>
     public const string CoopDoorKey = "NET_HOSTCOOP";
 
+    /// <summary>The co-op host's BOOT plaque beside the door, live while a guest is seated.</summary>
+    public const string CoopBootKey = "NET_BOOT";
+
     // The roster's own list colours, CAMPAIGN.SCRIPT's sub-script VB. The selection bar behind the
     // picked row is 0xff800000, the frame around the row under the pointer 0xffff0000.
     private const byte RosterBarRed = 0x80;
@@ -36,6 +39,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     // sits below the band's two lines (status and guest address), whose ground ends at y 49.
     private const float CoopDoorX = 14f;
     private const float CoopDoorY = 57f;
+    private const float CoopBootGap = 4f;
     private const float CoopBandY = 14f;
     private const float CoopBandSize = 13f;
     private const float CoopBandWidth = 520f;
@@ -51,6 +55,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     private readonly Func<PlayerSeat, IReadOnlyList<int>> _flightDevices;
     private readonly string? _dataRoot;
     private readonly Func<NetPlayFeature?> _net;
+    private readonly Action<NetSessionKind?, Action> _ask;
 
     // The pages' host, mirrored to the screen showing and never walked (see the class summary).
     private CampaignFlow? _flow;
@@ -96,7 +101,10 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         Func<PlayerSeat, IReadOnlyList<int>>? flightDevices = null,
         string? dataRoot = null,
         // The network door the cabin's Host Co-op opens; null, or a door answering null, hides it.
-        Func<NetPlayFeature?>? net = null)
+        Func<NetPlayFeature?>? net = null,
+        // Stands the network boxes over the cabin before Host Co-op opens the door; null opens it
+        // at once.
+        Action<NetSessionKind?, Action>? ask = null)
     {
         _campaign = campaign;
         _setup = setup ?? throw new ArgumentNullException(nameof(setup));
@@ -108,6 +116,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         _flightDevices = flightDevices ?? (_ => Array.Empty<int>());
         _dataRoot = dataRoot;
         _net = net ?? (() => null);
+        _ask = ask ?? ((_, then) => then());
     }
 
     /// <summary>Whether a campaign is open on this module.</summary>
@@ -299,9 +308,12 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             return false;
         }
 
-        // The guest's own last pilot names it to the host. Read only, since a guest's saves are
-        // never touched.
-        net.PlayerName = _profiles?.Invoke().LastPlayedPilotName ?? string.Empty;
+        // The guest's callsign names it to the host, and a guest that joined without one goes by
+        // its own last pilot. Read only, since a guest's saves are never touched.
+        if (net.PlayerName.Length == 0)
+        {
+            net.PlayerName = _profiles?.Invoke().LastPlayedPilotName ?? string.Empty;
+        }
 
         // The door's pick is the guest's memory for the joined session, and a fresh join clears it.
         // Reopening from it is what carries the plane and its fit across flights and retries.
@@ -442,6 +454,11 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
                     CoopDoorKey, open ? CoopDoorText.CloseNetworkButton : CoopDoorText.HostCoopButton, 0,
                     open || door.Stage is NetDoorStage.Shut or NetDoorStage.Failed, 0);
                 rows.Add(row with { X = CoopDoorX, Y = CoopDoorY });
+                if (open)
+                {
+                    var boot = _host.PlaqueRow(CoopBootKey, CoopDoorText.BootButton, 0, door.CoopGuests.Count > 0, 0);
+                    rows.Add(boot with { X = CoopDoorX, Y = CoopDoorY + row.Height + CoopBootGap });
+                }
             }
         }
     }
@@ -519,6 +536,12 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         if (row.Key == CoopDoorKey)
         {
             ToggleCoopDoor();
+            return null;
+        }
+
+        if (row.Key == CoopBootKey)
+        {
+            AskBoot(0);
             return null;
         }
 
@@ -1349,9 +1372,9 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             No());
     }
 
-    // Host Co-op opens a campaign listen server for the seats the local players leave free and
-    // advertises the cabin's mission; Close Network hangs it up. A door the Connection page opened
-    // is left alone, its button drawn greyed.
+    // Host Co-op asks Game and Player Information first. It then opens a campaign listen server
+    // for the seats the local players leave free and advertises the cabin's mission. Close Network
+    // hangs it up. A door the Connection page opened is left alone, its button drawn greyed.
     private void ToggleCoopDoor()
     {
         if (_net() is not { } net)
@@ -1366,6 +1389,37 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         }
 
         if (net.Stage is not (NetDoorStage.Shut or NetDoorStage.Failed))
+        {
+            return;
+        }
+
+        _ask(NetSessionKind.CampaignCoop, OpenCoopDoor);
+    }
+
+    // BOOT asks about each seated guest in player order: Yes boots that one, No asks about the
+    // next, and Cancel asks no more. The original has no campaign across a link, so the question is
+    // the remake's own; the boot itself is the Dogfight lobby's.
+    private void AskBoot(int from)
+    {
+        if (_net() is not { IsCoopHost: true } net || from >= net.CoopGuests.Count)
+        {
+            return;
+        }
+
+        var guest = net.CoopGuests[from];
+        var boot = Yes(() => net.Boot(guest.Peer));
+        if (from + 1 < net.CoopGuests.Count)
+        {
+            _host.RaiseDialog(CoopDoorText.BootQuestion(guest.Name), DialogIcon.Query, boot, NoCentred(() => AskBoot(from + 1)), Cancel());
+            return;
+        }
+
+        _host.RaiseDialog(CoopDoorText.BootQuestion(guest.Name), DialogIcon.Query, boot, No());
+    }
+
+    private void OpenCoopDoor()
+    {
+        if (_net() is not { } net || net.Stage is not (NetDoorStage.Shut or NetDoorStage.Failed))
         {
             return;
         }
@@ -1511,7 +1565,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
 
         for (int i = 0; i < rows.Count; i++)
         {
-            if (rows[i].Key == CoopDoorKey)
+            if (rows[i].Key is CoopDoorKey or CoopBootKey)
             {
                 bool pressed = !_host.DialogOpen && _host.PressedRow == i;
                 _host.ComposeGenericRow(rows[i], i == focus && !_host.DialogOpen, pressed, i, layers);
@@ -1697,6 +1751,13 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
 
     private OriginalDialogAnswer No() =>
         new(OriginalShell.DialogNoKey, CampaignBoards.DialogRightKey, DialogWord(103, "No"), null);
+
+    // The three-button box's No moves onto the centre slot, and Cancel takes the right one.
+    private OriginalDialogAnswer NoCentred(Action run) =>
+        new(OriginalShell.DialogNoKey, CampaignBoards.DialogCenterKey, DialogWord(103, "No"), run);
+
+    private OriginalDialogAnswer Cancel() =>
+        new(OriginalShell.DialogCancelKey, CampaignBoards.DialogRightKey, DialogWord(101, "Cancel"), null);
 
     private string DialogWord(int id, string fallback)
     {

@@ -28,10 +28,10 @@ Names only, deliberately: a gloss here would be a second description of the same
 exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One flag, one description.
 
 **Modes and content, what gets built**
-`--viewer` · `--fly` · `--stunt` · `--vs` · `--vs-kills` · `--vs-time` · `--vs-lives` · `--vs-no-respawn` · `--coop` · `--freecam` · `--anim-lab` · `--menu` · `--skip-intro` · `--intro` · `--chapter` · `--stage` · `--node` · `--plane` · `--players` · `--mission` · `--scenario` · `--ia` · `--campaign` · `--profiles` · `--play-anim` · `--movie` · `--presentation` · `--force-builtin`
+`--viewer` · `--fly` · `--stunt` · `--vs` · `--vs-kills` · `--vs-time` · `--vs-lives` · `--vs-no-respawn` · `--ctf` · `--zvz` · `--coop` · `--freecam` · `--anim-lab` · `--menu` · `--skip-intro` · `--intro` · `--chapter` · `--stage` · `--node` · `--plane` · `--players` · `--mission` · `--scenario` · `--ia` · `--campaign` · `--profiles` · `--play-anim` · `--movie` · `--presentation` · `--force-builtin`
 
 **Multiplayer, the wire a match flies over**
-`--net-host` · `--net-join`
+`--net-host` · `--net-join` · `--net-port-base`
 
 **Placement, where the subject starts and which way it faces**
 `--pos` · `--direction` · `--lookat` · `--fov` · `--view` · `--spawn` · `--campos` · `--spawn-at` · `--spawn-dir`
@@ -182,17 +182,32 @@ lines**.
 - `--vs-no-respawn` (with `--vs`, a downed pilot stays on the crash camera until it presses the
   respawn key itself, rather than coming back on the timer. The Multiplayer Lobby's Auto Respawn box
   unchecked is the same rule, and spelling this flag out beats the box)
+- `--ctf`, `--ctf=home` (with `--vs` over the wire, fly the match as Capture the Flag: each lobby
+  team's `cs_flag_n` flag is live, taken, carried, dropped and brought home, the host deciding and
+  scoring. Pair with `--mission=MP2`, the one mission that lays the flags out. `home` adds the host's
+  option that an enemy flag scores only while the carrier's own flag is at home. The Multiplayer
+  Lobby's Capture the Flag type sets both. Ignored without `--vs`, with a warning)
+- `--zvz` (with `--vs` over the wire, fly the match as Zeppelin vs Zeppelin: the zeppelins run, the
+  first two lobby teams in seat order each fly one hull, the host scores every gas bag and cannon
+  downed and the first hull lost ends the match for the other side. Pair with `--mission=MP3`, the
+  mission that lays out `multiplayer1zep` and `multiplayer2zep`. The Multiplayer Lobby's Zeppelin vs
+  Zeppelin type sets it. Ignored without `--vs` or beside `--ctf`, with a warning)
 - `--net-host[=port]`, `--net-host=address:port` (open a listen server and fly this session as its
   host, the scripted twin of the menu's multiplayer door over the same socket. A bare flag takes
-  port 47500 on IPv4's wildcard, the stable global IPv6 address and `::1`, a number sets the port,
+  port 47500 (or `--net-port-base`) on IPv4's wildcard, the stable global IPv6 address and `::1`, a number sets the port,
   and `address:port` binds that one address, IPv6 in brackets. ⚠ A scripted run names `127.0.0.1`: a wildcard
   bind is what puts a Windows firewall dialog on somebody's screen. A host waits for nobody and
   flies alone until a guest arrives)
 - `--net-join=address[:port]` (join the match at that address and fly this session as a guest,
-  the port defaulting to 47500 and an IPv6 address written in brackets. The launch holds at the
-  load screen until the link stands or 30 seconds pass, because a guest with no host has no seats
-  to fly. The roster it flies is the host's, so the plane this end picked is a request, not a
-  promise)
+  the port defaulting to 47500 (or `--net-port-base`) and an IPv6 address written in brackets. The
+  launch holds at the load screen until the link stands or 30 seconds pass, because a guest with no
+  host has no seats to fly. The roster it flies is the host's, so the plane this end picked is a
+  request, not a promise)
+- `--net-port-base=N` (this process's game port N and LAN discovery port N+1, in place of the
+  shipped 47500 and 47501: the door's port row starts on N, the LAN search asks and answers on N+1,
+  and a bare `--net-host` or `--net-join` takes N. N lies in [1024, 65436], else a warning keeps the
+  shipped pair. `RunTests.ps1` hands every engine shard its own, and a suite that opens a socket
+  stays inside the 100 ports from N up (`Testing/SuitePorts.cs`). A player never needs it)
 - `--coop` (plain splitscreen free flight defaults to **FFA**, every
   human on their own team (`AimAssist.TeamOfPilot`), so aim assist, world turrets and AI gunners
   treat the other humans as hostile. `--coop` opts a plain `--fly`/`--stunt` session into one
@@ -313,7 +328,7 @@ lines**.
 - `--debug-waves=N` (launchscreen only, H16: pre-configure the first N, clamped 0-4, Instant Action wizard wave slots with a distinct non-empty load, so `--menu=waves --screenshot=` can show "N waves configured" states with nobody at the controls, the same role `--debug-join=` plays for the plane screen's join strip)
 - `--debug-wingmen=N` (launchscreen only, H16: pre-configure the Instant Action wizard's wingman count, clamped 0-5, and a non-default aircraft, pairs with `--debug-join=` to screenshot the plane screen's decision-8a flown-wingmen re-clamp as players join)
 - `--debug-preset=N` (launchscreen only: apply Table of Contents preset N, 0-18, and open on the wizard's step 1, so a `--screenshot` shows the FILLED wizard with nobody at the controls. This is the aid for what units cannot see, a preset applying the wrong aircraft or the wrong militia looks entirely plausible on screen. It fills the wave and wingman fields itself, so it overrides `--debug-waves=`/`--debug-wingmen=` rather than combining with them)
-- `--mission=IA1` (which mission's spawns `--fly` uses; IA1 reads `ia.json` spawn_points, M0x story missions read `objectives.json` PLAYER_INIT, pair with the matching `--chapter=` so the world fits the spawn)
+- `--mission=IA1` (which mission's spawns `--fly` uses; IA1 reads `ia.json` spawn_points, M0x story missions read `objectives.json` PLAYER_INIT, pair with the matching `--chapter=` so the world fits the spawn. A Dogfight launched from a menu ignores it and flies its type's `MP1`, `MP2` or `MP3`)
 - `--scenario=zeppelin_run` (which instant-action scenario's spawn list, `zeppelin_run`/`dogfight_ace`/`dogfight_squadron`/`stunt_flying`/…)
 - `--ia=<path>` (**fly an Instant Action mission from a hand-authored JSON file**: a plain object using a chapter's shipped `ia.zrd.json` field names plus the invented `lives`; omitted keys take the original's reset defaults. Pair it with `--chapter=`. The launchscreen wizard's in-memory `IaDef` is checked before `IaPath`. `mission_type` drives the spawn list, the ace, wingmen, waves, the objective zeppelin, the danger zones and the end condition. `lives` is per pilot: 1 faithful, N for N-1 respawns, 0 unlimited. A malformed or missing file logs and leaves the session non-Instant-Action)
 - `--campaign=<profile>:<seq>` (the scripted-testing entry for a campaign session: `<profile>` is a profile folder under `user://Profiles/` or `--profiles=`, `<seq>` the `cm_sequence.zrd` flat mission index, 0-23. Both are recorded as plain values (`SessionSpec.CampaignProfile`/`CampaignMissionSeq`); loading the profile and building the mission's world is the campaign director's job. A missing or unparseable `:<seq>` keeps the profile name and warns rather than dropping the flag. There is no dedicated mode: like `--stunt`/`--vs`, a bare `--campaign=` rides the default Fly resolution)

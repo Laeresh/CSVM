@@ -110,6 +110,15 @@ public static class EngineAudioCurves
     public static bool SlotIsPitched(IReadOnlyDictionary<string, SoundDef>? defs, string? name) =>
         name != null && defs != null && defs.TryGetValue(name, out var def) && def.Frequency;
 
+    /// <summary>Whether the healthy slot takes the throttle pitch. The plain loop answers by
+    /// <see cref="SlotIsPitched"/>, and so does the cockpit loop while
+    /// <paramref name="pitchCockpitLoop"/> is clear. Set, the cockpit loop takes the exterior curve
+    /// although no <c>*_cp</c> definition carries <c>FREQUENCY</c>. That is a remake-only rule:
+    /// docs/formats/vehicle.md, "The cockpit loop's pitch is a remake-only rule".</summary>
+    public static bool HealthySlotIsPitched(IReadOnlyDictionary<string, SoundDef>? defs, string? name,
+        bool cockpitLoop, bool pitchCockpitLoop) =>
+        (cockpitLoop && pitchCockpitLoop && name != null) || SlotIsPitched(defs, name);
+
     /// <summary>The damaged swap's pitch multiplier, drawn once per swap and then held:
     /// <paramref name="u"/> is the original's <c>rand() / 32767</c> and the entry's own two floats
     /// bound it linearly. A CLEAR flag byte leaves the multiplier at 1 rather than drawing, which
@@ -169,7 +178,8 @@ public static class EngineAudioCurves
 
     /// <summary>The engine slot's definition and its pitch multiplier. Damaged takes
     /// <c>damaged_engine_sound</c> at a drawn multiplier. Else <paramref name="firstPersonView"/>
-    /// (own-ship, <see cref="SelectsCockpitLoop"/>) takes <c>cockpit_engine_sound</c> at 1. Else
+    /// (own-ship, <see cref="SelectsCockpitLoop"/>) takes <c>cockpit_engine_sound</c> at 1, pitched
+    /// or not by <see cref="HealthySlotIsPitched"/>. Else
     /// the plain <c>engine_sound</c>. Damaged wins because no def authors a damaged cockpit variant.</summary>
     public static (string Name, float PitchMul) EngineDefFor(
         PlaneStats stats, bool damaged, RandomNumberGenerator rng, bool firstPersonView = false)
@@ -199,11 +209,11 @@ public static class EngineAudioCurves
         boosting);
 
     /// <summary>Slot 0, the engine loop. Each curve's parameter is the throttle lever plus a
-    /// turn-rate and a climb-attitude term, clamped to [0, 1.5] BEFORE the curve maps it
-    /// (docs/formats/vehicle.md, "The engine slot's pitch and gain are not throttle alone"); the
-    /// pitch then carries the swap multiplier and the mixer's clamp, or is 1 when
+    /// turn-rate and a climb-attitude term. The sum is clamped to [0, 1.5] BEFORE the curve maps it
+    /// (docs/formats/vehicle.md, "The engine slot's pitch and gain are not throttle alone").
+    /// The pitch then carries the swap multiplier and the mixer's clamp, or is 1 when
     /// <paramref name="pitchable"/> (<see cref="SlotIsPitched"/>) is clear. The volume is the curve
-    /// alone: the caller still applies the definition's own VOLUME, its ramp and any mix gain.</summary>
+    /// alone: the caller still applies the definition's own VOLUME and any mix gain.</summary>
     internal static (float Pitch, float Volume) Engine(
         PlaneStats stats, in EngineDrive drive, float pitchMul, bool pitchable)
     {

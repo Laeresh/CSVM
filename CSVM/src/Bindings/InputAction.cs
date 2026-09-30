@@ -146,4 +146,9 @@ public enum InputAction
     // because the enum is positional.
     ZoomIn,
     ZoomOut,
+
+    // The original's Chat to Everyone and Chat to Team, which open the in-flight chat's entry in a
+    // network match. Appended because the enum is positional.
+    ChatEveryone,
+    ChatTeam,
 }

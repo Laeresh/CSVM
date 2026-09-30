@@ -32,20 +32,21 @@ public sealed partial class LoadBoard : Control
     /// why it is off unless a run asks for it.</summary>
     public string CaptureDir { get; set; } = string.Empty;
 
-    /// <summary>Builds the board for one launch. <paramref name="campaign"/> picks the paper sheet
-    /// over the blackboard, and <paramref name="missionType"/> the Instant Action dialog whose four
-    /// texts the blackboard writes, null for a mode of ours. <paramref name="subject"/> is the
-    /// heading a mode of ours takes in place of a dialog. <paramref name="sheet"/> is the campaign
-    /// screen's whole content, null where the extraction could not answer for it.</summary>
+    /// <summary>Builds the board for one launch. The campaign flag picks the paper sheet over the
+    /// blackboard. The mission type names the Instant Action dialog the blackboard writes, null for a
+    /// mode of ours. The subject is the heading a mode of ours takes in place of a dialog. The sheet
+    /// is the campaign screen's whole content, null where the extraction could not answer for it.
+    /// The briefing is a Dogfight's multiplayer dialog key.</summary>
     public static LoadBoard Build(
         string dataRoot, string zrdrPath, string messagesPath, bool campaign, string subject,
-        string? missionType, LoadSheet? sheet = null)
+        string? missionType, LoadSheet? sheet = null, string? briefing = null)
     {
         var board = new LoadBoard
         {
             _dataRoot = dataRoot,
             _board = LoadScreens.For(
-                campaign, subject, missionType, zrdrPath, messagesPath, sheet, pumped: true),
+                campaign, subject, missionType, zrdrPath, messagesPath, sheet, pumped: true,
+                briefing: briefing),
             _motion = LoadScreens.MotionFor(campaign, sheet),
             _palette = campaign ? BoardPalette.Paper : BoardPalette.Chalk,
             MouseFilter = MouseFilterEnum.Ignore,
