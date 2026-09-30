@@ -98,6 +98,7 @@ reset (INSTR-64).
 | | click right stick | hold to look back, the pad twin of `numpad 0` (`BL-372`), with the same split: external back camera outside, in-cockpit head look-back in the first-person views |
 | `F20` | | show the built colliders, coloured by the surface id they resolve to (see `--collision`), `--debug-colliders` |
 | `F21` | | colour world objects by class (destructible/facade/clutter/scenery), `--debug-classoverlay` |
+| `G` | | switch the graphics mode between Original and Enhanced on the running world, for an A/B comparison, and save it as the Options row does. Any flying session but the viewer, whose mesh lab keeps `G` for its normals density. The first switch each way costs a hitch while the shaders recompile |
 | `Esc` | Start | pause, the original's "Pause/Quit/Objectives". The board it opens is in the "Any mode" table below |
 | - | | the original's commands this port has no action for leave their keys free: Shift+`L` level off, Ctrl+`X` bail out, and `F9`, the first of its four external cameras. The other three external-camera keys, `F10` through `F12`, are the one place this port sits on an original command's key: they carry the gltf export, the placement print and the screenshot, which are instruments rather than flight actions and are not in the shipped table a Controls door can rebind |
 

@@ -405,6 +405,9 @@ public partial class GameSession : Node3D
     private Node3D? _worldRoot;
     // the session's LIGHT_STATE point lights (see WorldLights)
     private WorldLights? _worldLights;
+    // The faithful path's projected aircraft shadow, null in enhanced mode, which casts shadow maps
+    // instead. Held so a live graphics-mode switch can build it or free it.
+    private GroundShadowPass? _groundShadows;
     // The session-owned texture archive, kept open past the build scope so the data-driven crash can
     // bake its effect puffers lazily at crash time (the same reason --anim-lab keeps it open, but that
     // path hands it to the AnimLab node instead). Disposed by ReturnToMenu on teardown so a map reload
@@ -899,6 +902,26 @@ public partial class GameSession : Node3D
         HoldStart();
         LoadProgress.Report(LoadStep.Finished);
         return true;
+    }
+
+    /// <summary>Follow a live graphics-mode switch the launcher has already applied to the shaders,
+    /// the sun and the Environment. The zone is lit again under the other arm, each cockpit pass
+    /// copies the new look, and the ground shadow is built or freed. The world lights follow on
+    /// their own next commit.</summary>
+    public void ApplyGraphicsMode()
+    {
+        _weatherRig?.ReapplyZone();
+        foreach (var rig in _rigs)
+            rig.Controller?.CockpitPass?.ApplyGraphicsMode(_spec.SkippedPasses);
+        if (GraphicsMode.Enhanced)
+        {
+            _groundShadows?.QueueFree();
+            _groundShadows = null;
+        }
+        else if (_groundShadows == null && _worldRoot != null && _projectiles != null)
+        {
+            BuildGroundShadows();
+        }
     }
 
     public override void _Notification(int what)
@@ -2571,8 +2594,7 @@ public partial class GameSession : Node3D
         // The original's per-frame ground shadow, one quad under every aircraft. Roster and rigs
         // are read fresh, so waves are covered and each pane's own pilot takes the player's shape
         // there. Enhanced graphics mode builds nothing here and casts real shadow maps instead.
-        GroundShadowPass.Build(_worldRoot!, AllAircraft, PlayerPositionsSnapshot, () => _rigs,
-            () => _weatherRig?.SunlightRgb ?? WeatherRig.DefaultSunlightRgb);
+        BuildGroundShadows();
 
         // The smoke screens' own smoke, wired here rather than at their construction because the
         // chapter's textures and anim program are only resolved this far into the build. Same
@@ -5170,6 +5192,12 @@ public partial class GameSession : Node3D
 
         return -1;
     }
+
+    // Built at the flight build's projectile-pool step and again on a switch to original mode.
+    // A no-op in enhanced mode (GroundShadowPass.Build).
+    private void BuildGroundShadows() =>
+        _groundShadows = GroundShadowPass.Build(_worldRoot!, AllAircraft, PlayerPositionsSnapshot, () => _rigs,
+            () => _weatherRig?.SunlightRgb ?? WeatherRig.DefaultSunlightRgb);
 
     // One interior render pass per rig, on that player's own HUD parent, so splitscreen gets a
     // pass per pane rather than one for the window (--no-cockpit-pass opts out). Built after the rigs, since

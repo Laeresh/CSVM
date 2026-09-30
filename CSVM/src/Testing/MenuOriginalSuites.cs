@@ -81,14 +81,14 @@ internal static class MenuOriginalSuites
         + "from mid-setup discards the pick and shows Built-in's Mode screen, a switch back starts "
         + "Original fresh, Built-in's Options route steps the difficulty, the opening view, the "
         + "automatic head turn, the targeting setting on and back off, the rumble toggle off, the "
-        + "graphics mode and "
+        + "graphics mode, the view distance row under it and "
         + "its six display rows over the machine's own screens and sizes, the four vocabularies "
         + "and a wrap onto the last frame cap and, past the three scales below native, onto the last render scale, an anti-aliasing row "
         + "on the stepped mode's default whose step onto FSR 2.2 pulls that scale back to native "
         + "and narrows the scale row, its four volume rows "
         + "stepped by the AUDIO page's own step and clamped at both ends, "
         + "opens and leaves the rebinding screen behind its Controls door and emits the apply exit "
-        + "carrying all sixteen with no presentation row among them, "
+        + "carrying all seventeen with no presentation row among them, "
         + "Original's VIDEO door opens the decoded page on its Display Mode dropdown "
         + "which fits its authored window and draws no bar, over the V-Sync one whose five words "
         + "window into four with the arrows and the thumb inside the box's right edge and the fifth "
@@ -689,8 +689,8 @@ internal static class MenuOriginalSuites
 
     // Built-in's Options route: the last Mode row opens Options, and Right steps the difficulty to
     // Hard. The two rows under it step the opening view and the automatic head turn, the two under
-    // those the targeting setting and the rumble. The graphics mode row comes next; the command
-    // line alone chooses a presentation, so no row does. The six display rows step over the
+    // those the targeting setting and the rumble. The graphics mode and view distance rows come next;
+    // the command line alone chooses a presentation, so no row does. The six display rows step over the
     // machine's own screens and sizes. The four volume rows step the levels the AUDIO page writes.
     // The apply row's Accept is the one exit the launcher persists every choice from.
     private static void BuiltInOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, List<MenuExit> exits)
@@ -706,8 +706,8 @@ internal static class MenuOriginalSuites
         ctx.Check(menu.ShownRowText == LaunchMenu.OptionsRow,
             $"Up from Free Flight wraps onto the multiplayer door, and again onto Options ({menu.ShownRowText})");
         Press(host, seat, Accept);
-        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 18 && menu.ShownRowText == "Difficulty: Normal",
-            $"Accept opens the Options screen with its eighteen rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
+        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 19 && menu.ShownRowText == "Difficulty: Normal",
+            $"Accept opens the Options screen with its nineteen rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "Difficulty: Hard", $"Right steps the difficulty to Hard ({menu.ShownRowText})");
         Press(host, seat, Down);
@@ -743,11 +743,14 @@ internal static class MenuOriginalSuites
         ctx.Check(menu.ShownRowText != beforeGraphics && menu.ShownRowText.StartsWith("Graphics: ", System.StringComparison.Ordinal),
             $"the sixth row is the graphics mode, straight under the rumble with no presentation row between, and Right steps it ({beforeGraphics} -> {menu.ShownRowText})");
         string graphics = menu.ShownRowText.EndsWith("Enhanced", System.StringComparison.Ordinal) ? "enhanced" : "original";
+        Press(host, seat, Down);
+        ctx.Check(menu.ShownRowText.StartsWith("View distance (Enhanced only): ", System.StringComparison.Ordinal),
+            $"the seventh row is the view distance, under the graphics mode it belongs to ({menu.ShownRowText})");
         var display = BuiltInDisplayRows(ctx, host, seat, menu, graphics);
         BuiltInAudioRows(ctx, host, seat, menu);
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow && menu.ShownHeading == "OPTIONS  (17/18)",
-            $"the seventeenth row is the Controls door, the heading counting the window's position ({menu.ShownRowText}, {menu.ShownHeading})");
+        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow && menu.ShownHeading == "OPTIONS  (18/19)",
+            $"the eighteenth row is the Controls door, the heading counting the window's position ({menu.ShownRowText}, {menu.ShownHeading})");
         Press(host, seat, Accept);
         ctx.Check(menu.ShownScreen == "Controls" && menu.ShownRowCount > 2,
             $"which opens the rebinding screen over a seat's own keymap ({menu.ShownScreen}, {menu.ShownRowCount} rows)");
@@ -781,7 +784,7 @@ internal static class MenuOriginalSuites
         ctx.Check(!host.Shown, $"and the presentation is hidden for the launcher to act (shown={host.Shown})");
     }
 
-    // The six display rows, walked from the graphics row, each stepping in the store's own words.
+    // The six display rows, walked from the view distance row, each stepping in the store's own words.
     // The monitor row steps over the machine's screens, so its label is checked against the
     // enumeration. The resolution row steps once the mode leaves borderless, which pins it. The rest
     // step over their vocabularies. Returns the words the apply carries.
@@ -792,7 +795,7 @@ internal static class MenuOriginalSuites
         int standing = MonitorSetting.Resolve(null, screens).Screen;
         Press(host, seat, Down);
         ctx.Check(menu.ShownRowText == $"Monitor: {screens.Labels[standing]}",
-            $"the seventh row is the monitor, an unsaved index showing the screen the window stands on ({menu.ShownRowText})");
+            $"the eighth row is the monitor, an unsaved index showing the screen the window stands on ({menu.ShownRowText})");
         Press(host, seat, Right);
         int stepped = DisplaySettingRows.Step(standing, 1, screens.Labels.Count);
         ctx.Check(menu.ShownRowText == $"Monitor: {screens.Labels[stepped]}",
@@ -802,7 +805,7 @@ internal static class MenuOriginalSuites
         Press(host, seat, Down);
         string opened = menu.ShownRowText;
         ctx.Check(opened == $"Resolution: {sizes.Fallback}",
-            $"the eighth row is the resolution, showing the screen's own size ({opened})");
+            $"the ninth row is the resolution, showing the screen's own size ({opened})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == opened,
             $"which the shipped borderless mode pins, so Right steps it nowhere ({menu.ShownRowText})");
@@ -811,7 +814,7 @@ internal static class MenuOriginalSuites
 
         Press(host, seat, Down);
         ctx.Check(menu.ShownRowText == "Display mode: Borderless",
-            $"the ninth row is the display mode, unsaved showing the shipped borderless default ({menu.ShownRowText})");
+            $"the tenth row is the display mode, unsaved showing the shipped borderless default ({menu.ShownRowText})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "Display mode: Fullscreen",
             $"Right steps it one word along the vocabulary ({menu.ShownRowText})");
@@ -826,7 +829,7 @@ internal static class MenuOriginalSuites
         Press(host, seat, Down);
 
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == "V-Sync: Off", $"the tenth row is V-Sync, unsaved showing the shipped Off ({menu.ShownRowText})");
+        ctx.Check(menu.ShownRowText == "V-Sync: Off", $"the eleventh row is V-Sync, unsaved showing the shipped Off ({menu.ShownRowText})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "V-Sync: 60 FPS",
             $"Right steps it onto the first cap ({menu.ShownRowText})");
@@ -840,7 +843,7 @@ internal static class MenuOriginalSuites
 
         Press(host, seat, Down);
         ctx.Check(menu.ShownRowText == "Render scale: 100%",
-            $"the eleventh row is the render scale, unsaved showing native ({menu.ShownRowText})");
+            $"the twelfth row is the render scale, unsaved showing native ({menu.ShownRowText})");
         for (int i = 0; i < 4; i++)
         {
             Press(host, seat, Left);
@@ -854,7 +857,7 @@ internal static class MenuOriginalSuites
         bool enhanced = graphics == GraphicsMode.EnhancedWord;
         Press(host, seat, Down);
         ctx.Check(menu.ShownRowText == (enhanced ? "Anti-aliasing: TAA" : "Anti-aliasing: Off"),
-            $"the twelfth row is anti-aliasing, unsaved showing the {graphics} mode's own default ({menu.ShownRowText})");
+            $"the thirteenth row is anti-aliasing, unsaved showing the {graphics} mode's own default ({menu.ShownRowText})");
         Press(host, seat, enhanced ? Right : Left);
         ctx.Check(menu.ShownRowText == "Anti-aliasing: FSR 2.2",
             $"one step lands on FSR 2.2 ({menu.ShownRowText})");
@@ -875,8 +878,8 @@ internal static class MenuOriginalSuites
     private static void BuiltInAudioRows(TestContext ctx, MenuHost host, ScriptedSeat seat, LaunchMenu menu)
     {
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == $"Master volume: {AudioMix.DefaultMaster}" && menu.ShownHeading == "OPTIONS  (13/18)",
-            $"the thirteenth row is the Master level, unsaved showing the shipped full level ({menu.ShownRowText}, {menu.ShownHeading})");
+        ctx.Check(menu.ShownRowText == $"Master volume: {AudioMix.DefaultMaster}" && menu.ShownHeading == "OPTIONS  (14/19)",
+            $"the fourteenth row is the Master level, unsaved showing the shipped full level ({menu.ShownRowText}, {menu.ShownHeading})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == $"Master volume: {AudioMix.MaxLevel}",
             $"Right at full clamps rather than wrapping to silence ({menu.ShownRowText})");

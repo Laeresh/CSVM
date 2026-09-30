@@ -243,17 +243,17 @@ The original's graphics EffectsLevel option as a config key (`graphics.effectsLe
 [../formats/templates.md](../formats/templates.md). A second key, `graphics.clutterFarFade`, is the
 remake's own switch: false resolves the global to a never-fades scale, so clutter draws out to the
 fog instead of ending at the authored metres. Enhanced mode scales it by
-`WeatherRig.EnhancedFogScale()` squared. Read `ClutterBuilder` and `MapEdgeExtender` next.
+`WeatherRig.EnhancedFogScale()` times `ViewDistance.ClutterReach()`, squared. Read `ClutterBuilder` and `MapEdgeExtender` next.
 
 ## src/Utils/GraphicsMode.cs
 The opt-in enhanced-lighting mode's setting (`original` or `enhanced`, default `original`),
-resolved once by `Launcher._Ready` into the single boolean `GraphicsMode.Enhanced` every later
-scene builder reads, so the sources can be layered without touching a reader. The order mirrors
-`PresentationResolution`'s: `--graphics=` beats the saved `graphicsMode` option (`OptionsStore`),
-which beats the `graphics.mode` config key, which beats the default; an unknown word at any layer
-warns and falls back. `--det` drops both machine-state layers and keeps only an explicit
-`--graphics=`, which is how a golden or a deterministic capture pins the mode on purpose. The mode
-itself is written up as a divergence in `docs/architecture/Root.md`.
+resolved by `Launcher._Ready` into the single boolean `GraphicsMode.Enhanced` every scene builder
+reads. `Set` is the live switch, called only by `Launcher.SwitchGraphicsMode`, which then brings the
+built world into line. `--graphics=` beats the saved `graphicsMode` option (`OptionsStore`), which
+beats the `graphics.mode` config key, which beats the default; an unknown word at any layer warns
+and falls back. `--det` drops both machine-state layers and keeps only an explicit `--graphics=`,
+which is how a golden or a deterministic capture pins the mode on purpose. The mode itself is
+written up as a divergence in `docs/architecture/Root.md`.
 
 ## src/Utils/AntiAliasingSetting.cs
 The anti-aliasing method, a VIDEO page display setting over `DisplayWords.AntiAliasingChoices`: `off`, `fxaa`, `smaa`,
@@ -272,6 +272,15 @@ construction. FXAA and SMAA go to `ScreenSpaceAA`, TAA to `UseTaa`. Below native
 `Scaling3DModeEnum.Fsr2` under `fsr2` and `Fsr` otherwise, and above native through `Bilinear`, the one mode Godot
 supersamples in. At native only `fsr2` writes a scaling mode, `Fsr2` at 1.0, which runs as anti-aliasing alone. `off` at
 native writes nothing, so a faithful `--det` run reads back Godot's own defaults. MSAA stays `project.godot`'s.
+
+## src/Utils/ViewDistance.cs
+Enhanced mode's view distance: four saved words (`normal`, `far`, `farther`, `farthest`) resolving
+to how much further the clutter draws than the fade enhanced mode already gives it, 1x, 2x, 4x or
+no fade. The fog never moves with it, the early chapters' haze being part of their scenery; it
+closes the gap where C5's city blocks faded well inside the fog. The faithful path keeps the
+decoded fade. Both Options screens offer it on the VIDEO page, dead until Enhanced Graphics is
+chosen; `Launcher` folds `ClutterReach` into the clutter fade global at startup (never from the
+saved file under `--det`) and again on every apply.
 
 ## src/Utils/VSyncSetting.cs
 The frame pacing, one setting carrying both whether the loop waits for the screen and the cap it
@@ -329,7 +338,7 @@ the native window handle. Fully static, one call site in `Launcher._Ready` right
 block, where the same predicate drives both window hiding and the interactive run's focus request.
 
 ## src/Utils/OptionsStore.cs
-Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode and difficulty words, the six
+Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode, view distance and difficulty words, the six
 display settings (monitor index, resolution, display mode, V-Sync, render scale, anti-aliasing), the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn and the remembered install folder (fully qualified or dropped). One file, `user://options.json`,
 independent of `Session/Campaign/CampaignProfileStore.cs`. A missing or malformed file reads as empty, an unknown version invalidates it, an
 unknown value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump

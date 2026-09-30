@@ -540,6 +540,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private int _keysTab;
     private int _keysTop;
     private string _graphics = CSVM.Utils.GraphicsMode.Default;
+    // The view distance as saved, null while never set, which resolves to Normal.
+    private string? _viewDistance;
     private int _difficulty = CSVM.Flight.Hangar.Difficulty.Normal;
     // The targeting setting as saved, null while never set, which the consumer reads as off. It is
     // held nullable rather than as the checkbox's own 0/1. A page that never showed it then hands
@@ -642,6 +644,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
 
     /// <summary>The graphics mode word the VIDEO page would apply.</summary>
     public string GraphicsChoice => _graphics;
+
+    /// <summary>The view-distance word the VIDEO page would apply, null while never set.</summary>
+    public string? ViewDistanceChoice => _viewDistance;
 
     /// <summary>The screen index (<see cref="CSVM.Utils.MonitorSetting.Word"/>'s spelling) the
     /// VIDEO page would apply, or null while nothing has been saved and no row has been
@@ -1050,6 +1055,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     {
         var saved = _options?.Invoke();
         _graphics = saved?.GraphicsMode ?? CSVM.Utils.GraphicsMode.Default;
+        _viewDistance = saved?.ViewDistance;
         _difficulty = CSVM.Flight.Hangar.Difficulty.Parse(saved?.Difficulty) ?? CSVM.Flight.Hangar.Difficulty.Normal;
         _nearestAfterKill = saved?.NearestAfterKill;
         _rumble = saved?.Rumble;
@@ -1075,7 +1081,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         new(_graphics, CSVM.Flight.Hangar.Difficulty.Word(_difficulty),
             _monitorIndex, _resolution, _displayMode, _vsync, _renderScale, _antiAliasing,
             _audioMaster, _audioMusic, _audioEffects, _audioVoice, _nearestAfterKill, _rumble,
-            _defaultView, _autoHeadTurn);
+            _defaultView, _autoHeadTurn, _viewDistance);
 
     // Back from a page: the saved settings are read again, so an edit the player declined is gone.
     private void BackToPreferences()
@@ -1931,18 +1937,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             : "Select the window size.";
     }
 
-    // The graphics row's description says whether a restart is still owed. The mode is resolved
-    // once at launch. A choice that differs from the running one reaches the world on the next
-    // start, and nothing on the page can show it sooner. A player who saved it and came back would
-    // otherwise see the box checked and a world unchanged. They would read that as a failed switch.
-    private string GraphicsDescription()
-    {
-        bool running = CSVM.Utils.GraphicsMode.Enhanced;
-        bool chosen = _graphics == CSVM.Utils.GraphicsMode.EnhancedWord;
-        return chosen == running
-            ? "Select the lit world. Takes effect on the next start."
-            : $"Select the lit world. This run is {(running ? "enhanced" : "original")}; restart to apply.";
-    }
+    // The graphics row's description. The apply switches the running world
+    // (Launcher.SwitchGraphicsMode), over a paused flight as well, so no restart is owed.
+    private string GraphicsDescription() => "Select the lit world. Applies at once.";
 
     // The screen's sizes and the one a saved size it lacks falls back to. They are read through the
     // reader on every access, like the screens below. The list is widened with the size the options
