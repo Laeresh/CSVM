@@ -101,6 +101,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     /// <summary>The VIDEO page's anti-aliasing dropdown.</summary>
     public const string AntiAliasingKey = "ANTIALIASING";
 
+    /// <summary>The VIDEO page's shadow-quality dropdown, on the authored Texture Quality line.</summary>
+    public const string ShadowQualityKey = "SHADOWQUALITY";
+
     /// <summary>The VIDEO page's enhanced-graphics checkbox.</summary>
     public const string GraphicsKey = "GRAPHICS";
 
@@ -455,6 +458,12 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             OriginalRowKind.Dropdown, _ => DisplaySettingRows.AntiAliasingLabels,
             s => DisplaySettingRows.WordIndex(CSVM.Utils.DisplayWords.AntiAliasingChoices, s.AntiAliasingWord, s.AntiAliasingWord),
             (s, i) => s.PickAntiAliasing(CSVM.Utils.DisplayWords.AntiAliasingChoices[i])),
+        new(ShadowQualityKey, "Shadow Quality", "VP_T_TextureTitle", "VP_D_Texture", "VP_T_TextureDESC",
+            s => DisplaySettingRows.ShadowQualityDetail(s._graphics),
+            OriginalRowKind.Dropdown, _ => DisplaySettingRows.ShadowQualityLabels,
+            s => DisplaySettingRows.WordIndex(CSVM.Utils.ShadowQualitySetting.Words, s._shadowQuality, CSVM.Utils.ShadowQualitySetting.Default),
+            (s, i) => s._shadowQuality = CSVM.Utils.ShadowQualitySetting.Words[i],
+            s => s.ShadowQualityLive),
         new(GraphicsKey, "Enhanced Graphics", "VP_T_ShadowsTitle", "VP_B_SHADOWS", "VP_T_ShadowsDESC",
             s => s.GraphicsDescription(), OriginalRowKind.Radio, _ => GraphicsWords,
             s => s._graphics == CSVM.Utils.GraphicsMode.EnhancedWord ? 1 : 0,
@@ -567,6 +576,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private string? _vsync;
     private string? _renderScale;
     private string? _antiAliasing;
+    // The sun's shadow quality as saved, carried the same way. Null is "never set", which the next
+    // start reads as the enhanced mode's own look.
+    private string? _shadowQuality;
     // The four saved volume levels, carried for the same reason. The AUDIO page shows them and the
     // other pages do not, and every page's apply hands back the settings it does not show.
     private int? _audioMaster;
@@ -671,6 +683,15 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     /// VIDEO page would apply, or null while nothing has been saved and no row has been touched.
     /// The next start reads a null as the graphics mode's own default.</summary>
     public string? AntiAliasingChoice => _antiAliasing;
+
+    /// <summary>The shadow-quality word (<see cref="CSVM.Utils.ShadowQualitySetting.Words"/>) the
+    /// VIDEO page would apply, or null while nothing has been saved and no row has been touched.</summary>
+    public string? ShadowQualityChoice => _shadowQuality;
+
+    /// <summary>Whether the Shadow Quality row takes a press, which it does while the page's own
+    /// Enhanced Graphics box is ticked. The faithful world casts no sun shadow, so under Original the
+    /// row draws dead and keeps the saved word for a later flip.</summary>
+    public bool ShadowQualityLive => _graphics == CSVM.Utils.GraphicsMode.EnhancedWord;
 
     /// <summary>The scales the Render Scale row offers under the method the Anti-aliasing row stands
     /// on, which is fewer under FSR 2.2. The list follows that row live.</summary>
@@ -1062,6 +1083,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         _vsync = saved?.VSync;
         _renderScale = saved?.RenderScale;
         _antiAliasing = saved?.AntiAliasing;
+        _shadowQuality = saved?.ShadowQuality;
         _audioMaster = saved?.AudioMaster;
         _audioMusic = saved?.AudioMusic;
         _audioEffects = saved?.AudioEffects;
@@ -1073,7 +1095,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     // keeps Launcher.ApplyOptions the options file's one writer.
     private OptionsApplyExit AppliedOptions() =>
         new(_graphics, CSVM.Flight.Hangar.Difficulty.Word(_difficulty),
-            _monitorIndex, _resolution, _displayMode, _vsync, _renderScale, _antiAliasing,
+            _monitorIndex, _resolution, _displayMode, _vsync, _renderScale, _antiAliasing, _shadowQuality,
             _audioMaster, _audioMusic, _audioEffects, _audioVoice, _nearestAfterKill, _rumble,
             _defaultView, _autoHeadTurn);
 

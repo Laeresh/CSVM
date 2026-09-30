@@ -98,27 +98,6 @@ public partial class Launcher : Node3D
     private const float EnhancedSsrFadeOut = 2.5f;
     private const float EnhancedSsrDepthTolerance = 0.2f;
 
-    // TUNE, judged at the controls. The sun's apparent size in degrees; the real sun is about
-    // 0.5, softening a cast edge into a penumbra instead of a hard line. A 0.25/0.5/1.0/2.0
-    // sweep at the C1 waterfall lake held the edge at 4-6 px through 1.0. The penumbra grows with
-    // the caster's height, and at 2.0 an aircraft 40 m up blurred its own shadow away.
-    private const float EnhancedShadowAngularDistance = 1.0f;
-
-    // TUNE: the directional shadow map's edge in texels, twice Godot's 4096. The aircraft's own
-    // shadow is the one read at the controls, and the first cascade now spans twice the metres.
-    private const int EnhancedShadowAtlasSize = 8192;
-
-    // TUNE, judged at the controls: Godot's own default. Raising it alongside the angular distance
-    // above widens the edge further.
-    private const float EnhancedShadowBlur = 1.0f;
-
-    // ⚠ Do not lower this while EnhancedShadowAngularDistance stays above the sun's real 0.5°.
-    // Godot resolves a penumbra by sampling the shadow map through a disc rotated per screen
-    // pixel. Too few samples for the disc's width leave that rotation as a woven pattern over
-    // every lit surface. This width needs the top rung.
-    private const RenderingServer.ShadowQuality EnhancedShadowFilterQuality =
-        RenderingServer.ShadowQuality.SoftUltra;
-
     // TUNE, judged at the controls on C2/C5. Godot's own default (1.0 m) reads a building's own
     // trim but misses the wider contact shading a street canyon wants at this world's scale
     // (buildings tens of metres tall, streets a similar width); this radius picks up a block's
@@ -764,9 +743,14 @@ public partial class Launcher : Node3D
             Utils.RenderScaleSetting.SavedWord(_spec.Det),
             Config.GetString(Utils.RenderScaleSetting.Key, Utils.RenderScaleSetting.Default),
             antiAliasing.Word);
+        // Resolved under either mode so the line says what a flip to Enhanced would fly; only
+        // SetupLighting's enhanced sun reads it.
+        var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality,
+            Utils.ShadowQualitySetting.SavedWord(_spec.Det),
+            Config.GetString(Utils.ShadowQualitySetting.Key, Utils.ShadowQualitySetting.Default));
         string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
         string clamped = renderScale.Clamped ? " clamped_by=fsr2" : string.Empty;
-        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={renderScale.Source}{clamped} anti_aliasing={antiAliasing.Word} aa_source={antiAliasing.Source}");
+        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={renderScale.Source}{clamped} anti_aliasing={antiAliasing.Word} aa_source={antiAliasing.Source} shadow_quality={shadowQuality.Word} shadow_source={shadowQuality.Source}");
         // The window's own viewport takes the render flags here, before any scene builds. The
         // three SubViewports take them at construction.
         Utils.ViewportQuality.Apply(GetViewport());
@@ -2085,17 +2069,15 @@ public partial class Launcher : Node3D
         sun.DirectionalShadowBlendSplits = true;
         sun.ShadowBias = EnhancedShadowBias;
         sun.ShadowNormalBias = EnhancedShadowNormalBias;
-        // Both zero leaves a hard shadow edge rather than no shadow. That isolates the penumbra
-        // filter, which is the part resolving with a screen-space sample pattern.
-        bool hard = Skipped(EnhancedPasses.SoftShadows);
-        sun.LightAngularDistance = hard ? 0f : EnhancedShadowAngularDistance;
-        sun.ShadowBlur = hard ? 0f : EnhancedShadowBlur;
-        // A renderer-wide setting rather than a light property. It is set here beside the width it
-        // carries, not in project.godot, where the faithful path would inherit it.
-        RenderingServer.DirectionalSoftShadowFilterSetQuality(
-            hard ? RenderingServer.ShadowQuality.Hard : EnhancedShadowFilterQuality);
-        RenderingServer.DirectionalShadowAtlasSetSize(EnhancedShadowAtlasSize, true);
+        ApplyShadowQuality(sun);
     }
+
+    // The resolved shadow level on the world sun and the renderer: whether the sun casts, its
+    // penumbra, the filter and the atlas. An Options apply re-runs it, so a level changes mid-flight.
+    // The split-screen panes share this sun, and the cockpit pass follows it on its next Sync.
+    private void ApplyShadowQuality(DirectionalLight3D sun) =>
+        Utils.ShadowQualitySetting.ApplyTo(sun, Utils.ShadowQualitySetting.Sun, GraphicsMode.Enhanced,
+            Skipped(EnhancedPasses.SoftShadows));
 
     // Ambient occlusion, which darkens the ambient term where geometry occludes it. The faithful
     // path's world is fullbright, so this pass would find nothing there to occlude.
@@ -2521,6 +2503,7 @@ public partial class Launcher : Node3D
         options.VSync = applied.VSync;
         options.RenderScale = applied.RenderScale;
         options.AntiAliasing = applied.AntiAliasing;
+        options.ShadowQuality = applied.ShadowQuality;
         options.AudioMaster = applied.AudioMaster;
         options.AudioMusic = applied.AudioMusic;
         options.AudioEffects = applied.AudioEffects;
@@ -2541,6 +2524,15 @@ public partial class Launcher : Node3D
         // The haptics toggle takes effect now for the same reason. A pilot turning it off over the
         // pause sheet flies the rest of the sortie with a quiet pad.
         PadRumble.Enabled = !_spec.Det && applied.Rumble != false;
+        // The shadow level reaches the flying world now; --shadow-quality still beats the saved word.
+        var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality, applied.ShadowQuality,
+            Config.GetString(Utils.ShadowQualitySetting.Key, Utils.ShadowQualitySetting.Default));
+        if (IsInstanceValid(_sun))
+        {
+            ApplyShadowQuality(_sun);
+        }
+
+        Log.Info("world", $"shadow quality applied: {shadowQuality.Word} source={shadowQuality.Source}");
         // ⚠ The carve is NOT re-armed here. No screen offers it, so the saved key is untouched by an
         // apply and the gate keeps what boot gave it (see the arming above).
         Log.Info("ui", $"options applied: {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");

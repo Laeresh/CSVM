@@ -947,6 +947,11 @@ public sealed record SessionSpec
     /// (kept, not treated as given), the same rule <c>--collision=</c> uses for a bad value.</summary>
     public string? GraphicsMode { get; private set; }
 
+    /// <summary><c>--shadow-quality=off|low|medium|high|ultra</c>, the enhanced sun's shadow level.
+    /// Null when not given, and for an unrecognised word with a warning. Beats the saved option and
+    /// the config key, including under <c>--det</c>, the same rule <see cref="GraphicsMode"/> keeps.</summary>
+    public string? ShadowQuality { get; private set; }
+
     // ---- Everything else ------------------------------------------------------------------------
 
     public bool Mute { get; private set; }
@@ -1455,6 +1460,18 @@ public sealed record SessionSpec
                 else
                 {
                     notes.Add(new Note("world", $"--graphics={want} is not original/enhanced, keeping the config key's value"));
+                }
+            }
+            else if (arg.StartsWith("--shadow-quality="))
+            {
+                string want = arg["--shadow-quality=".Length..];
+                if (Utils.ShadowQualitySetting.IsWord(want))
+                {
+                    s.ShadowQuality = want;
+                }
+                else
+                {
+                    notes.Add(new Note("world", $"--shadow-quality={want} is not one of {string.Join("/", Utils.ShadowQualitySetting.Words)}, keeping the saved option's value"));
                 }
             }
             else if (arg == "--dump-mips") { s.DumpMips = true; }

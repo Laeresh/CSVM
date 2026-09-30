@@ -558,6 +558,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/StartupProfile.cs`, the always-on `[perf] startup …` line: every session build split into the phases it spends its time in.
 - `src/Utils/TapHoldButton.cs`, one button carrying two actions split by how long it is held; the caller feeds it the button level and switches on the answer.
 - `src/Utils/AntiAliasingSetting.cs`, the anti-aliasing method (off, FXAA, SMAA, TAA, FSR 2.2): the saved/config ladder over the graphics mode's own default, resolved once at launch.
+- `src/Utils/ShadowQualitySetting.cs`, the Enhanced sun's shadow quality (off, low, medium, high, ultra): the flag/saved/config ladder over ultra, and what each level writes on the sun and the renderer.
 - `src/Utils/WallCostBank.cs`, one `--perf` cost meter (bracket, banked milliseconds, worst span, count, tally) and the bracket node; the three cost facades are instances of it.
 - `src/Utils/ViewportQuality.cs`, what the anti-aliasing method and the render scale write on a 3D viewport, in one call the four viewport construction sites share.
 - `src/Utils/VSyncSetting.cs`, the frame pacing: the flag/saved/config ladder, and the one place the vsync mode and the frame cap are applied to the engine.

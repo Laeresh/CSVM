@@ -190,6 +190,11 @@ public sealed class OptionsDef
     /// graphics mode's own default rather than as a word of its own.</summary>
     public string? AntiAliasing { get; set; }
 
+    /// <summary>The sun's shadow quality under Enhanced Graphics, one of
+    /// <see cref="ShadowQualitySetting.Words"/>. Null is "never set", which reads as the
+    /// enhanced mode's own look.</summary>
+    public string? ShadowQuality { get; set; }
+
     /// <summary>The Master level, the multiplier over the three category levels
     /// (<see cref="AudioMix"/>). No vocabulary and no spelling to parse, so the store proves the
     /// range alone.
@@ -280,6 +285,8 @@ public sealed class OptionsStore
 
     private static readonly HashSet<string> ValidAntiAliasing = new(DisplayWords.AntiAliasingChoices, StringComparer.Ordinal);
 
+    private static readonly HashSet<string> ValidShadowQualities = new(ShadowQualitySetting.Words, StringComparer.Ordinal);
+
     private static readonly JsonWriterOptions WriterOptions = new() { Indented = true };
 
     private readonly string _dir;
@@ -329,6 +336,7 @@ public sealed class OptionsStore
             Write(w, "vsync", def.VSync);
             Write(w, "renderScale", def.RenderScale);
             Write(w, "antiAliasing", def.AntiAliasing);
+            Write(w, "shadowQuality", def.ShadowQuality);
             WriteLevel(w, "audioMaster", def.AudioMaster);
             WriteLevel(w, "audioMusic", def.AudioMusic);
             WriteLevel(w, "audioEffects", def.AudioEffects);
@@ -377,6 +385,7 @@ public sealed class OptionsStore
                 VSync = Read(root, "vsync", ValidVSyncChoices),
                 RenderScale = Read(root, "renderScale", ValidRenderScales),
                 AntiAliasing = Read(root, "antiAliasing", ValidAntiAliasing),
+                ShadowQuality = Read(root, "shadowQuality", ValidShadowQualities),
                 AudioMaster = ReadLevel(root, "audioMaster"),
                 AudioMusic = ReadLevel(root, "audioMusic"),
                 AudioEffects = ReadLevel(root, "audioEffects"),

@@ -31,6 +31,9 @@ public sealed partial class CockpitOverlay : CanvasLayer
     // pass's origin (SceneBuilder's `light_origin`).
     private readonly List<ShaderMaterial> _materials = new();
 
+    // The shadow-quality revision the light last copied the sun at (FollowSunShadow).
+    private int _shadowRevision = Utils.ShadowQualitySetting.Revision;
+
     private CockpitOverlay(SubViewport view, Camera3D camera, Node3D interior,
         DirectionalLight3D? light, DirectionalLight3D? sun)
     {
@@ -120,7 +123,23 @@ public sealed partial class CockpitOverlay : CanvasLayer
         if (_light != null && _sun != null && GodotObject.IsInstanceValid(_sun))
         {
             _light.Basis = _sun.GlobalBasis;
+            FollowSunShadow();
         }
+    }
+
+    /// <summary>Re-copy the world sun's shadow onto this pass's light. It does so only where the
+    /// shadow quality has moved the sun since the last copy. The per-frame <see cref="Sync"/>
+    /// calls it, and it is public so the suite can drive it without a rig.</summary>
+    public void FollowSunShadow()
+    {
+        if (_light == null || _sun == null || !GodotObject.IsInstanceValid(_sun)
+            || _shadowRevision == Utils.ShadowQualitySetting.Revision)
+        {
+            return;
+        }
+
+        _shadowRevision = Utils.ShadowQualitySetting.Revision;
+        CopyShadow(_sun, _light, _camera.Far);
     }
 
     /// <summary>Take the pass off the screen for a caller that has stopped syncing it. The crash
@@ -164,33 +183,38 @@ public sealed partial class CockpitOverlay : CanvasLayer
                 Name = "interior_sun",
                 LightEnergy = sun.LightEnergy,
                 LightColor = sun.LightColor,
-                // Copied off the live sun, which by this point in the build already carries the
-                // flown zone's settings (WeatherRig.Build runs ahead of BuildCockpitPasses),
-                // false in original mode, since the world sun's own flag never turns on there.
-                ShadowEnabled = sun.ShadowEnabled,
             };
-            if (sun.ShadowEnabled)
-            {
-                light.DirectionalShadowMode = sun.DirectionalShadowMode;
-                light.DirectionalShadowSplit1 = sun.DirectionalShadowSplit1;
-                light.DirectionalShadowSplit2 = sun.DirectionalShadowSplit2;
-                light.DirectionalShadowSplit3 = sun.DirectionalShadowSplit3;
-                light.DirectionalShadowBlendSplits = sun.DirectionalShadowBlendSplits;
-                light.ShadowBias = sun.ShadowBias;
-                light.ShadowNormalBias = sun.ShadowNormalBias;
-                light.LightAngularDistance = sun.LightAngularDistance;
-                light.ShadowBlur = sun.ShadowBlur;
-                // Clamped to this pass's own camera far plane: the world sun's distance is a
-                // zone's fog far (thousands of metres, always past 100 m), and passing it through
-                // would push every PSSM split past what this near-field pass ever renders.
-                light.DirectionalShadowMaxDistance = Mathf.Min(sun.DirectionalShadowMaxDistance, camera.Far);
-            }
+            // Copied off the live sun, which by this point in the build already carries the flown
+            // zone's settings (WeatherRig.Build runs ahead of BuildCockpitPasses).
+            CopyShadow(sun, light, camera.Far);
         }
         return new CockpitOverlay(view, camera, interior, light, sun)
         {
             Name = "cockpit_pass",
             Layer = UI.Boards.HudLayers.CockpitPass,
         };
+    }
+
+    // The world sun's shadow onto this pass's light, false in original mode since the world sun's
+    // own flag never turns on there. It runs at the build and again whenever the shadow quality
+    // moves the sun (ShadowQualitySetting.Revision), so an Options apply mid-flight reaches the panel.
+    private static void CopyShadow(DirectionalLight3D sun, DirectionalLight3D light, float far)
+    {
+        light.ShadowEnabled = sun.ShadowEnabled;
+        if (!sun.ShadowEnabled)
+            return;
+        light.DirectionalShadowMode = sun.DirectionalShadowMode;
+        light.DirectionalShadowSplit1 = sun.DirectionalShadowSplit1;
+        light.DirectionalShadowSplit2 = sun.DirectionalShadowSplit2;
+        light.DirectionalShadowSplit3 = sun.DirectionalShadowSplit3;
+        light.DirectionalShadowBlendSplits = sun.DirectionalShadowBlendSplits;
+        light.ShadowBias = sun.ShadowBias;
+        light.ShadowNormalBias = sun.ShadowNormalBias;
+        light.LightAngularDistance = sun.LightAngularDistance;
+        light.ShadowBlur = sun.ShadowBlur;
+        // Clamped to this pass's own camera far plane. The world sun's distance is a zone's fog far,
+        // thousands of metres, which would push every split past this pass.
+        light.DirectionalShadowMaxDistance = Mathf.Min(sun.DirectionalShadowMaxDistance, far);
     }
 
     // Every distinct shader material the subtree draws with, override or mesh surface.

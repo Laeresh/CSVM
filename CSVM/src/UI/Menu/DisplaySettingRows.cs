@@ -4,8 +4,8 @@ using System.Collections.Generic;
 namespace CSVM.UI.Menu;
 
 /// <summary>
-/// How the six display settings read as rows, shared by the two Options screens so they cannot
-/// disagree about a saved value. The labels are one per <see cref="CSVM.Utils.DisplayWords"/> entry
+/// How the six display settings and the shadow quality read as rows. The two Options screens
+/// share it so they cannot disagree about a saved value. The labels are one per vocabulary entry
 /// and in that order, since a row reads and writes the store word by index. The index rules restate
 /// the resolvers' forgiving reads: a never-set row shows the setting's own default, an unoffered or
 /// pinned size the screen's own. The screens and the sizes are enumerated per machine by
@@ -26,6 +26,18 @@ public static class DisplaySettingRows
     /// <summary>The anti-aliasing labels, one per <see cref="CSVM.Utils.DisplayWords.AntiAliasingChoices"/>
     /// word and in that order.</summary>
     public static readonly IReadOnlyList<string> AntiAliasingLabels = new[] { "Off", "FXAA", "SMAA", "TAA", "FSR 2.2" };
+
+    /// <summary>The shadow-quality labels, one per <see cref="CSVM.Utils.ShadowQualitySetting.Words"/>
+    /// word and in that order.</summary>
+    public static readonly IReadOnlyList<string> ShadowQualityLabels = new[] { "Off", "Low", "Medium", "High", "Ultra" };
+
+    /// <summary>What the shadow-quality row says under <paramref name="graphicsWord"/>, the graphics
+    /// word the same page would apply. Under Original the row is dead, and a row that refuses
+    /// without saying why reads as broken.</summary>
+    public static string ShadowQualityDetail(string? graphicsWord) =>
+        graphicsWord == CSVM.Utils.GraphicsMode.EnhancedWord
+            ? "Select how the sun's shadows are drawn. Lower levels run faster. Seen once the choices are applied."
+            : "Enhanced Graphics only. The original world casts no sun shadows.";
 
     /// <summary>The render-scale labels for <paramref name="words"/>, which is the list
     /// <see cref="CSVM.Utils.RenderScaleSetting.ChoicesFor"/> offers under the standing method. Each

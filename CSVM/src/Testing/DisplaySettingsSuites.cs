@@ -56,6 +56,7 @@ internal static class DisplaySettingsSuites
         ("VSync", "144", true),
         ("RenderScale", "200", true),
         ("AntiAliasing", DisplayWords.AntiAliasingFsr2, true),
+        ("ShadowQuality", ShadowQualitySetting.Low, true),
         ("AudioMaster", 0, false),
         ("AudioMusic", 100, false),
         ("AudioEffects", 50, false),
