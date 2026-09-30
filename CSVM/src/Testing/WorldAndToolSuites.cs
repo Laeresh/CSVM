@@ -554,7 +554,7 @@ internal static class WorldAndToolSuites
                 $"the pane drawing the same frame stands out of the fill's reach pane={paneReach:0.#}m reach={SceneBuilder.PhotoEyeReach}m");
 
             // The frame's end: leaving the tree before the draw lands takes the same disarm the
-            // post-draw callback does.
+            // step after the draw does.
             controller.RemoveChild(photo);
             int left = instances.Count(i => i.GetInstanceShaderParameter(SceneBuilder.PhotoEyeParam).AsVector4() != Vector4.Zero);
             ctx.Check(left == 0 && photo.Filled.Count == 0,

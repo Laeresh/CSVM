@@ -398,7 +398,7 @@ The Danger Zone camera's eye, one per human pilot, the `PaneRequest` `StuntCaptu
 roll-free look back at the aircraft. The node is a `SubViewport` on the pane's world that poses its
 camera in `_Process` after the controller's, at the external FOV with no HUD, shows a first-person
 pilot's airframe through `CockpitVisibility`, arms the fill light (`csky_photo_eye`) on its pilot's
-instances, renders once, disarms, and reads back after `FramePostDraw`. Decode:
+instances, renders once, and disarms and reads back on the frame after that draw was issued. Decode:
 [../formats/campaign-screens.md](../formats/campaign-screens.md), "The danger-zone slot".
 
 ## src/Flight/Airframe/ZeppelinBroadside.cs

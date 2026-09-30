@@ -234,7 +234,8 @@ public sealed class PromptFontGlyphs : ControlGlyphSet
             _loaded = true;
             if (FileAccess.FileExists(FontPath))
             {
-                _face = new FontFile { Data = FileAccess.GetFileAsBytes(FontPath) };
+                // ⚠ Keep the mipmaps, for the glyph atlas copy ComposedBoardView's faces explain.
+                _face = new FontFile { Data = FileAccess.GetFileAsBytes(FontPath), GenerateMipmaps = true };
             }
             else
             {

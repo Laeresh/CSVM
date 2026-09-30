@@ -329,15 +329,14 @@ public sealed class WorldLights : IDisposable
 
         // Packed by hand rather than via Image.SetPixel: positions are world metres (thousands,
         // and negative), and going through Godot's Color struct invites a clamp to 0..1.
-        var image = Image.CreateFromData(2, MaxActive, false, Image.Format.Rgbaf, _buffer);
         if (_texture == null)
         {
-            _texture = ImageTexture.CreateFromImage(image);
+            _texture = TextureUpload.Create(2, MaxActive, Image.Format.Rgbaf, _buffer);
             RenderingServer.GlobalShaderParameterSet(DataParam, _texture);
         }
         else
         {
-            _texture.Update(image);
+            TextureUpload.Replace(_texture, 2, MaxActive, Image.Format.Rgbaf, _buffer);
         }
         if (_lastCount != n)
             RenderingServer.GlobalShaderParameterSet(CountParam, n);

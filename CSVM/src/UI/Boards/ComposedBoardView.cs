@@ -307,11 +307,14 @@ public sealed partial class ComposedBoardView : Control
         Font? font = null;
         if (OS.GetSystemFontPath(face.Family, weight, FullStretch, face.Italic).Length > 0)
         {
+            // ⚠ Keep the mipmaps. Only then does Godot upload a copy of the glyph atlas it writes to.
+            // The separate render thread reads the live atlas torn or empty.
             font = new SystemFont
             {
                 FontNames = new[] { face.Family },
                 FontWeight = weight,
                 FontItalic = face.Italic,
+                GenerateMipmaps = true,
             };
         }
 

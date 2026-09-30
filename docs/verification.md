@@ -433,6 +433,11 @@ member, and it does not go here.
   physics step, the draw) grow far more from the author's machine to the Deck than managed phases
   do, so a desktop profile ranks the Deck's costs wrongly.** In CM24 `phys_engine_ms` grew 5 to 7
   times and `defer_ms` about 3 times, while the AI and animation phases grew 1.2 to 1.4 times.
+- **PERF-43**, **Under the separate render thread, a `RenderingServer` getter called in the frame
+  waits for the previous draw, so its wait reads as `proc_ms` or `phys_tick_ms`, and `draw_ms` is
+  only the draw's hand-off. A Godot debug build prints `causing RenderingServer synchronizations on
+  every frame` for each such call; the frame's own wait for the render thread is in `defer_ms`.**
+  The per-frame render-time read raised CM24's `proc_ms` on the Deck from 3.8 to 10.3 ms.
 
 ## LOG, logs, error censuses, and exit codes
 
