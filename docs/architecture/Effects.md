@@ -13,7 +13,7 @@ bit) into an `IEmitterRenderer` (`EmitterRenderer.cs`); this class owns only the
 The authored state picks burst, distance-trail or sustained mode; callers drive it through
 `Emit`/`Stop`, `Burst` and the hard-kill `Clear`, and `CreateWith` reaches all three with no atlas,
 archive or GPU. `_Process` writes the frame's draws farthest-first against pane 0. `BirthAlpha` is
-an opacity each particle keeps from birth, 1 except on the code-built exhaust trail. The distance fade, the accumulator, the pools and the two unauthored-interval constants carry their own constraint. Keys and decode: [../formats/effects.md](../formats/effects.md), [../org/puffer.md](../org/puffer.md).
+an opacity each particle keeps from birth, 1 except on the code-built exhaust trail. `FollowAlphaDepth` bakes an archive's atlases again in place when their frames change depth on a live switch. The distance fade, the accumulator, the pools and the two unauthored-interval constants carry their own constraint. Keys and decode: [../formats/effects.md](../formats/effects.md), [../org/puffer.md](../org/puffer.md).
 
 ## src/Effects/WorldWind.cs
 Two types delivering the mission's authored wind to every puffer. `WorldWind` is the gust model, a

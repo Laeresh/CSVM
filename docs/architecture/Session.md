@@ -52,8 +52,8 @@ PSSM sun shadows at the `ShadowQualitySetting` level, SSAO, SSR, glow, the AgX t
 mission-coloured sky, with the `SessionSpec.EnhancedPasses` doors; the off direction writes a fresh
 object's defaults back. `Switch` is the whole live mode switch the launcher and the
 `graphics-live-switch` suite run: shaders, sun, Environment, the clutter fade, the display quality
-(`ReapplyDisplayQuality`), then `GameSession.ApplyGraphicsMode`. `ApplyViewDistance` is the live
-View Distance. Every magnitude is TUNE; `Utils/SunShadow.cs` carries the sun into the cockpit pass.
+(`ReapplyDisplayQuality`), then `GameSession.ApplyGraphicsMode`, which opens with `FollowAlphaDepth`
+(textures, then atlases, then painted skins). `ApplyViewDistance` is the live View Distance. Every magnitude is TUNE; `Utils/SunShadow.cs` carries the sun into the cockpit pass.
 
 ## src/Session/Launch/TuningWarmup.cs
 The startup pass that fills `Config`'s key registry before `Config.ReportOrphans` and

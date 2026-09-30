@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using CSVM.Mech3;
 using CSVM.Session.World;
 using CSVM.Utils;
@@ -111,6 +112,7 @@ public static class EnhancedLook
     {
         if (enhanced == GraphicsMode.Enhanced)
             return;
+        long start = Stopwatch.GetTimestamp();
         GraphicsMode.Set(enhanced);
         SceneBuilder.RegenerateShaders();
         ApplySun(sun, enhanced, skipped);
@@ -119,7 +121,7 @@ public static class EnhancedLook
         WriteClutterFadeScale();
         ReapplyDisplayQuality(det, why);
         session?.ApplyGraphicsMode();
-        Log.Info("world", $"graphics mode: {GraphicsMode.Key}={(enhanced ? "enhanced" : "original")} (switched live by {why})");
+        Log.Info("world", $"graphics mode: {GraphicsMode.Key}={(enhanced ? "enhanced" : "original")} (switched live by {why}) ms={Stopwatch.GetElapsedTime(start).TotalMilliseconds:0.0}");
     }
 
     /// <summary>The View Distance on the running world: the clutter fade's scale, and the clutter
@@ -132,6 +134,23 @@ public static class EnhancedLook
             return;
         session?.FollowClutterFade();
         Log.Info("world", $"view distance: {word}, clutter reach x{ViewDistance.ClutterReach():0.#} (applied live)");
+    }
+
+    /// <summary>A texture's alpha depth on the running world. The archive uploads its alpha-plane
+    /// textures again at the standing mode's depth. Then the puffer atlases and painted skins made
+    /// from them are baked again, each in place. The session calls it first on a switch.
+    /// ⚠ Never move the truncation into a shader. Cutting after filtering changes the pixels.</summary>
+    public static void FollowAlphaDepth(TextureArchive? textures)
+    {
+        if (textures == null)
+            return;
+        long start = Stopwatch.GetTimestamp();
+        long bytes = textures.FollowAlphaDepth();
+        double texturesMs = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+        int atlases = Effects.Puffer.FollowAlphaDepth(textures);
+        int painted = PlanePainter.FollowAlphaDepth(textures);
+        double totalMs = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+        Log.Info("world", $"alpha depth: {(GraphicsMode.Enhanced ? 8 : 4)}-bit textures={textures.AlphaDepthFollowers.Count} bytes={bytes} atlases={atlases} painted={painted} textures_ms={texturesMs:0.0} total_ms={totalMs:0.0}");
     }
 
     /// <summary>The clutter fade's squared scale under the fog push and the View Distance reach, both

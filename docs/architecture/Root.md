@@ -75,14 +75,16 @@ What follows the switch, and how:
 - Built or freed: the ground shadow, the scorch field, the volumetric banks, the heat shimmer pool,
   the world lights' omni pool and burst lights, and the clutter's cells (`ClutterInstances.Recut`).
   A seat's wind streak field leaves the tree and comes back, still stepped, so its drift carries over.
+- Uploaded again, first of all: a texture's alpha depth. The faithful path uploads an alpha-plane
+  texture at the original's 16 alpha levels and Enhanced keeps 256. `EnhancedLook.FollowAlphaDepth`
+  decodes each one the archive handed out again from the archive and updates it in place, then
+  bakes the puffer atlases and paints the plane skins and decals made from them again. Decoding
+  again costs 60 to 110 ms a switch; keeping the 8-bit chains instead would hold 7 to 8 MB for the
+  whole session. ⚠ Never cut the depth in a shader: cutting after filtering changes the pixels.
 - Read per use already: the chase camera's trail and speed widening, the rocket ring's orientation,
   the muzzle flash's point term and the spyglass picture's minimum size.
 
-What waits for the next mission load: a texture's alpha depth. The faithful path uploads an
-alpha-plane texture at the original's 16 alpha levels and Enhanced keeps 256, decided when the
-archive decodes it and baked into the puffer atlases and painted skins built from it. After a
-switch those textures keep the depth the mission loaded with, which shows as slightly coarser or
-finer soft edges on cloud, smoke and foliage sprites until the next load.
+Nothing waits for the next mission load.
 
 ## src/Pads.cs
 Single source of truth for which gamepads exist: every reader goes through it rather than

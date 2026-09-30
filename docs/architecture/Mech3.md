@@ -24,7 +24,7 @@ doubled period) and classifies each texture's alpha twice, for two unrelated rea
 manifest, the one reader that sees the `Simple` textures. That manifest also supplies
 `RenderFlags`, whose bit 2 (`IsAdditive`) is the whole sprite-blend rule, and whose bit 3 decides `TruncatesAlpha`, the faithful path's 4-bit alpha that `PlanePainter` also applies.
 `Build` is the one construction path (decode, classify, drop-in, mip chain, alpha truncation), `Find` caches it, `BuildMipped` hands it to `--dump-mips` un-cached, and `MipBias` reads the chapter's authored LOD
-bias for `Launcher`. [../org/textures.md](../org/textures.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../formats/gamez.md](../formats/gamez.md).
+bias for `Launcher`. `FollowAlphaDepth` decodes the alpha-plane textures `Find` handed out again at a live switch's depth and uploads them in place. [../org/textures.md](../org/textures.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../formats/gamez.md](../formats/gamez.md).
 
 ## src/Mech3/SceneBuilder.cs
 Shared GameZ-subtree to MeshInstance3D builder: triangulation, material and mesh caches,
@@ -135,7 +135,8 @@ session share a decode. `.BM` layout: [../formats/rof.md](../formats/rof.md).
 ## src/Mech3/PlanePainter.cs
 Applies a `PaintScheme` to one aircraft: composites its skins from the pattern's region masks and
 swaps the three decal placeholders. `SkinNameFor` decides which `.BM` a model texture is painted
-from, the original pairing the two by table rather than by name. The composite formula, the
+from, the original pairing the two by table rather than by name. `FollowAlphaDepth` paints every live
+painter's alpha-plane skins and decals again in place at a live switch's depth. The composite formula, the
 shading-plane choice and the bottom-up `.BM` rows are decode, and belong to
 [../formats/paint.md](../formats/paint.md),
 [../formats/rof.md](../formats/rof.md) and [../org/paint.md](../org/paint.md). Read those before changing a composite step.

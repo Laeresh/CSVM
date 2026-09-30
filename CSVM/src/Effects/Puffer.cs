@@ -263,6 +263,34 @@ public sealed partial class Puffer : Node3D
         return puffer;
     }
 
+    /// <summary>Bakes again, in place, every atlas of <paramref name="textures"/> that holds a
+    /// frame whose alpha depth follows the graphics mode. The archive has already uploaded those
+    /// frames at the standing mode's depth. The dark-death verdict stays the one the emitters
+    /// were built with. Returns the atlases baked.</summary>
+    public static int FollowAlphaDepth(TextureArchive textures)
+    {
+        if (!AtlasCache.TryGetValue(textures, out var cache))
+            return 0;
+        int baked = 0;
+        foreach (var (key, entry) in cache)
+        {
+            bool sequenced = key.StartsWith("seq:", StringComparison.Ordinal);
+            var names = key[(key.IndexOf(':') + 1)..].Split('\n');
+            if (!names.Any(textures.FollowsAlphaDepth))
+                continue;
+            if (BakeImage(names, textures, sequenced).Atlas is { } image)
+            {
+                entry.Atlas.Update(image);
+                baked++;
+            }
+        }
+        return baked;
+    }
+
+    /// <summary>The atlases baked from <paramref name="textures"/>, for an instrument to read.</summary>
+    public static IEnumerable<ImageTexture> AtlasesOf(TextureArchive textures) =>
+        AtlasCache.TryGetValue(textures, out var cache) ? cache.Values.Select(v => v.Atlas).ToList() : new List<ImageTexture>();
+
     /// <summary>Loads a named PUFFER_STATE from a zrdr effects reader and builds its
     /// emitter under <paramref name="parent"/>; null (logged by <see cref="PufferState.Load"/>) when
     /// the reader or its textures are missing. Shared by the flight assembly and the
@@ -518,6 +546,13 @@ public sealed partial class Puffer : Node3D
     private static (ImageTexture? Atlas, bool DiesDark) BakeAtlas(IReadOnlyList<string> names,
         TextureArchive textures, bool sequenced)
     {
+        var (image, diesDark) = BakeImage(names, textures, sequenced);
+        return (image == null ? null : ImageTexture.CreateFromImage(image), diesDark);
+    }
+
+    private static (Image? Atlas, bool DiesDark) BakeImage(IReadOnlyList<string> names,
+        TextureArchive textures, bool sequenced)
+    {
         if (names.Count == 0)
             return (null, false);
         var frames = new Image[names.Count];
@@ -544,8 +579,7 @@ public sealed partial class Puffer : Node3D
             lastLum = MeanLuminance(f);
             meanLum += lastLum / frames.Length;
         }
-        return (ImageTexture.CreateFromImage(atlas),
-            (sequenced ? lastLum : meanLum) < SmokeLuminance);
+        return (atlas, (sequenced ? lastLum : meanLum) < SmokeLuminance);
     }
 
     // A sprite's mean luminance weighted by its own alpha, what it actually

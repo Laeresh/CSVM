@@ -31,7 +31,7 @@ internal static class GraphicsSwitchSuites
         + "shadow is the reverse, the clutter is one MultiMesh per kind on the faithful path and cells "
         + "with ranges under Enhanced, every world, clutter, cloud and streak material carries the "
         + "shader text a fresh build gives it, the rendered cloud puffs draw under Enhanced alone with "
-        + "a fresh build's pool and tint, the Environment's passes, tonemap and froxel fog and the "
+        + "a fresh build's pool and tint, every alpha-plane texture, puffer atlas and painted skin holds the alpha depth a fresh build uploads (16 levels on the faithful path), the Environment's passes, tonemap and froxel fog and the "
         + "cockpit pass's copy match, the sun and the pass's light cast at the resolved shadow level "
         + "under Enhanced and not at all on the faithful path, and no omni is left lit there")]
     internal static void LiveSwitchRoundTrip(TestContext ctx)
@@ -78,6 +78,8 @@ internal static class GraphicsSwitchSuites
                 Same(ctx, "Enhanced after a round trip through Original", freshEnhanced, roundTrip);
                 ctx.Check(freshEnhanced.Layers != freshOriginal.Layers && freshEnhanced.Shaders != freshOriginal.Shaders,
                     $"ABLE-TO-FAIL CONTROL: the two modes' fresh readings differ ({freshEnhanced.Layers} against {freshOriginal.Layers})");
+                ctx.Check(freshOriginal.AlphaLevels is > 0 and <= 16 && freshEnhanced.AlphaLevels > 16,
+                    $"ABLE-TO-FAIL CONTROL: the alpha-plane textures hold 16 alpha levels at most on the faithful path and more under Enhanced ({freshOriginal.AlphaLevels} against {freshEnhanced.AlphaLevels})");
                 ctx.Check(freshEnhanced.Puffs.Length > 0 && freshOriginal.Puffs.Length == 0,
                     $"the rendered cloud puffs draw under Enhanced alone ({freshEnhanced.Puffs})");
                 ctx.Check(freshEnhanced.SunCasts && !freshOriginal.SunCasts && !switchedOriginal.SunCasts,
@@ -307,11 +309,14 @@ internal static class GraphicsSwitchSuites
             }
         });
         ranges.Sort(StringComparer.Ordinal);
+        string alpha = AlphaDepth(rig, out int alphaLevels);
         return new Reading(
             Print(layers),
             $"{fogVolumes} fog volume(s), {clutterMeshes} clutter node(s), ranges {string.Join(",", ranges)}",
             Print(shaders),
             Print(puffs),
+            alpha,
+            alphaLevels,
             EnvFlags(rig.Env),
             SunFlags(rig.Sun),
             pass is { Env: { } passEnv } ? EnvFlags(passEnv) + " / " + (pass.Sun is { } light ? SunFlags(light) : "no light") : "no pass",
@@ -367,6 +372,54 @@ internal static class GraphicsSwitchSuites
     private static string PuffFlags(ShaderMaterial material) => string.Create(CultureInfo.InvariantCulture,
         $"{(material.GetShaderParameter("puff_tex").AsGodotObject() as Texture2DArray)?.GetLayers() ?? 0} layers tint {material.GetShaderParameter("puff_tint").AsColor().ToHtml()}");
 
+    // Every alpha-plane texture's alpha histogram over its whole chain, read back from the GPU, and
+    // each painted skin's and decal's alpha bytes. Both are what the renderer samples.
+    private static string AlphaDepth(Rig rig, out int levels)
+    {
+        levels = 0;
+        if (rig.Session.SessionTextures is not { } textures)
+            return "no archive";
+        var histogram = new long[256];
+        foreach (var tex in textures.AlphaDepthFollowers)
+            AddAlpha(tex.GetImage(), histogram, null);
+        levels = histogram.Count(c => c > 0);
+        var painted = new List<string>();
+        var atlases = new List<string>();
+        foreach (var atlas in Effects.Puffer.AtlasesOf(textures))
+            atlases.Add(AlphaHash(atlas));
+        atlases.Sort(StringComparer.Ordinal);
+        foreach (var tex in Mech3.PlanePainter.LiveOver(textures).SelectMany(p => p.Painted))
+            painted.Add(AlphaHash(tex));
+        ulong histogramHash = 14695981039346656037UL;
+        foreach (long count in histogram)
+            histogramHash = (histogramHash ^ (ulong)count) * 1099511628211UL;
+        return string.Create(CultureInfo.InvariantCulture,
+            $"{textures.AlphaDepthFollowers.Count} texture(s) at {levels} alpha level(s), histogram {histogramHash:x16}; {atlases.Count} atlas(es): {string.Join(",", atlases)}; {painted.Count} painted: {string.Join(",", painted)}");
+    }
+
+    private static string AlphaHash(Texture2D texture)
+    {
+        ulong hash = 14695981039346656037UL;
+        AddAlpha(texture.GetImage(), null, b => hash = (hash ^ b) * 1099511628211UL);
+        return hash.ToString("x16", CultureInfo.InvariantCulture);
+    }
+
+    private static void AddAlpha(Image? image, long[]? histogram, Action<byte>? each)
+    {
+        if (image == null)
+            return;
+        int stride = image.GetFormat() switch { Image.Format.Rgba8 => 4, Image.Format.La8 => 2, _ => 0 };
+        if (stride == 0)
+            return;
+        var data = image.GetData();
+        for (int i = stride - 1; i < data.Length; i += stride)
+        {
+            if (histogram != null)
+                histogram[data[i]]++;
+            each?.Invoke(data[i]);
+        }
+    }
+
     private static string EnvFlags(Godot.Environment env) => string.Create(CultureInfo.InvariantCulture,
         $"ssao {env.SsaoEnabled} {env.SsaoRadius:0.##}, ssr {env.SsrEnabled} {env.SsrMaxSteps}, glow {env.GlowEnabled} {env.GlowIntensity:0.##}, tonemap {env.TonemapMode} {env.TonemapAgxWhite:0.##}, froxel {env.VolumetricFogEnabled}, sky {env.Sky?.SkyMaterial?.GetType().Name}, reflected {env.ReflectedLightSource}");
 
@@ -389,13 +442,14 @@ internal static class GraphicsSwitchSuites
         ctx.Check(fresh.Layers == switched.Layers, $"{what}: the mode's layers ({switched.Layers} against fresh {fresh.Layers})");
         ctx.Check(fresh.Clutter == switched.Clutter, $"{what}: the clutter's nodes and ranges ({switched.Clutter} against fresh {fresh.Clutter})");
         ctx.Check(fresh.Shaders == switched.Shaders, $"{what}: the shader text on every material");
+        ctx.Check(fresh.Alpha == switched.Alpha, $"{what}: the alpha depth of every alpha-plane texture and painted skin ({switched.Alpha} against fresh {fresh.Alpha})");
         ctx.Check(fresh.Puffs == switched.Puffs, $"{what}: the rendered cloud puffs ({switched.Puffs} against fresh {fresh.Puffs})");
         ctx.Check(fresh.Env == switched.Env, $"{what}: the Environment ({switched.Env} against fresh {fresh.Env})");
         ctx.Check(fresh.Sun == switched.Sun, $"{what}: the sun ({switched.Sun} against fresh {fresh.Sun})");
         ctx.Check(fresh.Cockpit == switched.Cockpit, $"{what}: the cockpit pass ({switched.Cockpit} against fresh {fresh.Cockpit})");
     }
 
-    private sealed record Reading(string Layers, string Clutter, string Shaders, string Puffs, string Env, string Sun,
+    private sealed record Reading(string Layers, string Clutter, string Shaders, string Puffs, string Alpha, int AlphaLevels, string Env, string Sun,
         string Cockpit, bool SunCasts, int Omnis)
     {
         public override string ToString()
@@ -408,6 +462,7 @@ internal static class GraphicsSwitchSuites
             text.AppendLine($"  cockpit {Cockpit}");
             text.AppendLine($"  omnis   {Omnis}");
             text.AppendLine($"  puffs   {Puffs}");
+            text.AppendLine($"  alpha   {Alpha}");
             text.Append($"  shaders {Shaders}");
             return text.ToString();
         }

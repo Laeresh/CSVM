@@ -532,6 +532,9 @@ public partial class GameSession : Node3D
     /// host's.</summary>
     internal ulong MasterSeed => _masterSeed;
 
+    /// <summary>The session's texture archive, for an instrument reading its textures.</summary>
+    internal TextureArchive? SessionTextures => _sessionTextures;
+
     /// <summary>The whole match's roster in seat order, empty outside a network match.</summary>
     internal IReadOnlyList<Net.NetSeat> NetSeats => _netSeats;
 
@@ -923,6 +926,8 @@ public partial class GameSession : Node3D
     public void ApplyGraphicsMode()
     {
         bool enhanced = GraphicsMode.Enhanced;
+        // First: every step below that builds anything bakes from the archive's textures.
+        EnhancedLook.FollowAlphaDepth(_sessionTextures);
         _worldScene?.FollowGraphicsMode();
         _clutter?.Recut();
         _cloudField?.FollowGraphicsMode();
