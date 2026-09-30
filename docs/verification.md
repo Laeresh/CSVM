@@ -418,7 +418,12 @@ member, and it does not go here.
 - **PERF-39**, **`gpu_ms` and `render_cpu_ms` measure the root viewport alone, so a splitscreen
   frame's cost is every pane's measured time summed; a `frame_ms` that stays flat while that sum
   moves says the frame is CPU-bound.** Four-pane CM24 held 31.7 ms frames while the panes' GPU sum
-  ran from 11.3 to 19.5 ms across shadow settings.
+  ran from 11.3 to 19.5 ms across shadow settings. In splitscreen the root viewport draws no world,
+  so both read near zero there.
+- **PERF-44**, **Split a draw count by viewport and by pass (`ViewportGetRenderInfo`, visible and
+  shadow) before crediting it to a source: the frame's total cannot show a viewport nobody sees.**
+  Four-pane CM24's 20,500 draws held about 6,400 from the root viewport, which rendered the whole
+  world at the window's size behind the opaque pane backdrop.
 - **PERF-40**, **`script_ms` is Godot's `TIME_PROCESS`, which runs from the process pass through the
   draw and its present, so it holds the render as well as the scripts. Split a frame with the gap
   terms instead: `phys_engine_ms`, `defer_ms`, `draw_ms` and `idle_ms`, with `proc_ms` and ticks per

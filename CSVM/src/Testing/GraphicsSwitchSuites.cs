@@ -32,7 +32,7 @@ internal static class GraphicsSwitchSuites
         + "session, and its Original half as a fresh Original one: the enhanced-only layers (scorch "
         + "field, volumetric banks, wind streaks, heat shimmer) are built or gone and the ground "
         + "shadow is the reverse, the clutter is one MultiMesh per kind on the faithful path and cells "
-        + "with ranges under Enhanced, every world, clutter, cloud and streak material carries the "
+        + "with ranges under Enhanced, the map edge's clutter copies carry ranges under Enhanced alone, every world, clutter, cloud and streak material carries the "
         + "shader text a fresh build gives it, the rendered cloud puffs draw under Enhanced alone with "
         + "a fresh build's pool and tint, every alpha-plane texture, puffer atlas and painted skin holds the alpha depth a fresh build uploads (16 levels on the faithful path), the Environment's passes, tonemap and froxel fog and the "
         + "cockpit pass's copy match, the sun and the pass's light cast at the resolved shadow level "
@@ -84,6 +84,8 @@ internal static class GraphicsSwitchSuites
                     $"ABLE-TO-FAIL CONTROL: the two modes' fresh readings differ ({freshEnhanced.Layers} against {freshOriginal.Layers})");
                 ctx.Check(freshOriginal.AlphaLevels is > 0 and <= 16 && freshEnhanced.AlphaLevels > 16,
                     $"ABLE-TO-FAIL CONTROL: the alpha-plane textures hold 16 alpha levels at most on the faithful path and more under Enhanced ({freshOriginal.AlphaLevels} against {freshEnhanced.AlphaLevels})");
+                ctx.Check(freshEnhanced.EdgeRanged > 0 && freshOriginal.EdgeRanged == 0,
+                    $"the map edge's clutter copies stop at their fade under Enhanced alone ({freshEnhanced.EdgeRanged} ranged against {freshOriginal.EdgeRanged})");
                 ctx.Check(freshEnhanced.Puffs.Length > 0 && freshOriginal.Puffs.Length == 0,
                     $"the rendered cloud puffs draw under Enhanced alone ({freshEnhanced.Puffs})");
                 ctx.Check(freshEnhanced.SunCasts && !freshOriginal.SunCasts && !switchedOriginal.SunCasts,
@@ -108,7 +110,7 @@ internal static class GraphicsSwitchSuites
         "the Enhanced clutter cells follow a live View Distance change: moved from Normal to Very Far "
         + "the cells are cut and ranged as a session built at Very Far cuts them, farther than at "
         + "Normal, Unlimited leaves no cell a visibility range, and back at Normal the cells are the "
-        + "first build's again")]
+        + "first build's again; the map edge's clutter copies follow each move")]
     internal static void ViewDistanceCells(TestContext ctx)
     {
         RequireData(ctx);
@@ -157,6 +159,9 @@ internal static class GraphicsSwitchSuites
                     $"and reaches farther than Normal ({veryFarLive.MaxRange:0} m against {normal.MaxRange:0} m)");
                 ctx.Check(unlimited.Ranged == 0 && unlimited.Cells > 0,
                     $"Unlimited leaves no cell a range ({unlimited})");
+                ctx.Check(veryFarLive.EdgeMax > normal.EdgeMax && normal.EdgeMax > 0f && unlimited.EdgeMax == 0f
+                        && normalAgain.EdgeMax == normal.EdgeMax,
+                    $"the map edge's clutter copies follow each move ({normal.EdgeMax:0}, {veryFarLive.EdgeMax:0}, {unlimited.EdgeMax:0}, {normalAgain.EdgeMax:0} m)");
                 ctx.Check(normalAgain.Text == normal.Text,
                     $"and back at Normal the cells are the first build's ({normalAgain} against {normal})");
             }
@@ -340,6 +345,9 @@ internal static class GraphicsSwitchSuites
     // What one session reads as, each field a sorted, printable census so a mismatch names itself.
     private static Reading Read(Rig rig)
     {
+        // The map edge's copies past the first corner, a window every reading of a session shares.
+        // Built before the walk, so every reading's shader census meets the same nodes.
+        rig.Session.EdgeExtender?.Update(rig.Session.EdgeExtender.BeyondCorner);
         var layers = new SortedDictionary<string, int>(StringComparer.Ordinal);
         var shaders = new SortedDictionary<string, int>(StringComparer.Ordinal);
         var puffs = new SortedDictionary<string, int>(StringComparer.Ordinal);
@@ -381,10 +389,16 @@ internal static class GraphicsSwitchSuites
             }
         });
         ranges.Sort(StringComparer.Ordinal);
+        var edgeRanges = new List<float>();
+        if (rig.Session.EdgeExtender is { } edge)
+            edgeRanges.AddRange(edge.ClutterRanges());
+        edgeRanges.Sort();
         string alpha = AlphaDepth(rig, out int alphaLevels);
         return new Reading(
             Print(layers),
-            $"{fogVolumes} fog volume(s), {clutterMeshes} clutter node(s), ranges {string.Join(",", ranges)}",
+            $"{fogVolumes} fog volume(s), {clutterMeshes} clutter node(s), ranges {string.Join(",", ranges)}; "
+                + $"{edgeRanges.Count} edge clutter node(s), ranges {string.Join(",", edgeRanges.Select(r => r.ToString("0.##", CultureInfo.InvariantCulture)))}",
+            edgeRanges.Count(r => r > 0f),
             Print(shaders),
             Print(puffs),
             alpha,
@@ -406,7 +420,13 @@ internal static class GraphicsSwitchSuites
         });
         ranges.Sort();
         string text = string.Join(",", ranges.Select(r => r.ToString("0.##", CultureInfo.InvariantCulture)));
-        return new CellReading(ranges.Count, ranges.Count(r => r > 0f), ranges.Count > 0 ? ranges.Max() : 0f, text);
+        float edgeMax = 0f;
+        if (rig.Session.EdgeExtender is { } edge)
+        {
+            edge.Update(edge.BeyondCorner);
+            edgeMax = edge.ClutterRanges().DefaultIfEmpty(0f).Max();
+        }
+        return new CellReading(ranges.Count, ranges.Count(r => r > 0f), ranges.Count > 0 ? ranges.Max() : 0f, text, edgeMax);
     }
 
     private static bool UnderClutter(Node node)
@@ -540,7 +560,7 @@ internal static class GraphicsSwitchSuites
         ctx.Check(fresh.Cockpit == switched.Cockpit, $"{what}: the cockpit pass ({switched.Cockpit} against fresh {fresh.Cockpit})");
     }
 
-    private sealed record Reading(string Layers, string Clutter, string Shaders, string Puffs, string Alpha, int AlphaLevels, string Env, string Sun,
+    private sealed record Reading(string Layers, string Clutter, int EdgeRanged, string Shaders, string Puffs, string Alpha, int AlphaLevels, string Env, string Sun,
         string Cockpit, bool SunCasts, int Omnis)
     {
         public override string ToString()
@@ -559,10 +579,10 @@ internal static class GraphicsSwitchSuites
         }
     }
 
-    private sealed record CellReading(int Cells, int Ranged, float MaxRange, string Text)
+    private sealed record CellReading(int Cells, int Ranged, float MaxRange, string Text, float EdgeMax)
     {
         public override string ToString() => string.Create(CultureInfo.InvariantCulture,
-            $"{Cells} cell(s), {Ranged} ranged, farthest {MaxRange:0} m");
+            $"{Cells} cell(s), {Ranged} ranged, farthest {MaxRange:0} m, edge farthest {EdgeMax:0} m");
     }
 
     // One session, its pane and the lights the launcher would own for it.

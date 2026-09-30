@@ -2215,7 +2215,8 @@ internal static class WorldAndToolSuites
     [Suite("splitscreen-listeners",
         "every 2–4P pane is a 3D audio listener, which a SubViewport is not by default, the "
         + "pinned listener model (A2), and the one thing standing between splitscreen and a "
-        + "world with no listener at all")]
+        + "world with no listener at all; the main viewport draws no world while the panes stand "
+        + "and draws it again after them")]
     internal static void SplitscreenListeners(TestContext ctx)
     {
         var main = ctx.Host.GetViewport();
@@ -2229,6 +2230,7 @@ internal static class WorldAndToolSuites
             $"a fresh SubViewport is NOT an audio listener, so each pane must set it");
         bare.Free();
 
+        bool mainDrew = !main.Disable3D;
         for (int players = 2; players <= SplitScreen.MaxPlayers; players++)
         {
             var split = SplitScreen.Build(players, main);
@@ -2241,12 +2243,16 @@ internal static class WorldAndToolSuites
                     ctx.Check(view.AudioListenerEnable3D,
                         $"{players}P pane {view.Name} is a 3D audio listener");
                 }
+                ctx.Check(main.Disable3D,
+                    $"{players}P: the main viewport draws no world behind the panes");
             }
             finally
             {
                 ctx.Host.RemoveChild(split);
                 split.Free();
             }
+            ctx.Check(!main.Disable3D == mainDrew,
+                $"{players}P: and draws it again as it did once the panes are gone");
         }
     }
 

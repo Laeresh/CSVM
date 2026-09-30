@@ -84,6 +84,13 @@ public sealed class ClutterInstances
             placements.Count));
     }
 
+    /// <summary>The visibility range of a node whose stamps lie within <paramref name="radius"/> of its
+    /// bounds' centre. Past it every stamp has faded, the farthest at squared fade
+    /// <paramref name="far2"/>. It is 0, no range, on the faithful path or where a stamp never
+    /// fades.</summary>
+    public static float RangeEnd(bool enhanced, bool neverFades, float far2, float radius, float fadeScaleSq) =>
+        enhanced && !neverFades && fadeScaleSq > 0f ? Mathf.Sqrt(far2 / fadeScaleSq) + radius : 0f;
+
     /// <summary>Draws the kind again under the mode and the fade scale standing now, whole or in
     /// cells, as a fresh build draws it. A stamp the world has since hidden or a crater has
     /// flattened keeps its transform.</summary>
@@ -203,13 +210,8 @@ public sealed class ClutterInstances
             {
                 cell.SetInstanceShaderParameter("node_bias", nodeBias);
             }
-            // The farthest stamp's fade, plus the cell's half diagonal and the card's swing. Past
-            // that distance every stamp in the cell has already faded to nothing.
-            if (!neverFades)
-            {
-                float radius = (bounds.Value.Size * 0.5f).Length() + whole.ExtraCullMargin;
-                cell.VisibilityRangeEnd = Mathf.Sqrt(far2 / fadeScaleSq) + radius;
-            }
+            float radius = (bounds.Value.Size * 0.5f).Length() + whole.ExtraCullMargin;
+            cell.VisibilityRangeEnd = RangeEnd(true, neverFades, far2, radius, fadeScaleSq);
             group.AddChild(cell);
             cells[c] = mm;
             offsets[c] = offset;
