@@ -8,7 +8,7 @@ namespace CSVM.Testing;
 /// <summary>What the game hands Godot's separate render thread and what it reads back from it.
 /// Covered are the project's thread model and the render-time pair read without a round trip. So
 /// are a pane read back through the rendering device, which answers only the render thread, and
-/// texture uploads keeping their own pictures. A native error from any of them fails the run
+/// texture uploads keeping their own pictures. So is the subtree copy that stands in for Duplicate(). A native error from any of them fails the run
 /// through the harness's engine-error screen.</summary>
 internal static class RenderThreadSuites
 {
@@ -19,8 +19,9 @@ internal static class RenderThreadSuites
         "The project draws on Godot's separate render thread; the measured render CPU and GPU times "
         + "read off the frame path equal a synchronous read once the render thread has caught up; a "
         + "pane read back through the rendering device lands the same pixels a synchronous read "
-        + "answers; and a texture replaced many times over, its source bytes refilled after every "
-        + "upload, holds the last picture uploaded")]
+        + "answers; a texture replaced many times over, its source bytes refilled after every "
+        + "upload, holds the last picture uploaded; and a geometry subtree copied without "
+        + "Duplicate() keeps its names, transforms, mesh, surface material, metadata and children")]
     internal static void RenderThreadHandoffs(TestContext ctx)
     {
         int model = ProjectSettings.GetSetting("rendering/driver/threads/thread_model").AsInt32();
@@ -59,6 +60,40 @@ internal static class RenderThreadSuites
         }
 
         UploadsKeepTheirOwnPicture(ctx);
+        CopiesAGeometrySubtree(ctx);
+    }
+
+    // Able to fail: a copy that loses the transform, the mesh, a surface's material, the metadata
+    // animation resolves names by, or a child. Duplicate() in its place crashes this process.
+    private static void CopiesAGeometrySubtree(TestContext ctx)
+    {
+        var material = new StandardMaterial3D();
+        var root = new Node3D { Name = "copy_root", Position = new Vector3(1f, 2f, 3f) };
+        var mesh = new MeshInstance3D { Name = "copy_mesh", Mesh = new BoxMesh(), Position = new Vector3(0f, 5f, 0f) };
+        mesh.SetSurfaceOverrideMaterial(0, material);
+        mesh.SetMeta(Mech3.AnimRuntime.NameMeta, "copy_cs_name");
+        root.AddChild(mesh);
+        mesh.AddChild(new Node3D { Name = "copy_leaf" });
+        ctx.Host.AddChild(root);
+        Node3D? copy = null;
+        try
+        {
+            copy = SceneCopy.Of(root);
+            var copied = copy.GetNodeOrNull<MeshInstance3D>("copy_mesh");
+            ctx.Check(copy.Name == "copy_root" && copy.Position == root.Position,
+                $"the copy keeps its root's name and transform name={copy.Name} at={copy.Position}");
+            ctx.Check(copied != null && copied.Mesh == mesh.Mesh && copied.Position == mesh.Position
+                && copied.GetSurfaceOverrideMaterial(0) == material
+                && copied.GetMeta(Mech3.AnimRuntime.NameMeta).AsString() == "copy_cs_name"
+                && copied.GetNodeOrNull("copy_leaf") != null,
+                $"the copied geometry shares its mesh and surface material and keeps its transform, metadata and child");
+        }
+        finally
+        {
+            copy?.Free();
+            ctx.Host.RemoveChild(root);
+            root.Free();
+        }
     }
 
     // Able to fail: a publish that never runs reads zeros, a swapped pair or a stale one differs.

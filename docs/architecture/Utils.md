@@ -157,12 +157,23 @@ getters each wait for the previous draw, so a call queued on the render thread p
 and the frame takes the latest one, a draw older than a synchronous read. On one thread the read is
 direct. Why the wait matters: `docs/verification.md` PERF-43.
 
+## src/Utils/SceneCopy.cs
+A node subtree's copy for the three places that duplicate one in play: the splitscreen cloud decks
+(`Session/Launch/GameSession.cs`), the staged chute figures (`Mech3/WorldSession.cs`) and the glTF
+export (`Tooling/GltfExporter.cs`). `Duplicate()` builds each geometry node's property list, which
+under the separate render thread queues a call that writes into the caller's finished stack frame
+and kills the process. The copy reads a geometry node's properties off its class, then its
+metadata, surface materials and blend shapes; other nodes copy through their own list. Instance
+uniforms stay behind, as under `Duplicate()`.
+
 ## src/Utils/TextureUpload.cs
 New pixels for a texture the game repaints while it runs: the ground shadow's silhouette, the world
 light table, the cinema and the menu movies. Each upload builds its own `Image`, because under the
 separate render thread the update is queued and read later, and an Image refilled in place with
 `SetData` swaps its buffer under that reader. `Create` makes the texture and `Replace` hands it the
-next picture.
+next picture, holding each Image by a second native reference until the render thread lets go, so
+that thread never swaps the C# wrapper's GC handle, a swap that corrupts the managed heap when it
+races the main thread's.
 
 ## src/Utils/WallCostBank.cs
 One `--perf` cost meter: the open/close bracket, the banked wall milliseconds, the worst single

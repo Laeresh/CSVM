@@ -363,7 +363,7 @@ public sealed class WorldSession
                     // The staged actor IS the first copy: it is already in the tree and already in
                     // the runtime's node table, and a mission with one caller must keep using it.
                     Node3D? made = fromStage
-                        ? (copies.Count == 0 ? stagedChute : stagedChute!.Duplicate() as Node3D)
+                        ? (copies.Count == 0 ? stagedChute : Utils.SceneCopy.Of(stagedChute!))
                         : (gamez.FindByName(name) is { } gzNode
                             ? builder.Scene.BuildSubtree(gzNode, collisionSkip: _ => true) : null);
                     if (made == null)

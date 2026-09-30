@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Godot;
 
 namespace CSVM.Utils;
@@ -12,6 +13,11 @@ namespace CSVM.Utils;
 /// </summary>
 public static class TextureUpload
 {
+    // Each queued Image, held by a native reference as well as its C# wrapper, and freed here once
+    // the render thread has let go. The references each Image had before its update was queued.
+    private static readonly Godot.Collections.Array InFlight = new();
+    private static readonly List<(Image Image, int Held)> Pending = new();
+
     /// <summary>A texture holding <paramref name="pixels"/> as its first picture.</summary>
     public static ImageTexture Create(int width, int height, Image.Format format, byte[] pixels)
     {
@@ -24,8 +30,31 @@ public static class TextureUpload
     /// </summary>
     public static void Replace(ImageTexture texture, int width, int height, Image.Format format, byte[] pixels)
     {
-        // Disposing drops only this wrapper's reference: a queued update keeps the Image alive.
-        using var image = Image.CreateFromData(width, height, false, format, pixels);
+        Release();
+        var image = Image.CreateFromData(width, height, false, format, pixels);
+
+        // ⚠ Keep the second reference until the render thread is done. A release leaving the wrapper
+        // alone makes Godot swap its GC handle on that thread. Racing the main thread, that corrupts
+        // the managed heap.
+        InFlight.Add(image);
+        Pending.Add((image, image.GetReferenceCount()));
         texture.Update(image);
+    }
+
+    // Frees, on this thread, every Image the render thread no longer references.
+    private static void Release()
+    {
+        for (int i = Pending.Count - 1; i >= 0; i--)
+        {
+            var (image, held) = Pending[i];
+            if (image.GetReferenceCount() > held)
+            {
+                continue;
+            }
+
+            InFlight.RemoveAt(i);
+            Pending.RemoveAt(i);
+            image.Dispose();
+        }
     }
 }

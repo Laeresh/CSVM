@@ -5567,9 +5567,9 @@ public partial class GameSession : Node3D
         Log.Info("flight", $"cockpit: interior drawn in its own pass at the origin for {_rigs.Count} rig(s)");
     }
 
-    // Gives every rig a cloudlayer deck to anchor under its own camera: rig 0 takes the world's
+    // Gives every rig a cloudlayer deck to anchor under its own camera. Rig 0 takes the world's
     // deck, the rest get copies on their player's visual layer. ⚠ Re-apply the instance uniforms
-    // from the source; they are RenderingServer state and Duplicate drops them.
+    // from the source; they are RenderingServer state and no copy carries them.
     private void AssignCloudDecks(Node3D deck)
     {
         _rigs[0].Deck = deck;
@@ -5578,7 +5578,7 @@ public partial class GameSession : Node3D
         var parent = deck.GetParent();
         for (int i = 1; i < _rigs.Count; i++)
         {
-            var copy = (Node3D)deck.Duplicate();
+            var copy = Utils.SceneCopy.Of(deck);
             copy.Name = $"cloud_deck{i + 1}";
             CopyInstanceShaderParams(deck, copy);
             SplitScreen.SetVisualLayer(copy, _rigs[i].VisualLayer);

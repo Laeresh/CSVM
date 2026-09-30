@@ -564,6 +564,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/RenderScaleSetting.cs`, the render scale: the saved/config ladder over 50 to 200 percent of native, capped at native under FSR 2.2, resolved once at launch for the four 3D viewports.
 - `src/Utils/ResolutionSetting.cs`, the window size: the sizes a screen can hold, the saved one against the screen's own size, and the one place the window size is set.
 - `src/Utils/Rng.cs`, the session's one master seed and the named subsystem generators every random draw derives from.
+- `src/Utils/SceneCopy.cs`, a node subtree's copy in place of `Duplicate()`, which under the separate render thread corrupts memory on any geometry node.
 - `src/Utils/ScriptedWindow.cs`, Win32-only window hiding for scripted runs; `ScriptedWindow.Hide()` uses `ShowWindow(SW_HIDE)` on the native window.
 - `src/Utils/ShaderTime.cs`, the `csky_time` global uniform: the clock's GPU twin, replacing `TIME` in every generated shader; wraps at 3600 s.
 - `src/Utils/LoadProgress.cs`, the load screen's progress under a blocking build: the authored milestone table, the monotonic setter and the throttled repaint pump.
