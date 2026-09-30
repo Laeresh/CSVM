@@ -75,7 +75,7 @@ primitives no archive carries. Schema and the data-to-look TUNE mapping:
 Remake-only wind streaks, a layer OVER the authored speed cue (`Flight/Hud/SpeedCue.cs`) rather than a
 replacement: one MultiMesh of thin procedural quads in a camera-centred wrap box on
 `Precipitation`'s pattern, aligned to the aircraft's world velocity, with the same near and rim
-fades. `Create` returns null unless `GraphicsMode.Enhanced`; `HumanFlightAdapter` gives each player
+fades. `Create` returns null unless `GraphicsMode.Enhanced` and the `graphics.windStreaks` config key is on (it ships off); `HumanFlightAdapter` gives each player
 pane its own, `FlightController` drives it, and a live switch takes it out of the tree and back. `Update` is the whole law: opacity zero below a
 cruise fraction of `PlaneStats.FdSpeed`, rising with the speed fraction plus a term on
 `FlightModel.LoadFactorDemand`, length growing with airspeed, and the drift accumulated on the CPU

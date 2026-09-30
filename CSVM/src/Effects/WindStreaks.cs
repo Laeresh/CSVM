@@ -21,6 +21,12 @@ public sealed partial class WindStreaks : Node3D
     /// item, so this constant records the decision rather than performing it.</summary>
     public const float AuthoredWispAlphaScale = 1f;
 
+    /// <summary>The <c>config.json</c> switch for the streaks, a bool.</summary>
+    public const string Key = "graphics.windStreaks";
+
+    /// <summary>Off unless <see cref="Key"/> turns them on: the user's call at the controls.</summary>
+    public const bool DefaultEnabled = false;
+
     // --- TUNE: the feel, pending the user's judgement at the controls ---
     private const float BoxHalf = 45f;        // camera-centred wrap-box half-extent (m)
     private const int Count = 1400;           // MultiMesh instances in that box (density)
@@ -100,6 +106,9 @@ public sealed partial class WindStreaks : Node3D
     private MultiMeshInstance3D _mmi = null!;
     private Vector3 _drift;
 
+    /// <summary>Whether the config asks for the streaks, <see cref="DefaultEnabled"/> when unset.</summary>
+    public static bool EnabledByConfig => Config.GetBool(Key, DefaultEnabled);
+
     /// <summary>The peak alpha written to the field this frame, zero while it is invisible.</summary>
     public float Alpha { get; private set; }
 
@@ -108,12 +117,13 @@ public sealed partial class WindStreaks : Node3D
 
     internal ShaderMaterial Material => _mat;
 
-    /// <summary>Builds the field, or null on the faithful path: this is a remake-only layer and
-    /// the presentation switch is its one gate. Add the returned node beside the player's other
-    /// world-space effects and drive it with <see cref="Update"/>.</summary>
-    public static WindStreaks? Create()
+    /// <summary>Builds the field, or null on the faithful path or while <see cref="Key"/> leaves the
+    /// streaks off. <paramref name="enabled"/> stands in for the config read, for a suite. Add the
+    /// returned node beside the player's other world-space effects and drive it with
+    /// <see cref="Update"/>.</summary>
+    public static WindStreaks? Create(bool? enabled = null)
     {
-        if (!GraphicsMode.Enhanced)
+        if (!GraphicsMode.Enhanced || !(enabled ?? EnabledByConfig))
             return null;
         var field = new WindStreaks();
         field.Init();
