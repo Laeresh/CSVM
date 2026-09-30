@@ -180,7 +180,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 4. ☑ Alpha-to-coverage on the cutout surfaces under Enhanced
 5. ☑ FSR 2.2 tried once as the alternative temporal pass, kept or parked on the user's verdict
 6. ☑ An Anti-aliasing row on the VIDEO page, and a Render Scale that follows it down to 50%
-7. ◐ C5 and the last two campaign missions hold a frame budget under Enhanced
+7. ☑ C5 and the last two campaign missions hold a frame budget under Enhanced
 
 ### Wave B, lit explosions
 
@@ -719,7 +719,7 @@ on them, so look for smear on smoke and clouds first. The spyglass SubViewport a
 the same writes as the root viewport, or they disagree in sharpness (A2's trap); the transparent
 cockpit pass takes none (see the fix above).
 
-## A7 ◐ C5 and the last two campaign missions hold a frame budget under Enhanced
+## A7 ☑ C5 and the last two campaign missions hold a frame budget under Enhanced
 
 **Landed.** Seven changes, each taken from a profile on the author's machine:
 - **Clutter cells, Enhanced only.** `Mech3/ClutterInstances.cs` cuts each clutter kind's MultiMesh
@@ -775,15 +775,24 @@ PERF-39).
 - **The separate render thread**, the project default (`--render-thread safe` for one thread).
   proc_ms on the author's machine 6.5 to 7.4 → 0.3 to 1.5 ms at one pane and 20 to 30 → 0.9 to
   3.5 ms at four (PERF-43).
+- **The draw count by source** (PERF-44). Split by viewport, pass and source, four-pane CM24's
+  20,500 draws held about 6,400 from the main viewport, which drew the whole world behind the pane
+  backdrop, and 6,100 from the map edge's clutter copies, drawn to the window's edge. The split
+  rig now turns the main viewport's 3D off (`SplitScreen`, both modes, no pixel moves), and under
+  Enhanced each map-edge copy node stops at its stamps' farthest fade
+  (`MapEdgeExtender.FollowClutterFade`). Four-pane CM24 20,500 → 10,700 draws, one pane 4,200 →
+  2,550. The static world merge was not built: after these two it is a minor term in CM24, and in
+  C5 a census groups the 3,056 placed-node surfaces into 1,810 by material in 512 m cells.
 
-**Against the goal.** Deck, 1280x800, one pane, 67% TAA, Shadow Quality High, separate render
-thread: C5 110 to 138 fps (GPU-bound, noisy); CM24 58 fps (17.3 ms), CM24 Original 67 fps; CM23 not
-yet measured. The author's machine, four panes at 67% TAA High, separate thread: C5 12.9 to 20.1
-ms, CM24 22.9 to 29.9 ms, a shared machine moving the rows between passes. **Open:** CM23 on the
-Deck, CM24 on the Deck (2 fps short), and the four-pane 60 fps target at 100% on the author's
-machine, re-measured under the levers above. The CPU side is the draw-call count, which the
-Approach's merge of static world nodes sharing a material targets. The Deck at four panes (43 ms
-for C5) is outside the goal.
+**Against the goal.** Every target reads met. Deck, 1280x800, one pane, 67% TAA, Shadow Quality
+High, separate render thread, two passes: CM24 67.5 fps (14.9 ms, from 57.5 to 58.5), CM23 96 to
+97 fps, C5 130 to 148 fps (GPU-bound, the pose moves it), CM24 Original 68 fps (67 before). The
+author's machine, release export, four panes at 5120x1440, 100% TAA Ultra: CM24 13.2 ms (18.1 to
+18.3 before), C5 13.4 to 13.7 ms (16.2 to 16.6), CM23 9.9 ms (13.5). The faithful path's four-pane
+frame falls with the main viewport's render, and every golden, the five Enhanced ones included,
+is hash-identical. The next CPU terms are the zeppelins' and aircraft's many small parts and the
+spyglass disc, which draws a full view with its own shadow cascades. The Deck at four panes is
+outside the goal.
 
 **Goal.** Under Enhanced, C5 and the campaign's last two missions, CM23 "The Criminal Exodus"
 (`C5/M03`) and CM24 "Battle over Broadway" (`C5/M04`), run at 60 fps on the Steam Deck at 67% with
