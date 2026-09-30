@@ -16,7 +16,7 @@ Run headless from the repository root (never with a Blender window):
 
   "C:\\Program Files\\Blender Foundation\\Blender 5.2\\blender.exe" -b --factory-startup
       --python CSVM/data/cloud_puffs/render_cloud_puffs.py -- [--out DIR] [--size N]
-      [--samples N] [--set veil|far|far_soft|far_smooth|veil_pair|soft|billowy] [--only NAME[,NAME]]
+      [--samples N] [--set veil|far|far_detail|far_smooth|veil_pair|soft|billowy] [--only NAME[,NAME]]
 
 The default --out is this script's own folder and the default --set is the shipped one. Each
 puff is written as <name>.png.bin: PNG bytes under an extension Godot does not import (the export's data/*.bin filter packs it, see
@@ -160,10 +160,11 @@ SETS = {
     "veil_pair": dict(sky=0.8, bounces=6, puffs=_pair((0.9, 0.85, 0.88, 0.9), 0.02, 0.9, 3.0)),
     # C as shipped: the same look over eight silhouettes, one per card by a hash of its position.
     "veil": dict(sky=0.8, bounces=6, puffs=VEIL_POOL),
-    # The placed cloud clusters: the same lighting over six detailed heaps (shipped), a softer
-    # candidate with the authored masks' fringe, and the earlier smooth set.
-    "far": dict(sky=0.8, bounces=6, puffs=_mass_pool(soft_look=False)),
-    "far_soft": dict(sky=0.8, bounces=6, puffs=_mass_pool(soft_look=True)),
+    # The placed cloud clusters: the same lighting over six heaps with the authored masks' soft
+    # fringe (shipped, picked at the controls), the firmer detailed candidate, and the earlier
+    # smooth set.
+    "far": dict(sky=0.8, bounces=6, puffs=_mass_pool(soft_look=True)),
+    "far_detail": dict(sky=0.8, bounces=6, puffs=_mass_pool(soft_look=False)),
     "far_smooth": dict(sky=0.8, bounces=6, puffs=FAR_SMOOTH_POOL),
 }
 

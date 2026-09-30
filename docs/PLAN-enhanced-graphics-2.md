@@ -1471,11 +1471,12 @@ own fog arm must not double-fog. The cards stay (decision 5); the bank is under 
 texture arrays, rendered headless by `CSVM/data/cloud_puffs/render_cloud_puffs.py`:
 - The fvol deck cards draw the eight-puff veil set: translucent, lightly shaded, with strongly
   varied outlines.
-- The placed `cloudparent` sprites (C1, C1B, C1C, C4, C2, C2B) draw the six-puff far set: denser,
-  cauliflower heaps.
+- The placed `cloudparent` sprites (C1, C1B, C1C, C4, C2, C2B) draw the six-puff far set: denser
+  heaps with the authored masks' soft fringe.
 
 The user picked the veil for the deck over two opaque sets, asked for more than two textures and
-less order, and picked the detailed far set over a softer one.
+less order, and after flying both picked the soft-fringed far set over a firmer detailed one
+(`--set far_detail`).
 
 Each card keys its puff, a turn of up to 20°, a mirror and a size of 0.8 to 1.25 on a hash of its own
 position, never on the shared cloud Rng stream, so the placements are unchanged. The puff carries
