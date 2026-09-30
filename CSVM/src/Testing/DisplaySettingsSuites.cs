@@ -50,6 +50,7 @@ internal static class DisplaySettingsSuites
         ("DefaultView", "cockpit", false),
         ("AutoHeadTurn", true, false),
         ("RocketCraters", true, false),
+        ("CockpitEnginePitch", false, false),
         ("MonitorIndex", "3", true),
         ("Resolution", "1920x1080", true),
         ("DisplayMode", DisplayWords.Borderless, true),

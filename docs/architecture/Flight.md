@@ -881,7 +881,7 @@ for the player and every AI vehicle: whether an airframe counts as damaged, the 
 rattle gate, the drive parameter and the cull distance. The drive adds a turn rate and a climb
 attitude to each curve's parameter under a clamp with headroom above 1, which is why `SoundCurve`
 exposes its steps separately. A pitch reaches the voice only where the definition accepts a
-frequency write (`SlotIsPitched`), leaving the damaged and cockpit loops at their own rate. Decode: [../formats/vehicle.md](../formats/vehicle.md), [../formats/sounds.md](../formats/sounds.md), [../org/shakes.md](../org/shakes.md).
+frequency write (`SlotIsPitched`), leaving the damaged loop at its own rate, and the cockpit loop unless the remake-only `cockpitEnginePitch` option lets the exterior curve reach it (`HealthySlotIsPitched`, read through `FlightAudio.CockpitLoopPitched`). Decode: [../formats/vehicle.md](../formats/vehicle.md), [../formats/sounds.md](../formats/sounds.md), [../org/shakes.md](../org/shakes.md).
 
 ## src/Flight/Audio/EngineVoiceDuck.cs
 The engine duck under a radio line: one gain the session builds once and hands to every engine

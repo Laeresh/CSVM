@@ -2428,6 +2428,84 @@ internal static class CombatSuites
         }
     }
 
+    // The cockpit loop's pitch option on a real FlightAudio, both states in one process. The rule is
+    // remake-only: docs/formats/vehicle.md, "The cockpit loop's pitch is a remake-only rule". Off
+    // must be the original's flat loop, and on must be the exterior curve rather than a new one.
+    [Suite("engine-cockpit-pitch",
+        "the cockpit engine loop's pitch option: off, the cockpit loop plays at its own rate at idle " +
+        "and at full throttle, as the original's refused frequency write leaves it; on, it takes " +
+        "the exterior views' throttle curve, reading the plain loop's own idle and full-throttle " +
+        "pitch; the plain loop is pitched either way, and the damaged loop stays at its own rate " +
+        "with the option on, since the option reaches the cockpit swap alone")]
+    internal static void EngineCockpitPitch(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
+        var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        ctx.Check(stats.CockpitEngineSound != null
+                  && !EngineAudioCurves.SlotIsPitched(soundDefs, stats.CockpitEngineSound),
+            $"{ctx.PlaneName} binds cockpit_engine_sound={stats.CockpitEngineSound}, which carries no FREQUENCY flag");
+        if (stats.CockpitEngineSound == null)
+            return;
+
+        bool previous = FlightAudio.CockpitLoopPitched;
+        using var archive = new SoundArchive(ctx.SoundsPath);
+        var audio = new FlightAudio();
+        audio.Setup(archive, soundDefs, stats, weapons, soundGroups);
+        ctx.Host.AddChild(audio);
+        try
+        {
+            const float dt = 1f / 60f;
+            var idle = new EngineDrive(0f, 0f, 0f);
+            var full = new EngineDrive(1f, 0f, 0f);
+            float exteriorIdle = EngineAudioCurves.Engine(stats, idle, 1f, true).Pitch;
+            float exteriorFull = EngineAudioCurves.Engine(stats, full, 1f, true).Pitch;
+            ctx.Check(exteriorIdle < exteriorFull - 0.1f,
+                $"the exterior curve spans {exteriorIdle:0.000} at idle to {exteriorFull:0.000} at full throttle");
+
+            // Off: the original's flat loop. The first frame in the Cockpit view makes the swap.
+            FlightAudio.CockpitLoopPitched = false;
+            audio.Update(dt, idle, 0.5f, 1f, firstPersonView: true);
+            float offIdle = audio.EnginePitch;
+            audio.Update(dt, full, 0.5f, 1f, firstPersonView: true);
+            float offFull = audio.EnginePitch;
+            ctx.Check(audio.EngineHoldsCockpitStream && offIdle == 1f && offFull == 1f,
+                $"off, the cockpit loop plays at its own rate (idle {offIdle:0.000}, full {offFull:0.000}, cockpit={audio.EngineHoldsCockpitStream})");
+
+            // The Chase view is the control: the plain loop is pitched whatever the option says.
+            audio.Update(dt, idle, 0.5f, 1f, firstPersonView: false);
+            float chaseIdle = audio.EnginePitch;
+            ctx.Check(!audio.EngineHoldsCockpitStream && Mathf.IsEqualApprox(chaseIdle, exteriorIdle),
+                $"the Chase view's plain loop reads the exterior idle pitch with the option off ({chaseIdle:0.000})");
+
+            // On: the next swap into the Cockpit view reads the option.
+            FlightAudio.CockpitLoopPitched = true;
+            audio.Update(dt, idle, 0.5f, 1f, firstPersonView: true);
+            float onIdle = audio.EnginePitch;
+            audio.Update(dt, full, 0.5f, 1f, firstPersonView: true);
+            float onFull = audio.EnginePitch;
+            ctx.Check(audio.EngineHoldsCockpitStream && Mathf.IsEqualApprox(onIdle, exteriorIdle)
+                      && Mathf.IsEqualApprox(onFull, exteriorFull),
+                $"on, the cockpit loop takes the exterior curve (idle {onIdle:0.000}, full {onFull:0.000})");
+
+            // The damaged loop answers by its own flag even with the option on.
+            int frame = 0;
+            for (; frame < 400 && audio.EnginePhase != EngineSlotPhase.Damaged; frame++)
+                audio.Update(dt, idle, 0.5f, 0.1f, firstPersonView: true);
+            audio.Update(dt, idle, 0.5f, 0.1f, firstPersonView: true);
+            ctx.Check(audio.EngineHoldsDamagedStream && audio.EnginePitch == 1f,
+                $"with the option on, the damaged loop still plays at its own rate ({audio.EnginePitch:0.000} after {frame} frames)");
+        }
+        finally
+        {
+            FlightAudio.CockpitLoopPitched = previous;
+            audio.QueueFree();
+        }
+    }
+
     // The engine duck under a voice line on a real MissionRadio, own-ship and AI engine voices.
     // Decode: docs/formats/vehicle.md, "A voice line ducks every engine". Every rate comes from
     // the decode's constants, so a failure here is the port drifting.
