@@ -18,20 +18,9 @@ internal static class EnetTransportSuites
     private const string Loopback = "127.0.0.1";
     private const string LoopbackV6 = "::1";
 
-    // Below the ephemeral range Windows allocates from. Walked rather than fixed, so a second run
-    // does not fail on a port its sibling still holds.
-    private const int FirstPort = 47100;
-    private const int PortsToTry = 20;
-
-    // The stall suite's own walk. Engine suites run in parallel shards, and a busy port costs an
-    // engine error line that the battery counts against the shard.
-    private const int StallFirstPort = 47130;
-
-    // The two address-family suites' walks, and how far above its host's port a guest that names
-    // its own source port sends from.
-    private const int DualFirstPort = 47800;
-    private const int StableFirstPort = 47840;
-    private const int GuestPortOffset = 100;
+    // Each suite's own range in this process's port block, SuitePorts' table.
+    private const int PortsToTry = SuitePorts.Walk;
+    private const int GuestPortOffset = SuitePorts.GuestSource;
 
     // How long a wait for the other end may take before the check that wanted it reports what it
     // saw instead. Loopback delivery is sub-millisecond; this is the give-up, not the budget.
@@ -198,7 +187,7 @@ internal static class EnetTransportSuites
         EnetTransport? v6 = null;
         try
         {
-            host = OpenOn(new[] { Loopback, LoopbackV6 }, DualFirstPort, out int port, out string why);
+            host = OpenOn(new[] { Loopback, LoopbackV6 }, SuitePorts.At(SuitePorts.DualStack), out int port, out string why);
             if (host == null)
             {
                 ctx.Check(false, $"ENet cannot host on {Loopback} and {LoopbackV6} on one port: {why}");
@@ -245,7 +234,7 @@ internal static class EnetTransportSuites
         }
 
         // The IPv6 guest joins through the IPv6 socket, not through anything the IPv4 one does.
-        using var alone = OpenOn(new[] { Loopback }, DualFirstPort + PortsToTry, out int alonePort, out _);
+        using var alone = OpenOn(new[] { Loopback }, SuitePorts.At(SuitePorts.DualStack) + PortsToTry, out int alonePort, out _);
         if (alone == null)
         {
             ctx.Check(false, $"control: ENet cannot host on {Loopback} alone");
@@ -279,7 +268,7 @@ internal static class EnetTransportSuites
 
         ctx.Note($"stable {stable}, temporary {temporary}");
         var shipped = EnetTransport.ListenAddresses(EnetTransport.Wildcard, stable);
-        using (var host = OpenOn(shipped, StableFirstPort, out int port, out string why))
+        using (var host = OpenOn(shipped, SuitePorts.At(SuitePorts.StableReply), out int port, out string why))
         {
             if (host == null)
             {
@@ -298,7 +287,7 @@ internal static class EnetTransportSuites
         }
 
         // The shape the fix replaced: IPv6's wildcard answers from the address Windows picks.
-        using var wild = OpenOn(new[] { EnetTransport.Wildcard }, StableFirstPort + PortsToTry, out int wildPort, out string wildWhy);
+        using var wild = OpenOn(new[] { EnetTransport.Wildcard }, SuitePorts.At(SuitePorts.StableReply) + PortsToTry, out int wildPort, out string wildWhy);
         if (wild == null)
         {
             ctx.Check(false, $"control: ENet cannot host on the wildcard: {wildWhy}");
@@ -434,15 +423,15 @@ internal static class EnetTransportSuites
         return bytes;
     }
 
-    // The first port of the walk that binds, or null with the last error. A busy port is the
-    // expected miss here, so it costs a try rather than the suite.
+    // The first port of the suite's walk that binds, or null with the last error. Only a foreign
+    // process can hold one, and SuitePorts says what a miss still costs.
     private static EnetTransport? OpenHost(out int port, out string why, EnetTransport.Keepalive? keepalive = null,
-        int firstPort = FirstPort)
+        int offset = SuitePorts.Transport)
     {
         why = "no port tried";
         for (int i = 0; i < PortsToTry; i++)
         {
-            port = firstPort + i;
+            port = SuitePorts.At(offset) + i;
             try
             {
                 return EnetTransport.Host(port, maxPeers: 4, bindAddress: Loopback, keepalive);
@@ -625,7 +614,7 @@ internal static class EnetTransportSuites
         // Null, with the reason checked as a failure, when the socket will not open or join.
         public static Pair? Open(TestContext ctx, EnetTransport.Keepalive keepalive)
         {
-            var host = OpenHost(out int port, out string why, keepalive, StallFirstPort);
+            var host = OpenHost(out int port, out string why, keepalive, SuitePorts.Stall);
             if (host == null)
             {
                 ctx.Check(false, $"ENet cannot host on {Loopback} in this process: {why}");

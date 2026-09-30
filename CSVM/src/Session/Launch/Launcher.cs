@@ -611,6 +611,12 @@ public partial class Launcher : Node3D
         {
             Log.Warn("core", $"deprecated flag={old} use={replacement}");
         }
+        // Before any door is built or suite runs: a door reads the game port as it is constructed.
+        if (_spec.NetPortBase is { } netPortBase)
+        {
+            Net.NetPorts.Use(netPortBase);
+            Log.Info("core", $"net ports: game {Net.NetPorts.Game} lan {Net.NetPorts.Lan} (--net-port-base)");
+        }
         // Ahead of --dump-config, same reason as _hitchMonitor: registers the two
         // hitchSidecar.* keys. The fallback path only matters if Log.Open itself failed.
         string hitchLogPath = Log.SinkPath
@@ -2694,7 +2700,7 @@ public partial class Launcher : Node3D
             }
             else
             {
-                var (address, joinPort) = SessionSpec.ParseJoin(_spec.NetJoin!);
+                var (address, joinPort) = SessionSpec.ParseJoin(_spec.NetJoin!, Net.NetPorts.Game);
                 _netWire = Net.NetCarrier.Join(address, joinPort);
                 _netIsHost = false;
             }

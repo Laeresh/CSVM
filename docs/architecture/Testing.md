@@ -34,6 +34,13 @@ shard and returns each shard in the input's order, so one tree always divides th
 default for a suite the file does not name and `Groups` for the sets a shard may not split. Read
 `TestHarness.cs` for where a plan is applied.
 
+## src/Testing/SuitePorts.cs
+The one table of where each suite that opens a real socket opens it: an offset into this process's
+port block, `Net/NetPorts.cs`'s base up to `Block` ports above it. `RunTests.ps1` hands every
+engine shard its own base, and these offsets keep one shard's suites apart, so no two live sockets
+share a port. `Walk` bounds each suite's fallback walk and `At` turns an offset into a port. The
+report's `shard.netPortBase` is the base the process used, which `RunTests.ps1` checks.
+
 ## src/Testing/PhaseAttribution.cs
 Godot-free and pure (`CSVM.Tests` proves it without the engine): buckets a `StartupProfile`'s raw
 phase names into archive/decode, sound preparation and runtime/world construction, and does the

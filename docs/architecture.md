@@ -573,6 +573,7 @@ determinism repo-wide; read `docs/verification.md` first.
 
 - `src/Testing/TestHarness.cs`, `--run-tests`: the suite registry, `TestContext`, the PASS/FAIL/SKIP table, `test-report.json` and the process exit code.
 - `src/Testing/SuiteShards.cs`, the `shard:<index>/<count>` term and the deterministic weighted division behind it, over `analysis/engine-suite-weights.json`.
+- `src/Testing/SuitePorts.cs`, where each socket-opening suite opens its socket: an offset into this process's `--net-port-base` block, so concurrent shards never share a port.
 - `src/Testing/PhaseAttribution.cs`, buckets a build's `StartupProfile` phases into archive/decode, sound preparation and world construction for the report.
 - `src/Testing/CountingEmitterFactory.cs`, the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
 - `src/Testing/RecordingEmitterRenderer.cs`, the no-GPU `IEmitterRenderer` fake: keeps a `Puffer`'s particles instead of drawing, so its modes are testable.
@@ -802,6 +803,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/SteamTransport.cs`, the Steam carrier's place in the seam with no SDK behind it: every way in throws "not built with the Steamworks SDK", and `SteamBuild` is the `CSVM_STEAM` define.
 - `src/Net/NetCarrier.cs`, which carrier a match runs over, chosen once: the door's registration and the command line both open through it, and a build define is the whole of the choice.
 - `src/Net/NetEndpoint.cs`, a host and port parsed from a typed or command-line address, a bare IPv6 address all host, and written back with the host bracketed.
+- `src/Net/NetPorts.cs`, the game and LAN discovery ports this process opens by default: the shipped pair, or the pair `--net-port-base` moves for a test process.
 - `src/Net/UpnpPortMap.cs`, a best-effort port mapping through Godot's UPnP client: five outcomes a host can show, never a throw, and never required for a match to be joinable.
 - `src/Net/UpnpLease.cs`, the router mapping's rules behind a gateway seam: no add behind a non-public external address, a finite lease, the stale mapping cleared by exact port, and when the door renews.
 - `src/Net/IgdAddress.cs`, a gateway's external address read without the engine: its kind (public, private, carrier-shared, reserved) and the description and SOAP text a direct question is made of.

@@ -97,6 +97,8 @@
     shard:<index>/<count> term, so it is deterministic: the same tree divides the same way every
     run. Each shard gets its own engine log, report, scratch subdirectory and watchdog; the stage's
     verdict is the merge of every shard's report, and a shard exiting 0 without one FAILS the stage.
+    Each shard also gets its own --net-port-base, from a slot this run holds for the stage, so no two
+    shards of this or a concurrent run open one port; at most 10 shards (docs/tooling.md).
 
 .PARAMETER Quick
     The broad partial confidence gate: build, the quick unit tier (Tier=Quick), the quick engine
@@ -515,6 +517,42 @@ function Stop-StrayGodots {
     }
 }
 
+# Each engine shard's --net-port-base. A suite that opens a real socket opens it inside its own
+# process's block of $NetPortBlock ports above that base (SuitePorts.cs), so two shards running at
+# once never bind one port. A walk past a busy port does not save a shard: the failed bind has
+# already printed an engine ERROR line, which fails it. A run first claims a slot, a lock file held
+# for the engine stage, so two runs from two worktrees get disjoint blocks as well. Every block
+# stands below the shipped pair (47500 game, 47501 LAN), which a game played on this machine holds,
+# and below Windows' ephemeral range (49152 up).
+$NetPortFirst = 40000
+$NetPortBlock = 100
+$NetPortSlotShards = 10
+$NetPortSlots = 7
+
+# The first free slot, held until its stream is disposed, or $null when every slot is taken. The
+# handle, not the file, is the claim: a run that dies releases it with its process.
+function Open-NetPortSlot {
+    $dir = Join-Path ([System.IO.Path]::GetTempPath()) "csvm-net-ports"
+    if (-not (Test-Path $dir)) {
+        $null = New-Item -ItemType Directory -Path $dir -Force
+    }
+    for ($slot = 0; $slot -lt $NetPortSlots; $slot++) {
+        try {
+            $stream = [System.IO.File]::Open((Join-Path $dir "slot$slot.lock"), 'OpenOrCreate', 'ReadWrite', 'None')
+            return [pscustomobject]@{ Slot = $slot; Stream = $stream }
+        } catch {
+            continue
+        }
+    }
+    return $null
+}
+
+# Shard $ShardIndex (1-based) of a run holding $Slot.
+function Get-NetPortBase {
+    param([int]$Slot, [int]$ShardIndex)
+    return $NetPortFirst + (($Slot * $NetPortSlotShards) + ($ShardIndex - 1)) * $NetPortBlock
+}
+
 # Folds the shard reports into one engine verdict. Every rule here exists because concurrency can
 # manufacture a false pass: a shard exiting 0 without a report ran nothing, two shards claiming
 # different CSVM.dll hashes did not measure one build, and shard suite counts that do not add up to
@@ -527,7 +565,7 @@ function Merge-EngineShards {
     $problems = @(); $failedRows = @(); $seenNames = @{}
     $unexpected = @(); $overCap = @(); $screenedAll = $true; $anyScreen = $false
     $binaries = @{}; $allowSeen = @{}; $allowMax = @{}; $allowWhy = @{}
-    $totals = @{}; $unweighted = @(); $slowest = 0.0; $reports = 0
+    $totals = @{}; $unweighted = @(); $slowest = 0.0; $reports = 0; $portBases = @{}
 
     foreach ($shard in $Shards) {
         if ($shard.ExitCode -eq 124) {
@@ -571,6 +609,16 @@ function Merge-EngineShards {
         $slowest = [math]::Max($slowest, [double]$json.phaseTotals.wallSeconds)
         $binaries[[string]$json.binary.md5] = 1
         $totals[[string][int]$json.shard.selectedTotal] = 1
+        # The base the process says it opened its sockets from, against the one it was handed and
+        # against every other shard's. Either miss puts two shards' suites on one port.
+        $portBase = $json.shard.netPortBase
+        if ($null -eq $portBase -or [int]$portBase -ne $shard.NetPortBase) {
+            $problems += "$($shard.Label): opened its sockets from net port base '$portBase', not the $($shard.NetPortBase) it was handed"
+        } elseif ($portBases.ContainsKey([int]$portBase)) {
+            $problems += "$($shard.Label) and $($portBases[[int]$portBase]) shared net port base $portBase"
+        } else {
+            $portBases[[int]$portBase] = $shard.Label
+        }
         foreach ($name in @($json.shard.unweighted)) {
             if ($name) { $unweighted += $name }
         }
@@ -794,6 +842,17 @@ if ($SkipEngine) {
     if ($shardCount -le 0) {
         $shardCount = if ($EngineSelector) { 1 } else { $DefaultEngineShards }
     }
+    if ($shardCount -gt $NetPortSlotShards) {
+        throw "-Shards ${shardCount}: a run has $NetPortSlotShards disjoint net port blocks, so at most $NetPortSlotShards shards"
+    }
+
+    # Held from before the first launch until every shard has exited. With every slot taken, a
+    # slot the pid picks still keeps this run's shards apart, though not off a sibling run's.
+    $netSlot = Open-NetPortSlot
+    $netSlotNumber = if ($netSlot) { $netSlot.Slot } else { $PID % $NetPortSlots }
+    if (-not $netSlot) {
+        Write-Host "  every net port slot is held by another run; slot $netSlotNumber is shared, so a network suite may meet a sibling's socket" -ForegroundColor Yellow
+    }
 
     # Per-run launch directory. The owner pid in the path is what makes a stray distinguishable from
     # a sibling's live shard, and it keeps a timed-out shard's evidence from being overwritten.
@@ -827,23 +886,32 @@ if ($SkipEngine) {
         }
         $shardRuns += [pscustomobject]@{
             Index = $k; Label = $label; Terms = $terms; Report = $report; Log = $log
+            NetPortBase = (Get-NetPortBase -Slot $netSlotNumber -ShardIndex $k)
             Launch = $null; ExitCode = -1
         }
     }
     if ($shardCount -gt 1) {
         Write-Host "  $shardCount shards, weighted by analysis\engine-suite-weights.json" -ForegroundColor DarkGray
     }
+    Write-Host "  net ports: slot $netSlotNumber, bases $(($shardRuns | ForEach-Object { $_.NetPortBase }) -join ', ')" -ForegroundColor DarkGray
 
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     $ErrorActionPreference = "Continue"
-    foreach ($shard in $shardRuns) {
-        $testArg = if ($shard.Terms) { "--run-tests=$($shard.Terms)" } else { "--run-tests" }
-        $shard.Launch = Start-Godot -Arguments @("--path", $ProjectDir, "--log-file", $shard.Log,
-                                                 "res://scenes/Main.tscn", "--", $testArg)
-    }
-    # Each shard's own watchdog, so one hung shard fails itself and the others still report.
-    foreach ($shard in $shardRuns) {
-        $shard.ExitCode = Wait-Godot -Launch $shard.Launch -TimeoutSec $EngineTimeoutSec
+    try {
+        foreach ($shard in $shardRuns) {
+            $testArg = if ($shard.Terms) { "--run-tests=$($shard.Terms)" } else { "--run-tests" }
+            $shard.Launch = Start-Godot -Arguments @("--path", $ProjectDir, "--log-file", $shard.Log,
+                                                     "res://scenes/Main.tscn", "--", $testArg,
+                                                     "--net-port-base=$($shard.NetPortBase)")
+        }
+        # Each shard's own watchdog, so one hung shard fails itself and the others still report.
+        foreach ($shard in $shardRuns) {
+            $shard.ExitCode = Wait-Godot -Launch $shard.Launch -TimeoutSec $EngineTimeoutSec
+        }
+    } finally {
+        if ($netSlot) {
+            $netSlot.Stream.Dispose()
+        }
     }
     $ErrorActionPreference = "Stop"
     $watch.Stop()

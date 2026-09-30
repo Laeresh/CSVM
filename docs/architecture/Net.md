@@ -139,6 +139,15 @@ is all host, and a missing or out-of-range port takes the fallback. `ToString` w
 an IPv6 host bracketed. The menu door's `JoinTarget` and `SessionSpec.ParseJoin` both parse through
 it; the carriers' `Join` still takes the host and the port apart.
 
+## src/Net/NetPorts.cs
+The ports this process opens by default. `Game` is where a menu door's port row starts and what a
+bare `--net-host` or `--net-join` takes; `Lan` is where a LAN responder listens and a search asks.
+Both stand at the shipped pair (`ShippedGame`, one above it for LAN) until the launcher calls `Use`
+with `--net-port-base`, which `RunTests.ps1` passes each engine shard. `Block` is the span a base
+reserves, which `Testing/SuitePorts.cs` divides among the suites that open sockets. The shipped
+constants stay where a port every build fills in is named: `NetPlayFeature.DefaultPort` for a bare
+address and `LanDiscovery.Port`.
+
 ## src/Net/UpnpPortMap.cs
 A best-effort port mapping through Godot's UPnP client, so a host behind a router is reachable
 from outside it. `Map` returns one of five outcomes a board can show (mapped, no gateway, refused,
@@ -240,7 +249,7 @@ than it was sent and cannot amplify a forged-source flood. Layout:
 [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Net/LanResponder.cs
-An open door's answer to a search, over a socket bound on `LanDiscovery.Port` only while the door
+An open door's answer to a search, over a socket bound on `NetPorts.Lan` only while the door
 hosts. `Poll` answers each well-formed query with the door's advert and game port, to the address
 the query came from, and reads at most `QueriesPerPoll` a frame so a flood costs bounded work.
 Anything that is not a whole query of this version is read and dropped unanswered.

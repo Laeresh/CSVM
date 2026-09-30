@@ -117,7 +117,7 @@ internal static class MenuCoopDoorSuites
         menu.Drive(Network);
         AwaitMapping(door);
         menu.Drive(MenuCommands.None);
-        string address = $"{NetDoorAid.ExternalAddress}:{NetPlayFeature.DefaultPort.ToString(CultureInfo.InvariantCulture)}";
+        string address = $"{NetDoorAid.ExternalAddress}:{NetPorts.Game.ToString(CultureInfo.InvariantCulture)}";
         ctx.Check(menu.ShownNetBand.Contains(address, StringComparison.Ordinal),
             $"the band shows where guests reach the host ({menu.ShownNetBand})");
         door.Step(0.016);
@@ -205,7 +205,7 @@ internal static class MenuCoopDoorSuites
 
         ctx.Check(hostMenu.ShownScreen == "Mode" && hostDoor.Stage == NetDoorStage.Shut,
             $"leaving the campaign closes the host's door ({hostMenu.ShownScreen}, {hostDoor.Stage})");
-        ctx.Check(unmapped.Count == 2 && unmapped.All(port => port == NetPlayFeature.DefaultPort),
+        ctx.Check(unmapped.Count == 2 && unmapped.All(port => port == NetPorts.Game),
             $"and gives the router's port back ({string.Join(", ", unmapped)})");
     }
 

@@ -4199,7 +4199,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // does go. The waiting board's one row replaces all five.
     private string NetworkRowText(int index) => _coopWait ? CoopDoorText.LeaveRow : index switch
     {
-        NetPortRow => $"Port            {(_net?.Port ?? NetPlayFeature.DefaultPort).ToString(CultureInfo.InvariantCulture)}",
+        NetPortRow => $"Port            {(_net?.Port ?? NetPorts.Game).ToString(CultureInfo.InvariantCulture)}",
         NetAddressRow => $"Address         {_net?.Address ?? NetPlayFeature.DefaultAddress}",
         NetHostRow => "Host a match",
         NetJoinRow => "Join that address",

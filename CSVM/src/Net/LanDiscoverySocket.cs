@@ -5,7 +5,7 @@ namespace CSVM.Net;
 
 /// <summary>
 /// The shipped LAN discovery socket: <see cref="ILanSocket"/> over Godot's UDP peer, with
-/// broadcast sends allowed. The responder binds <see cref="LanDiscovery.Port"/> and a search binds
+/// broadcast sends allowed. The responder binds <see cref="NetPorts.Lan"/> and a search binds
 /// a free port; both are polled from the menu frame, never from a thread.
 /// ⚠ Besides <see cref="EnetTransport"/>, this is the only type under <c>CSVM/</c> that may name a
 /// Godot networking type; <c>CSVM.Tests/NetNamespaceDependencyTests.cs</c> asserts that.

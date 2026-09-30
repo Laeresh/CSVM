@@ -42,9 +42,10 @@ public readonly record struct CoopGuest(
 /// </summary>
 public sealed class NetPlayFeature : IMenuFeature
 {
-    /// <summary>The port a host opens on unless the board is stepped off it. Unregistered and
-    /// arbitrary: the original carried no port of its own, since DirectPlay chose one.</summary>
-    public const int DefaultPort = 47500;
+    /// <summary>The shipped game port, the one every build fills in for a bare address. A door
+    /// opens on <see cref="NetPorts.Game"/>, which equals it unless a test process moved it.
+    /// </summary>
+    public const int DefaultPort = NetPorts.ShippedGame;
 
     /// <summary>The address a join opens on. This machine, so a board with nothing typed into it
     /// still names something that can answer.</summary>
@@ -147,8 +148,9 @@ public sealed class NetPlayFeature : IMenuFeature
     /// bind is what makes Windows put a firewall dialog on somebody's screen.</summary>
     public string BindAddress { get; set; } = "*";
 
-    /// <summary>The port a host opens on, and the port a join is aimed at.</summary>
-    public int Port { get; private set; } = DefaultPort;
+    /// <summary>The port a host opens on, and the port a join is aimed at. It starts on
+    /// <see cref="NetPorts.Game"/> as the door is built.</summary>
+    public int Port { get; private set; } = NetPorts.Game;
 
     /// <summary>The address a join is aimed at, as typed. It may name its own port, which beats
     /// <see cref="Port"/> for the join (<see cref="NetEndpoint.Parse"/>).</summary>
@@ -845,7 +847,7 @@ public sealed class NetPlayFeature : IMenuFeature
         {
             try
             {
-                _search = new LanSearch(_lan(BindAddress, 0), SearchTargets, LanDiscovery.Port);
+                _search = new LanSearch(_lan(BindAddress, 0), SearchTargets, NetPorts.Lan);
             }
             catch (Exception e) when (e is InvalidOperationException or ArgumentException)
             {
@@ -1181,7 +1183,7 @@ public sealed class NetPlayFeature : IMenuFeature
 
         try
         {
-            _responder = new LanResponder(_lan(BindAddress, LanDiscovery.Port), Version);
+            _responder = new LanResponder(_lan(BindAddress, NetPorts.Lan), Version);
         }
         catch (Exception e) when (e is InvalidOperationException or ArgumentException)
         {

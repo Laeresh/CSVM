@@ -685,7 +685,7 @@ internal static class MenuOriginalConnectionSuites
         LanDiscoverySocket ask;
         try
         {
-            answer = LanDiscoverySocket.Bind(LanDiscovery.Port, Loopback);
+            answer = LanDiscoverySocket.Bind(NetPorts.Lan, Loopback);
         }
         catch (InvalidOperationException e)
         {
@@ -705,7 +705,7 @@ internal static class MenuOriginalConnectionSuites
         }
 
         var responder = new LanResponder(answer);
-        var search = new LanSearch(ask, Loopback, LanDiscovery.Port);
+        var search = new LanSearch(ask, Loopback, NetPorts.Lan);
         try
         {
             var advert = new SessionAdvertMessage(NetSessionKind.CampaignCoop, 3, 2, CampaignAidProfiles.Pilot, NetSessionStatus.Waiting, 4);
@@ -722,7 +722,7 @@ internal static class MenuOriginalConnectionSuites
             ctx.Check(responder.Answered == 1, $"the responder answered one query ({responder.Answered})");
 
             // ABLE-TO-FAIL CONTROL: a datagram that is not a query is read and never answered.
-            ask.Send(Loopback, LanDiscovery.Port, new byte[] { 0x43, 0x53, 0x56, 0x4D });
+            ask.Send(Loopback, NetPorts.Lan, new byte[] { 0x43, 0x53, 0x56, 0x4D });
             Settle(() => responder.Poll(advert, NetPlayFeature.DefaultPort), search, () => false, seconds: 0.25);
             ctx.Check(responder.Answered == 1, $"a datagram that is not a query gets no answer ({responder.Answered})");
 
@@ -2129,11 +2129,12 @@ internal static class MenuOriginalConnectionSuites
         host.Step(0.001);
     }
 
-    // An ENet host on the IPv6 loopback, on the first port of a short walk that binds.
+    // An ENet host on the IPv6 loopback, on the first port of the suite's walk that binds.
     private static EnetTransport? OpenIpv6Host(out int port, out string why)
     {
         why = "no port tried";
-        for (port = 47760; port < 47780; port++)
+        int first = SuitePorts.At(SuitePorts.Ipv6Join);
+        for (port = first; port < first + SuitePorts.Walk; port++)
         {
             try
             {

@@ -444,6 +444,11 @@ member, and it does not go here.
   numeric format (`:0.0`, `ToString("0.#")`) OUTSIDE a `Log.*` call, in a summary property, a
   `reason` argument, a list entry or a `StringBuilder.Append`, and give each one `Log.Format` or
   `FormattableString.Invariant`.
+- **LOG-24**, **A socket suite that passes alone can fail beside a sibling shard; take its port from
+  `Testing/SuitePorts.cs`, since a walk past a busy port still leaves the bind's engine `ERROR` line.**
+  With the old fixed ports held by another process,
+  `lan-discovery` failed and three `Couldn't create an ENet host` lines failed the run, though
+  every walking suite then found a free port.
 
 ## WORLD, world data and runtime traps
 

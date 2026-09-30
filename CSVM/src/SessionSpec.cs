@@ -222,6 +222,11 @@ public sealed record SessionSpec
     /// and fly this session as a guest. Null when the flag is absent. Split with
     /// <see cref="ParseJoin"/>.</summary>
     public string? NetJoin { get; private set; }
+    /// <summary><c>--net-port-base=N</c>: this process's game port, with the LAN discovery port one
+    /// above it, in place of the shipped pair (<see cref="Net.NetPorts"/>). A bare
+    /// <c>--net-host</c> or <c>--net-join</c> takes it too. Null when absent or out of range. The
+    /// test runner hands every engine shard its own.</summary>
+    public int? NetPortBase { get; private set; }
     /// <summary><b>Resolved.</b> Open the aircraft's per-part HP sliders at launch, a modifier on
     /// <see cref="SessionMode.Viewer"/> (the parked plane) or <see cref="SessionMode.Fly"/> (the
     /// flown one), dropped by the modes that build no aircraft at all. The lab itself is always
@@ -1037,6 +1042,9 @@ public sealed record SessionSpec
         var logSpecs = new List<string>();
         var texOverrides = new List<string>();
 
+        // Split after the loop, so a bare port falls back to --net-port-base in either order.
+        string? netHost = null;
+
         void Deprecate(string old, string replacement)
         {
             if (!deprecated.Exists(d => d.Old == old))
@@ -1084,9 +1092,21 @@ public sealed record SessionSpec
             else if (arg == "--ctf") { s.CaptureTheFlag = true; }
             else if (arg == "--ctf=home") { s.CaptureTheFlag = true; s.FlagHomeToCapture = true; }
             else if (arg == "--zvz") { s.ZeppelinVsZeppelin = true; }
-            else if (arg == "--net-host") { s.NetHostPort = UI.Menu.NetPlayFeature.DefaultPort; }
-            else if (arg.StartsWith("--net-host=")) { var h = ParseHost(arg["--net-host=".Length..]); s.NetHostBind = h.Bind; s.NetHostPort = h.Port; }
+            else if (arg == "--net-host") { netHost = ""; }
+            else if (arg.StartsWith("--net-host=")) { netHost = arg["--net-host=".Length..]; }
             else if (arg.StartsWith("--net-join=")) { s.NetJoin = arg["--net-join=".Length..]; }
+            else if (arg.StartsWith("--net-port-base="))
+            {
+                string value = arg["--net-port-base=".Length..];
+                if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int netBase) && Net.NetPorts.IsBase(netBase))
+                {
+                    s.NetPortBase = netBase;
+                }
+                else
+                {
+                    notes.Add(new Note("core", $"--net-port-base: '{value}' is not a port base in [{Net.NetPorts.MinBase}, {Net.NetPorts.MaxBase}], the shipped ports stand"));
+                }
+            }
             else if (arg == "--freecam") { s._freecamArg = true; s.HasContentArg = true; }
             else if (arg == "--anim-lab") { s._animLabArg = true; s.HasContentArg = true; }
             else if (arg.StartsWith("--play-anim=")) { s.PlayAnim = arg["--play-anim=".Length..]; s.HasContentArg = true; }
@@ -1625,6 +1645,13 @@ public sealed record SessionSpec
             }
         }
 
+        if (netHost != null)
+        {
+            var h = ParseHost(netHost, s.NetPortBase ?? UI.Menu.NetPlayFeature.DefaultPort);
+            s.NetHostBind = h.Bind;
+            s.NetHostPort = h.Port;
+        }
+
         s._notes = notes;
         s.Deprecated = deprecated;
         s.LogSpecs = logSpecs;
@@ -1634,23 +1661,25 @@ public sealed record SessionSpec
     }
 
     /// <summary>Splits a <see cref="NetJoin"/> value into the address and the port to join. A
-    /// value naming no port takes the door's own default. An IPv6 address is written in brackets,
-    /// which is what tells its colons from the port's.</summary>
-    public static Net.NetEndpoint ParseJoin(string value) =>
-        Net.NetEndpoint.Parse(value, UI.Menu.NetPlayFeature.DefaultPort);
+    /// value naming no port takes <paramref name="defaultPort"/>, the launcher's
+    /// <see cref="Net.NetPorts.Game"/>. An IPv6 address is written in brackets, which is what
+    /// tells its colons from the port's.</summary>
+    public static Net.NetEndpoint ParseJoin(string value, int defaultPort = UI.Menu.NetPlayFeature.DefaultPort) =>
+        Net.NetEndpoint.Parse(value, defaultPort);
 
     /// <summary>Splits a <see cref="NetHostPort"/> value: a bare port binds every interface, and
     /// an <c>address:port</c> binds that one address, by the same rules as
-    /// <see cref="ParseJoin"/>.</summary>
-    public static (string Bind, int Port) ParseHost(string value)
+    /// <see cref="ParseJoin"/>. A value naming no usable port takes <paramref name="defaultPort"/>.
+    /// </summary>
+    public static (string Bind, int Port) ParseHost(string value, int defaultPort = UI.Menu.NetPlayFeature.DefaultPort)
     {
         string text = value ?? "";
         if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int bare))
         {
-            return ("*", bare is > 0 and < 65536 ? bare : UI.Menu.NetPlayFeature.DefaultPort);
+            return ("*", bare is > 0 and < 65536 ? bare : defaultPort);
         }
 
-        var (address, port) = ParseJoin(text);
+        var (address, port) = ParseJoin(text, defaultPort);
         return (address.Length == 0 ? "*" : address, port);
     }
 

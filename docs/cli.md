@@ -31,7 +31,7 @@ exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One 
 `--viewer` · `--fly` · `--stunt` · `--vs` · `--vs-kills` · `--vs-time` · `--vs-lives` · `--vs-no-respawn` · `--ctf` · `--zvz` · `--coop` · `--freecam` · `--anim-lab` · `--menu` · `--skip-intro` · `--intro` · `--chapter` · `--stage` · `--node` · `--plane` · `--players` · `--mission` · `--scenario` · `--ia` · `--campaign` · `--profiles` · `--play-anim` · `--movie` · `--presentation` · `--force-builtin`
 
 **Multiplayer, the wire a match flies over**
-`--net-host` · `--net-join`
+`--net-host` · `--net-join` · `--net-port-base`
 
 **Placement, where the subject starts and which way it faces**
 `--pos` · `--direction` · `--lookat` · `--fov` · `--view` · `--spawn` · `--campos` · `--spawn-at` · `--spawn-dir`
@@ -194,15 +194,20 @@ lines**.
   Zeppelin type sets it. Ignored without `--vs` or beside `--ctf`, with a warning)
 - `--net-host[=port]`, `--net-host=address:port` (open a listen server and fly this session as its
   host, the scripted twin of the menu's multiplayer door over the same socket. A bare flag takes
-  port 47500 on IPv4's wildcard, the stable global IPv6 address and `::1`, a number sets the port,
+  port 47500 (or `--net-port-base`) on IPv4's wildcard, the stable global IPv6 address and `::1`, a number sets the port,
   and `address:port` binds that one address, IPv6 in brackets. ⚠ A scripted run names `127.0.0.1`: a wildcard
   bind is what puts a Windows firewall dialog on somebody's screen. A host waits for nobody and
   flies alone until a guest arrives)
 - `--net-join=address[:port]` (join the match at that address and fly this session as a guest,
-  the port defaulting to 47500 and an IPv6 address written in brackets. The launch holds at the
-  load screen until the link stands or 30 seconds pass, because a guest with no host has no seats
-  to fly. The roster it flies is the host's, so the plane this end picked is a request, not a
-  promise)
+  the port defaulting to 47500 (or `--net-port-base`) and an IPv6 address written in brackets. The
+  launch holds at the load screen until the link stands or 30 seconds pass, because a guest with no
+  host has no seats to fly. The roster it flies is the host's, so the plane this end picked is a
+  request, not a promise)
+- `--net-port-base=N` (this process's game port N and LAN discovery port N+1, in place of the
+  shipped 47500 and 47501: the door's port row starts on N, the LAN search asks and answers on N+1,
+  and a bare `--net-host` or `--net-join` takes N. N lies in [1024, 65436], else a warning keeps the
+  shipped pair. `RunTests.ps1` hands every engine shard its own, and a suite that opens a socket
+  stays inside the 100 ports from N up (`Testing/SuitePorts.cs`). A player never needs it)
 - `--coop` (plain splitscreen free flight defaults to **FFA**, every
   human on their own team (`AimAssist.TeamOfPilot`), so aim assist, world turrets and AI gunners
   treat the other humans as hostile. `--coop` opts a plain `--fly`/`--stunt` session into one

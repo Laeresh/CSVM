@@ -18,9 +18,9 @@ namespace CSVM.Testing;
 /// </summary>
 internal static class MenuNetPlaySuites
 {
-    // How far the board's port is walked when the shipped default is taken by another run. Every
-    // Right on the port row is one step, so the walk below is the board's own gesture.
-    private const int PortsToTry = 24;
+    // How far the board's port is walked when a foreign process holds one, SuitePorts' door range.
+    // Every Right on the port row is one step, so the walk below is the board's own gesture.
+    private const int PortsToTry = SuitePorts.DoorWalk;
 
     private static readonly MenuCommands Accept = new() { Accept = true };
     private static readonly MenuCommands Back = new() { Back = true };
@@ -213,10 +213,10 @@ internal static class MenuNetPlaySuites
         // Up twice from Host is the port row, which is the board's own way to a free port.
         menu.Drive(Up);
         menu.Drive(Up);
-        ctx.Check(menu.ShownRowText == $"Port            {NetPlayFeature.DefaultPort.ToString(CultureInfo.InvariantCulture)}",
+        ctx.Check(menu.ShownRowText == $"Port            {NetPorts.Game.ToString(CultureInfo.InvariantCulture)}",
             $"the first row is the port, on the door's own default ({menu.ShownRowText})");
         menu.Drive(Right);
-        ctx.Check(door.Port == NetPlayFeature.DefaultPort + 1,
+        ctx.Check(door.Port == NetPorts.Game + 1,
             $"and Right steps it ({door.Port.ToString(CultureInfo.InvariantCulture)})");
 
         for (int i = 0; i < PortsToTry; i++)
