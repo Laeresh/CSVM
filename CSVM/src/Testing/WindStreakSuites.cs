@@ -18,7 +18,8 @@ internal static class WindStreakSuites
     private const float RatedSpeed = 113f;
 
     [Suite("wind-streaks",
-        "the enhanced wind-streak field builds only under the enhanced presentation, and its "
+        "the enhanced wind-streak field builds only under the enhanced presentation and only with "
+        + "the graphics.windStreaks config key on (it ships off), and its "
         + "uniforms follow the flight: zero alpha and a hidden draw at a cruise fraction of rated "
         + "max, rising to the master opacity at full throttle, a pull adding on top of that, the "
         + "streak length growing with airspeed, the long axis tracking the velocity, and the "
@@ -29,13 +30,17 @@ internal static class WindStreakSuites
         try
         {
             GraphicsMode.Resolve(GraphicsMode.Default);
-            var faithful = WindStreaks.Create();
-            ctx.Check(faithful == null, $"the faithful presentation builds no streak field");
+            var faithful = WindStreaks.Create(enabled: true);
+            ctx.Check(faithful == null, $"the faithful presentation builds no streak field, even switched on");
             faithful?.Free();
 
             GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
-            var field = WindStreaks.Create();
-            ctx.Check(field != null, $"the enhanced presentation builds one");
+            ctx.Check(!WindStreaks.DefaultEnabled, $"the streaks ship off, {WindStreaks.Key} turns them on");
+            var off = WindStreaks.Create(enabled: false);
+            ctx.Check(off == null, $"the enhanced presentation builds none while the switch is off");
+            off?.Free();
+            var field = WindStreaks.Create(enabled: true);
+            ctx.Check(field != null, $"the enhanced presentation builds one once switched on");
             if (field == null)
                 return;
             try

@@ -69,6 +69,8 @@ public static class TuningWarmup
             // registered here so --dump-config documents it even on a --graphics= launch, which
             // bypasses this read.
             Config.GetString(GraphicsMode.Key, GraphicsMode.Default);
+            // The wind streaks are read only when an Enhanced player rig is built.
+            Config.GetBool(Effects.WindStreaks.Key, Effects.WindStreaks.DefaultEnabled);
             // The start grid is built only by a multiplayer stunt race or a co-op campaign mission.
             // The warmup builds neither, so its two keys are registered here for --dump-config.
             Config.GetFloat("startGrid.slotSpacing", StartGrid.SlotSpacingDefault);

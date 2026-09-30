@@ -1514,7 +1514,8 @@ size.
 ## E41 ☑ Wind streaks past the camera, keyed to speed and G, over the authored speed cue
 
 **Landed.** `Effects/WindStreaks.cs` draws a camera-local streak field under Enhanced only, over the
-authored wisps, which are untouched. It follows `Precipitation`: one MultiMesh of 1400 thin quads
+authored wisps, which are untouched. It ships off: the user's pick is that `graphics.windStreaks`
+in `config.json` turns it on. It follows `Precipitation`: one MultiMesh of 1400 thin quads
 whose positions come out of a per-instance seed and `CAMERA_POSITION_WORLD`, wrapped into a
 camera-centred 45 m box, with the same near fade (6 m, which is what keeps a streak off the cockpit
 glass at the near plane) and rim fade. Each quad is an axial billboard whose long axis is the
