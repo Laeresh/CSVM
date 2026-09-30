@@ -64,6 +64,9 @@ What follows the switch, and how:
 - Rewritten in place: every `SceneBuilder`, `Clutter` and puffer shader, the cloud field's card
   shaders (`FogVolumeClutter.FollowGraphicsMode`), the sky sprites' keyed copies, and the puffer
   fire gain and smoke grade, read per particle.
+- Swapped onto the rendered cloud puffs and back: the deck cards' pool, tint, rim depth and cull
+  margin, and the placed clouds' billboards (`SceneBuilder`'s pooled swap). The first switch to
+  Enhanced reads each mask's tint and loads the pools, which a faithful session never touches.
 - Re-dressed: the sun (shadows at the `ShadowQualitySetting` level, the atlas and filter, its
   specular and colour), the Environment's SSAO, SSR, glow, tonemap, sky and froxel fog, each cockpit
   pass's copy of both, and the weather zone, written again last (fog push, energies, shadow distance).

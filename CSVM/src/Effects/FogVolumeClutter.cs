@@ -58,9 +58,10 @@ public sealed partial class FogVolumeClutter : Node3D
     // same texels and the rim disappears.
     private const float EnhancedRimOffset = 0.2f;
 
-    // TUNE: which mip level that sample reads. The rim wants the mask's bulk rather than its
-    // texels, and level 3 is the reference technique's own choice. The cloud masks carry a full
-    // chain (TextureArchive generates it), so this never silently falls back to level 0.
+    // TUNE: which mip level of the authored mask that sample reads. The rim wants the mask's bulk
+    // rather than its texels, and level 3 is the reference technique's own choice. A larger
+    // rendered puff reads correspondingly deeper, so the blur covers the same share of the card.
+    // Both carry a full mip chain, so this never silently falls back to level 0.
     private const float EnhancedRimBlurLod = 3f;
 
     // TUNE: how far the unoccluded sun-side edge lifts, and how far a texel behind the card's own
@@ -88,9 +89,9 @@ public sealed partial class FogVolumeClutter : Node3D
     // soften a rooftop or a ridge and narrow enough that a plane in cloud clears no bubble.
     private const float EnhancedSoftFadeMetres = 12f;
 
-    // Enhanced mode's fragment block: the reference technique's two view terms, the card's own
-    // face normal against the sun, and the soft-particle depth fade. Emitted at 4 spaces to sit
-    // inside fragment(); the amplitudes above are substituted below.
+    // Enhanced mode's fragment block: the reference's two view terms, the face normal against the
+    // sun, and the soft depth fade. Emitted at 4 spaces to sit inside fragment(); the amplitudes
+    // above are substituted below.
     private const string EnhancedGradeTemplate = """
         // 0 with the sun behind the eye (front-lit), 1 looking into it (backlit).
         vec3 view_dir = -INV_VIEW_MATRIX[2].xyz;
@@ -101,7 +102,7 @@ public sealed partial class FogVolumeClutter : Node3D
         // a texel behind the bulk is shadowed by it.
         vec2 sun_uv = vec2(dot(csky_sun_dir, INV_VIEW_MATRIX[0].xyz),
                            -dot(csky_sun_dir, INV_VIEW_MATRIX[1].xyz));
-        float thickness = textureLod(albedo_tex, UV + sun_uv * RIM_OFFSET, RIM_LOD).a;
+        float thickness = RIM_THICKNESS;
         float rim = 1.0 + lit_side * (RIM_GAIN * (1.0 - thickness) - CORE_SHADOW * thickness);
         float lambert = clamp(dot(v_face_n, csky_sun_dir) * 0.5 + 0.5, 0.0, 1.0);
         vec3 graded = min(col.rgb * tint * rim
@@ -115,21 +116,31 @@ public sealed partial class FogVolumeClutter : Node3D
         float soft = clamp((VERTEX.z - scene_z) / SOFT_METRES, 0.0, 1.0);
     """;
 
+    // Enhanced Graphics only: the fvol kinds that draw from the deck pool in place of their
+    // authored masks. Both kinds take the whole pool, which reads less ordered than a half each.
+    // ⚠ Do not read the pool on the faithful path; that path draws the authored masks alone.
+    private static readonly HashSet<string> EnhancedPuffKinds = new(StringComparer.Ordinal)
+    {
+        "cloudsprite1",
+        "cloudsprite2",
+    };
+
     // ⚠ Format every amplitude invariantly: a comma decimal separator emits shader text that will
     // not compile, on a German-locale machine only.
     private static readonly string EnhancedGradeBody = EnhancedGradeTemplate
         .Replace("TINT_GAIN", Literal(EnhancedSunTintGain))
-        .Replace("RIM_OFFSET", Literal(EnhancedRimOffset))
-        .Replace("RIM_LOD", Literal(EnhancedRimBlurLod))
         .Replace("RIM_GAIN", Literal(EnhancedRimGain))
         .Replace("CORE_SHADOW", Literal(EnhancedCoreShadow))
         .Replace("UNDERSIDE", Literal(EnhancedUndersideDarkening))
         .Replace("CEILING", Literal(EnhancedAlbedoCeiling))
         .Replace("SOFT_METRES", Literal(EnhancedSoftFadeMetres));
 
-    // Each kind's shader with the authored flags its text was written for. A live mode switch
-    // writes it again under the other mode (FollowGraphicsMode).
-    private readonly List<(Shader Shader, bool Lit, bool Fogged)> _shaders = new();
+    // Each kind with its material and node. A live mode switch writes them again under the other
+    // mode (FollowGraphicsMode).
+    private readonly List<(Kind Kind, ShaderMaterial Material, MultiMeshInstance3D Node)> _drawn = new();
+
+    // The archive the kinds' masks come from, read again on a first switch to Enhanced for the tint.
+    private TextureArchive? _textures;
 
     /// <summary>Sprites placed, summed over every kind, the authored volumes' own placements
     /// plus the map-edge continuation (<see cref="ExtensionCount"/>). Zero means nothing was
@@ -193,22 +204,44 @@ public sealed partial class FogVolumeClutter : Node3D
             field.QueueFree();
             return null;
         }
+        field._textures = textures;
         field.Build(gamez, kinds);
         return field;
     }
 
-    /// <summary>Writes every card shader again under the standing graphics mode: the enhanced grade
-    /// and soft edge on, or the faithful text back. A live mode switch calls it; the field's
+    /// <summary>Writes every card again under the standing graphics mode: the enhanced grade, soft
+    /// edge and deck pool on, or the faithful text back. A live mode switch calls it. The field's
     /// placements and fades belong to neither mode, so nothing else changes.</summary>
     public void FollowGraphicsMode()
     {
-        foreach (var (shader, lit, fogged) in _shaders)
+        bool enhanced = GraphicsMode.Enhanced;
+        foreach (var (kind, mat, node) in _drawn)
         {
-            string code = ShaderCode(lit, fogged, GraphicsMode.Enhanced);
-            if (code != shader.Code)
-                shader.Code = code;
+            if (enhanced && _textures != null)
+            {
+                TrySwapInPuff(kind, _textures);
+            }
+            bool pooled = enhanced && kind.Pool != null;
+            string code = ShaderCode(kind.Lit, kind.Fogged, enhanced, pooled);
+            if (code != mat.Shader.Code)
+            {
+                mat.Shader.Code = code;
+            }
+            if (enhanced)
+            {
+                mat.SetShaderParameter("rim_lod", kind.RimLod);
+            }
+            if (pooled)
+            {
+                CloudPuffs.Apply(mat, kind.Pool!, kind.PuffTint);
+            }
+            node.ExtraCullMargin = CullMargin(kind, pooled);
         }
     }
+
+    /// <summary>True when a kind of this template name draws from the rendered pool under Enhanced
+    /// Graphics.</summary>
+    internal static bool DrawsRenderedPuffs(string kindName) => EnhancedPuffKinds.Contains(kindName);
 
     // The gamez side of one clutter alternative: the sprite card its template root carries.
     // Resolved by ClutterBuilder's own template rule, a parentless Object3d of that name whose
@@ -230,7 +263,7 @@ public sealed partial class FogVolumeClutter : Node3D
                 }
                 var mesh = gamez.Meshes[card.MeshIndex];
                 var texture = FirstTexture(gamez, mesh);
-                kinds.Add(new Kind
+                var kind = new Kind
                 {
                     Name = reference.Node,
                     Block = block,
@@ -241,11 +274,40 @@ public sealed partial class FogVolumeClutter : Node3D
                     Lit = mesh.Lighting,
                     Fogged = mesh.Fog,
                     Radius = CardRadius(mesh),
-                });
+                };
+                if (GraphicsMode.Enhanced)
+                {
+                    TrySwapInPuff(kind, textures);
+                }
+                kinds.Add(kind);
             }
         }
         return kinds;
     }
+
+    // Draws the kind from the deck pool in place of its mask. The mask's colour and peak opacity
+    // become the tint, and the rim sample deepens by the size ratio. Tried once per kind.
+    private static void TrySwapInPuff(Kind kind, TextureArchive textures)
+    {
+        if (kind.PuffTried || kind.Texture == null)
+        {
+            return;
+        }
+        kind.PuffTried = true;
+        if (!DrawsRenderedPuffs(kind.Name) || CloudPuffs.Deck() is not { } pool
+            || textures.FindImage(kind.TextureName) is not { } mask || CloudPuffs.MaskTint(mask) is not { } tint)
+        {
+            return;
+        }
+        kind.PuffTint = tint;
+        kind.RimLod = EnhancedRimBlurLod + Mathf.Log(pool.GetWidth() / (float)mask.GetWidth()) / Mathf.Log(2f);
+        kind.Pool = pool;
+    }
+
+    // The billboard swings vertices outside the instances' static AABB, and a pooled card is
+    // drawn up to the pool's largest size on top.
+    private static float CullMargin(Kind kind, bool pooled) =>
+        kind.Radius * Mathf.Max(kind.Block.ScaleRange.Y, 1f) * (pooled ? CloudPuffs.MaxSize : 1f);
 
     private static GameZNode? FirstWithMesh(GameZ gamez, GameZNode node)
     {
@@ -377,7 +439,7 @@ public sealed partial class FogVolumeClutter : Node3D
     // dropped it, so a sprite outside its draw distance costs no fragments, what lets the whole
     // field be one static MultiMesh with no streaming. ⚠ The fade distance is the true 3D one, not
     // the fog's horizontal cylinder: a cloud overhead is as far away as one on the horizon.
-    private static string ShaderCode(bool lit, bool fogged, bool enhanced)
+    private static string ShaderCode(bool lit, bool fogged, bool enhanced, bool pooled = false)
     {
         // ⚠ A `lighting: true` card takes the original's PER-VERTEX term on normals turned by the
         // same `face` the quad takes, never the collapsed csky_world_light and never another basis
@@ -401,10 +463,21 @@ public sealed partial class FogVolumeClutter : Node3D
         // which is already in col.
         string decls = enhanced
             ? "\nuniform sampler2D depth_texture : hint_depth_texture, filter_nearest;"
-              + "\nvarying flat vec3 v_face_n;" : string.Empty;
+              + $"\nuniform float rim_lod = {Literal(EnhancedRimBlurLod)};"
+              + "\nvarying flat vec3 v_face_n;" + (pooled ? "\n" + CloudPuffs.Include : string.Empty) : string.Empty;
         string carryNormal = enhanced
-            ? "\n    v_face_n = INSTANCE_CUSTOM.xyz * 2.0 - 1.0;" : string.Empty;
-        string grade = enhanced ? "\n" + EnhancedGradeBody : string.Empty;
+            ? "\n    v_face_n = INSTANCE_CUSTOM.xyz * 2.0 - 1.0;" + (pooled ? "\n" + CloudPuffs.PoseLines : string.Empty)
+            : string.Empty;
+        // A pooled card samples its own layer through its pose; every other card samples its mask.
+        string sample = pooled
+            ? "csky_puff_sample(v_puff_card_uv, v_puff_pose, v_puff_layer)"
+            : "csky_sample_albedo(albedo_tex, UV)";
+        string rimOffset = $"sun_uv * {Literal(EnhancedRimOffset)}";
+        string grade = enhanced
+            ? "\n" + EnhancedGradeBody.Replace("RIM_THICKNESS", pooled
+                ? $"textureLod(puff_tex, vec3(csky_puff_uv(v_puff_card_uv + {rimOffset}, v_puff_pose), v_puff_layer), rim_lod).a"
+                : $"textureLod(albedo_tex, UV + {rimOffset}, rim_lod).a")
+            : string.Empty;
         string soft = enhanced ? " * soft" : string.Empty;
         return $$"""
             shader_type spatial;
@@ -443,7 +516,7 @@ public sealed partial class FogVolumeClutter : Node3D
             }
 
             void fragment() {
-                vec4 col = vec4(csky_srgb_to_linear({{vcol}}), COLOR.a) * csky_sample_albedo(albedo_tex, UV);{{grade}}
+                vec4 col = vec4(csky_srgb_to_linear({{vcol}}), COLOR.a) * {{sample}};{{grade}}
             {{albedo}}
                 ALPHA = col.a * v_alpha{{soft}};
             }
@@ -739,15 +812,24 @@ public sealed partial class FogVolumeClutter : Node3D
             {
                 meshCache[kind.MeshIndex] = mesh = BuildCardMesh(gamez, kind.MeshIndex);
             }
-            var shader = new Shader { Code = ShaderCode(kind.Lit, kind.Fogged, GraphicsMode.Enhanced) };
-            _shaders.Add((shader, kind.Lit, kind.Fogged));
-            var mat = new ShaderMaterial { Shader = shader };
+            var mat = new ShaderMaterial
+            {
+                Shader = new Shader { Code = ShaderCode(kind.Lit, kind.Fogged, GraphicsMode.Enhanced, kind.Pool != null) },
+            };
             if (kind.Texture != null)
             {
                 mat.SetShaderParameter("albedo_tex", kind.Texture);
             }
             mat.SetShaderParameter("far_fade_0", kind.Block.FarFadeNear);
             mat.SetShaderParameter("far_fade_1", kind.Block.FarFade);
+            if (GraphicsMode.Enhanced)
+            {
+                mat.SetShaderParameter("rim_lod", kind.RimLod);
+            }
+            if (kind.Pool != null)
+            {
+                CloudPuffs.Apply(mat, kind.Pool, kind.PuffTint);
+            }
 
             var mm = new MultiMesh
             {
@@ -762,16 +844,17 @@ public sealed partial class FogVolumeClutter : Node3D
                 mm.SetInstanceTransform(i, kind.Placements[i]);
                 mm.SetInstanceCustomData(i, kind.Bands[i]);
             }
-            AddChild(new MultiMeshInstance3D
+            var node = new MultiMeshInstance3D
             {
                 Multimesh = mm,
                 MaterialOverride = mat,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-                // The billboard swings vertices outside the instances' static AABB.
-                ExtraCullMargin = kind.Radius * Mathf.Max(kind.Block.ScaleRange.Y, 1f),
+                ExtraCullMargin = CullMargin(kind, kind.Pool != null),
                 Name = kind.Name,
-            });
-            parts.Add($"{kind.Name} x{kind.Placements.Count} ({kind.TextureName}, "
+            };
+            AddChild(node);
+            _drawn.Add((kind, mat, node));
+            parts.Add($"{kind.Name} x{kind.Placements.Count} ({kind.TextureName}{(kind.Pool != null ? " as the rendered puff pool" : string.Empty)}, "
                       + $"fade {kind.Block.FarFadeNear.X:0}-{kind.Block.FarFadeNear.Y:0}"
                       + $"..{kind.Block.FarFade.X:0}-{kind.Block.FarFade.Y:0} m)");
         }
@@ -796,5 +879,11 @@ public sealed partial class FogVolumeClutter : Node3D
         public bool Lit = true;
         public bool Fogged = true;
         public float Radius;
+
+        // Enhanced only: what SwapInPuff carries over from the authored mask it replaced.
+        public Color PuffTint = Colors.White;
+        public float RimLod = EnhancedRimBlurLod;
+        public Texture2DArray? Pool;
+        public bool PuffTried;
     }
 }

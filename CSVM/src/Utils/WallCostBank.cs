@@ -153,9 +153,11 @@ public sealed partial class WallCostBracket : Node
         if (_tail)
         {
             _bank.Close();
+            EngineGapCost.MarkTail(_physics);
         }
         else
         {
+            EngineGapCost.MarkHead();
             _bank.Open();
         }
     }

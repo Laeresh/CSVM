@@ -178,6 +178,15 @@ its next window instead. `PhysicsTickCost` above is the same bank around the phy
 `TIME_PROCESS` monitor answers neither question, and the misreading it invites is
 `docs/verification.md` PERF-1.
 
+## src/Utils/EngineGapCost.cs
+The frame time no scene-tree callback owns, banked by the same `WallCostBracket` nodes as the two
+pass meters above: the gap after a physics tick (the tree's end-of-tick flush and the physics
+server's step), and the gap after the process pass, split at the rendering server's
+`frame_pre_draw` and `frame_post_draw` signals into the end-of-frame flush (deferred calls, every
+queued `_Draw`, transform notifications), the draw with its present, and the idle rest. `--perf`
+hooks the two signals and prints the four terms per frame, so they and the two pass terms sum to
+`frame_ms`. Rules: `docs/verification.md` PERF-40.
+
 ## src/Utils/AiStepCost.cs
 The wall cost of the flight roster's AI walks and how many aircraft they walked, banked by an
 `Open`/`Close` pair around `SessionSimulationRuntime.StepCapturedAiAircraft` rather than by bracket
@@ -265,14 +274,14 @@ reader is `ViewportQuality.Apply`; `Launcher`'s `[world] graphics mode:` line an
 refuses a render scale above native, which `RenderScaleSetting.ClampFor` applies.
 
 ## src/Utils/ShadowQualitySetting.cs
-The Enhanced sun's shadow quality, a VIDEO page row over `Words`: `off`, `low`, `medium`, `high` or `ultra`, the default and
-the look Enhanced shipped with. `Resolve` layers `--shadow-quality=`, the saved `shadowQuality` word, the
-`graphics.shadowQuality` config key, then `ultra`; `SavedWord` holds the `--det` guard. Each word maps to a `SunShadowPlan`:
+The Enhanced sun's shadow quality, a VIDEO page row over `Words`: `off`, `low`, `medium`, `high` or `ultra`.
+`Resolve` layers `--shadow-quality=`, the saved `shadowQuality` word, the `graphics.shadowQuality` config key, then
+`DefaultFor(det)`: `ultra`, or `high` where the GPU reports integrated (the Steam Deck), and `ultra` under `--det` everywhere;
+`SavedWord` holds the `--det` guard. Each word maps to a `SunShadowPlan`:
 whether the sun casts, its angular distance and blur, and the renderer-wide soft filter and atlas edge. `ApplyTo` is the one
 writer, re-runnable, called by `Launcher.ApplyShadowQuality` at the sun's build and on every Options apply; it writes nothing
 on the faithful path and bumps `Revision`, which the cockpit pass (`Flight/Hud/CockpitOverlay.cs`) re-copies the sun on. The
-split-screen panes share the world's one sun. Why each
-level stands where it does, and the cost of each: `analysis/screen-dither/FINDINGS.md`.
+split-screen panes share the world's one sun. Why each level stands where it does: `analysis/screen-dither/FINDINGS.md`.
 
 ## src/Utils/ViewportQuality.cs
 What `AntiAliasingSetting` and `RenderScaleSetting` write on a 3D viewport, gathered here because

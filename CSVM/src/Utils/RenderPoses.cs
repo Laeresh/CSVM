@@ -100,7 +100,10 @@ public static class RenderPoses
                 pose.Prev = pose.Curr;
                 pose.Fresh = false;
             }
-            node.Transform = pose.Curr;
+            // ⚠ Keep the comparison. Every animation runtime opens the tick with this call, and a write
+            // re-walks the node's subtree. A node something moved since is still put back.
+            if (node.Transform != pose.Curr)
+                node.Transform = pose.Curr;
         }
         Sweep();
     }

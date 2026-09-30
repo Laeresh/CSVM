@@ -195,7 +195,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ Lit cloud cards: sun tint, transmission rim, shadowed undersides, soft depth fade
 22. ☑ FogVolume banks from the authored fvol slabs
-23. ☐ A rendered puff sprite set under Enhanced, picked by montage
+23. ☑ A rendered puff sprite set under Enhanced, picked by montage
 
 ### Wave E, the feel of speed
 
@@ -1464,7 +1464,30 @@ montage of densities. D32 measures the froxel cost.
 is gamez geometry drawn over the background; volumetric fog in front of it is fine, but the dome's
 own fog arm must not double-fog. The cards stay (decision 5); the bank is under them.
 
-## C23 ☐ A rendered puff sprite set under Enhanced, picked by montage
+## C23 ☑ A rendered puff sprite set under Enhanced, picked by montage
+
+**Landed.** Under Enhanced every cloud puff card draws a Blender-rendered sprite. The shared module
+`Mech3/CloudPuffs.cs` and `shaders/csky_cloud_puffs.gdshaderinc` hold two pools as mipmapped
+texture arrays, rendered headless by `CSVM/data/cloud_puffs/render_cloud_puffs.py`:
+- The fvol deck cards draw the eight-puff veil set: translucent, lightly shaded, with strongly
+  varied outlines.
+- The placed `cloudparent` sprites (C1, C1B, C1C, C4, C2, C2B) draw the six-puff far set: denser
+  heaps with the authored masks' soft fringe.
+
+The user picked the veil for the deck over two opaque sets, asked for more than two textures and
+less order, and after flying both picked the soft-fringed far set over a firmer detailed one
+(`--set far_detail`).
+
+Each card keys its puff, a turn of up to 20°, a mirror and a size of 0.8 to 1.25 on a hash of its own
+position, never on the shared cloud Rng stream, so the placements are unchanged. The puff carries
+the authored mask's colour and peak opacity as a tint, which keeps C5's dark haze dark.
+
+⚠ Most shipped cloud cards map their image a quarter turn and flipped along the diagonal (C1 108 of
+109, C4 all 274, both C5 deck templates). The shapeless authored masks hide that, but a rendered
+heap drew as a sideways pill. So a pooled card samples through its own upright card UV
+(`csky_puff_card_uv`), and the authored UV still drives every card that draws its mask.
+
+The faithful shader text is unchanged, and the `cloud-puffs` suite pins both paths.
 
 **Goal.** A small set of rendered cloud puff sprites replaces the authored masks per fvol kind
 under Enhanced, if the user picks them over the authored masks on a montage.

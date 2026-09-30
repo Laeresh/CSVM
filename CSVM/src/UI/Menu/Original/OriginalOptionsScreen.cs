@@ -461,7 +461,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         new(ShadowQualityKey, "Shadow Quality", "VP_T_TextureTitle", "VP_D_Texture", "VP_T_TextureDESC",
             s => DisplaySettingRows.ShadowQualityDetail(s._graphics),
             OriginalRowKind.Dropdown, _ => DisplaySettingRows.ShadowQualityLabels,
-            s => DisplaySettingRows.WordIndex(CSVM.Utils.ShadowQualitySetting.Words, s._shadowQuality, CSVM.Utils.ShadowQualitySetting.Default),
+            s => DisplaySettingRows.WordIndex(CSVM.Utils.ShadowQualitySetting.Words, s._shadowQuality, CSVM.Utils.ShadowQualitySetting.Word),
             (s, i) => s._shadowQuality = CSVM.Utils.ShadowQualitySetting.Words[i],
             s => s.ShadowQualityLive),
         new(GraphicsKey, "Enhanced Graphics", "VP_T_ShadowsTitle", "VP_B_SHADOWS", "VP_T_ShadowsDESC",

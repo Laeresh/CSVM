@@ -223,12 +223,15 @@ public partial class Launcher : Node3D
 
     private double _perfClock;
     private int _perfFrames;
-    private double _perfProcess, _perfGpu, _perfCpuRender, _perfPhysics;
+    private double _perfProcess, _perfGpu, _perfCpuRender, _perfPhysics, _perfSetup;
     private double _perfDraws, _perfPrims, _perfNodes, _perfMem;
 
     // The --perf GC readout. Built with the first --perf frame rather than in _Ready, so a run
     // without the flag subscribes to no runtime events at all.
     private Utils.GcTrace? _gcTrace;
+
+    // Whether --perf has hooked the rendering server's draw signals into EngineGapCost.
+    private bool _drawMarksHooked;
 
     // The always-on rate window (ReportRate). Separate accumulators from the --perf ones above
     // rather than shared: those are opt-in and reset on a frame count, these run every session.
@@ -670,9 +673,10 @@ public partial class Launcher : Node3D
             antiAliasing.Word);
         // Resolved under either mode so the line says what a flip to Enhanced would fly; only
         // SetupLighting's enhanced sun reads it.
+        string shadowFallback = Utils.ShadowQualitySetting.DefaultFor(_spec.Det);
         var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality,
             Utils.ShadowQualitySetting.SavedWord(_spec.Det),
-            Config.GetString(Utils.ShadowQualitySetting.Key, Utils.ShadowQualitySetting.Default));
+            Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
         string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
         string clamped = renderScale.Clamped ? " clamped_by=fsr2" : string.Empty;
         Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={renderScale.Source}{clamped} anti_aliasing={antiAliasing.Word} aa_source={antiAliasing.Source} shadow_quality={shadowQuality.Word} shadow_source={shadowQuality.Source} view_distance={viewDistance.Word} view_source={viewDistance.Source}");
@@ -1045,6 +1049,13 @@ public partial class Launcher : Node3D
         TickNetReadout(delta);
         if (_spec.Perf)
         {
+            if (!_drawMarksHooked)
+            {
+                // Only under --perf: an ordinary run pays for no signal into managed code.
+                RenderingServer.FramePreDraw += EngineGapCost.MarkPreDraw;
+                RenderingServer.FramePostDraw += EngineGapCost.MarkPostDraw;
+                _drawMarksHooked = true;
+            }
             (_gcTrace ??= Utils.GcTrace.Create(_spec.GcTypes)).Tick();
             ReportPerf(delta, counters);
         }
@@ -1918,6 +1929,7 @@ public partial class Launcher : Node3D
         // tick, pass, AI walk or phase. Its next close would charge the whole build to one step.
         PhysicsTickCost.Reset();
         ProcessPassCost.Reset();
+        EngineGapCost.Reset();
         AiStepCost.Reset();
         SimPhaseCost.Reset();
         ProcessSiteCost.Reset();
@@ -2364,8 +2376,9 @@ public partial class Launcher : Node3D
         PadRumble.Enabled = !_spec.Det && applied.Rumble != false;
         ApplyViewDistance(applied.ViewDistance);
         // The shadow level reaches the flying world now; --shadow-quality still beats the saved word.
+        string shadowFallback = Utils.ShadowQualitySetting.DefaultFor(_spec.Det);
         var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality, applied.ShadowQuality,
-            Config.GetString(Utils.ShadowQualitySetting.Key, Utils.ShadowQualitySetting.Default));
+            Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
         Log.Info("world", $"shadow quality applied: {shadowQuality.Word} source={shadowQuality.Source}");
         // A mode switch dresses the sun at the new level itself; otherwise the level alone moves.
         if (GraphicsMode.TryParse(applied.Graphics, out bool enhanced) && enhanced != GraphicsMode.Enhanced)
@@ -2990,6 +3003,7 @@ public partial class Launcher : Node3D
         PerfSample.Reset();
         PhysicsTickCost.Reset();
         ProcessPassCost.Reset();
+        EngineGapCost.Reset();
         AiStepCost.Reset();
         SimPhaseCost.Reset();
         ProcessSiteCost.Reset();
@@ -3124,6 +3138,9 @@ public partial class Launcher : Node3D
         _perfProcess += counters.ScriptMs;
         _perfPhysics += counters.PhysicsMs;
         _perfCpuRender += counters.RenderCpuMs;
+        // The rendering server's instance update, run before any viewport draws and left out of
+        // render_cpu_ms. It is the part of draw_ms that grows with what moved this frame.
+        _perfSetup += RenderingServer.GetFrameSetupTimeCpu();
         _perfGpu += counters.GpuMs;
         // Counts, averaged like every ms term, but with no timing noise in them: a scene that
         // starts drawing more says so exactly, where an ms term has to clear a noise band first.
@@ -3147,6 +3164,7 @@ public partial class Launcher : Node3D
         // conversion on Godot's two TIME_* monitors once, at the read.
         double scriptMs = _perfProcess / n;
         double renderCpuMs = _perfCpuRender / n;
+        double setupMs = _perfSetup / n;
         double gpuMs = _perfGpu / n;
         double physicsMs = _perfPhysics / n;
         // ⚠ These are the physics terms to read, not physics_ms above (verification PERF-1). One
@@ -3166,6 +3184,13 @@ public partial class Launcher : Node3D
         double aiPlanes = aiSteps > 0 ? (double)aiPlaneSum / aiSteps : 0;
         double physHz = _perfClock > 0 ? physTicks / _perfClock : 0;
         double physTick = physTicks > 0 ? physTickMs / physTicks : 0;
+        // Per FRAME, like proc_ms: the engine's step after each tick, then the flush, draw and idle
+        // after the pass. With the two pass terms they sum to frame_ms (verification PERF-40).
+        var (physEngineTotalMs, deferTotalMs, drawTotalMs, idleTotalMs) = EngineGapCost.Take();
+        double physEngineMs = physEngineTotalMs / n;
+        double deferMs = deferTotalMs / n;
+        double drawMs = drawTotalMs / n;
+        double idleMs = idleTotalMs / n;
         // These split the two whole-pass terms above by what ran. The sim step goes per TICK beside
         // phys_tick_ms, the named _Process consumers per FRAME beside proc_ms (src/Utils/PhaseCost.cs).
         string simRow = SimPhaseCost.TakeRow(physTicks);
@@ -3179,12 +3204,12 @@ public partial class Launcher : Node3D
         System.Array.Sort(_perfFrameMsSorted);
         double maxMs = _perfFrameMsSorted[PerfWindowFrames - 1];
         double p95Ms = _perfFrameMsSorted[Perf95Index];
-        Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} proc_ms={procMs:0.000} proc_max_ms={procMaxMs:0.000} proc_passes={procPasses} ai_ms={aiMs:0.000} ai_planes={aiPlanes:0.0} render_cpu_ms={renderCpuMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} phys_tick_ms={physTick:0.000} phys_tick_max_ms={physTickMaxMs:0.000} phys_hz={physHz:0.0} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00} max_ms={maxMs:0.00} p95_ms={p95Ms:0.00} sim_ms={simRow} proc_sites_ms={procSites}");
+        Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} proc_ms={procMs:0.000} proc_max_ms={procMaxMs:0.000} proc_passes={procPasses} ai_ms={aiMs:0.000} ai_planes={aiPlanes:0.0} render_cpu_ms={renderCpuMs:0.00} setup_ms={setupMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} phys_tick_ms={physTick:0.000} phys_tick_max_ms={physTickMaxMs:0.000} phys_hz={physHz:0.0} phys_engine_ms={physEngineMs:0.000} defer_ms={deferMs:0.000} draw_ms={drawMs:0.000} idle_ms={idleMs:0.000} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00} max_ms={maxMs:0.00} p95_ms={p95Ms:0.00} sim_ms={simRow} proc_sites_ms={procSites}");
         // Its own line, not another term on the window above. The BYTE figure answers a different
         // question from the millisecond one: which phase feeds the collector, rather than which
         // phase the pause landed in (PERF-34). The two are read side by side.
         Log.Info("perf", $"alloc sim_frame={simFrame} sim_alloc_b={simAllocRow}");
-        _perfClock = 0; _perfFrames = 0; _perfProcess = _perfGpu = _perfCpuRender = _perfPhysics = 0;
+        _perfClock = 0; _perfFrames = 0; _perfProcess = _perfGpu = _perfCpuRender = _perfPhysics = _perfSetup = 0;
         _perfDraws = _perfPrims = _perfNodes = _perfMem = 0;
     }
 }

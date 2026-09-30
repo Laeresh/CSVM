@@ -286,7 +286,7 @@ graphics mode's own default; FSR 2.2 clamps a scale above native back to it. The
 settings that reach no window: they are written on each 3D viewport as it is built, so they take hold
 at the next start the way the graphics mode does, which is what the rows' own descriptions say. The
 shadow quality beside them is `ShadowQualitySetting.Resolve`, `--shadow-quality=` over the saved word
-over the `graphics.shadowQuality` config key over `ultra`; it reaches the Enhanced sun alone, and unlike
+over the `graphics.shadowQuality` config key over `ultra` (`high` on an integrated GPU); it reaches the Enhanced sun alone, and unlike
 those two the apply puts it on the flying world at once (`Launcher.ApplyShadowQuality`, which the
 cockpit pass follows). Its row draws dead while the page's own graphics word is Original. Every other display
 setting is the case where the apply does

@@ -136,6 +136,7 @@
     "chase-trail": 0.02,
     "cloud-band-object-gate": 0.05,
     "cloud-field-fade": 4.46,
+    "cloud-puffs": 5.3,
     "clutter-activation": 4.73,
     "clutter-cells": 1.89,
     "clutter-card-depth": 2.0,

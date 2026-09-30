@@ -30,7 +30,8 @@ internal static class GraphicsSwitchSuites
         + "field, volumetric banks, wind streaks, heat shimmer) are built or gone and the ground "
         + "shadow is the reverse, the clutter is one MultiMesh per kind on the faithful path and cells "
         + "with ranges under Enhanced, every world, clutter, cloud and streak material carries the "
-        + "shader text a fresh build gives it, the Environment's passes, tonemap and froxel fog and the "
+        + "shader text a fresh build gives it, the rendered cloud puffs draw under Enhanced alone with "
+        + "a fresh build's pool and tint, the Environment's passes, tonemap and froxel fog and the "
         + "cockpit pass's copy match, the sun and the pass's light cast at the resolved shadow level "
         + "under Enhanced and not at all on the faithful path, and no omni is left lit there")]
     internal static void LiveSwitchRoundTrip(TestContext ctx)
@@ -77,6 +78,8 @@ internal static class GraphicsSwitchSuites
                 Same(ctx, "Enhanced after a round trip through Original", freshEnhanced, roundTrip);
                 ctx.Check(freshEnhanced.Layers != freshOriginal.Layers && freshEnhanced.Shaders != freshOriginal.Shaders,
                     $"ABLE-TO-FAIL CONTROL: the two modes' fresh readings differ ({freshEnhanced.Layers} against {freshOriginal.Layers})");
+                ctx.Check(freshEnhanced.Puffs.Length > 0 && freshOriginal.Puffs.Length == 0,
+                    $"the rendered cloud puffs draw under Enhanced alone ({freshEnhanced.Puffs})");
                 ctx.Check(freshEnhanced.SunCasts && !freshOriginal.SunCasts && !switchedOriginal.SunCasts,
                     $"the sun casts under Enhanced and not on the faithful path, switched or fresh");
                 ctx.Check(switchedOriginal.Omnis == 0 && freshOriginal.Omnis == 0,
@@ -267,6 +270,7 @@ internal static class GraphicsSwitchSuites
     {
         var layers = new SortedDictionary<string, int>(StringComparer.Ordinal);
         var shaders = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        var puffs = new SortedDictionary<string, int>(StringComparer.Ordinal);
         var ranges = new List<string>();
         int omnis = 0, fogVolumes = 0, clutterMeshes = 0;
         CockpitOverlay? pass = null;
@@ -288,7 +292,14 @@ internal static class GraphicsSwitchSuites
                     break;
             }
             if (node is GeometryInstance3D geometry)
-                CountShaders(geometry, shaders);
+            {
+                foreach (var material in Materials(geometry))
+                {
+                    Count(shaders, material.Shader.Code.GetHashCode().ToString("x8", CultureInfo.InvariantCulture));
+                    if (material.Shader.Code.Contains("csky_cloud_puffs", StringComparison.Ordinal))
+                        Count(puffs, PuffFlags(material));
+                }
+            }
             if (node is MultiMeshInstance3D mmi && UnderClutter(mmi))
             {
                 clutterMeshes++;
@@ -300,6 +311,7 @@ internal static class GraphicsSwitchSuites
             Print(layers),
             $"{fogVolumes} fog volume(s), {clutterMeshes} clutter node(s), ranges {string.Join(",", ranges)}",
             Print(shaders),
+            Print(puffs),
             EnvFlags(rig.Env),
             SunFlags(rig.Sun),
             pass is { Env: { } passEnv } ? EnvFlags(passEnv) + " / " + (pass.Sun is { } light ? SunFlags(light) : "no light") : "no pass",
@@ -330,31 +342,30 @@ internal static class GraphicsSwitchSuites
         return false;
     }
 
-    // Every shader a drawn instance reaches, keyed by its text, so two readings agree only where
-    // every material carries the text a fresh build writes.
-    private static void CountShaders(GeometryInstance3D geometry, SortedDictionary<string, int> into)
+    // Every shader material a drawn instance reaches. Two readings agree on the shader census only
+    // where every material carries the text a fresh build writes.
+    private static IEnumerable<ShaderMaterial> Materials(GeometryInstance3D geometry)
     {
-        void Add(Material? material)
-        {
-            if (material is ShaderMaterial { Shader: { } shader })
-            {
-                string key = shader.Code.GetHashCode().ToString("x8", CultureInfo.InvariantCulture);
-                into[key] = into.GetValueOrDefault(key) + 1;
-            }
-        }
-
-        Add(geometry.MaterialOverride);
+        var found = new List<Material?> { geometry.MaterialOverride };
         if (geometry is MeshInstance3D mi && mi.Mesh is { } mesh)
         {
             for (int s = 0; s < mesh.GetSurfaceCount(); s++)
-                Add(mi.GetSurfaceOverrideMaterial(s) ?? mesh.SurfaceGetMaterial(s));
+                found.Add(mi.GetSurfaceOverrideMaterial(s) ?? mesh.SurfaceGetMaterial(s));
         }
         else if (geometry is MultiMeshInstance3D { Multimesh.Mesh: { } shared })
         {
             for (int s = 0; s < shared.GetSurfaceCount(); s++)
-                Add(shared.SurfaceGetMaterial(s));
+                found.Add(shared.SurfaceGetMaterial(s));
         }
+        return found.OfType<ShaderMaterial>().Where(m => m.Shader != null);
     }
+
+    private static void Count(SortedDictionary<string, int> into, string key) =>
+        into[key] = into.GetValueOrDefault(key) + 1;
+
+    // A pooled cloud material's pool and tint, what DrawPool and CloudPuffs.Apply write on it.
+    private static string PuffFlags(ShaderMaterial material) => string.Create(CultureInfo.InvariantCulture,
+        $"{(material.GetShaderParameter("puff_tex").AsGodotObject() as Texture2DArray)?.GetLayers() ?? 0} layers tint {material.GetShaderParameter("puff_tint").AsColor().ToHtml()}");
 
     private static string EnvFlags(Godot.Environment env) => string.Create(CultureInfo.InvariantCulture,
         $"ssao {env.SsaoEnabled} {env.SsaoRadius:0.##}, ssr {env.SsrEnabled} {env.SsrMaxSteps}, glow {env.GlowEnabled} {env.GlowIntensity:0.##}, tonemap {env.TonemapMode} {env.TonemapAgxWhite:0.##}, froxel {env.VolumetricFogEnabled}, sky {env.Sky?.SkyMaterial?.GetType().Name}, reflected {env.ReflectedLightSource}");
@@ -378,12 +389,13 @@ internal static class GraphicsSwitchSuites
         ctx.Check(fresh.Layers == switched.Layers, $"{what}: the mode's layers ({switched.Layers} against fresh {fresh.Layers})");
         ctx.Check(fresh.Clutter == switched.Clutter, $"{what}: the clutter's nodes and ranges ({switched.Clutter} against fresh {fresh.Clutter})");
         ctx.Check(fresh.Shaders == switched.Shaders, $"{what}: the shader text on every material");
+        ctx.Check(fresh.Puffs == switched.Puffs, $"{what}: the rendered cloud puffs ({switched.Puffs} against fresh {fresh.Puffs})");
         ctx.Check(fresh.Env == switched.Env, $"{what}: the Environment ({switched.Env} against fresh {fresh.Env})");
         ctx.Check(fresh.Sun == switched.Sun, $"{what}: the sun ({switched.Sun} against fresh {fresh.Sun})");
         ctx.Check(fresh.Cockpit == switched.Cockpit, $"{what}: the cockpit pass ({switched.Cockpit} against fresh {fresh.Cockpit})");
     }
 
-    private sealed record Reading(string Layers, string Clutter, string Shaders, string Env, string Sun,
+    private sealed record Reading(string Layers, string Clutter, string Shaders, string Puffs, string Env, string Sun,
         string Cockpit, bool SunCasts, int Omnis)
     {
         public override string ToString()
@@ -395,6 +407,7 @@ internal static class GraphicsSwitchSuites
             text.AppendLine($"  sun     {Sun}");
             text.AppendLine($"  cockpit {Cockpit}");
             text.AppendLine($"  omnis   {Omnis}");
+            text.AppendLine($"  puffs   {Puffs}");
             text.Append($"  shaders {Shaders}");
             return text.ToString();
         }
