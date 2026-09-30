@@ -45,9 +45,13 @@ public static class ShadowQualitySetting
     /// <summary>The one-degree penumbra on the top filter rung, the enhanced mode's own look.</summary>
     public const string Ultra = "ultra";
 
-    /// <summary>The word a launch with nothing saved runs, so nobody who never touches the row sees
-    /// a change.</summary>
+    /// <summary>The word a launch with nothing saved runs on a discrete GPU, and under
+    /// <c>--det</c> on every machine.</summary>
     public const string Default = Ultra;
+
+    /// <summary>The word an integrated GPU (the Steam Deck's APU) runs when nothing is set. On the
+    /// Deck, C5 at 67% with TAA ran 56 fps at Ultra and over 60 at High.</summary>
+    public const string IntegratedDefault = High;
 
     /// <summary>Every word, lowest first, the order both Options screens offer them.</summary>
     public static readonly IReadOnlyList<string> Words = new[] { Off, Low, Medium, High, Ultra };
@@ -66,7 +70,11 @@ public static class ShadowQualitySetting
         new(true, 1f, 1f, RenderingServer.ShadowQuality.SoftUltra, 8192),
     };
 
-    /// <summary>The word the run resolved, <see cref="Default"/> until <see cref="Resolve"/> runs.</summary>
+    private static string? _machineDefault;
+
+    /// <summary>The word the run resolved, <see cref="Default"/> until <see cref="Resolve"/> runs. The
+    /// Options rows show it when nothing is saved.
+    /// ⚠ The rows read this and never <see cref="MachineDefault"/>: a unit test has no renderer to ask.</summary>
     public static string Word { get; private set; } = Default;
 
     /// <summary>What the resolved word writes.</summary>
@@ -76,11 +84,21 @@ public static class ShadowQualitySetting
     /// cockpit pass's interior light, re-reads the sun's shadow fields when this moves.</summary>
     public static int Revision { get; private set; }
 
+    /// <summary>The fallback word for this machine: <see cref="IntegratedDefault"/> on an integrated
+    /// GPU, else <see cref="Default"/>. Read once, since the device cannot change under a run.</summary>
+    public static string MachineDefault => _machineDefault ??= IsIntegratedGpu() ? IntegratedDefault : Default;
+
+    /// <summary>The fallback a launch resolves against. ⚠ <see cref="Default"/> under
+    /// <paramref name="det"/>, so a scripted capture does not depend on the machine it runs on.</summary>
+    public static string DefaultFor(bool det) => det ? Default : MachineDefault;
+
     /// <summary>The level the sources resolve to, highest first: <paramref name="flagWord"/>, then
-    /// <paramref name="savedWord"/>, then <paramref name="configWord"/>, then <see cref="Default"/>.
-    /// A word this vocabulary does not know reads as never set and falls through. A config key
-    /// spelling the default is reported as the default, which is what the absent key means.</summary>
-    public static ShadowQualityPlan Resolve(string? flagWord, string? savedWord, string? configWord)
+    /// <paramref name="savedWord"/>, then <paramref name="configWord"/>, then
+    /// <paramref name="fallback"/>. A word this vocabulary does not know reads as never set and
+    /// falls through. A config key spelling the fallback reads as the fallback. The absent key reads
+    /// the same, so a caller hands the config read that fallback too.</summary>
+    public static ShadowQualityPlan Resolve(string? flagWord, string? savedWord, string? configWord,
+        string fallback = Default)
     {
         if (IsWord(flagWord))
         {
@@ -92,17 +110,17 @@ public static class ShadowQualitySetting
             return Store(savedWord!, "options.json");
         }
 
-        if (configWord != Default && IsWord(configWord))
+        if (configWord != fallback && IsWord(configWord))
         {
             return Store(configWord!, Key);
         }
 
-        if (configWord != null && configWord != Default)
+        if (configWord != null && configWord != fallback)
         {
-            Log.Warn("world", $"config {Key}={configWord} is not one of {string.Join("/", Words)}; using {Default}");
+            Log.Warn("world", $"config {Key}={configWord} is not one of {string.Join("/", Words)}; using {fallback}");
         }
 
-        return Store(Default, "default");
+        return Store(fallback, fallback == Default ? "default" : "default_integrated_gpu");
     }
 
     /// <summary>The saved word a launch reads, or null under <paramref name="det"/>.
@@ -153,6 +171,10 @@ public static class ShadowQualitySetting
         RenderingServer.DirectionalSoftShadowFilterSetQuality(filter);
         RenderingServer.DirectionalShadowAtlasSetSize(atlasSize, true);
     }
+
+    // A headless host reports no adapter, which reads as discrete.
+    private static bool IsIntegratedGpu() =>
+        RenderingServer.GetVideoAdapterType() == RenderingDevice.DeviceType.IntegratedGpu;
 
     private static int IndexOf(string word)
     {

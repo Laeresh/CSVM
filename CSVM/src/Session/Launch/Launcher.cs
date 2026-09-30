@@ -748,9 +748,10 @@ public partial class Launcher : Node3D
             antiAliasing.Word);
         // Resolved under either mode so the line says what a flip to Enhanced would fly; only
         // SetupLighting's enhanced sun reads it.
+        string shadowFallback = Utils.ShadowQualitySetting.DefaultFor(_spec.Det);
         var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality,
             Utils.ShadowQualitySetting.SavedWord(_spec.Det),
-            Config.GetString(Utils.ShadowQualitySetting.Key, Utils.ShadowQualitySetting.Default));
+            Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
         string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
         string clamped = renderScale.Clamped ? " clamped_by=fsr2" : string.Empty;
         Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={renderScale.Source}{clamped} anti_aliasing={antiAliasing.Word} aa_source={antiAliasing.Source} shadow_quality={shadowQuality.Word} shadow_source={shadowQuality.Source}");
@@ -2536,8 +2537,9 @@ public partial class Launcher : Node3D
         // pause sheet flies the rest of the sortie with a quiet pad.
         PadRumble.Enabled = !_spec.Det && applied.Rumble != false;
         // The shadow level reaches the flying world now; --shadow-quality still beats the saved word.
+        string shadowFallback = Utils.ShadowQualitySetting.DefaultFor(_spec.Det);
         var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality, applied.ShadowQuality,
-            Config.GetString(Utils.ShadowQualitySetting.Key, Utils.ShadowQualitySetting.Default));
+            Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
         if (IsInstanceValid(_sun))
         {
             ApplyShadowQuality(_sun);

@@ -3551,7 +3551,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     private string ShadowQualityChoiceLabel() =>
-        DisplaySettingRows.ShadowQualityLabels[DisplaySettingRows.WordIndex(ShadowQualitySetting.Words, _shadowQualityChoice, ShadowQualitySetting.Default)];
+        DisplaySettingRows.ShadowQualityLabels[DisplaySettingRows.WordIndex(ShadowQualitySetting.Words, _shadowQualityChoice, ShadowQualitySetting.Word)];
 
     // Dead while the graphics row stands on Original, whose world casts no sun shadow. The saved
     // word is kept, so flipping to Enhanced gives the player back the level they chose.
@@ -3563,7 +3563,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
 
         var words = ShadowQualitySetting.Words;
-        int at = DisplaySettingRows.WordIndex(words, _shadowQualityChoice, ShadowQualitySetting.Default);
+        int at = DisplaySettingRows.WordIndex(words, _shadowQualityChoice, ShadowQualitySetting.Word);
         _shadowQualityChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
     }
 

@@ -27,8 +27,9 @@ internal static class ShadowQualitySuites
 
     [Suite("display-shadow-quality",
         "The Enhanced sun's shadow quality: --shadow-quality beats the saved word, which beats the "
-        + "graphics.shadowQuality config key, which beats the default Ultra, a key spelling ultra "
-        + "reads as the default and an unknown word at any layer falls through; each of Off, Low, "
+        + "graphics.shadowQuality config key, which beats the default Ultra (High on an integrated "
+        + "GPU, Ultra under --det everywhere), a key spelling the fallback reads as the default "
+        + "and an unknown word at any layer falls through; each of Off, Low, "
         + "Medium, High and Ultra writes its pinned cast switch, angular distance and blur on the sun "
         + "and hands the renderer its pinned soft filter and atlas (4096 below Ultra, 8192 at Ultra), "
         + "Off handing the renderer nothing; no level's sun is wider than its filter rung holds "
@@ -89,6 +90,14 @@ internal static class ShadowQualitySuites
         var unknown = ShadowQualitySetting.Resolve("epic", "cinematic", "potato");
         ctx.Check(unknown.Word == ShadowQualitySetting.Default && unknown.Source == "default",
             $"an unknown word at every layer falls through to the default ({Describe(unknown)})");
+        var integrated = ShadowQualitySetting.Resolve(null, null, ShadowQualitySetting.IntegratedDefault, ShadowQualitySetting.IntegratedDefault);
+        ctx.Check(integrated.Word == ShadowQualitySetting.High && integrated.Source == "default_integrated_gpu",
+            $"an integrated GPU with nothing set runs High ({Describe(integrated)})");
+        var keyUltra = ShadowQualitySetting.Resolve(null, null, ShadowQualitySetting.Ultra, ShadowQualitySetting.IntegratedDefault);
+        ctx.Check(keyUltra.Word == ShadowQualitySetting.Ultra && keyUltra.Source == ShadowQualitySetting.Key,
+            $"and a key spelling ultra still wins there, since ultra is not that machine's fallback ({Describe(keyUltra)})");
+        ctx.Check(ShadowQualitySetting.DefaultFor(det: true) == ShadowQualitySetting.Default,
+            $"a --det run falls back to Ultra whatever the GPU, so a capture does not depend on the machine");
     }
 
     private static void OneLevel(TestContext ctx, (string Word, bool Cast, float Angle, float Blur, RenderingServer.ShadowQuality Filter, int Atlas) level)
