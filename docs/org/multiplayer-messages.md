@@ -383,8 +383,9 @@ score, `0x17` match state, `0x22` hit and `0x27` seat roster. Damage, spawn, the
 director transition, the join handshake and a seat's ask to be spawned again have no
 counterpart, so they are minted at `0x40`, `0x41`, `0x42`, `0x43` and `0x44`, above the ceiling
 above. The host-owned world's four (AI state, AI fire, a guest's hit claim on an AI, and a world
-event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, the start barrier's word at `0x5B`, a match's death notice at `0x5C`, the lobby's plane build and plane rules at `0x5D` and `0x5E`, the lobby's co-op hangar plane at `0x5F`, the lobby's join password at `0x60`, and the lobby's team action and team list at `0x61` and `0x62`, Capture the Flag's ask and table at `0x63` and `0x64`, and Zeppelin
-vs Zeppelin's placed return at `0x65`. The handshake carries the master seed, the host's clock and the seat the joining peer was
+event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, the start barrier's word at `0x5B`, a match's death notice at `0x5C`, the lobby's plane build and plane rules at `0x5D` and `0x5E`, the lobby's co-op hangar plane at `0x5F`, the lobby's join password at `0x60`, and the lobby's team action and team list at `0x61` and `0x62`, Capture the Flag's ask and table at `0x63` and `0x64`, Zeppelin
+vs Zeppelin's placed return at `0x65`, and the in-flight chat at `0x66`, the original's `0x15` with
+the typist's seat added ("In-flight chat" below). The handshake carries the master seed, the host's clock and the seat the joining peer was
 given; the original needs none of the three, because it draws from no shared stream and hands
 out no seat. The ask carries a seat and nothing else: the original's client takes its own
 respawn, while here the host owns every placement and answers the ask with a spawn event.
@@ -420,6 +421,11 @@ score message is one seat rather than the whole table, and its roster carries th
 which the original has no need of because it never draws from a shared stream. The packed angle
 and motion dwords are not taken either; the remake spends 8 bytes on a quantised quaternion and
 12 on a float velocity, which is the trade `Net/NetMessages.cs`'s width budget exists to hold.
+
+The damage report `0x40` carries the victim's own hull fraction after it applied a hit, and every
+other machine stages that seat's damage from it. A fraction of 1 is a rearm on the owner's machine
+([`multiplayer-rearm.md`](multiplayer-rearm.md)), and every other machine takes the stages off its
+copy. The original's `FUN_0049b970` sends nothing for a rearm.
 
 ## The mission director
 
@@ -717,6 +723,60 @@ other one alike. On an end where that seat is a copy fed by samples, the copy is
 the cutscene host poses it on the marker each frame over the pose its samples write, then hands it
 back to its feed at the handoff. A guest's docking therefore shows the guest's aeroplane on the
 host, and the host's docking shows the host's on each guest.
+
+## In-flight chat
+
+[Evidence: decoded] **The keys.** Commands `0x6d` Chat to Everyone and `0x6e` Chat to Team (DIK
+GRAVE and Shift+GRAVE, [`input.md`](input.md)) share one handler, `FUN_00489570`, registered at
+`0x0048972c` and `0x00489738`. It does nothing unless `FUN_00440ad0` reports a network game, and
+otherwise calls `FUN_004a8340` on the flight UI object at `0x0071d3a0` with 1 for `0x6d` and 0 for
+`0x6e`. That call opens an all-chat whatever the key when the byte at `0x0071d89c` (the object's
+`+0x4fc`, the "mode has teams" flag the death report reads) is clear, so a match without teams has
+no team line.
+
+[Evidence: decoded] **The entry.** `FUN_004a8470` builds a `0x2328`-byte edit object
+(`FUN_0046d740`, vtable `0x00607c2c`) as a child of the chat panel. Its caption is langui 7049
+`MSG_GLOBAL_MESSAGE` "To All:" or 7050 `MSG_SQUADRON_MESSAGE` "To Team:" (`0x0046d7a2`,
+`0x0046d7a9`), and its text buffer is sized 60 bytes (`FUN_005cc050(0x3c)` at `0x0046d797`). The
+text opens as "> " (`0x0063f93c`, written by `FUN_005cbe40`), which leaves 57 typed characters
+before the terminator. The submit handler `FUN_0046d800` (vtable slot at `0x00607cfc`) takes the
+text after the ">", trims both ends, and closes the entry without sending when nothing is left
+(`0x0046d898`). Otherwise it posts the sender's own line, the caption and `" %s"` of the text
+joined by `"%s %s"` (`0x0046d8db`, `0x0046d911`), so "To All:  hello" with two spaces, and sends
+`0x15` through `FUN_00499a50`. Opening the entry also sets the panel's ten-second timer.
+
+[Evidence: decoded] **The wire.** `FUN_00499a50(text, all)` writes the type, the length (text + 8),
+the text length at `+4` and the text at `+6`. An all-chat is one unguaranteed broadcast; a team line
+is sent guaranteed, to the DirectPlay id at `+4`, for each entry of the list at `0x0071c150` whose
+`+0x18` equals the team slot at `+0x3c` of the record `0x0071c7ac` points to (`0x00499af5`). Nothing echoes the send, since the submit handler posted it.
+The handler `LAB_00499b30` keeps at most 80 characters (`0x00499b5f`), finds the sender's remote
+record by DirectPlay id (`FUN_00499d80`) and names it by that record's `+0x34`, or by langui 6007
+`MSG_UNKNOWN` "Unknown" when there is none, and posts `"%s: %s"` (`0x0062918c`).
+
+[Evidence: decoded] **The panel.** `FUN_004a8390` builds it once per flight at `+0x508` of the UI
+object (`0x0071d8a8`): a five-line text list (`FUN_005c5950(5)`), font `mpChat` (Arial 12, green
+0, 255, 0, shadow, weight 500 in `fonts.zrd`), placed at 10, 10 and sized 300 by 100 in 640-by-480
+display pixels (`0x004a8404` to `0x004a842d`). `FUN_004a8570` formats a line into it (vtable
+`+0xa0`, `FUN_005c5e10`, which writes the newest line with no timer of its own) and then hands the
+whole panel a 10.0 s timer (vtable `+0x60`, `FUN_005c54a0`), after which the panel hides with its
+lines kept. Display Scores (command `0x23`, `FUN_00489320`) hides it at once.
+
+**The remake.** `Session/World/NetChatLink.cs` routes by lobby team, `NetSeat.TeamId`, never by a
+team id. A guest sends its line to the host alone; the host forwards an all-chat to every other
+machine and a team line only to a machine that flies a seat on the typist's team, once per machine
+however many seats it flies, and shows a team line itself only when it flies that team. A line is
+reliable either way, where the original sends an all-chat unguaranteed, since the star's relay
+would otherwise lose a line on either leg. The seat rides in the message because a relayed line
+reaches its reader from the host, not from the typist; the host takes a line only from the machine
+flying the seat it names. The panel draws in every local pane (`Flight/Hud/ChatPanel.cs`), and the
+entry only in the pane whose seat reads the keyboard: the splitscreen seats beyond the first are
+pad-only, so they read the chat and type nothing. While a line is open, and until every key pressed
+into it is released, that seat's flight keys read idle. The panel stays up while its typist types.
+Display Scores does not hide it, as the remake has no bound scores key in flight.
+
+| Id | Message | Class | Carries |
+|---|---|---|---|
+| `0x66` | Flight chat | reliable, guest to host and host to each admitted machine | the typist's seat at 4, flags at 5 (bit 0 a team line), two reserved bytes, the line in 81 bytes UTF-8 at 8 (89 bytes) |
 
 ## Cutscene skip
 
@@ -1092,7 +1152,7 @@ Their ids stay the original's objective messages.
 
 | Id | Message | Class | Carries |
 |---|---|---|---|
-| `0x63` | Flag ask | reliable, guest to host | the flag's team number at 4, the ask at 5 (take 1, home 2), the asking seat at 6, one reserved byte (8 bytes) |
+| `0x63` | Flag ask | reliable, guest to host; an eject also host to every guest | the flag's team number at 4, the ask at 5 (take 1, home 2, eject 3), the asking seat at 6, one reserved byte (8 bytes). Eject is the console's `ejectflag`, which the host relays as the drop every machine then runs |
 | `0x64` | Flag table | reliable, host to every guest | the flag count at 4, three reserved bytes, then four rows of 4 bytes: the team number, the state (1 held, 2 at home, 3 floating) and the holding seat (`0xFF` none), one reserved byte (24 bytes) |
 
 Zeppelin vs Zeppelin's return is a point rather than a table entry (`FUN_004969b0`'s mode 4 branch,

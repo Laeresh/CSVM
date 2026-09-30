@@ -97,6 +97,10 @@ public sealed partial class HudMessages : Control
     /// </summary>
     public const string FlagHomeKey = "MSG_X_FLAG_HOME";
 
+    /// <summary>"Rearmed!", row 7077, a rearm base's restore (<c>0x49ba99</c>, <c>0x49bbb9</c>).
+    /// </summary>
+    public const string RearmedKey = "MSG_MP_REARMED";
+
     // The placement, from FUN_00458a10: x is 0.5 of the display width (0x006032e0) with the
     // centring flag set (the text object's +0x1044, read at 0x005c7e4f), y is 0.2 of its height
     // (0x006034fc), and each further slot sits 18 px lower (FUN_00458530's `+ 0x12`). The 18 px and
@@ -244,6 +248,11 @@ public sealed partial class HudMessages : Control
     /// death handler posts all its lines in (<c>DAT_006eba60</c>, the enemy arm).</summary>
     public static void PostLivesLeft(HudMessages stack, Messages? strings, int livesLeft) =>
         stack.Post(LivesLine(strings, livesLeft), Side.Enemy);
+
+    /// <summary>Posts "Rearmed!" into the rearmed pilot's own pane, in the <c>DAT_006eba60</c>
+    /// colour <c>FUN_0049b970</c> passes (<c>0x49ba8d</c>).</summary>
+    public static void PostRearmed(HudMessages stack, Messages? strings) =>
+        stack.Post(Text(strings, RearmedKey), Side.Enemy);
 
     /// <summary>The lines one Dogfight death posts, top line first. That is the victim's name over
     /// the killer's line, or one Self-Destroyed line when nobody killed it. Every machine

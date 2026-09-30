@@ -222,8 +222,8 @@ public class LoadScreensTests
     }
 
     /// <summary>A Dogfight's dialog name. It is the number the original's session setup writes for
-    /// the lobby row (0x413c08), then the mode letter (0x004a201c). Above the Clouds writes 3 although
-    /// the lobby flies it on C2B, and a chapter no row flies names none.</summary>
+    /// the lobby row (0x413c08), then the mode letter (0x004a201c). Above the Clouds writes 3, C1C's
+    /// world number, and a chapter no row flies (C2B, Instant Action's clouds) names none.</summary>
     [Fact]
     public void ADogfightNamesItsDialogByTheOriginalsEnvironmentNumberAndModeLetter()
     {
@@ -234,11 +234,11 @@ public class LoadScreensTests
         Assert.Equal(
             new[] { 'd', 't', 'c', 'z', 'd', 'd' },
             new[] { 1, 2, 3, 4, 0, 5 }.Select(LoadScreens.MultiplayerLetter));
-        Assert.Equal("loading_m3d", LoadScreens.MultiplayerKey("C2B", false, false, false));
+        Assert.Equal("loading_m3d", LoadScreens.MultiplayerKey("C1C", false, false, false));
         Assert.Equal("loading_m6t", LoadScreens.MultiplayerKey("c3", false, false, true));
         Assert.Equal("loading_m4c", LoadScreens.MultiplayerKey("C2", true, false, true));
         Assert.Equal("loading_m7z", LoadScreens.MultiplayerKey("C4", false, true, true));
-        Assert.Null(LoadScreens.MultiplayerKey("C1C", false, false, false));
+        Assert.Null(LoadScreens.MultiplayerKey("C2B", false, false, false));
     }
 
     /// <summary>Every dialog a lobby launch can name is in <c>Loading.zrd</c>, so no Dogfight falls

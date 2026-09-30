@@ -709,7 +709,7 @@ on the main thread and raises `ShotLanded`. The pixels come from the caller's `P
 Capture the Flag's rules, engine-free: one flag per lobby team with its home, held, at home or
 floating. `Check` is a pilot's per-tick proximity ask with the 25 m reach and the two cooldowns,
 `Decide` the host's first-asker-wins decision, `TakeAhead` a guest's take before the answer, `Apply`
-the host's table on a guest, `Drop` a downed carrier's flag and `Advance` its 15 s throw arc, and
+the host's table on a guest, `Drop` a downed or ejecting carrier's flag and `Advance` its 15 s throw arc, and
 `Points` what a flag brought home scores off the match's `MatchScores`. The host's own-flag-home
 option gates a capture.
 `Session/World/FlagRuntime.cs` runs it in a match. Read `CaptureTheFlagTests.cs` and
@@ -729,9 +729,18 @@ hull 0 flying the first and hull 1 the second, and `SpawnBlocks` opens each side
 block round its own hull. `Counts` lets each gas bag score once, at its own death or its bound
 cannon's, and `Points` is `score_gas_kill` to an enemy and `score_my_gas_kill` on the killer's
 own hull. `RespawnPoint` is the return by the pilot's hull, `HullSide` labels a hull's marker by
-side, and `BroadsideShooter` is the shooter id a hull's rounds carry. `VersusMatch.EndOnHullLoss`
-ends the match on the hull loss, and `Session/World/ZeppelinVersusRuntime.cs` runs it in a match.
-Read `ZeppelinVersusTests.cs` and `docs/org/multiplayer-zvz.md`.
+side and `RearmSide` its rearm base's, and `BroadsideShooter` is the shooter id a hull's rounds
+carry. `VersusMatch.EndOnHullLoss` ends the match on the hull loss, and
+`Session/World/ZeppelinVersusRuntime.cs` runs it. Read `ZeppelinVersusTests.cs` and `docs/org/multiplayer-zvz.md`.
+
+## src/Flight/Modes/RearmBases.cs
+The multiplayer rearm's rules, engine-free: `RuleFor` serves any base in either Deathmatch and only
+the pilot's own team's in Capture the Flag and Zeppelin vs Zeppelin, `NodeName` names base `n`'s
+node, and `ReadRadiusSquared` takes `player.zrd`'s `rearm_rad` squared or the executable's 625.
+`Enters` is one seat's step, true on the step it comes within the radius of a base serving it and
+latched until it is outside all of them. `Session/World/RearmRuntime.cs` runs it in a match and
+`FlightController.Rearm` is the restore. Read `RearmBasesTests.cs` and
+`docs/org/multiplayer-rearm.md`.
 
 ## src/Flight/Modes/ScoreStore.cs
 Stunt best-time persistence: one JSON object in `user://stunt_scores.json` keyed
@@ -804,6 +813,19 @@ only where it sits, as `LineAnchor` over a pane size, static so a suite asserts 
 `Control`. The fraction is of the pane, never of `HudMetrics`' reading box, so each splitscreen pane
 centres its own. `Prompt` is a `UI/Boards/ControlLine.cs`, not a string, so a pad seat's control draws as a
 glyph where the words go; `Line` is still the words. Decode: [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md) "The prompt's own placement".
+
+## src/Flight/Hud/FlightChat.cs
+One machine's in-flight chat in a network match, engine-free: the original's chat panel of five
+lines shown for ten seconds after the newest, and the entry a pilot types into under its "To All:"
+or "To Team:" prompt. `Echo` and `Received` word a line as the sender's own panel and every other
+panel show it. `Session/World/NetChatLink.cs` fills it and `ChatPanel.cs` draws it. Decode:
+[../org/multiplayer-messages.md](../org/multiplayer-messages.md) "In-flight chat".
+
+## src/Flight/Hud/ChatPanel.cs
+One pane's drawing of the machine's `FlightChat`, at the top left of the reading box in the
+original's `mpChat` green with its drop shadow, and the entry line under it in the pane whose seat
+reads the keyboard. It draws only: a splitscreen pane routes no input, so the keys are
+`Session/World/NetChatLink.cs`'s.
 
 ## src/Flight/Hud/TargetHud.cs
 The per-pane targeting HUD, built on every human pane in every flight session: the pilot's own
@@ -1167,7 +1189,7 @@ text, dials and gates compose and assert here with no `Control` (`ComputeStallWa
 ## src/Flight/Airframe/FlightController.cs
 The flying-aircraft node: input through `FlightModel` to a transform (or, for an AI pilot publishing
 a `RailPose`, the danger-zone ribbon's pose in place of the model step, the sweep still run), plus
-weapon fire as `FireControl`'s engine adapter and the crash and respawn paths (`Respawn` takes what its `RespawnPlacement` hook answers, `RespawnAt` a pose handed to it instead, and `RespawnRequest` withholds the return altogether for a seat whose placement is somebody else's to grant). It keeps no rule it
+weapon fire as `FireControl`'s engine adapter and the crash and respawn paths (`Respawn` takes what its `RespawnPlacement` hook answers, `RespawnAt` a pose handed to it instead, and `RespawnRequest` withholds the return altogether for a seat whose placement is somebody else's to grant), and `Rearm`, a rearm base's in-flight restore of parts, damage stages and every slot. It keeps no rule it
 can delegate: the camera is `CameraController`'s, the pilot HUD `FlightHud`'s, this frame's stick
 one `IFlightInputSource`, the states an aircraft moves between `AircraftLifecycle`'s, and what a
 contact costs `AircraftContactResolver`'s. This node reads the devices, performs what each of those

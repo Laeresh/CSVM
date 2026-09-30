@@ -56,8 +56,9 @@ internal sealed class FlagRuntimeInputs
 /// Capture the Flag in a live network match: <see cref="FlagMatch"/>'s rules over the mission's
 /// <c>cs_flag_n</c> flags. Each machine checks its own seats against the flags and asks its host.
 /// The host decides, scores and sends its table. Every machine moves the flags, speaks the six
-/// <c>snd_CTF</c> lines, posts the flag lines and labels the flag markers from the changes. A downed carrier's flag floats on
-/// every machine, and the host sends it home when its throw runs out.
+/// <c>snd_CTF</c> lines, posts the flag lines and labels the flag markers from the changes. A downed
+/// or ejecting carrier's flag floats on every machine, and the host sends it home when its throw runs
+/// out.
 /// Decode: docs/org/multiplayer-ctf.md.
 /// </summary>
 internal sealed class FlagRuntime
@@ -229,25 +230,29 @@ internal sealed class FlagRuntime
     /// <summary>A seat went down on this machine's copy of the match: the flag it carried floats
     /// from where it hung. Every machine runs it for every seat, as <c>FUN_0049ab50</c> runs from
     /// the death handler.</summary>
-    public void Downed(int seat)
+    public void Downed(int seat) => Float(seat);
+
+    /// <summary>A seat flown here lets its flag go, the console's <c>ejectflag</c>. A guest asks its
+    /// host, which floats the flag and relays the eject, so every machine floats it as it does a
+    /// downed carrier's. False when the seat carries nothing or the match has ended.</summary>
+    public bool Eject(int seat)
     {
         int team = _flags.Carried(seat);
-        if (team == 0 || !_props.TryGetValue(team, out var prop))
+        if (team == 0 || !_in.IsLocal(seat) || _in.Match.Completed)
         {
-            return;
+            return false;
         }
 
-        var at = prop.Carried is { } node && node.IsInsideTree() ? node.GlobalPosition
-            : seat < _in.SeatRigs.Count && _in.SeatRigs[seat].Controller is { } pilot ? pilot.WorldPosition
-            : _flags.HomeOf(team);
-        float elevation = ThrowElevationMin + ((float)_rng.NextDouble() * (ThrowElevationMax - ThrowElevationMin));
-        float speed = ThrowSpeedMin + ((float)_rng.NextDouble() * (ThrowSpeedMax - ThrowSpeedMin));
-        var velocity = MotionRuntime.RangeLaunchDirection(0f, elevation) * speed;
-        float floor = _in.GroundAt?.Invoke(at) ?? float.MinValue;
-        if (_flags.Drop(seat, at, velocity, floor) is { } change)
+        if (_in.Net.IsHost)
         {
-            Show(change);
+            Ejected(seat, team);
         }
+        else
+        {
+            _in.Net.Send(_in.Net.HostPeer, new FlagRequestMessage((byte)team, (byte)FlagAsk.Eject, (byte)seat), NetChannels.Events);
+        }
+
+        return true;
     }
 
     /// <summary>The host's rematch: every flag home, its table sent, and nothing scored.</summary>
@@ -307,14 +312,41 @@ internal sealed class FlagRuntime
     // A flag's side as a hostility id: its lobby team, banded.
     private static int SideTeam(int team) => AimAssist.LobbyTeam(team) ?? AimAssist.NeutralTeam;
 
+    // The host's eject: floated here, then the same ask to every guest, which floats it there.
+    private void Ejected(int seat, int team)
+    {
+        Log.Info("flight", $"ctf: seat {seat} ejects team {team}'s flag");
+        Float(seat);
+        _in.Net.Broadcast(new FlagRequestMessage((byte)team, (byte)FlagAsk.Eject, (byte)seat), NetChannels.Events);
+    }
+
+    // FUN_0049ab50 on this machine: the seat's flag floats from where it hung.
+    private void Float(int seat)
+    {
+        int team = _flags.Carried(seat);
+        if (team == 0 || !_props.TryGetValue(team, out var prop))
+        {
+            return;
+        }
+
+        var at = prop.Carried is { } node && node.IsInsideTree() ? node.GlobalPosition
+            : seat < _in.SeatRigs.Count && _in.SeatRigs[seat].Controller is { } pilot ? pilot.WorldPosition
+            : _flags.HomeOf(team);
+        float elevation = ThrowElevationMin + ((float)_rng.NextDouble() * (ThrowElevationMax - ThrowElevationMin));
+        float speed = ThrowSpeedMin + ((float)_rng.NextDouble() * (ThrowSpeedMax - ThrowSpeedMin));
+        var velocity = MotionRuntime.RangeLaunchDirection(0f, elevation) * speed;
+        float floor = _in.GroundAt?.Invoke(at) ?? float.MinValue;
+        if (_flags.Drop(seat, at, velocity, floor) is { } change)
+        {
+            Show(change);
+        }
+    }
+
     private void Wire()
     {
         var net = _in.Net;
         net.On<FlagTableMessage>((_, table) => TakeTable(table));
-        if (net.IsHost)
-        {
-            net.On<FlagRequestMessage>((_, request) => TakeRequest(request));
-        }
+        net.On<FlagRequestMessage>(TakeRequest);
     }
 
     // One ask from a seat flown here. The host decides it at once. A guest asks its host, and takes a
@@ -335,10 +367,22 @@ internal sealed class FlagRuntime
     }
 
     // A guest's ask on the host. The table goes back whatever the decision, which is what corrects
-    // a guest that took ahead and lost (FUN_0049a170 re-sends the unchanged row).
-    private void TakeRequest(FlagRequestMessage request)
+    // a guest that took ahead and lost (FUN_0049a170 re-sends the unchanged row). An eject reaches a
+    // guest only as the host's relay.
+    private void TakeRequest(int peer, FlagRequestMessage request)
     {
-        if (request.Seat >= _in.SeatRigs.Count || request.Ask is not ((byte)FlagAsk.Take or (byte)FlagAsk.Home))
+        if (request.Seat >= _in.SeatRigs.Count)
+        {
+            return;
+        }
+
+        if (request.Ask == (byte)FlagAsk.Eject)
+        {
+            TakeEject(peer, request);
+            return;
+        }
+
+        if (!_in.Net.IsHost || request.Ask is not ((byte)FlagAsk.Take or (byte)FlagAsk.Home))
         {
             return;
         }
@@ -351,6 +395,27 @@ internal sealed class FlagRuntime
         }
 
         SendTable();
+    }
+
+    // An eject on the wire. The host takes it only from the machine flying the seat, for the flag
+    // that seat carries. A guest takes only its host's relay.
+    private void TakeEject(int peer, FlagRequestMessage request)
+    {
+        if (!_in.Net.IsHost)
+        {
+            if (peer == _in.Net.HostPeer)
+            {
+                Float(request.Seat);
+            }
+
+            return;
+        }
+
+        if (_in.Net.PeerOfSeat(request.Seat) == peer && !_in.Match.Completed && request.Team != 0
+            && _flags.Carried(request.Seat) == request.Team)
+        {
+            Ejected(request.Seat, request.Team);
+        }
     }
 
     private void TakeTable(FlagTableMessage table)

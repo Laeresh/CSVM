@@ -76,6 +76,6 @@ Everything the command line settles about a session as one immutable, engine-fre
 the pure arg parsers (`ParseVec3`, `ParsePlanes`, `ParseHold`, …) are public so they are testable.
 `SessionMode` is closed (Menu/Fly/Viewer/Freecam/AnimLab), with the `Stunt`, `Versus` (and its `CaptureTheFlag` or `ZeppelinVsZeppelin`) and `Coop`
 modifiers and `SessionProbe` beside it. `FromMenu` and `FromCampaign` are the launchscreen's and the
-campaign cabin's counterparts to a command line, each carrying its own no-re-resolve rule on itself;
+campaign cabin's counterparts to a command line, each carrying its own no-re-resolve rule on itself. `FromMenu` flies every Dogfight on its type's multiplayer map (`DeathmatchMission`, `CtfMission`, `ZvzMission`) whatever `--mission` says, so every machine in one match builds the same mission;
 a menu value that a spelled-out flag beats says so in an `*Explicit` field (`ScenarioExplicit`, `ViewModeExplicit` over the opening view, which keeps a `--view=` above the saved Default View even where both name chase, and `VsKillsExplicit`/`VsTimeExplicit` over Dogfight's kill target and time limit). The `WithSaved*` folds are how a saved option reaches a spec, each dropped under `--det`.
 `Resolve` carries its step order and the type's purity contract (DET-9). Per-rule coverage lives in `CSVM.Tests/SessionSpec*Tests`.

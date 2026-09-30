@@ -67,6 +67,8 @@ public class DefaultBindingsTests
         { InputAction.Nitro, Key.N, KeyModifiers.None },
         { InputAction.AutoLand, Key.A, KeyModifiers.None },
         { InputAction.Pause, Key.Escape, KeyModifiers.None },
+        { InputAction.ChatEveryone, Key.Quoteleft, KeyModifiers.None },
+        { InputAction.ChatTeam, Key.Quoteleft, KeyModifiers.Shift },
     };
 
     /// <summary>The coverage gate: a migrating polling site must never discover a missing default

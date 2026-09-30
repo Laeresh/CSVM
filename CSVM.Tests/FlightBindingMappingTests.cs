@@ -42,6 +42,7 @@ public class FlightBindingMappingTests
         { Key.Kp5, InputAction.LookCenter },
         { Key.KpAdd, InputAction.ZoomIn },
         { Key.KpSubtract, InputAction.ZoomOut },
+        { Key.Quoteleft, InputAction.ChatEveryone },
     };
 
     /// <summary>The keyboard rows that carry a modifier, which are a control of their own rather
@@ -55,6 +56,7 @@ public class FlightBindingMappingTests
         { Key.R, KeyModifiers.Shift, InputAction.TargetPreviousNonAircraft },
         { Key.R, KeyModifiers.Ctrl, InputAction.TargetNearestNonAircraft },
         { Key.S, KeyModifiers.Shift, InputAction.ToggleSpyglass },
+        { Key.Quoteleft, KeyModifiers.Shift, InputAction.ChatTeam },
     };
 
     /// <summary>Every migrated pad button, against the action the call site now names.</summary>
@@ -105,6 +107,7 @@ public class FlightBindingMappingTests
         Assert.False(actions.Held(InputAction.TargetNextEnemy));
         Assert.False(actions.Held(InputAction.TargetNextAlly));
         Assert.False(actions.Held(InputAction.TargetNextNonAircraft));
+        Assert.False(actions.Held(InputAction.ChatEveryone));
     }
 
     [Theory]

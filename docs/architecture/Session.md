@@ -17,7 +17,7 @@ ahead of `Rng.Reset` and the seat sizing, and the handshake's clock opens the `N
 puts every seat flown here on the wire on the `AircraftStateCadence` as the SIM pose, while a sample for a seat flown elsewhere reaches that seat's own pose buffer.
 `WireNetCombat` puts combat on the same wire: an owner's fire event spawns the round on every peer, the shooter's machine decides a hit and addresses the victim's owner,
 that owner applies the damage and reports its own death (a match from its own `Downed` handler, any other mission from the one `WireNetCombat` adds, which is what plays a guest's wreck in a host's campaign field), and the host alone scores it and relays each of those between guests. A match death's kill lines follow the host's scoring as a death notice, so every machine posts them once. `WireNetSpawns` puts placement on it under one rule: the OPENING spawn is the shared seed's own walk over the mission table and crosses no wire, while every later return is GRANTED, a downed seat asking the host and the host's single rotation answering the whole field with a table entry every peer applies through the same call the owner would have made locally. `WireNetMatch` makes the host the only writer of the match itself: it sends the clock, both limits and the ending as one reliable message, change-driven (a rematch, an ending) plus a `MatchStateCadence` tick a second that carries the host's session clock into every guest's `NetClockSlew`, and a guest hands its `VersusMatch` over rather than advancing a clock or arming a limit of its own. ⚠ The ending is sent AFTER the scores that settled the round and never from the match's completion event, which fires before them. The scoreboard itself is never sent: every machine derives it from the scores it was already sent seat by seat. `WireNetDirector` puts a campaign mission's objective graph on the same wire through `NetDirectorLink.cs`: the host's graph publishes every event it raises and a guest's is replicated, so it follows them and decides nothing. `WireNetWorld` hands the AI aircraft and the world's destructible pools to `NetWorldLink.cs`, admitted from the capture phase and sent after the AI phase: the host flies every AI and spends every world hit, and a guest's AI fly from the host's samples while its pools spend nothing of their own. The landing trigger and the ladder switch read `_seatRigs`, and `WireNetPositionalStarts` hands their decisions to `NetPositionalStartLink.cs`; an airframe swap wires its replacement for combat again through `WireSeatCombat`, since that wiring is per controller.
-Under a Versus lives rule a pilot out of lives is held spectating and its respawn refused (`VersusMatch.OutOfLives`). A guest builds no rotation of its own, and a field larger than the table is served by that rotation relaxing its one-living-seat-per-point rule rather than failing. A `--ctf` match adds `FlagRuntime` (`WireFlags`), stepped ahead of the match clock, and a `--zvz` match `ZeppelinVersusRuntime` (`WireZeppelinVersus`), which also answers a return with `SpawnAtMessage`. `AllAircraft` combines the roster's AI view with the ordered rig controllers, and `OrderWaveAirframes` with `StepOwedLoad` puts the coming waves behind the load screen.
+Under a Versus lives rule a pilot out of lives is held spectating and its respawn refused (`VersusMatch.OutOfLives`). A guest builds no rotation of its own, and a field larger than the table is served by that rotation relaxing its one-living-seat-per-point rule rather than failing. A `--ctf` match adds `FlagRuntime` (`WireFlags`), stepped ahead of the match clock, and a `--zvz` match `ZeppelinVersusRuntime` (`WireZeppelinVersus`), which also answers a return with `SpawnAtMessage` and whose board's Restart leaves for the lobby rather than rerunning on burnt hulls, and any Dogfight whose world holds rearm nodes `RearmRuntime` (`WireRearmBases`). `AllAircraft` combines the roster's AI view with the ordered rig controllers, and `OrderWaveAirframes` with `StepOwedLoad` puts the coming waves behind the load screen.
 Exit frees the session subtree atomically and releases only the non-node resources it owns; the prohibitions that keep these rules true sit on the members they bind. Read `SessionSimulation.cs` next.
 
 ## src/Session/World/SessionSimulation.cs
@@ -231,10 +231,10 @@ Capture the Flag in a network match, built by `GameSession.WireFlags` for a `--c
 `FlagMatch` flag per lobby team whose `cs_flag_n` the mission world holds. Each machine checks its
 own seats and asks the host (`FlagRequestMessage`); the host decides, scores through
 `VersusMatch.AddScore` and sends its `FlagTableMessage`. Every machine moves the props from the
-changes, hanging the carried flag under the holder's `cf_light`, and speaks the `snd_CTF*` lines and
-posts the flag rows. A seat's death or drop floats its flag everywhere; the host sends it home when
-the throw runs out. `SideOf` labels the flags' three markers for the site feed, and the carrier
-carries its tag (`FlightController.MarkerName`). Decode: [../org/multiplayer-ctf.md](../org/multiplayer-ctf.md).
+changes, hangs the carried flag under the holder's `cf_light`, speaks the `snd_CTF*` lines and posts
+the flag rows. A death, a drop or `Eject` (the console's `ejectflag`, relayed by the host) floats a
+flag everywhere, and the host sends it home when the throw runs out. `SideOf` labels the three
+markers, and the carrier carries its tag. Decode: [../org/multiplayer-ctf.md](../org/multiplayer-ctf.md).
 
 ## src/Session/World/ZeppelinVersusRuntime.cs
 Zeppelin vs Zeppelin in a network match, built by `GameSession.WireZeppelinVersus` for a `--zvz`
@@ -243,8 +243,16 @@ hull 1 to the second (`SetTeam`), both broadsides engaged with rounds named for 
 `PartDestroyed` the host scores each gas bag to the seat whose hit killed it, and every machine
 speaks the gas bag line. `ZeppelinKilled` ends the match on the host, a guest taking the winner
 from the `0x17` state; `Rules` names the side a broadside's kill goes to. `RespawnPoint` is
-the host's return, sent as `SpawnAtMessage`, and `SideOf` labels each hull's marker. Decode:
-[../org/multiplayer-zvz.md](../org/multiplayer-zvz.md).
+the host's return, sent as `SpawnAtMessage`, and `SideOf` labels each hull's marker and its rearm
+base's. Decode: [../org/multiplayer-zvz.md](../org/multiplayer-zvz.md).
+
+## src/Session/World/RearmRuntime.cs
+The multiplayer rearm bases in any Dogfight, built by `GameSession.WireRearmBases`: the world's
+`rearm_node_n` serving lobby team `n`, or in Zeppelin vs Zeppelin each hull's `zep_rearm_node_n`
+serving its side while the hull lives. Each machine steps only the seats it flies through
+`RearmBases`, and on entry calls `FlightController.Rearm`, posts "Rearmed!" in the seat's own pane
+and sends the full hull in the `0x40` damage report, which every other machine takes as the damage
+stages coming off. Decode: [../org/multiplayer-rearm.md](../org/multiplayer-rearm.md).
 
 ## src/Session/World/NetCutsceneLink.cs
 The cutscene skip over the wire, one per network session with a cutscene host. On the host it
@@ -253,6 +261,15 @@ and takes an ask only from the machine that owns the seat. On a guest it binds `
 skip input sends the ask and ends nothing locally, and hands each skip the host sends to
 `TakeSkip`, which ends only the episode the key and ordinal name. Layout and episode naming:
 [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+
+## src/Session/World/NetChatLink.cs
+The in-flight chat over the wire, one per network session. `Open` puts the entry under a seat's
+prompt, `Submit` posts the echo and sends the line: a guest's to the host, which forwards an
+all-chat to every machine and a team line only to machines flying a seat on the typist's lobby
+team, once each. `TakeKey` is the typing seat's keys, and `HoldsKeyboard` keeps that seat's
+flight keys idle until every key pressed into a line is up. A line whose first word is the original
+console's `ejectflag` is no chat: it runs `EjectFlag` for the typist. It owns the machine's
+`Flight/Hud/FlightChat.cs`. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Session/Campaign/NetPositionalStartLink.cs
 The landing rows, the ladder switch and the code-raising range gates over the wire, one per network

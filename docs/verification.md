@@ -907,6 +907,11 @@ member, and it does not go here.
   it every suite in the catalog leaves 0, `TestHarness.OrphanLeakTolerance` is 0, and a failing
   suite's verdict names each new orphan root with its node count. A `Dispose()` on a node drops
   only its C# wrapper, so a test node is freed with `Free()`.
+- **INSTR-97**, **A session suite that steps only `_PhysicsProcess` never plays a film out: the
+  world's animation and the cutscene host advance in the frame, so the film holds until a skip and
+  whatever a played-out film leaves in the world is never seen. Advance the world runtime and tick
+  the cutscene beside each step.** With both added, CM09's opening film handed off by itself after
+  3193 steps on host and guest and left its wingman prop drawn about 50 m from the seats on both.
 
 ## SRC, sources and documents
 
@@ -961,6 +966,9 @@ member, and it does not go here.
 - **SRC-21**, **A constant a config reader stores when a key is missing is a fallback, not the value
   in play; open the file the reader loaded before citing it.** The multiplayer score table was read
   as kill +1 and lost hull +100, and the shipped `player.zrd` authors 2 and 10.
+- **SRC-22**, **When a reader leaves a global alone on a missing key, the value in play is the
+  global's initialised bytes; read them from `.data` before quoting a default.** The rearm radius
+  was written up as 624.0, and `0x628f10` holds 625.0, 25 m squared.
 
 ## What this project cannot verify itself
 

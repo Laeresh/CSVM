@@ -894,6 +894,13 @@ public sealed partial class CutsceneController : Node
             {
                 AnimRuntime.SetSubtreeActive(prop, false);
             }
+
+            // The intro's wingman prop too, or it hangs where its last script stopped. After C1/M04's
+            // dive that is beside the humans, while the roster's own wingman flies from its spawn.
+            if (_aircraft.Prop is { } wingman)
+            {
+                AnimRuntime.SetSubtreeActive(wingman, false);
+            }
         }
 
         // A re-placement authored in that same block is raised here, since the reset walk above

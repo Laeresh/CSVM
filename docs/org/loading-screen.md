@@ -73,7 +73,12 @@ The multiplayer environment number is written at `0x004139d1`, inside the sessio
 table at `0x00413c08` maps the lobby's Environment row (`0x642f8c`, 0-based, the string table's
 order) to it, and `0x004638f0` then takes it as the world number the match loads, beside a mission
 number of 1, 2 for Capture the Flag or 3 for Zeppelin vs Zeppelin (`0x71c1ac`, the `MP1`..`MP3`
-folder):
+folder). [Evidence: decoded] The number starts at 1 (`0x413976`), mode 3 makes it 2 (`0x4139bb`) and
+mode 4 makes it 3 (`0x4139c7`), so both Deathmatch modes, free-for-all and team, load `MP1`.
+`FUN_00496c60` hands `0x71c1a8` and `0x71c1ac` to `0x004638f0` (`0x496c88`). The remake's
+`SessionSpec.FromMenu` takes the same folder for every menu Dogfight, the splitscreen one included,
+since the original's only Dogfight is this network match. The Environment rows map to worlds as
+follows:
 
 | Row | Environment | Number | World |
 |---|---|---|---|
@@ -283,8 +288,9 @@ pilot is on a team, else `d`. The screen draws the dialog as authored, its `load
 pictures its script places and every text, point rows included, from `messages.json`; the points
 printed there are the values `player.zrd` authors and the match scores
 ([`multiplayer-scoring.md`](multiplayer-scoring.md)). A splitscreen Dogfight is keyed the same
-way. The row is found from the chapter flown, so Above the Clouds reads `m3` while CSVM flies it
-on `C2B`, and a chapter no row names (a `--vs` launch on `C1C`) writes the mode's heading alone.
+way. The row is found from the chapter flown, so Above the Clouds, flown on `C1C` as the table
+says, reads `m3`, and a chapter no row names (a `--vs` launch on `C2B`) writes the mode's heading
+alone.
 
 **The campaign sheet is the mission's own dialog and nothing of ours.** `UI/Menu/EscapeDialog.cs`
 reads `Loading.zrd` the way it reads `escape.zrd`, `LoadSheet` resolves the launch's dialog key,

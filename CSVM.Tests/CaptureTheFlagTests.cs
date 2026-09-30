@@ -85,6 +85,21 @@ public sealed class CaptureTheFlagTests
     }
 
     [Fact]
+    public void AnEjectIsNoDecisionAndItsAskRoundTrips()
+    {
+        var flags = Match();
+        flags.Decide(1, FlagAsk.Take, 2);
+        Assert.Null(flags.Decide(1, FlagAsk.Eject, 2));
+        Assert.Equal(new FlagRow(1, FlagState.Held, 2), flags.RowOf(1));
+
+        var ask = new FlagRequestMessage(1, (byte)FlagAsk.Eject, 2);
+        var bytes = new byte[FlagRequestMessage.Size];
+        Assert.Equal(FlagRequestMessage.Size, ask.Write(bytes));
+        Assert.True(FlagRequestMessage.TryRead(bytes, out var read));
+        Assert.Equal(ask, read);
+    }
+
+    [Fact]
     public void ADroppedFlagFloatsAndIsCaughtByEitherTeamUntilItsThrowRunsOut()
     {
         var flags = Match();

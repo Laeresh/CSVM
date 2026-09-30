@@ -6,6 +6,7 @@ using CSVM.Flight.Weapons;
 using CSVM.Net;
 using CSVM.Session;
 using CSVM.Session.Launch;
+using CSVM.Session.World;
 using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
@@ -56,8 +57,9 @@ internal static class NetFlagSuites
         + "aeroplane on every machine, the base flag hides and the away marker and the carrier's tag "
         + "name the carrier; bringing it home "
         + "scores score_enemy_flag; a carrier's death floats the flag on every machine; a pilot catches its own "
-        + "floating flag and returning it scores score_return_flag; an uncaught flag goes home when its 15 s throw "
-        + "runs out, scoring nobody; and a second capture ends the match on the Score limit by team")]
+        + "floating flag and returning it scores score_return_flag; a guest carrier's ejectflag typed into the chat "
+        + "floats its flag on every machine through the host and sends no chat line; the uncaught flag goes home "
+        + "when its 15 s throw runs out, scoring nobody; and a second capture ends the match on the Score limit by team")]
     internal static void AMatchOfFlagsAcrossThreeMachines(TestContext ctx)
     {
         var spec = Spec(ctx);
@@ -219,15 +221,33 @@ internal static class NetFlagSuites
         Park(peers, seat: 0);
     }
 
-    // A floating flag nobody catches goes home at the end of its throw, on the host's word.
+    // The guest carrier types the console's ejectflag into its chat. The host floats the flag and
+    // relays it, so it floats everywhere while the carrier flies on. Nobody catches it, and it goes
+    // home at the end of its throw, on the host's word.
     private static void ThrowRunsOut(TestContext ctx, GameSession[] peers)
     {
         Put(peers, seat: 2, peers[2].Flags!.Flags.HomeOf(1));
         Lockstep(AskSteps, peers);
         Held(ctx, peers, "taken a third time", team: 1, holder: 2);
-        Down(peers, victim: 2, killer: 1);
+        var posted = peers.Select(p => p.NetChat!.Chat.Posted).ToArray();
+        var sent = peers.Select(p => p.NetChat!.LinesSent).ToArray();
+        Type(peers, seat: 1, NetChatLink.EjectFlagCommand);
+        Lockstep(AskSteps, peers);
+        Held(ctx, peers, "ABLE-TO-FAIL CONTROL: the console's ejectflag from a pilot carrying nothing leaves the flag held", team: 1, holder: 2);
+
+        // Parked only once the relay is back, so the flag floats over team 1's base everywhere. The
+        // take's cooldown stops the carrier catching it meanwhile.
+        Type(peers, seat: 2, NetChatLink.EjectFlagCommand);
+        Lockstep(AskSteps, peers);
+        Park(peers, seat: 2);
+        ctx.Check(peers.All(p => p.Flags!.Flags.RowOf(1) is { State: FlagState.Floating, Holder: FlagMatch.NoHolder }),
+            $"the carrier's ejectflag floats the flag on every machine ({Rows(peers)})");
+        ctx.Check(peers[2].SeatRigs[2].Controller is { Crashed: false, Destroyed: false } && peers.All(p => p.SeatRigs[2].Controller!.MarkerName == null),
+            $"and the carrier flies on untagged");
+        ctx.Check(peers.Select((p, i) => p.NetChat!.Chat.Posted == posted[i] && p.NetChat!.LinesSent == sent[i]).All(same => same),
+            $"and neither console line was posted or sent as chat ({string.Join(",", peers.Select(p => $"{p.NetChat!.Chat.Posted}/{p.NetChat!.LinesSent}"))})");
         var scores = peers.Select(p => Enumerable.Range(0, 3).Select(p.Versus!.ScoreOf).ToArray()).ToArray();
-        int flown = GrantSteps + AskSteps;
+        int flown = AskSteps;
         Lockstep((int)(FlagMatch.ThrowSeconds / GameClock.FixedDt) - flown - AskSteps, peers);
         ctx.Check(peers.All(p => p.Flags!.Flags.RowOf(1) is { State: FlagState.Floating }),
             $"ABLE-TO-FAIL CONTROL: short of its 15 s throw the flag still floats on every machine ({Rows(peers)})");
@@ -346,6 +366,19 @@ internal static class NetFlagSuites
         var home = peers[seat].Flags!.Flags.HomeOf(1);
         var high = home + (Vector3.Up * ParkHeight) + ((Vector3.Left + Vector3.Forward) * (ParkHeight * seat));
         peers[seat].SeatRigs[seat].Controller!.RespawnAt(high, high + (Vector3.Right * 100f));
+    }
+
+    // A line typed into the chat on the machine that flies the seat, and sent.
+    private static void Type(GameSession[] peers, int seat, string text)
+    {
+        var link = peers[seat].NetChat!;
+        link.Open(seat, team: false);
+        foreach (char c in text)
+        {
+            link.Chat.Type(c);
+        }
+
+        link.Submit();
     }
 
     private static void Down(GameSession[] peers, int victim, int killer)
