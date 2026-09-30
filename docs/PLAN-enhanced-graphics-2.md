@@ -223,6 +223,21 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 | C22 | C5's whiteout bank draws a hard horizontal edge and too prominent a skyline | The lit city takes no froxel fog, so the bank blackened only the dome behind it. An armed chapter builds no bank (`FogVolumeBanks.Create`); C5's street pose is now flat zone grey like the Original, and C1's banks are byte-identical |
 | All | C5 performance is poor under every AA method | A7 |
 
+### On the branch beyond the checklist
+
+- **The live graphics switch** (PR #27, with the owner's review on top). G, a bindable action,
+  switches Original and Enhanced in flight through `EnhancedLook.Switch`, and every Enhanced system
+  follows, texture alpha depth included, with no mission reload. View Distance is a Remake-menu row,
+  a `graphics.viewDistance` key and `--view-distance`, default Far. Graphics mode, View Distance,
+  AA, Render Scale and Shadow Quality all apply live.
+- **Shader twins per mode.** Each generated shader keeps one compiled copy per graphics mode, and a
+  switch moves materials between them, so Godot recompiles nothing. `--shader-warmup=auto|load|off`
+  compiles the other mode's copies at load (auto: once the process has switched). From Enhanced
+  with the warm-up, C1 switches in 0.2 s on the author's machine against 2.5 to 5.7 s, and in 0.7 s
+  on the Deck against 3.1 to 6.5 s. **Open:** the C5 clutter recut (2.5 to 3.0 s of a Deck switch),
+  the stall on the first frame after a first switch to Enhanced (5 to 14 s, Godot building the
+  advanced variants), and the identical shader texts CM24's world compiles twice.
+
 ## Dependency and parallelism notes
 
 A1 lands before any look item is judged, since B and C are seen through the same temporal filter;
@@ -743,14 +758,32 @@ with their rosters over a `--profiles=` store and their intro skipped (PERF-38):
 
 Enhanced C5 shots at a freecam pose and in flight differ from the unchunked build on 4 and 49
 pixels by one level. The four-pane C5 run at 67% and at 50%, under TAA and under FSR 2.2, logs no
-mipmap error where the unfixed build logged four. **Owed:** every Deck figure, since the Deck did
-not answer ssh; the four-pane 60 fps target on the author's machine, which the sun's soft shadow
-stands in the way of on the GPU (four-pane CM24, all panes' GPU time: 19.5 ms with Soft Ultra, 17.3
-with Soft High, 12.9 with Soft Medium, 11.3 with the penumbra off, 8.9 with no sun shadow; the 8192
-atlas against 4096 is 0.3 ms) and about 22,000 draw calls stand in the way of on the CPU (the
-frame holds at 31.7 ms whichever shadow setting, PERF-39). The filter quality is the user's
-judgement, since the comment on `EnhancedShadowFilterQuality` binds it while the sun is wider than
-0.5°.
+mipmap error where the unfixed build logged four. On the GPU the sun's soft shadow was the largest
+term (four-pane CM24, all panes' GPU time: 19.5 ms with Soft Ultra, 17.3 with Soft High, 12.9 with
+Soft Medium, 11.3 with the penumbra off, 8.9 with no sun shadow; the 8192 atlas against 4096 is 0.3
+ms), and on the CPU about 22,000 draw calls (the frame holds at 31.7 ms whichever shadow setting,
+PERF-39).
+
+**Later levers.** Three changes after the first landing act on this item's cost:
+- **Shadow Quality**, a VIDEO row (Off, Low, Medium, High, Ultra, `ShadowQualitySetting`), each
+  level with its own sun width, applied live. Ultra is the default; an integrated GPU (the Deck)
+  defaults to High, and `--det` is always Ultra. Deck C5 at 67% TAA: Ultra 56 fps, High 113.
+- **The CM24 pose restore.** `RenderPoses.Restore` writes only a node off its simulation pose, where
+  CM24's 25 physics callbacks per tick rewrote every booked node. CM24 on the author's machine:
+  phys_tick 4.5 to 4.8 ms → 2.9 to 3.2 ms; Deck Original 30.3 → 35.4 fps. `--perf` splits the whole
+  frame (PERF-40 to PERF-42).
+- **The separate render thread**, the project default (`--render-thread safe` for one thread).
+  proc_ms on the author's machine 6.5 to 7.4 → 0.3 to 1.5 ms at one pane and 20 to 30 → 0.9 to
+  3.5 ms at four (PERF-43).
+
+**Against the goal.** Deck, 1280x800, one pane, 67% TAA, Shadow Quality High, separate render
+thread: C5 110 to 138 fps (GPU-bound, noisy); CM24 58 fps (17.3 ms), CM24 Original 67 fps; CM23 not
+yet measured. The author's machine, four panes at 67% TAA High, separate thread: C5 12.9 to 20.1
+ms, CM24 22.9 to 29.9 ms, a shared machine moving the rows between passes. **Open:** CM23 on the
+Deck, CM24 on the Deck (2 fps short), and the four-pane 60 fps target at 100% on the author's
+machine, re-measured under the levers above. The CPU side is the draw-call count, which the
+Approach's merge of static world nodes sharing a material targets. The Deck at four panes (43 ms
+for C5) is outside the goal.
 
 **Goal.** Under Enhanced, C5 and the campaign's last two missions, CM23 "The Criminal Exodus"
 (`C5/M03`) and CM24 "Battle over Broadway" (`C5/M04`), run at 60 fps on the Steam Deck at 67% with
