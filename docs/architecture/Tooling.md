@@ -41,6 +41,13 @@ also holds `TriggerDestroy` (`--destroy=`) and `ForceObjective` (`--debug-object
 scripted world forces belonging to no session. `RunTestSuites` is the one call into `CSVM.Testing`
 from outside it. Read `Probes.cs` for the work each wrapper calls into.
 
+## src/Tooling/ShaderDiagnostics.cs
+`--debug-shaders`: a census of the distinct shaders the running tree draws, by `SceneBuilder`
+family or owning node type, at sim frame 240 and after every live switch; the wall time and
+pipeline compilations of the twelve frames after a switch; and every frame over 33 ms with the
+pipelines it compiled. The pipeline counts are published from the render thread, since reading
+them on the main thread waits for the previous draw. Off unless the flag is given.
+
 ## src/Tooling/CaptureDirector.cs
 The `--screenshot=`/`--shots=`/`--frames=` capture state machine plus F11's pose print and F12's
 ad-hoc save, built in `Launcher._Ready` from the spec and `Tick()`ed from its `_Process`, so

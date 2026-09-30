@@ -173,7 +173,13 @@ separate render thread the update is queued and read later, and an Image refille
 `SetData` swaps its buffer under that reader. `Create` makes the texture and `Replace` hands it the
 next picture, holding each Image by a second native reference until the render thread lets go, so
 that thread never swaps the C# wrapper's GC handle, a swap that corrupts the managed heap when it
-races the main thread's.
+races the main thread's. The live alpha-depth follow hands a finished mipmapped Image to the same
+holding `Replace`.
+
+## src/Utils/SwitchProfile.cs
+The live graphics-mode switch's stopwatch: `EnhancedLook.Switch` and `GameSession.ApplyGraphicsMode`
+mark each step, and the switch's log line carries the steps that cost a millisecond. A step that
+blocks on the renderer shows the wait there, which is how a compile the switch queued surfaces.
 
 ## src/Utils/WallCostBank.cs
 One `--perf` cost meter: the open/close bracket, the banked wall milliseconds, the worst single

@@ -102,6 +102,10 @@ public static class EnhancedLook
     private static readonly Color DefaultSkyColor = new(0.69f, 0.69f, 0.69f);
 
 
+    /// <summary>Gets a value indicating whether this process has switched the graphics mode live, which
+    /// is when a load warms the other mode's shaders by default.</summary>
+    public static bool HasSwitched { get; private set; }
+
     /// <summary>The live graphics-mode switch, the one sequence the launcher runs and the round-trip
     /// suite drives. It sets the flag, regenerates the shaders and re-dresses <paramref name="sun"/>
     /// and <paramref name="env"/>. Then the clutter fade and the display quality are resolved again,
@@ -113,15 +117,24 @@ public static class EnhancedLook
         if (enhanced == GraphicsMode.Enhanced)
             return;
         long start = Stopwatch.GetTimestamp();
+        Tooling.ShaderDiagnostics.BeginSwitch();
+        SwitchProfile.Begin();
         GraphicsMode.Set(enhanced);
-        SceneBuilder.RegenerateShaders();
+        HasSwitched = true;
+        var regen = SceneBuilder.RegenerateShaders();
+        SwitchProfile.Mark("shaders");
         ApplySun(sun, enhanced, skipped);
+        SwitchProfile.Mark("sun");
         if (env != null)
             ApplyEnvironment(env, enhanced, skipped);
+        SwitchProfile.Mark("env");
         WriteClutterFadeScale();
         ReapplyDisplayQuality(det, why);
+        SwitchProfile.Mark("display");
         session?.ApplyGraphicsMode();
-        Log.Info("world", $"graphics mode: {GraphicsMode.Key}={(enhanced ? "enhanced" : "original")} (switched live by {why}) ms={Stopwatch.GetElapsedTime(start).TotalMilliseconds:0.0}");
+        SwitchProfile.End();
+        Log.Info("world", $"graphics mode: {GraphicsMode.Key}={(enhanced ? "enhanced" : "original")} (switched live by {why}) ms={Stopwatch.GetElapsedTime(start).TotalMilliseconds:0.0} shader_entries={regen.Entries} materials={regen.Tracked} moved={regen.Moved} twins_made={regen.TwinsMade} rewritten={regen.Retexted} steps=[{SwitchProfile.Line()}]");
+        Tooling.ShaderDiagnostics.NoteSwitch();
     }
 
     /// <summary>The View Distance on the running world: the clutter fade's scale, and the clutter

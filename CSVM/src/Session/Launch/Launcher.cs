@@ -360,6 +360,7 @@ public partial class Launcher : Node3D
         // effects, and the warnings below, emitted before the log so they read in launch order.
         _cli = SessionSpec.Parse(OS.GetCmdlineUserArgs());
         _spec = _cli;
+        Tooling.ShaderDiagnostics.Enabled = _spec.DebugShaders;
         foreach (var note in _spec.Warnings)
         {
             if (note.Category.Length == 0)
@@ -1125,6 +1126,12 @@ public partial class Launcher : Node3D
         {
             _debugSwitchesDone++;
             SwitchGraphicsMode(!GraphicsMode.Enhanced, $"--debug-graphics-switch at sim frame {simClock.Frame}");
+        }
+
+        if (_session is { InSession: true } && GameClock.Current is { } diagClock)
+        {
+            SceneBuilder.EnhancedDrawn |= GraphicsMode.Enhanced;
+            Tooling.ShaderDiagnostics.Tick(GetTree().Root, diagClock.Frame);
         }
 
         // Dropped here rather than by the cover itself, so one node owns both screens a launch

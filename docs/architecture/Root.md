@@ -54,16 +54,17 @@ resolved `GraphicsMode.Enhanced` boolean only, so neither the store nor the scre
 them. An Apply switches the running world, over a paused flight as well, and the Toggle Graphics
 Mode flight action (`G` by default) flips it and saves it the same way; `--debug-graphics-switch=`
 is the scripted twin. The sequence is `EnhancedLook.Switch`, and a world switched away and back reads
-as a fresh session in that mode (the `graphics-live-switch` suite). The world is not rebuilt: the
-shader caches key on everything but the mode, and `SceneBuilder.RegenerateShaders` rewrites each
-cached shader and fade twin in place, so every material holding one follows. The switch recompiles
-the changed shaders, which costs a hitch.
+as a fresh session in that mode (the `graphics-live-switch` suite). The world is not rebuilt: each
+cached shader keeps a compiled twin per mode, and `SceneBuilder.RegenerateShaders` moves every
+material onto the standing mode's twin, so no text changes and Godot compiles nothing again. A twin
+not yet made costs its compile on the switch that first needs it; a load after the process has
+switched once compiles them ahead (`--shader-warmup=`, the `graphics-shader-twins` suite).
 
 What follows the switch, and how:
 
-- Rewritten in place: every `SceneBuilder`, `Clutter` and puffer shader, the cloud field's card
-  shaders (`FogVolumeClutter.FollowGraphicsMode`), the sky sprites' keyed copies, and the puffer
-  fire gain and smoke grade, read per particle.
+- Moved onto the other mode's compiled twin: every `SceneBuilder`, `Clutter` and puffer shader,
+  their fade twins, the cloud field's card shaders (`FogVolumeClutter.FollowGraphicsMode`) and the
+  sky sprites' keyed copies. The puffer fire gain and smoke grade are read per particle.
 - Swapped onto the rendered cloud puffs and back: the deck cards' pool, tint, rim depth and cull
   margin, and the placed clouds' billboards (`SceneBuilder`'s pooled swap). The first switch to
   Enhanced reads each mask's tint and loads the pools, which a faithful session never touches.

@@ -571,6 +571,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/StartCover.cs`, the session-start cover's ramp: the dark tone, the hold until the first real frame, the one-second fade, and nothing at all under `--det`.
 - `src/Utils/StartupProfile.cs`, the always-on `[perf] startup …` line: every session build split into the phases it spends its time in.
 - `src/Utils/TextureUpload.cs`, new pixels for a texture the game repaints while it runs, one Image per upload so a queued update never reads a refilled one.
+- `src/Utils/SwitchProfile.cs`, the live graphics-mode switch's per-step stopwatch, written on the switch's log line.
 - `src/Utils/TapHoldButton.cs`, one button carrying two actions split by how long it is held; the caller feeds it the button level and switches on the answer.
 - `src/Utils/AntiAliasingSetting.cs`, the anti-aliasing method (off, FXAA, SMAA, TAA, FSR 2.2): the saved/config ladder over the graphics mode's own default, resolved once at launch.
 - `src/Utils/ShadowQualitySetting.cs`, the Enhanced sun's shadow quality (off, low, medium, high, ultra): the flag/saved/config ladder over ultra (high on an integrated GPU), and what each level writes on the sun and the renderer.
@@ -607,6 +608,7 @@ The `--dump-*` probes, the capture loop, the golden-image hash and the glTF expo
 - `src/Tooling/EnvelopeMargins.cs`, one flight scenario's distance from every term that could bound it, plus the decoded branches it drove.
 - `src/Tooling/GoldenShot.cs`, the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Tooling/ProbeRunner.cs`, the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
+- `src/Tooling/ShaderDiagnostics.cs`, `--debug-shaders`: the shader census, the frames after a live switch and every frame over 33 ms.
 - `src/Tooling/CaptureDirector.cs`, the `--screenshot=`/`--shots=`/`--frames=` capture state machine, F11's camera-pose print and F12's save, ticked from `_Process`.
 - `src/Tooling/GltfExporter.cs`, exports the viewer plane subtree to glTF (mesh + livery + baked damage) for `--export-gltf=`/F10, on a throwaway duplicate.
 

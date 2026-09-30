@@ -347,7 +347,7 @@ public sealed class CockpitGauges
                     {
                         continue;
                     }
-                    var own = (ShaderMaterial)built.Duplicate();
+                    var own = SceneBuilder.Track((ShaderMaterial)built.Duplicate());
                     mesh.SetSurfaceOverrideMaterial(i, own);
                     into._surfaces.Add((own, texture));
                 }
@@ -435,7 +435,7 @@ public sealed class CockpitGauges
                 {
                     continue;
                 }
-                var own = (ShaderMaterial)built.Duplicate();
+                var own = SceneBuilder.Track((ShaderMaterial)built.Duplicate());
                 mesh.SetSurfaceOverrideMaterial(i, own);
                 byX.Add((CentreX(mesh.Mesh, i), own));
             }

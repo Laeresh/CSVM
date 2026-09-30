@@ -84,7 +84,7 @@ internal sealed class OpacityWriter
             _fadeShaderCache[shader] = fadeShader = SceneBuilder.FadeShaderFor(shader);
         if (fadeShader != null)
         {
-            twin = (ShaderMaterial)source.Duplicate();
+            twin = SceneBuilder.Track((ShaderMaterial)source.Duplicate());
             twin.Shader = fadeShader;
             _fadeTwins.Add(twin);
         }

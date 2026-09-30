@@ -139,6 +139,10 @@ public sealed partial class FogVolumeClutter : Node3D
     // mode (FollowGraphicsMode).
     private readonly List<(Kind Kind, ShaderMaterial Material, MultiMeshInstance3D Node)> _drawn = new();
 
+    // One compiled shader per card text, both modes' kept, so a switch swaps shaders and Godot
+    // never compiles a rewritten one again.
+    private readonly Dictionary<string, Shader> _cardShaders = new(StringComparer.Ordinal);
+
     // The archive the kinds' masks come from, read again on a first switch to Enhanced for the tint.
     private TextureArchive? _textures;
 
@@ -222,10 +226,10 @@ public sealed partial class FogVolumeClutter : Node3D
                 TrySwapInPuff(kind, _textures);
             }
             bool pooled = enhanced && kind.Pool != null;
-            string code = ShaderCode(kind.Lit, kind.Fogged, enhanced, pooled);
-            if (code != mat.Shader.Code)
+            var shader = CardShader(ShaderCode(kind.Lit, kind.Fogged, enhanced, pooled));
+            if (!ReferenceEquals(mat.Shader, shader))
             {
-                mat.Shader.Code = code;
+                mat.Shader = shader;
             }
             if (enhanced)
             {
@@ -237,6 +241,20 @@ public sealed partial class FogVolumeClutter : Node3D
             }
             node.ExtraCullMargin = CullMargin(kind, pooled);
         }
+    }
+
+    /// <summary>Compiles each kind's card shader for the other graphics mode now, so a switch finds it
+    /// ready. The pooled Enhanced text waits for a real switch, since a faithful session never reads
+    /// the pool. Returns the shaders made.</summary>
+    public int WarmOtherMode()
+    {
+        bool other = !GraphicsMode.Enhanced;
+        int made = _cardShaders.Count;
+        foreach (var (kind, _, _) in _drawn)
+        {
+            CardShader(ShaderCode(kind.Lit, kind.Fogged, other, other && kind.Pool != null)).GetRid();
+        }
+        return _cardShaders.Count - made;
     }
 
     /// <summary>True when a kind of this template name draws from the rendered pool under Enhanced
@@ -798,6 +816,15 @@ public sealed partial class FogVolumeClutter : Node3D
         }
     }
 
+    private Shader CardShader(string code)
+    {
+        if (!_cardShaders.TryGetValue(code, out var shader))
+        {
+            _cardShaders[code] = shader = new Shader { Code = code };
+        }
+        return shader;
+    }
+
     private void Build(GameZ gamez, List<Kind> kinds)
     {
         var parts = new List<string>();
@@ -814,7 +841,7 @@ public sealed partial class FogVolumeClutter : Node3D
             }
             var mat = new ShaderMaterial
             {
-                Shader = new Shader { Code = ShaderCode(kind.Lit, kind.Fogged, GraphicsMode.Enhanced, kind.Pool != null) },
+                Shader = CardShader(ShaderCode(kind.Lit, kind.Fogged, GraphicsMode.Enhanced, kind.Pool != null)),
             };
             if (kind.Texture != null)
             {
