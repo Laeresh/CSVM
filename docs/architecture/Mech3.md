@@ -57,6 +57,15 @@ counts conflicting layers beneath it, not nodes before it. Every edge runs low n
 so the layering is a topological order of the original's own draw order and cannot invert authored
 layering. `WorldBuilder.RankConflicts` runs it before the build; 11–45 ms per chapter.
 
+## src/Mech3/CloudPuffs.cs
+Enhanced Graphics only: the rendered cloud puff pools that stand in for the authored `cloud1`/`cloud2`
+masks, loaded once as texture arrays from `data/cloud_puffs/` (our own Blender renders, with the
+script that makes them): the translucent deck set for `FogVolumeClutter`'s `fvol` cards and the
+fuller set for the placed cloud sprites `SceneBuilder` builds. `MaskTint` carries the authored mask's
+colour and peak opacity onto a puff, `Apply` sets a pooled material, and `PoseLines` plus
+`shaders/csky_cloud_puffs.gdshaderinc` give each card its puff, turn, mirror and size off a hash of
+its own position. The faithful path never reads it. Read `Effects/FogVolumeClutter.cs` next.
+
 ## src/Mech3/WorldCollision.cs
 Owns every `SceneBuilder`-built collider's `Disabled` flag and derives it: enabled exactly while the
 owning node is visible in the scene tree and no ancestor is faded out. `Track` binds that to the

@@ -31,6 +31,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/TextureArchive.cs`, texture lookup (zip or dir): resolves the name quirks, classifies each texture's alpha (soft vs hard).
 - `src/Mech3/SceneBuilder.cs`, shared GameZ-subtree → MeshInstance3D builder: triangulation, LOD, depth bias, billboards, fog, UV scroll.
 - `src/Mech3/ZoneGate.cs`, the original's per-node `zone_id` visibility gate: the rule, its visual-layer allocation, and the per-camera cull mask.
+- `src/Mech3/CloudPuffs.cs`, Enhanced only: the rendered cloud puff pools for the deck cards and the placed cloud sprites, their tint and per-card pose.
 - `src/Mech3/ConflictRank.cs`, the world's cross-node draw-order tie-break: ranks nodes by their conflict graph, one slot per coplanar layer.
 - `src/Mech3/WorldCollision.cs`, derives every world collider's `Disabled` flag from its owner's tree visibility and the fade channel.
 - `src/Mech3/CraterShape.cs`, one crater as geometry: the 7-vertex rim at radius 20, the bowl under it, the footprint the no-overlap rule compares.

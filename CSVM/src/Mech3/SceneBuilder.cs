@@ -1707,6 +1707,16 @@ void fragment() {
             // they fade into the fog wall instead of punching through it as crisp white.
             if (_billboardTexture != null && _billboardTexture(texName))
             {
+                // Enhanced only: the placed clouds draw the fuller rendered pool, tinted by this
+                // mask's own colour. The faithful path never reaches the pool.
+                if (GraphicsMode.Enhanced && CloudPuffs.Far() is { } pool
+                    && CloudPuffs.MaskTint(_textures.FindImage(texName)) is { } tint)
+                {
+                    var pooled = BillboardMaterial(tex, blend, scissor, glow: false, lit: lit, fogged: fogged,
+                        clampUv: clampUv, pooled: true);
+                    CloudPuffs.Apply(pooled, pool, tint);
+                    return pooled;
+                }
                 var billboard = BillboardMaterial(tex, blend, scissor, glow: false, lit: lit, fogged: fogged, clampUv: clampUv);
                 RegisterCycle(src, billboard); // same albedo_tex, see GetCylindricalMaterial
                 return billboard;
@@ -2021,22 +2031,23 @@ void fragment() {{");
     // distant sprites fade into the fog wall in step with the terrain they float over. blend /
     // scissor follow the alpha classification (cloud1/cloud2 are soft-alpha ⇒ blend).
     private ShaderMaterial BillboardMaterial(ImageTexture tex, bool blend, bool scissor, bool glow, bool lit, bool fogged,
-        bool clampUv)
+        bool clampUv, bool pooled = false)
     {
-        var mat = new ShaderMaterial { Shader = GetBillboardShader(blend, scissor, glow, lit, fogged, clampUv) };
+        var mat = new ShaderMaterial { Shader = GetBillboardShader(blend, scissor, glow, lit, fogged, clampUv, pooled) };
         mat.SetShaderParameter("albedo_tex", tex);
         NoteAlpha(mat, blend, scissor);
         return mat;
     }
 
     // Key bits taken: 1 blend, 2 scissor, 4 glow, 8 !lit, 16 !fogged, 32 clampUv, 64 enhanced
-    // mode. Next free bit is 128.
-    private Shader GetBillboardShader(bool blend, bool scissor, bool glow, bool lit, bool fogged, bool clampUv)
+    // mode, 128 the rendered cloud puff pool. Next free bit is 256.
+    private Shader GetBillboardShader(bool blend, bool scissor, bool glow, bool lit, bool fogged, bool clampUv,
+        bool pooled = false)
     {
         // A glow variant already ignores csky_world_light, so `lit` cannot split its key.
         lit |= glow;
         int key = (blend ? 1 : 0) | (scissor ? 2 : 0) | (glow ? 4 : 0) | (lit ? 0 : 8) | (fogged ? 0 : 16)
-            | (clampUv ? 32 : 0) | (GraphicsMode.Enhanced ? 64 : 0);
+            | (clampUv ? 32 : 0) | (GraphicsMode.Enhanced ? 64 : 0) | (pooled ? 128 : 0);
         if (BillboardShaders.TryGetValue(key, out var cached))
             return cached;
 
@@ -2070,6 +2081,11 @@ void fragment() {{");
             sb.AppendLine(InstanceUniformsInclude);
         sb.AppendLine(SrgbInclude); // DX7 gamma-space vertex modulate (world/cloud pass)
         sb.AppendLine(FacadeInclude);
+        if (pooled)
+            sb.AppendLine(CloudPuffs.Include);
+        // A pooled cloud sprite takes its rendered puff, turn, mirror and size off its own position.
+        string pose = pooled ? "\n" + CloudPuffs.PoseLines : string.Empty;
+        string sample = pooled ? "csky_puff_sample(v_puff_card_uv, v_puff_pose, v_puff_layer)" : SampleAlbedo("UV");
         sb.AppendLine($@"
 void vertex() {{
     // The SphericalY facade pose, keeping the instance scale (Godot's billboard_keep_scale, by
@@ -2080,11 +2096,11 @@ void vertex() {{
         vec4(face[0], 0.0), vec4(face[1], 0.0), vec4(face[2], 0.0), MODEL_MATRIX[3]);
     MODELVIEW_MATRIX[0] *= length(MODEL_MATRIX[0].xyz);
     MODELVIEW_MATRIX[1] *= length(MODEL_MATRIX[1].xyz);
-    MODELVIEW_MATRIX[2] *= length(MODEL_MATRIX[2].xyz);
+    MODELVIEW_MATRIX[2] *= length(MODEL_MATRIX[2].xyz);{pose}
 }}
 
 void fragment() {{
-    vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * {SampleAlbedo("UV")};");
+    vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * {sample};");
         // Cylindrical distance fog, identical to the world shader: VERTEX is the view-space
         // position in fragment; INV_VIEW_MATRIX lifts it back to world for the horizontal camera
         // distance + the fragment-altitude fade. A model authored `fog: false` skips it.
