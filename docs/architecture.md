@@ -548,6 +548,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/GcTrace.cs`, the `--perf` GC readout: pause per wall second, collections, and the finalizable-object count that sets the pause, per ten-second window.
 - `src/Utils/PresentationResolution.cs`, the requested-versus-active menu presentation resolver, force flag, then `--presentation=`, then Original, availability checked separately.
 - `src/Utils/ProcessPassCost.cs`, the wall cost of one whole `_Process` pass and how many passes a window held, measured by a bracket pair spanning the pass.
+- `src/Utils/EngineGapCost.cs`, the frame time outside every scene-tree callback, split into the engine step after a tick, the end-of-frame flush, the draw and the idle rest.
 - `src/Utils/RenderPoses.cs`, the render half of the fixed-tick simulation: the pose a realtime session draws between two simulation steps.
 - `src/Utils/RenderScaleSetting.cs`, the render scale: the saved/config ladder over 50 to 200 percent of native, capped at native under FSR 2.2, resolved once at launch for the four 3D viewports.
 - `src/Utils/ResolutionSetting.cs`, the window size: the sizes a screen can hold, the saved one against the screen's own size, and the one place the window size is set.

@@ -419,6 +419,20 @@ member, and it does not go here.
   frame's cost is every pane's measured time summed; a `frame_ms` that stays flat while that sum
   moves says the frame is CPU-bound.** Four-pane CM24 held 31.7 ms frames while the panes' GPU sum
   ran from 11.3 to 19.5 ms across shadow settings.
+- **PERF-40**, **`script_ms` is Godot's `TIME_PROCESS`, which runs from the process pass through the
+  draw and its present, so it holds the render as well as the scripts. Split a frame with the gap
+  terms instead: `phys_engine_ms`, `defer_ms`, `draw_ms` and `idle_ms`, with `proc_ms` and ticks per
+  frame times `phys_tick_ms`, sum to `frame_ms`.** On the Deck in CM24 `script_ms` read 20 to 60 ms
+  beside a 4.1 ms `proc_ms`, where `draw_ms` was 11.3 ms and `defer_ms` about 3 ms of each frame.
+- **PERF-41**, **Count a `dotnet-trace` capture's samples from the `.nettrace`, never read its
+  speedscope conversion as a timeline: the main thread is sampled only while it runs managed code,
+  and the conversion stretches each sample to the next, charging native time to the managed stack
+  before it.** The speedscope view of a CM24 trace put managed callbacks at 100 % of the main
+  thread; the samples themselves covered 28 % of its wall time.
+- **PERF-42**, **Judge a Deck target on the Deck: engine-native terms (the transform flush, the
+  physics step, the draw) grow far more from the author's machine to the Deck than managed phases
+  do, so a desktop profile ranks the Deck's costs wrongly.** In CM24 `phys_engine_ms` grew 5 to 7
+  times and `defer_ms` about 3 times, while the AI and animation phases grew 1.2 to 1.4 times.
 
 ## LOG, logs, error censuses, and exit codes
 

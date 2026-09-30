@@ -178,6 +178,15 @@ its next window instead. `PhysicsTickCost` above is the same bank around the phy
 `TIME_PROCESS` monitor answers neither question, and the misreading it invites is
 `docs/verification.md` PERF-1.
 
+## src/Utils/EngineGapCost.cs
+The frame time no scene-tree callback owns, banked by the same `WallCostBracket` nodes as the two
+pass meters above: the gap after a physics tick (the tree's end-of-tick flush and the physics
+server's step), and the gap after the process pass, split at the rendering server's
+`frame_pre_draw` and `frame_post_draw` signals into the end-of-frame flush (deferred calls, every
+queued `_Draw`, transform notifications), the draw with its present, and the idle rest. `--perf`
+hooks the two signals and prints the four terms per frame, so they and the two pass terms sum to
+`frame_ms`. Rules: `docs/verification.md` PERF-40.
+
 ## src/Utils/AiStepCost.cs
 The wall cost of the flight roster's AI walks and how many aircraft they walked, banked by an
 `Open`/`Close` pair around `SessionSimulationRuntime.StepCapturedAiAircraft` rather than by bracket
