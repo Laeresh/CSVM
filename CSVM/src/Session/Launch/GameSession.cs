@@ -529,6 +529,9 @@ public partial class GameSession : Node3D
     /// <summary>The session's per-player rigs, the Launcher's F11 placement print reads them.</summary>
     internal List<PlayerRig> Rigs => _rigs;
 
+    /// <summary>The map-edge continuation, null where the world has none. Read by the suites.</summary>
+    internal Mech3.MapEdgeExtender? EdgeExtender => _edgeExtender;
+
     /// <summary>The launch as this session resolved it. A campaign launch settles its chapter and
     /// mission here, out of the story position, so the Launcher's own copy never names them.</summary>
     internal SessionSpec Spec => _spec;
@@ -981,6 +984,7 @@ public partial class GameSession : Node3D
         _worldScene?.FollowGraphicsMode();
         SwitchProfile.Mark("world");
         _clutter?.Recut();
+        _edgeExtender?.FollowClutterFade();
         SwitchProfile.Mark("clutter");
         _cloudField?.FollowGraphicsMode();
         SwitchProfile.Mark("cloudfield");
@@ -1029,8 +1033,13 @@ public partial class GameSession : Node3D
     }
 
     /// <summary>A live View Distance change under Enhanced cuts the clutter cells again. Their size
-    /// and visibility range come from the fade scale the launcher just wrote.</summary>
-    public void FollowClutterFade() => _clutter?.Recut();
+    /// and visibility range come from the fade scale the launcher just wrote, as do the map edge's
+    /// copies' ranges.</summary>
+    public void FollowClutterFade()
+    {
+        _clutter?.Recut();
+        _edgeExtender?.FollowClutterFade();
+    }
 
     /// <summary>After the launcher re-dressed the session sun: each cockpit pass re-takes it, then
     /// the zone is written again over them all. ⚠ Keep the zone last. The Environment and sun

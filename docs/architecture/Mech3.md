@@ -191,10 +191,10 @@ helpers (`HorizonZonesOf`, `CloudDeckAltitudeOf`, `DomeZonesToBuild`, `DetachedW
 A rolling window of repeated border tiles and clutter continuing the world past the map edge, one
 window per session shared by every player camera and diffed only on a cell crossing. Clutter copies
 grow from `ClutterBuilder.ExportedKinds`, each keeping its source stamp's fade thresholds and
-drawing only while `ClutterActivation` shows that stamp.
-`ClassifyGroundMesh`, `IsCompletionStrip` and `FoldAxis` are pure statics pinned by
-`MapEdgeTileTests`/`MapEdgeFoldTests`; `--dump-tilegrid` writes the per-cell acceptance census
-`WriteCensus` builds. The original's own continuation behaviour and the per-chapter fold
+drawing only while `ClutterActivation` shows that stamp; under Enhanced each copied kind's node
+stops at its farthest fade (`ClutterInstances.RangeEnd`, `FollowClutterFade`).
+`ClassifyGroundMesh`, `IsCompletionStrip` and `FoldAxis` are pure statics pinned by `MapEdgeTileTests`/`MapEdgeFoldTests`;
+`--dump-tilegrid` writes the per-cell acceptance census `WriteCensus` builds. The original's own continuation behaviour and the per-chapter fold
 measurements: [../formats/world-structure.md](../formats/world-structure.md). Read `Clutter.cs` next.
 
 ## src/Mech3/Clutter.cs
