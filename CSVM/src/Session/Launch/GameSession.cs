@@ -166,6 +166,8 @@ public partial class GameSession : Node3D
     // The boards' Restart item on an Instant Action or campaign mission: the Launcher frees this
     // session and builds a fresh one. Nothing here can put a mission's opposition back on its own.
     private readonly Action _restartSession;
+    // The graphics-mode action every local seat's controller fires; the switch is the Launcher's.
+    private readonly Action? _toggleGraphicsMode;
     // A campaign mission's end: the Launcher frees this session and reopens the launchscreen on
     // the named profile's debrief, carrying the result so a page can be opened on it. Null
     // outside a menu-driven process (a --campaign= run from the command line has no cabin to
@@ -484,6 +486,7 @@ public partial class GameSession : Node3D
         _menuPads = ctx.MenuPads;
         _exitSession = ctx.ExitSession;
         _restartSession = ctx.RestartSession;
+        _toggleGraphicsMode = ctx.ToggleGraphicsMode;
         _pauseOptionsFactory = ctx.PauseOptions;
         _campaignMissionEnded = ctx.CampaignMissionEnded;
         _instantActionWrapup = ctx.InstantActionWrapup;
@@ -905,14 +908,17 @@ public partial class GameSession : Node3D
     }
 
     /// <summary>Follow a live graphics-mode switch the launcher has already applied to the shaders,
-    /// the sun and the Environment. The zone is lit again under the other arm, each cockpit pass
-    /// copies the new look, and the ground shadow is built or freed. The world lights follow on
+    /// the sun and the Environment. Each cockpit pass takes the new look, the zone is lit again
+    /// under the other arm, and the ground shadow is built or freed. The world lights follow on
     /// their own next commit.</summary>
     public void ApplyGraphicsMode()
     {
-        _weatherRig?.ReapplyZone();
         foreach (var rig in _rigs)
-            rig.Controller?.CockpitPass?.ApplyGraphicsMode(_spec.SkippedPasses);
+        {
+            if (rig.Controller?.CockpitPass?.Env is { } env)
+                EnhancedLook.ApplyEnvironment(env, GraphicsMode.Enhanced, _spec.SkippedPasses);
+        }
+        FollowSun();
         if (GraphicsMode.Enhanced)
         {
             _groundShadows?.QueueFree();
@@ -922,6 +928,17 @@ public partial class GameSession : Node3D
         {
             BuildGroundShadows();
         }
+    }
+
+    /// <summary>After the launcher re-dressed the session sun: each cockpit pass re-takes it, then
+    /// the zone is written again over them all. ⚠ Keep the zone last. The Environment and sun
+    /// writes put back defaults the zone's sky colour, energies and shadow distance overwrite.
+    /// </summary>
+    public void FollowSun()
+    {
+        foreach (var rig in _rigs)
+            rig.Controller?.CockpitPass?.FollowSun();
+        _weatherRig?.ReapplyZone();
     }
 
     public override void _Notification(int what)
@@ -2746,6 +2763,7 @@ public partial class GameSession : Node3D
             MenuInputFor = MenuInputFor,
             ExitsToMenu = _menuDriven,
             ExitSession = _exitSession,
+            ToggleGraphicsMode = _toggleGraphicsMode,
             SpawnList = spawnList,
             SpawnBase = spawnBase,
             StuntZones = stuntZones,

@@ -274,13 +274,19 @@ supersamples in. At native only `fsr2` writes a scaling mode, `Fsr2` at 1.0, whi
 native writes nothing, so a faithful `--det` run reads back Godot's own defaults. MSAA stays `project.godot`'s.
 
 ## src/Utils/ViewDistance.cs
-Enhanced mode's view distance: four saved words (`normal`, `far`, `farther`, `farthest`) resolving
-to how much further the clutter draws than the fade enhanced mode already gives it, 1x, 2x, 4x or
-no fade. The fog never moves with it, the early chapters' haze being part of their scenery; it
-closes the gap where C5's city blocks faded well inside the fog. The faithful path keeps the
-decoded fade. Both Options screens offer it on the VIDEO page, dead until Enhanced Graphics is
-chosen; `Launcher` folds `ClutterReach` into the clutter fade global at startup (never from the
+Enhanced mode's view distance: four saved words (`normal`, `far`, `veryfar`, `unlimited`), one
+label table beside them, resolving to how much further the clutter draws than the fade enhanced
+mode already gives it: 1x, 2x, 4x or no fade. The fog never moves with it, the early chapters'
+haze being part of their scenery; C5's city blocks fade well inside theirs. The faithful path keeps
+the decoded fade. The Built-in Options screen offers it under the graphics row, dead until Enhanced
+is chosen. `Launcher` folds `ClutterReach` into the clutter fade global at startup (never from the
 saved file under `--det`) and again on every apply.
+
+## src/Utils/SunShadow.cs
+The shadow settings one `DirectionalLight3D` hands another, clamped to the receiving pass's far
+plane: `Flight/Hud/CockpitOverlay.cs`'s own sun takes the session sun's at build and on a live
+graphics-mode switch, and `Session/Launch/EnhancedLook.cs` resets the session sun from a fresh light
+through it. Below Flight and Session so both share one field list.
 
 ## src/Utils/VSyncSetting.cs
 The frame pacing, one setting carrying both whether the loop waits for the screen and the cap it

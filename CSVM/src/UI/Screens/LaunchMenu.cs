@@ -3449,17 +3449,24 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string GraphicsChoiceLabel() =>
         _graphicsChoice == GraphicsMode.EnhancedWord ? "Enhanced" : "Original";
 
-    // Clamped at both ends rather than wrapped, so a held arrow settles on Normal or Farthest.
-    private void StepViewDistanceChoice(int dir) =>
-        _viewDistanceChoice = ViewDistance.Words[Math.Clamp(ViewDistance.Index(_viewDistanceChoice) + dir, 0, ViewDistance.Words.Length - 1)];
-
-    private string ViewDistanceChoiceLabel() => ViewDistance.Index(_viewDistanceChoice) switch
+    // Dead under Original, as the resolution row is under borderless: the faithful world keeps the
+    // decoded fade. Clamped at both ends, so a held arrow settles on Normal or Unlimited.
+    private void StepViewDistanceChoice(int dir)
     {
-        0 => "Normal",
-        1 => "Far",
-        2 => "Very far",
-        _ => "Unlimited",
-    };
+        if (_graphicsChoice != GraphicsMode.EnhancedWord)
+        {
+            return;
+        }
+
+        _viewDistanceChoice = ViewDistance.Words[Math.Clamp(ViewDistance.Index(_viewDistanceChoice) + dir, 0, ViewDistance.Words.Length - 1)];
+    }
+
+    private string ViewDistanceChoiceLabel() => ViewDistance.Label(_viewDistanceChoice);
+
+    // The row says why it does not step rather than refusing in silence.
+    private string ViewDistanceDetail() => _graphicsChoice == GraphicsMode.EnhancedWord
+        ? "How far buildings and scenery draw before they fade; the haze stays. Applies at once."
+        : "Enhanced Graphics only: choose Enhanced above to set how far buildings and scenery draw.";
 
     // The monitor and resolution rows ask the engine on every read rather than holding a list from
     // when the screen opened, since a monitor can be plugged in while the row stands focused and the
@@ -4494,7 +4501,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             3 => "Take the nearest target after a kill instead of the first of the list.",
             4 => "Rumble the gamepad for guns, launches, hits, the nitro and a dive past the rated maximum.",
             5 => GraphicsDetail(),
-            6 => "How far buildings and scenery draw before they fade; the haze stays. Enhanced Graphics only. Applies at once.",
+            6 => ViewDistanceDetail(),
             7 => "Select the monitor the game opens on. Applied on the way out, before the size.",
             8 => ResolutionDetail(),
             9 => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",

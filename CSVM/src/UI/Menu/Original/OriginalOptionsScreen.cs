@@ -508,11 +508,13 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         },
     };
 
-    // The Other tab's own flight rows, in the original's Other page order. The rest of that tab is
-    // whatever the seven groups leave over, which is every menu and free-camera action.
+    // The Other tab's own flight rows, in the original's Other page order, then this port's
+    // graphics-mode switch. The rest of that tab is whatever the seven groups leave over, which is
+    // every menu and free-camera action.
     private static readonly InputAction[] KeysOtherFlightGroup =
     {
         InputAction.AutoLand, InputAction.Nitro, InputAction.Respawn, InputAction.Pause,
+        InputAction.ToggleGraphicsMode,
     };
 
     private static readonly string[] KeysTabNames =

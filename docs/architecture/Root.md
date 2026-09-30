@@ -30,9 +30,9 @@ leaving the fog where it is; `LIGHT_STATE` point lights are mirrored onto real
 scales its colour above 1.0 to feed an Environment glow pass, and an AgX tonemap rolls the
 resulting HDR scene off instead of clipping it; SSAO adds contact shading in ambient light, and
 SSR reflects the shoreline off water surfaces the engine already classifies as `"water"`
-(`Launcher.cs`'s `SetupLighting`); the sky those water surfaces reflect where SSR finds nothing is
+(`Session/Launch/EnhancedLook.cs`); the sky those water surfaces reflect where SSR finds nothing is
 the flown zone's own `FOG_COLOR`, painted flat over Godot's procedural placeholder as a `Sky`
-resource (`Launcher.cs`'s `UseMissionSky`, `WeatherRig.WriteSkyColor`). The cockpit interior pass
+resource (`EnhancedLook.ApplyEnvironment`, `WeatherRig.WriteSkyColor`). The cockpit interior pass
 and every splitscreen pane pick up the same settings and the same per-zone updates, since both
 duplicate or share the session's own sun and Environment (`CockpitOverlay.cs`, `SplitScreen.cs`).
 
@@ -51,13 +51,14 @@ FOG_COLOR independently.
 Both Options screens expose the mode as a two-way row saved into the menu plan's options store
 ([../menu-presentations.md](../menu-presentations.md)); every reader in this codebase consults the
 resolved `GraphicsMode.Enhanced` boolean only, so neither the store nor the screens reach any of
-them. An Apply switches the running world, over a paused flight as well, and **G** in flight flips it
-and saves it the same way (`Launcher.SwitchGraphicsMode`). Nothing is rebuilt: the three shader
-caches key on everything but the mode, and `SceneBuilder.RegenerateShaders` rewrites each cached
-shader and fade twin in place, so every material holding one follows. The launcher re-dresses the
-sun and Environment (`Session/Launch/EnhancedLook.cs`), and the session re-lights its zone, copies
-the look into each cockpit pass and builds or frees the ground shadow. `WorldLights` reads the flag
-on every commit. The switch recompiles the changed shaders, which costs a hitch.
+them. An Apply switches the running world, over a paused flight as well, and the Toggle Graphics
+Mode flight action (`G` by default) flips it and saves it the same way (`Launcher.SwitchGraphicsMode`).
+Nothing is rebuilt: the three shader caches key on everything but the mode, and
+`SceneBuilder.RegenerateShaders` rewrites each cached shader and fade twin in place, so every
+material holding one follows. The launcher re-dresses the sun and Environment
+(`Session/Launch/EnhancedLook.cs`), and the session copies the look into each cockpit pass, re-lights
+its zone and builds or frees the ground shadow. `WorldLights` reads the flag on every commit. The
+switch recompiles the changed shaders, which costs a hitch.
 
 ## src/Pads.cs
 Single source of truth for which gamepads exist: every reader goes through it rather than

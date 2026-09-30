@@ -164,6 +164,8 @@ public partial class Launcher : Node3D
     // An Options apply, acted on at the top of the next frame: the exit arrives inside the active
     // presentation's own tick, which is no place to free it.
     private OptionsApplyExit? _pendingApply;
+    // A seat's graphics-mode action, acted on at the top of the next frame for the same reason.
+    private bool _pendingGraphicsToggle;
     // The --menu= aid, held for the cold start alone: the first presentation created reads it and
     // the first ShowMenu consumes it, so no return from flight and no switch re-enters its screen.
     private string? _menuAid;
@@ -978,17 +980,6 @@ public partial class Launcher : Node3D
             Tooling.GltfExporter.ExportToExports(_session?.Plane, _spec.PlaneName);
             return;
         }
-        // G in a session flips the graphics mode on the running world, saved like the Options row.
-        // ⚠ Not in the viewer, whose mesh lab cycles its normals density on G, nor over the menu.
-        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.G } g
-            && g.GetModifiersMask() == 0 && _session is { InSession: true } && !_spec.Viewer
-            && _menuHost is not { Shown: true })
-        {
-            SwitchGraphicsMode(!GraphicsMode.Enhanced, "G");
-            SaveGraphicsMode();
-            GetViewport().SetInputAsHandled();
-            return;
-        }
     }
 
     public override void _Process(double delta)
@@ -1082,6 +1073,18 @@ public partial class Launcher : Node3D
         {
             _pendingApply = null;
             ApplyOptions(applied);
+        }
+
+        // The graphics-mode action, a frame after the seat that fired it, so no switch runs inside a
+        // controller's own _Process. Saved like the Options row.
+        if (_pendingGraphicsToggle)
+        {
+            _pendingGraphicsToggle = false;
+            if (_session is { InSession: true })
+            {
+                SwitchGraphicsMode(!GraphicsMode.Enhanced, "the graphics-mode action");
+                SaveGraphicsMode();
+            }
         }
 
         // Dropped here rather than by the cover itself, so one node owns both screens a launch
@@ -1850,6 +1853,7 @@ public partial class Launcher : Node3D
             Presentation = SessionPresentation,
             ExitSession = ExitSession,
             RestartSession = RestartSession,
+            ToggleGraphicsMode = () => _pendingGraphicsToggle = true,
             PauseOptions = BuildPauseOptions,
             CampaignMissionEnded = _menuDriven
                 ? (profile, result) => _pendingDebrief = (profile, result)
@@ -3257,6 +3261,11 @@ public sealed class LauncherContext
     /// opposition lives in the world, so putting it back means rebuilding the world, which only
     /// the Launcher can do.</summary>
     public required System.Action RestartSession { get; init; }
+
+    /// <summary>The graphics-mode action a seat's controller fires: the Launcher switches the
+    /// running world at the top of its next frame and saves the choice. Null leaves the action inert.
+    /// </summary>
+    public System.Action? ToggleGraphicsMode { get; init; }
 
     /// <summary>Builds the in-flight Preferences leaf either pause board opens over the held world,
     /// or answers null where the install carries no decoded menu layout for it to compose from. A

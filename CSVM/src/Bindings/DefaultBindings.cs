@@ -193,6 +193,10 @@ public static class DefaultBindings
         b.Keys(InputAction.SnapLookMode, Key.K);
         b.Keys(InputAction.TrackTarget, Key.L);
         b.Keys(InputAction.SmoothLookMode, Key.J);
+
+        // The graphics-mode switch, this port's own action. Keyboard only: it is a comparison
+        // tool, and the pad has no free control to spend on it.
+        b.Keys(InputAction.ToggleGraphicsMode, Key.G);
         return b;
     }
 

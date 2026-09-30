@@ -124,18 +124,16 @@ public sealed partial class CockpitOverlay : CanvasLayer
         }
     }
 
-    /// <summary>Follow a live graphics-mode switch. The pass's Environment copy takes the session's
-    /// passes, and its light the session sun's shadow settings, clamped to this pass's far plane as
-    /// at build. The zone's energies and ambient then arrive through
-    /// <c>WeatherRig.RegisterExtraLighting</c>.</summary>
-    public void ApplyGraphicsMode(EnhancedPasses skipped)
+    /// <summary>Re-take the session sun's colour, specular and shadows after a live graphics-mode
+    /// switch re-dressed it, clamped to this pass's far plane as at build. The zone's energies
+    /// arrive after this through <c>WeatherRig.RegisterExtraLighting</c>.</summary>
+    public void FollowSun()
     {
-        if (_view.World3D.Environment is { } env)
-            Session.Launch.EnhancedLook.ApplyEnvironment(env, GraphicsMode.Enhanced, skipped);
         if (_light != null && _sun != null && GodotObject.IsInstanceValid(_sun))
         {
             _light.LightColor = _sun.LightColor;
-            Session.Launch.EnhancedLook.CopyShadow(_sun, _light, _camera.Far);
+            _light.LightSpecular = _sun.LightSpecular;
+            SunShadow.Copy(_sun, _light, _camera.Far);
         }
     }
 
@@ -189,7 +187,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
             // far (thousands of metres, always past 100 m), and passing it through would push every
             // PSSM split past what this near-field pass ever renders.
             if (sun.ShadowEnabled)
-                Session.Launch.EnhancedLook.CopyShadow(sun, light, camera.Far);
+                SunShadow.Copy(sun, light, camera.Far);
         }
         return new CockpitOverlay(view, camera, interior, light, sun)
         {

@@ -182,6 +182,10 @@ internal sealed class HumanRosterBindings
     public Func<int, MenuInput> MenuInputFor { get; init; } = null!;
     public bool ExitsToMenu { get; init; }
     public Action ExitSession { get; init; } = null!;
+
+    /// <summary>The graphics-mode action a local seat fires, the Launcher's live switch; null
+    /// leaves it inert.</summary>
+    public Action? ToggleGraphicsMode { get; init; }
     public List<SpawnPoint>? SpawnList { get; init; }
     public int SpawnBase { get; init; }
     public StuntMission? StuntZones { get; init; }

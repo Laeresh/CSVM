@@ -88,4 +88,26 @@ public class GraphicsModeTests
 
         GraphicsMode.Resolve("original");
     }
+
+    /// <summary>The View Distance reaches the clutter only in enhanced mode, both ways across a
+    /// live switch. The faithful fade stays the decoded one whatever is saved.</summary>
+    [Fact]
+    public void TheViewDistanceReachFollowsTheLiveSwitch()
+    {
+        try
+        {
+            ViewDistance.Set("veryfar");
+            GraphicsMode.Set(true);
+            Assert.Equal(4f, ViewDistance.ClutterReach());
+            GraphicsMode.Set(false);
+            Assert.Equal(1f, ViewDistance.ClutterReach());
+            GraphicsMode.Set(true);
+            Assert.Equal(4f, ViewDistance.ClutterReach());
+        }
+        finally
+        {
+            GraphicsMode.Resolve("original");
+            ViewDistance.Set(null);
+        }
+    }
 }

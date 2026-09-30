@@ -35,9 +35,9 @@ public sealed record QuitExit : MenuExit;
 
 /// <summary>The player applied an Options screen: the consumer persists every choice it carries,
 /// then shows the active presentation again at its top level. Which presentation that is stays the
-/// command line's, never an option. Carried are a <see cref="Utils.GraphicsMode"/> word saved and
-/// no more, a <see cref="Flight.Hangar.Difficulty.Word"/> the next launch reads, and the rest of
-/// <see cref="Utils.OptionsDef"/>'s own fields, null where never set. A screen showing none of them
+/// command line's, never an option. Carried are a <see cref="Utils.GraphicsMode"/> word the apply
+/// switches the running world to, a <see cref="Flight.Hangar.Difficulty.Word"/> the next launch
+/// reads, and <see cref="Utils.OptionsDef"/>'s other fields, null where never set. A screen showing none of them
 /// hands back what it read, since the consumer writes every field it is given. ⚠ All seventeen ride
 /// the exit, not the screen's own save, so the options file keeps one writer, and none is
 /// defaulted. ⚠ A field no screen offers is dropped rather than left riding as a null, since a null

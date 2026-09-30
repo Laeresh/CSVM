@@ -744,8 +744,16 @@ internal static class MenuOriginalSuites
             $"the sixth row is the graphics mode, straight under the rumble with no presentation row between, and Right steps it ({beforeGraphics} -> {menu.ShownRowText})");
         string graphics = menu.ShownRowText.EndsWith("Enhanced", System.StringComparison.Ordinal) ? "enhanced" : "original";
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText.StartsWith("View distance (Enhanced only): ", System.StringComparison.Ordinal),
-            $"the seventh row is the view distance, under the graphics mode it belongs to ({menu.ShownRowText})");
+        string viewDistance = menu.ShownRowText;
+        ctx.Check(viewDistance.StartsWith("View distance (Enhanced only): ", System.StringComparison.Ordinal),
+            $"the seventh row is the view distance, under the graphics mode it belongs to ({viewDistance})");
+        // Stepped away from whichever end it stands at, since the row clamps rather than wraps.
+        bool atFarEnd = viewDistance.EndsWith(ViewDistance.Labels[^1], System.StringComparison.Ordinal);
+        Press(host, seat, atFarEnd ? Left : Right);
+        bool viewStepped = menu.ShownRowText != viewDistance;
+        ctx.Check(graphics == GraphicsMode.EnhancedWord ? viewStepped
+                : !viewStepped && menu.ShownDetail.StartsWith("Enhanced Graphics only", System.StringComparison.Ordinal),
+            $"a step moves it under Enhanced and not under Original, whose detail says why ({graphics}: {viewDistance} -> {menu.ShownRowText}, {menu.ShownDetail})");
         var display = BuiltInDisplayRows(ctx, host, seat, menu, graphics);
         BuiltInAudioRows(ctx, host, seat, menu);
         Press(host, seat, Down);

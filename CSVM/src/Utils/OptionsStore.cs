@@ -125,7 +125,8 @@ public sealed class OptionsDef
 
     public string? GraphicsMode { get; set; }
 
-    /// <summary>Enhanced mode's fog push, a <see cref="Utils.ViewDistance"/> word.</summary>
+    /// <summary>How far enhanced mode draws the clutter before its fade, a
+    /// <see cref="Utils.ViewDistance"/> word.</summary>
     public string? ViewDistance { get; set; }
 
     /// <summary>Whether a rocket warhead's ground burst carves the terrain

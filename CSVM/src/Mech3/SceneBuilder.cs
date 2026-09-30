@@ -394,10 +394,10 @@ void fragment() {
     private static readonly Dictionary<int, Shader> BiasShaders = new(); // keyed by feature bits
     private static readonly Dictionary<int, Shader> BillboardShaders = new(); // cloud sprites, keyed by blend/scissor bits
     private static readonly Dictionary<int, Shader> CylindricalShaders = new(); // Y/X-axis facades, keyed by axis/blend/scissor/glow bits
-    // Every shader the three caches above hold, beside the recipe that wrote its text, and every
-    // fade twin beside its source. A live graphics-mode switch rewrites both lists in place, which
-    // reaches every material holding one of these shaders, the per-instance duplicates included.
-    private static readonly List<(Shader Shader, Func<string> Code)> Regenerable = new();
+    // Every mode-dependent generated shader beside the recipe that wrote its text, and the fade
+    // twin of each. A live graphics-mode switch rewrites both in place, which reaches every
+    // material holding one, the per-instance duplicates included. Process-lifetime like the caches.
+    private static readonly Dictionary<Shader, Func<string>> Regenerable = new();
     private static readonly Dictionary<Shader, Shader?> FadeTwins = new();
 
     private readonly GameZ _gamez;
@@ -681,13 +681,17 @@ void fragment() {
     /// a runtime fade on an opaque world piece an alpha to drive.
     /// ⚠ Install it per instance, never into the shared caches: ALPHA moves it to the transparent
     /// pass. Null when the code cannot take the line (no <c>csky_opacity</c> preamble, or no
-    /// <c>col</c> local). One twin per source, which <see cref="RegenerateShaders"/> follows.</summary>
+    /// <c>col</c> local). A regenerable source keeps one twin, which <see cref="RegenerateShaders"/>
+    /// follows; any other source gets a fresh one, which its caller memoizes.</summary>
     internal static Shader? FadeShaderFor(Shader source)
     {
         if (FadeTwins.TryGetValue(source, out var known))
             return known;
         var twin = FadeCode(source.Code) is { } code ? new Shader { Code = code } : null;
-        FadeTwins[source] = twin;
+        // ⚠ Remember only a regenerable source's twin. The others are per-session objects, and a
+        // static memo would hold every session's shaders alive.
+        if (Regenerable.ContainsKey(source))
+            FadeTwins[source] = twin;
         return twin;
     }
 
@@ -712,6 +716,15 @@ void fragment() {
         }
     }
 
+    /// <summary>Put a generated shader under <see cref="RegenerateShaders"/>: its text is rewritten
+    /// from <paramref name="code"/> on every live mode switch. For a process-lifetime shader cache
+    /// outside this builder whose text reads <see cref="GraphicsMode.Enhanced"/>.</summary>
+    internal static Shader RegenerableShader(Func<string> code)
+    {
+        var shader = new Shader { Code = code() };
+        Regenerable[shader] = code;
+        return shader;
+    }
 
     /// <summary>The surface class one texture name names, <c>"water"</c>, <c>"buildings"</c>, or
     /// null for the untagged default. The collision buckets are built from this
@@ -1829,15 +1842,7 @@ void fragment() {
     // The generators below are static so a recipe in Regenerable holds no builder alive, and kept
     // beside their getters, which costs one SA1204 suppression per block.
 #pragma warning disable SA1204
-    // The two halves of RegenerateShaders' bookkeeping: a cached shader with its recipe, and a
-    // fade twin's text off its source's.
-    private static Shader RegenerableShader(Func<string> code)
-    {
-        var shader = new Shader { Code = code() };
-        Regenerable.Add((shader, code));
-        return shader;
-    }
-
+    // A fade twin's text off its source's, the half of RegenerateShaders' bookkeeping the twins use.
     private static string? FadeCode(string code)
     {
         if (!code.Contains(InstanceUniformsInclude, StringComparison.Ordinal)

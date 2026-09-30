@@ -385,6 +385,23 @@ public class DefaultBindingsTests
         Assert.Equal(2, bound.Count);
     }
 
+    /// <summary>The graphics-mode switch ships on G alone, as a flight action. The steal rule then
+    /// keeps G off every other flight action, so a rebind of G moves the switch off it.</summary>
+    [Fact]
+    public void TheGraphicsModeSwitch_ShipsOnGAloneAsAFlightAction()
+    {
+        var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
+        var g = new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.G));
+
+        Assert.Equal(InputContext.Flight, DefaultBindings.ContextOf(InputAction.ToggleGraphicsMode));
+        Assert.Equal(new[] { g }, map.Bindings(InputAction.ToggleGraphicsMode));
+        foreach (var action in DefaultBindings.ActionsIn(InputContext.Flight))
+        {
+            if (action != InputAction.ToggleGraphicsMode)
+                Assert.DoesNotContain(g, map.Bindings(action));
+        }
+    }
+
     /// <summary>The two look-mode selectors are the original's own K and J, and keyboard only. Its
     /// Views 1 page has them that way: neither row carries a joystick button there. Recorded so
     /// neither drifts onto a pad control, where it would state a mode a pad player cannot state
