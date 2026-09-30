@@ -289,8 +289,9 @@ label table beside them, resolving to how much further the clutter draws than th
 mode already gives it: 1x, 2x, 4x or no fade. The fog never moves with it, the early chapters'
 haze being part of their scenery; C5's city blocks fade well inside theirs. The faithful path keeps
 the decoded fade. The Built-in Options screen offers it under the graphics row, dead until Enhanced
-is chosen. `Launcher` folds `ClutterReach` into the clutter fade global at startup (never from the
-saved file under `--det`) and again on every apply.
+is chosen. `Resolve` layers `--view-distance`, the saved word (never under `--det`), the
+`graphics.viewDistance` key and the default Far, the largest step four C5 panes run at Normal's
+cost. `Launcher` folds `ClutterReach` into the clutter fade global at startup and on every apply.
 
 ## src/Utils/SunShadow.cs
 The shadow settings one `DirectionalLight3D` hands another, clamped to the receiving pass's far

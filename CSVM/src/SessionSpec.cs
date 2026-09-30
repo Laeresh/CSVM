@@ -952,6 +952,11 @@ public sealed record SessionSpec
     /// the config key, including under <c>--det</c>, the same rule <see cref="GraphicsMode"/> keeps.</summary>
     public string? ShadowQuality { get; private set; }
 
+    /// <summary><c>--view-distance=normal|far|veryfar|unlimited</c>, how far Enhanced draws the
+    /// clutter before its fade. Null when not given, and for an unknown word with a warning. Beats
+    /// the saved option and the config key, including under <c>--det</c>.</summary>
+    public string? ViewDistance { get; private set; }
+
     /// <summary><c>--debug-graphics-switch=N[,N...]</c>: the sim frames at which the running session
     /// flips the graphics mode, as the Toggle Graphics Mode action does but unsaved. The scripted
     /// twin of the live switch, so a capture shows a world after a round trip. Empty = none.</summary>
@@ -1478,6 +1483,18 @@ public sealed record SessionSpec
                 else
                 {
                     notes.Add(new Note("world", $"--shadow-quality={want} is not one of {string.Join("/", Utils.ShadowQualitySetting.Words)}, keeping the saved option's value"));
+                }
+            }
+            else if (arg.StartsWith("--view-distance="))
+            {
+                string want = arg["--view-distance=".Length..];
+                if (Utils.ViewDistance.IsWord(want))
+                {
+                    s.ViewDistance = want;
+                }
+                else
+                {
+                    notes.Add(new Note("world", $"--view-distance={want} is not one of {string.Join("/", Utils.ViewDistance.Words)}, keeping the saved option's value"));
                 }
             }
             else if (arg == "--dump-mips") { s.DumpMips = true; }

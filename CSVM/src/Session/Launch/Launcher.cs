@@ -653,7 +653,8 @@ public partial class Launcher : Node3D
         var savedOptions = _spec.Det ? null : OptionsStore.UserOptions().Load();
         bool graphicsEnhanced = Utils.GraphicsMode.Resolve(_spec.GraphicsMode, savedOptions?.GraphicsMode);
         // The view distance under the same --det rule, a machine's own state a capture must not read.
-        Utils.ViewDistance.Set(savedOptions?.ViewDistance);
+        var viewDistance = Utils.ViewDistance.Resolve(_spec.ViewDistance, savedOptions?.ViewDistance,
+            Config.GetString(Utils.ViewDistance.Key, Utils.ViewDistance.Default));
         // Display settings rather than the mode's, so each is written whichever presentation won;
         // only the method's default follows the mode. They share the mode's line because all three
         // reach the same viewports, so a softer or slower run than expected is read off one line.
@@ -674,7 +675,7 @@ public partial class Launcher : Node3D
             Config.GetString(Utils.ShadowQualitySetting.Key, Utils.ShadowQualitySetting.Default));
         string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
         string clamped = renderScale.Clamped ? " clamped_by=fsr2" : string.Empty;
-        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={renderScale.Source}{clamped} anti_aliasing={antiAliasing.Word} aa_source={antiAliasing.Source} shadow_quality={shadowQuality.Word} shadow_source={shadowQuality.Source} view_distance={savedOptions?.ViewDistance ?? Utils.ViewDistance.Default}");
+        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={renderScale.Source}{clamped} anti_aliasing={antiAliasing.Word} aa_source={antiAliasing.Source} shadow_quality={shadowQuality.Word} shadow_source={shadowQuality.Source} view_distance={viewDistance.Word} view_source={viewDistance.Source}");
         // The window's own viewport takes the render flags here, before any scene builds. The
         // three SubViewports take them at construction.
         Utils.ViewportQuality.Apply(GetViewport());
@@ -2405,8 +2406,10 @@ public partial class Launcher : Node3D
         store.Save(options);
     }
 
-    // The view distance on the running world (EnhancedLook.ApplyViewDistance).
-    private void ApplyViewDistance(string? word) => EnhancedLook.ApplyViewDistance(word, _session);
+    // The view distance on the running world (EnhancedLook.ApplyViewDistance), resolved again with the
+    // applied word in the saved slot, so --view-distance still beats it.
+    private void ApplyViewDistance(string? word) => EnhancedLook.ApplyViewDistance(Utils.ViewDistance.Resolve(
+        _spec.ViewDistance, word, Config.GetString(Utils.ViewDistance.Key, Utils.ViewDistance.Default)).Word, _session);
 
     // The in-flight Preferences leaf both pause boards open. It takes the decoded layout the
     // Original presentation composes from, and the menu's audio service for its cues. The host's

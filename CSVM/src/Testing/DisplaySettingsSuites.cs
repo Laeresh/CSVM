@@ -43,7 +43,7 @@ internal static class DisplaySettingsSuites
     {
         ("MenuPresentation", "original", false),
         ("GraphicsMode", GraphicsMode.EnhancedWord, false),
-        ("ViewDistance", "veryfar", false),
+        ("ViewDistance", "veryfar", true),
         ("Difficulty", Flight.Hangar.Difficulty.Word(Flight.Hangar.Difficulty.Hard), false),
         ("NearestAfterKill", true, false),
         ("Rumble", false, false),
