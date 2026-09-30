@@ -175,6 +175,7 @@
     "display-monitor": 0.029,
     "display-render-scale": 0.03,
     "display-resolution": 0.06,
+    "display-shadow-quality": 0.03,
     "display-vsync": 0.044,
     "dropoff-chuteman-stage": 0.829,
     "dropoff-placement": 1.243,

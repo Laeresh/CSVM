@@ -38,7 +38,7 @@ public sealed record QuitExit : MenuExit;
 /// command line's, never an option. Carried are a <see cref="Utils.GraphicsMode"/> word the apply
 /// switches the running world to, a <see cref="Flight.Hangar.Difficulty.Word"/> the next launch
 /// reads, and <see cref="Utils.OptionsDef"/>'s other fields, null where never set. A screen showing none of them
-/// hands back what it read, since the consumer writes every field it is given. ⚠ All seventeen ride
+/// hands back what it read, since the consumer writes every field it is given. ⚠ All eighteen ride
 /// the exit, not the screen's own save, so the options file keeps one writer, and none is
 /// defaulted. ⚠ A field no screen offers is dropped rather than left riding as a null, since a null
 /// the consumer saves wipes the file's value.</summary>
@@ -51,6 +51,7 @@ public sealed record OptionsApplyExit(
     string? VSync,
     string? RenderScale,
     string? AntiAliasing,
+    string? ShadowQuality,
     int? AudioMaster,
     int? AudioMusic,
     int? AudioEffects,

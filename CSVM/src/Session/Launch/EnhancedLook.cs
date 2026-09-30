@@ -46,26 +46,6 @@ public static class EnhancedLook
     private const float SsrFadeOut = 2.5f;
     private const float SsrDepthTolerance = 0.2f;
 
-    // TUNE, judged at the controls. The sun's apparent size in degrees; the real sun is about 0.5.
-    // It softens a cast edge into a penumbra. A 0.25/0.5/1.0/2.0 sweep at the C1 waterfall lake
-    // held the edge at 4-6 px through 1.0. The penumbra grows with the caster's height, and at 2.0
-    // an aircraft 40 m up blurs its own shadow away.
-    private const float ShadowAngularDistance = 1.0f;
-
-    // TUNE: the directional shadow map's edge in texels, twice Godot's 4096. The aircraft's own
-    // shadow is the one read at the controls, and the first cascade spans 0.12 of the distance.
-    private const int ShadowAtlasSize = 8192;
-
-    // TUNE, judged at the controls: Godot's own default. Raising it alongside the angular distance
-    // above widens the edge further.
-    private const float ShadowBlur = 1.0f;
-
-    // ⚠ Do not lower this while ShadowAngularDistance stays above the sun's real 0.5°.
-    // Godot resolves a penumbra by sampling the shadow map through a disc rotated per screen
-    // pixel. Too few samples for the disc's width leave that rotation as a woven pattern over
-    // every lit surface. This width needs the top rung.
-    private const RenderingServer.ShadowQuality ShadowFilterQuality = RenderingServer.ShadowQuality.SoftUltra;
-
     // Where the faithful path's filter quality comes from: project.godot, or Godot's own default.
     private const string ShadowFilterQualitySetting =
         "rendering/lights_and_shadows/directional_shadow/soft_shadow_filter_quality";
@@ -119,10 +99,9 @@ public static class EnhancedLook
     // over it, so a world with no weather.json still reflects a plausible sky.
     private static readonly Color DefaultSkyColor = new(0.69f, 0.69f, 0.69f);
 
-    /// <summary>The session sun's shadow maps, on or back to a fresh light's defaults. The one
-    /// place the sun's shadow setup is written, so a later shadow setting re-applies through here.
-    /// ⚠ Also sets the renderer-wide soft-shadow filter and shadow atlas, which belong to this light
-    /// alone.</summary>
+    /// <summary>The session sun's shadow maps, on at the resolved shadow quality or back to a fresh
+    /// light's defaults. ⚠ Also sets the renderer-wide soft-shadow filter and shadow atlas, which
+    /// belong to this light alone; the off direction puts back the project's own pair.</summary>
     public static void ApplySun(DirectionalLight3D sun, bool enhanced, EnhancedPasses skipped)
     {
         if (!enhanced)
@@ -152,16 +131,16 @@ public static class EnhancedLook
         sun.DirectionalShadowBlendSplits = true;
         sun.ShadowBias = ShadowBias;
         sun.ShadowNormalBias = ShadowNormalBias;
-        // Both zero leaves a hard shadow edge rather than no shadow. That isolates the penumbra
-        // filter, which is the part resolving with a screen-space sample pattern.
-        bool hard = (skipped & EnhancedPasses.SoftShadows) != 0;
-        sun.LightAngularDistance = hard ? 0f : ShadowAngularDistance;
-        sun.ShadowBlur = hard ? 0f : ShadowBlur;
-        // Renderer-wide settings rather than light properties, set here beside the width they
-        // carry rather than in project.godot, where the faithful path would inherit them.
-        RenderingServer.DirectionalSoftShadowFilterSetQuality(hard ? RenderingServer.ShadowQuality.Hard : ShadowFilterQuality);
-        RenderingServer.DirectionalShadowAtlasSetSize(ShadowAtlasSize, true);
+        ApplyShadowQuality(sun, true, skipped);
     }
+
+    /// <summary>The resolved <see cref="ShadowQualitySetting"/> level on the sun and the renderer:
+    /// whether it casts, its penumbra, the filter and the atlas. Writes nothing unless
+    /// <paramref name="enhanced"/>. <c>--no-soft-shadows</c> keeps the shadow and drops its
+    /// penumbra, which isolates the filter's screen-space sample pattern.</summary>
+    public static void ApplyShadowQuality(DirectionalLight3D sun, bool enhanced, EnhancedPasses skipped) =>
+        ShadowQualitySetting.ApplyTo(sun, ShadowQualitySetting.Sun, enhanced,
+            (skipped & EnhancedPasses.SoftShadows) != 0);
 
     /// <summary>The screen-space passes, the tonemap and the mission sky on one Environment, or a
     /// fresh Environment's values for each. The faithful path's world is fullbright, so none of

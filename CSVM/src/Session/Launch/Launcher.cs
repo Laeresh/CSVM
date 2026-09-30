@@ -665,9 +665,14 @@ public partial class Launcher : Node3D
             Utils.RenderScaleSetting.SavedWord(_spec.Det),
             Config.GetString(Utils.RenderScaleSetting.Key, Utils.RenderScaleSetting.Default),
             antiAliasing.Word);
+        // Resolved under either mode so the line says what a flip to Enhanced would fly; only
+        // SetupLighting's enhanced sun reads it.
+        var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality,
+            Utils.ShadowQualitySetting.SavedWord(_spec.Det),
+            Config.GetString(Utils.ShadowQualitySetting.Key, Utils.ShadowQualitySetting.Default));
         string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
         string clamped = renderScale.Clamped ? " clamped_by=fsr2" : string.Empty;
-        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={renderScale.Source}{clamped} anti_aliasing={antiAliasing.Word} aa_source={antiAliasing.Source} view_distance={savedOptions?.ViewDistance ?? Utils.ViewDistance.Default}");
+        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={renderScale.Source}{clamped} anti_aliasing={antiAliasing.Word} aa_source={antiAliasing.Source} shadow_quality={shadowQuality.Word} shadow_source={shadowQuality.Source} view_distance={savedOptions?.ViewDistance ?? Utils.ViewDistance.Default}");
         // The window's own viewport takes the render flags here, before any scene builds. The
         // three SubViewports take them at construction.
         Utils.ViewportQuality.Apply(GetViewport());
@@ -2324,6 +2329,7 @@ public partial class Launcher : Node3D
         options.VSync = applied.VSync;
         options.RenderScale = applied.RenderScale;
         options.AntiAliasing = applied.AntiAliasing;
+        options.ShadowQuality = applied.ShadowQuality;
         options.AudioMaster = applied.AudioMaster;
         options.AudioMusic = applied.AudioMusic;
         options.AudioEffects = applied.AudioEffects;
@@ -2345,8 +2351,20 @@ public partial class Launcher : Node3D
         // pause sheet flies the rest of the sortie with a quiet pad.
         PadRumble.Enabled = !_spec.Det && applied.Rumble != false;
         ApplyViewDistance(applied.ViewDistance);
-        if (GraphicsMode.TryParse(applied.Graphics, out bool enhanced))
+        // The shadow level reaches the flying world now; --shadow-quality still beats the saved word.
+        var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality, applied.ShadowQuality,
+            Config.GetString(Utils.ShadowQualitySetting.Key, Utils.ShadowQualitySetting.Default));
+        Log.Info("world", $"shadow quality applied: {shadowQuality.Word} source={shadowQuality.Source}");
+        // A mode switch dresses the sun at the new level itself; otherwise the level alone moves.
+        if (GraphicsMode.TryParse(applied.Graphics, out bool enhanced) && enhanced != GraphicsMode.Enhanced)
+        {
             SwitchGraphicsMode(enhanced, "options");
+        }
+        else if (IsInstanceValid(_sun))
+        {
+            ApplyShadowQuality(_sun);
+        }
+
         // ⚠ The carve is NOT re-armed here. No screen offers it, so the saved key is untouched by an
         // apply and the gate keeps what boot gave it (see the arming above).
         Log.Info("ui", $"options applied: {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");
@@ -2369,6 +2387,11 @@ public partial class Launcher : Node3D
         _session?.ApplyGraphicsMode();
         Log.Info("world", $"graphics mode: {GraphicsMode.Key}={(enhanced ? "enhanced" : "original")} (switched live by {why})");
     }
+
+    // The resolved shadow level on the world sun and the renderer. An Options apply re-runs it, so a
+    // level changes mid-flight; the cockpit pass follows on its next Sync.
+    private void ApplyShadowQuality(DirectionalLight3D sun) =>
+        EnhancedLook.ApplyShadowQuality(sun, GraphicsMode.Enhanced, _spec.SkippedPasses);
 
     // G's save, the one field it changes. Never under --det, whose runs must not write the player's
     // options (the same rule the startup read keeps).

@@ -264,6 +264,16 @@ falls back. A chosen method is written whichever mode won, since only the defaul
 reader is `ViewportQuality.Apply`; `Launcher`'s `[world] graphics mode:` line announces the word and its source. FSR 2.2
 refuses a render scale above native, which `RenderScaleSetting.ClampFor` applies.
 
+## src/Utils/ShadowQualitySetting.cs
+The Enhanced sun's shadow quality, a VIDEO page row over `Words`: `off`, `low`, `medium`, `high` or `ultra`, the default and
+the look Enhanced shipped with. `Resolve` layers `--shadow-quality=`, the saved `shadowQuality` word, the
+`graphics.shadowQuality` config key, then `ultra`; `SavedWord` holds the `--det` guard. Each word maps to a `SunShadowPlan`:
+whether the sun casts, its angular distance and blur, and the renderer-wide soft filter and atlas edge. `ApplyTo` is the one
+writer, re-runnable, called by `Launcher.ApplyShadowQuality` at the sun's build and on every Options apply; it writes nothing
+on the faithful path and bumps `Revision`, which the cockpit pass (`Flight/Hud/CockpitOverlay.cs`) re-copies the sun on. The
+split-screen panes share the world's one sun. Why each
+level stands where it does, and the cost of each: `analysis/screen-dither/FINDINGS.md`.
+
 ## src/Utils/ViewportQuality.cs
 What `AntiAliasingSetting` and `RenderScaleSetting` write on a 3D viewport, gathered here because
 there are four viewports to write them on: the root viewport `Session/Launch/Launcher.cs` owns, and the SubViewports
@@ -345,7 +355,7 @@ block, where the same predicate drives both window hiding and the interactive ru
 
 ## src/Utils/OptionsStore.cs
 Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode, view distance and difficulty words, the six
-display settings (monitor index, resolution, display mode, V-Sync, render scale, anti-aliasing), the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn and the remembered install folder (fully qualified or dropped). One file, `user://options.json`,
+display settings (monitor index, resolution, display mode, V-Sync, render scale, anti-aliasing), the Enhanced shadow quality, the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn and the remembered install folder (fully qualified or dropped). One file, `user://options.json`,
 independent of `Session/Campaign/CampaignProfileStore.cs`. A missing or malformed file reads as empty, an unknown version invalidates it, an
 unknown value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
 `Version`. Four reads hold that one contract: a word set (`DisplayWords`, `DifficultyWords` and `ViewWords` hold the vocabularies, whose resolved tier and view mode belong to `Flight`), a shape predicate for the

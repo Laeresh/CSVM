@@ -652,6 +652,42 @@ public class OriginalOptionsTests
         Assert.Null(host.Module.AntiAliasingChoice);
     }
 
+    /// <summary>The Shadow Quality row follows the page's own graphics choice. It is dead under
+    /// Original, whose world casts no sun shadow, and live once the checkbox is ticked. A saved word shows
+    /// back, a never-set row shows Ultra, and ACCEPT CHANGES carries the stepped word.</summary>
+    [Fact]
+    public void TheShadowQualityRowIsLiveUnderEnhancedAndCarriesItsWord()
+    {
+        var saved = new OptionsDef { ShadowQuality = ShadowQualitySetting.Medium };
+        var host = Host(() => saved);
+        host.Module.OpenVideo();
+        Assert.False(Row(host, OriginalOptionsScreen.ShadowQualityKey).Enabled);
+        Assert.Equal("Medium", Row(host, OriginalOptionsScreen.ShadowQualityKey).Label);
+
+        saved.ShadowQuality = null;
+        saved.GraphicsMode = GraphicsMode.EnhancedWord;
+        host.Module.OpenVideoOn(OriginalOptionsScreen.ShadowQualityKey);
+        Assert.Equal(OriginalOptionsScreen.ShadowQualityKey, host.FocusedKey);
+        Assert.True(Row(host, OriginalOptionsScreen.ShadowQualityKey).Enabled);
+        Assert.Equal("Ultra", Row(host, OriginalOptionsScreen.ShadowQualityKey).Label);
+        Assert.Null(host.Module.ShadowQualityChoice);
+
+        // Ultra is the last word, so a step right wraps onto Off and a step left comes back.
+        StepX(host, 1);
+        Assert.Equal(ShadowQualitySetting.Off, host.Module.ShadowQualityChoice);
+        StepX(host, -1);
+        StepX(host, -1);
+        Assert.Equal(ShadowQualitySetting.High, host.Module.ShadowQualityChoice);
+        Assert.Equal("High", Row(host, OriginalOptionsScreen.ShadowQualityKey).Label);
+
+        Down(host);
+        Down(host);
+        Assert.Equal(OriginalOptionsScreen.VideoAcceptKey, host.FocusedKey);
+        var exit = Assert.IsType<OptionsApplyExit>(Accept(host));
+        Assert.Equal(ShadowQualitySetting.High, exit.ShadowQuality);
+        Assert.Equal(GraphicsMode.EnhancedWord, exit.Graphics);
+    }
+
     /// <summary>Opening a page shows back the saved words, not what this process resolved. A flag
     /// or the config key can have decided the running mode. The rows owe the player the choices
     /// their own ACCEPT CHANGES saved. The module never writes the options file.</summary>
@@ -823,6 +859,11 @@ public class OriginalOptionsTests
         Assert.Equal((260f, 402f, 70f, 17f), Rect(Row(host, OriginalOptionsScreen.RenderScaleKey)));
         // Anti-aliasing stands on the authored Lighting Quality line under Render Scale.
         Assert.Equal((260f, 440f, 70f, 17f), Rect(Row(host, OriginalOptionsScreen.AntiAliasingKey)));
+        // Shadow Quality stands on the authored Texture Quality line, dead under the Original
+        // default, whose world casts no sun shadow.
+        var shadow = Row(host, OriginalOptionsScreen.ShadowQualityKey);
+        Assert.Equal((260f, 530f, 70f, 17f), Rect(shadow));
+        Assert.False(shadow.Enabled);
         // The Graphics checkbox keeps the authored Shadows corner. The Clutter Detail line above it
         // stays blank, no row moving up onto a line the artwork does not draw it on.
         Assert.Equal((260f, 465f, 16f, 16f), Rect(Row(host, OriginalOptionsScreen.GraphicsKey)));
@@ -855,10 +896,13 @@ public class OriginalOptionsTests
         Assert.Contains(board.Lines, l => l.Text == "Anti-aliasing" && l.X == 130f && l.Y == 440f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select how edges are smoothed.", StringComparison.Ordinal)
             && l.X == 340f && l.Y == 440f && l.Width == 310f);
+        Assert.Contains(board.Lines, l => l.Text == "Shadow Quality" && l.X == 130f && l.Y == 530f && l.Width == 130f);
+        Assert.Contains(board.Lines, l => l.Text.StartsWith("Enhanced Graphics only.", StringComparison.Ordinal)
+            && l.X == 340f && l.Y == 530f && l.Width == 150f);
         Assert.Contains(board.Lines, l => l.Text == "Enhanced Graphics" && l.X == 130f && l.Y == 470f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the lit world.", StringComparison.Ordinal)
             && l.X == 340f && l.Y == 470f && l.Width == 160f);
-        Assert.Equal(15, board.Lines.Count(l => l.Row < 0));
+        Assert.Equal(17, board.Lines.Count(l => l.Row < 0));
         // The checkbox draws unchecked and unfocused, the page opening on the monitor row above it:
         // the second of its eight frames.
         Assert.Equal(1, board.Plaques.Single(p => p.Art.Name == "PP_B_Check8.png").Frame);
@@ -1263,10 +1307,11 @@ public class OriginalOptionsTests
             {
                 OriginalOptionsScreen.MonitorKey, OriginalOptionsScreen.ResolutionKey, OriginalOptionsScreen.DisplayModeKey,
                 OriginalOptionsScreen.VSyncKey, OriginalOptionsScreen.RenderScaleKey, OriginalOptionsScreen.AntiAliasingKey,
-                OriginalOptionsScreen.GraphicsKey, OriginalOptionsScreen.VideoAcceptKey, OriginalOptionsScreen.VideoCancelKey,
+                OriginalOptionsScreen.ShadowQualityKey, OriginalOptionsScreen.GraphicsKey,
+                OriginalOptionsScreen.VideoAcceptKey, OriginalOptionsScreen.VideoCancelKey,
             },
             rows.Select(r => r.Key));
-        RowsAreClearOfEachOther(host, rows, "VIDEO", 14);
+        RowsAreClearOfEachOther(host, rows, "VIDEO", 16);
     }
 
     // The CONTROLS page's rows, the same rule over its own plate. The sensitivity slider is pinned

@@ -32,6 +32,9 @@ public sealed partial class CockpitOverlay : CanvasLayer
     // pass's origin (SceneBuilder's `light_origin`).
     private readonly List<ShaderMaterial> _materials = new();
 
+    // The shadow-quality revision the light last copied the sun at (FollowSunShadow).
+    private int _shadowRevision = Utils.ShadowQualitySetting.Revision;
+
     private CockpitOverlay(SubViewport view, Camera3D camera, Node3D interior,
         DirectionalLight3D? light, DirectionalLight3D? sun)
     {
@@ -121,7 +124,23 @@ public sealed partial class CockpitOverlay : CanvasLayer
         if (_light != null && _sun != null && GodotObject.IsInstanceValid(_sun))
         {
             _light.Basis = _sun.GlobalBasis;
+            FollowSunShadow();
         }
+    }
+
+    /// <summary>Re-copy the world sun's shadow onto this pass's light. It does so only where the
+    /// shadow quality has moved the sun since the last copy. The per-frame <see cref="Sync"/>
+    /// calls it, and it is public so the suite can drive it without a rig.</summary>
+    public void FollowSunShadow()
+    {
+        if (_light == null || _sun == null || !GodotObject.IsInstanceValid(_sun)
+            || _shadowRevision == Utils.ShadowQualitySetting.Revision)
+        {
+            return;
+        }
+
+        _shadowRevision = Utils.ShadowQualitySetting.Revision;
+        SunShadow.Copy(_sun, _light, _camera.Far);
     }
 
     /// <summary>Re-take the session sun's colour, specular and shadows after a live graphics-mode
@@ -133,6 +152,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
         {
             _light.LightColor = _sun.LightColor;
             _light.LightSpecular = _sun.LightSpecular;
+            _shadowRevision = Utils.ShadowQualitySetting.Revision;
             SunShadow.Copy(_sun, _light, _camera.Far);
         }
     }
@@ -178,16 +198,11 @@ public sealed partial class CockpitOverlay : CanvasLayer
                 Name = "interior_sun",
                 LightEnergy = sun.LightEnergy,
                 LightColor = sun.LightColor,
-                // Copied off the live sun, which by this point in the build already carries the
-                // flown zone's settings (WeatherRig.Build runs ahead of BuildCockpitPasses),
-                // false in original mode, since the world sun's own flag never turns on there.
-                ShadowEnabled = sun.ShadowEnabled,
             };
-            // Clamped to this pass's own camera far plane: the world sun's distance is a zone's fog
-            // far (thousands of metres, always past 100 m), and passing it through would push every
-            // PSSM split past what this near-field pass ever renders.
-            if (sun.ShadowEnabled)
-                SunShadow.Copy(sun, light, camera.Far);
+            // Copied off the live sun, which by this point in the build already carries the flown
+            // zone's settings (WeatherRig.Build runs ahead of BuildCockpitPasses). Clamped to this
+            // pass's far plane, since a zone's fog far would push every split past the pass.
+            SunShadow.Copy(sun, light, camera.Far);
         }
         return new CockpitOverlay(view, camera, interior, light, sun)
         {
