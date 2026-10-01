@@ -296,31 +296,32 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   marker); the fire path is the unflagged `fire_bullet` source. And the near-match trap: several
   magnitude candidates coincide with authored constants, wire nothing on one coincidence (the
   caliber law stood because the candidates separated by an order of magnitude each way).
-- `BL-885` `[Fidelity]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The chase camera's base elevation is authored
-  (`thirdp_pitch`), where CSVM holds a hand-picked 15.7°.** The chase placement builds its direction
-  from the head's shown azimuth and the head's shown elevation PLUS the camparam block's `+0x28`:
-  `FUN_0042c7f0` loads `DAT_0064ef58` at `0042c881`, adds `[ECX + 0x28]` at `0042c88d` and hands the
-  pair to the direction builder `FUN_0053f550` at `0042c8a2`. The reader `FUN_0042f700` puts
-  `thirdp_pitch` there in radians (`0042f81d`-`0042f83b`, the authored degrees × π/180). Shipped that
-  is **0.29°** on every airframe and **0.2°** on Balmoral's block, i.e. the original's settled chase
-  camera sits essentially dead astern, level with the aeroplane. CSVM instead normalises a
-  hand-picked `BaseUp` 4.5 / `BaseBack` 16 pair, which is **15.7°** above the tail, and
-  `CameraController`'s own comment calls the direction hand-picked because
-  `docs/formats/camparam.md` had read 0.29° as too small to be an elevation. It is the elevation.
-  *Fix shape:* take the base elevation off `CamParams` (`thirdp_pitch`, already parsed) and feed it
-  as the resting elevation the head's own angle adds to, so `ChaseSwing` keeps working unchanged;
-  `BaseUp`/`BaseBack` then reduce to "behind the tail" plus that angle. `thirdp_height`'s units are
-  still unknown, so the radius stays where it is (`dist` + `dist_factor`).
-  ⚠ **This moves every pinned golden shot with a chase camera**, so it is a re-pin, and the new pose
-  drops the framing of every flight capture by 15°. Judge it at the controls before re-pinning: a
-  camera level with the aeroplane sees less ground and more sky, and the original's own footage is
-  the reference. ⚠ **Do not read the 15.7° as wrong-by-construction**: it was picked to look right
-  and has never been judged against the authored figure side by side.
-  *Decision:* build the authored elevation behind a toggle first, so both chase cameras can be A/B'd
-  in CSVM at the controls; the default stays 15.7° and no golden is re-pinned until that judgement.
-  *Cross-refs:* the numpad views' three level keys (`Kp2`/`Kp4`/`Kp6`), which sit at this same
-  base elevation (`git log --grep=BL-150`), `docs/formats/camparam.md` (`thirdp_pitch`, and the Known limits paragraph this corrects),
-  `docs/org/cameraViews.md` (head-look controller, the chase placement's own elevation).
+- `BL-885` `[Fidelity]` `[S]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` **The chase camera's settled pose is authored
+  (`thirdp_height` + `thirdp_pitch`, 7.57° above the tail and aimed along the nose), where CSVM
+  rests at a hand-picked 15.7° aimed ahead of the nose.** The decoded rig is built and runs under
+  `--chase-rig=authored`; the default stays `picked` and no golden moves until the look below.
+  The decode (`docs/org/cameraViews.md`, "The chase rig"): `FUN_0042c7f0` swings the plane-frame
+  vector `(0, thirdp_height·w²·1.0145, 1.0145)` by the head's elevation PLUS `thirdp_pitch`
+  (`0042c88d`) and its azimuth (`FUN_0053f550`), and aims the camera along the same swing.
+  `thirdp_height` 0.138 is the lift (`atan(0.138)` ≈ 7.9°) and the 0.29° pitch only tilts the rig,
+  so the settled camera is 7.57° above the tail (Balmoral 11.11°), not "dead astern at 0.29°".
+  `w²` fades the lift as the head swings: the level numpad keys sit at about 3.7° on the flanks and
+  0.29° below level nose-on, where the picked rig holds all three at 15.7°.
+  *Sortie:* `.\RunGame.ps1 --chapter=C1 --plane=player_bhawk --chase-rig=picked`, then the same
+  with `--chase-rig=authored`; fly level and through a few turns in each, then hold `Kp4`, `Kp6`
+  and `Kp2`. Compare where the aircraft sits under the reticle and how much ground the frame shows
+  against the original's `Z:\CSVM\OriginalScreenshots\C1 IA1 Fog river.png` (a level chase still
+  over the C1 river) and the numpad keys against `Z:\CSVM\OriginalScreenshots\Videos\CAP-07 Numpad
+  1,2,3,6,9,8,7,4.mp4`. The question: which rig reads as the original's chase camera?
+  *If authored:* make it the default and re-pin every chase golden in that commit (every flight
+  shot moves). *If picked:* close with the reason, the decoded rig staying behind the flag.
+  ⚠ **Do not read the 15.7° as wrong-by-construction**: it was picked to look right and has never
+  been judged against the authored figure side by side. ⚠ The authored rig ports the direction and
+  aim only; the original's `pos_catch_up`/`look_catch_up` easing of the aircraft frame is not
+  ported by either rig, so a hard roll still trails on CSVM's own rates.
+  *Cross-refs:* the numpad views' three level keys (`git log --grep=BL-150`),
+  `docs/formats/camparam.md` (`thirdp_height`, `thirdp_pitch`, Known limits), `docs/cli.md`
+  (`--chase-rig`).
 - `BL-1023` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **In smooth look
   mode (`J`) a released right stick leaves the view where it was aimed, in the chase view and in
   first person alike, the way a released numpad direction or mouse pan already does.** Today the

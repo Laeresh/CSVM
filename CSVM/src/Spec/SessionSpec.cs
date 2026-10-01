@@ -696,6 +696,11 @@ public sealed record SessionSpec
     /// pilot flies in and the one the cycle key changes. Dropped outside flight, like
     /// <see cref="View"/>.</summary>
     public Flight.Camera.PilotViewMode ViewMode { get; private set; }
+
+    /// <summary><c>--chase-rig=picked|authored</c>: which settled pose the chase camera rests at,
+    /// for an A/B at the controls. Picked, the default, is the hand-picked rig every golden is
+    /// taken with; an unknown word keeps it with a note.</summary>
+    public Flight.Camera.ChaseRig ChaseRig { get; private set; }
     /// <summary>Whether <see cref="ViewMode"/> came from a <c>--view=</c> naming a mode rather than
     /// from the default. Held because Chase is both the default and a nameable mode, so the value
     /// alone cannot say whether the command line asked for it. That matters because
@@ -1691,6 +1696,15 @@ public sealed record SessionSpec
                 else
                 {
                     notes.Add(new Note("core", $"--look={want} is not an x,y pair, leaving the look stick centred"));
+                }
+            }
+            else if (arg.StartsWith("--chase-rig="))
+            {
+                string want = arg["--chase-rig=".Length..];
+                s.ChaseRig = want == "authored" ? Flight.Camera.ChaseRig.Authored : Flight.Camera.ChaseRig.Picked;
+                if (want != "authored" && want != "picked")
+                {
+                    notes.Add(new Note("core", $"--chase-rig={want} is not a rig it takes (picked|authored), keeping 'picked'"));
                 }
             }
         }

@@ -474,6 +474,10 @@ public partial class FlightController : Node3D
     /// cycle key changes it; this field only seeds it.</summary>
     public PilotViewMode PinnedViewMode = PilotViewMode.Chase;
 
+    /// <summary>Which settled chase pose this pilot's camera rests at (<c>--chase-rig=</c>), read
+    /// once by <see cref="Setup"/>. Picked, the default, is exactly today's behaviour.</summary>
+    public ChaseRig ChaseRig = ChaseRig.Picked;
+
     /// <summary>The Auto Head Turn option as the options file has it, the original's GAME OPTIONS
     /// checkbox. True turns the head with the aircraft in the cockpit, false leaves it ahead. It is
     /// seeded at build and read every frame. A page accepted over the pause rewrites it
@@ -1205,7 +1209,8 @@ public partial class FlightController : Node3D
         _model = model;
         _viewCamera = camera;
         _cam = camera != null
-            ? new CameraController(camera, camParams, _actions.Held, PinnedView, PinnedViewMode, cockpitCameraOffset)
+            ? new CameraController(camera, camParams, _actions.Held, PinnedView, PinnedViewMode, cockpitCameraOffset,
+                rig: ChaseRig)
             : null;
         // C22: the idle branch of the shared head-look law, set once here, since Head lives for
         // the controller's whole life and _model (captured by the closure) is reassigned by every

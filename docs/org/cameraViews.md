@@ -348,6 +348,43 @@ law) and `DistTransient` (step 1's transient, reading `dist_vary`/`dist_catch_up
 `CamParams`). The direction factor `f` has no port: CSVM's look-behind takes the forward radius
 whole, so the transient is never inverted and the blended bounds are never formed.
 
+## The chase rig
+
+The forward arm of `FUN_0042c7f0` builds the chase camera's DIRECTION and AIM from the head's shown
+angles and the two `thirdp_*` fields, then scales the direction by the distance above:
+
+1. **The swing** (`0042c881`-`0042c8a2`): elevation `e = DAT_0064ef58 + thirdp_pitch` (the block's
+   `+0x28`, which the reader `FUN_0042f700` stores as the authored degrees × `0.017453292`), azimuth
+   `a = DAT_0064ef5c`. `FUN_0053f550(a, e)` returns the quaternion
+   `(cos e/2 · cos a/2, sin e/2 · cos a/2, cos e/2 · sin a/2, −sin e/2 · sin a/2)`, which is a turn
+   by `e` about the plane's right axis followed by `a` about its up axis.
+   `CameraController.ChaseSwing` is the same rotation.
+2. **The rig vector** (`0042c8a7`-`0042c8d5`): `(0, thirdp_height · w² · 1.0145, 1.0145)` in the
+   plane's frame (+Y up, +Z astern), with `w` the swing's scalar part and `1.0145` the float
+   `0x3f81db23`, written once as a literal for Z and read from `0x006040c0` for Y. `thirdp_height` is
+   the block's `+0x24`, stored raw: a dimensionless rise per unit astern. `w²` is 1 with the head
+   settled, ½ on a flank and 0 dead ahead, so the lift fades as the head swings round.
+3. **Turned and scaled** (`0042c8d8`, `FUN_0053fb40` = `q v q*`; then `FUN_0042c670`): the swung
+   vector, multiplied by the clamped and zoomed distance, is the camera's offset from the aircraft.
+   Its length is therefore `1.0145 · √(1 + (h·w²)²)` times the distance, about `1.024` settled.
+4. **The aim** (`FUN_0042c670`, `FUN_0053f920`): the camera's orientation is the eased aircraft
+   frame times the same swing quaternion, so the camera looks along the swung nose, not at a point.
+
+What that gives with the head settled, on the shipped blocks: the camera sits **7.57°** above the
+tail (`atan(0.138)` less the `0.29°` pitch; Balmoral's `0.2`/`0.2°` gives **11.11°**), the
+aircraft sits `atan(thirdp_height)` = **7.86°** below the image centre whatever the pitch, and the
+pitch tilts the whole rig, offset and aim together, by a third of a degree. The level numpad keys
+follow from `w²`: the flanks sit at about **3.7°** and the nose-on view 0.29° below level.
+
+CSVM carries both rigs as `ChaseRig`, chosen per launch by `--chase-rig=`. `Picked`, the default,
+is the hand-picked direction `atan2(4.5, 16)` = **15.7°** above the tail aimed at a point 40 m
+ahead of the nose, at the distance itself; every pinned golden is taken with it. `Authored` is the
+law above, through `CameraController.AuthoredRig`, at the same distance law. ⚠ **Which one ships is
+a judgement at the controls against the original's footage**, since the picked rig was chosen to
+look right and nobody has compared the two side by side. The eased frame in step 4 is the
+original's own `pos_catch_up`/`look_catch_up` lag; both rigs ease on CSVM's own position and aim
+rates instead.
+
 ## Head-look controller
 
 Decoded from `FUN_0042d010`. Three callers share it: the
@@ -357,15 +394,9 @@ autohead off, at `0042c877`-`0042c87c`). CSVM's port is `HeadLook` (`src/Flight/
 instance per pilot, floored per frame by whichever view places it
 (`CameraController.StepHead`), and turned into a chase offset by `CameraController.ChaseSwing`.
 
-⚠ **The chase placement's own elevation is the head's plus the authored `thirdp_pitch`.**
-`FUN_0042c7f0` loads the shown elevation `DAT_0064ef58` at `0042c881`, adds the camparam block's
-`+0x28` at `0042c88d` (the reader converts `thirdp_pitch` degrees to radians on the way in,
-`docs/formats/camparam.md`) and hands that with the shown azimuth `DAT_0064ef5c` to the direction
-builder `FUN_0053f550` at `0042c8a2`. So a settled head leaves the camera dead astern at the
-authored pitch, `0.29°` on every plane but Balmoral's `0.2°`, not at the `15.7°` CSVM's own
-`BaseUp`/`BaseBack` pair sits at. The look-behind arm is the exception that proves the routing: with
-the back flag set the routine never calls `FUN_0042d010` at all and writes the fixed direction
-`(0, 0, 1)` instead.
+⚠ **The chase placement adds the authored `thirdp_pitch` to the head's elevation before it
+builds the swing, and lifts the camera by `thirdp_height`.** "The chase rig" below has the whole
+law. The look-behind arm never calls `FUN_0042d010` at all and writes a fixed rig instead.
 
 - **State byte** `DAT_0064ef68`: `0` snap, `1` free-look, `2` padlock. CSVM carries all three as
   `HeadLook.LookMode`, written by the same three keys and padlock's exit alone, never by a device
@@ -487,7 +518,7 @@ the back flag set the routine never calls `FUN_0042d010` at all and writes the f
 | Camera position | per-plane authored `cockpit_camera` offset, read from the model (`player_pfighter` `(0,0.75,−0.2)`) | landed: `MarkerRig.FindNamedMarker` / `PlaneBuilder.CockpitCameraOffset` (A2) |
 | Head-look controller | snap, free-look, padlock, center key, autohead, one shared state machine, three callers (first person + chase) | landed as `HeadLook`, one head for every view: the snap cluster, the centre key and the mouse aim the cockpit and swing the chase camera alike, each frame floored by the view that places it, and `K`/`L`/`J` state the mode the original's three selectors state, which the numpad and the mouse both obey |
 | Padlock (Track Target) | state `2`: the head snaps onto the selection's bearing every frame, floored by the caller and unlimited in azimuth, any look direction returning it to snap | landed as `LookMode.Padlock`, reading `TargetSelection.Current` through `HeadLook.TargetOffset` and following the same tail-crossing wrap |
-| Chase base elevation | the head's elevation plus the authored `thirdp_pitch`, i.e. dead astern at `0.29°` with the head settled | a hand-picked `15.7°` from `BaseUp`/`BaseBack` (`BL-885`) |
+| Chase rig | `thirdp_height` lifts the camera `7.57°` above the tail with the head settled, `thirdp_pitch` tilts the rig, and the camera aims along the swung nose | `ChaseRig.Picked` by default, a hand-picked `15.7°` aimed ahead of the nose; the decoded rig is `--chase-rig=authored`, owed a judgement at the controls |
 
 The camera is placed faithfully today: the plane's `cockpit_camera` offset read from the model (no
 hardcoded 0.75), both first-person views sitting at it, the interior drawn + head-look + 80° for

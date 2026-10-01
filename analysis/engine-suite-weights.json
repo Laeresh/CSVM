@@ -136,6 +136,7 @@
     "carried-state-silent": 0.006,
     "carried-turrets": 0.457,
     "chapter-census": 9.767,
+    "chase-rig": 0.02,
     "chase-trail": 0.02,
     "cloud-band-object-gate": 0.05,
     "cloud-field-fade": 4.46,

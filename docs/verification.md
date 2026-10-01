@@ -1026,6 +1026,10 @@ member, and it does not go here.
 - **SRC-22**, **When a reader leaves a global alone on a missing key, the value in play is the
   global's initialised bytes; read them from `.data` before quoting a default.** The rearm radius
   was written up as 624.0, and `0x628f10` holds 625.0, 25 m squared.
+- **SRC-23**, **An angle added to a rotation is not the pose; read the vector the rotation turns
+  before saying where the result points.** `thirdp_pitch` was written up as the chase camera's
+  0.29° elevation, and the vector it swings carries `thirdp_height` as a rise that puts the camera
+  7.57° above the tail.
 
 ## What this project cannot verify itself
 

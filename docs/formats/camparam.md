@@ -64,8 +64,8 @@ two-turret aircraft, the largest.
 | `dist_catch_up` | 1.0 | The rate, per frame-second, at which the lagged speed copy `dist_vary` works against eases toward the real one, so also the throttle transient's relaxation rate. |
 | `pos_catch_up` | 2.0 | Rate at which position eases, in the same exponential and the same clock. |
 | `look_catch_up` | 3.0 | Rate at which the aim eases, likewise. |
-| `thirdp_height` | 0.138 | Third-person eye height. Units unknown (not metres at this magnitude). |
-| `thirdp_pitch` | 0.29 | Third-person pitch, in **degrees**: the reader multiplies it by π/180 on the way into the block, and the placement adds the result to the camera's smoothed elevation. 0.29° is a hair of tilt, not the 16.6° that reading the file's number as radians would suggest. |
+| `thirdp_height` | 0.138 | The chase camera's rise per unit astern, a dimensionless ratio of the chase distance stored raw: the rig vector is `(0, thirdp_height·w², 1)·1.0145`, `w` the head swing's quaternion scalar. With the head settled it puts the camera `atan(0.138)` ≈ 7.9° above the tail before the pitch. See [`../org/cameraViews.md`](../org/cameraViews.md), "The chase rig". |
+| `thirdp_pitch` | 0.29 | The chase rig's tilt, in **degrees**: the reader multiplies it by π/180 on the way into the block, and the placement adds the result to the head's shown elevation, turning offset and aim together. Positive tilts the aim up and the camera down, so the settled camera sits at 7.57°. 0.29° is a hair of tilt, not the 16.6° that reading the file's number as radians would suggest. |
 | `back_dist_min` / `_max` | 15.5 / 55.0 | The look-behind view's distance bounds. Ships with no base-distance sibling, so the engine reads it as bounds on the shared chase radius: the min bites for the smallest airframes (a Kestrel's 15.0 m dynamic radius is lifted to 15.5), the max never in practice. A reading from the data's shape, not a capture-verified decode, no look-behind footage exists. |
 | `death_interval` | 2.0 | Seconds of velocity projection in the death-camera placement: `speed · death_interval` becomes the third local offset component. It is not a re-frame timer. |
 | `death_z` / `death_x` | 0 / 80 | Longitudinal addition / radius of the random local-plane offset used for the death camera. |
@@ -187,12 +187,12 @@ aircraft sits at `dist_max + 10` with the axis fully out.
 
 ## Known limits
 
-⚠ **`thirdp_height`'s units are unknown**, so CSVM takes only the *radius* from this file.
-`thirdp_pitch` IS the chase offset's own elevation, though: the placement adds it to the head's
-smoothed elevation and builds the direction from that pair (`docs/org/cameraViews.md`, head-look
-controller), so with the head settled the original's camera sits dead astern at 0.29° rather than at
-the 15.7° CSVM's hand-picked pair holds. Correcting that is `BL-885`, since it moves every chase
-shot and wants judging at the controls.
+⚠ **The default chase camera does not read `thirdp_height` or `thirdp_pitch`.** The two fields
+together place the original's chase camera 7.57° above the tail and aim it along the nose
+(`../org/cameraViews.md`, "The chase rig"). Neither alone is the elevation: the pitch is a
+third-of-a-degree tilt and the height is the lift. CSVM's default rig is a hand-picked 15.7° aimed
+ahead of the nose, and the decoded rig runs only under `--chase-rig=authored` until the two are
+judged side by side at the controls, since the switch moves every chase shot.
 
 ## Throttle transient
 
@@ -241,6 +241,8 @@ direction factor, which the look-behind arm hard-codes to `−1`, so a slam push
   both per real second.
 - `dist_min` / `dist_max`, the bounds that radius is held inside for every forward-facing pose,
   and so the pose the view rests at (`ExternalRadius`).
+- `thirdp_height` / `thirdp_pitch`, the authored chase rig (`AuthoredRig`), read only under
+  `--chase-rig=authored`.
 - `crash_horiz` / `crash_y`, the crash camera's hard-cut pose (`CrashView`).
 - `back_dist_min` / `back_dist_max`, the look-behind view's distance bounds (`BackView`,
   numpad 0 / `--view=back`), which take no zoom.

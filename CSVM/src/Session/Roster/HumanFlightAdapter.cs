@@ -166,6 +166,7 @@ internal sealed class HumanFlightAdapter
             DebugCollision = _world.DebugCollision,
             PinnedView = _policy.View,
             PinnedViewMode = _policy.ViewMode,
+            ChaseRig = _policy.ChaseRig,
             AutoHeadTurn = _policy.AutoHeadTurn,
             PinnedLook = _policy.PinnedLook,
             HudParent = remote ? null : rig.Viewport,
