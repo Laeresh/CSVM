@@ -282,11 +282,10 @@ walk that stops at the first zero mask would end at entry 10; play disproves tha
 (the Hoplite offers four patterns including `itstaxi` = 13, and a genuine save carries
 `studio` = 11), so the walk evidently tolerates it. The corrected masks, de-shifted for
 10/12 and matching every external source (the schemes' vehicle.json users, the shipped icon
-sets, the fixtures): 0x411, 0x80, 0x208, 0x204, 0x7ff, 0x40, 0x188, 0x110, 0x20, 0x402,
+sets, the genuine saves): 0x411, 0x80, 0x208, 0x204, 0x7ff, 0x40, 0x188, 0x110, 0x20, 0x402,
 0x2, 0x81, 0x200, 0x1.
 
-Two facts pinned by reading seven genuine saves (the `CSVM.Tests/fixtures/planes204` fixture
-set): the paint UI's darkest shade saves as **(25,25,25)**, so every scheme-table slot listed
+Two facts pinned by reading seven genuine saves: the paint UI's darkest shade saves as **(25,25,25)**, so every scheme-table slot listed
 as (0,0,0) round-trips through a save as 25/25/25 (the four Fury fixtures, each named for a
 shipped scheme, match their scheme's triple in every other slot; their saves also pin pattern
 indices blckswan = 1, fortune = 4, hughes = 6, studio = 11). And the family-bit byte at +0x84
