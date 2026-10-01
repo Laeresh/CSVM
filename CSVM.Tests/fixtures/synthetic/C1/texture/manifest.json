@@ -1,0 +1,7 @@
+{
+  "texture_infos": [
+    { "name": "probe_skin", "width": 64, "height": 64, "alpha": "None", "stretch": "None" },
+    { "name": "probe_panel", "width": 32, "height": 32, "alpha": "None", "stretch": "None" },
+    { "name": "probe_tracer", "width": 16, "height": 8, "alpha": "None", "stretch": "None" }
+  ]
+}

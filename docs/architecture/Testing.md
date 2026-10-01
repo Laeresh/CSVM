@@ -19,9 +19,9 @@ instead; read `TestHarness.cs` for that half.
 `--run-tests[=filter]`: the suite registry, `TestContext` (assert verbs, resolved data paths, a
 scene-tree host, `SyncPhysics` for the space a one-frame run leaves behind, and the `WithWorld`
 chapter-world builder over `WorldSession`), the PASS/FAIL/SKIP table, `test-report.json` in
-`TestContext.ScratchDir`, and the exit code. `Select` is the pure selector over the flag's value,
-`SkipFailures` the pure set of suites whose SKIP a tier makes a FAIL, and `SuiteShards` the term
-that divides. The world cache and its eviction, the mission-override and private-world forms,
+`TestContext.ScratchDir` (its `syntheticData` names a synthetic data root), and the exit code.
+`Select` is the pure selector over the flag's value, `SkipFailures` the pure set of suites whose
+SKIP a tier makes a FAIL, and `SuiteShards` the term that divides. The world cache and its eviction, the mission-override and private-world forms,
 `DecodeCache`, `StartupProfile`, the queued-free flush and the engine-error allowlist carry their
 rules at their members. Read `SuiteCatalog.cs` for registration, `PhaseAttribution.cs` for time.
 

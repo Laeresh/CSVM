@@ -11,6 +11,11 @@ skip when it is absent.
 Byte-level fixtures (WAV/ADPCM) are not files at all: they are assembled field by field in
 `WavFileTests.cs`, so the provenance of every byte is visible in the code that writes it.
 
+The engine reads this folder too, from the repo checkout: `--synthetic-data` assembles its
+invented `extracted/` tree from files named here plus files generated in code
+(`CSVM/src/Tooling/SyntheticData.cs`). A record a synthetic family copies keeps its path, or the
+tree fails to build.
+
 | Path | Format page | Exercises |
 |---|---|---|
 | `zrdr/shapes.json` | `zrdr.md`, `README.md` "Shared conventions" | alternating key/list dicts, bare flags, stray values, duplicate keys |
@@ -29,3 +34,4 @@ Byte-level fixtures (WAV/ADPCM) are not files at all: they are assembled field b
 | `ia-cli.json` | `instant-action.md` | the `--ia=` plain-JSON-object shape (not the zrdr flat-alternating one), a JSON-`null` wave |
 | `menu-layout/` | `menu-layout.md` | the sectioned-CSV grammar, `V<n>` beating `G<n>`, an unresolvable macro, every widget type's field order, the `ResID` → header → text join, the button colour tail and frame counts, the quoted scrapbook rectangle, a stray line and an unknown type |
 | `menu-layout-original/` | `menu-layout.md`, `instant-action.md` | the Original shell's screens under the shipped widget keys on invented lines and invented `PM_*`/`PI_*` art: the main menu's panes and six buttons, the flight check's paper plaque, and the Instant Action section (the contents list, the dropdowns on shared lines for the two enemy pages, the radio pair, the text rows) |
+| `synthetic/C1/texture/manifest.json` | `docs/org/textures.md` | the extraction manifest's `texture_infos` (`name`, `width`, `height`, `alpha`, `stretch`) for the synthetic C1 texture archive; one PNG per entry is generated at that size |

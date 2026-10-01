@@ -67,7 +67,7 @@ exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One 
 `--hold` · `--lever` · `--yaw` · `--pitch` · `--look`
 
 **Data paths, override where the extraction is read from**
-`--data-root` · `--gamez` · `--textures` · `--zrdr` · `--interp` · `--sounds` · `--zip-assets` · `--messages`
+`--data-root` · `--synthetic-data` · `--gamez` · `--textures` · `--zrdr` · `--interp` · `--sounds` · `--zip-assets` · `--messages`
 
 **Extraction, build `extracted/` from an original install and exit**
 `--extract` · `--extract-force` · `--extract-unzip` · `--unzbd`
@@ -338,6 +338,7 @@ lines**.
 - `--spawn-at=x,y,z` / `--spawn-dir=x,y,z` (**deprecated**, the pre-A5 flight-only spelling of `--pos`/`--direction`; each logs `WARN [core] deprecated flag=… use=…` once per run and otherwise behaves exactly as it did. They still carry their old per-mode meaning, which `--pos` deliberately does not copy: in `--anim-lab` `--spawn-at` moves the parked stage prop as well as the camera, and in `--freecam` it moves the camera through the spawn path, where `--pos` beats it)
 - `--sky-zone=zone1|zone2|zone3` (horizon zone, default `zone2`. It also selects that zone's distance fog and enables fog, whiteout and the map-edge extension in a static view. **The names are per chapter**: C1 to C4 ship `zone1`+`zone2`, **C5 ships `zone1`+`zone3`**, and a zone the chapter does not define falls back to the first its `weather.json` lists. The default is also corrected by the horizon's geometry: where the named zone builds no dome, the one that has renders. **Passing the flag explicitly opts out of that correction**, pins the fog and forces the `zone_id` gate to that zone)
 - `--data-root=` (where `extracted/` lives; default the repo root. Also settable as the **`CSVM_DATA_ROOT`** environment variable, which the flag overrides. It exists so a **git worktree can run the game**: `/extracted/`, `/CrimsonSkiesGame/` and `/tools/` are git-ignored, so a worktree checkout has none of them. Point it at the primary tree and a worktree session renders **byte-identically** to that tree. It affects asset lookup only: `planes.zip`, `zrdr.zip`, `soundsh.zip`, `interp.json`, `messages.json`, `rof/`, and the per-chapter `gamez`/`texture` and mission `zrdr` paths)
+- `--synthetic-data` (**read an invented test tree instead of the data root**: writes an `extracted/` of the `CSVM.Tests/fixtures/` records and generated files into `.scratch/synthetic-data/<pid>/`, stamped synthetic, and reads it in place of whatever root was named, so an install there is not read. Opt-in only, logged as `WARN [core] SYNTHETIC DATA`, and `test-report.json`'s `syntheticData` reads true. A tree that cannot be written quits 1 rather than read the install. Needs a repo checkout, so an export refuses it; dropped beside `--extract`. `Tooling/SyntheticData.cs`)
 - `--gamez=`
 - `--textures=`
 - `--zrdr=` (default extracted/zrdr.zip)

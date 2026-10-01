@@ -283,6 +283,7 @@ public sealed class ProbeRunner
         {
             RepoRoot = _repoRoot,
             DataRoot = _dataRoot,
+            SyntheticData = SyntheticData.Marks(_dataRoot),
             Chapter = spec.Chapter,
             Mission = spec.Mission,
             ZrdrPath = _zrdrPath,

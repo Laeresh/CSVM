@@ -126,7 +126,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B, the synthetic data root and the stand-in plane
 
-11. ☐ A synthetic data root written at run time
+11. ☑ A synthetic data root written at run time
 12. ☐ The stand-in plane: model, markers and plane records
 13. ☐ Stand-in weapons, shakes and messages
 14. ☐ Generated texture and sound archives
@@ -351,7 +351,64 @@ off the world; those are bucket E even when they also use terrain.
 
 # Wave B, the synthetic data root and the stand-in plane
 
-## B11 ☐ A synthetic data root written at run time
+## B11 ☑ A synthetic data root written at run time
+
+**Landed.** `--synthetic-data` writes an invented `extracted/` tree into
+`.scratch/synthetic-data/<pid>/` and reads it as the data root, for any launch, `--run-tests`
+included. `Tooling/SyntheticData.cs` is the builder, engine-free so `CSVM.Tests/SyntheticDataTests.cs`
+builds the same tree; `Tooling/SyntheticTextures.cs` is its one family so far, the C1 texture
+archive (`extracted/C1/texture/`: the hand-authored `fixtures/synthetic/C1/texture/manifest.json`
+plus one generated checker PNG per `texture_infos` entry, through the existing
+`Extraction/PngWriter.cs`). The open questions, settled:
+
+- **Opt-in, and what a real install gets.** Only the switch builds or selects the tree; nothing
+  infers it from a tier or a missing install. With the switch, the tree replaces whatever root
+  `--data-root=`, `CSVM_DATA_ROOT` or the repo root named, and the install there is not read: the
+  author's checkout always has an install at the repo root, so refusing would make the CI run
+  impossible to reproduce locally without hand-pointing `CSVM_DATA_ROOT` at an empty folder, and
+  the replacement reads nothing from the install because every base path derives from the replaced
+  root. The explicit `--zrdr=`-style overrides still win, as they always do. The switch is logged as
+  `WARN [core] SYNTHETIC DATA` naming both roots, the harness adds a `WARN [test]` line and
+  `data=SYNTHETIC` on its summary line, and `test-report.json` carries `"syntheticData": true` beside
+  the `dataRoot` path. A data root pointed at a synthetic tree without the switch gets the same
+  warning. A tree that cannot be written quits 1 and never falls back to the install. Beside
+  `--extract` the switch is dropped with a note.
+- **The stamp.** The tree is stamped through `ExtractionStampWriter.Merge` with the current
+  `schema` and a `synthetic` field. `ExtractionStamp.Check` reads only `schema`, so a field it does
+  not know is inert: the synthetic stamp passes the boot check silently, `Standing` reads
+  `Current` (a menu launch reaches the menu) and `Behind`, the Original shell's gate (C23), is
+  false. An unstamped tree would read the same everywhere except one boot warning, so the stamp is
+  needed for the marker more than for the check: `Marks` reads the `synthetic` field, and `Build`
+  deletes an existing `extracted/` only when it carries it, so a real extraction is never replaced.
+- **Where the records live.** In `CSVM.Tests/fixtures/`, read from the repo checkout
+  (`SyntheticData.FixturesUnder(repoRoot)`); nothing moved. The engine never reaches them through
+  `res://`, and an export has no such folder, so it refuses the switch and ships nothing extra.
+- **How the generators are shared.** They are engine code in `CSVM/src`, which `CSVM.Tests`
+  references, so the unit tests call `SyntheticData.Build` directly. A generator must stay
+  engine-free for that.
+- **Adding a family** (B12 to B14): one `SyntheticFamily` entry in `SyntheticData.Families` and a
+  writer that copies records with `SyntheticTree.CopyFixture` and writes bytes with `WriteBytes`,
+  only under its own folder. B12 owns `planes/` and the plane records under `zrdr/`, B13 the weapon,
+  shake and message records, B14 extends `C1/texture/` and adds `soundsh/`. A WAV generator moves
+  from `WavFileTests.cs` into `CSVM/src` the way `PngWriter` already sits there.
+
+Verified on Linux, headless, with an empty data root and port base 50000: the full catalog without
+the switch is unchanged at 53 PASS, 2 FAIL (`build-stamp-focus`, `enet-dual-stack`), 440 SKIP and
+`syntheticData: false`; `tier:ci` with the switch passes 52/0/0 with the synthetic root in the log
+and report; a temporary suite (reverted) opened `SessionPaths.ChapterTextures(DataRoot, "C1")` over
+the synthetic root and decoded all three textures (64x64, 32x32, 16x8, class `None`) with no
+warning line and no miss; a fake install (`extracted/VERSION.json` alone, schema 3) without the
+switch read only that root, wrote no synthetic tree and skipped the probe, while the same root with
+the switch read the synthetic tree and named the install as unread; a missing manifest quit 1 with
+the reason. The full catalog over the synthetic root reads 53 PASS, 7 FAIL, 435 SKIP: five suites
+gate on the C1 textures alone and then need real names or an unguarded `planes.zip`
+(`cockpit-panel-staging`, `damage-staging-pool`, `puffer-fire-glow`, `puffer-smoke-sun`,
+`tex-dropin`); that is B15's input, and no ci tier member is among them. The author's Windows run
+owes the full `RunTests.ps1` battery, which should be unchanged (no suite changed and nothing runs
+without the switch), and optionally one `--run-tests=tier:ci --synthetic-data` on the real
+checkout, which should pass the tier and name the repo root's install as unread.
+
+**Original approach (kept for reference).**
 
 **Goal.** With no install, the harness (or the CI script) writes an `extracted/` tree of invented
 records and generated files into the scratch folder and points the run at it, so the loaders take

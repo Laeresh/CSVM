@@ -603,8 +603,8 @@ determinism repo-wide; read `docs/verification.md` first.
 
 ### `src/Tooling/`, runtime tooling the game and the harness share
 
-The `--dump-*` probes, the capture loop, the golden-image hash and the glTF export. The game and
-`src/Testing/` both depend on it; it reaches into the harness only to dispatch `--run-tests`.
+The `--dump-*` probes, the capture loop, the golden-image hash, the glTF export and the
+`--synthetic-data` tree. The game and `src/Testing/` both depend on it; it reaches into the harness only to dispatch `--run-tests`.
 
 - `src/Tooling/Probes.cs`, the assertion cores behind the `--dump-*` reports: one pass yields the report text and the verdict a suite asserts on.
 - `src/Tooling/EnvelopeMargins.cs`, one flight scenario's distance from every term that could bound it, plus the decoded branches it drove.
@@ -613,6 +613,8 @@ The `--dump-*` probes, the capture loop, the golden-image hash and the glTF expo
 - `src/Tooling/ShaderDiagnostics.cs`, `--debug-shaders`: the shader census, the frames after a live switch and every frame over 33 ms.
 - `src/Tooling/CaptureDirector.cs`, the `--screenshot=`/`--shots=`/`--frames=` capture state machine, F11's camera-pose print and F12's save, ticked from `_Process`.
 - `src/Tooling/GltfExporter.cs`, exports the viewer plane subtree to glTF (mesh + livery + baked damage) for `--export-gltf=`/F10, on a throwaway duplicate.
+- `src/Tooling/SyntheticData.cs`, `--synthetic-data`: writes an invented `extracted/` tree into scratch from the fixture records and generated files, stamped synthetic.
+- `src/Tooling/SyntheticTextures.cs`, the synthetic tree's C1 texture archive: the fixture manifest plus one generated PNG per entry.
 
 ### `src/Session/`, the launch/session layer
 

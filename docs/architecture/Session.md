@@ -31,7 +31,7 @@ weather, lens flare, terrain extension and wall-time watches stay outside it, wi
 than a participant registry. Read `GameSession.cs` for who owns each phase.
 
 ## src/Session/Launch/Launcher.cs
-Main.tscn's root and the process bootstrap: CLI parse into `_cli`/`_spec`, data-root precedence, the
+Main.tscn's root and the process bootstrap: CLI parse into `_cli`/`_spec`, data-root precedence and the `--synthetic-data` swap (`Tooling/SyntheticData.cs`), the
 editor check that gives an export its `logs\` and audible volume default, the developer gain on bus 0 with the saved mix under it, at startup and on an Options apply (`Utils/MasterVolume.cs` resolves the first, `Utils/AudioMix.cs` writes the second), the `--dump-*`/`--run-tests` early quits and the `--extract` run (`Extraction/ExtractionRun.cs` on a worker thread),
 and what outlives a session (camera, sun, audio, music, the perf and hitch instruments, the stick pump `Sticks/StickPump.cs` started after the pad roster is logged, the typed-character feed `UI/Screens/TypedText.cs` its `_Input` fills with every key event's character and paste chord, and the one `ChapterCinema` and `ClosingCinema` the campaign's doors play through). It owns the
 menu as one `MenuHost` built on the first show, the presentation resolution, the only options write (an apply from the in-flight `UI/Screens/PausePreferences.cs` leaf takes that same route, without the presentation reselect a menu-side apply ends on),

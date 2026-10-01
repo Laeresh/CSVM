@@ -953,6 +953,12 @@ public sealed record SessionSpec
     /// repo root, and the paths derived from the winner, are resolution.</summary>
     public string? DataRoot { get; private set; }
 
+    /// <summary><c>--synthetic-data</c>: write an invented extraction tree into the scratch folder
+    /// and read it in place of the data root. Off unless given, and dropped with a note beside
+    /// <c>--extract</c>, which would otherwise write an extraction into that tree. See
+    /// <see cref="Tooling.SyntheticData"/>.</summary>
+    public bool SyntheticData { get; private set; }
+
     /// <summary><c>--extract=&lt;install&gt;</c> verbatim: extract that install into the data root's
     /// <c>extracted</c> folder and quit with the verdict. Empty for a bare <c>--extract</c>, which
     /// the install check refuses; null when the flag was absent.</summary>
@@ -1512,6 +1518,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--spawn-dir=")) { s.SpawnDir = ParseVec3(arg["--spawn-dir=".Length..]); Deprecate("--spawn-dir", "--direction"); }
             else if (arg.StartsWith("--sky-zone=")) { s.SkyZone = arg["--sky-zone=".Length..]; s.SkyZoneExplicit = true; }
             else if (arg.StartsWith("--data-root=")) { s.DataRoot = arg["--data-root=".Length..]; }
+            else if (arg == "--synthetic-data") { s.SyntheticData = true; }
             else if (arg == "--extract") { s.ExtractInstall = ""; }
             else if (arg.StartsWith("--extract=")) { s.ExtractInstall = arg["--extract=".Length..]; }
             else if (arg == "--extract-force") { s.ExtractForce = true; }
@@ -1706,6 +1713,11 @@ public sealed record SessionSpec
                     notes.Add(new Note("core", $"{name} does nothing without --extract=<install>, ignoring it"));
                 }
             }
+        }
+        else if (s.SyntheticData)
+        {
+            notes.Add(new Note("core", $"--synthetic-data with --extract would extract into the invented tree, ignoring --synthetic-data"));
+            s.SyntheticData = false;
         }
 
         if (netHost != null)

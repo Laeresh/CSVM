@@ -101,6 +101,10 @@ public static class TestHarness
         var skipFails = SkipFailures(terms);
         var results = new List<SuiteResult>();
         Log.Info("test", $"run-tests suites={selected.Count}/{All.Count} filter='{filter}' chapter={ctx.Chapter} mission={ctx.Mission}");
+        if (ctx.SyntheticData)
+        {
+            Log.Warn("test", $"run-tests reads SYNTHETIC data dataRoot={ctx.DataRoot}: a PASS here proves a code path on invented records, never the game's data");
+        }
         if (unmatched.Count > 0)
         {
             Log.Error("test", $"run-tests selector matched nothing: {string.Join(", ", unmatched)}; registered: {string.Join(", ", All.Select(s => s.Name))}");
@@ -254,7 +258,7 @@ public static class TestHarness
         Log.Raw(FormatTable(results, screen, logPath));
         WriteReport(ctx, results, screen, logPath, phaseTotals, filter, plan);
         string errors = screen == null ? "unscreened" : screen.Ok ? "clean" : "UNEXPECTED";
-        Log.Info("test", $"run-tests pass={pass} fail={fail} skip={skip} errors={errors}");
+        Log.Info("test", $"run-tests pass={pass} fail={fail} skip={skip} errors={errors}{(ctx.SyntheticData ? " data=SYNTHETIC" : "")}");
         return fail > 0 || screenFailed ? 1 : 0;
     }
 
@@ -562,6 +566,7 @@ public static class TestHarness
         json.AppendLine($"  \"chapter\": {Quote(ctx.Chapter)},");
         json.AppendLine($"  \"mission\": {Quote(ctx.Mission)},");
         json.AppendLine($"  \"dataRoot\": {Quote(ctx.DataRoot)},");
+        json.AppendLine($"  \"syntheticData\": {(ctx.SyntheticData ? "true" : "false")},");
         json.AppendLine($"  \"passed\": {results.Count(r => r.Status == SuiteStatus.Pass)},");
         json.AppendLine($"  \"failed\": {results.Count(r => r.Status == SuiteStatus.Fail)},");
         json.AppendLine($"  \"skipped\": {results.Count(r => r.Status == SuiteStatus.Skip)},");
@@ -795,6 +800,11 @@ public sealed class TestContext
 
     public required string RepoRoot { get; init; }
     public required string DataRoot { get; init; }
+
+    /// <summary>Whether <see cref="DataRoot"/> is the invented tree <c>--synthetic-data</c> writes,
+    /// read off the tree's own stamp. The run's log and report say so.</summary>
+    public bool SyntheticData { get; init; }
+
     public required string Chapter { get; init; }
     public required string Mission { get; init; }
     public required string ZrdrPath { get; init; }
