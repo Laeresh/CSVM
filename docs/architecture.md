@@ -30,6 +30,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/GameZ.cs`, GameZ extraction loader (zip or dir): nodes/models/materials/textures JSON → C# objects, either extraction shape.
 - `src/Mech3/TextureArchive.cs`, texture lookup (zip or dir): resolves the name quirks, classifies each texture's alpha (soft vs hard).
 - `src/Mech3/SceneBuilder.cs`, shared GameZ-subtree → MeshInstance3D builder: triangulation, LOD, depth bias, billboards, fog, UV scroll.
+- `src/Mech3/ShaderTwins.cs`, every generated shader one per text, each cache key's pair per graphics mode, and the materials that follow a key across a live switch.
 - `src/Mech3/ZoneGate.cs`, the original's per-node `zone_id` visibility gate: the rule, its visual-layer allocation, and the per-camera cull mask.
 - `src/Mech3/CloudPuffs.cs`, Enhanced only: the rendered cloud puff pools for the deck cards and the placed cloud sprites, their tint and per-card pose.
 - `src/Mech3/ConflictRank.cs`, the world's cross-node draw-order tie-break: ranks nodes by their conflict graph, one slot per coplanar layer.
@@ -624,6 +625,7 @@ delegate to, in six sub-namespaces, one folder each. `Launch` sits on top and no
 - `src/Session/Launch/Launcher.cs`, Main.tscn's root: the once-per-process bootstrap, what outlives a session, the menu host, and every path a session starts or ends.
 - `src/Session/Launch/GameSession.cs`, the per-launch session node: ordered build phases over one `SessionSpec`, owning the clock, world root, panes and runtimes.
 - `src/Session/Launch/EnhancedLook.cs`, the enhanced mode's sun shadows, screen-space passes, tonemap and sky on a sun and an Environment, on or back to the faithful defaults.
+- `src/Session/Launch/SwitchCover.cs`, a live graphics switch over a flying world: the flight held, a load board over the window, the switch run once it presents, both dropped when frames settle.
 - `src/Session/Launch/TuningWarmup.cs`, the startup pass that registers every `Config` key before the orphan report and `--dump-config` read the registry.
 - `src/Session/Launch/ExtractionStamp.cs`, reads the extraction provenance stamp at boot and warns once when it is stale or unreadable; `Behind` is the blocking read, `Schema` the promise a test pins.
 - `src/Session/Launch/MenuAudioService.cs`, the menus' audio host: the music channel, the briefing narration player, the cue player behind `MenuCueTable`, and the AUDIO page's live mix preview.

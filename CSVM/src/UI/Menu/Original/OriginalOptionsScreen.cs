@@ -467,7 +467,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         new(GraphicsKey, "Enhanced Graphics", "VP_T_ShadowsTitle", "VP_B_SHADOWS", "VP_T_ShadowsDESC",
             s => s.GraphicsDescription(), OriginalRowKind.Radio, _ => GraphicsWords,
             s => s._graphics == CSVM.Utils.GraphicsMode.EnhancedWord ? 1 : 0,
-            (s, i) => s._graphics = i == 1 ? CSVM.Utils.GraphicsMode.EnhancedWord : CSVM.Utils.GraphicsMode.Default),
+            (s, i) => s._graphics = i == 1 ? CSVM.Utils.GraphicsMode.EnhancedWord : CSVM.Utils.GraphicsMode.Default,
+            _ => !CSVM.Utils.GraphicsMode.SwitchLocked),
     };
 
     // The six named tabs are the original's own action categories, over this port's flight actions,
@@ -1963,8 +1964,11 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     }
 
     // The graphics row's description. The apply switches the running world
-    // (Launcher.SwitchGraphicsMode), over a paused flight as well, so no restart is owed.
-    private string GraphicsDescription() => "Select the lit world. Applies at once.";
+    // (Launcher.RequestGraphicsSwitch), over a paused flight as well, so no restart is owed. A network
+    // session refuses it, and the row draws dead.
+    private string GraphicsDescription() => CSVM.Utils.GraphicsMode.SwitchLocked
+        ? "Select the lit world. A network game keeps the one it started with."
+        : "Select the lit world. Applies at once.";
 
     // The screen's sizes and the one a saved size it lacks falls back to. They are read through the
     // reader on every access, like the screens below. The list is widened with the size the options

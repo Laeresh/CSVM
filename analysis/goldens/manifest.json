@@ -169,7 +169,7 @@
     {
       "name": "c1-rocket-hit-enhanced",
       "frame": 90,
-      "hash": "719b26adcdca7f8c53ee8e69e99bc2b1",
+      "hash": "05acd6d817e878fdd4029e47777ac7b9",
       "exercises": "Enhanced chase flight after two HE rockets hit the dirt by C1's airfield: the burst omni light on the ground, blooming fire frames, sun-shaded smoke, heat shimmer and scorch pools live, wind streaks, TAA; frame-sensitive 94.08 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6104,300,-4420", "--direction=0,-0.33,0.94", "--fire-rockets", "--hold=0,0,0,0.3", "--det", "--mute", "--graphics=enhanced"]
     },

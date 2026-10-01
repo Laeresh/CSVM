@@ -443,11 +443,22 @@ member, and it does not go here.
   only the draw's hand-off. A Godot debug build prints `causing RenderingServer synchronizations on
   every frame` for each such call; the frame's own wait for the render thread is in `defer_ms`.**
   The per-frame render-time read raised CM24's `proc_ms` on the Deck from 3.8 to 10.3 ms.
-- **PERF-45**, **Count each pane's spyglass disc as a viewport of its own: it renders the whole
+- **PERF-45**, **The first frame a process draws with TAA stalls for every Shader object alive, not
+  for what that frame draws: Godot then builds the advanced scene-shader group (20 variants a shader
+  beside the base group's 8) for every version (`ShaderRD::enable_group`, a disk-cache hit loading
+  synchronously on the render thread) and recompiles every surface's pipelines for the new flags.
+  Count the live shaders with `--debug-shaders` before reading such a stall, and read it as
+  Godot's, not the frame's.** A first switch to Enhanced on CM24 stalled 10.2 s over 217 shaders,
+  8.6 s over 138 once texts were shared; one hidden TAA frame at load took the same build there.
+- **PERF-46**, **Under the separate render thread a per-instance `MultiMesh` getter is a synchronous
+  round trip, so a loop of them over a large MultiMesh costs about a microsecond each in waits. Keep
+  the state you need to read in a mirror of your own, and fill a new MultiMesh with one `Buffer`
+  write.** Reading C5's 199,685 clutter placements back took 290 to 440 ms of every graphics switch.
+- **PERF-47**, **Count each pane's spyglass disc as a viewport of its own: it renders the whole
   world through the pane's cull mask, sun shadows included, on every frame a target is off screen,
   and a flight with several players holds one most of the time.** In four-pane C5 flight the four
   discs drew 5,400 of 11,700 draws, more than the panes' own world draws.
-- **PERF-46**, **Compare four-pane frame times only within one interleaved batch: the same build's
+- **PERF-48**, **Compare four-pane frame times only within one interleaved batch: the same build's
   `frame_ms` on the author's machine moves by more than a change's effect between batches an hour
   apart.** C5 four-pane with the merge off read 14.8 and 15.1 ms in one batch and 13.3 and 13.4 ms
   in a later one, against a merge effect of 0.4 to 1.8 ms.

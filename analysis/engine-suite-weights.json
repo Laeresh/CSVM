@@ -229,6 +229,7 @@
     "gltf-export": 0.433,
     "graphics-live-switch": 15.3,
   "graphics-shader-twins": 3.0,
+    "graphics-switch-cover": 0.02,
     "graphics-view-distance": 6.9,
     "graze-bounce": 0.361,
     "ground-contact": 0.022,

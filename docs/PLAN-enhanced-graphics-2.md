@@ -230,13 +230,20 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
   follows, texture alpha depth included, with no mission reload. View Distance is a Remake-menu row,
   a `graphics.viewDistance` key and `--view-distance`, default Far. Graphics mode, View Distance,
   AA, Render Scale and Shadow Quality all apply live.
-- **Shader twins per mode.** Each generated shader keeps one compiled copy per graphics mode, and a
-  switch moves materials between them, so Godot recompiles nothing. `--shader-warmup=auto|load|off`
-  compiles the other mode's copies at load (auto: once the process has switched). From Enhanced
-  with the warm-up, C1 switches in 0.2 s on the author's machine against 2.5 to 5.7 s, and in 0.7 s
-  on the Deck against 3.1 to 6.5 s. **Open:** the C5 clutter recut (2.5 to 3.0 s of a Deck switch),
-  the stall on the first frame after a first switch to Enhanced (5 to 14 s, Godot building the
-  advanced variants), and the identical shader texts CM24's world compiles twice.
+- **Shader twins per mode.** Each cache key keeps one compiled shader per graphics mode, keys whose
+  texts agree share one, and a switch moves each material onto its key's shader, so Godot recompiles
+  nothing (`Mech3/ShaderTwins.cs`). `--shader-warmup=auto|load|off` compiles the other mode's shaders
+  at load (auto: once the process has switched); `load` in an Original process also draws one hidden
+  TAA frame, which moves Godot's advanced-variant build from the first switch to the first frames at
+  load. The clutter keeps both its layouts and writes only the stamps moved since. With the load
+  warm-up a switch costs 0.2 to 1.3 s on the author's machine (C1 to CM24) and 0.3 to 0.9 s on the
+  Deck (C1, C5). **Open:** under the default `auto`, a process's first switch to Enhanced still
+  stalls 4.9 to 9.5 s on the author's machine and 6.2 to 6.9 s on the Deck, and the first switch
+  that makes the Original shaders costs 1.8 to 4.7 s and 2.7 to 3.7 s: Godot builds the variants of
+  every live shader (`docs/verification.md` PERF-45).
+- **The switch cover.** A switch over a flying world runs under a load board with the flight held,
+  its catch-up ticks spent while held and a player's pause kept (`SwitchCover`). A network session
+  refuses the switch, and its Options row draws dead.
 
 ## Dependency and parallelism notes
 
@@ -783,7 +790,28 @@ PERF-39).
   (`MapEdgeExtender.FollowClutterFade`). Four-pane CM24 20,500 → 10,700 draws, one pane 4,200 →
   2,550. The static world merge was not built: after these two it is a minor term in CM24, and in
   C5 a census groups the 3,056 placed-node surfaces into 1,810 by material in 512 m cells.
-- **The static world merge** (`Mech3/WorldMerge.cs`, Enhanced flight only). @@MERGE@@
+- **The static world merge** (`Mech3/WorldMerge.cs`, Enhanced flight only). Re-profiled first
+  (release export, four panes, one category hidden at a time): C5 15.0 ms with world placed nodes
+  5.6 ms of it, the spyglass discs 2.2 and clutter 3.4; CM24 13.2 with world nodes 1.9, discs 1.3,
+  clutter 2.3, zeppelins 0.5; CM23 10.1 with world nodes 1.6 (PERF-47 on the discs). The merge
+  draws the opaque placed-world surfaces that share an exact node frame, material, `node_bias`, zone
+  layer and shadow setting as one mesh at that frame, from the arrays `SceneBuilder` committed, so
+  no vertex reaches the GPU rounded differently; in C5, CM23 and CM24 it is 851 surfaces of 423
+  nodes in 190 meshes, the world-space-authored ground and blocks sharing the identity frame. A
+  node a name query hands out (`AnimRuntime.ClaimedNodes`), a parked vehicle, the cloud deck, a
+  hidden node, and every blended or billboard surface stay on their own draw. Baking transforms into
+  512 m cells merged more but moved two Enhanced goldens by up to 18,565 px; cells of 1 to 4 km
+  around the frame grouping merged less and drew no faster. Paired release exports on the author's
+  machine, four panes, frame_ms over three interleaved passes: C5 13.40 / 16.91 / 13.37 → 13.03 /
+  15.91 / 12.92 (draws about 10,800 → 10,000), CM23 10.00 / 9.89 → 9.60 / 9.55, CM24 flat within
+  noise; one pane stays at the 120 Hz cap. Deck, 67% TAA, Shadow Quality High, merge off → on: C5
+  108 / 130 → 119 / 137 fps, CM23 94 → 101, CM24 66.6 → 70.0, C5 four panes 24.4 → 28.0. The 19
+  faithful goldens are untouched; `c1-rocket-hit-enhanced` differs from the unmerged draw by one
+  pixel of one level, a draw order tie between coplanar surfaces of one material, and is pinned at
+  the merged image. Not built, measured: a camera's cull mask
+  drops the sun for that camera (the disc's shadow draws 444 → 0 with the sun on a layer the disc
+  camera leaves out), so a shadowless twin sun on a layer only the discs draw is the route to their
+  shadow cost. Zeppelin and aircraft parts move, so a merge does not reach them.
 
 **Against the goal.** Every target reads met. Deck, 1280x800, one pane, 67% TAA, Shadow Quality
 High, separate render thread, two passes: CM24 67.5 fps (14.9 ms, from 57.5 to 58.5), CM23 96 to

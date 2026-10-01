@@ -24,6 +24,9 @@ internal static class ClutterCull
 
     private static readonly ConditionalWeakTable<MultiMesh, Bins> s_bins = new();
 
+    // The kind a MultiMesh draws and the placement in each slot (null: the slot is the placement).
+    private static readonly ConditionalWeakTable<MultiMesh, Owner> s_owners = new();
+
     /// <summary>How many live decorations stand inside <paramref name="shape"/>. The census a
     /// crater's destruction is measured by, before and after.</summary>
     internal static int Within(Node? root, in CraterShape shape) => Walk(root, shape, destroy: false);
@@ -43,6 +46,12 @@ internal static class ClutterCull
         }
         s_bins.AddOrUpdate(mm, bins);
     }
+
+    /// <summary>Routes a cull of <paramref name="mm"/> through <paramref name="instances"/>. It reads
+    /// and records each stamp, so a flattened stamp stays flattened across a recut. Each slot's
+    /// placement is in <paramref name="placements"/>, null where slot and placement agree.</summary>
+    internal static void Own(MultiMesh mm, ClutterInstances instances, int[]? placements) =>
+        s_owners.AddOrUpdate(mm, new Owner(instances, placements));
 
     private static int Walk(Node? node, in CraterShape shape, bool destroy)
     {
@@ -112,12 +121,19 @@ internal static class ClutterCull
     // and rasterises nothing, which is what keeps the draw call and its custom data intact.
     private static int Card(MultiMesh mm, in Transform3D toWorld, int i, in CraterShape shape, bool destroy)
     {
-        var placed = mm.GetInstanceTransform(i);
+        var owner = s_owners.TryGetValue(mm, out var known) ? known : null;
+        int placement = owner?.Placements?[i] ?? i;
+        var placed = owner != null ? owner.Instances.LocalTransform(placement) : mm.GetInstanceTransform(i);
         if (placed.Basis.Determinant() == 0f || !shape.Covers(toWorld * placed.Origin))
         {
             return 0;
         }
-        if (destroy)
+        if (destroy && owner != null)
+        {
+            var root = owner.Instances.GetInstanceTransform(placement);
+            owner.Instances.SetInstanceTransform(placement, new Transform3D(root.Basis.Scaled(Vector3.Zero), root.Origin));
+        }
+        else if (destroy)
         {
             mm.SetInstanceTransform(i, new Transform3D(placed.Basis.Scaled(Vector3.Zero), placed.Origin));
         }
@@ -167,6 +183,8 @@ internal static class ClutterCull
         }
         return 0;
     }
+
+    private sealed record Owner(ClutterInstances Instances, int[]? Placements);
 
     // Instance indices by the bin their origin falls in.
     private sealed class Bins

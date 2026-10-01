@@ -204,8 +204,9 @@ internal static class NetSessionSuites
     [Suite("net-pause-overlay",
         "a host and then a guest open the pause sheet mid-flight in a network match: the sheet is "
         + "up, the clock is not halted, the pauser's aeroplane flies on with its stick centred, and "
-        + "its states keep crossing the wire to the far peer; an offline flight's pause, the "
-        + "control, still halts the clock and stops the aeroplane dead")]
+        + "its states keep crossing the wire to the far peer; neither end switches its graphics mode "
+        + "live; an offline flight, the control, still halts the clock and stops the aeroplane dead "
+        + "under its pause, and switches its graphics mode live and back")]
     internal static void PauseSheetLeavesANetworkFlightRunning(TestContext ctx)
     {
         string missionZrdr = RequireMatchData(ctx);
@@ -249,6 +250,8 @@ internal static class NetSessionSuites
             Lockstep(host.Session, guest.Session);
             SheetOverNetFlight(ctx, "host", host.Session, guest.Session, host.Session, guest.Session);
             SheetOverNetFlight(ctx, "guest", guest.Session, host.Session, host.Session, guest.Session);
+            ctx.Check(!TrySwitch(host.Session) && !TrySwitch(guest.Session),
+                $"neither end switches its graphics mode live, which stays {GraphicsMode.Key}={(GraphicsMode.Enhanced ? "enhanced" : "original")}");
             guest.Close();
             guest = null;
             host.Close();
@@ -260,6 +263,10 @@ internal static class NetSessionSuites
             if (offline.Built)
             {
                 SheetOverOfflineFlight(ctx, offline.Session);
+                bool switched = TrySwitch(offline.Session);
+                bool back = switched && TrySwitch(offline.Session);
+                ctx.Check(switched && back,
+                    $"ABLE-TO-FAIL CONTROL: the offline flight switches its graphics mode live and back (there {switched}, back {back})");
             }
         }
         finally
@@ -422,6 +429,22 @@ internal static class NetSessionSuites
         pilot.PollPauseForTest(clock);
         ctx.Check(!pause.Paused && !pilot.SheetOverFlightForTest(),
             $"…and the resume hands the {name}'s seat back");
+    }
+
+    // The live graphics switch the launcher runs, on this session, toward the other mode. A loose sun
+    // stands in for the launcher's, which a refused switch never touches.
+    private static bool TrySwitch(GameSession session)
+    {
+        var sun = new DirectionalLight3D();
+        try
+        {
+            return EnhancedLook.Switch(!GraphicsMode.Enhanced, sun, null, EnhancedPasses.None, det: true,
+                session, "net-pause-sheet");
+        }
+        finally
+        {
+            sun.Free();
+        }
     }
 
     // ABLE-TO-FAIL CONTROL. The same toggle and the same poll on a flight with no wire. A sheet

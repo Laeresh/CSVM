@@ -166,6 +166,9 @@ public partial class Launcher : Node3D
     private OptionsApplyExit? _pendingApply;
     // A seat's graphics-mode action, acted on at the top of the next frame for the same reason.
     private bool _pendingGraphicsToggle;
+
+    // The cover over a live graphics switch in flight, null when none is up.
+    private SwitchCover? _switchCover;
     // How many of --debug-graphics-switch's frames have fired, process-scoped like the capture.
     private int _debugSwitchesDone;
     // The --menu= aid, held for the cold start alone: the first presentation created reads it and
@@ -1113,24 +1116,25 @@ public partial class Launcher : Node3D
         {
             _pendingGraphicsToggle = false;
             if (_session is { InSession: true })
-            {
-                SwitchGraphicsMode(!GraphicsMode.Enhanced, "the graphics-mode action");
-                SaveGraphicsMode();
-            }
+                RequestGraphicsSwitch(!GraphicsMode.Enhanced, "the graphics-mode action", save: true);
         }
 
         // --debug-graphics-switch: the same flip at each named sim frame, unsaved.
-        if (_session is { InSession: true } && GameClock.Current is { } simClock
+        if (_session is { InSession: true } && GameClock.Current is { } simClock && _switchCover == null
             && _debugSwitchesDone < _spec.DebugGraphicsSwitch.Count
             && simClock.Frame >= _spec.DebugGraphicsSwitch[_debugSwitchesDone])
         {
             _debugSwitchesDone++;
-            SwitchGraphicsMode(!GraphicsMode.Enhanced, $"--debug-graphics-switch at sim frame {simClock.Frame}");
+            RequestGraphicsSwitch(!GraphicsMode.Enhanced, $"--debug-graphics-switch at sim frame {simClock.Frame}", save: false);
         }
+
+        if (_switchCover?.Tick(frameMs) == true)
+            _switchCover = null;
+        GraphicsMode.SwitchLocked = _session is { InSession: true, NetLink: not null };
 
         if (_session is { InSession: true } && GameClock.Current is { } diagClock)
         {
-            SceneBuilder.EnhancedDrawn |= GraphicsMode.Enhanced;
+            ShaderTwins.EnhancedDrawn |= GraphicsMode.Enhanced;
             Tooling.ShaderDiagnostics.Tick(GetTree().Root, diagClock.Frame);
         }
 
@@ -2466,7 +2470,7 @@ public partial class Launcher : Node3D
         // A mode switch dresses the sun at the new level itself; otherwise the level alone moves.
         if (GraphicsMode.TryParse(applied.Graphics, out bool enhanced) && enhanced != GraphicsMode.Enhanced)
         {
-            SwitchGraphicsMode(enhanced, "options");
+            RequestGraphicsSwitch(enhanced, "options", save: false);
         }
         else if (IsInstanceValid(_sun))
         {
@@ -2481,9 +2485,48 @@ public partial class Launcher : Node3D
     }
 
     // The live graphics-mode switch on this process's sun, Environment and session
-    // (EnhancedLook.Switch). Godot recompiles each changed shader, so a switch costs a hitch.
+    // (EnhancedLook.Switch). It stalls a few frames, so a flying world takes it under RequestGraphicsSwitch.
     private void SwitchGraphicsMode(bool enhanced, string why) =>
         EnhancedLook.Switch(enhanced, _sun, _env, _spec.SkippedPasses, _spec.Det, _session, why);
+
+    // A switch over a flying world runs under a SwitchCover: the flight held, a load board over it.
+    // With no world up it runs at once. ⚠ Refuse it in a network session. Its shared world has no
+    // pause to hold it in, and the stall would freeze one seat in a live match.
+    private void RequestGraphicsSwitch(bool enhanced, string why, bool save)
+    {
+        if (_session is { InSession: true, NetLink: not null })
+        {
+            Log.Info("world", $"graphics mode: {why} refused, a network session switches no graphics mode");
+            return;
+        }
+        if (_switchCover != null)
+        {
+            Log.Info("world", $"graphics mode: {why} ignored, a switch is already under way");
+            return;
+        }
+        void Run()
+        {
+            SwitchGraphicsMode(enhanced, why);
+            if (save)
+                SaveGraphicsMode();
+        }
+        if (_session is not { InSession: true } session)
+        {
+            Run();
+            return;
+        }
+        string subject = enhanced ? "SWITCHING TO ENHANCED GRAPHICS" : "SWITCHING TO ORIGINAL GRAPHICS";
+        var board = UI.Screens.LoadBoard.Build(_dataRoot, _zrdrPath, _messagesPath, false, subject, null);
+        board.CaptureDir = _spec.DebugLoad ?? string.Empty;
+        _switchCover = SwitchCover.Begin(this, board, session.Pause, GameClock.Current, Run, why);
+    }
+
+    // A cover over a session being torn down: off at once, its hold released.
+    private void DropSwitchCover()
+    {
+        _switchCover?.Drop();
+        _switchCover = null;
+    }
 
     // The resolved shadow level on the world sun and the renderer. An Options apply re-runs it, so a
     // level changes mid-flight; the cockpit pass follows on its next Sync.
@@ -2875,6 +2918,7 @@ public partial class Launcher : Node3D
         if (_session != null)
         {
             // Freed at the end of THIS frame, so the build owed for the next one finds it gone.
+            DropSwitchCover();
             _session.QueueFree();
             _session = null;
         }
@@ -3073,6 +3117,7 @@ public partial class Launcher : Node3D
 
         if (_session != null)
         {
+            DropSwitchCover();
             _session.QueueFree();
             _session = null;
         }
