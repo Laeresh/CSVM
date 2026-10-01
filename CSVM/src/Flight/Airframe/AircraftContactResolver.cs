@@ -118,6 +118,7 @@ public sealed class AircraftContactResolver
             ShakeMagnitude = striker.IsHumanPiloted
                 ? CollisionDamage.ContactShake(striker.Speed, severity)
                 : 0f,
+            AiShake = !striker.IsHumanPiloted && severity > 0f,
             // local_11 (0x0048d79e): an AI that rammed anything OTHER than an aeroplane dies
             // outright, whatever health it has left. An AI that rammed an aeroplane survives on
             // health as usual.

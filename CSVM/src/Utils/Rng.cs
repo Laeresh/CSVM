@@ -53,9 +53,9 @@ public static class Rng
     // Rng.Puffer is drawn per emitter at spawn, sharing one would make every puffer's scatter a
     // function of how many frames the wind had been blowing.
     public const string Wind = "wind";
-    // The plane wobble's per-shot fire-kick steps (PlaneShake random-walk accumulator, BL-266(a)
-    // branch). Its own stream so a draw here never shifts what another subsystem rolls; under
-    // --det it is a pure function of the master, so the gun-buzz wobble replays exactly.
+    // The plane wobble's random kick steps (PlaneShake's fire walk and its component blocks).
+    // Its own stream, so a draw here never shifts what another subsystem rolls. Under --det it
+    // is a pure function of the master, so the wobble replays exactly.
     public const string Shake = "shake";
     // The hangar's rolled plane names (PlaneNameTables). Its own stream so naming a plane never
     // shifts what the paint or spawn code rolls; under --det the offered name replays exactly,

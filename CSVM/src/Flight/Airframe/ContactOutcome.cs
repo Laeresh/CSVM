@@ -45,9 +45,13 @@ public readonly record struct ContactOutcome
     public Vector3 PushOut { get; init; }
 
     /// <summary>The camera kick this contact owes the striker, radians of block-5 roll
-    /// (<see cref="CollisionDamage.ContactShake"/>). Zero on an AI, which the original never
-    /// shakes for, and on a contact that is not closing.</summary>
+    /// (<see cref="CollisionDamage.ContactShake"/>). Zero on an AI, which takes
+    /// <see cref="AiShake"/> instead, and on a contact that is not closing.</summary>
     public float ShakeMagnitude { get; init; }
+
+    /// <summary>Whether this contact rocks an AI striker with the large aishake def
+    /// (<c>0x0048d3bf</c>): every closing contact on an aircraft nobody is flying.</summary>
+    public bool AiShake { get; init; }
 
     /// <summary>The instruction the caller owes when it is set: hand the struck aeroplane the pair
     /// above, and arm the collision grace window on BOTH parties so neither re-resolves the overlap

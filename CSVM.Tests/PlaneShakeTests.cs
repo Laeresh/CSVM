@@ -8,12 +8,11 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The wobble-oscillator law (<c>docs/formats/shakes.md</c>): <b>fire is a random-walk accumulator</b>
-/// (BL-266(a) branch, per-shot uniform step ±7.54·(factor×caliber), explosion, pulled from an
-/// injected <see cref="Random"/> so the trace pins without the engine), the being-hit he_factor
-/// doubling, the overspeed gate, and determinism of the whole sum. Input is
-/// <c>fixtures/zrdr/shakes.json</c> (probe values under the real source ids; <c>bullet_impact</c>/
-/// <c>explosion</c> deliberately absent so missing sources prove to no-op).
+/// The wobble-oscillator law (<c>docs/formats/shakes.md</c>). Fire is a random-walk accumulator,
+/// a per-shot uniform step ±7.54·(factor×caliber) from an injected <see cref="Random"/>. Then the
+/// being-hit quantities, the empty explosion source, the overspeed gate and determinism. Input is
+/// <c>fixtures/zrdr/shakes.json</c> (probe values under the real source ids, explosion authored
+/// as the shipped file authors it).
 /// </summary>
 public class PlaneShakeTests
 {
@@ -84,12 +83,54 @@ public class PlaneShakeTests
     public void AHighExplosiveHitDoublesTheMissileMagnitude()
     {
         var he = NewShake();
-        he.MissileHit(10f, highExplosive: true);
+        he.MissileHit(10f, 10f, highExplosive: true);
         var plain = NewShake();
-        plain.MissileHit(10f, highExplosive: false);
+        plain.MissileHit(10f, 10f, highExplosive: false);
         float heEnv = MaxAbsRollOver(he, seconds: 0.6f);
         float plainEnv = MaxAbsRollOver(plain, seconds: 0.6f);
         Assert.InRange(heEnv / plainEnv, 1.8f, 2.2f);
+    }
+
+    [Fact]
+    public void AMissileHitIsSizedByTheLargerFigureOfTheDamagePair()
+    {
+        // The original takes max(armour, health) of the delivered pair. The HE rocket's 40/60
+        // pair kicks as 60, and swapping the pair changes nothing.
+        float Env(float armor, float health)
+        {
+            var shake = NewShake();
+            shake.MissileHit(armor, health, highExplosive: false);
+            return MaxAbsRollOver(shake, seconds: 0.6f);
+        }
+
+        Assert.Equal(Env(60f, 60f), Env(40f, 60f), 6);
+        Assert.Equal(Env(40f, 60f), Env(60f, 40f), 6);
+        Assert.InRange(Env(60f, 60f) / Env(40f, 40f), 1.45f, 1.55f);
+    }
+
+    [Fact]
+    public void ACannonHitIsSizedByCaliberAndHeFactor()
+    {
+        var plain = NewShake();
+        plain.BulletHit(40f, highExplosive: false);
+        var bigger = NewShake();
+        bigger.BulletHit(80f, highExplosive: false);
+        var he = NewShake();
+        he.BulletHit(40f, highExplosive: true);
+        float plainEnv = MaxAbsRollOver(plain, seconds: 0.6f);
+        Assert.True(plainEnv > 0f, "a cannon round taken rocks the plane");
+        Assert.InRange(MaxAbsRollOver(bigger, seconds: 0.6f) / plainEnv, 1.95f, 2.05f);
+        Assert.InRange(MaxAbsRollOver(he, seconds: 0.6f) / plainEnv, 1.95f, 2.05f);
+    }
+
+    [Fact]
+    public void TheExplosionSourceKicksNothingBecauseNoMaxMagnitudeIsAuthored()
+    {
+        // The fixture authors explosion exactly as the shipped file does, magnitude_factor and no
+        // max_magnitude, so a burst at its centre rocks nothing.
+        var shake = NewShake();
+        shake.ExplosionAt(1f);
+        Assert.Equal(0f, MaxAbsRollOver(shake, seconds: 0.5f));
     }
 
     [Fact]
@@ -242,15 +283,12 @@ public class PlaneShakeTests
     [Fact]
     public void AMissingSourceIsANoOpNotACrash()
     {
-        var shake = NewShake(); // fixture has no bullet_impact / explosion
-        shake.BulletHit(40f);
-        shake.ExplosionAt(25f);
-        Assert.Equal(0f, MaxAbsRollOver(shake, seconds: 0.5f));
-
-        // …and an install whose file authors nothing at all, where the two block sources have no
-        // law to run either.
+        // An install whose file authors nothing at all: no source has a law or a magnitude to run.
         var bare = new PlaneShake(new ShakeDefs(), new Random(1));
         bare.FireBullet(40f);
+        bare.BulletHit(40f, highExplosive: true);
+        bare.MissileHit(40f, 60f, highExplosive: true);
+        bare.ExplosionAt(1f);
         bare.NitroEngaged();
         bare.SetSpeedRatio(1.5f);
         Assert.Equal(0f, MaxAbsRollOver(bare, seconds: 0.5f));
@@ -271,7 +309,7 @@ public class PlaneShakeTests
                 }
                 if (i == 60)
                 {
-                    shake.MissileHit(12f, highExplosive: true);
+                    shake.MissileHit(12f, 12f, highExplosive: true);
                 }
                 shake.SetSpeedRatio(i > 80 ? 1.1f : 0.7f);
                 shake.Advance(Dt);

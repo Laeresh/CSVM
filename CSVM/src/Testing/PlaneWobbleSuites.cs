@@ -68,8 +68,10 @@ internal static class PlaneWobbleSuites
                 return;
             }
 
-            // Cruise: nothing else kicks an untouched aeroplane, so the gate is the only reason
-            // the pivot could move, and below it the original's own updater never calls the kicker.
+            // Flown as a person flies it: the camera blocks are a human pilot's alone, and an AI
+            // rocks to an aishake def instead. Cruise: nothing else kicks an untouched aeroplane, so
+            // the gate is the only reason the pivot could move, and below it nothing kicks.
+            rig.IsHumanPiloted = true;
             var cruise = Drive(rig, at, rated, CruiseRatio, ticks: 60);
             ctx.Check(cruise.All(r => r == 0f),
                 $"cruise at {CruiseRatio:0.00} of rated max leaves the shake pivot dead still (worst {cruise.Max(Mathf.Abs):E2} rad)");
@@ -88,13 +90,12 @@ internal static class PlaneWobbleSuites
             ctx.Check(mean > 0.0 && spread / mean > 0.15,
                 $"…with a swing amplitude that wanders rather than repeating one envelope (spread/mean {spread / System.Math.Max(mean, 1e-9):0.000})");
 
-            // The engage, flown as a person flies it, back under the speed gate so the nitro
-            // source is the only thing the pivot carries. The dive's block rings on for about a
-            // second after the gate shuts, so this waits it out; reading across it sums two sources.
+            // The engage, back under the speed gate so the nitro source is the only thing the
+            // pivot carries. The dive's block rings on for about a second after the gate shuts,
+            // so this waits it out; reading across it sums two sources.
             var settle = Drive(rig, at, rated, CruiseRatio, ticks: 180);
             ctx.Check(settle[^1] == 0f,
                 $"the dive's rattle rings down to rest once the gate shuts (last {settle[^1]:E2} rad)");
-            rig.IsHumanPiloted = true;
             rig.Nitro.Installed = true;
             rig.AutoNitro = true;
             var engage = Drive(rig, at, rated, CruiseRatio, ticks: 180);

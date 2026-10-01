@@ -353,6 +353,24 @@ public class EffectCatalogueTests
         Assert.Equal("random_remote_damage", DamageVisuals.RigAnimFor("random_remote_damage"));
     }
 
+    /// <summary>The aishake def a round taken plays on an AI. A round that is not HIGH_EXPLOSIVE
+    /// plays small however close it burst. An HE round goes by squared burst distance: large at 100
+    /// and inside, medium to 400, small beyond. Every answer is a def the crash rig binds.</summary>
+    [Fact]
+    public void ARoundTakenPicksItsAiShakeByHighExplosiveAndSquaredDistance()
+    {
+        Assert.Equal(EffectCatalogue.SmallAiShakeAnim, EffectCatalogue.AiShakeForHit(false, 0f));
+        Assert.Equal(EffectCatalogue.LargeAiShakeAnim, EffectCatalogue.AiShakeForHit(true, 0f));
+        Assert.Equal(EffectCatalogue.LargeAiShakeAnim, EffectCatalogue.AiShakeForHit(true, 100f));
+        Assert.Equal(EffectCatalogue.AiShakeAnim, EffectCatalogue.AiShakeForHit(true, 100.5f));
+        Assert.Equal(EffectCatalogue.AiShakeAnim, EffectCatalogue.AiShakeForHit(true, 400f));
+        Assert.Equal(EffectCatalogue.SmallAiShakeAnim, EffectCatalogue.AiShakeForHit(true, 400.5f));
+
+        var bound = EffectCatalogue.CrashRigAnimNames(new SurfaceDefTable("probe_", null, _ => false));
+        foreach (var anim in EffectCatalogue.AiShakeAnims)
+            Assert.Contains(anim, bound);
+    }
+
     /// <summary>The healthy↔torn candidate sets derive from the authored defs, the
     /// hideable skins are exactly the two `*_h` nodes `plane_reset` re-ACTIVEs (pdp2_h/pdp3_h,
     /// one shared def OPERAND_NODE-retargeted at every airframe) and the torn set is exactly the

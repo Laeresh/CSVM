@@ -17,9 +17,8 @@ namespace CSVM.Flight.Camera;
 public sealed class PlaneShake
 {
     /// <summary>Per-shot gun-buzz step scale. The decoded law is ±<c>7.54·(factor×caliber)</c>;
-    /// scale 1 reproduces the original's faithful step (= ±2.11e-2 rad for wep40), lower tames it.
-    /// The one tune knob for the fidelity judgment, the mechanism (random walk) is what BL-266(a)
-    /// is evaluating, this is how loud the wobble reads.</summary>
+    /// scale 1 (±2.11e-2 rad for wep40) is the step judged right at the controls, lower tames it.
+    /// The one tune knob for how loud the gun buzz reads.</summary>
     public const float GunBuzzKickScale = 1f;
 
     /// <summary>Per-tick overspeed-rattle step scale, the dive rattle's one tune knob. Scale 1 is
@@ -31,10 +30,8 @@ public sealed class PlaneShake
     /// the original's own velocity kick, so dial this and never the authored <c>magnitude</c>.</summary>
     public const float NitroWobbleKickScale = 1f;
 
-    // What each impact source's magnitude_factor multiplies is authored for fire_bullet only
-    // (caliber, measured). For being hit: an incoming gun round reuses the caliber law; a rocket
-    // has no caliber, so its armor damage stands in, doubled by he_factor when HIGH_EXPLOSIVE.
-    // The stand-ins are declared TUNE pending being-hit footage.
+    // The three being-hit sources and what each magnitude multiplies are decoded from the
+    // original's take-hit routine: docs/org/shakes.md, "What a round taken kicks".
     private readonly Osc _fire = new();
     private readonly Osc _bulletHit = new();
     private readonly Osc _missileHit = new();
@@ -93,32 +90,37 @@ public sealed class PlaneShake
         }
     }
 
-    /// <summary>A gun round struck this plane.</summary>
-    public void BulletHit(float caliber)
+    /// <summary>A <c>CANNON</c> round struck this plane: its <c>CALIBER</c> times the source's
+    /// <c>magnitude_factor</c>, times missile_impact's <c>he_factor</c> on a
+    /// <c>HIGH_EXPLOSIVE</c> round.</summary>
+    public void BulletHit(float caliber, bool highExplosive)
     {
         if (_bulletHit.Src is { MagnitudeFactor: { } f })
         {
-            _bulletHit.Kick(f * caliber);
+            _bulletHit.Kick(f * caliber * HeScale(highExplosive));
         }
     }
 
-    /// <summary>A rocket/ordnance round struck this plane; <paramref name="damage"/> stands in
-    /// for the unauthored per-event quantity, doubled by <c>he_factor</c> on HE rounds.</summary>
-    public void MissileHit(float damage, bool highExplosive)
+    /// <summary>Any other round struck this plane, directly or by its blast. The kick is the
+    /// larger figure of the damage pair it delivered times the source's <c>magnitude_factor</c>,
+    /// times <c>he_factor</c> on a <c>HIGH_EXPLOSIVE</c> round.</summary>
+    public void MissileHit(float armorDamage, float healthDamage, bool highExplosive)
     {
         if (_missileHit.Src is { MagnitudeFactor: { } f })
         {
-            float he = highExplosive ? _missileHit.Src.HeFactor ?? 1f : 1f;
-            _missileHit.Kick(f * damage * he);
+            _missileHit.Kick(f * MathF.Max(armorDamage, healthDamage) * HeScale(highExplosive));
         }
     }
 
-    /// <summary>A nearby detonation (not a direct hit) rocked this plane.</summary>
-    public void ExplosionAt(float damage)
+    /// <summary>A <c>SHAKES_CAMERA</c> round's burst reached this plane, at
+    /// <paramref name="falloff"/> of the way in from its edge: that fraction of
+    /// <c>max_magnitude</c>. ⚠ Do not read <c>magnitude_factor</c> here; the original's parser never
+    /// does, and shakes.zrd authors no max_magnitude, so this kicks nothing, as the original's does.</summary>
+    public void ExplosionAt(float falloff)
     {
-        if (_explosion.Src is { MagnitudeFactor: { } f })
+        if (_explosion.Src is { MaxMagnitude: { } m })
         {
-            _explosion.Kick(f * damage);
+            _explosion.Kick(falloff * m);
         }
     }
 
@@ -183,12 +185,16 @@ public sealed class PlaneShake
                + (_speed?.Roll ?? 0f) + (_nitro?.Roll ?? 0f);
     }
 
+    // The original applies missile_impact's he_factor to a cannon round as well (0x004b9caf).
+    private float HeScale(bool highExplosive) =>
+        highExplosive ? _missileHit.Src?.HeFactor ?? 1f : 1f;
+
     private sealed class Osc
     {
         public ShakeSource? Src;
         public float Amp;      // current envelope, radians
         public float Phase;    // waveform cycles, wraps at 1
-        public float Walk;     // random-walk accumulator (fire source, BL-266(a) branch)
+        public float Walk;     // random-walk accumulator (fire source)
 
         public float Advance(float dt)
         {
@@ -268,8 +274,8 @@ public sealed class PlaneShake
 
         /// <summary>One kicker's random velocity step: uniform in
         /// ±<c>0.6·magnitude·frequency·W</c>, W being 4 on a <c>sawtooth</c> source and 2π
-        /// otherwise. Roll takes the ×1.2 axis weight, yaw's ×2.5 is unported because the pivot
-        /// rolls only.</summary>
+        /// otherwise. The port rolls by the ×1.2 component's position. The original's roll is
+        /// the ×2.5 component at twice its position (docs/org/shakes.md, "The rendered rotation").</summary>
         public void Kick(float magnitude, Random rng)
         {
             float wave = Src.Sawtooth ? 4f : MathF.Tau;

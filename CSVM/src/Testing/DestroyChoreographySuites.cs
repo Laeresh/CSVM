@@ -1718,6 +1718,134 @@ internal static class DestroyChoreographySuites
         });
     }
 
+    // The AI twins of a round taken and the overspeed arm, on the rig a session builds. Each starts
+    // the aishake def the original picks, one def at a time per aircraft. Nothing reaches the shake
+    // pivot, which a person's camera blocks alone drive.
+    [Suite("ai-shake-twins",
+        "an AI on a session-built rig rocks to the aishake def the original picks: small for a gun round taken, large for an HIGH_EXPLOSIVE rocket bursting on it, medium past 1.2x rated max, none while another of the three still runs, and its shake pivot never moves")]
+    internal static void AiShakeTwins(TestContext ctx)
+    {
+        const string model = "player_warhawk";
+        const float Dt = 1f / 60f;
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            FlightController? ai = null;
+            try
+            {
+                var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+                var gun = weapons.All.FirstOrDefault(w => w.IsCannon && w.Caliber > 0);
+                var heRocket = weapons.All.FirstOrDefault(w => !w.IsCannon && w.HighExplosive);
+                if (gun == null || heRocket == null)
+                {
+                    ctx.Check(false, $"the shipped weapons carry a gun and an HE rocket (gun={gun?.Id}, he={heRocket?.Id})");
+                    return;
+                }
+                var factory = new Session.World.WorldEffectsFactory(
+                    SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
+                var spawn = new Vector3(0f, 500f, 0f);
+                var stats = PlaneStats.Load(ctx.ZrdrPath, model);
+                var builder = new PlaneBuilder(planesGamez, textures);
+                var planeModel = builder.Build(model);
+                var pivot = new Node3D { Name = "ShakePivot" };
+                ai = new FlightController
+                {
+                    PlaneModel = planeModel,
+                    Collider = PlaneCollider.Build(planeModel),
+                    PlayerIndex = FlightRoster.ShooterIdBase,
+                    IsHumanPiloted = false,
+                    Pilot = AiPilot.HoldingCourse(spawn, spawn + Vector3.Forward),
+                    UseKeyboard = false,
+                    PadDevices = System.Array.Empty<int>(),
+                    AllowPause = false,
+                    // No ledger, so the rounds below rock the aircraft without ever killing it.
+                    Shake = new PlaneShake(ShakeDefs.Load(ctx.ZrdrPath)),
+                    ShakePivot = pivot,
+                };
+                ai.AddChild(pivot);
+                pivot.AddChild(planeModel);
+                ai.Setup(new FlightModel(stats, aiForcePath: true), null, new CamParams(),
+                    spawn, spawn + Vector3.Forward);
+                ctx.Host.AddChild(ai);
+                factory.BuildFlightCrashRuntime(ai, builder, model, world.Gamez,
+                    world.Session.Builder.Scene, textures, world.Session.Program, verbose: false,
+                    planesGamez: planesGamez);
+                if (ai.CrashRuntime is not { } rig)
+                {
+                    ctx.Check(false, $"{model}: the session rig built a crash runtime");
+                    return;
+                }
+                rig.ManualAdvance = true;
+                float rated = stats.FdSpeed;
+                float pivotPeak = 0f;
+
+                string? Running()
+                {
+                    foreach (var anim in EffectCatalogue.AiShakeAnims)
+                    {
+                        if (rig.AnimStateOf(anim) == 2)
+                            return anim;
+                    }
+                    return null;
+                }
+
+                // Steps at cruise until no aishake runs, so each arm starts from a still aircraft.
+                int Settle()
+                {
+                    int ticks = 0;
+                    while (Running() != null && ticks < 600)
+                    {
+                        ai.WarpTo(spawn, 0f, rated * 0.8f);
+                        ai.SimStep(Dt);
+                        rig.Advance(Dt);
+                        pivotPeak = Mathf.Max(pivotPeak, Mathf.Abs(pivot.Rotation.Z));
+                        ticks++;
+                    }
+                    return ticks;
+                }
+
+                ai.TakeProjectileHit(gun, ai.WorldPosition + new Vector3(2f, 0f, 0f), "fuselage", 0);
+                string? onGun = Running();
+                ctx.Check(onGun == EffectCatalogue.SmallAiShakeAnim,
+                    $"{model}: a {gun.Id} round taken starts {EffectCatalogue.SmallAiShakeAnim} (running {onGun ?? "none"})");
+                ai.TakeProjectileHit(heRocket, ai.WorldPosition, "fuselage", 0);
+                ctx.Check(Running() == EffectCatalogue.SmallAiShakeAnim,
+                    $"{model}: …and a second round while it runs starts nothing else (running {Running() ?? "none"})");
+                int gunTicks = Settle();
+                ctx.Check(gunTicks is > 0 and < 600, $"{model}: …which ends on its own after {gunTicks} tick(s)");
+
+                ai.TakeProjectileHit(heRocket, ai.WorldPosition, "fuselage", 0);
+                string? onHe = Running();
+                ctx.Check(onHe == EffectCatalogue.LargeAiShakeAnim,
+                    $"{model}: an HE {heRocket.Id} bursting on the aircraft starts {EffectCatalogue.LargeAiShakeAnim} (running {onHe ?? "none"})");
+                Settle();
+
+                string? onDive = null;
+                for (int i = 0; i < 5 && onDive == null; i++)
+                {
+                    ai.WarpTo(spawn, 0f, rated * 1.3f);
+                    ai.SimStep(Dt);
+                    rig.Advance(Dt);
+                    pivotPeak = Mathf.Max(pivotPeak, Mathf.Abs(pivot.Rotation.Z));
+                    onDive = Running();
+                }
+                ctx.Check(onDive == EffectCatalogue.AiShakeAnim,
+                    $"{model}: 1.3x rated max starts {EffectCatalogue.AiShakeAnim} (running {onDive ?? "none"})");
+                Settle();
+                ctx.Check(pivotPeak == 0f,
+                    $"{model}: the camera blocks stay a person's: the shake pivot never moved (peak {pivotPeak:E2} rad)");
+            }
+            finally
+            {
+                ai?.Free();
+                textures.Dispose();
+            }
+        });
+    }
+
     // The pre-warm's contract on a replica rig: after Bind and PrewarmEmitters nothing emits, a
     // crash and a panel tear reach the factory for no emitter, the claims count as built, and
     // respawn keeps the emitters so the next crash builds nothing either.

@@ -1892,12 +1892,7 @@ public partial class FlightController : Node3D
         // Runs even with no damage data, so a plane nothing tracks HP for still visibly takes fire.
         // ⚠ Ahead of the absorb return on purpose: the original's own shake kick (0x004b9d26) sits
         // ahead of the arm, so an absorbed round still rocks the airframe.
-        if (weapon.Caliber is { } shakeCal)
-            Shake?.BulletHit(shakeCal);
-        else if (damageScale < 1f)
-            Shake?.ExplosionAt((weapon.ArmorDamage ?? 0f) * damageScale);
-        else
-            Shake?.MissileHit(weapon.ArmorDamage ?? 0f, weapon.HighExplosive);
+        RoundTakenShake(weapon, impact, damageScale);
         // The pad's half of the same event. Two effects, not one: the original splits a gun round
         // from everything else and gives each its own damage edge (docs/org/input.md).
         if (IsHumanPiloted)
@@ -2313,9 +2308,13 @@ public partial class FlightController : Node3D
         // visual-only roll to the pivot the model hangs under. Physics, aim and the camera
         // read this node's transform, which the pivot sits below, never the wobble.
         float speedRatio = _model.Speed / Mathf.Max(1f, _model.Stats.FdSpeed);
+        // The original's per-frame update drives the camera block for the player alone. Anyone
+        // else rocks to the middle aishake def, past its own higher gate (0x0048d1e9).
+        if (!IsHumanPiloted && speedRatio > EffectCatalogue.AiOverspeedShakeRatio)
+            PlayAiShake(EffectCatalogue.AiShakeAnim);
         if (Shake != null)
         {
-            Shake.SetSpeedRatio(speedRatio);
+            Shake.SetSpeedRatio(IsHumanPiloted ? speedRatio : 0f);
             Shake.Advance(dt);
             if (ShakePivot != null)
                 ShakePivot.Rotation = new Vector3(0f, 0f, Shake.Roll);
@@ -2748,7 +2747,7 @@ public partial class FlightController : Node3D
             }
             else
             {
-                PlayAiShake();
+                PlayAiShake(EffectCatalogue.AiShakeAnim);
             }
             // Play, not PlayWithin. The def's anchor NAME ("warhawk") never resolves in this
             // per-plane index, as with spinprops/stopprops. Play falls back to PlaneModel; PlayWithin does not.
@@ -2788,17 +2787,43 @@ public partial class FlightController : Node3D
             EngineAudio?.RefreshNitroLoop(Nitro.LoopRefreshedThisTick, dt);
     }
 
-    // The AI half of the engage's shake: the original plays the middle of the three `*_aishake`
-    // defs on the aircraft's own node, one at a time per vehicle, where a person at the controls
-    // gets the camera shake instead. The runtime's own ANIM_STATE is that one-at-a-time handle.
-    private void PlayAiShake()
+    // The AI half of a shake: one of the three `*_aishake` defs on the aircraft's own node. A
+    // person at the controls gets the camera block instead.
+    // ⚠ Refuse while ANY of the three runs, not just this one. The original keeps one handle per
+    // vehicle for all three (FUN_00473430's `+0x6ec`), so a rocking aircraft ignores every request.
+    private void PlayAiShake(string anim)
     {
-        if (PlaneModel == null || CrashRuntime is not { } rig
-            || rig.AnimStateOf(EffectCatalogue.AiShakeAnim) == AnimRunning)
+        if (PlaneModel == null || CrashRuntime is not { } rig)
+            return;
+        foreach (var running in EffectCatalogue.AiShakeAnims)
         {
+            if (rig.AnimStateOf(running) == AnimRunning)
+                return;
+        }
+        rig.Play(anim, PlaneModel, applyReset: false);
+    }
+
+    // The shake one round taken kicks (FUN_004b9bc0, docs/org/shakes.md "What a round taken
+    // kicks"). A person gets a camera block sized by the round, anyone else an aishake def. The
+    // camera half reads the flags in the original's order: CANNON, HIGH_EXPLOSIVE, SHAKES_CAMERA.
+    // A splash share's burst distance is the falloff inverted.
+    private void RoundTakenShake(WeaponDef weapon, Vector3 impact, float damageScale)
+    {
+        if (!IsHumanPiloted)
+        {
+            float distanceSq = damageScale < 1f
+                ? (1f - damageScale) * (weapon.ImpactProximitySqM ?? 0f)
+                : (impact - _model.Position).LengthSquared();
+            PlayAiShake(EffectCatalogue.AiShakeForHit(weapon.HighExplosive, distanceSq));
             return;
         }
-        rig.Play(EffectCatalogue.AiShakeAnim, PlaneModel, applyReset: false);
+        if (weapon.IsCannon)
+            Shake?.BulletHit(weapon.Caliber ?? 0, weapon.HighExplosive);
+        else if (weapon.ShakesCamera && !weapon.HighExplosive)
+            Shake?.ExplosionAt(damageScale);
+        else
+            Shake?.MissileHit((weapon.ArmorDamage ?? 0f) * damageScale,
+                (weapon.HealthDamage ?? 0f) * damageScale, weapon.HighExplosive);
     }
 
     // Both bit-2 edges of the original's disabled-systems mask. They are read off the model's own
@@ -3256,11 +3281,15 @@ public partial class FlightController : Node3D
             // The assisted direction, not the barrel's. Every other machine spawns the round this
             // machine decided on rather than re-running a scan against its own world.
             WeaponFired?.Invoke(g.Weapon, muzzle.GlobalPosition, aimDir);
-            Shake?.FireBullet(g.Weapon.Caliber ?? 0f); // the firing buzz: factor × caliber (measured)
             // One of three effects by calibre, each restarted per round. The original's loop is
             // infinite and its own timer stops it 0.3 s after the last shot.
             if (IsHumanPiloted)
+            {
+                // The firing buzz is the player's alone. The original's AI twin of it sits inside
+                // the player branch (0x004b6e13), so it never plays.
+                Shake?.FireBullet(g.Weapon.Caliber ?? 0f);
                 _rumble.Play(PadRumble.GunFire(g.Weapon.Caliber ?? 0f));
+            }
             if (!_gunLoggedFirst[gi])
             {
                 _gunLoggedFirst[gi] = true;   // verification breadcrumb: which groups actually fire
@@ -4959,6 +4988,8 @@ public partial class FlightController : Node3D
         // 0x48d3aa's second guard is the fd developer switch, which no gameplay event sets.
         if (outcome.ShakeMagnitude > 0f)
             Shake?.ContactHit(outcome.ShakeMagnitude);
+        if (outcome.AiShake)
+            PlayAiShake(EffectCatalogue.LargeAiShakeAnim);
         // The pad takes the larger of the damage pair, the quantity the original's contact path
         // hands its own effect. The 50.5 edge picks the heavy effect over the light one.
         if (IsHumanPiloted)

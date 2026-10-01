@@ -16,9 +16,9 @@ public class ShakeDefsTests
     public void EverySourceIsIndexedByIdAndKeptInFileOrder()
     {
         var defs = Load();
-        Assert.Equal(4, defs.All.Count);
+        Assert.Equal(6, defs.All.Count);
         Assert.Equal("fire_bullet", defs.All[0].Id);
-        Assert.Equal("nitro", defs.All[3].Id);
+        Assert.Equal("nitro", defs.All[5].Id);
         Assert.NotNull(defs.Get("FIRE_BULLET")); // id lookup is case-insensitive
         Assert.Null(defs.Get("probe_absent"));
     }
@@ -52,9 +52,12 @@ public class ShakeDefsTests
         Assert.Equal(0.05f, nitro.Magnitude);
         Assert.Null(nitro.MagnitudeFactor);
 
-        // fixture carries no bullet_impact/explosion: absent stays null, not empty
-        Assert.Null(defs.BulletImpact);
-        Assert.Null(defs.Explosion);
+        // explosion authors magnitude_factor, the key the original never reads for it, and no
+        // max_magnitude, the one it does: absent stays null, not zero
+        var explosion = defs.Explosion!;
+        Assert.Equal(0.0005f, explosion.MagnitudeFactor);
+        Assert.Null(explosion.MaxMagnitude);
+        Assert.Null(defs.Get("turbulence"));
     }
 
     [Fact]
@@ -77,6 +80,9 @@ public class ShakeDefsTests
         Assert.NotNull(defs.HighSpeed!.MagnitudeQuotient);
         Assert.NotNull(defs.HighSpeed.MinSpeed);
         Assert.NotNull(defs.Nitro!.Magnitude);
+        // The explosion source's magnitude never fills in the original, and this is why.
+        Assert.NotNull(defs.Explosion!.MagnitudeFactor);
+        Assert.Null(defs.Explosion.MaxMagnitude);
         foreach (var src in defs.All)
         {
             Assert.Empty(src.UnhandledKeys);

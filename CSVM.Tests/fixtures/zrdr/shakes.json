@@ -6,6 +6,13 @@
     "sawtooth", [1],
     "magnitude_factor", [0.0002]
   ],
+  "bullet_impact",
+  [
+    "frequency", [2.2],
+    "damp", [14.0],
+    "sawtooth", [0],
+    "magnitude_factor", [0.0005]
+  ],
   "missile_impact",
   [
     "frequency", [2.2],
@@ -14,6 +21,13 @@
     "magnitude_factor", [0.001],
     "he_factor", [2.0],
     "PROBE_FUTURE_KEY", [1]
+  ],
+  "explosion",
+  [
+    "frequency", [2.2],
+    "damp", [8.0],
+    "sawtooth", [0],
+    "magnitude_factor", [0.0005]
   ],
   "high_speed",
   [

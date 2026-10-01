@@ -1135,19 +1135,19 @@ Typed reader over the shared `shakes.zrd.json`, the six shake-oscillator sources
 `WeaponDefs`: loaded once into `AircraftAssemblyResources.Shakes`, with named accessors per source
 and an unhandled-key tripwire. Each source is one law (frequency, damp, sawtooth) plus exactly one
 magnitude-term variant (`magnitude_factor` with an optional `he_factor`, `min_speed` with
-`magnitude_quotient`, or an absolute `magnitude`); an absent source reads as null and `PlaneShake`
-no-ops it. Schema: [../formats/shakes.md](../formats/shakes.md); decode:
+`magnitude_quotient`, an absolute `magnitude`, or the never-authored `max_magnitude`); an absent
+source or term reads as null and `PlaneShake` no-ops it. Schema: [../formats/shakes.md](../formats/shakes.md); decode:
 [../org/shakes.md](../org/shakes.md).
 
 ## src/Flight/Camera/PlaneShake.cs
-The plane-wobble oscillators, summed each sim tick into `Roll`, the radians the controller writes to
-`ShakePivot`; engine-free on purpose, so the pivot write is the controller's one line. The gunfire
-buzz (`fire_bullet`), the being-hit rocks (`bullet_impact`/`missile_impact`/`explosion`) and
-`ContactHit` (the oscillator no def authors, magnitude from `CollisionDamage.ContactShake`) are
-decaying envelopes. The overspeed rattle (`high_speed`, per tick on the excess over its gate, which
-sits at rated max) and the nitro engage (`nitro`, one kick, human pilots only) instead run the
-original's own component block, a velocity kick into a two-branch integrator whose position renders;
-`DiveRattleKickScale`/`NitroWobbleKickScale` are their only knobs. [../org/shakes.md](../org/shakes.md).
+A human pilot's plane-wobble oscillators, summed each sim tick into `Roll`, the radians the
+controller writes to `ShakePivot`; engine-free, so the pivot write is the controller's one line. An
+AI never kicks it: `FlightController` plays an `*_aishake` def instead. The gunfire buzz, the
+being-hit rocks (a cannon round by caliber, any other by its larger damage figure, the explosion
+source empty as in the original) and `ContactHit` are decaying envelopes. The overspeed rattle and
+the nitro engage run the original's own component block, a velocity kick into a two-branch
+integrator whose position renders; `DiveRattleKickScale`/`NitroWobbleKickScale` are their only
+knobs. [../org/shakes.md](../org/shakes.md).
 
 ## src/Flight/Airframe/FlightControllerBuild.cs
 The internal construction handoff from `FlightRoster` to `FlightController`: one resolved
