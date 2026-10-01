@@ -84,8 +84,8 @@ public static class TestHarness
 
     /// <summary>Runs the suites <paramref name="filter"/> selects (empty = all), prints the table,
     /// writes <c>.scratch/test-report.json</c>, and returns the process exit code: 0 when nothing
-    /// failed, 1 otherwise. A skipped suite is not a failure; a selector term that matched nothing
-    /// is, and nothing runs in that case.</summary>
+    /// failed, 1 otherwise. A skipped suite is a failure only when <see cref="SkipFailures"/> names
+    /// it. A selector term that matched nothing is a failure, and nothing runs in that case.</summary>
     public static int Run(TestContext ctx, string filter)
     {
         // Numbers in a committed report must read the same on every machine.
@@ -98,6 +98,7 @@ public static class TestHarness
             return 1;
         }
         var selected = Select(All, terms, out var unmatched);
+        var skipFails = SkipFailures(terms);
         var results = new List<SuiteResult>();
         Log.Info("test", $"run-tests suites={selected.Count}/{All.Count} filter='{filter}' chapter={ctx.Chapter} mission={ctx.Mission}");
         if (unmatched.Count > 0)
@@ -170,6 +171,15 @@ public static class TestHarness
                 string leak = $"left {orphansLeft} orphan node(s) past its teardown, over the tolerance of {OrphanLeakTolerance}: {orphanRoots}";
                 ctx.Failures.Add(leak);
                 Log.Error("test", $"FAIL {leak}");
+                status = SuiteStatus.Fail;
+            }
+            // After the orphan check, which a skipped body is exempt from. The row keeps the skip
+            // reason as its detail, so the report names the input that went missing.
+            if (status == SuiteStatus.Skip && skipFails.TryGetValue(suite.Name, out string? refusing))
+            {
+                string refused = $"skipped, and {refusing} counts a skip as a failure: {detail}";
+                ctx.Failures.Add(refused);
+                Log.Error("test", $"FAIL {suite.Name} {refused}");
                 status = SuiteStatus.Fail;
             }
             double wallSeconds = watch.Elapsed.TotalSeconds;
@@ -285,6 +295,30 @@ public static class TestHarness
         return suites.Where(s => wanted.Contains(s.Name)).ToList();
     }
 
+    /// <summary>The suites whose SKIP fails a run of <paramref name="spec"/>, each mapped to the
+    /// <c>tier:</c> term that refuses it. They are the members of every named tier carrying
+    /// <see cref="SuiteTier.SkipFails"/>. A suite reached only by another term keeps SKIP as a
+    /// non-failure. Pure, like <see cref="Select"/>.</summary>
+    public static IReadOnlyDictionary<string, string> SkipFailures(string spec)
+    {
+        const string tier = "tier:";
+        var refused = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string raw in spec.Split(','))
+        {
+            string term = raw.Trim();
+            if (!term.StartsWith(tier, StringComparison.OrdinalIgnoreCase)
+                || SuiteCatalog.Tier(term[tier.Length..]) is not { SkipFails: true } named)
+            {
+                continue;
+            }
+            foreach (string name in named.Suites)
+            {
+                refused.TryAdd(name, term);
+            }
+        }
+        return refused;
+    }
+
     /// <summary>Classifies a run's log lines: how many engine error lines there were, how many the
     /// allowlist covers, which are unknown, and which allowed pattern went over its cap. Pure, no
     /// Godot API, no file access, so it is unit-testable outside the engine.</summary>
@@ -371,12 +405,12 @@ public static class TestHarness
         }
         if (term.StartsWith(tier, StringComparison.OrdinalIgnoreCase))
         {
-            var names = SuiteCatalog.Tier(term[tier.Length..]);
-            if (names == null)
+            var named = SuiteCatalog.Tier(term[tier.Length..]);
+            if (named == null)
             {
                 return new List<Suite>();
             }
-            var set = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+            var set = new HashSet<string>(named.Suites, StringComparer.OrdinalIgnoreCase);
             return suites.Where(s => set.Contains(s.Name)).ToList();
         }
         return suites.Where(s => s.Name.Contains(term, StringComparison.OrdinalIgnoreCase)).ToList();

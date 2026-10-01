@@ -19,11 +19,11 @@ instead; read `TestHarness.cs` for that half.
 `--run-tests[=filter]`: the suite registry, `TestContext` (assert verbs, resolved data paths, a
 scene-tree host, `SyncPhysics` for the space a one-frame run leaves behind, and the `WithWorld`
 chapter-world builder over `WorldSession`), the PASS/FAIL/SKIP table, `test-report.json` in
-`TestContext.ScratchDir`, and the process exit code. `Select` is the pure selector over the flag's
-value; `SuiteShards` handles the one term that divides rather than selects. The world cache and its
-eviction, the mission-override and private-world forms, the shared `DecodeCache`, the per-build
-`StartupProfile`, the between-suite queued-free flush and the engine-error allowlist carry their
-own rules at their members. Read `SuiteCatalog.cs` for registration, `PhaseAttribution.cs` for time.
+`TestContext.ScratchDir`, and the exit code. `Select` is the pure selector over the flag's value,
+`SkipFailures` the pure set of suites whose SKIP a tier makes a FAIL, and `SuiteShards` the term
+that divides. The world cache and its eviction, the mission-override and private-world forms,
+`DecodeCache`, `StartupProfile`, the queued-free flush and the engine-error allowlist carry their
+rules at their members. Read `SuiteCatalog.cs` for registration, `PhaseAttribution.cs` for time.
 
 ## src/Testing/SuiteShards.cs
 Godot-free and pure (`CSVM.Tests` proves it without the engine): the `shard:<index>/<count>` term
@@ -68,10 +68,11 @@ emitter's own modes are. Neither covers the other's job.
 The registry of the in-engine assertion suites, discovered from the `[Suite("name", "what")]`
 attribute each body carries in the `*Suites.cs` modules; the catalog keeps no per-suite table, so
 adding a suite means adding one marked body in one of those modules and nothing else. `QuickTier`
-is the checked-in membership of `--run-tests=tier:quick`, resolved through `Tier(name)`. The
-determinism rule behind the alphabetical registry order, and why a malformed declaration throws
-rather than being skipped, are stated at the members themselves. Read `SuiteShards.cs` for what
-depends on that order.
+and `CiTier` are the memberships of `tier:quick` and `tier:ci`; `Tier(name)` resolves each into a
+`SuiteTier`, whose `SkipFails` (the ci tier's alone) makes a member's SKIP fail the run. The
+determinism rule behind the alphabetical order, and why a malformed declaration throws rather
+than being skipped, are stated at the members. Read `SuiteShards.cs` for what depends on that
+order, and `docs/tooling.md` for each tier's selection rule.
 
 ## src/Testing/*Suites.cs
 The in-engine scenario bodies, one module per domain: the emitter model, combat and ordnance,

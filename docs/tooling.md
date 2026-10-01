@@ -130,6 +130,18 @@ checked in, as the `[Trait("Tier", "Quick")]` classes and `SuiteCatalog.QuickTie
 `-Suite`/`-Filter` unions with the engine tier and a `-UnitFilter` replaces the unit tier. Quick
 prints a `not checked:` line per omitted surface, and never satisfies the landing gate.
 
+**The ci engine tier (`--run-tests=tier:ci`) is what CI requires, and a skip in it fails.** Its
+membership is checked in as `SuiteCatalog.CiTier`, one name per line and sorted. A suite earns its
+place by passing headless with an empty data root (no extraction), with no IPv6 loopback and no OS
+shell or real display; it joins when it stops needing the install, and leaves rather than taking an
+exception when it starts needing one. The suites on `sandbox/LinuxRelease.ps1`'s `$HeadlessOnly`
+list, `enet-dual-stack`, `enet-stable-ipv6-reply` and `build-stamp-focus` are out for that reason.
+The ENet and LAN discovery suites bound to `127.0.0.1` are in. The tier carries
+`SuiteTier.SkipFails`, so a listed suite that SKIPs reports FAIL with its skip reason and the run
+exits nonzero; any other selector, including `suite:<name>` on a listed suite, keeps SKIP as a
+non-failure, so the local battery is unchanged. The tier checks mechanisms on invented or absent
+data and never replaces the full local battery.
+
 **The engine stage runs the full catalog in concurrent Godot processes.** `-Shards <n>` sets how
 many; the default is 6 for a full run and 1 whenever `-Suite`/`-Filter`/`-Quick` names a selection,
 and `-Shards 1` is the serial reference path. Membership comes from the harness's

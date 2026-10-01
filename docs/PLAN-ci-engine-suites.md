@@ -119,7 +119,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A, CI runs the install-free suites
 
-1. ☐ The `ci` tier: a checked-in list CI requires to pass, where a skip fails
+1. ☑ The `ci` tier: a checked-in list CI requires to pass, where a skip fails
 2. ☑ Drop unused `RequireData` gates, and make the unguarded loads skip
 3. ☐ The CI engine job: Linux Godot 4.7 .NET, headless, `--run-tests=tier:ci`
 4. ☐ Move the three world-as-terrain suites onto `EmptyStage`
@@ -153,7 +153,26 @@ list in `SuiteCatalog.cs`, so tier additions land one item at a time.
 
 # Wave A, CI runs the install-free suites
 
-## A1 ☐ The `ci` tier: a checked-in list CI requires to pass, where a skip fails
+## A1 ☑ The `ci` tier: a checked-in list CI requires to pass, where a skip fails
+
+**Landed.** `--run-tests=tier:ci` runs `SuiteCatalog.CiTier`, a sorted one-name-per-line list of
+43 suites. `SuiteCatalog.Tier` now returns a `SuiteTier` (its names plus `SkipFails`), and only the
+ci tier sets `SkipFails`. The harness reads it through the pure `TestHarness.SkipFailures(spec)`:
+a selected suite that a `SkipFails` tier term lists and that SKIPs is reported FAIL, with the skip
+reason as the row's detail, a `!!` line and an `ERROR [test]` line naming the tier, and the process
+exits 1. Any other selector, `suite:<name>` on a listed suite included, keeps today's SKIP. The
+fail-on-skip check lives in the harness, read off the tier, so CI needs no script of its own to
+read `test-report.json`. Membership is every suite that passed headless with an empty data root
+here (all 43 of the baseline's passes), none of which is on `$HeadlessOnly` or needs IPv6 or an
+OS shell; `enet-transport`, `enet-load-stall` and `lan-discovery` (127.0.0.1 only) stayed in after
+three clean runs. The rule is in `docs/tooling.md`. Verified on Linux with an empty data root:
+`tier:ci` 43/0/0 and exit 0 three times; a `RequireData` probe on `target-ref` turned `tier:ci`
+red (42/1/0, exit 1, naming the suite) while the full catalog and `suite:target-ref` still
+reported it SKIP. The author's Windows run owes: the full `RunTests.ps1` battery, which should be
+unchanged (same counts as before; no suite body changed), and one windowed `--run-tests=tier:ci`
+on the real install, which should pass all 43.
+
+**Original approach (kept for reference).**
 
 **Goal.** `--run-tests=tier:ci` runs a checked-in list of suites, and the run fails when a listed
 suite fails or skips, so a suite that silently loses its input is a red build, not a quieter

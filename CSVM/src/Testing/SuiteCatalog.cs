@@ -32,10 +32,71 @@ public static class SuiteCatalog
         "music-states",
     };
 
-    /// <summary>The suite names a tier holds, or null when no tier carries that name (which a
-    /// selector must treat as a miss, not as an empty selection).</summary>
-    public static IReadOnlyList<string>? Tier(string name) =>
-        name.Equals("quick", StringComparison.OrdinalIgnoreCase) ? QuickTier : null;
+    // The suites `--run-tests=tier:ci` runs and CI requires to pass. A suite earns membership by
+    // passing with no extraction, headless, with no IPv6 loopback and no OS shell. A listed suite
+    // that loses its input must go red, so this tier counts a skip as a failure. A suite joins when
+    // it stops needing the install. One name per line, sorted; the rule is in docs/tooling.md.
+    public static readonly IReadOnlyList<string> CiTier = new[]
+    {
+        "ai-airframe-pool",
+        "anim-call-start-order",
+        "anim-clock-realtime",
+        "audio-levels-launch",
+        "bindings-launch-load",
+        "build-stamp-icons",
+        "campaign-coop-cutscene-fullscreen",
+        "chase-trail",
+        "cinema-skip-pad",
+        "display-det-guard",
+        "display-shadow-quality",
+        "enet-load-stall",
+        "enet-transport",
+        "extraction-picker",
+        "extraction-screen",
+        "fade-walk-bound",
+        "flight-input-handback",
+        "graphics-switch-cover",
+        "hud-crash-prompt",
+        "lan-discovery",
+        "net-cutscene-skip-episode",
+        "options-difficulty-launch",
+        "options-targeting-launch",
+        "options-view-launch",
+        "pause-board",
+        "perf-hud-layout",
+        "puffer-distance-fade",
+        "puffer-draw-order",
+        "puffer-priority-size",
+        "puffer-wind",
+        "render-poses",
+        "results-board-shell",
+        "session-start-cover",
+        "splitscreen-listeners",
+        "stick-discrete-buttons",
+        "target-flag",
+        "target-ref",
+        "target-selection",
+        "weapon-selector-input",
+        "wind-streaks",
+        "world-lights-enhanced-budget",
+        "world-lights-nearest-viewer",
+        "world-query-reuse",
+    };
+
+    /// <summary>The tier carrying that name, or null when none does (which a selector must treat
+    /// as a miss, not as an empty selection).</summary>
+    public static SuiteTier? Tier(string name)
+    {
+        if (name.Equals("quick", StringComparison.OrdinalIgnoreCase))
+        {
+            return new SuiteTier(QuickTier, SkipFails: false);
+        }
+        if (name.Equals("ci", StringComparison.OrdinalIgnoreCase))
+        {
+            return new SuiteTier(CiTier, SkipFails: true);
+        }
+        return null;
+    }
 
     /// <summary>Every marked body, ordered by name. ⚠ Keep this order deterministic and
     /// machine-independent: <see cref="SuiteShards"/> breaks balancer ties on registry position and
@@ -87,3 +148,8 @@ public static class SuiteCatalog
         return (Action<TestContext>)method.CreateDelegate(typeof(Action<TestContext>));
     }
 }
+
+/// <summary>A checked-in tier: the suite names it holds, and whether a member that SKIPs fails the
+/// run. The rule rides on the tier, not the harness, so only a selector naming such a tier changes
+/// what a skip means. Every other selector keeps SKIP as "the data was not there".</summary>
+public sealed record SuiteTier(IReadOnlyList<string> Suites, bool SkipFails);
