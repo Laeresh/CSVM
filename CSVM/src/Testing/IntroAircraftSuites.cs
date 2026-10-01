@@ -61,6 +61,7 @@ internal static class IntroAircraftSuites
     internal static void IntroAircraftStage(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), IntroSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {IntroSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();

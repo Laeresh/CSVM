@@ -668,6 +668,63 @@ loader's own checks become the thing under test.
 
 ## B15 ☐ Bring the plane-only suites onto the tier
 
+**B15a landed: precise gates under `--synthetic-data`.** A suite that needs an input the invented
+tree lacks now SKIPs naming it, so a FAIL with the switch means code or a shipped-value assertion,
+never "the tree lacks X". Two new `TestContext` gates sit beside `RequireData` and `RequireTexture`.
+`RequireZrdrEntry(zrdrPath, file)` skips when a zrdr ZIP or unpacked folder lacks a reader file
+(through the new engine-free `Zrdr.HasFile`, the names `LoadFile` accepts); it is checked on every
+tree, since a suite names only entries every install ships. `RequirePlane(nodes)` skips when the
+planes gamez lacks a shipped airframe node, only under the switch, the `RequireTexture` kind: every
+install carries every airframe, so the real battery never reads it. Gated: 69 suites on
+`cm_sequence.json` (the campaign, landings, co-op, cutscene, pause and briefing suites; the gate
+sits in `DriveMission` for 13 landings suites and in four mission helpers for 5 co-op suites), 11 on `ai.json`, 2 on `voice.json`, 19 on a
+shipped airframe, 4 on the effect readers (`flame_ball.json`, `pufftrails.json`, `fire101`), and
+one each on C1's `neindex.json`, C1/IA1's `weather.json`, C4/IA1's `ia.json`, `ia_escape.json`,
+`rimage/prog_red.png` and `PX_P_DECALS.TGA`.
+
+Full catalog over an empty root, Linux headless: with the switch 113 PASS, 154 FAIL, 231 SKIP before
+and 113, 43, 342 after (111 FAIL to SKIP, no PASS changed); without it 57, 2, 439, unchanged suite
+by suite. `tier:ci` with the switch passes 104/0/0. The 43 FAILs, by class:
+
+- **Asserting a shipped value on invented data**, the B15b candidates. AI: `ai-engine-rearm` (log
+  filter on `snd_damagedengine`), `ai-gunnery` (rating 9 takes the bearing at the shipped 89°
+  `quick_draw_angle`), `ai-modes` (`min_ai_active_dist` is 2000 m, got 1800). Combat and flight:
+  `aim-assist` (`sticky_bullet_catchup_rate` 5.0, `forget_interval` 1.5, `dist_factor` 0.0),
+  `air-to-air` (a fused rocket with `blastRadius >= 60f`), `graze-bounce`
+  (`IsEqualApprox(stats.BounceFactor, 0.6f)`), `plane-wobble-walk` (swing gaps of 8 to 11 ticks),
+  `cockpit-interior` (the shipped interior's `gauges`, `lowalt_on`, `stallwarning_on`, `bullet1`..`5`),
+  `ground-shadow` (`mask.TriangleCount > 100`, nose-to-tail asymmetry, wing span; it also needs
+  `player_autogyro` later). Sound and HUD: `engine-voice-duck` (`voiceover_volume_limiter` 0.4 and a
+  `snd_id` combat line), `incoming-fire-cues` (`BulletHitSound == "bullet_hit_sg"`, the
+  `snd_bulletpass`/`snd_ricochet`/`snd_windowhit` cues), `hud-kill-line` (the shipped string-table
+  wordings; it also needs `player_kestrel` later). Ordnance by shipped weapon id: `blast-curve-cover-cap`
+  and `blast-neighbor-shape` (`wep_14`), `burst-light-envelope`, `heat-shimmer`, `scorch-decals`
+  (`wep_06`), `impact-orientation` (`wep_06`, `wep_12`), `disabling-hits` (`wep_08/09/12`),
+  `flyout-rack-pose` (`wep_15/14`), `launch-velocity-decay` (`wep_14/12/00`), `motor-acceleration`
+  (`wep_04/26/12/00`), `ordnance-end-conditions` (`wep_24/12/15/08/14`), `ordnance-guidance`
+  (`wep_11/14/10`), `ordnance-impact-effects` (`wep_07/10/11`), `ordnance-launch-axis` and
+  `smoke-screen` (`wep_13` with a `SMOKE_SCREEN` time), `shootable-flyout` (`wep_14/06`). Original
+  shell layout: `campaign-layout-parity` (the decoded layout against the hardcoded chrome, `CM_B_START`
+  pinned to `CM_B_Start.png` and the six measured rows), `menu-original-hangar` (the name pane at
+  268,211, the tab bar at 23,524 and 662, `PX_BackGround.jpg`, a `PX_ICON_` composite, the $50000
+  note), `menu-original-instant-action` (fourteen contents rows, the arrows and thumb on the authored
+  column; its first check also wants the first environment's `IA1/ia.json`).
+- **Headless only:** `build-stamp-focus`, `display-mode`, `display-monitor`, `display-resolution`,
+  `display-vsync`, `menu-original-tracer`, `menu-screenshot-key`, `muzzle-flash-rides-muzzle`,
+  `puffer-smoke-sun`.
+- **Environment (no IPv6 loopback):** `enet-dual-stack`, `menu-original-ipv6-address`.
+- **A bug the invented data exposes:** `weapons-fire`. `Loadout.ForRig` synthesizes each gun slot
+  from the stock spec's `Caliber` and `Ammo` and drops its `WeaponId`, so a stock fit that names its
+  weapon outright (the format allows it, `docs/formats/loadouts.md`) binds `wep_30` instead of
+  `wep_probe_gun` and throws, against the method's own "a slot the stock fit names keeps its weapon".
+  No shipped stock fit names a weapon, so the real battery cannot see it. The suite then pins the
+  shipped 48-weapon count, a B15b retarget.
+
+**Still owed to the Windows run.** No assertion changed. On the real extraction every
+`RequireZrdrEntry` names a shipped entry and `RequirePlane` does nothing, so the full `RunTests.ps1`
+battery should show the same PASS/FAIL/SKIP per suite as before, and `tier:ci` with and without the
+switch 104/0/0.
+
 **Goal.** Each bucket C suite either passes on the stand-in and joins the tier, or is split into a
 logic half (on the tier) and a parity half (local).
 

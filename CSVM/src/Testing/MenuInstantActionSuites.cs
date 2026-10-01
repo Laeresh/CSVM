@@ -79,6 +79,7 @@ internal static class MenuInstantActionSuites
     internal static void MenuInstantActionJourney(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(SessionPaths.MissionZrdr(ctx.DataRoot, "C4", "IA1"), "ia.json");
         var exits = new List<MenuExit>();
         var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
         var menu = MenuSuiteHost.Build(ctx, host, seat, "menu-instant-action-journey");

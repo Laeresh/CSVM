@@ -497,6 +497,7 @@ internal static class WorldAndToolSuites
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequireZrdrEntry(SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1"), "weather.json");
 
         var weather = WeatherState.Load(SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1"));
         ctx.Check(weather != null, $"C1 IA1's weather loads");
@@ -1543,6 +1544,7 @@ internal static class WorldAndToolSuites
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequirePlane(plane);
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         using var textures = new TextureArchive(texturesPath);

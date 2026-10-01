@@ -259,7 +259,8 @@ read. Schema, offsets, the per-chapter census and the keying rules: [../formats/
 ## src/Mech3/Zrdr.cs
 Zrdr extraction reader (zip or unpacked dir): `LoadFile`, `LoadFileOrEmpty`, content-sniffing
 `LoadMatchingFiles`, name-predicate `LoadFilesNamed` (for families with nothing to sniff, e.g. the
-`ne0*` nets), and `ZrdrDict`, the key/[values…] view over a reader's alternating list.
+`ne0*` nets), `HasFile` (whether an entry is there, under either stored name), and `ZrdrDict`, the
+key/[values…] view over a reader's alternating list.
 
 ## src/Mech3/GamePath.cs
 Splits a path the game's data names (`..\data\c1\m02\zrdr\cutscenes\cabpickup.zrd`) on `\` and `/`

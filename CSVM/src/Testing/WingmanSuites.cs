@@ -565,6 +565,7 @@ internal static class WingmanSuites
     private static void JitterGate(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequirePlane(FlownPlaneNode);
         var wingman = PlaneStats.LoadForAi(ctx.ZrdrPath, FlownPlaneNode, WingmanAiDef);
         var jet = PlaneStats.LoadForAi(ctx.ZrdrPath, FlownPlaneNode);
         ctx.Note($"[jitter] '{wingman.AiDefName}' mode={wingman.VehicleMode} fd_speed {wingman.FdSpeed:0.0} m/s, '{jet.AiDefName}' mode={jet.VehicleMode} fd_speed {jet.FdSpeed:0.0} m/s");

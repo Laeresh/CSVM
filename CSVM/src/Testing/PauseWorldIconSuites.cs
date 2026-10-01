@@ -60,6 +60,7 @@ internal static class PauseWorldIconSuites
     internal static void PauseWorldIcons(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
         if (MissionAt(missions, BothSeq) is not { } mission)
         {

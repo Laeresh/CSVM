@@ -92,6 +92,7 @@ internal static class CampaignMarkerSuites
     internal static void CampaignObjectiveMarkers(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), FirstSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {FirstSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
@@ -132,6 +133,7 @@ internal static class CampaignMarkerSuites
     internal static void CampaignObjectiveTargetPath(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), PathSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {PathSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
@@ -181,6 +183,7 @@ internal static class CampaignMarkerSuites
     internal static void CampaignObjectiveLabels(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), LabelSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {LabelSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
@@ -238,6 +241,7 @@ internal static class CampaignMarkerSuites
     internal static void CampaignBalloonMarker(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), BalloonSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {BalloonSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();

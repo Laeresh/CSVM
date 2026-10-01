@@ -61,6 +61,7 @@ internal static class BalmoralCaptureSuites
     internal static void Cm15Capture(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), MissionSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {MissionSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
@@ -100,6 +101,7 @@ internal static class BalmoralCaptureSuites
     internal static void Cm15BalmoralHidden(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), OtherMissionSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {OtherMissionSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();
@@ -138,6 +140,7 @@ internal static class BalmoralCaptureSuites
     internal static void Cm15StagedPaint(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), MissionSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {MissionSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();

@@ -77,6 +77,7 @@ internal static class AirframeColliderSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequirePlane(MarkerRig.PlayerAirframes.Select(a => a.Model).ToArray());
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
@@ -117,6 +118,7 @@ internal static class AirframeColliderSuites
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequirePlane(MarkerRig.PlayerAirframes.Select(a => a.Model).ToArray());
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var textures = new TextureArchive(texturesPath);
         var report = new StringBuilder();

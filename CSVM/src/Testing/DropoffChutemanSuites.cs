@@ -48,6 +48,7 @@ internal static class DropoffChutemanSuites
     internal static void DropoffChutemanStage(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), MissionSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {MissionSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();

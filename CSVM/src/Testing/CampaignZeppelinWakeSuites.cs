@@ -41,6 +41,7 @@ internal static class CampaignZeppelinWakeSuites
     internal static void CampaignZeppelinWakeup(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), FirstSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {FirstSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();

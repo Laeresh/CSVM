@@ -46,6 +46,7 @@ internal static class CampaignHudSuites
     internal static void CampaignObjectivesHud(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         ctx.RequireData(ctx.MessagesPath, $"messages file");
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
         if (FirstMissionOf(missions, ctx.Chapter) is not { } mission)
@@ -149,6 +150,7 @@ internal static class CampaignHudSuites
     internal static void MissionRadioCallouts(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
         if (FirstMissionOf(missions, ctx.Chapter) is not { } mission)
         {

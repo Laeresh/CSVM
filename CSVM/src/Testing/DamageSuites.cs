@@ -444,6 +444,7 @@ internal static class DamageSuites
     internal static void DamageStageSlots(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequirePlane("player_fury");
         var stats = PlaneStats.LoadForAi(ctx.ZrdrPath, "player_fury");
         ctx.Check(stats.VehicleInjureAnims.Count == 7,
             $"fury's AI ladder carries {stats.VehicleInjureAnims.Count} entries (want 7)");

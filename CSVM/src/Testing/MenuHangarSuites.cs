@@ -97,6 +97,7 @@ internal static class MenuHangarSuites
     internal static void MenuHangarJourney(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(Extraction.RofTree.Under(ctx.DataRoot, "ASSETS/GRAPHICS/PX_P_DECALS.TGA"), $"paint decal sheet");
         var exits = new List<MenuExit>();
         var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
         var menu = MenuSuiteHost.Build(ctx, host, seat, "menu-hangar-journey");

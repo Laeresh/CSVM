@@ -36,6 +36,7 @@ internal static class WingmanFitSuites
     internal static void AWingmanFliesItsPickedFit(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequirePlane("player_fury");
         var defs = VehicleDefs.Load(ctx.ZrdrPath);
         WingmanDefCensus(ctx, defs);
 

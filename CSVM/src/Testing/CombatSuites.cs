@@ -28,6 +28,7 @@ internal static class CombatSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequirePlane(MarkerRig.PlayerAirframes.Select(a => a.Model).ToArray());
         var r = Probes.Loadouts(ctx.ZrdrPath, ctx.MessagesPath, ctx.PlanesGamezPath, ctx.DataRoot,
             "", ctx.LoadoutOverride);
         ctx.Check(r.Error == null, $"loadout inputs load error={r.Error ?? "-"}");
@@ -770,6 +771,7 @@ internal static class CombatSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequirePlane(MarkerRig.PlayerAirframes.Select(a => a.Model).ToArray());
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, Messages.Load(ctx.MessagesPath));
@@ -859,6 +861,7 @@ internal static class CombatSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, "pufftrails.json");
         var textures = new TextureArchive(texturesPath);
         Node3D? carrier = null;
         try
@@ -1119,6 +1122,7 @@ internal static class CombatSuites
     internal static void TurretDeathEffectWorldAnchor(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
         ProjectilePool? pool = null;
@@ -1917,6 +1921,7 @@ internal static class CombatSuites
     internal static void AiPlaneDefs(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequirePlane(MarkerRig.PlayerAirframes.Select(a => a.Model).ToArray());
 
         // node name, AI def, authored pair, def-level injure entries. The pools are vehicle.json's
         // own (docs/formats/vehicle.md); the ladder is seven everywhere but the balmoral's eight.
@@ -2256,6 +2261,7 @@ internal static class CombatSuites
     internal static void EngineNote(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequirePlane("player_bhawk");
         var stats = PlaneStats.Load(ctx.ZrdrPath, "player_bhawk");
 
         // Everything below is quoted in PERCENT OF THE LEVEL BASELINE, so the shipped curve has to

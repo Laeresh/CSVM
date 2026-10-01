@@ -63,6 +63,7 @@ internal static class CampaignSnapshotSuites
     internal static void CampaignDangerZoneSnapshot(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         if (MissionAt(CampaignSequence.Load(ctx.ZrdrPath)) is not { } mission)
         {
             throw new SuiteSkippedException($"{Chapter}/{Mission} is not in cm_sequence");

@@ -467,6 +467,7 @@ internal static class WorldFidelitySuites
     internal static void HangarDoorWake(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         CampaignMission? found = null;
         foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
         {

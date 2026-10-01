@@ -33,6 +33,7 @@ internal static class WarhawkTorpedoRunSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequirePlane("player_warhawk");
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);

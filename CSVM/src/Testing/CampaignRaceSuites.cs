@@ -58,6 +58,7 @@ internal static class CampaignRaceSuites
     internal static void CampaignRaceChain(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = MissionAt(CampaignSequence.Load(ctx.ZrdrPath))
             ?? throw new SuiteSkippedException($"{Chapter}/{Mission} is not in cm_sequence");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);

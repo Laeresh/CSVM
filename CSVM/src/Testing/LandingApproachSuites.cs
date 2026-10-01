@@ -455,6 +455,7 @@ internal static class LandingApproachSuites
         MissionDrive drive)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {seq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();

@@ -57,6 +57,7 @@ internal static class CoopDropoffSuites
     internal static void CampaignCoopDropoff(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         ctx.RequireData(ctx.PlanesGamezPath, $"aircraft archive");
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), MissionSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {MissionSeq}");

@@ -74,6 +74,7 @@ internal static class CampaignTargetListSuites
     internal static void CampaignTargetList(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var report = new StringBuilder();
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
         ctx.Same(CampaignSequence.MissionCount, missions.Count,

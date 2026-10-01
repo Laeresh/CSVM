@@ -473,6 +473,7 @@ internal static class NetCoopMissionSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>()
             .FirstOrDefault(m => m!.Value.ChapterFolder.Equals("C1", StringComparison.OrdinalIgnoreCase)
                                  && m.Value.MissionFolder.Equals("M04", StringComparison.OrdinalIgnoreCase))
@@ -562,6 +563,7 @@ internal static class NetCoopMissionSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>()
             .FirstOrDefault(m => m!.Value.ChapterFolder.Equals("C5", StringComparison.OrdinalIgnoreCase)
                                  && m.Value.MissionFolder.Equals("M01", StringComparison.OrdinalIgnoreCase))
@@ -633,6 +635,7 @@ internal static class NetCoopMissionSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>()
             .FirstOrDefault(m => m!.Value.ChapterFolder.Length > 0 && m.Value.Wingman)
             ?? throw new SuiteSkippedException($"cm_sequence carries no wingman mission with a chapter");
@@ -1047,6 +1050,7 @@ internal static class NetCoopMissionSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>()
             .FirstOrDefault(m => m!.Value.ChapterFolder.Length > 0)
             ?? throw new SuiteSkippedException($"cm_sequence carries no mission with a chapter");

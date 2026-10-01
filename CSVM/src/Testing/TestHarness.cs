@@ -798,6 +798,9 @@ public sealed class TestContext
     // see DecodeCache for what it holds and the read-only contract that binds every user.
     private readonly DecodeCache _decode = new();
 
+    // The synthetic planes archive's node names, read once by RequirePlane and only under the switch.
+    private HashSet<string>? _syntheticPlaneNodes;
+
     public required string RepoRoot { get; init; }
     public required string DataRoot { get; init; }
 
@@ -928,6 +931,41 @@ public sealed class TestContext
         if (SyntheticData && textures.FindImage(name) == null)
         {
             throw new SuiteSkippedException($"the synthetic texture archive carries no {name}");
+        }
+    }
+
+    /// <summary>Skips a suite whose body reads the reader file <paramref name="fileName"/> when the
+    /// zrdr archive at <paramref name="zrdrPath"/> lacks it. The archive may be a ZIP or its unpacked
+    /// folder. Checked on every tree, like <see cref="RequireData"/>. A suite names only entries every
+    /// install ships, so on a real extraction the gate passes wherever the body would have run.</summary>
+    public void RequireZrdrEntry(string zrdrPath, string fileName)
+    {
+        RequireData(zrdrPath, $"zrdr archive for {fileName}");
+        if (!Zrdr.HasFile(zrdrPath, fileName))
+        {
+            throw new SuiteSkippedException($"{fileName} not found in {zrdrPath}");
+        }
+    }
+
+    /// <summary>On the synthetic tree, skips a suite whose body needs a shipped airframe, by node
+    /// name, that the invented planes archive lacks. ⚠ Never skip on a real extraction: every
+    /// install carries every shipped airframe, so a miss there is a broken tree the body reports.</summary>
+    public void RequirePlane(params string[] nodeNames)
+    {
+        if (!SyntheticData)
+        {
+            return;
+        }
+
+        RequireData(PlanesGamezPath, $"planes gamez");
+        _syntheticPlaneNodes ??= new HashSet<string>(
+            GameZ.Load(PlanesGamezPath).Nodes.Select(n => n.Name), StringComparer.Ordinal);
+        foreach (string name in nodeNames)
+        {
+            if (!_syntheticPlaneNodes.Contains(name))
+            {
+                throw new SuiteSkippedException($"the synthetic planes gamez carries no {name}");
+            }
         }
     }
 

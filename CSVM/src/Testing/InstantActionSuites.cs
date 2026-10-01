@@ -47,6 +47,7 @@ internal static class InstantActionSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequirePlane("player_warhawk");
 
         // The display-name -> gamez-node table (docs/formats/instant-action.md's IDS_IA_PLANES
         // order): a real entry resolves, a typo/invention does not.

@@ -36,6 +36,7 @@ internal static class CutsceneOwnershipSuites
     internal static void CutsceneOwnership(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         var mission = MissionIn(CampaignSequence.Load(ctx.ZrdrPath), Chapter, Folder)
             ?? throw new SuiteSkippedException($"cm_sequence carries no {Chapter}/{Folder}");

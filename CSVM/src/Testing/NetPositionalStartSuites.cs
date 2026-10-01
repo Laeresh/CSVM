@@ -78,6 +78,7 @@ internal static class NetPositionalStartSuites
     internal static void PositionalStart(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>()
                 .FirstOrDefault(m => m!.Value.Seq == Cm02Seq)

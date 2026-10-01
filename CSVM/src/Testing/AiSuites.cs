@@ -399,6 +399,7 @@ internal static class AiSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
@@ -601,6 +602,7 @@ internal static class AiSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
@@ -1093,6 +1095,7 @@ internal static class AiSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, "ai.json");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
@@ -2441,6 +2444,7 @@ internal static class AiSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"shared zrdr");
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, "voice.json");
         var defs = SoundDefs.Load(ctx.ZrdrPath);
         var groups = SoundDefs.LoadGroups(ctx.ZrdrPath);
         var voice = new CombatVoice(defs, groups, CombatVoice.LoadAccents(ctx.ZrdrPath));
@@ -2566,6 +2570,7 @@ internal static class AiSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, "voice.json");
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
@@ -3783,6 +3788,7 @@ internal static class AiSuites
         ctx.RequireData(texturesPath, $"C1 textures");
         string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1");
         ctx.RequireData(chapterZrdr, $"C1 zrdr");
+        ctx.RequireZrdrEntry(chapterZrdr, "neindex.json");
 
         // The chapter graph resolves both ways the data references it: by id (aiv field 0)
         // and by neindex name (egen/zeppelins/objectives), case-insensitively.

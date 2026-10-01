@@ -136,6 +136,7 @@ internal static class AirframeSwapSuites
     internal static void AirframeSwap(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm02Seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm02Seq}");
@@ -175,6 +176,7 @@ internal static class AirframeSwapSuites
     internal static void CaptureSilencesGuns(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm02Seq)
@@ -246,6 +248,7 @@ internal static class AirframeSwapSuites
     internal static void HangarHandover(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm07Seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm07Seq}");
@@ -286,6 +289,7 @@ internal static class AirframeSwapSuites
     internal static void WarhawkCaptureLivery(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm19Seq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm19Seq}");

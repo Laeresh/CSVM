@@ -60,6 +60,7 @@ internal static class CampaignBalloonDeathSuites
     internal static void CampaignBalloonDeath(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), BalloonSeq)
             ?? throw new SuiteSkippedException($"cm_sequence carries no story position {BalloonSeq}");
         string chapter = mission.ChapterFolder.ToUpperInvariant();

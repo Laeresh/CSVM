@@ -37,6 +37,7 @@ internal static class MouseFlightSuites
     internal static void FlightMouseScheme(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequirePlane("player_autogyro", "player_bhawk");
         var gyroStats = PlaneStats.Load(ctx.ZrdrPath, "player_autogyro");
         var planeStats = PlaneStats.Load(ctx.ZrdrPath, "player_bhawk");
         ctx.Check(gyroStats.IsAutogyro && !planeStats.IsAutogyro,
@@ -97,6 +98,7 @@ internal static class MouseFlightSuites
     internal static void FlightMouseCapture(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequirePlane("player_bhawk");
         var scripted = FlightRosterPolicy.From(SessionSpec.Parse(new[] { "--run-tests" }));
         var interactive = FlightRosterPolicy.From(SessionSpec.Parse(new[] { "--fly" }));
         bool realDisplay = DisplayServer.GetName() != "headless";
@@ -143,6 +145,7 @@ internal static class MouseFlightSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(UI.Menu.MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        ctx.RequirePlane("player_bhawk");
         var layout = UI.Menu.Original.OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)

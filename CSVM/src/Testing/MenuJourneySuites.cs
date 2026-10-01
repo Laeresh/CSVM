@@ -27,6 +27,7 @@ internal static class MenuJourneySuites
     internal static void MenuFreeFlightJourney(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequirePlane("player_autogyro");
         var exits = new List<MenuExit>();
         var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
         var menu = MenuSuiteHost.Build(ctx, host, seat, "menu-free-flight-journey");

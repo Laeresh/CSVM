@@ -50,6 +50,7 @@ internal static class NetDirectorSuites
     internal static void DirectorFollow(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         var mission = CampaignSequence.Load(ctx.ZrdrPath).Cast<CampaignMission?>().FirstOrDefault(m =>
                 string.Equals(m!.Value.ChapterFolder, Chapter, StringComparison.OrdinalIgnoreCase)

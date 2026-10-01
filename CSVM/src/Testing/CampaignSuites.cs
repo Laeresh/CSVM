@@ -109,6 +109,7 @@ internal static class CampaignSuites
     internal static void CampaignPersistence(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
         var second = LastMissionOf(missions, ctx.Chapter);
         if (second is not { } later
@@ -268,6 +269,7 @@ internal static class CampaignSuites
     internal static void PersistChainKill(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
         if (MissionAt(missions, BridgeChapter, BridgeMission) is not { } dropped
             || MissionAt(missions, BridgeChapter, BridgeLaterMission) is not { } later)
@@ -458,6 +460,7 @@ internal static class CampaignSuites
     internal static void CampaignMissionEnd(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
         if (FirstMissionOf(missions, ctx.Chapter) is not { } mission)
         {
@@ -540,6 +543,7 @@ internal static class CampaignSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
         if (FirstMissionOf(missions, ctx.Chapter) is not { } mission)
         {
@@ -673,6 +677,7 @@ internal static class CampaignSuites
     internal static void CampaignMissionCash(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
         if (MissionAt(missions, CashChapter, CashMission) is not { } mission)
         {
@@ -763,6 +768,7 @@ internal static class CampaignSuites
     internal static void CampaignDangerZoneObjectives(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireZrdrEntry(ctx.ZrdrPath, CampaignSequence.FileName);
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
         if (MissionAt(missions, DangerZoneChapter, DangerZoneMission) is not { } mission)
         {
