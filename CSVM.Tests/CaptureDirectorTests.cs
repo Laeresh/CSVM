@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO;
 using System.Threading;
 using CSVM.Tooling;
 using Godot;
@@ -19,19 +20,26 @@ public class CaptureDirectorTests
         new Basis(new Vector3(0.8f, 0f, -0.6f), new Vector3(-0.36f, 0.8f, -0.48f), new Vector3(0.6f, 0.48f, 0.64f)),
         new Vector3(1f, 2f, 3f));
 
+    // Built from the host's own root: a drive-letter path is relative off Windows, so
+    // GetFullPath would resolve it against the working directory.
+    private static readonly string Root = Path.GetPathRoot(Path.GetTempPath())!;
+
     [Fact]
     public void ARepoRunWritesToTheRepoRootsScreenshotsFolder()
     {
-        Assert.Equal(@"Z:\CSVM\Screenshots",
-            CaptureDirector.ShotDirFor(@"Z:\CSVM\CSVM\", @"Z:\CSVM\tools\godot", exported: false));
+        var repo = Path.Combine(Root, "CSVM");
+        Assert.Equal(Path.Combine(repo, "Screenshots"),
+            CaptureDirector.ShotDirFor(Path.Combine(repo, "CSVM") + Path.DirectorySeparatorChar,
+                Path.Combine(repo, "tools", "godot"), exported: false));
     }
 
     [Fact]
     public void AnExportedBuildWritesBesideItsExecutableNotInTheFolderAboveIt()
     {
         // res:// resolves to the exe's folder in an export, so the repo rule would climb out of it.
-        Assert.Equal(@"C:\Games\CSVM\Screenshots",
-            CaptureDirector.ShotDirFor(@"C:\Games\CSVM\", @"C:\Games\CSVM", exported: true));
+        var build = Path.Combine(Root, "Games", "CSVM");
+        Assert.Equal(Path.Combine(build, "Screenshots"),
+            CaptureDirector.ShotDirFor(build + Path.DirectorySeparatorChar, build, exported: true));
     }
 
     /// <summary>The chase camera sits behind the aircraft, so the frame reproduces only from the
