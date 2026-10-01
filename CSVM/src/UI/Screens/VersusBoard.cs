@@ -17,6 +17,10 @@ namespace CSVM.UI.Screens;
 /// </summary>
 public sealed partial class VersusBoard : ResultsBoard
 {
+    /// <summary>The line a network guest's board draws in place of its Restart row
+    /// (<see cref="ResultsBoard.RestartWithheld"/>): the host restarts the round for every machine.</summary>
+    public const string HostCallsTheRematch = "The host calls the rematch";
+
     // Base metrics at 720p (scaled by window height). All TUNE, mirrors StuntRaceBoard so the
     // two shared boards read as the same screen.
     private const int TitleFont = 30;

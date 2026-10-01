@@ -639,6 +639,10 @@ public partial class GameSession : Node3D
     /// flight is its host's, which restarts it for every machine.</summary>
     internal bool RestartOffered => _net is null or { IsHost: true };
 
+    /// <summary>The dogfight board this session built, null outside a Dogfight. A suite reads its
+    /// menu through this.</summary>
+    internal ResultsBoard? DogfightBoard => _boards.OfType<VersusBoard>().FirstOrDefault();
+
     /// <summary>The Restart the pause board built for this session carries, null where it offers
     /// none. A suite reads it, and fires it, through this.</summary>
     internal Action? PauseRestart => _originalPause?.Restart ?? (_pauseBoard as PauseBoard)?.Restart;
@@ -3187,6 +3191,10 @@ public partial class GameSession : Node3D
             var board = VersusBoard.Build(match, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
                 exitsToMenu: _menuDriven, _pauseState!, MenuInputFor);
             board.Restart = () => RestartMatch(match);
+            // A guest's board says why it offers no Restart. Zeppelin vs Zeppelin keeps the row,
+            // since there each machine's Restart takes that machine to the lobby itself.
+            if (RematchIsTheHosts() && !_spec.ZeppelinVsZeppelin)
+                board.RestartWithheld = VersusBoard.HostCallsTheRematch;
             board.Exit = _exitSession;
             // Player 1, for the same reason the race board is: the cursor is _inputFor(0)'s.
             board.PhotoMode = () => EnterPhotoMode(0);
@@ -6095,9 +6103,9 @@ public partial class GameSession : Node3D
         }
 
         // ⚠ On a wire the rematch is the host's alone. A guest restarting here would zero its own
-        // board and fly a round nobody else is in. Its R therefore does nothing, and it waits for
-        // the host's running state. Asking the host for one is BL-1026.
-        if (_netSeats.Count > 0 && _net is not { IsHost: true })
+        // board and fly a round nobody else is in. Its R therefore does nothing, its board says
+        // so in place of the Restart row, and it waits for the host's running state.
+        if (RematchIsTheHosts())
         {
             Log.Info("flight", $"dogfight: rematch is the host's to call, this guest waits for it");
             return;
@@ -6126,6 +6134,9 @@ public partial class GameSession : Node3D
         foreach (var rig in _rigs)
             rig.Controller?.Respawn();
     }
+
+    // Whether this machine is a network guest, whose dogfight rematch is its host's to call.
+    private bool RematchIsTheHosts() => _netSeats.Count > 0 && _net is not { IsHost: true };
 
     // The field the rotation weighs, one entry per seat and null where that seat is not in the
     // fight. ⚠ Over the whole seat list, not the panes. A host flying one pane still rotates

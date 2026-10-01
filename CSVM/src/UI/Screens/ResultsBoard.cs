@@ -33,10 +33,16 @@ public abstract partial class ResultsBoard : Control
     private BoardMenuHost? _host;
     private StuntShotStrip? _strip;
     private ShotViewer _viewer = null!;
+    private Label? _withheld;
 
     /// <summary>Rerun the ended mode in place, chosen from the menu (or R / pad Y where the mode
     /// offers them directly).</summary>
     public System.Action? Restart { get; set; }
+
+    /// <summary>The line drawn over the menu in place of its Restart row, null for the standard
+    /// menu. A network guest's dogfight board carries one, since the rematch is its host's to
+    /// call. A Restart row there would do nothing and say nothing.</summary>
+    public string? RestartWithheld { get; set; }
 
     /// <summary>Leave the session, chosen from the menu.</summary>
     public System.Action? Exit { get; set; }
@@ -49,6 +55,9 @@ public abstract partial class ResultsBoard : Control
     /// <summary>The standard menu while it is up, or null, the test harness's way to drive the
     /// activation routing without a device.</summary>
     internal BoardMenu? StandardMenu => _host?.Menu;
+
+    /// <summary>The withheld-Restart line as drawn on the panel, or null where none stands.</summary>
+    internal string? WithheldLine => _withheld is { } line && IsInstanceValid(line) ? line.Text : null;
 
     /// <summary>The board's photographs while it carries any, the second cursor region above the
     /// menu, for the suites.</summary>
@@ -269,6 +278,7 @@ public abstract partial class ResultsBoard : Control
     protected VBoxContainer BeginPanel(float s)
     {
         _strip = null;
+        _withheld = null;
         _viewer.Close();
         return RebuildPanel(_center, ref _panel, s);
     }
@@ -287,14 +297,32 @@ public abstract partial class ResultsBoard : Control
     }
 
     /// <summary>Appends the standard non-dismissable Photo Mode · Restart · Exit menu, driven by
-    /// player 1: an ended run is a session-wide decision, and no single player raised the board.</summary>
+    /// player 1. An ended run is a session-wide decision, and no single player raised the board.
+    /// With <see cref="RestartWithheld"/> set the Restart row is left off and that line stands
+    /// over the remaining two.</summary>
     protected void AddStandardMenu(VBoxContainer body, float s)
     {
-        var menu = new BoardMenu(
-            dismissable: false,
-            (BoardMenuItem.Photo, "Photo Mode"),
-            (BoardMenuItem.Restart, "Restart"),
-            (BoardMenuItem.Exit, _exitLabel));
+        // The line's size at 720p, the one the boards' context line is drawn at. TUNE.
+        const int withheldFont = 15;
+        BoardMenu menu;
+        if (RestartWithheld is { } line)
+        {
+            _withheld = Label(line, (int)(withheldFont * s), ContextColor);
+            body.AddChild(Centered(_withheld));
+            menu = new BoardMenu(
+                dismissable: false,
+                (BoardMenuItem.Photo, "Photo Mode"),
+                (BoardMenuItem.Exit, _exitLabel));
+        }
+        else
+        {
+            menu = new BoardMenu(
+                dismissable: false,
+                (BoardMenuItem.Photo, "Photo Mode"),
+                (BoardMenuItem.Restart, "Restart"),
+                (BoardMenuItem.Exit, _exitLabel));
+        }
+
         menu.Activated += OnActivated;
         _host = BoardMenuHost.Build(menu, _inputFor(0), s, legend: true);
         body.AddChild(_host.View);

@@ -504,18 +504,6 @@ usual.
   ending never waits for this tick (it is sent where it happens), so slowing the rate delays only
   the clock, and the reading must not be taken from a match that ended.
 
-- `BL-1026` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **A guest's
-  rematch key does nothing in a network match.** *Evidence:* `GameSession.RestartMatch` refuses
-  outright off the host, because a guest that restarted would zero its own board and fly a round
-  nobody else is in; `net-match-state` asserts that refusal. The host's R restarts the round for
-  everybody. So a guest at a wrap-up board presses R and sees nothing happen, with no line saying
-  why. *Fix shape:* either a rematch request on the wire the host may answer (which needs a rule
-  for who may ask and what happens when two ask), or the guest's board dropping the Restart item
-  and saying the host calls the rematch. The second is a board change alone and settles the
-  silence; the first is a lobby question. *Decision:* the second, the guest's board drops Restart
-  and says the host calls the rematch; no request on the wire. *⚠ Traps:* do not let a guest's request restart the
-  match directly, the host is the only writer of match state.
-
 - `BL-1041` `[Tuning]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: trace]` **The soak's
   position-error bars are regression tripwires, not what a player accepts.** *Evidence:*
   `Testing/NetSoakSuites.cs` flies a scripted Dogfight through four loopback cells and fails a

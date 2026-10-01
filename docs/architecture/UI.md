@@ -455,8 +455,8 @@ polls its own pointer and closes it through the wrap-up page's rows.
 ## src/UI/Screens/ResultsBoard.cs
 The shared shell every results board is built on (`StuntScoreboard`, `StuntRaceBoard`,
 `VersusBoard`, `IaWrapupBoard`): backdrop and centred panel, palette and label factories, the
-halt-and-retire contract on the sim clock, and the standard Photo Mode, Restart and Exit menu. A
-panel taller than the window is re-centred and shrunk about its centre to fit. Photographs added
+halt-and-retire contract on the sim clock, and the standard Photo Mode, Restart and Exit menu.
+`RestartWithheld` leaves the Restart row off and draws its line over the other two. A panel taller than the window is re-centred and shrunk about its centre to fit. Photographs added
 through `AddShotStrip` are the cursor's second region above the rows: up off Photo Mode (the
 resting row) enters the grid, confirm opens one in a `ShotViewer` over the board, back or a click
 closes it on its cell, and down out of the grid returns to Photo Mode. `PauseBoard` shares the
@@ -501,14 +501,14 @@ there the last finish is the mission's win, and the director's hold and wrap-up 
 `StuntScoreboard` is the single-pilot form of the same table.
 
 ## src/UI/Screens/VersusBoard.cs
-The Dogfight results overlay on `ResultsBoard`'s shell: the winner in their own
-`SplitScreen.PlayerColor`, or a draw on a tie, over one ranked row per player with tag, score,
-kills and deaths from `VersusMatch.Standings()`; a team match heads it with the winning team's name (`Title`) and ranked team rows. Score is the ranked column, kills alone do not
-explain it. Whole-window, because the match ends for everybody at once.
-Wakes on `MatchCompleted` and retires on the rematch; the rows are populated only from that
-completion, so they stay the ones the match ended with even after `Restart()` zeroes the live
-state. Restart routes through `GameSession.RestartMatch`, which the keyboard and pad shortcuts
-reach directly while the board is up. `StuntRaceBoard` is the same construction over a race.
+The whole-window Dogfight results overlay on `ResultsBoard`'s shell: the winner in their own
+`SplitScreen.PlayerColor` (`Title`, a team match's leading team, or a draw), ranked team rows,
+then one ranked row per player with tag, score, kills and deaths from `VersusMatch.Standings()`.
+Score is the ranked column. Wakes on `MatchCompleted` and retires on the rematch, its rows drawn
+from that completion alone, so `Restart()` zeroing the live state never redraws them. Restart
+routes through `GameSession.RestartMatch`, which R and pad Y reach directly. A network guest's
+board offers no Restart and reads `HostCallsTheRematch`, since that call refuses off the host;
+Zeppelin vs Zeppelin keeps the row, which leaves for the lobby. `StuntRaceBoard` is its twin.
 
 ## src/UI/Screens/IaWrapupBoard.cs
 Instant Action's wrap-up board on `ResultsBoard`'s shell, whole-window since the mission ends for

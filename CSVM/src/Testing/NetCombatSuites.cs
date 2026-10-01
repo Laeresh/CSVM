@@ -14,6 +14,8 @@ using CSVM.Session;
 using CSVM.Session.Roster;
 using CSVM.Spec;
 using CSVM.Tooling;
+using CSVM.UI.Boards;
+using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
 
@@ -240,7 +242,8 @@ internal static class NetCombatSuites
         + "on limits of their own: both guests take the host's kill target and time limit off the "
         + "wire, neither moves a match clock when stepped without the host, the host's session "
         + "clock reaches both slews through the same tick, a guest that counts the target locally "
-        + "neither ends its match nor raises its board, its own rematch key does nothing, and a "
+        + "neither ends its match nor raises its board, its board leaves Restart off and says the "
+        + "host calls the rematch while the host's offers it, its own rematch key does nothing, and a "
         + "match ended on the kill limit and then on the time limit holds all three machines with "
         + "the same reason and the same scoreboard")]
     internal static void MatchStateIsTheHostsAlone(TestContext ctx)
@@ -933,6 +936,17 @@ internal static class NetCombatSuites
     // that restarted here would fly a round nobody else is in.
     private static void Rematch(TestContext ctx, GameSession[] peers)
     {
+        // The boards the ending raised. Neither guest's offers a Restart row that would do nothing;
+        // each says whose call the rematch is. The host's keeps the row, the able-to-fail control.
+        var host = peers[0].DogfightBoard?.StandardMenu;
+        ctx.Check(host != null && host.Items.Any(i => i.Item == BoardMenuItem.Restart)
+                  && peers[0].DogfightBoard!.WithheldLine == null,
+            $"ABLE-TO-FAIL CONTROL: the host's board offers Restart ({MenuRows(peers[0])})");
+        ctx.Check(peers.Skip(1).All(p => p.DogfightBoard?.StandardMenu is { } menu
+                                        && menu.Items.All(i => i.Item != BoardMenuItem.Restart)
+                                        && p.DogfightBoard.WithheldLine == VersusBoard.HostCallsTheRematch),
+            $"each guest's board leaves Restart off and reads \"{VersusBoard.HostCallsTheRematch}\" ({string.Join(" | ", peers.Skip(1).Select(MenuRows))})");
+
         peers[1].SeatRigs[1].Controller!.RestartMatch!();
         Lockstep(SettleSteps, peers);
         ctx.Check(peers.All(p => p.Versus!.Completed),
@@ -978,6 +992,12 @@ internal static class NetCombatSuites
         ctx.Check(boards.All(b => b == boards[0]),
             $"and the scoreboard is identical on all three, derived from the scores and never sent ({string.Join(" | ", boards)})");
     }
+
+    // A dogfight board's menu rows and any line standing in for Restart, as one line.
+    private static string MenuRows(GameSession session) =>
+        session.DogfightBoard?.StandardMenu is { } menu
+            ? $"{string.Join("/", menu.Items.Select(i => i.Item))} '{session.DogfightBoard.WithheldLine}'"
+            : "no menu";
 
     // The ranked board as one line, which is what a results screen draws from.
     private static string Scoreboard(GameSession session) =>
