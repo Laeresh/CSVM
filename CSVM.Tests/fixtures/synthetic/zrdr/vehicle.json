@@ -3,7 +3,9 @@
     "player_airplane",
     [
       "flight_ceiling", [2200],
-      "engine_sound", ["snd_probe_engine"]
+      "engine_sound", ["snd_probe_engine"],
+      "cockpit_engine_sound", ["snd_probe_engine_cp"],
+      "damaged_engine_sound", [["snd_probe_engine_damaged", 0.6, 0.9]]
     ],
     "pprobe",
     [

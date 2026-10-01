@@ -19,6 +19,7 @@
         "ARMOR_DAMAGE", [2],
         "HEALTH_DAMAGE", [2],
         "CANNON", null,
+        "LOOPED_SOUND_NAME", ["snd_probe_gunloop"],
         "FIRE", ["SOUND", ["snd_probe_fire"]],
         "IMPACT", ["default", ["SOUND", ["snd_probe_hit"]]]
       ],
@@ -41,6 +42,7 @@
         "HEALTH_DAMAGE", [40],
         "IMPACT_PROXIMITY", [20],
         "DETONATION_DISTANCE", [8],
+        "FIRE", ["SOUND", ["snd_probe_launch"]],
         "IMPACT", ["default", ["SOUND", ["snd_probe_boom"]]]
       ]
     ]

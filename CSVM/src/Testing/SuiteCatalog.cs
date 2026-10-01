@@ -41,9 +41,12 @@ public static class SuiteCatalog
     {
         "ai-actor",
         "ai-airframe-pool",
+        "ai-engine-listeners",
         "ai-pursues-structure",
+        "ai-weapon-emitters",
         "anim-call-start-order",
         "anim-clock-realtime",
+        "audio-buses",
         "audio-levels-launch",
         "bindings-launch-load",
         "bindings-prompt-device",
@@ -61,6 +64,10 @@ public static class SuiteCatalog
         "empty-stage-net",
         "enet-load-stall",
         "enet-transport",
+        "engine-cockpit-pitch",
+        "engine-damage-phases",
+        "exhaust-smoke",
+        "exhaust-smoke-ai",
         "extraction-picker",
         "extraction-screen",
         "fade-walk-bound",
@@ -105,6 +112,7 @@ public static class SuiteCatalog
         "menu-player-setup-journey",
         "menu-player-setup-seats",
         "menu-zone-layout",
+        "music-states",
         "net-cutscene-skip-episode",
         "options-difficulty-launch",
         "options-targeting-launch",
@@ -134,6 +142,7 @@ public static class SuiteCatalog
         "world-lights-enhanced-budget",
         "world-lights-nearest-viewer",
         "world-query-reuse",
+        "world-sound-falloff",
     };
 
     /// <summary>The tier carrying that name, or null when none does (which a selector must treat

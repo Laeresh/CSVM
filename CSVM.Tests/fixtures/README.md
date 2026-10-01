@@ -9,12 +9,16 @@ instead by the golden-invariant tests, which read the player's own `extracted/` 
 skip when it is absent.
 
 Byte-level fixtures (WAV/ADPCM) are not files at all: they are assembled field by field in
-`WavFileTests.cs`, so the provenance of every byte is visible in the code that writes it.
+`WavFileTests.cs`, so the provenance of every byte is visible in the code that writes it. The
+synthetic tree's WAVs are generated the same way at run time, from a manifest of lengths and tones
+(`CSVM/src/Tooling/SyntheticSounds.cs`).
 
 The engine reads this folder too, from the repo checkout: `--synthetic-data` assembles its
 invented `extracted/` tree from files named here plus files generated in code
 (`CSVM/src/Tooling/SyntheticData.cs`). A record a synthetic family copies keeps its path, or the
-tree fails to build.
+tree fails to build. Where the engine looks a record up by a name written in its own code (the HUD's
+message keys, the music cues, the exhaust smoke sprites), the record carries that name over invented
+content.
 
 | Path | Format page | Exercises |
 |---|---|---|
@@ -36,8 +40,9 @@ tree fails to build.
 | `menu-layout-original/` | `menu-layout.md`, `instant-action.md` | the Original shell's screens under the shipped widget keys on invented lines and invented `PM_*`/`PI_*` art: the main menu's panes and six buttons, the flight check's paper plaque, the Instant Action section (the contents list, the dropdowns on shared lines for the two enemy pages, the radio pair, the text rows), and the ammunition screen's backdrop, plane diagrams and text rows; `--synthetic-data` decodes it into the tree's `menu_layout.json` |
 | `synthetic/rof/ui_strings.json` | `strings.md` | `ui_strings.json`'s row shape (`id`, `symbol`, `font`, `text`, `dll`) with invented text: one row per `IDS_` symbol `menu-layout-original/` names, on invented ids, and rows with no symbol for ids the code reads directly (the lobby's three type lines) |
 | `synthetic/rof/art.json` | `menu-layout.md` | an invented pixel size for every picture the Original shell draws, a button strip four frames tall (eight for a check or radio) and a pane strip its `NumFrames`; one PNG, JPEG or TGA per entry is generated at that size |
-| `synthetic/C1/texture/manifest.json` | `docs/org/textures.md` | the extraction manifest's `texture_infos` (`name`, `width`, `height`, `alpha`, `stretch`) for the synthetic C1 texture archive; one PNG per entry is generated at that size |
+| `synthetic/C1/texture/manifest.json` | `docs/org/textures.md` | the extraction manifest's `texture_infos` (`name`, `width`, `height`, `alpha`, `stretch`) for the synthetic C1 texture archive, the stand-in's skins and the exhaust trail's `smoke101`..`103`; one PNG per entry is generated at that size |
 | `synthetic/planes/` | `gamez.md`, `markers.md` | the stand-in `probe_plane`'s legacy-shape tree: `geometry` → `healthy` → one LOD, the `markers` rig (eight firepoints in mirror pairs, eight pylons odd to port, `target`, `cockpit_camera`, two exhausts), `dontmove` props, `destroyed` pieces, `pdpN` torn panels and a `cockpit1` interior with `pcdp4`/`pcdp6`; `boxes.json` lists one box per mesh index, and `models.json` is generated from it |
-| `synthetic/zrdr/vehicle.json`, `engines.json`, `player.json` | `vehicle.md`, `vehicle/player-globals.md`, `ai-rosters.md` | the `pprobe` player def (`nodename probe_plane`, dynamics, four zones with `pdpanelN` injure entries, six collision probes) and its `probe` AI flavour with a `weapons` block; three engine rows; flight globals, the `crash` block and every `ai_skill_parameters` pair. The tree also copies `zrdr/maneuvers.json` above as its maneuver library |
-| `synthetic/zrdr/weapons.json`, `shakes.json`, `synthetic/messages.json` | `weapons.md`, `shakes.md`, `missions.md` | one gun (`wep_probe_gun`) and one rocket (`wep_probe_rocket`), the six shake sources, and the strings the flight reads, each a `MSG_PROBE_*` key or an invented wording of a key the HUD names |
+| `synthetic/zrdr/vehicle.json`, `engines.json`, `player.json` | `vehicle.md`, `vehicle/player-globals.md`, `ai-rosters.md` | the `pprobe` player def (`nodename probe_plane`, dynamics, four zones with `pdpanelN` injure entries, six collision probes) and its `probe` AI flavour with a `weapons` block, the base def's three engine-slot sounds; three engine rows; flight globals, the `crash` block, the `rattle` block, the two incoming-fire groups and every `ai_skill_parameters` pair. The tree also copies `zrdr/maneuvers.json` above as its maneuver library |
+| `synthetic/zrdr/weapons.json`, `shakes.json`, `synthetic/messages.json` | `weapons.md`, `shakes.md`, `missions.md` | one gun (`wep_probe_gun`, with its firing loop) and one rocket (`wep_probe_rocket`, with its launch sound), the six shake sources, and the strings the flight reads, each a `MSG_PROBE_*` key or an invented wording of a key the HUD names |
+| `synthetic/zrdr/sounds.json`, `synthetic/soundsh/manifest.json` | `sounds.md` | the stand-in's sound library: the engine loop (`FREQUENCY`), its unpitched cockpit and damaged swaps, the rattle, the gun loop and dry click (`3D` + `RANGE`), fire, launch and impact one-shots, the pass and ricochet groups `player.json` names, a 45 s radio line and a 0.5 s bark (`QUEUE`), and the music cues `MusicPlayer` names over `snd_probe_*` members, two takes per stinger. The manifest gives each WAV a length and a tone or noise; one MS ADPCM WAV per entry is generated into `soundsh/` |
 | `synthetic/stock_loadouts.json` | `loadouts.md` | the stand-in's stock fit, its guns named by `weapon` rather than caliber; read in place as `StockLoadouts.Supplement`, not written into the tree |

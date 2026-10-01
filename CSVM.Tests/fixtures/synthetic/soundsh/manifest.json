@@ -1,0 +1,33 @@
+{
+  "wavs": [
+    { "name": "probe_engine.wav", "seconds": 1.0, "hz": 110 },
+    { "name": "probe_engine_cp.wav", "seconds": 1.0, "hz": 82 },
+    { "name": "probe_engine_damaged.wav", "seconds": 1.0, "hz": 0 },
+    { "name": "probe_rattle.wav", "seconds": 0.5, "hz": 0 },
+    { "name": "probe_gunloop.wav", "seconds": 0.5, "hz": 330 },
+    { "name": "probe_emptyclip.wav", "seconds": 0.1, "hz": 1200 },
+    { "name": "probe_fire.wav", "seconds": 0.2, "hz": 0 },
+    { "name": "probe_launch.wav", "seconds": 0.6, "hz": 0 },
+    { "name": "probe_hit.wav", "seconds": 0.2, "hz": 0 },
+    { "name": "probe_boom.wav", "seconds": 1.0, "hz": 0 },
+    { "name": "probe_pass1.wav", "seconds": 0.3, "hz": 880 },
+    { "name": "probe_pass2.wav", "seconds": 0.3, "hz": 990 },
+    { "name": "probe_ricochet1.wav", "seconds": 0.3, "hz": 1500 },
+    { "name": "probe_ricochet2.wav", "seconds": 0.3, "hz": 1700 },
+    { "name": "probe_radio_line.wav", "seconds": 3.5, "hz": 440 },
+    { "name": "probe_radio_bark.wav", "seconds": 1.0, "hz": 520 },
+    { "name": "music_splash_probe.wav", "seconds": 3.0, "hz": 262 },
+    { "name": "music_prebattle_probe1.wav", "seconds": 3.0, "hz": 294 },
+    { "name": "music_prebattle_probe2.wav", "seconds": 3.0, "hz": 330 },
+    { "name": "music_battle_probe1.wav", "seconds": 3.0, "hz": 196 },
+    { "name": "music_battle_probe2.wav", "seconds": 3.0, "hz": 220 },
+    { "name": "music_primaryobj_probe1.wav", "seconds": 2.0, "hz": 392 },
+    { "name": "music_primaryobj_probe2.wav", "seconds": 2.0, "hz": 440 },
+    { "name": "music_secondaryobj_probe1.wav", "seconds": 2.0, "hz": 494 },
+    { "name": "music_secondaryobj_probe2.wav", "seconds": 2.0, "hz": 523 },
+    { "name": "music_tertiaryobj_probe1.wav", "seconds": 2.0, "hz": 587 },
+    { "name": "music_tertiaryobj_probe2.wav", "seconds": 2.0, "hz": 659 },
+    { "name": "music_battlesuccess_probe.wav", "seconds": 2.0, "hz": 349 },
+    { "name": "music_missionsuccess_probe.wav", "seconds": 2.0, "hz": 698 }
+  ]
+}

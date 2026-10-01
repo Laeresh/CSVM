@@ -129,7 +129,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ A synthetic data root written at run time
 12. ☑ The stand-in plane: model, markers and plane records
 13. ☑ Stand-in weapons, shakes and messages
-14. ☐ Generated texture and sound archives
+14. ☑ Generated texture and sound archives
 15. ☐ Bring the plane-only suites onto the tier
 
 ### Wave C, arena and shell fixtures
@@ -589,7 +589,64 @@ collider.
 **⚠ Traps.** An invented id that collides with a real one is harmless on CI and confusing in a log;
 keep the `wep_probe_*` naming the fixtures use.
 
-## B14 ☐ Generated texture and sound archives
+## B14 ☑ Generated texture and sound archives
+
+**Landed.** The texture half landed with B11 (`Tooling/SyntheticTextures.cs`); this item adds the
+sound half and the exhaust trail's sprites. `Tooling/SyntheticSounds.cs` is the `sounds` family, one
+`Families` line. It copies `fixtures/synthetic/zrdr/sounds.json` (`SETS` and `SOUND_GROUPS`) to
+`zrdr/sounds.json` and writes `soundsh/`, the unpacked sibling of `soundsh.zip`, with one generated
+WAV per entry of `fixtures/synthetic/soundsh/manifest.json` (a length, and a tone or seeded noise).
+Each WAV is the shape `docs/formats/sounds.md` gives the shipped archive: MS ADPCM, mono, 22050 Hz,
+the seven standard coefficient pairs, 256-byte blocks and a `fact` chunk. The encoder is the new
+engine-free `Tooling/WavWriter.cs` (PCM16 and ADPCM), which `CSVM.Tests/SyntheticSoundsTests.cs`
+round-trips through `WavFile`. The build throws when the manifest and the `SETS` WAV names differ.
+The texture manifest gains `smoke101`..`103`, the pool `ExhaustSmoke` names in code.
+
+The stand-in's records now name their sounds: the base def's `cockpit_engine_sound` and
+`damaged_engine_sound` (neither carries `FREQUENCY`, the engine loop does), `player.json`'s
+`warning_shot_sound` and `bullet_hit_sound` groups and its `rattle` block, the gun's
+`LOOPED_SOUND_NAME` and the rocket's `FIRE` sound. Every definition is `snd_probe_*` except the music
+cues `MusicPlayer` looks up by literal name (`snd_music_splash` and the seven `music_*_sg` groups),
+the move B13 made for the HUD's message keys. Their members are `snd_probe_music_*` over invented
+`music_<family>_probe*.wav` files, since the format routes a `mu`-prefixed WAV to the music channel and
+`music-states` reads the family off the WAV name. Two settled questions: the generators are shared by
+living in `CSVM/src`, as B11 planned; music clips run 2 to 3 s, since `music-states` drives its
+hold and fade through `Tick` rather than playback and a clip only has to outlast the suite's frames.
+
+Verified on Linux, headless, empty data root, port base 53000. Nine suites pass with the switch and
+joined the tier, each shown red on one broken input, then restored: `engine-damage-phases` (no
+`damaged_engine_sound`), `engine-cockpit-pitch` (`FREQUENCY` on the cockpit loop),
+`ai-engine-listeners` and `audio-buses` (`engine_sound` naming no definition), `ai-weapon-emitters`
+(no `LOOPED_SOUND_NAME`), `music-states` (one primary stinger take), `world-sound-falloff` (no `3D`
+definition), `exhaust-smoke` and `exhaust-smoke-ai` (`smoke102` absent). `tier:ci` with the switch
+passes 87/0/0; its 37 unexpected lines are all the text-server pattern `RunCiSuites.ps1` excuses.
+The guard on this container refused `pwsh`, so the script itself was not run here. The full catalog
+with the switch went from 88 PASS, 136 FAIL, 274 SKIP to 97, 141, 260: the nine above, two of them
+`exhaust-*` turning FAIL to PASS, and seven suites that used to skip on the missing archive now run
+and fail. Without the switch it reads 56 PASS, 2 FAIL (`build-stamp-focus`, `enet-dual-stack`),
+440 SKIP, as before.
+
+The seven, for B15 or another family. Asserting a shipped name or value: `ai-engine-rearm` (its log
+filter `line.Contains("snd_damagedengine")`; retarget to `stats.DamagedEngineSound`),
+`engine-voice-duck` (`Mathf.IsEqualApprox(limit, 0.4f)`, the shipped `voiceover_volume_limiter`, and
+the combat line picked by `d.Name.StartsWith("snd_id")`; the tree carries a 3.5 s `QUEUE [45]` line
+and a 1 s `QUEUE [0.5]` bark for a pick by `QueueSeconds`), `incoming-fire-cues`
+(`stats.BulletHitSound == "bullet_hit_sg"`, every cue line containing `snd=snd_bulletpass` or
+`snd=snd_ricochet`, and the canopy line `snd=snd_windowhit` through `window_hit_sg`, the
+`CanopyHoleCue.WindowHitSound` constant the tree does not carry). Headless only: `puffer-smoke-sun`
+now finds `smoke101`, so `RequireTexture` no longer skips it, and it fails reading MultiMesh instance
+custom data back, which the dummy renderer answers with a default colour of alpha 1; it belongs in
+`analysis/headless-limits.json` once a Windows-export headless run confirms it, per that file's rule.
+Missing a family: `ai-voice` and `voice-runtime` (`zrdr/voice.json`, the combat-voice records),
+`campaign-capture-silences-guns` (`cm_sequence.json`).
+
+**Still owed to the Windows run.** No suite body changed and nothing reads the new files without the
+switch, so the full `RunTests.ps1` battery should be unchanged. On the real checkout
+`--run-tests=tier:ci` (the shipped plane and archive) and `--run-tests=tier:ci --synthetic-data`
+(the stand-in, the install named unread) should both pass 87/0/0, since the nine added suites run
+the same bodies the battery runs on the install.
+
+**Original approach (kept for reference).**
 
 **Goal.** A chapter texture archive and a sound archive exist in the synthetic root, generated in
 code.

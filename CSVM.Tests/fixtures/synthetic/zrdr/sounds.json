@@ -1,0 +1,60 @@
+[
+  [
+    "SETS",
+    [
+      "probe_flight",
+      [
+        ["snd_probe_engine", "probe_engine.wav", "LOOPED", "3D", "FREQUENCY", "SFX", "RANGE", [120, 900]],
+        ["snd_probe_engine_cp", "probe_engine_cp.wav", "LOOPED", "SFX", "VOLUME", [0.8]],
+        ["snd_probe_engine_damaged", "probe_engine_damaged.wav", "LOOPED", "3D", "SFX", "RANGE", [100, 500]],
+        ["snd_probe_rattle", "probe_rattle.wav", "LOOPED", "SFX", "VOLUME", [0.6]]
+      ],
+      "probe_weapons",
+      [
+        ["snd_probe_gunloop", "probe_gunloop.wav", "LOOPED", "3D", "SFX", "RANGE", [25, 180]],
+        ["snd_probe_emptyclip", "probe_emptyclip.wav", "3D", "SFX", "RANGE", [60, 600]],
+        ["snd_probe_fire", "probe_fire.wav", "3D", "SFX", "RANGE", [30, 300]],
+        ["snd_probe_launch", "probe_launch.wav", "3D", "SFX", "RANGE", [50, 600]],
+        ["snd_probe_hit", "probe_hit.wav", "3D", "SFX", "RANGE", [20, 250]],
+        ["snd_probe_boom", "probe_boom.wav", "3D", "SFX", "RANGE", [150, 1500], "VOLUME", [0.9]],
+        ["snd_probe_pass1", "probe_pass1.wav", "SFX"],
+        ["snd_probe_pass2", "probe_pass2.wav", "SFX"],
+        ["snd_probe_ricochet1", "probe_ricochet1.wav", "3D", "SFX", "RANGE", [10, 120]],
+        ["snd_probe_ricochet2", "probe_ricochet2.wav", "3D", "SFX", "RANGE", [10, 120]]
+      ],
+      "probe_radio",
+      [
+        ["snd_probe_radio_line", "probe_radio_line.wav", "QUEUE", [45]],
+        ["snd_probe_radio_bark", "probe_radio_bark.wav", "QUEUE", [0.5]]
+      ],
+      "probe_music",
+      [
+        ["snd_music_splash", "music_splash_probe.wav", "MUSIC"],
+        ["snd_probe_music_prebattle1", "music_prebattle_probe1.wav", "MUSIC"],
+        ["snd_probe_music_prebattle2", "music_prebattle_probe2.wav", "MUSIC"],
+        ["snd_probe_music_battle1", "music_battle_probe1.wav", "MUSIC", "LOOPED"],
+        ["snd_probe_music_battle2", "music_battle_probe2.wav", "MUSIC", "LOOPED"],
+        ["snd_probe_music_primaryobj1", "music_primaryobj_probe1.wav", "MUSIC"],
+        ["snd_probe_music_primaryobj2", "music_primaryobj_probe2.wav", "MUSIC"],
+        ["snd_probe_music_secondaryobj1", "music_secondaryobj_probe1.wav", "MUSIC"],
+        ["snd_probe_music_secondaryobj2", "music_secondaryobj_probe2.wav", "MUSIC"],
+        ["snd_probe_music_tertiaryobj1", "music_tertiaryobj_probe1.wav", "MUSIC"],
+        ["snd_probe_music_tertiaryobj2", "music_tertiaryobj_probe2.wav", "MUSIC"],
+        ["snd_probe_music_battlesuccess", "music_battlesuccess_probe.wav", "MUSIC"],
+        ["snd_probe_music_missionsuccess", "music_missionsuccess_probe.wav", "MUSIC"]
+      ]
+    ],
+    "SOUND_GROUPS",
+    [
+      ["probe_warning_sg", "DYNAMIC_WEIGHTS", 0.5, ["snd_probe_pass1"], ["snd_probe_pass2"]],
+      ["probe_ricochet_sg", "DYNAMIC_WEIGHTS", 0.5, ["snd_probe_ricochet1"], ["snd_probe_ricochet2"]],
+      ["music_prebattle_sg", "MUSIC", "DYNAMIC_WEIGHTS", 0.5, ["snd_probe_music_prebattle1"], ["snd_probe_music_prebattle2"]],
+      ["music_battle_sg", "MUSIC", "DYNAMIC_WEIGHTS", 0.5, ["snd_probe_music_battle1"], ["snd_probe_music_battle2"]],
+      ["music_primaryobj_sg", "MUSIC", "DYNAMIC_WEIGHTS", 0.5, ["snd_probe_music_primaryobj1"], ["snd_probe_music_primaryobj2"]],
+      ["music_secondaryobj_sg", "MUSIC", "DYNAMIC_WEIGHTS", 0.5, ["snd_probe_music_secondaryobj1"], ["snd_probe_music_secondaryobj2"]],
+      ["music_tertiaryobj_sg", "MUSIC", "DYNAMIC_WEIGHTS", 0.5, ["snd_probe_music_tertiaryobj1"], ["snd_probe_music_tertiaryobj2"]],
+      ["music_battlesuccess_sg", "MUSIC", ["snd_probe_music_battlesuccess"]],
+      ["music_missionsuccess_sg", "MUSIC", ["snd_probe_music_missionsuccess"]]
+    ]
+  ]
+]
