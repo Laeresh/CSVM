@@ -144,6 +144,46 @@ public static class EnhancedLook
         return true;
     }
 
+    /// <summary>Has Godot build the advanced scene-shader variants a TAA frame needs, for every shader
+    /// alive, while the load screen is still up. It draws one frame of a hidden 2x2 viewport under
+    /// <paramref name="host"/> with TAA and SSAO on and an empty world. Only an Original process that
+    /// has drawn no Enhanced frame needs it; the first Enhanced frame does it otherwise. Returns
+    /// whether it raised the viewport. The engine's side is docs/verification.md PERF-45.</summary>
+    public static bool WarmAdvancedVariants(Node host)
+    {
+        if (GraphicsMode.Enhanced || ShaderTwins.EnhancedDrawn)
+            return false;
+        var view = new SubViewport
+        {
+            Name = "advanced_variant_warm",
+            Size = new Vector2I(2, 2),
+            OwnWorld3D = true,
+            World3D = new World3D(),
+            UseTaa = true,
+            RenderTargetUpdateMode = SubViewport.UpdateMode.Once,
+        };
+        view.AddChild(new Camera3D
+        {
+            Current = true,
+            Environment = new Godot.Environment { SsaoEnabled = true, SsrEnabled = true },
+        });
+        host.AddChild(view);
+        // From here every new shader compiles the advanced group with its base one.
+        ShaderTwins.EnhancedDrawn = true;
+        var tree = host.GetTree();
+        int frames = 0;
+        void Drop()
+        {
+            if (++frames < 3 && GodotObject.IsInstanceValid(view))
+                return;
+            tree.ProcessFrame -= Drop;
+            if (GodotObject.IsInstanceValid(view))
+                view.QueueFree();
+        }
+        tree.ProcessFrame += Drop;
+        return true;
+    }
+
     /// <summary>The View Distance on the running world: the clutter fade's scale, and the clutter
     /// cells cut again at it. It moves nothing in original mode, but is resolved there too, so a
     /// later switch to Enhanced opens at the saved reach.</summary>

@@ -443,6 +443,17 @@ member, and it does not go here.
   only the draw's hand-off. A Godot debug build prints `causing RenderingServer synchronizations on
   every frame` for each such call; the frame's own wait for the render thread is in `defer_ms`.**
   The per-frame render-time read raised CM24's `proc_ms` on the Deck from 3.8 to 10.3 ms.
+- **PERF-45**, **The first frame a process draws with TAA stalls for every Shader object alive, not
+  for what that frame draws: Godot then builds the advanced scene-shader group (20 variants a shader
+  beside the base group's 8) for every version (`ShaderRD::enable_group`, a disk-cache hit loading
+  synchronously on the render thread) and recompiles every surface's pipelines for the new flags.
+  Count the live shaders with `--debug-shaders` before reading such a stall, and read it as
+  Godot's, not the frame's.** A first switch to Enhanced on CM24 stalled 10.2 s over 217 shaders,
+  8.6 s over 138 once texts were shared; one hidden TAA frame at load took the same build there.
+- **PERF-46**, **Under the separate render thread a per-instance `MultiMesh` getter is a synchronous
+  round trip, so a loop of them over a large MultiMesh costs about a microsecond each in waits. Keep
+  the state you need to read in a mirror of your own, and fill a new MultiMesh with one `Buffer`
+  write.** Reading C5's 199,685 clutter placements back took 290 to 440 ms of every graphics switch.
 
 ## LOG, logs, error censuses, and exit codes
 

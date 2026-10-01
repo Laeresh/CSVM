@@ -47,14 +47,14 @@ reads one back held to the decoded ranges, which is what every machine, the owne
 The ammunition and ordnance picks stay behind, since the seat's `CoopFit` carries them.
 
 ## src/Session/Launch/EnhancedLook.cs
-The enhanced graphics mode on a running process. On one sun and one Environment, in both directions:
-PSSM sun shadows at the `ShadowQualitySetting` level, SSAO, SSR, glow, the AgX tonemap and the
-mission-coloured sky, with the `SessionSpec.EnhancedPasses` doors; the off direction writes a fresh
-object's defaults back. `Switch` is the whole live mode switch, refused for a network session:
-shaders, sun, Environment, clutter fade, display quality, then `GameSession.ApplyGraphicsMode`, which
-opens with `FollowAlphaDepth`. Its log line carries `Utils/SwitchProfile.cs`'s steps; `HasSwitched`
-lets a later load warm the other mode's shaders. `ApplyViewDistance` is the live View Distance;
-`Utils/SunShadow.cs` carries the sun to the cockpit; `SwitchCover.cs` draws a switch over.
+The enhanced graphics mode on a running process, on one sun and one Environment and both ways:
+PSSM sun shadows, SSAO, SSR, glow, the AgX tonemap and the mission sky, with the `EnhancedPasses`
+doors; off writes a fresh object's defaults back. `Switch` is the whole live mode switch, refused
+for a network session: shaders, sun, Environment, clutter fade, display quality, then
+`GameSession.ApplyGraphicsMode`, which opens with `FollowAlphaDepth`; its log line carries
+`Utils/SwitchProfile.cs`'s steps. `HasSwitched` lets a later load warm the other mode's shaders,
+`WarmAdvancedVariants` their TAA variants through one hidden frame. `ApplyViewDistance` is the live
+View Distance; `Utils/SunShadow.cs` carries the sun to the cockpit; `SwitchCover.cs` draws a switch over.
 
 ## src/Session/Launch/SwitchCover.cs
 A live graphics switch over a flying world, drawn over so the stall does not read as a crash. The

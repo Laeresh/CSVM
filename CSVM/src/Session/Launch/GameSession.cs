@@ -1581,7 +1581,9 @@ public partial class GameSession : Node3D
         long start = Stopwatch.GetTimestamp();
         int twins = ShaderTwins.WarmOtherMode();
         int cards = _cloudField?.WarmOtherMode() ?? 0;
-        Log.Info("world", $"shader warm-up: other mode's twins={twins} cloud_cards={cards} at load ms={Stopwatch.GetElapsedTime(start).TotalMilliseconds:0.0}");
+        // The other mode's twins first, so the advanced variants the hidden frame builds cover them.
+        bool advanced = EnhancedLook.WarmAdvancedVariants(this);
+        Log.Info("world", $"shader warm-up: other mode's twins={twins} cloud_cards={cards} advanced_variants={(advanced ? "hidden frame" : "not owed")} at load ms={Stopwatch.GetElapsedTime(start).TotalMilliseconds:0.0}");
     }
 
     // Loads the session's core archives (gamez, textures, sounds, sound defs/groups) and routes the

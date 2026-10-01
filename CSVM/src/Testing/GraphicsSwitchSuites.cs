@@ -239,7 +239,8 @@ internal static class GraphicsSwitchSuites
         + "before the switch runs, the switch waits for the cover's second frame, the hold stands "
         + "through a stall and a slow frame after it and drops with the cover once three frames settle; "
         + "the stall reaches the sim clock's accumulator as no step; a pause the player had up stands "
-        + "after the cover drops; and with no pause state the clock is held and put back as it was")]
+        + "after the cover drops; with no pause state the clock is held and put back as it was; and the "
+        + "load warm-up's hidden TAA frame is raised once by an Original process alone")]
     internal static void SwitchCoverOrder(TestContext ctx)
     {
         var flying = CoverRun(ctx, paused: false);
@@ -254,6 +255,8 @@ internal static class GraphicsSwitchSuites
         ctx.Check(paused.Order == "held,covered,work" && paused.Dropped && paused.PausedAfter && paused.HeldAfter,
             $"over the pause sheet the same order runs, and the pause still stands after the cover drops (paused {paused.PausedAfter}, held {paused.HeldAfter})");
 
+        AdvancedVariantFrame(ctx);
+
         foreach (bool wasHalted in new[] { false, true })
         {
             var clock = new GameClock { Mode = GameClock.RunMode.FixedAccum, Halted = wasHalted };
@@ -265,6 +268,35 @@ internal static class GraphicsSwitchSuites
             }
             ctx.Check(held && clock.Halted == wasHalted,
                 $"with no pause state the cover holds the clock and puts it back {(wasHalted ? "halted" : "running")} (held {held}, after {clock.Halted})");
+        }
+    }
+
+    // The load warm-up's hidden TAA frame: raised once by an Original process that has drawn no
+    // Enhanced frame, and never by an Enhanced one. Freed before it draws, so this shard builds no
+    // advanced variants.
+    private static void AdvancedVariantFrame(TestContext ctx)
+    {
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        bool wasDrawn = Mech3.ShaderTwins.EnhancedDrawn;
+        var host = new Node();
+        ctx.Host.AddChild(host);
+        try
+        {
+            GraphicsMode.Set(true);
+            Mech3.ShaderTwins.EnhancedDrawn = false;
+            bool underEnhanced = EnhancedLook.WarmAdvancedVariants(host);
+            GraphicsMode.Set(false);
+            bool first = EnhancedLook.WarmAdvancedVariants(host);
+            var view = host.GetChildCount() == 1 ? host.GetChild(0) as SubViewport : null;
+            bool again = EnhancedLook.WarmAdvancedVariants(host);
+            ctx.Check(!underEnhanced && first && !again && view is { UseTaa: true } && Mech3.ShaderTwins.EnhancedDrawn,
+                $"an Original process with no Enhanced frame raises one hidden TAA viewport, once (Enhanced {underEnhanced}, first {first}, again {again}, TAA {view?.UseTaa})");
+        }
+        finally
+        {
+            host.Free();
+            GraphicsMode.Set(wasEnhanced);
+            Mech3.ShaderTwins.EnhancedDrawn = wasDrawn;
         }
     }
 
