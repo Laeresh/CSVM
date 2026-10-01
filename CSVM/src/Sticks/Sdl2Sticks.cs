@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -98,23 +99,33 @@ public sealed class Sdl2Sticks : IStickNative
 
     /// <summary>Loads the first candidate that exists, a bare name through the system search, and
     /// starts the joystick subsystem. Otherwise returns null, <paramref name="outcome"/> naming the
-    /// cause: no library, a failed load, a missing export or a failed init. Never throws, since a
-    /// missing stick library must not stop a launch.</summary>
+    /// cause: no library, a failed load (a bare name's with the loader's reason), a missing export
+    /// or a failed init. Never throws, since a missing stick library must not stop a launch.</summary>
     public static Sdl2Sticks? Load(IReadOnlyList<string> candidates, out string outcome)
     {
         ArgumentNullException.ThrowIfNull(candidates);
         string file = candidates.Count > 0 ? Path.GetFileName(candidates[^1]) : "SDL2";
         string tried = string.Join(", ", candidates);
         string? path = null;
+        string? failure = null;
         IntPtr library = IntPtr.Zero;
         foreach (string candidate in candidates)
         {
             if (!Path.IsPathRooted(candidate))
             {
-                if (NativeLibrary.TryLoad(candidate, out library))
+                try
                 {
+                    library = NativeLibrary.Load(candidate);
                     path = Where(candidate);
                     break;
+                }
+                catch (DllNotFoundException e)
+                {
+                    failure ??= LoadFailure(candidate, e.Message);
+                }
+                catch (BadImageFormatException e)
+                {
+                    failure ??= e.Message;
                 }
 
                 continue;
@@ -135,7 +146,7 @@ public sealed class Sdl2Sticks : IStickNative
 
         if (path is null)
         {
-            outcome = $"no {file} (tried {tried})";
+            outcome = failure is null ? $"no {file} (tried {tried})" : $"{file} failed to load: {failure} (tried {tried})";
             return null;
         }
 
@@ -179,6 +190,29 @@ public sealed class Sdl2Sticks : IStickNative
 
         outcome = $"SDL {version} from {path}";
         return new Sdl2Sticks(api, version);
+    }
+
+    /// <summary>Why a bare <paramref name="name"/> did not load, from the
+    /// <see cref="DllNotFoundException"/> message. Null when it only says the file is absent.
+    /// .NET puts one loader error per line under a fixed preamble. An error naming another file is a
+    /// missing dependency, which absence must not hide. Pure, so testable.</summary>
+    public static string? LoadFailure(string name, string message)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        ArgumentNullException.ThrowIfNull(message);
+        var errors = new List<string>();
+        foreach (string line in message.Split('\n').Skip(1))
+        {
+            string error = line.Trim();
+            if (error.Length > 0)
+            {
+                errors.Add(error);
+            }
+        }
+
+        bool absent = errors.TrueForAll(e =>
+            e.Contains(name, StringComparison.Ordinal) && e.Contains("no such file", StringComparison.OrdinalIgnoreCase));
+        return absent ? null : string.Join("; ", errors);
     }
 
     public bool Pump()
