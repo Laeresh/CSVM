@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "readme": "What a headless Godot process cannot do, on any platform. sandbox/LinuxRelease.ps1 and RunCiSuites.ps1 both read this file, so the two headless runs share one list and neither grows its own. headlessOnly names the suites that cannot pass headless by construction, each with the reason: each reads back something only a real renderer or a real display produces. Every entry was run headless from the Windows export of the same commit against a Windows extraction of the same shape and failed there too, so an entry here is never a Linux finding. LinuxRelease.ps1 still runs them and reports one that passes, so a stale entry is seen; none may be on SuiteCatalog.CiTier, which a unit test checks. headlessEngineErrors maps a regex to the reason for engine error lines a headless process prints and a windowed one does not: the same run from the Windows export prints each, at the same counts. The harness's own allowlist is written for the windowed battery, so a headless run applies these to the report's unexpected lines, by pattern, and every other unexpected line still fails it. Add an entry only on that evidence, never to turn a run green.",
+  "headlessOnly": {
+    "cloud-field-fade": "reads the cloud cards' normals back out of the built mesh, which the headless dummy renderer does not store",
+    "clutter-card-depth": "counts rendered pixels in a viewport; headless renders none",
+    "crater-carve": "counts the clutter decorations the bowl destroys from the clutter MultiMesh, which the headless renderer keeps no instances for",
+    "display-mode": "asserts on the window mode of a real window; the headless display server has none",
+    "display-monitor": "enumerates screens; the headless display server reports none",
+    "display-resolution": "reads the screen size; the headless display server reports 0x0",
+    "display-vsync": "applies V-Sync to a real window's swap chain; headless has none",
+    "menu-original-tracer": "reads the OS pointer's visibility and the monitor list from the display server, which headless does not provide",
+    "menu-screenshot-key": "captures the viewport texture to a PNG; headless draws nothing, so every file is empty",
+    "muzzle-flash-rides-muzzle": "reads the flash quads' drawn instance transforms back, which the headless renderer does not keep",
+    "trail-world-anchor": "reads the first drawn puff's instance transform back, which the headless renderer does not keep"
+  },
+  "headlessEngineErrors": {
+    "texture_2d_get \\(\\./servers/rendering/dummy/": "the dummy renderer holds no texture data to read back",
+    "(_shaped_text_add_string|_ensure_cache_for_size|_font_get_(ascent|descent)) \\(modules/text_server_adv/": "a headless font has no rasterised size cache, so shaping at a measured size of 0 fails"
+  }
+}

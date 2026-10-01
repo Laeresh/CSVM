@@ -121,7 +121,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ The `ci` tier: a checked-in list CI requires to pass, where a skip fails
 2. ☑ Drop unused `RequireData` gates, and make the unguarded loads skip
-3. ☐ The CI engine job: Linux Godot 4.7 .NET, headless, `--run-tests=tier:ci`
+3. ☑ The CI engine job: Linux Godot 4.7 .NET, headless, `--run-tests=tier:ci`
 4. ☑ Move the three world-as-terrain suites onto `EmptyStage`
 
 ### Wave B, the synthetic data root and the stand-in plane
@@ -237,7 +237,37 @@ real install is unchanged.
 **⚠ Traps.** `menu-hangar-journey` may assert stock armour values that read as zeros without
 `zrdr`; read its armour-page checks before ungating it.
 
-## A3 ☐ The CI engine job: Linux Godot 4.7 .NET, headless, `--run-tests=tier:ci`
+## A3 ☑ The CI engine job: Linux Godot 4.7 .NET, headless, `--run-tests=tier:ci`
+
+**Landed.** `.github/workflows/checks.yml` has an `engine` job on `ubuntu-latest` beside the
+unchanged three-OS `checks` job: .NET 8, Godot 4.7-stable mono for Linux x86_64 from the official
+release, checked against the release's `SHA512-SUMS.txt` and cached under a key naming the release
+(so the key pins the version, and the checksum is checked once, before a copy is stored),
+`libfontconfig1` installed only if the image lacks it, `dotnet build`, one headless import, then
+`./RunCiSuites.ps1 -Godot <exe>`, with the report, Godot's streams, the screened engine log and
+`.scratch/logs/` uploaded on every outcome. `RunCiSuites.ps1` is a root script a contributor runs
+the same way on Linux or macOS: one headless Godot over a fresh empty `CSVM_DATA_ROOT` and fresh
+XDG folders, judged from the report rather than the exit code. The two headless lists moved out of
+`sandbox/LinuxRelease.ps1` into `analysis/headless-limits.json`, which both scripts read; the
+Linux release check builds the same `$HeadlessOnly` and `$HeadlessEngineErrors` from it (keys,
+values and order checked identical), so it behaves as before. `RunCiSuites.ps1` excuses an
+unexpected engine line only when it matches a `headlessEngineErrors` pattern, as the release check
+does, and the harness's in-process screen is not touched, so no allowance widened. A unit test
+keeps every `headlessOnly` suite registered and off `CiTier`. With that allowance
+`menu-player-setup-journey` runs clean and joined `CiTier` (51 suites): its 21 text-server lines
+all match the existing `_shaped_text_add_string` pattern. A bare headless `--run-tests=tier:ci`
+now exits 1 on those lines, so the script, not the exit code, is the gate. No budget line: the
+budgets file covers `RunTests.ps1`'s stages, measured on the development machine. Verified on
+Linux with an empty data root and the script's environment, judged by the script's verdict logic:
+51/0/0 three times, the 21 lines excused, about 26 s wall per run; a broken `target-ref` input
+gave 50/1/0 and a failing verdict. `pwsh` was refused in the agent sandbox, so the script itself
+did not run there; its verdict was ported line for line and applied to the real reports. Still
+owed: the first real GitHub run on a PR (green, then red on a deliberately broken listed suite),
+which needs a push; a `RunCiSuites.ps1` run under `pwsh`; and the author's Windows battery, which
+should be unchanged apart from `menu-player-setup-journey` passing as before, and one windowed
+`--run-tests=tier:ci` on the real install, which should pass all 51.
+
+**Original approach (kept for reference).**
 
 **Goal.** Every PR runs the `ci` tier headless on `ubuntu-latest` and goes red on a failure or a
 listed skip.

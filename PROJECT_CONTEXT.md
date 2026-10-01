@@ -104,6 +104,7 @@ One line each, **the extraction pipeline, the launch scripts and the mech3ax for
 - `Extract.ps1`, the developer's extraction wrapper: builds, then runs the engine headless with `--extract=<install>` (install `CrimsonSkiesGame`, fork unzbd, data root the script's own folder unless given). It holds no extraction logic; the pipeline is `CSVM/src/Extraction/`, which the in-game Extract screen runs too. Details: `docs/tooling.md`.
 - `RunGame.ps1` / `RunDev.ps1`, play and dev launch scripts (build + Godot; dev one prompts). Details: `docs/tooling.md`.
 - `RunTests.ps1`, one command, one exit code: build → `dotnet test` → `--run-tests` (`-Shards`, default 4) → goldens (`-GoldenWorkers`, default 4) → perf (`-Perf`, A/B'd via the git-ignored `perf-history.jsonl`) → hitch (`-Hitch`, opt-in and last). Details: `docs/tooling.md`.
+- `RunCiSuites.ps1`, CI's engine stage, runnable on Linux or macOS: `--run-tests=tier:ci` headless over an empty data root, judged from the report. Details: `docs/tooling.md`.
 - `ExportRelease.ps1`, builds, headless-imports, and exports the "Windows Desktop" release preset to `.scratch/export/CSVM.exe`; checks the export templates are installed and creates `.scratch/export/` if missing before starting. Details: `docs/tooling.md`.
 - `PublishRelease.ps1`, the publish in one run: version, `ExportRelease.ps1 -Linux`, `sandbox/LinuxRelease.ps1` on the tarball, both archives' SHA-256s, the annotated tag on the commit that was built, and the GitHub release carrying the zip and the tarball (`-NotesFile` for the prose above the generated sections, `-DryRun`, `-TagSuffix` for a rehearsal run). Refuses a dirty tree, a dirty or unpushed `cs-anim`, or an existing tag, and never re-points one. Details: `docs/tooling.md`.
 - `RunSandbox.ps1`, runs a release zip in a clean Windows Sandbox and collects what happened (`-NoVGpu` is the below-the-renderer-floor machine, `-Driver` chooses what runs inside, `-MapReadOnly` adds host folders the zip does not carry). Details: `docs/tooling.md`.
@@ -254,7 +255,7 @@ Full validated format documentation lives in **`docs/formats/`**, one page per f
 
 **Where the project is.** Milestones 1 through 6 are delivered: 11 flyable aircraft over 8 animated chapter worlds, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 added guns, rockets and world destructibles that take damage, die, lose collision, throw debris and reset; M4 added the combat AI (aircraft that patrol, engage, evade and die, turrets, zeppelins, pilot voice), and all four Instant Action mission types plus the 2–4-player splitscreen Dogfight deathmatch are playable and scored. M5 added the single-player campaign: per-profile progression across the cabin, briefing and flight-check screens, and missions that run their authored `objectives.zrd` choreography with intro cutscenes, letterbox and campaign wingmen.
 
-**Active plan:** [`docs/PLAN-ci-engine-suites.md`](docs/PLAN-ci-engine-suites.md), Wave A; next A1.
+**Active plan:** [`docs/PLAN-ci-engine-suites.md`](docs/PLAN-ci-engine-suites.md), Wave B; next B11.
 
 Use the targeted/quick development loop above, then verify landed code with the complete
 **`.\RunTests.ps1`**; read [`docs/verification.md`](docs/verification.md) before measuring.

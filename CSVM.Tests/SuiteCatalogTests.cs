@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using CSVM.Testing;
 using Xunit;
 
@@ -74,6 +76,23 @@ public sealed class SuiteCatalogTests
         Assert.True(SuiteCatalog.Tier("ci")!.SkipFails);
         Assert.Same(SuiteCatalog.CiTier, SuiteCatalog.Tier("CI")!.Suites);
         Assert.False(SuiteCatalog.Tier("quick")!.SkipFails);
+    }
+
+    [Fact]
+    public void The_headless_limits_name_registered_suites_off_the_ci_tier()
+    {
+        string path = Path.Combine(TestData.RepoRoot, "analysis", "headless-limits.json");
+        using var limits = JsonDocument.Parse(File.ReadAllText(path));
+        string[] headlessOnly = limits.RootElement.GetProperty("headlessOnly").EnumerateObject().Select(p => p.Name).ToArray();
+        string[] patterns = limits.RootElement.GetProperty("headlessEngineErrors").EnumerateObject().Select(p => p.Name).ToArray();
+        var registered = Names.ToHashSet();
+
+        Assert.NotEmpty(headlessOnly);
+        Assert.All(headlessOnly, name => Assert.Contains(name, registered));
+        // The CI job runs headless, so a suite that cannot pass there would hold it red for good.
+        Assert.All(headlessOnly, name => Assert.DoesNotContain(name, SuiteCatalog.CiTier));
+        Assert.NotEmpty(patterns);
+        Assert.All(patterns, pattern => Assert.NotNull(new Regex(pattern)));
     }
 
     [Fact]

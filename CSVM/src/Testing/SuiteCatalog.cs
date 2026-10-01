@@ -66,6 +66,7 @@ public static class SuiteCatalog
         "menu-host-pointer",
         "menu-host-tracer",
         "menu-net-door",
+        "menu-player-setup-journey",
         "menu-zone-layout",
         "net-cutscene-skip-episode",
         "options-difficulty-launch",
