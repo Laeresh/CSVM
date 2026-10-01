@@ -52,9 +52,9 @@ public enum CameraView
 /// <see cref="Camera3D"/> it does not own, like <see cref="OrbitCamera"/> does for the
 /// static viewer.
 /// Deliberately passive: no clock and no input devices of its own, see <see cref="Chase"/> and
-/// <see cref="Orbit"/> for which clock each uses. The chase RADIUS is dynamic per plane; see
-/// <see cref="UpdateDynamics"/>. The offset's DIRECTION is hand-picked, not in the data, see
-/// <see cref="CamParams"/> and docs/formats/camparam.md. The enhanced presentation's own chase
+/// <see cref="Orbit"/> for which clock each uses. The chase RADIUS is dynamic per plane (see
+/// <see cref="UpdateDynamics"/>), while the offset's DIRECTION is hand-picked, not in the data
+/// (see <see cref="CamParams"/> and docs/formats/camparam.md). The enhanced presentation's own chase
 /// cues enter through <see cref="StepEnhancedCues"/> and reach nothing else.
 /// </summary>
 public sealed class CameraController
