@@ -11,6 +11,17 @@
     { "key": "MSG_DESTROYED", "id": 8, "value": "probe destroyed" },
     { "key": "MSG_PRESS_AUTOLAND", "id": 9, "value": "Probe dock: press %1" },
     { "key": "MSG_CLICK_AUTOLAND", "id": 10, "value": "Probe dock: click %1" },
-    { "key": "MSG_PROBE_FIGHTER", "id": 11, "value": "Probe Fighter" }
+    { "key": "MSG_PROBE_FIGHTER", "id": 11, "value": "Probe Fighter" },
+    { "key": "MSG_PROBE_TORPEDO", "id": 31, "value": "Probe torpedo" },
+    { "key": "MSG_PROBE_HE", "id": 32, "value": "Probe burst rocket" },
+    { "key": "MSG_PROBE_CHOKER", "id": 33, "value": "Probe choke rocket" },
+    { "key": "MSG_PROBE_FLARE", "id": 34, "value": "Probe flare" },
+    { "key": "MSG_PROBE_SONIC", "id": 35, "value": "Probe shock rocket" },
+    { "key": "MSG_PROBE_FLASH", "id": 36, "value": "Probe dazzle rocket" },
+    { "key": "MSG_PROBE_SEEKER", "id": 37, "value": "Probe homing rocket" },
+    { "key": "MSG_PROBE_BEEPER", "id": 38, "value": "Probe marker rocket" },
+    { "key": "MSG_PROBE_FLAK", "id": 39, "value": "Probe airburst rocket" },
+    { "key": "MSG_PROBE_INCENDIARY", "id": 40, "value": "Probe motor rocket" },
+    { "key": "MSG_PROBE_SMOKER", "id": 41, "value": "Probe smoke pot" }
   ]
 }

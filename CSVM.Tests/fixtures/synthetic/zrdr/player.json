@@ -19,6 +19,9 @@
     ],
     "score_kill", [2.0],
     "score_suicide", [-3.0],
+    "smokescreen_stun_range", [450.0],
+    "smokescreen_stun_angle", [160.0],
+    "smokescreen_stun_interval", [4.0],
     "ai_skill_parameters",
     [
       "daredevil_chance", [0.3, 0.9],

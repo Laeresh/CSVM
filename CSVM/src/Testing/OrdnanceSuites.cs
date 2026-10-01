@@ -28,6 +28,24 @@ internal static class OrdnanceSuites
     // actually strikes. C1's buildings are its airport hangars, a different surface entirely.
     private const string FilmLotChapter = "C2";
 
+    /// <summary>The weapon a suite flies. On a real extraction it is the shipped id the suite's
+    /// literal checks name. On the synthetic tree it is the first record that
+    /// <paramref name="carries"/> the behaviour under test, an invented <c>wep_probe_*</c> entry
+    /// whose values <c>CSVM.Tests/fixtures/README.md</c> states.</summary>
+    internal static WeaponDef? PickWeapon(TestContext ctx, WeaponDefs weapons, string shippedId,
+        System.Func<WeaponDef, bool> carries) =>
+        ctx.SyntheticData ? weapons.All.FirstOrDefault(carries) : weapons.Get(shippedId);
+
+    /// <summary>The HE rocket a burst suite drops, <c>wep_06</c> on a real extraction: a
+    /// high-explosive record whose default row plays a fireball the catalogue lights.</summary>
+    internal static WeaponDef? PickFireballRocket(TestContext ctx, WeaponDefs weapons) =>
+        PickWeapon(ctx, weapons, "wep_06",
+            w => w.HighExplosive && DefaultBurst(w) is { } fx && EffectCatalogue.IsBurstLight(fx));
+
+    /// <summary>The effect a weapon's default row plays, the name a burst hands the effect sink.</summary>
+    internal static string? DefaultBurst(WeaponDef weapon) =>
+        weapon.ImpactFor(SurfaceRegistry.Default) is { } row ? row.Animation ?? row.SurfaceAnimation : null;
+
     // C10/C11 on controlled geometry: a torpedo fired straight down onto a ground plate, so the burst
     // sits at a known point on a known face and every target's near face is a measured distance
     // away. Boxes stand on the plate with a bottom edge at the exact range, so the nearest-shape
@@ -46,7 +64,7 @@ internal static class OrdnanceSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        if (!weapons.TryGet("wep_14", out var torpedo)
+        if (PickWeapon(ctx, weapons, "wep_14", w => w.Torpedo) is not { } torpedo
             || torpedo.HealthDamage is not > 0f || torpedo.ImpactProximity is not > 0f)
         {
             ctx.Check(false, $"torpedo (wep_14) carries HEALTH_DAMAGE + IMPACT_PROXIMITY");
@@ -54,8 +72,14 @@ internal static class OrdnanceSuites
         }
         float full = torpedo.HealthDamage!.Value;
         float radius = torpedo.ImpactProximity!.Value;
-        ctx.Check(Mathf.IsEqualApprox(full, 200f) && Mathf.IsEqualApprox(radius, 30f),
-            $"wep_14 authors HEALTH_DAMAGE 200 and IMPACT_PROXIMITY 30 (the data this lab is scaled to)");
+        // The lab's farthest bodies stand 23.5 m out, so a smaller radius cannot show the curve or the cap.
+        ctx.Check(radius > 24f,
+            $"{torpedo.Id} authors IMPACT_PROXIMITY {radius:0.#}, wider than the lab's 23.5 m layout");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(Mathf.IsEqualApprox(full, 200f) && Mathf.IsEqualApprox(radius, 30f),
+                $"wep_14 authors HEALTH_DAMAGE 200 and IMPACT_PROXIMITY 30 (the data this lab is scaled to)");
+        }
 
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
@@ -206,16 +230,23 @@ internal static class OrdnanceSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        if (!weapons.TryGet("wep_14", out var torpedo) || !weapons.TryGet("wep_12", out var choker)
-            || !weapons.TryGet("wep_00", out var gun))
+        if (PickWeapon(ctx, weapons, "wep_14", w => w.Torpedo) is not { } torpedo
+            || PickWeapon(ctx, weapons, "wep_12", w => w.Tangler != null) is not { } choker
+            || PickWeapon(ctx, weapons, "wep_00", w => w.IsGun) is not { } gun)
         {
             ctx.Check(false, $"wep_14, wep_12 and wep_00 all resolve");
             return;
         }
         float cruise = torpedo.Velocity ?? 0f;
         float window = torpedo.LockOn ?? 0f;
-        ctx.Check(Mathf.IsEqualApprox(cruise, 60f) && Mathf.IsEqualApprox(window, 2.5f),
-            $"wep_14 authors VELOCITY {cruise:0.#} and LOCK_ON {window:0.##}, the decode's 60 m/s over 2.5 s");
+        // Every reading below is taken against these two, so a window under the 4 s flight is all it needs.
+        ctx.Check(cruise > 0f && window is > 0f and < 4f && (torpedo.Acceleration ?? 0f) == 0f,
+            $"{torpedo.Id} authors VELOCITY {cruise:0.#} and LOCK_ON {window:0.##} and no motor");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(Mathf.IsEqualApprox(cruise, 60f) && Mathf.IsEqualApprox(window, 2.5f),
+                $"wep_14 authors VELOCITY {cruise:0.#} and LOCK_ON {window:0.##}, the decode's 60 m/s over 2.5 s");
+        }
         ctx.Check(ProjectilePool.CarriesLockOn(torpedo) && !ProjectilePool.CarriesLockOn(choker)
                   && !ProjectilePool.CarriesLockOn(gun),
             $"the decay window flag is LOCK_ON itself: wep_14 carries it, the choker and the gun do not");
@@ -252,30 +283,30 @@ internal static class OrdnanceSuites
 
             // The decode's own worked example: a launcher at 120 m/s over the torpedo's 2.5 s.
             float fast0 = SpeedAt(torpedo, 120f, target, 0f);
-            float fastHalf = SpeedAt(torpedo, 120f, target, 1.25f);
-            float fastEnd = SpeedAt(torpedo, 120f, target, 2.5f);
+            float fastHalf = SpeedAt(torpedo, 120f, target, window / 2f);
+            float fastEnd = SpeedAt(torpedo, 120f, target, window);
             float fastLate = SpeedAt(torpedo, 120f, target, 4f);
-            ctx.Check(Mathf.Abs(fast0 - 180f) < 0.5f,
-                $"a torpedo launched at 120 m/s leaves at launcher + VELOCITY speed={fast0:0.##} expected=180");
-            ctx.Check(Mathf.Abs(fastHalf - 120f) < 0.5f,
-                $"half a LOCK_ON window in, half the inherited velocity is left speed={fastHalf:0.##} expected=120");
-            ctx.Check(Mathf.Abs(fastEnd - 60f) < 0.5f,
-                $"at LOCK_ON the round is down to its authored VELOCITY speed={fastEnd:0.##} expected=60");
-            ctx.Check(Mathf.Abs(fastLate - 60f) < 0.5f,
-                $"and it HOLDS there rather than continuing to fall speed={fastLate:0.##} expected=60");
+            ctx.Check(Mathf.Abs(fast0 - (cruise + 120f)) < 0.5f,
+                $"a torpedo launched at 120 m/s leaves at launcher + VELOCITY speed={fast0:0.##} expected={cruise + 120f:0.##}");
+            ctx.Check(Mathf.Abs(fastHalf - (cruise + 60f)) < 0.5f,
+                $"half a LOCK_ON window in, half the inherited velocity is left speed={fastHalf:0.##} expected={cruise + 60f:0.##}");
+            ctx.Check(Mathf.Abs(fastEnd - cruise) < 0.5f,
+                $"at LOCK_ON the round is down to its authored VELOCITY speed={fastEnd:0.##} expected={cruise:0.##}");
+            ctx.Check(Mathf.Abs(fastLate - cruise) < 0.5f,
+                $"and it HOLDS there rather than continuing to fall speed={fastLate:0.##} expected={cruise:0.##}");
 
             // The other half of the goal: a slow launch has almost nothing to shed.
             float slow0 = SpeedAt(torpedo, 10f, target, 0f);
-            float slowEnd = SpeedAt(torpedo, 10f, target, 2.5f);
-            ctx.Check(Mathf.Abs(slow0 - 70f) < 0.5f && Mathf.Abs(slowEnd - 60f) < 0.5f,
+            float slowEnd = SpeedAt(torpedo, 10f, target, window);
+            ctx.Check(Mathf.Abs(slow0 - (cruise + 10f)) < 0.5f && Mathf.Abs(slowEnd - cruise) < 0.5f,
                 $"a torpedo launched at 10 m/s barely slows at all launch={slow0:0.##} settled={slowEnd:0.##}");
 
             // ⚠ The recorded divergence: the original's decay lives inside its target-gated
             // steering step, ours runs for every LOCK_ON round, so a torpedo fired with nothing
             // selected still settles onto its authored 60 rather than flying at 180 forever.
             float untargeted = SpeedAt(torpedo, 120f, null, 4f);
-            ctx.Check(Mathf.Abs(untargeted - 60f) < 0.5f,
-                $"a LOCK_ON round holding NO target still sheds its launcher's velocity speed={untargeted:0.##} expected=60");
+            ctx.Check(Mathf.Abs(untargeted - cruise) < 0.5f,
+                $"a LOCK_ON round holding NO target still sheds its launcher's velocity speed={untargeted:0.##} expected={cruise:0.##}");
 
             // The choker authors no ACCELERATION, so the original seeds it like a gun and never
             // rebuilds it. LOCK_ON gates the MOTOR round's inheritance, not every round's.
@@ -313,16 +344,24 @@ internal static class OrdnanceSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        if (!weapons.TryGet("wep_04", out var incendiary) || !weapons.TryGet("wep_26", out var fake)
-            || !weapons.TryGet("wep_12", out var choker) || !weapons.TryGet("wep_00", out var gun))
+        if (PickWeapon(ctx, weapons, "wep_04", w => w.Acceleration is > 0f && !ProjectilePool.CarriesLockOn(w)) is not { } incendiary
+            || PickWeapon(ctx, weapons, "wep_26", w => w.Acceleration is > 0f && !ProjectilePool.CarriesLockOn(w)) is not { } fake
+            || PickWeapon(ctx, weapons, "wep_12", w => w.IsRocket && (w.Acceleration ?? 0f) == 0f && !ProjectilePool.CarriesLockOn(w)) is not { } choker
+            || PickWeapon(ctx, weapons, "wep_00", w => w.IsGun) is not { } gun)
         {
             ctx.Check(false, $"wep_04, wep_26, wep_12 and wep_00 all resolve");
             return;
         }
         float motor = incendiary.Acceleration ?? 0f;
         float cruise = incendiary.Velocity ?? 0f;
-        ctx.Check(Mathf.IsEqualApprox(motor, 150f) && Mathf.IsEqualApprox(cruise, 450f),
-            $"wep_04 authors ACCELERATION {motor:0.#} m/s² and VELOCITY {cruise:0.#} m/s");
+        // The 1 s and 2 s samples read the climb only while the cap is past 2 s and reached by 3 s.
+        ctx.Check(motor > 0f && cruise > 2f * motor && cruise <= 3f * motor,
+            $"{incendiary.Id} authors ACCELERATION {motor:0.#} m/s² and VELOCITY {cruise:0.#} m/s, a cap the motor reaches between 2 s and 3 s");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(Mathf.IsEqualApprox(motor, 150f) && Mathf.IsEqualApprox(cruise, 450f),
+                $"wep_04 authors ACCELERATION {motor:0.#} m/s² and VELOCITY {cruise:0.#} m/s");
+        }
         ctx.Check((choker.Acceleration ?? 0f) == 0f && (gun.Acceleration ?? 0f) == 0f,
             $"the choker and the gun author no motor at all, so they fly at VELOCITY throughout");
 
@@ -361,8 +400,8 @@ internal static class OrdnanceSuites
             var atOne = Fly(incendiary, 0f, 1f);
             var atTwo = Fly(incendiary, 0f, 2f);
             var atThree = Fly(incendiary, 0f, 3f);
-            ctx.Check(Mathf.Abs(atOne.Speed - 150f) < 0.5f && Mathf.Abs(atTwo.Speed - 300f) < 0.5f,
-                $"a motor round off a standing launcher climbs at its authored rate 1s={atOne.Speed:0.#} 2s={atTwo.Speed:0.#} expected=150/300");
+            ctx.Check(Mathf.Abs(atOne.Speed - motor) < 0.5f && Mathf.Abs(atTwo.Speed - (2f * motor)) < 0.5f,
+                $"a motor round off a standing launcher climbs at its authored rate 1s={atOne.Speed:0.#} 2s={atTwo.Speed:0.#} expected={motor:0.#}/{2f * motor:0.#}");
             ctx.Check(Mathf.Abs(atThree.Speed - cruise) < 0.5f,
                 $"and reaches VELOCITY exactly as the motor's own arithmetic predicts speed={atThree.Speed:0.#} expected={cruise:0.#}");
             // Its RANGE expires at 900 m, which it passes at ~3.46 s, so this is the last sample
@@ -376,8 +415,16 @@ internal static class OrdnanceSuites
             // offset climb; Ballistics.LaunchSpeed carries the cap arithmetic under unit test.
             var launched = Fly(fake, 100f, 1f);
             var launchedLater = Fly(fake, 100f, 2f);
-            ctx.Check(Mathf.Abs(launched.Speed - 250f) < 0.5f && Mathf.Abs(launchedLater.Speed - 400f) < 0.5f,
-                $"a motor round off a 100 m/s launcher leaves at it and climbs from there 1s={launched.Speed:0.#} 2s={launchedLater.Speed:0.#} expected=250/400");
+            float fakeMotor = fake.Acceleration ?? 0f;
+            float fakeCapped = (fake.Velocity ?? 0f) + 100f;
+            float fakeOne = Mathf.Min(100f + fakeMotor, fakeCapped), fakeTwo = Mathf.Min(100f + (2f * fakeMotor), fakeCapped);
+            ctx.Check(Mathf.Abs(launched.Speed - fakeOne) < 0.5f && Mathf.Abs(launchedLater.Speed - fakeTwo) < 0.5f,
+                $"a motor round off a 100 m/s launcher leaves at it and climbs from there 1s={launched.Speed:0.#} 2s={launchedLater.Speed:0.#} expected={fakeOne:0.#}/{fakeTwo:0.#}");
+            if (!ctx.SyntheticData)
+            {
+                ctx.Check(Mathf.Abs(launched.Speed - 250f) < 0.5f && Mathf.Abs(launchedLater.Speed - 400f) < 0.5f,
+                    $"a motor round off a 100 m/s launcher leaves at it and climbs from there 1s={launched.Speed:0.#} 2s={launchedLater.Speed:0.#} expected=250/400");
+            }
             var (fakeSpeed, fakeCap) = Ballistics.LaunchSpeed(fake.Velocity ?? 0f, fake.Acceleration ?? 0f, 100f);
             ctx.Check(Mathf.Abs(fakeCap - ((fake.Velocity ?? 0f) + 100f)) < 0.01f && Mathf.Abs(fakeSpeed - 100f) < 0.01f,
                 $"and its cap is VELOCITY above the launcher's speed cap={fakeCap:0.#} launch={fakeSpeed:0.#}");
@@ -414,25 +461,42 @@ internal static class OrdnanceSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        if (!weapons.TryGet("wep_24", out var he) || !weapons.TryGet("wep_12", out var choker)
-            || !weapons.TryGet("wep_15", out var flare) || !weapons.TryGet("wep_08", out var sonic)
-            || !weapons.TryGet("wep_14", out var torpedo))
+        if (PickWeapon(ctx, weapons, "wep_24", w => w.HighExplosive && ProjectilePool.CarriesLockOn(w)
+                && w.Range != null && (w.Acceleration ?? 0f) == 0f) is not { } he
+            || PickWeapon(ctx, weapons, "wep_12", w => w.Tangler != null) is not { } choker
+            || PickWeapon(ctx, weapons, "wep_15", w => w.DetonationTime is > 0f) is not { } flare
+            || PickWeapon(ctx, weapons, "wep_08", w => w.Sonic) is not { } sonic
+            || PickWeapon(ctx, weapons, "wep_14", w => w.Torpedo) is not { } torpedo)
         {
             ctx.Check(false, $"wep_24, wep_12, wep_15, wep_08 and wep_14 all resolve");
             return;
         }
 
-        ctx.Check(he.Range is 1000f && choker.Range is 1000f && flare.Range is null,
-            $"the two 1000 m rounds author RANGE and the flare authors none, taking the engine's own {ProjectilePool.DefaultRange:0} m default");
+        float fuseRange = sonic.DetonationDistance ?? 0f;
+        ctx.Check(he.Range is > 0f && choker.Range is > 0f && flare.Range is null,
+            $"{he.Id} and {choker.Id} author RANGE and the flare authors none, taking the engine's own {ProjectilePool.DefaultRange:0} m default");
         ctx.Check(ProjectilePool.DetonatesAtRange(he) && !ProjectilePool.DetonatesAtRange(choker),
             $"a round detonates at RANGE only if its weapon carries LOCK_ON: the HE rocket does, the choker does not");
-        ctx.Check(flare.DetonationTime is 2.0f && he.DetonationTime is null,
-            $"the rear-arc flare is the one weapon authoring a timed fuse, at 2.0 s");
-        ctx.Check(sonic.DetonationDistance is 35f && sonic.DetonationDistanceSqM is 1225f,
-            $"the sonic's DETONATION_DISTANCE is 35 m, stored squared as 1225 the way the engine keeps it");
-        ctx.Check(torpedo.RangeMinimum is 300f && torpedo.FlyoutHealth is 10
+        ctx.Check(flare.DetonationTime is > 0f && he.DetonationTime is null,
+            $"{flare.Id} authors a timed fuse of {flare.DetonationTime:0.##} s and the HE rocket none");
+        // The own target stands 30 m off the flight line, so only a fuse wider than that reaches it.
+        ctx.Check(fuseRange > 30f && sonic.DetonationDistanceSqM is { } fuseSq && Mathf.IsEqualApprox(fuseSq, fuseRange * fuseRange),
+            $"the sonic's DETONATION_DISTANCE is {fuseRange:0.#} m, stored squared as {sonic.DetonationDistanceSqM:0.#} the way the engine keeps it");
+        ctx.Check(torpedo.RangeMinimum is > 0f && torpedo.FlyoutHealth is > 0
                   && ProjectilePool.FlyoutUnhittableAtLaunch(torpedo) && !ProjectilePool.FlyoutUnhittableAtLaunch(he),
-            $"the torpedo alone carries both halves of the intersect gate (RANGE_MINIMUM 300 m and FLYOUT_HEALTH)");
+            $"the torpedo alone carries both halves of the intersect gate (RANGE_MINIMUM {torpedo.RangeMinimum:0} m and FLYOUT_HEALTH)");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(he.Range is 1000f && choker.Range is 1000f && flare.Range is null,
+                $"the two 1000 m rounds author RANGE and the flare authors none, taking the engine's own {ProjectilePool.DefaultRange:0} m default");
+            ctx.Check(flare.DetonationTime is 2.0f && he.DetonationTime is null,
+                $"the rear-arc flare is the one weapon authoring a timed fuse, at 2.0 s");
+            ctx.Check(sonic.DetonationDistance is 35f && sonic.DetonationDistanceSqM is 1225f,
+                $"the sonic's DETONATION_DISTANCE is 35 m, stored squared as 1225 the way the engine keeps it");
+            ctx.Check(torpedo.RangeMinimum is 300f && torpedo.FlyoutHealth is 10
+                      && ProjectilePool.FlyoutUnhittableAtLaunch(torpedo) && !ProjectilePool.FlyoutUnhittableAtLaunch(he),
+                $"the torpedo alone carries both halves of the intersect gate (RANGE_MINIMUM 300 m and FLYOUT_HEALTH)");
+        }
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
@@ -497,21 +561,38 @@ internal static class OrdnanceSuites
                 $"the choker flies the same full RANGE and expires with no detonation at all travelled={quiet.Travelled:0.#} m");
 
             // 2. The timed fuse, with nothing near and 498 m of range left unspent.
+            float fuse = flare.DetonationTime ?? 0f;
             var fused = Fly(flare, null, 4f);
             float fuseSeconds = fused.Steps / 60f;
-            ctx.Check(fused.At != null && Mathf.Abs(fuseSeconds - 2f) < 0.05f,
-                $"the flare detonates on its 2.0 s fuse t={fuseSeconds:0.###} s");
-            ctx.Check(fused.Travelled < 5f,
-                $"and does so two metres from the launcher, nowhere near a range expiry travelled={fused.Travelled:0.##} m");
+            ctx.Check(fused.At != null && Mathf.Abs(fuseSeconds - fuse) < 0.05f,
+                $"the flare detonates on its {fuse:0.0} s fuse t={fuseSeconds:0.###} s");
+            ctx.Check(fused.Travelled <= ((flare.Velocity ?? ProjectilePool.DefaultVelocity) * fuse) + 0.5f && fused.Travelled < ProjectilePool.DefaultRange / 2f,
+                $"and does so at its own speed's reach from the launcher, nowhere near a range expiry travelled={fused.Travelled:0.##} m");
+            if (!ctx.SyntheticData)
+            {
+                ctx.Check(fused.Travelled < 5f,
+                    $"and does so two metres from the launcher, nowhere near a range expiry travelled={fused.Travelled:0.##} m");
+            }
 
-            // 3. The round's own target, and the LOCK_ON half of its gate.
+            // 3. The round's own target, and the LOCK_ON half of its gate. The fuse is read at the
+            // start of each step, so it fires on the first step that starts inside DETONATION_DISTANCE.
+            float sonicStep = (sonic.Velocity ?? ProjectilePool.DefaultVelocity) / 60f;
+            float fuseEdge = 300f - Mathf.Sqrt((fuseRange * fuseRange) - 900f);
             var onTarget = Fly(sonic, mark, 3f);
             float onTargetRange = onTarget.At?.DistanceTo(origin) ?? 0f;
-            ctx.Check(onTarget.At != null && onTargetRange > 270f && onTargetRange < 295f,
-                $"a sonic holding a target detonates as it comes within DETONATION_DISTANCE of it at={onTargetRange:0.#} m");
+            ctx.Check(onTarget.At != null && onTargetRange > fuseEdge - 0.5f && onTargetRange < fuseEdge + sonicStep + 0.5f,
+                $"a sonic holding a target detonates as it comes within DETONATION_DISTANCE of it at={onTargetRange:0.#} m edge={fuseEdge:0.#} m step={sonicStep:0.#} m");
             var noTarget = Fly(sonic, null, 3f);
-            ctx.Check(noTarget.At is { } freeAt && freeAt.DistanceTo(origin) > 900f,
+            float sonicRange = sonic.Range ?? ProjectilePool.DefaultRange;
+            ctx.Check(noTarget.At is { } freeAt && freeAt.DistanceTo(origin) > sonicRange - sonicStep - 0.5f,
                 $"the same round holding NO target flies past that point to its RANGE at={noTarget.At?.DistanceTo(origin):0.#} m");
+            if (!ctx.SyntheticData)
+            {
+                ctx.Check(onTarget.At != null && onTargetRange > 270f && onTargetRange < 295f,
+                    $"a sonic holding a target detonates as it comes within DETONATION_DISTANCE of it at={onTargetRange:0.#} m");
+                ctx.Check(noTarget.At is { } shippedAt && shippedAt.DistanceTo(origin) > 900f,
+                    $"the same round holding NO target flies past that point to its RANGE at={noTarget.At?.DistanceTo(origin):0.#} m");
+            }
             var gated = Fly(choker, mark, 3f);
             ctx.Check(gated.At == null && gated.Travelled > 500f,
                 $"and a weapon without LOCK_ON holding the same target flies past it untouched travelled={gated.Travelled:0.#} m");
@@ -608,7 +689,9 @@ internal static class OrdnanceSuites
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequireData(ctx.MessagesPath, $"messages.json");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, Messages.Load(ctx.MessagesPath));
-        if (!weapons.TryGet("wep_14", out var torpedo) || !weapons.TryGet("wep_06", out var rocket))
+        if (PickWeapon(ctx, weapons, "wep_14", w => w.Torpedo) is not { } torpedo
+            || PickWeapon(ctx, weapons, "wep_06", w => w.HighExplosive && !w.Targetable
+                && w.DetonationDistance is > AimAssist.MinFuseDistance) is not { } rocket)
         {
             ctx.Check(false, $"wep_14 and wep_06 both resolve");
             return;
@@ -622,9 +705,17 @@ internal static class OrdnanceSuites
         }
 
         // --- the authored halves ---------------------------------------------------------------
-        ctx.Check(torpedo.Targetable && torpedo.FlyoutHealth is 10 && torpedo.ProjectileBbox is 0
-                  && torpedo.DestroyAnimation == "torpedo_destroy_effect",
-            $"wep_14 is the one entry carrying TARGETABLE, FLYOUT_HEALTH 10, PROJECTILE_BBOX 0 and a DESTROY_ANIMATION");
+        // Every count below is read off the torpedo's own pool; the first hit spends 4 of it.
+        float pool0 = torpedo.FlyoutHealth ?? 0;
+        ctx.Check(torpedo.Targetable && pool0 > 4f && torpedo.ProjectileBbox is 0
+                  && torpedo.DestroyAnimation != null,
+            $"{torpedo.Id} is the one entry carrying TARGETABLE, FLYOUT_HEALTH {pool0:0}, PROJECTILE_BBOX 0 and a DESTROY_ANIMATION");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(torpedo.Targetable && torpedo.FlyoutHealth is 10 && torpedo.ProjectileBbox is 0
+                      && torpedo.DestroyAnimation == "torpedo_destroy_effect",
+                $"wep_14 is the one entry carrying TARGETABLE, FLYOUT_HEALTH 10, PROJECTILE_BBOX 0 and a DESTROY_ANIMATION");
+        }
         ctx.Check(!rocket.Targetable && rocket.FlyoutHealth == null && rocket.DestroyAnimation == null
                   && rocket.DetonationDistance is > AimAssist.MinFuseDistance,
             $"wep_06 carries neither key though it IS fused, so it reaches the same fourth pool with the admission byte clear");
@@ -633,13 +724,13 @@ internal static class OrdnanceSuites
 
         // --- the pair's arithmetic, off the round's own state ------------------------------------
         var seeded = ProjectilePool.SeedFlyout(torpedo, 3);
-        ctx.Check(seeded is { Targetable: true, Armour: 0f, Health: 10f, HealthMax: 10f }
-                  && seeded.Name == "wep_14#3",
+        ctx.Check(seeded is { Targetable: true, Armour: 0f } && seeded.Health == pool0 && seeded.HealthMax == pool0
+                  && seeded.Name == $"{torpedo.Id}#3",
             $"a torpedo's pair seeds from weapon +0x8c/+0x90: armour {seeded?.Armour} (the parser's literal 0) and health {seeded?.Health}");
         ctx.Check(ProjectilePool.SeedFlyout(rocket, 0) == null,
             $"an ordinary rocket gets no flyout state at all, which is the −1.0 sentinel's outcome without the per-round allocation");
         seeded!.Spend(999f, 4f);
-        ctx.Check(seeded is { Armour: 0f, Health: 6f },
+        ctx.Check(seeded.Armour == 0f && seeded.Health == pool0 - 4f,
             $"the first hit spends HEALTH directly because the armour pool is already empty health={seeded.Health}");
         seeded.Spend(0f, 100f);
         ctx.Check(seeded is { Health: 0f, Destroyed: true },
@@ -674,7 +765,7 @@ internal static class OrdnanceSuites
 
             var flyouts = new List<ProjectilePool.Flyout>();
             live.CollectFlyouts(flyouts);
-            ctx.Check(flyouts.Count == 1 && flyouts[0].Targetable && flyouts[0].Health == 10f,
+            ctx.Check(flyouts.Count == 1 && flyouts[0].Targetable && flyouts[0].Health == pool0,
                 $"exactly one of the two live rounds carries flyout state count={flyouts.Count}");
 
             var scan = new AimCandidateSet();
@@ -693,9 +784,15 @@ internal static class OrdnanceSuites
                           && sel.Pool.NonAircraft.Count == 0,
                     $"the torpedo is the pool's one entry and lands on the ENEMY cycle, the ordinary rocket contributing nothing");
                 var round = sel.Pool.Enemy[0];
-                ctx.Check(round.Kind == AimTargetKind.Ordnance && round.Name == "wep_14#0"
-                          && round.DisplayName == "Aerial torpedo" && round.TypeLabel == null,
+                ctx.Check(round.Kind == AimTargetKind.Ordnance && round.Name == $"{torpedo.Id}#0"
+                          && round.DisplayName == torpedo.DisplayName && round.TypeLabel == null,
                     $"…named for --target= and labelled with the weapon's own DESC name='{round.Name}' display='{round.DisplayName}'");
+                if (!ctx.SyntheticData)
+                {
+                    ctx.Check(round.Kind == AimTargetKind.Ordnance && round.Name == "wep_14#0"
+                              && round.DisplayName == "Aerial torpedo" && round.TypeLabel == null,
+                        $"…named for --target= and labelled with the weapon's own DESC name='{round.Name}' display='{round.DisplayName}'");
+                }
                 ctx.Check(round.Health is { } h && Mathf.IsEqualApprox(h, 1f) && round.Armor == null,
                     $"…carrying a full health bar and no armour figure at all health={round.Health}");
                 ctx.Check(round.SortsFirst && sel.Current is { } cur && cur.IsSameTarget(round),
@@ -729,15 +826,15 @@ internal static class OrdnanceSuites
                 flyouts[0].Spend(gun.ArmorDamage ?? 0f, gun.HealthDamage ?? 0f);
                 shots++;
             }
-            int expected = Mathf.CeilToInt(10f / (gun.HealthDamage ?? 1f));
+            int expected = Mathf.CeilToInt(pool0 / (gun.HealthDamage ?? 1f));
             ctx.Check(shots == expected,
-                $"{gun.Id}'s HEALTH_DAMAGE {gun.HealthDamage} empties the 10-point pool in {shots} hits (expected {expected})");
+                $"{gun.Id}'s HEALTH_DAMAGE {gun.HealthDamage} empties the {pool0:0}-point pool in {shots} hits (expected {expected})");
             live.SimStep(1f / 60f);
             flyouts.Clear();
             live.CollectFlyouts(flyouts);
             ctx.Check(flyouts.Count == 0,
                 $"the frame check destroys the round the step after its health reaches zero");
-            ctx.Check(effects.Count == 1 && effects[0].Name == "torpedo_destroy_effect",
+            ctx.Check(effects.Count == 1 && effects[0].Name == torpedo.DestroyAnimation,
                 $"…playing DESTROY_ANIMATION and NOTHING else: no impact effect, no detonation ({string.Join(",", effects.Select(e => e.Name))})");
         }
         finally
@@ -749,6 +846,8 @@ internal static class OrdnanceSuites
         // --- the same thing through a REAL hit ray, which needs a real flyout body ---------------
         // The box is built over the round's instanced FLYOUT MODEL, so this half wants a chapter
         // gamez; C1 carries a_torpedo. Built without collision, so nothing but the round is solid.
+        if (!ctx.RunsChapterWorld("C1"))
+            return;
         ctx.WithWorld("C1", collision: false, world =>
         {
             var worldTextures = new TextureArchive(texturesPath);
@@ -872,6 +971,8 @@ internal static class OrdnanceSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         ctx.RequireData(ctx.MessagesPath, $"messages.json");
+        // Every check reads a body built off C1's FLYOUT models, so the world gates the whole suite.
+        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, "C1"), $"chapter C1 gamez");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, Messages.Load(ctx.MessagesPath));
         if (!weapons.TryGet("wep_15", out var flare) || !weapons.TryGet("wep_14", out var torpedo))
         {
@@ -1087,19 +1188,30 @@ internal static class OrdnanceSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        if (!weapons.TryGet("wep_11", out var seeker) || !weapons.TryGet("wep_14", out var torpedo)
-            || !weapons.TryGet("wep_10", out var beeper))
+        if (PickWeapon(ctx, weapons, "wep_11", w => w.BeeperSeeker) is not { } seeker
+            || PickWeapon(ctx, weapons, "wep_14", w => w.Torpedo) is not { } torpedo
+            || PickWeapon(ctx, weapons, "wep_10", w => w.BeeperTime != null) is not { } beeper)
         {
             ctx.Check(false, $"wep_11, wep_14 and wep_10 all resolve");
             return;
         }
         const float dt = 1f / 60f;
-        ctx.Check(seeker.TurnRate is 1.25f && seeker.BeeperSeeker && seeker.LockOnLead == null
-                  && torpedo.TurnRate is > 0.0009f and < 0.0011f && beeper.BeeperTime is 20f,
-            $"wep_11 authors TURN_RATE 1.25 and BEEPER_SEEKER with no LOCK_ON_LEAD, wep_14 the 0.001 sentinel, wep_10 TIME 20");
+        // A homing rate, a sentinel-scale one, and a paint long enough to read on and then off.
+        ctx.Check(seeker.TurnRate is > 0.01f && seeker.BeeperSeeker && seeker.LockOnLead == null
+                  && ProjectilePool.CarriesLockOn(seeker) && torpedo.TurnRate is > 0f and < 0.01f
+                  && ProjectilePool.CarriesLockOn(torpedo) && beeper.BeeperTime is > 1f,
+            $"{seeker.Id} authors TURN_RATE {seeker.TurnRate:0.##} and BEEPER_SEEKER with no LOCK_ON_LEAD, {torpedo.Id} the {torpedo.TurnRate:0.###} sentinel, {beeper.Id} TIME {beeper.BeeperTime:0.#}");
         var carriers = weapons.All.Where(w => w.LockOnLead != null).ToList();
-        ctx.Check(carriers.Count == 3 && carriers.All(w => w.TurnRate is < 0.01f),
+        ctx.Check(carriers.Count > 0 && carriers.All(w => w.TurnRate is < 0.01f),
             $"LOCK_ON_LEAD's carriers ({string.Join(",", carriers.Select(w => w.Id))}) all pair it with the sentinel rate");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(seeker.TurnRate is 1.25f && seeker.BeeperSeeker && seeker.LockOnLead == null
+                      && torpedo.TurnRate is > 0.0009f and < 0.0011f && beeper.BeeperTime is 20f,
+                $"wep_11 authors TURN_RATE 1.25 and BEEPER_SEEKER with no LOCK_ON_LEAD, wep_14 the 0.001 sentinel, wep_10 TIME 20");
+            ctx.Check(carriers.Count == 3 && carriers.All(w => w.TurnRate is < 0.01f),
+                $"LOCK_ON_LEAD's carriers ({string.Join(",", carriers.Select(w => w.Id))}) all pair it with the sentinel rate");
+        }
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
@@ -1190,24 +1302,31 @@ internal static class OrdnanceSuites
                 live.SimStep(dt);
             var dumb = Round();
             float dumbTurn = dumb is { } db ? AngleFrom(db.Vel, Vector3.Forward) : -1f;
-            ctx.Check(dumb != null && dumbTurn > 0.003f && dumbTurn < 0.005f,
-                $"a sentinel-rate round with a target flies effectively straight, turning only its 0.001 rad/s turned={Mathf.RadToDeg(dumbTurn):0.###}° in 4 s");
+            float dumbExpected = ProjectilePool.MaxTurnRad(torpedo, dt) * Mathf.RoundToInt(4f / dt);
+            ctx.Check(dumb != null && dumbTurn > 0.75f * dumbExpected && dumbTurn < 1.25f * dumbExpected,
+                $"a sentinel-rate round with a target flies effectively straight, turning only its {torpedo.TurnRate:0.###} rad/s turned={Mathf.RadToDeg(dumbTurn):0.###}° in 4 s");
 
             // 3. No target: the launcher's velocity still decays (the recorded divergence) and the
             // heading never moves.
             live.Clear();
             live.Spawn(torpedo, muzzle, Vector3.Forward * 120f);
-            for (int i = 0; i < Mathf.RoundToInt(2.5f / dt); i++)
+            for (int i = 0; i < Mathf.RoundToInt((torpedo.LockOn ?? 0f) / dt); i++)
                 live.SimStep(dt);
             var free = Round();
             float freeTurn = free is { } fr ? AngleFrom(fr.Vel, Vector3.Forward) : -1f;
-            ctx.Check(free != null && Mathf.Abs(free.Value.Vel.Length() - 60f) < 0.5f && freeTurn < 1e-4f,
-                $"a LOCK_ON round holding no target decays to its own 60 m/s and does not turn speed={free?.Vel.Length():0.##} turned={Mathf.RadToDeg(freeTurn):0.####}°");
+            float ownSpeed = torpedo.Velocity ?? 0f;
+            ctx.Check(free != null && Mathf.Abs(free.Value.Vel.Length() - ownSpeed) < 0.5f && freeTurn < 1e-4f,
+                $"a LOCK_ON round holding no target decays to its own {ownSpeed:0} m/s and does not turn speed={free?.Vel.Length():0.##} turned={Mathf.RadToDeg(freeTurn):0.####}°");
+            if (!ctx.SyntheticData)
+            {
+                ctx.Check(free != null && Mathf.Abs(free.Value.Vel.Length() - 60f) < 0.5f && freeTurn < 1e-4f,
+                    $"a LOCK_ON round holding no target decays to its own 60 m/s and does not turn speed={free?.Vel.Length():0.##} turned={Mathf.RadToDeg(freeTurn):0.####}°");
+            }
 
             // 4. LOCK_ON_LEAD. No shipped carrier reaches its element 0 before RANGE (wep_04 off a
             // standing launcher, its slowest case, is gone by 3.5 s of its 4 s onset), so the blend
             // is exercised on a lab def below, snapping to the desired direction every frame.
-            if (weapons.TryGet("wep_04", out var incendiary))
+            if (PickWeapon(ctx, weapons, "wep_04", w => w.LockOnLead != null && w.Acceleration is > 0f) is { } incendiary)
             {
                 live.Clear();
                 live.Spawn(incendiary, muzzle, Vector3.Zero, target: mark);
@@ -1219,7 +1338,7 @@ internal static class OrdnanceSuites
                 }
                 float ended = alive * dt;
                 ctx.Check(ended < (incendiary.LockOnLead?.Item1 ?? 0f),
-                    $"wep_04 off a standing launcher ends at {ended:0.##} s, before its LOCK_ON_LEAD onset at {incendiary.LockOnLead?.Item1:0} s");
+                    $"{incendiary.Id} off a standing launcher ends at {ended:0.##} s, before its LOCK_ON_LEAD onset at {incendiary.LockOnLead?.Item1:0} s");
             }
             // The heading after each step is that frame's desired direction, compared with the
             // bearing and the AimAssist.TryIntercept solve computed off the same pre-step state of
@@ -1366,13 +1485,14 @@ internal static class OrdnanceSuites
                 $"a wep_10 into a hostile rig paints it for TIME steps={hitSteps} remaining={remaining:0.###} of {beeper.BeeperTime:0}");
             ctx.Check(Pristine(victim) && victim.InPlay,
                 $"and the damage ledger is untouched: no zone lost a point");
-            for (int i = 0; i < Mathf.RoundToInt(19.5f / dt) - hitSteps; i++)
+            float paintSeconds = beeper.BeeperTime ?? 0f;
+            for (int i = 0; i < Mathf.RoundToInt((paintSeconds - 0.5f) / dt) - hitSteps; i++)
                 tags.SimStep(dt);
             bool paintedLate = tags.IsPainted(victim);
             for (int i = 0; i < Mathf.RoundToInt(0.6f / dt); i++)
                 tags.SimStep(dt);
             ctx.Check(paintedLate && !tags.IsPainted(victim),
-                $"the paint lasts TIME: still on at 19.5 s, off past 20 s");
+                $"the paint lasts TIME: still on at {paintSeconds - 0.5f:0.#} s, off past {paintSeconds:0.#} s");
             int again = Paint();
             bool repainted = tags.IsPainted(victim);
             victim.DebugForceCrash();
@@ -1410,16 +1530,25 @@ internal static class OrdnanceSuites
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        if (!weapons.TryGet("wep_13", out var smoker) || smoker.SmokeScreenTime is not { } screenTime)
+        if (PickWeapon(ctx, weapons, "wep_13", w => w.SmokeScreenTime != null) is not { } smoker
+            || smoker.SmokeScreenTime is not { } screenTime)
         {
             ctx.Check(false, $"wep_13 resolves and carries a SMOKE_SCREEN TIME");
             return;
         }
-        ctx.Check(Mathf.IsEqualApprox(screenTime, 8f), $"wep_13 authors SMOKE_SCREEN TIME {screenTime:0.#}, the decode's 8 s");
         var tunables = SmokeScreenTunables.Load(ctx.ZrdrPath);
-        ctx.Check(Mathf.IsEqualApprox(tunables.RangeM, 600f) && Mathf.IsEqualApprox(tunables.StunIntervalS, 5f)
-                  && Mathf.Abs(tunables.HalfAngleCos - Mathf.Cos(Mathf.DegToRad(85f))) < 1e-5f,
-            $"player.json reads 600 m, 5 s and 170° stored as cos 85° ({tunables.RangeM:0}/{tunables.StunIntervalS:0}/{tunables.HalfAngleCos:0.####})");
+        // The layout below puts an AI 300 m astern inside the cone and one 400 m out at 97° outside it.
+        float coneDeg = Mathf.RadToDeg(Mathf.Acos(tunables.HalfAngleCos));
+        ctx.Check(screenTime > 3f && tunables.RangeM > 400f && coneDeg < 97f && coneDeg > 1f
+                  && tunables.RangeM != SmokeScreenTunables.Image.RangeM,
+            $"{smoker.Id} authors SMOKE_SCREEN TIME {screenTime:0.#} and player.json reads {tunables.RangeM:0} m, {tunables.StunIntervalS:0.#} s and a {coneDeg:0.#}° half-angle, its own keys and not the loader's defaults");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(Mathf.IsEqualApprox(screenTime, 8f), $"wep_13 authors SMOKE_SCREEN TIME {screenTime:0.#}, the decode's 8 s");
+            ctx.Check(Mathf.IsEqualApprox(tunables.RangeM, 600f) && Mathf.IsEqualApprox(tunables.StunIntervalS, 5f)
+                      && Mathf.Abs(tunables.HalfAngleCos - Mathf.Cos(Mathf.DegToRad(85f))) < 1e-5f,
+                $"player.json reads 600 m, 5 s and 170° stored as cos 85° ({tunables.RangeM:0}/{tunables.StunIntervalS:0}/{tunables.HalfAngleCos:0.####})");
+        }
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
@@ -1495,8 +1624,12 @@ internal static class OrdnanceSuites
             var (chapterAnim, _) = AnimProgram.ArchivePaths(ctx.DataRoot, "C1", "IA1");
             var authored = new SmokeScreenEmitters(
                 AnimArchive.Load(chapterAnim, "cam_anim")?.Defs, textures, ctx.Host);
-            ctx.Check(authored.StateCount == 2,
-                $"generate_smokescreen authors {authored.StateCount} DISTANCE_INTERVAL puffer state(s), the decode's two");
+            // The synthetic tree carries no chapter anim archive, so the authored cloud is the install's alone.
+            if (!ctx.SyntheticData)
+            {
+                ctx.Check(authored.StateCount == 2,
+                    $"generate_smokescreen authors {authored.StateCount} DISTANCE_INTERVAL puffer state(s), the decode's two");
+            }
             if (authored.StateCount == 2)
                 SmokeScreenCloud(ctx, authored.States[0]);
 
@@ -1540,8 +1673,9 @@ internal static class OrdnanceSuites
                 $"the per-step refresh holds the AI's remaining stun at the interval for the whole screen lowest={lowestStun:0.00}");
             ctx.Check(!aiSide.Pilot.IsStunned, $"the AI beyond 85° stays untouched for the whole screen");
             int rewashes = washes.Count(w => w.Player == 1) - 1;
-            ctx.Check(rewashes >= 4 && washes.Where(w => w.Player == 1).Skip(1).All(w => Mathf.IsEqualApprox(w.Weight, 0.9f)),
-                $"the human behind is re-washed at 0.9 while it stays inside rewashes={rewashes} (1.5 s apart over 8 s)");
+            int rewashesOwed = (int)((screenTime - 1.5f) / 1.5f);
+            ctx.Check(rewashes >= rewashesOwed && washes.Where(w => w.Player == 1).Skip(1).All(w => Mathf.IsEqualApprox(w.Weight, 0.9f)),
+                $"the human behind is re-washed at 0.9 while it stays inside rewashes={rewashes} (1.5 s apart over {screenTime:0.#} s, at least {rewashesOwed})");
             var gaps = washes.Where(w => w.Player == 1).Select(w => w.Time).ToList();
             bool spaced = true;
             for (int i = 1; i < gaps.Count; i++)
@@ -1554,7 +1688,7 @@ internal static class OrdnanceSuites
                 $"the human behind's pane carries the grey-green wash ({pane2})");
             ctx.Check(flash.CurrentFor(0).IsEqualApprox(new Color(0f, 0f, 0f, 0f)),
                 $"the layer's own pane stays clear ({flash.CurrentFor(0)})");
-            ctx.Check(!laid[0].Stopped && laid[0].Steps > 400
+            ctx.Check(!laid[0].Stopped && laid[0].Steps > screenTime * 50f
                       && laid[0].LastPos.IsEqualApprox(layer.WorldPosition)
                       && laid[0].LastBasis.Z.IsEqualApprox(-layer.NoseDirection),
                 $"the emitter runs at the layer's live pose for the whole screen steps={laid[0].Steps}");
@@ -1621,17 +1755,28 @@ internal static class OrdnanceSuites
         ctx.RequireData(texturesPath, $"C1 textures");
 
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        if (!weapons.TryGet("wep_08", out var sonic) || !weapons.TryGet("wep_09", out var flashRocket)
-            || !weapons.TryGet("wep_12", out var choker))
+        if (PickWeapon(ctx, weapons, "wep_08", w => w.Sonic) is not { } sonic
+            || PickWeapon(ctx, weapons, "wep_09", w => w.Flash && w.IsRocket && w.DetonationTime == null) is not { } flashRocket
+            || PickWeapon(ctx, weapons, "wep_12", w => w.Tangler != null) is not { } choker)
         {
             ctx.Check(false, $"wep_08, wep_09 and wep_12 all resolve");
             return;
         }
-        ctx.Check(sonic.Sonic && !sonic.Flash && sonic.ImpactProximity is 35f && flashRocket.Flash
-                  && flashRocket.ImpactProximity is 450f && choker.Tangler is { Radius: 35f, Time: 2f },
-            $"wep_08 is SONIC at 35 m, wep_09 FLASH at 450 m, wep_12 a TANGLER of RADIUS 35 and TIME 2");
+        // The layout reads the sonic's fade band 29 to 33 m off a hull. Its radius must reach past
+        // 33 m with the plateau short of 29 m. The choker's cloud must take in a pilot 20 m out.
+        ctx.Check(sonic.Sonic && !sonic.Flash && sonic.ImpactProximity is > 33f and < 37f && flashRocket.Flash
+                  && flashRocket.ImpactProximity is > 0f && choker.Tangler is { Radius: > 25f, Time: > 1f },
+            $"{sonic.Id} is SONIC at {sonic.ImpactProximity:0.#} m, {flashRocket.Id} FLASH at {flashRocket.ImpactProximity:0.#} m, {choker.Id} a TANGLER of RADIUS {choker.Tangler?.Radius:0.#} and TIME {choker.Tangler?.Time:0.#}");
         var bounds = TanglerChoke.EngineDeadBounds(weapons);
-        ctx.Check(bounds == (5f, 13f), $"the catalogue's ENGINE_DEAD pair is [5, 13] ({bounds.Min}, {bounds.Max})");
+        ctx.Check(choker.Tangler?.EngineDead is { } dead && bounds == dead && bounds.Min > 0f && bounds.Max > bounds.Min,
+            $"the catalogue's ENGINE_DEAD pair is the choker's own ({bounds.Min}, {bounds.Max})");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(sonic.Sonic && !sonic.Flash && sonic.ImpactProximity is 35f && flashRocket.Flash
+                      && flashRocket.ImpactProximity is 450f && choker.Tangler is { Radius: 35f, Time: 2f },
+                $"wep_08 is SONIC at 35 m, wep_09 FLASH at 450 m, wep_12 a TANGLER of RADIUS 35 and TIME 2");
+            ctx.Check(bounds == (5f, 13f), $"the catalogue's ENGINE_DEAD pair is [5, 13] ({bounds.Min}, {bounds.Max})");
+        }
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
@@ -1833,25 +1978,32 @@ internal static class OrdnanceSuites
             // choked for the formula's seconds at its ORIGIN distance, the human 20 m out for the
             // floor, both refreshed every step the cloud lives, and the timer runs once it is gone.
             var clouds = new List<(Vector3 Centre, float Remaining)>();
+            float cloudTime = choker.Tangler!.Time ?? 0f;
             steps = Fire(choker, aiNear.WorldPosition + new Vector3(0f, 30f, 0f), Vector3.Down);
             live.CollectTanglerClouds(clouds);
-            ctx.Check(steps < 120 && clouds.Count == 1 && Mathf.Abs(clouds[0].Remaining - (2f - steps * dt)) < 0.02f,
-                $"a wep_12 into the AI leaves one cloud running its 2 s TIME (clouds={clouds.Count} remaining={(clouds.Count > 0 ? clouds[0].Remaining : 0f):0.00} after {steps} steps)");
+            ctx.Check(steps < 120 && clouds.Count == 1 && Mathf.Abs(clouds[0].Remaining - (cloudTime - steps * dt)) < 0.02f,
+                $"a wep_12 into the AI leaves one cloud running its {cloudTime:0.#} s TIME (clouds={clouds.Count} remaining={(clouds.Count > 0 ? clouds[0].Remaining : 0f):0.00} after {steps} steps)");
             float originSq = clouds.Count > 0 ? aiNear.WorldPosition.DistanceSquaredTo(clouds[0].Centre) : 0f;
             float expected = TanglerChoke.Duration(originSq, choker.Tangler!.Radius!.Value, bounds.Min, bounds.Max);
-            ctx.Check(expected > 10f && Mathf.Abs(aiNear.EngineDeadRemainingS - expected) < 0.05f,
+            // Above the floor, so the struck AI reads the formula and not the floor the far pilot reads.
+            ctx.Check(expected > bounds.Min + 1f && Mathf.Abs(aiNear.EngineDeadRemainingS - expected) < 0.05f,
                 $"the struck AI's engine is dead for the formula's {expected:0.00} s at {Mathf.Sqrt(originSq):0.##} m from its origin (remaining={aiNear.EngineDeadRemainingS:0.00})");
+            if (!ctx.SyntheticData)
+            {
+                ctx.Check(expected > 10f && Mathf.Abs(aiNear.EngineDeadRemainingS - expected) < 0.05f,
+                    $"the struck AI's engine is dead for the formula's {expected:0.00} s at {Mathf.Sqrt(originSq):0.##} m from its origin (remaining={aiNear.EngineDeadRemainingS:0.00})");
+            }
             ctx.Check(Mathf.Abs(human1.EngineDeadRemainingS - bounds.Min) < 0.05f,
                 $"the human 20 m out, inside RADIUS, is choked for the {bounds.Min:0} s floor (remaining={human1.EngineDeadRemainingS:0.00})");
             ctx.Check(human0.EngineDeadRemainingS == 0f && aiFar.EngineDeadRemainingS == 0f,
                 $"nobody outside the cloud is touched");
             ctx.Check(Pristine(aiNear) && Pristine(human1), $"the choker spent nothing on either ledger");
-            Advance(1.5f);
+            Advance(cloudTime * 0.75f);
             clouds.Clear();
             live.CollectTanglerClouds(clouds);
             ctx.Check(clouds.Count == 1 && Mathf.Abs(aiNear.EngineDeadRemainingS - expected) < 0.05f,
                 $"while the cloud lives the choke is refreshed every step (remaining={aiNear.EngineDeadRemainingS:0.00} at cloud {(clouds.Count > 0 ? clouds[0].Remaining : 0f):0.00} s left)");
-            Advance(0.6f);
+            Advance((cloudTime * 0.25f) + 0.1f);
             clouds.Clear();
             live.CollectTanglerClouds(clouds);
             ctx.Check(clouds.Count == 0, $"the cloud is gone at its TIME (clouds={clouds.Count})");
@@ -1859,7 +2011,7 @@ internal static class OrdnanceSuites
             aiNear.Held = false;
             float atRelease = aiNear.EngineDeadRemainingS;
             Advance(3f);
-            ctx.Check(atRelease > 10f && Mathf.Abs(aiNear.EngineDeadRemainingS - (atRelease - 3f)) < 0.1f,
+            ctx.Check(atRelease > Mathf.Max(bounds.Min + 1f, 3.5f) && Mathf.Abs(aiNear.EngineDeadRemainingS - (atRelease - 3f)) < 0.1f,
                 $"once the cloud is gone the engine timer runs down ({atRelease:0.00} → {aiNear.EngineDeadRemainingS:0.00} over 3 s)");
         }
         finally
@@ -1892,16 +2044,24 @@ internal static class OrdnanceSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        if (!weapons.TryGet("wep_06", out var he) || !weapons.TryGet("wep_12", out var choker))
+        if (PickWeapon(ctx, weapons, "wep_06", w => w.ImpactFor(SurfaceRegistry.Default) is { Animation: null, SurfaceAnimation: not null }) is not { } he
+            || PickWeapon(ctx, weapons, "wep_12", w => w.Tangler != null && w.ImpactFor(SurfaceRegistry.Default) is { Animation: not null, SurfaceAnimation: null }) is not { } choker)
         {
             ctx.Check(false, $"wep_06 and wep_12 resolve");
             return;
         }
         var heRow = he.ImpactFor(SurfaceRegistry.Default);
         var chokerRow = choker.ImpactFor(SurfaceRegistry.Default);
-        ctx.Check(heRow is { Animation: null, SurfaceAnimation: "he_ground_effect" }
-                  && chokerRow is { Animation: "scatter_effect", SurfaceAnimation: null },
-            $"wep_06's default row binds SURFACE_ANIMATION he_ground_effect and wep_12's a plain ANIMATION scatter_effect");
+        string heFx = heRow?.SurfaceAnimation ?? "-", chokerFx = chokerRow?.Animation ?? "-";
+        ctx.Check(heRow is { Animation: null, SurfaceAnimation: not null }
+                  && chokerRow is { Animation: not null, SurfaceAnimation: null },
+            $"{he.Id}'s default row binds SURFACE_ANIMATION {heFx} and {choker.Id}'s a plain ANIMATION {chokerFx}");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(heRow is { Animation: null, SurfaceAnimation: "he_ground_effect" }
+                      && chokerRow is { Animation: "scatter_effect", SurfaceAnimation: null },
+                $"wep_06's default row binds SURFACE_ANIMATION he_ground_effect and wep_12's a plain ANIMATION scatter_effect");
+        }
 
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
@@ -1947,20 +2107,20 @@ internal static class OrdnanceSuites
                 play is { } p ? $"fx={p.Name} Y={p.Orient.Y} ringNormal={(p.Ring is { } r ? (r * ProjectilePool.UpperRingDiscNormal).ToString() : "-")}" : "no play";
 
             var onSlope = Drop(he, origin + new Vector3(0f, 20f, 0f));
-            ctx.Check(onSlope is { Name: "he_ground_effect" } s1 && DegreesBetween(s1.Orient.Y, slopeNormal) < 0.5f
+            ctx.Check(onSlope is { } s1 && s1.Name == heFx && DegreesBetween(s1.Orient.Y, slopeNormal) < 0.5f
                       && DegreesBetween(s1.Orient.Y, Vector3.Up) > 29f,
-                $"wep_06 into the 30° slope plays he_ground_effect with its Y on the slope normal ({Describe(onSlope)} normal={slopeNormal})");
+                $"{he.Id} into the 30° slope plays {heFx} with its Y on the slope normal ({Describe(onSlope)} normal={slopeNormal})");
             ctx.Check(onSlope is { } s2 && Mathf.IsEqualApprox(s2.Orient.Determinant(), 1f)
                       && s2.Orient.Y.IsEqualApprox(s2.Orient * Vector3.Up),
                 $"the basis is a pure rotation");
 
             var onFlat = Drop(he, flat.GlobalPosition + new Vector3(0f, 20f, 0f));
-            ctx.Check(onFlat is { Name: "he_ground_effect" } f1 && f1.Orient.IsEqualApprox(Basis.Identity),
+            ctx.Check(onFlat is { } f1 && f1.Name == heFx && f1.Orient.IsEqualApprox(Basis.Identity),
                 $"the same round into flat ground plays it on the fixed axis ({Describe(onFlat)})");
 
             var chokerOnSlope = Drop(choker, origin + new Vector3(0f, 20f, 0f));
-            ctx.Check(chokerOnSlope is { Name: "scatter_effect" } c1 && c1.Orient.IsEqualApprox(Basis.Identity),
-                $"wep_12's plain ANIMATION scatter_effect keeps its fixed axis on the slope ({Describe(chokerOnSlope)})");
+            ctx.Check(chokerOnSlope is { } c1 && c1.Name == chokerFx && c1.Orient.IsEqualApprox(Basis.Identity),
+                $"{choker.Id}'s plain ANIMATION {chokerFx} keeps its fixed axis on the slope ({Describe(chokerOnSlope)})");
             ctx.Check(onSlope is { Ring: null } && onFlat is { Ring: null } && chokerOnSlope is { Ring: null },
                 $"the faithful presentation hands the upper ring no basis on any of the three, so it keeps the decoded fixed axis");
 
@@ -1991,7 +2151,7 @@ internal static class OrdnanceSuites
                 // confused.
                 var slanted = new Vector3(-1f, -1f, 0f).Normalized();
                 var enhancedOnSlope = Drop(he, origin + new Vector3(20f, 20f, 0f), slanted);
-                ctx.Check(enhancedOnSlope is { Name: "he_ground_effect", Ring: not null } e1
+                ctx.Check(enhancedOnSlope is { Ring: not null } e1 && e1.Name == heFx
                           && DegreesBetween(e1.Ring!.Value * discNormal, -slanted) < 15f
                           && DegreesBetween(e1.Ring!.Value * discNormal, Vector3.Up) > 20f
                           && DegreesBetween(e1.Ring!.Value * discNormal, slopeNormal) > 20f,
@@ -2017,7 +2177,8 @@ internal static class OrdnanceSuites
             textures.Dispose();
         }
 
-        UpperRingPlacement(ctx);
+        if (ctx.RunsChapterWorld(ctx.Chapter))
+            UpperRingPlacement(ctx);
     }
 
     // The enhanced burst light, driven end to end: a wep_06 dropped onto a plate, the effect sink
@@ -2037,7 +2198,7 @@ internal static class OrdnanceSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        if (!weapons.TryGet("wep_06", out var he))
+        if (PickFireballRocket(ctx, weapons) is not { } he || DefaultBurst(he) is not { } heFx)
         {
             ctx.Check(false, $"wep_06 resolves");
             return;
@@ -2045,6 +2206,10 @@ internal static class OrdnanceSuites
         ctx.Check(EffectCatalogue.IsBurstLight("he_ground_effect")
                   && !EffectCatalogue.IsBurstLight("3040slug_gunhit"),
             $"the catalogue calls wep_06's he_ground_effect a fireball and a gun hit not one");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(heFx == "he_ground_effect", $"wep_06's default row plays he_ground_effect ({heFx})");
+        }
         // The seeker's ground flare and the flash rocket's detonation carry no fireball. They take a
         // burst light but neither shimmer nor scorch.
         var flash = EffectCatalogue.BurstLightShape("flash_effect");
@@ -2092,13 +2257,13 @@ internal static class OrdnanceSuites
                 for (int i = 0; i < 120 && plays.Count == 0; i++)
                     live.SimStep(Dt);
                 live.Clear();
-                return plays.Contains("he_ground_effect");
+                return plays.Contains(heFx);
             }
 
             // The faithful presentation first: it is what every pinned golden renders, and the
             // able-to-fail control for everything below.
             lights = new WorldLights(omniParent);
-            ctx.Check(Drop(), $"the rocket reaches the plate and plays he_ground_effect");
+            ctx.Check(Drop(), $"the rocket reaches the plate and plays {heFx}");
             lights.Begin(Dt);
             lights.Commit(viewers);
             ctx.Same(0, lights.CommittedPositions.Count,
@@ -2181,10 +2346,14 @@ internal static class OrdnanceSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        if (!weapons.TryGet("wep_06", out var he))
+        if (PickFireballRocket(ctx, weapons) is not { } he || DefaultBurst(he) is not { } heFx)
         {
             ctx.Check(false, $"wep_06 resolves");
             return;
+        }
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(heFx == "he_ground_effect", $"wep_06's default row plays he_ground_effect ({heFx})");
         }
 
         const float Dt = 1f / 60f;
@@ -2221,12 +2390,12 @@ internal static class OrdnanceSuites
                 for (int i = 0; i < 120 && plays.Count == 0; i++)
                     live.SimStep(Dt);
                 live.Clear();
-                return plays.Contains("he_ground_effect");
+                return plays.Contains(heFx);
             }
 
             // The faithful presentation first: it is what every pinned golden renders, and the
             // able-to-fail control for everything below.
-            ctx.Check(Drop(), $"the rocket reaches the plate and plays he_ground_effect");
+            ctx.Check(Drop(), $"the rocket reaches the plate and plays {heFx}");
             ctx.Check(factory.Shimmer == null,
                 $"ABLE-TO-FAIL CONTROL: the faithful presentation builds no shimmer pool for the same hit");
             ctx.Same(0, worldRoot.GetChildCount(), $"and adds no node to the world");
@@ -2431,8 +2600,12 @@ internal static class OrdnanceSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        if (!weapons.TryGet("wep_10", out var beeper) || !weapons.TryGet("wep_11", out var seeker)
-            || !weapons.TryGet("wep_07", out var flak))
+        if (PickWeapon(ctx, weapons, "wep_10", w => w.BeeperTime != null) is not { } beeper
+            || PickWeapon(ctx, weapons, "wep_11", w => w.BeeperSeeker) is not { } seeker
+            || PickWeapon(ctx, weapons, "wep_07", w => ProjectilePool.CarriesLockOn(w) && w.DetonationDistance is > 0f
+                && !ProjectilePool.AircraftDamageDiscarded(w)
+                && w.ImpactFor(SurfaceRegistry.Default) is { Animation: { } fx } && w.ImpactFor(SurfaceRegistry.Player) is { Animation: { } own }
+                && fx != own) is not { } flak)
         {
             ctx.Check(false, $"wep_07, wep_10 and wep_11 resolve");
             return;
@@ -2440,18 +2613,30 @@ internal static class OrdnanceSuites
 
         // The authored rows this suite performs, read off the data first so a failure below names
         // the mechanism and not a changed table.
-        ctx.Check(flak.ImpactFor(SurfaceRegistry.Default) is { Animation: "flak_effect", Sound: "snd_missile_flak" },
-            $"wep_07's default row authors flak_effect + snd_missile_flak");
-        ctx.Check(flak.ImpactFor(SurfaceRegistry.Player) is { Animation: "flak_effectplayer" },
-            $"wep_07's player row authors flak_effectplayer, a name no chapter defines");
+        string flakFx = flak.ImpactFor(SurfaceRegistry.Default)?.Animation ?? "-";
+        ctx.Check(flak.ImpactFor(SurfaceRegistry.Default) is { Animation: not null }
+                  && flak.ImpactFor(SurfaceRegistry.Player) is { Animation: { } flakOwn } && flakOwn != flakFx,
+            $"{flak.Id}'s default row authors {flakFx} and its player row another name");
         ctx.Check(beeper.ImpactFor(SurfaceRegistry.Default) == null,
             $"wep_10's default row is named-and-empty (a null row): a burst that strikes nothing plays nothing");
-        ctx.Check(beeper.ImpactFor(SurfaceRegistry.Player) is { Animation: "large_fireball", Sound: "snd_missile_beeper" },
-            $"wep_10's player row authors large_fireball + snd_missile_beeper");
-        ctx.Check(seeker.ImpactFor(SurfaceRegistry.Default) is { Animation: "ballflare.flt", Sound: "snd_missile_seeker" },
-            $"wep_11's default row authors ballflare.flt + snd_missile_seeker (the white ground flare)");
-        ctx.Check(seeker.ImpactFor(SurfaceRegistry.Player) is { Animation: "large_fireball" },
-            $"wep_11's player row authors large_fireball");
+        ctx.Check(beeper.ImpactFor(SurfaceRegistry.Player) is { Animation: not null },
+            $"{beeper.Id}'s player row authors {beeper.ImpactFor(SurfaceRegistry.Player)?.Animation}, the fireball a direct strike alone plays");
+        ctx.Check(seeker.ImpactFor(SurfaceRegistry.Default) is { Animation: not null }
+                  && seeker.ImpactFor(SurfaceRegistry.Player) is { Animation: not null },
+            $"{seeker.Id}'s default and player rows each author an ANIMATION");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(flak.ImpactFor(SurfaceRegistry.Default) is { Animation: "flak_effect", Sound: "snd_missile_flak" },
+                $"wep_07's default row authors flak_effect + snd_missile_flak");
+            ctx.Check(flak.ImpactFor(SurfaceRegistry.Player) is { Animation: "flak_effectplayer" },
+                $"wep_07's player row authors flak_effectplayer, a name no chapter defines");
+            ctx.Check(beeper.ImpactFor(SurfaceRegistry.Player) is { Animation: "large_fireball", Sound: "snd_missile_beeper" },
+                $"wep_10's player row authors large_fireball + snd_missile_beeper");
+            ctx.Check(seeker.ImpactFor(SurfaceRegistry.Default) is { Animation: "ballflare.flt", Sound: "snd_missile_seeker" },
+                $"wep_11's default row authors ballflare.flt + snd_missile_seeker (the white ground flare)");
+            ctx.Check(seeker.ImpactFor(SurfaceRegistry.Player) is { Animation: "large_fireball" },
+                $"wep_11's player row authors large_fireball");
+        }
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
@@ -2513,8 +2698,8 @@ internal static class OrdnanceSuites
             // and the DEFAULT row's flak_effect is what it draws there.
             var flakBurst = Fly(flak, victim, muzzle);
             float flakToPlane = flakBurst?.At.DistanceTo(victim.WorldPosition) ?? -1f;
-            ctx.Check(flakBurst is { Name: "flak_effect" },
-                $"a flak fusing on its own target draws the DEFAULT row's flak_effect (played={flakBurst?.Name ?? "nothing"})");
+            ctx.Check(flakBurst is { } flakPlay && flakPlay.Name == flakFx,
+                $"a flak fusing on its own target draws the DEFAULT row's {flakFx} (played={flakBurst?.Name ?? "nothing"})");
             ctx.Check(flakToPlane > 5f && flakToPlane <= (flak.DetonationDistance ?? 0f) + 1f,
                 $"and the burst is a fuse burst inside DETONATION_DISTANCE, not a contact hit d={flakToPlane:0.#} m");
 
@@ -2545,6 +2730,8 @@ internal static class OrdnanceSuites
 
         // --- the seeker's ground flare needs the chapter gamez, where ballflare.flt is BOTH a
         // template root and a bound def: the def must win, or a bare 1 m disc stands in.
+        if (!ctx.RunsChapterWorld("C1"))
+            return;
         ctx.WithWorld("C1", collision: false, world =>
         {
             var bound = EffectCatalogue.WorldEffectAnimNames(world.Session.Program);
@@ -2675,7 +2862,8 @@ internal static class OrdnanceSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        if (!weapons.TryGet("wep_13", out var smoker) || smoker.SmokeScreenTime is not { } screenTime)
+        if (PickWeapon(ctx, weapons, "wep_13", w => w.SmokeScreenTime != null) is not { } smoker
+            || smoker.SmokeScreenTime is not { } screenTime)
         {
             ctx.Check(false, $"wep_13 resolves and carries a SMOKE_SCREEN TIME");
             return;
@@ -2683,6 +2871,10 @@ internal static class OrdnanceSuites
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var stockLoadouts = StockLoadouts.Load();
         var textures = new TextureArchive(texturesPath);
+        // The synthetic tree carries the stand-in alone, so the shipped census is the install's.
+        IReadOnlyList<(string Model, string Display)> airframes = ctx.SyntheticData
+            ? new[] { (ctx.PlaneName, ctx.PlaneName) }
+            : MarkerRig.PlayerAirframes;
         try
         {
             // The census: how far off the airframe's own axis any shipped pylon marker sits.
@@ -2690,7 +2882,7 @@ internal static class OrdnanceSuites
             string worstDisplay = string.Empty;
             float shippedCantDeg = 0f;
             int mostPylons = 0;
-            foreach (var (model, display) in MarkerRig.PlayerAirframes)
+            foreach (var (model, display) in airframes)
             {
                 Node3D? plane = null;
                 try
@@ -2718,8 +2910,12 @@ internal static class OrdnanceSuites
             // ⚠ Every shipped pylon marker is square to its airframe, so the two launch axes agree
             // on the shipped fit and the fix is a guard rather than a visible change. The salvo
             // below therefore cants its own markers; nothing else here can tell the two apart.
-            ctx.Check(shippedCantDeg < 0.5f && mostPylons > 1,
-                $"no shipped airframe cants a pylon marker (worst {shippedCantDeg:0.00}°); the salvo flies the {worstDisplay}'s {mostPylons} pylons");
+            ctx.Check(mostPylons > 1, $"the salvo flies the {worstDisplay}'s {mostPylons} pylons");
+            if (!ctx.SyntheticData)
+            {
+                ctx.Check(shippedCantDeg < 0.5f && mostPylons > 1,
+                    $"no shipped airframe cants a pylon marker (worst {shippedCantDeg:0.00}°); the salvo flies the {worstDisplay}'s {mostPylons} pylons");
+            }
 
             var stats = PlaneStats.Load(ctx.ZrdrPath, worstModel);
             var stock = StockFor(stockLoadouts, worstModel);

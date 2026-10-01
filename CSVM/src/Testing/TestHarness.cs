@@ -969,6 +969,22 @@ public sealed class TestContext
         }
     }
 
+    /// <summary>Whether a suite's half that builds <paramref name="chapter"/>'s world runs. The
+    /// synthetic tree carries no chapter gamez, so there it notes the half as not run and answers
+    /// false. The suite's other checks then decide it. ⚠ Never answer false on a real extraction:
+    /// a missing gamez there is a broken tree, which the world build reports.</summary>
+    public bool RunsChapterWorld(string chapter)
+    {
+        string gamez = SessionPaths.ChapterGamez(DataRoot, chapter);
+        if (!SyntheticData || File.Exists(gamez) || Directory.Exists(gamez))
+        {
+            return true;
+        }
+
+        Note($"the synthetic tree carries no {chapter} gamez, so the half on {chapter}'s world did not run");
+        return false;
+    }
+
     /// <summary>Leaves a suite's full report in the scratch folder, so a failure is diagnosable
     /// without re-running the equivalent <c>--dump-*</c> tool by hand. Absolute path, inside
     /// <c>.scratch/</c>, where every suite artifact belongs. The one exception is a suite proving

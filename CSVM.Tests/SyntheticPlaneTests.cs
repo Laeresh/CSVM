@@ -100,11 +100,15 @@ public class SyntheticPlaneTests
         var messages = Messages.Load(Path.Combine(root, "extracted", "messages.json"));
 
         var weapons = WeaponDefs.Load(zrdr, messages);
-        Assert.Equal(2, weapons.All.Count);
         var gun = Assert.Single(weapons.All, w => w.IsGun);
-        var rocket = Assert.Single(weapons.All, w => w.IsRocket);
+        var rocket = weapons.Get("wep_probe_rocket");
+        Assert.NotNull(rocket);
         Assert.Equal("Probe Gun", gun.DisplayName);
         Assert.Equal("Probe Rocket", rocket.DisplayName);
+
+        // The ordnance records beside them are invented too, and each names itself through the table.
+        Assert.All(weapons.All, w => Assert.StartsWith("wep_probe_", w.Id, System.StringComparison.Ordinal));
+        Assert.All(weapons.All, w => Assert.NotEqual(w.DescKey, w.DisplayName));
         Assert.All(weapons.All, w => Assert.Empty(w.UnhandledKeys));
 
         var shakes = ShakeDefs.Load(zrdr);

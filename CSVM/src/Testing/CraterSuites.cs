@@ -71,7 +71,7 @@ internal static class CraterSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
         ctx.RequireData(texturesPath, $"{Chapter} textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        if (!weapons.TryGet("wep_06", out var he))
+        if (OrdnanceSuites.PickFireballRocket(ctx, weapons) is not { } he)
         {
             ctx.Check(false, $"wep_06 resolves");
             return;

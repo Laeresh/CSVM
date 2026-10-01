@@ -743,6 +743,37 @@ airframes) and `net-kill-line` (its named-host leg now builds and fails on the s
 The Windows battery should be unchanged: no shipped fit names a weapon, and `Overlay` runs only under
 the switch.
 
+**B15b-1 landed: the ordnance family flies invented weapons.** The synthetic `weapons.json` gains
+eleven `wep_probe_*` records, one per ordnance class the suites fly (torpedo, HE, choker, flare,
+sonic, flash, seeker, beeper, flak, motor rocket, smoke pot), each value chosen so its suite's
+behaviour is reachable in the suite's own layout (`CSVM.Tests/fixtures/README.md`); `messages.json`
+names each, and `player.json` gains the three `smokescreen_stun_*` keys. A suite picks its weapon
+through `OrdnanceSuites.PickWeapon`: the shipped id on a real extraction, the first record carrying
+the class under test on the synthetic tree. Each check that pinned a shipped value now reads it off
+the record it flies, and the old literal stays under `!ctx.SyntheticData` unless the suite already
+pins the value it derives from; the landing commit lists every check. `TestContext.RunsChapterWorld`
+lets the chapter-world halves of `impact-orientation`, `ordnance-impact-effects` and
+`shootable-flyout` sit out on the synthetic tree with a note. Fourteen suites join `tier:ci`:
+`blast-curve-cover-cap`, `blast-neighbor-shape`, `burst-light-envelope`, `disabling-hits`,
+`heat-shimmer`, `impact-orientation`, `launch-velocity-decay`, `motor-acceleration`,
+`ordnance-end-conditions`, `ordnance-guidance`, `ordnance-impact-effects`, `scorch-decals`,
+`shootable-flyout`, `smoke-screen`. Each passed three runs in a row by name with the switch, went red
+on one broken invented input, and SKIPs as before without the switch.
+
+Still off the tier: `flyout-rack-pose` reads every body off C1's FLYOUT models, so it now SKIPs on
+the missing gamez instead of failing on `wep_15`. `ordnance-launch-axis` flies the stand-in's pylons
+and passes once `Loadout.ForRig` keeps a stock gun slot's named weapon (the `weapons-fire` bug
+above); with the PFIGHTER fix merged it passed three runs in a row and joined the tier (132).
+
+Full catalog over an empty root, Linux headless: with the switch 125 PASS, 50 FAIL, 324 SKIP before
+and 139, 35, 325 after (the fourteen FAIL to PASS, `flyout-rack-pose` FAIL to SKIP, nothing new);
+without it 58, 2, 439 before and after, suite by suite. `tier:ci` with the switch passes 130/0/0, its 37 engine
+error lines all the text-server pattern.
+
+**Still owed to the Windows run.** On the shipped values every relational check reduces to the
+literal it replaced, and each literal still runs, so the full `RunTests.ps1` battery should show the
+same PASS/FAIL/SKIP per suite as before.
+
 **Goal.** Each bucket C suite either passes on the stand-in and joins the tier, or is split into a
 logic half (on the tier) and a parity half (local).
 

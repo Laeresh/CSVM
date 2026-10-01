@@ -21,7 +21,7 @@ scene-tree host, `SyncPhysics` for the space a one-frame run leaves behind, and 
 chapter-world builder over `WorldSession`), the PASS/FAIL/SKIP table, `test-report.json` in
 `TestContext.ScratchDir` (its `syntheticData` names a synthetic data root), and the exit code.
 Its input gates SKIP a suite and name what it lacks: `RequireData` (a file) and `RequireZrdrEntry`
-(a reader file in a zrdr ZIP or folder) on every tree, `RequireTexture` and `RequirePlane` (a shipped name) on the synthetic one.
+(a reader file in a zrdr ZIP or folder) on every tree, `RequireTexture` and `RequirePlane` (a shipped name) on the synthetic one, where `RunsChapterWorld` also notes a suite's chapter-world half as not run.
 `Select` is the pure flag selector, `SkipFailures` the SKIPs a tier makes FAILs and `SuiteShards` the shard term. The world
 cache and its eviction, the mission-override and private-world forms, `DecodeCache`, `StartupProfile`, the queued-free flush and the engine-error allowlist carry their rules at their members. Read `SuiteCatalog.cs` for registration, `PhaseAttribution.cs` for time.
 

@@ -2167,7 +2167,7 @@ internal static class CombatSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
-        if (!weapons.TryGet("wep_14", out var torpedo)
+        if (OrdnanceSuites.PickWeapon(ctx, weapons, "wep_14", w => w.Torpedo) is not { } torpedo
             || torpedo.HealthDamage is not > 0f || torpedo.ImpactProximity is not > 0f)
         {
             ctx.Check(false, $"torpedo (wep_14) carries HEALTH_DAMAGE + IMPACT_PROXIMITY");
