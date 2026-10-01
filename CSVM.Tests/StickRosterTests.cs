@@ -370,14 +370,42 @@ public class StickRosterTests
         Assert.Equal(new[] { Sdl2Sticks.LinuxLibrary }, Sdl2Sticks.LinuxCandidates(string.Empty));
     }
 
+    // The soname is one no host installs, so a machine with a system SDL2 still exercises absence.
     [Fact]
-    public void ALinuxBuildWithNoSystemSdl2RunsWithoutSticksAndNamesTheSoname()
+    public void ABareNameTheSystemCannotFindRunsWithoutSticksAndNamesIt()
     {
-        var paths = Sdl2Sticks.LinuxCandidates(Path.Combine(Path.GetTempPath(), "csvm-no-sdl2-here", "bin"));
+        const string soname = "libcsvm-absent-sdl2.so.0";
+        var paths = new[] { Path.Combine(Path.GetTempPath(), "csvm-no-sdl2-here", "bin", soname), soname };
 
         Assert.Null(Sdl2Sticks.Load(paths, out string outcome));
-        Assert.StartsWith("no libSDL2-2.0.so.0 (tried ", outcome, StringComparison.Ordinal);
+        Assert.StartsWith($"no {soname} (tried ", outcome, StringComparison.Ordinal);
         Assert.Contains(paths[0], outcome, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnAbsentLibraryGivesNoLoadFailureOnLinuxOrMacOs()
+    {
+        const string linux = "Unable to load shared library 'libSDL2-2.0.so.0' or one of its dependencies. "
+            + "If you're using glibc, consider setting the LD_DEBUG environment variable: \n"
+            + "libSDL2-2.0.so.0: cannot open shared object file: No such file or directory\n";
+        const string macOs = "Unable to load shared library 'libSDL2-2.0.so.0' or one of its dependencies.\n"
+            + "dlopen(libSDL2-2.0.so.0, 0x0001): tried: 'libSDL2-2.0.so.0' (no such file), "
+            + "'/usr/lib/libSDL2-2.0.so.0' (no such file, not in dyld cache)\n";
+
+        Assert.Null(Sdl2Sticks.LoadFailure(Sdl2Sticks.LinuxLibrary, linux));
+        Assert.Null(Sdl2Sticks.LoadFailure(Sdl2Sticks.LinuxLibrary, macOs));
+    }
+
+    [Fact]
+    public void AMissingDependencyIsReportedWithTheFileTheLoaderCouldNotOpen()
+    {
+        const string message = "Unable to load shared library 'libSDL2-2.0.so.0' or one of its dependencies. "
+            + "If you're using glibc, consider setting the LD_DEBUG environment variable: \n"
+            + "libdep.so: cannot open shared object file: No such file or directory\n";
+
+        Assert.Equal(
+            "libdep.so: cannot open shared object file: No such file or directory",
+            Sdl2Sticks.LoadFailure(Sdl2Sticks.LinuxLibrary, message));
     }
 
     [Fact]

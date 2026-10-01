@@ -138,9 +138,10 @@ public sealed partial class OriginalPauseBoard : Control
 
         _input.Poll((float)delta);
 
-        // PadBack only: Escape and Start already reach the pause toggle through FlightController,
-        // so reading the combined back here would act twice.
-        bool changed = _menu.Handle(_input.Move, _input.Accept, _input.PadBack);
+        // The strips stand as a grid, so both axes step by position. PadBack only: Escape and Start
+        // already reach the pause toggle through FlightController, so the combined back acts twice.
+        bool changed = _menu.MoveTo(PauseScreens.Step(_sheet.Strips, _menu.Index, _input.MoveX, _input.Move));
+        changed |= _menu.Handle(0, _input.Accept, _input.PadBack);
         if (Visible)
         {
             changed |= _pointer.Step(_menu, PointerSource(), (x, y) => PauseScreens.RowAt(_sheet, x, y));

@@ -663,7 +663,7 @@ hash in `BUILD-INFO.txt`. With `-ToolsRoot <checkout>` a worktree's export takes
 from that checkout's `tools/sdl2/`, as it does Godot and the mech3ax fork.
 
 **Linux.** The bridge is SDL2's joystick API alone. `Sdl2Sticks` uses no `DllImport`: it loads
-one library with `NativeLibrary.TryLoad` and binds every export by name with `TryGetExport`, and
+one library through `NativeLibrary` and binds every export by name with `TryGetExport`, and
 the 24 functions it calls exist unchanged in every SDL2 build, sdl2-compat included. The roster,
 profiles, bindings, capture, prompts and glyphs never see the library. What differs off Windows:
 
@@ -675,8 +675,10 @@ profiles, bindings, capture, prompts and glyphs never see the library. What diff
   ships `/usr/lib/libSDL2-2.0.so.0` from sdl2-compat (SDL2's API over the system SDL3). The tarball
   ships no SDL2, and its `BUILD-INFO.txt` has no SDL block. No library found is the same one
   `sticks: off, no libSDL2-2.0.so.0 (tried ...)` line and a launch without sticks as a missing
-  `SDL2.dll`. A library that is present but cannot load (a missing dependency) reads the same,
-  since `TryLoad` reports no reason. A loaded one logs the file the loader chose, read from
+  `SDL2.dll`. A library that is present but cannot load carries the loader's reason instead,
+  `sticks: off, libSDL2-2.0.so.0 failed to load: libdep.so: cannot open shared object file: ...`,
+  read from `dlopen`'s errors in the load exception's message; an error naming any file but the
+  soname is a missing dependency, not absence. A loaded one logs the file the loader chose, read from
   `/proc/self/maps`: `sticks: SDL 2.32.4 from libSDL2-2.0.so.0 (system: /usr/lib/...)`.
 - **The hints in `Sdl2Sticks.Load`** are set on both platforms. `SDL_JOYSTICK_HIDAPI=0` matters on
   Linux too: it keeps SDL2 off the hidraw nodes, where it would handshake with the Deck's built-in

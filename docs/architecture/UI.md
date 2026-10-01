@@ -352,7 +352,7 @@ objectives parchment, the memento, and the labelled button strips, the block's f
 pause: its memento is the seated profile's own picture, `Rows` marks a note line by the runtime's answer for that line's own objective number, and
 `Icon` turns one world pose into the chart icon a session and a suite place alike, through the
 shared `MissionMap`, which draws nothing for a pose off the window. `RowAt` is the pointer's hit
-test over the five 132x28 plates, and a pointer draws the dialog's own cursor; an unreadable extraction leaves the pause to the Built-in board. Decode: [../org/pause-screen.md](../org/pause-screen.md).
+test over the five 132x28 plates, `Step` moves the pad and arrow cursor to the strip drawn in the pressed direction, and a pointer draws the dialog's own cursor; an unreadable extraction leaves the pause to the Built-in board. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/UI/Screens/PausePreferences.cs
 The Preferences leaf over a paused mission: an `OriginalShell` of its own on the Options screen,
