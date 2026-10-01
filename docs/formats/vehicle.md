@@ -387,7 +387,9 @@ A list of part entries:
     Source: Crimson Skies PC manual, damage-indicator section,
     <https://manualmachine.com/gamespc/crimsonskies/1119420-user-manual/>.
   - `<part>_damage_effects` (0.99), **not part of that cycle, despite the neighbouring
-    thresholds: this is the per-impact spark burst.** All four (`nose`/`tail`/`leftwing`/
+    thresholds: this is a first-damage spark burst, once per zone and not per impact** (the
+    per-part list starts an entry once per downward crossing, so each zone sparks once, when its
+    health first drops). All four (`nose`/`tail`/`leftwing`/
     `rightwing`) are one-event shims calling `random_gun_impact` (anim root `player`) with no
     parameters, so the part identity is discarded by the data itself. `random_gun_impact` is an
     IF/ELSEIF `RANDOM_WEIGHT 0.4` / `0.4` pair choosing `yellow_sparks_follow WITH_NODE pdp1` or
@@ -399,8 +401,10 @@ A list of part entries:
     (`title MSG_VEH_DEVASTATOR`), while each of the 11 planes spells its own `got_hit_anim`.
     Inheritance does not spread it: all 22 defs carrying `destroyable_parts` (11 `player_*`
     flyables + 11 lowercase AI variants) are `kind_of` a base that carries no parts list of its
-    own. The other 10 aircraft have no per-impact spark at all.
-    At 0.99 it fires on the *first scratch*, which is authored, not a threshold to retune.
+    own. The other 10 aircraft have no such spark at all.
+    At 0.99 it fires on the *first scratch* to reach a zone's health, which is authored, not a
+    threshold to retune. The executable starts the shim and binds its panels; the decode is
+    [`../org/vehicleDamage.md`](../org/vehicleDamage.md), "The first-damage spark shim".
 
     ⚠ **`random_gun_impact`'s real home is `weapons.json`, not here, read this entry as a probable
     authoring leftover (hypothesis).** It is the `player` **IMPACT surface animation**
@@ -409,7 +413,8 @@ A list of part entries:
     That is a general mechanism gated on being shot at, which nothing can do in M3. One plane of
     eleven ALSO firing it off a damage threshold fits a leftover better than a per-aircraft
     feature, but no capture of the original settles it, so it is a reading, not a finding, and the
-    entry is shipped data either way. Do not "fix" the other ten planes by adding the entry to them;
+    entry is shipped data either way. A leftover here would still be a live one: the executable
+    runs it. Do not "fix" the other ten planes by adding the entry to them;
     that would be inventing content.
   - `pdpanelN`, flips the exterior torn-skin panel `pdpN` (planes.zbd nodes; the anims
     live in the plane's own reader, e.g. player-1.json). Left wing: pdpanel5 @0.5,
