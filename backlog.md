@@ -452,23 +452,6 @@ usual.
   *Cross-refs:* `PLAN-cockpit-view` B11 ("Splitscreen posture"), `BL-389` (splitscreen weapon
   mix, same playtest family).
 
-- `BL-1017` `[Tuning]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **Seat colours:
-  the eight authored dwords are read channel-order-unproven, and seats 8 to 15 are invented.**
-  *Evidence:* the per-pilot table at `00628eb4` holds eight dwords and zeros from `00628ed4`; it is
-  indexed unchecked at `00495893` and `00497ae6` and each entry is stored to the aircraft at
-  `+0x1060`, where a search for a reader finds only those writers. So which channel the consumer
-  takes first is undetermined. `Net/NetSeats.cs` reads each entry's three stored bytes as red,
-  green, blue, the reading under which the set comes out red, blue, green, yellow, magenta, lime,
-  teal and violet, and derives seats 8 to 15 as the channel-wise complement of seats 0 to 7 (light
-  twins that collide with none of the authored ones). Both are TUNE. *Fix shape:* find the consumer
-  of the aircraft's `+0x1060` dword and read the channel order off it; then judge the eight against
-  a capture of the original's own lobby or marker colours, and judge the derived eight at the
-  controls once a match runs more than eight seats. *⚠ Traps:* the original's pilot index is
-  1-based and its eighth pilot reads one dword past the table, so do not reproduce that read as
-  fidelity; the remake gives every seat a colour on purpose. *Cross-refs:* `docs/architecture/Net.md`
-  (the player ceiling rule, `NetSeats.cs`), `docs/org/multiplayer-spawn.md`, `UI/SplitScreen.cs`'s own `Colors4` (a separate invention,
-  for panes rather than seats).
-
 ## Missions, modes & campaign
 
 - `BL-314` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A network stunt race: a timed, Trackmania-style run over the network,

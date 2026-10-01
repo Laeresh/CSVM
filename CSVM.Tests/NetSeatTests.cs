@@ -22,6 +22,33 @@ public sealed class NetSeatTests
         0x812D2D, 0x2D2D81, 0x2D812D, 0x81812D, 0x812D64, 0x66812D, 0x457C81, 0x662D81,
     };
 
+    // The same eight as the executable holds them, little-endian dwords read straight off 00628eb4.
+    private static readonly uint[] StoredDwords =
+    {
+        0x002D2D81, 0x00812D2D, 0x002D812D, 0x002D8181, 0x00642D81, 0x002D8166, 0x00817C45, 0x00812D66,
+    };
+
+    [Fact]
+    public void TheStoredDwordsReadLowByteFirstAsRed()
+    {
+        // The original's reader (FUN_004b3660) takes the low byte as its first float, then AH, then
+        // bits 16..23. The colour path packs the first float into a D3DCOLOR's red byte. So the low
+        // byte is red and the order is the stored byte order.
+        for (int seat = 0; seat < StoredDwords.Length; seat++)
+        {
+            uint dword = StoredDwords[seat];
+            uint red = dword & 0xFF;
+            uint green = (dword >> 8) & 0xFF;
+            uint blue = (dword >> 16) & 0xFF;
+            Assert.Equal((red << 16) | (green << 8) | blue, NetSeats.SeatColor(seat));
+        }
+
+        // ABLE-TO-FAIL CONTROL: the other reading, the dword's value taken as 0xRRGGBB, turns the
+        // first pilot blue rather than red.
+        Assert.NotEqual(StoredDwords[0] & 0xFFFFFFu, NetSeats.SeatColor(0));
+        Assert.Equal(0x81u, NetSeats.SeatColor(0) >> 16);
+    }
+
     [Fact]
     public void TheCeilingStandsBehindAWiderTable()
     {

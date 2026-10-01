@@ -34,8 +34,8 @@ comes from a terrain query (`FUN_004c76e0`): the sampled height plus a margin wh
 each, so their initialised values are not the values in play and are not recorded here.
 
 The bearing steps by exactly 45 degrees per pilot index, and the per-pilot colour table at
-`00628eb4`, indexed by the same field, has exactly eight entries, so the authored data serves
-eight pilots. ⚠ **That is not a player cap.** No coded bound exists: the pilot list is an STL list
+`00628eb4`, indexed by the same slot in a match without teams, has exactly eight entries, so the
+authored data serves eight pilots. ⚠ **That is not a player cap.** No coded bound exists: the pilot list is an STL list
 (head `0071c150`, count `0071c154`, walked by `FUN_0046f110`) whose count is never compared against
 a maximum. The only gate is DirectPlay's `dwMaxPlayers`, filled from the lobby's `nMaxPlayers`
 (string `006192e0`, global `00642f08`), which the code only ever resets to 0. The shipped lobby
@@ -81,17 +81,45 @@ block 0 of the table to the un-teamed match.
 
 ## The per-pilot colour table
 
-`00628eb4` holds eight dwords and then zeros from `00628ed4`. It is indexed by the pilot's own
-index with no bound check at `00495893` (`MOV ECX, dword ptr [EDX*0x4 + 0x628eb4]`, `EDX` from the
-aircraft's `+0x3c`) and again at `00497ae6`, and each entry is stored to the aircraft at `+0x1060`.
-The stored bytes are `81 2d 2d 00`, `2d 2d 81 00`, `2d 81 2d 00`, `81 81 2d 00`, `81 2d 64 00`,
-`66 81 2d 00`, `45 7c 81 00`, `66 2d 81 00`. Which channel the consumer takes first is not decoded:
-a search for a reader of `+0x1060` finds only those two writers.
+`00628eb4` holds eight dwords and then zeros from `00628ed4`. The stored bytes are `81 2d 2d 00`,
+`2d 2d 81 00`, `2d 81 2d 00`, `81 81 2d 00`, `81 2d 64 00`, `66 81 2d 00`, `45 7c 81 00`,
+`66 2d 81 00`. The table is indexed with no bound check at `00495893`
+(`MOV ECX, dword ptr [EDX*0x4 + 0x628eb4]`) and again at `00497ae6`, by the slot at `+0x3c` of the
+**remote-pilot record**, not of the aircraft: the `0x1090`-byte object `FUN_00499c90` constructs
+(zeroing `+0x1060` at `00499cda`) and `FUN_00497990` links into the list headed at `0071c7a4`. That
+slot is the pilot's own index (pilot record `+0x18`) in a match without teams and the team's index
+(`FUN_0046f3c0`'s `+0x18`) when the team flag `0071d89c` is set (`0049584f`..`0049587c`), so a team
+match colours by team. Each entry is stored to the record's `+0x1060`.
+
+**The channel order is red, green, blue in stored byte order.** The one reader of `+0x1060` is
+`FUN_004b3660` (`MOV EAX, dword ptr [ESI + 0x1060]` at `004b367c`), code Ghidra's analysis had left
+undefined, which is why a search of the analysed listing found only the writers. It takes an
+aircraft, finds that aircraft's record through `FUN_00499db0` (the record whose `+0x30` is it),
+and builds a float triple from the dword: the low byte (`AND ECX, 0xff`) first, `AH` second and
+bits 16 to 23 third, each times `1/255` (`0x3b808081` at `006081b8`). It hands the triple to
+`FUN_004d14e0` (`zclass\Object3d`) for the record's `+0x24` node with an amount: `0.3`
+(`0x3e99999a`, pushed at `004b372a`) normally, and while the aircraft's no-damage byte `+0x920` is
+set a triangle wave of the clock global `0071c470` with a 2-second period (`fmod` by 2.0 at
+`00607be0`, folded above 1.0 by `2 - x` at `006076b8`) times `0.7` (`006035b0`) plus `0.3`
+(`006034ac`), so 0.3 to 1.0. `FUN_004d14e0` stores the triple at class data `+0x08`..`+0x10` and
+the amount at `+0x14`; the `Object3d` draw `FUN_004d39c0` pushes those four through `FUN_0054e080`
+into `00a06fa0`..`00a06fac`, and `FUN_00551d90` adds that triple to the light colour triples it
+sums (its first float beside each light's `+0xa4`). The sum goes to `FUN_0058b140`, whose hardware
+branch `FUN_0059e730` packs the first float into bits 16 to 23, the second into 8 to 15 and the
+third into 0 to 7 of a `D3DCOLOR`, which `FUN_005a30c0` sets as render state `0x22` through the
+device's `+0x58` slot. A `D3DCOLOR` keeps red in bits 16 to 23, so the low stored byte is red. The
+set is dark red, blue, green, yellow, magenta, lime, teal and violet.
+
+⚠ **No caller of `FUN_004b3660` was found.** No analysed instruction calls it and its address
+(`60 36 4b 00`) appears nowhere in the image, so the tint may be dead code in the shipped build
+and the colour never seen. That does not reopen the order, which the reader fixes either way; it
+means the original shows no capture of these colours to judge them by, and where the remake shows
+a seat colour (lobby, markers) is the remake's choice.
 
 The original's pilot index is 1-based here, so its eighth pilot reads the first zero dword past the
 table. `Net/NetSeats.cs` does not reproduce that: every seat gets a colour, seats 0 to 7 from the
-eight dwords read as red, green, blue, and seats 8 to 15 from the channel-wise complement of seat
-minus 8. Both readings are TUNE (`BL-1017`).
+eight dwords in the decoded order, and seats 8 to 15 from the channel-wise complement of seat minus
+8, which is the remake's own, since the original has no colour past its table.
 
 ## What the remake takes
 

@@ -22,10 +22,9 @@ public static class NetSeats
     /// player array and a 16-entry team array.</summary>
     public const int SeatCapacity = 16;
 
-    // The original's per-pilot colour table at 00628eb4, eight dwords, zeros from 00628ed4. Each
-    // entry's three stored bytes are read here as red, green, blue. That is the reading under which
-    // the set comes out red, blue, green, yellow, magenta, lime, teal and violet. Nothing decoded
-    // shows which channel its consumer takes first, so the reading is a TUNE.
+    // The original's per-pilot colour table at 00628eb4, eight dwords, zeros from 00628ed4. Its one
+    // reader takes the low byte as red, then green, then blue. So each entry is restated here as
+    // 0xRRGGBB with its stored bytes in order (docs/org/multiplayer-spawn.md).
     private static readonly uint[] Authored =
     {
         0x812D2D, 0x2D2D81, 0x2D812D, 0x81812D, 0x812D64, 0x66812D, 0x457C81, 0x662D81,
@@ -41,7 +40,8 @@ public static class NetSeats
     /// original's authored dwords in order. The remake's index is 0-based where the original's was
     /// 1-based, so its eighth pilot read past the table and ours does not. Seats 8 to 15 take the
     /// channel-wise complement of seat minus 8, a light twin of a dark authored colour. It collides
-    /// with none of them. TUNE.</summary>
+    /// with none of them. The derived eight are the remake's own; the original has no colour past
+    /// its table.</summary>
     public static uint SeatColor(int seat)
     {
         if (seat < 0 || seat >= SeatCapacity)

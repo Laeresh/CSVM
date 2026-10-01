@@ -41,7 +41,7 @@ These are the design rules every module below is shaped by, and every multiplaye
   `SeatCapacity` wide. The original has no coded cap (its pilot list is never counted against a
   maximum, [../org/multiplayer-spawn.md](../org/multiplayer-spawn.md)) and its lobby reads
   `Players (1 of 16)`. The authored colour table and the 45-degree respawn fan serve eight, so seats
-  8 to 15 take derived colours (`BL-1017`) and the fan wraps. Co-op caps at four humans (`n/4`),
+  8 to 15 take the remake's own derived colours and the fan wraps. Co-op caps at four humans (`n/4`),
   the campaign's P1 to P4 field.
 - **The carrier is a flag.** ENet ships, by LAN search or direct IP with an IPv4 UPnP mapping or an
   IPv6 pinhole. A Steam carrier (Networking Sockets, relay, lobbies) is added behind `CsvmSteam`
@@ -401,10 +401,10 @@ without a pane.
 The roster's rules: `MaxPlayers = 16` pilots admitted, the count the original's lobby shows and
 its data holds, every seat-indexed table built `SeatCapacity = 16` wide, each seat's identity
 colour, and `Validate`, which requires seats numbered from zero with no gap and at least one flown here. `Field` builds a host's roster from its local planes and the peers on its wire; `CoopField` does so for co-op, naming each guest by its own player name.
-Seats 0 to 7 take the original's authored dwords at `00628eb4` in order (the remake's index is
-0-based where the original's was 1-based and its eighth pilot read past the table); seats 8 to 15
-take the channel-wise complement of seat minus 8. The channel order and the derived eight are TUNE
-(`BL-1017`).
+Seats 0 to 7 take the original's authored dwords at `00628eb4` in order, low byte red as the
+original's one reader takes them (the remake's index is 0-based where the original's was 1-based
+and its eighth pilot read past the table); seats 8 to 15 take the channel-wise complement of seat
+minus 8, the remake's own. The decode is `docs/org/multiplayer-spawn.md`.
 
 ## src/Net/RemotePoseBuffer.cs
 One remote aircraft's received history and the pose to draw it at now. A sample sits on the
