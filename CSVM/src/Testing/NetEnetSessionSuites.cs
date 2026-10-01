@@ -31,10 +31,8 @@ internal static class NetEnetSessionSuites
     // must never put a dialog on anybody's screen.
     private const string Loopback = "127.0.0.1";
 
-    // Below the ephemeral range, and clear of the enet-transport suite's own block, so the two
-    // can run in one shard. Walked, so a port a sibling still holds costs nothing.
-    private const int FirstPort = 47160;
-    private const int PortsToTry = 20;
+    // This suite's range in the process's port block, SuitePorts' table.
+    private const int PortsToTry = SuitePorts.Walk;
 
     // What the host and the guest are launched with. Different on purpose: the assertion that the
     // handshake replaced the guest's seed cannot then be satisfied by a shared launch value.
@@ -188,7 +186,7 @@ internal static class NetEnetSessionSuites
         why = "no port tried";
         for (int i = 0; i < PortsToTry; i++)
         {
-            port = FirstPort + i;
+            port = SuitePorts.At(SuitePorts.EnetJoin) + i;
             try
             {
                 return EnetTransport.Host(port, maxPeers: 4, bindAddress: Loopback);

@@ -206,8 +206,9 @@ internal static class NetSessionSuites
     [Suite("net-pause-overlay",
         "a host and then a guest open the pause sheet mid-flight in a network match: the sheet is "
         + "up, the clock is not halted, the pauser's aeroplane flies on with its stick centred, and "
-        + "its states keep crossing the wire to the far peer; an offline flight's pause, the "
-        + "control, still halts the clock and stops the aeroplane dead")]
+        + "its states keep crossing the wire to the far peer; neither end switches its graphics mode "
+        + "live; an offline flight, the control, still halts the clock and stops the aeroplane dead "
+        + "under its pause, and switches its graphics mode live and back")]
     internal static void PauseSheetLeavesANetworkFlightRunning(TestContext ctx)
     {
         string missionZrdr = RequireMatchData(ctx);
@@ -251,6 +252,8 @@ internal static class NetSessionSuites
             Lockstep(host.Session, guest.Session);
             SheetOverNetFlight(ctx, "host", host.Session, guest.Session, host.Session, guest.Session);
             SheetOverNetFlight(ctx, "guest", guest.Session, host.Session, host.Session, guest.Session);
+            ctx.Check(!TrySwitch(host.Session) && !TrySwitch(guest.Session),
+                $"neither end switches its graphics mode live, which stays {GraphicsMode.Key}={(GraphicsMode.Enhanced ? "enhanced" : "original")}");
             guest.Close();
             guest = null;
             host.Close();
@@ -262,6 +265,10 @@ internal static class NetSessionSuites
             if (offline.Built)
             {
                 SheetOverOfflineFlight(ctx, offline.Session);
+                bool switched = TrySwitch(offline.Session);
+                bool back = switched && TrySwitch(offline.Session);
+                ctx.Check(switched && back,
+                    $"ABLE-TO-FAIL CONTROL: the offline flight switches its graphics mode live and back (there {switched}, back {back})");
             }
         }
         finally
@@ -426,6 +433,22 @@ internal static class NetSessionSuites
             $"…and the resume hands the {name}'s seat back");
     }
 
+    // The live graphics switch the launcher runs, on this session, toward the other mode. A loose sun
+    // stands in for the launcher's, which a refused switch never touches.
+    private static bool TrySwitch(GameSession session)
+    {
+        var sun = new DirectionalLight3D();
+        try
+        {
+            return EnhancedLook.Switch(!GraphicsMode.Enhanced, sun, null, EnhancedPasses.None, det: true,
+                session, "net-pause-sheet");
+        }
+        finally
+        {
+            sun.Free();
+        }
+    }
+
     // ABLE-TO-FAIL CONTROL. The same toggle and the same poll on a flight with no wire. A sheet
     // that halted nothing anywhere would pass every network check above and fail this one.
     private static void SheetOverOfflineFlight(TestContext ctx, GameSession session)
@@ -550,13 +573,19 @@ internal static class NetSessionSuites
 
     // The join's own traffic, then the contract a replication feature uses. Register a handler,
     // send a typed message, and have it applied from inside the receiving session's step.
+    // ⚠ The host built first, so its start hold follows the join's two payloads. It lands inside the
+    // guest's join pump, and the guest must take it there: an unknown word here is that race.
     private static void Traffic(TestContext ctx, GameSession host, GameSession guest)
     {
         var link = host.NetLink!;
         var far = guest.NetLink!;
         string counters = $"sent {link.Sent}, received {far.Received}, unknown {far.DroppedUnknown}, malformed {far.Malformed}";
-        ctx.Check(link.Sent == 2 && far.Received == 2 && far.DroppedUnknown == 0 && far.Malformed == 0,
-            $"the join is two reliable payloads and nothing else ({counters})");
+        ctx.Check(link.Sent == 3 && far.Received == 3 && far.DroppedUnknown == 0 && far.Malformed == 0,
+            $"the join is two reliable payloads, then the host's start hold, and none is unknown ({counters})");
+        byte hostRound = host.StartGate?.Round ?? 0;
+        byte guestRound = guest.StartGate?.Round ?? 0;
+        ctx.Check(hostRound != 0 && guestRound == hostRound,
+            $"and the guest's start gate took that hold's round from inside its join (host {hostRound}, guest {guestRound})");
 
         int seen = 0;
         var got = default(ScoreMessage);

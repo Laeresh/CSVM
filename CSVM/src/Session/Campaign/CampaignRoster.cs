@@ -175,12 +175,12 @@ public sealed class CampaignRosterPlan
     /// <summary>Blocks that plan to nothing, with the reason.</summary>
     public IReadOnlyList<(string Name, string Why)> Skipped { get; private set; } = Array.Empty<(string, string)>();
 
-    /// <summary>Plans the roster. <paramref name="wingmanNode"/> is the profile's wingman
-    /// airframe for the block named <paramref name="wingmanName"/>, or null to fly the block's
-    /// own def; <paramref name="netDraw"/> is the <c>rand() % count</c> draw a multi-entry
-    /// <c>netids</c> takes, given the count. <paramref name="handover"/> is the player's own
-    /// airframe and paint, which <see cref="AirframeHandover.WingmanName"/> flies in the two
-    /// missions that resolve it; null everywhere else.</summary>
+    /// <summary>Plans the roster. The block named <paramref name="wingmanName"/> flies
+    /// <paramref name="wingmanNode"/>, the profile's wingman airframe, or its own def on null.
+    /// The draw a multi-entry <c>netids</c> takes is <paramref name="netDraw"/>, given the count.
+    /// The hand-over missions pass the player's airframe and paint as <paramref name="handover"/>,
+    /// which <see cref="AirframeHandover.WingmanName"/> flies on its <c>w&lt;plane&gt;</c> def.
+    /// </summary>
     public static CampaignRosterPlan Build(
         IReadOnlyList<(string Name, List<object?> Fields)> blocks,
         VehicleDefs defs,
@@ -222,8 +222,11 @@ public sealed class CampaignRosterPlan
             // base def or PlaneStats cannot resolve it, and the plain base def flies instead.
             string? planeNode = null;
             string? baseDef = null;
+            bool boundWingman = false;
+            bool handedOver = false;
             if (wingmanNode != null && name.Equals(wingmanName, StringComparison.OrdinalIgnoreCase))
             {
+                boundWingman = true;
                 planeNode = wingmanNode;
                 baseDef = defs.BaseDefForPlayerNode(wingmanNode);
             }
@@ -233,6 +236,7 @@ public sealed class CampaignRosterPlan
             else if (handover is { } handed
                      && name.Equals(AirframeHandover.WingmanName, StringComparison.OrdinalIgnoreCase))
             {
+                handedOver = true;
                 planeNode = handed.PlaneNode;
                 baseDef = defs.BaseDefForPlayerNode(handed.PlaneNode);
             }
@@ -258,12 +262,12 @@ public sealed class CampaignRosterPlan
                     continue;
                 }
             }
-            // The block's own def decides the mode. The AI def only carries stats and livery: the
-            // profile's airframe takes its w<plane> twin, a def that is no variant of its airframe
-            // takes the plain base def.
+            // The block's own def decides the mode; the AI def carries stats and livery. ⚠ Key the
+            // w<plane> twin on the bound wingman and hand-over blocks, never an airframe, as the
+            // original does. Any other block no variant of its airframe flies the plain base def.
             string? aiDef = surface ? null
                 : defs.DerivesFrom(def, baseDef) ? def
-                : planeNode == wingmanNode && defs.Has("w" + baseDef) && defs.DerivesFrom("w" + baseDef, baseDef)
+                : (boundWingman || handedOver) && defs.Has("w" + baseDef) && defs.DerivesFrom("w" + baseDef, baseDef)
                     ? "w" + baseDef
                     : null;
 
@@ -325,7 +329,9 @@ public sealed class CampaignRosterPlan
                 ObjectiveTarget = AiSkills.RosterObjectiveTarget(fields),
                 HelpLabel = AiSkills.RosterHelpLabel(fields),
                 CategoryLabel = AiSkills.RosterCategoryLabel(fields),
-                Fit = planeNode == wingmanNode ? wingmanFit : null,
+                // ⚠ Key the fit on the block, never the airframe. It outranks an AI def's weapons, so
+                // an enemy on the wingman's airframe would fly the player's pick.
+                Fit = boundWingman ? wingmanFit : null,
                 Scheme = handover is { } paint
                          && name.Equals(AirframeHandover.WingmanName, StringComparison.OrdinalIgnoreCase)
                     ? paint.Scheme

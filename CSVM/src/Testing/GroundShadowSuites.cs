@@ -22,7 +22,9 @@ namespace CSVM.Testing;
 /// pane's own pilot is the one taking that shape, that the texture carries the airframe's own
 /// silhouette rather than any symmetric blob, and that it is absent exactly where the decode says
 /// nothing is drawn (over the cutoff altitude, past the far range, and in enhanced graphics
-/// mode). Decode: docs/org/shadows.md.</summary>
+/// mode). That last gate carries the other half of the mode with it: which temporal pass a 3D
+/// viewport takes under enhanced, and that it takes none under the faithful presentation.
+/// Decode: docs/org/shadows.md.</summary>
 internal static class GroundShadowSuites
 {
     // The empty stage's ground plane, which the shadow must land on rather than on y=0 by luck.
@@ -71,7 +73,8 @@ internal static class GroundShadowSuites
         "aircraft's sits beneath, the player's footprint alone doubling by 155 m, that shape " +
         "belonging to each pane's own pilot in a two-pane session, the airframe's own silhouette " +
         "in the texture turning with it, and absent over 250 m of altitude, past 200 m of range " +
-        "and under enhanced graphics")]
+        "and under enhanced graphics, the mode that drops it being the same switch that puts a 3D " +
+        "viewport on Godot's TAA or on FSR 2.2 and leaves the faithful path untouched")]
     internal static void GroundShadow(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -666,7 +669,64 @@ internal static class GroundShadowSuites
         ctx.Check(present != null, $"and original graphics mode builds one");
         report.AppendLine($"graphics gate: enhanced={(absent == null ? "no pass" : "a pass")}, original={(present == null ? "no pass" : "a pass")}");
         present?.Free();
+        TemporalPass(ctx, report);
     }
+
+    // The same switch read on the other side of the mode. With nothing saved, a 3D viewport takes
+    // Godot's TAA under enhanced and Godot's own defaults under original. That keeps the pinned
+    // goldens on an untouched faithful image. A bare SubViewport stands for all four construction
+    // sites, since every one of them writes through the same ViewportQuality.Apply. Each method's
+    // own write is display-render-scale's to pin.
+    private static void TemporalPass(TestContext ctx, StringBuilder report)
+    {
+        var entry = AntiAliasingSetting.Method;
+        try
+        {
+            var untouched = QualityWrite(null);
+            var taa = QualityWrite(GraphicsMode.EnhancedWord);
+            var faithful = QualityWrite(GraphicsMode.Default);
+
+            ctx.Check(!untouched.Taa && untouched.Mode == Viewport.Scaling3DModeEnum.Bilinear,
+                $"a fresh viewport carries no temporal pass and Godot's own scaling ({untouched.Mode}), so the writes below are measured and not assumed");
+            ctx.Check(taa.Taa && taa.Mode == untouched.Mode && taa.Scale == untouched.Scale && taa.ScreenSpace == untouched.ScreenSpace,
+                $"the enhanced default puts it on Godot's TAA and touches nothing else (taa={taa.Taa}, {taa.Mode} at {taa.Scale}, {taa.ScreenSpace})");
+            ctx.Check(faithful == untouched,
+                $"while the faithful default reads back untouched (taa={faithful.Taa}, {faithful.Mode} at {faithful.Scale}, {faithful.ScreenSpace})");
+            report.AppendLine($"anti-aliasing default: enhanced={taa.Taa}/{taa.Mode}, original={faithful.Taa}/{faithful.Mode}");
+        }
+        finally
+        {
+            AntiAliasingSetting.Resolve(Word(entry), null, enhanced: false);
+        }
+    }
+
+    // What one freshly built viewport reads back once the mode and its default method are applied.
+    // A null graphics word leaves it untouched as the control. Fresh per case because Apply writes a
+    // viewport rather than restoring one, exactly as a construction site uses it.
+    private static (bool Taa, Viewport.Scaling3DModeEnum Mode, float Scale, Viewport.ScreenSpaceAAEnum ScreenSpace) QualityWrite(
+        string? graphics)
+    {
+        var view = new SubViewport { Name = "quality_probe" };
+        try
+        {
+            if (graphics != null)
+            {
+                bool enhanced = GraphicsMode.Resolve(graphics);
+                AntiAliasingSetting.Resolve(null, null, enhanced);
+                ViewportQuality.Apply(view);
+            }
+
+            return (view.UseTaa, view.Scaling3DMode, view.Scaling3DScale, view.ScreenSpaceAA);
+        }
+        finally
+        {
+            view.Free();
+        }
+    }
+
+    // The word a method is spelled as, so the finally can put the process back on the one it had.
+    private static string Word(AntiAliasingMethod method) =>
+        DisplayWords.AntiAliasingChoices[(int)method];
 
     // Where to look for C1 ground: a coarse grid over the map rather than one named spot, so the
     // suite does not depend on any particular place still being an island.

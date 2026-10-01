@@ -4,14 +4,13 @@ using System.Collections.Generic;
 namespace CSVM.UI.Menu;
 
 /// <summary>
-/// How the four display settings read as rows, shared by the two Options screens so they cannot
-/// disagree about a saved value. The labels are one per <see cref="CSVM.Utils.DisplayWords"/> entry
-/// and in that order, since a row reads and writes the store word by index; the two index rules are
-/// the forgiving reads the resolvers already make (a never-set row shows the setting's own default,
-/// an unoffered size the screen's own, and a size row the display mode pins the screen's own
-/// whatever is saved), restated where a row needs an index rather than a plan. The screens and the sizes are enumerated per machine by
-/// <see cref="CSVM.Utils.MonitorSetting"/> and <see cref="CSVM.Utils.ResolutionSetting"/>, which is
-/// why neither of those is a list here. Engine-free, so the rules test without a screen.
+/// How the six display settings and the shadow quality read as rows. The two Options screens
+/// share it so they cannot disagree about a saved value. The labels are one per vocabulary entry
+/// and in that order, since a row reads and writes the store word by index. The index rules restate
+/// the resolvers' forgiving reads: a never-set row shows the setting's own default, an unoffered or
+/// pinned size the screen's own. The screens and the sizes are enumerated per machine by
+/// <see cref="CSVM.Utils.MonitorSetting"/> and <see cref="CSVM.Utils.ResolutionSetting"/>.
+/// Engine-free, so the rules test without a screen.
 /// </summary>
 public static class DisplaySettingRows
 {
@@ -23,6 +22,46 @@ public static class DisplaySettingRows
     /// <summary>The V-Sync labels. A word that parses as a number is a cap in frames per second
     /// with V-Sync off, which is why the caps read as rates rather than as bare numbers.</summary>
     public static readonly IReadOnlyList<string> VSyncLabels = new[] { "On", "Off", "60 FPS", "120 FPS", "144 FPS" };
+
+    /// <summary>The anti-aliasing labels, one per <see cref="CSVM.Utils.DisplayWords.AntiAliasingChoices"/>
+    /// word and in that order.</summary>
+    public static readonly IReadOnlyList<string> AntiAliasingLabels = new[] { "Off", "FXAA", "SMAA", "TAA", "FSR 2.2" };
+
+    /// <summary>The shadow-quality labels, one per <see cref="CSVM.Utils.ShadowQualitySetting.Words"/>
+    /// word and in that order.</summary>
+    public static readonly IReadOnlyList<string> ShadowQualityLabels = new[] { "Off", "Low", "Medium", "High", "Ultra" };
+
+    /// <summary>What the shadow-quality row says under <paramref name="graphicsWord"/>, the graphics
+    /// word the same page would apply. Under Original the row is dead, and a row that refuses
+    /// without saying why reads as broken.</summary>
+    public static string ShadowQualityDetail(string? graphicsWord) =>
+        graphicsWord == CSVM.Utils.GraphicsMode.EnhancedWord
+            ? "Select how the sun's shadows are drawn. Lower levels run faster. Seen once the choices are applied."
+            : "Enhanced Graphics only. The original world casts no sun shadows.";
+
+    /// <summary>The render-scale labels for <paramref name="words"/>, which is the list
+    /// <see cref="CSVM.Utils.RenderScaleSetting.ChoicesFor"/> offers under the standing method. Each
+    /// store word is a percentage of the viewport's own size, so the label is that word with a sign
+    /// on it.</summary>
+    public static IReadOnlyList<string> RenderScaleLabels(IReadOnlyList<string> words)
+    {
+        var labels = new string[words.Count];
+        for (int i = 0; i < words.Count; i++)
+        {
+            labels[i] = words[i] + "%";
+        }
+
+        return labels;
+    }
+
+    /// <summary>The anti-aliasing word a row stands on: the saved word, or else the mode's own
+    /// default. <paramref name="graphicsWord"/> is the graphics word the same page would apply. The
+    /// row therefore follows a flip of the Enhanced Graphics row beside it.</summary>
+    public static string AntiAliasingWord(string? saved, string? graphicsWord)
+    {
+        string fallback = CSVM.Utils.AntiAliasingSetting.DefaultFor(graphicsWord == CSVM.Utils.GraphicsMode.EnhancedWord);
+        return IndexOf(CSVM.Utils.DisplayWords.AntiAliasingChoices, saved) >= 0 ? saved! : fallback;
+    }
 
     /// <summary>Where a saved word sits among a row's own values: a word the vocabulary does not
     /// know, or none saved at all, shows as <paramref name="fallback"/>, the setting's own default

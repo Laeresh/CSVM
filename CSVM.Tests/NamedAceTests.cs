@@ -188,7 +188,7 @@ public class NamedAceTests
 
         var voice = new CombatVoice(SoundDefs.Load(ZrdrPath), SoundDefs.LoadGroups(ZrdrPath),
             CombatVoice.LoadAccents(ZrdrPath));
-        int? pilot = voice.PilotFor(19, new Random(1));
+        int? pilot = voice.PilotFor(19, 0);
         Assert.Equal(15, pilot);
 
         var defs = SoundDefs.Load(ZrdrPath);

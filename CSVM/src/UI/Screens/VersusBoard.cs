@@ -42,12 +42,34 @@ public sealed partial class VersusBoard : ResultsBoard
         return board;
     }
 
+    /// <summary>The board's headline for a finished match: the one leader's name and WINS, or DRAW
+    /// on a tie at the top. A team match names the leading team by its lobby name. A match won on its
+    /// objective names the team that won it, whatever the totals.</summary>
+    public static string Title(VersusMatch match)
+    {
+        if (match.ObjectiveWinner > 0)
+        {
+            return $"{match.TeamName(match.ObjectiveWinner).ToUpperInvariant()} WINS";
+        }
+
+        if (match.Teamed)
+        {
+            var teams = match.TeamStandings().Where(t => t.Rank == 1).ToList();
+            return teams.Count == 1 ? $"{teams[0].Name.ToUpperInvariant()} WINS" : "DRAW";
+        }
+
+        var winners = match.Standings().Where(st => st.Rank == 1).ToList();
+        return winners.Count == 1 ? $"{SplitScreen.PlayerTag(winners[0].PlayerIndex)} WINS" : "DRAW";
+    }
+
     public override void _ExitTree() => _match.MatchCompleted -= OnMatchCompleted;
 
     private void OnMatchCompleted()
     {
         // Log the final standings too, so a match is reviewable from a headless run's log.
-        Log.Info("flight", $"dogfight results:");
+        Log.Info("flight", $"dogfight results: {Title(_match)}");
+        foreach (var team in _match.TeamStandings())
+            Log.Info("flight", $"  #{team.Rank}  {team.Name}  {team.Score} pts  {team.Kills}K/{team.Deaths}D");
         foreach (var st in _match.Standings())
             Log.Info("flight",
                 $"  #{st.Rank}  {SplitScreen.PlayerTag(st.PlayerIndex)}  {st.Score} pts  {st.Kills}K/{st.Deaths}D");
@@ -63,13 +85,19 @@ public sealed partial class VersusBoard : ResultsBoard
         // Captured once here so a later Restart() zeroing the live match never rebuilds these
         // already-drawn labels.
         var standings = _match.Standings().ToList();
+        var teams = _match.TeamStandings().ToList();
         var winners = standings.Where(st => st.Rank == 1).ToList();
-        string title = winners.Count == 1 ? $"{SplitScreen.PlayerTag(winners[0].PlayerIndex)} WINS" : "DRAW";
-        var titleColor = winners.Count == 1 ? SplitScreen.PlayerColor(winners[0].PlayerIndex) : TitleColor;
+        string title = Title(_match);
+        var titleColor = !_match.Teamed && winners.Count == 1 ? SplitScreen.PlayerColor(winners[0].PlayerIndex) : TitleColor;
 
         body.AddChild(Centered(Label(title, (int)(TitleFont * s), titleColor)));
         body.AddChild(Centered(Label(_context, (int)(ContextFont * s), ContextColor)));
         body.AddChild(Separator(s));
+        if (teams.Count > 0)
+        {
+            AddTeams(body, teams, s);
+            body.AddChild(Separator(s));
+        }
 
         // One row per player: placing | tag | score | kills | deaths. Score is the ranked number
         // and kills alone do not explain it, a death with no killer costs a point.
@@ -88,7 +116,7 @@ public sealed partial class VersusBoard : ResultsBoard
 
         foreach (var st in standings)
         {
-            bool won = st.Rank == 1 && winners.Count == 1;
+            bool won = !_match.Teamed && st.Rank == 1 && winners.Count == 1;
             // The winner's row wears their own identity colour; everyone else stays neutral so
             // the placing reads at a glance, same rule StuntRaceBoard's winner row follows.
             var color = won ? SplitScreen.PlayerColor(st.PlayerIndex) : RowColor;
@@ -103,5 +131,27 @@ public sealed partial class VersusBoard : ResultsBoard
 
         body.AddChild(Separator(s));
         AddStandardMenu(body, s);
+    }
+
+    // A team match's own rows over the pilots': placing | team name | score | kills | deaths. Each
+    // row is the total its members' lines add up to.
+    private void AddTeams(Control body, System.Collections.Generic.List<VersusTeamStanding> teams, float s)
+    {
+        var grid = new GridContainer { Columns = 5 };
+        grid.AddThemeConstantOverride("h_separation", Mathf.RoundToInt(26f * s));
+        grid.AddThemeConstantOverride("v_separation", Mathf.RoundToInt(6f * s));
+        body.AddChild(grid);
+        int rankW = (int)(52f * s), nameW = (int)(180f * s), numberW = (int)(80f * s);
+        int font = (int)(RowFont * s);
+        bool sole = teams.Count(t => t.Rank == 1) == 1;
+        foreach (var team in teams)
+        {
+            var color = sole && team.Rank == 1 ? TitleColor : RowColor;
+            AddCell(grid, $"#{team.Rank}", font, color, HorizontalAlignment.Left, rankW);
+            AddCell(grid, team.Name, font, color, HorizontalAlignment.Left, nameW);
+            AddCell(grid, team.Score.ToString(CultureInfo.InvariantCulture), font, color, HorizontalAlignment.Right, numberW);
+            AddCell(grid, team.Kills.ToString(CultureInfo.InvariantCulture), font, color, HorizontalAlignment.Right, numberW);
+            AddCell(grid, team.Deaths.ToString(CultureInfo.InvariantCulture), font, color, HorizontalAlignment.Right, numberW);
+        }
     }
 }

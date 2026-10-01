@@ -285,11 +285,11 @@ internal static class CampaignSetAiSuites
             }
 
             onBombRun += patrol.Net.Name.Equals(BombRunNet, StringComparison.OrdinalIgnoreCase) ? 1 : 0;
-            patrol.Update(rig.WorldPosition);
+            // The assignment seats at once, so the walk's seat node is where its first leg starts.
             int want = NearestEdgedNode(patrol, rig.WorldPosition);
-            seated += patrol.CurrentIndex == want ? 1 : 0;
+            seated += patrol.LegStartIndex == want ? 1 : 0;
             report.AppendLine($"net: {name} flies '{patrol.Net.Name}#{patrol.Net.Id}' "
-                + $"seated at node {patrol.CurrentIndex} (nearest to it is {want})");
+                + $"seated at node {patrol.LegStartIndex} toward {patrol.CurrentIndex} (nearest to it is {want})");
         }
         ctx.Same(3, onBombRun,
             $"all three Balmorals fly '{BombRunNet}' once OBJECTIVE{BombRunObjective} has run");
@@ -297,7 +297,7 @@ internal static class CampaignSetAiSuites
             $"each captures the new route at the node nearest where it is, not at node 0");
         if (parkNode > 0 && rigs.TryGetValue(Balmorals[2], out var late))
         {
-            ctx.Same(parkNode, late.Pilot?.Patrol?.CurrentIndex ?? -1,
+            ctx.Same(parkNode, late.Pilot?.Patrol?.LegStartIndex ?? -1,
                 $"the one parked down the net seats at node {parkNode} rather than restarting the route");
         }
 

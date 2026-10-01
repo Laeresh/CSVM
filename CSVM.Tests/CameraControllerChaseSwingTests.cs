@@ -96,6 +96,18 @@ public class CameraControllerChaseSwingTests
         Assert.True(law.IsEqualApprox(expected));
     }
 
+    // The look stick's swing is the identity at a centred stick, leaving the chase pose untouched.
+    // A stick pushed right carries the camera to starboard.
+    [Fact]
+    public void TheStickSwingIsTheIdentityAtCentreAndCarriesRightToStarboard()
+    {
+        Assert.Equal(Basis.Identity, CameraController.PadSwing(0f, 0f));
+        var right = CameraController.PadSwing(0.6f, 0f) * Rigs[0];
+        Assert.True(right.X > 0.5f, $"stick right at {right}");
+        var up = CameraController.PadSwing(0f, -0.5f) * Rigs[1];
+        Assert.True(up.Y < -0.1f, $"stick up looks up from below, at {up}");
+    }
+
     // Where the snap cluster's composed direction puts the camera: the head's own target angles,
     // then the swing, applied to the rig. The whole chain the chase placement runs.
     private static Vector3 Where(float x, float y, Vector3 rig)

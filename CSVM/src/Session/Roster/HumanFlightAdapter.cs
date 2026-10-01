@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Effects;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Audio;
 using CSVM.Flight.Camera;
@@ -180,6 +181,8 @@ internal sealed class HumanFlightAdapter
             Log.Info("flight", $"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");
         // The engine pick's nitrous bit (ids 3-5) installs the injector, the original's veh+0x946.
         controller.Nitro.Installed = custom != null && Flight.Hangar.CustomPlaneBuild.HasNitrous(custom);
+        // The graphics-mode action, for a seat somebody sits at here, like the pause key below.
+        controller.ToggleGraphicsMode = remote ? null : _human.ToggleGraphicsMode;
         // Every human joins team 1 in an Instant Action mission, splitscreen included, the
         // per-pilot team fallback would otherwise collide with an enemy's. --coop asks the same
         // in plain flight; SessionSpec.Resolve already drops Coop when --vs is set.
@@ -226,7 +229,9 @@ internal sealed class HumanFlightAdapter
             // A pause key belongs to a seat somebody is sitting at. A remote pilot's pause is
             // their own machine's business, and must not halt this one's simulation.
             AllowPause = !remote,
-            Team = _human.InstantActionActive || _human.Coop ? AimAssist.PlayerTeam : null,
+            // A team Dogfight's seat flies its lobby team, banded clear of every authored id.
+            Team = _human.InstantActionActive || _human.Coop ? AimAssist.PlayerTeam
+                : AimAssist.LobbyTeam(seat?.TeamId ?? 0),
             Shake = new PlaneShake(_aircraft.Shakes),
         });
         onCreated(controller);
@@ -407,7 +412,7 @@ internal sealed class HumanFlightAdapter
         // that pilot is sitting in theirs, on their own machine.
         if (!remote && _world.Sounds != null && _world.SoundDefs != null)
         {
-            var audio = new FlightAudio { MixGain = _human.MixGain };
+            var audio = new FlightAudio { MixGain = _human.MixGain, VoiceDuck = _world.VoiceDuck };
             audio.Setup(_world.Sounds, _world.SoundDefs, stats, _aircraft.WeaponDefs, _world.SoundGroups);
             controller.Audio = audio;
             controller.AddChild(audio);
@@ -575,6 +580,17 @@ internal sealed class HumanFlightAdapter
                 rig.VisualLayer == 0 ? null : node => SplitScreen.SetVisualLayer(node, rig.VisualLayer));
         }
 
+        // The enhanced streak field rides the same per-pane path for the same reason, and it
+        // centres on whichever camera renders it, so each pilot needs a private one. It builds on
+        // the empty stage too, being remake-only rather than chapter data.
+        if (WindStreaks.Create() is { } streaks)
+        {
+            if (rig.VisualLayer != 0)
+                SplitScreen.SetVisualLayer(streaks, rig.VisualLayer);
+            _worldRoot.AddChild(streaks);
+            controller.WindStreaks = streaks;
+        }
+
         controller.Name = $"player{pi + 1}";
         rig.Controller = controller;
         _worldRoot.AddChild(controller);
@@ -597,9 +613,9 @@ internal sealed class HumanFlightAdapter
             _worldEffects.BuildFlightCrashRuntime(controller, planeBuilder, planeName, _world.Gamez,
                 _world.WorldScene, _aircraft.Textures, _world.CrashProgram, verbose,
                 worldSounds: _world.WorldRuntime?.Sounds, planesGamez: _aircraft.PlanesGamez);
-            // The start choreography for the very first spawn: Respawn() plays this same def on
-            // every later respawn, but Setup() above called Respawn() before this runtime existed.
-            controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);
+            // The very first spawn's propellers: Respawn() spins them on every later respawn, but
+            // Setup() above called Respawn() before this runtime existed.
+            controller.SpinPropsAtSpawn();
         }
 
         // This pilot's own airframe onto its own visual layer, LAST, so everything the lines above
@@ -654,9 +670,14 @@ internal sealed class HumanFlightAdapter
 
     /// <summary>Pane <paramref name="pi"/>'s custom-built plane, or null to fly the stock
     /// airframe. Empty on every launch that did not come off the launchscreen, so the scripted
-    /// paths (<c>--plane=</c>, <c>--det</c>) never see one.</summary>
-    private Flight.Hangar.CustomPlaneDef? CustomPlaneFor(int pi) =>
-        MenuSeatOf(pi) is int menu && menu >= 0 && menu < _policy.MenuCustomPlanes.Count ? _policy.MenuCustomPlanes[menu] : null;
+    /// paths (<c>--plane=</c>, <c>--det</c>) never see one. A seat flown elsewhere carries its own
+    /// pilot's build, so every machine builds it alike.</summary>
+    private Flight.Hangar.CustomPlaneDef? CustomPlaneFor(int pi) => MenuSeatOf(pi) switch
+    {
+        < 0 => _human.SeatBuild?.Invoke(pi),
+        int menu when menu < _policy.MenuCustomPlanes.Count => _policy.MenuCustomPlanes[menu],
+        _ => null,
+    };
 
     // Which of this machine's menu seats flies seat pi. The menu lists only the local seats, and a
     // guest's own seat stands behind its host's in the roster. A seat flown elsewhere has none.

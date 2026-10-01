@@ -25,9 +25,25 @@ window/size/no_focus.template=false
 
 project/assembly_name="CSVM"
 
+[gui]
+
+; Mipmaps on the theme font, for the separate render thread below rather than for looks: canvas text
+; samples without them, so no pixel moves. Only a font with mipmaps makes Godot upload a copy of its
+; glyph atlas. Without them it uploads the atlas it goes on writing new glyphs into, and the render
+; thread reads that torn or empty ("p_image->is_empty()" from _texture_2d_update).
+theme/default_font_generate_mipmaps=true
+
 [rendering]
 
 anti_aliasing/quality/msaa_3d=2
+; The rendering server runs on its own thread (Separate), so one frame's draw overlaps the next
+; frame's simulation. Godot 4.7 still calls the model experimental and says so in a startup warning.
+; The game's hand-offs to that thread are written for it: textures repainted in play upload through
+; src/Utils/TextureUpload.cs, the per-frame render times through MeasuredRenderTime.cs, and pane
+; readbacks through PaneReadback.cs, and every font keeps mipmaps ([gui] above). `--render-thread
+; safe` runs one thread again, for an A/B.
+; How the --perf split reads under it: docs/verification.md PERF-43.
+driver/threads/thread_model=2
 ; 16x anisotropic (level 4) for the world's grazing-angle ground; the SceneBuilder shader
 ; samples albedo with filter_linear_mipmap_anisotropic. Cheap on modern GPUs. (item 2.)
 textures/default_filters/anisotropic_filtering_level=4

@@ -307,11 +307,14 @@ public sealed partial class ComposedBoardView : Control
         Font? font = null;
         if (OS.GetSystemFontPath(face.Family, weight, FullStretch, face.Italic).Length > 0)
         {
+            // ⚠ Keep the mipmaps. Only then does Godot upload a copy of the glyph atlas it writes to.
+            // The separate render thread reads the live atlas torn or empty.
             font = new SystemFont
             {
                 FontNames = new[] { face.Family },
                 FontWeight = weight,
                 FontItalic = face.Italic,
+                GenerateMipmaps = true,
             };
         }
 
@@ -359,6 +362,15 @@ public sealed partial class ComposedBoardView : Control
         _moving = pictures;
         PaintMoving();
         RenderingServer.ForceDraw();
+    }
+
+    /// <summary>Holds the moving pictures for the next ordinary frame. It is for a caller that
+    /// does not hold the frame loop, so it forces no draw.</summary>
+    public void HoldMoving(IReadOnlyList<BoardPicture> pictures)
+    {
+        ArgumentNullException.ThrowIfNull(pictures);
+        _moving = pictures;
+        QueueRedraw();
     }
 
     /// <inheritdoc/>
@@ -509,6 +521,11 @@ public sealed partial class ComposedBoardView : Control
         float top = Mathf.Clamp(frame, 0, count - 1) * height;
         return new Rect2(0f, top, size.X, height);
     }
+
+    // Where a spun picture turns, from its drawn top-left: the middle for a briefing element, the
+    // corner for a script pane placed by its corner.
+    private static Vector2 Pivot(BoardPicture picture, Vector2 span) =>
+        picture.FromCorner ? Vector2.Zero : span / 2f;
 
     // Greedy word wrap in one face at one size: the words that fit a width, in order. Each authored
     // line break starts a new line, and an empty paragraph stands as an empty line. A single word
@@ -697,12 +714,12 @@ public sealed partial class ComposedBoardView : Control
             at -= span / 2f;
         }
 
-        // Growing about the middle rather than the corner. A scrap swelling under the cursor then
-        // stays where the page put it, instead of creeping down and to the right.
+        // Growing about the middle unless the picture is placed by its corner. A scrap swelling
+        // under the cursor then stays where the page put it, instead of creeping down and right.
         if (picture.Scale != 1f)
         {
             var grown = span * picture.Scale;
-            at -= (grown - span) / 2f;
+            at -= picture.FromCorner ? Vector2.Zero : (grown - span) / 2f;
             span = grown;
         }
 
@@ -746,11 +763,12 @@ public sealed partial class ComposedBoardView : Control
             }
 
             var span = placed.Dest.Size;
+            var pivot = Pivot(picture, span);
             RenderingServer.CanvasItemAddSetTransform(
                 _motion,
-                new Transform2D(picture.Revs * Mathf.Tau, placed.Dest.Position + (span / 2f)));
+                new Transform2D(picture.Revs * Mathf.Tau, placed.Dest.Position + pivot));
             RenderingServer.CanvasItemAddTextureRectRegion(
-                _motion, new Rect2(-span / 2f, span), placed.Texture.GetRid(), placed.Src, placed.Tint);
+                _motion, new Rect2(-pivot, span), placed.Texture.GetRid(), placed.Src, placed.Tint);
             RenderingServer.CanvasItemAddSetTransform(_motion, Transform2D.Identity);
         }
     }
@@ -768,11 +786,12 @@ public sealed partial class ComposedBoardView : Control
             return;
         }
 
-        // A spin turns the element about its own middle, where the script's own centred placement
-        // puts it. Drawing through a transform keeps the frame region intact.
+        // A spin turns the element about its pivot, where the script's own placement puts it.
+        // Drawing through a transform keeps the frame region intact.
         var span = placed.Dest.Size;
-        DrawSetTransform(placed.Dest.Position + (span / 2f), picture.Revs * Mathf.Tau, Vector2.One);
-        DrawTextureRectRegion(placed.Texture, new Rect2(-span / 2f, span), placed.Src, placed.Tint);
+        var pivot = Pivot(picture, span);
+        DrawSetTransform(placed.Dest.Position + pivot, picture.Revs * Mathf.Tau, Vector2.One);
+        DrawTextureRectRegion(placed.Texture, new Rect2(-pivot, span), placed.Src, placed.Tint);
         DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
     }
 

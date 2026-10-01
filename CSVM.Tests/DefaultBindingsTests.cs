@@ -67,6 +67,8 @@ public class DefaultBindingsTests
         { InputAction.Nitro, Key.N, KeyModifiers.None },
         { InputAction.AutoLand, Key.A, KeyModifiers.None },
         { InputAction.Pause, Key.Escape, KeyModifiers.None },
+        { InputAction.ChatEveryone, Key.Quoteleft, KeyModifiers.None },
+        { InputAction.ChatTeam, Key.Quoteleft, KeyModifiers.Shift },
     };
 
     /// <summary>The coverage gate: a migrating polling site must never discover a missing default
@@ -383,6 +385,23 @@ public class DefaultBindingsTests
             new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.S, KeyModifiers.Shift)), bound);
         Assert.Contains(new Binding(Pad, BindingControl.Button((int)JoyButton.Misc1)), bound);
         Assert.Equal(2, bound.Count);
+    }
+
+    /// <summary>The graphics-mode switch ships on G alone, as a flight action. The steal rule then
+    /// keeps G off every other flight action, so a rebind of G moves the switch off it.</summary>
+    [Fact]
+    public void TheGraphicsModeSwitch_ShipsOnGAloneAsAFlightAction()
+    {
+        var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
+        var g = new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.G));
+
+        Assert.Equal(InputContext.Flight, DefaultBindings.ContextOf(InputAction.ToggleGraphicsMode));
+        Assert.Equal(new[] { g }, map.Bindings(InputAction.ToggleGraphicsMode));
+        foreach (var action in DefaultBindings.ActionsIn(InputContext.Flight))
+        {
+            if (action != InputAction.ToggleGraphicsMode)
+                Assert.DoesNotContain(g, map.Bindings(action));
+        }
     }
 
     /// <summary>The two look-mode selectors are the original's own K and J, and keyboard only. Its

@@ -176,6 +176,51 @@ public class HeadLookTests
         Assert.Equal(0f, head.TargetElevation, Tol);
     }
 
+    // The band comes off the radius, so a stick just past it aims next to nothing. It does not
+    // step the view by the band's width.
+    [Fact]
+    public void AStickJustPastTheBandAimsFromCentre()
+    {
+        var filter = new StickLookFilter();
+        for (int i = 0; i < 100; i++)
+        {
+            filter.Step(StepDt, HeadLook.PadAimCentreBand * 1.01f, 0f);
+        }
+
+        Assert.True(filter.Active);
+        Assert.True(filter.X > 0f && filter.X < 1e-3f, $"read {filter.X}");
+    }
+
+    // A filter with release rates eases a let-go pair home at those rates and lands on 0 exactly.
+    // A stick taken again mid-return resumes from there.
+    [Fact]
+    public void AReleaseRateEasesThePairHomeAndARegrabResumesFromIt()
+    {
+        var filter = new StickLookFilter(HeadLook.AzimuthSmoothRate, HeadLook.ElevationSmoothRate);
+        for (int i = 0; i < 100; i++)
+        {
+            filter.Step(StepDt, 1f, 0f);
+        }
+
+        float held = filter.X;
+        filter.Step(StepDt, 0f, 0f);
+        Assert.False(filter.Active);
+        Assert.Equal(HeadLook.Approach(held, 0f, HeadLook.AzimuthSmoothRate, StepDt), filter.X, Tol);
+
+        float returning = filter.X;
+        filter.Step(StepDt, 0.5f, 0f);
+        float target = (0.5f - HeadLook.PadAimCentreBand) / (0.5f * (1f - HeadLook.PadAimCentreBand)) * 0.5f;
+        Assert.Equal(HeadLook.Approach(returning, target, HeadLook.PadAimSmoothRate, StepDt), filter.X, Tol);
+
+        for (int i = 0; i < 1000; i++)
+        {
+            filter.Step(StepDt, 0f, 0f);
+        }
+
+        Assert.Equal(0f, filter.X);
+        Assert.False(filter.Swinging);
+    }
+
     // The filter is on the stick and nowhere else: the mouse pan still integrates at the decoded
     // 2 rad/s and the numpad still lands on the table's own angle, with a below-band stick over both.
     [Fact]

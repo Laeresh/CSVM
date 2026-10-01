@@ -45,8 +45,9 @@ internal static class MenuCoopDoorSuites
         var hostDoor = new NetPlayFeature(
             (_, _, _) => hostWires.Dequeue(),
             (_, _) => throw new InvalidOperationException("the host does not join"),
-            port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
-            unmapped.Add);
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                unmapped.Add));
         var guestDoor = new NetPlayFeature(
             (_, _, _) => throw new InvalidOperationException("the guest does not host"),
             (_, _) => mesh[1]);
@@ -116,7 +117,7 @@ internal static class MenuCoopDoorSuites
         menu.Drive(Network);
         AwaitMapping(door);
         menu.Drive(MenuCommands.None);
-        string address = $"{NetDoorAid.ExternalAddress}:{NetPlayFeature.DefaultPort.ToString(CultureInfo.InvariantCulture)}";
+        string address = $"{NetDoorAid.ExternalAddress}:{NetPorts.Game.ToString(CultureInfo.InvariantCulture)}";
         ctx.Check(menu.ShownNetBand.Contains(address, StringComparison.Ordinal),
             $"the band shows where guests reach the host ({menu.ShownNetBand})");
         door.Step(0.016);
@@ -140,7 +141,7 @@ internal static class MenuCoopDoorSuites
         menu.Drive(Down);
         ctx.Check(door.IsCoopGuest, $"the join lands and the host's advert names a campaign ({door.Stage}, {door.Advert?.Kind})");
         ctx.Check(menu.ShownDetail.Contains("Campaign co-op, chapter", StringComparison.Ordinal)
-                  && menu.ShownDetail.Contains($"hosted by {CampaignAidProfiles.Pilot}", StringComparison.Ordinal),
+                  && menu.ShownDetail.Contains($"game {CampaignAidProfiles.Pilot}", StringComparison.Ordinal),
             $"the board names the session as campaign co-op ({menu.ShownDetail})");
         ctx.Check(menu.ShownRowText == CoopDoorText.WaitRow,
             $"and its way on leads to the wait, not to a map ({menu.ShownRowText})");
@@ -204,7 +205,7 @@ internal static class MenuCoopDoorSuites
 
         ctx.Check(hostMenu.ShownScreen == "Mode" && hostDoor.Stage == NetDoorStage.Shut,
             $"leaving the campaign closes the host's door ({hostMenu.ShownScreen}, {hostDoor.Stage})");
-        ctx.Check(unmapped.Count == 2 && unmapped.All(port => port == NetPlayFeature.DefaultPort),
+        ctx.Check(unmapped.Count == 2 && unmapped.All(port => port == NetPorts.Game),
             $"and gives the router's port back ({string.Join(", ", unmapped)})");
     }
 
@@ -212,7 +213,7 @@ internal static class MenuCoopDoorSuites
     private static void AwaitMapping(NetPlayFeature door)
     {
         var waited = System.Diagnostics.Stopwatch.StartNew();
-        while (door.PortMap == null && waited.Elapsed.TotalSeconds < 20.0)
+        while (door.Router.PortMap == null && waited.Elapsed.TotalSeconds < 20.0)
         {
             door.Step(0.0);
             System.Threading.Thread.Sleep(1);

@@ -388,8 +388,10 @@ public class OriginalOptionsTests
         Assert.Null(host.Module.VSyncChoice);
         Assert.Equal(GraphicsMode.Default, host.Module.GraphicsChoice);
 
-        // Three steps, not four: the size row is dead under the borderless default, which owns the
+        // Five steps, not six: the size row is dead under the borderless default, which owns the
         // size. A dead row is out of the walk.
+        Down(host);
+        Down(host);
         Down(host);
         Down(host);
         Down(host);
@@ -412,6 +414,8 @@ public class OriginalOptionsTests
         Assert.Null(exit.Resolution);
         Assert.Null(exit.DisplayMode);
         Assert.Null(exit.VSync);
+        Assert.Null(exit.RenderScale);
+        Assert.Null(exit.AntiAliasing);
         Assert.Equal("normal", exit.Difficulty);
     }
 
@@ -445,6 +449,8 @@ public class OriginalOptionsTests
         StepX(host, -1);
         Assert.Equal(DisplayWords.Windowed, host.Module.DisplayModeChoice);
 
+        Down(host);
+        Down(host);
         Down(host);
         Down(host);
         Down(host);
@@ -578,6 +584,12 @@ public class OriginalOptionsTests
         StepX(host, 1);
         Assert.Equal("60", host.Module.VSyncChoice);
         Down(host);
+        StepX(host, 1);
+        Assert.Equal("125", host.Module.RenderScaleChoice);
+        Down(host);
+        StepX(host, 1);
+        Assert.Equal(DisplayWords.AntiAliasingFxaa, host.Module.AntiAliasingChoice);
+        Down(host);
         Accept(host);
         Assert.Equal(GraphicsMode.EnhancedWord, host.Module.GraphicsChoice);
         Down(host);
@@ -588,8 +600,12 @@ public class OriginalOptionsTests
         Assert.Equal(GraphicsMode.Default, host.Module.GraphicsChoice);
         Assert.Null(host.Module.DisplayModeChoice);
         Assert.Null(host.Module.VSyncChoice);
+        Assert.Null(host.Module.RenderScaleChoice);
+        Assert.Null(host.Module.AntiAliasingChoice);
 
         host.Module.OpenVideo();
+        Down(host);
+        Down(host);
         Down(host);
         Down(host);
         Down(host);
@@ -599,6 +615,77 @@ public class OriginalOptionsTests
         Assert.True(Back(host));
         Assert.Equal(OriginalScreen.Options, host.Screen);
         Assert.Equal(GraphicsMode.Default, host.Module.GraphicsChoice);
+    }
+
+    /// <summary>The Anti-aliasing row follows the page's own graphics choice while nothing is
+    /// saved. Picking FSR 2.2 pulls a scale above native down to 100. It also narrows the Render
+    /// Scale list to the scales FSR 2.2 can run, on the page as it stands.</summary>
+    [Fact]
+    public void TheAntiAliasingRowNarrowsTheRenderScaleRowLive()
+    {
+        var saved = new OptionsDef { RenderScale = "200" };
+        var host = Host(() => saved);
+        host.Module.OpenVideoOn(OriginalOptionsScreen.AntiAliasingKey);
+        Assert.Equal("Off", Row(host, OriginalOptionsScreen.AntiAliasingKey).Label);
+        Assert.Equal("200%", Row(host, OriginalOptionsScreen.RenderScaleKey).Label);
+
+        // A step back from the first word wraps onto the last, FSR 2.2.
+        StepX(host, -1);
+        Assert.Equal(DisplayWords.AntiAliasingFsr2, host.Module.AntiAliasingChoice);
+        Assert.Equal("FSR 2.2", Row(host, OriginalOptionsScreen.AntiAliasingKey).Label);
+        Assert.Equal("100", host.Module.RenderScaleChoice);
+        Assert.Equal("100%", Row(host, OriginalOptionsScreen.RenderScaleKey).Label);
+        Assert.Equal(new[] { "50", "67", "77", "100" }, host.Module.RenderScaleWords);
+
+        // Off again offers every scale, and leaves the clamped 100 where it stands.
+        StepX(host, 1);
+        Assert.Equal(DisplayWords.RenderScaleChoices, host.Module.RenderScaleWords);
+        Assert.Equal("100", host.Module.RenderScaleChoice);
+
+        // With nothing saved the row reads the default of the graphics choice on the same page.
+        saved.RenderScale = null;
+        host.Module.OpenVideoOn(OriginalOptionsScreen.GraphicsKey);
+        Assert.Equal("Off", Row(host, OriginalOptionsScreen.AntiAliasingKey).Label);
+        Accept(host);
+        Assert.Equal(GraphicsMode.EnhancedWord, host.Module.GraphicsChoice);
+        Assert.Equal("TAA", Row(host, OriginalOptionsScreen.AntiAliasingKey).Label);
+        Assert.Null(host.Module.AntiAliasingChoice);
+    }
+
+    /// <summary>The Shadow Quality row follows the page's own graphics choice. It is dead under
+    /// Original, whose world casts no sun shadow, and live once the checkbox is ticked. A saved word shows
+    /// back, a never-set row shows Ultra, and ACCEPT CHANGES carries the stepped word.</summary>
+    [Fact]
+    public void TheShadowQualityRowIsLiveUnderEnhancedAndCarriesItsWord()
+    {
+        var saved = new OptionsDef { ShadowQuality = ShadowQualitySetting.Medium };
+        var host = Host(() => saved);
+        host.Module.OpenVideo();
+        Assert.False(Row(host, OriginalOptionsScreen.ShadowQualityKey).Enabled);
+        Assert.Equal("Medium", Row(host, OriginalOptionsScreen.ShadowQualityKey).Label);
+
+        saved.ShadowQuality = null;
+        saved.GraphicsMode = GraphicsMode.EnhancedWord;
+        host.Module.OpenVideoOn(OriginalOptionsScreen.ShadowQualityKey);
+        Assert.Equal(OriginalOptionsScreen.ShadowQualityKey, host.FocusedKey);
+        Assert.True(Row(host, OriginalOptionsScreen.ShadowQualityKey).Enabled);
+        Assert.Equal("Ultra", Row(host, OriginalOptionsScreen.ShadowQualityKey).Label);
+        Assert.Null(host.Module.ShadowQualityChoice);
+
+        // Ultra is the last word, so a step right wraps onto Off and a step left comes back.
+        StepX(host, 1);
+        Assert.Equal(ShadowQualitySetting.Off, host.Module.ShadowQualityChoice);
+        StepX(host, -1);
+        StepX(host, -1);
+        Assert.Equal(ShadowQualitySetting.High, host.Module.ShadowQualityChoice);
+        Assert.Equal("High", Row(host, OriginalOptionsScreen.ShadowQualityKey).Label);
+
+        Down(host);
+        Down(host);
+        Assert.Equal(OriginalOptionsScreen.VideoAcceptKey, host.FocusedKey);
+        var exit = Assert.IsType<OptionsApplyExit>(Accept(host));
+        Assert.Equal(ShadowQualitySetting.High, exit.ShadowQuality);
+        Assert.Equal(GraphicsMode.EnhancedWord, exit.Graphics);
     }
 
     /// <summary>Opening a page shows back the saved words, not what this process resolved. A flag
@@ -667,12 +754,10 @@ public class OriginalOptionsTests
         Assert.Equal("Screen 0", Row(host, OriginalOptionsScreen.MonitorKey).Label);
     }
 
-    /// <summary>The graphics row's description reads the choice against the running mode. A saved
-    /// word the world has not picked up says a restart is owed, rather than repeating the
-    /// next-start note. Which of the two words is the running one depends on the process, so the
-    /// fact checks that exactly one of them owes the restart.</summary>
+    /// <summary>The graphics row's description owes no restart for either saved word, since the
+    /// apply switches the running world.</summary>
     [Fact]
-    public void TheGraphicsRowSaysWhenARestartIsStillOwed()
+    public void TheGraphicsRowOwesNoRestart()
     {
         var saved = new OptionsDef { GraphicsMode = GraphicsMode.EnhancedWord };
         var host = Host(() => saved);
@@ -683,11 +768,8 @@ public class OriginalOptionsTests
         host.Module.OpenVideo();
         string original = Compose(host).Lines.Single(l => l.Text.StartsWith("Select the lit world.", StringComparison.Ordinal)).Text;
 
-        var owed = new[] { enhanced, original }.Where(t => t.EndsWith("restart to apply.", StringComparison.Ordinal)).ToList();
-        var settled = new[] { enhanced, original }.Where(t => t.EndsWith("Takes effect on the next start.", StringComparison.Ordinal)).ToList();
-        Assert.Single(owed);
-        Assert.Single(settled);
-        Assert.Contains(GraphicsMode.Enhanced ? "This run is enhanced" : "This run is original", owed[0]);
+        Assert.Equal(enhanced, original);
+        Assert.DoesNotContain("restart", enhanced, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -774,6 +856,14 @@ public class OriginalOptionsTests
         Assert.False(resolution.Enabled);
         Assert.Equal((260f, 335f, 70f, 17f), Rect(Row(host, OriginalOptionsScreen.DisplayModeKey)));
         Assert.Equal((260f, 380f, 70f, 17f), Rect(Row(host, OriginalOptionsScreen.VSyncKey)));
+        Assert.Equal((260f, 402f, 70f, 17f), Rect(Row(host, OriginalOptionsScreen.RenderScaleKey)));
+        // Anti-aliasing stands on the authored Lighting Quality line under Render Scale.
+        Assert.Equal((260f, 440f, 70f, 17f), Rect(Row(host, OriginalOptionsScreen.AntiAliasingKey)));
+        // Shadow Quality stands on the authored Texture Quality line, dead under the Original
+        // default, whose world casts no sun shadow.
+        var shadow = Row(host, OriginalOptionsScreen.ShadowQualityKey);
+        Assert.Equal((260f, 530f, 70f, 17f), Rect(shadow));
+        Assert.False(shadow.Enabled);
         // The Graphics checkbox keeps the authored Shadows corner. The Clutter Detail line above it
         // stays blank, no row moving up onto a line the artwork does not draw it on.
         Assert.Equal((260f, 465f, 16f, 16f), Rect(Row(host, OriginalOptionsScreen.GraphicsKey)));
@@ -800,17 +890,26 @@ public class OriginalOptionsTests
         Assert.Contains(board.Lines, l => l.Text == "V-Sync" && l.X == 130f && l.Y == 380f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the frame pacing.", StringComparison.Ordinal)
             && l.X == 340f && l.Y == 380f && l.Width == 310f);
+        Assert.Contains(board.Lines, l => l.Text == "Render Scale" && l.X == 130f && l.Y == 402f && l.Width == 130f);
+        Assert.Contains(board.Lines, l => l.Text.StartsWith("Render the world below native", StringComparison.Ordinal)
+            && l.X == 340f && l.Y == 402f && l.Width == 310f);
+        Assert.Contains(board.Lines, l => l.Text == "Anti-aliasing" && l.X == 130f && l.Y == 440f && l.Width == 130f);
+        Assert.Contains(board.Lines, l => l.Text.StartsWith("Select how edges are smoothed.", StringComparison.Ordinal)
+            && l.X == 340f && l.Y == 440f && l.Width == 310f);
+        Assert.Contains(board.Lines, l => l.Text == "Shadow Quality" && l.X == 130f && l.Y == 530f && l.Width == 130f);
+        Assert.Contains(board.Lines, l => l.Text.StartsWith("Enhanced Graphics only.", StringComparison.Ordinal)
+            && l.X == 340f && l.Y == 530f && l.Width == 150f);
         Assert.Contains(board.Lines, l => l.Text == "Enhanced Graphics" && l.X == 130f && l.Y == 470f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the lit world.", StringComparison.Ordinal)
             && l.X == 340f && l.Y == 470f && l.Width == 160f);
-        Assert.Equal(11, board.Lines.Count(l => l.Row < 0));
+        Assert.Equal(17, board.Lines.Count(l => l.Row < 0));
         // The checkbox draws unchecked and unfocused, the page opening on the monitor row above it:
         // the second of its eight frames.
         Assert.Equal(1, board.Plaques.Single(p => p.Art.Name == "PP_B_Check8.png").Frame);
 
         // The box marks the focused dropdown and no other, and it follows the cursor past the dead
-        // size row onto the display mode's. Three rows down it stands on the checkbox, a plaque
-        // strip that takes no box at all, so the page draws none.
+        // size row onto the display mode's. Four rows further down it stands on the checkbox, a
+        // plaque strip that takes no box at all, so the page draws none.
         Assert.Equal(
             new[] { (260f, 245f, 70f, 15f) },
             board.Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
@@ -818,6 +917,8 @@ public class OriginalOptionsTests
         Assert.Equal(
             new[] { (260f, 335f, 70f, 17f) },
             Compose(host).Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
+        Down(host);
+        Down(host);
         Down(host);
         Down(host);
         Assert.Equal(OriginalOptionsScreen.GraphicsKey, host.FocusedKey);
@@ -1205,11 +1306,12 @@ public class OriginalOptionsTests
             new[]
             {
                 OriginalOptionsScreen.MonitorKey, OriginalOptionsScreen.ResolutionKey, OriginalOptionsScreen.DisplayModeKey,
-                OriginalOptionsScreen.VSyncKey, OriginalOptionsScreen.GraphicsKey,
+                OriginalOptionsScreen.VSyncKey, OriginalOptionsScreen.RenderScaleKey, OriginalOptionsScreen.AntiAliasingKey,
+                OriginalOptionsScreen.ShadowQualityKey, OriginalOptionsScreen.GraphicsKey,
                 OriginalOptionsScreen.VideoAcceptKey, OriginalOptionsScreen.VideoCancelKey,
             },
             rows.Select(r => r.Key));
-        RowsAreClearOfEachOther(host, rows, "VIDEO", 10);
+        RowsAreClearOfEachOther(host, rows, "VIDEO", 16);
     }
 
     // The CONTROLS page's rows, the same rule over its own plate. The sensitivity slider is pinned

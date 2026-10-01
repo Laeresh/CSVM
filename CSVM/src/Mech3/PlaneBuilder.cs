@@ -11,9 +11,8 @@ namespace CSVM.Mech3;
 ///
 /// Propellers have several representations under <c>dontmove</c> (see <see cref="PropParts"/>).
 /// The default (exterior) build keeps the still <c>staticpropN</c> disc and drops the blur
-/// layers; the <c>spinningProps</c> build (free flight) keeps BOTH rather than choosing one, so a
-/// <c>Flight.Airframe.PropAnimator</c> can spin the blur discs while the startprops/stopprops
-/// choreography cross-fades between them and the static disc at spawn and at engine stop.
+/// layers. The <c>spinningProps</c> build (free flight) keeps BOTH, for
+/// <c>Flight.Airframe.PropAnimator</c> to spin and the spinprops/stopprops pair to switch between.
 /// The <c>nitropropN</c> boost disc is built hidden in a flight build, for the nitro_boost def.
 /// </summary>
 public sealed class PlaneBuilder
@@ -31,6 +30,12 @@ public sealed class PlaneBuilder
     /// reads it with <see cref="CockpitCameraOffset"/>, and the interior mount carries the same
     /// tilt so the gunsight stays on the guns. Decode: docs/org/cameraViews.md.</summary>
     public const float HeadPitchOffsetRad = -0.08203f;
+
+    // TUNE, Enhanced only: metres the airframe reads the sun's shadow map out along its normal.
+    // Without it a skin lit by a low sun shows shadow acne, which the soft filter's rotated disc
+    // turns into a per-pixel dot grid. ⚠ Do not raise the sun's shared bias pair instead; that
+    // detaches every contact shadow. Measurement: docs/verification.md SHOT-43.
+    private const float AirframeShadowLookupOffset = 0.5f;
 
     // The flare mesh is a SphericalY facade, posed through the facade look-at like every other
     // population of that class (docs/org/cloudCards.md), keeping the node's scale.
@@ -106,7 +111,11 @@ public sealed class PlaneBuilder
         _painter = scheme != null ? painter : null;
         _patterns = patterns ?? PatternLibrary.Empty;
         _scene = new SceneBuilder(gamez, textures, blendTexture: IsPropBlurTexture, cullBackfaces: true,
-            textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex, sunVertexLit: true);
+            textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex, sunVertexLit: true)
+        {
+            // The interior keeps zero: its own pass measured no self-shadow noise at its scale.
+            ShadowLookupOffset = AirframeShadowLookupOffset,
+        };
         // ⚠ A builder of its own, never a field toggled on the airframe's: DepthBiasScale is baked
         // into cached meshes and materials, so one builder switching it mid-build would hand a
         // later caller a mesh biased for the wrong scale.
@@ -120,6 +129,7 @@ public sealed class PlaneBuilder
                 // The panel is a wall of soft-alpha decals over dark instruments, which is where
                 // the linear-space composite departs visibly from the original's (see the field).
                 GammaBlendAlpha = true,
+                NoAlphaCoverage = true,
             };
         }
         _spinningProps = spinningProps;
@@ -442,7 +452,7 @@ public sealed class PlaneBuilder
     {
         if (_flareMaterial == null)
         {
-            _flareMaterial = new ShaderMaterial { Shader = new Shader { Code = FlareShaderCode } };
+            _flareMaterial = new ShaderMaterial { Shader = ShaderTwins.Pooled(FlareShaderCode, "plane-flare") };
             if (_textures.Find(WingLights.FlareTexture) is { } tex)
                 _flareMaterial.SetShaderParameter("albedo_tex", tex);
             _flareMaterial.SetShaderParameter("tint", WingLights.FlareColor);

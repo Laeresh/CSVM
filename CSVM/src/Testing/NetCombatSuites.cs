@@ -8,6 +8,7 @@ using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
 using CSVM.Launch;
+using CSVM.Mech3;
 using CSVM.Net;
 using CSVM.Session;
 using CSVM.Session.Roster;
@@ -57,9 +58,8 @@ internal static class NetCombatSuites
     // the multiplayer opening speed by the step its grant is seen to land.
     private const float EntryTolerance = 5f;
 
-    // The host's two lobby rows for the match-state suite. The kill target is two so one seat
-    // reaches it off two real deaths, and the clock is the shortest whole minute --vs-time= takes.
-    private const int HostKillTarget = 2;
+    // The host's clock for the match-state suite, the shortest whole minute --vs-time= takes. Its
+    // kill target is HostKillTarget, two kills' worth.
     private const int HostTimeMinutes = 1;
 
     // What the two guests are launched on instead. Neither row is the host's, so a guest showing
@@ -170,6 +170,9 @@ internal static class NetCombatSuites
                       && host.Session.NetLink!.Peers.Count == 2,
                 $"the two guests hold one peer each and the host holds both ({first.Session.NetLink!.Peers.Count}, {second.Session.NetLink!.Peers.Count}, {host.Session.NetLink!.Peers.Count})");
 
+            // Past the start barrier first. A guest's loaded word is the host's own to take, and is
+            // never forwarded, so it belongs outside the relay count.
+            NetStartSuites.UntilStarted(host.Session, first.Session, second.Session);
             Relay(ctx, host.Session, first.Session, second.Session);
         }
         finally
@@ -245,7 +248,7 @@ internal static class NetCombatSuites
         // The scripted climb the star suites fly. This suite is the longest of the three, and a
         // seat that flies itself into the ground scores a suicide against the kill limit below.
         var spec = MatchSpec(ctx, out var table, TrackedFlight,
-            $"--vs-kills={HostKillTarget}", $"--vs-time={HostTimeMinutes}");
+            $"--vs-kills={HostKillTarget(ctx)}", $"--vs-time={HostTimeMinutes}");
         // The guests are launched on limits that are not the host's. A limit one of them shows
         // therefore crossed the wire, rather than being one its own command line held.
         var guestSpec = MatchSpec(ctx, out _, TrackedFlight,
@@ -300,7 +303,8 @@ internal static class NetCombatSuites
         "two pairs of sessions in one process on the lobby's lives rules: with two lives a guest's "
         + "seat comes back after its first death and stays down after its second on both machines, "
         + "the host refusing its ask, the spent seat watching the host's aircraft and the match "
-        + "ending on reason 4 with the lives and ending lines in the guest's pane, and with Auto "
+        + "ending on reason 4, the guest's pane reading its lives line under the kill lines and the "
+        + "ending over them, and with Auto "
         + "Respawn off a downed seat stays down past the crash camera until its pilot presses Fire "
         + "Guns, then comes back through the host's grant")]
     internal static void TheLobbysLivesRule(TestContext ctx)
@@ -354,6 +358,232 @@ internal static class NetCombatSuites
         }
     }
 
+    [Suite("net-kill-line",
+        "a host session and a guest session in one process: each Dogfight death posts the "
+        + "original's kill lines once on both machines, the victim above Destroyed by the killer, "
+        + "a death with no killer as Self-Destroyed and a turret owner's kill as Killed by its Turret. "
+        + "A lobby launch names the host's seat by its callsign rather than its game's name, and the "
+        + "guest's seat by the callsign its pick carried, so each kill reads Destroyed by that callsign "
+        + "on both machines")]
+    internal static void EveryMachinePostsTheKill(TestContext ctx)
+    {
+        var spec = MatchSpec(ctx, out _);
+        var ambient = Ambient.Save();
+        var ends = new List<Ends>();
+        try
+        {
+            var peers = Pair(ctx, spec, 6307, ends);
+            if (peers == null)
+            {
+                return;
+            }
+
+            foreach (var rig in peers.SelectMany(p => p.SeatRigs))
+            {
+                if (rig.Controller is { } pilot)
+                {
+                    pilot.AutoRespawnAfter = QuickRespawn;
+                }
+            }
+
+            var host = peers[0];
+            var guest = peers[1];
+            KillLines(ctx, peers, "the guest kills the host", "host", "Destroyed by guest1",
+                () => host.SeatRigs[0].Controller!.DebugForceCrash(host.SeatRigs[1].Controller!.PlayerIndex));
+            KillLines(ctx, peers, "the host kills the guest", "guest1", "Destroyed by host",
+                () => guest.SeatRigs[1].Controller!.DebugForceCrash(guest.SeatRigs[0].Controller!.PlayerIndex));
+            KillLines(ctx, peers, "the guest crashes with nobody to charge", "guest1 Self-Destroyed", null,
+                () => guest.SeatRigs[1].Controller!.DebugForceCrash());
+            KillLines(ctx, peers, "a turret owner's kill", "guest1", "Killed by host Turret",
+                () => guest.NetLink!.Send(guest.NetLink.HostPeer,
+                    new DeathMessage(1, 0, NetDeathCause.TurretOwner, 0u), NetChannels.Events));
+            foreach (var end in Enumerable.Reverse(ends))
+            {
+                end.Close();
+            }
+
+            NamedHostKills(ctx, spec, 6308);
+        }
+        finally
+        {
+            foreach (var end in Enumerable.Reverse(ends))
+            {
+                end.Close();
+            }
+
+            ambient.Restore();
+        }
+    }
+
+    // One Dogfight launch, plus the spawn table both ends walk. Every peer is launched with the
+    // same arguments unless a suite hands one its own. What otherwise differs between them is the
+    // roster and the seed, which the join sets.
+    internal static SessionSpec MatchSpec(TestContext ctx, out IReadOnlyList<SpawnPoint> table,
+        params string[] extraArgs)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} textures");
+        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
+        ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{MpMission} zrdr");
+        var args = new List<string>
+        {
+            "--vs", $"--chapter={ctx.Chapter}", $"--mission={MpMission}", "--players=1", "--mute",
+            "--no-pads",
+        };
+        args.AddRange(extraArgs);
+        var spec = SessionSpec.Parse(args.ToArray());
+        var loaded = new SpawnPicker(spec).LoadSpawnList(missionZrdr, spec.Scenario);
+        if (loaded is not { Count: >= 2 })
+        {
+            throw new SuiteSkippedException($"{ctx.Chapter}/{MpMission} authors no usable net.zrd table");
+        }
+
+        table = loaded;
+        return spec;
+    }
+
+    // The field, seat 0 on the host and one seat per guest after it.
+    internal static NetSeat[] Roster(int seats)
+    {
+        var roster = new NetSeat[seats];
+        for (int i = 0; i < seats; i++)
+        {
+            roster[i] = new NetSeat
+            {
+                PeerId = i,
+                SeatIndex = i,
+                IsLocal = i == 0,
+                Callsign = i == 0 ? "host" : $"guest{i}",
+                PlaneNode = Airframes[i % Airframes.Length],
+            };
+        }
+
+        NetSeats.Validate(roster);
+        return roster;
+    }
+
+    // One death on clean stacks: each machine's own pane then reads exactly the decoded lines,
+    // top line newest. A relayed copy posted twice, or one machine silent, fails it.
+    private static void KillLines(TestContext ctx, GameSession[] peers, string what, string top,
+        string? under, Action kill, Action<int>? fly = null)
+    {
+        fly ??= steps => Lockstep(steps, peers);
+        fly(GrantSteps);
+        var stacks = peers.Select((p, i) => p.SeatRigs[i].Controller?.MessageStack).ToArray();
+        foreach (var stack in stacks)
+        {
+            stack?.Clear();
+        }
+
+        kill();
+        fly(SettleSteps);
+        var want = under == null ? new[] { top } : new[] { top, under };
+        // The victim's own crash notice is the ground impact's line, not the kill's, and is left out.
+        string crash = Messages.Load(ctx.MessagesPath).Get(HudMessages.CrashKey);
+        string[] Read(HudMessages? stack) => stack == null
+            ? new[] { "no stack" }
+            : Enumerable.Range(0, HudMessages.Slots).Select(stack.LineAt)
+                .OfType<string>().Where(l => l.Length > 0 && l != crash).ToArray();
+        var reads = stacks.Select(Read).ToArray();
+        string reading = string.Join(" | ", reads.Select(r => string.Join(" / ", r)));
+        ctx.Check(reads.All(r => r.SequenceEqual(want)),
+            $"{what}: both machines post {string.Join(" / ", want)} once ({reading})");
+    }
+
+    // A lobby Dogfight launched through both doors, its host's callsign past the roster's width
+    // and its game named apart from it. The host's seat takes the callsign, cut where the wire cuts
+    // it, and the guest's seat the callsign its pick carried. Both machines then read those names
+    // in a kill line.
+    private static void NamedHostKills(TestContext ctx, SessionSpec spec, int seed)
+    {
+        const string HostName = "Montgomery Fairweather";
+        const string GameName = "Friday Fliers";
+        const string GuestName = "Laeresh";
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(seed));
+        var hostDoor = new UI.Menu.NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[1]);
+        hostDoor.Take(new UI.Menu.NetPlayerInfo { Callsign = HostName, GameName = GameName }, game: true);
+        var guestDoor = new UI.Menu.NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[1]);
+        guestDoor.Take(new UI.Menu.NetPlayerInfo { Callsign = GuestName, Voice = 1 }, game: false);
+        Ends? host = null;
+        Ends? guest = null;
+        try
+        {
+            hostDoor.OpenDogfightHost(1);
+            guestDoor.OpenJoin();
+            StepDoors(SettleSteps, hostDoor, guestDoor);
+            guestDoor.Dogfight?.Show();
+            StepDoors(SettleSteps, hostDoor, guestDoor);
+            ctx.Check(hostDoor.Advertising?.Host == GameName && hostDoor.Dogfight?.Players.Count == 2
+                      && hostDoor.Dogfight.Players[1].Name == GuestName,
+                $"[named host] the advert names the game and the host's list the guest's callsign ({hostDoor.Advertising?.Host}, {string.Join(", ", hostDoor.Dogfight?.Players.Select(p => p.Name) ?? Array.Empty<string>())})");
+            var hostLaunch = hostDoor.BuildLaunch();
+            if (!guestDoor.IsDogfightGuest || hostLaunch == null)
+            {
+                ctx.Check(false, $"[named host] the guest joins the host's Dogfight ({guestDoor.Stage})");
+                return;
+            }
+
+            var planes = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(UI.Menu.CoopGuestPick.StarterAirframe) };
+            var (roster, _) = Launcher.VersusLaunchField(hostLaunch.Transport, planes, new LoadoutChoice?[] { null }, StockLoadouts.Load());
+            string named = SeatRosterMessage.Carried(HostName).Trim();
+            ctx.Check(roster[0].Callsign == named && named.Length > 0 && named != HostName && HostName.StartsWith(named, StringComparison.Ordinal),
+                $"[named host] the host's seat takes its callsign, not the game's name, cut to the roster's width ({roster[0].Callsign})");
+            ctx.Check(roster.Length == 2 && roster[1].Callsign == GuestName,
+                $"[named host] and the guest's seat the callsign its pick carried ({(roster.Length > 1 ? roster[1].Callsign : "-")})");
+            host = Ends.Open(ctx, spec, hostLaunch.Transport, isHost: true, HostSeed, roster,
+                UI.Hangar.PlanePickerRoster.StockAirframes);
+            for (int i = 0; i < GrantSteps && !guestDoor.DogfightLaunchDue; i++)
+            {
+                host.Session._PhysicsProcess(GameClock.FixedDt);
+                StepDoors(1, hostDoor, guestDoor);
+            }
+
+            var guestLaunch = guestDoor.DogfightLaunchDue ? guestDoor.BuildLaunch() : null;
+            if (guestLaunch == null)
+            {
+                ctx.Check(false, $"[named host] the guest's door hears the host's opener");
+                return;
+            }
+
+            guest = Ends.Open(ctx, spec, guestLaunch.Transport, isHost: false, HostSeed + 1, null,
+                UI.Hangar.PlanePickerRoster.StockAirframes);
+            ctx.Check(host.Built && guest.Built, $"[named host] both sessions build ({host.Built}, {guest.Built})");
+            if (!host.Built || !guest.Built)
+            {
+                return;
+            }
+
+            var peers = new[] { host.Session, guest.Session };
+            var (h, g) = (host, guest);
+            Action<int> fly = steps => FlyTogether(steps, h, g, hostDoor, guestDoor);
+            fly(SettleSteps);
+            ctx.Check(guest.Session.NetSeats.Count == 2 && guest.Session.NetSeats[0].Callsign == named,
+                $"[named host] the guest's copy of the roster names the host's seat the same ({string.Join(", ", guest.Session.NetSeats.Select(s => s.Callsign))})");
+            foreach (var rig in peers.SelectMany(p => p.SeatRigs))
+            {
+                if (rig.Controller is { } pilot)
+                {
+                    pilot.AutoRespawnAfter = QuickRespawn;
+                }
+            }
+
+            string guestName = roster[1].Callsign;
+            KillLines(ctx, peers, "[named host] the host kills the guest", guestName, $"Destroyed by {named}",
+                () => guest.Session.SeatRigs[1].Controller!.DebugForceCrash(guest.Session.SeatRigs[0].Controller!.PlayerIndex), fly);
+            KillLines(ctx, peers, "[named host] the guest kills the host", named, $"Destroyed by {guestName}",
+                () => host.Session.SeatRigs[0].Controller!.DebugForceCrash(host.Session.SeatRigs[1].Controller!.PlayerIndex), fly);
+        }
+        finally
+        {
+            guest?.Close();
+            host?.Close();
+            guestDoor.Discard();
+            hostDoor.Discard();
+        }
+    }
+
     // One lobby Dogfight, launched through both doors, whose host then goes: its link cut, or its
     // pause sheet's exit run in the launcher's order. The guest's door is stepped as the launcher
     // steps it in flight.
@@ -377,7 +607,7 @@ internal static class NetCombatSuites
                 return;
             }
 
-            var planes = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(UI.Menu.NetPlayFeature.StarterAirframe) };
+            var planes = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(UI.Menu.CoopGuestPick.StarterAirframe) };
             var (roster, _) = Launcher.VersusLaunchField(hostLaunch.Transport, planes, new LoadoutChoice?[] { null }, StockLoadouts.Load());
             host = Ends.Open(ctx, spec, hostLaunch.Transport, isHost: true, HostSeed, roster,
                 UI.Hangar.PlanePickerRoster.StockAirframes);
@@ -523,6 +753,9 @@ internal static class NetCombatSuites
         ctx.Check(peers.All(p => !p.Versus!.Completed && p.MatchEnd == NetMatchEnd.Running)
                   && guest.SeatRigs[1].Controller!.Watching == null,
             $"ABLE-TO-FAIL CONTROL: with a life left the match runs and the seat watches nobody ({string.Join(", ", peers.Select(p => p.MatchEnd))})");
+        string first = PaneLines(guest.SeatRigs[1].Controller!);
+        ctx.Check(first.StartsWith("guest1 / Destroyed by host / You Have ONE Life Left!", StringComparison.Ordinal),
+            $"the guest's pane reads the kill lines over its lives line, the handler's order ({first})");
 
         int grants = peers[0].SpawnsTaken;
         guest.SeatRigs[1].Controller!.DebugForceCrash(guest.SeatRigs[0].Controller!.PlayerIndex);
@@ -538,12 +771,16 @@ internal static class NetCombatSuites
             $"and the spent seat watches the host's aircraft, the one still flying ({guest.SeatRigs[1].Controller!.Watching?.PlayerIndex})");
         ctx.Check(peers.All(p => p.Versus!.Completed && p.MatchEnd == NetMatchEnd.NobodyLeft),
             $"one pilot with lives left ends the match on reason 4 on both machines ({string.Join(", ", peers.Select(p => p.MatchEnd))})");
-        string lines = guest.SeatRigs[1].Controller!.MessageStack is { } stack
+        // Five lines into four slots: the ending and the kill lines push the lives line out.
+        string lines = PaneLines(guest.SeatRigs[1].Controller!);
+        ctx.Check(lines.StartsWith("Game Over: / No Enemies Left / guest1 / Destroyed by host", StringComparison.Ordinal),
+            $"and the guest's pane reads the ending over the last kill ({lines})");
+    }
+
+    private static string PaneLines(FlightController pilot) =>
+        pilot.MessageStack is { } stack
             ? string.Join(" / ", Enumerable.Range(0, HudMessages.Slots).Select(stack.LineAt))
             : "no stack";
-        ctx.Check(lines.Contains("Out of Lives", StringComparison.Ordinal) && lines.Contains("No Enemies Left", StringComparison.Ordinal),
-            $"and the guest's pane reads its last life and the ending ({lines})");
-    }
 
     // Auto Respawn off: the crash camera's three seconds pass and the seat stays down. Its pilot's
     // Fire Guns press is what brings it back, through the host like any other return.
@@ -577,7 +814,7 @@ internal static class NetCombatSuites
     {
         string reading = string.Join(" | ",
             peers.Select(p => $"{p.Versus!.KillTarget} kills / {p.Versus!.TimeLimit:0} s"));
-        ctx.Check(peers.All(p => p.Versus!.KillTarget == HostKillTarget
+        ctx.Check(peers.All(p => p.Versus!.KillTarget == HostKillTarget(ctx)
                                  && Mathf.IsEqualApprox(p.Versus!.TimeLimit, HostTimeMinutes * 60f)),
             $"every machine runs the host's two limits, not the {GuestKillTarget} kills / {GuestTimeMinutes * 60} s the guests were launched on ({reading})");
         ctx.Check(!peers[0].Versus!.Replicated && peers[1].Versus!.Replicated && peers[2].Versus!.Replicated,
@@ -643,7 +880,7 @@ internal static class NetCombatSuites
     private static void NoEarlyHold(TestContext ctx, GameSession[] peers)
     {
         var guest = peers[1];
-        for (int i = 0; i < HostKillTarget + 3; i++)
+        for (int i = 0; i < HostKillTarget(ctx) + 3; i++)
         {
             guest.Versus!.RegisterKill(shooter: 1, victim: 0);
         }
@@ -651,18 +888,18 @@ internal static class NetCombatSuites
         Lockstep(SettleSteps, peers);
         ctx.Check(!guest.Versus!.Completed && guest.Pause is { Ended: false }
                   && !peers[0].Versus!.Completed,
-            $"a guest that counts {HostKillTarget + 3} kills of its own ends nothing and raises no board (completed {guest.Versus!.Completed}, held {guest.Pause!.Ended}, host completed {peers[0].Versus!.Completed})");
+            $"a guest that counts {HostKillTarget(ctx) + 3} kills of its own ends nothing and raises no board (completed {guest.Versus!.Completed}, held {guest.Pause!.Ended}, host completed {peers[0].Versus!.Completed})");
 
         // ABLE-TO-FAIL CONTROL. The same calls into a match nobody replicates do end it. The
         // refusal above is therefore the rule, not a scorekeeping that counts nothing.
-        var alone = new VersusMatch(3, HostKillTarget, HostTimeMinutes * 60f);
-        for (int i = 0; i < HostKillTarget + 3; i++)
+        var alone = new VersusMatch(3, HostKillTarget(ctx), HostTimeMinutes * 60f);
+        for (int i = 0; i < HostKillTarget(ctx) + 3; i++)
         {
             alone.RegisterKill(shooter: 1, victim: 0);
         }
 
         ctx.Check(alone.Completed,
-            $"ABLE-TO-FAIL CONTROL: the same kills into a match of its own do end it ({alone.ScoreOf(1)} points against a target of {HostKillTarget})");
+            $"ABLE-TO-FAIL CONTROL: the same kills into a match of its own do end it ({alone.ScoreOf(1)} points against a target of {HostKillTarget(ctx)})");
     }
 
     // The kill limit, reached by two real deaths reported from two different machines. The host
@@ -679,7 +916,7 @@ internal static class NetCombatSuites
             }
         }
 
-        // Seat 1 downs the host's seat twice, a point each time. The victim is reported by the
+        // Seat 1 downs the host's seat twice, a kill's score each time. The victim is reported by the
         // machine that flies it, which is the only one that may. The host alone turns those
         // reports into a score.
         peers[0].SeatRigs[0].Controller!.DebugForceCrash(peers[0].SeatRigs[1].Controller!.PlayerIndex);
@@ -687,8 +924,8 @@ internal static class NetCombatSuites
         peers[0].SeatRigs[0].Controller!.DebugForceCrash(peers[0].SeatRigs[1].Controller!.PlayerIndex);
         Lockstep(SettleSteps, peers);
 
-        ctx.Check(peers[0].Versus!.ScoreOf(1) >= HostKillTarget,
-            $"seat 1 reaches the host's kill target of {HostKillTarget} ({Scoreboard(peers[0])})");
+        ctx.Check(peers[0].Versus!.ScoreOf(1) >= HostKillTarget(ctx),
+            $"seat 1 reaches the host's kill target of {HostKillTarget(ctx)} ({Scoreboard(peers[0])})");
         Held(ctx, peers, "the kill limit", NetMatchEnd.ScoreTarget);
     }
 
@@ -952,10 +1189,20 @@ internal static class NetCombatSuites
     // by the host alone. The board is read on both peers after each one.
     private static void Kills(TestContext ctx, GameSession host, GameSession guest)
     {
+        // Both machines score with the values player.zrd authors, which the shipped file sets apart
+        // from the executable's fallbacks.
+        var scores = host.Versus!.Scores;
+        var authored = MatchScores.Load(ctx.ZrdrPath);
+        ctx.Check(scores == authored && guest.Versus!.Scores == authored,
+            $"both sessions score with player.zrd's values ({scores})");
+        ctx.Check(authored != MatchScores.Fallback,
+            $"ABLE-TO-FAIL CONTROL: the shipped player.zrd authors values unlike the executable's fallbacks ({MatchScores.Fallback})");
+        int kill = scores.Kill;
+
         // The guest kills the host: the victim is flown here, so the host reports its own death.
         host.SeatRigs[0].Controller!.DebugForceCrash(host.SeatRigs[1].Controller!.PlayerIndex);
         Lockstep(SettleSteps, host, guest);
-        Board(ctx, host, guest, "the guest kills the host", (0, 1, 0), (1, 0, 1));
+        Board(ctx, host, guest, "the guest kills the host", (0, 1, 0), (kill, 0, 1));
         ctx.Check(guest.SeatRigs[0].Controller is { InPlay: false },
             $"and the guest's copy of that aeroplane is out of the fight with it");
 
@@ -963,7 +1210,7 @@ internal static class NetCombatSuites
         // wire to the scorer.
         guest.SeatRigs[1].Controller!.DebugForceCrash(guest.SeatRigs[0].Controller!.PlayerIndex);
         Lockstep(SettleSteps, host, guest);
-        Board(ctx, host, guest, "the host kills the guest", (1, 1, 1), (1, 1, 1));
+        Board(ctx, host, guest, "the host kills the guest", (kill, 1, 1), (kill, 1, 1));
         ctx.Check(host.SeatRigs[1].Controller is { InPlay: false },
             $"and the host's copy of that aeroplane is out of the fight with it");
     }
@@ -972,16 +1219,18 @@ internal static class NetCombatSuites
     // charged to a turret's owner. Both are put on the wire as the dying client's own report.
     private static void Causes(TestContext ctx, GameSession host, GameSession guest)
     {
+        var scores = host.Versus!.Scores;
         var link = guest.NetLink!;
         link.Send(link.HostPeer, new DeathMessage(1, NetMessage.NoSeat, NetDeathCause.Suicide, 0u),
             NetChannels.Events);
         Lockstep(SettleSteps, host, guest);
-        Board(ctx, host, guest, "a death with nobody to charge", (1, 1, 1), (0, 2, 1));
+        Board(ctx, host, guest, "a death with nobody to charge", (scores.Kill, 1, 1), (scores.Kill + scores.Suicide, 2, 1));
 
         link.Send(link.HostPeer, new DeathMessage(1, 0, NetDeathCause.TurretOwner, 0u),
             NetChannels.Events);
         Lockstep(SettleSteps, host, guest);
-        Board(ctx, host, guest, "a death charged to a turret's owner", (2, 1, 2), (0, 3, 1));
+        Board(ctx, host, guest, "a death charged to a turret's owner scores it score_turret_kill",
+            (scores.Kill + scores.TurretKill, 1, 2), (scores.Kill + scores.Suicide, 3, 1));
     }
 
     // One reading of the board on both peers: the expected (score, deaths, kills) per seat. The
@@ -1003,6 +1252,9 @@ internal static class NetCombatSuites
     // pristine airframe moves the armour alone. A health-only reading would call it silent.
     private static float Ledger(FlightController rig) =>
         rig.Damage!.WholeArmor + rig.Damage.WholeHealth;
+
+    // Two kills' worth of player.zrd's score_kill, so one seat reaches it off two real deaths.
+    private static int HostKillTarget(TestContext ctx) => 2 * MatchScores.Load(ctx.ZrdrPath).Kill;
 
     private static bool Matches(VersusMatch match, int seat, (int Score, int Deaths, int Kills) want) =>
         match.ScoreOf(seat) == want.Score && match.DeathsOf(seat) == want.Deaths
@@ -1070,55 +1322,6 @@ internal static class NetCombatSuites
         }
     }
 
-    // One Dogfight launch, plus the spawn table both ends walk. Every peer is launched with the
-    // same arguments unless a suite hands one its own. What otherwise differs between them is the
-    // roster and the seed, which the join sets.
-    private static SessionSpec MatchSpec(TestContext ctx, out IReadOnlyList<SpawnPoint> table,
-        params string[] extraArgs)
-    {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
-        ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{MpMission} zrdr");
-        var args = new List<string>
-        {
-            "--vs", $"--chapter={ctx.Chapter}", $"--mission={MpMission}", "--players=1", "--mute",
-            "--no-pads",
-        };
-        args.AddRange(extraArgs);
-        var spec = SessionSpec.Parse(args.ToArray());
-        var loaded = new SpawnPicker(spec).LoadSpawnList(missionZrdr, spec.Scenario);
-        if (loaded is not { Count: >= 2 })
-        {
-            throw new SuiteSkippedException($"{ctx.Chapter}/{MpMission} authors no usable net.zrd table");
-        }
-
-        table = loaded;
-        return spec;
-    }
-
-    // The field, seat 0 on the host and one seat per guest after it.
-    private static NetSeat[] Roster(int seats)
-    {
-        var roster = new NetSeat[seats];
-        for (int i = 0; i < seats; i++)
-        {
-            roster[i] = new NetSeat
-            {
-                PeerId = i,
-                SeatIndex = i,
-                IsLocal = i == 0,
-                Callsign = i == 0 ? "host" : $"guest{i}",
-                PlaneNode = Airframes[i % Airframes.Length],
-            };
-        }
-
-        NetSeats.Validate(roster);
-        return roster;
-    }
-
     // The process-global state several sessions in one process share. Saved before the first is
     // opened and put back after the last is freed. This suite cannot then shift the streams, or
     // the ambient clock, of every suite after it in the shard.
@@ -1140,7 +1343,10 @@ internal static class NetCombatSuites
     {
         public static Ends Open(TestContext ctx, SessionSpec spec, INetTransport transport,
             bool isHost, ulong seed, IReadOnlyList<NetSeat>? roster,
-            IReadOnlyList<string>? airframes = null, Func<int, LoadoutChoice?>? seatFit = null)
+            IReadOnlyList<string>? airframes = null, Func<int, LoadoutChoice?>? seatFit = null,
+            Func<CoopWingmanMessage?>? coopWingman = null,
+            Func<int, Flight.Hangar.CustomPlaneDef?>? seatBuild = null,
+            IReadOnlyDictionary<int, string>? teamNames = null, Action? exitSession = null)
         {
             var pane = new SubViewport
             {
@@ -1172,16 +1378,21 @@ internal static class NetCombatSuites
                 Orbit = new Flight.Camera.OrbitCamera(camera),
                 Sun = sun,
                 Env = new Godot.Environment(),
-                MenuDriven = false,
+                // A suite that hands over its own exit stands in for the launcher's menu, as a lobby
+                // flight's is.
+                MenuDriven = exitSession != null,
                 MenuPads = null,
                 Presentation = UI.Menu.PresentationId.BuiltIn,
-                ExitSession = () => { },
+                ExitSession = exitSession ?? (() => { }),
                 RestartSession = () => { },
                 NetSeats = isHost ? roster : null,
                 NetTransport = transport,
                 NetHost = isHost,
                 NetAirframes = airframes ?? Airframes,
                 NetSeatFit = seatFit,
+                NetCoopWingman = coopWingman,
+                NetSeatBuild = seatBuild,
+                NetTeamNames = teamNames,
             });
             pane.AddChild(session);
             return new Ends(pane, session, session.StartSession());

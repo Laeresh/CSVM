@@ -470,7 +470,9 @@ skill vector and `ace_accentID` as its voice.
 Wave `N` (1-based) puts `num_enemies` aircraft on **team 2, group N**, in the plain `<plane>` def,
 with `primary_target` `player`. Wave 1 spawns live at a spawn point picked the same way and sets the
 current-group counter `DAT_00718cd0` to 1; waves 2 to 4 are built **deactivated at the world
-origin**, which is the inert state `FUN_0045b9d0` later teleports and reactivates.
+origin**, which is the inert state `FUN_0045b9d0` later teleports and reactivates. The member's
+patrol walk is seated at that origin and activation keeps it
+([`org/aiPilot.md`](../org/aiPilot.md), "Activation keeps the walk").
 
 ⚠ **On `zeppelin_run` (id 2) even wave 1 is built deactivated at the origin**, and the wave block
 runs whether or not the scenario has spawn points, whereas every other mission type needs a

@@ -26,6 +26,9 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     /// <summary>The cabin's network door, Host Co-op while shut and Close Network while open.</summary>
     public const string CoopDoorKey = "NET_HOSTCOOP";
 
+    /// <summary>The co-op host's BOOT plaque beside the door, live while a guest is seated.</summary>
+    public const string CoopBootKey = "NET_BOOT";
+
     // The roster's own list colours, CAMPAIGN.SCRIPT's sub-script VB. The selection bar behind the
     // picked row is 0xff800000, the frame around the row under the pointer 0xffff0000.
     private const byte RosterBarRed = 0x80;
@@ -36,6 +39,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     // sits below the band's two lines (status and guest address), whose ground ends at y 49.
     private const float CoopDoorX = 14f;
     private const float CoopDoorY = 57f;
+    private const float CoopBootGap = 4f;
     private const float CoopBandY = 14f;
     private const float CoopBandSize = 13f;
     private const float CoopBandWidth = 520f;
@@ -51,6 +55,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     private readonly Func<PlayerSeat, IReadOnlyList<int>> _flightDevices;
     private readonly string? _dataRoot;
     private readonly Func<NetPlayFeature?> _net;
+    private readonly Action<NetSessionKind?, Action> _ask;
 
     // The pages' host, mirrored to the screen showing and never walked (see the class summary).
     private CampaignFlow? _flow;
@@ -73,6 +78,12 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     private int _guestFlows = -1;
     private MissionAttempt? _guestAttempt;
 
+    // A co-op guest's films: the host's last film word it took, and the ordinal of the film it shows.
+    // The ordinal is null when none shows, and the stop ends that film.
+    private CoopFilmMessage? _guestFilmSeen;
+    private byte? _guestFilm;
+    private Action? _guestFilmStop;
+
     /// <summary>A campaign module over <paramref name="campaign"/> and the campaign layout read off
     /// the shell's own. The store <paramref name="profiles"/> is the user's profiles, which the
     /// Campaign row's door opens over. The store <paramref name="planes"/> takes what an EXPORT
@@ -90,7 +101,10 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         Func<PlayerSeat, IReadOnlyList<int>>? flightDevices = null,
         string? dataRoot = null,
         // The network door the cabin's Host Co-op opens; null, or a door answering null, hides it.
-        Func<NetPlayFeature?>? net = null)
+        Func<NetPlayFeature?>? net = null,
+        // Stands the network boxes over the cabin before Host Co-op opens the door; null opens it
+        // at once.
+        Action<NetSessionKind?, Action>? ask = null)
     {
         _campaign = campaign;
         _setup = setup ?? throw new ArgumentNullException(nameof(setup));
@@ -102,6 +116,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         _flightDevices = flightDevices ?? (_ => Array.Empty<int>());
         _dataRoot = dataRoot;
         _net = net ?? (() => null);
+        _ask = ask ?? ((_, then) => then());
     }
 
     /// <summary>Whether a campaign is open on this module.</summary>
@@ -275,7 +290,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         _debriefCash = run?.Money ?? 0;
         if (_campaign.ClosingCinema is { } cinema)
         {
-            _host.PlayFilm(then => cinema.OpenScrapbook(seq, missionWon, then), () => OpenBook(seq));
+            PlayFilm(then => cinema.OpenScrapbook(seq, missionWon, then), NetCoopFilm.Closing, () => 0, () => OpenBook(seq));
             return true;
         }
 
@@ -293,14 +308,17 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             return false;
         }
 
-        // The guest's own last pilot names it to the host. Read only, since a guest's saves are
-        // never touched.
-        net.PlayerName = _profiles?.Invoke().LastPlayedPilotName ?? string.Empty;
+        // The guest's callsign names it to the host, and a guest that joined without one goes by
+        // its own last pilot. Read only, since a guest's saves are never touched.
+        if (net.PlayerName.Length == 0)
+        {
+            net.PlayerName = _profiles?.Invoke().LastPlayedPilotName ?? string.Empty;
+        }
 
         // The door's pick is the guest's memory for the joined session, and a fresh join clears it.
         // Reopening from it is what carries the plane and its fit across flights and retries.
-        _campaign.OpenGuest(net.Advert?.Host ?? string.Empty, flow.Progress, flow.Airframes, _stock?.Invoke(), _dataRoot,
-            net.CoopPickAirframe, net.CoopPickFit);
+        _campaign.OpenGuest(net.Advert?.Host ?? string.Empty, flow.Progress, net.CoopHangar, flow.Slot, _stock?.Invoke(),
+            _dataRoot, net.Pick.Plane, net.Pick.Fit);
         _flow = new CampaignFlow(_campaign, _layout);
         _host.CloseDialog();
         _briefingReturn = OriginalScreen.CampaignCabin;
@@ -308,7 +326,9 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         _guestScreen = NetCoopScreen.Unknown;
         _guestSeq = -1;
         _guestFlows = -1;
+        _guestFilmSeen = null;
         FollowHost(net, flow);
+        FollowFilm(net);
         return true;
     }
 
@@ -434,6 +454,11 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
                     CoopDoorKey, open ? CoopDoorText.CloseNetworkButton : CoopDoorText.HostCoopButton, 0,
                     open || door.Stage is NetDoorStage.Shut or NetDoorStage.Failed, 0);
                 rows.Add(row with { X = CoopDoorX, Y = CoopDoorY });
+                if (open)
+                {
+                    var boot = _host.PlaqueRow(CoopBootKey, CoopDoorText.BootButton, 0, door.CoopGuests.Count > 0, 0);
+                    rows.Add(boot with { X = CoopDoorX, Y = CoopDoorY + row.Height + CoopBootGap });
+                }
             }
         }
     }
@@ -511,6 +536,12 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         if (row.Key == CoopDoorKey)
         {
             ToggleCoopDoor();
+            return null;
+        }
+
+        if (row.Key == CoopBootKey)
+        {
+            AskBoot(0);
             return null;
         }
 
@@ -702,15 +733,20 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
                 _ => _campaign.NextMissionSeq,
             };
 
+            // Every pick is settled and the hangar named with its holders before the flow. A guest
+            // opening on the flow then already knows which planes are free.
+            _campaign.SetRemotePicks(net.CoopGuestPlanes);
+            net.OfferCoopHangar(_campaign.CoopHangar(), _campaign.SeatPlanes);
+
             // The result goes first, so the flow that names the debrief already carries it.
-            net.ShowCoopResult(_debriefWon, _debriefObjectives, _debriefCash);
+            net.HostFlow.ShowResult(_debriefWon, _debriefObjectives, _debriefCash);
             net.ShowCoop(screen, shown, profile.MissionsCompleted, CampaignFeature.HangarAirframes(profile));
             return false;
         }
 
         if (IsGuest && net.IsCoopGuest && net.CoopFlow is { } flow)
         {
-            return FollowHost(net, flow);
+            return FollowHost(net, flow) | FollowFilm(net);
         }
 
         return false;
@@ -732,7 +768,14 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             _setup.Seats.Count > 0 ? _flightDevices(_setup.Seats[0]) : Array.Empty<int>(),
         };
         var exit = _campaign.BuildExit(pads);
-        return exit == null ? null : exit with { Net = net.BuildLaunch() };
+        if (exit == null)
+        {
+            return null;
+        }
+
+        // A guest still watching its host's film leaves it for the launch rather than missing it.
+        StopGuestFilm();
+        return exit with { Net = net.BuildLaunch() };
     }
 
     /// <summary>Typed characters and Backspace into the roster's name box, the campaign's own
@@ -1181,18 +1224,102 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     // press. The seated profile's chapter cinema plays first where one is due, and the cabin opens
     // on the frame the film stops. A position inside a chapter, and a shell with no cinema (every
     // suite), opens the cabin straight away. The keepFocus flag is the way back's, landing on the
-    // plaque that was left.
+    // plaque that was left. A co-op guest's films are its host's, so none is derived here.
     private void OpenCabin(bool keepFocus = false)
     {
-        if (_campaign?.ChapterCinema is { } cinema && _campaign.Profile is { } seated)
+        if (_campaign?.ChapterCinema is { } cinema && _campaign.Profile is { } seated && !_campaign.IsGuest)
         {
-            _host.PlayFilm(
+            PlayFilm(
                 then => cinema.OpenCabin(seated, then),
+                NetCoopFilm.Chapter,
+                () => cinema.ChapterPlayed,
                 () => ShowCampaign(OriginalScreen.CampaignCabin, keepFocus));
             return;
         }
 
         ShowCampaign(OriginalScreen.CampaignCabin, keepFocus);
+    }
+
+    // Every campaign film this module plays. A co-op host's goes to each guest as well, and its end,
+    // played out or skipped, ends theirs. A film that never went up is shared with nobody.
+    private void PlayFilm(Func<Action, bool> play, NetCoopFilm film, Func<int> chapter, Action then)
+    {
+        var door = _net() is { IsCoopHost: true } host ? host : null;
+        _host.PlayFilm(
+            handoff =>
+            {
+                bool over = false;
+                bool up = play(() =>
+                {
+                    over = true;
+                    door?.EndCoopFilm();
+                    handoff();
+                });
+                if (up && !over)
+                {
+                    door?.ShowCoopFilm(film, chapter());
+                }
+            },
+            then);
+    }
+
+    // A guest plays the film its host plays and ends it when the host's ends. Its own skip ends
+    // only its own film, since the host drives the boards and the guest stands on them.
+    private bool FollowFilm(NetPlayFeature net)
+    {
+        if (net.CoopFilm is not { } word || word == _guestFilmSeen)
+        {
+            return false;
+        }
+
+        _guestFilmSeen = word;
+        if (!word.Playing)
+        {
+            if (_guestFilm == word.Ordinal)
+            {
+                StopGuestFilm();
+            }
+
+            return true;
+        }
+
+        StopGuestFilm();
+        var campaign = _campaign!;
+        byte ordinal = word.Ordinal;
+        Action ended = () =>
+        {
+            if (_guestFilm == ordinal)
+            {
+                _guestFilm = null;
+            }
+        };
+
+        if (word.Film == NetCoopFilm.Chapter && campaign.ChapterCinema is { } chapter)
+        {
+            _guestFilm = ordinal;
+            _guestFilmStop = chapter.Stop;
+            _host.PlayFilm(then => chapter.Play(word.Chapter, then), ended);
+        }
+        else if (word.Film == NetCoopFilm.Closing && campaign.ClosingCinema is { } closing)
+        {
+            _guestFilm = ordinal;
+            _guestFilmStop = closing.Stop;
+            _host.PlayFilm(then => closing.Play(then), ended);
+        }
+
+        return true;
+    }
+
+    // Ends the film a guest shows, which runs its hand-off and takes the film down.
+    private void StopGuestFilm()
+    {
+        if (_guestFilm == null)
+        {
+            return;
+        }
+
+        _guestFilm = null;
+        _guestFilmStop?.Invoke();
     }
 
     // A way back that may land on the cabin, which is then a cabin door with its film in front.
@@ -1245,9 +1372,9 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             No());
     }
 
-    // Host Co-op opens a campaign listen server for the seats the local players leave free and
-    // advertises the cabin's mission; Close Network hangs it up. A door the Connection page opened
-    // is left alone, its button drawn greyed.
+    // Host Co-op asks Game and Player Information first. It then opens a campaign listen server
+    // for the seats the local players leave free and advertises the cabin's mission. Close Network
+    // hangs it up. A door the Connection page opened is left alone, its button drawn greyed.
     private void ToggleCoopDoor()
     {
         if (_net() is not { } net)
@@ -1262,6 +1389,37 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         }
 
         if (net.Stage is not (NetDoorStage.Shut or NetDoorStage.Failed))
+        {
+            return;
+        }
+
+        _ask(NetSessionKind.CampaignCoop, OpenCoopDoor);
+    }
+
+    // BOOT asks about each seated guest in player order: Yes boots that one, No asks about the
+    // next, and Cancel asks no more. The original has no campaign across a link, so the question is
+    // the remake's own; the boot itself is the Dogfight lobby's.
+    private void AskBoot(int from)
+    {
+        if (_net() is not { IsCoopHost: true } net || from >= net.CoopGuests.Count)
+        {
+            return;
+        }
+
+        var guest = net.CoopGuests[from];
+        var boot = Yes(() => net.Boot(guest.Peer));
+        if (from + 1 < net.CoopGuests.Count)
+        {
+            _host.RaiseDialog(CoopDoorText.BootQuestion(guest.Name), DialogIcon.Query, boot, NoCentred(() => AskBoot(from + 1)), Cancel());
+            return;
+        }
+
+        _host.RaiseDialog(CoopDoorText.BootQuestion(guest.Name), DialogIcon.Query, boot, No());
+    }
+
+    private void OpenCoopDoor()
+    {
+        if (_net() is not { } net || net.Stage is not (NetDoorStage.Shut or NetDoorStage.Failed))
         {
             return;
         }
@@ -1286,14 +1444,22 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     };
 
     // A guest takes the board its host names, re-entering it only when the board or the mission
-    // moves. Its own cursor and its ammo and plane screens are left alone meanwhile.
+    // moves. Its own cursor and its ammo and plane screens are left alone meanwhile. A pick an
+    // earlier seat won at the same moment moves to the plane the host gave this seat, and says so.
     private bool FollowHost(NetPlayFeature net, CoopFlowMessage flow)
     {
         var campaign = _campaign!;
-        campaign.FollowHost(flow.Progress, flow.Airframes);
-        net.PickCoop(campaign.GuestAirframe, net.CoopPickReady, campaign.GuestCoopFit);
+        int lostTo = campaign.FollowHost(flow.Progress, net.CoopHangar);
+        net.Pick.Set(campaign.GuestAirframe, net.Pick.Ready, campaign.GuestCoopFit);
+        net.Pick.Choose(campaign.GuestPlane);
+        bool changed = lostTo >= 0;
+        if (lostTo >= 0)
+        {
+            _host.RaiseDialog(campaign.SeatRefusal(lostTo), DialogIcon.Warning, Ok());
+        }
+
         bool ready = net.CoopReady;
-        bool changed = campaign.GuestReady != ready || net.CoopFlows != _guestFlows;
+        changed |= campaign.GuestReady != ready || net.CoopFlows != _guestFlows;
         campaign.GuestReady = ready;
         if (flow.Screen == NetCoopScreen.Debrief && net.CoopFlows != _guestFlows)
         {
@@ -1357,8 +1523,9 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             return;
         }
 
-        net.PickCoop(_campaign.GuestAirframe, !net.CoopPickReady, _campaign.GuestCoopFit);
-        _campaign.GuestReady = net.CoopPickReady;
+        net.Pick.Set(_campaign.GuestAirframe, !net.Pick.Ready, _campaign.GuestCoopFit);
+        net.Pick.Choose(_campaign.GuestPlane);
+        _campaign.GuestReady = net.Pick.Ready;
     }
 
     // Leaving hangs up; the shell then takes the guest back to the Connection page.
@@ -1398,7 +1565,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
 
         for (int i = 0; i < rows.Count; i++)
         {
-            if (rows[i].Key == CoopDoorKey)
+            if (rows[i].Key is CoopDoorKey or CoopBootKey)
             {
                 bool pressed = !_host.DialogOpen && _host.PressedRow == i;
                 _host.ComposeGenericRow(rows[i], i == focus && !_host.DialogOpen, pressed, i, layers);
@@ -1584,6 +1751,13 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
 
     private OriginalDialogAnswer No() =>
         new(OriginalShell.DialogNoKey, CampaignBoards.DialogRightKey, DialogWord(103, "No"), null);
+
+    // The three-button box's No moves onto the centre slot, and Cancel takes the right one.
+    private OriginalDialogAnswer NoCentred(Action run) =>
+        new(OriginalShell.DialogNoKey, CampaignBoards.DialogCenterKey, DialogWord(103, "No"), run);
+
+    private OriginalDialogAnswer Cancel() =>
+        new(OriginalShell.DialogCancelKey, CampaignBoards.DialogRightKey, DialogWord(101, "Cancel"), null);
 
     private string DialogWord(int id, string fallback)
     {

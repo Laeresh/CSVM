@@ -92,8 +92,10 @@ public interface IObjectiveWorld
     void WidenGroupEngagement(int group);
 
     /// <summary>Whether a <c>TRAVELERS</c> proximity condition reads true this tick. An authored
-    /// <c>player</c> subject is the human field, nearest human first. Null when the subject or the
-    /// reference cannot be resolved.</summary>
+    /// <c>player</c> subject or reference is the human field, nearest human first. Null when the
+    /// subject or the reference cannot be resolved. ⚠ Not a pure read: with
+    /// <see cref="TravelersSpec.DeleteOnSuccess"/> the counted vehicles leave the world here, as
+    /// the original's evaluator removes them.</summary>
     bool? TravelersMet(TravelersSpec spec);
 
     /// <summary>`WAKEUP_ENEMIES`: reactivate each named vehicle or zeppelin that is

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Audio;
+using CSVM.Flight.Camera;
 using CSVM.Mech3;
 using Xunit;
 
@@ -162,13 +163,13 @@ public class EngineAudioModelTests
         };
 
         Assert.Equal(("snd_normal", 1f),
-            EngineAudioCurves.EngineDefFor(stats, damaged: false, rng: null!, cockpitView: false));
+            EngineAudioCurves.EngineDefFor(stats, damaged: false, rng: null!, firstPersonView: false));
         Assert.Equal(("snd_cockpit", 1f),
-            EngineAudioCurves.EngineDefFor(stats, damaged: false, rng: null!, cockpitView: true));
+            EngineAudioCurves.EngineDefFor(stats, damaged: false, rng: null!, firstPersonView: true));
         Assert.Equal(("snd_damaged", 1f),
-            EngineAudioCurves.EngineDefFor(stats, damaged: true, rng: null!, cockpitView: false));
+            EngineAudioCurves.EngineDefFor(stats, damaged: true, rng: null!, firstPersonView: false));
         Assert.Equal(("snd_damaged", 1f),
-            EngineAudioCurves.EngineDefFor(stats, damaged: true, rng: null!, cockpitView: true));
+            EngineAudioCurves.EngineDefFor(stats, damaged: true, rng: null!, firstPersonView: true));
     }
 
     /// <summary>The decoded damage gate: the swap needs the worst zone BELOW a quarter health, so a
@@ -230,6 +231,23 @@ public class EngineAudioModelTests
             EngineAudioCurves.EngineDefFor(unflagged, damaged: true, rng: null!));
     }
 
+    /// <summary>The selected view's loop: the original swaps in camera modes 6 and 7 alike, so Nose
+    /// takes the cockpit loop as Cockpit does. Chase keeps the plain loop, the control that shows
+    /// the mapping can say no.</summary>
+    [Theory]
+    [InlineData(PilotViewMode.Cockpit, "snd_cockpit")]
+    [InlineData(PilotViewMode.Nose, "snd_cockpit")]
+    [InlineData(PilotViewMode.Chase, "snd_normal")]
+    public void SelectedViewPicksTheEngineLoop(PilotViewMode view, string expected)
+    {
+        var stats = new PlaneStats { EngineSound = "snd_normal", CockpitEngineSound = "snd_cockpit" };
+
+        var (name, _) = EngineAudioCurves.EngineDefFor(stats, damaged: false, rng: null!,
+            firstPersonView: EngineAudioCurves.SelectsCockpitLoop(view));
+
+        Assert.Equal(expected, name);
+    }
+
     /// <summary>An airframe with no <c>cockpit_engine_sound</c> of its own keeps the normal loop
     /// in the Cockpit view rather than going silent or erroring, the same "keep the normal def"
     /// fallback the plan calls for.</summary>
@@ -239,7 +257,7 @@ public class EngineAudioModelTests
         var stats = new PlaneStats { EngineSound = "snd_normal" };
 
         Assert.Equal(("snd_normal", 1f),
-            EngineAudioCurves.EngineDefFor(stats, damaged: false, rng: null!, cockpitView: true));
+            EngineAudioCurves.EngineDefFor(stats, damaged: false, rng: null!, firstPersonView: true));
     }
 
     /// <summary>C22 (BL-459): the re-arm timer stays quiet below its 3 s floor. It fires once the
@@ -503,6 +521,26 @@ public class EngineAudioModelTests
         Assert.False(EngineAudioCurves.SlotIsPitched(defs, "snd_absent"));
         Assert.False(EngineAudioCurves.SlotIsPitched(defs, null));
         Assert.False(EngineAudioCurves.SlotIsPitched(null, "snd_normal"));
+    }
+
+    /// <summary>The cockpit pitch option reaches the cockpit loop and nothing else. Off, the
+    /// FREQUENCY flag decides as it does for every slot. On, the cockpit loop is pitched without the
+    /// flag, while the plain loop still answers by its flag and a missing name stays unpitched.</summary>
+    [Fact]
+    public void TheCockpitPitchOptionReachesOnlyTheCockpitLoop()
+    {
+        var defs = new Dictionary<string, SoundDef>
+        {
+            ["snd_normal"] = new SoundDef { Name = "snd_normal", Frequency = true },
+            ["snd_cockpit"] = new SoundDef { Name = "snd_cockpit", Frequency = false },
+        };
+
+        Assert.False(EngineAudioCurves.HealthySlotIsPitched(defs, "snd_cockpit", cockpitLoop: true, pitchCockpitLoop: false));
+        Assert.True(EngineAudioCurves.HealthySlotIsPitched(defs, "snd_cockpit", cockpitLoop: true, pitchCockpitLoop: true));
+        Assert.True(EngineAudioCurves.HealthySlotIsPitched(defs, "snd_normal", cockpitLoop: false, pitchCockpitLoop: false));
+        Assert.True(EngineAudioCurves.HealthySlotIsPitched(defs, "snd_normal", cockpitLoop: false, pitchCockpitLoop: true));
+        Assert.False(EngineAudioCurves.HealthySlotIsPitched(defs, "snd_cockpit", cockpitLoop: false, pitchCockpitLoop: true));
+        Assert.False(EngineAudioCurves.HealthySlotIsPitched(defs, null, cockpitLoop: true, pitchCockpitLoop: true));
     }
 
     /// <summary>...and two SEPARATELY loaded airframes never share one. Each load is its own

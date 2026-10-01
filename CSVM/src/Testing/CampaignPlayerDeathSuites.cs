@@ -42,8 +42,8 @@ internal static class CampaignPlayerDeathSuites
         + "mission being one of the four that author no loss at all, so a Lost outcome there "
         + "can only be the death: a crash driven through the production death path ends the "
         + "mission lost where the wreck lands rather than on either wrap-up delay, hands the "
-        + "player back to the cabin, and commits nothing to the persist log; --no-crash-loss "
-        + "leaves the same crash flying, a mission nobody crashes in runs on, and an aircraft "
+        + "player back to the cabin, commits nothing to the persist log, and neither offers nor "
+        + "takes a respawn; --no-crash-loss leaves the same crash flying and respawnable, a mission nobody crashes in runs on, and an aircraft "
         + "the under-map backstop teleported ends nothing at all")]
     internal static void CampaignPlayerDeath(TestContext ctx)
     {
@@ -156,11 +156,17 @@ internal static class CampaignPlayerDeathSuites
                 $"…where the wreck lands rather than on one of the graph's own wrap-up delays: {died.EndedAt:0.000} s");
             ctx.Check(died.PersistCount == 0,
                 $"…committing nothing to the persist log, so the retry starts from the chapter state the profile already held: {died.PersistCount} object(s)");
+            ctx.Check(!died.RespawnOffered && !died.FlewAgain,
+                $"…and the lost aircraft is not offered a respawn, nor flies again on an armed timer: {died.Line}");
 
+            // The able-to-fail control for the respawn pin: under --no-crash-loss the same crash
+            // keeps the prompt and flies again. A pin set on every crash goes red here.
             var flewOn = Fly(ctx, world, script, mission, planesGamez, textures, live,
                 endsOnPlayerDeath: false, crash: true, underMap: false, report, "no-crash-loss");
             ctx.Check(!flewOn.Ended,
                 $"--no-crash-loss leaves the same crash flying: {flewOn.Line}");
+            ctx.Check(flewOn.RespawnOffered && flewOn.FlewAgain,
+                $"…where the respawn prompt still shows and the timer flies the pilot again: {flewOn.Line}");
 
             // ⚠ The able-to-fail control for what "crashed" means: the under-map backstop respawns
             // without a crash flag and without a Downed report, so a rule read off altitude would
@@ -224,17 +230,22 @@ internal static class CampaignPlayerDeathSuites
             }
 
             var result = director.Result;
+            bool crashed = human.Crashed;
+            bool offered = human.RespawnOffered;
+            bool flewAgain = crash && FliesAgainOnTimer(human);
             var leg = new Leg
             {
                 Ended = result != null,
                 Outcome = result?.Outcome ?? MissionOutcome.None,
                 ReturnToCabin = director.ReturnToCabin,
                 EndedAt = endedAt,
-                Crashed = human.Crashed,
+                Crashed = crashed,
+                RespawnOffered = offered,
+                FlewAgain = flewAgain,
                 PersistCount = profile.PersistLog.Count,
                 Line = $"{label}: ended={result != null} outcome={result?.Outcome.ToString() ?? "-"} "
-                    + $"at={endedAt:0.00}s crashed={human.Crashed} cabin={director.ReturnToCabin} "
-                    + $"persist={profile.PersistLog.Count}",
+                    + $"at={endedAt:0.00}s crashed={crashed} cabin={director.ReturnToCabin} "
+                    + $"persist={profile.PersistLog.Count} offered={offered} flewAgain={flewAgain}",
             };
             report.AppendLine(leg.Line);
             return leg;
@@ -243,6 +254,19 @@ internal static class CampaignPlayerDeathSuites
         {
             human.Free();
         }
+    }
+
+    // Arms the crash's respawn timer and steps the wreck past it. The crashed step reads the same
+    // answer as the HUD prompt, so this measures the refusal the prompt reports.
+    private static bool FliesAgainOnTimer(FlightController human)
+    {
+        human.AutoRespawnAfter = StepDt;
+        for (float t = 0f; t < AircraftLifecycle.AutoRespawnDelay + 1f && human.Crashed; t += StepDt)
+        {
+            human.SimStep(StepDt);
+        }
+
+        return !human.Crashed;
     }
 
     private readonly record struct Leg
@@ -256,6 +280,10 @@ internal static class CampaignPlayerDeathSuites
         public float EndedAt { get; init; }
 
         public bool Crashed { get; init; }
+
+        public bool RespawnOffered { get; init; }
+
+        public bool FlewAgain { get; init; }
 
         public int PersistCount { get; init; }
 

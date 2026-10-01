@@ -48,6 +48,13 @@ authors so a player cannot inherit an emplacement's side. A remake-only rule: th
 per-pilot team ladder. A co-op campaign does not use it: every human sits on team id `1`.
 _Avoid_: team band, emplacement band, pilot team offset
 
+**Lobby team**:
+A free-form named team players form in the Multiplayer Lobby, known by its team number from `1`
+(`0` for a player on no team), with a captain whose leave disbands it. `NetSeat.TeamId` carries the
+team number, which is not a team id and is never compared as one: lobby team `1` is not the
+player's side. A team Dogfight flies lobby team `N` as the team id `AimAssist.LobbyTeam(N)`.
+_Avoid_: squadron, side, lobby team index
+
 ## Campaign co-op
 
 **Scripted player**:
@@ -169,7 +176,8 @@ result, the solo stunt result.
 _Avoid_: end screen, endscreen, game over screen, wrap-up screen
 
 **Board menu**:
-The cursor and item list a board carries, driven by pad or keyboard rather than Godot focus.
+The cursor and item list a board carries, driven by pad, keyboard or the menu owner's mouse rather
+than Godot focus.
 _Avoid_: pause menu (it appears on results boards too), overlay menu, button list
 
 **Menu owner**:

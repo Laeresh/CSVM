@@ -678,6 +678,13 @@ and the lifeboat at the group's own origin, so a marker on the node reads as a m
 The authored bbox is the answer in both: `lifesaver11`'s `child_bbox` spans y −1.411 to 24.745 in
 group coordinates, putting its centre 11.667 m up.
 
+The aim assist reads the same point: the `MStructList` scorer `FUN_004bb3b0` takes the candidate's
+position from vtable slot 0 and hands it to the lead solver `FUN_00460e30`, so the marker and the
+gun convergence are one point. CSVM keeps them one point with `DestructibleRegistry.Instance.Centre`,
+the box centre of the pool's damage node, which the gun assist, the selection marker and the AI all
+read. C2/M05's towing cranes show why the anchor is the wrong point: `zcraneN` stands at the joint
+on the zeppelin, and its flagged `healthy` child, the yellow striped arm, hangs 23 m below it.
+
 ## The cycle order
 
 `FUN_004bbd60` compares two candidates against a 15-float snapshot of the player: position in
@@ -891,6 +898,38 @@ The four red-listed category ids are `0x1f42`, `0x1f46`, `0x1f49` and `0x1f8d`, 
 ⚠ **A friendly target is green, not blue.** Blue is reserved for a non-destructive objective
 (protect, escort, and the rest of the `MSG_OBJ_*` set). The `hud_v2.zrd` `HUD_COMMON` block's
 `COLOR_RED (200,20,20)` / `COLOR_BLUE (40,40,240)` are a different pair and are not these.
+
+### Friend or foe
+
+[Evidence: decoded] The multiplayer code decides friend or foe with one rule in four places: a
+thing is a friend of the local pilot when it is on the local pilot's side, and a foe otherwise.
+`GetColor` compares the entity's team `+0x8` with the local aircraft's (`DAT_0071c298`, `+0x8`),
+and reads same-or-either-zero as a friend (`0x4a5f86`..`0x4a5f9c`).
+
+- **A remote pilot's aircraft** (`remote.cpp`, `0x497acc`..`0x497d58`). The remote record's
+  `+0x3c` takes the pilot's team index `FUN_0046e070(id)`, which is the lobby team's number while
+  the team flag `0071d89c` is set and the pilot's own player number otherwise. The same index of
+  the local pilot is compared with it (`sete` at `0x497afa`), and the aircraft's team is set
+  through its vtable `+8` to 1 (`FUN_004830c0`) on a match or 2 (`FUN_0045c260(0)` writes
+  `0 + 2`) otherwise, the campaign's own 1-ally, 2-enemy convention. [Evidence: inferred] The
+  local aircraft flies team 1, which the write that sets it was not traced for; with it, a
+  teammate's box is green and every other pilot's red, and in a free-for-all every pilot is red,
+  since no two player numbers match.
+  The record's `+0x1060` takes the colour table `0x628eb4` by the same index. That colour lights
+  a node on the aircraft (`FUN_004b3660`), not a HUD marker.
+- **A zeppelin in Zeppelin vs Zeppelin** (`FUN_00496490`): the hull and every entity under its
+  node take team 1 or 2 the same way (`FUN_0049bef0` stores it at `+0xe0`, `FUN_004bee80` hands
+  it down), and `FUN_0049b4c0` relabels the hull's target entry
+  ([`multiplayer-zvz.md`](multiplayer-zvz.md), "Sides").
+- **A Capture the Flag marker** (`FUN_00495d40`, `FUN_0049a780`, `FUN_0049ab50`): "Your" or
+  "Enemy" by whether the local pilot is a member of the flag's team, `FUN_0046f300(id, n)`
+  ([`multiplayer-ctf.md`](multiplayer-ctf.md), "Markers").
+
+The remake asks the same rule as `AimAssist.Friendly`, the negation of `AimAssist.Hostile`, over
+the banded team ids a team mode flies. It answers per pane rather than per machine, since
+splitscreen panes may sit on different sides. The Dogfight HUD's per-seat markers
+(`VersusHud`, a remake aid with no counterpart in the original) draw a teammate in the friendly
+green and every other seat in its identity colour.
 
 ## The HUD: the label
 

@@ -70,10 +70,14 @@ sets the team flag at `0071d89c` to "the mode is not 1":
 | 0 | 3 | yes |
 | 2 | 4 | yes |
 
-Mode 4 is capture the flag: it is the mode the respawn's own extra branch adjusts for, and it is
-the one the `snd_CTF*` sound keys (`00628f94` onward) and the `score_return_flag` /
-`score_enemy_flag` score keys (`00627754`, `00627768`) belong to. Team ids are handed out from 1,
-which is what leaves block 0 of the table to the un-teamed match.
+Mode 3 is Capture the Flag and mode 4 Zeppelin vs Zeppelin. Lobby setting 0 is the Type box's
+first row, 10555 Capture the Flag (`0x413938` writes mode 3), and setting 2 its third, 10557
+Zeppelin vs Zeppelin (`0x413916` writes mode 4). Every flag path gates on mode 3 (the proximity
+tick at `0x496db1`, the death handler's drop at `0x498f9f`, the peer-left drop at `0x4995c2`), and
+mode 3's score table `FUN_0046ed90` is the one that honours `score_return_flag` and
+`score_enemy_flag` ([`multiplayer-ctf.md`](multiplayer-ctf.md)). The respawn's extra mode 4 branch
+therefore belongs to Zeppelin vs Zeppelin. Team ids are handed out from 1, which is what leaves
+block 0 of the table to the un-teamed match.
 
 ## The per-pilot colour table
 
@@ -91,11 +95,15 @@ minus 8. Both readings are TUNE (`BL-1017`).
 
 ## What the remake takes
 
-The remake's Dogfight is the un-teamed match, so it takes the opening rule and the opening
-throttle and speed (`SpawnPicker.LoadSpawnList` and `SpawnPicker.StartState`, over
-`SpawnPoints.LoadNetFreeForAll`). It does **not** take the respawn rule: a centroid displacement
+The remake takes the opening rule and the opening throttle and speed (`SpawnPicker.LoadSpawnList`
+and `SpawnPicker.StartState`, over `SpawnPoints.LoadNetFreeForAll`), and in a team Dogfight the
+team's block of the whole table (`SpawnPoints.TeamBlocks`), walked by the seat's place in its team
+rather than by the original's pilot index. It does **not** take the respawn rule: a centroid displacement
 puts a returning pilot next to the pack, which is the camping problem
-`Flight/Modes/VersusSpawnRotation.cs` exists to solve, and that rotation stays as it is. The stunt
+`Flight/Modes/VersusSpawnRotation.cs` exists to solve, and that rotation stays as it is. Zeppelin vs
+Zeppelin is the exception: its mode 4 branch pulls the return halfway toward the pilot's own hull,
+and the remake takes it whole there, `respawn_rad` and `respawn_el` read from `player.zrd` (1200 and
+100 shipped), as the maintainer decided ([`multiplayer-zvz.md`](multiplayer-zvz.md)). The stunt
 race's abreast starting grid is selected only when a race exists and never touches a Dogfight:
 four dogfighters 60 m apart on one heading is a head-on merge every round.
 
@@ -107,3 +115,8 @@ sends no spawn event at all. The block holds sixteen entries and the match admit
 sixteen pilots, so a full field still opens one seat per point and the 45-degree fan above has
 nothing to wrap past. A list shorter than the field is answered by the rotation relaxing its
 one-living-seat-per-point rule, never by computing a bearing.
+
+## Retired and superseded readings
+
+### ⚠ "Mode 4 is capture the flag" — RETIRED (2026-09-29)
+ page read mode 4 as Capture the Flag and tied the `snd_CTF*` and flag score keys to it. The box's row order (10555 Capture the Flag first) and the mode 3 gates on every flag path decode other way round, above. Do not read the respawn's mode 4 branch as a flag rule again.

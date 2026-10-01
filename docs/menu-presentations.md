@@ -279,7 +279,17 @@ nearest, since every other option falls through to its own default and a nearest
 the player an aspect ratio they did not pick. The screen is `MonitorSetting.Resolve`, the one setting
 whose saved value can name something that is not there: an index no screen answers to is dropped like an
 unknown word and the window stays on the screen it already stands on, which is the primary on a launch
-that has moved nothing. A display setting is also the case where the apply does
+that has moved nothing. The render scale is `RenderScaleSetting.Resolve`, the saved word over the
+`graphics.renderScale` config key over native, and the anti-aliasing method is
+`AntiAliasingSetting.Resolve`, the saved word over the `graphics.antiAliasing` config key over the
+graphics mode's own default; FSR 2.2 clamps a scale above native back to it. These two are the display
+settings that reach no window: they are written on each 3D viewport as it is built, so they take hold
+at the next start the way the graphics mode does, which is what the rows' own descriptions say. The
+shadow quality beside them is `ShadowQualitySetting.Resolve`, `--shadow-quality=` over the saved word
+over the `graphics.shadowQuality` config key over `ultra` (`high` on an integrated GPU); it reaches the Enhanced sun alone, and unlike
+those two the apply puts it on the flying world at once (`Launcher.ApplyShadowQuality`, which the
+cockpit pass follows). Its row draws dead while the page's own graphics word is Original. Every other display
+setting is the case where the apply does
 more than save, since `Launcher.ApplyOptions` puts the chosen pacing, mode and size on the window
 there and then rather than at the next start. Those calls run in the order the window needs them: the
 screen the window sits on first, since a mode applied before the move would fill the screen the
@@ -319,20 +329,22 @@ page behind its Preferences page's first door (`--menu=game-options` under
 `--menu=keys` for the KEYS AND BUTTONS page behind its own door). Built-in's one screen carries
 every setting Original spreads over those pages, its rows in its own stepper
 convention: the difficulty, the opening view, the automatic head turn, the nearest-after-a-kill
-targeting switch and the rumble, the graphics mode, the monitor, the window size, the display mode
-and the V-Sync choice, then the four volume levels. Built-in has no continuous control, so a level
-is a stepper moving by the AUDIO page slider's own keyboard step (`SliderControl.KeyStep`, five)
-and clamped at both ends; a step that moves nothing writes nothing, so a level never touched stays
-never set. Built-in has no live preview either: a level is heard once the apply writes it. Sixteen
-rows overflow the band, so the screen is a window of the Controls list's height with its position
-in the heading. The two presentations read the four display settings through one rule
+targeting switch and the rumble, the graphics mode, the monitor, the window size, the display mode,
+the V-Sync choice and the render scale, then the four volume levels. Built-in has no continuous
+control, so a level is a stepper moving by the AUDIO page slider's own keyboard step
+(`SliderControl.KeyStep`, five) and clamped at both ends; a step that moves nothing writes nothing,
+so a level never touched stays never set. Built-in has no live preview either: a level is heard
+once the apply writes it. Seventeen rows overflow the band, so the screen is a window of the
+Controls list's height with its position in the heading. The two presentations read the five
+display settings through one rule
 set (`CSVM/src/UI/Menu/DisplaySettingRows.cs`) over the same per-machine enumerations, so a saved
 value cannot read one way on the VIDEO page and another on Built-in's screen. Every option page reads the saved options from the store on entry and leaves
 through an `OptionsApplyExit` carrying every choice, whichever page it was sent from, so the store
-keeps its one writer. Both graphics choosers cover `original` and `enhanced` and say in their description that
-the choice takes effect on the next start, since the mode is resolved once at launch and applying
-it rebuilds nothing; while the choice differs from the running mode the description names the
-running mode and says a restart is still owed, read off `GraphicsMode.Enhanced`. The
+keeps its one writer. Both graphics choosers cover `original` and `enhanced`, and the apply switches
+the running world at once (`Launcher.SwitchGraphicsMode`), so neither description owes a restart.
+Built-in's screen adds a View Distance row under its chooser (`Utils/ViewDistance.cs`), live the
+same way and marked as Enhanced only. The Original VIDEO page has no line for it and hands the
+saved word back unchanged. The
 startup recovery is `--force-builtin`, which beats everything and rewrites nothing.
 
 **What an Options page focuses with, and what it draws focus as.** Two choices on these pages are
@@ -426,7 +438,7 @@ consumed by `Launcher.OnMenuExit`. The hierarchy is closed:
 | `LaunchExit` | chapter, one `MenuSeatChoice` per seat, `MenuMode`, an `InstantActionDef` for Instant Action, a `VersusRules` for Dogfight, a `MenuNetLaunch` for a networked one | derive the session spec from the CLI plus the payload, bind the seats' pads, build |
 | `CampaignMissionExit` | the profile name, the `cm_sequence` position, one `MenuSeatChoice` per joined human | the same, over the campaign's story position |
 | `QuitExit` | nothing | quit the process |
-| `OptionsApplyExit` | the graphics-mode and difficulty words, the four display settings, the four volume levels, the nearest-after-a-kill switch, the controller-rumble toggle, the opening view and the automatic head turn | save every one of them, then one frame later end the presentation and show it again at its top level |
+| `OptionsApplyExit` | the graphics-mode and difficulty words, the six display settings, the four volume levels, the nearest-after-a-kill switch, the controller-rumble toggle, the opening view and the automatic head turn | save every one of them, then one frame later end the presentation and show it again at its top level |
 
 `MenuSeatChoice` is the plane node, the pad devices the seat claimed, the fit and, for a saved
 custom plane, its resolved `CustomPlaneDef`; the consumer never reads a store. The features build
@@ -557,7 +569,8 @@ hub's figures preview, `plane-construction:overweight` on a build past its capac
 edited build and
 `plane-paint:decals` standing the nose decal picker open as its five-across grid, `campaign`
 and the shared scratch-store campaign poses, `campaign-delete`, `connection` on the Multiplayer
-Connection page, and `connection-games` and `connection-games:searching` on the LAN games list
+Connection page, `connection:gameinfo` and `connection:playerinfo` with GAME INFORMATION or PLAYER
+INFORMATION standing over it on a sample answer, and `connection-games` and `connection-games:searching` on the LAN games list
 over an in-process network holding five sample games, one of another build version, or none, and `lobby[:host|guest[:tab]]` on
 the Multiplayer Lobby over an in-process wire with two guests), and any other value opens that 
 presentation's top level. Built-in's values and output stay stable whatever presentation is added.

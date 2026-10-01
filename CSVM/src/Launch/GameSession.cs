@@ -170,6 +170,8 @@ public partial class GameSession : Node3D
     // The boards' Restart item on an Instant Action or campaign mission: the Launcher frees this
     // session and builds a fresh one. Nothing here can put a mission's opposition back on its own.
     private readonly Action _restartSession;
+    // The graphics-mode action every local seat's controller fires; the switch is the Launcher's.
+    private readonly Action? _toggleGraphicsMode;
     // A campaign mission's end: the Launcher frees this session and reopens the launchscreen on
     // the named profile's debrief, carrying the result so a page can be opened on it. Null
     // outside a menu-driven process (a --campaign= run from the command line has no cabin to
@@ -204,6 +206,8 @@ public partial class GameSession : Node3D
     // here rather than through key-repeat events, since the grace period is measured on wall
     // time regardless of the sim being halted.
     private readonly HoldToRepeat _stepHold = new(initialDelay: 0.3f, repeatInterval: 0f);
+    // The panel each local pane draws the in-flight chat in, empty outside a network match.
+    private readonly List<ChatPanel> _chatPanels = new();
 
     // The master seed every subsystem generator derives from (see Utils.Rng), resolved by the
     // Launcher once per process and re-applied here at each session build. A pinned run takes
@@ -214,16 +218,25 @@ public partial class GameSession : Node3D
     // readonly: a guest's roster arrives over the wire, between construction and the build.
     private IReadOnlyList<Net.NetSeat> _netSeats;
     private Func<int, Flight.Weapons.LoadoutChoice?>? _netSeatFit;
+    private Func<int, Flight.Hangar.CustomPlaneDef?>? _netSeatBuild;
+    private Func<Net.CoopWingmanMessage?>? _netCoopWingman;
     // How this guest reads the host's session clock, null on a host and outside a match. Built
     // from the handshake, whose seed is already in _masterSeed by then.
     private Net.NetClockSlew? _netClock;
     private Net.NetClockPing? _netPing;
+    // The start barrier, null outside a network match. While it holds, the clock is start-held
+    // and only the wire is stepped.
+    private Net.NetStartGate? _startGate;
+    // Whether this machine's world is built, so a guest answers the host's hold word only then.
+    private bool _startBuilt;
     // When the host repeats the match state, null on a guest and outside a match. A guest never
     // holds one, which is what makes the host the only writer of the clock.
     private Net.MatchStateCadence? _matchCadence;
     // AI aircraft and world pools over the wire, null outside a network match.
     private NetWorldLink? _netWorld;
     private NetPositionalStartLink? _netStarts;
+    // The in-flight chat over the wire, null outside a network match.
+    private NetChatLink? _netChat;
     // Why the match stopped, as the host named it. Written where the state is sent and where it
     // is applied, so every machine holds one reason for an end screen to read.
     private Net.NetMatchEnd _matchEnd;
@@ -346,9 +359,17 @@ public partial class GameSession : Node3D
     // advanced on the sim dt (never wall time). Null outside Versus, the Downed events then
     // simply have no subscriber. Freed with this node; flight holds no match state.
     private VersusMatch? _versus;
+    // Capture the Flag's flags over the match, null outside a --ctf network match.
+    private FlagRuntime? _flagPlay;
+    // Zeppelin vs Zeppelin's hulls over the match, null outside a --zvz network match.
+    private ZeppelinVersusRuntime? _zvzPlay;
+    // The multiplayer rearm bases, null outside a match whose world holds any.
+    private RearmRuntime? _rearmPlay;
     // Built on the host alone in a network match, since two rotations diverge on first blood.
     // A guest holds none and takes every placement off the wire.
     private VersusSpawnRotation? _versusSpawns;
+    // A team Dogfight's team names by lobby team number, as this machine's lobby held them.
+    private IReadOnlyDictionary<int, string>? _netTeamNames;
     // The spawn list the session was placed from, kept so a granted spawn resolves its entry
     // index against the same table on every peer. Null where the session walks no list.
     private IReadOnlyList<SpawnPoint>? _spawnList;
@@ -393,6 +414,8 @@ public partial class GameSession : Node3D
     private NetTrailerTargets? _netTrailers;
     // rolling mirrored-tile window past the map edge
     private Mech3.MapEdgeExtender? _edgeExtender;
+    // the static world's merged draws under Enhanced (null outside flight)
+    private Mech3.WorldMerge? _worldMerge;
     // the splitscreen pane rig (null in single player)
     private UI.Boards.SplitScreen? _split;
 
@@ -402,6 +425,18 @@ public partial class GameSession : Node3D
     private Node3D? _worldRoot;
     // the session's LIGHT_STATE point lights (see WorldLights)
     private WorldLights? _worldLights;
+    // The faithful path's projected aircraft shadow, null in enhanced mode, which casts shadow maps
+    // instead. Held so a live graphics-mode switch can build it or free it.
+    private GroundShadowPass? _groundShadows;
+    // The enhanced-only world layers and the mode-dependent builds, held so a live graphics-mode
+    // switch can build, free or rewrite each (ApplyGraphicsMode). Null where the build made none.
+    private Effects.ScorchField? _scorches;
+    private Effects.FogVolumeClutter? _cloudField;
+    private Effects.FogVolumeBanks? _cloudBanks;
+    private IReadOnlyList<Mech3.FogVolumeBox>? _fogVolumes;
+    private Mech3.FogVolumeSpec? _fogVolumeSpec;
+    private ClutterBuilder? _clutter;
+    private SceneBuilder? _worldScene;
     // The session-owned texture archive, kept open past the build scope so the data-driven crash can
     // bake its effect puffers lazily at crash time (the same reason --anim-lab keeps it open, but that
     // path hands it to the AnimLab node instead). Disposed by ReturnToMenu on teardown so a map reload
@@ -455,6 +490,10 @@ public partial class GameSession : Node3D
             ? seats.OrderBy(s => s.SeatIndex).ToArray()
             : Array.Empty<Net.NetSeat>();
         _netSeatFit = ctx.NetSeatFit;
+        _netSeatBuild = ctx.NetSeatBuild;
+        _netTeamNames = ctx.NetTeamNames;
+        // Every guest binds the wingman from its host's word, and one with no word says so loudly.
+        _netCoopWingman = ctx.NetTransport != null && !ctx.NetHost ? ctx.NetCoopWingman ?? (() => null) : null;
         _netClock = ctx.NetHandshake is { } handshake
             ? new Net.NetClockSlew(handshake.HostClock)
             : null;
@@ -475,6 +514,7 @@ public partial class GameSession : Node3D
         _menuPads = ctx.MenuPads;
         _exitSession = ctx.ExitSession;
         _restartSession = ctx.RestartSession;
+        _toggleGraphicsMode = ctx.ToggleGraphicsMode;
         _pauseOptionsFactory = ctx.PauseOptions;
         _campaignMissionEnded = ctx.CampaignMissionEnded;
         _instantActionWrapup = ctx.InstantActionWrapup;
@@ -495,6 +535,19 @@ public partial class GameSession : Node3D
     /// <summary>The session's per-player rigs, the Launcher's F11 placement print reads them.</summary>
     internal List<PlayerRig> Rigs => _rigs;
 
+    /// <summary>The map-edge continuation, null where the world has none. Read by the suites.</summary>
+    internal Mech3.MapEdgeExtender? EdgeExtender => _edgeExtender;
+
+    /// <summary>The static world's merged draws, null outside flight. Read by the suites.</summary>
+    internal Mech3.WorldMerge? WorldMerge => _worldMerge;
+
+    /// <summary>The world's clutter, null where it has none. Read by the suites.</summary>
+    internal ClutterBuilder? Clutter => _clutter;
+
+    /// <summary>The launch as this session resolved it. A campaign launch settles its chapter and
+    /// mission here, out of the story position, so the Launcher's own copy never names them.</summary>
+    internal SessionSpec Spec => _spec;
+
     /// <summary>One rig per seat: the panes, then one pane-less rig per remote pilot, in seat
     /// order. Identical to <see cref="Rigs"/> outside a network match.</summary>
     internal IReadOnlyList<PlayerRig> SeatRigs => _seatRigs;
@@ -511,6 +564,9 @@ public partial class GameSession : Node3D
     /// host's.</summary>
     internal ulong MasterSeed => _masterSeed;
 
+    /// <summary>The session's texture archive, for an instrument reading its textures.</summary>
+    internal TextureArchive? SessionTextures => _sessionTextures;
+
     /// <summary>The whole match's roster in seat order, empty outside a network match.</summary>
     internal IReadOnlyList<Net.NetSeat> NetSeats => _netSeats;
 
@@ -518,10 +574,37 @@ public partial class GameSession : Node3D
     /// of the host's, written from the score messages rather than counted here.</summary>
     internal VersusMatch? Versus => _versus;
 
+    /// <summary>Capture the Flag's flags, null outside a <c>--ctf</c> network match.</summary>
+    internal FlagRuntime? Flags => _flagPlay;
+
+    /// <summary>The in-flight chat over the wire, null outside a network match.</summary>
+    internal NetChatLink? NetChat => _netChat;
+
+    /// <summary>The chat panel each local pane draws, in pane order; empty outside a network match.
+    /// </summary>
+    internal IReadOnlyList<ChatPanel> ChatPanels => _chatPanels;
+
+    /// <summary>Zeppelin vs Zeppelin's hulls, null outside a <c>--zvz</c> network match.</summary>
+    internal ZeppelinVersusRuntime? ZvzPlay => _zvzPlay;
+
+    /// <summary>The multiplayer rearm bases, null outside a match whose world holds any.</summary>
+    internal RearmRuntime? RearmPlay => _rearmPlay;
+
+    /// <summary>How many full-hull reports this machine applied to a seat flown elsewhere, each a
+    /// rearm on the seat's own machine. For a suite to read.</summary>
+    internal int RepairsTaken { get; private set; }
+
+    /// <summary>The mission's zeppelins, null in a flight that runs none.</summary>
+    internal ZeppelinRuntime? ZeppelinHulls => _zeppelins;
+
     /// <summary>Why the match stopped, as the host named it, <c>Running</c> until one does. The
     /// same value on every machine: the host writes it where it sends the state and a guest where
     /// it applies one.</summary>
     internal Net.NetMatchEnd MatchEnd => _matchEnd;
+
+    /// <summary>Each seat's opening entry in a team match's whole spawn table, null outside one.
+    /// </summary>
+    internal IReadOnlyList<int>? TeamOpenings => _spawnPicker?.SeatEntries;
 
     /// <summary>This guest's offset onto host time, null on a host and outside a network match.
     /// A suite reads its counters to tell a live reading from an untouched opening offset.
@@ -531,6 +614,14 @@ public partial class GameSession : Node3D
     /// <summary>This end of the shared clock's round trip, null outside a network session. A
     /// suite reads what it asked or answered.</summary>
     internal Net.NetClockPing? NetPing => _netPing;
+
+    /// <summary>This session's start barrier, null outside a network match. A suite reads why and
+    /// after how long it opened.</summary>
+    internal Net.NetStartGate? StartGate => _startGate;
+
+    /// <summary>Whether the flight is built but waits for every machine to load. The launcher keeps
+    /// its load screen up for as long as this holds.</summary>
+    internal bool StartHeld => _clock is { StartHeld: true };
 
     /// <summary>What is holding this session's world, null before the build. A results board's
     /// wake raises <see cref="PauseState.Ended"/> here, so this is where a suite reads whether the
@@ -567,6 +658,10 @@ public partial class GameSession : Node3D
     /// <summary>The network match's world link, null outside one. The harness suites read the
     /// admitted AI and the applied events off it.</summary>
     internal NetWorldLink? NetWorld => _netWorld;
+
+    /// <summary>The AI combat voice, null when the session built no sound defs. The harness suites
+    /// raise and count its call-outs.</summary>
+    internal AiVoiceRuntime? AiVoice => _aiVoice;
 
     /// <summary>The cutscene host, null outside a flown world. A suite drives its airframe swap
     /// seam the way a replayed definition's code does.</summary>
@@ -606,6 +701,7 @@ public partial class GameSession : Node3D
         }
 
         WireNetClock();
+        WireStartGate();
         // Published as the ambient Current so WorldSession, which the test harness also drives with
         // no session around it, can record its phases blind.
         _startup = new StartupProfile(_spec.ModeName, Time.GetTicksMsec())
@@ -640,11 +736,10 @@ public partial class GameSession : Node3D
         };
         GameClock.Current = _clock;
         LoadProgress.Report(LoadStep.Scaffold);
-        // Every world camera outside the cockpit interior draws at the one decoded base
-        // (CameraController.ExternalFovDeg). The 50 is the static viewer's own framing, which
-        // shows a model rather than the world and is not one of the original's views.
-        _camera.Fov = _spec.Fly || _spec.Freecam || _spec.AnimLab
-            ? CameraController.ExternalFovDeg : 50f;
+        // World cameras outside the cockpit draw at the decoded base, and the viewer's 50 frames
+        // a model. A free camera's own angle option replays a cockpit view an F11 line printed.
+        _camera.Fov = _spec.Fov ?? (_spec.Fly || _spec.Freecam || _spec.AnimLab
+            ? CameraController.ExternalFovDeg : 50f);
         // One rig per rendered view, before anything camera-anchored is built (the skydome and
         // weather visuals below are per-rig). Single player reuses the main-viewport camera.
         BuildRigs(_spec.Fly ? _spec.Players : 1);
@@ -715,7 +810,7 @@ public partial class GameSession : Node3D
         // lives on InstantActionDirector.TryCreate.
         _iaDirector = InstantActionDirector.TryCreate(_spec);
         // The campaign's sibling, on the same "a load failure flies without a mission" contract.
-        _campaign = CampaignDirector.TryCreate(_spec, _zrdrPath, state.MissionZrdrPath);
+        _campaign = CampaignDirector.TryCreate(_spec, _zrdrPath, state.MissionZrdrPath, _netCoopWingman);
         if (_campaign is { } campaign)
         {
             // The mission's own WAKEUP_SOUND_GROUP is what cues every campaign track, so the
@@ -782,6 +877,7 @@ public partial class GameSession : Node3D
         try
         {
             sw = Stopwatch.StartNew();
+            ShaderTwins.ReleaseUnused();
             LoadArchives(state);
             LoadProgress.Report(LoadStep.Archives);
             // The SOUND archive is scoped to this build everywhere but the lab, whose node owns its
@@ -875,11 +971,101 @@ public partial class GameSession : Node3D
         }
 
         FinishFraming(state);
+        BuildWorldMerge(state);
+        // By default only once this process has switched. The warm-up costs what one switch does,
+        // and a player who never switches would pay it at every load.
+        if (_spec.ShaderWarmup == "load" || (_spec.ShaderWarmup == "auto" && EnhancedLook.HasSwitched))
+            WarmShadersNow();
         _simulation = new SessionSimulation(new SessionSimulationRuntime(this));
         _startup?.EndBuild();
         InSession = true;
+        HoldStart();
         LoadProgress.Report(LoadStep.Finished);
         return true;
+    }
+
+    /// <summary>Follow a live graphics-mode switch the launcher has already applied to the shaders,
+    /// the sun, the Environment and the clutter fade. A layer only one mode builds is built or
+    /// freed, and every build-time choice is made again. The zone is lit last, under the other arm.
+    /// docs/architecture/Spec.md lists what follows and what waits for the next load.</summary>
+    public void ApplyGraphicsMode()
+    {
+        bool enhanced = GraphicsMode.Enhanced;
+        // First: every step below that builds anything bakes from the archive's textures.
+        EnhancedLook.FollowAlphaDepth(_sessionTextures);
+        SwitchProfile.Mark("alpha");
+        _worldScene?.FollowGraphicsMode();
+        SwitchProfile.Mark("world");
+        // After the world's own materials, whose blend verdicts decide what merges.
+        _worldMerge?.Follow(enhanced);
+        SwitchProfile.Mark("merge");
+        _clutter?.Recut();
+        _edgeExtender?.FollowClutterFade();
+        SwitchProfile.Mark("clutter");
+        _cloudField?.FollowGraphicsMode();
+        SwitchProfile.Mark("cloudfield");
+        _worldLights?.FollowGraphicsMode();
+        SwitchProfile.Mark("lights");
+        _worldEffectsFactory?.FollowGraphicsMode();
+        SwitchProfile.Mark("effects");
+        FollowCloudBanks();
+        SwitchProfile.Mark("banks");
+        foreach (var rig in _rigs)
+        {
+            if (rig.Controller?.CockpitPass?.Env is { } env)
+            {
+                EnhancedLook.ApplyEnvironment(env, enhanced, _spec.SkippedPasses);
+                Effects.FogVolumeBanks.ApplyFroxelFog(env, _cloudBanks != null);
+            }
+        }
+        SwitchProfile.Mark("cockpit");
+        FollowWindStreaks();
+        SwitchProfile.Mark("streaks");
+        FollowSun();
+        SwitchProfile.Mark("zone");
+        if (enhanced)
+        {
+            Drop(_groundShadows);
+            _groundShadows = null;
+        }
+        else if (_groundShadows == null && _worldRoot != null && _projectiles != null)
+        {
+            BuildGroundShadows();
+        }
+        if (_plane != null && BuildsCollision)
+        {
+            if (enhanced && _scorches == null && Effects.ScorchField.Create() is { } scorches)
+            {
+                _scorches = scorches;
+                _plane.AddChild(scorches);
+            }
+            else if (!enhanced && _scorches != null)
+            {
+                Drop(_scorches);
+                _scorches = null;
+            }
+        }
+        SwitchProfile.Mark("shadows");
+    }
+
+    /// <summary>A live View Distance change under Enhanced cuts the clutter cells again. Their size
+    /// and visibility range come from the fade scale the launcher just wrote, as do the map edge's
+    /// copies' ranges.</summary>
+    public void FollowClutterFade()
+    {
+        _clutter?.Recut();
+        _edgeExtender?.FollowClutterFade();
+    }
+
+    /// <summary>After the launcher re-dressed the session sun: each cockpit pass re-takes it, then
+    /// the zone is written again over them all. ⚠ Keep the zone last. The Environment and sun
+    /// writes put back defaults the zone's sky colour, energies and shadow distance overwrite.
+    /// </summary>
+    public void FollowSun()
+    {
+        foreach (var rig in _rigs)
+            rig.Controller?.CockpitPass?.FollowSun();
+        _weatherRig?.ReapplyZone();
     }
 
     public override void _Notification(int what)
@@ -916,12 +1102,23 @@ public partial class GameSession : Node3D
         }
     }
 
+    public override void _Input(InputEvent @event)
+    {
+        // Ahead of every other handler, so a letter typed into a chat line reaches no debug key,
+        // overlay or skip. Only the keys; the pointer stays with whoever reads it.
+        if (_netChat is { } chat && @event is InputEventKey key
+            && chat.TakeKey(key.Keycode, key.Pressed, (char)key.Unicode))
+        {
+            GetViewport()?.SetInputAsHandled();
+        }
+    }
+
     public override void _UnhandledInput(InputEvent @event)
     {
         // A cutscene skips on any input, as the original's state core does; a stick's is polled in
         // PollStickSkip. ⚠ Escape is exempt: it is the way out of the session. ⚠ Pads count only
         // where this session reads pads at all, since a pad reports button 0 pressed on arrival.
-        if (_cutscene is { Playing: true }
+        if (_cutscene is { Playing: true } && !StartHeld
             && (@event is InputEventKey { Pressed: true, Echo: false, Keycode: not Key.Escape }
                 || (!_spec.PadsDisabled && @event is InputEventJoypadButton { Pressed: true })))
         {
@@ -986,6 +1183,8 @@ public partial class GameSession : Node3D
             // A guest's offset onto host time is walked, not written, so nothing reading a
             // replicated timestamp sees the correction land on one frame.
             _netClock?.Advance(delta);
+            // Wall time, so a line keeps its ten seconds whatever the sim clock is doing.
+            _netChat?.Chat.Advance((float)delta);
             if (clock.ParentDriven)
             {
                 DriveParentSimulation(clock);
@@ -1058,14 +1257,24 @@ public partial class GameSession : Node3D
     /// </summary>
     public override void _PhysicsProcess(double delta)
     {
-        if (delta <= 0.0 || _clock is not { ParentDriven: false })
+        if (delta <= 0.0 || _clock is not { } clock)
+            return;
+        // Ahead of the mode check: a held start steps the wire from here in every clock mode. The
+        // parent-driven loop runs no steps while held.
+        bool wireStepped = clock.StartHeld;
+        if (wireStepped && !StepStartHold(clock, delta))
+            return;
+        if (clock.ParentDriven)
             return;
         // Before the step, never after: everything below reads world poses, and a follower or a
         // held pose seeded from a drawn one would feed the interpolation back into the simulation.
         RenderPoses.Restore();
         // Before the step, so everything that arrived is already applied when the phases run.
-        _net?.Step(delta);
-        _netPing?.Step();
+        if (!wireStepped)
+        {
+            _net?.Step(delta);
+            _netPing?.Step();
+        }
         _simulation?.Step((float)delta);
     }
 
@@ -1133,6 +1342,20 @@ public partial class GameSession : Node3D
         {
             Log.Info("world", $"egen: {roster.OwedAirframes} wave aeroplane(s) ordered from {ordered} block slot(s); the load screen builds them so a launch binds one instead of building it");
         }
+    }
+
+    // The enhanced scorch's one decision point, the way RegisterBurstLight is the burst light's: a
+    // hit marks the ground it burned when it carved a bowl, or when its effect is one of the
+    // fireballs EffectCatalogue names for the burst light. Every other impact, the gun hits among
+    // them, leaves the surface alone. One crater radius serves every weapon because all six CRATER
+    // carriers author the block bare (docs/org/craters.md). Internal so the scorch suite decides as
+    // a session does rather than modelling it.
+    internal static void RegisterScorch(Effects.ScorchField scorches, Vector3 at, Vector3 normal,
+        string? effectName, bool carved)
+    {
+        if (!carved && (effectName == null || !EffectCatalogue.IsBurstLight(effectName)))
+            return;
+        scorches.Mark(at, normal, CraterShape.RimRadius, carved);
     }
 
     /// <summary>Carries out one step of the build the load screen still owes and answers
@@ -1365,6 +1588,17 @@ public partial class GameSession : Node3D
         return _gatedScan;
     }
 
+    // The whole warm-up at once, while the load screen is still up (--shader-warmup=load).
+    private void WarmShadersNow()
+    {
+        long start = Stopwatch.GetTimestamp();
+        int twins = ShaderTwins.WarmOtherMode();
+        int cards = _cloudField?.WarmOtherMode() ?? 0;
+        // The other mode's twins first, so the advanced variants the hidden frame builds cover them.
+        bool advanced = EnhancedLook.WarmAdvancedVariants(this);
+        Log.Info("world", $"shader warm-up: other mode's twins={twins} cloud_cards={cards} advanced_variants={(advanced ? "hidden frame" : "not owed")} at load ms={Stopwatch.GetElapsedTime(start).TotalMilliseconds:0.0}");
+    }
+
     // Loads the session's core archives (gamez, textures, sounds, sound defs/groups) and routes the
     // texture/sound archives to whichever owner outlives this build scope.
     private void LoadArchives(BuildState state)
@@ -1515,8 +1749,11 @@ public partial class GameSession : Node3D
             {
                 extraAccents.AddRange(InstantActionRuntime.VoiceAccentIds(iaVoice.Runtime.Def));
             }
+            // Each network seat's chosen pilot speaks its lines at runtime too.
+            var seatPilots = _netSeats.Select(s => UI.Menu.PilotVoices.SpeakerFor(s.Voice))
+                .OfType<int>().ToList();
             voiceClips = CombatVoice.SessionPrewarmNames(
-                state.ZrdrPath, state.MissionZrdrPath, voiceDefs, voiceGroups, extraAccents);
+                state.ZrdrPath, state.MissionZrdrPath, voiceDefs, voiceGroups, extraAccents, seatPilots);
         }
         var session = WorldSession.Build(
             new WorldSession.Options
@@ -1618,13 +1855,24 @@ public partial class GameSession : Node3D
         state.DeckUndimmedMeshes = builder.CloudDeckUndimmedMeshes;
         // Owned by the session so a teardown drops the previous world's lights.
         _worldLights = session.Lights;
+        // Under Enhanced every burning emitter lights its surroundings; on the faithful path no
+        // emitter registers, so the source submits nothing.
+        _worldLights?.AddSource(_ambience.SubmitFires);
         state.CrashProgram = session.Program;
         state.WorldScene = session.Builder.Scene;
+        _worldScene = session.Builder.Scene;
+        _clutter = session.Clutter;
         state.WorldRuntime = session.Runtime;
         // The mission's craters, which need world colliders both to find the terrain a round struck
         // and to cut that terrain's own trimesh. Owned by the session, so they last exactly as long
         // as the mission does and a new launch starts on uncratered ground.
         state.Craters = BuildsCollision ? new CraterField(session.Root) : null;
+        // The enhanced scorch marks over those carves, a remake-only layer: null on the faithful
+        // path, where the field, its decal pool and its texture are never built at all.
+        _scorches = BuildsCollision ? Effects.ScorchField.Create() : null;
+        state.Scorches = _scorches;
+        if (_scorches != null)
+            session.Root.AddChild(_scorches);
         // After the bootstrap: an intro definition has already raised its codes, and this is where
         // the host picks up the two nodes it drives.
         _cutscene?.BindWorld(session.Runtime, session.Aircraft);
@@ -1820,8 +2068,11 @@ public partial class GameSession : Node3D
             // rig, and needs no per-frame driving unlike the dome/deck/whiteout below.
             var fogVolumes = Mech3.FogVolumeSpec.VolumesOf(state.Gamez);
             var fogVolumeSpec = Mech3.FogVolumeSpec.Load(SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter));
+            _fogVolumes = fogVolumes;
+            _fogVolumeSpec = fogVolumeSpec;
             var cloudField = Effects.FogVolumeClutter.Create(state.Gamez, state.Textures,
                 fogVolumeSpec, fogVolumes, _spec.CloudJitter);
+            _cloudField = cloudField;
             if (cloudField != null)
             {
                 _worldRoot!.AddChild(cloudField);
@@ -1841,6 +2092,11 @@ public partial class GameSession : Node3D
                 UI.Boards.SplitScreen.SetVisualLayer(cloudField, fvolLayer);
             }
 
+            // Enhanced Graphics only: the volumetric bank under those cards. --no-fog covers it as
+            // it covers the zone fog and the whiteout, and the Environment flag is cleared for a
+            // world that builds none, the froxel pass costing its buffer wherever it is left on.
+            var cloudBanks = BuildCloudBanks();
+
             // The sun goes in with the weather: its bearing is the zone's own SUNLIGHT_ORIENTATION,
             // applied by the same zone-apply that writes the fog. The ambience is the wind seam and
             // the viewer set carries each pane's camera pose for the puffer distance fade.
@@ -1855,6 +2111,9 @@ public partial class GameSession : Node3D
             // second consumer rather than re-loaded. Tick resolves each camera's weather state from
             // it, and its in-volume whiteout where fog_zone is armed.
             _weatherRig.SetFogVolumes(fogVolumes, fogVolumeSpec);
+            // The banks' scattering colour is the applied zone's, so the rig that owns the zone
+            // apply writes it, at build and on every later zone change.
+            _weatherRig.SetFogBanks(cloudBanks);
             // The flown objects the band's per-object gate moves between layers (ObjectZoneGate).
             // A plane or a zeppelin on the far side of the overcast stops drawing.
             _weatherRig.SetGatedObjects(GatedObjects);
@@ -2429,8 +2688,11 @@ public partial class GameSession : Node3D
         // _cutscene.Playing is settled before the player's spawn is chosen. Only a campaign intro
         // withholds --pos=; every other --pos= flight keeps landing on it immediately.
         _spawnPicker.WithholdOverrideForCutscene = _campaign != null && _cutscene is { Playing: true };
+        // A team Dogfight walks its teams' blocks of the whole table instead of the free-for-all's.
+        _spawnPicker.SeatTeams = SpawnTeams();
         var spawnList = _spawnPicker.LoadSpawnList(state.MissionZrdrPath, iaScenario);
         int spawnBase = _spawnPicker.ChooseSpawnBase(spawnList);
+        _spawnPicker.PlanTeams(spawnList, spawnBase);
         _spawnList = spawnList;
 
         // The weapons catalogue and stock loadouts, loaded once, and ONE shared projectile pool
@@ -2468,9 +2730,19 @@ public partial class GameSession : Node3D
             // reports the struck collider, the runtime resolves it to a destructible and
             // spends the weapon's HEALTH_DAMAGE. Null runtime ⇒ impacts stay cosmetic.
             DamageSink = state.WorldRuntime != null ? state.WorldRuntime.DamageAt : null,
+            ShooterDamageSink = state.WorldRuntime != null ? state.WorldRuntime.DamageAt : null,
             // Route a CRATER weapon's ground strike to the mission's crater field. The pool asks only
             // for a node carrying can_modify, which no shipped node does (Mech3.CraterField).
             CraterSink = state.Craters != null ? state.Craters.TryCarve : null,
+            // And the scorch that layers over the carve under Enhanced (Effects.ScorchField).
+            // Read through the field, which a live mode switch builds or frees.
+            ScorchSink = state.Craters != null
+                ? (at, normal, effectName, carved) =>
+                {
+                    if (_scorches is { } scorch)
+                        RegisterScorch(scorch, at, normal, effectName, carved);
+                }
+            : null,
             // The same equal-power splitscreen factor FlightAudio's own-ship loops take, plus the
             // nearest-human snapshot shared with WorldSession and the world-effects runtime.
             MixGain = mixGain,
@@ -2499,8 +2771,7 @@ public partial class GameSession : Node3D
         // The original's per-frame ground shadow, one quad under every aircraft. Roster and rigs
         // are read fresh, so waves are covered and each pane's own pilot takes the player's shape
         // there. Enhanced graphics mode builds nothing here and casts real shadow maps instead.
-        GroundShadowPass.Build(_worldRoot!, AllAircraft, PlayerPositionsSnapshot, () => _rigs,
-            () => _weatherRig?.SunlightRgb ?? WeatherRig.DefaultSunlightRgb);
+        BuildGroundShadows();
 
         // The smoke screens' own smoke, wired here rather than at their construction because the
         // chapter's textures and anim program are only resolved this far into the build. Same
@@ -2552,8 +2823,13 @@ public partial class GameSession : Node3D
         // binds every pane's VersusHud to this one instance below); the score/respawn plumbing
         // that feeds it Downed reports only runs once every rig exists, further down.
         VersusMatch? versus = _spec.Versus
-            ? new VersusMatch(_seatRigs.Count, _spec.VsKills, _spec.VsTimeMinutes * 60f, _spec.VsLives)
+            ? new VersusMatch(_seatRigs.Count, _spec.VsKills, _spec.VsTimeMinutes * 60f, _spec.VsLives,
+                MatchScores.Load(state.ZrdrPath, why => Log.Warn("flight", $"dogfight: player.zrd unreadable, scoring the executable's fallbacks: {why}")))
             : null;
+        if (versus != null && SeatTeams() is { } seatTeams)
+        {
+            versus.AssignTeams(seatTeams, _netTeamNames);
+        }
 
         // The original's HUD bitmap font, loaded once and shared across panes. Null when the rimage
         // atlas is absent, and its consumers are then simply not built.
@@ -2635,6 +2911,9 @@ public partial class GameSession : Node3D
             Sounds = state.Sounds,
             SoundDefs = state.SoundDefs,
             SoundGroups = state.SoundGroups,
+            // Read through the field: the radio is built after these bindings, and a session
+            // with none never ducks.
+            VoiceDuck = new EngineVoiceDuck(() => _radio?.OnAir != null, AudioMix.EffectsGain),
             DebugCollision = state.DebugCollision,
             // Read through the field rather than captured by value: the rig is built after these
             // bindings, and a zone apply rewrites the band while the mission runs.
@@ -2645,12 +2924,14 @@ public partial class GameSession : Node3D
             RigCount = _seatRigs.Count,
             NetSeats = _netSeats,
             SeatFit = _netSeatFit,
+            SeatBuild = _netSeatBuild,
             MixGain = mixGain,
             PadAssignment = padAssignment,
             PauseState = _pauseState!,
             MenuInputFor = MenuInputFor,
             ExitsToMenu = _menuDriven,
             ExitSession = _exitSession,
+            ToggleGraphicsMode = _toggleGraphicsMode,
             SpawnList = spawnList,
             SpawnBase = spawnBase,
             StuntZones = stuntZones,
@@ -2846,11 +3127,15 @@ public partial class GameSession : Node3D
             _versus = match;
             // Spawn rotation: a downed seat comes back on a point picked against the living field,
             // since a fixed spawn can be camped at. Its Rng comes off the master alone, so no pick
-            // here shifts Rng.Spawn. ⚠ Never on a guest: a second rotation diverges on first blood.
+            // here shifts Rng.Spawn. A team match rotates each seat inside its own team's block.
+            var rotationRng = new Random(Rng.IntSeedFor(Rng.VersusSpawn));
+
+            // ⚠ Never on a guest: a second rotation diverges on first blood.
             _versusSpawns = _netSeats.Count > 0 && _net is not { IsHost: true }
                 ? null
-                : VersusSpawnRotation.For(spawnList, spawnBase, _seatRigs.Count,
-                    new Random(Rng.IntSeedFor(Rng.VersusSpawn)));
+                : _spawnPicker.SeatEntries is { } openings && _spawnPicker.SeatBlocks is { } blocks
+                    ? VersusSpawnRotation.ForBlocks(spawnList, openings, blocks, SpawnTeams()!, rotationRng)
+                    : VersusSpawnRotation.For(spawnList, spawnBase, _seatRigs.Count, rotationRng);
             // Who downed each seat last, which the rotation weighs heaviest: the Downed report
             // carries it, and the respawn that reads it happens seconds later.
             _lastKiller = new int?[_seatRigs.Count];
@@ -2884,8 +3169,8 @@ public partial class GameSession : Node3D
                             match.RegisterDeath(victim);
                     };
                 }
-            match.MatchCompleted += () => Log.Info("flight", $"dogfight: match complete, {string.Join(", ", match.Standings().Select(s => $"P{s.PlayerIndex + 1} {s.Score}pts {s.Kills}K/{s.Deaths}D (#{s.Rank})"))}");
-            Log.Info("flight", $"dogfight: {_seatRigs.Count} pilots, {(match.KillTarget > 0 ? $"first to {match.KillTarget} points" : "no kill target")}, {(match.TimeLimit > 0f ? $"{match.TimeLimit / 60f:0.#} min limit" : "no time limit")}");
+            match.MatchCompleted += () => Log.Info("flight", $"dogfight: match complete, {string.Join(", ", match.Standings().Select(s => $"P{s.PlayerIndex + 1} {s.Score}pts {s.Kills}K/{s.Deaths}D (#{s.Rank})"))}{string.Concat(match.TeamStandings().Select(t => $", team {t.Team} '{t.Name}' {t.Score}pts (#{t.Rank})"))}");
+            Log.Info("flight", $"dogfight: {_seatRigs.Count} pilots, {(match.KillTarget > 0 ? $"first to {match.KillTarget} points" : "no kill target")}, {(match.TimeLimit > 0f ? $"{match.TimeLimit / 60f:0.#} min limit" : "no time limit")}{(match.Teamed ? $", teams by seat {string.Join(",", Enumerable.Range(0, match.PlayerCount).Select(match.TeamOf))}" : "")}, {match.Scores}");
 
             // The match's shared results board: same construction as the race board above,
             // one CanvasLayer over the whole window (the match ends for everybody at once), R
@@ -2914,6 +3199,9 @@ public partial class GameSession : Node3D
         // over to the host, so the match has to stand first.
         WireNetMatch();
 
+        // The in-flight chat, once every local seat has its aeroplane to take the keys from.
+        WireNetChat();
+
         // --incoming: the incoming-fire test rig, a phantom shooter on every pilot's six, so both
         // cues and the shield are reachable with one player, no AI gunner needed.
         if (_spec.IncomingPass is float incomingPass)
@@ -2936,6 +3224,18 @@ public partial class GameSession : Node3D
         // ⚠ The roster hook too: an aircraft a wave releases never passes through the _rigs loop.
         void PostKillLine(FlightController victim, int victimId, int? killer)
         {
+            // A seat's death in a match takes the Dogfight death lines, which post on every death,
+            // crashes included. On the wire the host's notice posts them, never this report.
+            if (_versus is { } m && victimId >= 0 && victimId < m.PlayerCount)
+            {
+                if (_netSeats.Count == 0)
+                {
+                    PostSplitScreenDeath(victimId, killer is int k && k >= 0 && k < m.PlayerCount ? k : null);
+                }
+
+                return;
+            }
+
             if (!HudMessages.WordsKillLine(victim))
             {
                 return;
@@ -2947,16 +3247,7 @@ public partial class GameSession : Node3D
                 {
                     continue;
                 }
-                // Dogfight words a death by seat, so the gate is the VICTIM being one. The decoded
-                // post reads nothing off the killer, and an unattributed death (a mid-air, the
-                // ground) still posts its line. An AI in a match keeps the decoded wording.
-                if (_versus is { } m && victimId >= 0 && victimId < m.PlayerCount)
-                {
-                    int? seat = killer is int k && k >= 0 && k < m.PlayerCount ? k : null;
-                    stack.Post(VersusHud.KillLine(seat, victimId),
-                        HudMessages.SideOf(victim.Team, viewer.Team));
-                    continue;
-                }
+                // An AI in a match keeps the single-player wording.
                 HudMessages.PostKill(stack, weaponMessages, victim, viewer.Team,
                     ReferenceEquals(victim, viewer), _pilotName);
             }
@@ -2984,7 +3275,7 @@ public partial class GameSession : Node3D
 
         // The voice dispatcher needs the world's WorldSounds (prewarmed
         // above) and the sound defs. Built before the --ai loop so spawns can register; the
-        // players register as damage sources only (WA-HighDmg's broadcast trigger).
+        // players register as event sources, and a network seat as its chosen pilot too.
         if (state.WorldRuntime?.Sounds is { } worldSounds
             && state.SoundDefs is { } vDefs && state.SoundGroups is { } vGroups)
         {
@@ -2999,14 +3290,20 @@ public partial class GameSession : Node3D
             // WA-Turret: subscribed to the pool, not to a turret list, so the emplacements built
             // further down and every carried gunner report through one seam.
             _aiVoice.WatchTurrets(projectiles);
-            foreach (var rig in _rigs)
+            RegisterPlayerVoices(_aiVoice);
+            if (_spec.CaptureTheFlag)
             {
-                if (rig.Controller is { } human)
-                {
-                    _aiVoice.RegisterPlayer(human);
-                }
+                worldSounds.Prewarm(FlagRuntime.VoiceLines);
+            }
+
+            if (_spec.ZeppelinVsZeppelin)
+            {
+                worldSounds.Prewarm(ZeppelinVersusRuntime.VoiceLines);
             }
         }
+
+        // Capture the Flag, once the match, the wire and the radio stand.
+        WireFlags(state.WorldRuntime, state.Gamez, state.WorldScene, weaponMessages);
         // An anchored net rides its trailer target, so every follower built below takes a supplier
         // for the object its net names. The player is rig 0, anything else is a world node, and a
         // name that resolves to nothing leaves the net at its authored coordinates.
@@ -3181,7 +3478,7 @@ public partial class GameSession : Node3D
         // along their nets as kinematic world nodes. ⚠ Build them before --generators below, so a
         // zeppelin generator's min_altitude gate reads the flown host's live Y from the first step.
         bool iaZeppelinRun = iaRt?.IsZeppelinRun ?? false;
-        if (_spec.Zeppelins || iaZeppelinRun || _spec.Zep != null)
+        if (_spec.Zeppelins || iaZeppelinRun || _spec.Zep != null || _spec.ZeppelinVsZeppelin)
         {
             List<ZeppelinDef> zepDefs;
             try
@@ -3506,7 +3803,10 @@ public partial class GameSession : Node3D
 
         WireNetDirector();
         WireNetWorld(state.WorldRuntime);
-        WireNetPositionalStarts();
+        // Zeppelin vs Zeppelin, once the hulls, their pools and the world's wire stand.
+        WireZeppelinVersus(state.ZrdrPath, weaponMessages);
+        WireRearmBases(state.WorldRuntime, state.ZrdrPath, weaponMessages);
+        WireNetPositionalStarts(state.WorldRuntime);
         WireNetCutscenes();
 
         // F15 / --debug-targets: who is aiming at whom. Reads the live gunners through closures
@@ -3604,6 +3904,8 @@ public partial class GameSession : Node3D
                 MissionTargets.Load(state.MissionZrdrPath,
                     SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter)),
                 state.WorldRuntime);
+            // A team mode labels its flags and hulls by side over the table's own lines.
+            sites.Sides = key => _flagPlay?.SideOf(key) ?? _zvzPlay?.SideOf(key);
             flightRoster.SetTargetObjectives(into => sites.Collect(into));
             var modeSites = new List<AimCandidate>();
             sites.Collect(modeSites);
@@ -3726,6 +4028,32 @@ public partial class GameSession : Node3D
         }
         if (state.Textures.MissingTextures.Count > 0)
             Log.Info("world", $"[textures] {state.Textures.MissingTextures.Count} referenced texture(s) absent from this install: {string.Join(", ", state.Textures.MissingTextures)}");
+    }
+
+    // Flight only: the inspection modes pick and edit single nodes, which a merged draw would not show.
+    // ⚠ Keep it last in the build, after every placement and hide, so what stands visible is what
+    // the mission shows.
+    private void BuildWorldMerge(BuildState state)
+    {
+        if (!_spec.Fly || state.NodeSubtree != null || _plane == null || _worldScene == null)
+            return;
+        var parked = _unplacedWatch;
+        _worldMerge = new Mech3.WorldMerge(_plane, _worldScene, state.WorldRuntime,
+            () => ParkedAndDeck(parked));
+        _plane.AddChild(_worldMerge);
+        _worldMerge.Follow(GraphicsMode.Enhanced);
+    }
+
+    // What the merge leaves alone besides the runtime's claims: the parked vehicles and the cloud deck.
+    // The deck follows the camera, and the weather rig sets its visibility per pane.
+    private IEnumerable<Node3D> ParkedAndDeck(WorldBuilder? builder)
+    {
+        if (builder == null)
+            yield break;
+        foreach (var parked in builder.ParkedEntities)
+            yield return parked;
+        if (builder.CloudDeck is { } deck)
+            yield return deck;
     }
 
     // The post-build framing pass: subject framing for the static views, the freecam/anim-lab mesh
@@ -3919,7 +4247,8 @@ public partial class GameSession : Node3D
     // of the controller's own tick, which is where a declined press's held state is re-read.
     private void PollStickSkip()
     {
-        if (_stickSkip is not { } stick || _cutscene == null)
+        // No skip while the start is held: the film has not begun on the machines still loading.
+        if (_stickSkip is not { } stick || _cutscene == null || StartHeld)
         {
             return;
         }
@@ -4039,6 +4368,9 @@ public partial class GameSession : Node3D
             return true;
         }
 
+        // A host built first sends its hold at once, so it can land inside this pump.
+        // ⚠ Claim the start words before pumping, or that hold is dropped as unknown.
+        net.On<Net.StartGateMessage>(TakeStartWord);
         for (int i = 0; i < NetJoinSteps && !net.Joined; i++)
         {
             net.Step(GameClock.FixedDt);
@@ -4159,6 +4491,7 @@ public partial class GameSession : Node3D
         net.On<Net.DamageMessage>((_, damage) => TakeDamage(damage));
         net.On<Net.DeathMessage>((_, death) => TakeDeath(death));
         net.On<Net.ScoreMessage>((_, score) => TakeScore(score));
+        net.On<Net.DeathNoticeMessage>((_, notice) => TakeDeathNotice(notice));
         if (net.IsHost)
         {
             // A hit is addressed to one machine, everything else is news for the whole field.
@@ -4203,6 +4536,50 @@ public partial class GameSession : Node3D
         {
             rig.Downed += (_, killer) => ReportDeath(seat, killer);
         }
+    }
+
+    // The in-flight chat, in every network mode: one chat per machine, drawn in each local pane,
+    // typed into from the seat that reads the keyboard. A pad-only splitscreen seat reads it and
+    // types nothing, since a line takes a keyboard.
+    private void WireNetChat()
+    {
+        if (_net is not { } net || _netSeats.Count == 0)
+        {
+            return;
+        }
+
+        _netChat = NetChatLink.Open(net, _flightStrings);
+        foreach (var pane in _rigs)
+        {
+            var panel = new ChatPanel
+            {
+                Chat = _netChat.Chat,
+                ShowsEntry = pane.Controller is { UseKeyboard: true },
+                MouseFilter = Control.MouseFilterEnum.Ignore,
+                FocusMode = Control.FocusModeEnum.None,
+            };
+            var layer = new CanvasLayer { Name = "chat", Layer = HudLayers.Hud };
+            layer.AddChild(panel);
+            pane.HudParent.AddChild(layer);
+            _chatPanels.Add(panel);
+            WireSeatChat(pane.Index);
+        }
+
+        Log.Info("core", $"net chat: {_rigs.Count} pane(s), {(net.IsHost ? "host (relaying an all-chat to every machine and a team line to the typist's team)" : "guest (sending its lines to the host)")}");
+    }
+
+    // One local seat's keys into the chat. Per controller, like the combat wiring, so an airframe
+    // swap's replacement is wired again.
+    private void WireSeatChat(int seat)
+    {
+        if (_netChat is not { } chat || seat < 0 || seat >= _seatRigs.Count
+            || _seatRigs[seat].Controller is not { UseKeyboard: true } pilot)
+        {
+            return;
+        }
+
+        pilot.KeyboardHeld = () => chat.HoldsKeyboard;
+        pilot.ChatAsked += team => chat.Open(seat, team);
     }
 
     // One round this machine fired, told to the field so every other copy of the aeroplane
@@ -4271,11 +4648,13 @@ public partial class GameSession : Node3D
         // reads. It has flown on by the time the claim lands, and the zone must not fly with it.
         var pose = new Transform3D(hit.Victim.Attitude, hit.Victim.WorldPosition);
         int weapon = _weaponWire.TryGetValue(hit.Weapon.Id, out int index) ? index : 0;
+        int hull = ZeppelinVersus.HullOfShooter(hit.Shooter);
         net.SendToSeat(
             victimSeat,
             new Net.HitMessage((byte)victimSeat,
                 shooterSeat >= 0 ? (byte)shooterSeat : Net.NetMessage.NoSeat, (ushort)weapon,
-                hit.DamageScale, (short)hit.ShapeIndex, pose.AffineInverse() * hit.Impact),
+                hit.DamageScale, (short)hit.ShapeIndex, pose.AffineInverse() * hit.Impact,
+                hull is >= 0 and < Net.NetMessage.NoSeat ? (byte)hull : Net.NetMessage.NoSeat),
             Net.NetChannels.Events);
         return true;
     }
@@ -4294,6 +4673,7 @@ public partial class GameSession : Node3D
 
         int shooter = hit.ShooterSeat < _seatRigs.Count
             ? _seatRigs[hit.ShooterSeat].Controller?.PlayerIndex ?? ProjectilePool.NoShooter
+            : hit.Hull != Net.NetMessage.NoSeat ? ZeppelinVersus.BroadsideShooter(hit.Hull)
             : ProjectilePool.NoShooter;
         var pose = new Transform3D(victim.Attitude, victim.WorldPosition);
         victim.TakeProjectileHit(defs.All[hit.Weapon], pose * hit.LocalImpact,
@@ -4315,13 +4695,24 @@ public partial class GameSession : Node3D
     }
 
     // The stage and flag words are sent zero and read as nothing. The damage stages this drives
-    // are the hull's, and a part-by-part ledger is not on the wire.
+    // are the hull's, and a part-by-part ledger is not on the wire. A full hull is a rearm on the
+    // owner's machine, which takes the stages off again, as its own Rearm did.
     private void TakeDamage(in Net.DamageMessage damage)
     {
         if (damage.Seat < _seatRigs.Count
             && _seatRigs[damage.Seat].Controller is { RemoteOwned: true } rig)
         {
-            rig.Visuals?.OnHullDamage(damage.Hull);
+            if (damage.Hull >= 1f)
+            {
+                rig.Visuals?.Reset();
+                RepairsTaken++;
+            }
+            else
+            {
+                rig.Visuals?.OnHullDamage(damage.Hull);
+            }
+
+            _aiVoice?.TakeRemotePlayerHull(rig, damage.Hull);
         }
     }
 
@@ -4336,11 +4727,16 @@ public partial class GameSession : Node3D
         }
 
         int killerSeat = killer is int shooter ? SeatOfShooter(shooter) : -1;
+        int hull = killer is int fired ? ZeppelinVersus.HullOfShooter(fired) : -1;
         // Cause 2 covers every death with no seat to charge, an AI's kill included. The decode
         // has no last-damager memory and no third party to credit, so the pilot pays for it.
+        // Cause 3 is a hull's broadside round, named by the hull's placement index.
         var death = new Net.DeathMessage(
             (byte)seat, killerSeat >= 0 ? (byte)killerSeat : Net.NetMessage.NoSeat,
-            killerSeat >= 0 ? Net.NetDeathCause.Killer : Net.NetDeathCause.Suicide, 0u);
+            killerSeat >= 0 ? Net.NetDeathCause.Killer
+            : hull >= 0 ? Net.NetDeathCause.ZeppelinPart
+            : Net.NetDeathCause.Suicide,
+            hull >= 0 ? (uint)hull : 0u);
         if (!net.IsHost)
         {
             net.Send(net.HostPeer, death, Net.NetChannels.Events);
@@ -4367,9 +4763,9 @@ public partial class GameSession : Node3D
         ScoreDeath(death);
     }
 
-    // The one place a network match's numbers move, and it runs on the host alone. Causes 3 and 4
-    // name the turret or zeppelin owner in the killer field, so they score as a kill to that
-    // owner. Nothing in the remake raises them yet.
+    // The one place a network match's numbers move, and it runs on the host alone. Cause 4 names
+    // the turret's owner in the killer field and scores it score_turret_kill. Cause 3 is a hull's
+    // broadside, named by placement index in the source field: event 9 sets the hull's side's term.
     private void ScoreDeath(in Net.DeathMessage death)
     {
         if (_versus is not { } match || _net is not { IsHost: true })
@@ -4379,13 +4775,23 @@ public partial class GameSession : Node3D
 
         int victim = death.VictimSeat;
         int killer = death.KillerSeat < match.PlayerCount ? death.KillerSeat : -1;
-        if (killer < 0 || death.Cause == Net.NetDeathCause.Suicide)
+        int hullTeam = death.Cause == Net.NetDeathCause.ZeppelinPart && _zvzPlay is { } zvz && death.SourceId < 2
+            ? zvz.Rules.TeamOfHull((int)death.SourceId)
+            : 0;
+        bool charged = killer >= 0 && death.Cause != Net.NetDeathCause.Suicide;
+        if (hullTeam > 0)
+        {
+            killer = -1;
+            charged = false;
+            match.RegisterZeppelinKill(victim, hullTeam);
+        }
+        else if (!charged)
         {
             match.RegisterDeath(victim);
         }
         else
         {
-            match.RegisterKill(killer, victim);
+            match.RegisterKill(killer, victim, turret: death.Cause == Net.NetDeathCause.TurretOwner);
         }
 
         SendScore(victim);
@@ -4394,12 +4800,93 @@ public partial class GameSession : Node3D
             SendScore(killer);
         }
 
+        // Sent between the scores and the ending on one reliable channel. Every machine then posts
+        // the lives line, the kill lines and the ending in the original's order.
+        var notice = new Net.DeathNoticeMessage((byte)victim,
+            charged ? (byte)killer : Net.NetMessage.NoSeat,
+            hullTeam > 0 ? Net.NetDeathCause.ZeppelinPart : charged ? death.Cause : Net.NetDeathCause.Suicide,
+            (byte)Math.Clamp(hullTeam, 0, byte.MaxValue));
+        _net.Broadcast(notice, Net.NetChannels.Events);
+        PostDeathNotice(notice.VictimSeat, notice.KillerSeat, notice.Cause, notice.Team);
+
         // ⚠ The ending goes out AFTER the scores that settled the round, never from the match's
         // completion event, which fires before them. A guest whose match already reads completed
         // drops every score behind it, and its board would then name a different winner.
         if (match.Completed && _matchEnd == Net.NetMatchEnd.Running)
         {
             SendMatchState();
+        }
+    }
+
+    // A splitscreen match's death in every pane, the seats named by their player tags. The match
+    // handler subscribed first, so the death is already counted for the lives line.
+    private void PostSplitScreenDeath(int victim, int? killer)
+    {
+        PostLivesLines();
+        foreach (var pane in _rigs)
+        {
+            if (pane.Controller?.MessageStack is { } stack)
+            {
+                HudMessages.PostMatchKill(stack, _flightStrings,
+                    killer != null ? HudMessages.MatchDeath.Killer : HudMessages.MatchDeath.NoKiller,
+                    UI.Boards.SplitScreen.PlayerTag(victim),
+                    killer is int k ? UI.Boards.SplitScreen.PlayerTag(k) : null);
+            }
+        }
+    }
+
+    // A guest's copy of the host's decision. A hull's kill writes its side's term here too, since
+    // no score message carries a team's term. The write is a set, so a repeat changes nothing.
+    private void TakeDeathNotice(in Net.DeathNoticeMessage notice)
+    {
+        if (notice.Cause == Net.NetDeathCause.ZeppelinPart && notice.Team > 0)
+        {
+            _versus?.RegisterZeppelinKill(notice.VictimSeat, notice.Team);
+        }
+
+        PostDeathNotice(notice.VictimSeat, notice.KillerSeat, notice.Cause, notice.Team);
+    }
+
+    // A match death as the host decided it, posted into every local pane once: the host from its
+    // own scoring, a guest from the notice. The dying pilot's lives line goes in first, below. A
+    // hull's kill is named for its side's lobby team, as the original's row 7064 is.
+    private void PostDeathNotice(int victim, int killer, Net.NetDeathCause cause, int team = 0)
+    {
+        PostLivesLines();
+        var death = cause switch
+        {
+            Net.NetDeathCause.Suicide => HudMessages.MatchDeath.NoKiller,
+            Net.NetDeathCause.ZeppelinPart => HudMessages.MatchDeath.Zeppelin,
+            Net.NetDeathCause.TurretOwner => HudMessages.MatchDeath.Turret,
+            _ => HudMessages.MatchDeath.Killer,
+        };
+        string? victimName = victim < _netSeats.Count ? _netSeats[victim].Callsign : null;
+        string? killerName = team > 0 && _versus is { } match ? match.TeamName(team)
+            : killer < _netSeats.Count ? _netSeats[killer].Callsign : null;
+        foreach (var pane in _rigs)
+        {
+            if (pane.Controller?.MessageStack is { } stack)
+            {
+                HudMessages.PostMatchKill(stack, _flightStrings, death, victimName, killerName);
+            }
+        }
+    }
+
+    // Every seat's lives line still owed, ahead of the kill lines, since the original's handler
+    // posts it first. The match step's own pass then finds nothing left to post.
+    private void PostLivesLines()
+    {
+        if (_versus is not { Lives: > 0 } match)
+        {
+            return;
+        }
+
+        for (int seat = 0; seat < _seatRigs.Count; seat++)
+        {
+            if (_seatRigs[seat].Controller is { } pilot)
+            {
+                PostLivesLeft(match, seat, pilot);
+            }
         }
     }
 
@@ -4448,6 +4935,141 @@ public partial class GameSession : Node3D
         }
     }
 
+    // The start barrier, armed before the build so no word is dropped as unknown. A host waits on
+    // every machine flying a seat that is still linked; a guest waits on its host.
+    private void WireStartGate()
+    {
+        if (_net is not { } net || _netSeats.Count == 0)
+        {
+            return;
+        }
+
+        var linked = net.Peers;
+        _startGate = net.IsHost
+            ? Net.NetStartGate.Host(_netSeats.Where(s => !s.IsLocal && linked.Contains(s.PeerId))
+                .Select(s => s.PeerId).Distinct())
+            : _startGate ?? Net.NetStartGate.Guest(net.HostPeer);
+        net.On<Net.StartGateMessage>(TakeStartWord);
+        net.PeerLeft += peer => _startGate?.TakeLeft(peer);
+    }
+
+    // A host answers a guest that loads after the start at once, so a late machine is never held.
+    // A loaded word under another round opens nothing: it may be an earlier flight's on this link.
+    // The host names its round in reply, and a guest that did not know it yet answers again.
+    private void TakeStartWord(int peer, Net.StartGateMessage word)
+    {
+        // A guest's word can precede its roster, which names the host, so the sender stands in.
+        if (_net is { IsHost: false })
+        {
+            _startGate ??= Net.NetStartGate.Guest(peer);
+        }
+
+        if (_startGate is not { } gate || _net is not { } net)
+        {
+            return;
+        }
+
+        if (net.IsHost && word.Word == Net.NetStartWord.Loaded)
+        {
+            if (!gate.Current(word.Round))
+            {
+                SendHold(peer);
+            }
+            else if (!gate.Open)
+            {
+                gate.TakeLoaded(peer, word.Round);
+            }
+            else
+            {
+                net.Send(peer, new Net.StartGateMessage(Net.NetStartWord.Start, gate.Round), Net.NetChannels.Events);
+            }
+        }
+        else if (!net.IsHost && word.Word == Net.NetStartWord.Hold)
+        {
+            if (gate.TakeHold(word.Round) && _startBuilt)
+            {
+                SendLoaded();
+            }
+        }
+        else if (!net.IsHost && word.Word == Net.NetStartWord.Start)
+        {
+            gate.TakeStart(word.Round);
+        }
+    }
+
+    // The last act of the build. Holding here, rather than in the launcher, freezes the mission
+    // clock, the AI and the world events along with the aeroplanes.
+    private void HoldStart()
+    {
+        if (_startGate is not { } gate || _clock is not { } clock || _net is not { } net)
+        {
+            return;
+        }
+
+        _startBuilt = true;
+        clock.StartHeld = !gate.Open;
+        if (net.IsHost)
+        {
+            foreach (int peer in gate.Waiting)
+            {
+                SendHold(peer);
+            }
+        }
+        else if (!gate.Open)
+        {
+            SendLoaded();
+        }
+
+        Log.Info("core", $"net start: {(gate.Open ? $"nobody to wait for ({gate.Release})" : net.IsHost ? $"holding for {gate.Waiting.Count} machine(s) to load, round {gate.Round}" : "loaded, holding for the host's start")}");
+    }
+
+    // Under the round this guest heard, 0 before any hold word reached it. The host takes only
+    // its own round, so it tells this word from one an earlier flight on this link sent.
+    private void SendLoaded()
+    {
+        if (_net is { } net && _startGate is { } gate)
+        {
+            net.Send(net.HostPeer, new Net.StartGateMessage(Net.NetStartWord.Loaded, gate.Round), Net.NetChannels.Events);
+        }
+    }
+
+    private void SendHold(int peer)
+    {
+        if (_net is { } net && _startGate is { } gate)
+        {
+            net.Send(peer, new Net.StartGateMessage(Net.NetStartWord.Hold, gate.Round), Net.NetChannels.Events);
+        }
+    }
+
+    // One physics tick of a held start: the wire only. True when the barrier opened on this tick,
+    // so the caller runs the tick's simulation step too.
+    private bool StepStartHold(GameClock clock, double delta)
+    {
+        RenderPoses.Restore();
+        _net?.Step(delta);
+        _netPing?.Step();
+        if (_startGate is not { } gate)
+        {
+            clock.StartHeld = false;
+            return true;
+        }
+
+        gate.Step(delta);
+        if (!gate.Open)
+        {
+            return false;
+        }
+
+        clock.StartHeld = false;
+        if (_net is { IsHost: true } net)
+        {
+            net.Broadcast(new Net.StartGateMessage(Net.NetStartWord.Start, gate.Round), Net.NetChannels.Events);
+        }
+
+        Log.Info("core", $"net start: released ({gate.Release}) after {gate.WaitedSeconds:0.00} s");
+        return true;
+    }
+
     // The campaign's objectives over the wire, once the graph is armed. The host's graph runs the
     // mission and says what it did; a guest's replays that and decides nothing, the way a guest's
     // match does. ⚠ Nothing is sent from here: the join stays the two payloads it is counted as.
@@ -4471,17 +5093,18 @@ public partial class GameSession : Node3D
         Log.Info("core", $"net director: {(net.IsHost ? $"host (every transition of {graph.Count} objective(s), and the ending, as they happen)" : $"guest (replaying the host's transitions over {graph.Count} objective(s), evaluating none of its own)")}");
     }
 
-    // The landing rows and the ladder switch over the wire. The host decides them off every seat,
-    // and a guest replays those decisions and reports its own auto-land button.
-    private void WireNetPositionalStarts()
+    // The landing rows, the ladder switch and the mission-code range gates over the wire. The host
+    // decides them off every seat, and a guest replays those decisions and reports its own
+    // auto-land button.
+    private void WireNetPositionalStarts(AnimRuntime? world)
     {
-        if (_net is not { } net || _netSeats.Count == 0 || (_landings == null && _ladder == null))
+        if (_net is not { } net || _netSeats.Count == 0 || (_landings == null && _ladder == null && world == null))
         {
             return;
         }
 
-        _netStarts = NetPositionalStartLink.Open(net, () => _seatRigs, _landings, _ladder);
-        Log.Info("core", $"net positional starts: {(net.IsHost ? $"host (landing rows and the ladder decided over {_seatRigs.Count} seats)" : "guest (replaying the host's row starts and holder, reporting its own auto-land button)")}");
+        _netStarts = NetPositionalStartLink.Open(net, () => _seatRigs, _landings, _ladder, world);
+        Log.Info("core", $"net positional starts: {(net.IsHost ? $"host (landing rows, the ladder and mission-code range gates decided over {_seatRigs.Count} seats)" : "guest (replaying the host's row starts, holder and range gates, reporting its own auto-land button)")}");
     }
 
     // The cutscene skip over the wire: any player's skip ends the shared episode on every machine,
@@ -4533,6 +5156,11 @@ public partial class GameSession : Node3D
             _netWorld.FollowGenerators(_generators, () => AiPlanes);
         }
 
+        if (_aiVoice != null)
+        {
+            _netWorld.FollowVoice(_aiVoice);
+        }
+
         Log.Info("core", $"net world: {(net.IsHost ? $"host (flying every AI and deciding every world hit, {world?.Destructibles.Count ?? 0} pool(s))" : "guest (AI replicated from the host, world pools spending nothing of their own)")}");
     }
 
@@ -4563,8 +5191,10 @@ public partial class GameSession : Node3D
         }
 
         // A drop is the other thing that can leave a match without an opponent (reason 4). The
-        // host's step sends that ending; a guest's replicated match only marks the seat.
+        // host's step sends that ending; a guest's replicated match only marks the seat. A flag the
+        // seat carried floats, as a death's does (FUN_004995a0).
         _versus?.Leave(seat);
+        _flagPlay?.Downed(seat);
         string line = UI.Menu.CoopDoorText.Left(_netSeats[seat].Callsign);
         foreach (var rig in _rigs)
         {
@@ -4603,6 +5233,131 @@ public partial class GameSession : Node3D
         Log.Info("core", $"net match state: {(net.IsHost ? $"host (both limits, the clock every {Net.MatchStateCadence.TickStepInterval} steps, and the ending as it happens)" : "guest (applying the host's clock, limits and ending, advancing none of its own)")}");
     }
 
+    // Capture the Flag over a team match on the wire, with the flags the mission lays out for the
+    // lobby's teams. Every seat's death drops its flag on every machine, and so does the console's
+    // ejectflag typed into the chat.
+    private void WireFlags(AnimRuntime? world, GameZ gamez, SceneBuilder? scene, Messages? strings)
+    {
+        if (!_spec.CaptureTheFlag || _net is not { } net || _versus is not { } match || SeatTeams() is not { } teams)
+        {
+            return;
+        }
+
+        _flagPlay = FlagRuntime.Open(new FlagRuntimeInputs
+        {
+            Net = net,
+            SeatRigs = _seatRigs,
+            Panes = _rigs,
+            SeatTeams = teams,
+            IsLocal = seat => seat >= 0 && seat < _netSeats.Count && _netSeats[seat].IsLocal,
+            Match = match,
+            SendScore = SendScore,
+            FlagHomeToCapture = _spec.FlagHomeToCapture,
+            World = world,
+            WorldScene = _worldRoot,
+            BuildLoose = name => BuildLoose(gamez, scene, name),
+            Lights = _worldLights,
+            Radio = _radio,
+            Strings = strings,
+            GroundAt = GroundSampler(),
+            CallsignOf = seat => seat >= 0 && seat < _netSeats.Count ? _netSeats[seat].Callsign : "",
+        });
+        if (_flagPlay is not { } flags)
+        {
+            return;
+        }
+
+        foreach (var rig in _seatRigs)
+        {
+            int seat = rig.Index;
+            if (rig.Controller is { } pilot)
+            {
+                pilot.Downed += (_, _) => flags.Downed(seat);
+            }
+        }
+
+        if (_netChat is { } chat)
+        {
+            chat.EjectFlag = seat => flags.Eject(seat);
+        }
+    }
+
+    // Zeppelin vs Zeppelin over a team match on the wire, the mission's two hulls one per side. The
+    // parts they lose are scored, and the first hull lost ends the match.
+    private void WireZeppelinVersus(string zrdrPath, Messages? strings)
+    {
+        if (!_spec.ZeppelinVsZeppelin || _net is not { } net || _versus is not { } match
+            || SeatTeams() is not { } teams || _zeppelins is not { } zeppelins)
+        {
+            return;
+        }
+
+        var (radius, margin) = ZeppelinVersusRuntime.LoadRespawnRing(zrdrPath);
+        _zvzPlay = ZeppelinVersusRuntime.Open(new ZeppelinVersusInputs
+        {
+            Net = net,
+            SeatRigs = _seatRigs,
+            Panes = _rigs,
+            SeatTeams = teams,
+            IsLocal = seat => seat >= 0 && seat < _netSeats.Count && _netSeats[seat].IsLocal,
+            SeatOfShooter = SeatOfShooter,
+            Match = match,
+            Zeppelins = zeppelins,
+            SendScore = SendScore,
+            Radio = _radio,
+            Strings = strings,
+            GroundAt = GroundSampler(),
+            RespawnRadius = radius,
+            RespawnMargin = margin,
+        });
+    }
+
+    // The rearm bases of any Dogfight, over the wire or split screen. Zeppelin vs Zeppelin rearms
+    // only at its hulls' own nodes, so a match that could not seat both hulls has no base at all.
+    private void WireRearmBases(AnimRuntime? world, string zrdrPath, Messages? strings)
+    {
+        if (_versus == null || world == null || (_spec.ZeppelinVsZeppelin && _zvzPlay == null))
+        {
+            return;
+        }
+
+        _rearmPlay = RearmRuntime.Open(new RearmRuntimeInputs
+        {
+            SeatRigs = _seatRigs,
+            IsLocal = seat => _netSeats.Count == 0 || (seat >= 0 && seat < _netSeats.Count && _netSeats[seat].IsLocal),
+            SeatTeams = SeatTeams(),
+            World = world,
+            CaptureTheFlag = _spec.CaptureTheFlag,
+            Zeppelins = _zvzPlay,
+            Hulls = _zeppelins,
+            RadiusSquared = RearmBases.LoadRadiusSquared(zrdrPath, why => Log.Warn("flight", $"rearm: player.zrd unreadable, the radius keeps its initialised value: {why}")),
+            Strings = strings,
+            Rearmed = seat =>
+            {
+                if (seat < _seatRigs.Count && _seatRigs[seat].Controller is { } restored)
+                {
+                    SendDamage(seat, restored);
+                }
+            },
+        });
+    }
+
+    // One library root of the chapter, built hidden and without collision under the world root. The
+    // caller parents it where the data's own animation would.
+    private Node3D? BuildLoose(GameZ gamez, SceneBuilder? scene, string name)
+    {
+        if (scene == null || _worldRoot == null || gamez.FindByName(name) is not { } node
+            || scene.BuildSubtree(node, collisionSkip: _ => true) is not { } built)
+        {
+            return null;
+        }
+
+        built.Transform = Transform3D.Identity;
+        built.Visible = false;
+        _worldRoot.AddChild(built);
+        return built;
+    }
+
     // The host's match state as it stands now. The clock rides along because the tick is the one
     // message a running match repeats, which makes it the reading a guest's slew can take.
     private void SendMatchState()
@@ -4617,13 +5372,14 @@ public partial class GameSession : Node3D
         // last opponent went, a time-out when the clock ran out, and a score target otherwise.
         var was = _matchEnd;
         _matchEnd = !match.Completed ? Net.NetMatchEnd.Running
+            : match.ObjectiveWinner > 0 ? Net.NetMatchEnd.Objective
             : match.AllAlone ? Net.NetMatchEnd.NobodyLeft
             : match.TimeLimit > 0f && match.Elapsed >= match.TimeLimit ? Net.NetMatchEnd.TimeLimit
             : Net.NetMatchEnd.ScoreTarget;
         PostAllAlone(was);
         net.Broadcast(
             new Net.MatchStateMessage(match.TimeRemaining, match.TimeLimit, (short)match.KillTarget,
-                _matchEnd, (float)(_clock?.Time ?? 0.0)),
+                _matchEnd, (float)(_clock?.Time ?? 0.0), (byte)Math.Clamp(match.ObjectiveWinner, 0, byte.MaxValue)),
             Net.NetChannels.Events);
     }
 
@@ -4636,6 +5392,12 @@ public partial class GameSession : Node3D
 
         var was = _matchEnd;
         _matchEnd = state.End;
+        // The objective's winner and bonus land ahead of the ending, which is what the board reads.
+        if (state.End == Net.NetMatchEnd.Objective && state.Winner > 0)
+        {
+            _zvzPlay?.TakeEnding(state.Winner);
+        }
+
         PostAllAlone(was);
         _netClock?.Observe(state.HostClock, _clock?.Time ?? 0.0);
         _versus?.ApplyState(state.ScoreTarget, state.TimeLimitSeconds, state.RemainingSeconds,
@@ -4648,6 +5410,9 @@ public partial class GameSession : Node3D
     // match without saying so, at worst one step late.
     private void StepVersusMatch(float dt)
     {
+        // Ahead of the clock, so a flag that ends the match is sent out on this step.
+        _flagPlay?.Step(dt);
+        _rearmPlay?.Step();
         _versus?.Advance(dt);
         HoldSpentPilots();
         if (_matchCadence is not { } cadence)
@@ -4663,10 +5428,16 @@ public partial class GameSession : Node3D
         }
     }
 
-    // Reason 4 in words, on every machine the moment its end turns to it. The original's "Game
-    // Over:" and "No Enemies Left" lines go into each local pane's stack.
+    // Reasons 3 and 4 in words, on every machine the moment its end turns to one. The original's
+    // "Game Over:" and "No Enemies Left" lines go into each local pane's stack, and a lost hull
+    // posts and speaks its own.
     private void PostAllAlone(Net.NetMatchEnd was)
     {
+        if (_matchEnd == Net.NetMatchEnd.Objective && was != Net.NetMatchEnd.Objective)
+        {
+            _zvzPlay?.Announce();
+        }
+
         if (was == Net.NetMatchEnd.NobodyLeft || _matchEnd != Net.NetMatchEnd.NobodyLeft)
         {
             return;
@@ -4762,6 +5533,7 @@ public partial class GameSession : Node3D
         _spawnEntries = new int[_seatRigs.Count];
         System.Array.Fill(_spawnEntries, -1);
         net.On<Net.SpawnMessage>((_, spawn) => TakeSpawn(spawn));
+        net.On<Net.SpawnAtMessage>((_, spawn) => TakeSpawnAt(spawn));
         if (net.IsHost)
         {
             net.On<Net.SpawnRequestMessage>((_, ask) => GrantSpawn(ask.Seat, Net.NetSpawnKind.Respawn));
@@ -4807,9 +5579,42 @@ public partial class GameSession : Node3D
             return;
         }
 
+        // Zeppelin vs Zeppelin brings a seat back by its hull rather than off the table.
+        if (kind == Net.NetSpawnKind.Respawn && _zvzPlay?.RespawnPoint(seat) is { } point)
+        {
+            var at = new Net.SpawnAtMessage((byte)seat, point.Position, point.HeadingDeg);
+            net.Broadcast(at, Net.NetChannels.Events);
+            TakeSpawnAt(at);
+            return;
+        }
+
         var spawn = new Net.SpawnMessage((byte)seat, kind, RotatedEntry(seat));
         net.Broadcast(spawn, Net.NetChannels.Events);
         TakeSpawn(spawn);
+    }
+
+    // A computed return, applied on every peer as TakeSpawn applies a table entry.
+    private void TakeSpawnAt(in Net.SpawnAtMessage spawn)
+    {
+        if (spawn.Seat >= _seatRigs.Count || _seatRigs[spawn.Seat].Controller is not { } rig)
+        {
+            return;
+        }
+
+        if (spawn.Seat < _spawnAsked.Length)
+        {
+            _spawnAsked[spawn.Seat] = false;
+        }
+
+        if (spawn.Seat < _spawnEntries.Length)
+        {
+            _spawnEntries[spawn.Seat] = -1;
+        }
+
+        SpawnsTaken++;
+        var point = new SpawnPoint(spawn.Position, spawn.HeadingDeg);
+        rig.RespawnAt(point.Position, point.Position + point.Forward);
+        Log.Info("flight", $"net spawns: seat {spawn.Seat} placed at ({spawn.Position.X:0},{spawn.Position.Y:0},{spawn.Position.Z:0}) heading {spawn.HeadingDeg:0.#}°, by its hull");
     }
 
     // The rotation's pick for one seat, as an index into the spawn list every peer holds. No
@@ -4824,6 +5629,23 @@ public partial class GameSession : Node3D
         rotation.Choose(seat, LivingField(), seat < _lastKiller.Length ? _lastKiller[seat] : null);
         return (ushort)rotation.IndexOf(seat);
     }
+
+    // Each seat's lobby team in a team Dogfight, by seat, or null for any other flight. Every
+    // machine reads the same roster, so every machine puts the same seats on the same teams.
+    private int[]? SeatTeams()
+    {
+        if (!_spec.Versus || !_netSeats.Any(seat => seat.TeamId > 0))
+        {
+            return null;
+        }
+
+        return _netSeats.Select(seat => seat.TeamId).ToArray();
+    }
+
+    // The spawn table's block each seat walks. Zeppelin vs Zeppelin opens each side in the block the
+    // map lays around its own hull, whatever the side's lobby team number is.
+    private int[]? SpawnTeams() =>
+        _spec.ZeppelinVsZeppelin && SeatTeams() is { } teams ? ZeppelinVersus.SpawnBlocks(teams) : SeatTeams();
 
     // The grant, applied. Every peer runs this, the host on its own message, so one placement
     // rule serves the aeroplane's owner and every copy of it. ⚠ Through RespawnAt, never
@@ -4881,6 +5703,76 @@ public partial class GameSession : Node3D
         return -1;
     }
 
+    // A layer a switch drops leaves the tree now and is freed at the frame's end. ⚠ Do not QueueFree
+    // alone: the node would draw, and count, for the rest of the frame.
+    private void Drop(Node? node)
+    {
+        if (node == null)
+            return;
+        node.GetParent()?.RemoveChild(node);
+        node.QueueFree();
+    }
+
+    // The bank follows a switch. It is freed, then built again where the mode builds one, and handed
+    // to the weather rig that colours it.
+    private void FollowCloudBanks()
+    {
+        if (_fogVolumes == null)
+            return;
+        Drop(_cloudBanks);
+        _cloudBanks = null;
+        _weatherRig?.SetFogBanks(BuildCloudBanks());
+    }
+
+    // Each seat's wind streak field leaves the tree on the faithful path and comes back under
+    // Enhanced; a seat with none gets one built. The seat keeps its field stepped, so a round trip
+    // draws the drift and seeds a fresh one would. The roster's teardown frees it in or out of the
+    // tree (FlightController.DetachRosterBindings).
+    private void FollowWindStreaks()
+    {
+        foreach (var rig in _seatRigs)
+        {
+            if (rig.Controller is not { } controller)
+                continue;
+            var streaks = controller.WindStreaks;
+            if (!GraphicsMode.Enhanced)
+            {
+                streaks?.GetParent()?.RemoveChild(streaks);
+                continue;
+            }
+            if (streaks == null && Effects.WindStreaks.Create() is { } created)
+            {
+                if (rig.VisualLayer != 0)
+                    SplitScreen.SetVisualLayer(created, rig.VisualLayer);
+                controller.WindStreaks = streaks = created;
+            }
+            if (streaks != null && !streaks.IsInsideTree())
+                _worldRoot!.AddChild(streaks);
+        }
+    }
+
+    // The Enhanced volumetric bank under the cloud cards, at the build and on a live switch.
+    // --no-fog covers it as it covers the zone fog. A world with none clears the froxel
+    // flag, since the pass costs its buffer wherever it is on.
+    private Effects.FogVolumeBanks? BuildCloudBanks()
+    {
+        _cloudBanks = _spec.NoFog || _fogVolumes == null ? null : Effects.FogVolumeBanks.Create(_fogVolumes, _fogVolumeSpec);
+        if (_env != null)
+            Effects.FogVolumeBanks.ApplyFroxelFog(_env, _cloudBanks != null);
+        if (_cloudBanks != null)
+        {
+            _worldRoot!.AddChild(_cloudBanks);
+            Log.Info("world", $"fogvol banks: {_cloudBanks.BankCount} volumetric bank(s) under the cards over {_cloudBanks.TileCount} fog box(es), density {_cloudBanks.Density:0.####} per metre");
+        }
+        return _cloudBanks;
+    }
+
+    // Built at the flight build's projectile-pool step and again on a switch to original mode.
+    // A no-op in enhanced mode (GroundShadowPass.Build).
+    private void BuildGroundShadows() =>
+        _groundShadows = GroundShadowPass.Build(_worldRoot!, AllAircraft, PlayerPositionsSnapshot, () => _rigs,
+            () => _weatherRig?.SunlightRgb ?? WeatherRig.DefaultSunlightRgb);
+
     // One interior render pass per rig, on that player's own HUD parent, so splitscreen gets a
     // pass per pane rather than one for the window (--no-cockpit-pass opts out). Built after the rigs, since
     // the interior it moves is the plane build's and the sun and environment it copies are the
@@ -4907,9 +5799,9 @@ public partial class GameSession : Node3D
         Log.Info("flight", $"cockpit: interior drawn in its own pass at the origin for {_rigs.Count} rig(s)");
     }
 
-    // Gives every rig a cloudlayer deck to anchor under its own camera: rig 0 takes the world's
+    // Gives every rig a cloudlayer deck to anchor under its own camera. Rig 0 takes the world's
     // deck, the rest get copies on their player's visual layer. ⚠ Re-apply the instance uniforms
-    // from the source; they are RenderingServer state and Duplicate drops them.
+    // from the source; they are RenderingServer state and no copy carries them.
     private void AssignCloudDecks(Node3D deck)
     {
         _rigs[0].Deck = deck;
@@ -4918,7 +5810,7 @@ public partial class GameSession : Node3D
         var parent = deck.GetParent();
         for (int i = 1; i < _rigs.Count; i++)
         {
-            var copy = (Node3D)deck.Duplicate();
+            var copy = Utils.SceneCopy.Of(deck);
             copy.Name = $"cloud_deck{i + 1}";
             CopyInstanceShaderParams(deck, copy);
             SplitScreen.SetVisualLayer(copy, _rigs[i].VisualLayer);
@@ -4966,7 +5858,7 @@ public partial class GameSession : Node3D
 
         if (_campaign is not { } campaign)
         {
-            return BuildInstantActionPauseBoard(pauseState);
+            return BuildMultiplayerPauseBoard(pauseState) ?? BuildInstantActionPauseBoard(pauseState);
         }
 
         var (chapterNumber, missionNumber) = campaign.Address;
@@ -4985,10 +5877,32 @@ public partial class GameSession : Node3D
             () => PauseReadout(sheet, campaign, objectives, pauseState, runtime));
     }
 
-    // An Instant Action sortie's own sheet: ia_escape.zrd's blackboard for the sortie's chapter and
-    // mission type, which carries no map, memento or parchment and so needs no readout. Free flight
-    // and the dogfight are modes of ours that no shipped dialog describes, so they keep the Built-in
-    // board, the same split the load screen makes (docs/org/pause-screen.md).
+    // A Dogfight's briefing blackboard, under the key its load screen read: the chapter, the type and
+    // whether any seat is on a lobby team. It carries no map, memento or parchment, so no readout.
+    private UI.Menu.Original.OriginalPauseBoard? BuildMultiplayerPauseBoard(Flight.Modes.PauseState pauseState)
+    {
+        if (!_spec.Versus
+            || UI.Screens.LoadScreens.MultiplayerKey(
+                _spec.Chapter, _spec.CaptureTheFlag, _spec.ZeppelinVsZeppelin, SeatTeams() != null) is not { } key)
+        {
+            return null;
+        }
+
+        var sheet = UI.Screens.PauseSheet.LoadMultiplayer(_zrdrPath, _messagesPath, key);
+        if (sheet == null)
+        {
+            Log.Warn("ui", $"pause: no escape.zrd or Loading.zrd sheet for {_spec.Chapter} ({key})");
+            return null;
+        }
+
+        Log.Info("ui", $"pause: {_spec.Chapter} Dogfight draws {sheet.State.Key}");
+        return UI.Menu.Original.OriginalPauseBoard.Build(
+            pauseState, MenuInputFor, _dataRoot, sheet, () => UI.Screens.PauseReadout.Empty);
+    }
+
+    // An Instant Action sortie's own sheet: ia_escape.zrd's blackboard for its chapter and mission
+    // type. It carries no map, memento or parchment and so needs no readout. Free flight has no
+    // shipped dialog and keeps the Built-in board, as on the load screen (docs/org/pause-screen.md).
     private UI.Menu.Original.OriginalPauseBoard? BuildInstantActionPauseBoard(Flight.Modes.PauseState pauseState)
     {
         if (_iaDirector?.Runtime is not { } ia
@@ -5137,6 +6051,24 @@ public partial class GameSession : Node3D
     // plane back to its own spawn. Mirrors RestartRace exactly.
     private void RestartMatch(VersusMatch match)
     {
+        // ⚠ Never rerun in place: that restores no world pool, so it would fly on the last round's
+        // burnt gas bags. The original's end takes every machine to the lobby, whose next launch
+        // builds the world afresh. Each machine goes there itself, a guest as much as the host.
+        if (_zvzPlay != null)
+        {
+            if (_menuDriven)
+            {
+                Log.Info("flight", $"dogfight: Zeppelin vs Zeppelin goes again from the lobby, whose next launch rebuilds both hulls");
+                _exitSession();
+            }
+            else
+            {
+                Log.Info("flight", $"dogfight: no rematch in Zeppelin vs Zeppelin outside the lobby, the hulls rebuild only at a launch");
+            }
+
+            return;
+        }
+
         // ⚠ On a wire the rematch is the host's alone. A guest restarting here would zero its own
         // board and fly a round nobody else is in. Its R therefore does nothing, and it waits for
         // the host's running state. Asking the host for one is BL-1026.
@@ -5158,6 +6090,7 @@ public partial class GameSession : Node3D
             SendMatchState();
             for (int seat = 0; seat < _seatRigs.Count; seat++)
                 SendScore(seat);
+            _flagPlay?.Restart();
             // On a wire the whole field is put back by grant, seat by seat, so a rematch places
             // every aeroplane from the one rotation. A guest grants nothing and waits.
             for (int seat = 0; seat < _seatRigs.Count; seat++)
@@ -5246,6 +6179,8 @@ public partial class GameSession : Node3D
             {
                 WireSeatCombat(_seatRigs.IndexOf(owner));
             }
+
+            WireSeatChat(_seatRigs.IndexOf(owner));
 
             return result;
         }
@@ -5405,9 +6340,9 @@ public partial class GameSession : Node3D
         }
         _photoPilot = null;
         RestoreBoards();
-        // The sheet's pointer too, for the reason the options leaf re-primes it. A mouse button
-        // still down as the mode is left reads as a fresh click on the strip it rests over.
-        _originalPause?.Reprime();
+        // The board's pointer too, for the reason the options leaf re-primes it. A mouse button
+        // still down as the mode is left reads as a fresh click on the row it rests over.
+        ReprimePauseBoard();
         // ⚠ Prime every board reader: MenuInput POLLS raw keys, so the Escape still under the
         // player's finger would read as a fresh press on the board that just returned and dismiss
         // the pause it was meant to reopen (BL-279's mechanism, docs/architecture.md).
@@ -5463,7 +6398,7 @@ public partial class GameSession : Node3D
 
         _pauseBoard.ProcessMode = ProcessModeEnum.Inherit;
         _pauseBoard.Visible = _pauseState?.Paused ?? false;
-        _originalPause?.Reprime();
+        ReprimePauseBoard();
         // ⚠ Prime every board reader and re-seed every pause edge, ExitPhotoMode's own hazard: the
         // Escape that left the leaf is still under the player's finger, and would otherwise dismiss
         // the sheet that just came back or resume the mission behind it.
@@ -5472,6 +6407,13 @@ public partial class GameSession : Node3D
             rig.Controller?.EndPauseLeaf();
             MenuInputFor(rig.Index).Prime();
         }
+    }
+
+    // Both presentations' pause boards read the mouse, so whichever one is in use is re-primed.
+    private void ReprimePauseBoard()
+    {
+        _originalPause?.Reprime();
+        (_pauseBoard as PauseBoard)?.Reprime();
     }
 
     // ⚠ Suspending a board is hide AND stop processing, not hide alone. A board left processing
@@ -5721,6 +6663,54 @@ public partial class GameSession : Node3D
             skills.At("constitution_chance", constitutionRating));
     }
 
+    // Every human aircraft joins the voice runtime. Outside a network match that is each pane's,
+    // voiceless. In one, every seat speaks on every machine as the pilot its roster voice names.
+    // It rolls the session's talker rating, the vehicle constructor's fallback for a def with none.
+    private void RegisterPlayerVoices(AiVoiceRuntime voice)
+    {
+        if (_netSeats.Count == 0)
+        {
+            foreach (var rig in _rigs)
+            {
+                if (rig.Controller is { } human)
+                {
+                    voice.RegisterPlayer(human);
+                }
+            }
+            return;
+        }
+
+        // A match may fly no AI, so the table the spawner loads on its first AI may not be read yet.
+        try
+        {
+            _aiSkills ??= _flightRoster?.AiSkills ?? AiSkills.Load(_zrdrPath);
+        }
+        catch (Exception e) when (e is IOException or InvalidDataException)
+        {
+            Log.Warn("sound", $"player voice: cannot load ai_skill_parameters, so no player speaks: {e.Message}");
+        }
+
+        int rating = _spec.AiAttackSkill ?? 5;
+        float talker = _aiSkills?.At("talker_chance", rating) ?? 0f;
+        float constitution = _aiSkills?.At("constitution_chance", rating) ?? 0f;
+        for (int seat = 0; seat < _netSeats.Count && seat < _seatRigs.Count; seat++)
+        {
+            if (_seatRigs[seat].Controller is not { } human)
+            {
+                continue;
+            }
+            int? voId = UI.Menu.PilotVoices.SpeakerFor(_netSeats[seat].Voice);
+            if (_netSeats[seat].IsLocal)
+            {
+                voice.RegisterPlayer(human, voId, talker, constitution);
+            }
+            else
+            {
+                voice.RegisterRemotePlayer(human, voId, talker, constitution);
+            }
+        }
+    }
+
     // Maps the simulation's named phases onto this session's concrete owners.
     private sealed class SessionSimulationRuntime(GameSession session) : ISessionSimulationRuntime
     {
@@ -5853,6 +6843,7 @@ public partial class GameSession : Node3D
         public SceneBuilder? WorldScene;
         public AnimRuntime? WorldRuntime;
         public CraterField? Craters;
+        public Effects.ScorchField? Scorches;
 
         /// <summary>The chapter's resolved approach rows, kept so the actor build can re-bind the
         /// trigger once the roster's own approach nodes exist (<see cref="Mech3.RosterMarkers"/>).

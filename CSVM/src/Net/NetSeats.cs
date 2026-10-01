@@ -140,10 +140,11 @@ public static class NetSeats
 
     /// <summary>A co-op host's field: one seat per plane in <paramref name="localPlanes"/> flown
     /// here, then one per guest flying the plane it picked, cut at <see cref="MaxPlayers"/>. A
-    /// guest is called by the player name its pick carried. A seat with no name is called by its
-    /// player number.</summary>
+    /// guest is called by the player name its pick carried, and the first local seat by
+    /// <paramref name="hostName"/>. A seat with no name is called by its player number.</summary>
     public static NetSeat[] CoopField(
-        int localPeer, IReadOnlyList<string> localPlanes, IReadOnlyList<(int Peer, string Plane, string Name)> guests)
+        int localPeer, IReadOnlyList<string> localPlanes, IReadOnlyList<(int Peer, string Plane, string Name)> guests,
+        string hostName = "")
     {
         ArgumentNullException.ThrowIfNull(localPlanes);
         ArgumentNullException.ThrowIfNull(guests);
@@ -151,7 +152,7 @@ public static class NetSeats
         for (int i = 0; i < localPlanes.Count + guests.Count && seats.Count < MaxPlayers; i++)
         {
             bool local = i < localPlanes.Count;
-            string name = local ? "" : (guests[i - localPlanes.Count].Name ?? "").Trim();
+            string name = local ? (i == 0 ? (hostName ?? "").Trim() : "") : (guests[i - localPlanes.Count].Name ?? "").Trim();
             seats.Add(new NetSeat
             {
                 PeerId = local ? localPeer : guests[i - localPlanes.Count].Peer,

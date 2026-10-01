@@ -4,7 +4,10 @@ using System.Text;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Weapons;
+using CSVM.Launch;
 using CSVM.Mech3;
+using CSVM.Session;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Testing;
@@ -43,13 +46,55 @@ internal static class CraterSuites
         "refused while the first one stays carved; a live wep_12 on the same ground first carves " +
         "nothing and plays its default scatter_effect, since no C1 node carries can_modify, and a " +
         "live rocket on untouched ground carves nothing with the carve option off and a " +
-        "bowl with it on, its burst playing the same row either way")]
+        "bowl with it on, its burst playing the same row either way and asking the scorch sink " +
+        "on both legs, uncarved with the effect it played and as a carve with the option on")]
     internal static void CraterCarve(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         var report = new StringBuilder();
         ctx.WithPrivateWorld(Chapter, collision: true, world => Drop(ctx, world, report));
         ctx.WriteArtifact("test-crater-carve.txt", report.ToString());
+    }
+
+    // The enhanced scorch, driven end to end: real rockets dropped onto tagged plates through the
+    // pool, with the sink composed the way GameSession composes it, so what is measured is the
+    // decal the session would place rather than a flag. The pool, the cap and the fade are then
+    // exercised directly, since a salvo of sixteen live rounds is not what this suite is about.
+    [Suite("scorch-decals",
+        "Enhanced Graphics only: a rocket hit on tarmac and one on grass each leave exactly one " +
+        "scorch decal sized from the weapon's crater radius, a hit on water leaves none, a gun hit " +
+        "leaves none, a hit that carved a bowl leaves a wider one, a second hit inside a live mark " +
+        "refreshes it instead of stacking, the pool caps at 16 and recycles the oldest, every mark " +
+        "is hidden once its life runs out, and the faithful presentation builds no field at all")]
+    internal static void ScorchDecals(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, Chapter);
+        ctx.RequireData(texturesPath, $"{Chapter} textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        if (!weapons.TryGet("wep_06", out var he))
+        {
+            ctx.Check(false, $"wep_06 resolves");
+            return;
+        }
+
+        // The faithful path first: it is what every pinned golden renders, and the able-to-fail
+        // control for everything below.
+        ctx.Check(Effects.ScorchField.Create() == null,
+            $"ABLE-TO-FAIL CONTROL: the faithful presentation builds no scorch field, so no pool, no decal and no texture");
+
+        var textures = new TextureArchive(texturesPath);
+        GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
+        try
+        {
+            Burn(ctx, textures, he);
+        }
+        finally
+        {
+            GraphicsMode.Resolve(GraphicsMode.Default);
+            textures.Dispose();
+        }
+        ctx.Check(!GraphicsMode.Enhanced, $"the graphics setting is back on the faithful presentation");
     }
 
     private static void Drop(TestContext ctx, TestWorld world, StringBuilder report)
@@ -182,6 +227,144 @@ internal static class CraterSuites
         ctx.Note($"C1: one crater carved on {owner.Name}, {census} decorations flattened, the clearance refusing the repeat");
     }
 
+    private static void Burn(TestContext ctx, TextureArchive textures, WeaponDef he)
+    {
+        const float Dt = 1f / 60f;
+        var field = Effects.ScorchField.Create();
+        ctx.Check(field != null, $"the enhanced presentation builds a scorch field");
+        if (field == null)
+        {
+            return;
+        }
+
+        var plates = new List<StaticBody3D>();
+        ProjectilePool? pool = null;
+        try
+        {
+            ctx.Host.AddChild(field);
+            int airstrip = SurfaceRegistry.IdForName("airstrip") ?? SurfaceRegistry.Default;
+            var tarmac = Ground(ctx, plates, "scorch-tarmac", new Vector3(900f, 4000f, 900f), airstrip);
+            var grass = Ground(ctx, plates, "scorch-grass", new Vector3(1600f, 4000f, 900f), SurfaceRegistry.Default);
+            var water = Ground(ctx, plates, "scorch-water", new Vector3(2300f, 4000f, 900f), SurfaceRegistry.Water);
+
+            var plays = new List<string>();
+            var live = new ProjectilePool(textures, null, null)
+            {
+                EffectSink = (name, at, orient, ringOrient, ttl) => plays.Add(name),
+                ScorchSink = (at, normal, effectName, carved) =>
+                    GameSession.RegisterScorch(field, at, normal, effectName, carved),
+            };
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            bool Drop(Vector3 onto)
+            {
+                plays.Clear();
+                live.Spawn(he, new Transform3D(Basis.LookingAt(Vector3.Down, Vector3.Forward),
+                    onto + new Vector3(0f, 20f, 0f)), Vector3.Zero);
+                for (int i = 0; i < 120 && plays.Count == 0; i++)
+                {
+                    live.SimStep(Dt);
+                }
+                live.Clear();
+                return plays.Count > 0;
+            }
+
+            ctx.Check(Drop(tarmac), $"the rocket reaches the tarmac plate and plays an impact effect");
+            ctx.Same(1, field.LiveMarks, $"the tarmac hit leaves exactly one scorch");
+            ctx.Check(Mathf.IsEqualApprox(field.RadiusOf(0), CraterShape.RimRadius * 0.455f, 1e-3f),
+                $"sized from the weapon's crater radius, a burst that carved nothing at 0.455 of it (radius={field.RadiusOf(0):0.00} m)");
+            var decal = field.NodeOf(0);
+            ctx.Check(decal.Visible && Mathf.IsEqualApprox(decal.Size.X, field.RadiusOf(0) * 2f, 1e-3f)
+                && Mathf.IsEqualApprox(decal.Size.Z, field.RadiusOf(0) * 2f, 1e-3f),
+                $"the decal is drawn and its projection box spans the mark (size={decal.Size})");
+            ctx.Check(decal.Modulate.A > 0.7f && decal.Modulate.A <= 1f,
+                $"a fresh mark draws at its full darkness (alpha={decal.Modulate.A:0.00})");
+
+            ctx.Check(Drop(grass), $"the rocket reaches the grass plate too");
+            ctx.Same(2, field.LiveMarks, $"the grass hit leaves a second scorch");
+
+            ctx.Check(Drop(water), $"the rocket reaches the water plate");
+            ctx.Same(2, field.LiveMarks, $"and leaves no mark on it, since a projected decal on the sea reads wrong");
+
+            GameSession.RegisterScorch(field, tarmac + new Vector3(200f, 0f, 0f), Vector3.Up, "3040slug_gunhit", carved: false);
+            ctx.Same(2, field.LiveMarks, $"a gun hit carries no fireball and marks nothing even under Enhanced");
+
+            GameSession.RegisterScorch(field, tarmac + new Vector3(300f, 0f, 0f), Vector3.Up, "he_ground_effect", carved: true);
+            ctx.Same(3, field.LiveMarks, $"a hit that carved a bowl marks the ground it opened");
+            ctx.Check(Mathf.IsEqualApprox(field.RadiusOf(2), CraterShape.RimRadius * 1.1f, 1e-3f),
+                $"and rings the carve at 1.1 of the crater radius (radius={field.RadiusOf(2):0.00} m)");
+
+            // The crater field's refusal, borrowed: a hit inside a live mark refreshes it.
+            live.SimStep(Dt);
+            field.Tick(5f);
+            ctx.Check(field.AgeOf(0) > 0f, $"the first mark has aged");
+            GameSession.RegisterScorch(field, tarmac + new Vector3(1f, 0f, 0f), Vector3.Up, "he_ground_effect", carved: false);
+            ctx.Same(3, field.LiveMarks, $"a second burst inside a live mark refreshes it instead of stacking a decal on it");
+            ctx.Check(Mathf.IsEqualApprox(field.AgeOf(0), 0f),
+                $"and the refreshed mark starts its life over (age={field.AgeOf(0):0.00} s)");
+
+            Cap(ctx, field, tarmac);
+            Expire(ctx, field);
+        }
+        finally
+        {
+            pool?.Free();
+            foreach (var plate in plates)
+            {
+                plate.Free();
+            }
+            ctx.Host.RemoveChild(field);
+            field.Free();
+        }
+    }
+
+    // The pool's own bound. The crater field keeps no count cap (its list only grows and the
+    // refusal is what holds it down), so the scorch's cap is its own: marks past it recycle the
+    // oldest decal rather than growing the pool.
+    private static void Cap(TestContext ctx, Effects.ScorchField field, Vector3 near)
+    {
+        for (int i = 0; i < 30; i++)
+        {
+            field.Tick(0.5f);
+            GameSession.RegisterScorch(field, near + new Vector3(0f, 0f, 60f + (i * 60f)), Vector3.Up,
+                "he_ground_effect", carved: false);
+        }
+        ctx.Same(16, field.PooledNodes, $"the pool stops at its cap of 16 decal nodes");
+        ctx.Same(16, field.LiveMarks, $"all sixteen stand, the thirty-third mark having taken the oldest slot");
+        float oldest = 0f;
+        for (int i = 0; i < field.PooledNodes; i++)
+        {
+            oldest = Mathf.Max(oldest, field.AgeOf(i));
+        }
+        ctx.Check(oldest < 16f * 0.5f,
+            $"no mark older than the sixteen most recent survives, the oldest having been recycled (oldest={oldest:0.0} s)");
+    }
+
+    // The life: a mark holds its darkness, fades over the tail and is hidden, not left drawn.
+    private static void Expire(TestContext ctx, Effects.ScorchField field)
+    {
+        float before = field.NodeOf(0).Modulate.A;
+        field.Tick(70f);
+        float faded = field.NodeOf(0).Modulate.A;
+        ctx.Check(faded < before && faded > 0f,
+            $"a mark fades over the tail of its life ({before:0.00} → {faded:0.00})");
+        field.Tick(30f);
+        ctx.Same(0, field.LiveMarks, $"every mark is gone once its life runs out");
+        ctx.Check(!field.NodeOf(0).Visible, $"and its decal is hidden rather than left drawn");
+        ctx.Same(16, field.PooledNodes, $"the pool keeps its nodes for the next burst rather than freeing them");
+        ctx.Note($"scorch: one decal per burst, cap 16, {CraterShape.RimRadius * 0.455f:0.0} m on bare ground and {CraterShape.RimRadius * 1.1f:0.0} m over a carve");
+    }
+
+    private static Vector3 Ground(TestContext ctx, List<StaticBody3D> plates, string name, Vector3 at, int surfaceId)
+    {
+        var plate = CombatSuites.Plate(name, new Vector3(120f, 0.2f, 120f), at);
+        plate.SetMeta(SceneBuilder.SurfaceIdMeta, surfaceId);
+        ctx.Host.AddChild(plate);
+        plates.Add(plate);
+        return at;
+    }
+
     // The carve option read where it decides: a live rocket warhead on untouched C1 ground, once
     // with it off and once on. The off leg is what every shipped run and every pinned golden sees.
     // The on leg carves although the struck node carries no can_modify stamp, which is the whole
@@ -202,6 +385,7 @@ internal static class CraterSuites
         ctx.Check(!SceneBuilder.CanModify(spot.Body), $"the spot's node carries no can_modify stamp ({spot.Body.GetParent()?.Name})");
         var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter));
         var plays = new List<(string Name, Vector3 At)>();
+        var scorches = new List<(string? Effect, bool Carved)>();
         int asked = 0;
         var pool = new ProjectilePool(textures, null, null)
         {
@@ -211,6 +395,7 @@ internal static class CraterSuites
                 return field.TryCarve(at, struck);
             },
             EffectSink = (name, at, orient, ring, ttl) => plays.Add((name, at)),
+            ScorchSink = (at, normal, effectName, carved) => scorches.Add((effectName, carved)),
         };
         bool armed = CraterGate.Enabled;
         int before = field.Craters.Count;
@@ -224,6 +409,10 @@ internal static class CraterSuites
             ctx.Same(0, asked, $"with the option off the gate refuses the rocket before the field is asked");
             ctx.Same(before, field.Craters.Count, $"and the ground is left intact, the behaviour every golden is pinned on");
             ctx.Check(off != null, $"the round still burst where it struck ({off?.Name ?? "no play"})");
+            // The enhanced scorch is asked on either leg. Uncarved, the burst's own effect decides:
+            // a fireball marks and this rocket's spark does not (GameSession.RegisterScorch).
+            ctx.Check(scorches.Count == 1 && !scorches[0].Carved && scorches[0].Effect == off?.Name,
+                $"the uncarved burst still asks the scorch sink, uncarved, with the effect it played ({(scorches.Count > 0 ? scorches[^1].Effect : "no ask")}, fireball={(scorches.Count > 0 && scorches[^1].Effect is { } burnt && EffectCatalogue.IsBurstLight(burnt))})");
 
             CraterGate.Enabled = true;
             var on = Drop(pool, rocket, spot.At + new Vector3(0f, 30f, 0f), plays);
@@ -231,6 +420,8 @@ internal static class CraterSuites
                 + $"{field.Craters.Count} craters, fx={on?.Name ?? "-"}");
             ctx.Same(1, asked, $"with the option on the same round is handed to the field");
             ctx.Same(before + 1, field.Craters.Count, $"which carves, although no node here carries the stamp");
+            ctx.Check(scorches.Count == 2 && scorches[1].Carved,
+                $"and the scorch sink is told this hit cut a bowl, so the mark rings the carve");
             ctx.Check(on != null && on.Value.Name == off?.Name,
                 $"and the burst plays the same row it played uncarved, since the option suppresses nothing ({on?.Name ?? "no play"} vs {off?.Name ?? "no play"})");
             float floor = ColumnY(space, spot.At, out _);

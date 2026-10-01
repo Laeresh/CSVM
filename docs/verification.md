@@ -195,6 +195,11 @@ member, and it does not go here.
   themselves cannot separate the pattern from the texture it lies on: over the same pose the C2
   city frame's own detail buries it entirely.
 
+- **SHOT-43**, **Read shadow noise on an aircraft against the same pose with the sun's shadow
+  off, never off the frame alone.** The airframe skins carry rivet rows that read as the same dot
+  grid, so a frame-only figure scores the texture; at C3's spawn the shadow's own high-pass excess
+  over the red paint was 1.13 levels against a 3.48 texture floor (`AirframeShadowLookupOffset`).
+
 ## GOLD, golden images
 
 - **GOLD-1**, **Update moved hashes with the visual change, and explain each moved shot in the
@@ -271,6 +276,10 @@ member, and it does not go here.
   a scripted capture pins its shape and never its pacing; judge pacing in a `--no-det` run.** The
   chase camera's throttle transient fell to 1/e in 2.15 sim seconds either way, which was 1.11 wall
   seconds under `--det` at 114 fps against 2.15 wall seconds without it.
+- **DET-16**, **A unit that blocks on work it queued with `Task.Run` can wait past any bound: xUnit runs
+  tests on pool threads, so the item lands in the blocked thread's local queue, which other threads
+  steal from only when the global queue is empty. Give such work its own thread.** The extraction
+  worker's cancel test failed 4 of 13 full unit passes with the item never started after 10 s.
 
 ## PERF, performance
 
@@ -325,7 +334,11 @@ member, and it does not go here.
   a thread's allocation context charges that thread for what the context still held. Empty it with
   a forced collection before any window that must read zero.** The step is that remainder alone,
   always under 8 KB: with per-thread pads 512 bytes apart it moved 512 bytes in lockstep, and
-  28,800 windows opened on an emptied context charged nothing where seven charged without it.
+  28,800 windows opened on an emptied context charged nothing where seven charged without it. A
+  loop of windows too many to collect before each measures again, after a forced collection, only
+  a window over its bound, and keeps the least reading, with a negative control that allocates on
+  every read. The net-message fuzz read a zero-allocating reader as 3,992 bytes against a
+  2,048-byte bound once in about 30 full unit passes.
 - **PERF-30**, **A unit test asserts a wall-clock FLOOR, or a figure read off a clock it advances
   itself, never a fixed millisecond ceiling: a ceiling reads the scheduler on an oversubscribed
   machine, so raising it moves the threshold rather than removing the flake.** A six-walk mean
@@ -386,6 +399,69 @@ member, and it does not go here.
   busy-wait injected into each launch reads a 30 ms median and fails. The cost of the choice: a
   regression that blocks instead of computing reads as nothing, so the window's wall worst stays in
   the report.
+- **PERF-37**, **`physics_ms` is Godot's physics-tick time, and a session whose clock is not
+  parent-driven runs its whole simulation step inside `GameSession._PhysicsProcess`. A large
+  `physics_ms` is therefore the game's own C# code until a split shows the physics server's step.**
+  A zeppelin gasbag loss on CM20 read as 205 and 424 ms of `physics_ms`, and the report blamed a
+  collision rebuild. The same frames in a probe run, where the step lands in `script_ms`, read
+  `physics_ms` at 0.4 to 0.9 ms. Timing the dispatch put the cost on the first CALL_ANIMATION of
+  each library-root effect. Building the copy was under 1 ms; indexing it was 100 to 200 ms. The
+  index ran every RESET_STATE definition's whole-table name scan and then voided every memoized
+  lookup, so the frame after paid for the refill. `zeppelin-library-copy-hitch` holds both on the
+  thread clock (PERF-36). Unfixed, it reads 97 to 131 ms per copy and 18 to 22 ms to re-ask 200
+  names. Fixed, it reads 6.4 ms and 0.2 ms, under bars of 40 and 5 ms.
+
+- **PERF-38**, **A scripted `--campaign=` run spends its first minute in the mission's intro
+  cutscene, so read `ai_planes` before crediting a window to the mission: 0 means the film, not
+  the fight.** CM24 under `--det` read 8.5 ms frames for 30 sim seconds of intro, and 17 to 23 ms
+  once the film was skipped and 22 AI planes flew.
+- **PERF-39**, **`gpu_ms` and `render_cpu_ms` measure the root viewport alone, so a splitscreen
+  frame's cost is every pane's measured time summed; a `frame_ms` that stays flat while that sum
+  moves says the frame is CPU-bound.** Four-pane CM24 held 31.7 ms frames while the panes' GPU sum
+  ran from 11.3 to 19.5 ms across shadow settings. In splitscreen the root viewport draws no world,
+  so both read near zero there.
+- **PERF-44**, **Split a draw count by viewport and by pass (`ViewportGetRenderInfo`, visible and
+  shadow) before crediting it to a source: the frame's total cannot show a viewport nobody sees.**
+  Four-pane CM24's 20,500 draws held about 6,400 from the root viewport, which rendered the whole
+  world at the window's size behind the opaque pane backdrop.
+- **PERF-40**, **`script_ms` is Godot's `TIME_PROCESS`, which runs from the process pass through the
+  draw and its present, so it holds the render as well as the scripts. Split a frame with the gap
+  terms instead: `phys_engine_ms`, `defer_ms`, `draw_ms` and `idle_ms`, with `proc_ms` and ticks per
+  frame times `phys_tick_ms`, sum to `frame_ms`.** On the Deck in CM24 `script_ms` read 20 to 60 ms
+  beside a 4.1 ms `proc_ms`, where `draw_ms` was 11.3 ms and `defer_ms` about 3 ms of each frame.
+- **PERF-41**, **Count a `dotnet-trace` capture's samples from the `.nettrace`, never read its
+  speedscope conversion as a timeline: the main thread is sampled only while it runs managed code,
+  and the conversion stretches each sample to the next, charging native time to the managed stack
+  before it.** The speedscope view of a CM24 trace put managed callbacks at 100 % of the main
+  thread; the samples themselves covered 28 % of its wall time.
+- **PERF-42**, **Judge a Deck target on the Deck: engine-native terms (the transform flush, the
+  physics step, the draw) grow far more from the author's machine to the Deck than managed phases
+  do, so a desktop profile ranks the Deck's costs wrongly.** In CM24 `phys_engine_ms` grew 5 to 7
+  times and `defer_ms` about 3 times, while the AI and animation phases grew 1.2 to 1.4 times.
+- **PERF-43**, **Under the separate render thread, a `RenderingServer` getter called in the frame
+  waits for the previous draw, so its wait reads as `proc_ms` or `phys_tick_ms`, and `draw_ms` is
+  only the draw's hand-off. A Godot debug build prints `causing RenderingServer synchronizations on
+  every frame` for each such call; the frame's own wait for the render thread is in `defer_ms`.**
+  The per-frame render-time read raised CM24's `proc_ms` on the Deck from 3.8 to 10.3 ms.
+- **PERF-45**, **The first frame a process draws with TAA stalls for every Shader object alive, not
+  for what that frame draws: Godot then builds the advanced scene-shader group (20 variants a shader
+  beside the base group's 8) for every version (`ShaderRD::enable_group`, a disk-cache hit loading
+  synchronously on the render thread) and recompiles every surface's pipelines for the new flags.
+  Count the live shaders with `--debug-shaders` before reading such a stall, and read it as
+  Godot's, not the frame's.** A first switch to Enhanced on CM24 stalled 10.2 s over 217 shaders,
+  8.6 s over 138 once texts were shared; one hidden TAA frame at load took the same build there.
+- **PERF-46**, **Under the separate render thread a per-instance `MultiMesh` getter is a synchronous
+  round trip, so a loop of them over a large MultiMesh costs about a microsecond each in waits. Keep
+  the state you need to read in a mirror of your own, and fill a new MultiMesh with one `Buffer`
+  write.** Reading C5's 199,685 clutter placements back took 290 to 440 ms of every graphics switch.
+- **PERF-47**, **Count each pane's spyglass disc as a viewport of its own: it renders the whole
+  world through the pane's cull mask, sun shadows included, on every frame a target is off screen,
+  and a flight with several players holds one most of the time.** In four-pane C5 flight the four
+  discs drew 5,400 of 11,700 draws, more than the panes' own world draws.
+- **PERF-48**, **Compare four-pane frame times only within one interleaved batch: the same build's
+  `frame_ms` on the author's machine moves by more than a change's effect between batches an hour
+  apart.** C5 four-pane with the merge off read 14.8 and 15.1 ms in one batch and 13.3 and 13.4 ms
+  in a later one, against a merge effect of 0.4 to 1.8 ms.
 
 ## LOG, logs, error censuses, and exit codes
 
@@ -420,6 +496,11 @@ member, and it does not go here.
   numeric format (`:0.0`, `ToString("0.#")`) OUTSIDE a `Log.*` call, in a summary property, a
   `reason` argument, a list entry or a `StringBuilder.Append`, and give each one `Log.Format` or
   `FormattableString.Invariant`.
+- **LOG-24**, **A socket suite that passes alone can fail beside a sibling shard; take its port from
+  `Testing/SuitePorts.cs`, since a walk past a busy port still leaves the bind's engine `ERROR` line.**
+  With the old fixed ports held by another process,
+  `lan-discovery` failed and three `Couldn't create an ENet host` lines failed the run, though
+  every walking suite then found a free port.
 
 ## WORLD, world data and runtime traps
 
@@ -438,7 +519,7 @@ member, and it does not go here.
 - **WORLD-25**, **A registry total counts bindings, not coverage: a larger census can mean one
   definition claimed objects it does not describe.**
 - **WORLD-26**, **Anchor an effect to the object it decorates, not to a parameter that merely
-  describes it.** C3 authors a sun yaw of 135 while its `sun` node sits at yaw 45.
+  describes it.** C3 authors a sun pitch of −25 while its `sun` node sits 34.4° above the horizon.
 - **WORLD-27**, **`--play-anim` proves a definition RUNS; it says nothing about whether the game
   ever reaches it, so drive the real entry point before concluding the definition is at fault.**
 - **WORLD-28**, **A suite world built without collision, or with no `ContactMask` wired, poses
@@ -539,6 +620,10 @@ member, and it does not go here.
   the approach docked with none. `campaign-coop-hookup-seat` reads the table's own answer for the
   airframe name beside the two hooks, which tells an arm resolving the wrong aeroplane apart from
   an effect attached to the wrong rig.
+- **WORLD-50**, **Read a gamez node's `parent_indices` before calling it missing from the built
+  world: an empty list is a library root, which the world build never creates and no lookup finds.**
+  C1's `cs_flg_light1`, the carried flag, answered neither `AnimRuntime.FindNodes` nor a name walk
+  of the world root while `nodes.json` held it, and `SceneBuilder.BuildSubtree` built it.
 
 ## SHELL, Windows, PowerShell, and processes
 
@@ -872,6 +957,18 @@ member, and it does not go here.
   blended surface whose alpha is below one paints over a card's soft edge without erasing it, and an
   equality count reads that as zero.** A C1 ground strip sorted after a tree card read 0 erased
   pixels and 1125 reordered ones in the same pane.
+- **INSTR-96**, **Count leaked nodes as orphans left AFTER the harness frees what was queued, and
+  list them through `ClassDB.ClassCallStatic("Node", "get_orphan_node_ids")`: the C# binding
+  `Node.GetOrphanNodeIds` types the 64-bit ids as `int`, so none of them resolves.** Before the
+  flush the queued frees swamped a 26-node session leak with up to +7,219 in one menu suite; after
+  it every suite in the catalog leaves 0, `TestHarness.OrphanLeakTolerance` is 0, and a failing
+  suite's verdict names each new orphan root with its node count. A `Dispose()` on a node drops
+  only its C# wrapper, so a test node is freed with `Free()`.
+- **INSTR-97**, **A session suite that steps only `_PhysicsProcess` never plays a film out: the
+  world's animation and the cutscene host advance in the frame, so the film holds until a skip and
+  whatever a played-out film leaves in the world is never seen. Advance the world runtime and tick
+  the cutscene beside each step.** With both added, CM09's opening film handed off by itself after
+  3193 steps on host and guest and left its wingman prop drawn about 50 m from the seats on both.
 
 ## SRC, sources and documents
 
@@ -919,6 +1016,16 @@ member, and it does not go here.
   objective number was written up as coming from the mission graph because `dzones.zrd` was said to
   carry no objective id; its `objective_numbers` key carries exactly that id, and the pairs match
   the shipped `Snap_<mission>_<objective>` scrapbook rows mission for mission.
+- **SRC-20**, **Evaluate a decoded compare at the shipped option and data values before saying what
+  the player hears; a threshold on a product of scales can be partial or inert at the defaults.**
+  The engine voice duck was written up as halving the engines, and with `SfxVolume` 0.5 and the
+  authored limiter 0.4 in the product it lowers them by about 1.9 dB.
+- **SRC-21**, **A constant a config reader stores when a key is missing is a fallback, not the value
+  in play; open the file the reader loaded before citing it.** The multiplayer score table was read
+  as kill +1 and lost hull +100, and the shipped `player.zrd` authors 2 and 10.
+- **SRC-22**, **When a reader leaves a global alone on a missing key, the value in play is the
+  global's initialised bytes; read them from `.data` before quoting a default.** The rearm radius
+  was written up as 624.0, and `0x628f10` holds 625.0, 25 m squared.
 
 ## What this project cannot verify itself
 

@@ -7,6 +7,7 @@ using CSVM.Flight.Ai;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
+using CSVM.Session.Roster;
 using Godot;
 using Xunit;
 
@@ -125,6 +126,97 @@ public class CampaignRosterPlanTests
         Assert.Same(fit, byName["wingman_1"].Fit);
         Assert.Equal("player_pfighter", byName["wingman_2"].PlaneNode);
         Assert.Null(byName["wingman_2"].Fit);
+    }
+
+    [Fact]
+    public void AnEnemyOnTheWingmansAirframeCarriesNoFit()
+    {
+        var fit = new LoadoutChoice();
+        var plan = CampaignRosterPlan.Build(new List<(string, List<object?>)>
+        {
+            ("wingman_1", Block(-1f, "player")),
+            ("secfury_1", Block(5f, "")),
+        }, Defs, Nets, wingmanNode: "player_fury", wingmanFit: fit);
+
+        var byName = plan.Spawns.ToDictionary(s => s.Name);
+        Assert.Same(fit, byName["wingman_1"].Fit);
+        Assert.Equal("player_fury", byName["secfury_1"].PlaneNode);
+        Assert.Equal("secfury", byName["secfury_1"].AiDef);
+        Assert.Null(byName["secfury_1"].Fit);
+    }
+
+    [Fact]
+    public void ANonVariantBlockOnTheWingmansAirframeKeepsThePlainBaseDef()
+    {
+        var plan = CampaignRosterPlan.Build(new List<(string, List<object?>)>
+        {
+            ("wingman_1", Block(-1f, "player")),
+            ("bswingman_1", Block(-1f, "player")),
+        }, Defs, Nets, wingmanNode: "player_fury", wingmanFit: new LoadoutChoice());
+
+        var byName = plan.Spawns.ToDictionary(s => s.Name);
+        Assert.Equal("wfury", byName["wingman_1"].AiDef);
+        Assert.Equal("player_fury", byName["bswingman_1"].PlaneNode);
+        Assert.Null(byName["bswingman_1"].AiDef);
+        Assert.Equal("wingman", byName["bswingman_1"].Mode);
+        Assert.Null(byName["bswingman_1"].Fit);
+    }
+
+    [Theory]
+    [InlineData("c3", "m05")]
+    [InlineData("C4", "M04")]
+    public void TheHandOverBlockFliesThePlayerAirframesWingmanTwin(string chapter, string mission)
+    {
+        var paint = new PaintScheme { Pattern = "player_fortune" };
+        var plan = HandOverPlan(chapter, mission, new FlyingAirframe("player_fury", paint), netIds: -1f);
+
+        var byName = plan.Spawns.ToDictionary(s => s.Name);
+        var handed = byName["wingman_4"];
+        Assert.Equal("player_fury", handed.PlaneNode);
+        Assert.Equal("wfury", handed.AiDef);
+        Assert.Equal("wingman", handed.Mode);
+        Assert.True(handed.Escorts);
+        Assert.Same(paint, handed.Scheme);   // the player's paint outranks the twin's livery
+        Assert.Null(handed.LiveryDef);
+        Assert.Null(handed.Fit);
+        // Keyed on the block name: wingman_1 and an enemy on the same airframe keep their own defs.
+        Assert.Equal("player_pfighter", byName["wingman_1"].PlaneNode);
+        Assert.Equal("wingman", byName["wingman_1"].AiDef);
+        Assert.Equal("secfury", byName["secfury_1"].AiDef);
+    }
+
+    [Fact]
+    public void ANettedHandOverBlockTakesTheTwinAndIsStillDemoted()
+    {
+        var plan = HandOverPlan("c4", "m04", new FlyingAirframe("player_fury", null), netIds: 5f);
+
+        var handed = plan.Spawns.Single(s => s.Name == "wingman_4");
+        Assert.Equal("wfury", handed.AiDef);
+        Assert.Equal("wingman", handed.Mode);
+        Assert.False(handed.Escorts);
+        Assert.Equal(5, handed.Net?.Id);
+    }
+
+    [Fact]
+    public void AHandedOverDevastatorFliesTheWingmanDefTheOriginalNamesForIt()
+    {
+        var plan = HandOverPlan("c3", "m05", new FlyingAirframe("player_pfighter", null), netIds: -1f);
+
+        var handed = plan.Spawns.Single(s => s.Name == "wingman_4");
+        Assert.Equal("player_pfighter", handed.PlaneNode);
+        Assert.Equal("wingman", handed.AiDef);
+    }
+
+    [Fact]
+    public void OutsideTheTwoHandOverMissionsTheBlockKeepsItsOwnDef()
+    {
+        var paint = new PaintScheme { Pattern = "player_fortune" };
+        var plan = HandOverPlan("c3", "m01", new FlyingAirframe("player_fury", paint), netIds: -1f);
+
+        var own = plan.Spawns.Single(s => s.Name == "wingman_4");
+        Assert.Equal("player_pfighter", own.PlaneNode);
+        Assert.Equal("wingman", own.AiDef);
+        Assert.Null(own.Scheme);
     }
 
     [Fact]
@@ -294,6 +386,17 @@ public class CampaignRosterPlanTests
         Assert.Equal(new AiVolume(700f, 200f, -50f), set.Return);
         Assert.False(AiVolumeSet.FromNetRecord(new List<object?> { null, 10f }).IsAuthored);
     }
+
+    // The hand-over roster as CampaignDirector plans it. The player's airframe goes in only where
+    // the mission resolves the hand-over, and no profile wingman is bound, as in both missions.
+    private static CampaignRosterPlan HandOverPlan(string chapter, string mission,
+        FlyingAirframe flying, float netIds) =>
+        CampaignRosterPlan.Build(new List<(string, List<object?>)>
+        {
+            ("wingman_1", Block(-1f, "player")),
+            ("wingman_4", Block(netIds, "player")),
+            ("secfury_1", Block(5f, "")),
+        }, Defs, Nets, handover: AirframeHandover.Resolves(chapter, mission) ? flying : null);
 
     // The shipped shape: each key followed by a one-element value LIST.
     private static List<object?> Props(params object?[] pairs)

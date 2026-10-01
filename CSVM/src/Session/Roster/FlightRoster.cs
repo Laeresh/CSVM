@@ -30,6 +30,7 @@ public readonly record struct FlightRosterBuild(int MeshInstances, string Summar
 /// <c>InitHealth</c>/<c>Armor</c> override the hull pools pre-scale (docs/org/vehicleDamage.md).</summary>
 public readonly record struct AiSpawn(string PlaneName, Vector3 Position, Vector3 LookAt, AiPilot Pilot,
     PaintScheme? Scheme = null, int? Team = null, bool Inert = false, bool ShippedSkins = false,
+    // ⚠ Set Fit on a wingman spawn only: it outranks the AI def's own weapons block too.
     string? AiDef = null, LoadoutChoice? Fit = null, int? AttackRating = null, bool Nitro = false,
     AiSkillVector? RosterSkills = null, string? NodeName = null, string? PilotName = null,
     // Overrides the session difficulty for this one spawn, which is all an Instant Action wave's
@@ -61,6 +62,7 @@ public sealed class FlightRoster
     private readonly HumanRosterBindings _human;
     private readonly Action? _aiAssemblyFault;
     private readonly string _zrdrPath;
+    private readonly LiveryResolver _liveries;
     private readonly List<FlightController> _ai = new();
     private readonly IReadOnlyList<FlightController> _aiView;
     private readonly Dictionary<FlightController, AiSubscriptions> _aiSubscriptions = new();
@@ -106,6 +108,7 @@ public sealed class FlightRoster
         _human = human;
         _aiAssemblyFault = aiAssemblyFault;
         _zrdrPath = aircraft.ZrdrPath;
+        _liveries = liveries;
         _aiView = _ai.AsReadOnly();
         if (starts != null)
             _players = new HumanFlightAdapter(policy, liveries, starts, worldEffects!, worldRoot,
@@ -338,14 +341,14 @@ public sealed class FlightRoster
         {
             if (rig.Controller is { } controller)
             {
-                controller.DetachRosterBindings(_world.Projectiles);
+                controller.DetachRosterBindings(_world.Projectiles, freeNow: true);
                 rig.Controller = null;
             }
         }
         foreach (var controller in _ai)
         {
             RemoveSubscriptions(controller);
-            controller.DetachRosterBindings(_world.Projectiles);
+            controller.DetachRosterBindings(_world.Projectiles, freeNow: true);
         }
         _humans = Array.Empty<PlayerRig>();
         _ai.Clear();
@@ -381,10 +384,10 @@ public sealed class FlightRoster
         return null;
     }
 
-    /// <summary>The whole of one mission-script airframe swap, as codes 965 to 967 raise it: the
-    /// rig rebuilt on the named airframe, the capture animation's own aircraft hidden with what is
-    /// left of its hull and its own livery carried onto the new one (967), and the aeroplane the
-    /// player just left handed to <see cref="AirframeHandover.WingmanName"/> off the nose when
+    /// <summary>The whole of one mission-script airframe swap, as codes 965 to 967 raise it. The rig
+    /// is rebuilt on the named airframe in the captured aircraft's livery (966 and 967). The capture
+    /// animation's own aircraft is hidden with what is left of its hull (967). The aeroplane the
+    /// player just left goes to <see cref="AirframeHandover.WingmanName"/> off the nose when
     /// <paramref name="handsOver"/> says this mission resolves that name. What the capture half hid
     /// comes back in the <see cref="AirframeSwapResult"/>.</summary>
     internal AirframeSwapResult RunSwap(PlayerRig rig, AirframeSwapOrder order, bool handsOver)
@@ -402,19 +405,18 @@ public sealed class FlightRoster
         float healthLeft = outgoing.Damage?.WholeHealth ?? 0f;
         var wasAt = outgoing.WorldPosition;
         var wasNose = outgoing.NoseDirection;
-        var captured = AirframeHandover.CarriesCapturedDamage(order.Airframe)
+        var captured = AirframeHandover.CarriesCapturedPaint(order.Airframe)
             ? AiNamed(order.CaptureRoot)
             : null;
-        // The captured rig's own scheme rides the rebuild (undecoded in the executable, so this is
-        // the user's own controls reading) with its ShippedSkins reading, since a real enemy spawn
-        // resolves to no scheme at all and null must beat default; 965 draws its shipped skins.
+        var (scheme, shippedSkins) = CapturedPaint(order.Airframe, captured);
         var build = order.Airframe.AwardAirframe is { } awardAirframe
             ? CampaignProgression.AwardBuild(awardAirframe)
             : null;
-        var replacement = SwapPlayerAirframe(rig, order.Airframe.PlaneNode, captured?.Scheme,
-            captured?.ShippedSkins ?? order.Airframe.ShippedSkins, build);
+        var replacement = SwapPlayerAirframe(rig, order.Airframe.PlaneNode, scheme, shippedSkins, build);
         RepointHolders(outgoing, replacement);
-        var hidden = CarryCapturedDamage(captured, rig.Controller?.Damage);
+        var hidden = AirframeHandover.CarriesCapturedDamage(order.Airframe)
+            ? CarryCapturedDamage(captured, rig.Controller?.Damage)
+            : null;
         if (captured != null && AirframeHandover.CarriesCapturedGroup(order.Airframe))
         {
             replacement.Group = captured.Group;
@@ -444,6 +446,26 @@ public sealed class FlightRoster
         fresh.ScalePools(armor, health);
         Log.Info("flight", $"airframe swap: '{captured.Name}' hidden, its hull (armour {armor * 100f:0}%, structure {health * 100f:0}%) carried onto the player's");
         return captured;
+    }
+
+    // The captured aircraft's livery (966 and 967), the user's own controls reading and undecoded in
+    // the executable. A live rig answers with its ShippedSkins reading: a real enemy spawn can resolve
+    // to no scheme, and that null must beat the pilot's default. With no live rig, 966 reads its
+    // militia def; --paint= is about this run and keeps the pilot's paint.
+    private (PaintScheme? Scheme, bool ShippedSkins) CapturedPaint(AirframeSwapCode airframe,
+        FlightController? captured)
+    {
+        if (captured != null)
+        {
+            return (captured.Scheme, captured.ShippedSkins);
+        }
+
+        if (AirframeHandover.CapturedPaintDef(airframe) is { } def && !_liveries.PaintRequested)
+        {
+            return (_liveries.DefScheme(_zrdrPath, def), true);
+        }
+
+        return (null, airframe.ShippedSkins);
     }
 
     // Step 2's re-point walk: every AI pilot holding the aircraft the player just left, as its
@@ -526,7 +548,7 @@ public sealed class FlightRoster
         // Before the detach, because a rollback's controller is freed here and a rig still queued
         // against it would be built onto a node on its way out.
         _crashRigs.Drop(controller);
-        controller.DetachRosterBindings(_world.Projectiles);
+        controller.DetachRosterBindings(_world.Projectiles, freeNow: false);
         controller.GetParent()?.RemoveChild(controller);
         controller.QueueFree();
     }

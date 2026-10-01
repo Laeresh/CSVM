@@ -24,8 +24,8 @@ when the device is not. Pinned by the `target-input` suite.
 The session's simulation clock: `BeginFrame(wallDelta)` sets `Steps` and `Dt`, and `GameSession`
 turns those into requests to `SessionSimulation`, so pausing, single-stepping and fixed-dt replay
 all enter through one ordered step. Modes are Realtime, FixedAccum (the interactive anim lab) and
-FixedStep (scripted runs and `--det`); `Halted`, `SimHeld` and `AuthoredAnimationHeld` are
-orthogonal holds, each carrying its own rule at its own field. Published as `GameClock.Current`,
+FixedStep (scripted runs and `--det`); `Halted`, `SimHeld`, `AuthoredAnimationHeld` and
+`StartHeld` (a network flight waiting for every machine to load) are orthogonal holds, each carrying its own rule at its own field. Published as `GameClock.Current`,
 session-scoped and nulled on teardown, where null reads as the raw frame delta. Read
 `RenderPoses.cs` for the render half of the same tick and `ShaderTime.cs` for the shaders' view.
 
@@ -143,12 +143,43 @@ site vocabulary, the seeded call sites and the attribution terms a record carrie
 ## src/Utils/PaneReadback.cs
 One frame of a viewport read back without stalling the frame that asks: the Danger Zone camera's
 own viewport (`Flight/Modes/DangerZonePhotograph.cs`), a pilot's pane where no frames draw, and the
-screenshot key's frame. A synchronous `GetImage` plus a PNG encode of a 5120x1440 pane costs the
-frame that runs them over a second. The request copies the viewport's render target through
-`RenderingDevice.TextureGetDataAsync`, whose callback arrives after the device's frame queue, and
-a worker builds the image (RGB8 for an opaque viewport, as `GetImage` answers) and runs the
-caller's continuation, which encodes there too and defers to the main thread for anything touching
-the scene. No rendering device, or a render target other than RGBA8, falls back to the synchronous read.
+screenshot key's frame, where a synchronous `GetImage` and encode of a 5120x1440 pane cost over a
+second. It copies the render target through `RenderingDevice.TextureGetDataAsync`, on the render
+thread since only that thread may call the device, and a worker builds the image (RGB8 for an
+opaque viewport, as `GetImage` answers) and runs the caller's continuation, which defers to the main
+thread for anything touching the scene. No rendering device, or a render target other than RGBA8,
+falls back to the synchronous read.
+
+## src/Utils/MeasuredRenderTime.cs
+The root viewport's measured render CPU and GPU times for `Launcher`'s per-frame counter read, which
+feeds `HitchMonitor`, the perf readout and `--perf`. Under the separate render thread Godot's two
+getters each wait for the previous draw, so a call queued on the render thread publishes the pair
+and the frame takes the latest one, a draw older than a synchronous read. On one thread the read is
+direct. Why the wait matters: `docs/verification.md` PERF-43.
+
+## src/Utils/SceneCopy.cs
+A node subtree's copy for the three places that duplicate one in play: the splitscreen cloud decks
+(`Launch/GameSession.cs`), the staged chute figures (`Mech3/WorldSession.cs`) and the glTF
+export (`Tooling/GltfExporter.cs`). `Duplicate()` builds each geometry node's property list, which
+under the separate render thread queues a call that writes into the caller's finished stack frame
+and kills the process. The copy reads a geometry node's properties off its class, then its
+metadata, surface materials and blend shapes; other nodes copy through their own list. Instance
+uniforms stay behind, as under `Duplicate()`.
+
+## src/Utils/TextureUpload.cs
+New pixels for a texture the game repaints while it runs: the ground shadow's silhouette, the world
+light table, the cinema and the menu movies. Each upload builds its own `Image`, because under the
+separate render thread the update is queued and read later, and an Image refilled in place with
+`SetData` swaps its buffer under that reader. `Create` makes the texture and `Replace` hands it the
+next picture, holding each Image by a second native reference until the render thread lets go, so
+that thread never swaps the C# wrapper's GC handle, a swap that corrupts the managed heap when it
+races the main thread's. The live alpha-depth follow hands a finished mipmapped Image to the same
+holding `Replace`.
+
+## src/Utils/SwitchProfile.cs
+The live graphics-mode switch's stopwatch: `EnhancedLook.Switch` and `GameSession.ApplyGraphicsMode`
+mark each step, and the switch's log line carries the steps that cost a millisecond. A step that
+blocks on the renderer shows the wait there, which is how a compile the switch queued surfaces.
 
 ## src/Utils/WallCostBank.cs
 One `--perf` cost meter: the open/close bracket, the banked wall milliseconds, the worst single
@@ -177,6 +208,15 @@ the `--perf` window means over; a caller reading from inside the pass gets the f
 its next window instead. `PhysicsTickCost` above is the same bank around the physics tick. Godot's
 `TIME_PROCESS` monitor answers neither question, and the misreading it invites is
 `docs/verification.md` PERF-1.
+
+## src/Utils/EngineGapCost.cs
+The frame time no scene-tree callback owns, banked by the same `WallCostBracket` nodes as the two
+pass meters above: the gap after a physics tick (the tree's end-of-tick flush and the physics
+server's step), and the gap after the process pass, split at the rendering server's
+`frame_pre_draw` and `frame_post_draw` signals into the end-of-frame flush (deferred calls, every
+queued `_Draw`, transform notifications), the draw with its present, and the idle rest. `--perf`
+hooks the two signals and prints the four terms per frame, so they and the two pass terms sum to
+`frame_ms`. Rules: `docs/verification.md` PERF-40, and PERF-43 for the separate render thread.
 
 ## src/Utils/AiStepCost.cs
 The wall cost of the flight roster's AI walks and how many aircraft they walked, banked by an
@@ -243,17 +283,61 @@ The original's graphics EffectsLevel option as a config key (`graphics.effectsLe
 [../formats/templates.md](../formats/templates.md). A second key, `graphics.clutterFarFade`, is the
 remake's own switch: false resolves the global to a never-fades scale, so clutter draws out to the
 fog instead of ending at the authored metres. Enhanced mode scales it by
-`WeatherRig.EnhancedFogScale()` squared. Read `ClutterBuilder` and `MapEdgeExtender` next.
+`WeatherRig.EnhancedFogScale()` times `ViewDistance.ClutterReach()`, squared. Read `ClutterBuilder` and `MapEdgeExtender` next.
 
 ## src/Utils/GraphicsMode.cs
 The opt-in enhanced-lighting mode's setting (`original` or `enhanced`, default `original`),
-resolved once by `Launcher._Ready` into the single boolean `GraphicsMode.Enhanced` every later
-scene builder reads, so the sources can be layered without touching a reader. The order mirrors
-`PresentationResolution`'s: `--graphics=` beats the saved `graphicsMode` option (`OptionsStore`),
-which beats the `graphics.mode` config key, which beats the default; an unknown word at any layer
-warns and falls back. `--det` drops both machine-state layers and keeps only an explicit
-`--graphics=`, which is how a golden or a deterministic capture pins the mode on purpose. The mode
-itself is written up as a divergence in `docs/architecture/Spec.md`.
+resolved by `Launcher._Ready` into the single boolean `GraphicsMode.Enhanced` every scene builder
+reads. `Set` is the live switch (`EnhancedLook.Switch`), and `SwitchLocked`, true in a network
+session, refuses one. `--graphics=` beats the saved `graphicsMode` option (`OptionsStore`), which
+beats the `graphics.mode` config key, which beats the default; an unknown word at any layer warns
+and falls back. `--det` drops both machine-state layers and keeps only an explicit `--graphics=`,
+which is how a golden or a deterministic capture pins the mode on purpose. The mode itself is
+written up as a divergence in `docs/architecture/Spec.md`.
+
+## src/Utils/AntiAliasingSetting.cs
+The anti-aliasing method, a VIDEO page display setting over `DisplayWords.AntiAliasingChoices`: `off`, `fxaa`, `smaa`,
+`taa` or `fsr2`. `Resolve` layers the saved `antiAliasing` word, then the `graphics.antiAliasing` config key, then
+`DefaultFor` the graphics mode, which is `off` under Original and `taa` under Enhanced; an unknown config word warns and
+falls back. A chosen method is written whichever mode won, since only the default follows the mode. `SavedWord` holds the
+`--det` guard. The resolve runs at launch after `GraphicsMode.Resolve`, and again on a live mode switch or an Options apply, landing in the static `Method`, whose one
+reader is `ViewportQuality.Apply`; `Launcher`'s `[world] graphics mode:` line announces the word and its source. FSR 2.2
+refuses a render scale above native, which `RenderScaleSetting.ClampFor` applies.
+
+## src/Utils/ShadowQualitySetting.cs
+The Enhanced sun's shadow quality, a VIDEO page row over `Words`: `off`, `low`, `medium`, `high` or `ultra`.
+`Resolve` layers `--shadow-quality=`, the saved `shadowQuality` word, the `graphics.shadowQuality` config key, then
+`DefaultFor(det)`: `ultra`, or `high` where the GPU reports integrated (the Steam Deck), and `ultra` under `--det` everywhere;
+`SavedWord` holds the `--det` guard. Each word maps to a `SunShadowPlan`:
+whether the sun casts, its angular distance and blur, and the renderer-wide soft filter and atlas edge. `ApplyTo` is the one
+writer, re-runnable, called by `Launcher.ApplyShadowQuality` at the sun's build and on every Options apply; it writes nothing
+on the faithful path and bumps `Revision`, which the cockpit pass (`Flight/Hud/CockpitOverlay.cs`) re-copies the sun on. The
+split-screen panes share the world's one sun. Why each level stands where it does: `analysis/screen-dither/FINDINGS.md`.
+
+## src/Utils/ViewportQuality.cs
+What `AntiAliasingSetting` and `RenderScaleSetting` write on a 3D viewport, gathered here because
+there are four viewports to write them on: the root viewport `Launch/Launcher.cs` owns, and the SubViewports
+`Flight/Hud/CockpitOverlay.cs`, `Flight/Camera/SpyglassView.cs` and `UI/Boards/SplitScreen.cs` build. `Apply` runs once per viewport at
+construction and remembers it weakly; `ReapplyAll` writes the settings resolved now on every one still alive (a live mode switch, an Options apply). FXAA and SMAA go to `ScreenSpaceAA`, TAA to `UseTaa`. Below native the scale runs through
+`Scaling3DModeEnum.Fsr2` under `fsr2` and `Fsr` otherwise, and above native through `Bilinear`, the one mode Godot
+supersamples in. At native only `fsr2` writes a scaling mode, `Fsr2` at 1.0, which runs as anti-aliasing alone. `off` at
+native writes nothing, so a faithful `--det` run reads back Godot's own defaults. MSAA stays `project.godot`'s.
+
+## src/Utils/ViewDistance.cs
+Enhanced mode's view distance: four saved words (`normal`, `far`, `veryfar`, `unlimited`), one
+label table beside them, resolving to how much further the clutter draws than the fade enhanced
+mode already gives it: 1x, 2x, 4x or no fade. The fog never moves with it, the early chapters'
+haze being part of their scenery; C5's city blocks fade well inside theirs. The faithful path keeps
+the decoded fade. The Built-in Options screen offers it under the graphics row, dead until Enhanced
+is chosen. `Resolve` layers `--view-distance`, the saved word (never under `--det`), the
+`graphics.viewDistance` key and the default Far, the largest step four C5 panes run at Normal's
+cost. `Launcher` folds `ClutterReach` into the clutter fade global at startup and on every apply.
+
+## src/Utils/SunShadow.cs
+The shadow settings one `DirectionalLight3D` hands another, clamped to the receiving pass's far
+plane: `Flight/Hud/CockpitOverlay.cs`'s own sun takes the session sun's at build and on a live
+graphics-mode switch, and `Launch/EnhancedLook.cs` resets the session sun from a fresh light
+through it. Below Flight and Session so both share one field list.
 
 ## src/Utils/VSyncSetting.cs
 The frame pacing, one setting carrying both whether the loop waits for the screen and the cap it
@@ -295,20 +379,30 @@ moved nothing) leaves a window where the player is looking. `SavedWord` holds th
 the one place `DisplayServer.WindowSetCurrentScreen` is called and skips a window already there; both of
 `Launcher`'s call sites make it before the mode and the size, a mode applied first filling the old screen.
 
+## src/Utils/RenderScaleSetting.cs
+The render scale, a VIDEO page display setting: the multiple of its own size a 3D viewport renders at. Above native the
+image is resampled down, spending GPU headroom on edges; below native it is upscaled, buying frame rate on a machine
+without it. The words are `DisplayWords.RenderScaleChoices`, percentages of native from 50 to 200. `Resolve` layers the
+saved `renderScale` word, then the `graphics.renderScale` config key, then native; an unknown word reads as never set and
+a key spelling native reads as the default. The winner is then clamped under the anti-aliasing word: `fsr2` pulls a scale
+above native to 100 (`ClampFor`, which the VIDEO page applies when FSR 2.2 is picked) and `ChoicesFor` offers it only 50
+to 100. `SavedWord` holds the `--det` guard. The resolve runs at launch and on a live apply, landing in the static `Scale`, whose one
+reader is `ViewportQuality.Apply`; `Launcher`'s `[world] graphics mode:` line announces it and any clamp.
+
 ## src/Utils/ScriptedWindow.cs
 Win32-only window hiding for scripted runs: `ScriptedWindow.Hide()` calls `ShowWindow(SW_HIDE)` on
 the native window handle. Fully static, one call site in `Launcher._Ready` right after the `--det`
 block, where the same predicate drives both window hiding and the interactive run's focus request.
 
 ## src/Utils/OptionsStore.cs
-Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode and difficulty words, the four
-display settings (monitor index, resolution, display mode, V-Sync), the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn and the remembered install folder (fully qualified or dropped). One file, `user://options.json`,
+Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode, view distance and difficulty words, the six
+display settings (monitor index, resolution, display mode, V-Sync, render scale, anti-aliasing), the Enhanced shadow quality, the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn, the remembered install folder (fully qualified or dropped), and the network callsign, voice and game name the Game and Player Information boxes remember. One file, `user://options.json`,
 independent of `Session/Campaign/CampaignProfileStore.cs`. A missing or malformed file reads as empty, an unknown version invalidates it, an
 unknown value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
 `Version`. Four reads hold that one contract: a word set (`DisplayWords`, `DifficultyWords` and `ViewWords` hold the vocabularies, whose resolved tier and view mode belong to `Flight`), a shape predicate for the
 monitor index and the canonical `1920x1080` resolution, `AudioMix`'s 0..100 range for a level, which is `int?` so a saved mute stays
 distinct from never set, and a JSON-kind check for the switch, `bool?` for the same reason. `Save` writes a sibling temp file and renames it. Under `--run-tests`, `UserOptions()` uses an emptied scratch
-directory (`DirectoryOverride`), so no suite touches the player's file; `Launcher.ApplyOptions` is the only writer.
+directory (`DirectoryOverride`), so no suite touches the player's file; `Launcher.ApplyOptions` and those boxes' OK are its writers.
 
 ## src/Utils/AudioBuses.cs
 The names of the four buses `CSVM/default_bus_layout.tres` ships: `Master`, and `Music`, `Effects`

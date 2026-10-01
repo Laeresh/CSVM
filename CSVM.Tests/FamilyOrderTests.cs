@@ -64,7 +64,6 @@ public sealed class FamilyOrderTests
         "CSVM.Session.Roster.HumanFlightAdapter -> CSVM.UI.Screens.StuntScoreboard",
         "CSVM.Spec.SessionSpec -> CSVM.UI.Labs.NodeLab",
         "CSVM.Spec.SessionSpec -> CSVM.UI.Labs.WorldDamageLab",
-        "CSVM.Spec.SessionSpec -> CSVM.UI.Menu.NetPlayFeature",
     };
 
     [Fact]

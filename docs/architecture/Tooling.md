@@ -41,15 +41,22 @@ also holds `TriggerDestroy` (`--destroy=`) and `ForceObjective` (`--debug-object
 scripted world forces belonging to no session. `RunTestSuites` is the one call into `CSVM.Testing`
 from outside it. Read `Probes.cs` for the work each wrapper calls into.
 
+## src/Tooling/ShaderDiagnostics.cs
+`--debug-shaders`: a census of the distinct shaders the running tree draws, by `SceneBuilder`
+family or owning node type, at sim frame 240 and after every live switch; the wall time and
+pipeline compilations of the twelve frames after a switch; and every frame over 33 ms with the
+pipelines it compiled. The pipeline counts are published from the render thread, since reading
+them on the main thread waits for the previous draw. Off unless the flag is given.
+
 ## src/Tooling/CaptureDirector.cs
-The `--screenshot=`/`--shots=`/`--frames=` capture state machine plus F11/F12's placement print and
-ad-hoc save, built in `Launcher._Ready` from the launch spec and `Tick()`ed from the Launcher's
-`_Process`, so `--menu --screenshot` captures the launchscreen with no session node alive; it takes
-its camera/orbit/rigs/clock as parameters. That capture reads synchronously, since the process
-exits on its file. `SaveScreenshot`, the F12 save every screen shares, asks `PaneReadback` for the
-frame and writes the PNG into `ShotDir()` (`Screenshots/`, git-ignored) on the worker it lands on,
-logging "screenshot saved" there; it returns the path the file will take, not yet written. Read
-`GoldenShot.cs` for what the save site prints.
+The `--screenshot=`/`--shots=`/`--frames=` capture state machine plus F11's pose print and F12's
+ad-hoc save, built in `Launcher._Ready` from the spec and `Tick()`ed from its `_Process`, so
+`--menu --screenshot` captures the launchscreen with no session alive; camera/orbit/rigs/clock are
+parameters. That capture reads synchronously, since the process exits on its file. `SaveScreenshot`,
+the F12 save every screen shares, writes `PaneReadback`'s frame into `ShotDir()` (`ShotDirFor`: the
+repo's `Screenshots/`, or one beside an export's executable) on the worker it lands on. F11 reads each
+pane's own camera (chase, cockpit, photo mode, free camera) through the pure `PlacementLines`: a
+`--freecam` line, `--fov=` off the external base, and each flight aircraft's `--fly` line.
 
 ## src/Tooling/GltfExporter.cs
 Exports any `Node3D` subtree to glTF: mesh, live material state, no animation and no emitters.

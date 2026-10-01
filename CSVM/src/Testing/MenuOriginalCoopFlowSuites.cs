@@ -10,7 +10,6 @@ using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
-using CSVM.UI.Screens;
 
 namespace CSVM.Testing;
 
@@ -24,20 +23,23 @@ internal static class MenuOriginalCoopFlowSuites
 {
     private const float Dt = 1f / 60f;
     private const string GuestOwnPilot = "Lucy";
+    private const string SparePlane = "Spare Kestrel";
+    private const int SpareAirframe = 7;
 
     [Suite("menu-original-coop-flow",
         "The Original co-op session flow over the loopback: a joined guest lands on the host's cabin "
         + "with every navigation button greyed and dead and is seated under its own last pilot's name, "
-        + "follows the host into the briefing and the flight check, where its pick carries its plane "
-        + "and ammunition and the host's FLY MISSION waits until the guest's Ready arrives, which "
-        + "repaints the host's check with no input at the host, a host "
+        + "follows the host into the briefing and the flight check, where its hangar is the host's, "
+        + "the host's own plane is refused to it, and its pick of the host's free spare carries that "
+        + "plane and its own ammunition, and the host's FLY MISSION waits until the guest's Ready "
+        + "arrives, which repaints the host's check with no input at the host, a host "
         + "back in the cabin clears the Ready, the host's launch names the flight InMission and the "
         + "guest launches into nothing it did not see open, the guest's plane and ammunition outlive "
         + "the host's Restart and the host builds the guest's seat on them, the host's debrief is the "
         + "guest's with the host's cash, RETURN TO CABIN takes both back, after a lost mission REPLAY "
         + "MISSION goes back through the briefing, the check and Ready with the guest still on its "
-        + "pick, a plane change puts the guest on the new plane's default ammunition, and the guest's "
-        + "own saves are untouched")]
+        + "pick, a change onto the stock Devastator flies it at rest, and the guest's own saves are "
+        + "untouched")]
     internal static void TheCoopFlow(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -53,8 +55,9 @@ internal static class MenuOriginalCoopFlowSuites
         var hostDoor = new NetPlayFeature(
             (_, _, _) => mesh[0],
             (_, _) => throw new InvalidOperationException("the host does not join"),
-            port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
-            _ => { });
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }));
         var guestDoor = new NetPlayFeature(
             (_, _, _) => throw new InvalidOperationException("a guest does not host"),
             (_, _) => mesh[1]);
@@ -76,6 +79,7 @@ internal static class MenuOriginalCoopFlowSuites
         var exits = new List<MenuExit>();
         End? host = null;
         End? guest = null;
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-coop-flow");
         try
         {
             host = Open(ctx, layout, hostDoor, CampaignAidProfiles.Store(seeded: true, progressed: true), exits);
@@ -85,10 +89,15 @@ internal static class MenuOriginalCoopFlowSuites
                 return;
             }
 
-            host.Shell.Campaign.OpenCampaignOver(
-                CampaignAidProfiles.Store(seeded: true, progressed: true), CampaignAidProfiles.Planes());
+            // A plane beyond the host's own and its wingman's, which nobody holds, for the guest to pick.
+            var hostStore = CampaignAidProfiles.Store(seeded: true, progressed: true);
+            var hostProfile = hostStore.Load(CampaignAidProfiles.Pilot)!;
+            hostProfile.Planes.Add(new OwnedPlane { Name = SparePlane, Airframe = SpareAirframe, Ammo = new[] { 2, 0, 0, 0 } });
+            hostStore.Save(hostProfile);
+            host.Shell.Campaign.OpenCampaignOver(hostStore, CampaignAidProfiles.Planes());
             host.Shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
             ClickRow(ctx, host, OriginalCampaignScreen.CoopDoorKey);
+            MenuSuiteHost.AnswerNetInfo(host.Shell, key => ClickRow(ctx, host, key), "Zachary", CampaignAidProfiles.Pilot);
             AwaitMapping(hostDoor);
             Join(ctx, host, guest);
             FollowTheBoards(ctx, host, guest);
@@ -105,6 +114,7 @@ internal static class MenuOriginalCoopFlowSuites
             hostDoor.Discard();
             guestDoor.Discard();
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
         }
 
         var after = Snapshot(guestDir);
@@ -157,13 +167,22 @@ internal static class MenuOriginalCoopFlowSuites
     {
         ctx.Check(Row(host.Shell, nameof(BoardButton.FlyMission)) is { Enabled: false } && !host.Door.CoopAllReady,
             $"the host's FLY MISSION is greyed while the guest is not Ready");
-        // The guest takes a stock plane other than the starter, so the pick is seen crossing.
+        // The guest's hangar is the host's, then the stock Devastator. The host's own plane is
+        // refused to it, and it picks the spare, the one plane off the starter's airframe.
         var campaign = guest.Host.Features.Get<CampaignFeature>();
         var hangar = campaign.Profile;
-        ctx.Check(hangar is { Planes.Count: > 1 }, $"the guest's hangar offers more than one plane ({hangar?.Planes.Count})");
-        if (hangar != null)
+        var hosted = host.Host.Features.Get<CampaignFeature>().Profile;
+        ctx.Check(hangar != null && hosted != null && hangar.Planes.Count == hosted.Planes.Count + 1
+                  && hangar.Planes.Take(hosted.Planes.Count).Select(p => p.Name).SequenceEqual(hosted.Planes.Select(p => p.Name)),
+            $"the guest's hangar is the host's planes and a stock Devastator ({string.Join(", ", hangar?.Planes.Select(p => p.Name) ?? Array.Empty<string>())})");
+        if (hangar != null && hosted != null)
         {
-            hangar.SelectedPlane = Math.Max(0, hangar.Planes.FindIndex(plane => plane.Airframe != NetPlayFeature.StarterAirframe));
+            int own = campaign.Field.HolderOf(0, hangar.Planes[hosted.SelectedPlane]);
+            ctx.Check(own == 0 && campaign.SeatRefusal(own).StartsWith("P1 ", StringComparison.Ordinal),
+                $"the host's own plane is refused to the guest, naming P1 (\"{(own >= 0 ? campaign.SeatRefusal(own) : "-")}\")");
+            int spare = hangar.Planes.FindIndex(plane => plane.Name == SparePlane);
+            ctx.Check(spare >= 0 && campaign.Field.HolderOf(0, hangar.Planes[spare]) < 0, $"and the spare is free to it");
+            campaign.CommitPlanes(Math.Max(0, spare), null);
 
             // The ammo screen's own write: explosive in the first gun slot.
             hangar.Planes[hangar.SelectedPlane].Ammo[0] = 3;
@@ -175,7 +194,7 @@ internal static class MenuOriginalCoopFlowSuites
         Pump(host, guest, frames: 4);
         ctx.Check(guest.Door.CoopReady && host.Door.CoopAllReady && host.Door.CoopGuests[0].Ready,
             $"the guest's press answers Ready and the host hears it ({guest.Door.CoopReady}, {host.Door.CoopAllReady})");
-        ctx.Check(picked != NetPlayFeature.StarterAirframe && host.Door.CoopGuests[0].Airframe == picked,
+        ctx.Check(picked == SpareAirframe && host.Door.CoopGuests[0].Airframe == picked,
             $"with the plane the guest picked ({host.Door.CoopGuests[0].Airframe}, picked {picked})");
         ctx.Check(fit.AmmoAt(0) == 3 && host.Door.CoopGuests[0].Fit == fit,
             $"and the ammunition it set on that plane ({host.Door.CoopGuests[0].Fit.AmmoAt(0)}, set {fit.AmmoAt(0)})");
@@ -246,9 +265,9 @@ internal static class MenuOriginalCoopFlowSuites
     // guest's campaign is rebuilt around its return, and it answers the new round on what it flew.
     private static (byte Airframe, CoopFit Fit) PickOutlivesARestart(TestContext ctx, End host, End guest)
     {
-        byte picked = guest.Door.CoopPickAirframe;
-        var fit = guest.Door.CoopPickFit;
-        ctx.Check(picked != NetPlayFeature.StarterAirframe && fit.AmmoAt(0) == 3,
+        byte picked = guest.Door.Pick.Airframe;
+        var fit = guest.Door.Pick.Fit;
+        ctx.Check(picked != CoopGuestPick.StarterAirframe && fit.AmmoAt(0) == 3,
             $"ABLE-TO-FAIL CONTROL: the pick the guest flew is not a fresh join's starter and stock fit ({picked}, {fit.AmmoAt(0)})");
         var guestWire = guest.Door.BuildLaunch();
         var relaunch = CSVM.Launch.Launcher.CoopRelaunch(host.Door);
@@ -323,8 +342,9 @@ internal static class MenuOriginalCoopFlowSuites
             $"the guest follows the host into its debrief ({guest.Shell.Screen})");
         var profile = guest.Host.Features.Get<CampaignFeature>().Profile;
         var run = profile != null ? CampaignProgression.ResultOf(profile, seq)?.Latest : null;
-        var hostRun = CampaignProgression.ResultOf(
-            CampaignAidProfiles.Store(seeded: true, progressed: true).Load(CampaignAidProfiles.Pilot)!, seq)?.Latest;
+        // The host's own profile, not a re-seeded store, which would drop the spare plane.
+        var hostProfile = host.Host.Features.Get<CampaignFeature>().Profile;
+        var hostRun = hostProfile != null ? CampaignProgression.ResultOf(hostProfile, seq)?.Latest : null;
         ctx.Check(run != null && hostRun != null && run.Money == hostRun.Money && run.CompletedMask == hostRun.CompletedMask,
             $"its book reads the host's objectives and cash ({run?.CompletedMask}/{hostRun?.CompletedMask}, {run?.Money}/{hostRun?.Money})");
         ctx.Check(Row(guest.Shell, nameof(BoardButton.ReturnToCabin)) is { Enabled: false },
@@ -389,17 +409,17 @@ internal static class MenuOriginalCoopFlowSuites
             $"and the guest's Ready makes it live, so the retry went back through selection and Ready");
         GuestFliesItsPick(ctx, host, hostWire, remembered, "the retry's launch builds the guest on the pick it kept");
 
-        // CHANGE PLANE's commit onto the starter, which this guest has not fitted.
+        // CHANGE PLANE's commit onto the stock Devastator, the last entry, which any seat may fly.
         var campaign = guest.Host.Features.Get<CampaignFeature>();
-        var planes = campaign.Profile?.Planes;
-        int starter = planes?.FindIndex(plane => plane.Airframe == NetPlayFeature.StarterAirframe) ?? -1;
+        int starter = (campaign.Profile?.Planes.Count ?? 0) - 1;
         campaign.CommitPlanes(starter, null);
         Pump(host, guest, frames: 4);
         var fresh = new OwnedPlane();
         var stock = CoopFit.Of(fresh.Ammo, fresh.Ordnance);
-        ctx.Check(starter >= 0 && campaign.GuestAirframe == NetPlayFeature.StarterAirframe && campaign.GuestCoopFit == stock,
-            $"changing the plane puts the guest on the new plane's default ammunition ({campaign.GuestAirframe}, ammo {campaign.GuestCoopFit.AmmoAt(0)})");
-        GuestFliesItsPick(ctx, host, hostWire, ((byte)NetPlayFeature.StarterAirframe, stock), "and the host builds the new plane on it");
+        ctx.Check(starter >= 0 && campaign.GuestPlane == CoopPlanePool.Stock && campaign.GuestAirframe == CoopGuestPick.StarterAirframe
+                  && campaign.GuestCoopFit == stock,
+            $"changing onto the stock Devastator flies it at rest ({campaign.GuestAirframe}, ammo {campaign.GuestCoopFit.AmmoAt(0)})");
+        GuestFliesItsPick(ctx, host, hostWire, ((byte)CoopGuestPick.StarterAirframe, stock), "and the host builds the Devastator on it");
         host.Seat.Enqueue(new MenuCommands { Back = true });
         Pump(host, guest, frames: 4);
     }
@@ -407,7 +427,7 @@ internal static class MenuOriginalCoopFlowSuites
     // The host's launch field for the guest's seat, over the host's wire.
     private static void GuestFliesItsPick(TestContext ctx, End host, MenuNetLaunch launch, (byte Airframe, CoopFit Fit) pick, string what)
     {
-        var own = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(NetPlayFeature.StarterAirframe) };
+        var own = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(CoopGuestPick.StarterAirframe) };
         var (roster, seatFits) = CSVM.Launch.Launcher.CoopLaunchField(
             host.Door, launch.Transport, own, Array.Empty<Flight.Weapons.LoadoutChoice?>(), Flight.Weapons.StockLoadouts.Load());
         ctx.Check(roster.Length == 2 && roster[1].PlaneNode == UI.Hangar.PlanePickerRoster.AirframeNode(pick.Airframe) && seatFits[1] == pick.Fit,
@@ -456,7 +476,7 @@ internal static class MenuOriginalCoopFlowSuites
     private static void AwaitMapping(NetPlayFeature door)
     {
         var waited = System.Diagnostics.Stopwatch.StartNew();
-        while (door.PortMap == null && waited.Elapsed.TotalSeconds < 20.0)
+        while (door.Router.PortMap == null && waited.Elapsed.TotalSeconds < 20.0)
         {
             door.Step(0.0);
             System.Threading.Thread.Sleep(1);

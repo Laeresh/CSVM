@@ -32,6 +32,11 @@ public static class EffectsLevel
     /// <c>csky_clutter_fade.gdshaderinc</c>, registered once by the launcher.</summary>
     public const string ShaderParam = "csky_clutter_fade_scale_sq";
 
+    /// <summary>The scale the launcher registered as <see cref="ShaderParam"/>, 0 (never fades)
+    /// until it does. Godot reads a global back only in the editor, so this is the one copy the
+    /// runtime can ask.</summary>
+    public static float RegisteredScaleSq { get; set; }
+
     /// <summary>The squared distance scale a level word sets, exactly the engine's own constants
     /// (1.0, 4.0, 9.0). False for a word the original does not know.</summary>
     public static bool TryClutterFadeScaleSq(string level, out float scaleSq)

@@ -11,6 +11,8 @@ using CSVM.Mech3;
 using CSVM.Mech3.Anim;
 using CSVM.Session.InstantAction;
 using CSVM.Session.Roster;
+using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.Utils;
 using Godot;
@@ -2020,17 +2022,290 @@ internal static class OrdnanceSuites
         UpperRingPlacement(ctx);
     }
 
+    // The enhanced burst light, driven end to end: a wep_06 dropped onto a plate, the effect sink
+    // composed the way WorldEffectsFactory composes it, and a real WorldLights behind it, so what
+    // is measured is the committed set and the omni pool rather than a flag. The fireball's
+    // liveness is a local the suite owns, which is the only way to step past the fireball's end.
+    [Suite("burst-light-envelope",
+        "Enhanced Graphics only: a wep_06 rocket burst registers exactly one short-lived " +
+        "WorldLights burst light at the hit, which commits as an ordinary light, mirrors onto one " +
+        "shadowless OmniLight3D from the same pool, decays as it burns and is gone the frame its " +
+        "fireball stops burning, with he_ground_effect's authored light replaced by it; the " +
+        "faithful presentation registers none at all and replaces nothing, and a gun hit registers " +
+        "none in either presentation")]
+    internal static void BurstLightEnvelope(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        if (!weapons.TryGet("wep_06", out var he))
+        {
+            ctx.Check(false, $"wep_06 resolves");
+            return;
+        }
+        ctx.Check(EffectCatalogue.IsBurstLight("he_ground_effect")
+                  && !EffectCatalogue.IsBurstLight("3040slug_gunhit"),
+            $"the catalogue calls wep_06's he_ground_effect a fireball and a gun hit not one");
+        // The seeker's ground flare and the flash rocket's detonation carry no fireball. They take a
+        // burst light but neither shimmer nor scorch.
+        var flash = EffectCatalogue.BurstLightShape("flash_effect");
+        ctx.Check(EffectCatalogue.BurstLightShape("ballflare.flt") != null && flash is { } f && f.Color.B > f.Color.R
+                  && !EffectCatalogue.IsBurstLight("ballflare.flt") && !EffectCatalogue.IsBurstLight("flash_effect"),
+            $"wep_11's ballflare.flt and wep_09's flash_effect throw a burst light, the flash's bluish, and are no fireball");
+        ctx.Check(EffectCatalogue.BurstLightShape("torpedo_ground_effect") is { } torp
+                  && EffectCatalogue.BurstLightShape("he_ground_effect") is { } heShape
+                  && torp.PeakGain > 2f * heShape.PeakGain && torp.RangeMax > heShape.RangeMax,
+            $"the torpedo's burst is far heavier than the HE rocket's");
+
+        const float Dt = 1f / 60f;
+        var origin = new Vector3(900f, 4000f, 900f);
+        var viewers = new[] { origin };
+        var textures = new TextureArchive(texturesPath);
+        var omniParent = new Node3D();
+        ProjectilePool? pool = null;
+        StaticBody3D? plate = null;
+        WorldLights? lights = null;
+        bool burning = true;
+        try
+        {
+            ctx.Host.AddChild(omniParent);
+            plate = CombatSuites.Plate("burst-light-plate", new Vector3(60f, 0.2f, 60f), origin);
+            ctx.Host.AddChild(plate);
+            var plays = new List<string>();
+            var live = new ProjectilePool(textures, null, null)
+            {
+                // The sink registers the envelope alone: this suite measures it, and `burst-light`
+                // owns the authored ramp it replaces under Enhanced.
+                EffectSink = (name, at, orient, ringOrient, ttl) =>
+                {
+                    plays.Add(name);
+                    WorldEffectsFactory.RegisterBurstLight(lights, name, at, () => burning);
+                },
+            };
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            bool Drop()
+            {
+                plays.Clear();
+                live.Spawn(he, new Transform3D(Basis.LookingAt(Vector3.Down, Vector3.Forward),
+                    origin + new Vector3(0f, 20f, 0f)), Vector3.Zero);
+                for (int i = 0; i < 120 && plays.Count == 0; i++)
+                    live.SimStep(Dt);
+                live.Clear();
+                return plays.Contains("he_ground_effect");
+            }
+
+            // The faithful presentation first: it is what every pinned golden renders, and the
+            // able-to-fail control for everything below.
+            lights = new WorldLights(omniParent);
+            ctx.Check(Drop(), $"the rocket reaches the plate and plays he_ground_effect");
+            lights.Begin(Dt);
+            lights.Commit(viewers);
+            ctx.Same(0, lights.CommittedPositions.Count,
+                $"ABLE-TO-FAIL CONTROL: the faithful presentation registers no burst light for the same hit");
+            ctx.Check(WorldEffectsFactory.ReplacedLightAnimNames() == null,
+                $"and replaces no authored light, so he_ground_effect keeps its own ramp");
+            ctx.Same(0, omniParent.GetChildCount(), $"and spawns no omni");
+            lights.Dispose();
+
+            GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
+            try
+            {
+                lights = new WorldLights(omniParent);
+                WorldEffectsFactory.RegisterBurstLight(lights, "3040slug_gunhit", origin, () => burning);
+                lights.Begin(Dt);
+                lights.Commit(viewers);
+                ctx.Same(0, lights.CommittedPositions.Count,
+                    $"a gun hit carries no fireball and registers nothing even under Enhanced");
+                ctx.Check(WorldEffectsFactory.ReplacedLightAnimNames()?.Contains("he_ground_effect") == true,
+                    $"under Enhanced he_ground_effect's authored light is replaced, so the burst is its only light");
+
+                ctx.Check(Drop(), $"the same rocket plays the same effect under Enhanced");
+                lights.Begin(Dt);
+                lights.Commit(viewers);
+                ctx.Same(1, lights.CommittedPositions.Count, $"the burst registers exactly one light");
+                ctx.Same(1, omniParent.GetChildCount(), $"which mirrors onto one pooled omni");
+                var omni = omniParent.GetChild(0) as OmniLight3D;
+                ctx.Check(omni is { ShadowEnabled: false, Visible: true } && omni.LightEnergy > 0f,
+                    $"the omni is lit and shadowless (energy={(omni?.LightEnergy ?? 0f):0.00})");
+                float ignition = omni?.LightEnergy ?? 0f;
+                for (int i = 0; i < 30; i++)
+                {
+                    lights.Begin(Dt);
+                    lights.Commit(viewers);
+                }
+                float halfSecond = omni?.LightEnergy ?? 0f;
+                ctx.Check(halfSecond < ignition * 0.5f && halfSecond > 0f,
+                    $"the envelope decays over the burst ({ignition:0.00} at ignition → {halfSecond:0.00} half a second on)");
+
+                burning = false;
+                lights.Begin(Dt);
+                lights.Commit(viewers);
+                ctx.Same(0, lights.CommittedPositions.Count,
+                    $"the light is gone the frame its fireball stops burning");
+                ctx.Check(omni is { Visible: false },
+                    $"and its omni is hidden rather than left lit");
+                ctx.Same(1, omniParent.GetChildCount(),
+                    $"the pool keeps the node for the next burst rather than freeing and respawning it");
+            }
+            finally
+            {
+                GraphicsMode.Resolve(GraphicsMode.Default);
+            }
+            ctx.Check(!GraphicsMode.Enhanced, $"the graphics setting is back on the faithful presentation");
+        }
+        finally
+        {
+            lights?.Dispose();
+            pool?.Free();
+            plate?.Free();
+            ctx.Host.RemoveChild(omniParent);
+            omniParent.Free();
+            textures.Dispose();
+        }
+    }
+
+    // The enhanced heat shimmer, driven the same way as the burst light above: a wep_06 dropped
+    // onto a plate, the effect sink composed the way WorldEffectsFactory composes it, and the
+    // factory's own pool behind it, so what is measured is the live quad count and the one draw
+    // rather than a flag. The fireball's liveness is a local the suite owns, which is the only way
+    // to step past the fireball's end inside one frame.
+    [Suite("heat-shimmer",
+        "Enhanced Graphics only: a wep_06 rocket burst takes exactly one refracting quad from the " +
+        "session's heat-shimmer pool, which draws while the fireball burns and is dropped the " +
+        "frame its liveness goes false; a gun hit takes none, the pool never exceeds its cap and " +
+        "recycles the oldest quad past it, and the faithful presentation builds no pool at all")]
+    internal static void HeatShimmerBurst(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        if (!weapons.TryGet("wep_06", out var he))
+        {
+            ctx.Check(false, $"wep_06 resolves");
+            return;
+        }
+
+        const float Dt = 1f / 60f;
+        var origin = new Vector3(1500f, 4000f, 1500f);
+        var textures = new TextureArchive(texturesPath);
+        var spec = SessionSpec.Parse(System.Array.Empty<string>());
+        var worldRoot = new Node3D();
+        ProjectilePool? pool = null;
+        StaticBody3D? plate = null;
+        bool burning = true;
+        try
+        {
+            ctx.Host.AddChild(worldRoot);
+            plate = CombatSuites.Plate("heat-shimmer-plate", new Vector3(60f, 0.2f, 60f), origin);
+            ctx.Host.AddChild(plate);
+            var plays = new List<string>();
+            var factory = new WorldEffectsFactory(spec, worldRoot, () => Vector3.Zero);
+            var live = new ProjectilePool(textures, null, null)
+            {
+                EffectSink = (name, at, orient, ringOrient, ttl) =>
+                {
+                    plays.Add(name);
+                    factory.RegisterHeatShimmer(name, at, () => burning);
+                },
+            };
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            bool Drop()
+            {
+                plays.Clear();
+                live.Spawn(he, new Transform3D(Basis.LookingAt(Vector3.Down, Vector3.Forward),
+                    origin + new Vector3(0f, 20f, 0f)), Vector3.Zero);
+                for (int i = 0; i < 120 && plays.Count == 0; i++)
+                    live.SimStep(Dt);
+                live.Clear();
+                return plays.Contains("he_ground_effect");
+            }
+
+            // The faithful presentation first: it is what every pinned golden renders, and the
+            // able-to-fail control for everything below.
+            ctx.Check(Drop(), $"the rocket reaches the plate and plays he_ground_effect");
+            ctx.Check(factory.Shimmer == null,
+                $"ABLE-TO-FAIL CONTROL: the faithful presentation builds no shimmer pool for the same hit");
+            ctx.Same(0, worldRoot.GetChildCount(), $"and adds no node to the world");
+
+            GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
+            try
+            {
+                var enhanced = new WorldEffectsFactory(spec, worldRoot, () => Vector3.Zero);
+                enhanced.RegisterHeatShimmer("3040slug_gunhit", origin, () => burning);
+                ctx.Check(enhanced.Shimmer == null,
+                    $"a gun hit carries no fireball and builds nothing even under Enhanced");
+
+                live.EffectSink = (name, at, orient, ringOrient, ttl) =>
+                {
+                    plays.Add(name);
+                    enhanced.RegisterHeatShimmer(name, at, () => burning);
+                };
+                ctx.Check(Drop(), $"the same rocket plays the same effect under Enhanced");
+                var shimmer = enhanced.Shimmer;
+                ctx.Check(shimmer != null, $"which builds the pool on the first fireball that asks");
+                if (shimmer == null)
+                    return;
+                ctx.Same(1, shimmer.LiveCount, $"the burst takes exactly one quad");
+                ctx.Check(shimmer.Drawing, $"and the pool draws while the fireball burns");
+                ctx.Same(1, worldRoot.GetChildCount(), $"from one node under the world root");
+
+                shimmer.Step(shimmer.SimTime + (Dt * 30));
+                ctx.Same(1, shimmer.LiveCount,
+                    $"the quad is still refracting half a second into the burst");
+
+                burning = false;
+                shimmer.Step(shimmer.SimTime + Dt);
+                ctx.Same(0, shimmer.LiveCount,
+                    $"and is gone the frame its fireball stops burning");
+                ctx.Check(!shimmer.Drawing,
+                    $"with the pool's draw off, so the colour-buffer copy is off too");
+
+                // Past the cap the oldest quad is recycled rather than the pool grown: a screen
+                // read costs a buffer copy, so the count is what has to stay bounded.
+                burning = true;
+                int overfill = HeatShimmer.PoolCap + 2;
+                for (int i = 0; i < overfill; i++)
+                    enhanced.RegisterHeatShimmer("he_ground_effect",
+                        origin + new Vector3(i * 30f, 0f, 0f), () => burning);
+                ctx.Same(HeatShimmer.PoolCap, shimmer.LiveCount,
+                    $"a salvo of {overfill} bursts fills the pool to its cap and no further");
+                ctx.Same(2, shimmer.Recycles, $"the two past the cap recycled the oldest quads");
+                ctx.Same(1, worldRoot.GetChildCount(), $"and the whole salvo is still one node");
+            }
+            finally
+            {
+                GraphicsMode.Resolve(GraphicsMode.Default);
+            }
+            ctx.Check(!GraphicsMode.Enhanced, $"the graphics setting is back on the faithful presentation");
+        }
+        finally
+        {
+            pool?.Free();
+            plate?.Free();
+            ctx.Host.RemoveChild(worldRoot);
+            worldRoot.Free();
+            textures.Dispose();
+        }
+    }
+
     // The authored detonation light is played the production way. A world-effects runtime only
     // contributes into a WorldLights another runtime owns, whose one Begin/Commit ranks the burst
     // with its own light. The ranges are the def's signed deltas accumulated
     // (extracted/C1/cam_anim/he_ring-he_ground_effect.json). (4,20), +(50,160), +(10,25), +(30,80),
     // +(10,35) holds (104,320) until the @Event+0.2 pair adds (30,80) and (10,20), then INACTIVE.
     [Suite("burst-light",
-        "he_ground_effect's authored he_light and he_light1 reach the world's WorldLights through " +
-        "the effects runtime on both presentations: the def's colour, the (104,320) m plateau its " +
-        "LIGHT_ANIMATION deltas accumulate to, a peak no wider than the authored 420 m, both " +
-        "committed beside the owner's own light and gone after their INACTIVE events; under " +
-        "Enhanced the same set mirrors onto omnis, on the faithful path onto none")]
+        "he_ground_effect's authored he_light and he_light1 run their ramp through the effects " +
+        "runtime on both presentations: the def's colour, the (104,320) m plateau its " +
+        "LIGHT_ANIMATION deltas accumulate to, a peak no wider than the authored 420 m, gone after " +
+        "their INACTIVE events. The faithful path commits both beside the owner's own light and " +
+        "spawns no omni; under Enhanced the burst envelope replaces them, one light on one omni " +
+        "no wider than 180 m")]
     internal static void BurstLight(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -2038,6 +2313,9 @@ internal static class OrdnanceSuites
             EffectStageSuiteHelper.WithEffectStage(ctx, world, "he_ground_effect",
                 new[] { "he_ring", "he_ring1", "he_trails" }, (stage, runtime, point) =>
             {
+                // A fireball def has no authored ramp, so under Enhanced the burst is its only light.
+                if (runtime.Handles("large_fireball"))
+                    ctx.Check(!runtime.AuthorsLight("large_fireball"), $"large_fireball authors no light of its own");
                 // One pool slot, so the second play reuses the first one's copy and its light keys.
                 BurstLightOn(ctx, runtime, point, enhanced: false);
                 BurstLightOn(ctx, runtime, point, enhanced: true);
@@ -2055,11 +2333,17 @@ internal static class OrdnanceSuites
             GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
         var lights = new WorldLights(omniParent);
         var viewers = new[] { point };
-        var ownerLight = point + new Vector3(30f, 0f, 0f);
+        var ownerLight = point + new Vector3(60f, 0f, 0f);
         try
         {
             runtime.ContributeLightsTo(lights);
+            runtime.LightReplacedAnimNames = WorldEffectsFactory.ReplacedLightAnimNames();
             ctx.Check(runtime.PlayEffectAt("he_ground_effect", point), $"{mode}: he_ground_effect plays");
+            ctx.Check(runtime.AuthorsLight("he_ground_effect"), $"{mode}: the runtime reads he_ground_effect as authoring its own light");
+            // The effect sink's own burst-light call, asked the way production asks it. Under
+            // Enhanced the burst stands in for he_light and he_light1, which stay tracked but
+            // uncommitted; on the faithful path the call registers nothing.
+            WorldEffectsFactory.RegisterBurstLight(lights, "he_ground_effect", point, () => true);
             float clock = 0f, firstLit = -1f, lastLit = -1f, peakMax = 0f, peakOmni = 0f;
             int maxCommitted = 0;
             var color = Colors.Black;
@@ -2070,7 +2354,7 @@ internal static class OrdnanceSuites
                 runtime.Advance(Dt);
                 clock += Dt;
                 // The owner's frame: its own light, then the commit that asks the contributor in.
-                lights.Begin();
+                lights.Begin(Dt);
                 lights.Add(ownerLight, Colors.White, 2f, 10f);
                 lights.Commit(viewers);
                 maxCommitted = Mathf.Max(maxCommitted, lights.CommittedPositions.Count);
@@ -2104,17 +2388,23 @@ internal static class OrdnanceSuites
                 $"{mode}: the four opening deltas accumulate to the authored (104,320) m plateau ({plateau.Min:0.##},{plateau.Max:0.##})");
             ctx.Check(peakMax >= 320f && peakMax <= 420.01f,
                 $"{mode}: the peak stays within the authored 420 m, never clamped below the plateau ({peakMax:0.##} m)");
-            ctx.Check(burstOffset < 1f, $"{mode}: a committed light sits on the burst ({burstOffset:0.###} m off)");
-            ctx.Same(3, maxCommitted, $"{mode}: the owner's light, he_light and he_light1 commit together");
-            ctx.Check(lastLit > 0.3f && lastLit < 0.6f, $"{mode}: he_light goes out on its INACTIVE event ({lastLit:0.###} s)");
-            ctx.Same(1, lights.CommittedPositions.Count, $"{mode}: once both bursts are out only the owner's light is left");
+            // The enhanced burst light stands BurstLift above the hit, so level ground is not lit edge-on.
+            float lift = enhanced ? WorldLights.BurstLift : 0f;
+            ctx.Check(Mathf.Abs(burstOffset - lift) < 1f, $"{mode}: a committed light sits {lift:0} m above the burst ({burstOffset:0.###} m off)");
             if (enhanced)
-                ctx.Check(peakOmni >= 320f, $"{mode}: the burst mirrors onto an omni of its authored reach ({peakOmni:0.#} m)");
+                ctx.Same(2, maxCommitted, $"{mode}: the owner's light and the one burst light commit together, he_light and he_light1 replaced");
+            else
+                ctx.Same(3, maxCommitted, $"{mode}: the owner's light, he_light and he_light1 commit together");
+            ctx.Check(lastLit > 0.3f && lastLit < 0.6f, $"{mode}: he_light goes out on its INACTIVE event ({lastLit:0.###} s)");
+            ctx.Same(1, lights.CommittedPositions.Count, $"{mode}: once the burst is out only the owner's light is left");
+            if (enhanced)
+                ctx.Check(peakOmni > 0f && peakOmni <= 180.01f, $"{mode}: the omni is the burst envelope's, not the authored 420 m ramp ({peakOmni:0.#} m)");
             else
                 ctx.Same(0, omniParent.GetChildCount(), $"{mode}: and spawns no omni");
         }
         finally
         {
+            runtime.LightReplacedAnimNames = null;
             runtime.ContributeLightsTo(null);
             lights.Dispose();
             if (enhanced)

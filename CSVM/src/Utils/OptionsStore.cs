@@ -7,9 +7,10 @@ using System.Text.Json;
 
 namespace CSVM.Utils;
 
-/// <summary>The display settings' vocabularies: the words <see cref="OptionsDef.DisplayMode"/> and
-/// <see cref="OptionsDef.VSync"/> accept, in the order a picker offers them. Kept as strings for
-/// the reason the presentation and graphics words are: the resolved value is an argument to an
+/// <summary>The display settings' vocabularies: the words <see cref="OptionsDef.DisplayMode"/>,
+/// <see cref="OptionsDef.VSync"/>, <see cref="OptionsDef.RenderScale"/> and
+/// <see cref="OptionsDef.AntiAliasing"/> accept, in the order a picker offers them. They are kept
+/// as strings, as the presentation and graphics words are. The resolved value is an argument to an
 /// engine call, owned by whichever module makes the call, not a type this store carries. The other
 /// two display settings have no word list, so <see cref="OptionsStore"/> validates their shape
 /// instead.</summary>
@@ -30,6 +31,24 @@ public static class DisplayWords
     /// <summary>V-Sync off with no frame cap.</summary>
     public const string VSyncOff = "off";
 
+    /// <summary>Native resolution, the scale a launch with no options file renders at.</summary>
+    public const string RenderScaleNative = "100";
+
+    /// <summary>No anti-aliasing past the project's own MSAA, the faithful presentation's default.</summary>
+    public const string AntiAliasingOff = "off";
+
+    /// <summary>Godot's FXAA screen-space filter.</summary>
+    public const string AntiAliasingFxaa = "fxaa";
+
+    /// <summary>Godot's SMAA screen-space filter.</summary>
+    public const string AntiAliasingSmaa = "smaa";
+
+    /// <summary>Godot's temporal anti-aliasing, the enhanced presentation's default.</summary>
+    public const string AntiAliasingTaa = "taa";
+
+    /// <summary>AMD FidelityFX Super Resolution 2.2, a temporal pass that also upscales.</summary>
+    public const string AntiAliasingFsr2 = "fsr2";
+
     /// <summary>Every display-mode word.</summary>
     public static readonly IReadOnlyList<string> DisplayModes = new[] { Windowed, Borderless, Fullscreen };
 
@@ -37,6 +56,17 @@ public static class DisplayWords
     /// second and means V-Sync off at that cap; <see cref="VSyncOn"/> and <see cref="VSyncOff"/>
     /// are the two that do not parse, so one field carries both the choice and the cap.</summary>
     public static readonly IReadOnlyList<string> VSyncChoices = new[] { VSyncOn, VSyncOff, "60", "120", "144" };
+
+    /// <summary>Every render-scale word, a percentage of a 3D viewport's own size. Below native the
+    /// image is upscaled; 67 and 77 are FSR's own quality presets. The list stops at 200 because
+    /// Godot supersamples in bilinear mode alone, and the quality it buys flattens off well before
+    /// the cost does.</summary>
+    public static readonly IReadOnlyList<string> RenderScaleChoices =
+        new[] { "50", "67", "77", RenderScaleNative, "125", "150", "175", "200" };
+
+    /// <summary>Every anti-aliasing word, in the order the VIDEO page offers them.</summary>
+    public static readonly IReadOnlyList<string> AntiAliasingChoices =
+        new[] { AntiAliasingOff, AntiAliasingFxaa, AntiAliasingSmaa, AntiAliasingTaa, AntiAliasingFsr2 };
 }
 
 /// <summary>The difficulty words <see cref="OptionsDef.Difficulty"/> and <c>--difficulty=</c>
@@ -95,12 +125,22 @@ public sealed class OptionsDef
 
     public string? GraphicsMode { get; set; }
 
+    /// <summary>How far enhanced mode draws the clutter before its fade, a
+    /// <see cref="Utils.ViewDistance"/> word.</summary>
+    public string? ViewDistance { get; set; }
+
     /// <summary>Whether a rocket warhead's ground burst carves the terrain
     /// (<c>CraterGate</c>). ⚠ No screen offers this. The carve is remake-only chrome
     /// the menu does not advertise. This key, hand-set in the file, is one of its two doors and
     /// <c>--craters</c> the other. Nullable because null is "never set", which reads as OFF, the
     /// original carving nothing in play.</summary>
     public bool? RocketCraters { get; set; }
+
+    /// <summary>Whether the cockpit engine loop takes the exterior views' throttle pitch
+    /// (<c>FlightAudio.CockpitLoopPitched</c>), a remake-only rule. ⚠ No screen offers this; the
+    /// key is set by hand. Nullable because null is "never set", which takes the flight's own
+    /// default rather than reading as off.</summary>
+    public bool? CockpitEnginePitch { get; set; }
 
     /// <summary>The difficulty word (<see cref="DifficultyWords"/>): the campaign
     /// selector's tier the launch reads when no flag names one.</summary>
@@ -151,6 +191,20 @@ public sealed class OptionsDef
     /// or off with the frame cap the word names.</summary>
     public string? VSync { get; set; }
 
+    /// <summary>The scale the 3D viewports render at, one of
+    /// <see cref="DisplayWords.RenderScaleChoices"/>, a percentage of their own size.</summary>
+    public string? RenderScale { get; set; }
+
+    /// <summary>The anti-aliasing method the 3D viewports run, one of
+    /// <see cref="DisplayWords.AntiAliasingChoices"/>. Null is "never set", which reads as the
+    /// graphics mode's own default rather than as a word of its own.</summary>
+    public string? AntiAliasing { get; set; }
+
+    /// <summary>The sun's shadow quality under Enhanced Graphics, one of
+    /// <see cref="ShadowQualitySetting.Words"/>. Null is "never set", which reads as the
+    /// enhanced mode's own look.</summary>
+    public string? ShadowQuality { get; set; }
+
     /// <summary>The Master level, the multiplier over the three category levels
     /// (<see cref="AudioMix"/>). No vocabulary and no spelling to parse, so the store proves the
     /// range alone.
@@ -172,6 +226,19 @@ public sealed class OptionsDef
     /// pre-fills the next picker (<c>Extraction.RememberedInstall</c>). Not a display setting and
     /// never read by a golden shot.</summary>
     public string? InstallPath { get; set; }
+
+    /// <summary>The network callsign the Player Information box last took, which prefills it next
+    /// session. At most <see cref="OptionsStore.NameLimit"/> characters. Not a display setting.
+    /// </summary>
+    public string? NetCallsign { get; set; }
+
+    /// <summary>The pilot voice the Player Information box last took, as its place in the Voice
+    /// list, 0 to <see cref="OptionsStore.MaxVoice"/>.</summary>
+    public int? NetVoice { get; set; }
+
+    /// <summary>The game name the Game Information box last took, which prefills it next session.
+    /// </summary>
+    public string? NetGameName { get; set; }
 }
 
 /// <summary>
@@ -202,6 +269,13 @@ public sealed class OptionsStore
     /// plugged in.</summary>
     public const int MaxMonitorIndex = 63;
 
+    /// <summary>The longest network name a file may carry, the Game Name box's limit and so the
+    /// longer of the two boxes'. A longer one reads as never set.</summary>
+    public const int NameLimit = 14;
+
+    /// <summary>The last place in the Voice list's seven voices.</summary>
+    public const int MaxVoice = 6;
+
     private const string FileName = "options.json";
     private const string TempFileName = "options.json.tmp";
 
@@ -222,6 +296,8 @@ public sealed class OptionsStore
         GraphicsMode.EnhancedWord,
     };
 
+    private static readonly HashSet<string> ValidViewDistances = new(ViewDistance.Words, StringComparer.Ordinal);
+
     // The three campaign words alone. The command line's wider vocabulary (Instant Action's names,
     // bare digits) is a convenience this file never carries. A file reads back only what the
     // options screens write.
@@ -230,12 +306,18 @@ public sealed class OptionsStore
     // The three selectable views, spelt as --view= takes them.
     private static readonly HashSet<string> ValidDefaultViews = new(ViewWords.All, StringComparer.Ordinal);
 
-    // The two display vocabularies, DisplayWords' own lists as sets. Held here rather than there
-    // for the same reason the three above are held here at all: the words a file may carry are
-    // this reader's business, and a file reads back only what an options screen writes.
+    // The four display vocabularies, DisplayWords' own lists as sets, held here like the sets above.
+    // The words a file may carry are this reader's business. A file reads back only what an
+    // options screen writes.
     private static readonly HashSet<string> ValidDisplayModes = new(DisplayWords.DisplayModes, StringComparer.Ordinal);
 
     private static readonly HashSet<string> ValidVSyncChoices = new(DisplayWords.VSyncChoices, StringComparer.Ordinal);
+
+    private static readonly HashSet<string> ValidRenderScales = new(DisplayWords.RenderScaleChoices, StringComparer.Ordinal);
+
+    private static readonly HashSet<string> ValidAntiAliasing = new(DisplayWords.AntiAliasingChoices, StringComparer.Ordinal);
+
+    private static readonly HashSet<string> ValidShadowQualities = new(ShadowQualitySetting.Words, StringComparer.Ordinal);
 
     private static readonly JsonWriterOptions WriterOptions = new() { Indented = true };
 
@@ -274,7 +356,9 @@ public sealed class OptionsStore
             w.WriteNumber("version", Version);
             Write(w, "menuPresentation", def.MenuPresentation);
             Write(w, "graphicsMode", def.GraphicsMode);
+            Write(w, "viewDistance", def.ViewDistance);
             WriteFlag(w, "rocketCraters", def.RocketCraters);
+            WriteFlag(w, "cockpitEnginePitch", def.CockpitEnginePitch);
             Write(w, "difficulty", def.Difficulty);
             WriteFlag(w, "nearestAfterKill", def.NearestAfterKill);
             WriteFlag(w, "rumble", def.Rumble);
@@ -284,11 +368,25 @@ public sealed class OptionsStore
             Write(w, "resolution", def.Resolution);
             Write(w, "displayMode", def.DisplayMode);
             Write(w, "vsync", def.VSync);
+            Write(w, "renderScale", def.RenderScale);
+            Write(w, "antiAliasing", def.AntiAliasing);
+            Write(w, "shadowQuality", def.ShadowQuality);
             WriteLevel(w, "audioMaster", def.AudioMaster);
             WriteLevel(w, "audioMusic", def.AudioMusic);
             WriteLevel(w, "audioEffects", def.AudioEffects);
             WriteLevel(w, "audioVoice", def.AudioVoice);
             Write(w, "installPath", def.InstallPath);
+            Write(w, "netCallsign", def.NetCallsign);
+            if (def.NetVoice is { } voice)
+            {
+                w.WriteNumber("netVoice", voice);
+            }
+            else
+            {
+                w.WriteNull("netVoice");
+            }
+
+            Write(w, "netGameName", def.NetGameName);
             w.WriteEndObject();
         }
 
@@ -320,7 +418,9 @@ public sealed class OptionsStore
             {
                 MenuPresentation = Read(root, "menuPresentation", ValidPresentations),
                 GraphicsMode = Read(root, "graphicsMode", ValidGraphicsModes),
+                ViewDistance = Read(root, "viewDistance", ValidViewDistances),
                 RocketCraters = ReadFlag(root, "rocketCraters"),
+                CockpitEnginePitch = ReadFlag(root, "cockpitEnginePitch"),
                 Difficulty = Read(root, "difficulty", ValidDifficulties),
                 NearestAfterKill = ReadFlag(root, "nearestAfterKill"),
                 Rumble = ReadFlag(root, "rumble"),
@@ -330,11 +430,20 @@ public sealed class OptionsStore
                 Resolution = ReadShaped(root, "resolution", static v => TryParseResolution(v, out _, out _)),
                 DisplayMode = Read(root, "displayMode", ValidDisplayModes),
                 VSync = Read(root, "vsync", ValidVSyncChoices),
+                RenderScale = Read(root, "renderScale", ValidRenderScales),
+                AntiAliasing = Read(root, "antiAliasing", ValidAntiAliasing),
+                ShadowQuality = Read(root, "shadowQuality", ValidShadowQualities),
                 AudioMaster = ReadLevel(root, "audioMaster"),
                 AudioMusic = ReadLevel(root, "audioMusic"),
                 AudioEffects = ReadLevel(root, "audioEffects"),
                 AudioVoice = ReadLevel(root, "audioVoice"),
                 InstallPath = ReadShaped(root, "installPath", Path.IsPathFullyQualified),
+                NetCallsign = ReadShaped(root, "netCallsign", static v => v.Length <= NameLimit),
+                NetVoice = root.TryGetProperty("netVoice", out var voice) && voice.ValueKind == JsonValueKind.Number
+                    && voice.TryGetInt32(out int place) && place >= 0 && place <= MaxVoice
+                        ? place
+                        : null,
+                NetGameName = ReadShaped(root, "netGameName", static v => v.Length <= NameLimit),
             };
         }
         catch (JsonException)

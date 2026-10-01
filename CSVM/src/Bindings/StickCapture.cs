@@ -25,6 +25,14 @@ public sealed class StickCapture
     /// TUNE.</summary>
     public const float MoveThreshold = 0.5f;
 
+    /// <summary>On the lever row, how close to the end it moved toward a lever must come when that end
+    /// lies nearer than <see cref="MoveThreshold"/> plus this band. TUNE.</summary>
+    public const float LeverEndBand = 0.1f;
+
+    /// <summary>The least travel that captures a lever, however near an end it rests. A lever parked
+    /// at an end therefore cannot be captured by its own jitter. TUNE.</summary>
+    public const float LeverMinTravel = 0.25f;
+
     /// <summary>The deadzone stamped on a captured flight axis and on the lever. TUNE.
     /// </summary>
     public const float FlightDeadzone = 0.02f;
@@ -100,9 +108,10 @@ public sealed class StickCapture
         return null;
     }
 
-    /// <summary>The stick axis moved furthest past <see cref="MoveThreshold"/> from where it was
-    /// armed, as the binding the row takes, or null. A half axis is only captured once it sits past
-    /// its own deadzone, so the moment of capture is a moment the binding fires.</summary>
+    /// <summary>The stick axis moved furthest from where it was armed, as the binding the row takes, or
+    /// null. It must travel past <see cref="MoveThreshold"/>, or on the lever row reach near the end it
+    /// moved toward. A half axis is only captured once it sits past its own deadzone, so the moment of
+    /// capture is a moment the binding fires.</summary>
     public Binding? PollAxes(IDeviceState state)
     {
         if (!Ready(state))
@@ -115,7 +124,7 @@ public sealed class StickCapture
         {
             float value = state.AxisValue(device, axis);
             float travel = value - armed;
-            if (Math.Abs(travel) < MoveThreshold || Math.Abs(travel) <= Math.Abs(bestTravel))
+            if (Math.Abs(travel) < TravelNeeded(armed, travel) || Math.Abs(travel) <= Math.Abs(bestTravel))
                 continue;
             if (!FullAxisRow() && value * Math.Sign(travel) <= ControlCapture.CapturedDeadzone)
                 continue;
@@ -190,4 +199,15 @@ public sealed class StickCapture
     }
 
     private bool FullAxisRow() => _row is { } row && AxisPairs.TakesFullAxis(row);
+
+    // The travel that captures this move. ⚠ Do not hold the lever row to MoveThreshold alone. A lever
+    // resting near its full end (the VKB R at -0.57) could then never be captured toward it, only
+    // away, with the opposite invert. There it must reach within LeverEndBand of that end instead.
+    private float TravelNeeded(float armed, float travel)
+    {
+        if (_row is not { } row || !AxisPairs.IsAbsolute(row))
+            return MoveThreshold;
+        float room = 1f - (armed * Math.Sign(travel));
+        return Math.Clamp(room - LeverEndBand, LeverMinTravel, MoveThreshold);
+    }
 }

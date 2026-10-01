@@ -2461,7 +2461,7 @@ internal static class AiSuites
 
             // The chain's worked example: accent 12 is a single-id pool, VO id 2 (the pilot with
             // the full bearing set). Prewarm that pilot exactly as a mission roster would.
-            int? pilot = voice.PilotFor(12, new System.Random(1));
+            int? pilot = voice.PilotFor(12, 0);
             ctx.Check(pilot == 2, $"accent 12 resolves to VO id 2 got={pilot?.ToString() ?? "null"}");
             var subset = voice.PrewarmNames(new[] { 12 });
             var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -2560,7 +2560,10 @@ internal static class AiSuites
         + "addresses the taunt pair to the pursuer off its own nose against the human it holds: "
         + "inside the nose cone taunts 26, on its own tail taunts 25, abeam taunts neither though "
         + "the raise ran, and a pursuer in its own evade reaction taunts nothing nose-on; and a "
-        + "Danger Zone the player has flown broadcasts 15 to that player's own flight")]
+        + "Danger Zone the player has flown broadcasts 15 to that player's own flight; and the "
+        + "bearing call-out needs a live hostile pursuer: one astern and below raises #7 from the "
+        + "escort, and the same pursuer downed, its gunner still on the human, raises nothing "
+        + "for 30 s, nor does a live friendly holding the same human")]
     internal static void AiVoice(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2588,6 +2591,7 @@ internal static class AiSuites
         MissionRadio? radio = null;
         Session.Roster.AiVoiceRuntime? runtime = null;
         Session.Roster.AiVoiceRuntime? attack = null;
+        Session.Roster.AiVoiceRuntime? wreckWatch = null;
         FlightController? ai = null;
         ProjectilePool? turretPool = null;
         var gloatRigs = new List<FlightController>();
@@ -3145,6 +3149,74 @@ internal static class AiSuites
                 && calls[^1].Clip.StartsWith("snd_id2_PR-D"),
                 $"a Danger Zone the player completed is praised by its flight, not by the player last={(calls.Count > zoneBefore ? calls[^1].ToString() : "none")}");
 
+            // --- the bearing call-out needs a live, hostile pursuer. A downed one's gunner still
+            // holds the human, and its wreck astern and below would call "six low" every 15 s.
+            // A third runtime, so no pursuer above can raise a bearing of its own here.
+            PumpRadio(radio);
+            wreckWatch = new Session.Roster.AiVoiceRuntime(voice, sounds, radio, new System.Random(15));
+            ctx.Host.AddChild(wreckWatch);
+            var bearings = new List<(string Tag, int Trigger, string Clip)>();
+            wreckWatch.LinePlayed += (tag, trigger, clip) =>
+            {
+                if (trigger is >= 1 and <= 12)
+                {
+                    bearings.Add((tag, trigger, clip));
+                }
+            };
+            var homebound = Rig(FlightRoster.ShooterIdBase + 20, AimAssist.PlayerTeam, human: true);
+            var escort = Rig(FlightRoster.ShooterIdBase + 21, AimAssist.PlayerTeam, human: false);
+            var homeAt = new Vector3(40000f, 500f, 0f);
+            homebound.PlaceHeld(homeAt, homeAt + Vector3.Forward);
+            FlightController Chaser(int index, int team, Vector3 at)
+            {
+                var rig = Rig(index, team, human: false);
+                rig.Pilot!.Gunner = new AiGunner(new RandomNumberGenerator { Seed = 6 })
+                {
+                    Target = homebound,
+                };
+                rig.PlaceHeld(at, homeAt);
+                return rig;
+            }
+            var sixLowAt = homeAt + new Vector3(0f, -200f, 500f);
+            var sixLow = Chaser(FlightRoster.ShooterIdBase + 22, enemyTeam, sixLowAt);
+            wreckWatch.RegisterPlayer(homebound);
+            wreckWatch.RegisterAi(escort, accentId: 12, talkerChance: 2f, constitutionChance: 1f);
+            // Accentless, so a death cry cannot occupy the channel the bearing needs.
+            wreckWatch.RegisterAi(sixLow, accentId: null, talkerChance: 0f, constitutionChance: 0f);
+
+            // The control: a live hostile pursuer astern and below raises "six low" from the escort.
+            int sixLowId = AiVoiceDispatcher.BearingTriggerFor(homeAt, homebound.NoseDirection, sixLowAt);
+            wreckWatch.Step(3f);
+            ctx.Check(sixLowId == 7 && bearings.Count == 1 && bearings[0].Trigger == sixLowId
+                && bearings[0].Tag == escort.Name,
+                $"a live pursuer astern and below raises one bearing call-out, #7 six low, from the escort want={sixLowId} lines=[{string.Join(", ", bearings)}]");
+            PumpRadio(radio);
+
+            // …and the same pursuer downed, its gunner still on the human, raises nothing for 30 s.
+            sixLow.DebugForceCrash();
+            ctx.Check(!sixLow.InPlay && ReferenceEquals(sixLow.Pilot!.Gunner!.AircraftTarget, homebound),
+                $"the pursuer is out of play with its gunner still holding the human inPlay={sixLow.InPlay}");
+            for (int i = 0; i < 30; i++)
+            {
+                wreckWatch.Step(1f);
+                PumpRadio(radio);
+            }
+            ctx.Check(bearings.Count == 1,
+                $"a downed pursuer raises no bearing call-out over 30 s of sim time lines=[{string.Join(", ", bearings)}]");
+
+            // A live aircraft of the human's own side holding it raises none either. It joins alone,
+            // so no other raise in the same step can hold the channel against it.
+            var ownSide = Chaser(FlightRoster.ShooterIdBase + 23, AimAssist.PlayerTeam,
+                homeAt + new Vector3(0f, 200f, -500f));
+            wreckWatch.RegisterAi(ownSide, accentId: null, talkerChance: 0f, constitutionChance: 0f);
+            for (int i = 0; i < 30; i++)
+            {
+                wreckWatch.Step(1f);
+                PumpRadio(radio);
+            }
+            ctx.Check(ownSide.InPlay && bearings.Count == 1,
+                $"a friendly holding the human raises no bearing call-out over 30 s lines=[{string.Join(", ", bearings)}]");
+
             ctx.Note($"lines: {string.Join(", ", played)}; attack pair: {string.Join(", ", calls)}");
         }
         finally
@@ -3155,6 +3227,7 @@ internal static class AiSuites
             }
             ai?.Free();
             attack?.Free();
+            wreckWatch?.Free();
             runtime?.Free();
             turretPool?.Free();
             radio?.Free();

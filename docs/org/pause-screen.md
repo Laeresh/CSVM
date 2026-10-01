@@ -19,7 +19,8 @@ this page does not repeat. How the 800x600 source artwork meets a modern window 
 | Address | Role |
 |---|---|
 | `FUN_004a0d20` | The pause-dialog constructor: picks the definition file, resolves the dialog by name, binds `MAP`, `OWNSHIP`, `MYZEP`, `OBJECTIVESLIST` and `MEMENTO`, binds the buttons, runs `ESC_SCRIPT` |
-| `0x004a1428` | The pause screen's dialog-name builder, `sprintf` over the two format strings below, and the only caller of `FUN_004a0d20` (at `0x004a14ba`) |
+| `0x004a1428` | The pause screen's dialog-name builder, `sprintf` over the two format strings below, and the only caller of `FUN_004a0d20` (at `0x004a14ba`); it sits inside the open method `0x004a13f0`, whose multiplayer test at `0x004a1415` skips it |
+| `FUN_004639c0` | The is-multiplayer predicate, the session kind at `0x71b480+0x700` equal to 2 |
 | `0x004a14f0` | The Instant Action mission-type letter table the name builder jumps through |
 | `FUN_0045fde0` | The `MAP` control's reader (its vtable slot `+0x78`): `CLIP`, `WORLD`, then the base reader, then the derived screen rectangle |
 | `FUN_0045ff20` | The `MAP` control's world-to-screen projection, and the in-window test |
@@ -85,13 +86,28 @@ propeller and places the mission's device icons
 `FUN_004a0d20` opens `ia_escape.zrd` when `FUN_004639b0` (is-Instant-Action) holds and falls back to
 `escape.zrd` when that predicate is false or the file fails to open. Both files ship.
 
-The dialog name is built at `0x004a1428` from the same globals the load screen reads, and there are
-only two branches, so **a multiplayer pause takes the Instant Action path's format string**:
+The dialog name is built in the screen's open method at `0x004a13f0` (a vtable slot at
+`0x0060873c`), from the same globals the load screen reads. It asks `FUN_004639c0`
+(is-multiplayer, the session kind at `0x71b480+0x700` equal to 2) first, and **a multiplayer pause
+builds no name at all**: `0x004a141c` jumps past both format calls to `0x004a1485`, so the stack
+buffer handed to `FUN_004a0d20` is never written. The lookup in `escape.zrd` then runs on whatever
+that buffer held, and a miss falls to `default`, a bare `loadframe`. Outside multiplayer:
 
 | Format string | Address | Used when |
 |---|---|---|
 | `loading_i%d%c` | `0x0062950c` | `FUN_004639b0` holds: `%d` is the environment number `0x0071c09c`, `%c` the mission-type letter |
 | `loading_c%d%d` | `0x0062951c` | otherwise: `%d%d` is `0x0071c09c` then the mission number `0x0071c0a0` |
+
+So `escape.zrd`'s 28 `loading_m<n><letter>` dialogs are never reached by the retail build: the
+only reference to `loading_m%d%c` (`0x00629648`) is the load screen's builder at `0x004a1f07`. They
+are authored data nonetheless, and they number their environments differently from
+`Loading.zrd`'s: `escape.zrd` carries `m1`, `m2`, `m4`, `m5`, `m6`, `m7` and `m8`, and
+`Loading.zrd` carries `m3` where `escape.zrd` carries `m5`. Grouped by content, `escape.zrd`'s
+`m5d` and `m5t` are the same as its `m1` and `m2` ones, which is the group `Loading.zrd`'s `m3d`
+and `m3t` belong to (the `c` and `z` dialogs are one per file whatever the number), so both files
+describe Above the Clouds and only the number differs: 5 is C2B's world
+number, 3 the one the session setup writes for that row
+([`loading-screen.md`](loading-screen.md)).
 
 The letter comes from the jump table at `0x004a14f0`, five entries wide over the Instant Action
 mission-type index `0x00718cd8` with an index above 4 falling to the default: `0` to `a`, `1` to `d`,
@@ -329,9 +345,14 @@ come from the shared block and are the only difference from the Instant Action l
 `escape.zrd`'s own `loading_i*` dialogs do carry a map and a memento, but they are unreachable:
 `ia_escape.zrd` ships and opens, so the fallback is never taken for an Instant Action session.
 
-A multiplayer pause takes the same Instant Action format string (the builder has no multiplayer
-branch), so it reads an `loading_i<env><letter>` dialog too, with the multiplayer environment number
-never reaching it.
+A multiplayer pause builds no dialog name ("Which dialog is shown" above), so what it shows is
+whatever `escape.zrd` answers to an unwritten buffer, most likely the bare `default` frame.
+
+### ⚠ A multiplayer pause reads an Instant Action dialog — RETIRED (2026-09-29)
+
+This page read the name builder as having two branches, so that a multiplayer pause would take the
+`loading_i%d%c` string with the Instant Action globals. The builder has a third test ahead of those
+two, `FUN_004639c0` at `0x004a1415`, and it skips the name altogether.
 
 ## The script is a beat sheet, and seven dialogs place their pins past a wait
 
@@ -368,9 +389,18 @@ the strips' light plates need. The four texts are composed through `UI/Screens/L
 the same words at the same authored points. The parchment stands or not on the dialog's own script,
 which is what keeps it off this sheet, and with no map, memento or parchment the board asks for no
 readout at all. RESTART reruns the sortie rather than a campaign mission, and PREFERENCES opens the
-same leaf the campaign sheet opens. Free flight and the dogfight are modes of ours that no shipped
-dialog describes, so they keep the Built-in board, the same split the load screen makes. The
+same leaf the campaign sheet opens. Free flight is a mode of ours that no shipped dialog
+describes, so it keeps the Built-in board, the same split the load screen makes. The
 `--menu=pauseboard-ia` door composes one with no sortie behind it.
+
+**A Dogfight pauses on its mode's briefing, which the original never shows there.**
+`Launch/GameSession.cs` resolves the key the load screen reads (`UI/Screens/LoadScreens.cs`'s
+`MultiplayerKey`, from the chapter, the type and whether any seat is on a lobby team) and
+`UI/Screens/PauseScreens.cs`'s `PauseSheet.LoadMultiplayer` reads that dialog out of `escape.zrd`,
+with that file's strips and the blackboard inks. The briefing is chosen over the original's bare
+frame because `escape.zrd` authors it. Above the Clouds is keyed 3, which `escape.zrd` numbers 5,
+so that row takes `Loading.zrd`'s own dialog instead; the composition leaves out any cycling
+element, since a halted mission has no load for the propeller to turn for.
 
 **The three authored faces meet one of ours.** The extraction ships no menu typeface, so
 `BtnEscapeNormal`, `BtnEscapeRollover` and `BtnEscapeActivate` become one face in three palette

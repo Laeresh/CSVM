@@ -190,10 +190,19 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// Searching box stands.</summary>
     public const string ConnectionSearchingAid = "searching";
 
+    /// <summary>The <see cref="ConnectionAid"/> argument that stands GAME INFORMATION over the page,
+    /// posed with the aids' sample game.</summary>
+    public const string GameInfoAid = "gameinfo";
+
+    /// <summary>The <see cref="ConnectionAid"/> argument that stands PLAYER INFORMATION over the
+    /// page, posed with the aids' sample callsign and voice.</summary>
+    public const string PlayerInfoAid = "playerinfo";
+
     /// <summary>The aid value that opens the Multiplayer Lobby over the aids' loopback wire with two
     /// guests on it. Its first colon argument names the view: host (the default), guest (Ready) or
     /// waiting (a guest not yet Ready). The second names the tab: mission (the default), plane,
-    /// ammo, rockets or scores, which lands a finished match first.</summary>
+    /// ammo, rockets or scores, which lands a finished match first. Outlaw and outlaw-rockets open
+    /// the outlaw list on Airframes or Rockets, with two airframes and All Rockets outlawed.</summary>
     public const string LobbyAid = "lobby";
 
     /// <summary>The campaign aid values Original shares with Built-in, each over the scratch
@@ -399,7 +408,8 @@ public sealed class OriginalPresentation : IMenuPresentation
                 screens: MonitorSetting.Screens,
                 controls: host.Features.TryGet<ControlsFeature>(out var controls) ? controls : null,
                 joinRoster: _devices,
-                net: host.Features.TryGet<NetPlayFeature>(out var net) ? net : null);
+                net: host.Features.TryGet<NetPlayFeature>(out var net) ? net : null,
+                netOptions: OptionsStore.UserOptions);
             _controlsSeats = host.Features.TryGet<ControlsFeature>(out var rebinds) ? new MenuControlsSeats(rebinds) : null;
             _palette = PaletteFor(_shell.Inks);
             _preferencesPalette = PaletteFor(_shell.PreferencesInks, _shell.Inks);
@@ -563,6 +573,14 @@ public sealed class OriginalPresentation : IMenuPresentation
                     break;
                 case ConnectionAid:
                     _shell.Connection.OpenConnection();
+                    break;
+                case ConnectionAid + ":" + GameInfoAid:
+                case ConnectionAid + ":" + PlayerInfoAid:
+                    // The aids' own door, so the pose never reads or writes the player's options.
+                    _shell.StandInNetDoor(NetDoorAid.Searching(silent: true));
+                    _shell.Connection.OpenConnection();
+                    _shell.AskNetInfo(aid.EndsWith(GameInfoAid, StringComparison.Ordinal) ? NetSessionKind.Dogfight : null,
+                        () => { }, NetDoorAid.SamplePlayer());
                     break;
                 case ConnectionGamesAid:
                 case ConnectionGamesAid + ":" + ConnectionSearchingAid:
@@ -1020,7 +1038,24 @@ public sealed class OriginalPresentation : IMenuPresentation
             _shell.Lobby.OpenGuest();
         }
 
+        bool outlaw = tab.StartsWith("outlaw", StringComparison.Ordinal);
+        if (outlaw && host.Dogfight is { } rules)
+        {
+            // Before the pose, whose Ready the rules change would otherwise clear.
+            rules.SetOutlawComponents(true);
+            rules.SetOutlawed(NetPlaneRules.AirframeFlag + 1, true);
+            rules.SetOutlawed(NetPlaneRules.AirframeFlag + 3, true);
+            rules.SetOutlawed(NetPlaneRules.AllRocketsFlag, true);
+        }
+
         NetDoorAid.PoseDogfight(host, guests);
+        if (outlaw)
+        {
+            _shell.Lobby.ShowOutlawList(tab == "outlaw-rockets" ? OutlawPage.Rockets : OutlawPage.Airframes);
+            _shell.StepNet(0.0);
+            return;
+        }
+
         if (tab == "scores")
         {
             // Game Scores fills only on the way back from a match, so every door lands one.
@@ -1219,7 +1254,8 @@ public sealed class OriginalPresentation : IMenuPresentation
     }
 
     // The guest as the host's boards leave it, three humans on the wire and this guest the second.
-    // The third is Ready on the check, so a shot shows another's mark beside this guest's own.
+    // The third is Ready on the check, so a shot shows another's mark beside this guest's own. The
+    // aid pilot's hangar is named first, so the guest stands on the first plane nobody holds.
     private void PoseCoopGuest(string board)
     {
         var host = CampaignAidProfiles.Store(seeded: true, progressed: true).Load(CampaignAidProfiles.Pilot);
@@ -1235,7 +1271,7 @@ public sealed class OriginalPresentation : IMenuPresentation
             _ => new CoopFlowMessage(NetCoopScreen.Cabin, flown, 1, 1, 0, 3, flown, false, airframes, 0, 0),
         };
 
-        _shell!.StandInNetDoor(NetDoorAid.CoopGuest(flow, ready: board == "ready"));
+        _shell!.StandInNetDoor(NetDoorAid.CoopGuest(flow, ready: board == "ready", NetDoorAid.HangarWords(host, 3)));
         _shell.Connection.OpenConnection();
         _shell.StepNet(0.0);
         if (board == "planeselection")

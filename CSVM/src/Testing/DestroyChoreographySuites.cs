@@ -881,6 +881,40 @@ internal static class DestroyChoreographySuites
         });
     }
 
+    // ---- a respawn puts back every node the death moved ----------------------------------------
+
+    // The eject stands its cpilot up on the seat's pilot_pos. It takes him down only when its SI
+    // script completes, after a Versus respawn's 3 s. The pose, the reparent and the switch must
+    // all be undone.
+    // ⚠ Respawn at two moments, mid-eject and past the whole death. A fix covering only the
+    // completed choreography passes the second and leaves the network case standing.
+    [Suite("death-respawn-rest-pose",
+        "after a shot-down player's death and a respawn, mid-eject (a Versus respawn's 3 s) and after the whole choreography, every airframe, wreck and bailing-pilot node the death defs touched is back on its built parent, transform and visibility, on a fixed-wing airframe and on the autogyro")]
+    internal static void DeathRespawnRestPose(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            try
+            {
+                foreach (var planeName in new[] { "player_bhawk", "player_autogyro" })
+                {
+                    foreach (float respawnAt in new[] { 3f, 15f })
+                    {
+                        DeathThenRespawn(ctx, world, planesGamez, textures, planeName, respawnAt);
+                    }
+                }
+            }
+            finally
+            {
+                textures.Dispose();
+            }
+        });
+    }
+
     // ---- binding the crash rig must leave the airframe under the controller --------------------
 
     // Builds the crash rig the way WorldEffectsFactory.BuildFlightCrashRuntime does, binds the
@@ -1007,7 +1041,7 @@ internal static class DestroyChoreographySuites
                             runtime.Advance(1f / 60f);
                         }
 
-                        // The respawn ritual, FlightController.Respawn's crash arm verbatim.
+                        // The respawn ritual's wreck half, as FlightController.Respawn's crash arm runs it.
                         runtime.ResetToBaseState();
                         foreach (var (node, rest) in restPoses)
                         {
@@ -1059,12 +1093,12 @@ internal static class DestroyChoreographySuites
     }
 
     // nitro_boost/nitro_decay anchor as NAME "warhawk" (plane_props.zrd), which never resolves in
-    // a per-plane crash rig's own index, the shape startprops/stopprops share, fixed by Play's
-    // PlaneModel fallback. ⚠ No flyable player_* model carries nitropropN (that disc geometry
-    // ships only on the separate bare-named library root); the fix restores what the flown
-    // plane's own nodes CAN show, the nitropuffN exhaust puffers at exhaust1..4.
+    // a per-plane crash rig's own index, the shape spinprops/stopprops share, fixed by Play's
+    // PlaneModel fallback. ⚠ No flyable player_* model carries nitropropN, whose disc geometry
+    // ships only on the separate bare-named library root. The fix restores what the flown plane's
+    // own nodes CAN show: the nitropuffN exhaust puffers at exhaust1..4.
     [Suite("nitro-boost-anchors",
-        "nitro_boost/nitro_decay author NAME \"warhawk\" as their anchor, which never resolves inside a per-plane crash rig; Play's PlaneModel fallback (the same shape startprops/stopprops already use) starts both defs on the flown Warhawk and sustains its nitropuff1 exhaust puffer, though no flyable model carries the nitropropN disc geometry itself")]
+        "nitro_boost/nitro_decay author NAME \"warhawk\" as their anchor, which never resolves inside a per-plane crash rig; Play's PlaneModel fallback (the same shape spinprops/stopprops already use) starts both defs on the flown Warhawk and sustains its nitropuff1 exhaust puffer, though no flyable model carries the nitropropN disc geometry itself")]
     internal static void NitroBoostAnchors(TestContext ctx)
     {
         const string model = "player_warhawk";
@@ -1293,10 +1327,10 @@ internal static class DestroyChoreographySuites
                         return null;
                     }
                     runtime.ManualAdvance = true;
-                    // The spawn choreography, replayed the way both assemblers do. Setup ran before
+                    // The first spawn's propellers, spun the way both assemblers do. Setup ran before
                     // this runtime existed, so the rig would otherwise fly with no definition ever
                     // having touched its two prop presentations.
-                    runtime.Play("startprops", planeModel, applyReset: false);
+                    rig.SpinPropsAtSpawn();
                     return rig;
                 }
 
@@ -1350,15 +1384,24 @@ internal static class DestroyChoreographySuites
                     return alpha < 0f || alpha > 0.01f;
                 }
 
-                // ⚠ The spawn definition's own end, not the moment the discs look right. Its last
-                // OBJECT_ACTIVE_STATE lands a frame after the fade it follows. A choke taken on
-                // that frame would have its own staticpropN activation undone by it.
-                float open = FlyUntil(() => human.CrashRuntime!.AnimStateOf("startprops") == Executed
-                                            && ai.CrashRuntime!.AnimStateOf("startprops") == Executed, 20f);
+                // The spawn is instant: one frame in, the blur discs are already alone on the
+                // aeroplane, with no spin-up ramp to wait out.
+                Fly(Dt);
                 foreach (var rig in built)
                 {
                     ctx.Check(!rig.PropsStopped && Shown(rig, "prop1") && !Shown(rig, "staticprop1"),
-                        $"{rig.Name}: opens with the spinning discs on the slot stopped={rig.PropsStopped} prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")} after={open:0.00} s");
+                        $"{rig.Name}: opens with the spinning discs on the slot on its first frame stopped={rig.PropsStopped} prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")}");
+                    SpawnPropsSuites.CheckSilentSpawn(ctx, rig, "the spawn");
+                }
+
+                // ⚠ The spawn definition's own end before the choke: a choke inside spinprops'
+                // 0.1 s offset would race the definition it stops.
+                float open = FlyUntil(() => human.CrashRuntime!.AnimStateOf("spinprops") == Executed
+                                            && ai.CrashRuntime!.AnimStateOf("spinprops") == Executed, 2f);
+                foreach (var rig in built)
+                {
+                    ctx.Same(Executed, rig.CrashRuntime!.AnimStateOf("spinprops"),
+                        $"{rig.Name}: the spawn's spinprops has run to its end after={open:0.00} s");
                 }
 
                 // The rising edge, read on the frame the choke lands rather than the next step.
@@ -1425,7 +1468,7 @@ internal static class DestroyChoreographySuites
                 }
 
                 // Back in the air off the stopped presentation the crash above left behind. That is
-                // the spawn choreography's own job: nothing else writes those opacities back.
+                // the respawn's spinprops job: nothing else writes those opacities back.
                 foreach (var rig in built)
                 {
                     rig.Respawn();
@@ -1437,6 +1480,7 @@ internal static class DestroyChoreographySuites
                 {
                     ctx.Check(!rig.PropsStopped && Shown(rig, "prop1") && !Shown(rig, "staticprop1"),
                         $"{rig.Name}: the respawn put the blur discs back on a hull that went down stopped prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")} after={spun:0.00} s");
+                    SpawnPropsSuites.CheckSilentSpawn(ctx, rig, "the respawn");
                 }
 
                 // The fourth arm, the death: a kill with no choke anywhere near it winds the discs
@@ -1491,6 +1535,7 @@ internal static class DestroyChoreographySuites
                     ctx.Check(!rig.PropsStopped && Shown(rig, "prop1") && !Shown(rig, "staticprop1")
                               && rig.CrashRuntime!.AnimStateOf("stopprops") != Running,
                         $"{rig.Name}: the respawn took the wind-down off the slot and put the blur discs back prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")} stop={rig.CrashRuntime!.AnimStateOf("stopprops")} after={restored:0.00} s");
+                    SpawnPropsSuites.CheckSilentSpawn(ctx, rig, "the respawn inside the wind-down");
                 }
             }
             finally
@@ -2804,6 +2849,124 @@ internal static class DestroyChoreographySuites
         return -1f;
     }
 
+    // One death and one respawn on a production-built human rig, compared node by node against
+    // the rig as it stood before the kill.
+    private static void DeathThenRespawn(TestContext ctx, TestWorld world, GameZ planesGamez,
+        TextureArchive textures, string planeName, float respawnAt)
+    {
+        var factory = new Session.World.WorldEffectsFactory(
+            SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
+        FlightController? player = null;
+        string label = $"{planeName} respawned at {respawnAt:0} s";
+        try
+        {
+            var spawn = new Vector3(0f, 500f, 0f);
+            var stats = PlaneStats.Load(ctx.ZrdrPath, planeName);
+            var builder = new PlaneBuilder(planesGamez, textures);
+            var planeModel = builder.Build(planeName);
+            player = new FlightController
+            {
+                PlaneModel = planeModel,
+                Collider = PlaneCollider.Build(planeModel),
+                PlayerIndex = 0,
+                UseKeyboard = false,
+                PadDevices = System.Array.Empty<int>(),
+                AllowPause = false,
+                Damage = PlaneDamage.For(stats),
+            };
+            player.AddChild(planeModel);
+            player.Setup(new FlightModel(stats), null, new CamParams(), spawn, spawn + Vector3.Forward);
+            ctx.Host.AddChild(player);
+            factory.BuildFlightCrashRuntime(player, builder, planeName, world.Gamez,
+                world.Session.Builder.Scene, textures, world.Session.Program, verbose: false,
+                planesGamez: planesGamez);
+            if (player.CrashRuntime is not { } rig || player.CrashAnchor is not { } crashRoot)
+            {
+                ctx.Check(false, $"{label}: the human rig built a crash runtime");
+                return;
+            }
+
+            rig.ManualAdvance = true;
+            // The first spawn's propellers, as the assemblers spin them, so the state compared
+            // below is the one a respawn is meant to restore.
+            player.SpinPropsAtSpawn();
+            rig.Advance(1f / 60f);
+            var cpilot = Find(crashRoot, "cpilot");
+            var wreck = Find(crashRoot, "destroyed");
+            ctx.Check(cpilot != null && wreck != null,
+                $"{label}: the rig staged the bailing pilot and the wreck cpilot={cpilot != null} wreck={wreck != null}");
+            if (cpilot == null || wreck == null)
+            {
+                return;
+            }
+
+            // The airframe, the wreck and the bailing pilot: what the death defs play on. The
+            // pooled effect templates are placed afresh by every call and are not compared.
+            var built = new List<NodeState>();
+            SnapshotStates(planeModel, built);
+            SnapshotStates(wreck, built);
+            SnapshotStates(cpilot, built);
+
+            float overkill = (player.Damage!.WholeHealthMax + player.Damage.WholeArmorMax) * 4f;
+            player.TakeCollisionHit(overkill, overkill, player.GlobalPosition, 1);
+            ctx.Check(player.Destroyed, $"{label}: the hull is spent and the destroy def is playing");
+            for (float t = 0f; t < respawnAt; t += 1f / 60f)
+            {
+                rig.Advance(1f / 60f);
+            }
+
+            var touched = built.Where(s => !s.Matches()).ToList();
+            ctx.Check(touched.Count > 0,
+                $"{label}: the death moved {touched.Count} node(s) off their built state before the respawn");
+            if (respawnAt < 5f)
+            {
+                ctx.Check(cpilot.GetParent() != crashRoot && cpilot.IsVisibleInTree(),
+                    $"{label}: the respawn lands mid-eject, with cpilot standing on the seat");
+            }
+
+            // The two ways back: a network match's granted placement, and single player's R.
+            if (respawnAt < 5f)
+            {
+                player.RespawnAt(spawn, spawn + Vector3.Forward);
+            }
+            else
+            {
+                player.Respawn();
+            }
+
+            rig.Advance(1f / 60f);
+            var stuck = touched.Where(s => !s.Matches(rig) && !StillBladeAtRest(s)).Select(s => s.Describe()).ToList();
+            ctx.Check(stuck.Count == 0,
+                $"{label}: every node the death touched is back on its built state ({touched.Count - stuck.Count}/{touched.Count}){(stuck.Count == 0 ? "" : ": " + string.Join("; ", stuck.Take(8)))}");
+            ctx.Check(!cpilot.IsVisibleInTree() && Find(planeModel, "pilot") is { Visible: true },
+                $"{label}: the seated pilot is back and the bailing one is gone");
+        }
+        finally
+        {
+            player?.Free();
+        }
+    }
+
+    // ⚠ A still blade's angle is not compared while the spawn keeps it hidden. The compiled stopprops
+    // turns it down to rest (slow_rotorN), and the spawn's spinprops never writes that angle back.
+    // Its parent, visibility and position still are, which is what catches a flung rotor.
+    private static bool StillBladeAtRest(NodeState s) =>
+        PropParts.Classify(AnimRuntime.NameOf(s.Node)) == PropParts.Kind.Static
+        && !s.Node.Visible && !s.Visible && s.Node.GetParent() == s.Parent
+        && s.Node.Transform.Origin.IsEqualApprox(s.Transform.Origin);
+
+    private static void SnapshotStates(Node3D node, List<NodeState> into)
+    {
+        into.Add(new NodeState(node, node.GetParent(), node.Transform, node.Visible));
+        foreach (var child in node.GetChildren())
+        {
+            if (child is Node3D sub)
+            {
+                SnapshotStates(sub, into);
+            }
+        }
+    }
+
     // The strongest translucency an OBJECT_OPACITY event has left anywhere in this subtree, read
     // off the per-instance shader parameter the fade writes. It is -1 where nothing has been
     // faded, which a caller reads as solid rather than as transparent.
@@ -2963,4 +3126,17 @@ internal static class DestroyChoreographySuites
             ["state"] = state,
         }),
     };
+
+    // A node's parent, transform and switch as they stood when the snapshot was taken.
+    private sealed record NodeState(Node3D Node, Node? Parent, Transform3D Transform, bool Visible)
+    {
+        // A node a live motion drives after the respawn is compared by position alone.
+        public bool Matches(AnimRuntime? rig = null) => Node.GetParent() == Parent && Node.Visible == Visible
+            && (Node.Transform.IsEqualApprox(Transform)
+                || (rig != null && rig.Motions.DrivesTransform(Node)
+                    && Node.Transform.Origin.IsEqualApprox(Transform.Origin)));
+
+        public string Describe() =>
+            $"'{Node.Name}'{(Node.GetParent() != Parent ? $" under '{Node.GetParent()?.Name}'" : "")}{(Node.Visible != Visible ? $" visible={Node.Visible}" : "")}{(Node.Transform.IsEqualApprox(Transform) ? "" : $" moved {Node.Transform.Origin.DistanceTo(Transform.Origin):0.00} m")}";
+    }
 }

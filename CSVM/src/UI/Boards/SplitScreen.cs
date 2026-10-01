@@ -78,6 +78,11 @@ public sealed partial class SplitScreen : CanvasLayer
     private Label? _skipNotice;
     private double _skipNoticeLeft;
 
+    // The viewport whose world the panes share, and whether it drew that world itself before the
+    // rig took it over.
+    private Viewport? _main;
+    private bool _mainDrew3D;
+
     /// <summary>One SubViewport per player, in player order. Add the player's camera (and its
     /// HUD canvases) to it.</summary>
     public IReadOnlyList<SubViewport> Views => _views;
@@ -218,6 +223,27 @@ public sealed partial class SplitScreen : CanvasLayer
         _skipNoticeLeft = SkipNoticeS;
     }
 
+    /// <summary>The main viewport stops drawing the world while the panes stand. Its render would sit
+    /// behind the opaque backdrop, a whole extra view at the window's size, whichever camera the
+    /// viewport holds current.</summary>
+    public override void _EnterTree()
+    {
+        if (_main != null && IsInstanceValid(_main))
+        {
+            _mainDrew3D = !_main.Disable3D;
+            _main.Disable3D = true;
+        }
+    }
+
+    /// <summary>Hands the main viewport its world back as the rig found it.</summary>
+    public override void _ExitTree()
+    {
+        if (_main != null && IsInstanceValid(_main) && _mainDrew3D)
+        {
+            _main.Disable3D = false;
+        }
+    }
+
     /// <inheritdoc/>
     public override void _Process(double delta)
     {
@@ -235,6 +261,7 @@ public sealed partial class SplitScreen : CanvasLayer
 
     private void Init(int players, Viewport mainViewport)
     {
+        _main = mainViewport;
         _root = new Control { Name = "panes", MouseFilter = Control.MouseFilterEnum.Ignore };
         _root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         AddChild(_root);
@@ -273,6 +300,9 @@ public sealed partial class SplitScreen : CanvasLayer
                 // pane is nearest it (Godot maxes the listeners per channel), not from P1.
                 AudioListenerEnable3D = true,
             };
+            // A pane is the whole of what its pilot sees, so it takes the mode's render flags the
+            // way the single-player root viewport does.
+            ViewportQuality.Apply(view);
             pane.AddChild(view);
             _root.AddChild(pane);
             _panes.Add(pane);

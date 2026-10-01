@@ -141,6 +141,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// this set is authored against a fixed axis, and re-basing it moves choreography.</summary>
     public HashSet<string>? OrientedCallAnimNames;
 
+    /// <summary>Defs whose authored lights are tracked but never submitted, because the enhanced
+    /// burst light stands in for them, keyed by <c>AnimName ?? Name</c>. Set by the world-effects
+    /// rig under Enhanced Graphics alone; null on the faithful path, which draws every light.</summary>
+    public HashSet<string>? LightReplacedAnimNames;
+
     /// <summary>Callers whose unresolvable CALL_ANIMATION target is worth one warning each, keyed by
     /// <c>AnimName ?? Name</c>, and the airframe that warning names. Injected like
     /// <see cref="LevelPlacedTemplateNames"/> above: the per-plane crash rig sets both to the damage
@@ -308,6 +313,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// film is putting them through. Set by the cutscene host as it takes and returns flight; a
     /// session with no host leaves it false and reads live, as it always has.</summary>
     internal bool PlayerRangeHeld;
+
+    /// <summary>Which machine answers each range gate: the host for a gate that raises a mission
+    /// code, every end for the rest. A network session wires its two seams.</summary>
+    internal RangeGateAuthority RangeGates = new();
 
     /// <summary>Where the player is, for a <c>PLAYER_RANGE</c> condition with no
     /// <see cref="PlayerPositions"/> wired (a lab, a unit test). Supplied by the session (the
@@ -607,6 +616,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // rest of its tally as LastDockingHookPark when the park finishes.
     private readonly List<string> _hookSeedsUnbound = new();
 
+    // Every node a name query has handed out (NameResolver.Claimed), by instance id, the way the
+    // resolver's own identity keys a node.
+    private readonly Dictionary<ulong, Node3D> _claimed = new();
+
     private Node3D _root = null!;
 
     private AnimProgram _program = null!;
@@ -732,7 +745,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         _templateStage = stage;
         _resolver = new NameResolver<Node3D>(Node3DIdentity.Instance, _templateStage.RootsFor, IsInstanceValid,
-            StagingAdmits, StagedCopyRootOf);
+            StagingAdmits, StagedCopyRootOf)
+        {
+            Claimed = OnClaimed,
+        };
         _templateStage.Wire(
             FindAll,
             Anchors,
@@ -742,9 +758,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             TemplateStillAnimated,
             NameOf,
             s => IndexWorld(s, indexByPointer: false),
-            () => _resolver.ClearFindCache(),
             ApplyResetStatesWithin);
     }
+
+    /// <summary>Raised the first time a name query hands a node out, this runtime's own or a caller's
+    /// through <see cref="FindNodes"/>. That is before any write the query was made for.</summary>
+    public event Action<Node3D>? NodeClaimed;
 
     /// <summary>Running count of ballistic <see cref="MotionRuntime"/> bodies launched, the debris
     /// pieces a death or crash flings (translation/translation_range/scale/forward_rotation over a
@@ -868,7 +887,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         var viewers = LightViewerPositions?.Invoke();
         return viewers != null && viewers.Count > 0 ? viewers : new[] { PlayerPos() };
-    }, () => DebugMotions, () => LightsCommittedElsewhere);
+    }, () => DebugMotions, () => LightsCommittedElsewhere,
+        def => LightReplacedAnimNames?.Contains(def.AnimName ?? def.Name) == true);
 
     /// <summary>This runtime's object-pose/visual family: the `OBJECT_*` pose, opacity and motion
     /// events, and the motion-builder role. It takes this runtime itself as one dependency, since
@@ -955,6 +975,35 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// the same wildcard matching and the same memoized index the dispatch uses, exposed so an
     /// inspect tool asks the engine instead of re-implementing the matcher. Read-only.</summary>
     public IReadOnlyList<Node3D> FindNodes(string pattern, Node3D? scope = null) => FindAll(pattern, scope);
+
+    /// <summary>Every live node a name query has handed out so far. Every node a definition's symbol
+    /// table or node prerequisite binds is added, run or not. A renderer that copies static nodes
+    /// leaves these subtrees alone and follows <see cref="NodeClaimed"/> after.</summary>
+    public List<Node3D> ClaimedNodes()
+    {
+        var nodes = new List<Node3D>();
+        foreach (var node in _claimed.Values)
+        {
+            if (IsInstanceValid(node))
+                nodes.Add(node);
+        }
+        if (_program == null)
+            return nodes;
+        foreach (var def in _program.Defs)
+        {
+            foreach (int index in def.NodeRefs.Values)
+            {
+                if (FindNodeByIndex(index) is { } bound)
+                    nodes.Add(bound);
+            }
+            foreach (var prereq in def.PrereqNodes)
+            {
+                if (prereq.Ptr is { } ptr && FindNodeByIndex(ptr) is { } leaf)
+                    nodes.Add(leaf);
+            }
+        }
+        return nodes;
+    }
 
     /// <summary>Runs the bootstrap passes against a built world. A separate call (not folded into
     /// construction) so a caller can set build-time-only collaborators (notably
@@ -1596,6 +1645,26 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// impact/destruction effects are handed off (doors and other calls fall through).</summary>
     public bool Handles(string animName) => _program.ByAnimName(animName).Count > 0;
 
+    /// <summary>Does a definition of this name author a light of its own (a <c>LightState</c> or
+    /// <c>LightAnimation</c> event in any of its sequences)? The enhanced burst light asks, so a
+    /// burst whose def already submits its authored light is not lit twice at the same point.</summary>
+    public bool AuthorsLight(string animName)
+    {
+        foreach (var def in _program.ByAnimName(animName))
+        {
+            foreach (var seq in def.Sequences)
+            {
+                foreach (var ev in seq.Events)
+                {
+                    if (ev.Kind is "LightState" or "LightAnimation")
+                        return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>The animation's current runtime state in the mission script's own numbering
     /// (<c>ANIM_STATE</c>, docs/formats/objectives.md): <c>RUNNING</c> 2 while any definition of
     /// that name has a live instance, <c>INVALID</c> 4 while one is latched off, <c>EXECUTED</c> 3
@@ -1783,7 +1852,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// armour pool (docs/formats/destructibles.md). At zero it marks the instance destroyed and
     /// runs the death sequence. Returns true when the hit landed on a destructible. A dormant pool
     /// is out of the world, so the hit finds nothing and returns false, whatever the caller.</summary>
-    public bool DamageAt(Node? struck, float healthDamage)
+    public bool DamageAt(Node? struck, float healthDamage) => DamageAt(struck, healthDamage, -1);
+
+    /// <summary><see cref="DamageAt(Node, float)"/> for a hit <paramref name="shooter"/> fired, which
+    /// the pool keeps as its <see cref="DestructibleRegistry.Instance.LastShooter"/>. A replicated
+    /// world records nothing, since it spends nothing.</summary>
+    public bool DamageAt(Node? struck, float healthDamage, int shooter)
     {
         var inst = _destructibles.Resolve(struck);
         if (inst == null)
@@ -1796,6 +1870,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return true;   // already dead, the death sequence owns it from here
         if (DamageReplicated)
             return true;   // struck, but another machine decides what it cost
+        inst.LastShooter = shooter;
         SpendHealth(inst, inst.Health - Math.Max(0f, healthDamage), healthDamage);
         return true;
     }
@@ -2118,6 +2193,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return rest;
     }
 
+    /// <summary>Whether this runtime has ever posed or moved the node, i.e. holds a rest pose for
+    /// it. A respawn re-poses only these, and leaves nodes other animators drive alone.</summary>
+    internal bool HasPosed(Node3D node) => _rest.ContainsKey(node);
+
     // Thin forwards into the pose family, kept here because their callers name this runtime:
     // MotionRuntime.Create reads the landing-resume mark as `rt.ConsumeLandingResume`, the
     // `ground-contact` suite arms it through `runtime.MarkLandingResume`, and OpacityFade and the
@@ -2407,6 +2486,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         _root = worldRoot;
         _program = program;
         _callTargets = null;
+        RangeGates.Bind(program.ByAnimName);
         // ⚠ Hand these flags over before the first Add/Anchors call; they are construction-time
         // facts about this runtime. The census covers the bootstrap passes only.
         _resolver.NameResolveFallback = NameResolveFallback;
@@ -2699,11 +2779,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     // Re-runs the quiet-stage RESET_STATE posing pass (bootstrap pass 1) for whatever now anchors
     // within a subtree added after the fact, IndexStage's (and IndexPooledCopy's) own tail.
+    // ⚠ Keep the name prefilter. Anchors scans the whole node table per definition. Unfiltered, a
+    // library copy built mid-flight paid that for every reset definition, about 150 ms.
     private void ApplyResetStatesWithin(Node3D subtree)
     {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        void Collect(Node3D n)
+        {
+            names.Add(NameOf(n));
+            for (int i = 0, count = n.GetChildCount(); i < count; i++)
+                if (n.GetChild(i) is Node3D c)
+                    Collect(c);
+        }
+        Collect(subtree);
         foreach (var def in _program.Defs)
         {
-            if (def.ResetState == null)
+            if (def.ResetState == null || !_resolver.MayAnchorAmong(def, names))
                 continue;
             foreach (var a in Anchors(def))
                 if (a != null && (a == subtree || subtree.IsAncestorOf(a)))
@@ -3696,8 +3787,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             // condition is the runtime flag itself.
             "HwRender" => true,
             "PlayerFirstPerson" => FirstPersonView?.Invoke() ?? false,
-            "PlayerRange" => anchor != null
-                             && NearestPlayerDistanceSquared(WorldPos(anchor)) <= num,
+            "PlayerRange" => anchor != null && PlayerInRange(def, anchor, num),
             // ANIM_HEALTH gates damage effects: "if this object has been worn down to N".
             // Read against the LIVE per-instance HP, not the def's authored value, so a
             // tower damaged to 30 smokes while its undamaged siblings do not.
@@ -3869,6 +3959,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return own;
         own.Health = 0f;
         own.Status = DestructibleRegistry.State.Destroyed;
+        own.LastShooter = -1;
         // In the `damage:` family on purpose, since this kill spends no HP. Without a line of its
         // own, a sweep for what died reads a demolished part as one nobody ever touched.
         Log.Info("anim", $"damage: {NameOf(own.Anchor)} DESTROYED by a call to '{target.AnimName ?? target.Name}', death sequence run");
@@ -4205,6 +4296,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         foreach (var p in RangePositions())
             d2 = Mathf.Min(d2, point.DistanceSquaredTo(p));
         return d2 == float.MaxValue ? point.DistanceSquaredTo(PlayerPos()) : d2;
+    }
+
+    // A PLAYER_RANGE gate's answer, from whichever machine RangeGates says owns it. C4/M03's
+    // blacke_drop is the one shipped gate whose closure raises a code (docs/org/multiplayer-messages.md).
+    // ⚠ Do not read a host-decided gate locally on a guest; the two ends would start it apart.
+    private bool PlayerInRange(AnimDefinition def, Node3D anchor, float radiusSq)
+    {
+        if (!RangeGates.HostDecides(def))
+        {
+            return NearestPlayerDistanceSquared(WorldPos(anchor)) <= radiusSq;
+        }
+
+        string gate = RangeGateAuthority.GateName(def, anchor.Name, radiusSq);
+        return RangeGates.HostVerdict is { } host
+            ? host(gate)
+            : RangeGates.Decide(gate, NearestPlayerDistanceSquared(WorldPos(anchor)) <= radiusSq);
     }
 
     private Node3D? ConditionNode(object? reference, AnimDefinition def, Node3D? anchor)
@@ -4727,6 +4834,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // owns the index, the wildcard matcher, and the memoization. Callers must treat the returned
     // list as read-only.
     private List<Node3D> FindAll(string pattern, Node3D? scope) => _resolver.FindAll(pattern, scope);
+
+    private void OnClaimed(Node3D node)
+    {
+        if (_claimed.TryAdd(node.GetInstanceId(), node))
+            NodeClaimed?.Invoke(node);
+    }
 
     // Any still-visible node named like a destroyed variant that no definition touched:
     // hide it and report, each name is a data-coverage gap (a def we failed to anchor).

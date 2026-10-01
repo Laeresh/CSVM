@@ -11,6 +11,7 @@ using CSVM.UI.Boards;
 using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
+using CSVM.UI.Menu.Original;
 using CSVM.UI.Screens;
 
 namespace CSVM.Testing;
@@ -98,6 +99,42 @@ internal static class MenuSuiteHost
         // Before the first ShowMenu: the roster refresh there is the store's first read.
         menu.PlaneStore = ScratchPlanes(ctx, suite);
         return menu;
+    }
+
+    /// <summary>Points the options store at an emptied directory of <paramref name="suite"/>'s own
+    /// and answers the one it replaced, which the caller puts back in a finally. The network boxes'
+    /// OK remembers a callsign and a game name there, and a later suite must not open on them.
+    /// </summary>
+    internal static string? ScratchOptions(TestContext ctx, string suite)
+    {
+        string dir = Path.Combine(ctx.ScratchDir, suite, "Options");
+        if (Directory.Exists(dir))
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+
+        Directory.CreateDirectory(dir);
+        string? previous = CSVM.Utils.OptionsStore.DirectoryOverride;
+        CSVM.Utils.OptionsStore.DirectoryOverride = dir;
+        return previous;
+    }
+
+    /// <summary>Answers the network boxes <paramref name="shell"/> stands, through each OK:
+    /// Game Information with <paramref name="game"/> when it stands, then Player Information with
+    /// <paramref name="callsign"/>. <paramref name="click"/> presses a row by key.</summary>
+    internal static void AnswerNetInfo(OriginalShell shell, Action<string> click, string callsign, string? game = null)
+    {
+        if (shell.NetInfo.Page == NetInfoPage.Game)
+        {
+            shell.NetInfo.Draft.GameName = game ?? callsign;
+            click(OriginalNetInfoBox.OkKey);
+        }
+
+        if (shell.NetInfo.Page == NetInfoPage.Player)
+        {
+            shell.NetInfo.Draft.Callsign = callsign;
+            click(OriginalNetInfoBox.OkKey);
+        }
     }
 
     /// <summary>A saved-plane store over a fresh <c>Planes</c> folder in <paramref name="suite"/>'s

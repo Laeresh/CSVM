@@ -141,6 +141,17 @@ public sealed class InstantActionDirector
             ? roster.Count(fc => !fc.Crashed)
             : roster.Count(fc => fc.InPlay || (fc.Parked && !fc.Crashed));
 
+    /// <summary>Seats an actor's patrol walk at its spawn placement, the original's
+    /// <c>FUN_00475fc0</c> inside the roster spawn (docs/org/aiPilot.md "Activation keeps the
+    /// walk").</summary>
+    internal static void SeatWalk(FlightController? rig)
+    {
+        if (rig?.Pilot?.Patrol is { } walk)
+        {
+            walk.Seat(rig.WorldPosition, rig.NoseDirection);
+        }
+    }
+
     /// <summary>The mission's actor build: the chapter's patrol net, the ace (dogfight_ace), the
     /// wingmen, and every wave's inert roster, one contiguous phase of GameSession's
     /// BuildFlightRigs, called at the same point in its build order. Returns the build-summary
@@ -173,9 +184,9 @@ public sealed class InstantActionDirector
             Log.Info("core", $"ia: actors patrol '{iaPatrolNet.Name}' (net {iaPatrolNet.Id}), the chapter's first{iaPatrolAnchor}");
         else
             Log.Info("core", $"ia: {_spec.Chapter} has no first patrol net, actors fly their spawn course");
-        // The net IS the standing order. ⚠ Do not let it bring its own volumes: the original copies
+        // The net IS the standing order. ⚠ Do not let it bring its own volumes. The original copies
         // the roster block's volumes over the net's afterwards, so ApplyActorVolumes has the last
-        // word (docs/formats/instant-action.md).
+        // word (docs/formats/instant-action.md). Each spawn seats the walk where it stands.
         Action<AiPilot> armIaPatrol = pilot =>
         {
             if (iaPatrolNet == null)
@@ -214,6 +225,7 @@ public sealed class InstantActionDirector
                     ShippedSkins: true, AttackRating: rating, PilotName: ia.Def.AceName,
                     Difficulty: Flight.Hangar.Difficulty.Parse(ia.Def.AceSkill)));
                 inputs.RegisterVoice(ace, ia.Def.AceAccentId, rating, rating);
+                SeatWalk(ace);
                 _ace = ace;
                 InstantActionRuntime.ApplyActorVolumes(pilot.Machine);
                 if (ace != null)
@@ -280,6 +292,7 @@ public sealed class InstantActionDirector
                     wingmen[i] = wingman;
                     if (wingman == null)
                         continue;
+                    SeatWalk(wingman);
                     // primary_target: 0, 1 and 3 escort the player; 2 and 4 escort
                     // wingmen 1 and 3, FlightController.SelectRankedTarget's own by-name/"player"
                     // match, the same seam the D12 ranking already reads.
@@ -327,9 +340,8 @@ public sealed class InstantActionDirector
                         // ActivateInstantActionWave teleports it in, same as the original's
                         // own "deactivated at the world origin".
                         var pilot = AiPilot.HoldingCourse(Vector3.Zero, Vector3.Forward);
-                        // Armed at build, but the follower seats itself at its first update and
-                        // Activate re-seats it, so a member patrols from where it arrives
-                        // rather than from this parking pose.
+                        // ⚠ Seated at this parking pose, and activation keeps it: the original
+                        // spawns a parked member at the origin facing yaw 0 (docs/org/aiPilot.md).
                         armIaPatrol(pilot);
                         // ⚠ The militia paints it and nothing more: the original spawns a wave
                         // member from the PLAIN AI def of its aircraft. An unnamed militia keeps
@@ -349,6 +361,7 @@ public sealed class InstantActionDirector
                         {
                             continue;
                         }
+                        SeatWalk(enemy);
                         if (pilot.Gunner != null)
                         {
                             pilot.Gunner.PrimaryTargetName = "player";
@@ -765,6 +778,12 @@ public sealed class InstantActionDirector
             var dir = fwd.Rotated(Vector3.Up, Mathf.DegToRad(offsetDeg));
             var pos = sp.Position + dir * metres;
             roster[m].Activate(pos, pos + fwd);
+            // The original spawns wave 1 live at this point, so its walk is seated here. Every other
+            // wave was spawned parked and keeps the walk it was seated on there.
+            if (waveNumber == 1)
+            {
+                SeatWalk(roster[m]);
+            }
         }
         Log.Info("core", $"ia: wave {waveNumber} ({roster.Count} aircraft) activated at spawn #{spIndex} of {spawns.Count}");
     }

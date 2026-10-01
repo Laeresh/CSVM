@@ -40,6 +40,16 @@ internal static class AirframeSwapSuites
 
     private const string DirectionSensor = "hdrop_direction";
 
+    // CM19's story position, the code its Warhawk capture raises, and the Black Hat def the
+    // mission's own Warhawk blocks fly. The stand-in def paints SACTRUST, a third scheme with
+    // Warhawk masks, so a live rig's paint cannot pass as either of the other two.
+    private const int Cm19Seq = 18;
+    private const int WarhawkSwapCode = 966;
+    private const string WarhawkMilitia = "bhatwarhawk";
+    private const string StandInDef = "stihellhound";
+    private const string WarhawkTailLogo = "war_taillogo";
+    private const int StandInGroup = 5;
+
     // Where the rig is flown from, and how close the replacement has to land to it. The tolerances
     // are a swap's, not a simulation's: the aircraft is rebuilt at the pose the outgoing one held,
     // so the two readings differ only by the spawn placement's own rounding.
@@ -57,6 +67,10 @@ internal static class AirframeSwapSuites
     // what the capture's called definition raises its reveal behind.
     private const float StepDt = 1f / 60f;
     private const float PlayBudgetS = 30f;
+
+    // How long the captured aircraft's gunners get to put one round out, in frames. A whole bored
+    // window of the duty cycle plus a shot interval has to fit inside it.
+    private const int ShotBudgetFrames = 1200;
 
     // The approach the drop is reached over, the way a flown session reaches it: the rig is bound
     // at the world build and the mission's own start anims are then run out with the player clear
@@ -118,7 +132,7 @@ internal static class AirframeSwapSuites
         + "swap built; plus the two things 967 does past that rebuild, on the same data: the "
         + "capture definition's own aircraft hidden with what is left of its hull carried onto "
         + "the player's, and the outgoing aeroplane handed to wingman_4 -- authored "
-        + "deactivated, flying the player's own airframe in this mission and its own def's "
+        + "deactivated, flying the player's own airframe on its w<plane> def in this mission and its own def's "
         + "everywhere else, revealed 100 m off the old nose at -45 degrees on the player's own "
         + "heading with the sums measured off the hull it was given")]
     internal static void AirframeSwap(TestContext ctx)
@@ -149,6 +163,59 @@ internal static class AirframeSwapSuites
 
         ctx.WriteArtifact($"test-airframe-swap-{chapter}-{folder}.txt", report.ToString());
         ctx.Note($"drove the swap {chapter}/{folder} authors against that mission's own world");
+    }
+
+    /// <summary>Captures CM02's Balmoral while its carried gunner is mid-burst and its own gun loop
+    /// is held. One frame after the swap, it reads every positional loop that aircraft owns.</summary>
+    [Suite("campaign-capture-silences-guns",
+        "capturing CM02's Balmoral while its carried turret is mid-burst silences every positional "
+        + "loop the hidden aircraft owns: the swap runs on the frame a round leaves the turret, "
+        + "with that gunner's voice still inside its lease and the aircraft's own gun loop held, "
+        + "and one session step after the swap no turret voice, gun loop or engine loop of the "
+        + "captured aircraft is sounding, since the inert airframe takes no tick that could run "
+        + "the lease out")]
+    internal static void CaptureSilencesGuns(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm02Seq)
+            ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm02Seq}");
+        string chapter = mission.ChapterFolder.ToUpperInvariant();
+        string folder = mission.MissionFolder.ToUpperInvariant();
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
+
+        var report = new StringBuilder();
+        using var archive = new SoundArchive(ctx.SoundsPath);
+        var ears = new List<Vector3> { Vector3.Zero };
+        var voices = new SwapVoices(TurretDefs.Load(ctx.ZrdrPath), archive,
+            SoundDefs.Load(ctx.ZrdrPath), () => ears);
+        ctx.CutsceneRoots = true;
+        try
+        {
+            ctx.WithWorld(chapter, collision: false, folder, world =>
+            {
+                var authored = SwapCallsIn(world.Session.Program);
+                if (authored.Count == 0)
+                {
+                    ctx.Check(false, $"{chapter}/{folder} authors a swap callback to capture through");
+                    return;
+                }
+
+                var call = authored[0];
+                var wanted = AirframeSwapCodes.For(call.Code)!.Value;
+                WithStagedCapture(ctx, world, chapter, folder, wanted, call,
+                    staged => CaptureMidBurst(ctx, world, staged, wanted, call, ears, report), voices);
+            });
+        }
+        finally
+        {
+            ctx.CutsceneRoots = false;
+        }
+
+        ctx.WriteArtifact($"test-capture-silences-guns-{chapter}-{folder}.txt", report.ToString());
+        ctx.Note($"captured the {chapter}/{folder} Balmoral mid-burst and read its loops after the swap");
     }
 
     /// <summary>Plays CM07's hangar drop over that mission's built world on a realtime clock: the
@@ -207,9 +274,119 @@ internal static class AirframeSwapSuites
         ctx.Note($"played the hangar drop {chapter}/{folder} authors against that mission's own world");
     }
 
-    // What 965's case writes by hand, read off the code table and the award template it names:
-    // the two have to agree, or the hangar would hand over one Blue Streak and the debrief award
-    // another.
+    /// <summary>Drives CM19's own 966 over that mission's built world, once as the mission raises it
+    /// and once with a live rig under its root. Each time it reads the rebuilt Warhawk's livery and
+    /// hull.</summary>
+    [Suite("campaign-warhawk-capture-livery",
+        "CM19's Warhawk capture (callback 966) over that mission's BUILT world keeps the captured "
+        + "aircraft's own paint: raised as the mission authors it, on a root that names no live "
+        + "rig, the rebuilt Warhawk wears the Black Hat scheme bhatwarhawk authors, painted as one "
+        + "of the mission's own Black Hat Warhawks paints, rather than the pilot's Fortune Hunters "
+        + "default; with a live rig under the root it wears that rig's paint instead, but takes "
+        + "neither its damage nor its roster group, and the rig is not hidden, since 967 alone "
+        + "carries those")]
+    internal static void WarhawkCaptureLivery(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        var mission = MissionOf(CampaignSequence.Load(ctx.ZrdrPath), Cm19Seq)
+            ?? throw new SuiteSkippedException($"cm_sequence carries no story position {Cm19Seq}");
+        string chapter = mission.ChapterFolder.ToUpperInvariant();
+        string folder = mission.MissionFolder.ToUpperInvariant();
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, chapter, folder), $"{chapter}/{folder} zrdr");
+
+        var report = new StringBuilder();
+        report.AppendLine($"seq {Cm19Seq} -> {chapter}/{folder}");
+        ctx.CutsceneRoots = true;
+        try
+        {
+            ctx.WithWorld(chapter, collision: false, folder,
+                world => DriveWarhawk(ctx, world, chapter, report));
+        }
+        finally
+        {
+            ctx.CutsceneRoots = false;
+        }
+
+        ctx.WriteArtifact($"test-warhawk-capture-livery-{chapter}-{folder}.txt", report.ToString());
+        ctx.Note($"drove the Warhawk swap {chapter}/{folder} authors and read the livery it rebuilds in");
+    }
+
+    // Fires the captured aircraft's carried gunners until one round leaves, holds its own gun loop,
+    // and runs the swap on that same frame. ⚠ Never swap with the turret idle: an expired lease
+    // passes this check with no fix at all.
+    private static void CaptureMidBurst(TestContext ctx, TestWorld world, Staged staged,
+        AirframeSwapCode wanted, (string Anim, int Code, string Root) call, List<Vector3> ears,
+        StringBuilder report)
+    {
+        var (roster, rig, before, cutscene, captured, _, _) = staged;
+        ears[0] = captured.WorldPosition + new Vector3(30f, 0f, 0f);
+        var gunners = captured.Turrets.Where(t => t.Voice != null).ToList();
+        report.AppendLine($"'{call.Root}' carries {captured.Turrets.Length} turret gunner(s), {gunners.Count} voiced: " +
+            string.Join(", ", captured.Turrets.Select(t => $"{t.Label}(voice={t.Voice != null})")));
+        ctx.Check(gunners.Count > 0,
+            $"the captured Balmoral carries a turret gunner with a voice of its own ({gunners.Count} of {captured.Turrets.Length})");
+        if (gunners.Count == 0)
+        {
+            return;
+        }
+
+        // The gunners alone, not the host, since a stepped host flies off its staged pose. The
+        // turret's own tick is what fires and renews the voice.
+        TurretController? firing = null;
+        for (int i = 0; i < ShotBudgetFrames && firing == null; i++)
+        {
+            foreach (var gunner in gunners)
+            {
+                int shots = gunner.ShotsFired;
+                gunner.SimStep(StepDt);
+                if (gunner.ShotsFired > shots)
+                {
+                    firing = gunner;
+                }
+            }
+        }
+
+        report.AppendLine($"mid-burst: {(firing == null ? "no gunner fired" : $"{firing.Label} fired, voice sounding={firing.Voice!.Sounding}")}; gates " +
+            string.Join(", ", gunners.Select(t => $"{t.Label}={t.Gate}")));
+        ctx.Check(firing is { Voice.Sounding: true },
+            $"a carried gunner is mid-burst at the swap: its round just left and its voice is sounding inside the {TurretController.VoiceLeaseSeconds:0.0} s lease");
+        if (firing == null)
+        {
+            return;
+        }
+
+        string? loop = captured.Loadout?.Guns.Select(g => g.Weapon.LoopedSoundName)
+            .FirstOrDefault(n => !string.IsNullOrEmpty(n));
+        captured.WeaponAudio?.StartGunLoop(loop);
+        bool loopHeld = captured.WeaponAudio is { LoopSounding: true };
+        report.AppendLine($"own gun loop '{loop ?? "-"}' held at the swap: {loopHeld}");
+
+        cutscene.BindWorld(world.Runtime);
+        cutscene.BindRigs(rigs: new[] { rig }, aiPlanes: Array.Empty<FlightController>);
+        cutscene.HostDefinitions(new[] { call.Anim });
+        cutscene.SwapAirframe = order => roster.RunSwap(rig, order, handsOver: true);
+        ctx.Check(cutscene.Host(wanted.Code, call.Anim, call.Root),
+            $"the mission-script host answers callback {wanted.Code}");
+        ctx.Check(!ReferenceEquals(rig.Controller, before) && captured.Inert,
+            $"the swap ran and hid the captured aircraft");
+
+        // One session step, the way the simulation ticks every controller it holds.
+        captured.SimStep(StepDt);
+        var still = gunners.Where(t => t.Voice!.Sounding).Select(t => t.Label).ToList();
+        report.AppendLine($"one step after the swap: turret voices sounding [{string.Join(", ", still)}], " +
+            $"gun loop={captured.WeaponAudio?.LoopSounding}, engine={captured.EngineAudio?.EngineSounding}");
+        ctx.Check(still.Count == 0,
+            $"no turret voice of the captured aircraft is sounding a frame after the swap (still sounding: {string.Join(", ", still)})");
+        ctx.Check(captured.WeaponAudio is not { LoopSounding: true },
+            $"nor is its own gun loop, held at the moment of capture");
+        ctx.Check(captured.EngineAudio is not { EngineSounding: true },
+            $"nor its engine loop, since the player now flies that airframe on their own engine");
+    }
+
+    // What 965's case writes by hand, read off the code table and the award template it names. The
+    // two have to agree, or the hangar would hand over one Blue Streak and the debrief award another.
     private static void CheckBlueStreakTemplate(TestContext ctx, StringBuilder report)
     {
         var code = AirframeSwapCodes.For(HangarSwapCode);
@@ -897,6 +1074,16 @@ internal static class AirframeSwapSuites
             $"and in this mission it flies the player's own '{StartPlane}', which is the aeroplane it is about to be given");
         ctx.Check(!string.Equals(own.PlaneNode, StartPlane, StringComparison.OrdinalIgnoreCase),
             $"rather than the '{own.Def}' def's own airframe it flies everywhere else");
+
+        // The original's name-keyed arm names the player airframe's w<plane> def. The shipped twin
+        // authors no pools, so the hand-over's cap is its base def's pair.
+        string twin = "w" + defs.BaseDefForPlayerNode(StartPlane);
+        report.AppendLine($"{AirframeHandover.WingmanName}: own AI def '{own.AiDef ?? "-"}', handed over '{handed.AiDef ?? "-"}'");
+        ctx.Check(string.Equals(handed.AiDef, twin, StringComparison.OrdinalIgnoreCase),
+            $"handed over, it flies the '{StartPlane}' twin '{twin}', as the original's wingman_4 arm names it");
+        ctx.Check(string.Equals(own.AiDef, own.Def, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(handed.Mode, own.Mode, StringComparison.OrdinalIgnoreCase),
+            $"and its own '{own.Def}' def keeps deciding the mode ('{handed.Mode}')");
     }
 
     private static void Drive(TestContext ctx, TestWorld world, string chapter, string folder,
@@ -942,7 +1129,8 @@ internal static class AirframeSwapSuites
     // capture animation's aircraft and the hand-over block, then the leg. Two legs share it because
     // a swap replaces the rig it ran on, so neither can read the other's world back.
     private static void WithStagedCapture(TestContext ctx, TestWorld world, string chapter, string folder,
-        AirframeSwapCode wanted, (string Anim, int Code, string Root) call, Action<Staged> leg)
+        AirframeSwapCode wanted, (string Anim, int Code, string Root) call, Action<Staged> leg,
+        SwapVoices? voices = null)
     {
         var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, chapter));
         var pool = new ProjectilePool(textures, null, null);
@@ -956,7 +1144,7 @@ internal static class AirframeSwapSuites
         ctx.Host.AddChild(cutscene);
         try
         {
-            roster = BuildRoster(ctx, world, chapter, textures, pool, rigs);
+            roster = BuildRoster(ctx, world, chapter, textures, pool, rigs, voices: voices);
             roster.BuildPlayers(rigs);
             var before = rig.Controller ?? throw new InvalidOperationException("no rig was built");
             // A real enemy roster spawn, not an override: team != the player's own, so the AI
@@ -965,8 +1153,10 @@ internal static class AirframeSwapSuites
             var captured = StageAi(roster, call.Root, wanted.PlaneNode,
                 before.WorldPosition + (before.NoseDirection * 300f), inert: false,
                 team: capturedTeam, shippedSkins: true);
+            // On the w<plane> twin the plan gives it, so the hand-over's cap is that def's pair.
             var wingman = StageAi(roster, AirframeHandover.WingmanName, StartPlane,
-                before.WorldPosition + new Vector3(0f, 0f, 5000f), inert: true);
+                before.WorldPosition + new Vector3(0f, 0f, 5000f), inert: true,
+                aiDef: "w" + VehicleDefs.Load(ctx.ZrdrPath).BaseDefForPlayerNode(StartPlane));
             Damage(wingman, 0.10f);
             leg(new Staged(roster, rig, before, cutscene, captured, wingman, pool));
         }
@@ -1140,11 +1330,12 @@ internal static class AirframeSwapSuites
     // hand-over having run at all (INSTR-10).
     private static FlightController StageAi(FlightRoster roster, string name, string planeNode,
         Vector3 at, bool inert, PaintScheme? scheme = null, int team = AimAssist.PlayerTeam,
-        bool shippedSkins = false)
+        bool shippedSkins = false, string? aiDef = null)
     {
         var aim = at - Vector3.Forward;
         return roster.SpawnAi(new AiSpawn(planeNode, at, aim, AiPilot.HoldingCourse(at, aim),
-            Scheme: scheme, Team: team, Inert: inert, ShippedSkins: shippedSkins, NodeName: name));
+            Scheme: scheme, Team: team, Inert: inert, ShippedSkins: shippedSkins, NodeName: name,
+            AiDef: aiDef));
     }
 
     // Whether two rigs' painted output actually matches, read off the painter rather than the
@@ -1152,7 +1343,8 @@ internal static class AirframeSwapSuites
     // field while the model it built stayed unpainted or vice versa). Neither having a painter is
     // itself a match: a ShippedSkins reading can legitimately resolve to no paint at all, and that
     // null has to carry as faithfully as a real scheme would.
-    private static bool PaintMatches(FlightController a, FlightController b)
+    private static bool PaintMatches(FlightController a, FlightController b,
+        string placeholder = "bal_taillogo")
     {
         bool aPainted = a.Painter != null;
         bool bPainted = b.Painter != null;
@@ -1162,8 +1354,8 @@ internal static class AirframeSwapSuites
             return true;
         // The tail decal placeholder every Balmoral ships (docs/formats/paint.md) is the fixed
         // point both painters are asked to resolve, so the comparison is real composited pixels.
-        return ImagesEqual(a.Painter!.Substitute("bal_taillogo", null),
-            b.Painter!.Substitute("bal_taillogo", null));
+        return ImagesEqual(a.Painter!.Substitute(placeholder, null),
+            b.Painter!.Substitute(placeholder, null));
     }
 
     private static bool ImagesEqual(ImageTexture? a, ImageTexture? b)
@@ -1224,6 +1416,164 @@ internal static class AirframeSwapSuites
             $"the capture stand-in's own paint is not the player's own, so a match below cannot be coincidence");
         ctx.Check(PaintMatches(after, captured),
             $"the rebuilt rig's actual painted output matches the captured aircraft's, as the original reads at the controls");
+    }
+
+    // CM19's 966 as the mission raises it, on a root naming no live rig, then with a damaged, grouped
+    // stand-in under that root. Each leg gets its own rig, since a swap replaces it.
+    private static void DriveWarhawk(TestContext ctx, TestWorld world, string chapter, StringBuilder report)
+    {
+        var calls = SwapCallsIn(world.Session.Program).Where(c => c.Code == WarhawkSwapCode).ToList();
+        foreach (var (anim, code, root) in calls)
+        {
+            report.AppendLine($"'{root}-{anim}' authors callback {code}");
+        }
+
+        ctx.Check(calls.Count > 0, $"the mission authors callback {WarhawkSwapCode}, the Warhawk capture");
+        var militia = PaintScheme.ForDef(ctx.ZrdrPath, WarhawkMilitia);
+        report.AppendLine($"'{WarhawkMilitia}' authors '{militia?.ToString() ?? "-"}'");
+        ctx.Check(militia != null, $"'{WarhawkMilitia}' authors a scheme of its own");
+        if (calls.Count == 0 || militia == null)
+        {
+            return;
+        }
+
+        var call = calls[0];
+        var wanted = AirframeSwapCodes.For(WarhawkSwapCode)!.Value;
+        WithWarhawkRig(ctx, world, chapter, (roster, rig, before, cutscene) =>
+        {
+            var reference = SpawnBlackHat(roster, wanted.PlaneNode,
+                before.WorldPosition + new Vector3(0f, 0f, 5000f));
+            ctx.Check(roster.AiNamed(call.Root) == null,
+                $"the capture's root '{call.Root}' names no live rig, so the paint has nothing to be read off");
+            var (_, after) = RaiseWarhawk(ctx, world, roster, rig, cutscene, call);
+            CheckWarhawkLivery(ctx, before, reference, after, militia, report);
+        });
+        WithWarhawkRig(ctx, world, chapter, (roster, rig, before, cutscene) =>
+        {
+            var standIn = StageAi(roster, call.Root, wanted.PlaneNode,
+                before.WorldPosition + (before.NoseDirection * 300f), inert: false,
+                scheme: PaintScheme.ForDef(ctx.ZrdrPath, StandInDef), team: AimAssist.PlayerTeam + 1,
+                shippedSkins: true);
+            standIn.Group = StandInGroup;
+            Damage(standIn, 0.25f);
+            ctx.Check(ReferenceEquals(roster.AiNamed(call.Root), standIn),
+                $"a live stand-in answers to the capture's root '{call.Root}'");
+            var (result, after) = RaiseWarhawk(ctx, world, roster, rig, cutscene, call);
+            CheckWarhawkStandIn(ctx, standIn, militia, result, after, report);
+        });
+    }
+
+    // One of the mission's own Black Hat Warhawks, parked far off as the painted reference. It is
+    // spawned the way the campaign roster spawns an enemy.
+    private static FlightController SpawnBlackHat(FlightRoster roster, string planeNode, Vector3 at)
+    {
+        var aim = at - Vector3.Forward;
+        return roster.SpawnAi(new AiSpawn(planeNode, at, aim, AiPilot.HoldingCourse(at, aim),
+            Team: AimAssist.PlayerTeam + 1, Inert: true, ShippedSkins: true, AiDef: WarhawkMilitia,
+            NodeName: $"{WarhawkMilitia}_reference"));
+    }
+
+    // The swap as the host dispatches it, answering what it returned and the aircraft it built.
+    private static (AirframeSwapResult Result, FlightController After) RaiseWarhawk(TestContext ctx,
+        TestWorld world, FlightRoster roster, PlayerRig rig, CutsceneController cutscene,
+        (string Anim, int Code, string Root) call)
+    {
+        AirframeSwapResult result = default;
+        cutscene.BindWorld(world.Runtime);
+        cutscene.BindRigs(rigs: new[] { rig }, aiPlanes: Array.Empty<FlightController>);
+        cutscene.HostDefinitions(new[] { call.Anim });
+        cutscene.SwapAirframe = order => result = roster.RunSwap(rig, order, handsOver: false);
+        ctx.Check(cutscene.Host(WarhawkSwapCode, call.Anim, call.Root),
+            $"the mission-script host answers callback {WarhawkSwapCode}");
+        var after = rig.Controller ?? throw new InvalidOperationException("the swap built no aircraft");
+        return (result, after);
+    }
+
+    // The mission's own shape: the Warhawk is rebuilt in the scheme its Black Hat def authors. It
+    // paints as the mission's Black Hat Warhawks do, not in the pilot's default.
+    private static void CheckWarhawkLivery(TestContext ctx, FlightController before,
+        FlightController reference, FlightController after, PaintScheme militia, StringBuilder report)
+    {
+        report.AppendLine($"as authored: was '{before.Scheme?.Label ?? "-"}', rebuilt '{after.Scheme?.ToString() ?? "-"}' " +
+            $"(painted={after.Painter != null}, shipped-skins={after.ShippedSkins}), reference '{reference.Scheme?.Label ?? "-"}'; " +
+            $"hull worst {after.Damage?.WorstFraction ?? 0f:0.00}");
+        var wanted = AirframeSwapCodes.For(WarhawkSwapCode)!.Value;
+        ctx.Check(after.Loadout is { } fit && string.Equals(fit.Def.Def, wanted.Def, StringComparison.OrdinalIgnoreCase),
+            $"the player is flying '{wanted.Def}'");
+        ctx.Check(string.Equals(before.Scheme?.Pattern, LiveryResolver.DefaultPattern, StringComparison.OrdinalIgnoreCase),
+            $"the aircraft flown in wore the pilot's default '{LiveryResolver.DefaultPattern}'");
+        ctx.Check(SameScheme(after.Scheme, militia),
+            $"the rebuilt Warhawk wears the '{militia.Pattern}' scheme '{WarhawkMilitia}' authors, colours and decals included, not the pilot's default");
+        ctx.Check(after.Painter != null && PaintMatches(after, reference, WarhawkTailLogo),
+            $"and paints as the mission's own Black Hat Warhawk paints");
+        ctx.Check(after.Damage is { } hull && hull.WorstFraction > 1f - FractionTolerance,
+            $"on a whole hull, since no captured aircraft's damage is there to carry");
+    }
+
+    // A live rig under the root: its paint rides the rebuild. Its damage, its group and its place
+    // in the world stay with it, since 967 alone hands those over.
+    private static void CheckWarhawkStandIn(TestContext ctx, FlightController standIn,
+        PaintScheme militia, AirframeSwapResult result, FlightController after, StringBuilder report)
+    {
+        report.AppendLine($"live stand-in: '{standIn.Scheme?.Label ?? "-"}' group {standIn.Group}, " +
+            $"rebuilt '{after.Scheme?.Label ?? "-"}' group {after.Group?.ToString() ?? "-"}, " +
+            $"hull worst {after.Damage?.WorstFraction ?? 0f:0.00}, stand-in inert={standIn.Inert}, hidden={result.Hidden != null}");
+        ctx.Check(standIn.Scheme != null && !SameScheme(standIn.Scheme, militia),
+            $"the stand-in's own paint ('{standIn.Scheme?.Pattern ?? "-"}') is not the militia's, so a match below cannot be the fallback");
+        ctx.Check(SameScheme(after.Scheme, standIn.Scheme) && PaintMatches(after, standIn, WarhawkTailLogo),
+            $"the rebuilt Warhawk wears the live rig's paint, read off the painter");
+        ctx.Check(after.Damage is { } hull && hull.WorstFraction > 1f - FractionTolerance,
+            $"but not its damage: the new hull is whole");
+        ctx.Check(after.Group != standIn.Group,
+            $"nor its roster group");
+        ctx.Check(result.Swapped && result.Hidden == null && !standIn.Inert,
+            $"and the rig is left in the world rather than hidden");
+    }
+
+    private static bool SameScheme(PaintScheme? a, PaintScheme? b) =>
+        a != null && b != null
+        && string.Equals(a.Pattern, b.Pattern, StringComparison.OrdinalIgnoreCase)
+        && a.Color1 == b.Color1 && a.Color2 == b.Color2 && a.Color3 == b.Color3
+        && a.NoseDecal == b.NoseDecal && a.TailDecal == b.TailDecal && a.WingDecal == b.WingDecal;
+
+    // One staged Warhawk leg: the mission's own world and a flown human rig off the session's roster.
+    private static void WithWarhawkRig(TestContext ctx, TestWorld world, string chapter,
+        Action<FlightRoster, PlayerRig, FlightController, CutsceneController> leg)
+    {
+        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, chapter));
+        var pool = new ProjectilePool(textures, null, null);
+        ctx.Host.AddChild(pool);
+        var pane = new SubViewport();
+        ctx.Host.AddChild(pane);
+        var rig = new PlayerRig { Index = 0, Camera = ctx.Camera, HudParent = pane, Viewport = pane };
+        var rigs = new[] { rig };
+        FlightRoster? roster = null;
+        var cutscene = new CutsceneController();
+        ctx.Host.AddChild(cutscene);
+        try
+        {
+            roster = BuildRoster(ctx, world, chapter, textures, pool, rigs);
+            roster.BuildPlayers(rigs);
+            var before = rig.Controller ?? throw new InvalidOperationException("no rig was built");
+            leg(roster, rig, before, cutscene);
+        }
+        finally
+        {
+            // The staged AI too: the host is shared with every suite in the run.
+            var live = rig.Controller;
+            var members = new List<FlightController>(roster?.AiAircraft ?? Array.Empty<FlightController>());
+            roster?.ClearMembership();
+            live?.Free();
+            foreach (var ai in members)
+            {
+                ai.Free();
+            }
+
+            cutscene.Free();
+            pane.Free();
+            pool.Free();
+            textures.Dispose();
+        }
     }
 
     // Step 5: the aeroplane the player just left, in the hands of wingman_4 and visible.
@@ -1358,7 +1708,7 @@ internal static class AirframeSwapSuites
 
     private static FlightRoster BuildRoster(TestContext ctx, TestWorld world, string chapter,
         TextureArchive textures, ProjectilePool pool, IReadOnlyList<PlayerRig> rigs,
-        string plane = StartPlane, LoadoutChoice? fit = null)
+        string plane = StartPlane, LoadoutChoice? fit = null, SwapVoices? voices = null)
     {
         var spec = SessionSpec.Parse(new[] { $"--plane={plane}" });
         if (fit != null)
@@ -1380,6 +1730,7 @@ internal static class AirframeSwapSuites
             WeaponMessages = Messages.Load(ctx.MessagesPath),
             Textures = textures,
             Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+            TurretDefs = voices?.Turrets,
         };
         return new FlightRoster(FlightRosterPolicy.From(spec),
             new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
@@ -1389,6 +1740,9 @@ internal static class AirframeSwapSuites
                 Projectiles = pool,
                 Gamez = planesGamez,
                 ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter),
+                Sounds = voices?.Archive,
+                SoundDefs = voices?.Defs,
+                HumanPositions = voices?.Ears,
             },
             new HumanRosterBindings
             {
@@ -1437,6 +1791,14 @@ internal static class AirframeSwapSuites
         FlightController Captured,
         FlightController Wingman,
         ProjectilePool Pool);
+
+    // What a staged capture's roster needs for its aircraft to be heard. That is the carried turret
+    // table, the sound archive and definitions, and where the listening pilot is.
+    private sealed record SwapVoices(
+        TurretDefs Turrets,
+        SoundArchive Archive,
+        Dictionary<string, SoundDef> Defs,
+        Func<IReadOnlyList<Vector3>> Ears);
 
     // The actors one staged hangar hands its leg: the roster and rig, the aircraft flown in, the
     // host, and the chapter archive the rebuild's skins come out of.

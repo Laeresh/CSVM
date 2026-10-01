@@ -144,6 +144,8 @@ the time it started. The newest file there is the run you just did, and its firs
 states the build version. That same version is in the bottom-right corner of the menu.
 The small page icon beside it opens the logs folder, and the floppy disk icon opens the user
 folder, which holds your settings, controls, campaign profiles and custom planes.
+`F12` saves a screenshot from any screen into `Screenshots/` next to `CSVM.x86_64`, ready to
+attach to a report.
 Starting `./CSVM.x86_64` from a terminal also shows the engine's own startup output, which
 includes messages from before the log file opens.
 
@@ -168,7 +170,7 @@ Two failures answer themselves:
 
 ## Where your files live
 
-The engine, your `extracted` game assets and the `logs` folder all sit in the CSVM folder,
+The engine, your `extracted` game assets and the `logs` and `Screenshots` folders all sit in the CSVM folder,
 wherever you unpacked it. Your settings, control bindings, campaign profiles, stunt scores,
 custom planes and the install folder you last extracted from are kept outside it, in:
 

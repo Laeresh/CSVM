@@ -5,33 +5,35 @@ using CSVM.Net;
 
 namespace CSVM.UI.Menu;
 
-/// <summary>The three mission types the lobby's Type box lists, in the string table's order.
-/// Only the Deathmatch is flown; it is the Dogfight.</summary>
+/// <summary>The three mission types the lobby's Type box lists, in the string table's order. All
+/// three are flown.</summary>
 public enum DogfightMissionType : byte
 {
-    /// <summary>Capture the Flag, drawn greyed.</summary>
+    /// <summary>Capture the Flag, two lobby teams on a chapter's <c>MP2</c> map.</summary>
     CaptureTheFlag = 0,
 
     /// <summary>Deathmatch, the Dogfight every lobby flies.</summary>
     Deathmatch = 1,
 
-    /// <summary>Zeppelin vs Zeppelin, drawn greyed.</summary>
+    /// <summary>Zeppelin vs Zeppelin, the first two lobby teams each flying a hull on a chapter's
+    /// <c>MP3</c> map.</summary>
     ZeppelinVsZeppelin = 2,
 }
 
 /// <summary>One line of the lobby's chat panel: who typed it and what.</summary>
 public readonly record struct DogfightChatLine(string Name, string Text);
 
-/// <summary>One pilot's line on the Game Scores page after a match: its name and its final points,
-/// kills and deaths.</summary>
-public readonly record struct DogfightScore(string Name, int Points, int Kills, int Deaths);
+/// <summary>One line on the Game Scores page after a match: a pilot's name, or a team's when
+/// <paramref name="IsTeam"/>, and its final points, kills and deaths.</summary>
+public readonly record struct DogfightScore(string Name, int Points, int Kills, int Deaths, bool IsTeam = false);
 
 /// <summary>
 /// The Multiplayer Lobby of a Dogfight, on both of its ends, engine-free. The host owns the Mission
-/// Options and the player list, and each guest reads them off the wire. Every pilot picks a stock
-/// airframe and a fit and marks itself Ready, and the host launches once every pilot is Ready. A
-/// guest's pick travels as a <see cref="CoopPickMessage"/> under the round the host's options name,
-/// so an option change clears every Ready. A match flown from here lands back on it with its scores.
+/// Options, the plane rules and the player list, and each guest reads them off the wire. Every pilot
+/// picks a stock airframe or one of its custom planes, and a fit, and marks itself Ready on a plane
+/// the rules admit. The host launches once every pilot is Ready. A guest's pick travels as a
+/// <see cref="CoopPickMessage"/> under the round the host's options name, so an option change clears
+/// every Ready. A match flown from here lands back on it with its scores.
 /// </summary>
 public sealed class DogfightLobby
 {
@@ -57,12 +59,20 @@ public sealed class DogfightLobby
     /// <summary>The largest life count the two-character Lives box takes.</summary>
     public const int MaxLives = 99;
 
+    /// <summary>The largest team count the Restrict Number of Teams boxes take, the script's
+    /// <c>WF = 16</c> for a Deathmatch.</summary>
+    public const int MaxTeams = 16;
+
+    /// <summary>How many teams a Capture the Flag launch takes, one per flag. It fixes the Restrict
+    /// Number of Teams boxes at this, and langui 10519 says "one of two teams".</summary>
+    public const int CtfTeams = 2;
+
     /// <summary>How many chat lines the panel keeps; older lines scroll away.</summary>
     public const int ChatDepth = 64;
 
     /// <summary>The airframe a pilot flies until it picks one: the Devastator, the original's first
     /// row.</summary>
-    public const byte DefaultAirframe = NetPlayFeature.StarterAirframe;
+    public const byte DefaultAirframe = CoopGuestPick.StarterAirframe;
 
     /// <summary>How many stock airframes the Select Plane list offers.</summary>
     public const int AirframeCount = 11;
@@ -81,7 +91,13 @@ public sealed class DogfightLobby
         "NW Boeing Field", "NW Lighthouse", "Sky Haven (Rockies)",
     };
 
-    private static readonly string[] EnvironmentChapters = { "C2B", "C3", "C2", "C5", "C1", "C1B", "C4" };
+    // ⚠ Above the Clouds is C1C, not Instant Action's clouds chapter C2B. The two ship the same MP1
+    // and MP3 layouts, so the data alone cannot tell them apart; the row's number (below) does.
+    private static readonly string[] EnvironmentChapters = { "C1C", "C3", "C2", "C5", "C1", "C1B", "C4" };
+
+    // The number each row writes to the environment global, the jump table at 0x413c08. Each is its
+    // row's chapter's world number.
+    private static readonly int[] EnvironmentNumbers = { 3, 6, 4, 8, 1, 2, 7 };
 
     private readonly NetLobby _wire;
     private readonly Func<string> _name;
@@ -89,11 +105,19 @@ public sealed class DogfightLobby
     private readonly List<DogfightChatLine> _chat = new();
     private readonly Dictionary<int, DogfightOptionsMessage> _optionsSent = new();
     private readonly Dictionary<int, DogfightRosterMessage> _rosterSent = new();
+    private readonly Dictionary<int, LobbyPlaneRulesMessage> _rulesSent = new();
+    private readonly Dictionary<int, LobbyTeamsMessage> _teamsSent = new();
+    private readonly List<PlaneRefusal> _refusals = new();
+    private readonly NetTeamBook _teams = new();
     private DogfightOptionsMessage _options = new(
         1, 0, (byte)DogfightMissionType.Deathmatch, DogfightVictory.Time, DefaultTimeMinutes, DefaultScore,
         false, DefaultLives, true);
 
+    // The original's settings block starts zeroed, so a new lobby allows no custom plane.
+    private NetPlaneRules _rules;
     private byte _airframe = DefaultAirframe;
+    private NetPlaneBuild? _build;
+    private NetPlaneBuild? _buildSent;
     private CoopFit _fit;
     private bool _ready;
     private byte _readyEpoch;
@@ -117,6 +141,19 @@ public sealed class DogfightLobby
         _hostPeer = hostPeer;
     }
 
+    /// <summary>Whether a host lists and tells a peer on the wire. Every peer is, unless the door
+    /// refused it, as it refuses a guest past its chosen cap.</summary>
+    public Func<int, bool> Seated { get; init; } = _ => true;
+
+    /// <summary>The voice byte this pilot's pick carries (<see cref="CoopPickMessage.Voice"/>).
+    /// </summary>
+    public Func<byte> Voice { get; init; } = () => CoopPickMessage.NoVoice;
+
+    /// <summary>How many seats the host's own machine flies, its splitscreen seats included. They
+    /// all fly on the host's team, and the balance check counts each as a player. A guest flies one.
+    /// </summary>
+    public Func<int> LocalSeats { get; init; } = () => 1;
+
     /// <summary>Whether this end owns the options and launches the match.</summary>
     public bool IsHost => _hostPeer < 0;
 
@@ -133,8 +170,28 @@ public sealed class DogfightLobby
     /// <summary>The ammunition and ordnance this pilot picked, stock when all zero.</summary>
     public CoopFit Fit => _fit;
 
-    /// <summary>Whether this pilot marked itself Ready under the current round.</summary>
-    public bool Ready => _ready && _readyEpoch == Options.Epoch;
+    /// <summary>The fit this pilot flies: its pick as <see cref="NetPlaneRules.Enforce"/> leaves it.
+    /// The host reads a guest's fit through the same rules, so both ends agree.</summary>
+    public CoopFit LaunchFit => Rules.Enforce(_fit);
+
+    /// <summary>The custom plane this pilot picked, or null on a stock airframe.</summary>
+    public NetPlaneBuild? Build => _build;
+
+    /// <summary>The plane rules as this end stands on them: its own on the host, the host's word on
+    /// a guest. A guest that has heard nothing reads a new lobby's, which allow no custom plane.
+    /// </summary>
+    public NetPlaneRules Rules => IsHost ? _rules : _wire.PlaneRules?.Rules ?? default;
+
+    /// <summary>Why the rules refuse this pilot's plane, or none.</summary>
+    public PlaneRefusal Refusal => Rules.Refuses(_airframe, _build);
+
+    /// <summary>Whether this pilot marked itself Ready under the current round, on a plane the rules
+    /// admit.</summary>
+    public bool Ready => _ready && _readyEpoch == Options.Epoch && Refusal == PlaneRefusal.None;
+
+    /// <summary>Why the last <see cref="SetReady"/> was refused, in the order the original lists
+    /// them. Empty after a mark that took.</summary>
+    public IReadOnlyList<PlaneRefusal> ReadyRefusals => _refusals;
 
     /// <summary>The chat panel's lines, oldest first.</summary>
     public IReadOnlyList<DogfightChatLine> Chat => _chat;
@@ -163,8 +220,85 @@ public sealed class DogfightLobby
         }
     }
 
-    /// <summary>Whether LAUNCH! goes: on the host, once every pilot is Ready.</summary>
+    /// <summary>Whether LAUNCH! is live: on the host, once every pilot is Ready. The press still
+    /// asks <see cref="LaunchRefusal"/>, as the original's LAUNCH! asks its team counts.</summary>
     public bool CanLaunch => IsHost && AllReady;
+
+    /// <summary>The teams standing, in the order they were created: the host's book on the host,
+    /// the host's word on a guest.</summary>
+    public IReadOnlyList<LobbyTeamName> Teams
+    {
+        get
+        {
+            if (!IsHost)
+            {
+                return _wire.Teams?.Teams ?? Array.Empty<LobbyTeamName>();
+            }
+
+            var teams = new List<LobbyTeamName>(_teams.Count);
+            foreach (var team in _teams.Teams)
+            {
+                teams.Add(new LobbyTeamName(team.Number, team.Name));
+            }
+
+            return teams;
+        }
+    }
+
+    /// <summary>The team this pilot is on, 0 for none.</summary>
+    public byte OwnTeam => You < Players.Count ? Players[You].Team : (byte)0;
+
+    /// <summary>Whether any pilot on the list is on a team, which flies a Deathmatch as a team
+    /// one.</summary>
+    public bool Teamed
+    {
+        get
+        {
+            foreach (var row in Players)
+            {
+                if (row.Team != 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>Why the host's launch is refused on its teams, or none. Each row counts one player,
+    /// the host's row every seat its machine flies (<see cref="LocalSeats"/>).</summary>
+    public TeamLaunchRefusal LaunchRefusal
+    {
+        get
+        {
+            var players = Players;
+            var weighed = new List<(byte Team, int Seats)>(players.Count);
+            for (int i = 0; i < players.Count; i++)
+            {
+                weighed.Add((players[i].Team, players[i].IsHost ? Math.Max(1, LocalSeats()) : 1));
+            }
+
+            var options = Options;
+            var refusal = NetTeamBook.Check(weighed, options.RestrictTeams, options.MinTeams, options.MaxTeams);
+            if (refusal != TeamLaunchRefusal.None || !IsCtf(options))
+            {
+                return refusal;
+            }
+
+            // FUN_00495d40 builds flag n for team number n, and the maps lay out two. A team
+            // numbered past them would fly with no flag.
+            foreach (var (team, _) in weighed)
+            {
+                if (team > CtfTeams)
+                {
+                    return TeamLaunchRefusal.TooFewTeams;
+                }
+            }
+
+            return TeamLaunchRefusal.None;
+        }
+    }
 
     /// <summary>Whether a lobby screen stands on this lobby. A Built-in Network board never shows
     /// one, so its guest sends no pick and its flight ends the way it always has.</summary>
@@ -189,6 +323,19 @@ public sealed class DogfightLobby
     /// Environment box does not list.</summary>
     public static int EnvironmentOf(string chapter) => Array.IndexOf(EnvironmentChapters, chapter);
 
+    /// <summary>The environment number the original's session setup writes for an Environment row,
+    /// which completes the row's <c>loading_m</c> dialog names (docs/org/loading-screen.md).
+    /// ⚠ Keyed by the row: <c>escape.zrd</c> numbers Above the Clouds 5, and this answers 3, the
+    /// number <c>Loading.zrd</c> keys that row's dialogs by.</summary>
+    public static int EnvironmentNumber(int environment) =>
+        EnvironmentNumbers[Math.Clamp(environment, 0, EnvironmentCount - 1)];
+
+    /// <summary>The original's 1-based multiplayer mode for a launch (docs/org/multiplayer-spawn.md).
+    /// Capture the Flag is 3 and Zeppelin vs Zeppelin 4. A Deathmatch is 2 once any pilot is on a
+    /// team, else 1.</summary>
+    public static int ModeOf(bool captureTheFlag, bool zeppelinVsZeppelin, bool teamed) =>
+        captureTheFlag ? 3 : zeppelinVsZeppelin ? 4 : teamed ? 2 : 1;
+
     /// <summary>The Game Scores lines for a match's standings, best first. Each seat is named from
     /// <paramref name="names"/>, the list as it stood at the launch, or by its player tag past it.
     /// </summary>
@@ -208,32 +355,190 @@ public sealed class DogfightLobby
         return lines.ConvertAll(line => line.Line).ToArray();
     }
 
-    /// <summary>Whether the Type box offers a mission type as live. Capture the Flag and Zeppelin vs
-    /// Zeppelin are drawn greyed.</summary>
-    public static bool Flies(DogfightMissionType type) => type == DogfightMissionType.Deathmatch;
+    /// <summary>The Game Scores lines for a finished match. A team match lists each team's totals,
+    /// best first, with its pilots under it best first. A free-for-all is
+    /// <see cref="ScoresOf(IEnumerable{CSVM.Flight.Modes.VersusStanding}, IReadOnlyList{string})"/>.
+    /// </summary>
+    public static DogfightScore[] ScoresOf(CSVM.Flight.Modes.VersusMatch match, IReadOnlyList<string> names)
+    {
+        ArgumentNullException.ThrowIfNull(match);
+        ArgumentNullException.ThrowIfNull(names);
+        if (!match.Teamed)
+        {
+            return ScoresOf(match.Standings(), names);
+        }
 
-    /// <summary>The match rules a launch carries: the victory condition as a kill target or a match
-    /// clock, the other limit off, and the lives rule.</summary>
+        var lines = new List<DogfightScore>();
+        foreach (var team in match.TeamStandings())
+        {
+            lines.Add(new DogfightScore(team.Name, team.Score, team.Kills, team.Deaths, IsTeam: true));
+            lines.AddRange(ScoresOf(Members(match, team.Team), names));
+        }
+
+        // A seat on no team, which a team launch refuses, still gets its line.
+        lines.AddRange(ScoresOf(Members(match, 0), names));
+        return lines.ToArray();
+    }
+
+    /// <summary>Whether the Type box offers a mission type as live. All three fly.</summary>
+    public static bool Flies(DogfightMissionType type) =>
+        type is DogfightMissionType.Deathmatch or DogfightMissionType.CaptureTheFlag or DogfightMissionType.ZeppelinVsZeppelin;
+
+    /// <summary>Whether the Environment box offers <paramref name="environment"/> under
+    /// <paramref name="type"/>. Capture the Flag greys Above the Clouds and NW Lighthouse, the two
+    /// chapters with no <c>MP2</c> map, as the mission script's type change does.</summary>
+    public static bool Offers(DogfightMissionType type, int environment) =>
+        environment is >= 0 and < EnvironmentCount
+        && (type != DogfightMissionType.CaptureTheFlag || EnvironmentChapters[environment] is not ("C1C" or "C1B"));
+
+    /// <summary>Whether <paramref name="options"/> fly Capture the Flag.</summary>
+    public static bool IsCtf(DogfightOptionsMessage options) =>
+        options.MissionType == (byte)DogfightMissionType.CaptureTheFlag;
+
+    /// <summary>Whether <paramref name="options"/> fly Zeppelin vs Zeppelin.</summary>
+    public static bool IsZvz(DogfightOptionsMessage options) =>
+        options.MissionType == (byte)DogfightMissionType.ZeppelinVsZeppelin;
+
+    /// <summary>Whether <paramref name="options"/>' type fixes Restrict Number of Teams at two, as
+    /// Capture the Flag's and Zeppelin vs Zeppelin's type changes do.</summary>
+    public static bool FixesTeams(DogfightOptionsMessage options) => IsCtf(options) || IsZvz(options);
+
+    /// <summary>The match rules a launch carries: the victory condition as a kill target, a match
+    /// clock or both, and the lives rule. They say too which team mode it flies. A limit not chosen is
+    /// off. With both, the first one reached ends the match.</summary>
     public static VersusRules RulesOf(DogfightOptionsMessage options) => new(
-        options.Victory == DogfightVictory.Score ? options.Score : 0,
-        options.Victory == DogfightVictory.Time ? options.TimeMinutes : 0,
+        options.Victory != DogfightVictory.Time ? options.Score : 0,
+        options.Victory != DogfightVictory.Score ? options.TimeMinutes : 0,
         options.LimitedLives ? ClampLives(options.Lives) : 0,
-        options.AutoRespawn);
+        options.AutoRespawn,
+        IsCtf(options),
+        IsCtf(options) && options.FlagHomeToCapture,
+        IsZvz(options));
+
+    /// <summary>Whether <paramref name="victory"/> arms <paramref name="limit"/>, Time or Score.
+    /// </summary>
+    public static bool Arms(DogfightVictory victory, DogfightVictory limit) => victory == limit || victory == DogfightVictory.Both;
+
+    /// <summary>The victory condition a press on the <paramref name="limit"/> radio leaves: it
+    /// arms that limit beside the other, or disarms it while the other stays. The last armed limit
+    /// is never cleared, so a match always has an end.</summary>
+    public static DogfightVictory Toggled(DogfightVictory victory, DogfightVictory limit)
+    {
+        var other = limit == DogfightVictory.Time ? DogfightVictory.Score : DogfightVictory.Time;
+        if (victory == DogfightVictory.Both)
+        {
+            return other;
+        }
+
+        return victory == limit ? victory : DogfightVictory.Both;
+    }
 
     /// <summary>A life count held to 1..99. The original clamps nothing, so its empty box launches
     /// on 0 lives and a pilot on 0 counts as alive after its first death.</summary>
     public static int ClampLives(int lives) => Math.Clamp(lives, 1, MaxLives);
 
-    /// <summary>Picks the environment. Refused on a guest and outside the seven.</summary>
+    /// <summary>The lobby notice of one team event, the original's langui 10503 to 10505 lines.
+    /// </summary>
+    public static string TeamLine(NetTeamEventKind kind, string player, string team) => kind switch
+    {
+        NetTeamEventKind.Joined => $"[{player} joined team {team}.]",
+        NetTeamEventKind.Left => $"[{player} left team {team}.]",
+        _ => $"[{team} disbanded.]",
+    };
+
+    /// <summary>Picks the environment. Refused on a guest, outside the seven, and on one the type
+    /// greys (<see cref="Offers"/>).</summary>
     public bool SetEnvironment(int environment) =>
-        environment is >= 0 and < EnvironmentCount && Change(_options with { Environment = (byte)environment });
+        Offers((DogfightMissionType)_options.MissionType, environment) && Change(_options with { Environment = (byte)environment });
 
-    /// <summary>Picks the mission type. Refused on a guest and for a greyed type.</summary>
-    public bool SetMissionType(DogfightMissionType type) => Flies(type) && Change(_options with { MissionType = (byte)type });
+    /// <summary>Picks the mission type. Refused on a guest and for a greyed type. Capture the Flag
+    /// and Zeppelin vs Zeppelin tick Restrict Number of Teams at two teams exactly. Capture the Flag
+    /// moves off an environment it greys to the first it offers.</summary>
+    public bool SetMissionType(DogfightMissionType type)
+    {
+        if (!Flies(type))
+        {
+            return false;
+        }
 
-    /// <summary>Picks how the match is won. Refused on a guest.</summary>
+        if (type == DogfightMissionType.Deathmatch)
+        {
+            return Change(_options with { MissionType = (byte)type });
+        }
+
+        int environment = _options.Environment;
+        while (!Offers(type, environment))
+        {
+            environment = (environment + 1) % EnvironmentCount;
+        }
+
+        return Change(_options with
+        {
+            MissionType = (byte)type,
+            Environment = (byte)environment,
+            RestrictTeams = true,
+            MinTeams = CtfTeams,
+            MaxTeams = CtfTeams,
+        });
+    }
+
+    /// <summary>Picks how the match is won: Time, Score or both. Refused on a guest.</summary>
     public bool SetVictory(DogfightVictory victory) =>
-        victory is DogfightVictory.Time or DogfightVictory.Score && Change(_options with { Victory = victory });
+        victory is DogfightVictory.Time or DogfightVictory.Score or DogfightVictory.Both && Change(_options with { Victory = victory });
+
+    /// <summary>Checks or clears Restrict Number of Teams. Refused on a guest and in a type that fixes
+    /// it (<see cref="FixesTeams"/>).</summary>
+    public bool SetRestrictTeams(bool restrict) => !FixesTeams(_options) && Change(_options with { RestrictTeams = restrict });
+
+    /// <summary>Sets the minimum team count, held to 0 up to the maximum as the script's box binds
+    /// it. Refused on a guest, while Restrict Number of Teams is clear, and in a type fixing it.</summary>
+    public bool SetMinTeams(int teams) =>
+        _options.RestrictTeams && !FixesTeams(_options) && Change(_options with { MinTeams = (byte)Math.Clamp(teams, 0, _options.MaxTeams) });
+
+    /// <summary>Sets the maximum team count, held to the minimum up to <see cref="MaxTeams"/>.
+    /// Refused on a guest, while Restrict Number of Teams is clear, and in a type fixing it.</summary>
+    public bool SetMaxTeams(int teams) =>
+        _options.RestrictTeams && !FixesTeams(_options) && Change(_options with { MaxTeams = (byte)Math.Clamp(teams, _options.MinTeams, MaxTeams) });
+
+    /// <summary>Checks or clears Capture the Flag's own-flag-home rule: an enemy flag scores only
+    /// while the carrier's own flag stands at its base. Refused on a guest and outside Capture the
+    /// Flag.</summary>
+    public bool SetFlagHomeToCapture(bool required) =>
+        IsCtf(_options) && Change(_options with { FlagHomeToCapture = required });
+
+    /// <summary>Creates a team under <paramref name="name"/> with this pilot its captain. A guest
+    /// asks its host. Refused while this pilot is Ready or on a team, and for a blank name.</summary>
+    public bool CreateTeam(string name)
+    {
+        if (Ready || OwnTeam != 0 || !NetPlayerInfo.IsValidName(name))
+        {
+            return false;
+        }
+
+        return Act(new LobbyTeamActionMessage(NetTeamAction.Create, 0, name.Trim()));
+    }
+
+    /// <summary>Joins team <paramref name="team"/>. A guest asks its host. Refused while this pilot
+    /// is Ready or on a team, and for a team that does not stand.</summary>
+    public bool JoinTeam(byte team)
+    {
+        bool stands = false;
+        foreach (var named in Teams)
+        {
+            stands |= named.Number == team;
+        }
+
+        return !Ready && OwnTeam == 0 && stands && Act(new LobbyTeamActionMessage(NetTeamAction.Join, team, ""));
+    }
+
+    /// <summary>Leaves this pilot's team; a captain's leave disbands it. A guest asks its host.
+    /// Refused while this pilot is Ready or on no team.</summary>
+    public bool LeaveTeam() =>
+        !Ready && OwnTeam != 0 && Act(new LobbyTeamActionMessage(NetTeamAction.Leave, OwnTeam, ""));
+
+    /// <summary>The team the pilot at <paramref name="peer"/> is on, 0 for none. On the host, which
+    /// alone holds the teams; the host's own seats go by its local peer.</summary>
+    public byte TeamOfPeer(int peer) => IsHost ? _teams.TeamOf(peer) : (byte)0;
 
     /// <summary>Sets the Time box, in minutes. Refused on a guest and outside 1 to 99.</summary>
     public bool SetTimeMinutes(int minutes) =>
@@ -253,14 +558,22 @@ public sealed class DogfightLobby
     /// <summary>Checks or clears Auto Respawn. Refused on a guest.</summary>
     public bool SetAutoRespawn(bool auto) => Change(_options with { AutoRespawn = auto });
 
-    /// <summary>Allow Custom Planes, drawn greyed: guests fly stock planes, so nothing sets it.</summary>
-    public bool SetAllowCustomPlanes(bool allow) => false;
+    /// <summary>Checks or clears Allow Custom Planes. Refused on a guest.</summary>
+    public bool SetAllowCustomPlanes(bool allow) => ChangeRules(_rules with { AllowCustom = allow });
 
-    /// <summary>Outlaw Components, drawn greyed with Allow Custom Planes.</summary>
-    public bool SetOutlawComponents(bool outlaw) => false;
+    /// <summary>Checks or clears Outlaw Components, which puts the outlaw list in force. A toggle
+    /// either way empties the list in the same round, as the original's 5044 does. Refused on a
+    /// guest.</summary>
+    public bool SetOutlawComponents(bool outlaw) =>
+        ChangeRules(outlaw == _rules.Outlawing ? _rules : _rules with { Outlawing = outlaw, Outlawed = 0 });
 
-    /// <summary>Picks this pilot's airframe and fit, live whether or not it is Ready. A changed pick
-    /// clears this pilot's own Ready. Refused outside the eleven stock airframes.</summary>
+    /// <summary>Sets or clears one flag of the outlaw list (<see cref="NetPlaneRules"/> names them).
+    /// Refused on a guest and outside the list.</summary>
+    public bool SetOutlawed(int flag, bool outlawed) =>
+        flag is >= 0 and < NetPlaneRules.Flags && ChangeRules(_rules.With(flag, outlawed));
+
+    /// <summary>Picks this pilot's stock airframe and fit, live whether or not it is Ready. A changed
+    /// pick clears this pilot's own Ready. Refused outside the eleven stock airframes.</summary>
     public bool Pick(int airframe, CoopFit fit)
     {
         if (airframe is < 0 or >= AirframeCount)
@@ -268,23 +581,42 @@ public sealed class DogfightLobby
             return false;
         }
 
-        // ⚠ Readiness is consent to the plane as it stood, so the host must not launch a changed one.
-        if (airframe != _airframe || fit != _fit)
-        {
-            _ready = false;
-        }
-
-        _airframe = (byte)airframe;
-        _fit = fit;
+        Take((byte)airframe, null, fit);
         return true;
     }
 
-    /// <summary>Marks this pilot Ready or not under the current round. A guest's mark reaches the host
-    /// on the next step.</summary>
-    public void SetReady(bool ready)
+    /// <summary>Picks one of this pilot's custom planes and its fit. Refused on an airframe outside
+    /// the eleven. Whether the rules admit it is asked at Ready, as the original asks.</summary>
+    public bool PickCustom(NetPlaneBuild build, CoopFit fit)
     {
+        ArgumentNullException.ThrowIfNull(build);
+        if (build.Airframe >= AirframeCount)
+        {
+            return false;
+        }
+
+        Take(build.Airframe, build.Copy(), fit);
+        return true;
+    }
+
+    /// <summary>Changes this pilot's fit alone, keeping the plane it stands on.</summary>
+    public void Refit(CoopFit fit) => Take(_airframe, _build, fit);
+
+    /// <summary>Marks this pilot Ready or not under the current round. A guest's mark reaches the host
+    /// on the next step. False, and no mark, when the rules refuse this pilot's plane or a picked
+    /// ammunition or rocket; <see cref="ReadyRefusals"/> then names each reason.</summary>
+    public bool SetReady(bool ready)
+    {
+        _refusals.Clear();
+        if (ready && ReadyCheck())
+        {
+            _ready = false;
+            return false;
+        }
+
         _ready = ready;
         _readyEpoch = Options.Epoch;
+        return true;
     }
 
     /// <summary>A lobby screen now stands on this lobby, so a guest's pick and name go to the host.
@@ -297,7 +629,7 @@ public sealed class DogfightLobby
     public string? CheckBuiltInLaunch(string chapter, VersusRules rules)
     {
         bool picked = false;
-        foreach (int peer in _wire.AllPeers)
+        foreach (int peer in SeatedPeers())
         {
             if (!_wire.Picks.TryGetValue(peer, out var pick))
             {
@@ -305,7 +637,7 @@ public sealed class DogfightLobby
             }
 
             picked = true;
-            if (!pick.Ready || pick.Epoch != _options.Epoch)
+            if (!Admits(peer, pick))
             {
                 return GuestsNotReady;
             }
@@ -328,7 +660,9 @@ public sealed class DogfightLobby
         var adopted = _options with
         {
             Environment = (byte)environment,
-            Victory = rules.KillTarget > 0 ? DogfightVictory.Score : DogfightVictory.Time,
+            Victory = rules.KillTarget > 0
+                ? rules.TimeLimitMinutes > 0 ? DogfightVictory.Both : DogfightVictory.Score
+                : DogfightVictory.Time,
             TimeMinutes = (byte)Math.Clamp(rules.TimeLimitMinutes > 0 ? rules.TimeLimitMinutes : _options.TimeMinutes, 1, MaxTimeMinutes),
             Score = (ushort)Math.Clamp(rules.KillTarget > 0 ? rules.KillTarget : _options.Score, 1, MaxScore),
             LimitedLives = rules.Lives > 0,
@@ -380,7 +714,7 @@ public sealed class DogfightLobby
         Add(message);
         if (IsHost)
         {
-            foreach (int peer in _wire.AllPeers)
+            foreach (int peer in SeatedPeers())
             {
                 _wire.Tell(peer, message);
             }
@@ -398,6 +732,38 @@ public sealed class DogfightLobby
     /// </summary>
     public void Note(string name, string text) => Add(new LobbyChatMessage(name ?? "", text ?? ""));
 
+    /// <summary>Posts a notice under no name in this host's chat and every seated guest's, as the
+    /// original posts its lobby notices (langui 10499 to 10506). Refused on a guest.</summary>
+    public bool Announce(string text)
+    {
+        if (!IsHost || string.IsNullOrEmpty(text))
+        {
+            return false;
+        }
+
+        var notice = new LobbyChatMessage("", text);
+        Add(notice);
+        foreach (int peer in SeatedPeers())
+        {
+            _wire.Tell(peer, notice);
+        }
+
+        return true;
+    }
+
+    /// <summary>The peer a host's player list row names. It is -1 for the host's own row, for a row
+    /// past the list, and on a guest.</summary>
+    public int PeerAt(int row)
+    {
+        if (!IsHost || row < 1)
+        {
+            return -1;
+        }
+
+        var peers = SeatedPeers();
+        return row - 1 < peers.Count ? peers[row - 1] : -1;
+    }
+
     /// <summary>One menu frame, after the socket was stepped. The host relays each guest's chat to the
     /// others and sends each guest its options and list when they change. A guest takes the host's
     /// chat and sends its own pick.</summary>
@@ -411,7 +777,7 @@ public sealed class DogfightLobby
                 continue;
             }
 
-            foreach (int peer in _wire.AllPeers)
+            foreach (int peer in SeatedPeers())
             {
                 if (peer != from)
                 {
@@ -422,12 +788,27 @@ public sealed class DogfightLobby
 
         if (IsHost)
         {
+            TakeTeamActions();
             SendToGuests();
         }
         else
         {
             SendPick();
         }
+    }
+
+    private static List<CSVM.Flight.Modes.VersusStanding> Members(CSVM.Flight.Modes.VersusMatch match, int team)
+    {
+        var members = new List<CSVM.Flight.Modes.VersusStanding>();
+        foreach (var standing in match.Standings())
+        {
+            if (match.TeamOf(standing.PlayerIndex) == team)
+            {
+                members.Add(standing);
+            }
+        }
+
+        return members;
     }
 
     private static bool Contains(IReadOnlyList<int> peers, int peer)
@@ -441,6 +822,81 @@ public sealed class DogfightLobby
         }
 
         return false;
+    }
+
+    private List<int> SeatedPeers()
+    {
+        var peers = new List<int>();
+        foreach (int peer in _wire.AllPeers)
+        {
+            if (Seated(peer))
+            {
+                peers.Add(peer);
+            }
+        }
+
+        return peers;
+    }
+
+    // A guest counts as Ready only under this round and on a plane the rules admit. The guest's
+    // own lobby asks the same, but the host does not take its word for it.
+    private bool Admits(int peer, CoopPickMessage pick) =>
+        pick.Ready && pick.Epoch == _options.Epoch
+        && _rules.Refuses(pick.Airframe, _wire.PickBuilds.TryGetValue(peer, out var build) ? build : null) == PlaneRefusal.None;
+
+    // The original's Ready check, true when it refuses. An outlawed ammunition or rocket also resets
+    // every gun's or pylon's to none, so the next Ready takes; Outlaw All resets without refusing.
+    private bool ReadyCheck()
+    {
+        var rules = Rules;
+        if (rules.Refuses(_airframe, _build) is var plane and not PlaneRefusal.None)
+        {
+            _refusals.Add(plane);
+        }
+
+        if (rules.AmmoOutlawed(_fit) && !rules.Has(NetPlaneRules.AllAmmoFlag))
+        {
+            _refusals.Add(PlaneRefusal.Ammo);
+        }
+
+        if (rules.RocketsOutlawed(_fit) && !rules.Has(NetPlaneRules.AllRocketsFlag))
+        {
+            _refusals.Add(PlaneRefusal.Rockets);
+        }
+
+        _fit = rules.Enforce(_fit);
+        return _refusals.Count > 0;
+    }
+
+    // ⚠ Readiness is consent to the plane as it stood, so the host must not launch a changed one.
+    private void Take(byte airframe, NetPlaneBuild? build, CoopFit fit)
+    {
+        if (airframe != _airframe || fit != _fit || !Equals(build, _build))
+        {
+            _ready = false;
+        }
+
+        _airframe = airframe;
+        _build = build;
+        _fit = fit;
+    }
+
+    // A rules change is a new round, as an options change is.
+    private bool ChangeRules(NetPlaneRules changed)
+    {
+        if (!IsHost)
+        {
+            return false;
+        }
+
+        if (changed != _rules)
+        {
+            _rules = changed;
+            _options = _options with { Epoch = NextEpoch() };
+            _ready = false;
+        }
+
+        return true;
     }
 
     // Every host change is a new round: the Ready marks under the old options clear.
@@ -482,8 +938,9 @@ public sealed class DogfightLobby
 
     private List<DogfightLobbySeat> HostRows()
     {
-        var rows = new List<DogfightLobbySeat> { new(OwnName(), _airframe, Ready, true) };
-        var peers = _wire.AllPeers;
+        int self = _wire.LocalPeer;
+        var rows = new List<DogfightLobbySeat> { new(OwnName(), _airframe, Ready, true, _teams.TeamOf(self), _teams.IsCaptain(self)) };
+        var peers = SeatedPeers();
         for (int i = 0; i < peers.Count; i++)
         {
             bool picked = _wire.Picks.TryGetValue(peers[i], out var pick);
@@ -491,10 +948,80 @@ public sealed class DogfightLobby
                 ? named
                 : "Pilot " + (rows.Count + 1).ToString(CultureInfo.InvariantCulture);
             byte airframe = picked && pick.Airframe < AirframeCount ? pick.Airframe : DefaultAirframe;
-            rows.Add(new DogfightLobbySeat(name, airframe, picked && pick.Ready && pick.Epoch == _options.Epoch, false));
+            rows.Add(new DogfightLobbySeat(name, airframe, picked && Admits(peers[i], pick), false,
+                _teams.TeamOf(peers[i]), _teams.IsCaptain(peers[i])));
         }
 
         return rows;
+    }
+
+    // One team action: a guest asks its host, the host applies its own at once.
+    private bool Act(LobbyTeamActionMessage action)
+    {
+        if (IsHost)
+        {
+            return Apply(_wire.LocalPeer, action);
+        }
+
+        if (_hostPeer < 0)
+        {
+            return false;
+        }
+
+        _wire.Tell(_hostPeer, action);
+        return true;
+    }
+
+    // ⚠ The host alone decides, on its own book: a guest's word names only what it asks for. A
+    // guest's Disband is ignored, since only a captain's Leave disbands.
+    private bool Apply(int member, LobbyTeamActionMessage action)
+    {
+        var events = action.Action switch
+        {
+            NetTeamAction.Create when _teams.TeamOf(member) == 0 && NetPlayerInfo.IsValidName(action.Name) => _teams.Create(member, action.Name),
+            NetTeamAction.Join => _teams.Join(member, action.Team),
+            NetTeamAction.Leave => _teams.Leave(member),
+            _ => Array.Empty<NetTeamEvent>(),
+        };
+
+        Post(events);
+        return events.Count > 0;
+    }
+
+    // Each guest's asked actions, then every member no longer seated taken off its team: a leaver's
+    // or a booted captain's team is disbanded.
+    private void TakeTeamActions()
+    {
+        var seated = SeatedPeers();
+        foreach (var (peer, action) in _wire.TakeTeamActions())
+        {
+            if (Contains(seated, peer))
+            {
+                Apply(peer, action);
+            }
+        }
+
+        var present = new List<int>(seated) { _wire.LocalPeer };
+        Post(_teams.Keep(present));
+    }
+
+    private void Post(IReadOnlyList<NetTeamEvent> events)
+    {
+        foreach (var happened in events)
+        {
+            Announce(TeamLine(happened.Kind, MemberName(happened.Member), happened.TeamName));
+        }
+    }
+
+    // A member's name as the player list writes it, the host's own included.
+    private string MemberName(int member)
+    {
+        if (member == _wire.LocalPeer)
+        {
+            return OwnName();
+        }
+
+        return _wire.Picks.TryGetValue(member, out var pick) && pick.Name is { Length: > 0 } named ? named : "A pilot";
     }
 
     // A guest that has not heard the host's list yet shows itself alone.
@@ -502,15 +1029,32 @@ public sealed class DogfightLobby
 
     private void SendToGuests()
     {
-        var peers = _wire.AllPeers;
+        var peers = SeatedPeers();
         var rows = HostRows();
+        var teams = new LobbyTeamsMessage(Teams);
         for (int i = 0; i < peers.Count; i++)
         {
             int peer = peers[i];
+
+            // The rules go first, so a guest reading a new round reads it under the rules it has.
+            var rules = new LobbyPlaneRulesMessage(_options.Epoch, _rules);
+            if (!_rulesSent.TryGetValue(peer, out var told) || told != rules)
+            {
+                _wire.Tell(peer, rules);
+                _rulesSent[peer] = rules;
+            }
+
             if (!_optionsSent.TryGetValue(peer, out var sent) || sent != _options)
             {
                 _wire.Tell(peer, _options);
                 _optionsSent[peer] = _options;
+            }
+
+            // The team list goes before the rows that name its teams.
+            if (!_teamsSent.TryGetValue(peer, out var teamed) || teamed != teams)
+            {
+                _wire.Tell(peer, teams);
+                _teamsSent[peer] = teams;
             }
 
             var roster = new DogfightRosterMessage(_options.Epoch, (byte)(i + 1), rows);
@@ -527,6 +1071,8 @@ public sealed class DogfightLobby
             {
                 _optionsSent.Remove(gone);
                 _rosterSent.Remove(gone);
+                _rulesSent.Remove(gone);
+                _teamsSent.Remove(gone);
             }
         }
     }
@@ -540,7 +1086,14 @@ public sealed class DogfightLobby
             return;
         }
 
-        var pick = new CoopPickMessage(options.Epoch, Ready, _airframe, _fit, OwnName());
+        // The build goes before the pick, so the host never reads a Ready without the plane behind it.
+        if (!Equals(_build, _buildSent))
+        {
+            _wire.Tell(_hostPeer, new PlaneBuildMessage(PlaneBuildMessage.Mine, _build));
+            _buildSent = _build?.Copy();
+        }
+
+        var pick = new CoopPickMessage(options.Epoch, Ready, _airframe, _fit, OwnName(), Voice: Voice());
         if (_pickSent != pick)
         {
             _wire.Tell(_hostPeer, pick);

@@ -134,14 +134,15 @@ Two further writers of the same bit, neither of them the data path:
 
 ### The other bits, named by data correlation only
 
-⚠ **Bits 0, 1 and 3 are not traced in the executable.** The names below come from which textures
-carry them, and from the extractor's existing spelling. Treat them as provisional.
+⚠ **Bits 0 and 1 are not traced in the executable.** Their names come from which textures carry
+them, and from the extractor's existing spelling. Treat them as provisional. Bit 3 is traced to the
+upload (see "No colour key, and a truncated 4-bit alpha" below).
 
-| Bit | Provisional name | C1 textures carrying it |
+| Bit | Name | C1 textures carrying it |
 |---|---|---|
-| `0x01` | `STRETCH_U` | `cliff01_trans1/2`, `compassticks2`, `dougfirtree1`, `firtree1/2`, `river2`, `sky1`, `terpat02_trans2` (plus everything in `Both`) |
-| `0x02` | `STRETCH_V` | `tracer1`, `water1_trans1` (plus everything in `Both`) |
-| `0x08` | `UNK3` | `cloud1`, `cloud2`, `rotorblur`, and nothing else |
+| `0x01` | `STRETCH_U` (provisional) | `cliff01_trans1/2`, `compassticks2`, `dougfirtree1`, `firtree1/2`, `river2`, `sky1`, `terpat02_trans2` (plus everything in `Both`) |
+| `0x02` | `STRETCH_V` (provisional) | `tracer1`, `water1_trans1` (plus everything in `Both`) |
+| `0x08` | `FULL_ALPHA_UPLOAD` | `cloud1`, `cloud2`, `rotorblur`, and nothing else |
 
 Values observed across the install: 0, 1, 2, 3, 4, 7, 8. `Both` (3) is `lkshad2/3/5/6`,
 `nitroprop`, `splash01/02/03`, `splashbase`, `tether_field`, which is consistent with a UV wrap or
@@ -162,8 +163,14 @@ Nothing else in 881 textures carries it, and every member is a glow or emissive 
 same set minus `bigflare01/02` and the impact rings. That correlation is what identifies the bit;
 it is not an inference from the extractor's field name.
 
-**Sprites that do NOT carry it**, which is every sprite any puffer names: `fire_f01`, `fire_f02`,
-`fire_f06`, `smoke101`, `smoke102`, `smoke103`, `exp_yel01`, `thickblksmoke`. All alpha-mixed.
+**Sprites that do NOT carry it**, which is every sprite any puffer names. The 145 `zrdr` files
+that define a `PUFFER_STATE` name 26 distinct textures between them, and the census above holds
+none of them: `bit01` … `bit04`, `cloud1`, `cloud2`, `exp_gre01`, `exp_red01`, `exp_yel01`,
+`fire_f01` … `fire_f06`, `fireflare1`, `magnesiumtip`, `poleflare`, `smoke101` … `smoke103`,
+`splashbase`, `thickblksmoke01` … `thickblksmoke03`, `watersquirt`. All alpha-mixed (the words
+seen are 0, 3 for `splashbase` and 8 for the two clouds). The additive `fire101` … `fire112`
+flipbook belongs to `effects.zrd`'s `EFFECTS` table, which installs on gamez mesh materials
+rather than on a puffer, so nothing in an install reaches the particle path's additive branch.
 
 ## What this means for particles
 
@@ -291,7 +298,7 @@ render_flags: u16     // was: stretch
   bit 0  STRETCH_U             (provisional, not traced)
   bit 1  STRETCH_V             (provisional, not traced)
   bit 2  ADDITIVE_TRANSPARENT  (traced: FUN_005a4210, FUN_005a6160)
-  bit 3  UNK3                  (provisional, not traced)
+  bit 3  FULL_ALPHA_UPLOAD     (traced: 0x005a1b58, ARGB8888 instead of ARGB4444)
 ```
 
 The existing enum values map as: `None` = 0, `Horizontal` = 1, `Vertical` = 2, `Both` = 3,
@@ -349,7 +356,50 @@ surface subtends 554 px per metre-at-one-metre. Level 1 is therefore first fully
 black and the far clip stands 570 m beyond ([weather.md](weather.md)). At a grazing angle the
 density rises and the radius shrinks, by the same factor in both the biased and unbiased case.
 
+## No colour key, and a truncated 4-bit alpha
+
+**The hardware draw never colour-keys a texture.** The device setup `FUN_005a0e00` sets its render
+states once (cull, z, shade, fog, `ALPHABLENDENABLE` off, `SRCBLEND` 5, `DESTBLEND` 6), and no code
+in the executable passes state `0x29` (`D3DRENDERSTATE_COLORKEYENABLE`, default off) to
+`SetRenderState`. A texture with no alpha therefore draws every texel opaque. The C4 `moon1` and C5
+`star1` cards are such textures: each paints its backdrop in the chapter sky texture's corner colour
+(`star1` 16,16,25), and that backdrop lands on the sky as a square wherever the sky gradient
+departs from it. The `CAP-11` New York footage shows the same plateau around a star low in the sky,
+a few levels over the sky beside it, and none around a star near the zenith, where the sky matches.
+
+**An alpha surface keeps only the top four bits of each channel.** The upload's ARGB4444 arm
+(`005a1bcf`) hands 4 bits per channel to `FUN_0059e1f0`, which builds each channel mask as the top
+`n` bits of the byte (`0xf0` for 4), and the pixel converter ANDs the source alpha with that mask
+before shifting it into place (`005a2356`). A texel alpha below 16 therefore uploads as 0, and 16 to
+31 as one sixteenth. `flare_green`'s border fringe (alpha 6 to 29) mostly vanishes that way: its
+corners (alpha 7) draw nothing, and its edge midpoints (alpha 29) draw at one sixteenth.
+
+**Which textures take that arm.** The upload `0x005a1840` reads the image's storage flags at `+0x09`
+(bit `0x02`, alpha present) into a local, and for such an image branches on the alpha plane pointer
+at `+0x14` (`005a1adc`). With no plane (the `Simple` class) it builds ARGB1555, a 1-bit alpha. With a
+plane (the `Full` class) it takes ARGB8888 when the device offers it and render-flags bit 3 is set
+(`TEST [EBP+0xc], DL` at `005a1b58`, `DL` = 8 from `005a1a63`), else ARGB4444 when offered
+(`005a1bbe`), else ARGB1555. Bit 3 is carried by `cloud1`, `cloud2` and `rotorblur` alone, so every
+other alpha-plane texture keeps four bits of alpha. How the card expands a 4-bit channel back to
+eight (nibble replication, `a4 * 17`) is hardware behaviour and not in the executable.
+
+**Sampling matches a modern bilinear sampler.** The same device setup sets, per texture stage,
+`MAGFILTER` and `MINFILTER` to linear (states `0x10`, `0x11` = 2), `MIPFILTER` to linear (`0x12` =
+3) and both address modes to wrap (`0x0d`, `0x0e` = 1). Stage 0 modulates the texture colour by the
+vertex colour and leaves `ALPHAOP` at its default, so a sprite's alpha is its texture's alpha. A
+quad's edge pixel therefore reads the texture's border rows, as CSVM's does, and an authored border
+alpha of 16 to 31 draws at one sixteenth in both.
+
 ## Where CSVM differs today
+
+Glow billboards blend their alpha in gamma space in both graphics modes (`SceneBuilder`'s sprite
+alpha line), the byte-space `SRCALPHA, INVSRCALPHA` mix above. Only Enhanced mode keys the `moon1`
+and `star1` backdrops, since its tonemap moves them off the sky's colour; the faithful path draws
+them opaque, as the original does. Under faithful graphics an alpha-plane texture without bit 3
+keeps the top four bits of its alpha on every mip level, expanded by nibble replication
+(`TextureArchive.TruncatesAlpha`, applied in `TextureArchive.Build` and to `PlanePainter`'s decals
+and painted skins), so a fringe below 16/255 draws nothing. Enhanced graphics keeps 8-bit alpha.
+Colour stays at 8 bits in both modes.
 
 `TextureArchive.RenderFlags` carries the word off each archive's own extraction manifest (the
 `stretch` field) and `IsAdditive` tests bit 2; a name the archive cannot resolve, and a PNG-only
@@ -363,6 +413,39 @@ the sorted transparent pass's additive and so the one that applies to particles.
 split path is reachable only by a frame list nothing authors. The flagged textures are consumed by
 mesh polygons and the HUD instead: the `fire101`…`fire112` flipbook, the lens flares, the impact
 rings and the HUD hilites. Those draw through `SceneBuilder`, which does not read the word yet.
+
+Because blend cannot tell a flame from smoke here, Enhanced Graphics selects the sprites that
+bloom by name instead: `MultiMeshEmitterRenderer.IsFireSprite` names `fire_f01` … `fire_f06`, the
+flipbook every explosion puffer sequences, and that column's `ALBEDO` is multiplied by 2.0 so its
+hottest texels cross the 1.0 glow threshold `Launcher.EnableGlowAndTonemap` sets. The multiplier
+is uniform and the flipbook's own authored falloff decides which frames halo: alpha-weighted
+linear peaks run 0.814, 0.714, 0.540, 0.429, 0.292, 0.268 across the six frames, so the first two
+clear 1.0 and the tail stays under it. The sprites deliberately left out reach 1.0 unaided and
+would halo on every gun strike or pole lamp (`magnesiumtip` 1.000, `poleflare` 1.000, `exp_yel01`
+0.981, `fireflare1` 0.911), and luminance alone cannot be the gate because `smoke101` peaks at
+1.000 against `fire_f03`'s 0.540. The faithful presentation compiles the shader with no gain term.
+
+The same seam names the sprites Enhanced Graphics grades by the sun:
+`MultiMeshEmitterRenderer.IsSmokeSprite` names `smoke101` … `smoke103` and
+`thickblksmoke01` … `thickblksmoke03`, the six the puffer states use for smoke, and the mix
+variant alone grades those columns across the quad by `csky_sun_dir` projected into the
+billboard's own right and up. The graded value is clamped under the glow threshold, since
+`smoke101` already reaches 1.0 and a lift without the clamp would bloom smoke that the fire
+flipbook is meant to have to itself. The measured effect is small: at a C1 rocket plume with the
+sun 25° up and to one side, a gradient amplitude of 0.2 lifts one puff's sun-side against its
+far-side luminance from ratio 1.046 to 1.061 and moves no pixel by more than 7 of 255 levels, and
+0.45 reaches 1.075 and 12 levels. The reason is that a plume is a stack of overlapping quads, so
+one quad's gradient is averaged against its neighbours' rather than summed with them.
+
+⚠ **The cloud cards' transmission rim does not transfer to these masks, do not add it back.**
+Measured on the same plume with the gradient off, the rim of
+[`Effects/FogVolumeClutter.cs`](../../CSVM/src/Effects/FogVolumeClutter.cs) (gain 0.12, core
+shadow 0.20, three taps toward the sun) moves at most 3 levels of 255 with the sun to one side and
+4 at the backlit pose it exists for, for three extra texture samples per smoke fragment. The
+sprite masks are smooth blobs, so the rim's brightening lands exactly where the alpha is too low
+to reach the frame. A second reason applies to the sample itself: the puffer atlas packs its
+frames side by side with no mip chain, so the reference technique's blurred level would read the
+neighbouring frame rather than a blur of this one.
 
 ⚠ **The word is per archive, not per name.** `bigflare01`, `ring_he` and `beflare5` are flagged in
 some chapters and not in others, so an install-wide name table would answer wrongly for whichever
@@ -392,6 +475,20 @@ as the same texture does on a world surface. Soft also suppresses `ScissorMipsKe
 only job is to stop a cutout thinning at distance, leaving a blended card the plain box-filtered
 mip chain the original sampled.
 
+Enhanced Graphics resolves the cutouts the rule leaves behind through coverage rather than a
+sharper cut: the scissored arm of every world, facade and clutter shader also takes
+`alpha_to_coverage` and writes `ALPHA_ANTIALIASING_EDGE = 0.0`, so the edge spends the project's
+four MSAA samples instead of stepping one bit per pixel. ⚠ Godot adds that built-in to
+`ALPHA_SCISSOR_THRESHOLD` (`clamp(threshold + edge, 0, 1)` in its scene shader), so 0.0 is what
+puts the coverage edge on the scissor's own 0.5. Written as 0.5 it moved the edge to 1.0: an
+opaque texel then took half coverage wherever its texture magnified (mip 0), which veiled the C3
+dome's cloud puffs and cut them along a triangle's diagonal where one triangle of a quad sat at
+mip 0 and the other did not, and it eroded every cutout's silhouette. The render mode
+alone changes nothing, because Godot's opaque pass writes alpha 1 unless that edge built-in is
+set, and `alpha_to_coverage_and_one` hardens the result back toward the plain cut, which is why
+the plain mode ships. The faithful presentation emits none of it, so its shader text and the
+goldens pinned on it are untouched.
+
 All of that is a different question from `LastAlphaClass`, the extractor's own
 `None`/`Simple`/`Full` field, which is the header bit itself and the only reader that sees the
 `Simple` textures; no lighting decision keys on it, since the original's hardware draw has none
@@ -399,7 +496,8 @@ All of that is a different question from `LastAlphaClass`, the extractor's own
 
 `TextureArchive` carries two absent-name sets rather than one, because the retail data lacks
 textures for two different reasons. `KnownAbsentFromGameData` (`pir_spinner`, `barngrill`) draws a
-neutral gray card; `AbsentAndUndrawn` (`cloud1`, `cloud2`) drops the polygon, which is what C3's
+neutral gray card on the generated shader, so it keeps the polygon's sidedness, the fog and a
+dormant zeppelin's fade to opacity 0; `AbsentAndUndrawn` (`cloud1`, `cloud2`) drops the polygon, which is what C3's
 skydome needs. ⚠ Membership of the second set is not enough on its own: `IsAbsentAndUndrawn` also
 requires the lookup to fail, so the seven chapters that do ship the pair keep drawing it.
 `SceneBuilder.UndrawnPolygonCount` reports 2 for a C3 world build and 0 for every other chapter,

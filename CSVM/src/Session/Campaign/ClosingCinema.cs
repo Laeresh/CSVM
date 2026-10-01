@@ -24,9 +24,15 @@ public sealed class ClosingCinema
     public const string Name = "Final.MPG";
 
     private readonly CinemaPlay _play;
+    private readonly Action? _stop;
 
-    /// <summary>Builds a closing cinema over the call that puts one on screen.</summary>
-    public ClosingCinema(CinemaPlay play) => _play = play;
+    /// <summary>Builds a closing cinema over the call that puts one on screen and, where given,
+    /// <paramref name="stop"/>, the call that ends the one showing.</summary>
+    public ClosingCinema(CinemaPlay play, Action? stop = null)
+    {
+        _play = play;
+        _stop = stop;
+    }
 
     /// <summary>Whether a mission that ended this way earns the film: it was won, and it was the
     /// campaign's last story position. A replay of that mission earns it again, since the flown
@@ -51,4 +57,16 @@ public sealed class ClosingCinema
         _play(Name, CinemaHandoff.Once(showScrapbook), CinemaScreen.ClosingKeys);
         return true;
     }
+
+    /// <summary>Plays the film with no gate, as a co-op guest does when its host plays it, and runs
+    /// <paramref name="then"/> when it stops.</summary>
+    public void Play(Action then)
+    {
+        ArgumentNullException.ThrowIfNull(then);
+        _play(Name, CinemaHandoff.Once(then), CinemaScreen.ClosingKeys);
+    }
+
+    /// <summary>Ends the film showing now, as a skip does. Nothing happens without a stop call.
+    /// </summary>
+    public void Stop() => _stop?.Invoke();
 }

@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CSVM.Bindings;
-using CSVM.Effects;
 using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
@@ -41,8 +40,8 @@ internal static class InstantActionSuites
         "personality/accent draws are pure over theirs, " +
         "and a real InstantActionWaves sequence over spawned aircraft advances from wave 1 " +
         "to wave 2 exactly on the last kill, activating wave 2's built-inert member at a " +
-        "drawn spawn point at least 500 m from the human, where its patrol net re-seats on " +
-        "the node by that arrival, not the one by the parking pose it seated on while inert")]
+        "drawn spawn point at least 500 m from the human, where it keeps the patrol walk it " +
+        "was seated on at its parking pose")]
     internal static void InstantActionAce(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -229,9 +228,9 @@ internal static class InstantActionSuites
                     Scheme: null, Team: InstantActionRuntime.EnemyTeam)));
             }
             var wave2Pilot = AiPilot.HoldingCourse(Vector3.Zero, Vector3.Forward);
-            // Every Instant Action actor carries the chapter's first patrol net and an inert one still ticks,
-            // so this two-node stand-in net has a node at the parking pose and another out at the wave spawn
-            // point, to watch which one it flies after the teleport.
+            // Every Instant Action actor carries the chapter's first patrol net, seated where it spawns. This
+            // two-node stand-in has a node at the parking pose and one at the wave spawn point. It shows
+            // which leg the member flies after the teleport.
             var parkNet = new AiNet
             {
                 Id = 1,
@@ -247,9 +246,9 @@ internal static class InstantActionSuites
             var wave2Member = spawner.SpawnAi(new AiSpawn(waveNode, Vector3.Zero, Vector3.Forward, wave2Pilot,
                 Scheme: null, Team: InstantActionRuntime.EnemyTeam, Inert: true));
             waveMembers.Add(wave2Member);
-            wave2Pilot.Patrol.Update(Vector3.Zero);
-            ctx.Check(wave2Pilot.Patrol.CurrentIndex == 0,
-                $"parked inert, the follower seats on the node by the parking pose: idx={wave2Pilot.Patrol.CurrentIndex}");
+            wave2Pilot.Patrol.Seat(Vector3.Zero, Vector3.Forward);
+            ctx.Check(wave2Pilot.Patrol is { LegStartIndex: 0, CurrentIndex: 1 },
+                $"parked inert, the walk is seated on the node by the parking pose: {wave2Pilot.Patrol.LegStartIndex} -> {wave2Pilot.Patrol.CurrentIndex}");
 
             int aliveWave1 = waveMembers.Take(2).Count(m => m.InPlay);
             ctx.Check(aliveWave1 == 2, $"both wave-1 members InPlay before any kill: {aliveWave1}");
@@ -281,12 +280,9 @@ internal static class InstantActionSuites
             float distSq = wave2Member.WorldPosition.DistanceSquaredTo(humanPos);
             ctx.Check(distSq >= InstantActionWaves.MinSpawnDistanceSquared,
                 $"activated at least 500 m from the human: dist={Mathf.Sqrt(distSq):0} m");
-            // The activation snap the original does (FUN_004b0f40 → FUN_00432010): the arrival
-            // re-seats the walk, so the member patrols from where it was put down instead of
-            // flying back to the node by its parking pose.
-            wave2Pilot.Patrol.Update(wave2Member.WorldPosition);
-            ctx.Check(wave2Pilot.Patrol.CurrentIndex == 1,
-                $"activation re-seats it on the node by its ARRIVAL: idx={wave2Pilot.Patrol.CurrentIndex}");
+            // The arrival keeps the walk: the member flies the leg it was seated on while parked.
+            ctx.Check(wave2Pilot.Patrol is { LegStartIndex: 0, CurrentIndex: 1 },
+                $"activation keeps the walk seated at the parking pose: {wave2Pilot.Patrol.LegStartIndex} -> {wave2Pilot.Patrol.CurrentIndex}");
         }
         finally
         {
@@ -347,7 +343,7 @@ internal static class InstantActionSuites
         var defs = SoundDefs.Load(ctx.ZrdrPath);
         var groups = SoundDefs.LoadGroups(ctx.ZrdrPath);
         var voice = new CombatVoice(defs, groups, CombatVoice.LoadAccents(ctx.ZrdrPath));
-        int? acePilot = voice.PilotFor(aceDef.AceAccentId, new System.Random(1));
+        int? acePilot = voice.PilotFor(aceDef.AceAccentId, 0);
         if (acePilot is not { } vo)
         {
             throw new SuiteSkippedException($"accent {aceDef.AceAccentId} resolves to no voiced pilot");
@@ -359,13 +355,13 @@ internal static class InstantActionSuites
         // thirteen militia accents all speak; among the five wingman slots only 14 does not, its
         // row being the single pilot id the install ships no clip for.
         var mute = UI.Menu.InstantActionFeature.Militias
-            .Where(m => voice.PilotFor(m.AccentId, new System.Random(1)) == null)
+            .Where(m => voice.PilotFor(m.AccentId, 0) == null)
             .Select(m => m.Name).ToList();
         ctx.Check(mute.Count == 0,
             $"every militia's wave accent reaches a voiced pilot; silent: [{string.Join(",", mute)}]");
         var silentSlots = Enumerable.Range(0, 5)
             .Select(i => InstantActionRuntime.WingmanSlotFor(i).AccentId)
-            .Where(a => voice.PilotFor(a, new System.Random(1)) == null).ToList();
+            .Where(a => voice.PilotFor(a, 0) == null).ToList();
         ctx.Check(silentSlots.SequenceEqual(new[] { 14 }),
             $"wingman slot accent 14 alone reaches no voiced pilot: [{string.Join(",", silentSlots)}]");
         ctx.Check(voice.Pool(14).SequenceEqual(new[] { 5 }) && voice.ClipsFor(5, "DA").Count == 0,

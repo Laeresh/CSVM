@@ -127,14 +127,15 @@ public sealed class CombatVoice
         return new List<int>(accents);
     }
 
-    /// <summary>The session convenience: the voice prewarm set for one mission's roster, or empty
-    /// when the mission authors no roster (21 of the 53 mission dirs author no accents at all).
-    /// The subset is chosen over prewarm-everything deliberately (see combat-voice.md).
-    /// <paramref name="extraAccents"/> joins accents the session assigns outside the roster
-    /// (the <c>--ai=…:accent=N</c> spawns), a clip not in this set never plays.</summary>
+    /// <summary>The voice prewarm set for one mission's roster, or empty when nothing joins it. 21
+    /// of the 53 mission dirs author no accents at all. The subset beats prewarming everything.
+    /// The extra accents are those assigned outside the roster, the <c>--ai=…:accent=N</c> spawns.
+    /// The extra pilots are VO ids, the voices network players chose. A clip not in this set never
+    /// plays.</summary>
     public static IReadOnlyCollection<string> SessionPrewarmNames(string zrdrPath,
         string missionZrdrPath, IReadOnlyDictionary<string, SoundDef> defs,
-        IReadOnlyDictionary<string, SoundGroup> groups, IEnumerable<int>? extraAccents = null)
+        IReadOnlyDictionary<string, SoundGroup> groups, IEnumerable<int>? extraAccents = null,
+        IEnumerable<int>? extraPilots = null)
     {
         var accents = new SortedSet<int>(MissionAccentIds(missionZrdrPath));
         if (extraAccents != null)
@@ -144,11 +145,15 @@ public sealed class CombatVoice
                 accents.Add(accent);
             }
         }
-        if (accents.Count == 0)
+        var pilots = extraPilots != null ? new SortedSet<int>(extraPilots) : new SortedSet<int>();
+        if (accents.Count == 0 && pilots.Count == 0)
         {
             return Array.Empty<string>();
         }
-        return new CombatVoice(defs, groups, LoadAccents(zrdrPath)).PrewarmNames(accents);
+        var voice = new CombatVoice(defs, groups, LoadAccents(zrdrPath));
+        var names = new HashSet<string>(voice.PrewarmNames(accents), StringComparer.OrdinalIgnoreCase);
+        names.UnionWith(voice.PilotPrewarmNames(pilots));
+        return names;
     }
 
     /// <summary>Splits <c>snd_id&lt;N&gt;_&lt;TYPE&gt;</c> into pilot VO id and TYPE token; false
@@ -186,25 +191,20 @@ public sealed class CombatVoice
         _accents.TryGetValue(accentId, out var pool) ? pool : Array.Empty<int>();
 
     /// <summary>
-    /// Picks one pilot VO id from the accent's pool, the spawn-time half of the chain. Pool
-    /// members without any clip def are skipped, and <paramref name="eligible"/> narrows further
-    /// (the flight session passes a prewarm-backed availability check). Null when nothing in the pool qualifies.
+    /// The pilot VO id the accent's <paramref name="turn"/>-th aircraft takes, counting from 0. The
+    /// pool is dealt in its authored order and wraps, as the original deals it, never drawn. Null when
+    /// the dealt id has no clip def or fails <paramref name="eligible"/>, so that aircraft is silent.
+    /// The decode is docs/formats/combat-voice.md.
     /// </summary>
-    public int? PilotFor(int accentId, Random rng, Func<int, bool>? eligible = null)
+    public int? PilotFor(int accentId, int turn, Func<int, bool>? eligible = null)
     {
-        var candidates = new List<int>();
-        foreach (int id in Pool(accentId))
-        {
-            if (_clips.ContainsKey(id) && (eligible == null || eligible(id)))
-            {
-                candidates.Add(id);
-            }
-        }
-        if (candidates.Count == 0)
+        int[] pool = Pool(accentId);
+        if (pool.Length == 0 || turn < 0)
         {
             return null;
         }
-        return candidates[rng.Next(candidates.Count)];
+        int id = pool[turn % pool.Length];
+        return _clips.ContainsKey(id) && (eligible == null || eligible(id)) ? id : null;
     }
 
     /// <summary>
@@ -277,6 +277,23 @@ public sealed class CombatVoice
                     {
                         names.Add(defName);
                     }
+                }
+            }
+        }
+        return names;
+    }
+
+    /// <summary>Every clip def name the given pilot VO ids own, deduplicated.</summary>
+    public IReadOnlyCollection<string> PilotPrewarmNames(IEnumerable<int> voIds)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (int voId in voIds)
+        {
+            if (_clips.TryGetValue(voId, out var list))
+            {
+                foreach (var (_, defName) in list)
+                {
+                    names.Add(defName);
                 }
             }
         }

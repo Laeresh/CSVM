@@ -3,7 +3,7 @@ using System;
 namespace CSVM.Net;
 
 /// <summary>
-/// An open door's answer to a LAN search. It listens on <see cref="LanDiscovery.Port"/> only while
+/// An open door's answer to a LAN search. It listens on <see cref="NetPorts.Lan"/> only while
 /// a door is open. Each well-formed query gets the door's current advert and game port, sent back
 /// to the address the query came from. Engine-free: the socket is handed in.
 /// </summary>

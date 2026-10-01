@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using CSVM.Net;
+using CSVM.Session.Campaign;
 
 namespace CSVM.UI.Menu;
 
@@ -49,6 +50,16 @@ public static class NetDoorAid
             NetSessionKind.Dogfight, 5, 2, "Oskar", NetSessionStatus.Waiting, NetSeats.MaxPlayers), OtherVersion),
     };
 
+    /// <summary>The answers the network boxes' aids are posed with. The host's game stands at the
+    /// spinner's opening eight, and its callsign on the Gruff Male voice.</summary>
+    public static NetPlayerInfo SamplePlayer() => new()
+    {
+        GameName = HostName,
+        Callsign = HostName,
+        Voice = 5,
+        MaxPlayers = NetPlayerInfo.DefaultPlayers,
+    };
+
     /// <summary>A shut door whose host opens onto a loopback wire with <paramref name="guests"/>
     /// peers already on it, and whose router maps any port asked for.</summary>
     public static NetPlayFeature Host(int guests, out Func<int> unmapped) => Host(guests, out unmapped, out _);
@@ -66,8 +77,9 @@ public static class NetDoorAid
         return new NetPlayFeature(
             (port, maxGuests, bind) => mesh[0],
             (address, port) => throw new InvalidOperationException("the aid's host door joins nothing"),
-            port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, ExternalAddress, "aid"),
-            port => given = port);
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, ExternalAddress, "aid"),
+                port => given = port));
     }
 
     /// <summary>Opens <paramref name="door"/> as a campaign host and waits for its mapping, so the
@@ -78,7 +90,7 @@ public static class NetDoorAid
         door.OpenCoopHost(NetSeats.MaxPlayers - localPlayers);
         door.Offer(missionSeq, HostName, localPlayers);
         var waited = System.Diagnostics.Stopwatch.StartNew();
-        while (door.PortMap == null && waited.ElapsedMilliseconds < MappingWaitMs)
+        while (door.Router.PortMap == null && waited.ElapsedMilliseconds < MappingWaitMs)
         {
             door.Step(0.0);
             Thread.Sleep(1);
@@ -106,8 +118,9 @@ public static class NetDoorAid
         var host = new NetPlayFeature(
             (port, maxGuests, bind) => mesh[0],
             (address, port) => throw new InvalidOperationException("the aid's host door joins nothing"),
-            port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, ExternalAddress, "aid"),
-            port => { })
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, ExternalAddress, "aid"),
+                port => { }))
         { PlayerName = HostName };
         string[] names = { "Nathan", "Sheila" };
         var guests = new List<NetPlayFeature>();
@@ -209,22 +222,60 @@ public static class NetDoorAid
     public static NetPlayFeature JoinedGuest(int missionSeq, int players) => Joined(missionSeq, players, out _);
 
     /// <summary>A door joined as <see cref="JoinedGuest"/> that has also heard its host name its
-    /// boards as <paramref name="flow"/>, so a guest's campaign follows them. With
-    /// <paramref name="ready"/> the guest has answered Ready under that round.</summary>
-    public static NetPlayFeature CoopGuest(CoopFlowMessage flow, bool ready)
+    /// boards as <paramref name="flow"/>, so a guest's campaign follows them. When given, the host
+    /// has first named its hangar as <paramref name="hangar"/>. With <paramref name="ready"/> the
+    /// guest has answered Ready under that round.</summary>
+    public static NetPlayFeature CoopGuest(CoopFlowMessage flow, bool ready, IReadOnlyList<CoopHangarMessage>? hangar = null)
     {
         var door = Joined(flow.MissionSeq, flow.Humans, out var host);
+        Span<byte> word = stackalloc byte[CoopHangarMessage.Size];
+        foreach (var plane in hangar ?? Array.Empty<CoopHangarMessage>())
+        {
+            plane.Write(word);
+            host.Send(host.Peers[0], word, NetReliability.Reliable);
+        }
+
         Span<byte> bytes = stackalloc byte[CoopFlowMessage.Size];
         flow.Write(bytes);
         host.Send(host.Peers[0], bytes, NetReliability.Reliable);
         door.Step(0.0);
         if (ready)
         {
-            door.PickCoop(door.CoopPickAirframe, true);
+            door.Pick.Set(door.Pick.Airframe, true);
             door.Step(0.0);
         }
 
         return door;
+    }
+
+    /// <summary>The words a co-op host names <paramref name="host"/>'s hangar with while
+    /// <paramref name="seats"/> humans fly it and none past the host has picked yet. Each plane
+    /// carries the seat <see cref="CoopPlanePool.Resolve"/> gives it, no build, and its stored fit.
+    /// </summary>
+    public static CoopHangarMessage[] HangarWords(CampaignProfileDef? host, int seats)
+    {
+        var planes = host?.Planes ?? new List<OwnedPlane>();
+        int count = Math.Min(planes.Count, byte.MaxValue);
+        var names = new string[count];
+        for (int at = 0; at < count; at++)
+        {
+            names[at] = planes[at].Name;
+        }
+
+        var picks = new int[Math.Max(1, seats)];
+        Array.Fill(picks, CoopPlanePool.Unpicked);
+        picks[0] = host?.SelectedPlane ?? CoopPlanePool.Unpicked;
+        int[] flown = CoopPlanePool.Resolve(names, picks);
+        var words = new CoopHangarMessage[count];
+        for (int at = 0; at < count; at++)
+        {
+            int holder = Array.FindIndex(flown, plane => plane >= 0 && names[plane] == names[at]);
+            words[at] = new CoopHangarMessage((byte)at, (byte)count, holder >= 0 ? (byte)holder : CoopHangarMessage.NoHolder,
+                (byte)Math.Clamp(planes[at].Airframe, 0, byte.MaxValue), CoopFit.Of(planes[at].Ammo, planes[at].Ordnance),
+                null, names[at]);
+        }
+
+        return words;
     }
 
     private static NetPlayFeature Joined(int missionSeq, int players, out INetTransport host)

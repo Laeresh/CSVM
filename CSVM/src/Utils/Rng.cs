@@ -44,6 +44,10 @@ public static class Rng
     // reason: every knob value then lays the same decoded field and moves only the offsets.
     public const string CloudJitter = "cloudjitter";
     public const string Precip = "precip";
+    // The enhanced wind-streak field's per-instance seeds (WindStreaks). Its own stream, not
+    // Rng.Precip, because the field is built only under the enhanced presentation. A shared stream
+    // would make the faithful path's rain scatter depend on which graphics mode ran.
+    public const string WindStreaks = "windstreaks";
     // The mission's global wind gust (WorldWind). Its own stream, not Puffer's: the wind
     // is one random walk for the whole world, stepped once per frame by WeatherRig, while
     // Rng.Puffer is drawn per emitter at spawn, sharing one would make every puffer's scatter a
@@ -69,6 +73,11 @@ public static class Rng
     // The Danger Zone photograph's eye scatter (DangerZonePhotograph). Its own stream, so a
     // zone crossed never shifts the static cameras' spots or anything else a run rolls.
     public const string Photograph = "photograph";
+    // Capture the Flag's throw draws, the elevation and speed of a dropped flag's arc (FlagRuntime).
+    // Its own stream, read through IntSeedFor, so a drop never shifts anything else a match rolls.
+    public const string Flags = "flags";
+    // Zeppelin vs Zeppelin's radio variant picks (ZeppelinVersusRuntime), apart for the same reason.
+    public const string ZeppelinVersus = "zvz";
 
     private static readonly Dictionary<string, RandomNumberGenerator> Streams = new(StringComparer.Ordinal);
 

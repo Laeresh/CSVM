@@ -88,6 +88,10 @@ public sealed class WorldBuilder
         _scene.Cycler = Cycler;
         _scene.DebugClutterFlag = debugClutterFlag;
         _scene.HiddenAlpha = hiddenAlpha;
+        // Keyed under Enhanced alone, whose tonemap and emissive scale move a backdrop off the sky's
+        // colour so the quad shows. The faithful path draws it opaque, as the original does (no
+        // colour key, docs/org/textures.md). Named in both modes so a live switch can swap it.
+        _scene.KeyedBackdropTexture = IsSkySpriteTexture;
     }
 
     /// <summary>Which mission of the chapter this world is being built for, 1-based, forwarded to
@@ -171,6 +175,17 @@ public sealed class WorldBuilder
     /// <c>Node.Name</c>. Siblings share the name <c>cloudparent</c>, so Godot's duplicate-sibling
     /// renaming is free to have touched the built name.</summary>
     public IReadOnlyList<Node3D> CloudClusters => _cloudClusters;
+
+    /// <summary>Gets the subtree built for each entity the chapter parks at the world origin for a
+    /// mission to place. These are vehicles, never static scenery.</summary>
+    public IEnumerable<Node3D> ParkedEntities
+    {
+        get
+        {
+            foreach (var (_, built) in _parkedAtOrigin)
+                yield return built;
+        }
+    }
 
     /// <summary>This world's shared scene builder, its mesh/material/shape caches and its
     /// fullbright world materials. Handed to <see cref="ClutterBuilder"/> so the clutter's 3D
@@ -388,6 +403,7 @@ public sealed class WorldBuilder
 
         FindCloudDeck(world, roots);
         _deckUndimmedMeshes.Clear();
+        _scene.CastsNoShadow = GroundSheetTest(world);
         RankConflicts(roots);
         foreach (var idx in roots)
             Add(root, deck, idx);
@@ -409,6 +425,11 @@ public sealed class WorldBuilder
             DisableShadows(deck);
             Log.Info("world", $"cloud deck: {_deckNodes.Count} tiles at y={_deckAltitude} ({_deckCoverage:P0} of the map)");
         }
+        else
+        {
+            // Never parented, so nothing else would free it.
+            deck.Free();
+        }
 
         // A post-walk pass because the clusters are nested too deep for a walk root to recognise.
         // Logged per chapter so a real "none" cannot read like a census that stopped working.
@@ -422,6 +443,7 @@ public sealed class WorldBuilder
                 DisableShadows(cluster);
         }
 
+        Log.Info("world", $"sun shadow: {_scene.ShadowlessMeshCount} terrain/water mesh instance(s) cast none");
         _builtWorld = world;
         return root;
     }
@@ -552,6 +574,29 @@ public sealed class WorldBuilder
         || n.Name.Equals("dzpaths", StringComparison.OrdinalIgnoreCase)
         || IsFogVolumeNode(n);
 
+    /// <summary>Whether one world mesh is ground that casts no sun shadow: a sheet of nothing but
+    /// water, or a ground tile carrying no building wall. The original's world casts no sun shadow
+    /// at all, and Enhanced keeps that for the ground. Under a low sun, Godot's soft filter makes a
+    /// flat sheet shadow itself in bands at the shadow map's texel pitch.
+    /// ⚠ <c>cblock*</c> is the city GROUND texture, though it classifies as
+    /// <c>buildings</c>; only a wall keeps a tile casting.</summary>
+    internal static bool IsShadowlessGround(IReadOnlyList<Vector3> vertices,
+        IReadOnlyList<string?> textures, float tileX, float tileZ)
+    {
+        bool allWater = textures.Count > 0;
+        bool wall = false;
+        foreach (var t in textures)
+        {
+            string? surface = SceneBuilder.ClassifySurface(t);
+            allWater &= surface == "water";
+            wall |= surface == "buildings" && !t!.StartsWith("cblock", StringComparison.OrdinalIgnoreCase);
+        }
+        if (allWater)
+            return true;
+        return !wall && MapEdgeExtender.ClassifyGroundMesh(vertices, textures, tileX, tileZ, out _, out _)
+            == MapEdgeExtender.TileVerdict.Accepted;
+    }
+
     // The deck-tile test: one flat, untilted 4-vertex quad, so a wall or a ramp fails it. Static
     // and gamez-only so CloudDeckAltitudeOf can run it with no built scene; the instance walk goes
     // through FlatTile below rather than a parallel copy. StyleCop's ordering rules, not the
@@ -613,6 +658,14 @@ public sealed class WorldBuilder
         tex.Contains("flare", StringComparison.OrdinalIgnoreCase)
         || tex.Contains("fire", StringComparison.OrdinalIgnoreCase)
         || tex.Contains("flame", StringComparison.OrdinalIgnoreCase);
+
+    // The skydome's opaque moon and star cards, whose backdrop is painted in the chapter sky
+    // texture's corner colour. ⚠ Match the whole stem; C2's studio set carries moonbackdrop and
+    // moonsurface, which are scenery.
+    internal static bool IsSkySpriteTexture(string tex) =>
+        System.IO.Path.GetFileNameWithoutExtension(tex) is { } stem
+        && (stem.Equals("moon1", StringComparison.OrdinalIgnoreCase)
+            || stem.Equals("star1", StringComparison.OrdinalIgnoreCase));
 
     // The cloud SPRITES only: cloud1/cloud2 are soft vertical cards that face the camera.
     // ⚠ Keep this disjoint from whatever FindCloudDeck classifies as deck, or the deck tiles
@@ -689,29 +742,6 @@ public sealed class WorldBuilder
             DisableLightRangeFade(child);
     }
 
-    // Alpha from distance to the background color (sampled at a corner): background → 0,
-    // the painted glow halo → partial, the moon disc → 1. Reproduces the original's
-    // color-key so the sky shows through right up to the halo, with no hard quad edge.
-    private static ImageTexture ColorKeyed(ImageTexture tex)
-    {
-        var img = tex.GetImage();
-        img.ClearMipmaps();
-        img.Convert(Image.Format.Rgba8);
-        var bg = img.GetPixel(0, 0);
-        const float ramp = 0.25f; // channels this far from the background are fully opaque
-        for (int y = 0; y < img.GetHeight(); y++)
-            for (int x = 0; x < img.GetWidth(); x++)
-            {
-                var c = img.GetPixel(x, y);
-                float d = Mathf.Max(Mathf.Abs(c.R - bg.R),
-                    Mathf.Max(Mathf.Abs(c.G - bg.G), Mathf.Abs(c.B - bg.B)));
-                c.A = Mathf.Clamp(d / ramp, 0f, 1f);
-                img.SetPixel(x, y, c);
-            }
-        img.GenerateMipmaps();
-        return ImageTexture.CreateFromImage(img);
-    }
-
     private static Node3D? FindChildByName(Node3D root, string name)
     {
         if (root.Name.ToString().Equals(name, StringComparison.OrdinalIgnoreCase))
@@ -767,6 +797,28 @@ public sealed class WorldBuilder
         }
         Walk(root, Transform3D.Identity);
         return merged;
+    }
+
+    // IsShadowlessGround per mesh index, for this world's cell size, decided once per mesh.
+    private Func<int, bool> GroundSheetTest(GameZNode world)
+    {
+        float tileX = (world.AreaRight - world.AreaLeft) / Math.Max(1, world.PartitionCols);
+        float tileZ = (world.AreaBottom - world.AreaTop) / Math.Max(1, world.PartitionRows);
+        var verdicts = new Dictionary<int, bool>();
+        return meshIndex =>
+        {
+            if (verdicts.TryGetValue(meshIndex, out bool known))
+                return known;
+            var mesh = _gamez.Meshes[meshIndex];
+            var textures = new List<string?>(mesh.Polygons.Count);
+            foreach (var poly in mesh.Polygons)
+            {
+                textures.Add(poly.MaterialIndex >= 0 && poly.MaterialIndex < _gamez.Materials.Count
+                    ? _gamez.Materials[poly.MaterialIndex].TextureName
+                    : null);
+            }
+            return verdicts[meshIndex] = IsShadowlessGround(mesh.Vertices, textures, tileX, tileZ);
+        };
     }
 
     // Ranks this world's nodes by its conflict graph for the scene builder's `node_bias`. Runs
@@ -1142,11 +1194,11 @@ public sealed class WorldBuilder
         return zones[0].Name;
     }
 
-    // The source moon is an axis-aligned quad, which looks tilted from most headings, but the
-    // original shows a round upright moon from any direction, so it must billboard. Replaced
-    // with a camera-facing quad of the same position and size. The original also color-keys the
-    // uniform background away, since crater detail rules out additive and the sky shows through
-    // to the halo; ColorKeyed reproduces that as an alpha ramp on distance from that colour.
+    // The source moon is an axis-aligned quad, which looks tilted from most headings. The original
+    // shows a round upright moon from any direction, so it must billboard. Replaced with a
+    // camera-facing quad of the same position and size. The original also color-keys the uniform
+    // background away, since crater detail rules out additive. SceneBuilder.ColorKeyed reproduces
+    // that as an alpha ramp on distance from that colour.
     private void BillboardMoon(Node3D built)
     {
         var moonNode = FindChildByName(built, "moon");
@@ -1179,7 +1231,7 @@ public sealed class WorldBuilder
             BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled,
             BillboardKeepScale = true, // billboards ignore inherited scale (the 2.5× dome anchor) without this
             Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            AlbedoTexture = ColorKeyed(tex),
+            AlbedoTexture = SceneBuilder.ColorKeyed(tex),
         };
         moonNode.AddChild(new MeshInstance3D
         {

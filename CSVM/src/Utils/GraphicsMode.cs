@@ -3,9 +3,9 @@ using System;
 namespace CSVM.Utils;
 
 /// <summary>
-/// The opt-in enhanced-lighting mode's setting, modeled on <see cref="EffectsLevel"/>: a
-/// <c>graphics.*</c> word read once at launch and resolved to the single boolean scene builders
-/// consult. Its user-facing home is <see cref="OptionsStore"/>'s <c>graphicsMode</c> field, which
+/// The opt-in enhanced-lighting mode's setting, modeled on <see cref="EffectsLevel"/>. A
+/// <c>graphics.*</c> word resolves at launch to the single boolean scene builders consult, and
+/// <see cref="Set"/> switches it live after that. Its user-facing home is <see cref="OptionsStore"/>'s <c>graphicsMode</c> field, which
 /// both Options screens write; the <c>graphics.mode</c> config key stays under it as the
 /// hand-edited source. Readers take <see cref="Enhanced"/> rather than either, so the layering is
 /// this module's business alone.
@@ -22,11 +22,14 @@ public static class GraphicsMode
     /// <summary>The shipped default: the faithful recreation, unchanged from every prior build.</summary>
     public const string Default = "original";
 
-    /// <summary><b>Resolved once at launch</b> by <see cref="Resolve"/>, before any scene builds;
-    /// every later reader (SceneBuilder's shader keys, the lighting rig) takes this rather than
-    /// querying Config itself, so one resolution point can gain an options-store layer later
-    /// without touching its readers.</summary>
+    /// <summary>Resolved at launch by <see cref="Resolve"/>, before any scene builds, and moved
+    /// only by <see cref="Set"/>. Every reader takes this rather than querying Config itself.</summary>
     public static bool Enhanced { get; private set; }
+
+    /// <summary>Gets or sets whether the running session refuses a live switch, which a network
+    /// session does. The launcher writes it every frame; the options pages draw the mode row dead
+    /// while it is set.</summary>
+    public static bool SwitchLocked { get; set; }
 
     /// <summary>Whether a mode word is one the original vocabulary knows.</summary>
     public static bool TryParse(string mode, out bool enhanced)
@@ -63,4 +66,9 @@ public static class GraphicsMode
         Enhanced = enhanced;
         return enhanced;
     }
+
+    /// <summary>A live switch after launch, from the graphics-mode action or an Options apply.
+    /// ⚠ Only <c>Launcher.SwitchGraphicsMode</c> calls this. The flag alone moves nothing already
+    /// built, and that switch brings the shaders, the lights and the session into line.</summary>
+    internal static void Set(bool enhanced) => Enhanced = enhanced;
 }

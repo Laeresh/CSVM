@@ -88,10 +88,10 @@ public sealed record LoadSheet(
 }
 
 /// <summary>
-/// What the mission load screen is made of, in the original's 800x600 dialog space: the campaign
-/// chart sheet, and the Instant Action blackboard with the four texts its own <c>loading_i</c>
-/// dialog places. Engine-free, so what the screen says and where it says it settles without a
-/// window; <see cref="LoadBoard"/> is only the node that hangs it over the build.
+/// What the mission load screen is made of, in the original's 800x600 dialog space. That is the
+/// campaign chart sheet, the Instant Action blackboard with its <c>loading_i</c> dialog's four
+/// texts, or a Dogfight's <c>loading_m</c> briefing. Engine-free, so what the screen says and where
+/// settles without a window; <see cref="LoadBoard"/> is only the node that hangs it over the build.
 /// The dialogs, the mission-type letter and the face mapping: <c>docs/org/loading-screen.md</c>.
 /// </summary>
 public static class LoadScreens
@@ -153,21 +153,26 @@ public static class LoadScreens
         "prp0", "prp7", "prp15", "prp22", "prp30", "prp37",
     };
 
-    /// <summary>The board for one launch. <paramref name="campaign"/> picks the paper sheet over the
-    /// blackboard, the split the original makes, and takes <paramref name="sheet"/> as its whole
-    /// content. <paramref name="missionType"/> names the Instant Action dialog to read, or is null
-    /// for a mode of ours, which takes <paramref name="subject"/> as its heading instead; neither
-    /// reaches the campaign sheet, which writes no words of ours.</summary>
+    /// <summary>The board for one launch. The campaign flag picks the paper sheet, whole content
+    /// <paramref name="sheet"/>. A Dogfight's <paramref name="briefing"/> key picks its multiplayer
+    /// dialog. Otherwise the mission type names the blackboard's dialog, or is null for a mode of
+    /// ours, which writes <paramref name="subject"/> instead. A pumped board leaves the still
+    /// propeller out, for a moving layer that draws the cycle.
+    /// ⚠ Shown without that layer, a pumped board draws no propeller at all.</summary>
     public static ComposedBoard For(
         bool campaign,
         string subject,
         string? missionType,
         string zrdrPath,
         string messagesPath,
-        LoadSheet? sheet = null) =>
+        LoadSheet? sheet = null,
+        bool pumped = false,
+        string? briefing = null) =>
         campaign
-            ? CampaignSheet(sheet)
-            : Blackboard(Texts(missionType, subject, zrdrPath, messagesPath));
+            ? CampaignSheet(sheet, pumped)
+            : briefing != null && Briefing(briefing, zrdrPath, messagesPath, pumped) is { } board
+                ? board
+                : Blackboard(Texts(missionType, subject, zrdrPath, messagesPath), pumped);
 
     /// <summary>The two moving pieces of one launch's screen, found once because a build reports
     /// its steps ten times a second and a composition is not worth redoing per step.</summary>
@@ -190,10 +195,10 @@ public static class LoadScreens
             cycle?.At.X ?? 0f, cycle?.At.Y ?? 0f, cycle?.Center ?? false);
     }
 
-    /// <summary>The two pictures that move while a build holds the frame loop: the lit strip
-    /// clipped to <see cref="LoadProgress.FillPixels"/> of <paramref name="fillArtWidth"/>, and the
-    /// propeller cycle's current frame over the still one. Either may be absent, an unstarted bar
-    /// lights nothing and a sheet that did not read carries no cycle.</summary>
+    /// <summary>The two pictures that move while a build holds the frame loop. One is the lit
+    /// strip, clipped to <see cref="LoadProgress.FillPixels"/> of its width. The other is the
+    /// cycle's current frame, standing in for the still one a pumped board leaves out.
+    /// Either may be absent: an unstarted bar lights nothing, an unread sheet has no cycle.</summary>
     public static IReadOnlyList<BoardPicture> Moving(
         LoadMotion motion, float fillArtWidth, float fillArtHeight, float fraction, int frame)
     {
@@ -219,8 +224,8 @@ public static class LoadScreens
 
     /// <summary>The still board with the build's own progress over it: the lit strip clipped to
     /// <see cref="LoadProgress.FillPixels"/> of <paramref name="fillArtWidth"/>, and the cycle's
-    /// current frame over the still one. An overlay, so the composition under it is untouched and
-    /// a screen with no build behind it draws exactly what it always did.</summary>
+    /// current frame. An overlay, so the composition under it is untouched; hand it a pumped
+    /// composition, or the still frame shows through the turning one.</summary>
     public static ComposedBoard Painted(
         ComposedBoard still, LoadMotion motion,
         float fillArtWidth, float fillArtHeight, float fraction, int frame)
@@ -250,10 +255,36 @@ public static class LoadScreens
         _ => null,
     };
 
+    /// <summary>The mode letter that completes a multiplayer dialog name, from the jump table at
+    /// <c>0x004a201c</c> over the 1-based mode. The four are Deathmatch, team Deathmatch, Capture
+    /// the Flag and Zeppelin vs Zeppelin. A mode outside the table falls to <c>d</c>, as the
+    /// original's does.</summary>
+    public static char MultiplayerLetter(int mode) => mode switch
+    {
+        2 => 't',
+        3 => 'c',
+        4 => 'z',
+        _ => 'd',
+    };
+
+    /// <summary>The multiplayer dialog a Dogfight on <paramref name="chapter"/> names, keyed by the
+    /// original's own number for the environment row and the mode letter. Null for a chapter none
+    /// of the lobby's seven rows flies, which keeps the blackboard's heading.</summary>
+    public static string? MultiplayerKey(
+        string chapter, bool captureTheFlag, bool zeppelinVsZeppelin, bool teamed)
+    {
+        int environment = DogfightLobby.EnvironmentOf(chapter.ToUpperInvariant());
+        return environment < 0
+            ? null
+            : EscapeDialog.MultiplayerKey(
+                DogfightLobby.EnvironmentNumber(environment),
+                MultiplayerLetter(DogfightLobby.ModeOf(captureTheFlag, zeppelinVsZeppelin, teamed)));
+    }
+
     /// <summary>The words one load screen writes. An Instant Action mission takes its dialog's four
-    /// texts; free flight and dogfight are ours rather than the original's, so they take
-    /// <paramref name="heading"/> alone at the mode heading's authored place, no dialog's blurb
-    /// being true of them.</summary>
+    /// texts. Free flight is ours, so it takes the heading alone at the mode heading's authored
+    /// place, no dialog's blurb being true of it. So does a Dogfight whose multiplayer dialog did
+    /// not read.</summary>
     public static IReadOnlyList<BoardLine> Texts(
         string? missionType, string heading, string zrdrPath, string messagesPath)
     {
@@ -265,10 +296,10 @@ public static class LoadScreens
         return DialogTexts(zrdrPath, DialogFile, DialogPrefix + letter, Messages.Load(messagesPath));
     }
 
-    /// <summary>The words one Instant Action dialog writes, at its own authored positions, wrap
-    /// widths and faces. Taken by file and key so the pause screen's <c>ia_escape.zrd</c> dialog
-    /// draws through the same composition as the load screen's <c>Loading.zrd</c> one: the two
-    /// author the same four texts (docs/org/pause-screen.md).</summary>
+    /// <summary>The words one blackboard dialog writes, Instant Action or multiplayer, at its own
+    /// authored positions, wrap widths and faces. Taken by file and key, so the pause screen's
+    /// dialog draws through the same composition as the load screen's. The two author the same
+    /// texts (docs/org/pause-screen.md).</summary>
     public static IReadOnlyList<BoardLine> DialogTexts(
         string zrdrPath, string file, string dialog, Messages messages)
     {
@@ -297,13 +328,12 @@ public static class LoadScreens
         return lines;
     }
 
-    // The campaign screen, through the same drawer PauseScreens uses: the mission's chart at its
-    // authored crop, the pins, device icons and propeller its script places, the parchment, the
-    // memento over its shadow, and the unlit bar.
+    // The campaign screen, through the same drawer PauseScreens uses. It draws the chart at its
+    // authored crop, what the script places, the parchment, the memento and the unlit bar.
     // ⚠ Place no ownship or zeppelin icon here: the load dialog's constructor binds neither, and
     // the pause screen's is the only one that does (docs/org/pause-screen.md).
     // An unreadable sheet leaves the frame and the bar standing, which is all this screen promises.
-    private static ComposedBoard CampaignSheet(LoadSheet? sheet)
+    private static ComposedBoard CampaignSheet(LoadSheet? sheet, bool pumped)
     {
         var backdrop = new List<BoardPicture>
         {
@@ -327,8 +357,10 @@ public static class LoadScreens
                     list.BackgroundAt.X, list.BackgroundAt.Y));
             }
 
-            MissionMap.Elements(pictures, sheet.Reveal, back: true);
-            MissionMap.Elements(pictures, sheet.Reveal, back: false);
+            // Pumped, the cycle element stays out by identity: the moving layer draws its frames.
+            var cycle = pumped ? Cycle(sheet) : null;
+            MissionMap.Elements(pictures, sheet.Reveal, back: true, except: cycle);
+            MissionMap.Elements(pictures, sheet.Reveal, back: false, except: cycle);
             AddMemento(pictures, sheet);
             if (sheet.Shared.Objectives != null && sheet.ObjectivesTitle.Length > 0)
             {
@@ -349,20 +381,8 @@ public static class LoadScreens
             backdrop);
     }
 
-    // The sheet's cycling element, found by its frame list rather than by its authored id, or null
-    // where no sheet read. One script beat in the whole file authors a cycle.
-    private static BriefingElement? Cycle(LoadSheet? sheet)
-    {
-        foreach (var element in sheet?.Reveal.Elements ?? Array.Empty<BriefingElement>())
-        {
-            if (element.Frames.Count > 0)
-            {
-                return element;
-            }
-        }
-
-        return null;
-    }
+    // The sheet's cycling element, or null where no sheet read.
+    private static BriefingElement? Cycle(LoadSheet? sheet) => MissionMap.Cycle(sheet?.Reveal);
 
     // The frame the dialog names, which every campaign dialog authors as its one background image.
     private static string Background(LoadSheet? sheet) =>
@@ -414,24 +434,70 @@ public static class LoadScreens
         }
     }
 
-    // The Instant Action screen: the blackboard, its three authored photographs each centred on
-    // its own coordinate, the unlit lamp bar and one still propeller frame beside it.
-    private static ComposedBoard Blackboard(IReadOnlyList<BoardLine> lines) =>
-        new(
-            new[]
-            {
-                new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, "loadframempt2"), 0, 0),
-                new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, "MP-shotdown"), 197, 157, 0, true),
-                new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, "MP-crash"), 197, 307, 0, true),
-                new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, "mp-dangerzone2"), 197, 457, 0, true),
-                new BoardPicture(
-                    new BoardArt(BoardArtLibrary.Rimage, Propeller[0]),
-                    ChalkPropellerX, ChalkPropellerY),
-                new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, ChalkBarArt), ChalkBarX, ChalkBarY),
-            },
+    // The Instant Action screen: the blackboard, its three centred photographs, the unlit lamp
+    // bar and one still propeller frame beside it. A pumped screen leaves
+    // that frame to its moving layer.
+    private static ComposedBoard Blackboard(IReadOnlyList<BoardLine> lines, bool pumped)
+    {
+        var pictures = new List<BoardPicture>
+        {
+            new(new BoardArt(BoardArtLibrary.Rimage, "loadframempt2"), 0, 0),
+            new(new BoardArt(BoardArtLibrary.Rimage, "MP-shotdown"), 197, 157, 0, true),
+            new(new BoardArt(BoardArtLibrary.Rimage, "MP-crash"), 197, 307, 0, true),
+            new(new BoardArt(BoardArtLibrary.Rimage, "mp-dangerzone2"), 197, 457, 0, true),
+        };
+        if (!pumped)
+        {
+            pictures.Add(new BoardPicture(
+                new BoardArt(BoardArtLibrary.Rimage, Propeller[0]), ChalkPropellerX, ChalkPropellerY));
+        }
+
+        pictures.Add(new BoardPicture(
+            new BoardArt(BoardArtLibrary.Rimage, ChalkBarArt), ChalkBarX, ChalkBarY));
+        return new ComposedBoard(
+            pictures, Array.Empty<BoardStroke>(), lines, Array.Empty<BoardPlaque>());
+    }
+
+    // A Dogfight's multiplayer screen: the dialog's frame, the photographs and propeller its script
+    // places, its texts, and the chalk bar its PROGRESS authors. Null for a dialog the file lacks.
+    // Never the file's default, whose bare frame says less than the heading the caller keeps.
+    private static ComposedBoard? Briefing(string key, string zrdrPath, string messagesPath, bool pumped)
+    {
+        EscapeDialog dialog;
+        Messages messages;
+        try
+        {
+            dialog = EscapeDialog.Load(zrdrPath, EscapeDialog.LoadingFile);
+            messages = Messages.Load(messagesPath);
+        }
+        catch (Exception e) when (e is IOException or JsonException)
+        {
+            return null;
+        }
+
+        if (!dialog.States.TryGetValue(key, out var state))
+        {
+            return null;
+        }
+
+        var reveal = EscapeDialog.Settled(state.Steps);
+        var pictures = new List<BoardPicture>
+        {
+            new(new BoardArt(BoardArtLibrary.Rimage, state.Background), 0, 0),
+        };
+
+        // Pumped, the cycle element stays out by identity: the moving layer draws its frames.
+        var cycle = pumped ? MissionMap.Cycle(reveal) : null;
+        MissionMap.Elements(pictures, reveal, back: true, except: cycle);
+        MissionMap.Elements(pictures, reveal, back: false, except: cycle);
+        pictures.Add(new BoardPicture(
+            new BoardArt(BoardArtLibrary.Rimage, ChalkBarArt), ChalkBarX, ChalkBarY));
+        return new ComposedBoard(
+            pictures,
             Array.Empty<BoardStroke>(),
-            lines,
+            DialogTexts(zrdrPath, DialogFile, key, messages),
             Array.Empty<BoardPlaque>());
+    }
 
     // Every Text the named dialog's script places, in script order, as its own property dict. An
     // unreadable or absent extraction yields none, since a board must still come up without one.

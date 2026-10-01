@@ -67,6 +67,10 @@ public sealed class ClutterBuilder
     // shapes, so CollisionObject3D._update_shapes() would clear the body and re-add nothing.
     private const float CollisionRegion = 1024f;
 
+    // One sprite shader pair per variant the decoration models actually ask for, process-wide so a
+    // live mode switch finds the other mode's compiled (ShaderTwins). Main thread only.
+    private static readonly Dictionary<int, ModeShader> SpriteShaders = new();
+
     private readonly GameZ _gamez;
     private readonly TextureArchive _textures;
     private readonly SceneBuilder? _scene;
@@ -86,9 +90,6 @@ public sealed class ClutterBuilder
     // target through the engine's global model table, i.e. to ONE model however many templates
     // mention it; first-seen wins here, which is the same statement over a deterministic walk.
     private readonly Dictionary<string, Kind> _kindsByModel = new(StringComparer.OrdinalIgnoreCase);
-
-    // One sprite shader per (lit, fogged) pair the decoration models actually ask for.
-    private readonly Dictionary<int, Shader> _shaders = new();
 
     // Shared collision shapes of the last collidable Build, keyed by decoration MeshIndex.
     private Dictionary<int, ConcavePolygonShape3D>? _solidShapes;
@@ -426,12 +427,14 @@ public sealed class ClutterBuilder
             var mmi = kind.Solid ? BuildSolidInstance(kind) : BuildKindInstance(kind);
             if (mmi == null)
                 continue;
-            root.AddChild(mmi);
+            var mesh = (ArrayMesh)mmi.Multimesh!.Mesh;
+            var material = mmi.MaterialOverride;
+            var drawn = Drawn(root, mmi, kind.Instances, kind.Fades);
             exported.Add(new KindExport
             {
                 Texture = kind.Label,
-                Mesh = (ArrayMesh)mmi.Multimesh!.Mesh,
-                Material = mmi.MaterialOverride,
+                Mesh = mesh,
+                Material = material,
                 Solid = kind.Solid,
                 NodeBias = NodeBiasOf(kind),
                 Width = kind.Width,
@@ -440,7 +443,7 @@ public sealed class ClutterBuilder
                 Placements = kind.Instances,
                 Fades = kind.Fades,
                 Owners = kind.Owners,
-                Instances = mmi.Multimesh,
+                Instances = drawn,
             });
             exportedMesh.Add(kind.MeshIndex);
             exportedFrom.Add((kind, 0));
@@ -456,12 +459,14 @@ public sealed class ClutterBuilder
                     var placements = Composed(kind.Instances, local);
                     if (BuildSolidPart(kind, meshIndex, placements) is not { } partMmi)
                         continue;
-                    root.AddChild(partMmi);
+                    var partMesh = (ArrayMesh)partMmi.Multimesh!.Mesh;
+                    var partMaterial = partMmi.MaterialOverride;
+                    var partDrawn = Drawn(root, partMmi, placements, kind.Fades);
                     exported.Add(new KindExport
                     {
                         Texture = kind.Label,
-                        Mesh = (ArrayMesh)partMmi.Multimesh!.Mesh,
-                        Material = partMmi.MaterialOverride,
+                        Mesh = partMesh,
+                        Material = partMaterial,
                         Solid = true,
                         NodeBias = NodeBiasOf(kind),
                         Width = kind.Width,
@@ -470,7 +475,7 @@ public sealed class ClutterBuilder
                         Placements = placements,
                         Fades = kind.Fades,
                         Owners = kind.Owners,
-                        Instances = partMmi.Multimesh,
+                        Instances = partDrawn,
                     });
                     exportedMesh.Add(meshIndex);
                     exportedFrom.Add((kind, part + 1));
@@ -507,6 +512,21 @@ public sealed class ClutterBuilder
     /// <paramref name="world"/> is the built world the stamping nodes live under.</summary>
     public void FollowActivation(Node3D world) =>
         Activation = ClutterActivation.Bind(world, ExportedKinds);
+
+    /// <summary>Draws every exported kind again under the graphics mode and the clutter fade scale
+    /// standing now (<see cref="ClutterInstances.Recut"/>). A live mode switch calls it, and so does a
+    /// live View Distance change, which moves the cells' visibility ranges.</summary>
+    public void Recut()
+    {
+        foreach (var kind in ExportedKinds ?? System.Array.Empty<KindExport>())
+            kind.Instances?.Recut();
+    }
+
+    // A kind's node under the clutter root. The faithful path keeps its one MultiMesh; Enhanced cuts
+    // it into map cells (ClutterInstances), so a pane skips the cells out of its reach.
+    private static ClutterInstances Drawn(Node3D root, MultiMeshInstance3D whole,
+        IReadOnlyList<Transform3D> placements, IReadOnlyList<Color> fades) =>
+        ClutterInstances.Draw(root, whole, placements, fades);
 
     // Any billboard kind is a placeable card: C1's CylindricalY trees and bushes, and C5's
     // SphericalY poleflare glows beside their CylindricalY lightpole posts.
@@ -793,7 +813,7 @@ public sealed class ClutterBuilder
     // one draw in buffer order, so a card writing no depth is painted over by every later card.
     private static string ShaderCode(bool lit, bool fogged, bool clampUv, bool spherical, bool blend) => $$"""
         shader_type spatial;
-        render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled{{(blend ? ", blend_mix, depth_prepass_alpha" : "")}};
+        render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled{{(blend ? ", blend_mix, depth_prepass_alpha" : "")}}{{(blend || !GraphicsMode.Enhanced ? "" : SceneBuilder.CoverageMode)}};
 
         uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, {{(clampUv ? "repeat_disable" : "repeat_enable")}};
 
@@ -834,7 +854,7 @@ public sealed class ClutterBuilder
             ALBEDO = col.rgb{{(lit ? " * csky_world_light" : "")}};
         {{(fogged ? FogLines : "")}}{{SceneBuilder.TintLine}}
             ALPHA = col.a;
-        {{(blend ? "" : ScissorLine)}}}
+        {{(blend ? "" : ScissorLine)}}{{(blend || !GraphicsMode.Enhanced ? "" : SceneBuilder.CoverageLines + "\n")}}}
         """;
 
     // The basis a card's vertices are turned by, the rendering half of its decoration model's own
@@ -1183,12 +1203,19 @@ public sealed class ClutterBuilder
 
     // ---------------------------------------------------------------- rendering
 
-    private Shader SpriteShader(bool lit, bool fogged, bool clampUv, bool spherical, bool blend)
+    // Key bits: 1 lit, 2 fogged, 4 clampUv, 8 spherical, 16 blend. Next free bit is 32.
+    // ⚠ Keep the graphics mode out of the key: the cutout variant's coverage lines follow it
+    // through ShaderTwins, one process-lifetime pair per key.
+    private ModeShader SpriteShader(bool lit, bool fogged, bool clampUv, bool spherical, bool blend)
     {
         int key = (lit ? 1 : 0) | (fogged ? 2 : 0) | (clampUv ? 4 : 0) | (spherical ? 8 : 0) | (blend ? 16 : 0);
-        if (!_shaders.TryGetValue(key, out var shader))
-            _shaders[key] = shader = new Shader { Code = ShaderCode(lit, fogged, clampUv, spherical, blend) };
-        return shader;
+        ShaderTwins.EnsureCurrent();
+        if (!SpriteShaders.TryGetValue(key, out var twins))
+        {
+            SpriteShaders[key] = twins = ShaderTwins.Make(() => ShaderCode(lit, fogged, clampUv, spherical, blend),
+                "clutter-sprite", $"clutter-sprite:{key:x}");
+        }
+        return twins;
     }
 
     // All instances of one kind as a single MultiMesh draw call. Null when an isolation run
@@ -1211,11 +1238,8 @@ public sealed class ClutterBuilder
         // SceneBuilder's world surfaces; wrapping bleeds the texture's opposite edge in at the
         // UV border (the hairline-seam / tracer-tail artifact).
         bool clampUv = SceneBuilder.UvsWithinUnitSquare(_gamez.Meshes[kind.MeshIndex].Polygons, pass: 0);
-        var mat = new ShaderMaterial
-        {
-            Shader = SpriteShader(kind.Lit, kind.Fogged, clampUv,
-                kind.Billboard == SceneBuilder.BillboardKind.Spherical, blend),
-        };
+        var mat = ShaderTwins.Follow(new ShaderMaterial(), SpriteShader(kind.Lit, kind.Fogged, clampUv,
+            kind.Billboard == SceneBuilder.BillboardKind.Spherical, blend));
         if (tex != null)
             mat.SetShaderParameter("albedo_tex", tex);
 
@@ -1431,8 +1455,8 @@ public sealed class ClutterBuilder
         // ClutterActivation hides it with.
         public IReadOnlyList<int> Owners = null!;
 
-        // The map's own MultiMesh of these placements, indexed as Placements is.
-        public MultiMesh? Instances;
+        // The map's own drawn instances of these placements, indexed as Placements is.
+        public ClutterInstances? Instances;
 
         // Parallel to Placements, solid kinds in a collidable build only: the region body and
         // shape slot each placement's shared shape was attached at.

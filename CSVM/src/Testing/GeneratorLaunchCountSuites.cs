@@ -532,13 +532,12 @@ internal static class GeneratorLaunchCountSuites
                 return;
             }
 
-            // The seat OBJECTIVE60 makes, then the leg into the tagged node: the assignment takes
-            // the nearest node and the edge the nose lines up with, so a nose already on the leg is
-            // what the script's mid-flight swap leaves behind.
-            CampaignDirector.SeatOnNet(miles, pilot, run, null, skills.MinAiActiveDist);
+            // OBJECTIVE60's swap seats at once from where the aeroplane is and where its nose points.
+            // So it is put on the leg into the tagged node first.
             var leg = (run.Nodes[TaggedNode].Position - run.Nodes[TaggedNode - 1].Position).Normalized();
             var start = run.Nodes[TaggedNode - 1].Position - (leg * SeatLeadM);
             miles.Activate(start, start + leg);
+            CampaignDirector.SeatOnNet(miles, pilot, run, null, skills.MinAiActiveDist);
             report.AppendLine($"seat: '{run.Name}' at {start}, flying node {TaggedNode - 1} -> {TaggedNode}");
 
             string? entered = null;

@@ -6,7 +6,6 @@ using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
-using CSVM.UI.Menu;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -316,8 +315,8 @@ public class CampaignFlightCheckPageTests
         Assert.Equal(CampaignExit.FlyMission, flow.Exit);
     }
 
-    // A guest's page is one PILOT block and its two action rows: the wingman belongs to the seated
-    // profile, and CHANGE PLANE is always offered because a guest picks out of their own roster.
+    // A guest's page is one PILOT block and its two action rows, since the wingman belongs to the
+    // seated profile. CHANGE PLANE is always offered because a guest picks out of their own roster.
     [Fact]
     public void AGuestsPageCarriesOnePilotBlockAndNoWingman()
     {

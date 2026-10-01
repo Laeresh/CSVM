@@ -101,6 +101,21 @@ public readonly record struct ZepStageSpec(string Chapter, string Mission, strin
 /// </summary>
 public sealed record SessionSpec
 {
+    /// <summary>The mission a Deathmatch launch flies, free-for-all or team. The original's session
+    /// setup loads mission 1 for both (docs/org/loading-screen.md), and only <c>mp1.gw</c> and
+    /// <c>mp2.gw</c> leave the plain rearm bases on (docs/org/multiplayer-rearm.md).</summary>
+    public const string DeathmatchMission = "MP1";
+
+    /// <summary>The mission a Capture the Flag launch flies. Each chapter that ships the flags lays
+    /// them out in <c>MP2</c>, and only <c>mp2.gw</c> leaves them on (docs/formats/interp.md).
+    /// </summary>
+    public const string CtfMission = "MP2";
+
+    /// <summary>The mission a Zeppelin vs Zeppelin launch flies. Every chapter lays out its two hulls,
+    /// <c>multiplayer1zep</c> and <c>multiplayer2zep</c>, in <c>MP3</c> (docs/org/multiplayer-zvz.md).
+    /// </summary>
+    public const string ZvzMission = "MP3";
+
     // The sim frame a bare `--crash` (no `=frame`) fires at, early enough that
     // the default `--frames=` screenshot lands mid-break-up rather than pre-impact.
     private const int DefaultCrashFrame = 5;
@@ -183,6 +198,17 @@ public sealed record SessionSpec
     public bool VsAutoRespawn { get; private set; } = true;
     /// <summary>Resolved. <c>--vs-no-respawn</c> was spelled out, so the flag beats a lobby's box.</summary>
     public bool VsAutoRespawnExplicit { get; private set; }
+    /// <summary><c>--ctf</c>: a network Dogfight flown as Capture the Flag, the mission's
+    /// <c>cs_flag_n</c> flags live for its lobby teams. Resolved false without <see cref="Versus"/>.
+    /// </summary>
+    public bool CaptureTheFlag { get; private set; }
+    /// <summary><c>--ctf=home</c>: <see cref="CaptureTheFlag"/> with the host's option that an enemy
+    /// flag scores only while the carrier's own flag stands at home.</summary>
+    public bool FlagHomeToCapture { get; private set; }
+    /// <summary><c>--zvz</c>: a network Dogfight flown as Zeppelin vs Zeppelin, the mission's two
+    /// hulls flown for its first two lobby teams. It switches the zeppelins on. Resolved false
+    /// without <see cref="Versus"/> or beside <see cref="CaptureTheFlag"/>.</summary>
+    public bool ZeppelinVsZeppelin { get; private set; }
     /// <summary><c>--net-host</c>, <c>--net-host=port</c> or <c>--net-host=address:port</c>: open
     /// a listen server on that port and fly this session as its host. Null when the flag is
     /// absent. A scripted smoke is what it is for; a player opens the same socket from the menu's
@@ -196,6 +222,11 @@ public sealed record SessionSpec
     /// and fly this session as a guest. Null when the flag is absent. Split with
     /// <see cref="ParseJoin"/>.</summary>
     public string? NetJoin { get; private set; }
+    /// <summary><c>--net-port-base=N</c>: this process's game port, with the LAN discovery port one
+    /// above it, in place of the shipped pair (<see cref="Net.NetPorts"/>). A bare
+    /// <c>--net-host</c> or <c>--net-join</c> takes it too. Null when absent or out of range. The
+    /// test runner hands every engine shard its own.</summary>
+    public int? NetPortBase { get; private set; }
     /// <summary><b>Resolved.</b> Open the aircraft's per-part HP sliders at launch, a modifier on
     /// <see cref="SessionMode.Viewer"/> (the parked plane) or <see cref="SessionMode.Fly"/> (the
     /// flown one), dropped by the modes that build no aircraft at all. The lab itself is always
@@ -316,6 +347,11 @@ public sealed record SessionSpec
     /// <summary>The <c>:&lt;seq&gt;</c> half of <c>--campaign=</c>; null when it was omitted or
     /// unparseable, in which case a warning is recorded and only the profile name is kept.</summary>
     public int? CampaignMissionSeq { get; private set; }
+
+    /// <summary>The aeroplane the cabin settled for the wingman when a human holds its saved plane.
+    /// Null when the wingman flies that saved plane. Only a campaign launch from the menu sets it;
+    /// no flag names it.</summary>
+    public Net.CoopWingmanMessage? CampaignWingman { get; private set; }
     /// <summary><c>--profiles=&lt;dir&gt;</c>: the campaign profile store this process reads and
     /// writes in place of <c>user://Profiles/</c>, so a probe never touches a player's own
     /// profiles. Null when the flag was absent. Kept as the raw value; resolving it is
@@ -646,6 +682,10 @@ public sealed record SessionSpec
     public Vector3? CamDir { get; private set; }
     public float? Yaw { get; private set; }
     public float? Pitch { get; private set; }
+    /// <summary><b>Resolved.</b> The <c>--fov=</c> vertical angle in degrees for the free camera
+    /// of <c>--freecam</c>/<c>--anim-lab</c>, null for the decoded external base. It lets an F11
+    /// line taken from a cockpit view reproduce that view's angle.</summary>
+    public float? Fov { get; private set; }
     /// <summary><b>Resolved.</b> The <c>--view=</c> numpad digit (0 = chase;
     /// <see cref="Flight.Camera.CameraController.PinnedBackView"/> = the look-behind, <c>--view=back</c>).
     /// The numpad views orbit a FLYING plane, so one asked for outside flight is dropped.</summary>
@@ -804,6 +844,16 @@ public sealed record SessionSpec
     /// readout (<c>F14</c>) at launch, the scripted twin for a deterministic screenshot of it.
     /// Null = flag absent (off); no value = compact.</summary>
     public string? DebugFps { get; private set; }
+
+    /// <summary><c>--debug-shaders</c>: the shader census, the frames after a live switch and every
+    /// frame over 33 ms with the pipelines it compiled (<c>Tooling/ShaderDiagnostics.cs</c>).</summary>
+    public bool DebugShaders { get; private set; }
+
+    /// <summary><c>--shader-warmup=auto|load|off</c>: whether a load compiles the other graphics
+    /// mode's shaders, so a live switch only swaps them. The default <c>auto</c> does so once this
+    /// process has switched.</summary>
+    public string ShaderWarmup { get; private set; } = "auto";
+
     /// <summary><b>Resolved.</b> Null outside <c>--freecam</c>/<c>--anim-lab</c>: the shared
     /// selection lives in the two world-observation modes, the viewer's LMB is already the orbit
     /// drag, and flight has no cursor.</summary>
@@ -938,6 +988,21 @@ public sealed record SessionSpec
     /// (kept, not treated as given), the same rule <c>--collision=</c> uses for a bad value.</summary>
     public string? GraphicsMode { get; private set; }
 
+    /// <summary><c>--shadow-quality=off|low|medium|high|ultra</c>, the enhanced sun's shadow level.
+    /// Null when not given, and for an unrecognised word with a warning. Beats the saved option and
+    /// the config key, including under <c>--det</c>, the same rule <see cref="GraphicsMode"/> keeps.</summary>
+    public string? ShadowQuality { get; private set; }
+
+    /// <summary><c>--view-distance=normal|far|veryfar|unlimited</c>, how far Enhanced draws the
+    /// clutter before its fade. Null when not given, and for an unknown word with a warning. Beats
+    /// the saved option and the config key, including under <c>--det</c>.</summary>
+    public string? ViewDistance { get; private set; }
+
+    /// <summary><c>--debug-graphics-switch=N[,N...]</c>: the sim frames at which the running session
+    /// flips the graphics mode, as the Toggle Graphics Mode action does but unsaved. The scripted
+    /// twin of the live switch, so a capture shows a world after a round trip. Empty = none.</summary>
+    public IReadOnlyList<long> DebugGraphicsSwitch { get; private set; } = Array.Empty<long>();
+
     // ---- Everything else ------------------------------------------------------------------------
 
     public bool Mute { get; private set; }
@@ -1002,6 +1067,9 @@ public sealed record SessionSpec
         var logSpecs = new List<string>();
         var texOverrides = new List<string>();
 
+        // Split after the loop, so a bare port falls back to --net-port-base in either order.
+        string? netHost = null;
+
         void Deprecate(string old, string replacement)
         {
             if (!deprecated.Exists(d => d.Old == old))
@@ -1046,9 +1114,24 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--vs-time=")) { s.VsTimeMinutes = int.Parse(arg["--vs-time=".Length..]); s.VsTimeExplicit = true; }
             else if (arg.StartsWith("--vs-lives=")) { s.VsLives = Math.Max(0, int.Parse(arg["--vs-lives=".Length..])); s.VsLivesExplicit = true; }
             else if (arg == "--vs-no-respawn") { s.VsAutoRespawn = false; s.VsAutoRespawnExplicit = true; }
-            else if (arg == "--net-host") { s.NetHostPort = UI.Menu.NetPlayFeature.DefaultPort; }
-            else if (arg.StartsWith("--net-host=")) { var h = ParseHost(arg["--net-host=".Length..]); s.NetHostBind = h.Bind; s.NetHostPort = h.Port; }
+            else if (arg == "--ctf") { s.CaptureTheFlag = true; }
+            else if (arg == "--ctf=home") { s.CaptureTheFlag = true; s.FlagHomeToCapture = true; }
+            else if (arg == "--zvz") { s.ZeppelinVsZeppelin = true; }
+            else if (arg == "--net-host") { netHost = ""; }
+            else if (arg.StartsWith("--net-host=")) { netHost = arg["--net-host=".Length..]; }
             else if (arg.StartsWith("--net-join=")) { s.NetJoin = arg["--net-join=".Length..]; }
+            else if (arg.StartsWith("--net-port-base="))
+            {
+                string value = arg["--net-port-base=".Length..];
+                if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int netBase) && Net.NetPorts.IsBase(netBase))
+                {
+                    s.NetPortBase = netBase;
+                }
+                else
+                {
+                    notes.Add(new Note("core", $"--net-port-base: '{value}' is not a port base in [{Net.NetPorts.MinBase}, {Net.NetPorts.MaxBase}], the shipped ports stand"));
+                }
+            }
             else if (arg == "--freecam") { s._freecamArg = true; s.HasContentArg = true; }
             else if (arg == "--anim-lab") { s._animLabArg = true; s.HasContentArg = true; }
             else if (arg.StartsWith("--play-anim=")) { s.PlayAnim = arg["--play-anim=".Length..]; s.HasContentArg = true; }
@@ -1080,6 +1163,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--debug-wingmen=")) { s.DebugWingmen = int.Parse(arg["--debug-wingmen=".Length..]); }
             else if (arg.StartsWith("--debug-preset=")) { s.DebugPreset = int.Parse(arg["--debug-preset=".Length..]); }
             else if (arg.StartsWith("--debug-pointer=")) { s.DebugPointer = ParseDebugPointer(arg["--debug-pointer=".Length..]); }
+            else if (arg.StartsWith("--debug-graphics-switch=")) { s.DebugGraphicsSwitch = ParseFrameList(arg["--debug-graphics-switch=".Length..]); }
             else if (arg.StartsWith("--debug-marquee=")) { s.DebugMarquee = double.TryParse(arg["--debug-marquee=".Length..], NumberStyles.Float, CultureInfo.InvariantCulture, out double phase) ? Math.Max(0d, phase) : null; }
             else if (arg.StartsWith("--paint=")) { s.PaintNames = arg["--paint=".Length..].Split(',', StringSplitOptions.TrimEntries); }
             else if (arg.StartsWith("--paint-color=")) { s.PaintColorOverride = ParsePaintColors(arg["--paint-color=".Length..]); }
@@ -1102,6 +1186,19 @@ public sealed record SessionSpec
             else if (arg == "--debug-names") { s.DebugNames ??= "meshes"; }
             else if (arg.StartsWith("--debug-names=")) { s.DebugNames = arg["--debug-names=".Length..]; }
             else if (arg == "--debug-fps") { s.DebugFps ??= "compact"; }
+            else if (arg == "--debug-shaders") { s.DebugShaders = true; }
+            else if (arg.StartsWith("--shader-warmup="))
+            {
+                string want = arg["--shader-warmup=".Length..];
+                if (want is "auto" or "load" or "off")
+                {
+                    s.ShaderWarmup = want;
+                }
+                else
+                {
+                    notes.Add(new Note("world", $"--shader-warmup={want} is not one of auto/load/off, keeping {s.ShaderWarmup}"));
+                }
+            }
             else if (arg.StartsWith("--debug-fps=")) { s.DebugFps = arg["--debug-fps=".Length..]; }
             else if (arg == "--debug-select") { s.DebugSelect ??= ""; }
             else if (arg.StartsWith("--debug-select=")) { s.DebugSelect = arg["--debug-select=".Length..]; }
@@ -1448,6 +1545,30 @@ public sealed record SessionSpec
                     notes.Add(new Note("world", $"--graphics={want} is not original/enhanced, keeping the config key's value"));
                 }
             }
+            else if (arg.StartsWith("--shadow-quality="))
+            {
+                string want = arg["--shadow-quality=".Length..];
+                if (Utils.ShadowQualitySetting.IsWord(want))
+                {
+                    s.ShadowQuality = want;
+                }
+                else
+                {
+                    notes.Add(new Note("world", $"--shadow-quality={want} is not one of {string.Join("/", Utils.ShadowQualitySetting.Words)}, keeping the saved option's value"));
+                }
+            }
+            else if (arg.StartsWith("--view-distance="))
+            {
+                string want = arg["--view-distance=".Length..];
+                if (Utils.ViewDistance.IsWord(want))
+                {
+                    s.ViewDistance = want;
+                }
+                else
+                {
+                    notes.Add(new Note("world", $"--view-distance={want} is not one of {string.Join("/", Utils.ViewDistance.Words)}, keeping the saved option's value"));
+                }
+            }
             else if (arg == "--dump-mips") { s.DumpMips = true; }
             else if (arg.StartsWith("--dump-mips=")) { s.DumpMips = true; s.DumpMipsFilter = arg["--dump-mips=".Length..]; }
             else if (arg == "--dump-ai") { s.DumpAi = true; }
@@ -1536,6 +1657,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--export-gltf=")) { s.ExportGltfPath = arg["--export-gltf=".Length..]; s.HasContentArg = true; }
             else if (arg.StartsWith("--yaw=")) { s.Yaw = Flt(arg["--yaw=".Length..]); }
             else if (arg.StartsWith("--pitch=")) { s.Pitch = Flt(arg["--pitch=".Length..]); }
+            else if (arg.StartsWith("--fov=")) { s.Fov = Flt(arg["--fov=".Length..]); }
             else if (arg.StartsWith("--pos=")) { s.Pos = ParseVec3(arg["--pos=".Length..]); }
             else if (arg.StartsWith("--direction=")) { s.Direction = ParseVec3(arg["--direction=".Length..]); }
             else if (arg.StartsWith("--campos=")) { s.CamPos = ParseVec3(arg["--campos=".Length..]); Deprecate("--campos", "--pos"); }
@@ -1586,6 +1708,13 @@ public sealed record SessionSpec
             }
         }
 
+        if (netHost != null)
+        {
+            var h = ParseHost(netHost, s.NetPortBase ?? UI.Menu.NetPlayFeature.DefaultPort);
+            s.NetHostBind = h.Bind;
+            s.NetHostPort = h.Port;
+        }
+
         s._notes = notes;
         s.Deprecated = deprecated;
         s.LogSpecs = logSpecs;
@@ -1595,40 +1724,49 @@ public sealed record SessionSpec
     }
 
     /// <summary>Splits a <see cref="NetJoin"/> value into the address and the port to join. A
-    /// value naming no port takes the door's own default. An IPv6 address is written in brackets,
-    /// which is what tells its colons from the port's.</summary>
-    public static (string Address, int Port) ParseJoin(string value) =>
-        UI.Menu.NetPlayFeature.SplitAddress(value, UI.Menu.NetPlayFeature.DefaultPort);
+    /// value naming no port takes <paramref name="defaultPort"/>, the launcher's
+    /// <see cref="Net.NetPorts.Game"/>. An IPv6 address is written in brackets, which is what
+    /// tells its colons from the port's.</summary>
+    public static Net.NetEndpoint ParseJoin(string value, int defaultPort = UI.Menu.NetPlayFeature.DefaultPort) =>
+        Net.NetEndpoint.Parse(value, defaultPort);
 
     /// <summary>Splits a <see cref="NetHostPort"/> value: a bare port binds every interface, and
     /// an <c>address:port</c> binds that one address, by the same rules as
-    /// <see cref="ParseJoin"/>.</summary>
-    public static (string Bind, int Port) ParseHost(string value)
+    /// <see cref="ParseJoin"/>. A value naming no usable port takes <paramref name="defaultPort"/>.
+    /// </summary>
+    public static (string Bind, int Port) ParseHost(string value, int defaultPort = UI.Menu.NetPlayFeature.DefaultPort)
     {
         string text = value ?? "";
         if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int bare))
         {
-            return ("*", bare is > 0 and < 65536 ? bare : UI.Menu.NetPlayFeature.DefaultPort);
+            return ("*", bare is > 0 and < 65536 ? bare : defaultPort);
         }
 
-        var (address, port) = ParseJoin(text);
+        var (address, port) = ParseJoin(text, defaultPort);
         return (address.Length == 0 ? "*" : address, port);
     }
 
-    /// <summary>The spec for a launchscreen launch, one plane per player, derived from the pristine
-    /// command line <paramref name="cli"/>, never the last session's spec. ⚠ Does not re-resolve:
-    /// every menu-settable field must be written here, or the pristine base drops it. The 2-player
-    /// Dogfight lock is <see cref="UI.Screens.LaunchMenu"/>'s job. An <paramref name="iaDef"/> decides
-    /// <see cref="Scenario"/> and <see cref="Stunt"/> instead. The vs arguments are a screen's match
-    /// rules, null where none offers them (<see cref="VsKillsExplicit"/>); only the lobby sets lives.</summary>
+    /// <summary>The spec for a launchscreen launch, one plane per player, derived from the pristine command line
+    /// <paramref name="cli"/>, never the last session's spec. ⚠ Does not re-resolve: every menu-settable field must
+    /// be written here, or the pristine base drops it. An <paramref name="iaDef"/> decides <see cref="Scenario"/> and
+    /// <see cref="Stunt"/> instead. The vs arguments are a screen's match rules, null where none offers them.
+    /// ⚠ A Dogfight flies its type's map whatever <c>--mission</c> says, <see cref="DeathmatchMission"/>,
+    /// <see cref="CtfMission"/> or <see cref="ZvzMission"/>: the type is all a guest hears of the host's mission.</summary>
     public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
         MenuMode mode, InstantActionDef? iaDef = null, IReadOnlyList<LoadoutChoice?>? loadouts = null,
         IReadOnlyList<CustomPlaneDef?>? customPlanes = null, int? vsKills = null, int? vsTimeMinutes = null,
-        int? vsLives = null, bool? vsAutoRespawn = null, LoadoutChoice? iaWingmanLoadout = null)
+        int? vsLives = null, bool? vsAutoRespawn = null, LoadoutChoice? iaWingmanLoadout = null,
+        bool captureTheFlag = false, bool flagHomeToCapture = false, bool zeppelinVsZeppelin = false)
     {
         var names = planeNodes.ToArray();
+        bool ctf = captureTheFlag && mode == MenuMode.Versus;
+        bool zvz = zeppelinVsZeppelin && !ctf && mode == MenuMode.Versus;
         return cli with
         {
+            CaptureTheFlag = ctf,
+            FlagHomeToCapture = ctf && flagHomeToCapture,
+            ZeppelinVsZeppelin = zvz,
+            Mission = ctf ? CtfMission : zvz ? ZvzMission : mode == MenuMode.Versus ? DeathmatchMission : cli.Mission,
             MenuLoadouts = loadouts ?? Array.Empty<LoadoutChoice?>(),
             MenuCustomPlanes = customPlanes ?? Array.Empty<CustomPlaneDef?>(),
             Chapter = chapter,
@@ -1665,11 +1803,13 @@ public sealed record SessionSpec
     /// <c>cm_sequence.zrd</c>, as for a command line. ⚠ Derived from the pristine <paramref name="cli"/>.</summary>
     public static SessionSpec FromCampaign(SessionSpec cli, string profile, int seq,
         IReadOnlyList<string> planeNodes, int players,
-        IReadOnlyList<LoadoutChoice?>? fits = null, IReadOnlyList<CustomPlaneDef?>? customs = null) =>
+        IReadOnlyList<LoadoutChoice?>? fits = null, IReadOnlyList<CustomPlaneDef?>? customs = null,
+        Net.CoopWingmanMessage? wingman = null) =>
         cli with
         {
             CampaignProfile = profile,
             CampaignMissionSeq = seq,
+            CampaignWingman = wingman,
             MenuLoadouts = fits ?? Array.Empty<LoadoutChoice?>(),
             MenuCustomPlanes = customs ?? Array.Empty<CustomPlaneDef?>(),
             PlaneNames = planeNodes.ToArray(),
@@ -1835,6 +1975,20 @@ public sealed record SessionSpec
         }
         steps.Sort((a, b) => a.Item1.CompareTo(b.Item1));
         return steps.ToArray();
+    }
+
+    /// <summary>Parse <c>--debug-graphics-switch=</c>: comma-separated sim frames, ascending, a word
+    /// that is not a whole number dropped.</summary>
+    public static long[] ParseFrameList(string spec)
+    {
+        var frames = new List<long>();
+        foreach (string part in spec.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (long.TryParse(part, NumberStyles.Integer, CultureInfo.InvariantCulture, out long frame) && frame >= 0)
+                frames.Add(frame);
+        }
+        frames.Sort();
+        return frames.ToArray();
     }
 
     /// <summary>Parse <c>--paint-color=</c>: up to three '/'-separated byte triples (body / dark
@@ -2063,6 +2217,19 @@ public sealed record SessionSpec
             Coop = false;
         }
 
+        if (CaptureTheFlag && !Versus)
+        {
+            Warn("core", "--ctf is a Dogfight mode; ignoring it without --vs");
+            CaptureTheFlag = false;
+            FlagHomeToCapture = false;
+        }
+
+        if (ZeppelinVsZeppelin && (!Versus || CaptureTheFlag))
+        {
+            Warn("core", "--zvz is a Dogfight mode of its own; ignoring it without --vs or beside --ctf");
+            ZeppelinVsZeppelin = false;
+        }
+
         // A campaign sortie is co-op by construction: the authored AI teams assume one player side.
         // Silent, not warned, --coop asks for exactly this. !Versus so the rule above still holds.
         if (CampaignProfile != null && !Versus)
@@ -2083,6 +2250,18 @@ public sealed record SessionSpec
             Warn("core", $"--view={Flight.Camera.PilotView.Name(ViewMode)} is a flight camera; "
                          + "ignoring it outside --fly/--stunt");
             ViewMode = Flight.Camera.PilotViewMode.Chase;
+        }
+        // Flight and the viewer own their angles, so only the two free-camera modes take one.
+        // Godot clamps a camera to 1..179 on its own, so a value outside it is a typo, not a request.
+        if (Fov is { } fov && !(Freecam || AnimLab))
+        {
+            Warn("core", $"--fov={fov.ToString(CultureInfo.InvariantCulture)} sets the free camera's angle; ignoring it outside --freecam/--anim-lab");
+            Fov = null;
+        }
+        else if (Fov is { } bad && (bad < 1f || bad > 179f))
+        {
+            Warn("core", $"--fov={bad.ToString(CultureInfo.InvariantCulture)} is outside 1..179 degrees; keeping the decoded base");
+            Fov = null;
         }
         // An unknown surface name would otherwise search for an id no collider can carry and
         // report it missing, which reads as a map fact rather than a typo.

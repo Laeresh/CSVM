@@ -44,10 +44,10 @@ public sealed partial class DangerZonePhotograph : SubViewport
     private float _dist;
     private Action<Image?>? _pending;
     private bool _drawing;
-    private Callable _drawn;
+    private int _drawnBefore;
 
-    /// <summary>Whether this run draws frames at all. A headless run never reaches
-    /// <c>FramePostDraw</c>, so a request would never land; its callers read the pane instead.</summary>
+    /// <summary>Whether this run draws frames at all. A headless run never issues a draw, so a
+    /// request would never land; its callers read the pane instead.</summary>
     public static bool Drawable => DisplayServer.GetName() != "headless";
 
     /// <summary>Where the eye stood for the last photograph. Read by the suite.</summary>
@@ -88,7 +88,6 @@ public sealed partial class DangerZonePhotograph : SubViewport
         view._aircraft = aircraft;
         view._dist = dist;
         view._unit = () => (random() * 2f) - 1f;
-        view._drawn = Callable.From(view.Drawn);
         view._camera = new Camera3D { Name = "danger_zone_camera", Current = true };
         view.AddChild(view._camera);
         return view;
@@ -144,8 +143,20 @@ public sealed partial class DangerZonePhotograph : SubViewport
     /// <inheritdoc/>
     public override void _Process(double delta)
     {
-        if (_pending == null || _drawing)
+        if (_pending == null)
         {
+            return;
+        }
+
+        // ⚠ Do not wait on FramePostDraw instead. Under the separate render thread it is deferred
+        // from the render thread and can be the previous draw's, which never drew the pose.
+        if (_drawing)
+        {
+            if (Engine.GetFramesDrawn() > _drawnBefore)
+            {
+                Drawn();
+            }
+
             return;
         }
 
@@ -176,18 +187,12 @@ public sealed partial class DangerZonePhotograph : SubViewport
         Fill(_camera.Transform.Origin);
         RenderTargetUpdateMode = UpdateMode.Once;
         _drawing = true;
-        RenderingServer.Singleton.Connect(RenderingServer.SignalName.FramePostDraw,
-            _drawn, (uint)ConnectFlags.OneShot);
+        _drawnBefore = Engine.GetFramesDrawn();
     }
 
     /// <inheritdoc/>
     public override void _ExitTree()
     {
-        var rs = RenderingServer.Singleton;
-        if (rs.IsConnected(RenderingServer.SignalName.FramePostDraw, _drawn))
-        {
-            rs.Disconnect(RenderingServer.SignalName.FramePostDraw, _drawn);
-        }
         if (_drawing)
         {
             _cockpit?.EndPhotograph();
@@ -242,18 +247,12 @@ public sealed partial class DangerZonePhotograph : SubViewport
         _filled.Clear();
     }
 
-    // After the draw that rendered the pose: the airframe goes back to what the pilot's view drew,
-    // and the readback starts off the frame path.
+    // Runs on the frame after the draw of the pose. The airframe goes back to what the pilot's view
+    // drew, and the readback starts off the frame path. Both queue behind a draw still running.
     private void Drawn()
     {
         _cockpit?.EndPhotograph();
         Unfill();
-        if (!IsInstanceValid(this) || !IsInsideTree())
-        {
-            Land(null);
-            return;
-        }
-
         var landed = _pending;
         _pending = null;
         _drawing = false;

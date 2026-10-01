@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
@@ -8,12 +9,13 @@ namespace CSVM.Effects;
 
 /// <summary>
 /// The original's ambient cloud field: the chapter's own <c>fogvol.zrd</c> clutter table scattered
-/// through its gamez <c>fvol*</c> volumes. Schema, per-chapter numbers and the decoded/undecoded
-/// split: docs/formats/fogvol.md.
+/// through its gamez <c>fvol*</c> volumes (schema and per-chapter numbers in
+/// docs/formats/fogvol.md).
 /// Built once, world-anchored, zero per-frame cost, one <see cref="MultiMeshInstance3D"/> per
 /// sprite kind, shared by every splitscreen pane; the shader billboards, fades and culls per view.
 /// ⚠ Do not re-introduce a hand-tuned cloud field. Every count, radius, size, opacity and band
-/// margin is authored data read here; the two that are not are marked at their own fields.
+/// margin is authored data read here. The two that are not are marked at their own fields, as are
+/// the <c>Enhanced</c>-only grade amplitudes, which reach no faithful pixel.
 /// ⚠ C1B, C2 and C3 render nothing here on purpose (see fogvol.md); their ambient sky is the
 /// world's own placed <c>cloudparent</c> sprites, built elsewhere.
 /// </summary>
@@ -42,6 +44,107 @@ public sealed partial class FogVolumeClutter : Node3D
     // `distance` (the column step). Decoded, not chosen: it is the spacing that makes a row
     // offset by half a column step equidistant from its neighbours (docs/org/cloudCards.md).
     private const float RowStepFactor = 0.8660254f;
+
+    // How far the whole card brightens as the eye swings toward the sun, the reference technique's
+    // forward-scatter term. ⚠ TUNE, and enhanced mode only: nothing in the original grades a
+    // cloud card, so no decoded magnitude exists to match. Small on purpose: a uniform brighten
+    // adds no structure, it only spends the little headroom the ceiling below leaves, and the
+    // reference's own 1.6-to-2.8 range assumes its rendered puffs rather than a near-white mask.
+    private const float EnhancedSunTintGain = 0.1f;
+
+    // TUNE: the step taken toward the sun, in the card's own UV space, before the blurred alpha
+    // sample that says how much cloud lies between a texel and the sun. A fifth of the card is
+    // about one puff feature at the shipped 70 to 132 m card sizes; a much smaller step reads the
+    // same texels and the rim disappears.
+    private const float EnhancedRimOffset = 0.2f;
+
+    // TUNE: which mip level of the authored mask that sample reads. The rim wants the mask's bulk
+    // rather than its texels, and level 3 is the reference technique's own choice. A larger
+    // rendered puff reads correspondingly deeper, so the blur covers the same share of the card.
+    // Both carry a full mip chain, so this never silently falls back to level 0.
+    private const float EnhancedRimBlurLod = 3f;
+
+    // TUNE: how far the unoccluded sun-side edge lifts, and how far a texel behind the card's own
+    // bulk drops. Both apply only as the eye swings toward the sun, the backlit half. A front-lit
+    // card is evenly bright and keeps the authored colour. The pair is the medium strength the user picked from a shipped/medium/strong sweep.
+    // ⚠ Do not go past it. The scatter lays one repeated card on a regular lattice, and the strong
+    // step paints that lattice as a visible grid on the near deck.
+    private const float EnhancedRimGain = 0.2f;
+    private const float EnhancedCoreShadow = 0.45f;
+
+    // TUNE: how far a card whose own authored face normal turns away from the sun darkens, on a
+    // half-lambert ramp. Every shipped fvol face points upward (docs/org/cloudCards.md), so this
+    // mostly separates C1C's sloped build-ups and C5's rims from a flat deck, and lowers the
+    // whole field as the sun drops toward the horizon.
+    private const float EnhancedUndersideDarkening = 0.35f;
+
+    // TUNE: the ceiling the graded albedo is clamped to. The enhanced Environment blooms
+    // everything over 1.0 in the HDR buffer and reserves that for the glow-arm sprites
+    // (Launcher's glow threshold), so a lit card brightens up to the threshold, never across it.
+    private const float EnhancedAlbedoCeiling = 0.98f;
+
+    // TUNE: over how many metres a card fades out as it nears whatever the depth buffer already
+    // holds, the soft-particle term copied from EmitterRenderer. A card is 70 to 132 m across, so
+    // the emitter's 1.5 m would be invisible here; about one aircraft length is wide enough to
+    // soften a rooftop or a ridge and narrow enough that a plane in cloud clears no bubble.
+    private const float EnhancedSoftFadeMetres = 12f;
+
+    // Enhanced mode's fragment block: the reference's two view terms, the face normal against the
+    // sun, and the soft depth fade. Emitted at 4 spaces to sit inside fragment(); the amplitudes
+    // above are substituted below.
+    private const string EnhancedGradeTemplate = """
+        // 0 with the sun behind the eye (front-lit), 1 looking into it (backlit).
+        vec3 view_dir = -INV_VIEW_MATRIX[2].xyz;
+        float lit_side = clamp(dot(view_dir, csky_sun_dir) * 0.5 + 0.5, 0.0, 1.0);
+        float tint = 1.0 + TINT_GAIN * lit_side;
+        // The mask's blurred alpha one step TOWARD the sun in billboard UV space: how much cloud
+        // lies between this texel and the sun. The sun-side edge samples off the card and glows;
+        // a texel behind the bulk is shadowed by it.
+        vec2 sun_uv = vec2(dot(csky_sun_dir, INV_VIEW_MATRIX[0].xyz),
+                           -dot(csky_sun_dir, INV_VIEW_MATRIX[1].xyz));
+        float thickness = RIM_THICKNESS;
+        float rim = 1.0 + lit_side * (RIM_GAIN * (1.0 - thickness) - CORE_SHADOW * thickness);
+        float lambert = clamp(dot(v_face_n, csky_sun_dir) * 0.5 + 0.5, 0.0, 1.0);
+        vec3 graded = min(col.rgb * tint * rim
+            * (1.0 - UNDERSIDE * (1.0 - lambert)), vec3(CEILING));
+        // The last metres before whatever the depth buffer holds, so a card never hard-cuts into
+        // terrain or an aircraft. The field draws depth_draw_never, so the buffer excludes the
+        // cards themselves and they do not fade against each other.
+        float scene_raw = texture(depth_texture, SCREEN_UV).r;
+        vec4 unproj = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, scene_raw, 1.0);
+        float scene_z = unproj.z / unproj.w;
+        float soft = clamp((VERTEX.z - scene_z) / SOFT_METRES, 0.0, 1.0);
+    """;
+
+    // Enhanced Graphics only: the fvol kinds that draw from the deck pool in place of their
+    // authored masks. Both kinds take the whole pool, which reads less ordered than a half each.
+    // ⚠ Do not read the pool on the faithful path; that path draws the authored masks alone.
+    private static readonly HashSet<string> EnhancedPuffKinds = new(StringComparer.Ordinal)
+    {
+        "cloudsprite1",
+        "cloudsprite2",
+    };
+
+    // ⚠ Format every amplitude invariantly: a comma decimal separator emits shader text that will
+    // not compile, on a German-locale machine only.
+    private static readonly string EnhancedGradeBody = EnhancedGradeTemplate
+        .Replace("TINT_GAIN", Literal(EnhancedSunTintGain))
+        .Replace("RIM_GAIN", Literal(EnhancedRimGain))
+        .Replace("CORE_SHADOW", Literal(EnhancedCoreShadow))
+        .Replace("UNDERSIDE", Literal(EnhancedUndersideDarkening))
+        .Replace("CEILING", Literal(EnhancedAlbedoCeiling))
+        .Replace("SOFT_METRES", Literal(EnhancedSoftFadeMetres));
+
+    // Each kind with its material and node. A live mode switch writes them again under the other
+    // mode (FollowGraphicsMode).
+    private readonly List<(Kind Kind, ShaderMaterial Material, MultiMeshInstance3D Node)> _drawn = new();
+
+    // One compiled shader per card text, both modes' kept, so a switch swaps shaders and Godot
+    // never compiles a rewritten one again.
+    private readonly Dictionary<string, Shader> _cardShaders = new(StringComparer.Ordinal);
+
+    // The archive the kinds' masks come from, read again on a first switch to Enhanced for the tint.
+    private TextureArchive? _textures;
 
     /// <summary>Sprites placed, summed over every kind, the authored volumes' own placements
     /// plus the map-edge continuation (<see cref="ExtensionCount"/>). Zero means nothing was
@@ -105,9 +208,58 @@ public sealed partial class FogVolumeClutter : Node3D
             field.QueueFree();
             return null;
         }
+        field._textures = textures;
         field.Build(gamez, kinds);
         return field;
     }
+
+    /// <summary>Writes every card again under the standing graphics mode: the enhanced grade, soft
+    /// edge and deck pool on, or the faithful text back. A live mode switch calls it. The field's
+    /// placements and fades belong to neither mode, so nothing else changes.</summary>
+    public void FollowGraphicsMode()
+    {
+        bool enhanced = GraphicsMode.Enhanced;
+        foreach (var (kind, mat, node) in _drawn)
+        {
+            if (enhanced && _textures != null)
+            {
+                TrySwapInPuff(kind, _textures);
+            }
+            bool pooled = enhanced && kind.Pool != null;
+            var shader = CardShader(ShaderCode(kind.Lit, kind.Fogged, enhanced, pooled));
+            if (!ReferenceEquals(mat.Shader, shader))
+            {
+                mat.Shader = shader;
+            }
+            if (enhanced)
+            {
+                mat.SetShaderParameter("rim_lod", kind.RimLod);
+            }
+            if (pooled)
+            {
+                CloudPuffs.Apply(mat, kind.Pool!, kind.PuffTint);
+            }
+            node.ExtraCullMargin = CullMargin(kind, pooled);
+        }
+    }
+
+    /// <summary>Compiles each kind's card shader for the other graphics mode now, so a switch finds it
+    /// ready. The pooled Enhanced text waits for a real switch, since a faithful session never reads
+    /// the pool. Returns the shaders made.</summary>
+    public int WarmOtherMode()
+    {
+        bool other = !GraphicsMode.Enhanced;
+        int made = _cardShaders.Count;
+        foreach (var (kind, _, _) in _drawn)
+        {
+            CardShader(ShaderCode(kind.Lit, kind.Fogged, other, other && kind.Pool != null)).GetRid();
+        }
+        return _cardShaders.Count - made;
+    }
+
+    /// <summary>True when a kind of this template name draws from the rendered pool under Enhanced
+    /// Graphics.</summary>
+    internal static bool DrawsRenderedPuffs(string kindName) => EnhancedPuffKinds.Contains(kindName);
 
     // The gamez side of one clutter alternative: the sprite card its template root carries.
     // Resolved by ClutterBuilder's own template rule, a parentless Object3d of that name whose
@@ -129,7 +281,7 @@ public sealed partial class FogVolumeClutter : Node3D
                 }
                 var mesh = gamez.Meshes[card.MeshIndex];
                 var texture = FirstTexture(gamez, mesh);
-                kinds.Add(new Kind
+                var kind = new Kind
                 {
                     Name = reference.Node,
                     Block = block,
@@ -140,11 +292,40 @@ public sealed partial class FogVolumeClutter : Node3D
                     Lit = mesh.Lighting,
                     Fogged = mesh.Fog,
                     Radius = CardRadius(mesh),
-                });
+                };
+                if (GraphicsMode.Enhanced)
+                {
+                    TrySwapInPuff(kind, textures);
+                }
+                kinds.Add(kind);
             }
         }
         return kinds;
     }
+
+    // Draws the kind from the deck pool in place of its mask. The mask's colour and peak opacity
+    // become the tint, and the rim sample deepens by the size ratio. Tried once per kind.
+    private static void TrySwapInPuff(Kind kind, TextureArchive textures)
+    {
+        if (kind.PuffTried || kind.Texture == null)
+        {
+            return;
+        }
+        kind.PuffTried = true;
+        if (!DrawsRenderedPuffs(kind.Name) || CloudPuffs.Deck() is not { } pool
+            || textures.FindImage(kind.TextureName) is not { } mask || CloudPuffs.MaskTint(mask) is not { } tint)
+        {
+            return;
+        }
+        kind.PuffTint = tint;
+        kind.RimLod = EnhancedRimBlurLod + Mathf.Log(pool.GetWidth() / (float)mask.GetWidth()) / Mathf.Log(2f);
+        kind.Pool = pool;
+    }
+
+    // The billboard swings vertices outside the instances' static AABB, and a pooled card is
+    // drawn up to the pool's largest size on top.
+    private static float CullMargin(Kind kind, bool pooled) =>
+        kind.Radius * Mathf.Max(kind.Block.ScaleRange.Y, 1f) * (pooled ? CloudPuffs.MaxSize : 1f);
 
     private static GameZNode? FirstWithMesh(GameZ gamez, GameZNode node)
     {
@@ -191,6 +372,9 @@ public sealed partial class FogVolumeClutter : Node3D
 
     private static float Lerp(Vector2 range, float t) => range.X + ((range.Y - range.X) * t);
 
+    private static string Literal(float value)
+        => value.ToString("0.0##", CultureInfo.InvariantCulture);
+
     // One sprite's shader custom data: the polygon normal its draw distance is scaled against, and
     // the single draw `t` its fade band is interpolated with. The normal is remapped onto [0, 1]
     // because a MultiMesh custom-data slot is a Color, whose range a future Godot may narrow.
@@ -230,9 +414,9 @@ public sealed partial class FogVolumeClutter : Node3D
                 foreach (int corner in corners)
                 {
                     st.SetNormal(CardNormal(mesh, poly, corner));
-                    // The authored colour, unscaled. ⚠ Never scale it here: no per-card colour term
-                    // exists and a brightness gap on this population is coverage
-                    // (docs/org/cloudCards.md). The one term the original applies is per vertex.
+                    // ⚠ The authored colour, never scaled here: a brightness gap on this population
+                    // is coverage (docs/org/cloudCards.md). The per-vertex term and the enhanced
+                    // grade are both applied in the shader.
                     st.SetColor(poly.VertexColors != null && corner < poly.VertexColors.Count
                         ? poly.VertexColors[corner]
                         : Colors.White);
@@ -273,7 +457,7 @@ public sealed partial class FogVolumeClutter : Node3D
     // dropped it, so a sprite outside its draw distance costs no fragments, what lets the whole
     // field be one static MultiMesh with no streaming. ⚠ The fade distance is the true 3D one, not
     // the fog's horizontal cylinder: a cloud overhead is as far away as one on the horizon.
-    private static string ShaderCode(bool lit, bool fogged)
+    private static string ShaderCode(bool lit, bool fogged, bool enhanced, bool pooled = false)
     {
         // ⚠ A `lighting: true` card takes the original's PER-VERTEX term on normals turned by the
         // same `face` the quad takes, never the collapsed csky_world_light and never another basis
@@ -286,11 +470,33 @@ public sealed partial class FogVolumeClutter : Node3D
         // authored colour, and it clamps in the framebuffer's own gamma space. COLOR is still in
         // that space here.
         string vcol = lit ? "clamp(COLOR.rgb * v_light, 0.0, 1.0)" : "COLOR.rgb";
+        string source = enhanced ? "graded" : "col.rgb";
         string albedo = fogged
             ? "    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;\n"
               + "    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);\n"
-              + "    ALBEDO = mix(col.rgb, csky_fog_color, fog_amt);"
-            : "    ALBEDO = col.rgb;";
+              + $"    ALBEDO = mix({source}, csky_fog_color, fog_amt);"
+            : $"    ALBEDO = {source};";
+        // ⚠ Every enhanced hole below is empty AND at end of line in the faithful path, so that
+        // path's text stays byte-identical. The grade layers over the lit arm's per-vertex term,
+        // which is already in col.
+        string decls = enhanced
+            ? "\nuniform sampler2D depth_texture : hint_depth_texture, filter_nearest;"
+              + $"\nuniform float rim_lod = {Literal(EnhancedRimBlurLod)};"
+              + "\nvarying flat vec3 v_face_n;" + (pooled ? "\n" + CloudPuffs.Include : string.Empty) : string.Empty;
+        string carryNormal = enhanced
+            ? "\n    v_face_n = INSTANCE_CUSTOM.xyz * 2.0 - 1.0;" + (pooled ? "\n" + CloudPuffs.PoseLines : string.Empty)
+            : string.Empty;
+        // A pooled card samples its own layer through its pose; every other card samples its mask.
+        string sample = pooled
+            ? "csky_puff_sample(v_puff_card_uv, v_puff_pose, v_puff_layer)"
+            : "csky_sample_albedo(albedo_tex, UV)";
+        string rimOffset = $"sun_uv * {Literal(EnhancedRimOffset)}";
+        string grade = enhanced
+            ? "\n" + EnhancedGradeBody.Replace("RIM_THICKNESS", pooled
+                ? $"textureLod(puff_tex, vec3(csky_puff_uv(v_puff_card_uv + {rimOffset}, v_puff_pose), v_puff_layer), rim_lod).a"
+                : $"textureLod(albedo_tex, UV + {rimOffset}, rim_lod).a")
+            : string.Empty;
+        string soft = enhanced ? " * soft" : string.Empty;
         return $$"""
             shader_type spatial;
             render_mode blend_mix, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
@@ -307,7 +513,7 @@ public sealed partial class FogVolumeClutter : Node3D
             // its level as every other mip-mapped arm does.
             #include "res://shaders/csky_mip_bias.gdshaderinc"
 
-            varying flat float v_alpha;{{varying}}
+            varying flat float v_alpha;{{varying}}{{decls}}
 
             void vertex() {
                 vec3 origin = MODEL_MATRIX[3].xyz;
@@ -324,13 +530,13 @@ public sealed partial class FogVolumeClutter : Node3D
                     vec4(face[0], 0.0), vec4(face[1], 0.0), vec4(face[2], 0.0), MODEL_MATRIX[3]);
                 MODELVIEW_MATRIX[0] *= length(MODEL_MATRIX[0].xyz) * cull;
                 MODELVIEW_MATRIX[1] *= length(MODEL_MATRIX[1].xyz) * cull;
-                MODELVIEW_MATRIX[2] *= length(MODEL_MATRIX[2].xyz);{{vertexLight}}
+                MODELVIEW_MATRIX[2] *= length(MODEL_MATRIX[2].xyz);{{vertexLight}}{{carryNormal}}
             }
 
             void fragment() {
-                vec4 col = vec4(csky_srgb_to_linear({{vcol}}), COLOR.a) * csky_sample_albedo(albedo_tex, UV);
+                vec4 col = vec4(csky_srgb_to_linear({{vcol}}), COLOR.a) * {{sample}};{{grade}}
             {{albedo}}
-                ALPHA = col.a * v_alpha;
+                ALPHA = col.a * v_alpha{{soft}};
             }
             """;
     }
@@ -610,6 +816,15 @@ public sealed partial class FogVolumeClutter : Node3D
         }
     }
 
+    private Shader CardShader(string code)
+    {
+        if (!_cardShaders.TryGetValue(code, out var shader))
+        {
+            _cardShaders[code] = shader = new Shader { Code = code };
+        }
+        return shader;
+    }
+
     private void Build(GameZ gamez, List<Kind> kinds)
     {
         var parts = new List<string>();
@@ -624,13 +839,24 @@ public sealed partial class FogVolumeClutter : Node3D
             {
                 meshCache[kind.MeshIndex] = mesh = BuildCardMesh(gamez, kind.MeshIndex);
             }
-            var mat = new ShaderMaterial { Shader = new Shader { Code = ShaderCode(kind.Lit, kind.Fogged) } };
+            var mat = new ShaderMaterial
+            {
+                Shader = CardShader(ShaderCode(kind.Lit, kind.Fogged, GraphicsMode.Enhanced, kind.Pool != null)),
+            };
             if (kind.Texture != null)
             {
                 mat.SetShaderParameter("albedo_tex", kind.Texture);
             }
             mat.SetShaderParameter("far_fade_0", kind.Block.FarFadeNear);
             mat.SetShaderParameter("far_fade_1", kind.Block.FarFade);
+            if (GraphicsMode.Enhanced)
+            {
+                mat.SetShaderParameter("rim_lod", kind.RimLod);
+            }
+            if (kind.Pool != null)
+            {
+                CloudPuffs.Apply(mat, kind.Pool, kind.PuffTint);
+            }
 
             var mm = new MultiMesh
             {
@@ -645,16 +871,17 @@ public sealed partial class FogVolumeClutter : Node3D
                 mm.SetInstanceTransform(i, kind.Placements[i]);
                 mm.SetInstanceCustomData(i, kind.Bands[i]);
             }
-            AddChild(new MultiMeshInstance3D
+            var node = new MultiMeshInstance3D
             {
                 Multimesh = mm,
                 MaterialOverride = mat,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-                // The billboard swings vertices outside the instances' static AABB.
-                ExtraCullMargin = kind.Radius * Mathf.Max(kind.Block.ScaleRange.Y, 1f),
+                ExtraCullMargin = CullMargin(kind, kind.Pool != null),
                 Name = kind.Name,
-            });
-            parts.Add($"{kind.Name} x{kind.Placements.Count} ({kind.TextureName}, "
+            };
+            AddChild(node);
+            _drawn.Add((kind, mat, node));
+            parts.Add($"{kind.Name} x{kind.Placements.Count} ({kind.TextureName}{(kind.Pool != null ? " as the rendered puff pool" : string.Empty)}, "
                       + $"fade {kind.Block.FarFadeNear.X:0}-{kind.Block.FarFadeNear.Y:0}"
                       + $"..{kind.Block.FarFade.X:0}-{kind.Block.FarFade.Y:0} m)");
         }
@@ -679,5 +906,11 @@ public sealed partial class FogVolumeClutter : Node3D
         public bool Lit = true;
         public bool Fogged = true;
         public float Radius;
+
+        // Enhanced only: what SwapInPuff carries over from the authored mask it replaced.
+        public Color PuffTint = Colors.White;
+        public float RimLod = EnhancedRimBlurLod;
+        public Texture2DArray? Pool;
+        public bool PuffTried;
     }
 }

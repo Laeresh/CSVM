@@ -37,20 +37,38 @@ public static class MissionMap
             : null);
 
     /// <summary>Every visible picture element of one draw layer, in the order the reveal placed
-    /// them, which is the order they draw in. Call it for the back layer and then the front, so
-    /// what a <c>ToBack</c> pushed behind stays behind.</summary>
-    public static void Elements(List<BoardPicture> into, BriefingReveal reveal, bool back)
+    /// them, which is the order they draw in. Call it for the back layer first, so a
+    /// <c>ToBack</c> element stays behind. <paramref name="except"/> is one element a caller draws
+    /// elsewhere, left out by identity.</summary>
+    public static void Elements(
+        List<BoardPicture> into, BriefingReveal reveal, bool back, BriefingElement? except = null)
     {
         foreach (var element in reveal.Elements)
         {
             if (element.Back == back && element.Visible && element.Opacity > 0f
-                && element.Bitmap.Length > 0)
+                && element.Bitmap.Length > 0 && !ReferenceEquals(element, except))
             {
                 into.Add(new BoardPicture(
                     new BoardArt(BoardArtLibrary.Rimage, element.Bitmap),
                     element.At.X, element.At.Y, 0, element.Center, element.Opacity, element.Revs));
             }
         }
+    }
+
+    /// <summary>The reveal's cycling element, found by its frame list rather than by its authored
+    /// id, or null for a reveal with none. Only a load screen's script authors one, the propeller
+    /// (docs/org/loading-screen.md).</summary>
+    public static BriefingElement? Cycle(BriefingReveal? reveal)
+    {
+        foreach (var element in reveal?.Elements ?? Array.Empty<BriefingElement>())
+        {
+            if (element.Frames.Count > 0)
+            {
+                return element;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>The connector lines a reveal has drawn, at most one per mission on the shipped

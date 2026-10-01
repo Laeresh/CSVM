@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Hud;
+using CSVM.Flight.Weapons;
 using CSVM.UI.Boards;
 using Godot;
 
@@ -65,14 +66,14 @@ public sealed partial class VersusHud : Control
         };
     }
 
-    /// <summary>The line a Downed report anywhere in the match posts to the message stack: killer
-    /// named when it was a weapon kill, a plain "DOWN" otherwise, which is a hull spent by a ram or
-    /// by anything else with no seat to credit. Static, since the stack it lands in belongs to the
-    /// reading pane, not to this one.</summary>
-    public static string KillLine(int? killer, int victim) =>
-        killer is int k
-            ? $"{SplitScreen.PlayerTag(k)} DOWNED {SplitScreen.PlayerTag(victim)}"
-            : $"{SplitScreen.PlayerTag(victim)} DOWN";
+    /// <summary>One other seat's marker colour: the friendly green of <c>Target::GetColor</c> for a
+    /// teammate (<see cref="AimAssist.Friendly"/>), else that seat's identity colour. A free-for-all
+    /// flies every seat on its own team, so only a team match draws green.
+    /// ⚠ A pane with no aircraft bound (<paramref name="ownTeam"/> null) has no side, and every
+    /// seat keeps its identity colour there.</summary>
+    public static Color MarkerColor(int? ownTeam, int seatTeam, int seatIndex) =>
+        ownTeam is { } own && AimAssist.Friendly(own, seatTeam) ? TargetHud.HudGreen
+            : SplitScreen.PlayerColor(seatIndex);
 
     public override void _Process(double delta)
     {
@@ -99,11 +100,18 @@ public sealed partial class VersusHud : Control
         if (Rigs == null)
             return;
         int markerFont = Mathf.Max(1, Mathf.RoundToInt(RefMarkerFont * s * HudMetrics.MarkerTextScale));
+        int? ownTeam = null;
+        foreach (var rig in Rigs)
+        {
+            if (rig.Index == PlayerIndex && rig.Controller is { } own)
+                ownTeam = own.Team;
+        }
+
         foreach (var opp in Rigs)
         {
             if (opp.Index == PlayerIndex || opp.Controller is not { Crashed: false } c)
                 continue; // this pane's own seat, or an opponent out of the fight for now
-            DrawOpponent(font, c.GlobalPosition, SplitScreen.PlayerColor(opp.Index),
+            DrawOpponent(font, c.GlobalPosition, MarkerColor(ownTeam, c.Team, opp.Index),
                 SplitScreen.PlayerTag(opp.Index), s, markerFont);
         }
     }
@@ -122,9 +130,17 @@ public sealed partial class VersusHud : Control
     }
 
     // The sole rank-1 player's tag, or TIED while nobody leads (including 0-0 before the
-    // first kill).
+    // first kill). A team match names this pane's team and its total, then the leading team.
     private string LeaderText(VersusMatch match)
     {
+        if (match.Teamed)
+        {
+            int own = match.TeamOf(PlayerIndex);
+            string mine = own > 0 ? $"{match.TeamName(own)} {match.TeamScoreOf(own)}   " : "";
+            var teams = match.TeamStandings().Where(t => t.Rank == 1).ToList();
+            return mine + (teams.Count == 1 ? $"LEADER {teams[0].Name}" : "LEADER TIED");
+        }
+
         var leaders = match.Standings().Where(st => st.Rank == 1).ToList();
         return leaders.Count == 1 ? $"LEADER {SplitScreen.PlayerTag(leaders[0].PlayerIndex)}" : "LEADER TIED";
     }

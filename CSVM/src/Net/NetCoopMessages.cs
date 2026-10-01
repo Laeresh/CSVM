@@ -166,27 +166,63 @@ public readonly record struct CoopFit(uint Ammo, ulong Ordnance)
 }
 
 /// <summary>
-/// A co-op guest's answer on its flight check, under the round it answers. It names the airframe
-/// picked from the host's hangar, its fit, the guest's player name and whether it is Ready. A host
-/// counts a pick only under its own current round. A Ready from before a mission change therefore
-/// never launches the next one. <see cref="Left"/> says the guest walked out of the flight under way.
-/// Kept in the lobby, so a flight's end cannot carry it into the next session.
+/// A co-op guest's answer on its flight check, under the round it answers. It names the airframe it
+/// flies, its fit, the guest's callsign, its chosen pilot voice and whether it is Ready. On a
+/// campaign it also names the plane of the host's hangar it picked (<see cref="Plane"/>). A host
+/// counts a Ready only under its own current round, so a Ready from before a mission change never
+/// launches the next one. The Left flag says the guest walked out of the flight under way. It is
+/// kept in the lobby, so a flight's end cannot carry it into the next session.
 /// </summary>
 public readonly record struct CoopPickMessage(
-    byte Epoch, bool Ready, byte Airframe, CoopFit Fit = default, string Name = "", bool Left = false)
+    byte Epoch, bool Ready, byte Airframe, CoopFit Fit = default, string Name = "", bool Left = false,
+    byte Plane = CoopPickMessage.NoPlane, byte Voice = CoopPickMessage.NoVoice)
     : INetMessage<CoopPickMessage>
 {
+    /// <summary>The <see cref="Voice"/> of a player that chose none, as an older build's pick reads.
+    /// Any other value is the voice's place in the Voice list plus one, 1 to 7.</summary>
+    public const byte NoVoice = 0;
+
+    /// <summary>The largest <see cref="Voice"/> the flags byte carries: three bits above the Ready
+    /// and Left bits, which an older reader ignores.</summary>
+    public const byte MaxVoice = 7;
+
     /// <summary>The fixed width of the message, header included.</summary>
     public const int Size = NetMessage.HeaderBytes + 4 + CoopFit.Bytes + NameBytes;
 
     /// <summary>How many bytes the player name takes, the roster's own callsign width.</summary>
     public const int NameBytes = SeatRosterMessage.CallsignBytes;
 
+    /// <summary>The <see cref="Plane"/> of a guest that has picked no plane of the hangar.</summary>
+    public const byte NoPlane = 0;
+
+    /// <summary>The <see cref="Plane"/> of a guest that picked the shared stock Devastator.</summary>
+    public const byte StockPlane = 0xFF;
+
+    private const int VoiceShift = 2;
+
     /// <inheritdoc/>
     public static NetMessageType Type => NetMessageType.CoopPick;
 
     /// <inheritdoc/>
     public static NetReliability Reliability => NetReliability.Reliable;
+
+    /// <summary>The picked plane as an index into the host's hangar: -1 for the stock Devastator,
+    /// -2 for no pick. Any other byte is the index plus one.</summary>
+    public int PlaneIndex => Plane switch
+    {
+        NoPlane => -2,
+        StockPlane => -1,
+        _ => Plane - 1,
+    };
+
+    /// <summary>The <see cref="Plane"/> byte for <paramref name="index"/>, the reverse of
+    /// <see cref="PlaneIndex"/>. An index past the byte reads as no pick.</summary>
+    public static byte PlaneByte(int index) => index switch
+    {
+        -1 => StockPlane,
+        >= 0 and < StockPlane - 1 => (byte)(index + 1),
+        _ => NoPlane,
+    };
 
     /// <inheritdoc/>
     public static bool TryRead(ReadOnlySpan<byte> from, out CoopPickMessage message)
@@ -199,10 +235,11 @@ public readonly record struct CoopPickMessage(
         byte epoch = reader.ReadByte();
         byte flags = reader.ReadByte();
         byte airframe = reader.ReadByte();
-        _ = reader.ReadByte();
+        byte plane = reader.ReadByte();
         var fit = CoopFit.Read(ref reader);
         string name = reader.ReadText(NameBytes);
-        message = new CoopPickMessage(epoch, (flags & 1) != 0, airframe, fit, name, (flags & 2) != 0);
+        byte voice = (byte)((flags >> VoiceShift) & MaxVoice);
+        message = new CoopPickMessage(epoch, (flags & 1) != 0, airframe, fit, name, (flags & 2) != 0, plane, voice);
         return true;
     }
 
@@ -211,11 +248,78 @@ public readonly record struct CoopPickMessage(
     {
         var writer = new NetMessageWriter(into, Type);
         writer.WriteByte(Epoch);
-        writer.WriteByte((byte)((Ready ? 1 : 0) | (Left ? 2 : 0)));
+        int voice = Voice <= MaxVoice ? Voice : NoVoice;
+        writer.WriteByte((byte)((Ready ? 1 : 0) | (Left ? 2 : 0) | (voice << VoiceShift)));
         writer.WriteByte(Airframe);
-        writer.WriteByte(0);
+        writer.WriteByte(Plane);
         Fit.Write(ref writer);
         writer.WriteText(Name, NameBytes);
+        return writer.Close();
+    }
+}
+
+/// <summary>
+/// One plane of a co-op host's hangar as its guests pick from it. It names its place and the
+/// hangar's size, the seat that holds it, its airframe, stored fit, build and name. The build is
+/// null for a plane with none on file. The host sends every plane to every guest, and again
+/// whenever one changes. The holders are the host's settling of every seat's pick, so every
+/// machine refuses the same taken planes. Kept in the lobby by place.
+/// </summary>
+public readonly record struct CoopHangarMessage(
+    byte Index, byte Count, byte Holder, byte Airframe, CoopFit Fit = default, NetPlaneBuild? Build = null,
+    string Name = "")
+    : INetMessage<CoopHangarMessage>
+{
+    /// <summary>The fixed width of the message, header included.</summary>
+    public const int Size = NetMessage.HeaderBytes + 5 + CoopFit.Bytes + NetPlaneBuild.Bytes + NetPlaneBuild.NameBytes + NameBytes;
+
+    /// <summary>How many bytes the plane's name takes: the hangar's 32-character name cap and its
+    /// terminator.</summary>
+    public const int NameBytes = 33;
+
+    /// <summary>The <see cref="Holder"/> of a plane no seat holds.</summary>
+    public const byte NoHolder = 0xFF;
+
+    /// <inheritdoc/>
+    public static NetMessageType Type => NetMessageType.CoopHangar;
+
+    /// <inheritdoc/>
+    public static NetReliability Reliability => NetReliability.Reliable;
+
+    /// <summary>Whether a seat holds this plane.</summary>
+    public bool Held => Holder != NoHolder;
+
+    /// <inheritdoc/>
+    public static bool TryRead(ReadOnlySpan<byte> from, out CoopHangarMessage message)
+    {
+        message = default;
+        var reader = new NetMessageReader(from);
+        if (!reader.Is(Size) || reader.Type != Type)
+            return false;
+
+        byte index = reader.ReadByte();
+        byte count = reader.ReadByte();
+        byte holder = reader.ReadByte();
+        byte airframe = reader.ReadByte();
+        bool built = reader.ReadByte() != 0;
+        var fit = CoopFit.Read(ref reader);
+        var build = NetPlaneBuild.Read(ref reader);
+        message = new CoopHangarMessage(index, count, holder, airframe, fit, built ? build : null, reader.ReadText(NameBytes));
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public int Write(Span<byte> into)
+    {
+        var writer = new NetMessageWriter(into, Type);
+        writer.WriteByte(Index);
+        writer.WriteByte(Count);
+        writer.WriteByte(Holder);
+        writer.WriteByte(Airframe);
+        writer.WriteByte(Build != null ? (byte)1 : (byte)0);
+        Fit.Write(ref writer);
+        (Build ?? new NetPlaneBuild()).Write(ref writer);
+        writer.WriteText(Name ?? string.Empty, NameBytes);
         return writer.Close();
     }
 }
@@ -260,6 +364,101 @@ public readonly record struct CoopSeatFitMessage(byte Seat, CoopFit Fit)
         writer.WriteByte(0);
         writer.WriteUInt16(0);
         Fit.Write(ref writer);
+        return writer.Close();
+    }
+}
+
+/// <summary>
+/// The campaign wingman's aeroplane as a co-op host launched it: the airframe its profile picked
+/// and that plane's fit. Sent to every guest before the session's opener, since every machine
+/// builds the host-owned wingman itself and must build the same def. Kept in the lobby.
+/// </summary>
+public readonly record struct CoopWingmanMessage(byte Airframe, CoopFit Fit)
+    : INetMessage<CoopWingmanMessage>
+{
+    /// <summary>The fixed width of the message, header included.</summary>
+    public const int Size = NetMessage.HeaderBytes + 4 + CoopFit.Bytes;
+
+    /// <summary>The airframe value saying the host's profile binds no wingman aeroplane, so the
+    /// wingman block flies its own def on every machine.</summary>
+    public const byte NoAirframe = 0xFF;
+
+    /// <inheritdoc/>
+    public static NetMessageType Type => NetMessageType.CoopWingman;
+
+    /// <inheritdoc/>
+    public static NetReliability Reliability => NetReliability.Reliable;
+
+    /// <summary>Whether the host named an airframe for the wingman.</summary>
+    public bool Binds => Airframe != NoAirframe;
+
+    /// <inheritdoc/>
+    public static bool TryRead(ReadOnlySpan<byte> from, out CoopWingmanMessage message)
+    {
+        message = default;
+        var reader = new NetMessageReader(from);
+        if (!reader.Is(Size) || reader.Type != Type)
+            return false;
+
+        byte airframe = reader.ReadByte();
+        _ = reader.ReadByte();
+        _ = reader.ReadUInt16();
+        message = new CoopWingmanMessage(airframe, CoopFit.Read(ref reader));
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public int Write(Span<byte> into)
+    {
+        var writer = new NetMessageWriter(into, Type);
+        writer.WriteByte(Airframe);
+        writer.WriteByte(0);
+        writer.WriteUInt16(0);
+        Fit.Write(ref writer);
+        return writer.Close();
+    }
+}
+
+/// <summary>
+/// A campaign film a co-op host started or ended. The ordinal counts the host's films, so a guest
+/// tells a new film from the end of the one it plays. Each guest plays the named film and ends it
+/// when the host's ends. Kept in the lobby like the flow, and never reaches a session.
+/// </summary>
+public readonly record struct CoopFilmMessage(byte Ordinal, bool Playing, NetCoopFilm Film, byte Chapter)
+    : INetMessage<CoopFilmMessage>
+{
+    /// <summary>The fixed width of the message, header included.</summary>
+    public const int Size = NetMessage.HeaderBytes + 4;
+
+    /// <inheritdoc/>
+    public static NetMessageType Type => NetMessageType.CoopFilm;
+
+    /// <inheritdoc/>
+    public static NetReliability Reliability => NetReliability.Reliable;
+
+    /// <inheritdoc/>
+    public static bool TryRead(ReadOnlySpan<byte> from, out CoopFilmMessage message)
+    {
+        message = default;
+        var reader = new NetMessageReader(from);
+        if (!reader.Is(Size) || reader.Type != Type)
+            return false;
+
+        byte ordinal = reader.ReadByte();
+        bool playing = reader.ReadByte() != 0;
+        var film = (NetCoopFilm)reader.ReadByte();
+        message = new CoopFilmMessage(ordinal, playing, film, reader.ReadByte());
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public int Write(Span<byte> into)
+    {
+        var writer = new NetMessageWriter(into, Type);
+        writer.WriteByte(Ordinal);
+        writer.WriteByte(Playing ? (byte)1 : (byte)0);
+        writer.WriteByte((byte)Film);
+        writer.WriteByte(Chapter);
         return writer.Close();
     }
 }

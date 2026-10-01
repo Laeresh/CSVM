@@ -242,7 +242,9 @@ while [ "$k" -le "$shards" ]; do
     xdg "shard$k"
     # No --log-file: an exported build cannot see Godot's own flags from managed code, so the
     # harness screens the engine log at user://logs/godot.log, which this process owns alone.
-    timeout -k 10 "$timeout_s" ./CSVM.x86_64 --headless -- --run-tests="shard:$k/$shards" --data-root="$data" > "$out/shard$k.out" 2>&1
+    # Each shard's own port block, below Linux's ephemeral range, as RunTests.ps1 hands them.
+    timeout -k 10 "$timeout_s" ./CSVM.x86_64 --headless -- --run-tests="shard:$k/$shards" --data-root="$data" \
+      --net-port-base=$((30000 + (k - 1) * 100)) > "$out/shard$k.out" 2>&1
     echo $? > "$out/shard$k.exit"
   ) &
   k=$((k + 1))

@@ -176,6 +176,12 @@ with airspeed. This effect is separate from both chapter cloud-card populations 
 hard-coded throttle-rise exhaust below. CSVM implements it in `Flight.Hud.SpeedCue`, loading the
 chapter reader verbatim and assigning one private renderer set to each player rig.
 
+CSVM's opt-in enhanced presentation adds a second, camera-local streak field over these wisps
+(`Effects.WindStreaks`). It is a remake invention with nothing behind it in the original data or
+the executable, and it neither replaces the authored cue nor changes it: the wisps above keep
+emitting exactly as the reader authors them, and the faithful presentation builds no streak field
+at all.
+
 ## Aircraft throttle-rise exhaust
 
 `crimson.exe` also constructs one puffer outside the authored `PUFFER_STATE` readers. Aircraft

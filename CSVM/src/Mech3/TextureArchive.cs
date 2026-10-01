@@ -648,6 +648,10 @@ public sealed class TextureArchive : IDisposable
     // The decode, the other bits and the install-wide census are in docs/org/textures.md.
     private const int AdditiveTransparentBit = 0x04;
 
+    // Bit 3 of the same word: an alpha-plane texture carrying it uploads as ARGB8888.
+    // Every other one uploads as ARGB4444, keeping four bits of alpha (docs/org/textures.md).
+    private const int FullAlphaUploadBit = 0x08;
+
     // Texture names referenced by gamez meshes that ship in NO archive of a retail
     // install, verified absent across all extracted chapters. The
     // original engine tolerates them (renders neutral), so we do too: a quiet gray
@@ -725,6 +729,10 @@ public sealed class TextureArchive : IDisposable
     private readonly Dictionary<string, string> _byBaseName = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ImageTexture?> _cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, (bool HasAlpha, bool Soft, AlphaClass Class)> _alphaInfo = new(StringComparer.OrdinalIgnoreCase);
+
+    // Every cached texture whose alpha depth depends on the graphics mode, by base name. A live
+    // switch uploads each one again at the other depth (FollowAlphaDepth).
+    private readonly Dictionary<string, ImageTexture> _depthFollowers = new(StringComparer.OrdinalIgnoreCase);
     // Archive base name -> the extractor's own alpha class, off the extraction manifest. Empty when
     // the tree ships PNGs alone, which is why every read of it falls back to the pixel test.
     private readonly Dictionary<string, AlphaClass> _alphaClasses = new(StringComparer.OrdinalIgnoreCase);
@@ -846,6 +854,10 @@ public sealed class TextureArchive : IDisposable
     /// test misses. Falls back to the pixel test only where no manifest ships.</summary>
     public AlphaClass LastAlphaClass { get; private set; }
 
+    /// <summary>The textures whose alpha depth follows the graphics mode, as <see cref="Find"/>
+    /// handed them out.</summary>
+    public IReadOnlyCollection<ImageTexture> AlphaDepthFollowers => _depthFollowers.Values;
+
     /// <summary>Textures the extraction manifest classified, and how many of those carry an alpha
     /// channel. Zero means no manifest shipped and <see cref="LastAlphaClass"/> is running on the
     /// pixel fallback; the population per chapter is in docs/org/vertexLighting.md.</summary>
@@ -912,6 +924,37 @@ public sealed class TextureArchive : IDisposable
         return bias;
     }
 
+    /// <summary>Keeps the top four bits of every alpha byte, mip levels included. They expand back
+    /// by nibble replication (<c>a4 * 17</c>), as a card reads a 4-bit channel. Colour bytes
+    /// are untouched. A format with no 8-bit alpha channel is left alone.</summary>
+    public static void TruncateAlphaToNibble(Image img)
+    {
+        int stride = img.GetFormat() switch
+        {
+            Image.Format.Rgba8 => 4,
+            Image.Format.La8 => 2,
+            _ => 0,
+        };
+        if (stride == 0)
+        {
+            return;
+        }
+
+        var data = img.GetData();
+        TruncateAlphaToNibble(data, stride);
+        img.SetData(img.GetWidth(), img.GetHeight(), img.HasMipmaps(), img.GetFormat(), data);
+    }
+
+    /// <summary>The byte form of <see cref="TruncateAlphaToNibble(Image)"/>: alpha is the last byte
+    /// of each <paramref name="stride"/>-byte texel.</summary>
+    public static void TruncateAlphaToNibble(byte[] texels, int stride)
+    {
+        for (int i = stride - 1; i < texels.Length; i += stride)
+        {
+            texels[i] = (byte)((texels[i] >> 4) * 17);
+        }
+    }
+
     /// <summary>True when the name is one the original draws nothing for (see AbsentAndUndrawn)
     /// AND this archive cannot resolve it, so the caller drops the polygon instead of surfacing it.
     /// ⚠ Both halves are required: the chapters that DO ship the texture must keep drawing it, so
@@ -938,6 +981,26 @@ public sealed class TextureArchive : IDisposable
     /// (docs/org/textures.md). Unknown reads as alpha-mixed, the engine's own fallback.</summary>
     public bool IsAdditive(string materialTextureName) =>
         (RenderFlags(materialTextureName) & AdditiveTransparentBit) != 0;
+
+    /// <summary>True when the original uploads this texture as ARGB4444, keeping four bits of alpha:
+    /// an alpha-plane texture without render-flags bit 3 (docs/org/textures.md). A name the archive
+    /// cannot resolve reads false.</summary>
+    public bool UploadsFourBitAlpha(string materialTextureName)
+    {
+        if (Resolve(Path.GetFileNameWithoutExtension(materialTextureName)) is not { } resolved)
+        {
+            return false;
+        }
+
+        // Without a manifest an image carrying no alpha passes too, which is harmless: 255 stays 255.
+        return AlphaClassOf(Path.GetFileNameWithoutExtension(resolved), hasPixelAlpha: true) == AlphaClass.Full
+            && (RenderFlags(materialTextureName) & FullAlphaUploadBit) == 0;
+    }
+
+    /// <summary>True when this build truncates the texture's alpha: faithful graphics and
+    /// <see cref="UploadsFourBitAlpha"/>. Enhanced mode keeps the full 8-bit alpha.</summary>
+    public bool TruncatesAlpha(string materialTextureName) =>
+        !GraphicsMode.Enhanced && UploadsFourBitAlpha(materialTextureName);
 
     public ImageTexture? Find(string materialTextureName)
     {
@@ -971,7 +1034,39 @@ public sealed class TextureArchive : IDisposable
         }
         _cache[baseName] = tex;
         _alphaInfo[baseName] = (LastHadAlpha, LastAlphaIsSoft, LastAlphaClass);
+        if (tex != null && LastHadAlpha && UploadsFourBitAlpha(baseName))
+        {
+            _depthFollowers[baseName] = tex;
+        }
         return tex;
+    }
+
+    /// <summary>True when <see cref="Find"/> has handed out this texture and its alpha depth
+    /// follows the graphics mode.</summary>
+    public bool FollowsAlphaDepth(string materialTextureName) =>
+        _depthFollowers.ContainsKey(Path.GetFileNameWithoutExtension(materialTextureName));
+
+    /// <summary>Uploads every texture whose alpha depth follows the graphics mode again at the
+    /// standing mode's depth, in place, so every material holding one follows. Decodes each from
+    /// the archive as <see cref="Find"/> first did. Returns the bytes uploaded.
+    /// ⚠ Never move the truncation into a shader instead. Cutting after filtering is not the same
+    /// pixels as cutting before, and the faithful goldens would move.</summary>
+    public long FollowAlphaDepth()
+    {
+        var last = (LastHadAlpha, LastAlphaIsSoft, LastAlphaClass);
+        var counters = (AuthoredMipsInstalled, AuthoredMipTextures, AuthoredMipsRefused);
+        long bytes = 0;
+        foreach (var (baseName, tex) in _depthFollowers)
+        {
+            if (Build(baseName, out _, out _) is { } img)
+            {
+                TextureUpload.Replace(tex, img);
+                bytes += img.GetDataSize();
+            }
+        }
+        (LastHadAlpha, LastAlphaIsSoft, LastAlphaClass) = last;
+        (AuthoredMipsInstalled, AuthoredMipTextures, AuthoredMipsRefused) = counters;
+        return bytes;
     }
 
     /// <summary>The exact <see cref="Image"/> <see cref="Find"/> installs, freshly decoded, alpha
@@ -1260,6 +1355,12 @@ public sealed class TextureArchive : IDisposable
                 AuthoredMipsInstalled += authoredLevels;
                 AuthoredMipTextures++;
             }
+        }
+        // Last, so every level is truncated as the original converts each level it uploads. The
+        // alpha class and softness above stay read off the raw 8-bit alpha.
+        if (LastHadAlpha && TruncatesAlpha(baseName))
+        {
+            TruncateAlphaToNibble(img);
         }
         return img;
     }

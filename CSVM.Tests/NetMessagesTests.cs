@@ -115,6 +115,13 @@ public class NetMessagesTests
         Assert.Equal(HitMessage.Size, written);
         Assert.True(HitMessage.TryRead(buffer, out var got));
         Assert.Equal(sent, got);
+        Assert.Equal(NetMessage.NoSeat, got.Hull);
+
+        // A hull's broadside round rides in the same width, the hull where the padding was.
+        var broadside = sent with { ShooterSeat = NetMessage.NoSeat, Hull = 1 };
+        Assert.Equal(HitMessage.Size, broadside.Write(buffer));
+        Assert.True(HitMessage.TryRead(buffer, out var fired));
+        Assert.Equal(broadside, fired);
     }
 
     [Fact]
@@ -252,6 +259,34 @@ public class NetMessagesTests
             Assert.Equal(seats[i], got.Seats[i]);
     }
 
+    // Every seat's pilot voice rides bits 1 to 3 of its flags byte beside the host bit. The entry
+    // keeps its width, and an older reader, which reads bit 0 alone, still finds the host.
+    [Fact]
+    public void SeatRosterCarriesEachSeatsVoiceBesideTheHostBit()
+    {
+        var seats = new List<NetSeatEntry>
+        {
+            new(0, 1, 3, true, "host", Voice: 1),
+            new(1, 2, 0, false, "guest", Voice: CoopPickMessage.MaxVoice),
+            new(2, 2, 7, false, "quiet"),
+        };
+        var buffer = new byte[SeatRosterMessage.SizeFor(seats.Count)];
+        new SeatRosterMessage(5u, seats).Write(buffer);
+
+        Assert.True(SeatRosterMessage.TryRead(buffer, out var got));
+        Assert.Equal(new byte[] { 1, CoopPickMessage.MaxVoice, CoopPickMessage.NoVoice }, got.Seats.Select(s => s.Voice).ToArray());
+        Assert.Equal(new[] { true, false, false }, got.Seats.Select(s => s.IsHost).ToArray());
+        int flags = SeatRosterMessage.PrefixSize + 2;
+        Assert.Equal(1, buffer[flags] & 1);
+        Assert.Equal(1 | (1 << 1), buffer[flags]);
+
+        // ABLE-TO-FAIL CONTROL: a voice past the three bits is sent as none rather than spilling
+        // into the next field.
+        new SeatRosterMessage(5u, new List<NetSeatEntry> { new(0, 0, 0, false, "x", Voice: 9) }).Write(buffer);
+        Assert.True(SeatRosterMessage.TryRead(buffer.AsSpan(0, SeatRosterMessage.SizeFor(1)), out var clipped));
+        Assert.Equal(CoopPickMessage.NoVoice, clipped.Seats[0].Voice);
+    }
+
     // The callsign field is fixed width, so a long name has to lose its tail rather than the
     // roster losing its alignment.
     [Fact]
@@ -266,6 +301,23 @@ public class NetMessagesTests
         Assert.Equal(SeatRosterMessage.SizeFor(1), written);
         Assert.True(SeatRosterMessage.TryRead(buffer, out var got));
         Assert.Equal(new string('x', SeatRosterMessage.CallsignBytes - 1), got.Seats[0].Callsign);
+    }
+
+    // A host names its own seat by what the roster carries, so its copy and a guest's agree. That
+    // holds for a name past the width and for one whose last character straddles it.
+    [Theory]
+    [InlineData("Zachary")]
+    [InlineData("Montgomery Fairweather")]
+    [InlineData("Léonie Désirée-Hébert")]
+    [InlineData("")]
+    public void CarriedIsWhatTheRosterReadsBack(string name)
+    {
+        var buffer = new byte[SeatRosterMessage.SizeFor(1)];
+        new SeatRosterMessage(1u, new List<NetSeatEntry> { new(0, 0, 0, true, name) }).Write(buffer);
+
+        Assert.True(SeatRosterMessage.TryRead(buffer, out var got));
+        Assert.Equal(got.Seats[0].Callsign, SeatRosterMessage.Carried(name));
+        Assert.StartsWith(SeatRosterMessage.Carried(name), name, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -517,6 +569,18 @@ public class NetMessagesTests
         Assert.NotEqual(CSVM.Session.World.NetWorldLink.NameKey("patrolboat_1"), CSVM.Session.World.NetWorldLink.NameKey("patrolboat_2"));
     }
 
+    // A host AI's voice raise rides the world event. An addressed line carries no team, and a
+    // broadcast keeps its team apart from the trigger, the neutral team 0 included.
+    [Fact]
+    public void AiVoiceRaisePacksTriggerAndTeam()
+    {
+        Assert.Equal(7, (int)NetWorldEvent.AiVoice);
+        Assert.Equal((14, (int?)null), CSVM.Session.World.NetWorldLink.UnpackVoice(CSVM.Session.World.NetWorldLink.PackVoice(14, null)));
+        Assert.Equal((7, (int?)1), CSVM.Session.World.NetWorldLink.UnpackVoice(CSVM.Session.World.NetWorldLink.PackVoice(7, 1)));
+        Assert.Equal((12, (int?)0), CSVM.Session.World.NetWorldLink.UnpackVoice(CSVM.Session.World.NetWorldLink.PackVoice(12, 0)));
+        Assert.Equal((28, (int?)300), CSVM.Session.World.NetWorldLink.UnpackVoice(CSVM.Session.World.NetWorldLink.PackVoice(28, 300)));
+    }
+
     // A take-off run carries a lever and no carrier drop; a zeppelin drop carries a velocity.
     [Fact]
     public void AiSpawnRoundTripsBothLaunchShapes()
@@ -697,7 +761,7 @@ public class NetMessagesTests
     }
 
     [Fact]
-    public void ACoopPickRoundTripsItsRoundReadyAirframeFitNameAndLeaveInThirtySixBytes()
+    public void ACoopPickRoundTripsItsRoundReadyAirframePlaneFitNameAndLeaveInThirtySixBytes()
     {
         Assert.Equal(36, CoopPickMessage.Size);
         Span<byte> buffer = stackalloc byte[CoopPickMessage.Size];
@@ -707,12 +771,18 @@ public class NetMessagesTests
             new CoopPickMessage(4, true, 7),
             new CoopPickMessage(255, false, 0, fit, "Lucy", Left: true),
             new CoopPickMessage(9, true, 5, fit, "Red Baron Jr"),
+            new CoopPickMessage(3, true, 7, fit, "Lucy", Plane: CoopPickMessage.PlaneByte(2)),
         })
         {
             Assert.Equal(CoopPickMessage.Size, sent.Write(buffer));
             Assert.True(CoopPickMessage.TryRead(buffer, out var got));
             Assert.Equal(sent, got);
         }
+
+        // The picked plane of the host's hangar: none, the stock Devastator, or an index.
+        Assert.Equal(-2, new CoopPickMessage(1, true, 5).PlaneIndex);
+        Assert.Equal(new[] { -1, 0, 2 }, new[] { -1, 0, 2 }.Select(p => new CoopPickMessage(1, true, 5, Plane: CoopPickMessage.PlaneByte(p)).PlaneIndex));
+        Assert.Equal(CoopPickMessage.NoPlane, CoopPickMessage.PlaneByte(-2));
 
         Assert.Equal(0x51, (int)NetMessageType.CoopPick);
         Assert.Equal(NetReliability.Reliable, NetMessage.ReliabilityOf(NetMessageType.CoopPick));
@@ -724,14 +794,40 @@ public class NetMessagesTests
     }
 
     [Fact]
-    public void DogfightOptionsRoundTripEveryFieldInTwelveBytes()
+    public void APicksVoiceRidesTheFlagsByteBesideReadyAndLeftWithoutGrowingThePick()
     {
-        Assert.Equal(12, DogfightOptionsMessage.Size);
+        Span<byte> buffer = stackalloc byte[CoopPickMessage.Size];
+        var fit = CoopFit.Of(new[] { 1, 0, 0, 0 }, null);
+        for (byte voice = CoopPickMessage.NoVoice; voice <= CoopPickMessage.MaxVoice; voice++)
+        {
+            var sent = new CoopPickMessage(6, true, 3, fit, "Laeresh", Left: true, Voice: voice);
+            Assert.Equal(CoopPickMessage.Size, sent.Write(buffer));
+            Assert.True(CoopPickMessage.TryRead(buffer, out var got));
+            Assert.Equal(sent, got);
+        }
+
+        // The voice sits in bits 2 to 4, so the Ready and Left bits an older reader takes are intact.
+        new CoopPickMessage(6, true, 3, Voice: 6).Write(buffer);
+        Assert.Equal(1 | (6 << 2), buffer[NetMessage.HeaderBytes + 1]);
+
+        // ABLE-TO-FAIL CONTROL: a voice past the three bits is written as none, never into Ready.
+        new CoopPickMessage(6, false, 3, Voice: 9).Write(buffer);
+        Assert.True(CoopPickMessage.TryRead(buffer, out var clipped));
+        Assert.Equal(CoopPickMessage.NoVoice, clipped.Voice);
+        Assert.False(clipped.Ready);
+    }
+
+    [Fact]
+    public void DogfightOptionsRoundTripEveryFieldInSixteenBytes()
+    {
+        Assert.Equal(16, DogfightOptionsMessage.Size);
         Span<byte> buffer = stackalloc byte[DogfightOptionsMessage.Size];
         foreach (var sent in new[]
         {
             new DogfightOptionsMessage(0, 0, 1, DogfightVictory.Time, 10, 40, false, 3, true),
             new DogfightOptionsMessage(255, 6, 2, DogfightVictory.Score, 99, 999, true, 99, false),
+            new DogfightOptionsMessage(9, 3, 1, DogfightVictory.Both, 15, 20, false, 3, true, true, 0, 16),
+            new DogfightOptionsMessage(9, 3, 1, DogfightVictory.Time, 15, 20, false, 3, true, false, 3, 5),
         })
         {
             Assert.Equal(DogfightOptionsMessage.Size, sent.Write(buffer));
@@ -754,21 +850,23 @@ public class NetMessagesTests
         var buffer = new byte[DogfightRosterMessage.Size];
         var sent = new DogfightRosterMessage(7, 1, new[]
         {
-            new DogfightLobbySeat("Host", 5, true, true),
-            new DogfightLobbySeat("Lucy", 1, false, false),
+            new DogfightLobbySeat("Host", 5, true, true, 2, true),
+            new DogfightLobbySeat("Lucy", 1, false, false, 2),
             new DogfightLobbySeat("Red Baron Jr", 10, true, false),
         });
         Assert.Equal(DogfightRosterMessage.Size, sent.Write(buffer));
         Assert.True(DogfightRosterMessage.TryRead(buffer, out var got));
         Assert.Equal(sent, got);
         Assert.Equal("Red Baron Jr", got.Rows[2].Name);
+        Assert.Equal((2, true), (got.Rows[0].Team, got.Rows[0].Captain));
+        Assert.Equal((2, false), (got.Rows[1].Team, got.Rows[1].Captain));
         Assert.Equal(0x54, (int)NetMessageType.DogfightRoster);
 
         // ABLE-TO-FAIL CONTROL: a different Ready mark is a different list.
         var other = new DogfightRosterMessage(7, 1, new[]
         {
-            new DogfightLobbySeat("Host", 5, true, true),
-            new DogfightLobbySeat("Lucy", 1, true, false),
+            new DogfightLobbySeat("Host", 5, true, true, 2, true),
+            new DogfightLobbySeat("Lucy", 1, true, false, 2),
             new DogfightLobbySeat("Red Baron Jr", 10, true, false),
         });
         Assert.NotEqual(sent, other);
@@ -876,6 +974,129 @@ public class NetMessagesTests
         Span<byte> pick = stackalloc byte[CoopPickMessage.Size];
         new CoopPickMessage(1, true, 5).Write(pick);
         Assert.False(CoopSeatFitMessage.TryRead(pick, out _));
+    }
+
+    [Fact]
+    public void ACoopFilmRoundTripsItsOrdinalStateFilmAndChapterInEightBytes()
+    {
+        Assert.Equal(8, CoopFilmMessage.Size);
+        Span<byte> buffer = stackalloc byte[CoopFilmMessage.Size];
+        foreach (var sent in new[]
+        {
+            new CoopFilmMessage(1, true, NetCoopFilm.Chapter, 2),
+            new CoopFilmMessage(255, false, NetCoopFilm.Closing, 0),
+        })
+        {
+            Assert.Equal(CoopFilmMessage.Size, sent.Write(buffer));
+            Assert.True(CoopFilmMessage.TryRead(buffer, out var got));
+            Assert.Equal(sent, got);
+        }
+
+        Assert.Equal(0x5A, (int)NetMessageType.CoopFilm);
+        Assert.Equal(NetReliability.Reliable, NetMessage.ReliabilityOf(NetMessageType.CoopFilm));
+
+        // ABLE-TO-FAIL CONTROL: a message of another type and width is not a film.
+        Span<byte> wingman = stackalloc byte[CoopWingmanMessage.Size];
+        new CoopWingmanMessage(7, default).Write(wingman);
+        Assert.False(CoopFilmMessage.TryRead(wingman, out _));
+        Assert.False(CoopFilmMessage.TryRead(wingman[..CoopFilmMessage.Size], out _));
+    }
+
+    [Fact]
+    public void ADeathNoticeRoundTripsVictimKillerCauseAndAHullsTeamInTenBytes()
+    {
+        Assert.Equal(10, DeathNoticeMessage.Size);
+        Span<byte> buffer = stackalloc byte[DeathNoticeMessage.Size];
+        foreach (var sent in new[]
+        {
+            new DeathNoticeMessage(1, 0, NetDeathCause.Killer),
+            new DeathNoticeMessage(3, NetMessage.NoSeat, NetDeathCause.Suicide),
+            new DeathNoticeMessage(0, 2, NetDeathCause.TurretOwner),
+            new DeathNoticeMessage(2, NetMessage.NoSeat, NetDeathCause.ZeppelinPart, Team: 3),
+        })
+        {
+            Assert.Equal(DeathNoticeMessage.Size, sent.Write(buffer));
+            Assert.True(DeathNoticeMessage.TryRead(buffer, out var got));
+            Assert.Equal(sent, got);
+        }
+
+        Assert.Equal(0x5C, (int)NetMessageType.DeathNotice);
+        Assert.Equal(NetReliability.Reliable, NetMessage.ReliabilityOf(NetMessageType.DeathNotice));
+
+        // ABLE-TO-FAIL CONTROL: the owner's own death report is not the host's notice.
+        Span<byte> report = stackalloc byte[DeathMessage.Size];
+        new DeathMessage(1, 0, NetDeathCause.Killer, 0u).Write(report);
+        Assert.False(DeathNoticeMessage.TryRead(report, out _));
+        Assert.False(DeathNoticeMessage.TryRead(report[..DeathNoticeMessage.Size], out _));
+    }
+
+    [Fact]
+    public void AStartGateWordRoundTripsInEightBytes()
+    {
+        Assert.Equal(8, StartGateMessage.Size);
+        Span<byte> buffer = stackalloc byte[StartGateMessage.Size];
+        foreach (var word in new[] { NetStartWord.Loaded, NetStartWord.Start, NetStartWord.Hold })
+        {
+            var sent = new StartGateMessage(word, 201);
+            Assert.Equal(StartGateMessage.Size, sent.Write(buffer));
+            Assert.True(StartGateMessage.TryRead(buffer, out var got));
+            Assert.Equal(sent, got);
+            Assert.Equal(201, buffer[5]);
+        }
+
+        Assert.Equal(0x5B, (int)NetMessageType.StartGate);
+        Assert.Equal(NetReliability.Reliable, NetMessage.ReliabilityOf(NetMessageType.StartGate));
+
+        // ABLE-TO-FAIL CONTROL: a film word of the same width is not a start word.
+        Span<byte> film = stackalloc byte[CoopFilmMessage.Size];
+        new CoopFilmMessage(1, true, NetCoopFilm.Chapter, 2).Write(film);
+        Assert.False(StartGateMessage.TryRead(film, out _));
+    }
+
+    [Fact]
+    public void ACoopWingmanRoundTripsTheAirframeAndItsFitInTwentyBytes()
+    {
+        Assert.Equal(20, CoopWingmanMessage.Size);
+        Span<byte> buffer = stackalloc byte[CoopWingmanMessage.Size];
+        var sent = new CoopWingmanMessage(7, CoopFit.Of(new[] { 2, 2, 2, 2 }, new[] { 0, 3, 0, 0, 0, 0, 0, 0 }));
+        Assert.Equal(CoopWingmanMessage.Size, sent.Write(buffer));
+        Assert.True(CoopWingmanMessage.TryRead(buffer, out var got));
+        Assert.Equal(sent, got);
+        Assert.True(got.Binds);
+        Assert.Equal(0x59, (int)NetMessageType.CoopWingman);
+        Assert.Equal(NetReliability.Reliable, NetMessage.ReliabilityOf(NetMessageType.CoopWingman));
+        Assert.False(new CoopWingmanMessage(CoopWingmanMessage.NoAirframe, default).Binds);
+
+        // ABLE-TO-FAIL CONTROL: a seat fit has the same length and is still not a wingman.
+        Span<byte> seatFit = stackalloc byte[CoopSeatFitMessage.Size];
+        new CoopSeatFitMessage(7, sent.Fit).Write(seatFit);
+        Assert.False(CoopWingmanMessage.TryRead(seatFit, out _));
+    }
+
+    [Fact]
+    public void ACoopHangarPlaneRoundTripsItsPlaceHolderFitBuildAndName()
+    {
+        Assert.Equal(96, CoopHangarMessage.Size);
+        Assert.Equal(0x5F, (int)NetMessageType.CoopHangar);
+        Assert.Equal(NetReliability.Reliable, NetMessage.ReliabilityOf(NetMessageType.CoopHangar));
+        Span<byte> buffer = stackalloc byte[CoopHangarMessage.Size];
+        var fit = CoopFit.Of(new[] { 3, 2, 0, 0 }, new[] { 4, 0, 0, 0, 0, 0, 0, 4 });
+        var build = new NetPlaneBuild { Airframe = 7, PaintPattern = 9, Name = "Kestrel" };
+        var sent = new CoopHangarMessage(2, 4, 1, 7, fit, build, "Kestrel");
+        Assert.Equal(CoopHangarMessage.Size, sent.Write(buffer));
+        Assert.True(CoopHangarMessage.TryRead(buffer, out var got));
+        Assert.Equal(sent, got);
+        Assert.True(got.Held);
+
+        // A plane with no build and no holder still carries its name.
+        new CoopHangarMessage(3, 4, CoopHangarMessage.NoHolder, 2, fit, null, "Osprey").Write(buffer);
+        Assert.True(CoopHangarMessage.TryRead(buffer, out var bare));
+        Assert.Equal((false, (NetPlaneBuild?)null, "Osprey"), (bare.Held, bare.Build, bare.Name));
+
+        // ABLE-TO-FAIL CONTROL: a wingman word is not a hangar plane.
+        Span<byte> wingman = stackalloc byte[CoopWingmanMessage.Size];
+        new CoopWingmanMessage(7, fit).Write(wingman);
+        Assert.False(CoopHangarMessage.TryRead(wingman, out _));
     }
 
     [Fact]

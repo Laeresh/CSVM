@@ -71,7 +71,7 @@ public class OriginalKeysStickColumnTests
         Assert.DoesNotContain(r1, after);
         Assert.Contains(l1, after);
         Assert.Equal(others, after.Where(b => !KeysStickColumn.IsStick(b)));
-        Assert.Equal("Button 2 / Button 8", rig.Shell.Options.KeysCellText(0).Stick);
+        Assert.Equal("231D/0201 Button 2 / 231D/0200 Button 8", rig.Shell.Options.KeysCellText(0).Stick);
     }
 
     /// <summary>A full axis counts once for its pair. R's new axis replaces R's old one on both
@@ -178,7 +178,8 @@ public class OriginalKeysStickColumnTests
         rig.Add(action, r1);
         rig.Add(action, l1);
         var others = rig.Controls.Bindings(InputContext.Flight, action).Where(b => !KeysStickColumn.IsStick(b)).ToList();
-        Assert.Equal("Button 2 / Button 4", rig.Shell.Options.KeysCellText(0).Stick);
+        // Two unnamed models share the row, so each caption keeps its model; one alone drops it.
+        Assert.Equal("231D/0200 Button 2 / 231D/0201 Button 4", rig.Shell.Options.KeysCellText(0).Stick);
 
         rig.Shell.Step(new MenuCommands { MoveX = 1 });
         rig.Shell.Step(new MenuCommands { MoveX = 1 });
@@ -261,7 +262,7 @@ public class OriginalKeysStickColumnTests
 
         Assert.NotEmpty(cells);
         Assert.All(cells, l => Assert.Equal(0f, l.Height));
-        Assert.Contains(cells, l => l.Text == "Button 2 / Button 10");
+        Assert.Contains(cells, l => l.Text == "231D/0200 Button 2 / 231D/0201 Button 10");
         Assert.DoesNotContain(lines, l => l.Text.Contains(" +1", StringComparison.Ordinal));
         Assert.Equal(3, cells.Count(l => l.Y == cells[0].Y));
     }
@@ -276,7 +277,9 @@ public class OriginalKeysStickColumnTests
         rig.Shell.Options.PoseStickCaptions();
 
         Assert.Equal("Axis 6 inverted", rig.Shell.Options.KeysCellText(0).Stick);
-        Assert.Equal("Axis 6 inverted / Button 4 / Button 12 / Hat Up", rig.Shell.Options.KeysCellText(1).Stick);
+        Assert.Equal(
+            "231D/0200 Axis 6 inverted / 231D/0200 Button 4 / 231D/0201 Button 12 / 231D/0201 Hat Up",
+            rig.Shell.Options.KeysCellText(1).Stick);
         Assert.EndsWith(" / Pagedown / Insert", rig.Shell.Options.KeysCellText(2).B);
     }
 

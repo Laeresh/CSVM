@@ -90,6 +90,39 @@ public class OptionsStoreTests
         }
     }
 
+    /// <summary>Every View Distance word round-trips, beside the graphics word it belongs to.</summary>
+    [Fact]
+    public void RoundTrip_PreservesTheViewDistanceWord()
+    {
+        var store = new OptionsStore(TestData.TempDir());
+        foreach (string word in ViewDistance.Words)
+        {
+            store.Save(new OptionsDef { GraphicsMode = "enhanced", ViewDistance = word });
+            var def = store.Load();
+
+            Assert.Equal(word, def.ViewDistance);
+            Assert.Equal("enhanced", def.GraphicsMode);
+        }
+    }
+
+    /// <summary>A word outside the four is dropped like an unknown difficulty, the rest of the file
+    /// standing. That includes <c>farther</c> and <c>farthest</c>, which no build writes.</summary>
+    [Fact]
+    public void Load_UnknownViewDistanceWord_DropsOnlyThatField()
+    {
+        var dir = TestData.TempDir();
+        foreach (string word in new[] { "farther", "farthest", "Far", "2" })
+        {
+            File.WriteAllText(Path.Combine(dir, "options.json"),
+                $"{{\"version\": 1, \"graphicsMode\": \"enhanced\", \"viewDistance\": \"{word}\"}}",
+                new UTF8Encoding(false));
+            var def = new OptionsStore(dir).Load();
+
+            Assert.Equal("enhanced", def.GraphicsMode);
+            Assert.Null(def.ViewDistance);
+        }
+    }
+
     [Fact]
     public void Load_UnknownGraphicsValue_DropsOnlyThatField()
     {

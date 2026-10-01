@@ -54,7 +54,7 @@ send call, and "To" is the fourth.
 | `0x15` | `FUN_00499a50` | `LAB_00499b30` | 6 + text | see note | 0 or one peer | chat. An all-chat goes out **unguaranteed** to everybody; a team chat is sent guaranteed, once per teammate, to each peer whose `+0x18` matches the sender's team slot |
 | `0x17` | `FUN_004996d0` | `FUN_00499730` | `0xc` | yes | 0 | the match end: a float clock at `+4` and the reason at `+8` |
 | `0x18` | `FUN_00413170` | lobby | `0x18` + text | mode-dependent | 0, one peer, or each peer | a lobby notice with a string; the third argument selects broadcast, per-team or single |
-| `0x1a` | `FUN_00413090`, `FUN_00413f70`, `FUN_004142c0`, `FUN_00414340`, `FUN_004143c0` | lobby | `0xc`, or 4 + payload from the last | yes | 0 | a lobby setting change; the subtype word at `+4` is 8, 8, 2, 1 and variable in builder order |
+| `0x1a` | `FUN_00413090`, `FUN_00413f70`, `FUN_004142c0`, `FUN_00414340`, `FUN_004143c0` | `FUN_00415b20` | `0xc`, or `0x38` for a create | yes | 0 | a team action; the subtype word at `+4` is 8 (disband), 8, 2 (leave), 1 (join) and 4 (create) in builder order, "Lobby teams" below |
 | `0x1c` | `FUN_0049a050` | `FUN_0049a170` | `0xc` | yes | the host (`DAT_0071d228`) | an objective or flag request, which only the host answers |
 | `0x1d` | `FUN_0049a240` | `FUN_0049a300` | 8 + `0xc` per row | yes | 0 | the objective table: a count at `+4`, then `(id, holder, state)` per row |
 | `0x1e` | `FUN_0049adf0` | `FUN_0049b0b0` | 6 + `0x1c` per zeppelin + `0x10` per event | **no** | 0 | the zeppelin state, below |
@@ -64,8 +64,8 @@ send call, and "To" is the fourth.
 | `0x22` | `FUN_00499110` | `LAB_00499190` | `0x10` | yes | 0 | a damage attribution: victim id at `+4`, attacker id at `+8`, a dword from the weapon record `+0x10` at `+0xc` |
 | `0x23` | `FUN_0049bd00` | `LAB_0049bd70` | `0xc` | yes | one peer | the ping: two `GetTickCount` stamps, sent only to a peer whose id is at or above ours, so one side of each pair pings |
 | `0x24`, `0x25` | none found | `LAB_0049bde0` | | | | receive-only in this build, both on one handler |
-| `0x26` | `FUN_004134e0` | lobby, `FUN_00415940` | `0x2c` + a variable payload | yes | 0 | the lobby settings block, below |
-| `0x27` | `FUN_004135f0` | lobby | 8 + `0x20` per player + a tail | yes | 0 | the lobby roster, below |
+| `0x26` | `FUN_004134e0` | lobby, `FUN_00415940` | `0x30` + the packed outlaw list | **no** | 0 | the lobby settings block, below |
+| `0x27` | `FUN_004135f0` | lobby | 8 + `0x20` per team + the member ids | yes | 0 | the team roster, below |
 
 ⚠ **Types `0x02`, `0x03`, `0x05`, `0x06`, `0x07`, `0x0d` and `0x0e` never cross the wire.**
 `FUN_005b2820` and `FUN_005b24a0` build them on the stack from DirectPlay's own system messages
@@ -85,7 +85,7 @@ transport's own connect and disconnect callbacks are the counterpart.
 | `+0x10` | orientation, three angles packed into one dword as `yaw << 0x15 \| pitch << 0xb \| roll` |
 | `+0x14` | motion, packed the same way as `a << 0x14 \| b << 10 \| c` |
 | `+0x18` | `GetTickCount` at build time |
-| `+0x1c` | throttle in the low byte, a 7-bit field at bits 8..14, and one flag at bit 15 |
+| `+0x1c` | the health fraction × 255 in the low byte (vehicle `+0x2d0` over `+0x2cc`, clamped 0..255; the receiver `FUN_00498170` scales it back into `+0x2d0`), a 7-bit field at bits 8..14, and one flag at bit 15 |
 | `+0x1e` | a 3-bit shot count at bits 4..6 and a 4-bit hit count at bits 0..3 |
 | `+0x20` | when the shot count is above zero, three dwords of shot state |
 | tail | the queued hit records, 12 bytes each |
@@ -135,6 +135,55 @@ at `00496bba`. The team chat arm of `FUN_00499a50` compares the same field.
 
 So the friendly-fire arm is correct as written and needs no team lookup: in an un-teamed match the
 slot holds distinct per-pilot indices, two pilots never match, and the arm cannot fire.
+
+### The kill lines
+
+[Evidence: decoded] `FUN_00498bf0` posts the death's lines itself, so every peer posts them, the
+dying pilot's own included, on every death, a crash included. The single-player kill line
+(`vehicleDamage.md` "The kill message") is gated off in a network game and never adds to these.
+A name is the remote record's CString at `+0x34`, which `FUN_00499c90` starts as row 6007
+`MSG_UNKNOWN` ("Unknown"). Both callers overwrite it at once with the lobby player record's name
+at `+0x10`, found by DirectPlay id through `FUN_0046f110`: `FUN_00495310` for this machine's own
+pilot (the id is `FUN_005b4200`'s, so on the host the host's own) and `FUN_00497990` for each peer
+that arrives. That name is the player's DirectPlay name: `FUN_00414640` copies it from the wrapper's
+player entry `+0x44`, which `FUN_005b24a0` fills from the `pszCallsign` setting (`DAT_00642f0c`,
+registered at `00401416`, "noname" at `0063b100` when unset) as both session-open paths make their
+local player (`FUN_00412c30` at `00412d18`/`00412d52`, `FUN_00412e30` at `00412f22`/`00412f66`). So
+the host's seat is named by its callsign exactly as every guest's is, in the kill lines and in the
+lobby's player list (`FUN_00412530` reads the same `+0x10`), and the connection page refuses a blank
+callsign (`FUN_00407060`, called at `0040820c`). The handler composes into two 0x31-byte stack buffers, a top line and a
+second line, switched on the cause at `+0xc` through the jump table at `0x499028`:
+
+| Cause | Top line | Second line |
+|---|---|---|
+| 1, a killer | the victim's name (`sprintf "%s"` at `0x498d0a`) | row 214 `MSG_DESTROYED_BY_X` "Destroyed by %1" with the killer's name, `FUN_0059cd70(buf, 0x31, 0xd6, ..)` at `0x498d20`, so cut at 48 characters |
+| 2, no killer | row 7063 `MSG_MP_SUICIDE` "%1 Self-Destroyed" with the victim's name (`0x498d91`..`0x498da8`) | none |
+| 3, a zeppelin part | the victim's name | row 7064 `MSG_MP_KILLED_X_ZEP` "Killed by %1 Zeppelin" with the team record's `+8` name (`FUN_0046e0f0`), at `0x498dfd` |
+| 4, a turret owner | the victim's name | row 7065 `MSG_MP_KILLED_X_TURRET` "Killed by %1 Turret" with the owner's `+0x34`, at `0x498e70` |
+
+The second line is posted first and only when non-empty (`0x498eae`..`0x498ecf`), then the top
+line (`0x498ed7`..`0x498ee8`), so the victim's name reads above "Destroyed by". Both go through
+`FUN_004588e0(line, 5.0, DAT_006eba60, DAT_006eba60)`: the HUD message stack, five seconds, in the
+colour global the single-player kill line takes for a team above the player's. The Limited Lives
+line (`0x498c52`..`0x498cba`, same colour) is posted before them and so reads below them. Row 7003
+`MSG_DESTROYED_BY` ("was destroyed by") has no reference in the program: a search for the operand
+`0x1b5b` finds none. After the posts the handler plays the combat voice (`FUN_004afd00`, codes
+`0x14`..`0x17`), plays a remote victim's wreck, and on the host runs the score table.
+
+The remake posts these lines from the host's decision rather than from each machine's copy of the
+report, since a relayed report never returns to the machine that sent it. The host scores the
+death, sends the scores, then sends `0x5C`, the death notice, and posts the lines itself; each
+guest posts them from the notice, after the lives line the scores produced. A pilot is named by
+its seat's callsign. A lobby host's first seat takes the host's own callsign (Player Information's,
+carried on the wire as `NetLobby.LocalCallsign`), cut to the roster's width so every machine reads
+the same name, and its player tag only when that callsign is empty. The advert's name is the
+game's, not the host's, and never names a seat. A second local seat keeps its tag: the original's session-open paths make one local player
+each, so it has no counterpart there. Cause 3 is a Zeppelin vs Zeppelin hull's broadside: the dying
+client names the hull by placement index in the report's source field, and the notice carries that
+hull's lobby team in its ninth byte, which names the line and sets the team's term on every guest
+([`multiplayer-zvz.md`](multiplayer-zvz.md), "What the remake takes"). The host's `0x22` hit names
+the hull in the byte after the part, where a round no seat fired came from a broadside.
+Splitscreen Dogfight posts the same lines in every pane, named by player tag.
 
 ## The zeppelin state packet
 
@@ -205,24 +254,126 @@ bytes back into `0x642f8c` and posts `0x3f7`. The block at `+4` is a copy of `0x
 | `+0x1c` | `0x642fa8` | Limited Lives byte |
 | `+0x20` | `0x642fac` | lives count dword |
 | `+0x24` | `0x642fb0` | Auto Respawn byte |
-| `+0x25`..`+0x27` | | unmapped flags |
+| `+0x25` | `0x642fb1` | Allow Custom Planes byte |
+| `+0x26`, `+0x27` | | unmapped |
 
-A variable payload follows at `+0x2c`. [Evidence: undecoded] What triggers the send, and bytes
-`+0x25`..`+0x27`, are open. No message carries a pilot's remaining lives: each peer seeds them from
+[Evidence: decoded] The outlaw list follows at message `+0x2c`, packed by `FUN_00410800` (below),
+and the whole message is sent unguaranteed (`FUN_005b2640(.., 0, 0)`). `FUN_004134e0` is called
+from a per-frame step at `0x415656` while the lobby object's byte `+4`, a dirty flag, is set.
+[Evidence: undecoded] What sets that flag, and bytes `+0x26`..`+0x27`, are open. No message carries a pilot's remaining lives: each peer seeds them from
 this block and counts them down on the `0x12` death reports
 ([`multiplayer-scoring.md`](multiplayer-scoring.md)). The remake's `0x53` carries the same lives
 settings and nothing more.
 
-## The lobby roster
+## Custom planes
 
-`FUN_004135f0` sends type `0x27`, the widest message in the protocol and the only one the remake
-borrows an id from for a roster. A player count sits at `+4`, then `0x20` per player: the player
-index, a second dword, an 18-character name copied with `strncpy` and zero-terminated at `+0x1a`,
-a dword at `+0x1c`, and a variable tail of that player's own list. It is sent guaranteed to
-everybody, whole, every time anything changes; there is no delta form.
+[Evidence: decoded] Allow Custom Planes is the byte at `0x642fb1`, written by the lobby's check at
+`0x40dde5` and read at `0x40deeb`, `0x40f053` and `0x407f04`. The lobby globals are zero-initialised,
+so a new lobby allows no custom planes. At Ready (`0x407f02`) the program copies it to `0x61f2ec` and
+calls `FUN_00414580(1)`.
+
+The outlaw list is one object at `0x64e168`, built by `FUN_00410560`, of 34 byte flags:
+
+| Flags | Outlaws | Check |
+|---|---|---|
+| 0..10 | one airframe each, in airframe order | `FUN_00410cc0` |
+| 11..15 | one gun calibre each; calibre 5, no gun, is always allowed | `FUN_00410c10` |
+| 16..19 | one ammunition each; 4, none, is always allowed | `FUN_00410c40` |
+| 20..30 | one rocket-table row each; row 11, none, is always allowed | `FUN_00410c80` |
+| 31 | every rocket | `FUN_00410c80` |
+| 32 | every ammunition | `FUN_00410c40` |
+| 33 | nitro-boosted engines: engines 3 to 5 refused, engine 6 (none) always refused | `FUN_00410cf0` |
+
+`FUN_00410800` packs the list into five bytes, lowest flag in bit 0 of the first byte, and
+`FUN_00410930` unpacks it. `FUN_00410d30` checks a plane record's engine (`+0x30`), airframe
+(`+0x2c`) and four guns (`+0x88`) against it.
+
+The Ready check runs on each client, for its own pick only, in the Ready callback at `0x40f026`. A
+custom plane (`0x645c10 == 1`) is refused while Allow Custom Planes is clear, and so is a record the
+check fails; `FUN_0040fa30` then clears the pick. A mounted gun's outlawed ammunition refuses Ready
+and `FUN_0040fa60(4)` sets all four guns' ammunition to none. A loaded pylon's outlawed rocket
+refuses Ready and `FUN_0040fa90(11)` sets all eight pylons to none and both hardpoint counts to 0.
+Outlaw All Ammo and Outlaw All Rockets make the same resets without refusing. A refusal shows langui
+10517 followed by 10514 (plane), 10515 (ammunition) and 10516 (rockets) for each reason, and a
+second Ready takes the reset fit. The host does not validate a remote pick.
+
+A pilot's plane travels as DirectPlay player data: `FUN_00414470` writes 80 bytes through
+`FUN_005b31f0` (SetPlayerData, guaranteed). It carries the airframe, the paint pattern, three decals,
+three colours and each gun slot's weapon id. It does not carry the engine, the armour or the
+hardpoints, so a remote copy of a custom plane flies on the stock template's. `FUN_004136e0` builds
+the remote planes from it, and in a team game the team colours replace the paint.
+
+The stock templates at `0x619f58` (stride `0xcc`) all carry engine 1. Their guns, at `+0x88`..`+0x94`,
+are what the check reads for a stock pick:
+
+| Airframe | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Guns | 0,5,5,5 | 2,1,5,2 | 2,2,0,0 | 1,0,5,5 | 3,0,5,0 | 2,1,0,5 | 4,0,5,0 | 4,0,5,5 | 3,2,5,1 | 2,1,5,5 | 4,2,5,5 |
+
+### The outlaw list screen
+
+[Evidence: decoded] The lobby's Select... (`BCA` in `MULTIPLAYERLOBBY_MISSION.SCRIPT`,
+`mp_b_medium.png` at page +295,+277) reads langui 10103 "Select..." on the host and 10508 "View..."
+on a guest. It is greyed (`mail(1)`) while Outlaw Components (`ACA`) is clear and live (`mail(2)`)
+while it is ticked, on both ends and whether or not the host is Ready: the options refresh 1015 sets
+it on the tick alone, and the Ready message 2012 leaves it alone. Every toggle of `ACA` calls uiData
+5044, whose case at `0x40eca8` (entry 7 of the table at `0x40f98c`) loads `0x64e168`, calls
+`FUN_004107a0`, which zeroes all 34 flags, and returns 0. It reads no argument and tests nothing, so
+the list empties whether the tick was set or cleared. A press on Select...
+runs `MULTIPLAYER_OUTLAW.SCRIPT`, greys the four lobby tabs and pauses the mission page; on the host
+it first calls 5050 (`0x40ef3f`), where `FUN_004106c0` copies the list at `0x64e168` to `0x64df60`.
+
+The pane is `mp_lobby_outlawed.png` at (314, 26), the tab page's place, titled 10136 "Outlawed
+Components" at +15,+45. Five sub-tabs stand at y +63, four frames each, their labels black and the
+picked one (142,0,0): Airframes (10130, `mp_lobby_tabmedium.png`, +46), then Engines, Guns, Ammo and
+Rockets (10131..10134, `mp_lobby_tabsmall.png`, +127, +200, +268, +336). Airframes is picked on
+open. Every box is `mp_b_readycheckbox8states.png` (eight frames of 48x26) with its label at +60,+4:
+
+| Sub-tab | Boxes | Names | Read / write (uiData) |
+|---|---|---|---|
+| Airframes | 11 rows, 4 shown from +85,+120 at a 36 px pitch | langui 3000+i (`FUN_00410b60`, 5020) | 5063 `FUN_00410cc0` / 5025 byte +i |
+| Engines | one at +100,+150 | 10135 "Outlaw Nitro-Boosted Engines" | 5033 third out (`0x64e189`) / 5043 byte +0x21 |
+| Guns | 5 rows from +85,+110 at a 32 px pitch | langui 3320+i (`FUN_00410ab0`, 5017) | 5065 `FUN_00410c10` / 5022 byte +0xb+i |
+| Ammo | Outlaw All Ammo, then 4 rows from +85,+120 at 36 px | 10137, then langui 3350+i (`FUN_00410ae0`, 5018) | 5033 first out (`0x64e188`) / 5028 byte +0x20; rows 5018 / 5023 byte +0x10+i |
+| Rockets | Outlaw All Rockets, then 11 rows, 4 shown | 10138, then langui 3380+i (`FUN_00410b30`, 5019) | 5033 second out (`0x64e187`) / 5027 byte +0x1f; rows 5064 `FUN_00410c80` / 5024 byte +0x14+i |
+
+The two Outlaw All boxes stand at +95,+86 drawn at half size (`scale(TD) = 50,50,100`), their labels
+at +40,-2. While one is set its page's rows read ticked (5018 and `FUN_00410c80` answer outlawed)
+and a click on a row is ignored. The long pages scroll under a control at +393,+104, 167 high
+(`mp_b_scrollup.png`, `mp_b_scrolldown.png`, `mp_b_scrollbar.png`, colour `0xff282418`). The uiData
+switch is at `0x40e3e5` (jump table `0x40f93c`, 5016..5035) and `0x40e7f7` (table `0x40f98c`,
+5037..5075).
+
+A box is live (`mail(8)`/`mail(2)`) only on the host while it is not Ready, and otherwise shows its
+state disabled (`mail(5)`/`mail(1)`). Accept (10540, `mp_b_medium.png` at +200,+280) is removed
+(`deactivate`) on a guest and greyed while the host is Ready; its press calls `$$A$$` 1028 on the
+host and closes. Cancel (10541 at +300,+280) calls 5051 (`0x40ef5d`, the copy back from `0x64df60`)
+on a host that is not Ready, then closes. So a guest's View... opens the list read-only. Closing
+(91111) re-enables the lobby tabs, Game Scores only once a match has landed.
+
+[Evidence: undecoded] What `$$A$$` 1028 does. It is the likely trigger of the `0x26` send above.
+
+The remake builds this pane over the tab page (`OriginalOutlawList`). Each tick calls
+`DogfightLobby.SetOutlawed`, which starts a new round, clears every Ready and sends `0x5E` to every
+guest at once, so Accept only closes; Cancel restores the opening list the same way. A toggle of
+Outlaw Components either way empties the list as 5044 does: `DogfightLobby.SetOutlawComponents`
+writes the new tick and the empty list as one rules change, so one round starts, every Ready clears
+and one `0x5E` reaches each guest. The model still takes a flag while the tick is clear, which
+reaches every guest; the screen's Select... greys then, as the original's does.
+
+## The team roster
+
+[Evidence: decoded] `FUN_004135f0` sends type `0x27`, the widest message in the protocol. The count
+at `+4` is the team container's `+0x28`, the team count. Then comes `0x20` per team: the team number
+(`team+0x18`), the team's `+0x28`, the team name (`team+8`, 18 characters copied with `strncpy` and
+zero-terminated at `+0x1a`) and the member count (`team+0x34`). A tail of member player ids (the
+list at `team+0x30`) follows the teams, so the size is `(members + 8 * teams) * 4 + 8`. It is sent
+guaranteed to everybody, whole, every time anything changes; there is no delta form. Guests learn
+team membership from this message alone.
 
 `0x27` is the highest type word the program uses, which is why the remake mints its own ids above
-it.
+it. The remake's `0x27` is its seat roster, a different message under the original's id; its team
+list is minted at `0x62` ("Lobby teams").
 
 ## What the remake takes
 
@@ -232,7 +383,9 @@ score, `0x17` match state, `0x22` hit and `0x27` seat roster. Damage, spawn, the
 director transition, the join handshake and a seat's ask to be spawned again have no
 counterpart, so they are minted at `0x40`, `0x41`, `0x42`, `0x43` and `0x44`, above the ceiling
 above. The host-owned world's four (AI state, AI fire, a guest's hit claim on an AI, and a world
-event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, and a cutscene skip at `0x58`. The handshake carries the master seed, the host's clock and the seat the joining peer was
+event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, the start barrier's word at `0x5B`, a match's death notice at `0x5C`, the lobby's plane build and plane rules at `0x5D` and `0x5E`, the lobby's co-op hangar plane at `0x5F`, the lobby's join password at `0x60`, and the lobby's team action and team list at `0x61` and `0x62`, Capture the Flag's ask and table at `0x63` and `0x64`, Zeppelin
+vs Zeppelin's placed return at `0x65`, and the in-flight chat at `0x66`, the original's `0x15` with
+the typist's seat added ("In-flight chat" below). The handshake carries the master seed, the host's clock and the seat the joining peer was
 given; the original needs none of the three, because it draws from no shared stream and hands
 out no seat. The ask carries a seat and nothing else: the original's client takes its own
 respawn, while here the host owns every placement and answers the ask with a spawn event.
@@ -243,7 +396,9 @@ remaining time, both limits, the reason and the host's session clock, because a 
 no countdown of its own: it is told the clock, and that field is also the reading its
 `NetClockSlew` takes an offset from, since the periodic tick is the only message a running match
 repeats. Both limits ride even though the original arms exactly one, which costs four bytes a
-second and leaves an exclusive lobby nothing to change on the wire.
+second and leaves an exclusive lobby nothing to change on the wire. The byte after the reason names
+the winning lobby team under reason 3, a Zeppelin vs Zeppelin hull lost, and is 0 otherwise
+([`multiplayer-zvz.md`](multiplayer-zvz.md)).
 
 The clock ping is minted at `0x49` rather than taking `0x23`, though it has the original's shape:
 twelve bytes, two stamps, one peer, a ten-second timer (`Net/NetClockPing.cs`). The stamps
@@ -266,6 +421,11 @@ score message is one seat rather than the whole table, and its roster carries th
 which the original has no need of because it never draws from a shared stream. The packed angle
 and motion dwords are not taken either; the remake spends 8 bytes on a quantised quaternion and
 12 on a float velocity, which is the trade `Net/NetMessages.cs`'s width budget exists to hold.
+
+The damage report `0x40` carries the victim's own hull fraction after it applied a hit, and every
+other machine stages that seat's damage from it. A fraction of 1 is a rearm on the owner's machine
+([`multiplayer-rearm.md`](multiplayer-rearm.md)), and every other machine takes the stages off its
+copy. The original's `FUN_0049b970` sends nothing for a rearm.
 
 ## The mission director
 
@@ -322,7 +482,8 @@ What a guest replays, and what it derives from what it replayed:
   event like `WAKEUP_ENEMIES`; 800's credit launches nothing there of its own. 965 to 967 (the
   airframe swap) belong to the episode's owner and run on every end (below). Definitions started
   by a player's position are not graph events: the landing rows and the ladder switch cross as
-  `0x4E` (below), and the `PlayerRange` conditions run on each end over the whole field.
+  `0x4E` (below), as does the one `PlayerRange` gate whose definitions raise a code; the other
+  `PlayerRange` conditions run on each end over the whole field.
   The escorting wingman is a roster block spawned at build, not a director event.
 
 A guest applies each event on arrival and then catches up on it (`Session/Objectives/NetDirectorCatchUp.cs`).
@@ -402,10 +563,15 @@ index, the argument a hash of its definition and anchor names, which the guest c
 applying and searches by when the index has shifted), 4 a `WARP_VEHICLE` pick (the subject is the
 drawn waypoint index, the argument the hash of the warped vehicle's name), 5 an AI's presence (the argument is 1 for in
 play and 0 for deactivated). The host sends 5 whenever an AI's `Inert` changes outside a cutscene
-park, which covers a script wake, a Black Hat launch and a wingman taken out. A cutscene park (913)
+park, which covers a script wake, a Black Hat launch, a wingman taken out and an aircraft a
+`TRAVELERS ... DELETE_ON_SUCCESS` removes. Only the host's graph evaluates that condition, so the
+removal is decided there and a guest's copy leaves on the 0. A cutscene park (913)
 is not sent, because each end's own cutscene parks its own copy. 6 a seat left (the subject is
 the seat of a guest whose link dropped mid-mission): the host sends it to the guests still flying,
 every end removes that aeroplane and tells its players "<name> left", and the mission goes on.
+7 an AI's combat-voice raise (the subject is the ordinal of the AI the line is about, the argument
+packs the trigger in bits 0..7, a broadcast flag in bit 15 and the broadcast's team in bits
+16..31); see "AI voice across the link" below.
 
 Code 3 goes out at once for a stage change or a kill. A hit that lowers a pool without either is
 held and sent on the seat stream's next tick, one sample per pool however many hits landed, because
@@ -435,6 +601,7 @@ Each simulation phase, as a guest runs it:
 |---|---|
 | Ending hold, radio, smoke screens, beeper tags, incoming fire | Local presentation or per-pane rules, no world authority. |
 | Landing approaches, ladder switch | **Host-decided**: a row start and a ladder holder arrive as `0x4E`; the guest offers the auto-land prompt to its own humans and sends their held button. |
+| World animation | Local, except a `PlayerRange` gate whose definitions raise a code, which is **host-decided** and read from `0x4E`'s range gate verdict. |
 | Capture AI aircraft | Local membership; new AI are admitted by ordinal before any is stepped. |
 | Projectiles | Local on every end, spawned from fire events; the guest's rounds spend nothing on the world or on an AI. |
 | Human aircraft | Replicated per seat (`0x0f`, `0x10`, `0x22`, `0x40`, `0x12`). |
@@ -445,8 +612,48 @@ Each simulation phase, as a guest runs it:
 | Surface vehicles | **Replicated patrol**: each hull chases the host's `0x4D` samples. A hull's death arrives as a pool event; its gun still fires locally. |
 | Instant action | Not run in a network match. |
 | Campaign | The director replay above. |
-| AI voice | Derived locally; a replicated AI runs no mode machine, so its mode-driven call-outs are silent. |
+| AI voice | **Host-raised**: a replicated AI's attack pair, shake taunt, gloat and ally distress arrive as `0x48` code 7 and pass this end's own gate; its DI tiers and death cry are derived from codes 2 and 1. |
 | Versus | The match state above. |
+
+### AI voice across the link
+
+The original sends no voice trigger and no mode code. Its one send, `FUN_005b2640`, is called only
+by the message builders, and the addressed gate `FUN_004afd00` (the speaker in `ECX`, the trigger
+and the force flag on the stack) is reached from no receive handler: its callers are
+`FUN_0041d9f0`, `FUN_0041f420`, `FUN_0043d640`, `FUN_00470750`, `FUN_00498170`, `FUN_00498bf0`,
+`FUN_004b82d0`, `FUN_004b86a0`, `FUN_004b9770` and `FUN_004b9bc0`, and none of the `0x10` fire
+handler (`LAB_00498950`), the `0x21` handler (`LAB_004990d0`) or the `0x24`/`0x25` handler
+(`LAB_0049bde0`) calls it. The broadcast helper `FUN_004b86a0` is reached from `FUN_0041d9f0`,
+`FUN_00446990`, `FUN_00470750`, `FUN_004aabb0` and `FUN_004b9bc0`, none a network handler. Each peer
+derives its call-outs from what it already receives, with no mode machine for a remote aircraft:
+
+- `FUN_00470750`, run per remote vehicle from the remote update `FUN_00470210` (called by
+  `FUN_004897c0`), skips a remote on the local player's side (`FUN_004952f0`, remote record `+0x3c`
+  against the local record's) and one farther than 1695.0 from the local player (`0x00607e78`), and
+  otherwise raises the taunt 26 or 25 off the geometry (`0x00470822`, `0x00470849`) and the bearing
+  broadcast (`0x004708e0`).
+- `FUN_00498170` applies a `0x0f` state: the low byte of `+0x1c` becomes the vehicle's health, and
+  when it falls on a remote of the local side the gate raises DI 19, 18 or 17 against 0.3, 0.5 and
+  0.7 of the vehicle's whole (`0x004985cf`).
+- The death handler `FUN_00498bf0` plays the dying pilot's cry itself (`0x00498f67`, `0x00498f9a`).
+
+The remake cannot derive the same way, because its raises read what only the flying end holds: the
+gunner's target behind the attack pair, the mode machine's evade flag behind the shake taunt 27,
+the killer behind the gloats 22 and 23, and the shooter behind the ally distress 28. A guest's copy
+of an AI steps none of those, and stepping them would voice transitions the host's AI never made.
+So the host relays each such raise as code 7, reliable and to every guest, and each guest runs it
+through its own gate: the mute window, the speaker's aliveness and radio, the slot cooldown, the
+talker roll, and for a broadcast the election among its own speakers on the named team. The raise
+is per AI and each session has one voice runtime, so a splitscreen host's panes send it once. The
+DI tiers stay derived, as the original derives them, from code 2's hull fraction, and the death cry
+from code 1's death. A guest's own copies raise nothing locally.
+
+No message carries the speaker's pilot either. The original hands a mission vehicle the local
+player's own voice (`FUN_00499c60`, the lobby record's `+0x78`, the player's chosen voice, at
+`0x0047531e`), so its peers do not agree on it. The remake deals each AI a pilot from its accent's pool in registration order on every
+end, the single-player rule, and the ends agree because they register the same AI in the same order
+([`../formats/combat-voice.md`](../formats/combat-voice.md), "Which pilot of a pool an aircraft
+takes").
 
 ## Positional starts
 
@@ -468,6 +675,7 @@ The kinds are `NetPositionalStart`:
 | 1 Landing row | host to all | the row the host's trigger started, and the seat whose flying started it |
 | 2 Ladder holder | host to all | the seat now holding the switch, or no seat |
 | 3 Auto-land held | guest to host | the guest's own seat has the auto-land button down while offered the prompt, or has let it go |
+| 4 Range gate | host to all | the host's verdict on a code-raising `PlayerRange` gate, sent when it changes: the row is the gate name's hash, the held flag the verdict, no seat |
 
 A guest starts the named row for the named seat's rig, which makes that seat the episode's owner
 on the guest as on the host. An `auto` row's prompt is per pane, so a guest still tests its own
@@ -485,14 +693,90 @@ the world, so it names an ordinal both ends already hold, and the host's samples
 guest. A guest's scripted player, which an episode claimed by nobody
 belongs to, is the host's first seat.
 
-The `PlayerRange` conditions are not sent: each end tests them over the whole field, so a range
-start can differ between ends by the link delay.
+A `PlayerRange` gate is the host's when its definition, or one it starts through
+`CALL_ANIMATION`, raises a `CALLBACK` (`Mech3/Anim/RangeGateAuthority.cs`). The host tests it
+over its whole field and sends kind 4 when the verdict changes; a guest answers the gate with the
+host's last verdict and never tests it against its own field. A pass the guest's gate has not read
+yet is held until it is read, so a host pass shorter than the gate's poll still starts the
+definition once on the guest. The gate is named by its definition, anchor and radius in metres
+squared (`blacke_drop/blacke_marker/4096`), and the wire carries that name's FNV-1a hash.
+
+Of the 216 shipped animation names carrying a `PlayerRange` condition (1016 definitions over the
+shared, chapter and mission sources), C4/M03's `blacke_drop` is the only one whose closure raises a
+code: its 64 m gate on `blacke_marker` starts `bdplayer`, `bdchute` and the two drop cameras, which
+raise cutscene codes 11, 951, 1 and 2, and it reaches `dropped_blacke`, which the mission's
+objectives read. Every other gate stays on each end over the whole field, so its start can differ
+between ends by the link delay:
+- the ordnance washes (the gun hits, ground effects, flak, muzzle bursts), which each machine draws
+  for its own viewer;
+- the zeppelin props at 270 m, the MP-map and repair-base `call_door` at 25 m, C1's lightning,
+  C1/M02's `pure_panic` and C1B/M03's `foghorn_toot`;
+- C4/M03's `blacke_drop_east` on `blk_e_marker`, which picks which drop camera leg plays. Both
+  legs raise the same codes, so the choice is presentation, but the two ends can show different
+  legs;
+- C5/M02's `arcadia_start` at 1400 m, which burns the Workers' Voyage's gas bags and so sets the
+  `panels` nodes its objectives count inactive. A node state, not a code: the guest's objectives
+  are the host's replicated graph, and the burn is drawn on each end.
 
 Every end draws the episode owner on the staged `player` marker, the owner's own machine and every
 other one alike. On an end where that seat is a copy fed by samples, the copy is in no pane, and
 the cutscene host poses it on the marker each frame over the pose its samples write, then hands it
 back to its feed at the handoff. A guest's docking therefore shows the guest's aeroplane on the
 host, and the host's docking shows the host's on each guest.
+
+## In-flight chat
+
+[Evidence: decoded] **The keys.** Commands `0x6d` Chat to Everyone and `0x6e` Chat to Team (DIK
+GRAVE and Shift+GRAVE, [`input.md`](input.md)) share one handler, `FUN_00489570`, registered at
+`0x0048972c` and `0x00489738`. It does nothing unless `FUN_00440ad0` reports a network game, and
+otherwise calls `FUN_004a8340` on the flight UI object at `0x0071d3a0` with 1 for `0x6d` and 0 for
+`0x6e`. That call opens an all-chat whatever the key when the byte at `0x0071d89c` (the object's
+`+0x4fc`, the "mode has teams" flag the death report reads) is clear, so a match without teams has
+no team line.
+
+[Evidence: decoded] **The entry.** `FUN_004a8470` builds a `0x2328`-byte edit object
+(`FUN_0046d740`, vtable `0x00607c2c`) as a child of the chat panel. Its caption is langui 7049
+`MSG_GLOBAL_MESSAGE` "To All:" or 7050 `MSG_SQUADRON_MESSAGE` "To Team:" (`0x0046d7a2`,
+`0x0046d7a9`), and its text buffer is sized 60 bytes (`FUN_005cc050(0x3c)` at `0x0046d797`). The
+text opens as "> " (`0x0063f93c`, written by `FUN_005cbe40`), which leaves 57 typed characters
+before the terminator. The submit handler `FUN_0046d800` (vtable slot at `0x00607cfc`) takes the
+text after the ">", trims both ends, and closes the entry without sending when nothing is left
+(`0x0046d898`). Otherwise it posts the sender's own line, the caption and `" %s"` of the text
+joined by `"%s %s"` (`0x0046d8db`, `0x0046d911`), so "To All:  hello" with two spaces, and sends
+`0x15` through `FUN_00499a50`. Opening the entry also sets the panel's ten-second timer.
+
+[Evidence: decoded] **The wire.** `FUN_00499a50(text, all)` writes the type, the length (text + 8),
+the text length at `+4` and the text at `+6`. An all-chat is one unguaranteed broadcast; a team line
+is sent guaranteed, to the DirectPlay id at `+4`, for each entry of the list at `0x0071c150` whose
+`+0x18` equals the team slot at `+0x3c` of the record `0x0071c7ac` points to (`0x00499af5`). Nothing echoes the send, since the submit handler posted it.
+The handler `LAB_00499b30` keeps at most 80 characters (`0x00499b5f`), finds the sender's remote
+record by DirectPlay id (`FUN_00499d80`) and names it by that record's `+0x34`, or by langui 6007
+`MSG_UNKNOWN` "Unknown" when there is none, and posts `"%s: %s"` (`0x0062918c`).
+
+[Evidence: decoded] **The panel.** `FUN_004a8390` builds it once per flight at `+0x508` of the UI
+object (`0x0071d8a8`): a five-line text list (`FUN_005c5950(5)`), font `mpChat` (Arial 12, green
+0, 255, 0, shadow, weight 500 in `fonts.zrd`), placed at 10, 10 and sized 300 by 100 in 640-by-480
+display pixels (`0x004a8404` to `0x004a842d`). `FUN_004a8570` formats a line into it (vtable
+`+0xa0`, `FUN_005c5e10`, which writes the newest line with no timer of its own) and then hands the
+whole panel a 10.0 s timer (vtable `+0x60`, `FUN_005c54a0`), after which the panel hides with its
+lines kept. Display Scores (command `0x23`, `FUN_00489320`) hides it at once.
+
+**The remake.** `Session/World/NetChatLink.cs` routes by lobby team, `NetSeat.TeamId`, never by a
+team id. A guest sends its line to the host alone; the host forwards an all-chat to every other
+machine and a team line only to a machine that flies a seat on the typist's team, once per machine
+however many seats it flies, and shows a team line itself only when it flies that team. A line is
+reliable either way, where the original sends an all-chat unguaranteed, since the star's relay
+would otherwise lose a line on either leg. The seat rides in the message because a relayed line
+reaches its reader from the host, not from the typist; the host takes a line only from the machine
+flying the seat it names. The panel draws in every local pane (`Flight/Hud/ChatPanel.cs`), and the
+entry only in the pane whose seat reads the keyboard: the splitscreen seats beyond the first are
+pad-only, so they read the chat and type nothing. While a line is open, and until every key pressed
+into it is released, that seat's flight keys read idle. The panel stays up while its typist types.
+Display Scores does not hide it, as the remake has no bound scores key in flight.
+
+| Id | Message | Class | Carries |
+|---|---|---|---|
+| `0x66` | Flight chat | reliable, guest to host and host to each admitted machine | the typist's seat at 4, flags at 5 (bit 0 a team line), two reserved bytes, the line in 81 bytes UTF-8 at 8 (89 bytes) |
 
 ## Cutscene skip
 
@@ -522,6 +806,32 @@ can start a film after the host's skip of it arrives.
 The skip notice (`SplitScreen.NoteSkip`) is the pressing machine's own: it names the local skipper
 on the machine where the input landed, and no machine names a skipper from another.
 
+## The start barrier
+
+Every machine holds its flight on its load screen until every machine flying a seat has built its
+world, and then all of them start (`Net/NetStartGate.cs`). The original has no counterpart. The
+word is a session message: it is sent only once the sender's handlers stand, so it never waits in
+the lobby.
+
+| Id | Message | Class | Carries |
+|---|---|---|---|
+| `0x5B` | Start gate | reliable, guest to host (loaded) and host to guests (hold, start) | word at 4 (loaded 1, start 2, hold 3), round at 5, two reserved bytes (8 bytes) |
+
+Each host flight takes a round, 1 to 255, that the flight before it on the same process did not.
+Once its own world is built, the host sends hold under that round to every machine it waits on.
+A guest keeps the first round it hears. It sends loaded under that round as the last act of its
+build (round 0 when no hold has reached it yet), and answers a hold that arrives after its build
+with loaded again. A loaded under another round than the host's opens nothing, and the host
+answers it with hold under its own. A restart binds the next flight on the same link, so a loaded
+from the flight before can reach the new one, and taking it would start the host before that
+guest's new world is built. The host broadcasts start under the round when the last machine
+reports, drops, or does not answer within the timeout. A loaded under the round that reaches a
+host already started is answered with a start to that machine alone. A guest takes only a start
+under the round it kept. While a machine holds, its clock takes no step: the
+mission clock, the AI, the director and the world events wait with the aeroplanes, and only the
+link and the clock ping are stepped. The host-owned world therefore sends nothing to a guest
+before that guest's world can apply it, unless the wait gave up on that guest.
+
 ## The lobby
 
 Before any session binds the carrier, a `Net/NetLobby.cs` stands on it. A host sends the advert
@@ -532,8 +842,8 @@ sees them.
 
 | Id | Message | Class | Carries |
 |---|---|---|---|
-| `0x4A` | Session advert | reliable, host to each guest | session kind (Dogfight 1, campaign co-op 2) at 4, campaign mission sequence or `0xFF` for none at 5, player count at 6, status at 7 (unknown 0, waiting 1, in mission 2, full 3), seat cap at 8, three reserved bytes, host name in 16 bytes UTF-8 zero padded at 12 (28 bytes) |
-| `0x4F` | Session closed | reliable, host to each guest | reason at 4 (unknown 0, closed 1, full 2, version mismatch 3), three reserved bytes, the host's build version at 8, the guest's as the host heard it at 12 (16 bytes) |
+| `0x4A` | Session advert | reliable, host to each guest | session kind (Dogfight 1, campaign co-op 2) at 4, campaign mission sequence or `0xFF` for none at 5, player count at 6, status at 7 (unknown 0, waiting 1, in mission 2, full 3), seat cap at 8, flags at 9 (bit 0 the host asks a password), two reserved bytes, the game's name in 16 bytes UTF-8 zero padded at 12 (28 bytes) |
+| `0x4F` | Session closed | reliable, host to each guest | reason at 4 (unknown 0, closed 1, full 2, version mismatch 3, booted 4, wrong password 5), three reserved bytes, the host's build version at 8, the guest's as the host heard it at 12 (16 bytes) |
 | `0x56` | Build version | reliable, each end to each peer on connect | the build version at 4 (8 bytes) |
 
 A guest that reads a closed reason tells the player the host closed the game, that the game was
@@ -562,24 +872,175 @@ command line's `--net-host` and `--net-join` stand no lobby on the carrier and c
 of different minors recognise each other, so a change makes an older build read a newer one as
 silent or foreign instead of naming the mismatch.
 
+### Game and Player Information
+
+Before a network game opens the original asks two things, in `MULTIPLAYERHOSTMODAL.SCRIPT` (GAME
+INFORMATION, string 10032) and `MULTIPLAYERPLAYERMODAL.SCRIPT` (PLAYER INFORMATION, 10036). The
+Connection page's Host and the games list's Create Game open Game Information, whose OK opens
+Player Information; Join Game opens Player Information alone. Player Information's OK is the
+join or the lobby, and either box's Cancel goes back to the page under it.
+
+- **Game Name** (10027): an edit box of at most 14 characters (`SZ.FD`), prefilled from the saved
+  game name (setting callback `2142`, index 2). An empty name greys OK (`gui_execute` mails 1 to
+  the button). A refused name raises 10511, "Invalid game name.".
+- **Password (optional)** (10028): a masked box (`UZ.SC = 1`) with no length set in the script.
+- **Maximum # of Players** (10029): a spinner whose floor is `VZ.VF = 2`. Both doors set its
+  ceiling and value as they open it: `VZ.WF = 16`, `VZ.YF = 8`, or 2 and 2 for Modem-to-Modem
+  (`MULTIPLAYERMAIN.SCRIPT` and `MULTIPLAYERGAMESLIST.SCRIPT`, the `mail(1108)` refresh). It is not
+  saved.
+- **Callsign** (10033): at most 12 characters (`UGA.FD`), prefilled from the saved callsign
+  (index 1). An empty callsign greys OK, and a refused one raises 10510, "Invalid Callsign.".
+- **Voice** (10034): a drop-down of seven voices, strings 10039 to 10045, each row with a value in
+  `WGA.LG[R].SF`: Nathan Zachary 48, Jack 2, Black Swan 24, Paladin Blake 29, Loyle Crawford 44,
+  Gruff Male 26, Texan Male 31. The picked row is saved (index 4); its value goes to `$$AHA$$`.
+  [Evidence: decoded] The value is a pilot VO id, held in the `nVoice` setting (`0x00642f14`). It
+  travels as DirectPlay player data at `+0x4c`, written as the session opens (`FUN_00412b60`,
+  `0x00412bf2`) and copied into each peer's lobby record `+0x78` (`FUN_00414640`, `0x004147aa`), and
+  every aircraft of that player speaks as that pilot
+  ([`../formats/combat-voice.md`](../formats/combat-voice.md), "A player's own voice").
+- **Password** (10035): the join's password, greyed unless callback 5003 answers that the picked
+  game needs one (`gui_init`); the capture of a LAN TCP/IP game shows it greyed. OK copies it to
+  `$$ZGA$$` before the join (message 1074), and the join hands it to DirectPlay (below, "Boot and
+  the password"). Which field 5003 reads is not traced; the games list's own password mark is.
+
+[Evidence: decoded] The name test is `FUN_00407060`: `GetStringTypeExA` with `CT_CTYPE1` over the
+text, and the name passes as soon as one character carries a class outside space, blank and
+control (mask `0xff97`). So an empty name or one of spaces alone is refused. `FUN_00407670` calls it
+three times, at `0040820c` (the callsign), `0040824f` and `00408290`; the second is read as the
+game name's callback and the third is not tied to a box.
+
+The remake follows both boxes in the Original presentation (`UI/Menu/Original/OriginalNetInfoBox.cs`)
+and offers the same choices as rows of the Built-in Network board. The cabin's remake-only HOST
+CO-OP asks both boxes too. The cap is held to the kind's own: four humans for campaign co-op, sixteen
+for a Dogfight. The game name is the advert's name, and the games list shows it and the chosen cap
+as they are. A host past its cap refuses a guest with the full notice, a Dogfight host as a co-op
+host does. The callsign names this machine's player in every roster, list and line. The voice
+rides the pick's flags byte, so the pick keeps its 36 bytes and a build a patch older reads the
+same pick without it. At launch the host writes each seat's voice into bits 1 to 3 of that seat's
+flags byte in the seat roster `0x27`, beside the host bit, so every machine speaks every seat in its
+chosen voice; the entry keeps its 20 bytes, and a build a patch older reads the host bit alone. A
+co-op host's first seat carries Nathan Zachary's, the scripted player's, and a splitscreen seat
+carries none. The callsign, the voice and the game name are remembered in `options.json`
+for the next session; a password never is. Game Information's password is the one the host asks,
+and Player Information's is the one a join answers with. That box is live for a join to a game the
+list marks Need Password and for a join by typed address, whose advert is not known yet, and greyed
+on a host's own box.
+
+### Boot and the password
+
+[Evidence: decoded] **Boot.** The lobby's Boot is `KDA` in `MULTIPLAYERLOBBY_READY.SCRIPT` (string
+10054, `mp_b_small.png` at 19, 325), created greyed. The script's refresh (message 1301) makes it
+live only on the host (`$$OX$$`) while the picked player-list row is a player (row kind 0 or 2 from
+callback 5002; a team row is kind 1), and greys it otherwise. Its press calls `$$A$$` 1005 with the
+picked row's player id, then presses the picked row again, which lets the pick go. The screen-flow
+dispatcher `FUN_00407670` sends 1005 to `FUN_00413090`, which acts only on the host
+(`FUN_005b4210`) and never on the host's own player id (`this+0x160`). It posts lobby notice 1
+naming the player (`FUN_00413270`, message `0x18`, sent to everybody), sends a `0x1a` setting
+change of subtype 8 for each entry of the table at `0x6453a8` that the player holds, and destroys
+the player through `IDirectPlay4::DestroyPlayer` (`FUN_005b2480`, vtable `+0x24`). Every end shows
+notice 1 in its chat as langui 10500, "[%1!s! was booted from the game.]" (`FUN_00414120` posts
+message 1018, whose handler in `FUN_004084a0` formats `0x2903` plus the notice code). The original
+keeps no ban: DirectPlay would admit the booted player again. What a booted guest's own screen shows
+is not traced.
+
+[Evidence: decoded] **The games list's mark.** `FUN_00414b40` turns each enumerated session's state
+into the list's status: state 1 reads Ready (10089), 3 In Progress (10090), 2 **Need Password**
+(10141) with the entry's password flag set (`DAT_00642f40`), and anything else "???" (10091).
+`FUN_00402f40` writes the Status cell and puts Game Full (10140) over any of them once the player
+count reaches the cap.
+
+[Evidence: decoded] **The join's password.** `$$A$$` 1004 joins through `FUN_00412e30`, which puts
+`DAT_00642f10`, the Player Information password, into the join's session descriptor. `FUN_005b3bd0`
+copies it into `lpszPassword` when the session's flags carry `DPSESSION_PASSWORDREQUIRED` (`0x400`)
+and calls `IDirectPlay4::Open` (vtable `+0x60`) with `DPOPEN_JOIN | DPOPEN_RETURNSTATUS` (`0x81`).
+DirectPlay checks the password on the host. A refusal returns to 1004 as `DPERR_INVALIDPASSWORD`,
+which `FUN_005b1770` names `MSG_DPERR_INVALIDPASSWORD`, "Invalid Password" (messages 7041). Player
+Information shows that in a messagebox and goes back to the games list. Langui 10509, "The password
+is incorrect. Please try again.", has no reference as an immediate in the executable.
+
+The remake follows the original where it speaks and fills in what DirectPlay did for it:
+
+- **The mark.** The advert's byte 9 is a flags byte, bit 0 set when the host asks a password. It was
+  a reserved zero, so a build a patch older reads the rest unchanged. The games list reads Need
+  Password in the Status column unless the game is full, which reads Full.
+- **The check.** A host with a password holds every new peer off every peer list until it answers.
+  A guest answers an advert that asks a password with `0x60`, its typed password, once per
+  connection. The host compares it ordinally; a match is answered with `0x60` marked admitted, and
+  only then does the lobby list, seat and tell the guest anything. A wrong answer, or none within 10
+  seconds (a build a patch older sends none), is sent session closed reason 5 and hung up on after
+  the full notice's grace. The guest reads Invalid Password over the Connection page. A session with
+  no password sends no `0x60` at all.
+- **Boot.** Boot is live on the host while it has picked a guest's row; the host's own row is never
+  offered. The guest is sent session closed reason 4 and hung up on, and the lobby's chat on every
+  other end reads 10500, a chat line `0x55` under no name. The cabin's remake-only BOOT asks about
+  each co-op guest in player order, since a campaign board has no chat. The booted guest reads "You
+  were booted from the game" over the Connection page.
+- **The ban.** The remake adds one the original lacks: a boot bans the address the guest connected
+  from until the session closes, and a later connection from it is refused with reason 4 before its
+  password is asked. It is an address, so another player behind the same router is refused too, and
+  a carrier that names no address bans nothing.
+
+| Id | Message | Class | Carries |
+|---|---|---|---|
+| `0x60` | Join password | reliable, guest to host (the answer) and host to guest (the admission) | flags at 4 (bit 0 admitted), three reserved bytes, the password in 48 bytes UTF-8 zero padded at 8 (56 bytes) |
+
 ### Campaign co-op boards
 
-A co-op guest follows the host's boards through three more lobby messages, minted at `0x50` to
-`0x52` since the original has no campaign across a link. None reaches a session.
+A co-op guest follows the host's boards through six more lobby messages, minted at `0x50` to
+`0x52`, `0x59`, `0x5A` and `0x5F` since the original has no campaign across a link. None reaches a
+session.
 
 | Id | Message | Class | Carries |
 |---|---|---|---|
 | `0x50` | Co-op flow | reliable, host to each guest | screen at 4 (unknown 0, cabin 1, briefing 2, flight check 3, in mission 4, debrief 5), mission sequence at 5, round at 6, the guest's player number at 7, Ready mask by player number at 8, humans at 9, host's campaign progress at 10, flags at 11 (bit 0 won), hangar airframe mask at 12, the guest's local seats at 14, one reserved byte, objectives mask at 16, cash at 20 (24 bytes) |
-| `0x51` | Co-op pick | reliable, guest to host | round at 4, flags at 5 (bit 0 Ready, bit 1 left the flight), airframe at 6, one reserved byte, the fit at 8, the player name at 20 (16 bytes, zero-padded; 36 bytes) |
+| `0x51` | Co-op pick | reliable, guest to host | round at 4, flags at 5 (bit 0 Ready, bit 1 left the flight, bits 2 to 4 the pilot voice's place in the Voice list plus one, 0 for none), airframe at 6, the picked plane at 7 (0 none, `0xFF` the stock Devastator, else its place in the host's hangar plus one), the fit at 8, the player name at 20 (16 bytes, zero-padded; 36 bytes) |
 | `0x52` | Co-op seat fit | reliable, host to each guest | seat at 4, three reserved bytes, the fit at 8 (20 bytes) |
+| `0x59` | Co-op wingman | reliable, host to each guest | wingman airframe at 4 (`0xFF` none), three reserved bytes, the fit at 8 (20 bytes) |
+| `0x5A` | Co-op film | reliable, host to each guest | ordinal at 4, playing at 5, film at 6 (chapter 1, closing 2), chapter at 7 (8 bytes) |
+| `0x5F` | Co-op hangar plane | reliable, host to each guest | the plane's place in the hangar at 4, the hangar's plane count at 5, the seat holding it at 6 (`0xFF` none), airframe at 7, flags at 8 (bit 0 a custom build), the stored fit at 9, the 26 build bytes and 16-byte build name as `0x5D`'s at 21, the plane's name in 33 bytes at 63 (96 bytes) |
 
 A fit is twelve bytes: the four gun slots' ammunition, then the eight ordnance cells, one byte
-each, each the profile's stored value plus one so that zero reads as unset (stock). The pick
-carries a guest's own plane record's ammunition and ordnance. At its launch the host sends every
+each, each the profile's stored value plus one so that zero reads as unset (stock).
+
+Every co-op seat picks its own plane from the host's hangar, and no two seats fly one plane, a
+plane counting once by name as the flight check's "Pilot and Wingman must fly different planes."
+compares. The stock Devastator is the exception: any number of seats fly it, and it holds no
+hangar plane. The host settles the picks in seat order (its own seat, its splitscreen seats, then
+each guest in player order): a seat keeps a free pick, and a seat whose pick an earlier seat holds,
+or that has picked nothing, takes the first free plane, else the stock Devastator. A hangar plane
+word is one plane of the host's hangar with its stored fit, build, name and the seat that holds
+it. The host sends each guest every word before the flow, and again whenever one changes, and the
+lobby keeps them by place, so every machine refuses the same held planes. A plain join with no
+campaign board up sends none. A guest's roster is a copy of each word's plane, then a stock
+Devastator. It opens on its remembered pick unless an earlier seat holds it, else on the plane
+the host settled for it, and CHANGE PLANE and CHANGE AMMO stay on its check. A pick of a plane an
+earlier seat holds is refused with a modal naming that seat. Two guests picking one plane at once
+are settled by the host, and the later seat moves to what the next word gives it. The pick carries
+the plane's place, and the host seats each guest on its settled plane with the pick's fit when the
+guest flies the plane it picked, else the word's own fit. The flow's hangar airframe mask stays on
+the wire but a guest does not read it. The wingman is held only on a mission that flies one, after
+every human: its saved plane while no seat holds it, else the first free plane, else the stock
+Devastator at rest, which the host names in the launch's co-op wingman. Allow Custom Planes and
+Outlaw Components are Dogfight rules and do not apply here. At its launch the host sends every
 guest a seat fit for each seat, its own seats included, before the session's opener on the same
 ordered channel. Every machine then builds each seat flown elsewhere with its own pilot's fit.
-The name is the guest's last-played pilot, read without writing, and the host's roster calls
-the guest by it; a guest with none is called by its player number. A guest leaving the flight
+After the seat fits and before the opener the host also sends each guest a co-op wingman naming
+its profile's wingman airframe and fit. A guest's director has no profile of its own, so it binds
+the campaign's `wingman_1` from that word, and both machines build the host-owned wingman in the
+same def with the same damage parts. A guest with no word flies the block's own def and says so in
+a warning; it never substitutes its own default. `0xFF` names no pick, which also flies the block's
+def. A guest a patch older drops `0x59` as unknown and flies the old default.
+A co-op film names the campaign film the host's board has up: a chapter's opening film before the
+cabin, or the closing film before the book. The host sends it playing when the film starts and
+again with the same ordinal and playing clear when it ends, played out or skipped, and it goes
+out at once rather than on the next flow, so a guest reads the end before the board that follows.
+A guest plays the film it names and ends it on the host's end. A guest's own skip ends only its
+own film, since the host drives the boards. A guest joining while a film plays sees none, and a
+guest back from flight joins a film still playing. A launch ends a guest's film still up, so the
+guest flies with its host. A guest a patch older drops `0x5A` as unknown and plays no film.
+The name is the guest's callsign from Player Information, else its last-played pilot read without
+writing, and the host's roster calls the guest by it; a guest with neither is called by its player
+number. The host's own first seat takes the host's callsign the same way. A guest leaving the flight
 through its pause sheet sets the left flag, and the host takes its seat out at once, as it does
 for a dropped link.
 
@@ -593,15 +1054,17 @@ The debrief flow carries the host's result, which every guest's scrapbook shows.
 
 ### Dogfight lobby
 
-The Multiplayer Lobby runs over three more lobby messages, minted at `0x53` to `0x55`, with a
+The Multiplayer Lobby runs over five more lobby messages, minted at `0x53` to `0x55`, `0x5D` and `0x5E`, and the two of "Lobby teams" below, with a
 guest's plane and Ready riding the co-op pick at `0x51` under the lobby's own round. None reaches a
 session.
 
 | Id | Message | Class | Carries |
 |---|---|---|---|
-| `0x53` | Dogfight options | reliable, host to each guest | round at 4, environment at 5, mission type at 6 (Capture the Flag 0, Deathmatch 1, Zeppelin vs Zeppelin 2), flags at 7 (bit 0 Score rather than Time, bit 1 Limited Lives, bit 2 Auto Respawn), minutes at 8, lives at 9, score at 10 (12 bytes) |
-| `0x54` | Dogfight roster | reliable, host to each guest | round at 4, row count at 5, the reading guest's own row at 6, one reserved byte, then sixteen rows of 20 bytes: flags (bit 0 Ready, bit 1 host), airframe, two reserved bytes, the name in 16 bytes (328 bytes) |
+| `0x53` | Dogfight options | reliable, host to each guest | round at 4, environment at 5, mission type at 6 (Capture the Flag 0, Deathmatch 1, Zeppelin vs Zeppelin 2), flags at 7 (bit 0 Score rather than Time, bit 1 Limited Lives, bit 2 Auto Respawn, bit 3 both Time and Score, bit 4 Restrict Number of Teams, bit 5 Capture the Flag's own flag home to capture), minutes at 8, lives at 9, score at 10, team minimum at 12, team maximum at 13, two reserved bytes (16 bytes) |
+| `0x54` | Dogfight roster | reliable, host to each guest | round at 4, row count at 5, the reading guest's own row at 6, one reserved byte, then sixteen rows of 20 bytes: flags (bit 0 Ready, bit 1 host, bit 2 team captain), airframe, team number (0 for none), one reserved byte, the name in 16 bytes (328 bytes) |
 | `0x55` | Lobby chat | reliable, guest to host and host to each guest | the speaker's name in 16 bytes at 4, the line in 84 bytes at 20 (104 bytes) |
+| `0x5D` | Plane build | reliable, guest to host (its pick, seat `0xFF`) and host to each guest (every seat, at launch) | seat at 4, flags at 5 (bit 0 custom), then 26 bytes: airframe, engine, four armour presses (nose, tail, left, right), left and right hardpoints, four gun calibres (5 empty), twin mask, paint pattern, three colours, three shades, three decals, three spare; the name in 16 bytes (48 bytes) |
+| `0x5E` | Plane rules | reliable, host to each guest | round at 4, flags at 5 (bit 0 Allow Custom Planes, bit 1 Outlaw Components), the outlaw list in the original's five-byte packing at 6, one reserved byte (12 bytes) |
 
 Any option change advances the round and clears every Ready, the host's own included, so a player
 is never launched on options it did not see. A guest's changed pick clears that guest's own Ready,
@@ -610,6 +1073,96 @@ launch waits until every row is Ready. A guest's
 chat line goes to the host, which adds it to its own list and relays it to every other guest under
 the name the guest's pick gave, so each end shows the line once. The advert's mission sequence
 carries the environment index for a Dogfight, which is what the games list reads.
+
+A custom plane crosses whole, where the original's player data leaves out the engine, the armour
+and the hardpoints. The shooter decides a hit here, so every copy of a plane needs its owner's hit
+volumes and armour. A guest sends its pick's build before the pick; at launch the host sends every
+seat's build and fit before the session's opener, on the same ordered channel, so a guest has built
+every custom plane before it reports loaded. The plane rules change the round as an option does.
+The original's Ready check runs on each end for its own pick, and the host also checks every guest's
+pick against its rules before counting it Ready, which the original does not. An outlawed
+ammunition or rocket refuses Ready once and resets the fit, as the original does; the hardpoint
+counts are kept, since the pylons stay empty either way. A co-op launch sends the host's own custom
+planes, and its guests fly stock.
+
+### Lobby teams
+
+[Evidence: decoded] **The actions.** Every team action rides `0x1a` with a subtype word at `+4`,
+sent guaranteed to everybody; only the host acts on it, in `FUN_00415b20`:
+
+| Subtype | Builder | Bytes | Payload | Host action |
+|---|---|---|---|---|
+| 4 create | `FUN_004143c0` | `0x38` | creator id at `+0x10`, name at `+0x18` | `FUN_0046f250` mints the number, `FUN_00413c30` makes the team, the creator joins |
+| 1 join | `FUN_00414340` | `0xc` | team number at `+8` | `FUN_00413db0`: player `+8` takes the team, member list `+0x30` grows, lobby notice 4 (10503) |
+| 2 leave | `FUN_004142c0` | `0xc` | team number at `+8` | `FUN_00413e50` |
+| 8 disband | `FUN_00413f70` | `0xc` | team number at `+8` | a subtype 2 for every member, then `FUN_00413ef0` |
+
+After any of them the host sets the lobby's dirty bytes (`[0x64e724]+4`, `+5`), which resend `0x26`
+and the `0x27` team roster. `FUN_0046f250` mints the lowest number no team holds, counting from 1.
+The screen dispatcher `FUN_00407670` takes 1007 (create), which copies 16 characters of the name to
+`0x64316e` and calls `FUN_00413400`; a blank name there becomes "Default team name" (`0x61f614`).
+1008 is join (`FUN_004133e0`), and 1009 leave (`FUN_00413390`), which sends disband instead when the
+player record's byte `+0xd`, the captain flag, is set. Boot sends a disband for every team the
+booted player holds (`FUN_00413090`). In flight a pilot carries its team number
+(`FUN_0046f3c0(pilot+8)+0x18`, remote record `+0x3c`).
+
+[Evidence: script] **The screen.** `MULTIPLAYERLOBBY_READY.SCRIPT`'s team button (at 105, 325)
+reads Create Team (10056) when its pilot is on no team and no team row is picked, Join Team (10057)
+with a team row picked, and Leave Team (10058) on a team. It is live only while its pilot is not
+Ready. The player list has team rows (kind 1 from callback 5002) and player rows. Create Team runs
+`MULTIPLAYERTEAMMODAL.SCRIPT`: `mp_createteambackground.png` at 234, 99, the title 10552, one name
+box (label 10551, `FD` 12 characters) with OK and Cancel. OK refuses a blank name with 10512 through
+`$$A$$` 1042. `MULTIPLAYERLOBBY_MISSION.SCRIPT`'s LAUNCH! refuses 10519 while Restrict Number of
+Teams is ticked with fewer teams than the minimum box, and 10518 with more than the maximum, before
+it calls `$$A$$` 1013. The minimum box opens at 2 and the maximum at 4 (`SBA.XF`, `TBA.XF`, read as
+the opening values), a Deathmatch ranges them over 0 to 16, and each bounds the other. Capture the
+Flag and Zeppelin vs Zeppelin tick Restrict and hold both boxes at 2.
+
+[Evidence: weak negative] Langui 10520 ("There are not enough players in the game.") and 10547
+("You are not on a team.") have no reference in the scripts or as an immediate in the executable.
+
+**The remake.** `Net/NetTeams.cs` is the host's team book and every team mode's launch check. A
+guest's action goes to the host alone as `0x61`; the host acts on it against its own book and sends
+the outcome in the player list's team byte and the team list `0x62`, never in an answer to the
+guest. A captain's Leave Team disbands its team, and a captain who leaves the game or is booted
+takes its team with it. Each action posts the original's notices 10503 to 10505 as a chat line under
+no name. The launch refusals, in order:
+
+1. Restrict Number of Teams ticked with fewer teams than the minimum: 10519. With more than the
+   maximum: 10518. With no team standing the match is a free-for-all, and only this check applies.
+2. A team match with fewer than two players: 10520.
+3. A team match with one team: 10519.
+4. A player on no team in a team match: the remake's own line.
+5. Two teams whose sizes differ by more than one player: the remake's own line. A machine's
+   splitscreen seats fly on its team and count as players.
+
+| Id | Message | Class | Carries |
+|---|---|---|---|
+| `0x61` | Team action | reliable, guest to host | the action at 4 (the original's subtypes: join 1, leave 2, create 4), the team number at 5, two reserved bytes, the new team's name in 39 bytes UTF-8 at 8 (47 bytes) |
+| `0x62` | Team list | reliable, host to each guest | the team count at 4, three reserved bytes, then sixteen entries of 40 bytes: the team number and its name in 39 bytes (648 bytes) |
+
+A Capture the Flag match adds a sixth refusal: a team numbered above 2, which would fly with no
+flag, under 10519.
+
+### Capture the Flag
+
+The original's flag ask `0x1c` and flag table `0x1d` (above, and
+[`multiplayer-ctf.md`](multiplayer-ctf.md)) are minted anew, naming seats rather than player ids.
+Their ids stay the original's objective messages.
+
+| Id | Message | Class | Carries |
+|---|---|---|---|
+| `0x63` | Flag ask | reliable, guest to host; an eject also host to every guest | the flag's team number at 4, the ask at 5 (take 1, home 2, eject 3), the asking seat at 6, one reserved byte (8 bytes). Eject is the console's `ejectflag`, which the host relays as the drop every machine then runs |
+| `0x64` | Flag table | reliable, host to every guest | the flag count at 4, three reserved bytes, then four rows of 4 bytes: the team number, the state (1 held, 2 at home, 3 floating) and the holding seat (`0xFF` none), one reserved byte (24 bytes) |
+
+Zeppelin vs Zeppelin's return is a point rather than a table entry (`FUN_004969b0`'s mode 4 branch,
+[`multiplayer-zvz.md`](multiplayer-zvz.md)), so the host's answer to `0x44` there is minted anew
+beside `0x41`. The original's `0x1e` hull state is the remake's `0x4B` path and `0x48`'s pool
+events, and its `0x1f` and `0x20` part deaths ride the pool events as every destructible's do.
+
+| Id | Message | Class | Carries |
+|---|---|---|---|
+| `0x65` | Spawn at | reliable, host to all | the seat at 4, three reserved bytes, the position as three floats at 8, the heading in degrees at 20 (24 bytes) |
 
 ### LAN discovery
 

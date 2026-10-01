@@ -274,6 +274,50 @@ public sealed class NetSession : INetTransportListener
         };
     }
 
+    /// <summary>Forwards every arriving <typeparamref name="T"/> to each other guest that
+    /// <paramref name="admits"/> takes, byte for byte, once per machine however many seats it flies.
+    /// The predicate is handed the message, the peer it came from and the peer it would go to. The
+    /// sender is never sent its own message.</summary>
+    /// <typeparam name="T">The message being relayed.</typeparam>
+    public void RelayToPeers<T>(Func<T, int, int, bool> admits)
+        where T : struct, INetMessage<T>
+    {
+        ArgumentNullException.ThrowIfNull(admits);
+        RequireHostRelay();
+        _relays[T.Type] = (from, channel, payload) =>
+        {
+            if (!T.TryRead(payload, out var message))
+            {
+                return;
+            }
+
+            var peers = _transport.Peers;
+            for (int i = 0; i < peers.Count; i++)
+            {
+                if (peers[i] != from && admits(message, from, peers[i]))
+                {
+                    Forward(peers[i], T.Type, channel, payload);
+                }
+            }
+        };
+    }
+
+    /// <summary>Whether <paramref name="peer"/> flies a seat on lobby team <paramref name="team"/>,
+    /// which is the whole of a team line's addressing. A seat's team number is never a team id.
+    /// </summary>
+    public bool FliesOnTeam(int peer, int team)
+    {
+        foreach (var seat in _seats)
+        {
+            if (seat.PeerId == peer && seat.TeamId == team)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>Advances the transport by <paramref name="dt"/> seconds, which is where every
     /// arrival is handed to its handler. The one place this session does anything on its own.
     /// </summary>
@@ -394,7 +438,7 @@ public sealed class NetSession : INetTransportListener
             var seat = _seats[i];
             entries[i] = new NetSeatEntry(
                 (byte)seat.SeatIndex, (byte)seat.TeamId, AirframeIndex(seat.PlaneNode),
-                seat.PeerId == _transport.LocalPeer, seat.Callsign);
+                seat.PeerId == _transport.LocalPeer, seat.Callsign, seat.Voice);
         }
 
         return entries;
@@ -465,6 +509,7 @@ public sealed class NetSession : INetTransportListener
                 IsLocal = local,
                 Callsign = entry.Callsign,
                 PlaneNode = AirframeName(entry.Plane),
+                Voice = entry.Voice,
             });
         }
     }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using CSVM.Extraction;
 using CSVM.Mech3;
@@ -42,7 +43,7 @@ internal static class LoadProgressSuites
         + "chart sheet's prog_redload both resolve at their authored width, the fill at each of "
         + "the sixteen authored milestones is floor(stripWidth * fraction) pixels and never "
         + "steps backwards, the propeller cycles the six extracted frames at its authored point "
-        + "and rate, the campaign sheet's own content is unchanged under the overlay that moves, "
+        + "and rate with no still frame drawn behind it, the campaign sheet's own content is unchanged under the overlay that moves, "
         + "the board owns the pump for exactly as long as it is in the tree so a CLI launch gains "
         + "no draw, every one of the sixteen steps reported back to back lights the strip a lamp "
         + "at a time on the window's own frames, and a reported step draws a frame from inside "
@@ -108,6 +109,9 @@ internal static class LoadProgressSuites
             report.AppendLine(
                 $"{family} fill={motion.FillArt} {(int)art.X}x{(int)art.Y} at ({motion.FillX},{motion.FillY}) "
                 + $"propeller={motion.Propeller.Count} frame(s) at ({motion.PropellerX},{motion.PropellerY})");
+            ctx.Same(
+                1, PropellerDraws(still.Pictures, motion) + PropellerDraws(view.Moving, motion),
+                $"{family}: the board on a window opens on one propeller, the moving layer's");
             WalkMilestones(ctx, report, family, still, motion, art, stripWidth);
         }
         finally
@@ -140,6 +144,13 @@ internal static class LoadProgressSuites
                 frames.Add(named);
             }
 
+            int blades = PropellerDraws(painted.Pictures, motion);
+            foreach (var panel in painted.Overlays)
+            {
+                blades += PropellerDraws(panel.Pictures, motion);
+            }
+
+            ctx.Same(1, blades, $"{family}: {step} draws one propeller, not a still one behind it");
             ctx.Same(
                 still.Pictures.Count, painted.Pictures.Count,
                 $"{family}: {step} leaves the still composition's {still.Pictures.Count} picture(s) alone");
@@ -173,7 +184,7 @@ internal static class LoadProgressSuites
             $"the sheet's script authors the whole six-frame cycle");
         ctx.Check(
             motion.Propeller.Count > 0 && motion.Propeller[0] == LoadScreens.Propeller[0],
-            $"the sheet's cycle starts on {LoadScreens.Propeller[0]}, the frame its still draws");
+            $"the sheet's cycle starts on {LoadScreens.Propeller[0]}, the frame a still capture draws");
         ctx.Check(
             motion.PropellerX != 0f || motion.PropellerY != 0f,
             $"the sheet's cycle sits where its script put it ({motion.PropellerX},{motion.PropellerY})");
@@ -394,6 +405,18 @@ internal static class LoadProgressSuites
         }
 
         return 0;
+    }
+
+    // How many of the pictures are one of the cycle's frames, which is how many propellers show.
+    private static int PropellerDraws(IReadOnlyList<BoardPicture> pictures, LoadMotion motion)
+    {
+        int count = 0;
+        foreach (var picture in pictures)
+        {
+            count += motion.Propeller.Contains(picture.Art.Name) ? 1 : 0;
+        }
+
+        return count;
     }
 
     // The propeller frame the painted board draws, or null where the screen carries no propeller.

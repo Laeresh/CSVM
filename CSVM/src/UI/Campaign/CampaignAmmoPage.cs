@@ -281,6 +281,10 @@ public sealed class CampaignAmmoPage : CampaignPage
         return null;
     }
 
+    /// <summary>A pick row takes the cursor only while it has a field, since the rows without one
+    /// draw nothing. ⚠ Read live, never cached: the aircraft and its fit decide which rows have one.</summary>
+    public override bool Focusable(int row) => row >= AcceptRow || Combo(row) != null;
+
     /// <summary>A pick row's words are its field's, and the board draws them inside the field. A
     /// row with no field contributes no line at all, which is why these are empty rather than the
     /// caption's words repeated.</summary>
@@ -677,13 +681,16 @@ public sealed class CampaignAmmoPage : CampaignPage
     private int ProgressOrdinal() =>
         Math.Max(1, (Flow.Profile?.MissionsCompleted ?? Flow.MissionSeq) + 1);
 
-    // The plane's gun/hardpoint shape: from its own CustomPlaneStore build when it has one (every
-    // hangar-built plane), else the airframe's plain stock fit (the two profile-seeded starters,
-    // which use the stock-fit fallback and never touch CustomPlaneStore, and a guest's
-    // stock airframe, which is named for its airframe and so must never look a build up by name).
+    // The plane's gun/hardpoint shape comes from its own CustomPlaneStore build when it has one,
+    // as every hangar-built plane does. Otherwise it is the airframe's plain stock fit, as for the
+    // two profile-seeded starters. A guest's stock airframe is named for its airframe, so it must
+    // never look a build up by name. A network guest's plane is its host's, whose build only the
+    // host's hangar word carries.
     private SlotBuild ResolveBuild(OwnedPlane plane)
     {
-        var built = Flow.Field.IsStock(plane) ? null : _planes?.Load(plane.Name);
+        var built = Flow.Feature.IsGuest ? Flow.Feature.GuestBuildOf(plane)
+            : Flow.Field.IsStock(plane) ? null
+            : _planes?.Load(plane.Name);
         if (built != null)
         {
             var present = new bool[4];

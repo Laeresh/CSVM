@@ -192,20 +192,23 @@ internal sealed class AiFlightAssembler
             }
             onCreated(controller);
 
-            // The AI def's own fit when it authors one, the player stock table otherwise. Both
-            // paths say so when they come up empty: an AI plane that flies unarmed is a bug that
-            // looks exactly like a passive enemy from the cockpit.
+            // A fit outranks the AI def's weapons, since the original rebuilds its wingman's list
+            // from the hangar record. Every path warns when it comes up empty, because an unarmed
+            // AI plane looks exactly like a passive enemy from the cockpit.
             try
             {
-                if (stats.AiWeapons.Count > 0)
+                if (spawn.Fit is { } fit && _aircraft.StockLoadouts.For(stats.DefName) is { } fitBase)
+                {
+                    controller.Loadout = Loadout.BindWingman(fit.ApplyTo(fitBase), planeModel, _aircraft.WeaponDefs);
+                }
+                else if (stats.AiWeapons.Count > 0)
                 {
                     controller.Loadout = Loadout.BindAi(stats.AiWeapons,
                         stats.AiDefName ?? stats.DefName, planeModel, _aircraft.WeaponDefs);
                 }
                 else if (_aircraft.StockLoadouts.For(stats.DefName) is { } loadout)
                 {
-                    controller.Loadout = Loadout.Bind(
-                        spawn.Fit is { } fit ? fit.ApplyTo(loadout) : loadout, planeModel, _aircraft.WeaponDefs);
+                    controller.Loadout = Loadout.Bind(loadout, planeModel, _aircraft.WeaponDefs);
                 }
                 else
                 {
@@ -265,7 +268,7 @@ internal sealed class AiFlightAssembler
             // one-shots measure against. An aircraft answering two listener models let a
             // splitscreen pane hear its engine and not its guns, or the reverse.
             controller.EngineAudio = AiEngineAudio.Attach(controller, _world.Sounds, _world.SoundDefs,
-                stats, _world.HumanPositions);
+                stats, _world.HumanPositions, _world.VoiceDuck);
             // Attach no-ops to null when the session found no sound archive; the own-ship
             // FlightAudio is never built for an AI. The engine loop culls at 2000 units, each
             // weapon cue at its own authored audible distance.
@@ -287,13 +290,12 @@ internal sealed class AiFlightAssembler
                 // with a pump takes it off the launch frame; one without builds it in place.
                 if (_crashRigs is { } queue)
                 {
-                    queue.Defer(controller, rig,
-                        () => controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false));
+                    queue.Defer(controller, rig, controller.SpinPropsAtSpawn);
                 }
                 else
                 {
                     rig.Finish();
-                    controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);
+                    controller.SpinPropsAtSpawn();
                 }
             }
         }

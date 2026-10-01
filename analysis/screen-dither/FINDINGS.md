@@ -66,3 +66,44 @@ frame sits inside the shadow cascades.
 Medium against Ultra at the same pose, 2560x1440: `chk2` 2.037 to 1.112, while `mean` moves 83.98
 to 83.95 and `sd` 40.201 to 40.200. The difference image is a woven mesh over every lit surface
 with no scene structure in it.
+
+## The shadow-quality levels
+
+Question: which cheaper sun-shadow settings keep the pattern at or under the shipped look, so the
+Enhanced `Shadow Quality` row (`CSVM/src/Utils/ShadowQualitySetting.cs`) can offer them.
+
+The terrain and the water no longer cast a sun shadow, so the waterfall pose above now shows no
+caster at all: every setting renders it alike (whole-frame `chk2` 0.825 at every level). The
+pattern now lives in the penumbrae of the buildings, vehicles and aircraft that still cast. The
+measure is the `chk2` of the difference against the hard-shadow floor (angular distance 0, filter
+Hard), at 1600x900, with anti-aliasing **off** to expose the source; the C1 town pose is
+`--freecam --chapter=C1 --pos=-6620,175,-5690 --direction=0,-0.42,-0.91`, the C5 city pose
+`--freecam --chapter=C5 --pos=-9256,178,-3155 --direction=-0.588,-0.1,-0.809`.
+
+| sun (deg) / filter | C1 town chk2(dL) | C5 city chk2(dL) | town gpu_ms | city gpu_ms |
+|---|---|---|---|---|
+| 1.0 / Ultra (shipped) | 2.03 | 0.45 | 3.3 | 3.2 |
+| 1.0 / High | 2.20 | 0.48 | 3.1 | 2.7 |
+| 1.0 / Medium | 2.61 | 0.64 | 1.5 | 1.4 |
+| 0.5 / High | 1.47 | 0.24 | 2.3 | 1.9 |
+| 0.5 / Medium | 2.14 | 0.29 | 1.3 | 1.2 |
+| 0.25 / Medium | 1.32 | 0.10 | 1.3 | 0.9 |
+| 0.25 / Low | 1.57 | 0.12 | 1.0 | 0.8 |
+| 0 / Low, blur 1 (four-tap PCF) | 0.42 | 0.05 | 0.6 | 0.7 |
+| no sun shadow | 0.29 | 0.17 | 0.5 | 0.6 |
+
+A lower rung under the one-degree sun raises the pattern above the shipped one, which is the
+artefact `EnhancedShadowFilterQuality`'s old warning named. Each rung holds a width: Ultra 1.0, High
+0.5, Medium 0.25, and a zero-width sun below that. 0.5 on Medium already matches the shipped
+pattern. A lower rung under a wide sun also loses the aircraft's own shadow, the blocker search
+missing a thin caster with too few samples (1.0 on Medium at the C3 plane pose).
+
+The atlas edge is the second lever. At 4096 against 8192 (anti-aliasing on): the town pose at 0.5 /
+High 3.0 to 2.0 ms, the city 2.0 to 1.3 ms, 0.25 / Medium 1.05 to 0.82 ms on the city. The
+aircraft's own shadow stays visible at 4096 at both the C3 chase pose (`--chapter=C3
+--pos=-2471.167,41.406,-1281.563 --direction=-0.5962,-0.02573,0.80242 --hold=0,0,0,0.6`) and the
+same pose 40 m higher, at every level from 0 to 0.5 degrees; at 2048 it fades. A tighter first split (0.08 of
+the shadow distance) bought nothing measurable.
+
+Shipped levels: Off (no shadow), Low (0 / SoftLow, blur 1, 4096), Medium (0.25 / SoftMedium, 4096),
+High (0.5 / SoftHigh, 4096), Ultra (1.0 / SoftUltra, 8192, the shipped look and the default).

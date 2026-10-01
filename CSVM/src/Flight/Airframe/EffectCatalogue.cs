@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Mech3;
+using Godot;
 
 namespace CSVM.Flight.Airframe;
 
@@ -62,6 +63,12 @@ public static class EffectCatalogue
     // vehicle named `player`. Same NAME as the crash root, so it needs no anchor of its own.
     public const string PlayerDestroyAnim = "player";
 
+    /// <summary>What a vehicle def naming no <c>spin_props_anim</c> spins its propellers with.</summary>
+    public const string DefaultSpinPropsAnim = "spinprops";
+
+    /// <summary>What a vehicle def naming no <c>stop_props_anim</c> winds them down with.</summary>
+    public const string DefaultStopPropsAnim = "stopprops";
+
     // The middle of damage_shakes.zrd.json's three `*_aishake` defs, the plane-rocking half of the
     // camera shake a person at the controls gets instead. FlightController plays it on an AI's
     // nitro engage, the one trigger of the three the executable's shake player is decoded on, and
@@ -110,6 +117,32 @@ public static class EffectCatalogue
     // whatever the flight path (docs/org/ordnanceTypes.md).
     public static readonly string[] ImpactUpperRingAnimNames = { "call_he_ring1" };
 
+    // The impact effects whose fireball lights what stands around it: the HE ground burst, the
+    // torpedo's, and the two heaviest fireball defs. ⚠ Enhanced Graphics only,
+    // and a remake-only rule. Effects.HeatShimmer and the enhanced scorch take the whole set.
+    // Each also throws a burst light (BurstLightShapes, below). The faithful path registers none of
+    // these and draws the authored light. The gun hits and the
+    // fireless bursts carry no fireball, and `ap_ground_effect`/`flak_effect` throw a spark.
+    public static readonly string[] BurstLightAnimNames =
+        { "he_ground_effect", "torpedo_ground_effect", "large_fireball", "small_fireball" };
+
+    // Every effect that throws an enhanced burst light, and that light's shape (WorldLights.AddBurst).
+    // A superset of BurstLightAnimNames. The seeker's ground flare and the flash rocket's detonation
+    // light the ground but carry no fireball, so they neither shimmer nor scorch. Under Enhanced each
+    // replaces the authored light its def declares (AnimRuntime.LightReplacedAnimNames). The HE and
+    // torpedo defs author one `he_light` colour (1.0, 0.86, 0.29); these sit a little redder, and the
+    // torpedo reads far heavier. TUNE, judged at the controls (docs/org/ordnanceTypes.md).
+    public static readonly IReadOnlyDictionary<string, WorldLights.BurstShape> BurstLightShapes =
+        new Dictionary<string, WorldLights.BurstShape>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["he_ground_effect"] = new(new Color(1.0f, 0.74f, 0.265f), 4.0f, 180f, 0.29f),
+            ["large_fireball"] = new(new Color(1.0f, 0.74f, 0.265f), 4.0f, 180f, 0.29f),
+            ["small_fireball"] = new(new Color(1.0f, 0.74f, 0.265f), 2.5f, 120f, 0.25f),
+            ["torpedo_ground_effect"] = new(new Color(1.0f, 0.69f, 0.245f), 9.0f, 280f, 0.45f),
+            ["ballflare.flt"] = new(new Color(1.0f, 0.7f, 0.42f), 1.8f, 160f, 0.3f),
+            ["flash_effect"] = new(new Color(0.72f, 0.84f, 1.0f), 14.0f, 350f, 0.22f),
+        };
+
     // The bailed pilot under his canopy. He is not a piece of the wreck, he is a man stepping out
     // of it, so he takes neither its momentum nor its attitude. The momentum half needs no list any
     // more: `chuteman` authors no `impact_force`, so the authored gate excludes him by data.
@@ -133,13 +166,12 @@ public static class EffectCatalogue
     public static readonly string[] PlaneDamageEffectAnims =
         { "nose_damage_effects", "tail_damage_effects", "leftwing_damage_effects", "rightwing_damage_effects" };
 
-    // The engine start/stop choreography (plane_props.zrd.json): the static blade prop cross-fades
-    // to its spinning blur disc (with the startup smokepuffN burst) and the reverse on shutdown.
-    // Bound alongside the crash def for the same live puffer factory; unlike the crash/damage defs
-    // above, FlightController plays these directly (spawn/engine-death), never through a CALL.
-    // `spinprops` is the silent, instant restart the original's own bit-2 falling edge runs
-    // (docs/org/ordnanceTypes.md); `startprops` is named by no airframe def in the original's data.
-    public static readonly string[] PropChoreographyAnims = { "startprops", "stopprops", "spinprops" };
+    // The propeller defs from plane_props.zrd.json. FlightController plays them directly unless the
+    // airframe's def names its own pair, which CrashRigAnimNames binds too. `startprops` stays
+    // loadable, but nothing plays it. No def or scene in the original's data names it
+    // (docs/org/ordnanceTypes.md).
+    public static readonly string[] PropChoreographyAnims =
+        { "startprops", DefaultStopPropsAnim, DefaultSpinPropsAnim };
 
     // The nitro boost's two defs (plane_props.zrd.json): the nitroprop discs cross-fade in over
     // the spinning props with the exhaust puffers and snd_nitrostart, and the decay reverses it.
@@ -237,6 +269,18 @@ public static class EffectCatalogue
     // only where a bound def really names it and the gamez pair carries it as a root.
     public static readonly string[] CrashActivatedRoots = { "cpilot" };
 
+    /// <summary>Whether a played impact effect throws a fireball that lights the world around it
+    /// and heats the air over it (<see cref="BurstLightAnimNames"/>): the burst light and the heat
+    /// shimmer read the same set. Enhanced Graphics only; the faithful presentation registers
+    /// neither, so it never asks.</summary>
+    public static bool IsBurstLight(string animName) =>
+        Array.Exists(BurstLightAnimNames,
+            name => string.Equals(name, animName, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The burst light a played effect throws, or null for one that throws none.</summary>
+    public static WorldLights.BurstShape? BurstLightShape(string animName) =>
+        BurstLightShapes.TryGetValue(animName, out var shape) ? shape : null;
+
     /// <summary>The crash-def vector this program can play, built over the whole surface registry
     /// with <see cref="CrashDefPrefix"/>, what <c>BuildFlightCrashRuntime</c> binds and what
     /// <c>FlightController.Crash</c> indexes with the struck material's surface id. A slot whose
@@ -289,18 +333,22 @@ public static class EffectCatalogue
         return false;
     }
 
-    /// <summary>Everything the per-player crash rig binds, every playable crash-vector slot (the
-    /// struck surface is only known at impact, so the whole vector is bound), the four damage
-    /// shims, the prop choreography, both authored damage-stage menus and this rig's destroy def,
-    /// i.e. every def that plays ON one aircraft, and therefore the name set whose anchor-root
-    /// closure that rig's own template stage must satisfy (<see cref="CrashStageRoots"/>). Both
-    /// menus regardless of who flies; <paramref name="humanPiloted"/> adds the canopy holes.</summary>
+    /// <summary>Everything the per-player crash rig binds, which is every def that plays ON one
+    /// aircraft. That is every playable crash-vector slot, since the struck surface is known only at
+    /// impact. It adds the four damage shims, the prop choreography, both damage-stage menus and the
+    /// destroy def. The rig's template stage must satisfy this set's anchor-root closure, which is
+    /// <see cref="CrashStageRoots"/>. A human rig adds the canopy holes, and
+    /// <paramref name="propAnims"/> is the propeller pair the airframe's own def names.</summary>
     public static IReadOnlyList<string> CrashRigAnimNames(SurfaceDefTable crashDefs,
-        string? destroyAnim = null, bool humanPiloted = false)
+        string? destroyAnim = null, bool humanPiloted = false, IEnumerable<string>? propAnims = null)
     {
         var names = new List<string>(crashDefs.PlayableDefs);
         names.AddRange(PlaneDamageEffectAnims);
         names.AddRange(PropChoreographyAnims);
+        if (propAnims != null)
+            foreach (var prop in propAnims)
+                if (!names.Contains(prop, StringComparer.OrdinalIgnoreCase))
+                    names.Add(prop);
         names.AddRange(NitroAnims);
         names.Add(AiShakeAnim);
         names.AddRange(DamageStageAnims);

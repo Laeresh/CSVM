@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Effects;
 using CSVM.Flight.Airframe;
+using CSVM.Flight.Audio;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Hangar;
 using CSVM.Flight.Hud;
@@ -141,6 +142,10 @@ internal sealed class FlightWorldBindings
     public SoundArchive? Sounds { get; init; }
     public Dictionary<string, SoundDef>? SoundDefs { get; init; }
     public Dictionary<string, SoundGroup>? SoundGroups { get; init; }
+
+    /// <summary>The session's one engine duck, handed to every engine voice the roster builds, own
+    /// ship and AI alike. A radio line lowers them all through the same gain.</summary>
+    public EngineVoiceDuck? VoiceDuck { get; init; }
     public string ChapterZrdrPath { get; init; } = "";
     public string MissionZrdrPath { get; init; } = "";
     public bool DebugCollision { get; init; }
@@ -166,6 +171,11 @@ internal sealed class HumanRosterBindings
 
     /// <summary>The fit a seat flown elsewhere carries, by seat, or null for its stock fit.</summary>
     public Func<int, LoadoutChoice?>? SeatFit { get; init; }
+
+    /// <summary>The custom plane a seat flown elsewhere carries, by seat, or null for its stock
+    /// airframe. Its hit volumes and damage parts must match the owner's, since the shooter decides
+    /// hits.</summary>
+    public Func<int, CustomPlaneDef?>? SeatBuild { get; init; }
     public float MixGain { get; init; } = 1f;
 
     /// <summary>The pads each of this machine's players reads, indexed by local player, never by
@@ -178,6 +188,10 @@ internal sealed class HumanRosterBindings
     public Func<int, MenuInput> MenuInputFor { get; init; } = null!;
     public bool ExitsToMenu { get; init; }
     public Action ExitSession { get; init; } = null!;
+
+    /// <summary>The graphics-mode action a local seat fires, the Launcher's live switch; null
+    /// leaves it inert.</summary>
+    public Action? ToggleGraphicsMode { get; init; }
     public List<SpawnPoint>? SpawnList { get; init; }
     public int SpawnBase { get; init; }
     public StuntMission? StuntZones { get; init; }

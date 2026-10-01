@@ -111,10 +111,10 @@ Three sources, and a reader should know which one is under any given number.
 `PS_T_TITLE` is read at its row's `x = 132` and drawn left-justified where the row says centred;
 only the justification is pinned there.
 
-Two positions are chosen rather than decoded, and both are marked as such in the code. The cabin's
-memento window (`179, 330`, 73x84) is the block each `PC_P_HANGAR*.JPG` keys out for it, where the
-layout's `PC_MEMENTO` pane sits at `169, 325` with no size, and the picture inside it is whichever
-keepsake the profile holds, the campaign's opening one until the chooser writes another. The profile screen's title mark
+One position is chosen rather than decoded, and is marked as such in the code. The cabin's memento
+is decoded: the `PC_MEMENTO` pane at `169, 325` draws the whole scrapbook file the profile holds at
+the script's own scale and tilt ([campaign-screens.md](../formats/campaign-screens.md), "The
+cabin"). The profile screen's title mark
 (`MM_Logo.png`) is `[@MainMenu@]`'s own `MM_LOGO` row, read from the layout; what is chosen is
 standing it over the profile dialog at all, matched off `Campaign Player Profile.png`, since the
 flag movie it belongs over is not decoded.

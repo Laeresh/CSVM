@@ -1638,8 +1638,8 @@ internal static class CampaignRosterSuites
             }
         };
 
-        // A warp, not an Activate: it writes a pose and a velocity and nothing else, so both keep
-        // the net seat an activation would reseat.
+        // A warp, not an Activate. It writes a pose and a velocity and nothing else, so neither the
+        // respawn nor its spawn grace touches the aircraft.
         var track = new Basis(Vector3.Up, Mathf.DegToRad(pinned.HeadingDeg)) * Vector3.Forward;
         void Pin(bool holdProber)
         {

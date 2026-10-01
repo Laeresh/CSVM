@@ -32,16 +32,21 @@ internal sealed class LightChannel
     // True when another runtime owns the set's frame (see WorldLights.AddSource).
     private readonly Func<bool> _contributesOnly;
 
+    // Whether a def's lights are replaced by the enhanced burst light (see AnimLight.Replaced).
+    private readonly Func<AnimDefinition, bool> _replaced;
+
     private Action<WorldLights>? _submit;
 
     public LightChannel(Func<WorldLights?> lights, Func<string, AnimDefinition, Node3D?, Node3D?> resolve,
-        Func<IReadOnlyList<Vector3>> viewers, Func<bool> debugMotions, Func<bool> contributesOnly)
+        Func<IReadOnlyList<Vector3>> viewers, Func<bool> debugMotions, Func<bool> contributesOnly,
+        Func<AnimDefinition, bool> replaced)
     {
         _worldLights = lights;
         _resolve = resolve;
         _viewers = viewers;
         _debugMotions = debugMotions;
         _contributesOnly = contributesOnly;
+        _replaced = replaced;
     }
 
     /// <summary>How many point lights this channel has declared, for the bootstrap census.
@@ -66,7 +71,7 @@ internal sealed class LightChannel
             return;
         var key = (name, anchor);
         if (!_lights.TryGetValue(key, out var light))
-            _lights[key] = light = new AnimLight { Host = anchor };
+            _lights[key] = light = new AnimLight { Host = anchor, Replaced = _replaced(def) };
 
         // AT_NODE arrives as translate:{AtNode:{name, pos}}, node plus a local offset, the same
         // shape (and the same frame) as a puffer's AT_NODE.
@@ -162,7 +167,9 @@ internal sealed class LightChannel
             lights.AddSource(_submit ??= Submit);
             return;
         }
-        lights.Begin();
+        // The step goes in so the enhanced burst lights age on this tick's sim clock. A wall clock
+        // of their own would drift from it.
+        lights.Begin(dt);
         Submit(lights);
         lights.Commit(_viewers());
         if (_debugMotions())
@@ -186,7 +193,7 @@ internal sealed class LightChannel
     {
         foreach (var light in _lights.Values)
         {
-            if (!light.Active || light.RangeMax <= 0f)
+            if (!light.Active || light.Replaced || light.RangeMax <= 0f)
                 continue;
             // ⚠ A light inside a deactivated subtree is off. A building's destroyed variant must
             // not keep lighting the ground through its healthy twin, and a retired burst copy

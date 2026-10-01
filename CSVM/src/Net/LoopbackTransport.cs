@@ -12,8 +12,12 @@ namespace CSVM.Net;
 /// imitated. Loss touches only the unreliable classes, a reliable stream keeps its send order
 /// whatever the jitter, and a stale sequenced payload is discarded.
 /// </summary>
-public sealed class LoopbackTransport : INetTransport
+public sealed class LoopbackTransport : INetTransport, INetPeerAddress
 {
+    /// <summary>The address every end names unless a suite gives it another: one machine's, as
+    /// every guest of a host on this machine reaches it from.</summary>
+    public const string MachineAddress = "127.0.0.1";
+
     private readonly int _local;
     private readonly Random _rng;
     private readonly List<int> _peers = new();
@@ -42,6 +46,10 @@ public sealed class LoopbackTransport : INetTransport
 
     /// <summary>Seconds this end has been stepped, the clock every deadline is measured on.</summary>
     public double Now => _now;
+
+    /// <summary>The address the other ends name this one by. A suite gives two ends different
+    /// addresses to stand them on two machines.</summary>
+    public string Address { get; set; } = MachineAddress;
 
     /// <summary>Payloads this end sent that the loss model threw away. The ground truth a
     /// receiver's inferred drop count is checked against.</summary>
@@ -84,6 +92,9 @@ public sealed class LoopbackTransport : INetTransport
     /// <summary>The share of <see cref="Lost"/> sent on <paramref name="channel"/>. A channel no
     /// sequence stream rides is lost without a gap, so a receiver cannot infer it.</summary>
     public int LostOn(int channel) => _lostOn.TryGetValue(channel, out int lost) ? lost : 0;
+
+    /// <inheritdoc/>
+    public string? AddressOf(int peer) => _links.TryGetValue(peer, out var link) ? link.Address : null;
 
     /// <inheritdoc/>
     public void Bind(INetTransportListener listener)

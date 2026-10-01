@@ -5,6 +5,7 @@ using CSVM.Effects;
 using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
+using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
@@ -67,105 +68,6 @@ public partial class Launcher : Node3D
     // gain or a mute written here still reaches every sound while leaving a player's own mix on the
     // three child buses alone.
     private const int MasterBus = 0;
-
-    // TUNE, and the FALLBACK only: a flown mission overwrites this per zone from its own pushed-out
-    // fog near (WeatherRig.ApplyEnhancedLighting), so shadows end where that zone's haze ramp
-    // begins. This value is what a session with no weather.json gets, and it sits in the middle of
-    // the pushed-near range the shipped zones resolve to (2000-4200 m).
-    private const float EnhancedShadowMaxDistance = 3000f;
-
-    // TUNE, paired with the distance above and judged the same way (WeatherRig.ApplyEnhancedLighting
-    // sets the flown-mission copy). Fades the last cascade out before this fallback distance rather
-    // than cutting at a hard edge.
-    private const float EnhancedShadowFadeStart = 0.8f;
-
-    // TUNE, judged at the controls, and the pair trades against each other: lower values put
-    // dithered acne over every terrain triangle at C1's 25° sun, higher ones dissolve a hangar's
-    // shadow along with it. These keep the building and aircraft silhouettes with no acne left.
-    private const float EnhancedShadowBias = 0.05f;
-    private const float EnhancedShadowNormalBias = 1.25f;
-
-    // TUNE. Fractions of EnhancedShadowMaxDistance, tighter than Godot's 0.1/0.2/0.5 because the
-    // shadows a player reads are the aircraft's own and the buildings it passes, all inside the
-    // first few hundred metres; the outer cascades only have to carry a skyline into the haze.
-    private const float EnhancedShadowSplit1 = 0.06f;
-    private const float EnhancedShadowSplit2 = 0.17f;
-    private const float EnhancedShadowSplit3 = 0.42f;
-
-    // TUNE. Screen-space reflection on the glossy water arm: the step count buys reflection length
-    // along the ray, the fades hide where a ray runs off the screen or past the depth buffer.
-    // The fade-out exponent is the lever on the border and aircraft flicker, since it dims a ray
-    // before it is lost. Depth tolerance measures inert here, from this value up to 8.0.
-    private const int EnhancedSsrMaxSteps = 64;
-    private const float EnhancedSsrFadeIn = 0.15f;
-    private const float EnhancedSsrFadeOut = 2.5f;
-    private const float EnhancedSsrDepthTolerance = 0.2f;
-
-    // TUNE, judged at the controls. The sun's apparent size in degrees; the real sun is about
-    // 0.5, softening a cast edge into a penumbra instead of a hard line. A 0.25/0.5/1.0/2.0
-    // sweep at the C1 waterfall lake held the edge at 4-6 px through 1.0. Only 2.0 opened it
-    // into a visibly soft ~18 px transition.
-    private const float EnhancedShadowAngularDistance = 2.0f;
-
-    // TUNE, judged at the controls: Godot's own default. Raising it alongside the angular
-    // distance above widened the edge further, but it also dithered the lit water beside it.
-    // Kept here rather than trading a hard line for banding.
-    private const float EnhancedShadowBlur = 1.0f;
-
-    // ⚠ Do not lower this while EnhancedShadowAngularDistance stays above the sun's real 0.5°.
-    // Godot resolves a penumbra by sampling the shadow map through a disc rotated per screen
-    // pixel. Too few samples for the disc's width leave that rotation as a woven pattern over
-    // every lit surface. This width needs the top rung.
-    private const RenderingServer.ShadowQuality EnhancedShadowFilterQuality =
-        RenderingServer.ShadowQuality.SoftUltra;
-
-    // TUNE, judged at the controls on C2/C5. Godot's own default (1.0 m) reads a building's own
-    // trim but misses the wider contact shading a street canyon wants at this world's scale
-    // (buildings tens of metres tall, streets a similar width); this radius picks up a block's
-    // base and a hangar's corner without darkening open tarmac.
-    private const float EnhancedSsaoRadius = 2.5f;
-
-    // TUNE, judged at the controls: Godot's defaults (intensity 2.0, power 1.5) already read as
-    // grounded contact shading rather than a grey wash at this radius, so both are kept.
-    private const float EnhancedSsaoIntensity = 2.0f;
-    private const float EnhancedSsaoPower = 1.5f;
-
-    // TUNE, Godot defaults: detail keeps small-scale creases (window mullions, girders) from
-    // being swallowed by the coarse term above; horizon and sharpness are the denoise pair that
-    // keeps the depth-buffer edges from shimmering worse than the effect is worth.
-    private const float EnhancedSsaoDetail = 0.5f;
-    private const float EnhancedSsaoHorizon = 0.06f;
-    private const float EnhancedSsaoSharpness = 0.98f;
-
-    // TUNE, judged at the controls against C21's contract (only the glow-arm sprites exceed 1.0
-    // in the HDR buffer). A threshold of 1.0 blooms exactly them; bloom stays 0 so nothing below
-    // threshold glows, and screen blend keeps a flare's halo additive without blowing its own
-    // core out further.
-    private const float EnhancedGlowHdrThreshold = 1.0f;
-    private const float EnhancedGlowBloom = 0.0f;
-    private const float EnhancedGlowIntensity = 0.9f;
-    private const float EnhancedGlowStrength = 1.1f;
-    private const Godot.Environment.GlowBlendModeEnum EnhancedGlowBlendMode =
-        Godot.Environment.GlowBlendModeEnum.Screen;
-
-    // TUNE. Scale and cap on the values the glow pass reads before it thresholds them; wide enough
-    // that a saturated flare core (255 before the tonemap) still separates from its own falloff.
-    private const float EnhancedGlowHdrScale = 2.0f;
-    private const float EnhancedGlowHdrLuminanceCap = 8.0f;
-
-    // TUNE, judged at the controls against a C4 horizon, a C1 horizon and C5 at night: AgX rolls
-    // off the far-ridge washout the authored sun energy produces (Wave B) while keeping the night
-    // city's contrast, where Filmic read flatter. Exposure stays neutral; the AgX-specific white
-    // point is what recovers the horizon rather than the general TonemapWhite, which AgX ignores.
-    private const Godot.Environment.ToneMapper EnhancedTonemapMode = Godot.Environment.ToneMapper.Agx;
-    private const float EnhancedTonemapExposure = 1.0f;
-    private const float EnhancedTonemapAgxWhite = 6.0f;
-    private const float EnhancedTonemapAgxContrast = 1.0f;
-
-    // The zone default FOG_COLOR (Effects/Weather.cs's no-weather zone), which is the colour a
-    // horizon dome fades into at eye level. Enhanced mode's sky until a flown zone writes its own
-    // over it, so a world with no weather.json still reflects a plausible sky.
-    private static readonly Color EnhancedDefaultSkyColor = new(0.69f, 0.69f, 0.69f);
 
     // What F11's placement print receives at the launchscreen, where no session (and no rigs)
     // exists, the same empty list the pre-split root held after a teardown.
@@ -259,6 +161,7 @@ public partial class Launcher : Node3D
     // A co-op host's fit for each seat, by seat, as its launch told the guests. A guest reads its
     // host's word off the door instead.
     private Net.CoopFit[] _coopSeatFits = System.Array.Empty<Net.CoopFit>();
+    private Net.NetPlaneBuild?[] _seatBuilds = System.Array.Empty<Net.NetPlaneBuild?>();
     private StockLoadouts? _coopStock;
     // The decoded menu layout the Original presentation composes from, loaded once by the
     // availability check and handed to every Original instance the registry creates.
@@ -266,6 +169,13 @@ public partial class Launcher : Node3D
     // An Options apply, acted on at the top of the next frame: the exit arrives inside the active
     // presentation's own tick, which is no place to free it.
     private OptionsApplyExit? _pendingApply;
+    // A seat's graphics-mode action, acted on at the top of the next frame for the same reason.
+    private bool _pendingGraphicsToggle;
+
+    // The cover over a live graphics switch in flight, null when none is up.
+    private SwitchCover? _switchCover;
+    // How many of --debug-graphics-switch's frames have fired, process-scoped like the capture.
+    private int _debugSwitchesDone;
     // The --menu= aid, held for the cold start alone: the first presentation created reads it and
     // the first ShowMenu consumes it, so no return from flight and no switch re-enters its screen.
     private string? _menuAid;
@@ -285,6 +195,8 @@ public partial class Launcher : Node3D
     // completion, not a flag stored anywhere, so a second profile that finishes in the same run
     // does not get it again. Do not replace it with a latch persisted in the profile.
     private ClosingCinema? _closingCinema;
+    // The cinema last put up, which StopCinema ends when a co-op host's film ends before the guest's.
+    private UI.Screens.CinemaScreen? _cinemaShown;
     // The score, and the archive it streams from. Both are process-lifetime, unlike the
     // build-scoped SessionArchives.Sounds: one channel has to survive a mission launch, or the
     // cabin track would restart every time the player left a board. See docs/org/music.md.
@@ -309,6 +221,9 @@ public partial class Launcher : Node3D
     // load is carried out one step a frame with the screen still up. That is what makes the screen
     // a real yield of several frames. -1 means nothing is owed.
     private int _loadStepsRun = -1;
+
+    // Frames the load screen stayed up after the owed steps, for a network start still held.
+    private int _startHeldFrames;
     // The cover that bridges the load screen and the session's first real frame. It is raised with
     // the screen, or with the build on a CLI launch. It stays opaque until the session says that
     // frame is ready, then fades up from dark. Null under --det and once it has finished.
@@ -316,12 +231,15 @@ public partial class Launcher : Node3D
 
     private double _perfClock;
     private int _perfFrames;
-    private double _perfProcess, _perfGpu, _perfCpuRender, _perfPhysics;
+    private double _perfProcess, _perfGpu, _perfCpuRender, _perfPhysics, _perfSetup;
     private double _perfDraws, _perfPrims, _perfNodes, _perfMem;
 
     // The --perf GC readout. Built with the first --perf frame rather than in _Ready, so a run
     // without the flag subscribes to no runtime events at all.
     private Utils.GcTrace? _gcTrace;
+
+    // Whether --perf has hooked the rendering server's draw signals into EngineGapCost.
+    private bool _drawMarksHooked;
 
     // The always-on rate window (ReportRate). Separate accumulators from the --perf ones above
     // rather than shared: those are opt-in and reset on a frame count, these run every session.
@@ -343,7 +261,7 @@ public partial class Launcher : Node3D
     // The --debug-net readout, null without the flag, and the wall time since it last refreshed.
     private UI.Overlays.NetReadout? _netReadout;
     private double _sinceNetReadout;
-    private Rid _viewportRid;
+    private MeasuredRenderTime _renderTime = null!;
     // The previous frame's QPC stamp, so the monitor is fed a raw wall cost rather than Godot's
     // post-processed `delta`. 0 on the first frame, which reports 0 ms and trips nothing.
     private long _lastFrameStamp;
@@ -450,6 +368,7 @@ public partial class Launcher : Node3D
         // effects, and the warnings below, emitted before the log so they read in launch order.
         _cli = SessionSpec.Parse(OS.GetCmdlineUserArgs());
         _spec = _cli;
+        Tooling.ShaderDiagnostics.Enabled = _spec.DebugShaders;
         foreach (var note in _spec.Warnings)
         {
             if (note.Category.Length == 0)
@@ -525,8 +444,9 @@ public partial class Launcher : Node3D
         // Measured render time is opt-in per viewport and reads 0 until it is, so it is enabled once
         // here rather than per frame from ReportPerf (which used to own the call): the hitch record
         // needs the CPU/GPU split on every frame, not only on a --perf run.
-        _viewportRid = GetViewport().GetViewportRid();
-        RenderingServer.ViewportSetMeasureRenderTime(_viewportRid, true);
+        var viewportRid = GetViewport().GetViewportRid();
+        RenderingServer.ViewportSetMeasureRenderTime(viewportRid, true);
+        _renderTime = new MeasuredRenderTime(viewportRid);
 
 
         // An editor run's window is created without focus (no_focus in project.godot). An
@@ -609,6 +529,12 @@ public partial class Launcher : Node3D
         {
             Log.Warn("core", $"deprecated flag={old} use={replacement}");
         }
+        // Before any door is built or suite runs: a door reads the game port as it is constructed.
+        if (_spec.NetPortBase is { } netPortBase)
+        {
+            Net.NetPorts.Use(netPortBase);
+            Log.Info("core", $"net ports: game {Net.NetPorts.Game} lan {Net.NetPorts.Lan} (--net-port-base)");
+        }
         // Ahead of --dump-config, same reason as _hitchMonitor: registers the two
         // hitchSidecar.* keys. The fallback path only matters if Log.Open itself failed.
         string hitchLogPath = Log.SinkPath
@@ -681,6 +607,11 @@ public partial class Launcher : Node3D
         // run drops the key, keeping every golden clear of a bowl; the flag survives it, for a probe.
         CraterGate.Enabled = _spec.Craters
             || (!_spec.Det && OptionsStore.UserOptions().Load().RocketCraters == true);
+        // The cockpit loop's throttle pitch, a remake-only rule. ⚠ No screen offers it; the saved key
+        // is its one door. A --det run drops the key, so a suite states the rule it tests.
+        bool? savedCockpitPitch = _spec.Det ? null : OptionsStore.UserOptions().Load().CockpitEnginePitch;
+        Flight.Audio.FlightAudio.CockpitLoopPitched = savedCockpitPitch ?? Flight.Audio.FlightAudio.CockpitLoopPitchedDefault;
+        Log.Info("sound", $"cockpit engine pitch: pitched={Flight.Audio.FlightAudio.CockpitLoopPitched} via={(savedCockpitPitch.HasValue ? "options.json" : "default")}");
         // Before the first PreferUnzipped call and process-wide, so every later resolution (the
         // chapter paths in StartSession, the menu pages' own lookups) takes the same asset shape.
         SessionPaths.ForceZipped = _spec.ZipAssets;
@@ -711,9 +642,9 @@ public partial class Launcher : Node3D
         // overrides it from WeatherState.WorldLight below.
         RenderingServer.GlobalShaderParameterAdd("csky_world_light",
             RenderingServer.GlobalShaderParameterType.Float, 1.0f);
-        // The same SUNLIGHT uncollapsed, for the camera-facing cloud cards the collapse cannot
-        // describe (docs/org/vertexLighting.md). The defaults are the no-directional-term state,
-        // ambient 1 and diffuse 0, so a view without mission weather draws a card as authored.
+        // The same SUNLIGHT uncollapsed, for the cloud cards and the enhanced billboard grades
+        // (docs/org/vertexLighting.md). The defaults, ambient 1 and diffuse 0, draw a card as
+        // authored in a view without mission weather.
         RenderingServer.GlobalShaderParameterAdd("csky_sun_dir",
             RenderingServer.GlobalShaderParameterType.Vec3, new Vector3(0f, 1f, 0f));
         RenderingServer.GlobalShaderParameterAdd("csky_sun_light",
@@ -743,15 +674,42 @@ public partial class Launcher : Node3D
         // After the --det block, so ClearOverrides has dropped a config graphics.mode; ahead of the
         // clutter fade, which needs the mode to follow the pushed fog. ⚠ --det reads no saved
         // option either: options.json is one machine's state (docs/cli.md's --graphics bullet).
-        string? savedGraphics = _spec.Det ? null : OptionsStore.UserOptions().Load().GraphicsMode;
-        bool graphicsEnhanced = Utils.GraphicsMode.Resolve(_spec.GraphicsMode, savedGraphics);
-        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={(graphicsEnhanced ? "enhanced" : "original")}");
-        // The graphics EffectsLevel's one global: the clutter fade's squared distance scale, 0 when
-        // the fade is off. Enhanced mode pushes the fade out by the fog range's own factor (the
-        // scale shrinks) so clutter reaches the pushed haze; original mode's factor is identity.
-        float clutterFadeScaleSq = Utils.EffectsLevel.ResolveClutterFadeScaleSq(WeatherRig.EnhancedFogScale());
+        var savedOptions = _spec.Det ? null : OptionsStore.UserOptions().Load();
+        bool graphicsEnhanced = Utils.GraphicsMode.Resolve(_spec.GraphicsMode, savedOptions?.GraphicsMode);
+        // The view distance under the same --det rule, a machine's own state a capture must not read.
+        var viewDistance = Utils.ViewDistance.Resolve(_spec.ViewDistance, savedOptions?.ViewDistance,
+            Config.GetString(Utils.ViewDistance.Key, Utils.ViewDistance.Default));
+        // Display settings rather than the mode's, so each is written whichever presentation won;
+        // only the method's default follows the mode. They share the mode's line because all three
+        // reach the same viewports, so a softer or slower run than expected is read off one line.
+        string antiAliasingDefault = Utils.AntiAliasingSetting.DefaultFor(graphicsEnhanced);
+        var antiAliasing = Utils.AntiAliasingSetting.Resolve(
+            Utils.AntiAliasingSetting.SavedWord(_spec.Det),
+            Config.GetString(Utils.AntiAliasingSetting.Key, antiAliasingDefault),
+            graphicsEnhanced);
+        // After the method, which clamps the scale: FSR 2.2 runs at native or below.
+        var renderScale = Utils.RenderScaleSetting.Resolve(
+            Utils.RenderScaleSetting.SavedWord(_spec.Det),
+            Config.GetString(Utils.RenderScaleSetting.Key, Utils.RenderScaleSetting.Default),
+            antiAliasing.Word);
+        // Resolved under either mode so the line says what a flip to Enhanced would fly; only
+        // SetupLighting's enhanced sun reads it.
+        string shadowFallback = Utils.ShadowQualitySetting.DefaultFor(_spec.Det);
+        var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality,
+            Utils.ShadowQualitySetting.SavedWord(_spec.Det),
+            Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
+        string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
+        string clamped = renderScale.Clamped ? " clamped_by=fsr2" : string.Empty;
+        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={renderScale.Source}{clamped} anti_aliasing={antiAliasing.Word} aa_source={antiAliasing.Source} shadow_quality={shadowQuality.Word} shadow_source={shadowQuality.Source} view_distance={viewDistance.Word} view_source={viewDistance.Source}");
+        // The window's own viewport takes the render flags here, before any scene builds. The
+        // three SubViewports take them at construction.
+        Utils.ViewportQuality.Apply(GetViewport());
+        // The clutter fade's squared distance scale, 0 when the fade is off. Enhanced mode pushes
+        // the fade out with the fog and further by the View Distance (ClutterFadeScaleSq).
+        float clutterFadeScaleSq = EnhancedLook.ClutterFadeScaleSq();
         RenderingServer.GlobalShaderParameterAdd(Utils.EffectsLevel.ShaderParam,
             RenderingServer.GlobalShaderParameterType.Float, clutterFadeScaleSq);
+        Utils.EffectsLevel.RegisteredScaleSq = clutterFadeScaleSq;
         string clutterFarFade = Utils.EffectsLevel.ClutterFarFadeEnabled() ? "true" : "false";
         Log.Info("world", $"clutter fade: {Utils.EffectsLevel.FadeKey}={clutterFarFade} {Utils.EffectsLevel.Key}={Config.GetString(Utils.EffectsLevel.Key, Utils.EffectsLevel.Default)} scale_sq={clutterFadeScaleSq}");
         // The animated world's LIGHT_STATE point lights. Defaults to an empty set, so a session
@@ -1041,12 +999,11 @@ public partial class Launcher : Node3D
             Tooling.CaptureDirector.SaveScreenshot(GetViewport());
             return;
         }
-        // F11 anywhere: print the mode's subject placement as ready-to-paste --pos=/--direction=
-        // args, so a hand-framed orbit (or a spot found while flying) can be reproduced for a
-        // deterministic --screenshot run.
+        // F11 anywhere: print args that reproduce each pane's camera and, in flight, each
+        // aircraft's placement. A deterministic --screenshot run then replays a hand-framed view.
         if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F11 })
         {
-            _captureDirector.PrintPlacement(_spec, _session?.Rigs ?? NoRigs, _camera, _orbit);
+            _captureDirector.PrintPlacement(_session?.Spec ?? _spec, _session?.Rigs ?? NoRigs, _camera, _orbit);
             return;
         }
         // F10 in the viewer: export the plane on screen, current livery and damage state baked
@@ -1113,6 +1070,13 @@ public partial class Launcher : Node3D
         TickNetReadout(delta);
         if (_spec.Perf)
         {
+            if (!_drawMarksHooked)
+            {
+                // Only under --perf: an ordinary run pays for no signal into managed code.
+                RenderingServer.FramePreDraw += EngineGapCost.MarkPreDraw;
+                RenderingServer.FramePostDraw += EngineGapCost.MarkPostDraw;
+                _drawMarksHooked = true;
+            }
             (_gcTrace ??= Utils.GcTrace.Create(_spec.GcTypes)).Tick();
             ReportPerf(delta, counters);
         }
@@ -1149,6 +1113,34 @@ public partial class Launcher : Node3D
         {
             _pendingApply = null;
             ApplyOptions(applied);
+        }
+
+        // The graphics-mode action, a frame after the seat that fired it, so no switch runs inside a
+        // controller's own _Process. Saved like the Options row.
+        if (_pendingGraphicsToggle)
+        {
+            _pendingGraphicsToggle = false;
+            if (_session is { InSession: true })
+                RequestGraphicsSwitch(!GraphicsMode.Enhanced, "the graphics-mode action", save: true);
+        }
+
+        // --debug-graphics-switch: the same flip at each named sim frame, unsaved.
+        if (_session is { InSession: true } && GameClock.Current is { } simClock && _switchCover == null
+            && _debugSwitchesDone < _spec.DebugGraphicsSwitch.Count
+            && simClock.Frame >= _spec.DebugGraphicsSwitch[_debugSwitchesDone])
+        {
+            _debugSwitchesDone++;
+            RequestGraphicsSwitch(!GraphicsMode.Enhanced, $"--debug-graphics-switch at sim frame {simClock.Frame}", save: false);
+        }
+
+        if (_switchCover?.Tick(frameMs) == true)
+            _switchCover = null;
+        GraphicsMode.SwitchLocked = _session is { InSession: true, NetLink: not null };
+
+        if (_session is { InSession: true } && GameClock.Current is { } diagClock)
+        {
+            ShaderTwins.EnhancedDrawn |= GraphicsMode.Enhanced;
+            Tooling.ShaderDiagnostics.Tick(GetTree().Root, diagClock.Frame);
         }
 
         // Dropped here rather than by the cover itself, so one node owns both screens a launch
@@ -1189,8 +1181,37 @@ public partial class Launcher : Node3D
         }
 
         Log.Info("ui", $"cinema {name} playing skip={skip}");
-        cinema.Ended = then;
+
+        // Every film carries its own sound track, so the score must not play under it. The track
+        // waits where it stopped and resumes under the screen the film hands to.
+        if (_music != null)
+        {
+            _music.Paused = true;
+        }
+
+        cinema.Ended = () =>
+        {
+            if (_music != null)
+            {
+                _music.Paused = false;
+            }
+
+            then();
+        };
+        _cinemaShown = cinema;
         AddChild(cinema);
+    }
+
+    /// <summary>Ends the cinema <see cref="PlayCinema"/> last put up, as a skip does, when it is
+    /// still showing. A co-op guest's film stops this way when its host's does.</summary>
+    public void StopCinema()
+    {
+        if (_cinemaShown is { } cinema && IsInstanceValid(cinema) && !cinema.Finished)
+        {
+            cinema.Stop();
+        }
+
+        _cinemaShown = null;
     }
 
     /// <summary>Whether a co-op guest's flight is over. Its host named another board or restarted
@@ -1218,14 +1239,32 @@ public partial class Launcher : Node3D
         return CampaignLoadout.For(fit, stock);
     }
 
+    /// <summary>The campaign wingman a co-op host's launch names to its guests, read off
+    /// <paramref name="profile"/> as the host's own director reads it. A launch with no profile
+    /// flies the fresh profile a director without one binds.</summary>
+    internal static Net.CoopWingmanMessage CoopWingmanFor(string profile, string? profilesDir)
+    {
+        var def = profile.Length == 0
+            ? CampaignProfileDef.NewProfile(CampaignDirector.CoopGuestPilot)
+            : CampaignProfileStore.ForSession(profilesDir).Load(profile);
+        if (def == null)
+        {
+            Log.Warn("core", $"net: co-op profile '{profile}' cannot be read, so no wingman aeroplane is named to the guests");
+            return new Net.CoopWingmanMessage(Net.CoopWingmanMessage.NoAirframe, default);
+        }
+
+        return CampaignDirector.CoopWingmanOf(def);
+    }
+
     /// <summary>A co-op host's field and each seat's fit, by seat. Its own seats come first, with
-    /// the fits its launch carried. Then comes every seated guest still on the wire, in the plane,
+    /// the fits its launch carried, the first named by the door's callsign. Then comes every seated guest still on the wire, in the plane,
     /// fit and name its pick carried.</summary>
     internal static (Net.NetSeat[] Roster, Net.CoopFit[] SeatFits) CoopLaunchField(
         UI.Menu.NetPlayFeature door, Net.INetTransport wire, IReadOnlyList<string> planes,
         IReadOnlyList<LoadoutChoice?> fits, StockLoadouts stock)
     {
         var guests = new List<(int Peer, string Plane, string Name)>();
+        var voices = new List<byte>();
         var seatFits = new List<Net.CoopFit>();
         for (int i = 0; i < planes.Count; i++)
         {
@@ -1237,36 +1276,59 @@ public partial class Launcher : Node3D
             if (System.Linq.Enumerable.Contains(wire.Peers, guest.Peer))
             {
                 guests.Add((guest.Peer, UI.Hangar.PlanePickerRoster.AirframeNode(guest.Airframe), guest.Name));
+                voices.Add(UI.Menu.PilotVoices.Wire(guest.Voice));
                 seatFits.Add(guest.Fit);
             }
         }
 
-        return (Net.NetSeats.CoopField(wire.LocalPeer, planes, guests), seatFits.ToArray());
+        string hostName = Net.SeatRosterMessage.Carried(door.PlayerName.Trim()).Trim();
+        var roster = Net.NetSeats.CoopField(wire.LocalPeer, planes, guests, hostName);
+        // The host's first seat is the scripted player and speaks as Nathan Zachary. Its splitscreen
+        // seats have no voice, and each guest speaks in the voice its pick carried.
+        for (int seat = 0; seat < roster.Length; seat++)
+        {
+            int guest = seat - planes.Count;
+            byte voice = seat == 0 ? UI.Menu.PilotVoices.Wire(UI.Menu.PilotVoices.CoopHost)
+                : guest >= 0 && guest < voices.Count ? voices[guest] : (byte)0;
+            roster[seat] = roster[seat] with { Voice = voice };
+        }
+
+        return (roster, seatFits.ToArray());
     }
 
     /// <summary>A network Dogfight host's field and each seat's fit, by seat. Its own seats come
-    /// first. Each guest follows in the stock airframe, fit and name its lobby pick carried.
+    /// first, the first named by the wire's local callsign and any other by player tag. Each guest
+    /// follows in the stock airframe, fit and name its lobby pick carried.
     /// ⚠ A guest with no pick on the wire flies the host's first airframe on the stock fit. That is
-    /// the Built-in Dogfight door's only rule.</summary>
+    /// the Built-in Dogfight door's only rule. Each seat takes its machine's lobby team from
+    /// <paramref name="teamOf"/>, by peer; none leaves every seat on 0.</summary>
     internal static (Net.NetSeat[] Roster, Net.CoopFit[] SeatFits) VersusLaunchField(
-        Net.INetTransport wire, IReadOnlyList<string> planes, IReadOnlyList<LoadoutChoice?> fits, StockLoadouts stock)
+        Net.INetTransport wire, IReadOnlyList<string> planes, IReadOnlyList<LoadoutChoice?> fits, StockLoadouts stock,
+        Net.NetPlaneRules? rules = null, System.Func<int, byte>? teamOf = null)
     {
+        teamOf ??= _ => 0;
         var seats = new List<Net.NetSeat>(planes.Count + wire.Peers.Count);
         var seatFits = new List<Net.CoopFit>(seats.Capacity);
+        var lobby = wire as Net.NetLobby;
+        // Cut to the roster's width, so the host's kill lines read what each guest's copy reads.
+        string hostName = Net.SeatRosterMessage.Carried((lobby?.LocalCallsign ?? "").Trim()).Trim();
         for (int i = 0; i < planes.Count; i++)
         {
             seats.Add(new Net.NetSeat
             {
                 PeerId = wire.LocalPeer,
                 SeatIndex = seats.Count,
+                TeamId = teamOf(wire.LocalPeer),
                 IsLocal = true,
-                Callsign = UI.Boards.SplitScreen.PlayerTag(i),
+                Callsign = i == 0 && hostName.Length > 0 ? hostName : UI.Boards.SplitScreen.PlayerTag(i),
                 PlaneNode = planes[i],
+                // Only the first seat has a Player Information answer; a splitscreen seat has none.
+                Voice = i == 0 && lobby != null ? lobby.LocalVoice : (byte)0,
             });
             seatFits.Add(CampaignLoadout.FitOf(i < fits.Count ? fits[i] : null, stock));
         }
 
-        var picks = (wire as Net.NetLobby)?.Picks;
+        var picks = lobby?.Picks;
         foreach (int peer in wire.Peers)
         {
             if (seats.Count >= Net.NetSeats.MaxPlayers)
@@ -1281,14 +1343,89 @@ public partial class Launcher : Node3D
             {
                 PeerId = peer,
                 SeatIndex = seats.Count,
+                TeamId = teamOf(peer),
                 Callsign = name.Length > 0 ? name : $"guest {peer.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
                 PlaneNode = picked ? UI.Hangar.PlanePickerRoster.AirframeNode(chosen.Airframe) : planes[0],
+                Voice = picked ? chosen.Voice : (byte)0,
             });
-            seatFits.Add(picked ? chosen.Fit : default);
+            // The guest's own lobby flies its pick through the same rules, so both ends agree.
+            seatFits.Add(picked ? rules?.Enforce(chosen.Fit) ?? chosen.Fit : default);
         }
 
         Net.NetSeats.Validate(seats, wire.LocalPeer);
         return (seats.ToArray(), seatFits.ToArray());
+    }
+
+    /// <summary>Each seat's custom plane, by seat, null for a stock one. This machine's seats take
+    /// <paramref name="customs"/> in menu order. A guest's seat takes the build its lobby pick sent
+    /// when <paramref name="rules"/> admit it. Without rules a guest's pick seats no build; a co-op
+    /// guest's comes from its host's hangar instead (<see cref="CoopSeatBuilds"/>).
+    /// </summary>
+    internal static Net.NetPlaneBuild?[] SeatBuildsFor(IReadOnlyList<Net.NetSeat> roster,
+        IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs, Net.INetTransport wire, Net.NetPlaneRules? rules)
+    {
+        var builds = new Net.NetPlaneBuild?[roster.Count];
+        var picks = (wire as Net.NetLobby)?.PickBuilds;
+        for (int seat = 0; seat < roster.Count; seat++)
+        {
+            if (roster[seat].IsLocal)
+            {
+                int menu = Net.NetSeats.LocalOrdinal(roster, seat);
+                builds[seat] = menu >= 0 && menu < customs.Count ? CustomPlaneWire.Build(customs[menu]) : null;
+                continue;
+            }
+
+            if (rules is not { } admitting || picks == null || !picks.TryGetValue(roster[seat].PeerId, out var build))
+            {
+                continue;
+            }
+
+            // Unreachable from a lobby, which launches only on admitted planes; the log names the case.
+            var refusal = admitting.Refuses(build.Airframe, build);
+            if (refusal != Net.PlaneRefusal.None)
+            {
+                Log.Warn("core", $"net: seat {seat.ToString(System.Globalization.CultureInfo.InvariantCulture)}'s custom plane '{build.Name}' is refused ({refusal}), so it flies stock");
+                continue;
+            }
+
+            builds[seat] = build;
+        }
+
+        return builds;
+    }
+
+    /// <summary>A co-op host's custom planes, by seat, null for a stock one. Its own seats take
+    /// <paramref name="customs"/> in menu order. Each guest's seat takes the build of the hangar
+    /// plane it flies, never one the guest brought.</summary>
+    internal static Net.NetPlaneBuild?[] CoopSeatBuilds(IReadOnlyList<Net.NetSeat> roster,
+        IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs, UI.Menu.NetPlayFeature door, Net.INetTransport wire)
+    {
+        var builds = SeatBuildsFor(roster, customs, wire, null);
+        var guests = door.CoopGuests;
+        for (int seat = 0; seat < roster.Count; seat++)
+        {
+            foreach (var guest in guests)
+            {
+                if (!roster[seat].IsLocal && guest.Peer == roster[seat].PeerId)
+                {
+                    builds[seat] = guest.Build;
+                }
+            }
+        }
+
+        return builds;
+    }
+
+    /// <summary>The custom plane a seat flown elsewhere carries: from <paramref name="launched"/> on
+    /// the host that launched it, or the host's word through <paramref name="door"/> on a guest.
+    /// Null for a stock seat.</summary>
+    internal static Flight.Hangar.CustomPlaneDef? SeatBuildFor(int seat, IReadOnlyList<Net.NetPlaneBuild?>? launched,
+        UI.Menu.NetPlayFeature? door)
+    {
+        var build = launched != null
+            ? seat >= 0 && seat < launched.Count ? launched[seat] : null
+            : door?.SeatBuilds.TryGetValue(seat, out var told) == true ? told : null;
+        return CustomPlaneWire.Def(build);
     }
 
     /// <summary>Where a finished lobby Dogfight lands: its lobby's Game Scores, named off the list
@@ -1296,8 +1433,20 @@ public partial class Launcher : Node3D
     /// </summary>
     internal static LobbyReturn? LobbyLanding(bool lobbyFlight, UI.Menu.DogfightLobby? lobby, Flight.Modes.VersusMatch? match) =>
         lobbyFlight && lobby is { Shown: true } && match is { Completed: true }
-            ? new LobbyReturn(UI.Menu.DogfightLobby.ScoresOf(match.Standings(), lobby.LaunchNames))
+            ? new LobbyReturn(UI.Menu.DogfightLobby.ScoresOf(match, lobby.LaunchNames))
             : null;
+
+    /// <summary>A lobby's team names by team number, the form a session reads them in.</summary>
+    internal static Dictionary<int, string> TeamNames(IReadOnlyList<Net.LobbyTeamName> teams)
+    {
+        var names = new Dictionary<int, string>();
+        foreach (var team in teams)
+        {
+            names[team.Number] = team.Name;
+        }
+
+        return names;
+    }
 
     /// <summary>Whether a lobby Dogfight guest's host left its flight. The door, stepped in
     /// flight, has failed on a close notice or a lost link.</summary>
@@ -1455,9 +1604,25 @@ public partial class Launcher : Node3D
                 return;
             }
 
-            Log.Info("ui", $"load screen: {_loadStepsRun} owed build step(s) run behind the screen");
+            // A network flight waiting for its other machines keeps the screen up, since its world
+            // stands still until they have all loaded.
+            if (_session is { StartHeld: true })
+            {
+                _startHeldFrames++;
+                return;
+            }
+
+            Log.Info("ui", $"load screen: {_loadStepsRun} owed build step(s) run behind the screen, {_startHeldFrames} frame(s) held for the other machines");
             _loadStepsRun = -1;
             HideLoadScreen();
+            if (_startHeldFrames > 0)
+            {
+                // The cover's own hold is capped from when it went up, so a long wait would spend
+                // it behind the screen. A fresh one covers the frame the world first runs on.
+                RaiseStartCover();
+            }
+
+            _startHeldFrames = 0;
             return;
         }
 
@@ -1467,12 +1632,13 @@ public partial class Launcher : Node3D
         }
         _launchFramesWaited = -1;
         bool built = TryLaunchSession();
-        // The screen stays up while the build's own owed steps run, and comes down on the frame
-        // they finish. A load screen left up past that would draw over the first frame of the
+        // The screen stays up while the build's own owed steps run and a network start is held,
+        // and comes down on the frame both end. A load screen left up past that would draw over the first frame of the
         // world, and over a --screenshot capture.
-        if (built && _session is { } loaded && loaded.StepOwedLoad())
+        if (built && _session is { } loaded && loaded.StepOwedLoad() is var owed && (owed || loaded.StartHeld))
         {
-            _loadStepsRun = 1;
+            _loadStepsRun = owed ? 1 : 0;
+            _startHeldFrames = 0;
             return;
         }
         HideLoadScreen();
@@ -1532,7 +1698,7 @@ public partial class Launcher : Node3D
     {
         DropStartCover();
         _startFade = UI.Screens.SessionStartFade.Build(
-            _spec.Det, () => _session is { InSession: true, FirstFrameReady: true });
+            _spec.Det, () => _session is { InSession: true, FirstFrameReady: true, StartHeld: false });
         if (_startFade != null)
         {
             AddChild(_startFade);
@@ -1556,19 +1722,33 @@ public partial class Launcher : Node3D
     // (docs/org/loading-screen.md).
     private void ShowLoadScreen(bool campaign, string? missionType, int? missionSeq = null)
     {
-        // The blackboard writes its dialog's own four texts, and takes this heading only when the
-        // mode is ours and no dialog describes it. The chart sheet writes no words of ours at all.
+        // The blackboard writes its dialog's own texts, and takes this heading only when no dialog
+        // describes the flight. The chart sheet writes no words of ours at all.
         string subject = campaign ? string.Empty : LaunchSubject().ToUpperInvariant();
         var sheet = campaign
             ? CampaignLoadSheet(missionSeq ?? _spec.CampaignMissionSeq ?? 0)
             : null;
         _loadLayer = new CanvasLayer { Name = "load_board", Layer = UI.Boards.HudLayers.Board };
+        string? briefing = campaign || missionType != null ? null : LaunchBriefing();
         var board = UI.Screens.LoadBoard.Build(
-            _dataRoot, _zrdrPath, _messagesPath, campaign, subject, missionType, sheet);
+            _dataRoot, _zrdrPath, _messagesPath, campaign, subject, missionType, sheet, briefing);
+        if (briefing != null)
+        {
+            Log.Info("ui", $"load screen: {_spec.Chapter} Dogfight reads {briefing}");
+        }
         board.CaptureDir = _spec.DebugLoad ?? string.Empty;
         _loadLayer.AddChild(board);
         AddChild(_loadLayer);
     }
+
+    // A Dogfight's multiplayer dialog, from its chapter, its type and whether a lobby pilot joined a
+    // team. The session's pause board resolves the same key off its seats. Null for anything else.
+    private string? LaunchBriefing() =>
+        _spec.Versus
+            ? UI.Screens.LoadScreens.MultiplayerKey(
+                _spec.Chapter, _spec.CaptureTheFlag, _spec.ZeppelinVsZeppelin,
+                _lobbyFlight && _netDoor?.Dogfight is { Teamed: true })
+            : null;
 
     // The chart sheet a story position resolves: the loading dialog the mission's own storage
     // address names, that mission's objectives for the parchment, and the profile's memento.
@@ -1792,6 +1972,7 @@ public partial class Launcher : Node3D
             Presentation = SessionPresentation,
             ExitSession = ExitSession,
             RestartSession = RestartSession,
+            ToggleGraphicsMode = () => _pendingGraphicsToggle = true,
             PauseOptions = BuildPauseOptions,
             CampaignMissionEnded = _menuDriven
                 ? (profile, result) => _pendingDebrief = (profile, result)
@@ -1803,6 +1984,11 @@ public partial class Launcher : Node3D
             NetSeats = _netRoster,
             NetAirframes = _netWire == null ? null : UI.Hangar.PlanePickerRoster.StockAirframes,
             NetSeatFit = _coopFlight || _lobbyFlight ? CoopSeatFit : null,
+            NetSeatBuild = _coopFlight || _lobbyFlight ? NetSeatBuild : null,
+            NetCoopWingman = _coopFlight && !_netIsHost && _netDoor is { } coopDoor
+                ? () => coopDoor.CoopWingman
+                : null,
+            NetTeamNames = _lobbyFlight && _netDoor?.Dogfight is { } teamLobby ? TeamNames(teamLobby.Teams) : null,
         });
         AddChild(_session);
         bool built = _session.StartSession();
@@ -1835,6 +2021,7 @@ public partial class Launcher : Node3D
         // tick, pass, AI walk or phase. Its next close would charge the whole build to one step.
         PhysicsTickCost.Reset();
         ProcessPassCost.Reset();
+        EngineGapCost.Reset();
         AiStepCost.Reset();
         SimPhaseCost.Reset();
         ProcessSiteCost.Reset();
@@ -1860,13 +2047,13 @@ public partial class Launcher : Node3D
         };
         // Enhanced mode alone: a lit world has surfaces a shadow pass can land on.
         if (GraphicsMode.Enhanced)
-            EnableSunShadows(_sun);
+            EnhancedLook.ApplySun(_sun, true, _spec.SkippedPasses);
         AddChild(_sun);
-        // The faithful aircraft's per-vertex term gets the same defaults, the modal day pair under
-        // this bearing. A view without mission weather then shades a plane like a day zone would.
+        // The modal day pair under this bearing, after the AddChild so the bearing is the one the
+        // light wears in the tree. A session with no weather.json never reaches ApplyZone, and
+        // this write shades its planes like a day zone.
         (Vector3 dayDiffuse, Vector3 dayAmbient) = WeatherRig.DefaultSunlightRgb;
-        RenderingServer.GlobalShaderParameterSet("csky_sun_dir",
-            (_sun.IsInsideTree() ? _sun.GlobalBasis : _sun.Basis).Z.Normalized());
+        WeatherRig.WriteSunDirection(_sun);
         RenderingServer.GlobalShaderParameterSet("csky_sun_ambient_rgb", dayAmbient);
         RenderingServer.GlobalShaderParameterSet("csky_sun_diffuse_rgb", dayDiffuse);
         RenderingServer.GlobalShaderParameterSet("csky_sun_fill_rgb",
@@ -1887,117 +2074,9 @@ public partial class Launcher : Node3D
         // anything to work on. The cockpit pass duplicates this Environment
         // (CockpitOverlay.NewOverlay) and inherits the settings.
         if (GraphicsMode.Enhanced)
-        {
-            UseMissionSky(_env);
-            if (!Skipped(EnhancedPasses.Ssao))
-            {
-                EnableAmbientOcclusion(_env);
-            }
-            if (!Skipped(EnhancedPasses.Ssr))
-            {
-                EnableWaterReflections(_env);
-            }
-            if (!Skipped(EnhancedPasses.Glow))
-            {
-                EnableGlow(_env);
-            }
-            UseFilmicTonemap(_env);
-        }
+            EnhancedLook.ApplyEnvironment(_env, true, _spec.SkippedPasses);
         AddChild(new WorldEnvironment { Environment = _env });
     }
-
-    // Enhanced mode alone: the sky a reflection reads is the mission's own colour, not Godot's
-    // procedural gradient. The dome is gamez geometry drawn over the background, so this is
-    // normally unseen; what it feeds is the glossy water's specular. WeatherRig.WriteSkyColor
-    // writes the flown zone's own FOG_COLOR over the default here on every zone apply. The ambient
-    // is colour-sourced already, built that way above, so a flat panorama reaches reflection alone.
-    private void UseMissionSky(Godot.Environment env)
-    {
-        env.Sky = new Sky { SkyMaterial = new PanoramaSkyMaterial() };
-        WeatherRig.WriteSkyColor(env, EnhancedDefaultSkyColor);
-    }
-
-    // Every setting here is TUNE: nothing in the original authors a shadow map, so there is no
-    // decoded magnitude to match. Four splits because the useful range spans an aircraft's own
-    // shadow a few metres below it and a skyline several kilometres out.
-    private void EnableSunShadows(DirectionalLight3D sun)
-    {
-        sun.ShadowEnabled = true;
-        sun.DirectionalShadowMode = DirectionalLight3D.ShadowMode.Parallel4Splits;
-        sun.DirectionalShadowMaxDistance = EnhancedShadowMaxDistance;
-        sun.DirectionalShadowFadeStart = EnhancedShadowFadeStart;
-        sun.DirectionalShadowSplit1 = EnhancedShadowSplit1;
-        sun.DirectionalShadowSplit2 = EnhancedShadowSplit2;
-        sun.DirectionalShadowSplit3 = EnhancedShadowSplit3;
-        sun.DirectionalShadowBlendSplits = true;
-        sun.ShadowBias = EnhancedShadowBias;
-        sun.ShadowNormalBias = EnhancedShadowNormalBias;
-        // Both zero leaves a hard shadow edge rather than no shadow. That isolates the penumbra
-        // filter, which is the part resolving with a screen-space sample pattern.
-        bool hard = Skipped(EnhancedPasses.SoftShadows);
-        sun.LightAngularDistance = hard ? 0f : EnhancedShadowAngularDistance;
-        sun.ShadowBlur = hard ? 0f : EnhancedShadowBlur;
-        // A renderer-wide setting rather than a light property. It is set here beside the width it
-        // carries, not in project.godot, where the faithful path would inherit it.
-        RenderingServer.DirectionalSoftShadowFilterSetQuality(
-            hard ? RenderingServer.ShadowQuality.Hard : EnhancedShadowFilterQuality);
-    }
-
-    // Ambient occlusion, which darkens the ambient term where geometry occludes it. The faithful
-    // path's world is fullbright, so this pass would find nothing there to occlude.
-    private void EnableAmbientOcclusion(Godot.Environment env)
-    {
-        env.SsaoEnabled = true;
-        env.SsaoRadius = EnhancedSsaoRadius;
-        env.SsaoIntensity = EnhancedSsaoIntensity;
-        env.SsaoPower = EnhancedSsaoPower;
-        env.SsaoDetail = EnhancedSsaoDetail;
-        env.SsaoHorizon = EnhancedSsaoHorizon;
-        env.SsaoSharpness = EnhancedSsaoSharpness;
-    }
-
-    // Screen-space reflection, for the one glossy population in the world: the water surfaces
-    // SceneBuilder.ClassifySurface names. Every other enhanced surface is matte, so nothing else
-    // can reflect. ⚠ SSR reflects only what the camera already draws; content off-screen or behind
-    // the near plane has no reflection at all.
-    private void EnableWaterReflections(Godot.Environment env)
-    {
-        env.SsrEnabled = true;
-        env.SsrMaxSteps = EnhancedSsrMaxSteps;
-        env.SsrFadeIn = EnhancedSsrFadeIn;
-        env.SsrFadeOut = EnhancedSsrFadeOut;
-        env.SsrDepthTolerance = EnhancedSsrDepthTolerance;
-    }
-
-    // Enhanced mode alone. A lit world's real light energy feeds the HDR colour buffer, and
-    // C21's glow-arm sprites are the only surfaces meant to bloom out of it.
-    private void EnableGlow(Godot.Environment env)
-    {
-        env.GlowEnabled = true;
-        env.GlowHdrThreshold = EnhancedGlowHdrThreshold;
-        env.GlowBloom = EnhancedGlowBloom;
-        env.GlowIntensity = EnhancedGlowIntensity;
-        env.GlowStrength = EnhancedGlowStrength;
-        env.GlowBlendMode = EnhancedGlowBlendMode;
-        env.GlowHdrScale = EnhancedGlowHdrScale;
-        env.GlowHdrLuminanceCap = EnhancedGlowHdrLuminanceCap;
-    }
-
-    // Enhanced mode alone: without it the HDR values a lit world produces clip instead of rolling
-    // off. It is not a pass a bisect door closes, since every enhanced frame's exposure depends on
-    // it. The cockpit pass duplicates this Environment at build time (CockpitOverlay.NewOverlay),
-    // so its own tonemap matches the world pass exactly.
-    private void UseFilmicTonemap(Godot.Environment env)
-    {
-        env.TonemapMode = EnhancedTonemapMode;
-        env.TonemapExposure = EnhancedTonemapExposure;
-        env.TonemapAgxWhite = EnhancedTonemapAgxWhite;
-        env.TonemapAgxContrast = EnhancedTonemapAgxContrast;
-    }
-
-    // Whether this run asked for that enhanced pass to be left out. Closing one door at a time
-    // bisects a full-screen artefact to the pass that draws it; docs/cli.md holds them.
-    private bool Skipped(EnhancedPasses pass) => (_spec.SkippedPasses & pass) != 0;
 
     // The launchscreen, after the boot sequence when this launch plays one. Both a boot with data
     // and the extraction screen's hand-back come through here, so they reach the same menu.
@@ -2241,8 +2320,8 @@ public partial class Launcher : Node3D
         host.Features.Add(new HangarFeature(strings, PlanePickerRoster.AirframeNode, () => StockLoadouts.Load(), _zrdrPath));
         // The campaign feature carries both cinemas because both presentations already read that
         // one feature, and neither of them can reach a Launcher to play a film through.
-        _chapterCinema ??= new ChapterCinema(PlayCinema);
-        _closingCinema ??= new ClosingCinema(PlayCinema);
+        _chapterCinema ??= new ChapterCinema(PlayCinema, StopCinema);
+        _closingCinema ??= new ClosingCinema(PlayCinema, StopCinema);
         host.Features.Add(new CampaignFeature(
             strings, PlanePickerRoster.AirframeNode, _chapterCinema, _closingCinema));
         // The keymap editor writes through C21's per-player store, with player 1's stick rows split
@@ -2259,16 +2338,17 @@ public partial class Launcher : Node3D
         _netDoor = new NetPlayFeature(
             (port, guests, bind) => Net.NetCarrier.Host(port, guests, bind),
             (address, port) => Net.NetCarrier.Join(address, port),
-            Net.NetCarrier.PortMap,
-            Net.NetCarrier.PortUnmap,
+            new Net.RouterAccess(
+                Net.NetCarrier.PortMap,
+                Net.NetCarrier.PortUnmap,
+                // The pinhole opens for the stable address, the one the IPv6 socket binds and the
+                // board shows. A temporary address would rotate away from under the router's rule.
+                Net.NetCarrier.Pinhole(HostAddress.StableGlobalIPv6),
+                Net.NetCarrier.PinholeClose),
             Net.NetCarrier.Lan)
         {
             Version = Net.NetBuildVersion.Parse(BuildVersion.Current),
             LanNetworks = LocalNetworks.Ipv4,
-            // The pinhole opens for the stable address, the one the IPv6 socket binds and the board
-            // shows. A temporary address would rotate away from under the router's rule.
-            OpenPinhole = Net.NetCarrier.Pinhole(HostAddress.StableGlobalIPv6),
-            ClosePinhole = Net.NetCarrier.PinholeClose,
             StableIpv6 = Net.NetCarrier.StableIpv6,
             LanIpv4 = Net.NetCarrier.LanIpv4,
             CopyText = DisplayServer.ClipboardSet,
@@ -2344,16 +2424,16 @@ public partial class Launcher : Node3D
     }
 
     // The options file's one writer, shared by the menu's apply above and by the pause leaf's.
-    // It saves every choice the screen took. The display settings and the mix are applied now.
-    // ⚠ The graphics word, the opening view and the difficulty are saved and no more. Each is
-    // read once, at launch or when a flight is built, so do not rebuild anything here. The head
-    // turn and targeting switch are saved for the next sortie and put on the seats flying now by
-    // the pause leaf itself (PausePreferences.FeedGameOptions).
+    // The display settings, the mix, the view distance and the graphics mode apply now.
+    // ⚠ The opening view and the difficulty are saved and no more, so do not rebuild anything for
+    // them here. The pause leaf puts the head turn and targeting switch on the seats flying now
+    // (PausePreferences.FeedGameOptions).
     private void PersistOptions(OptionsApplyExit applied)
     {
         var store = OptionsStore.UserOptions();
         var options = store.Load();
         options.GraphicsMode = applied.Graphics;
+        options.ViewDistance = applied.ViewDistance;
         options.Difficulty = applied.Difficulty;
         options.NearestAfterKill = applied.NearestAfterKill;
         options.Rumble = applied.Rumble;
@@ -2363,6 +2443,9 @@ public partial class Launcher : Node3D
         options.Resolution = applied.Resolution;
         options.DisplayMode = applied.DisplayMode;
         options.VSync = applied.VSync;
+        options.RenderScale = applied.RenderScale;
+        options.AntiAliasing = applied.AntiAliasing;
+        options.ShadowQuality = applied.ShadowQuality;
         options.AudioMaster = applied.AudioMaster;
         options.AudioMusic = applied.AudioMusic;
         options.AudioEffects = applied.AudioEffects;
@@ -2383,10 +2466,94 @@ public partial class Launcher : Node3D
         // The haptics toggle takes effect now for the same reason. A pilot turning it off over the
         // pause sheet flies the rest of the sortie with a quiet pad.
         PadRumble.Enabled = !_spec.Det && applied.Rumble != false;
+        ApplyViewDistance(applied.ViewDistance);
+        // The shadow level reaches the flying world now; --shadow-quality still beats the saved word.
+        string shadowFallback = Utils.ShadowQualitySetting.DefaultFor(_spec.Det);
+        var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality, applied.ShadowQuality,
+            Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
+        Log.Info("world", $"shadow quality applied: {shadowQuality.Word} source={shadowQuality.Source}");
+        // A mode switch dresses the sun at the new level itself; otherwise the level alone moves.
+        if (GraphicsMode.TryParse(applied.Graphics, out bool enhanced) && enhanced != GraphicsMode.Enhanced)
+        {
+            RequestGraphicsSwitch(enhanced, "options", save: false);
+        }
+        else if (IsInstanceValid(_sun))
+        {
+            ApplyShadowQuality(_sun);
+        }
+
+        // The render scale and the anti-aliasing method reach every 3D viewport now as well.
+        EnhancedLook.ReapplyDisplayQuality(_spec.Det, "options");
         // ⚠ The carve is NOT re-armed here. No screen offers it, so the saved key is untouched by an
         // apply and the gate keeps what boot gave it (see the arming above).
         Log.Info("ui", $"options applied: {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");
     }
+
+    // The live graphics-mode switch on this process's sun, Environment and session
+    // (EnhancedLook.Switch). It stalls a few frames, so a flying world takes it under RequestGraphicsSwitch.
+    private void SwitchGraphicsMode(bool enhanced, string why) =>
+        EnhancedLook.Switch(enhanced, _sun, _env, _spec.SkippedPasses, _spec.Det, _session, why);
+
+    // A switch over a flying world runs under a SwitchCover: the flight held, a load board over it.
+    // With no world up it runs at once. ⚠ Refuse it in a network session. Its shared world has no
+    // pause to hold it in, and the stall would freeze one seat in a live match.
+    private void RequestGraphicsSwitch(bool enhanced, string why, bool save)
+    {
+        if (_session is { InSession: true, NetLink: not null })
+        {
+            Log.Info("world", $"graphics mode: {why} refused, a network session switches no graphics mode");
+            return;
+        }
+        if (_switchCover != null)
+        {
+            Log.Info("world", $"graphics mode: {why} ignored, a switch is already under way");
+            return;
+        }
+        void Run()
+        {
+            SwitchGraphicsMode(enhanced, why);
+            if (save)
+                SaveGraphicsMode();
+        }
+        if (_session is not { InSession: true } session)
+        {
+            Run();
+            return;
+        }
+        string subject = enhanced ? "SWITCHING TO ENHANCED GRAPHICS" : "SWITCHING TO ORIGINAL GRAPHICS";
+        var board = UI.Screens.LoadBoard.Build(_dataRoot, _zrdrPath, _messagesPath, false, subject, null);
+        board.CaptureDir = _spec.DebugLoad ?? string.Empty;
+        _switchCover = SwitchCover.Begin(this, board, session.Pause, GameClock.Current, Run, why);
+    }
+
+    // A cover over a session being torn down: off at once, its hold released.
+    private void DropSwitchCover()
+    {
+        _switchCover?.Drop();
+        _switchCover = null;
+    }
+
+    // The resolved shadow level on the world sun and the renderer. An Options apply re-runs it, so a
+    // level changes mid-flight; the cockpit pass follows on its next Sync.
+    private void ApplyShadowQuality(DirectionalLight3D sun) =>
+        EnhancedLook.ApplyShadowQuality(sun, GraphicsMode.Enhanced, _spec.SkippedPasses);
+
+    // G's save, the one field it changes. Never under --det, whose runs must not write the player's
+    // options (the same rule the startup read keeps).
+    private void SaveGraphicsMode()
+    {
+        if (_spec.Det)
+            return;
+        var store = OptionsStore.UserOptions();
+        var options = store.Load();
+        options.GraphicsMode = GraphicsMode.Enhanced ? GraphicsMode.EnhancedWord : GraphicsMode.Default;
+        store.Save(options);
+    }
+
+    // The view distance on the running world (EnhancedLook.ApplyViewDistance), resolved again with the
+    // applied word in the saved slot, so --view-distance still beats it.
+    private void ApplyViewDistance(string? word) => EnhancedLook.ApplyViewDistance(Utils.ViewDistance.Resolve(
+        _spec.ViewDistance, word, Config.GetString(Utils.ViewDistance.Key, Utils.ViewDistance.Default)).Word, _session);
 
     // The in-flight Preferences leaf both pause boards open. It takes the decoded layout the
     // Original presentation composes from, and the menu's audio service for its cues. The host's
@@ -2461,10 +2628,11 @@ public partial class Launcher : Node3D
     {
         var (planes, pads, fits, customs) = Unpack(launch.Seats);
         LaunchedFrom(launch);
-        TakeNetLaunch(launch, planes, fits);
+        TakeNetLaunch(launch, planes, fits, customs);
         _spec = SessionSpec.FromMenu(_cli, launch.Chapter, planes, launch.Mode, launch.InstantAction, fits, customs,
             launch.Match?.KillTarget, launch.Match?.TimeLimitMinutes, launch.Match?.Lives, launch.Match?.AutoRespawn,
-            launch.WingmanLoadout);
+            launch.WingmanLoadout, launch.Match?.CaptureTheFlag == true, launch.Match?.FlagHomeToCapture == true,
+            launch.Match?.ZeppelinVsZeppelin == true);
         // Step the master so flying again is a new mission rather than a replay: without this every
         // relaunch re-derives the same spawn, opposition and liveries. ⚠ A pinned run must hold
         // still, which is what keeps the goldens and the perf harnesses reproducible.
@@ -2493,7 +2661,7 @@ public partial class Launcher : Node3D
             }
             else
             {
-                var (address, joinPort) = SessionSpec.ParseJoin(_spec.NetJoin!);
+                var (address, joinPort) = SessionSpec.ParseJoin(_spec.NetJoin!, Net.NetPorts.Game);
                 _netWire = Net.NetCarrier.Join(address, joinPort);
                 _netIsHost = false;
             }
@@ -2586,36 +2754,47 @@ public partial class Launcher : Node3D
     // The wire a menu launch carried, kept for the session build. A host also builds the match's
     // roster here. The transport's peer list is the field, and the door is the only thing that
     // has seen it. A guest builds none, since the host's roster replaces whatever it had. Every
-    // seat's fit goes to every guest before the session's opener, as a co-op launch sends them.
-    private void TakeNetLaunch(LaunchExit launch, IReadOnlyList<string> planes, IReadOnlyList<LoadoutChoice?> fits)
+    // seat's fit and custom plane go to every guest before the session's opener, as a co-op launch
+    // sends them.
+    private void TakeNetLaunch(LaunchExit launch, IReadOnlyList<string> planes, IReadOnlyList<LoadoutChoice?> fits,
+        IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs)
     {
         _netWire = launch.Net?.Transport;
         _netIsHost = launch.Net?.IsHost ?? false;
         _netRoster = null;
         _coopSeatFits = System.Array.Empty<Net.CoopFit>();
+        _seatBuilds = System.Array.Empty<Net.NetPlaneBuild?>();
         _lobbyFlight = _netWire != null && _netDoor is { Dogfight: not null };
         if (_netWire == null || !_netIsHost)
         {
             return;
         }
 
-        (_netRoster, _coopSeatFits) = VersusLaunchField(_netWire, planes, fits, _coopStock ??= StockLoadouts.Load());
+        var rules = _lobbyFlight ? _netDoor!.Dogfight!.Rules : (Net.NetPlaneRules?)null;
+        System.Func<int, byte>? teamOf = _lobbyFlight ? _netDoor!.Dogfight!.TeamOfPeer : null;
+        (_netRoster, _coopSeatFits) = VersusLaunchField(_netWire, planes, fits, _coopStock ??= StockLoadouts.Load(), rules, teamOf);
+        _seatBuilds = SeatBuildsFor(_netRoster, customs, _netWire, rules);
         if (_lobbyFlight)
         {
             _netDoor!.TellSeatFits(_coopSeatFits);
+            _netDoor.TellSeatBuilds(_seatBuilds);
         }
     }
 
     // A co-op campaign launch's wire. The host's roster is its own seats and then each guest the
-    // door seated, in the stock aeroplane it picked and under its name. Every seat's fit goes to
-    // every guest before the session's opener, on the same ordered channel. A guest builds none.
+    // door seated, under its name. A guest flies the hangar plane the host settled for its seat.
+    // Every seat's fit and build goes to every guest before the session's opener, on the same
+    // ordered channel. A guest builds none. The campaign wingman's aeroplane goes out beside the fits,
+    // since every guest builds it too: `wingman` when the cabin kept it off its saved plane.
     private void TakeCoopLaunch(UI.Menu.MenuNetLaunch? net, IReadOnlyList<string> planes,
-        IReadOnlyList<LoadoutChoice?> fits)
+        IReadOnlyList<LoadoutChoice?> fits, IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs, string profile,
+        string? profilesDir, Net.CoopWingmanMessage? wingman)
     {
         _netWire = net?.Transport;
         _netIsHost = net?.IsHost ?? false;
         _netRoster = null;
         _coopSeatFits = System.Array.Empty<Net.CoopFit>();
+        _seatBuilds = System.Array.Empty<Net.NetPlaneBuild?>();
         _coopFlight = _netWire != null && _netDoor is { IsCoopHost: true } or { IsCoopGuest: true };
         if (_netWire == null || !_netIsHost || _netDoor == null)
         {
@@ -2624,12 +2803,17 @@ public partial class Launcher : Node3D
 
         (_netRoster, _coopSeatFits) = CoopLaunchField(_netDoor, _netWire, planes, fits,
             _coopStock ??= StockLoadouts.Load());
+        _seatBuilds = CoopSeatBuilds(_netRoster, customs, _netDoor, _netWire);
         _netDoor.TellSeatFits(_coopSeatFits);
+        _netDoor.TellSeatBuilds(_seatBuilds);
+        _netDoor.TellCoopWingman(wingman ?? CoopWingmanFor(profile, profilesDir));
         Log.Info("core", $"net: co-op launch with {_netRoster.Length - planes.Count} guest(s)");
     }
 
     private LoadoutChoice? CoopSeatFit(int seat) =>
         CoopSeatFitFor(seat, _netIsHost ? _coopSeatFits : null, _netDoor, _coopStock ??= StockLoadouts.Load());
+
+    private Flight.Hangar.CustomPlaneDef? NetSeatBuild(int seat) => SeatBuildFor(seat, _netIsHost ? _seatBuilds : null, _netDoor);
 
     // The seat choices as the four parallel lists the spec factories take. The fits ride
     // alongside the planes rather than inside them: FromMenu writes each menu-settable field
@@ -2699,9 +2883,9 @@ public partial class Launcher : Node3D
     {
         var (planes, pads, fits, customs) = Unpack(mission.Seats);
         LaunchedFrom(mission);
-        TakeCoopLaunch(mission.Net, planes, fits);
+        TakeCoopLaunch(mission.Net, planes, fits, customs, mission.Profile, _cli.ProfilesDir, mission.Wingman);
         _spec = SessionSpec.FromCampaign(_cli, mission.Profile, mission.MissionSeq, planes,
-            pads.Count, fits, customs);
+            pads.Count, fits, customs, mission.Wingman);
         StepSortieSeed();
         BindMenuPads(pads);
         BeginLaunch();
@@ -2739,6 +2923,7 @@ public partial class Launcher : Node3D
         if (_session != null)
         {
             // Freed at the end of THIS frame, so the build owed for the next one finds it gone.
+            DropSwitchCover();
             _session.QueueFree();
             _session = null;
         }
@@ -2766,7 +2951,8 @@ public partial class Launcher : Node3D
             return false;
         }
 
-        TakeCoopLaunch(launch, _spec.PlaneNames, _spec.MenuLoadouts);
+        TakeCoopLaunch(launch, _spec.PlaneNames, _spec.MenuLoadouts, _spec.MenuCustomPlanes, _spec.CampaignProfile ?? "",
+            _spec.ProfilesDir, _spec.CampaignWingman);
         return true;
     }
 
@@ -2936,6 +3122,7 @@ public partial class Launcher : Node3D
 
         if (_session != null)
         {
+            DropSwitchCover();
             _session.QueueFree();
             _session = null;
         }
@@ -2951,6 +3138,7 @@ public partial class Launcher : Node3D
         PerfSample.Reset();
         PhysicsTickCost.Reset();
         ProcessPassCost.Reset();
+        EngineGapCost.Reset();
         AiStepCost.Reset();
         SimPhaseCost.Reset();
         ProcessSiteCost.Reset();
@@ -3004,18 +3192,22 @@ public partial class Launcher : Node3D
 
     // Samples the engine's eight per-frame counters once, for both instruments. The two
     // `TIME_*` monitors are seconds and are converted here, so everything downstream of this
-    // is in milliseconds. Read at priority -999, so (like `delta` itself) these describe the
-    // frame that just ended rather than the one being built; the two agree with each other, which
-    // is what a hitch record needs.
-    private FrameCounters ReadFrameCounters() => new(
-        ScriptMs: 1000 * Performance.GetMonitor(Performance.Monitor.TimeProcess),
-        RenderCpuMs: RenderingServer.ViewportGetMeasuredRenderTimeCpu(_viewportRid),
-        GpuMs: RenderingServer.ViewportGetMeasuredRenderTimeGpu(_viewportRid),
-        PhysicsMs: 1000 * Performance.GetMonitor(Performance.Monitor.TimePhysicsProcess),
-        Draws: (long)Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame),
-        Prims: (long)Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame),
-        Nodes: (long)Performance.GetMonitor(Performance.Monitor.ObjectNodeCount),
-        MemBytes: (long)Performance.GetMonitor(Performance.Monitor.MemoryStatic));
+    // is in milliseconds. Read at priority -999, like `delta` they describe the frame that just
+    // ended, which is what a hitch record needs. The render pair is one draw older under the
+    // separate render thread.
+    private FrameCounters ReadFrameCounters()
+    {
+        var (renderCpuMs, gpuMs) = _renderTime.Read();
+        return new(
+            ScriptMs: 1000 * Performance.GetMonitor(Performance.Monitor.TimeProcess),
+            RenderCpuMs: renderCpuMs,
+            GpuMs: gpuMs,
+            PhysicsMs: 1000 * Performance.GetMonitor(Performance.Monitor.TimePhysicsProcess),
+            Draws: (long)Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame),
+            Prims: (long)Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame),
+            Nodes: (long)Performance.GetMonitor(Performance.Monitor.ObjectNodeCount),
+            MemBytes: (long)Performance.GetMonitor(Performance.Monitor.MemoryStatic));
+    }
 
     // --hitch-inject=: burns wall time synchronously for about `ms`, so a stall of known
     // magnitude exists to verify against. The busy-wait form proves the timing path; `alloc`
@@ -3085,6 +3277,9 @@ public partial class Launcher : Node3D
         _perfProcess += counters.ScriptMs;
         _perfPhysics += counters.PhysicsMs;
         _perfCpuRender += counters.RenderCpuMs;
+        // The rendering server's instance update, run before any viewport draws and left out of
+        // render_cpu_ms. It is the part of draw_ms that grows with what moved this frame.
+        _perfSetup += RenderingServer.GetFrameSetupTimeCpu();
         _perfGpu += counters.GpuMs;
         // Counts, averaged like every ms term, but with no timing noise in them: a scene that
         // starts drawing more says so exactly, where an ms term has to clear a noise band first.
@@ -3108,6 +3303,7 @@ public partial class Launcher : Node3D
         // conversion on Godot's two TIME_* monitors once, at the read.
         double scriptMs = _perfProcess / n;
         double renderCpuMs = _perfCpuRender / n;
+        double setupMs = _perfSetup / n;
         double gpuMs = _perfGpu / n;
         double physicsMs = _perfPhysics / n;
         // ⚠ These are the physics terms to read, not physics_ms above (verification PERF-1). One
@@ -3127,6 +3323,13 @@ public partial class Launcher : Node3D
         double aiPlanes = aiSteps > 0 ? (double)aiPlaneSum / aiSteps : 0;
         double physHz = _perfClock > 0 ? physTicks / _perfClock : 0;
         double physTick = physTicks > 0 ? physTickMs / physTicks : 0;
+        // Per FRAME, like proc_ms: the engine's step after each tick, then the flush, draw and idle
+        // after the pass. With the two pass terms they sum to frame_ms (verification PERF-40).
+        var (physEngineTotalMs, deferTotalMs, drawTotalMs, idleTotalMs) = EngineGapCost.Take();
+        double physEngineMs = physEngineTotalMs / n;
+        double deferMs = deferTotalMs / n;
+        double drawMs = drawTotalMs / n;
+        double idleMs = idleTotalMs / n;
         // These split the two whole-pass terms above by what ran. The sim step goes per TICK beside
         // phys_tick_ms, the named _Process consumers per FRAME beside proc_ms (src/Utils/PhaseCost.cs).
         string simRow = SimPhaseCost.TakeRow(physTicks);
@@ -3140,12 +3343,12 @@ public partial class Launcher : Node3D
         System.Array.Sort(_perfFrameMsSorted);
         double maxMs = _perfFrameMsSorted[PerfWindowFrames - 1];
         double p95Ms = _perfFrameMsSorted[Perf95Index];
-        Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} proc_ms={procMs:0.000} proc_max_ms={procMaxMs:0.000} proc_passes={procPasses} ai_ms={aiMs:0.000} ai_planes={aiPlanes:0.0} render_cpu_ms={renderCpuMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} phys_tick_ms={physTick:0.000} phys_tick_max_ms={physTickMaxMs:0.000} phys_hz={physHz:0.0} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00} max_ms={maxMs:0.00} p95_ms={p95Ms:0.00} sim_ms={simRow} proc_sites_ms={procSites}");
+        Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} proc_ms={procMs:0.000} proc_max_ms={procMaxMs:0.000} proc_passes={procPasses} ai_ms={aiMs:0.000} ai_planes={aiPlanes:0.0} render_cpu_ms={renderCpuMs:0.00} setup_ms={setupMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} phys_tick_ms={physTick:0.000} phys_tick_max_ms={physTickMaxMs:0.000} phys_hz={physHz:0.0} phys_engine_ms={physEngineMs:0.000} defer_ms={deferMs:0.000} draw_ms={drawMs:0.000} idle_ms={idleMs:0.000} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00} max_ms={maxMs:0.00} p95_ms={p95Ms:0.00} sim_ms={simRow} proc_sites_ms={procSites}");
         // Its own line, not another term on the window above. The BYTE figure answers a different
         // question from the millisecond one: which phase feeds the collector, rather than which
         // phase the pause landed in (PERF-34). The two are read side by side.
         Log.Info("perf", $"alloc sim_frame={simFrame} sim_alloc_b={simAllocRow}");
-        _perfClock = 0; _perfFrames = 0; _perfProcess = _perfGpu = _perfCpuRender = _perfPhysics = 0;
+        _perfClock = 0; _perfFrames = 0; _perfProcess = _perfGpu = _perfCpuRender = _perfPhysics = _perfSetup = 0;
         _perfDraws = _perfPrims = _perfNodes = _perfMem = 0;
     }
 }
@@ -3210,6 +3413,19 @@ public sealed class LauncherContext
     /// flown here keeps its own menu pick and never asks this.</summary>
     public System.Func<int, Flight.Weapons.LoadoutChoice?>? NetSeatFit { get; init; }
 
+    /// <summary>The custom plane a seat flown elsewhere carries, by seat index, or null for a stock
+    /// airframe. Read when the field is known, as <see cref="NetSeatFit"/> is.</summary>
+    public System.Func<int, Flight.Hangar.CustomPlaneDef?>? NetSeatBuild { get; init; }
+
+    /// <summary>The campaign wingman's aeroplane as a co-op guest's host named it, null while the
+    /// host named none. Set on a co-op guest only, whose director binds the wingman from it.</summary>
+    public System.Func<Net.CoopWingmanMessage?>? NetCoopWingman { get; init; }
+
+    /// <summary>A team Dogfight's team names by lobby team number, as this machine's lobby held
+    /// them at the launch. A host reads its own book and a guest the names its host sent. Null
+    /// names each team by its number.</summary>
+    public IReadOnlyDictionary<int, string>? NetTeamNames { get; init; }
+
     /// <summary>The presentation this session's own boards take, already resolved: the menu's
     /// active one, or what the flags name on a CLI launch. A resolved answer rather than a flag,
     /// which is why it rides here beside <see cref="MenuDriven"/>.</summary>
@@ -3225,6 +3441,11 @@ public sealed class LauncherContext
     /// opposition lives in the world, so putting it back means rebuilding the world, which only
     /// the Launcher can do.</summary>
     public required System.Action RestartSession { get; init; }
+
+    /// <summary>The graphics-mode action a seat's controller fires: the Launcher switches the
+    /// running world at the top of its next frame and saves the choice. Null leaves the action inert.
+    /// </summary>
+    public System.Action? ToggleGraphicsMode { get; init; }
 
     /// <summary>Builds the in-flight Preferences leaf either pause board opens over the held world,
     /// or answers null where the install carries no decoded menu layout for it to compose from. A

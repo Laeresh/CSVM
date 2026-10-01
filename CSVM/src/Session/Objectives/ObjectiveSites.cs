@@ -54,6 +54,8 @@ public sealed class ObjectiveSites
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Node3D> _nodes = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _live = new();
+    private readonly Dictionary<string, (Node3D Node, List<(MeshInstance3D Mesh, Aabb Local)> Meshes)> _meshes =
+        new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Reads a campaign director, the mission's target table and the world's node index.
     /// The director's graph may not exist yet; <see cref="Collect"/> polls for it and offers
@@ -78,6 +80,11 @@ public sealed class ObjectiveSites
         _targets = targets;
         _runtime = runtime;
     }
+
+    /// <summary>A team mode's labelling of a target key by side, null for a key the mode leaves to
+    /// its record. Capture the Flag's bases and flags and Zeppelin vs Zeppelin's hulls read this
+    /// way; every other session leaves it unset.</summary>
+    public Func<string, SiteSide?>? Sides { get; set; }
 
     /// <summary>The target keys carrying one flag: <c>targets.zrd</c>'s own entries carrying it,
     /// less those a completed objective's <c>REMOVE_</c> directive names, plus everything the
@@ -196,7 +203,13 @@ public sealed class ObjectiveSites
         CollectFlagged(TargetFlag.OtherTarget, _director?.Script, graph, _targets, _live);
         for (int i = 0; i < _live.Count; i++)
         {
-            Offer(_live[i], graph, objective: i < objectives, into);
+            // A side the mode has taken off the cycle is the original's cleared +0x4d, a flag's
+            // marker for a state the flag is not in.
+            var side = Sides?.Invoke(_live[i]);
+            if (side is not { Shown: false })
+            {
+                Offer(_live[i], graph, objective: i < objectives, side, into);
+            }
         }
     }
 
@@ -276,9 +289,41 @@ public sealed class ObjectiveSites
         }
     }
 
-    private void Offer(string node, ObjectiveGraph? graph, bool objective, List<AimCandidate> into)
+    private static bool AllValid(List<(MeshInstance3D Mesh, Aabb Local)> meshes)
     {
-        if (Where(node) is not { } at)
+        foreach (var (mesh, _) in meshes)
+        {
+            if (!GodotObject.IsInstanceValid(mesh))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    // The same walk and the same meshes CollectMeshBoxes reads, each with its own mesh's box.
+    private static void ListMeshes(Node node, List<(MeshInstance3D, Aabb)> into)
+    {
+        if (node is MeshInstance3D { Mesh: not null } mesh)
+        {
+            into.Add((mesh, mesh.GetAabb()));
+        }
+
+        int children = node.GetChildCount();
+        for (int i = 0; i < children; i++)
+        {
+            if (node.GetChild(i) is Node3D child)
+            {
+                ListMeshes(child, into);
+            }
+        }
+    }
+
+    private void Offer(string node, ObjectiveGraph? graph, bool objective, SiteSide? side,
+        List<AimCandidate> into)
+    {
+        if ((side?.At ?? Where(node)) is not { } at)
         {
             return;
         }
@@ -290,12 +335,12 @@ public sealed class ObjectiveSites
             // A record naming a mission-structure node stamps its flags onto the object that
             // node already built and keeps its team; one naming any other node builds its own,
             // and the original builds those neutral, which is almost every site.
-            Team = (resolved is { } site
+            Team = side?.Team ?? (resolved is { } site
                 ? DestructibleRegistry.MissionStructureTeamOf(site)
                 : null) ?? AimAssist.NeutralTeam,
             Live = LiveDespiteState(resolved is { } n ? _runtime?.Destructibles.Resolve(n)?.Status : null),
             ConeOverride = AimAssist.NoConeOverride,
-            Source = SiteFor(node, graph, at, objective),
+            Source = SiteFor(node, graph, at, objective, side),
         });
     }
 
@@ -311,7 +356,29 @@ public sealed class ObjectiveSites
             return point;
         }
 
-        return Resolve(key) is { } node ? SiteAnchor(node) : null;
+        if (Resolve(key) is not { } node)
+        {
+            return null;
+        }
+
+        // The meshes are listed once per resolved node and re-read live, so a part the site's own
+        // script moves moves the marker. The walk itself was the cost: a zeppelin site is several
+        // hundred meshes, read once per site per pane per frame.
+        if (!_meshes.TryGetValue(key, out var site) || !ReferenceEquals(site.Node, node) || !AllValid(site.Meshes))
+        {
+            site = (node, new List<(MeshInstance3D, Aabb)>());
+            ListMeshes(node, site.Meshes);
+            _meshes[key] = site;
+        }
+
+        Aabb? merged = null;
+        foreach (var (mesh, local) in site.Meshes)
+        {
+            var box = mesh.GlobalTransform * local;
+            merged = merged?.Merge(box) ?? box;
+        }
+
+        return merged?.GetCenter() ?? node.GlobalPosition;
     }
 
     // Cached: FindNodes walks the world index by name and this runs once per pane per frame.
@@ -342,7 +409,8 @@ public sealed class ObjectiveSites
 
     // The strings are re-read every frame because SET_HELP_LABEL rewrites a live site's category;
     // the instance itself survives that, since it is the identity the selection is held by.
-    private ObjectiveSite SiteFor(string key, ObjectiveGraph? graph, Vector3 at, bool objective)
+    private ObjectiveSite SiteFor(string key, ObjectiveGraph? graph, Vector3 at, bool objective,
+        SiteSide? side)
     {
         if (!_sites.TryGetValue(key, out var site))
         {
@@ -363,9 +431,11 @@ public sealed class ObjectiveSites
         // The script's own SET_HELP_LABEL outranks targets.zrd's authored label.
         string category = Text(graph != null && graph.HelpLabels.TryGetValue(key, out var written)
             ? written : info.HelpLabel);
-        site.DisplayName = name.Length > 0 ? name : site.Target.Node;
+        site.DisplayName = side is { Name.Length: > 0 } named ? named.Name
+            : name.Length > 0 ? name : site.Target.Node;
         site.TypeLabel = typeLabel.Length > 0 ? typeLabel : null;
         site.Category = category.Length > 0 ? category : null;
+        site.Side = side;
         site.Position = at;
         site.Objective = objective;
         return site;

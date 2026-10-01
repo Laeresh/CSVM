@@ -356,7 +356,8 @@ stick binding the keymap carries. There are two folders. The shipped profiles ar
 - `name` is the short label screens print ("R", "L"); empty when absent, and left out of a saved
   file when empty (a saved generic default has none). An unnamed stick prints
   as `Stick 231D/0200` on the remake Controls screen and in status lines, so two unnamed sticks
-  read apart, and as its control alone in the KEYS AND BUTTONS page's narrow Stick column.
+  read apart. The KEYS AND BUTTONS page's narrow Stick column prints its control alone, and
+  `231D/0200` and the control when a second unnamed model is bound on the same row.
 - `ignore: true` makes the model yield no bindings while the file is active, for a device that
   enumerates as a joystick but flies nothing (a gaming keypad). It still counts as a profiled
   device, so the generic single-stick default does not claim it. The shipped `1532-022B.json`

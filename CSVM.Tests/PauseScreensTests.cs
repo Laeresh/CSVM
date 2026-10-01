@@ -330,6 +330,45 @@ public class PauseScreensTests
         Assert.Equal(5, board.Plaques.Count);
     }
 
+    /// <summary>A Dogfight pauses on its own briefing, <c>escape.zrd</c>'s <c>loading_m</c> dialog
+    /// under the load screen's key. Its point rows and photographs stand on the blackboard with the
+    /// strips over them, and there is no chart, memento or parchment.</summary>
+    [ExtractedDataFact]
+    public void ADogfightPauseDrawsItsModesBriefing()
+    {
+        var sheet = PauseSheet.LoadMultiplayer(Zrdr(), MessagesPath(), "loading_m4c")!;
+        var board = PauseScreens.For(sheet, PauseReadout.Empty, 0, false);
+
+        Assert.True(sheet.InstantAction);
+        Assert.Equal("loadframempt", sheet.State.Background);
+        Assert.Equal("CAPTURE THE FLAG", sheet.Texts[0].Text);
+        Assert.Equal(
+            new[] { "10", "8", "2", "-2" },
+            sheet.Texts.Where(t => t.X == 280f).Select(t => t.Text));
+        Assert.Contains(board.Pictures, p => p.Art.Name == "MP-flagreturn");
+        Assert.Empty(board.Notes);
+        Assert.Equal(5, board.Plaques.Count);
+    }
+
+    /// <summary>Above the Clouds' dialogs are numbered 3 in <c>Loading.zrd</c> and 5 in
+    /// <c>escape.zrd</c>. Its pause therefore takes the load screen's own dialog, less the propeller.
+    /// A name neither file carries builds no sheet.</summary>
+    [ExtractedDataFact]
+    public void AnAboveTheCloudsPauseTakesTheLoadScreensDialogWithoutItsPropeller()
+    {
+        Assert.False(Dialog().States.ContainsKey("loading_m3d"));
+
+        var sheet = PauseSheet.LoadMultiplayer(Zrdr(), MessagesPath(), "loading_m3d")!;
+        var board = PauseScreens.For(sheet, PauseReadout.Empty, 0, false);
+
+        Assert.NotNull(MissionMap.Cycle(sheet.Reveal));
+        Assert.Equal("DEATHMATCH", sheet.Texts[0].Text);
+        Assert.DoesNotContain(board.Pictures, p => p.Art.Name.StartsWith("prp"));
+        Assert.Contains(board.Pictures, p => p.Art.Name == "MP-shotdown");
+        Assert.Equal(5, board.Plaques.Count);
+        Assert.Null(PauseSheet.LoadMultiplayer(Zrdr(), MessagesPath(), "loading_m9d"));
+    }
+
     /// <summary>A sheet is run out rather than played: `CM02`'s script places its four pins past an
     /// authored <c>Wait</c>, which a reveal nobody advances never releases, so a sheet left unsettled
     /// would draw that chart with no flags on it at all.</summary>

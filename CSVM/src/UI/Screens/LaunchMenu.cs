@@ -53,7 +53,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     /// <summary>The row that opens the Options screen, under the modes. Options hold
     /// the process-wide choices (the difficulty, the targeting setting, the graphics mode and the
-    /// four display settings). Which presentation runs is not among them: only the two command-line
+    /// six display settings). Which presentation runs is not among them: only the two command-line
     /// flags choose Built-in.</summary>
     public const string OptionsRow = "Options";
 
@@ -74,15 +74,21 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// in place of <see cref="RemoteChipMark"/>.</summary>
     public const string ReadyChipMark = " ready";
 
-    // The multiplayer door's five rows, in the order they are drawn. Two fields a player edits,
-    // two ways a socket opens, and the way on to the map. The door's own state is the feature's;
-    // these are this screen's row numbers alone.
+    // The multiplayer door's ten rows, in the order they are drawn. Two fields a player edits,
+    // two ways a socket opens, and the way on to the map. Then the original's Game and Player
+    // Information: the game's name, password and cap, and the callsign and voice. The door's own
+    // state is the feature's; these are this screen's row numbers alone.
     private const int NetPortRow = 0;
     private const int NetAddressRow = 1;
     private const int NetHostRow = 2;
     private const int NetJoinRow = 3;
     private const int NetContinueRow = 4;
-    private const int NetworkRows = 5;
+    private const int NetGameNameRow = 5;
+    private const int NetPasswordRow = 6;
+    private const int NetPlayersRow = 7;
+    private const int NetCallsignRow = 8;
+    private const int NetVoiceRow = 9;
+    private const int NetworkRows = 10;
 
     // Base metrics at 720p, scaled up on taller viewports (like StuntScoreboard). All TUNE.
     private const int TitleFont = 40;
@@ -144,11 +150,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The Options screen's stepper rows, above the Controls door and the apply row. The screen
     // is a form the cursor walks top to bottom. First the five gameplay settings: the three the
     // Original presentation's GAME OPTIONS page draws, in its order, then the targeting switch
-    // and the rumble. Then the graphics mode and the four display settings in the order the
-    // Original presentation's VIDEO page draws them. Then the four volume levels in the order its
-    // AUDIO page draws them, then the two doors.
-    private const int OptionsStepperRows = 14;
-    // How many Options rows show at once. Sixteen rows do not fit the band at 720p, and a band
+    // and the rumble. Then the graphics mode, its view distance, the six display settings and the
+    // shadow quality in the order the Original presentation's VIDEO page draws them. Then the four
+    // volume levels in the order its AUDIO page draws them, then the two doors.
+    private const int OptionsStepperRows = 18;
+    // How many Options rows show at once. Twenty rows do not fit the band at 720p, and a band
     // sized to all of them shrinks every row. The screen is windowed at the Controls list's
     // height, which is known to fit.
     private const int OptionsWindow = ControlsWindow;
@@ -263,11 +269,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     // config key deciding, rather than overruling it with a default of this screen's own.
     private bool? _autoHeadTurnChoice;
     private string _graphicsChoice = GraphicsMode.Default;
-    // The four display settings, stepped by the four rows under the graphics one. Each is stored as
-    // the word the options file carries, never as a row index, so a screen unplugged or a size the
-    // monitor stopped offering is answered by the resolver's own forgiving read rather than by a
-    // stale position.
-    private string? _monitorChoice, _resolutionChoice, _displayModeChoice, _vsyncChoice;
+    private string? _viewDistanceChoice;
+    // The six display settings, stepped by the six rows under the view distance. Each is stored as
+    // the word the options file carries, never as a row index. A screen unplugged or a size the
+    // monitor stopped offering then meets the resolver's own forgiving read, not a stale position.
+    private string? _monitorChoice, _resolutionChoice, _displayModeChoice, _vsyncChoice, _renderScaleChoice, _antiAliasingChoice, _shadowQualityChoice;
     // The size the options file named when this screen opened, which the size row offers as an entry
     // of its own (ResolutionSizes). It is held apart from the stepped choice, so a hand-written
     // size stays in the list after a step lands elsewhere. A step back then reaches it again.
@@ -330,6 +336,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // A character reached a plane's name since the last frame, so the menu owes a redraw that no
     // polled input asked for.
     private bool _typed;
+    private bool _netSeeded;
     // The hangar page's art, as the one texture the shell owns: rebuilt only when
     // the page hands over a different decoded image, since Rebuild runs on every keypress.
     private TgaImage? _hangarArtSource;
@@ -959,6 +966,9 @@ public sealed partial class LaunchMenu : CanvasLayer
             {
                 walked++;
             }
+
+            // The walk skips the page's re-entry, so the cursor opens where a guest's own would.
+            flow.FocusRow(flow.Page.OpeningRow);
         }
 
         _aidGuest = 0;
@@ -1040,7 +1050,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         // every other seat's frame is read from its own source. Text capture is set before the
         // poll: the PLANENAME screen's letter aliases must be dead for the frame that reads them.
         var seat = _host.Seats[0];
-        seat.CapturingText = NamePage() != null || AddressField() != null;
+        seat.CapturingText = NamePage() != null || AddressField() != null || NetNameRow() >= 0;
         Apply(WithPointer(seat.Poll((float)delta)));
         for (int i = 1; i < _slots.Count; i++)
             _slots[i].Frame = _slots[i].Seat.Source.Poll((float)delta);
@@ -1102,6 +1112,12 @@ public sealed partial class LaunchMenu : CanvasLayer
         if (AddressField() is { } net)
         {
             TypeAddress(net, key);
+            return;
+        }
+
+        if (NetNameRow() is var nameRow and >= 0 && _net is { } door)
+        {
+            TypeNetName(door, nameRow, key);
             return;
         }
 
@@ -1739,7 +1755,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         switch (_screen)
         {
             case Screen.Options:
-                // The fourteen choice rows are steppers; the doors under them have nothing to step.
+                // The eighteen choice rows are steppers; the doors under them have nothing to step.
                 switch (_optionsIndex)
                 {
                     case 0: StepDifficultyChoice(dir); return true;
@@ -1748,26 +1764,43 @@ public sealed partial class LaunchMenu : CanvasLayer
                     case 3: ToggleNearestAfterKillChoice(); return true;
                     case 4: ToggleRumbleChoice(); return true;
                     case 5: ToggleGraphicsChoice(); return true;
-                    case 6: StepMonitorChoice(dir); return true;
-                    case 7: StepResolutionChoice(dir); return true;
-                    case 8: StepDisplayModeChoice(dir); return true;
-                    case 9: StepVSyncChoice(dir); return true;
-                    case 10: _audioMasterChoice = StepLevel(_audioMasterChoice, AudioMix.DefaultMaster, dir); return true;
-                    case 11: _audioMusicChoice = StepLevel(_audioMusicChoice, AudioMix.DefaultMusic, dir); return true;
-                    case 12: _audioEffectsChoice = StepLevel(_audioEffectsChoice, AudioMix.DefaultEffects, dir); return true;
-                    case 13: _audioVoiceChoice = StepLevel(_audioVoiceChoice, AudioMix.DefaultVoice, dir); return true;
+                    case 6: StepViewDistanceChoice(dir); return true;
+                    case 7: StepMonitorChoice(dir); return true;
+                    case 8: StepResolutionChoice(dir); return true;
+                    case 9: StepDisplayModeChoice(dir); return true;
+                    case 10: StepVSyncChoice(dir); return true;
+                    case 11: StepRenderScaleChoice(dir); return true;
+                    case 12: StepAntiAliasingChoice(dir); return true;
+                    case 13: StepShadowQualityChoice(dir); return true;
+                    case 14: _audioMasterChoice = StepLevel(_audioMasterChoice, AudioMix.DefaultMaster, dir); return true;
+                    case 15: _audioMusicChoice = StepLevel(_audioMusicChoice, AudioMix.DefaultMusic, dir); return true;
+                    case 16: _audioEffectsChoice = StepLevel(_audioEffectsChoice, AudioMix.DefaultEffects, dir); return true;
+                    case 17: _audioVoiceChoice = StepLevel(_audioVoiceChoice, AudioMix.DefaultVoice, dir); return true;
                     default: return false;
                 }
             case Screen.Network:
-                // The port is the door's one stepper. The address is typed, and the three rows
-                // under it are presses.
-                if (_coopWait || _netIndex != NetPortRow)
+                // The port, the cap and the voice step. The address and the names are typed, and
+                // the three rows under the address are presses.
+                if (_coopWait || _net is not { } door)
                 {
                     return false;
                 }
 
-                _net?.StepPort(dir);
-                return true;
+                switch (_netIndex)
+                {
+                    case NetPortRow:
+                        door.StepPort(dir);
+                        return true;
+                    case NetPlayersRow:
+                        door.MaxPlayers = NetPlayerInfo.ClampPlayers(NetSessionKind.Dogfight, ShownCap(door) + dir);
+                        return true;
+                    case NetVoiceRow:
+                        int voices = PilotVoices.All.Count;
+                        door.Voice = (((PilotVoices.Clamp(door.Voice) + dir) % voices) + voices) % voices;
+                        return true;
+                    default:
+                        return false;
+                }
             case Screen.Chapter:
                 // Only the two Dogfight rows under the map list step; a map row has nothing
                 // sideways, and MatchRowCount is 0 in the other two modes.
@@ -1864,9 +1897,9 @@ public sealed partial class LaunchMenu : CanvasLayer
                     // standing for the host to hide.
                     _host.Exit(new OptionsApplyExit(_graphicsChoice,
                         Difficulty.Word(_difficultyChoice), _monitorChoice, _resolutionChoice,
-                        _displayModeChoice, _vsyncChoice, _audioMasterChoice, _audioMusicChoice,
-                        _audioEffectsChoice, _audioVoiceChoice, _nearestAfterKillChoice, _rumbleChoice,
-                        _defaultViewChoice, _autoHeadTurnChoice));
+                        _displayModeChoice, _vsyncChoice, _renderScaleChoice, _antiAliasingChoice, _shadowQualityChoice, _audioMasterChoice,
+                        _audioMusicChoice, _audioEffectsChoice, _audioVoiceChoice, _nearestAfterKillChoice,
+                        _rumbleChoice, _defaultViewChoice, _autoHeadTurnChoice, _viewDistanceChoice));
                 }
 
                 break;
@@ -1888,6 +1921,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 
                 if (_modeIndex == Modes.Length + 3)
                 {
+                    SeedNetInfo();
                     _screen = Screen.Network;
                     _netIndex = _net is { Stage: NetDoorStage.Shut } or null ? NetHostRow : NetContinueRow;
                     break;
@@ -1994,6 +2028,80 @@ public sealed partial class LaunchMenu : CanvasLayer
     private NetPlayFeature? AddressField() =>
         _screen == Screen.Network && !_coopWait && _netIndex == NetAddressRow ? _net : null;
 
+    // The door's name row under the cursor, the game's name, its password or the callsign, or -1.
+    private int NetNameRow() =>
+        _screen == Screen.Network && !_coopWait && _net != null
+        && _netIndex is NetGameNameRow or NetPasswordRow or NetCallsignRow ? _netIndex : -1;
+
+    // The door takes what the options remember once, before the board or the campaign's door
+    // first shows it. Original's boxes open on the same answers.
+    private void SeedNetInfo()
+    {
+        if (_netSeeded || _net is not { } net)
+        {
+            return;
+        }
+
+        _netSeeded = true;
+        net.Take(NetPlayerInfo.Remembered(OptionsStore.UserOptions().Load()), game: true);
+    }
+
+    // A host or a join keeps the callsign, the voice and the game's name for the next session.
+    private void RememberNetInfo(NetPlayFeature net)
+    {
+        var store = OptionsStore.UserOptions();
+        var saved = store.Load();
+        new NetPlayerInfo { Callsign = net.PlayerName, Voice = PilotVoices.Clamp(net.Voice), GameName = net.GameName }
+            .Remember(saved, game: true);
+        store.Save(saved);
+    }
+
+    // One keypress into a name row, under the Original boxes' limits and character rule.
+    private void TypeNetName(NetPlayFeature net, int row, InputEventKey key)
+    {
+        string text = row switch
+        {
+            NetGameNameRow => net.GameName,
+            NetPasswordRow => net.Password,
+            _ => net.PlayerName,
+        };
+        int limit = row switch
+        {
+            NetGameNameRow => NetPlayerInfo.GameNameLimit,
+            NetPasswordRow => NetPlayerInfo.PasswordLimit,
+            _ => NetPlayerInfo.CallsignLimit,
+        };
+
+        string before = text;
+        if (key.Keycode == Key.Backspace)
+        {
+            text = text.Length > 0 ? text[..^1] : text;
+        }
+        else if (key.Unicode > 0 && NetPlayerInfo.Takes((char)key.Unicode) && text.Length < limit)
+        {
+            text += (char)key.Unicode;
+        }
+
+        switch (row)
+        {
+            case NetGameNameRow:
+                net.GameName = text;
+                break;
+            case NetPasswordRow:
+                net.Password = text;
+                break;
+            default:
+                net.PlayerName = text;
+                break;
+        }
+
+        if (text != before)
+        {
+            _typed = true;
+            GetViewport().SetInputAsHandled();
+        }
+    }
+
     // One keypress into the address. Redrawn on the next frame rather than here, because Rebuild
     // replaces the very controls the event is being dispatched through.
     private void TypeAddress(NetPlayFeature net, InputEventKey key)
@@ -2044,11 +2152,13 @@ public sealed partial class LaunchMenu : CanvasLayer
                 HandleMoveX(1);
                 break;
             case NetHostRow:
+                RememberNetInfo(net);
                 net.OpenHost(NetSeats.MaxPlayers - 1);
                 _netIndex = net.Stage == NetDoorStage.Hosting ? NetContinueRow : NetHostRow;
                 _error = net.Fault;
                 break;
             case NetJoinRow:
+                RememberNetInfo(net);
                 net.OpenJoin();
                 _error = net.Fault;
                 break;
@@ -2656,6 +2766,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             return;
         }
 
+        SeedNetInfo();
         net.Close();
         net.OpenCoopHost(NetSeats.MaxPlayers - _slots.Count);
         OfferCoopMission(flow);
@@ -3088,11 +3199,15 @@ public sealed partial class LaunchMenu : CanvasLayer
         _defaultViewChoice = saved.DefaultView;
         _autoHeadTurnChoice = saved.AutoHeadTurn;
         _graphicsChoice = saved.GraphicsMode ?? GraphicsMode.Default;
+        _viewDistanceChoice = saved.ViewDistance;
         _monitorChoice = saved.MonitorIndex;
         _resolutionChoice = saved.Resolution;
         _savedResolution = saved.Resolution;
         _displayModeChoice = saved.DisplayMode;
         _vsyncChoice = saved.VSync;
+        _renderScaleChoice = saved.RenderScale;
+        _antiAliasingChoice = saved.AntiAliasing;
+        _shadowQualityChoice = saved.ShadowQuality;
         _audioMasterChoice = saved.AudioMaster;
         _audioMusicChoice = saved.AudioMusic;
         _audioEffectsChoice = saved.AudioEffects;
@@ -3441,6 +3556,25 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string GraphicsChoiceLabel() =>
         _graphicsChoice == GraphicsMode.EnhancedWord ? "Enhanced" : "Original";
 
+    // Dead under Original, as the resolution row is under borderless: the faithful world keeps the
+    // decoded fade. Clamped at both ends, so a held arrow settles on Normal or Unlimited.
+    private void StepViewDistanceChoice(int dir)
+    {
+        if (_graphicsChoice != GraphicsMode.EnhancedWord)
+        {
+            return;
+        }
+
+        _viewDistanceChoice = ViewDistance.Words[Math.Clamp(ViewDistance.Index(_viewDistanceChoice) + dir, 0, ViewDistance.Words.Length - 1)];
+    }
+
+    private string ViewDistanceChoiceLabel() => ViewDistance.Label(_viewDistanceChoice);
+
+    // The row says why it does not step rather than refusing in silence.
+    private string ViewDistanceDetail() => _graphicsChoice == GraphicsMode.EnhancedWord
+        ? "How far buildings and scenery draw before they fade; the haze stays. Applies at once."
+        : "Enhanced Graphics only: choose Enhanced above to set how far buildings and scenery draw.";
+
     // The monitor and resolution rows ask the engine on every read rather than holding a list from
     // when the screen opened, since a monitor can be plugged in while the row stands focused and the
     // sizes are the standing screen's own. A saved index no screen answers to draws as the screen
@@ -3470,9 +3604,25 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string VSyncChoiceLabel() =>
         DisplaySettingRows.VSyncLabels[DisplaySettingRows.WordIndex(DisplayWords.VSyncChoices, _vsyncChoice, VSyncSetting.Default)];
 
-    // The four display steppers. Each writes back the word the options file carries rather than the
-    // row's position, since the apply hands the word to the setting's own resolver; a step off a
-    // value the machine no longer offers therefore starts from the forgiving read, not from -1.
+    // The scales the render-scale row offers under the method the anti-aliasing row stands on.
+    private IReadOnlyList<string> RenderScaleWords() =>
+        RenderScaleSetting.ChoicesFor(DisplaySettingRows.AntiAliasingWord(_antiAliasingChoice, _graphicsChoice));
+
+    private string RenderScaleChoiceLabel()
+    {
+        var words = RenderScaleWords();
+        return DisplaySettingRows.RenderScaleLabels(words)[DisplaySettingRows.WordIndex(words, _renderScaleChoice, RenderScaleSetting.Default)];
+    }
+
+    private string AntiAliasingChoiceLabel()
+    {
+        string word = DisplaySettingRows.AntiAliasingWord(_antiAliasingChoice, _graphicsChoice);
+        return DisplaySettingRows.AntiAliasingLabels[DisplaySettingRows.WordIndex(DisplayWords.AntiAliasingChoices, word, word)];
+    }
+
+    // The six display steppers. Each writes back the word the options file carries, not the row's
+    // position, since the apply hands the word to the setting's own resolver. A step off a value
+    // the machine no longer offers therefore starts from the forgiving read, not from -1.
     private void StepMonitorChoice(int dir)
     {
         var screens = MonitorSetting.Screens();
@@ -3509,6 +3659,41 @@ public sealed partial class LaunchMenu : CanvasLayer
         _vsyncChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
     }
 
+    private void StepRenderScaleChoice(int dir)
+    {
+        var words = RenderScaleWords();
+        int at = DisplaySettingRows.WordIndex(words, _renderScaleChoice, RenderScaleSetting.Default);
+        _renderScaleChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
+    }
+
+    // FSR 2.2 refuses a scale above native, so stepping onto it moves such a scale to native. The
+    // launch applies the same clamp to a saved pair.
+    private void StepAntiAliasingChoice(int dir)
+    {
+        var words = DisplayWords.AntiAliasingChoices;
+        string standing = DisplaySettingRows.AntiAliasingWord(_antiAliasingChoice, _graphicsChoice);
+        int at = DisplaySettingRows.WordIndex(words, standing, standing);
+        _antiAliasingChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
+        _renderScaleChoice = RenderScaleSetting.ClampFor(_renderScaleChoice, _antiAliasingChoice);
+    }
+
+    private string ShadowQualityChoiceLabel() =>
+        DisplaySettingRows.ShadowQualityLabels[DisplaySettingRows.WordIndex(ShadowQualitySetting.Words, _shadowQualityChoice, ShadowQualitySetting.Word)];
+
+    // Dead while the graphics row stands on Original, whose world casts no sun shadow. The saved
+    // word is kept, so flipping to Enhanced gives the player back the level they chose.
+    private void StepShadowQualityChoice(int dir)
+    {
+        if (_graphicsChoice != GraphicsMode.EnhancedWord)
+        {
+            return;
+        }
+
+        var words = ShadowQualitySetting.Words;
+        int at = DisplaySettingRows.WordIndex(words, _shadowQualityChoice, ShadowQualitySetting.Word);
+        _shadowQualityChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
+    }
+
     // The size row's detail says what the size does under the mode standing with it. The size does
     // something different in each mode, and under borderless the row does not step at all. A
     // stepper that refuses without saying why reads as a broken row.
@@ -3524,18 +3709,10 @@ public sealed partial class LaunchMenu : CanvasLayer
             : "Select the window size. The list is what the screen the window stands on can hold.";
     }
 
-    // The graphics row's detail says whether a restart is still owed: the mode is resolved once at
-    // launch, so a choice that differs from the running one reaches the world on the next start,
-    // and a player who saved it and came back would otherwise read the unchanged world as a
-    // failed switch.
-    private string GraphicsDetail()
-    {
-        bool running = GraphicsMode.Enhanced;
-        bool chosen = _graphicsChoice == GraphicsMode.EnhancedWord;
-        return chosen == running
-            ? "Original is the faithful world; Enhanced lights it. Takes effect on the next start."
-            : $"Original is the faithful world; Enhanced lights it. This run is {(running ? "Enhanced" : "Original")}; restart to apply.";
-    }
+    // The graphics row's detail. The apply switches the running world (Launcher.SwitchGraphicsMode),
+    // so no restart is owed and the line does not read the running mode.
+    private string GraphicsDetail() =>
+        "Original is the faithful world; Enhanced lights it. Applies at once.";
 
     // What this screen is, the middle band's first line.
     private string Heading()
@@ -4054,15 +4231,19 @@ public sealed partial class LaunchMenu : CanvasLayer
                 3 => $"Nearest target after a kill: {NearestAfterKillChoiceLabel()}",
                 4 => $"Controller rumble: {RumbleChoiceLabel()}",
                 5 => $"Graphics: {GraphicsChoiceLabel()}",
-                6 => $"Monitor: {MonitorChoiceLabel()}",
-                7 => $"Resolution: {ResolutionChoiceLabel()}",
-                8 => $"Display mode: {DisplayModeChoiceLabel()}",
-                9 => $"V-Sync: {VSyncChoiceLabel()}",
-                10 => $"Master volume: {LevelLabel(_audioMasterChoice, AudioMix.DefaultMaster)}",
-                11 => $"Music volume: {LevelLabel(_audioMusicChoice, AudioMix.DefaultMusic)}",
-                12 => $"Effects volume: {LevelLabel(_audioEffectsChoice, AudioMix.DefaultEffects)}",
-                13 => $"Voice volume: {LevelLabel(_audioVoiceChoice, AudioMix.DefaultVoice)}",
-                14 => ControlsRow,
+                6 => $"View distance (Enhanced only): {ViewDistanceChoiceLabel()}",
+                7 => $"Monitor: {MonitorChoiceLabel()}",
+                8 => $"Resolution: {ResolutionChoiceLabel()}",
+                9 => $"Display mode: {DisplayModeChoiceLabel()}",
+                10 => $"V-Sync: {VSyncChoiceLabel()}",
+                11 => $"Render scale: {RenderScaleChoiceLabel()}",
+                12 => $"Anti-aliasing: {AntiAliasingChoiceLabel()}",
+                13 => $"Shadow quality: {ShadowQualityChoiceLabel()}",
+                14 => $"Master volume: {LevelLabel(_audioMasterChoice, AudioMix.DefaultMaster)}",
+                15 => $"Music volume: {LevelLabel(_audioMusicChoice, AudioMix.DefaultMusic)}",
+                16 => $"Effects volume: {LevelLabel(_audioEffectsChoice, AudioMix.DefaultEffects)}",
+                17 => $"Voice volume: {LevelLabel(_audioVoiceChoice, AudioMix.DefaultVoice)}",
+                18 => ControlsRow,
                 _ => "Apply and restart the menu",
             },
             Screen.Controls => $"{ControlsRowLabel(index)}   {ControlsRowValue(index)}",
@@ -4093,13 +4274,23 @@ public sealed partial class LaunchMenu : CanvasLayer
     // does go. The waiting board's one row replaces all five.
     private string NetworkRowText(int index) => _coopWait ? CoopDoorText.LeaveRow : index switch
     {
-        NetPortRow => $"Port            {(_net?.Port ?? NetPlayFeature.DefaultPort).ToString(CultureInfo.InvariantCulture)}",
+        NetPortRow => $"Port            {(_net?.Port ?? NetPorts.Game).ToString(CultureInfo.InvariantCulture)}",
         NetAddressRow => $"Address         {_net?.Address ?? NetPlayFeature.DefaultAddress}",
         NetHostRow => "Host a match",
         NetJoinRow => "Join that address",
+        NetGameNameRow => $"Game name       {_net?.GameName}",
+        NetPasswordRow => $"Password        {new string('*', _net?.Password.Length ?? 0)}",
+        NetPlayersRow => $"Max players     {(_net is { } door ? ShownCap(door) : NetPlayerInfo.DefaultPlayers).ToString(CultureInfo.InvariantCulture)}",
+        NetCallsignRow => $"Callsign        {_net?.PlayerName}",
+        NetVoiceRow => $"Voice           {PilotVoices.All[PilotVoices.Clamp(_net?.Voice ?? PilotVoices.Default)].Name}",
         _ when _net is { } net && net.IsCoopGuest => CoopDoorText.WaitRow,
         _ => "Continue → Map",
     };
+
+    // The cap the board's row shows: the chosen one inside the spinner's range, or a Dogfight's
+    // sixteen where none was chosen. A campaign door holds it to four when it opens.
+    private int ShownCap(NetPlayFeature door) =>
+        door.MaxPlayers > 0 ? NetPlayerInfo.ClampPlayers(NetSessionKind.Dogfight, door.MaxPlayers) : NetSeats.MaxPlayers;
 
     // The line under the door's rows: what the socket is doing, who is on it, and what the
     // router said. This is the whole readout, so a player who cannot fly can see why.
@@ -4116,7 +4307,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
 
         string link = net.Link is { } state ? $", link {state.ToString().ToLowerInvariant()}" : "";
-        string mapped = net.PortMap is { } map ? $" {CoopDoorText.RouterStatus(map)}" : "";
+        string mapped = net.Router.PortMap is { } map ? $" {CoopDoorText.RouterStatus(map)}" : "";
         string pinhole = CoopDoorText.HostPinholeStatus(net);
         mapped += pinhole.Length > 0 ? $" {pinhole}" : "";
         string address = CoopDoorText.HostAddressStatus(net);
@@ -4125,7 +4316,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             NetDoorStage.Hosting =>
                 $"Hosting on port {net.Port.ToString(CultureInfo.InvariantCulture)}{link}, {net.Peers.ToString(CultureInfo.InvariantCulture)} joined.{where}{mapped}",
-            NetDoorStage.Joining => $"Joining {net.JoinTargetText}{link}",
+            NetDoorStage.Joining => $"Joining {net.JoinTarget}{link}",
             NetDoorStage.Joined => CoopDoorText.JoinedStatus(net, link, MissionName),
             NetDoorStage.Failed => $"That did not open: {net.Fault}",
             _ => "Host a match, or type an address and join one. The host picks the map.",
@@ -4367,7 +4558,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             // W/A/S/D are dead on the address row (MenuInput.TextEntry), so the arrows are named
             // alone, as the hangar's own name screen names them.
             Screen.Network when _coopWait => "↑↓  Navigate",
-            Screen.Network => "↑↓  Choose row       ←→  Port       Type / Backspace  Address",
+            Screen.Network => "↑↓  Choose row       ←→  Port, players, voice       Type / Backspace  Address, names",
             // Dogfight's map screen carries the two match rows, whose stepper is an unbound axis
             // nobody can guess at. Free Flight's map screen has nothing sideways and says so.
             Screen.Chapter when MatchRowCount > 0 => "↑↓  Choose map or rule       ←→  Change",
@@ -4445,15 +4636,19 @@ public sealed partial class LaunchMenu : CanvasLayer
             3 => "Take the nearest target after a kill instead of the first of the list.",
             4 => "Rumble the gamepad for guns, launches, hits, the nitro and a dive past the rated maximum.",
             5 => GraphicsDetail(),
-            6 => "Select the monitor the game opens on. Applied on the way out, before the size.",
-            7 => ResolutionDetail(),
-            8 => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
-            9 => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
-            10 => "Set the overall volume of all sounds. Heard once the choices are applied.",
-            11 => "Set the volume of the in-game music. Heard once the choices are applied.",
-            12 => "Set the volume of the sound effects. Heard once the choices are applied.",
-            13 => "Set the volume of the voices. Heard once the choices are applied.",
-            14 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
+            6 => ViewDistanceDetail(),
+            7 => "Select the monitor the game opens on. Applied on the way out, before the size.",
+            8 => ResolutionDetail(),
+            9 => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
+            10 => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
+            11 => "Render the world below native to spare the GPU, or above it for cleaner edges. Applies at once.",
+            12 => "Select how edges are smoothed. FSR 2.2 also upscales a Render Scale below 100%. Applies at once.",
+            13 => DisplaySettingRows.ShadowQualityDetail(_graphicsChoice),
+            14 => "Set the overall volume of all sounds. Heard once the choices are applied.",
+            15 => "Set the volume of the in-game music. Heard once the choices are applied.",
+            16 => "Set the volume of the sound effects. Heard once the choices are applied.",
+            17 => "Set the volume of the voices. Heard once the choices are applied.",
+            18 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
             _ => "Saves every choice and restarts the menu at its top level; unfinished setup is discarded.",
         },
         Screen.Controls => ControlsDetail(focus),

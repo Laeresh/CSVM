@@ -755,6 +755,22 @@ public class SessionSpecTests
         Assert.Contains(s.Warnings, w => w.Category == "core" && w.Message.Contains("flight camera"));
     }
 
+    /// <summary>`--fov` sets only the free camera's angle, since flight's views and the viewer's
+    /// orbit own theirs. An angle Godot would clamp is reported rather than silently changed.</summary>
+    [Fact]
+    public void TheFovIsAFreeCameraAngleOnly()
+    {
+        Assert.Equal(55.5f, S("--freecam", "--fov=55.5").Fov);
+        Assert.Equal(55.5f, S("--anim-lab", "--fov=55.5").Fov);
+        Assert.Null(S("--freecam").Fov);
+        var flight = S("--fly", "--fov=55.5");
+        Assert.Null(flight.Fov);
+        Assert.Contains(flight.Warnings, w => w.Category == "core" && w.Message.Contains("outside --freecam/--anim-lab"));
+        var wide = S("--freecam", "--fov=180");
+        Assert.Null(wide.Fov);
+        Assert.Contains(wide.Warnings, w => w.Message.Contains("outside 1..179"));
+    }
+
     /// <summary>The shared selection lives in the two world-observation modes: the viewer's LMB is
     /// already the orbit drag, and flight has no cursor.</summary>
     [Theory]

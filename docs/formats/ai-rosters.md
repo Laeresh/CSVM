@@ -126,6 +126,24 @@ def placed on the water at the block's spot and driven along its net by the scri
 (`Session/World/SurfaceVehicleRuntime.cs`); C1B/M03's four `patrolboat_1..4` are the shipped roster case,
 C2/M01's `patrolboat_eg0` the generator-template one.
 
+**Two block names swap the def for a `w<plane>` twin, and no airframe does.** The roster builder
+`FUN_004735b0` compares each block name against `wingman_1` (`0x0062886c`, at `0x00474e3e`) and,
+on a match, takes the wingman's airframe id `DAT_0071db4c` (id `0xb` read as 5), names its
+`w<plane>` def through `FUN_00426d60` and looks that up in the def list in place of the block's
+own. The `wingman_4` arm (`0x00475018`) does the same with the player's airframe id `DAT_0071daec`
+in C3/M05 and C4/M04 alone (`0x004750a4`), then writes the player's paint pair. Every other block
+keeps its own def, whatever airframe it resolves to. `FUN_00426d60` reads column 0 of the
+eleven-row, seven-string airframe table at `0x00620c80`; row 5, the Devastator, names `wingman`
+(`0x00620f7c`), since no `wdevastator` def ships, so on a Devastator both arms land on the
+block's own `wingman` def. CSVM's plan gives the twin to `wingman_1` when a profile or co-op
+wingman is bound, and to `wingman_4` when the hand-over resolves (`CampaignRosterPlan.Build`'s
+bound-wingman and hand-over arms); the Devastator case falls out of `wingman` deriving from
+`devastator`. The shipped `w<plane>` defs author `kind_of`, `nodename`, `mode wingman`,
+`activation`, `struct_bias -200` and `target_bias -100` and nothing else, so the twin keeps its
+base def's `armor`/`health` and weapons. The one spawned aircraft block whose def is no variant of its airframe, `bswingman_1` on
+`player_fury` in C4/M01, M02 and M03, never shares a mission with a bound wingman:
+`cm_sequence` carries `wingman false` for those three, and for C3/M05 and C4/M04.
+
 ### `group` is a cohort id, not a formation
 
 The format is established; instrument and function addresses are in

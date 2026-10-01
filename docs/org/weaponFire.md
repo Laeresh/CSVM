@@ -42,17 +42,19 @@ or a `REP` count, with no id table holding the pair either; the same scan does f
 (`PUSH 0x84` at `0049e23c` formats id 132, and the multiplayer flag builder `FUN_00495d40` formats
 7056 to 7061), so the absence is the finding rather than the method. The shipped data agrees: no
 reader, node tree or `.gw` script names an ammo, supply or crate pickup, and the four `pickups.zrd`
-files are campaign person rescues. What does re-arm is a fixed multiplayer base. `FUN_0049b970`
-walks the rearm-node list (`DAT_0071c7c4`), compares the player's distance against `_DAT_00628f10`
-(624.0 by default, written from the config keys read at `00473f8c` and `0043f33b`), and on entry
-calls `FUN_00480480`, which restores health and armour (`FUN_004b80a0` and `FUN_004b8180`, from the
+files are campaign person rescues. What does re-arm is a fixed multiplayer base, decoded in full in
+[`multiplayer-rearm.md`](multiplayer-rearm.md). `FUN_0049b970` walks the rearm-node list
+(`DAT_0071c7c4`), compares the player's squared distance against `_DAT_00628f10` (625.0, 25 m
+squared, as initialised; `player.zrd`'s `rearm_rad` squared would replace it, and the shipped file
+has none), and on entry calls `FUN_00480480`, which restores health and armour (`FUN_004b80a0` and `FUN_004b8180`, from the
 stored maxima at `plane + 0x2c4` and `plane + 0x2cc`) and re-applies the entire loadout through
 `FUN_004b24d0`, calling `FUN_004b2550(plane, slot, def, -1, flag)` for all four gun groups and all
 eight pylons, where `-1` means the def's own full count from `FUN_004bad90`. A rearm therefore
 restores everything at once, never one round and never one weapon; the caller preserves the
 selected group (`plane + 0x604`) and pylon (`plane + 0x608`) across the reset, latches on
 `DAT_0071d23c` so it fires once per entry into the radius, requires the base to belong to the
-player's own team in the team modes, and announces with id 7077 (`MSG_MP_REARMED`, "Rearmed!") at
+player's own team in Capture the Flag and Zeppelin vs Zeppelin (either Deathmatch takes any base),
+and announces with id 7077 (`MSG_MP_REARMED`, "Rearmed!") at
 `0049ba99` and `0049bbb9`. The nodes (`rabase1`, `rabase2`, `racmplx`, `rabaset1`, `ammosign`,
 `rearm_node_1`, `rearm_node_2`, and `zep_rearm_node_1` / `zep_rearm_node_2` on the zeppelin map)
 exist only in the multiplayer maps, and the `.gw` scripts of every campaign mission and of Instant

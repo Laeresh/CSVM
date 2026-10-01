@@ -39,10 +39,10 @@ public class CoopDoorTextTests
     }
 
     [Fact]
-    public void TheGamesListNamesTheHostsGameItsPlayersOfItsCapAndItsMission()
+    public void TheGamesListNamesTheGameItsPlayersOfItsCapAndItsMission()
     {
         var coop = new SessionAdvertMessage(NetSessionKind.CampaignCoop, 7, 2, "Zachary", NetSessionStatus.Waiting, 4);
-        Assert.Equal("Zachary's campaign", CoopDoorText.GameName(coop));
+        Assert.Equal("Zachary", CoopDoorText.GameName(coop));
         Assert.Equal("Campaign", CoopDoorText.GameName(coop with { Host = "" }));
         Assert.Equal("2/4", CoopDoorText.PlayerCount(coop));
         Assert.Equal($"2/{NetPlayFeature.CoopHumans}", CoopDoorText.PlayerCount(coop with { Cap = 0 }));
@@ -54,7 +54,8 @@ public class CoopDoorTextTests
         Assert.Equal("C2/M03", CoopDoorText.Shortcode(coop));
 
         var dogfight = new SessionAdvertMessage(NetSessionKind.Dogfight, SessionAdvertMessage.NoMission, 5, "Lucy");
-        Assert.Equal("Lucy's dogfight", CoopDoorText.GameName(dogfight));
+        Assert.Equal("Lucy", CoopDoorText.GameName(dogfight));
+        Assert.Equal("Dogfight", CoopDoorText.GameName(dogfight with { Host = "" }));
         Assert.Equal($"5/{NetSeats.MaxPlayers}", CoopDoorText.PlayerCount(dogfight));
         Assert.Equal("", CoopDoorText.Environment(dogfight, _ => "x", _ => true));
     }
@@ -82,15 +83,16 @@ public class CoopDoorTextTests
         var door = new NetPlayFeature(
             (_, _, _) => mesh[0],
             (_, _) => mesh[0],
-            port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, "203.0.113.24", "mapped"),
-            _ => { });
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, "203.0.113.24", "mapped"),
+                _ => { }));
         Assert.Equal("", CoopDoorText.HostBand(door));
 
         door.OpenCoopHost(14);
         Assert.Equal($"NETWORK OPEN  port {NetPlayFeature.DefaultPort}  2 guests", CoopDoorText.HostBand(door));
 
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
-        while (door.PortMap == null && DateTime.UtcNow < deadline)
+        while (door.Router.PortMap == null && DateTime.UtcNow < deadline)
         {
             door.Step(0.016);
             System.Threading.Thread.Sleep(1);
@@ -132,11 +134,11 @@ public class CoopDoorTextTests
 
         string joined = CoopDoorText.JoinedStatus(door, "", seq => $"M{seq + 1}");
         Assert.Contains("Campaign co-op, chapter 2, mission 3: M8", joined, StringComparison.Ordinal);
-        Assert.Contains("hosted by Zachary", joined, StringComparison.Ordinal);
+        Assert.Contains("game Zachary", joined, StringComparison.Ordinal);
         Assert.Contains("3 players", joined, StringComparison.Ordinal);
 
         string waiting = CoopDoorText.WaitingStatus(door, seq => $"M{seq + 1}");
-        Assert.Contains("Hosted by Zachary", waiting, StringComparison.Ordinal);
+        Assert.Contains("Game Zachary", waiting, StringComparison.Ordinal);
         Assert.EndsWith("Waiting for the host to launch the mission.", waiting, StringComparison.Ordinal);
     }
 
@@ -144,10 +146,11 @@ public class CoopDoorTextTests
     private static string HostBandOver(UpnpPortMapResult answer)
     {
         var mesh = LoopbackTransport.Mesh(1, Clean, new Random(3));
-        var door = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0], port => answer with { Port = port }, _ => { });
+        var door = new NetPlayFeature(
+            (_, _, _) => mesh[0], (_, _) => mesh[0], new RouterAccess(port => answer with { Port = port }, _ => { }));
         door.OpenCoopHost(14);
         var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(20);
-        while (door.PortMap == null && DateTime.UtcNow < deadline)
+        while (door.Router.PortMap == null && DateTime.UtcNow < deadline)
         {
             door.Step(0.016);
             System.Threading.Thread.Sleep(1);

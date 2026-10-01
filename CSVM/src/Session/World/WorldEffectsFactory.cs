@@ -28,6 +28,11 @@ public sealed class WorldEffectsFactory
     // fire, so it completes), then tears its puffers down.
     private const float EffectRuntimeTtl = 32f;
 
+    // ANIM_STATE RUNNING in the mission script's own numbering (AnimRuntime.AnimStateOf): the
+    // effect name still has a live instance. This is what a burst light reads as "the fireball is
+    // still burning", so the light ends when the fireball does and not on a clock of its own.
+    private const int AnimStateRunning = 2;
+
     // ⚠ TUNE, not decoded, the original copies templates per call and has no such number.
     // Sizes live in `CSVM/data/effect_pools.json` (EffectPools), not here: per root, scaled by
     // player count. AnimRuntime.PoolRecycles counts wraps onto a live slot.
@@ -64,6 +69,10 @@ public sealed class WorldEffectsFactory
     private readonly EffectPools _pools = EffectPools.Load();
 
     private AnimRuntime? _worldEffects;
+
+    // The session's heat-shimmer quads, built on the first fireball that asks for one and null
+    // otherwise, so the faithful presentation carries no pool and no node at all.
+    private HeatShimmer? _shimmer;
 
     // The builder for the planes-gamez half of a crash rig's template stage. Kept for the session
     // rather than per rig so all rigs share one material cache, the way every rig already shares
@@ -102,6 +111,10 @@ public sealed class WorldEffectsFactory
     /// <see cref="EnsureWorldEffects"/> has run. <c>HumanFlightAdapter</c> hands it to every
     /// controller, so all rigs index the ONE vector rather than each building its own.</summary>
     public SurfaceDefTable? TouchdownDefs { get; private set; }
+
+    /// <summary>The session's heat-shimmer pool, null until a fireball has asked for one and on the
+    /// faithful presentation always. Observation only; the pool stays owned here.</summary>
+    internal HeatShimmer? Shimmer => _shimmer;
 
     /// <summary>The effect-template ROOT names the world-effects stage builds, the set
     /// <see cref="EffectPools"/> sizes, exposed so the committed pool config can be checked
@@ -279,6 +292,7 @@ public sealed class WorldEffectsFactory
         // A burst's authored LIGHT_STATE (he_light and its kin) submits into the world's own set,
         // so it rides the world's fade, budget and omni mirror on both presentations.
         effects.ContributeLightsTo(worldRuntime.Lights);
+        effects.LightReplacedAnimNames = ReplacedLightAnimNames();
         if (worldRuntime.ExternalEffect == null)
         {
             worldRuntime.ExternalEffect = (name, pt, node, follow) =>
@@ -288,7 +302,16 @@ public sealed class WorldEffectsFactory
         if (projectiles != null && projectiles.EffectSink == null)
         {
             projectiles.EffectSink = (name, pt, orient, ringOrient, ttl) =>
-                effects.PlayEffectAt(name, pt, null, ttl, orient, callOrient: ringOrient);
+            {
+                if (!effects.PlayEffectAt(name, pt, null, ttl, orient, callOrient: ringOrient))
+                    return;
+                // Unconditional: the whole rule, the mode gate included, lives in each helper, so
+                // there is one place a burst light or a shimmer is decided rather than two that
+                // can disagree. Both read the same liveness, the fireball's own ANIM_STATE.
+                Func<bool> stillBurning = () => effects.AnimStateOf(name) == AnimStateRunning;
+                RegisterBurstLight(worldRuntime.Lights, name, pt, stillBurning);
+                RegisterHeatShimmer(name, pt, stillBurning);
+            };
             // The one callee a burst may re-base, and only when the pool hands a basis in, which is
             // the enhanced presentation alone (ProjectilePool.UpperRingOrient).
             effects.OrientedCallAnimNames = new HashSet<string>(
@@ -302,9 +325,9 @@ public sealed class WorldEffectsFactory
 
     /// <summary>Builds the per-plane crash runtime: <c>player_crash_*</c> for a human rig,
     /// <c>ai_crash_*</c> for an AI plane (<see cref="EffectCatalogue.CrashDefTableFor"/>). Builds
-    /// the effect-template roots and the plane's wreck under a <c>player</c> crash root, then binds
+    /// the effect-template roots and the plane's wreck under a <c>player</c> crash root. Then binds
     /// a non-auto-start <see cref="AnimRuntime"/> to the controller, scoped so every anchor is unique.
-    /// ⚠ <c>startprops</c>/<c>stopprops</c> never resolve on any airframe, so callers pass the plane
+    /// ⚠ <c>spinprops</c>/<c>stopprops</c> never resolve on any airframe, so callers pass the plane
     /// model as fallback anchor; <paramref name="planesGamez"/> is the second stage source.</summary>
     public void BuildFlightCrashRuntime(FlightController controller, PlaneBuilder planeBuilder,
         string planeName, GameZ gamez, SceneBuilder worldScene, TextureArchive textures,
@@ -325,6 +348,56 @@ public sealed class WorldEffectsFactory
         GameZ? planesGamez = null) =>
         new CrashRigBuild(this, controller, planeBuilder, planeName, gamez, worldScene, textures,
             crashProgram, verbose, worldSounds, planesGamez);
+
+    /// <summary>The defs whose authored lights the burst light stands in for: every burst-light def
+    /// under Enhanced Graphics. An HE detonation is then one light, not a faint wide ramp beside a
+    /// bright short one. Null on the faithful path, which draws every authored light.</summary>
+    internal static HashSet<string>? ReplacedLightAnimNames() => GraphicsMode.Enhanced
+        ? new HashSet<string>(EffectCatalogue.BurstLightShapes.Keys, StringComparer.OrdinalIgnoreCase)
+        : null;
+
+    /// <summary>The effect sink's burst-light rule, the one place it is decided. Under Enhanced
+    /// Graphics a played effect with a <see cref="EffectCatalogue.BurstLightShape"/> registers a
+    /// short-lived light of that shape with the world's <see cref="WorldLights"/>, gone when
+    /// <paramref name="stillBurning"/> goes false. The faithful presentation and a view with no
+    /// lights register nothing. A def that authors its own light still takes one: under Enhanced
+    /// its authored light is not drawn (<see cref="AnimRuntime.LightReplacedAnimNames"/>).</summary>
+    internal static void RegisterBurstLight(WorldLights? lights, string animName, Vector3 at,
+        Func<bool> stillBurning)
+    {
+        if (lights == null || !GraphicsMode.Enhanced || EffectCatalogue.BurstLightShape(animName) is not { } shape)
+            return;
+        lights.AddBurst(at, shape, stillBurning);
+    }
+
+    /// <summary>The effect sink's heat-shimmer rule, the one place it is decided: under Enhanced
+    /// Graphics a played fireball effect (<see cref="EffectCatalogue.IsBurstLight"/>, the same set,
+    /// since a fireball that lights what stands around it is one that heats the air over it) takes
+    /// a refracting quad from this session's <see cref="HeatShimmer"/> pool.
+    /// <paramref name="stillBurning"/> is the fireball's liveness, the same closure the burst light
+    /// reads. The faithful presentation builds neither the pool nor its node.</summary>
+    internal void RegisterHeatShimmer(string animName, Vector3 at, Func<bool> stillBurning)
+    {
+        if (!GraphicsMode.Enhanced || !EffectCatalogue.IsBurstLight(animName))
+            return;
+        _shimmer ??= HeatShimmer.Attach(_worldRoot);
+        _shimmer.Spawn(at, stillBurning);
+    }
+
+    /// <summary>A live graphics-mode switch. The world-effects runtime takes the replaced-light set of
+    /// the mode now standing. The faithful mode frees the heat shimmer pool, which it never builds.
+    /// Enhanced builds a fresh one at its next fireball, as a fresh session does.</summary>
+    internal void FollowGraphicsMode()
+    {
+        if (_worldEffects != null)
+            _worldEffects.LightReplacedAnimNames = ReplacedLightAnimNames();
+        if (!GraphicsMode.Enhanced && _shimmer != null)
+        {
+            _shimmer.GetParent()?.RemoveChild(_shimmer);
+            _shimmer.QueueFree();
+            _shimmer = null;
+        }
+    }
 
     // Every template root either rig kind stages, for the pool-config drift check alone. Derived
     // the same way the live one is, so a root this rig does not stage still counts as known.
@@ -439,24 +512,52 @@ public sealed class WorldEffectsFactory
         return names;
     }
 
-    private static void CollectRestPoses(Node3D node, List<(Node3D, Transform3D)> into)
+    private static void CollectRestStates(Node3D node, List<(Node3D, Node3D?, Transform3D, bool)> into)
     {
-        into.Add((node, node.Transform));
+        into.Add((node, node.GetParent() as Node3D, node.Transform, node.Visible));
         foreach (var child in node.GetChildren())
             if (child is Node3D c)
             {
-                CollectRestPoses(c, into);
+                CollectRestStates(c, into);
             }
     }
 
-    private static void CollectVisibility(Node3D node, List<(Node3D, bool)> into)
+    // The child of every OBJECT_ADD_CHILD a bound def authors. That is the eject's `cpilot`, stood
+    // up on the seat's `pilot_pos` and taken down only once its SI script completes.
+    private static HashSet<string> AdoptedChildNames(AnimProgram bound)
     {
-        into.Add((node, node.Visible));
-        foreach (var child in node.GetChildren())
-            if (child is Node3D c)
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var def in bound.Defs)
+            foreach (var seq in def.Sequences)
+                foreach (var ev in seq.Events)
+                    if (ev.Kind == "ObjectAddChild" && ev.Data.Str("child") is { } child)
+                        names.Add(child);
+        return names;
+    }
+
+    // Every staged copy under the rig carrying one of those names. A copy's own subtree is not
+    // searched further, since its joints are collected with it.
+    private static List<Node3D> AdoptedTemplates(Node3D root, HashSet<string> names)
+    {
+        var found = new List<Node3D>();
+        if (names.Count == 0)
+            return found;
+        var queue = new Queue<Node>();
+        queue.Enqueue(root);
+        while (queue.Count > 0)
+        {
+            foreach (var child in queue.Dequeue().GetChildren())
             {
-                CollectVisibility(c, into);
+                string name = child.HasMeta(AnimRuntime.NameMeta)
+                    ? child.GetMeta(AnimRuntime.NameMeta).AsString()
+                    : child.Name.ToString();
+                if (child is Node3D n3d && names.Contains(name))
+                    found.Add(n3d);
+                else
+                    queue.Enqueue(child);
             }
+        }
+        return found;
     }
 
     // Built once per session (see the field): cullBackfaces and the sun term match PlaneBuilder's
@@ -570,7 +671,7 @@ public sealed class WorldEffectsFactory
         private readonly WorldSounds? _worldSounds;
         private readonly GameZ? _planesGamez;
         private readonly int _crashSeed;
-        private readonly List<(Node3D, Transform3D)> _restPoses = new();
+        private readonly List<(Node3D, Node3D?, Transform3D, bool)> _restStates = new();
 
         private Phase _phase;
         private int _slot;
@@ -752,9 +853,9 @@ public sealed class WorldEffectsFactory
             {
                 destroyed.Visible = false;
                 _crashRoot!.AddChild(destroyed);
-                // Every wreck node's rest pose, so respawn can re-home the flung pieces (a
-                // RESET_STATE re-poses only what it names, and the pieces have no reset event).
-                CollectRestPoses(destroyed, _restPoses);
+                // Every wreck node's rest state, so respawn can re-home the flung pieces. A
+                // RESET_STATE re-poses only what it names, and the pieces have no reset event.
+                CollectRestStates(destroyed, _restStates);
             }
         }
 
@@ -802,26 +903,31 @@ public sealed class WorldEffectsFactory
                 // BOUNCE reads a real struck surface rather than a guess.
                 crashRuntime.SurfaceIsWater = body => ProjectilePool.SurfaceIsWater(body as Node);
             }
+            // The def's own propeller pair. Its anchors are airframe names, so the stage closure above
+            // needs no template for it.
+            var propAnims = new[] { _controller.SpinPropsAnim, _controller.StopPropsAnim };
             // Bind only the closure of names that play ON this aircraft (CrashRigAnimNames), never the
             // full ~800-def world program, its ~150 generic-named defs would mis-anchor onto this
             // plane's parts and run their reset states on it.
-            crashRuntime.Bind(_controller,
-                _crashProgram.Subset(EffectCatalogue.CrashRigAnimNames(_crashDefs!, _destroyAnim,
-                    _controller.IsHumanPiloted)));
+            var bound = _crashProgram.Subset(EffectCatalogue.CrashRigAnimNames(_crashDefs!, _destroyAnim,
+                _controller.IsHumanPiloted, propAnims));
+            crashRuntime.Bind(_controller, bound);
             _controller.AddChild(crashRuntime);
             _controller.DestroyDef = _destroyAnim;
             // Which of the two families owns the landing, asked of the data rather than of who is
             // flying: a def that takes the hull over also authors its own bounce sequences.
             _controller.DestroyDefFliesWreck = EffectCatalogue.FliesOwnHull(_crashProgram, _destroyAnim);
-            // The plane model's built visibility, so respawn can undo the crash def's healthy/markers
-            // hides (its RESET_STATE only restores dontmove). Captured pristine, before any crash.
-            var planeVis = new List<(Node3D, bool)>();
+            // The built state of every node the death defs play on, captured after the bind and
+            // before any crash. That is the airframe, the wreck and the templates a def adopts.
+            // ⚠ A snapshot taken at respawn would record the death's end pose.
             if (_controller.PlaneModel != null)
-                CollectVisibility(_controller.PlaneModel, planeVis);
+                CollectRestStates(_controller.PlaneModel, _restStates);
+            foreach (var adopted in AdoptedTemplates(_crashRoot!, AdoptedChildNames(bound)))
+                CollectRestStates(adopted, _restStates);
             // One call for the whole rig, so it cannot be half-bound. The anchor is the context node
             // both families play against: the ai_crash_* NAME `kestrel` resolves nowhere in a rig, so
             // Play falls back to it, the node the original's own caller supplies (org/vehicleDamage.md).
-            _controller.BindCrashRig(crashRuntime, _crashDefs, _crashRoot, _restPoses, planeVis);
+            _controller.BindCrashRig(crashRuntime, _crashDefs, _crashRoot, _restStates);
             // Phase 2 of the damage-visuals setup: the sink and the stops, which need a live rig
             // runtime and so cannot be wired where the object is built.
             WireDamageStages(_controller, crashRuntime, _crashProgram);
@@ -863,7 +969,7 @@ public sealed class WorldEffectsFactory
                 Log.Warn("anim", $"effect pools: crash root '{unknown}' is staged by no rig kind, it sizes nothing");
             }
             if (_verbose)
-                Log.Info("anim", $"data-crash: {_effectRoots} effect template cop(ies) over {_factory._pools.CrashDepthFor(_rootNames)} pool slot(s) + {_restPoses.Count} wreck node(s), crash runtime bound (scoped, no auto-start)");
+                Log.Info("anim", $"data-crash: {_effectRoots} effect template cop(ies) over {_factory._pools.CrashDepthFor(_rootNames)} pool slot(s) + {_restStates.Count} rest-state node(s), crash runtime bound (scoped, no auto-start)");
         }
     }
 }
