@@ -247,7 +247,7 @@ internal static class ShaderTwins
         int rewrote = 0;
         foreach (var group in groups)
         {
-            var from = (Shader)group.Key;
+            var from = (Shader)group.Key!;
             bool free = holders[from] == group.Count();
             bool rewritten = false;
             foreach (var twins in group)
