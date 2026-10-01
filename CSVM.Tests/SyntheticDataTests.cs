@@ -6,6 +6,7 @@ using System.Text.Json;
 using CSVM.Mech3;
 using CSVM.Session.Launch;
 using CSVM.Tooling;
+using CSVM.UI.Menu.Original;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -13,7 +14,8 @@ namespace CSVM.Tests;
 /// <summary>
 /// The synthetic data root <c>--synthetic-data</c> writes, built from the fixtures the engine reads.
 /// Its stamp passes the boot check as a current tree and marks it synthetic. Its chapter texture
-/// archive opens through the path every session resolves, with one PNG per manifest entry. Decoding
+/// archive opens through the path every session resolves, with one PNG per manifest entry. The
+/// Original shell's files pass its availability check, each picture at its recorded size. Decoding
 /// pixels needs Godot, so the in-engine run covers that half.
 /// </summary>
 public class SyntheticDataTests
@@ -75,6 +77,41 @@ public class SyntheticDataTests
     }
 
     [Fact]
+    public void TheOriginalShellOpensOverTheTree()
+    {
+        string root = Built();
+
+        var layout = OriginalAvailability.Load(root, out string? reason);
+
+        Assert.Null(reason);
+        Assert.NotNull(layout);
+        Assert.All(layout!.MissingArt, art => Assert.True(OriginalAvailability.IsMovie(art), art));
+        Assert.NotNull(layout.Screen(OriginalAvailability.MainMenuSection));
+        Assert.Equal("Agreed", layout.Screen("MessageBox")!.Widget("MB_B_CENTER")!.Text);
+        Assert.True(UiStrings.TryLoad(root)!.Has(10123));
+    }
+
+    [Fact]
+    public void EveryShellPictureIsWrittenAtItsRecordedSizeInItsOwnFormat()
+    {
+        string root = Built();
+        using var doc = JsonDocument.Parse(File.ReadAllText(TestData.Fixture("synthetic", "rof", "art.json")));
+        foreach (var entry in doc.RootElement.GetProperty("art").EnumerateArray())
+        {
+            string name = entry.GetProperty("name").GetString()!;
+            byte[] bytes = File.ReadAllBytes(OriginalAvailability.ArtPath(root, name));
+            var size = Path.GetExtension(name).ToLowerInvariant() switch
+            {
+                ".png" => (BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(16)), BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(20))),
+                ".tga" => (TgaImage.Decode(bytes)!.Width, TgaImage.Decode(bytes)!.Height),
+                _ => JpegFrameSize(bytes),
+            };
+
+            Assert.Equal((entry.GetProperty("width").GetInt32(), entry.GetProperty("height").GetInt32()), size);
+        }
+    }
+
+    [Fact]
     public void ARebuildReplacesWhatAnEarlierRunLeft()
     {
         string root = Built();
@@ -113,6 +150,20 @@ public class SyntheticDataTests
         string root = Path.Combine(TestData.TempDir(), "root");
         SyntheticData.Build(TestData.Fixture(), root);
         return root;
+    }
+
+    // A baseline JPEG's frame header: the size follows the precision byte, height first. Every
+    // marker before it is a length-prefixed segment, which is all the synthetic writer emits.
+    private static (int Width, int Height) JpegFrameSize(byte[] jpeg)
+    {
+        Assert.True(jpeg[0] == 0xFF && jpeg[1] == 0xD8, "a JPEG starts with SOI");
+        int at = 2;
+        while (jpeg[at + 1] != 0xC0)
+        {
+            at += 2 + BinaryPrimitives.ReadUInt16BigEndian(jpeg.AsSpan(at + 2));
+        }
+
+        return (BinaryPrimitives.ReadUInt16BigEndian(jpeg.AsSpan(at + 7)), BinaryPrimitives.ReadUInt16BigEndian(jpeg.AsSpan(at + 5)));
     }
 
     private static List<(string Name, int Width, int Height)> ManifestEntries()

@@ -35,6 +35,7 @@ public static class SyntheticData
         new("chapter-textures", SyntheticTextures.WriteChapter),
         new("plane", SyntheticPlane.WritePlane),
         new("armament", SyntheticPlane.WriteArmament),
+        new("original-shell", SyntheticShell.WriteShell),
     };
 
     /// <summary>Where the hand-authored records sit in a repo checkout. An exported build has no

@@ -94,3 +94,17 @@ outward-wound box per entry) and the `vehicle.json`, `engines.json`, `player.jso
 `SessionSpec.DefaultPlane` names it, both set by `Launcher` under the switch. Shapes:
 [../formats/gamez.md](../formats/gamez.md), [../formats/markers.md](../formats/markers.md),
 [../formats/vehicle.md](../formats/vehicle.md), [../formats/weapons.md](../formats/weapons.md).
+
+## src/Tooling/SyntheticShell.cs
+The synthetic tree's Original shell, `extracted/rof/`: `fixtures/menu-layout-original/LAYOUT.CSV`
+decoded by `Extraction/MenuLayoutDecoder.cs` into `menu_layout.json`, the invented string rows of
+`fixtures/synthetic/rof/ui_strings.json` (a layout symbol's row, or a row the code reads by id), and
+one generated picture per `fixtures/synthetic/rof/art.json` entry at that size. A file the asset
+manifest requires with no size stops the build. The backdrop movies stay absent, the one optional
+gap. Read `UI/Menu/Original/OriginalAvailability.cs` for what the tree must satisfy.
+
+## src/Tooling/SyntheticImages.cs
+The synthetic tree's JPEG and TGA writers, for menu art a layout or a script names by those
+extensions, since a loader picks its decoder by the name: a baseline greyscale JPEG whose 8x8
+blocks are flat, so each is one DC term, and an uncompressed top-down 24-bit TGA. Both draw a
+checker shaded from the name. PNGs stay with `Extraction/PngWriter.cs`.

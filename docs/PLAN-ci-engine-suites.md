@@ -136,7 +136,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☐ A code-built spawn table for a match on the empty stage
 22. ☐ An invented multiplayer map for the team and flag suites
-23. ☐ The Original shell's remaining layout screens
+23. ☑ The Original shell's remaining layout screens
 24. ☐ Anim, effect and weather records for the remaining D suites
 
 ## Dependency and parallelism notes
@@ -671,7 +671,74 @@ destructible.
 
 **⚠ Traps.** Some of these suites pin values from the real C2/MP2 table; those split, as in B15.
 
-## C23 ☐ The Original shell's remaining layout screens
+## C23 ☑ The Original shell's remaining layout screens
+
+**Landed.** `--synthetic-data` writes the Original shell under `extracted/rof/` as the
+`original-shell` family (`Tooling/SyntheticShell.cs`), and 17 Original-shell suites join the tier,
+which holds 73. `OriginalAvailability.Load` needs the stamp at the current schema (B11 writes it),
+a decoded layout with a `[MainMenu]` section, and every file the asset manifest classes required on
+disk with a readable PNG header. The family decodes `fixtures/menu-layout-original/LAYOUT.CSV`
+through the extraction's own `MenuLayoutDecoder` against the invented rows of
+`fixtures/synthetic/rof/ui_strings.json`, and generates 137 pictures at the invented sizes of
+`fixtures/synthetic/rof/art.json`: PNG through `PngWriter`, JPEG and TGA through the new
+`Tooling/SyntheticImages.cs`, since Godot picks a decoder by extension and the manifest requires
+`.JPG` and `.tga` names. The two backdrop movies stay absent, which the manifest classes optional.
+The fixture layout already carried the Options, VIDEO, CONTROLS, KEYS, hangar, campaign, Instant
+Action and wrap-up sections; it gains the ammunition screen's backdrop, plane diagrams and text rows
+(`OL_T_PLANEINFO` names the seat whose loadout it is). The lobby, connection, join board and team
+screens have no layout section: code composes them from script-named `MP_*` art, which `art.json`
+sizes.
+
+The joined suites are `display-render-scale`, `menu-backdrop`, `menu-join-board`,
+`menu-launch-return`, `menu-player-setup-seats` and twelve `menu-original-*` suites (`boot`,
+`builtin-host`, `cheats`, `connection`, `controls`, `coop-boot`, `coop-film`, `coop-flow`, `lobby`,
+`lobby-teams`, `outlaw-list`, `version`). Sixteen lost a `zrdr` gate whose only use is the Built-in
+launch menu's tolerant stats read, as A2 did for the Built-in menu suites. Three checks that pinned
+shipped words now read them from the data root, so they read the same on the install:
+`menu-original-controls` takes the KEYS column heads from `[@Keys@]`'s three `KB_T_` rows,
+`menu-original-cheats` names the cabin painting by `PC_BACKGROUND`'s art, and `menu-original-lobby`
+reads langui 10123 to 10125 from the string table after checking the three are present and distinct
+(the synthetic table carries invented rows at those ids). Off synthetic data each of the three
+also keeps its old literal check on the shipped words, so a decode that garbles them still fails on
+the install. Each joined suite can fail: the other 16
+failed with `[@MainMenu@]` renamed, the controls and lobby checks failed on a dropped
+`KB_T_CONTTITLEB` and on a 10124 row holding 10123's words, and `menu-player-setup-seats`, whose
+Original leg notes an absent layout rather than failing, failed before `OL_T_PLANEINFO` existed.
+
+Verified on Linux, headless, empty data root, port base 52000: the 17 by name with
+`--synthetic-data` pass 17/0/0 with no engine error line; `--run-tests=tier:ci --synthetic-data`
+passes 73/0/0, its 37 engine error lines all text-server lines `analysis/headless-limits.json`
+allows. The full catalog with the switch reads 73 PASS, 10 FAIL, 415 SKIP: B11's five
+texture-gated suites, `build-stamp-focus`, `enet-dual-stack`, and `display-mode`, `display-monitor`
+and `display-vsync`, which are on `headlessOnly` and now reach their window legs over the synthetic
+layout. Without the switch it reads 57 PASS, 2 FAIL, 439 SKIP; the one change is
+`menu-player-setup-seats`, whose Built-in leg now runs while its Original leg notes the missing
+layout. **CI needs the switch:** `RunCiSuites.ps1` on this base does not pass `--synthetic-data`, so
+its tier run reports the 17 as skips until the script passes it.
+
+Still off the tier, with what each lacks:
+- `menu-original-hangar` asserts the shipped name pane `PX_PlaneNameBackground.Png` centred at
+  268,211, the shipped hub background and the `PX_ICON_` composites. It splits: the walk on the
+  tier, the shipped-geometry checks local.
+- `menu-original-instant-action` asserts the shipped `ia.zrd`'s ace, the shipped fourteen-row
+  contents and the Hellhound's slots. It splits, and its def legs need an invented `ia.zrd` per
+  environment.
+- `menu-original-campaign`: GO TO FLIGHT CHECK expects a narration to end, which needs a
+  `cm_sequence` entry for seq 0, its `brief_c` dialog state, sound and objectives
+  (`CampaignBriefing.Load`), all under `zrdr`.
+- `menu-original-wrapup`: a C4 gamez with Danger Zone nodes, a C4/IA1 zrdr with stunt zones, and
+  `messages.json`.
+- `flight-mouse-scheme-live`: `player_bhawk`'s `vehicle.json` and the plane records (B12).
+- `menu-original-ipv6-address`: this container has no IPv6 loopback; its gate stays.
+- `display-mode`, `display-monitor`, `display-resolution`, `display-vsync` and
+  `menu-original-tracer` are `headlessOnly` by construction.
+
+The author's Windows run owes the full `RunTests.ps1` battery, where each of the 17 should PASS as
+before: a dropped gate changes nothing where the archive exists, and the three retargeted checks
+read the shipped words they pinned. Optionally, `--run-tests=tier:ci --synthetic-data` on the real
+checkout should pass all 73.
+
+**Original approach (kept for reference).**
 
 **Goal.** The Original-shell menu suites run on an invented layout and invented art.
 

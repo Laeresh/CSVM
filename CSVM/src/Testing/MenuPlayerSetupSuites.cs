@@ -77,7 +77,6 @@ internal static class MenuPlayerSetupSuites
         + "from the top level")]
     internal static void MenuPlayerSetupSeats(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         BuiltInSeats(ctx);
         OriginalSeats(ctx);
     }

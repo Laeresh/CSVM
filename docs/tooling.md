@@ -135,8 +135,8 @@ membership is checked in as `SuiteCatalog.CiTier`, one name per line and sorted.
 place by passing `RunCiSuites.ps1` (below): headless, with no extraction but the `--synthetic-data`
 tree of invented records, with no IPv6 loopback and no OS shell or real display, and by being shown
 to go red when one of its inputs in that tree is broken. It joins when it stops needing the install,
-and leaves rather than taking an exception when it starts needing one. The plane suites skip without
-the switch, so the tier is only green with it. The suites on the `headlessOnly`
+and leaves rather than taking an exception when it starts needing one. The plane and Original-shell
+suites skip without the switch, so the tier is only green with it. The suites on the `headlessOnly`
 list in `analysis/headless-limits.json` (a unit test keeps them off the tier), `enet-dual-stack`,
 `enet-stable-ipv6-reply` and `build-stamp-focus` are out for that reason.
 The ENet and LAN discovery suites bound to `127.0.0.1` are in. The tier carries
