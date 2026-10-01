@@ -387,13 +387,16 @@ internal static class NetCombatSuites
 
             var host = peers[0];
             var guest = peers[1];
-            KillLines(ctx, peers, "the guest kills the host", "host", "Destroyed by guest1",
+            var words = MatchWording.Read(ctx);
+            words.Check(ctx, Array.Empty<string>(),
+                new[] { HudMessages.DestroyedByKey, HudMessages.SelfDestroyedKey, HudMessages.KilledByTurretKey });
+            KillLines(ctx, peers, "the guest kills the host", ("host", words.DestroyedBy("guest1")), ("host", "Destroyed by guest1"),
                 () => host.SeatRigs[0].Controller!.DebugForceCrash(host.SeatRigs[1].Controller!.PlayerIndex));
-            KillLines(ctx, peers, "the host kills the guest", "guest1", "Destroyed by host",
+            KillLines(ctx, peers, "the host kills the guest", ("guest1", words.DestroyedBy("host")), ("guest1", "Destroyed by host"),
                 () => guest.SeatRigs[1].Controller!.DebugForceCrash(guest.SeatRigs[0].Controller!.PlayerIndex));
-            KillLines(ctx, peers, "the guest crashes with nobody to charge", "guest1 Self-Destroyed", null,
-                () => guest.SeatRigs[1].Controller!.DebugForceCrash());
-            KillLines(ctx, peers, "a turret owner's kill", "guest1", "Killed by host Turret",
+            KillLines(ctx, peers, "the guest crashes with nobody to charge", (words.SelfDestroyed("guest1"), null),
+                ("guest1 Self-Destroyed", null), () => guest.SeatRigs[1].Controller!.DebugForceCrash());
+            KillLines(ctx, peers, "a turret owner's kill", ("guest1", words.KilledByTurret("host")), ("guest1", "Killed by host Turret"),
                 () => guest.NetLink!.Send(guest.NetLink.HostPeer,
                     new DeathMessage(1, 0, NetDeathCause.TurretOwner, 0u), NetChannels.Events));
             foreach (var end in Enumerable.Reverse(ends))
@@ -401,7 +404,7 @@ internal static class NetCombatSuites
                 end.Close();
             }
 
-            NamedHostKills(ctx, spec, 6308);
+            NamedHostKills(ctx, spec, 6308, words);
         }
         finally
         {
@@ -472,6 +475,12 @@ internal static class NetCombatSuites
     internal static string[] AirframesFor(SessionSpec spec) =>
         spec.EmptyStage ? new[] { spec.PlaneName, spec.PlaneName } : Airframes;
 
+    // Two different airframes, for a suite whose check is a seat's pick crossing the wire. The
+    // empty arena seats the root's own plane beside the lobby's starter. A synthetic tree so flies
+    // both of its invented airframes there, and the MP map keeps the shipped pair.
+    internal static string[] DistinctAirframesFor(SessionSpec spec) =>
+        spec.EmptyStage ? new[] { spec.PlaneName, Airframes[0] } : Airframes;
+
     // The field, seat 0 on the host and one seat per guest after it.
     internal static NetSeat[] Roster(int seats, SessionSpec match)
     {
@@ -493,10 +502,11 @@ internal static class NetCombatSuites
         return roster;
     }
 
-    // One death on clean stacks: each machine's own pane then reads exactly the decoded lines,
-    // top line newest. A relayed copy posted twice, or one machine silent, fails it.
-    private static void KillLines(TestContext ctx, GameSession[] peers, string what, string top,
-        string? under, Action kill, Action<int>? fly = null)
+    // One death on clean stacks: each machine's own pane then reads exactly the lines the run's
+    // table words, top line newest. A relayed copy posted twice, or one machine silent, fails it.
+    // A real extraction's panes are also read against the shipped wording, `shipped`.
+    private static void KillLines(TestContext ctx, GameSession[] peers, string what,
+        (string Top, string? Under) worded, (string Top, string? Under) shipped, Action kill, Action<int>? fly = null)
     {
         fly ??= steps => Lockstep(steps, peers);
         fly(GrantSteps);
@@ -508,7 +518,9 @@ internal static class NetCombatSuites
 
         kill();
         fly(SettleSteps);
-        var want = under == null ? new[] { top } : new[] { top, under };
+        string[] Lines((string Top, string? Under) pair) =>
+            pair.Under == null ? new[] { pair.Top } : new[] { pair.Top, pair.Under };
+        var want = Lines(worded);
         // The victim's own crash notice is the ground impact's line, not the kill's, and is left out.
         string crash = Messages.Load(ctx.MessagesPath).Get(HudMessages.CrashKey);
         string[] Read(HudMessages? stack) => stack == null
@@ -518,14 +530,20 @@ internal static class NetCombatSuites
         var reads = stacks.Select(Read).ToArray();
         string reading = string.Join(" | ", reads.Select(r => string.Join(" / ", r)));
         ctx.Check(reads.All(r => r.SequenceEqual(want)),
-            $"{what}: both machines post {string.Join(" / ", want)} once ({reading})");
+            $"{what}: both machines post the message table's {string.Join(" / ", want)} once ({reading})");
+        if (!ctx.SyntheticData)
+        {
+            var old = Lines(shipped);
+            ctx.Check(reads.All(r => r.SequenceEqual(old)),
+                $"{what}: both machines post {string.Join(" / ", old)} once ({reading})");
+        }
     }
 
     // A lobby Dogfight launched through both doors, its host's callsign past the roster's width
     // and its game named apart from it. The host's seat takes the callsign, cut where the wire cuts
     // it, and the guest's seat the callsign its pick carried. Both machines then read those names
     // in a kill line.
-    private static void NamedHostKills(TestContext ctx, SessionSpec spec, int seed)
+    private static void NamedHostKills(TestContext ctx, SessionSpec spec, int seed, MatchWording words)
     {
         const string HostName = "Montgomery Fairweather";
         const string GameName = "Friday Fliers";
@@ -599,9 +617,9 @@ internal static class NetCombatSuites
             }
 
             string guestName = roster[1].Callsign;
-            KillLines(ctx, peers, "[named host] the host kills the guest", guestName, $"Destroyed by {named}",
+            KillLines(ctx, peers, "[named host] the host kills the guest", (guestName, words.DestroyedBy(named)), (guestName, $"Destroyed by {named}"),
                 () => guest.Session.SeatRigs[1].Controller!.DebugForceCrash(guest.Session.SeatRigs[0].Controller!.PlayerIndex), fly);
-            KillLines(ctx, peers, "[named host] the guest kills the host", named, $"Destroyed by {guestName}",
+            KillLines(ctx, peers, "[named host] the guest kills the host", (named, words.DestroyedBy(guestName)), (named, $"Destroyed by {guestName}"),
                 () => host.Session.SeatRigs[0].Controller!.DebugForceCrash(host.Session.SeatRigs[1].Controller!.PlayerIndex), fly);
         }
         finally
@@ -782,9 +800,18 @@ internal static class NetCombatSuites
         ctx.Check(peers.All(p => !p.Versus!.Completed && p.MatchEnd == NetMatchEnd.Running)
                   && guest.SeatRigs[1].Controller!.Watching == null,
             $"ABLE-TO-FAIL CONTROL: with a life left the match runs and the seat watches nobody ({string.Join(", ", peers.Select(p => p.MatchEnd))})");
+        var words = MatchWording.Read(ctx);
+        words.Check(ctx, new[] { HudMessages.OneLifeKey, HudMessages.GameOverKey, HudMessages.AllAloneKey },
+            new[] { HudMessages.DestroyedByKey });
+        string killed = $"guest1 / {words.DestroyedBy("host")}";
         string first = PaneLines(guest.SeatRigs[1].Controller!);
-        ctx.Check(first.StartsWith("guest1 / Destroyed by host / You Have ONE Life Left!", StringComparison.Ordinal),
-            $"the guest's pane reads the kill lines over its lives line, the handler's order ({first})");
+        ctx.Check(first.StartsWith($"{killed} / {words.Row(HudMessages.OneLifeKey)}", StringComparison.Ordinal),
+            $"the guest's pane reads the kill lines over its lives line, the handler's order, in the message table's lines ({first})");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(first.StartsWith("guest1 / Destroyed by host / You Have ONE Life Left!", StringComparison.Ordinal),
+                $"the guest's pane reads the kill lines over its lives line, the handler's order ({first})");
+        }
 
         int grants = peers[0].SpawnsTaken;
         guest.SeatRigs[1].Controller!.DebugForceCrash(guest.SeatRigs[0].Controller!.PlayerIndex);
@@ -802,8 +829,13 @@ internal static class NetCombatSuites
             $"one pilot with lives left ends the match on reason 4 on both machines ({string.Join(", ", peers.Select(p => p.MatchEnd))})");
         // Five lines into four slots: the ending and the kill lines push the lives line out.
         string lines = PaneLines(guest.SeatRigs[1].Controller!);
-        ctx.Check(lines.StartsWith("Game Over: / No Enemies Left / guest1 / Destroyed by host", StringComparison.Ordinal),
-            $"and the guest's pane reads the ending over the last kill ({lines})");
+        ctx.Check(lines.StartsWith($"{words.Row(HudMessages.GameOverKey)} / {words.Row(HudMessages.AllAloneKey)} / {killed}", StringComparison.Ordinal),
+            $"and the guest's pane reads the ending over the last kill, in the message table's lines ({lines})");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(lines.StartsWith("Game Over: / No Enemies Left / guest1 / Destroyed by host", StringComparison.Ordinal),
+                $"and the guest's pane reads the ending over the last kill ({lines})");
+        }
     }
 
     private static string PaneLines(FlightController pilot) =>
@@ -1368,6 +1400,35 @@ internal static class NetCombatSuites
     }
 
     // One peer's whole rig: its own pane, its own world, its own session node.
+    // The Dogfight lines a pane posts, read off the run's own message table, so a check follows
+    // whichever table that is. A suite checks the rows first: a missing row reads as its key,
+    // which a pane posting the bare key would match.
+    internal sealed class MatchWording
+    {
+        private readonly Messages _rows;
+
+        private MatchWording(Messages rows) => _rows = rows;
+
+        internal static MatchWording Read(TestContext ctx) => new(Messages.Load(ctx.MessagesPath));
+
+        internal string Row(string key) => _rows.Get(key);
+
+        internal string DestroyedBy(string killer) => Messages.Fill(Row(HudMessages.DestroyedByKey), killer);
+
+        internal string SelfDestroyed(string victim) => Messages.Fill(Row(HudMessages.SelfDestroyedKey), victim);
+
+        internal string KilledByTurret(string owner) => Messages.Fill(Row(HudMessages.KilledByTurretKey), owner);
+
+        // Every key worded, and every row in `named` taking the name it is filled with.
+        internal void Check(TestContext ctx, string[] keys, string[] named)
+        {
+            var missing = keys.Concat(named).Where(key => Row(key) == key).ToArray();
+            var nameless = named.Where(key => !Row(key).Contains("%1", StringComparison.Ordinal)).ToArray();
+            ctx.Check(missing.Length == 0 && nameless.Length == 0,
+                $"the message table words every line the panes are read against, and each name row takes a name (missing {string.Join(",", missing)}; no %1 in {string.Join(",", nameless)})");
+        }
+    }
+
     internal sealed record Ends(SubViewport Pane, GameSession Session, bool Built)
     {
         public static Ends Open(TestContext ctx, SessionSpec spec, INetTransport transport,

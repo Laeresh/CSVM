@@ -10,11 +10,12 @@ namespace CSVM.Testing;
 
 /// <summary>
 /// The campaign boards over the decoded layout compose the same screen the hardcoded chrome
-/// composes: every scratch-profile aid is opened twice through a real <see cref="LaunchMenu"/>,
-/// once with the flow pinned to <see cref="CampaignLayout.Fallback"/> and once reading the data
-/// root's own <c>menu_layout.json</c>, and the two composed boards are compared element by element.
-/// The decoded side must have loaded, and the rows the boards pin to a measurement must really
-/// differ from it, or the comparison would be the fallback against itself.
+/// composes. Every scratch-profile aid is opened twice through a real <see cref="LaunchMenu"/>,
+/// pinned to <see cref="CampaignLayout.Fallback"/> and then over the root's <c>menu_layout.json</c>.
+/// The two composed boards are compared element by element. The decoded side must have loaded, and
+/// its measured rows must differ from the fallback's, or the comparison would be the fallback
+/// against itself. That the two sources are read holds on any layout and is the core suite's; the
+/// comparison needs the shipped one.
 /// </summary>
 internal static class CampaignLayoutSuites
 {
@@ -28,6 +29,47 @@ internal static class CampaignLayoutSuites
         ("campaign-planeselection", 0), ("campaign-planeselection:export", 0),
     };
 
+    [Suite("campaign-layout-core",
+        "every campaign screenshot aid composed twice through a real LaunchMenu, once with the flow "
+        + "pinned to the hardcoded chrome and once over the data root's decoded menu layout: the "
+        + "decoded layout loads, the pinned composition reads the hardcoded chrome and the other the "
+        + "data root's layout, and each source composes a board")]
+    internal static void CampaignLayoutCore(TestContext ctx)
+    {
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var decoded = Loaded(ctx);
+        if (decoded == null)
+        {
+            return;
+        }
+
+        var menu = MenuSuiteHost.Menu(ctx, "campaign-layout-core");
+        ctx.Host.AddChild(menu);
+        menu.SetProcess(false);
+        try
+        {
+            foreach (var (aid, join) in Aids)
+            {
+                menu.CampaignLayoutOverride = CampaignLayout.Fallback;
+                string hardcoded = Compose(menu, aid, join);
+                bool pinned = menu.Campaign?.Layout == CampaignLayout.Fallback;
+                menu.CampaignLayoutOverride = null;
+                string read = Compose(menu, aid, join);
+                bool fromRoot = menu.Campaign?.Layout == decoded;
+                ctx.Check(pinned, $"{aid}: the pinned composition reads the hardcoded chrome");
+                ctx.Check(fromRoot, $"{aid}: the second composition reads the data root's layout");
+                ctx.Check(hardcoded.Length > 0 && read.Length > 0,
+                    $"{aid}: each source composes a board ({hardcoded.Split('\n').Length} / {read.Split('\n').Length} lines)");
+            }
+        }
+        finally
+        {
+            menu.CampaignLayoutOverride = null;
+            ctx.Host.RemoveChild(menu);
+            menu.QueueFree();
+        }
+    }
+
     [Suite("campaign-layout-parity",
         "every campaign screenshot aid composed twice through a real LaunchMenu, once over the "
         + "hardcoded chrome and once over the decoded menu layout, and the two composed boards "
@@ -38,10 +80,15 @@ internal static class CampaignLayoutSuites
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
-        var decoded = CampaignLayout.For(ctx.DataRoot);
-        ctx.Check(decoded.Decoded != null && decoded.Reason == null,
-            $"the data root's layout loaded ({decoded.Reason ?? "no reason"})");
-        if (decoded.Decoded == null)
+        // ⚠ Never skip on a real extraction. The hardcoded chrome copies the shipped layout, so an
+        // invented one has nothing to match, and campaign-layout-core reads it instead.
+        if (ctx.SyntheticData)
+        {
+            throw new SuiteSkippedException($"the synthetic tree's layout is invented, and the hardcoded chrome copies the shipped one");
+        }
+
+        var decoded = Loaded(ctx);
+        if (decoded == null)
         {
             return;
         }
@@ -59,8 +106,6 @@ internal static class CampaignLayoutSuites
                 string hardcoded = Compose(menu, aid, join);
                 menu.CampaignLayoutOverride = null;
                 string read = Compose(menu, aid, join);
-                bool fromRoot = menu.Campaign?.Layout == decoded;
-                ctx.Check(fromRoot, $"{aid}: the second composition reads the data root's layout");
                 ctx.Check(hardcoded.Length > 0 && hardcoded == read,
                     $"{aid}: the board over the decoded layout is the board over the hardcoded chrome ({FirstDifference(hardcoded, read)})");
                 report.Append("== ").Append(aid).Append(" (").Append(hardcoded.Split('\n').Length.ToString(CultureInfo.InvariantCulture))
@@ -75,6 +120,15 @@ internal static class CampaignLayoutSuites
         }
 
         ctx.WriteArtifact("campaign-layout-parity.txt", report.ToString());
+    }
+
+    // The data root's layout as the campaign flow reads it, or null after the failed check.
+    private static CampaignLayout? Loaded(TestContext ctx)
+    {
+        var decoded = CampaignLayout.For(ctx.DataRoot);
+        ctx.Check(decoded.Decoded != null && decoded.Reason == null,
+            $"the data root's layout loaded ({decoded.Reason ?? "no reason"})");
+        return decoded.Decoded != null ? decoded : null;
     }
 
     // The six values docs/org/campaign-board.md pins: each must still differ from its row, or the

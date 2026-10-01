@@ -22,8 +22,6 @@ namespace CSVM.Testing;
 /// <see cref="World3D"/>, so neither one's hulls, lights or areas can reach the other's.</summary>
 internal static class NetSessionSuites
 {
-    private const string MpMission = "MP1";
-
     // What the host and the guest are launched with. Different on purpose: the assertion that the
     // handshake replaced the guest's seed cannot then be satisfied by a shared launch value.
     private const ulong HostSeed = 0xA5A50101UL;
@@ -42,6 +40,10 @@ internal static class NetSessionSuites
     // for each step itself, so the reading is in sim time and never in wall time.
     private const int FlightSteps = 240;
 
+    // The same flight on the empty arena. Its invented airframes bend that stick through less of a
+    // curve than the shipped pair. The leg so runs longer to clear the same 30 degree floor.
+    private const int ArenaFlightSteps = 360;
+
     // The alignment search's width, in sim steps, and the index the measurement starts at. It has
     // to cover the buffer delay plus the link's latency and jitter. Starting there also skips the
     // opening steps, where the shown aeroplane holds its spawn because nothing has arrived.
@@ -57,10 +59,6 @@ internal static class NetSessionSuites
     private const float MeanErrorBar = 1.5f;
     private const float WorstErrorBar = 5f;
 
-    // The airframe order both peers read a roster's airframe index against. Two different entries,
-    // so a seat's pick crossing the wire cannot be satisfied by the two ends sharing a default.
-    private static readonly string[] Airframes = { "player_pfighter", "player_fbrand" };
-
     [Suite("net-two-session",
         "a host session and a guest session in one process, joined over a two-transport loopback "
         + "mesh and stepped in lockstep: the guest takes the host's seed off the handshake in place "
@@ -70,24 +68,17 @@ internal static class NetSessionSuites
         + "receiving session's own step, and the two worlds stand in separate physics spaces")]
     internal static void TwoSessionsOverOneLoopback(TestContext ctx)
     {
-        string missionZrdr = RequireMatchData(ctx);
-        var spec = SessionSpec.Parse(new[]
-        {
-            "--vs", $"--chapter={ctx.Chapter}", $"--mission={MpMission}", "--players=1", "--mute",
-        });
-        var table = new SpawnPicker(spec).LoadSpawnList(missionZrdr, spec.Scenario);
-        if (table is not { Count: >= 2 })
-        {
-            throw new SuiteSkippedException($"{ctx.Chapter}/{MpMission} authors no usable net.zrd table");
-        }
+        var spec = NetCombatSuites.MatchSpec(ctx, out var table);
+        var airframes = NetCombatSuites.DistinctAirframesFor(spec);
+        ctx.RequirePlane(airframes);
 
         // A lossy, jittery link on purpose. The join and everything this suite asserts on is
         // reliable traffic, which the transport must carry in order whatever the conditions.
         var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.03, 0.01, 0.25), new Random(6571));
         var roster = new NetSeat[]
         {
-            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = Airframes[0] },
-            new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
+            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = airframes[0] },
+            new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = airframes[1] },
         };
         NetSeats.Validate(roster);
 
@@ -103,11 +94,11 @@ internal static class NetSessionSuites
         {
             long memBefore = (long)OS.GetStaticMemoryUsage();
             var wall = Stopwatch.StartNew();
-            host = Open(ctx, spec, mesh[0], isHost: true, HostSeed, roster);
+            host = Open(ctx, spec, mesh[0], isHost: true, HostSeed, roster, airframes);
             double hostMs = wall.Elapsed.TotalMilliseconds;
             long memHost = (long)OS.GetStaticMemoryUsage();
             wall.Restart();
-            guest = Open(ctx, spec, mesh[1], isHost: false, GuestSeed, null);
+            guest = Open(ctx, spec, mesh[1], isHost: false, GuestSeed, null, airframes);
             double guestMs = wall.Elapsed.TotalMilliseconds;
             long memGuest = (long)OS.GetStaticMemoryUsage();
 
@@ -119,7 +110,7 @@ internal static class NetSessionSuites
             }
 
             Join(ctx, host.Session, guest.Session);
-            Spawns(ctx, host.Session, guest.Session, table);
+            Spawns(ctx, host.Session, guest.Session, table, airframes);
             Traffic(ctx, host.Session, guest.Session);
             ctx.Check(host.Pane.World3D.Space != guest.Pane.World3D.Space
                       && host.Session.GetWorld3D().Space != guest.Session.GetWorld3D().Space,
@@ -150,7 +141,8 @@ internal static class NetSessionSuites
     internal static void AircraftStateTracksItsOwner(TestContext ctx)
     {
         var spec = NetCombatSuites.MatchSpec(ctx, out _, TrackedFlight);
-        var airframes = NetCombatSuites.AirframesFor(spec);
+        var airframes = NetCombatSuites.DistinctAirframesFor(spec);
+        ctx.RequirePlane(airframes);
 
         // The same link the join is asserted over. Aircraft state is the unreliable sequenced
         // class, so a quarter of these samples never land and the buffer covers the gaps.
@@ -170,8 +162,8 @@ internal static class NetSessionSuites
         Ends? guest = null;
         try
         {
-            host = Open(ctx, spec, mesh[0], isHost: true, HostSeed, roster);
-            guest = Open(ctx, spec, mesh[1], isHost: false, GuestSeed, null);
+            host = Open(ctx, spec, mesh[0], isHost: true, HostSeed, roster, airframes);
+            guest = Open(ctx, spec, mesh[1], isHost: false, GuestSeed, null, airframes);
             ctx.Check(host.Built && guest.Built,
                 $"both sessions build in one process (host {host.Built}, guest {guest.Built})");
             if (!host.Built || !guest.Built)
@@ -179,7 +171,7 @@ internal static class NetSessionSuites
                 return;
             }
 
-            var flight = Fly(host.Session, guest.Session);
+            var flight = Fly(host.Session, guest.Session, spec.EmptyStage ? ArenaFlightSteps : FlightSteps);
             Tracking(ctx, flight);
         }
         finally
@@ -302,10 +294,10 @@ internal static class NetSessionSuites
     // One tracked flight: both sessions stepped together, with the four paths that matter
     // recorded after every step. The case the guest's buffer answered from is counted
     // beside them.
-    private static TrackedRun Fly(GameSession host, GameSession guest)
+    private static TrackedRun Fly(GameSession host, GameSession guest, int steps)
     {
         var flight = new TrackedRun();
-        for (int i = 0; i < FlightSteps; i++)
+        for (int i = 0; i < steps; i++)
         {
             host._PhysicsProcess(GameClock.FixedDt);
             guest._PhysicsProcess(GameClock.FixedDt);
@@ -499,18 +491,6 @@ internal static class NetSessionSuites
         return turned;
     }
 
-    // The five data files both ends of a match are built from.
-    private static string RequireMatchData(TestContext ctx)
-    {
-        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
-        ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{MpMission} zrdr");
-        return missionZrdr;
-    }
-
     // The seed, the seat and the roster a guest is built from are the host's, and nothing of its
     // own launch survives the join. The local flags are the one thing that must differ.
     private static void Join(TestContext ctx, GameSession host, GameSession guest)
@@ -537,7 +517,7 @@ internal static class NetSessionSuites
     // The spawn walk is the real proof the two peers agree. With no --spawn the base is drawn
     // from the seeded Spawn stream, so a disagreed seed moves a seat to another table entry.
     private static void Spawns(TestContext ctx, GameSession host, GameSession guest,
-        IReadOnlyList<SpawnPoint> table)
+        IReadOnlyList<SpawnPoint> table, IReadOnlyList<string> airframes)
     {
         ctx.Same(host.SeatRigs.Count, guest.SeatRigs.Count, $"both worlds size themselves by the field");
         var mine = host.SeatRigs.Select(r => EntryAt(table, r.Controller)).ToArray();
@@ -547,7 +527,7 @@ internal static class NetSessionSuites
         ctx.Check(new HashSet<int>(mine).Count == mine.Length,
             $"and no two seats share one (entries {string.Join(", ", mine)})");
         string planes = string.Join(", ", guest.NetSeats.Select(s => s.PlaneNode));
-        ctx.Check(guest.NetSeats.Select(s => s.PlaneNode).SequenceEqual(Airframes),
+        ctx.Check(airframes.Distinct().Count() == 2 && guest.NetSeats.Select(s => s.PlaneNode).SequenceEqual(airframes),
             $"and each entry's airframe index resolved back to its own name on the guest ({planes})");
     }
 
@@ -603,7 +583,7 @@ internal static class NetSessionSuites
     // One end of the match: its own pane, its own world, its own session node. The pane renders
     // nothing, the suite reads poses and counters rather than pixels.
     private static Ends Open(TestContext ctx, SessionSpec spec, INetTransport? transport,
-        bool isHost, ulong seed, IReadOnlyList<NetSeat>? roster)
+        bool isHost, ulong seed, IReadOnlyList<NetSeat>? roster, IReadOnlyList<string>? airframes = null)
     {
         var pane = new SubViewport
         {
@@ -643,7 +623,7 @@ internal static class NetSessionSuites
             NetSeats = isHost ? roster : null,
             NetTransport = transport,
             NetHost = isHost,
-            NetAirframes = transport == null ? null : NetCombatSuites.AirframesFor(spec),
+            NetAirframes = transport == null ? null : airframes ?? NetCombatSuites.AirframesFor(spec),
         });
         pane.AddChild(session);
         return new Ends(pane, session, session.StartSession());

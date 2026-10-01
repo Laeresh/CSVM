@@ -592,7 +592,8 @@ A mission's `targets.json` as one table: target key to its objective display key
 a nested `[parent, child]` entry keys `parent/child`, the same spelling `ObjectiveTarget` gives
 the script's directives, so the two tables meet on one string. `Load(mission, chapter)` walks the
 original's reader search path, and `ByNode` exposes the whole table for a consumer that wants the
-starting flags rather than one key's labels. Schema: [../formats/missions.md](../formats/missions.md).
+starting flags rather than one key's labels. `Objectives(keys)` is a table built in code, every key
+flagged, for a stage that ships none. Schema: [../formats/missions.md](../formats/missions.md).
 
 ## src/Flight/Weapons/ObjectiveTarget.cs
 One argument of a target directive (`ADD_`/`REMOVE_OBJECTIVE_TARGET`, `ADD_`/`REMOVE_OTHER_TARGET`,

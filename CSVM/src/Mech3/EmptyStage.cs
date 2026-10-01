@@ -66,8 +66,8 @@ public sealed class EmptyStage
     /// rungs of its altitude ladder.</summary>
     public const float TeamBlockSpacing = 100f;
 
-    /// <summary>The bases the match arena stands, team 1's and team 2's: each a
-    /// <c>cs_flag_n</c> flag with its carried twin and a <c>rearm_node_n</c>.</summary>
+    /// <summary>The bases the match arena stands, team 1's and team 2's. Each is a <c>ctf_n</c>
+    /// base, a <c>cs_flag_n</c> flag with its carried twin and a <c>rearm_node_n</c>.</summary>
     public const int ArenaBases = 2;
 
     /// <summary>How far a base's rearm node stands from its flag toward the origin, and how high,
@@ -118,10 +118,16 @@ public sealed class EmptyStage
     public static IReadOnlyList<(Vector3 Position, float HeadingDeg)> SpawnTable { get; } = BuildSpawnTable();
 
     /// <summary>The match arena's named nodes, (name, position). Each of the
-    /// <see cref="ArenaBases"/> bases stands its <c>cs_flag_n</c> on the ground with the carried
-    /// <c>cs_flg_lightn</c> beside it. Its <c>rearm_node_n</c> stands at <see cref="RearmOffset"/>.
-    /// The names are the ones the flag and rearm runtimes look a mission world up by.</summary>
+    /// <see cref="ArenaBases"/> bases stands its <c>ctf_n</c> and <c>cs_flag_n</c> on the ground
+    /// with the carried <c>cs_flg_lightn</c> beside them. Its <c>rearm_node_n</c> stands at
+    /// <see cref="RearmOffset"/>. The names are the ones the flag and rearm runtimes and the flag
+    /// markers look a mission world up by.</summary>
     public static IReadOnlyList<(string Name, Vector3 Position)> ArenaNodes { get; } = BuildArenaNodes();
+
+    /// <summary>The arena's flag marker keys, each base's <c>ctf_n</c>, <c>cs_flag_n</c> and
+    /// <c>cs_flg_lightn</c>. They are the three entries a map's <c>targets.zrd</c> lists per flag
+    /// for the flag runtime to label by side (docs/org/multiplayer-ctf.md "Markers").</summary>
+    public static IReadOnlyList<string> ArenaTargets { get; } = BuildArenaTargets();
 
     /// <summary>The stage subtree, the caller adds it to the session root exactly as it adds a
     /// built world.</summary>
@@ -196,6 +202,28 @@ public sealed class EmptyStage
     {
         float angle = Mathf.DegToRad(TeamBearing(team));
         return new Vector3(Mathf.Sin(angle) * TeamBaseRadius, 0f, -Mathf.Cos(angle) * TeamBaseRadius);
+    }
+
+    /// <summary>The arena node carrying <paramref name="name"/> as its gamez name, the lookup a
+    /// mission world answers through its node index, or null. Case-insensitive, as that index is.
+    /// </summary>
+    public static Node3D? ArenaNode(Node3D? arena, string name)
+    {
+        if (arena == null)
+        {
+            return null;
+        }
+
+        foreach (var child in arena.GetChildren())
+        {
+            if (child is Node3D node && node.HasMeta(AnimRuntime.NameMeta)
+                && node.GetMeta(AnimRuntime.NameMeta).AsString().Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                return node;
+            }
+        }
+
+        return null;
     }
 
     /// <summary><see cref="PatrolNet"/> when <paramref name="idOrName"/> names it, else null, so a
@@ -286,12 +314,27 @@ public sealed class EmptyStage
             var home = TeamBase(team);
             var inward = new Basis(Vector3.Up, Mathf.DegToRad(-TeamBearing(team))) * RearmOffset;
             string n = team.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            nodes.Add(("ctf_" + n, home));
             nodes.Add(("cs_flag_" + n, home));
             nodes.Add(("cs_flg_light" + n, home));
             nodes.Add(("rearm_node_" + n, home + inward));
         }
 
         return nodes.ToArray();
+    }
+
+    private static string[] BuildArenaTargets()
+    {
+        var keys = new List<string>();
+        for (int team = 1; team <= ArenaBases; team++)
+        {
+            string n = team.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            keys.Add("ctf_" + n);
+            keys.Add("cs_flag_" + n);
+            keys.Add("cs_flg_light" + n);
+        }
+
+        return keys.ToArray();
     }
 
     // Entry e of a team block sits at position e % 4 of the square on rung e / 4. A team's first

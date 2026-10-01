@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
+using CSVM.Mech3;
 using CSVM.Net;
 using CSVM.Session;
 using CSVM.Session.Launch;
@@ -46,6 +47,15 @@ internal static class NetFlagSuites
     private static readonly int[] Teams = { 1, 1, 2 };
 
     private static readonly Dictionary<int, string> TeamNames = new() { [1] = "Red Squadron", [2] = "Blue Angels" };
+
+    // The rows every flag marker reads, by the keys FlagMarkers names. The side words come first,
+    // then each marker's line for the flag's own side and for the other.
+    private static readonly string[] MarkerRows =
+    {
+        FlagMarkers.YourKey, FlagMarkers.EnemyKey, FlagMarkers.CapturedByKey, FlagMarkers.HoldsFlagKey,
+        "MSG_MP_YOUR_BASE", "MSG_MP_ENEMY_BASE", "MSG_MP_YOUR_FLAG_BASE", "MSG_MP_ENEMY_FLAG_BASE",
+        "MSG_YOUR_FLAG_FLOAT", "MSG_ENEMY_FLAG_FLOAT",
+    };
 
     // Steps that outlast a cooldown, so the next ask of the same seat is not refused by it.
     private static int CooledSteps => (int)(FlagMatch.HomeTakeCooldown / GameClock.FixedDt) + 10;
@@ -101,10 +111,12 @@ internal static class NetFlagSuites
                 Park(peers, seat);
             }
 
-            HomeMarkers(ctx, peers);
-            Capture(ctx, peers);
+            var rows = Messages.Load(ctx.MessagesPath);
+            Worded(ctx, rows);
+            HomeMarkers(ctx, peers, rows);
+            Capture(ctx, peers, rows);
             Lockstep(CooledSteps, peers);
-            CatchAndReturn(ctx, peers);
+            CatchAndReturn(ctx, peers, rows);
             Lockstep(CooledSteps, peers);
             ThrowRunsOut(ctx, peers);
             Lockstep(CooledSteps, peers);
@@ -152,12 +164,12 @@ internal static class NetFlagSuites
     }
 
     // The guest on team 2 takes team 1's flag at its base, and brings it to its own.
-    private static void Capture(TestContext ctx, GameSession[] peers)
+    private static void Capture(TestContext ctx, GameSession[] peers, Messages rows)
     {
         Put(peers, seat: 2, peers[2].Flags!.Flags.HomeOf(1));
         Lockstep(AskSteps, peers);
         Held(ctx, peers, "the team 2 guest takes team 1's flag at its base", team: 1, holder: 2);
-        HeldMarkers(ctx, peers);
+        HeldMarkers(ctx, peers, rows);
         var spoken = peers.Select(p => string.Join(",", p.Flags!.Spoken)).ToArray();
         ctx.Check(peers[0].Flags!.Spoken.Contains("snd_CTFlost") && peers[1].Flags!.Spoken.Contains("snd_CTFlost")
                   && peers[2].Flags!.Spoken.Contains("snd_CTFstolen") && !peers[2].Flags!.Spoken.Contains("snd_CTFlost"),
@@ -184,7 +196,7 @@ internal static class NetFlagSuites
 
     // The carrier goes down with the flag and it floats everywhere. The host's own pilot on team 1
     // catches it and returns it.
-    private static void CatchAndReturn(TestContext ctx, GameSession[] peers)
+    private static void CatchAndReturn(TestContext ctx, GameSession[] peers, Messages rows)
     {
         Put(peers, seat: 2, peers[2].Flags!.Flags.HomeOf(1));
         Lockstep(AskSteps, peers);
@@ -192,7 +204,7 @@ internal static class NetFlagSuites
         Down(peers, victim: 2, killer: 0);
         ctx.Check(peers.All(p => p.Flags!.Flags.RowOf(1) is { State: FlagState.Floating, Holder: FlagMatch.NoHolder }),
             $"the carrier's death floats the flag on every machine ({Rows(peers)})");
-        FloatingMarkers(ctx, peers);
+        FloatingMarkers(ctx, peers, rows);
 
         // Over the flag rather than on it: a flag at rest lies against a base's buildings.
         int before = peers[0].Versus!.ScoreOf(0);
@@ -270,44 +282,72 @@ internal static class NetFlagSuites
             $"and every machine's board names the capturing team ({string.Join(" | ", titles)})");
     }
 
+    // Every marker line below is read off the run's own table, so a missing row would compare
+    // the key against itself. Each side's two lines must also differ, or no read could tell the
+    // sides apart.
+    private static void Worded(TestContext ctx, Messages rows)
+    {
+        var missing = MarkerRows.Where(key => rows.Get(key) == key).ToArray();
+        var pairs = new[] { ("MSG_MP_YOUR_BASE", "MSG_MP_ENEMY_BASE"), ("MSG_MP_YOUR_FLAG_BASE", "MSG_MP_ENEMY_FLAG_BASE"),
+            ("MSG_YOUR_FLAG_FLOAT", "MSG_ENEMY_FLAG_FLOAT"), (FlagMarkers.YourKey, FlagMarkers.EnemyKey) };
+        var alike = pairs.Where(p => rows.Get(p.Item1) == rows.Get(p.Item2)).Select(p => p.Item1).ToArray();
+        ctx.Check(missing.Length == 0 && alike.Length == 0,
+            $"the message table words every flag marker line, each side apart (missing {string.Join(",", missing)}; alike {string.Join(",", alike)})");
+    }
+
     // Both flags home. Each base and each flag at its base reads "Your" to its own team's pane and
     // "Enemy" to the other's, under its team's name. No away marker stands.
-    private static void HomeMarkers(TestContext ctx, GameSession[] peers)
+    private static void HomeMarkers(TestContext ctx, GameSession[] peers, Messages rows)
     {
         Reads(ctx, peers, "every pane reads team 1's base as Your Base on team 1 and Enemy Base on team 2, "
             + "where the map's own table labels it Team 1 on every machine", "ctf_1",
+            m => $"{Side(m, 1, rows.Get("MSG_MP_YOUR_BASE"), rows.Get("MSG_MP_ENEMY_BASE"))}|Red Squadron",
             m => $"{Side(m, 1, "Your Base", "Enemy Base")}|Red Squadron");
         Reads(ctx, peers, "and team 2's base the other way round", "ctf_2",
+            m => $"{Side(m, 2, rows.Get("MSG_MP_YOUR_BASE"), rows.Get("MSG_MP_ENEMY_BASE"))}|Blue Angels",
             m => $"{Side(m, 2, "Your Base", "Enemy Base")}|Blue Angels");
         Reads(ctx, peers, "every pane reads team 1's flag at its base by side", "cs_flag_1",
+            m => $"{Side(m, 1, rows.Get("MSG_MP_YOUR_FLAG_BASE"), rows.Get("MSG_MP_ENEMY_FLAG_BASE"))}|Red Squadron",
             m => $"{Side(m, 1, "Your Flag At Base", "Enemy Flag At Base")}|Red Squadron");
         Reads(ctx, peers, "and no pane has an away marker for a flag at home", "cs_flg_light1", _ => "off");
     }
 
     // Team 1's flag held by seat 2. Its at-base marker is off and its away marker names the carrier
     // by side. The carrier's own name line is its tag.
-    private static void HeldMarkers(TestContext ctx, GameSession[] peers)
+    private static void HeldMarkers(TestContext ctx, GameSession[] peers, Messages rows)
     {
         string carrier = peers[0].NetSeats[2].Callsign;
+        string your = rows.Get(FlagMarkers.YourKey);
+        string enemy = rows.Get(FlagMarkers.EnemyKey);
         Reads(ctx, peers, "with the flag taken no pane marks it at its base", "cs_flag_1", _ => "off");
         Reads(ctx, peers, "and every pane marks it away, captured by its carrier, by side", "cs_flg_light1",
+            m => $"{Messages.Fill(rows.Get(FlagMarkers.CapturedByKey), Side(m, 1, your, enemy), carrier)}|Red Squadron",
             m => $"{Side(m, 1, "Your", "Enemy")} Flag Captured by {carrier}|Red Squadron");
         Reads(ctx, peers, "ABLE-TO-FAIL CONTROL: team 2's flag still stands at its base on every pane", "cs_flag_2",
+            m => $"{Side(m, 2, rows.Get("MSG_MP_YOUR_FLAG_BASE"), rows.Get("MSG_MP_ENEMY_FLAG_BASE"))}|Blue Angels",
             m => $"{Side(m, 2, "Your Flag At Base", "Enemy Flag At Base")}|Blue Angels");
 
         var tags = new[] { 0, 1 }.Select(m => NetTeamSuites.RefOf(NetTeamSuites.Cycles(peers[m], m),
             s => ReferenceEquals(s, peers[m].SeatRigs[2].Controller))?.DisplayName ?? "missing").ToArray();
-        ctx.Check(tags.All(t => t == $"{carrier}  Holds Your flag"),
-            $"and team 1's panes read the carrier's own marker as holding their flag ({string.Join(" | ", tags)})");
+        string tag = Messages.Fill(rows.Get(FlagMarkers.HoldsFlagKey), carrier, your);
+        ctx.Check(tags.All(t => t == tag),
+            $"and team 1's panes read the carrier's own marker as holding their flag, in the message table's line ({string.Join(" | ", tags)})");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(tags.All(t => t == $"{carrier}  Holds Your flag"),
+                $"and team 1's panes read the carrier's own marker as holding their flag ({string.Join(" | ", tags)})");
+        }
+
         var near = NetTeamSuites.RefOf(NetTeamSuites.Cycles(peers[0], 0),
             s => s is ObjectiveSite { Node: "cs_flg_light1" })?.Position.DistanceTo(peers[0].SeatRigs[2].Controller!.WorldPosition);
         ctx.Check(near is < 30f, $"and the away marker stands on the carrier ({near?.ToString("0.0") ?? "none"} m)");
     }
 
     // The carrier down: the away marker reads floating by side and the carrier's tag is gone.
-    private static void FloatingMarkers(TestContext ctx, GameSession[] peers)
+    private static void FloatingMarkers(TestContext ctx, GameSession[] peers, Messages rows)
     {
         Reads(ctx, peers, "every pane marks the floating flag by side", "cs_flg_light1",
+            m => $"{Side(m, 1, rows.Get("MSG_YOUR_FLAG_FLOAT"), rows.Get("MSG_ENEMY_FLAG_FLOAT"))}|Red Squadron",
             m => $"{Side(m, 1, "Your Flag Floating", "Enemy Flag Floating")}|Red Squadron");
         ctx.Check(peers.All(p => p.SeatRigs[2].Controller!.MarkerName == null),
             $"and no machine still tags the downed carrier");
@@ -317,13 +357,27 @@ internal static class NetFlagSuites
     private static string Side(int machine, int team, string your, string enemy) =>
         Teams[machine] == team ? your : enemy;
 
-    private static void Reads(TestContext ctx, GameSession[] peers, string what, string key, Func<int, string> want)
+    // A marker read on every pane against the lines the run's table words. On a real extraction it
+    // is also read against the shipped wording, `shipped`, which an invented table does not carry.
+    private static void Reads(TestContext ctx, GameSession[] peers, string what, string key, Func<int, string> want,
+        Func<int, string>? shipped = null)
     {
         var got = peers.Select((p, m) => NetTeamSuites.RefOf(NetTeamSuites.Cycles(p, m),
                 s => s is ObjectiveSite site && site.Node.Equals(key, StringComparison.OrdinalIgnoreCase)) is { } t
             ? $"{t.Category}|{t.DisplayName}"
             : "off").ToArray();
-        ctx.Check(got.Select((g, m) => g == want(m)).All(ok => ok), $"{what} ({string.Join(" | ", got)})");
+        string reading = string.Join(" | ", got);
+        if (shipped == null)
+        {
+            ctx.Check(got.Select((g, m) => g == want(m)).All(ok => ok), $"{what} ({reading})");
+            return;
+        }
+
+        ctx.Check(got.Select((g, m) => g == want(m)).All(ok => ok), $"{what}, in the message table's lines ({reading})");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(got.Select((g, m) => g == shipped(m)).All(ok => ok), $"{what} ({reading})");
+        }
     }
 
     private static void Held(TestContext ctx, GameSession[] peers, string what, int team, int holder)

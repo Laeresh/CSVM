@@ -801,6 +801,44 @@ the full battery should show the same PASS/FAIL per suite. Two relational checks
 `plane-wobble-walk`'s window around the shipped nitro's computed swing (the 8 to 11 literal still
 runs), and `cockpit-interior`'s drawn group over every `bulNx` quad.
 
+**B15b-3 landed: the network suites read their lines off the table, and the campaign layout
+splits.** The synthetic `messages.json` words the Dogfight lines (kill, self-destroyed, turret,
+one life, the ending's two lines, rearm) and the Capture the Flag markers, Your/Enemy words and
+carrier tag in invented wording. `net-kill-line`, `net-versus-lives` and `net-rearm-deathmatch`
+read each expected line off that table through `NetCombatSuites.MatchWording` after checking the
+rows exist and fill a name; `net-capture-the-flag` reads its marker lines the same way. Each old
+literal still runs under `!ctx.SyntheticData` with its old wording; the landing commit lists every
+check. A small production seam feeds the empty stage's flag markers: `EmptyStage` stands a `ctf_n`
+beside each flag and lists `ArenaTargets`, `MissionTargets.Objectives` builds their table in code,
+`ObjectiveSites` takes a node finder in place of a world index, and `GameSession` binds that feed
+for a `--ctf` launch on the stage alone, so every chapter path is unchanged. `net-two-session` and
+`net-aircraft-replication` fly `NetCombatSuites.DistinctAirframesFor`, the root's plane beside
+`player_pfighter` on the stage and the shipped pair on `MP1`; the replication leg runs 360 steps
+on the stage (41 degrees of turn against the 30 degree floor), 240 on `MP1` as before.
+`campaign-layout-parity` splits: `campaign-layout-core` checks that each campaign aid composes from
+the pinned chrome and from the data root's layout, and the parity half keeps the six pinned rows
+and the element comparison and skips under the switch, its hardcoded side being the shipped
+layout. Seven suites join `tier:ci` (139): `campaign-layout-core`, `net-aircraft-replication`,
+`net-capture-the-flag`, `net-kill-line`, `net-rearm-deathmatch`, `net-two-session`,
+`net-versus-lives`. Each passed three runs in a row by name with the switch and went red on one
+broken input. Full catalog over an empty root with the switch: 148 PASS, 29 FAIL, 323 SKIP, the
+29 all known (B15b-2's fourteen, ten headless-only, two IPv6, `net-custom-planes` and the two
+below); without it 58, 2, 440, the one change the new core suite skipping on the absent layout.
+
+Still off the tier: `menu-original-hangar` and `menu-original-instant-action`. Their shipped
+checks sit in every leg of one walk (25 and 19 fail on the invented tree: authored geometry,
+shipped art names, langui rows 1139, 1149, 1154, 1256 and 3240 on, the `PX_ICON_` composite sets,
+the Hellhound's three pylons against the invented ammo layout, and each environment's own
+`ia.zrd` ace), so a split would walk twice and count every walk check in both halves, and the
+relational forms need invented art, strings, layout rows and five `ia.zrd` records first.
+`net-custom-planes` waits on `player_fbrand` and `player_avenger`.
+
+**Still owed to the Windows run.** On the install every network suite flies `MP1` or `MP2` as
+before, each relational line reduces to the shipped row and each literal still runs, so the full
+`RunTests.ps1` battery should show the same PASS/FAIL/SKIP per suite, plus `campaign-layout-core`
+passing. The network suites each carry a few more check sites, and `campaign-layout-parity` one
+fewer per aid, its source check having moved to the core.
+
 **Goal.** Each bucket C suite either passes on the stand-in and joins the tier, or is split into a
 logic half (on the tier) and a parity half (local).
 

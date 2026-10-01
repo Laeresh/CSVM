@@ -3912,6 +3912,16 @@ public partial class GameSession : Node3D
             int modeFlagged = modeSites.Count(c => c.Source is ObjectiveSite { Objective: true });
             Log.Info("core", $"{_spec.Chapter}/{_spec.Mission}: {modeFlagged} objective site(s) and {modeSites.Count - modeFlagged} other-target site(s) from the mission's own targets.zrd");
         }
+        else if (_spec.CaptureTheFlag && _stageArena is { } arena)
+        {
+            // The empty stage's arena ships no targets.zrd and has no world index. It flags its own
+            // flag markers and finds them among its own nodes. The flag runtime labels them.
+            var sites = new ObjectiveSites(Messages.Load(state.MessagesPath),
+                MissionTargets.Objectives(EmptyStage.ArenaTargets), key => EmptyStage.ArenaNode(arena, key));
+            sites.Sides = key => _flagPlay?.SideOf(key);
+            flightRoster.SetTargetObjectives(into => sites.Collect(into));
+            Log.Info("core", $"stage empty: {EmptyStage.ArenaTargets.Count} flag marker site(s) from the match arena");
+        }
 
         if (_rigs.Count > 1)
         {

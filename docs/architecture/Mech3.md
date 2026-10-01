@@ -809,5 +809,5 @@ Its patrol net, `PatrolNet`, is a closed eight-node 1000 m ring at the spawn alt
 2500/1500/700 m volumes, which `--ai=<plane>:grid` and `--zep=...:net=grid` reach through `ResolveNet`.
 A `--vs` match walks `SpawnRing` in place of `net.zrd`, sixteen entries 600 m out and aimed in, and a
 team match `SpawnTable`, that ring plus four team blocks at the teams' bases. `Build(arena: true)`
-stands `ArenaNodes`, two bases' `cs_flag_n`, `cs_flg_lightn` and `rearm_node_n`. All of it is built in
-code, like the grid texture: no chapter assets are here.
+stands `ArenaNodes`, two bases' `ctf_n`, `cs_flag_n`, `cs_flg_lightn` and `rearm_node_n`, which
+`ArenaNode` finds by name; `ArenaTargets` lists the flag markers. All of it is built in code.
