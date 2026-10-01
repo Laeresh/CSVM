@@ -26,6 +26,19 @@ public sealed partial class SplitScreen : CanvasLayer
     /// the own-airframe band. No pane's cull mask carries it (<see cref="PaneCullMask"/>).</summary>
     public const uint PhotographLayer = 1u << 8;
 
+    /// <summary>The layer the world sun is drawn on under Enhanced Graphics
+    /// (<c>Launch.EnhancedLook.ApplySun</c>). Every pane camera draws it and the spyglass disc's
+    /// camera does not, so the disc renders no sun shadow pass. The faithful sun keeps layer 1.</summary>
+    public const uint SunLayer = 1u << 7;
+
+    /// <summary>The layer of the spyglass disc's shadowless copy of the sun
+    /// (<see cref="Flight.Camera.SpyglassSun"/>). Only the disc's camera draws it; no pane's cull mask
+    /// carries it (<see cref="PaneCullMask"/>), or a pane would be lit twice.</summary>
+    public const uint SpyglassSunLayer = 1u << 6;
+
+    // The layers no pane camera draws: the photograph's one-frame airframe and the disc's own sun.
+    private const uint NoPaneLayers = PhotographLayer | SpyglassSunLayer;
+
     // First visual layer of the reserved per-player band. Godot has 20 layers (bits 0–19); the
     // world builds everything on layer 1 (bit 0), so taking the top four leaves the whole middle
     // range free for future use.
@@ -138,11 +151,12 @@ public sealed partial class SplitScreen : CanvasLayer
     /// <summary>Cull mask for player <paramref name="index"/>'s camera: everything outside the
     /// reserved per-player band (the shared world, all aircraft) plus only this player's own bit.</summary>
     public static uint PlayerCullMask(int index) =>
-        (AllLayers & ~PlayerBand & ~PhotographLayer) | PlayerVisualLayer(index);
+        (AllLayers & ~PlayerBand & ~NoPaneLayers) | PlayerVisualLayer(index);
 
-    /// <summary><paramref name="mask"/> less <see cref="PhotographLayer"/>, for a pane camera
-    /// whose mask is not built by <see cref="PlayerCullMask"/>.</summary>
-    public static uint PaneCullMask(uint mask) => mask & ~PhotographLayer;
+    /// <summary><paramref name="mask"/> less <see cref="PhotographLayer"/> and
+    /// <see cref="SpyglassSunLayer"/>, for a pane camera whose mask is not built by
+    /// <see cref="PlayerCullMask"/>.</summary>
+    public static uint PaneCullMask(uint mask) => mask & ~NoPaneLayers;
 
     /// <summary>The visual layer player <paramref name="index"/>'s OWN airframe is drawn on, so one
     /// camera can leave that pilot's aeroplane out while every other camera, this pane's included,

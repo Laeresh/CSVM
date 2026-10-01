@@ -683,10 +683,18 @@ The spyglass picture: a square `SubViewport` rendering the SHARED world through 
 own, one per pane, hung on `TargetHud` so it sits inside that pane's viewport. `Aim` points it
 (`Spyglass.Pose`/`FovDeg`), sizes it to the disc's drawn diameter, borrows the pane camera's clip
 planes and cull mask and starts it rendering; `Idle` stops it. The world is inherited rather than
-owned, so the target is the one in play and wears the flown zone's fog. `DiscMask` is the one
-departure from the pane's view: the eye stands inside the pilot's own aeroplane, so that aeroplane's
-layer (`UI.Boards.SplitScreen.OwnAirframeLayer`, stamped by `Session/HumanFlightAdapter`) is dropped, on
-the original at the controls and not on the decode. `TargetHud.DrawDisc` masks it to a circle.
+owned, so the target is the one in play and wears the flown zone's fog. `DiscMask` departs from the
+pane's view: the pilot's own aeroplane's layer (`UI.Boards.SplitScreen.OwnAirframeLayer`, stamped by
+`Session/HumanFlightAdapter`) is dropped, and under Enhanced the sun is traded for `SpyglassSun.cs`.
+`Census` is the `--perf` spyglass line. `TargetHud.DrawDisc` masks it to a circle.
+
+## src/Flight/Camera/SpyglassSun.cs
+The spyglass discs' own sun under Enhanced: a shadowless `DirectionalLight3D` on
+`UI.Boards.SplitScreen.SpyglassSunLayer`, which only the disc cameras draw, while the world sun sits on
+`SunLayer`, which they leave out (`Launch/EnhancedLook.ApplySun`). So the discs are lit as the panes
+are and render no shadow pass. One per flight session, built and freed by `GameSession` on a live
+switch; `Mirror` takes the sun's bearing, colour, energy and the rest of its light every frame, since
+the zone apply (`Session/World/WeatherRig.cs`), the Shadow Quality level and a switch all write the sun.
 
 ## src/Flight/Modes/StuntRunHud.cs
 The stunt run's own readouts, one per pane and sized through `HudMetrics.Scale`: the clock and

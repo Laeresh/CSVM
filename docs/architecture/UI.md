@@ -566,7 +566,7 @@ stand side by side from 2:1 out (`SideBySide`); three and four are the 2x2 grid.
 3D audio listener**, or nothing positional is audible: Godot takes the per-channel maximum over
 listener-enabled viewports. `Fill(true)` gives pane 1 the whole window for a cutscene; `NoteSkip`
 names a skipping player. `OwnAirframeLayer` is one bit per seat, dropped only by that pilot's
-spyglass disc; `PhotographLayer` is one bit no pane draws, for the Danger Zone camera.
+spyglass disc; `PhotographLayer` and `SpyglassSunLayer` are bits no pane draws; `SunLayer` the disc drops.
 
 ## src/UI/Boards/ScreenFlash.cs
 The full-screen colour wash, two channels over one hidden `ColorRect` per rendered view. The ramp

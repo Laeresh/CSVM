@@ -35,6 +35,8 @@ the flown zone's own `FOG_COLOR`, painted flat over Godot's procedural placehold
 resource (`EnhancedLook.ApplyEnvironment`, `WeatherRig.WriteSkyColor`). The cockpit interior pass
 and every splitscreen pane pick up the same settings and the same per-zone updates, since both
 duplicate or share the session's own sun and Environment (`CockpitOverlay.cs`, `SplitScreen.cs`).
+The spyglass disc is the one view lit without the sun's shadow: it draws a shadowless copy of the
+sun in its place, so it renders no shadow pass of its own (`Flight/Camera/SpyglassSun.cs`).
 
 One drawing runs in **original mode alone**, the only difference in that direction: the aircraft's
 projected ground shadow (`Flight/Airframe/GroundShadowPass.cs`, decoded in `../org/shadows.md`). It is the

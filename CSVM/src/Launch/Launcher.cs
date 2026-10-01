@@ -233,6 +233,8 @@ public partial class Launcher : Node3D
     private int _perfFrames;
     private double _perfProcess, _perfGpu, _perfCpuRender, _perfPhysics, _perfSetup;
     private double _perfDraws, _perfPrims, _perfNodes, _perfMem;
+    // The spyglass discs' own counts over the window (SpyglassView.Census), split out of draws.
+    private double _perfDiscs, _perfDiscDraws, _perfDiscShadowDraws;
 
     // The --perf GC readout. Built with the first --perf frame rather than in _Ready, so a run
     // without the flag subscribes to no runtime events at all.
@@ -3287,6 +3289,10 @@ public partial class Launcher : Node3D
         _perfPrims += counters.Prims;
         _perfNodes += counters.Nodes;
         _perfMem += counters.MemBytes;
+        var (discs, discDraws, discShadowDraws) = Flight.Camera.SpyglassView.Census();
+        _perfDiscs += discs;
+        _perfDiscDraws += discDraws;
+        _perfDiscShadowDraws += discShadowDraws;
         if (_perfFrames < PerfWindowFrames)
         {
             return;
@@ -3348,8 +3354,13 @@ public partial class Launcher : Node3D
         // question from the millisecond one: which phase feeds the collector, rather than which
         // phase the pause landed in (PERF-34). The two are read side by side.
         Log.Info("perf", $"alloc sim_frame={simFrame} sim_alloc_b={simAllocRow}");
+        // The discs' own line, said only while one rendered in the window. Each is a viewport of its
+        // own, which gpu_ms leaves out and draws folds into the frame's total (verification PERF-47).
+        if (_perfDiscs > 0)
+            Log.Info("perf", $"spyglass sim_frame={simFrame} discs={_perfDiscs / n:0.00} disc_draws={_perfDiscDraws / n:0.0} disc_shadow_draws={_perfDiscShadowDraws / n:0.0}");
         _perfClock = 0; _perfFrames = 0; _perfProcess = _perfGpu = _perfCpuRender = _perfPhysics = _perfSetup = 0;
         _perfDraws = _perfPrims = _perfNodes = _perfMem = 0;
+        _perfDiscs = _perfDiscDraws = _perfDiscShadowDraws = 0;
     }
 }
 

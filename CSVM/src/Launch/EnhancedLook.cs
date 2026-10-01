@@ -235,9 +235,9 @@ public static class EnhancedLook
         Log.Info("world", $"display quality: render_scale={renderScale.Word}% source={renderScale.Source} anti_aliasing={antiAliasing.Word} aa_source={antiAliasing.Source} (applied live by {why})");
     }
 
-    /// <summary>The session sun's shadow maps, on at the resolved shadow quality or back to a fresh
-    /// light's defaults. ⚠ Also sets the renderer-wide soft-shadow filter and shadow atlas, which
-    /// belong to this light alone; the off direction puts back the project's own pair.</summary>
+    /// <summary>The session sun's shadow maps and visual layer, on at the resolved shadow quality or
+    /// back to a fresh light's defaults. ⚠ Also sets the renderer-wide soft-shadow filter and shadow
+    /// atlas, which belong to this light alone; the off direction puts back the project's own pair.</summary>
     public static void ApplySun(DirectionalLight3D sun, bool enhanced, EnhancedPasses skipped)
     {
         if (!enhanced)
@@ -245,6 +245,7 @@ public static class EnhancedLook
             // The colour and specular too: the enhanced zone apply writes both, and the faithful
             // one writes neither back.
             var fresh = new DirectionalLight3D();
+            sun.Layers = fresh.Layers;
             sun.LightColor = fresh.LightColor;
             sun.LightSpecular = fresh.LightSpecular;
             SunShadow.Copy(fresh, sun, fresh.DirectionalShadowMaxDistance);
@@ -255,6 +256,9 @@ public static class EnhancedLook
                 ProjectSettings.GetSetting(ShadowAtlasSizeSetting, DefaultShadowAtlasSize).AsInt32(), true);
             return;
         }
+        // On a layer every pane camera draws and the spyglass disc's does not. The disc is lit by a
+        // shadowless copy instead (Flight/Camera/SpyglassSun), so it renders no shadow pass.
+        sun.Layers = UI.Boards.SplitScreen.SunLayer;
         // Four splits because the useful range spans an aircraft's own shadow a few metres below
         // it and a skyline several kilometres out.
         sun.ShadowEnabled = true;

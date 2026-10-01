@@ -428,6 +428,9 @@ public partial class GameSession : Node3D
     // The faithful path's projected aircraft shadow, null in enhanced mode, which casts shadow maps
     // instead. Held so a live graphics-mode switch can build it or free it.
     private GroundShadowPass? _groundShadows;
+    // The spyglass discs' shadowless sun, Enhanced flight only; held so a live switch can build or
+    // free it (FollowSpyglassSun).
+    private Flight.Camera.SpyglassSun? _spyglassSun;
     // The enhanced-only world layers and the mode-dependent builds, held so a live graphics-mode
     // switch can build, free or rewrite each (ApplyGraphicsMode). Null where the build made none.
     private Effects.ScorchField? _scorches;
@@ -566,6 +569,10 @@ public partial class GameSession : Node3D
 
     /// <summary>The session's texture archive, for an instrument reading its textures.</summary>
     internal TextureArchive? SessionTextures => _sessionTextures;
+
+    /// <summary>The spyglass discs' shadowless copy of the sun, null outside an Enhanced flight.
+    /// Read by the suite.</summary>
+    internal Flight.Camera.SpyglassSun? SpyglassSun => _spyglassSun;
 
     /// <summary>The whole match's roster in seat order, empty outside a network match.</summary>
     internal IReadOnlyList<Net.NetSeat> NetSeats => _netSeats;
@@ -1032,6 +1039,7 @@ public partial class GameSession : Node3D
         {
             BuildGroundShadows();
         }
+        FollowSpyglassSun();
         if (_plane != null && BuildsCollision)
         {
             if (enhanced && _scorches == null && Effects.ScorchField.Create() is { } scorches)
@@ -3009,6 +3017,7 @@ public partial class GameSession : Node3D
             _boards.Add(scoreboard);
         }
         BuildCockpitPasses();
+        FollowSpyglassSun();
 
         // Damage lab in flight (F19): the panel --viewer hosts, bound to P1's real PlaneDamage
         // rather than visuals alone, so a dialled-in state drives the HUD and can then be flown.
@@ -5769,6 +5778,22 @@ public partial class GameSession : Node3D
 
     // Built at the flight build's projectile-pool step and again on a switch to original mode.
     // A no-op in enhanced mode (GroundShadowPass.Build).
+    // The spyglass discs' shadowless sun, built under Enhanced and freed on the faithful path. A
+    // flight session only, the one that builds the projectiles and the discs.
+    private void FollowSpyglassSun()
+    {
+        if (GraphicsMode.Enhanced && _spyglassSun == null && _worldRoot != null && _projectiles != null)
+        {
+            _spyglassSun = Flight.Camera.SpyglassSun.Build(_sun);
+            _worldRoot.AddChild(_spyglassSun);
+        }
+        else if (!GraphicsMode.Enhanced && _spyglassSun != null)
+        {
+            Drop(_spyglassSun);
+            _spyglassSun = null;
+        }
+    }
+
     private void BuildGroundShadows() =>
         _groundShadows = GroundShadowPass.Build(_worldRoot!, AllAircraft, PlayerPositionsSnapshot, () => _rigs,
             () => _weatherRig?.SunlightRgb ?? WeatherRig.DefaultSunlightRgb);

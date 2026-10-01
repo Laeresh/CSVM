@@ -1368,7 +1368,7 @@ internal static class TargetingSuites
             // pilot's own: the stamp a human rig applies moves every mesh onto that one layer, so
             // dropping the bit takes the whole aeroplane out rather than its root node alone.
             UI.Boards.SplitScreen.SetVisualLayer(model, own);
-            uint discMask = SpyglassView.DiscMask(ctx.Camera.CullMask, own);
+            uint discMask = SpyglassView.DiscMask(ctx.Camera.CullMask, own, Utils.GraphicsMode.Enhanced);
             var (meshes, inDisc) = DrawnUnder(model, discMask);
             var (_, inPane) = DrawnUnder(model, ctx.Camera.CullMask);
             ctx.Check(meshes > 0 && inDisc == 0 && inPane == meshes,
