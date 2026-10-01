@@ -63,6 +63,12 @@ internal static class LookStickSuites
     // head's decoded 5/s undoes about 8% a frame.
     private const float ReleaseFirstFrameShare = 0.25f;
 
+    // Smooth mode's park: a second of release, against which a return at the decoded 5/s would
+    // undo over 99% of the swing. The bounds are a small fraction of that.
+    private const int ParkFrames = 60;
+
+    private const float ParkDriftDeg = 0.5f, ParkDriftMove = 0.25f;
+
     // The padlock sortie's target, a bare identity in the pool so the acquisition can be asserted
     // by reference rather than by name.
     private static readonly object PadlockMark = new();
@@ -120,7 +126,7 @@ internal static class LookStickSuites
     /// <summary>Eases the look stick slowly off centre and back, then lets go of a held deflection
     /// at once. Both views are read every frame in the aircraft's own frame.</summary>
     [Suite("look-stick-edge",
-        "the look stick's activation edge flown in both views: easing the stick off centre and back, the camera's per-frame displacement and turn across the frames the look takes and releases the view stay within what the stick's own motion accounts for, and letting go of a held deflection eases the view home over many frames rather than cutting to the chase pose")]
+        "the look stick's activation edge flown in both views: easing the stick off centre and back, the camera's per-frame displacement and turn across the frames the look takes and releases the view stay within what the stick's own motion accounts for, letting go of a held deflection in snap mode eases the view home over many frames rather than cutting to the chase pose, and in smooth mode (J) the let-go view stays on the aim it was released at for a second of release until the centre key or K returns it")]
     internal static void LookStickEdge(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -138,6 +144,8 @@ internal static class LookStickSuites
             {
                 EdgeSortie(ctx, view, clock, plane, report);
                 ReleaseSortie(ctx, view, clock, plane, report);
+                ParkSortie(ctx, view, clock, plane, InputAction.LookCenter, report);
+                ParkSortie(ctx, view, clock, plane, InputAction.SnapLookMode, report);
             });
             ctx.Check(flown, $"{view}: the view builds an aircraft to fly");
         }
@@ -155,7 +163,7 @@ internal static class LookStickSuites
         ctx.Check(swing.SideX > 0f,
             $"{view}: pushing the stick right puts the view on the aircraft's right (x={swing.SideX:0.###})");
         ctx.Check(swing.ReleasedDeg < ToleranceDeg,
-            $"{view}: centring the stick returns the view to its settled pose (read {swing.ReleasedDeg:0.#}° off)");
+            $"{view}: in snap mode, centring the stick returns the view to its settled pose (read {swing.ReleasedDeg:0.#}° off)");
     }
 
     // The slow ramp: from centre out to EdgePeak and back, one step a frame, with the settled chase
@@ -230,6 +238,39 @@ internal static class LookStickSuites
         ctx.Check(homeDeg < ToleranceDeg,
             $"{view}: and the view arrives back on its settled pose ({homeDeg:0.##}° off)");
     }
+
+    // Smooth mode's release: a held stick let go at once leaves the view on its aim for a second.
+    // Then `release`, the centre key or K, returns it to the settled pose.
+    private static void ParkSortie(TestContext ctx, string view, GameClock clock, FlightController plane,
+        InputAction release, StringBuilder report)
+    {
+        var settled = PlaneFramePose(ctx.Camera, plane);
+        Press(clock, plane, InputAction.SmoothLookMode);
+        plane.PinnedLook = new Vector2(StickX, 0f);
+        Step(clock, plane, SettleFrames);
+        var held = PlaneFramePose(ctx.Camera, plane);
+        plane.PinnedLook = Vector2.Zero;
+        Step(clock, plane, ParkFrames);
+        var parked = PlaneFramePose(ctx.Camera, plane);
+        Press(clock, plane, release);
+        Step(clock, plane, SettleFrames);
+        var home = PlaneFramePose(ctx.Camera, plane);
+
+        float span = TurnDeg(held.Basis, settled.Basis);
+        float driftDeg = TurnDeg(held.Basis, parked.Basis);
+        float driftMove = (parked.Origin - held.Origin).Length();
+        float homeDeg = TurnDeg(home.Basis, settled.Basis);
+        string by = release == InputAction.LookCenter ? "the centre key" : "K";
+        report.AppendLine($"{view} park ({by}): held {span:0.##} deg off, after {ParkFrames} frames of release drifted {driftDeg:0.###} deg and {driftMove:0.###} m, {Mode(plane)} after the press, home {homeDeg:0.###} deg off");
+        ctx.Check(span > 30f,
+            $"{view} ({by}): in smooth mode the held stick swings the view ({span:0.#}° off the settled pose)");
+        ctx.Check(driftDeg < ParkDriftDeg && driftMove < ParkDriftMove,
+            $"{view} ({by}): and letting go leaves it on that aim, {driftDeg:0.###}° and {driftMove:0.###} m off it after {ParkFrames} frames of release (under {ParkDriftDeg:0.##}° and {ParkDriftMove:0.##} m)");
+        ctx.Check(homeDeg < ToleranceDeg,
+            $"{view} ({by}): which returns the parked view to its settled pose ({homeDeg:0.##}° off, mode {Mode(plane)})");
+    }
+
+    private static string Mode(FlightController plane) => plane.Head?.Mode.ToString() ?? "none";
 
     // The camera's whole pose in the aircraft's own frame, so the aeroplane's flight drops out and
     // only what the view itself did is left.

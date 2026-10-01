@@ -142,6 +142,12 @@ public sealed class HeadLook
     /// both obey whichever mode the keys chose.</summary>
     public LookMode Mode { get; private set; }
 
+    /// <summary>Whether a look stick let go on this frame leaves its aim where it was. True in
+    /// <see cref="LookMode.FreeLook"/> alone, and false on a frame the centre key or the smooth-look
+    /// key centred the head. The chase swing reads it, since that stick bypasses this head. This
+    /// head's own pad aim follows the same rule through its targets.</summary>
+    public bool HoldsStickAim { get; private set; }
+
     /// <summary>The lowest elevation this head may be told to look at:
     /// <see cref="FirstPersonElevationFloor"/> in the cockpit and <see cref="ChaseElevationFloor"/>
     /// on the chase camera. Settable rather than fixed because the original's one head serves both
@@ -272,7 +278,8 @@ public sealed class HeadLook
         // Ahead of the modes, so the filter advances on every frame and a mode that takes the pad
         // over from another path reads this frame's deflection rather than the last one it saw.
         _padFilter.Step(dt, input.PadRight, input.PadUp);
-        SelectMode(input);
+        bool recentred = SelectMode(input);
+        HoldsStickAim = Mode == LookMode.FreeLook && !input.Center && !recentred;
         bool padlocked = Mode == LookMode.Padlock;
 
         if (padlocked)
@@ -301,6 +308,8 @@ public sealed class HeadLook
         }
         else if (_padFilter.Active)
         {
+            // Only while held. A let-go stick runs nothing here, so the targets keep the aim of the
+            // last frame outside the centre band, never a later one.
             PadAim();
         }
         else if (panning)
@@ -331,11 +340,13 @@ public sealed class HeadLook
         Mode = LookMode.Snap;
     }
 
-    // This frame's mode, in writer order: the keys on their press edge, then the forced snap. ⚠ No
-    // device writes the mode. A numpad direction writing Snap would make the free-look pan
-    // impossible, and a mouse pan writing FreeLook would stop the head springing back in snap.
-    private void SelectMode(in HeadLookInput input)
+    // This frame's mode, in writer order: the keys on their press edge, then the forced snap. True
+    // when the smooth-look key centred the head. ⚠ No device writes the mode. A numpad direction
+    // writing Snap would make the free-look pan impossible, and a mouse pan writing FreeLook would
+    // stop the head springing back in snap.
+    private bool SelectMode(in HeadLookInput input)
     {
+        bool recentred = false;
         if (input.SelectSnapMode && !_snapKeyDown)
         {
             Mode = LookMode.Snap;
@@ -354,6 +365,7 @@ public sealed class HeadLook
             // the mode, so smooth look always starts from straight ahead.
             Reset();
             Mode = LookMode.FreeLook;
+            recentred = true;
         }
 
         _snapKeyDown = input.SelectSnapMode;
@@ -364,6 +376,8 @@ public sealed class HeadLook
         {
             Mode = LookMode.Snap;
         }
+
+        return recentred;
     }
 
     // The padlock frame: the selected target's bearing becomes the targets outright, with only the
@@ -453,10 +467,9 @@ public sealed class HeadLook
 /// a first-order lag at <see cref="HeadLook.PadAimSmoothRate"/> on each component. The pair is the
 /// stick's own: the head reads it as right and up, the chase swing as right and down.
 /// ⚠ Ask <see cref="Active"/> whether the stick is being used, never the filtered pair. The lag
-/// never lands on its input exactly, so a held stick's pair is never its raw one. Without release
-/// rates the band zeroes the state, so a reader with its own return starts it on the frame the stick
-/// was let go. With them the pair itself eases home, for a reader that has no return of its own.
-/// </summary>
+/// never lands on its input exactly, so a held stick's pair is never its raw one. A let-go pair is
+/// zeroed with no release rates, eased home with them, or parked when the caller holds the release
+/// (<see cref="Step"/>).</summary>
 public sealed class StickLookFilter
 {
     // Below this a returning component is put on 0 exactly, about 0.015° of swing. A reader's
@@ -464,6 +477,10 @@ public sealed class StickLookFilter
     private const float ReleaseRestBand = 1e-4f;
 
     private readonly float _releaseRateX, _releaseRateY;
+
+    // Whether the released pair is parked rather than returning. Set only on the frame the stick is
+    // let go. One frame that does not hold returns it until the stick is taken again.
+    private bool _parked;
 
     /// <summary>A filter whose released pair returns to 0 at the given rates, 1/s, per component.
     /// Omitted, the band zeroes the pair at once.</summary>
@@ -488,15 +505,23 @@ public sealed class StickLookFilter
     public bool Swinging => X != 0f || Y != 0f;
 
     /// <summary>Advance one frame over the raw pair. Inside the band the pair is released: zeroed,
-    /// or eased home at the release rates. A stick taken again mid-return resumes from there.
-    /// </summary>
-    public void Step(float dt, float x, float y)
+    /// or eased home at the release rates. While <paramref name="hold"/> has been set on every frame
+    /// since the stick was let go, the pair stays on its last aim outside the band. A stick taken
+    /// again resumes from wherever the pair is.</summary>
+    public void Step(float dt, float x, float y, bool hold = false)
     {
         float radius = Mathf.Sqrt((x * x) + (y * y));
         if (radius <= HeadLook.PadAimCentreBand)
         {
-            X = Release(X, _releaseRateX, dt);
-            Y = Release(Y, _releaseRateY, dt);
+            // Active is still last frame's here, so it marks the crossing. ⚠ Do not step the pair
+            // on that frame; a lagged value after the crossing drifts the parked view toward centre.
+            _parked = hold && (_parked || Active);
+            if (!_parked)
+            {
+                X = Release(X, _releaseRateX, dt);
+                Y = Release(Y, _releaseRateY, dt);
+            }
+
             Active = false;
             return;
         }
@@ -515,6 +540,7 @@ public sealed class StickLookFilter
         X = 0f;
         Y = 0f;
         Active = false;
+        _parked = false;
     }
 
     private static float Release(float value, float rate, float dt)

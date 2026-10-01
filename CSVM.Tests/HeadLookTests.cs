@@ -118,8 +118,8 @@ public class HeadLookTests
         Assert.Equal(1f, head.TargetElevation, Tol);
     }
 
-    // Release is the idle frame, so the head returns to straight ahead on its own: the stick
-    // position is the whole state, and nothing of it survives letting go.
+    // A head starts in snap mode, where release is the idle frame. The head returns to straight
+    // ahead on its own, and nothing of the stick survives letting go.
     [Fact]
     public void ReleasingTheStickReturnsTheHeadToStraightAhead()
     {
@@ -219,6 +219,112 @@ public class HeadLookTests
 
         Assert.Equal(0f, filter.X);
         Assert.False(filter.Swinging);
+    }
+
+    // A held release parks the pair on the aim of the last frame outside the band, not one step of
+    // the return after it. A second of release moves it not at all. A stick easing back is read on
+    // its way, so the park is wherever the pair stood when it crossed.
+    [Fact]
+    public void AHeldReleaseParksThePairOnTheAimItCrossedTheBandAt()
+    {
+        var filter = new StickLookFilter(HeadLook.AzimuthSmoothRate, HeadLook.ElevationSmoothRate);
+        for (int i = 0; i < 100; i++)
+        {
+            filter.Step(StepDt, 0.6f, -0.3f, hold: true);
+        }
+
+        foreach (float x in new[] { 0.45f, 0.3f, 0.15f })
+        {
+            filter.Step(StepDt, x, -x / 2f, hold: true);
+        }
+
+        float crossedX = filter.X, crossedY = filter.Y;
+        for (int i = 0; i < HoldFrames; i++)
+        {
+            filter.Step(StepDt, 0f, 0f, hold: true);
+        }
+
+        Assert.False(filter.Active);
+        Assert.Equal(crossedX, filter.X);
+        Assert.Equal(crossedY, filter.Y);
+    }
+
+    // One frame that does not hold returns the parked pair. A later held frame does not park it
+    // again mid-return; only a stick taken and let go once more does. A regrab resumes from the
+    // parked pair.
+    [Fact]
+    public void OneFrameThatDoesNotHoldReturnsTheParkedPairUntilTheStickIsTakenAgain()
+    {
+        var filter = new StickLookFilter(HeadLook.AzimuthSmoothRate, HeadLook.ElevationSmoothRate);
+        for (int i = 0; i < 100; i++)
+        {
+            filter.Step(StepDt, 1f, 0f, hold: true);
+        }
+
+        filter.Step(StepDt, 0f, 0f, hold: true);
+        float parked = filter.X;
+        filter.Step(StepDt, 0.5f, 0f, hold: true);
+        float target = (0.5f - HeadLook.PadAimCentreBand) / (1f - HeadLook.PadAimCentreBand);
+        Assert.Equal(HeadLook.Approach(parked, target, HeadLook.PadAimSmoothRate, StepDt), filter.X, Tol);
+
+        filter.Step(StepDt, 0f, 0f, hold: true);
+        float reparked = filter.X;
+        filter.Step(StepDt, 0f, 0f, hold: false);
+        Assert.Equal(HeadLook.Approach(reparked, 0f, HeadLook.AzimuthSmoothRate, StepDt), filter.X, Tol);
+
+        float returning = filter.X;
+        filter.Step(StepDt, 0f, 0f, hold: true);
+        Assert.Equal(HeadLook.Approach(returning, 0f, HeadLook.AzimuthSmoothRate, StepDt), filter.X, Tol);
+    }
+
+    // Free-look alone holds a let-go stick. The frames that centre the head do not: the centre key
+    // held, and the press of the smooth-look key that enters the mode.
+    [Fact]
+    public void OnlyFreeLookHoldsALetGoStickAndTheCentringFramesDoNot()
+    {
+        var head = new HeadLook();
+        head.Step(StepDt, Idle);
+        Assert.False(head.HoldsStickAim);
+
+        head.Step(StepDt, SmoothKey);
+        Assert.False(head.HoldsStickAim);
+        head.Step(StepDt, Idle);
+        Assert.True(head.HoldsStickAim);
+
+        head.Step(StepDt, new HeadLookInput(0f, 0f, 0f, 0f, true));
+        Assert.False(head.HoldsStickAim);
+        head.Step(StepDt, Idle);
+        Assert.True(head.HoldsStickAim);
+
+        head.Step(StepDt, PadlockKey);
+        Assert.False(head.HoldsStickAim);
+        head.Step(StepDt, SnapKey);
+        Assert.False(head.HoldsStickAim);
+    }
+
+    // The first-person half of the same rule. In free-look a let-go stick leaves the head on its
+    // aim for a second and more, and the snap key returns it.
+    [Fact]
+    public void InFreeLookALetGoStickParksTheHeadAndTheSnapKeyReturnsIt()
+    {
+        var head = new HeadLook();
+        head.Step(StepDt, SmoothKey);
+        HoldStick(head, -0.6f, 0.3f);
+        float elevation = head.TargetElevation, azimuth = head.TargetAzimuth;
+        Assert.True(azimuth > 1f);
+
+        for (int i = 0; i < HoldFrames; i++)
+        {
+            head.Step(StepDt, Idle);
+        }
+
+        Assert.Equal(elevation, head.TargetElevation);
+        Assert.Equal(azimuth, head.TargetAzimuth);
+        Assert.Equal(azimuth, head.Azimuth, 1e-3f);
+
+        head.Step(StepDt, SnapKey);
+        Assert.Equal(0f, head.TargetElevation, Tol);
+        Assert.Equal(0f, head.TargetAzimuth, Tol);
     }
 
     // The filter is on the stick and nowhere else: the mouse pan still integrates at the decoded

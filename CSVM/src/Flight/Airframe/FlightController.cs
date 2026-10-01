@@ -574,7 +574,8 @@ public partial class FlightController : Node3D
     // OS one for as long as it does. Idle on every seat that never takes it (MouseCaptureAllowed).
     private readonly MouseCapture _mouse = new();
     // The look stick as the CHASE swing reads it. It has its own filter because that swing has no
-    // return of its own. A released stick eases home at the head's decoded rates.
+    // return of its own. A released stick eases home at the head's decoded rates, or stays put in
+    // free-look, as the head does (HeadLook.HoldsStickAim).
     private readonly StickLookFilter _chaseLook = new(HeadLook.AzimuthSmoothRate, HeadLook.ElevationSmoothRate);
     private readonly AimCandidateSet _aimCandidates = new(); // rebuilt once per fire call (B4/B5)
     private readonly AimCandidateSet _gunnerScan = new();    // the AI gunner's acquisition scan (D14)
@@ -2534,7 +2535,8 @@ public partial class FlightController : Node3D
                     _chaseLook.Reset();
                     _chaseLookStale = false;
                 }
-                _chaseLook.Step(simDt, lookX, lookY);
+                // The head's own release rule, so a let-go stick parks this view in free-look too.
+                _chaseLook.Step(simDt, lookX, lookY, _cam.Head.HoldsStickAim);
                 // Fed simDt, not wall time, so a scripted flight capture stays frame-rate
                 // independent; fed the DRAWN pose, same rule as the rigid views above.
                 _cam.Chase(simDt, _renderPose.Origin, _renderPose.Basis, _chaseLook.X, _chaseLook.Y);
