@@ -55,6 +55,13 @@ The indirection from a name to a file is the remake's, since the original's scri
 and it lives here so `MenuAudioService` owns lookup alone. Engine-free, so the table is unit-tested
 against the names the presentations ask for. Read `MenuAudioService.cs` next.
 
+## src/Launch/MasterServerLink.cs
+The shipped way to the master server, over .NET's `HttpClient` and `ClientWebSocket`: `FetchGames`
+is the games list GET, `Open` an `IMasterSocket` whose receive and send loops run on the pool with
+queues to the frame. The send loop repeats a host's listing through a stalled frame for up to
+`KeepListedSeconds`. Here rather than in `Net/` because the seam names no socket API; the launcher
+hands it to the door and `NetCarrier`. Read `MasterServerLinkTests.cs`, which runs it against the server.
+
 ## src/Launch/EnhancedLook.cs
 The enhanced graphics mode on a running process, on one sun and one Environment and both ways:
 PSSM sun shadows, SSAO, SSR, glow, the AgX tonemap and the mission sky, with the `EnhancedPasses`

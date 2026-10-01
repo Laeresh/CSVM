@@ -31,7 +31,7 @@ exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One 
 `--viewer` · `--fly` · `--stunt` · `--vs` · `--vs-kills` · `--vs-time` · `--vs-lives` · `--vs-no-respawn` · `--ctf` · `--zvz` · `--coop` · `--freecam` · `--anim-lab` · `--menu` · `--skip-intro` · `--intro` · `--chapter` · `--stage` · `--node` · `--plane` · `--players` · `--mission` · `--scenario` · `--ia` · `--campaign` · `--profiles` · `--play-anim` · `--movie` · `--presentation` · `--force-builtin`
 
 **Multiplayer, the wire a match flies over**
-`--net-host` · `--net-join` · `--net-port-base`
+`--net-host` · `--net-join` · `--net-port-base` · `--master-server`
 
 **Placement, where the subject starts and which way it faces**
 `--pos` · `--direction` · `--lookat` · `--fov` · `--view` · `--chase-rig` · `--spawn` · `--campos` · `--spawn-at` · `--spawn-dir`
@@ -208,6 +208,12 @@ lines**.
   and a bare `--net-host` or `--net-join` takes N. N lies in [1024, 65436], else a warning keeps the
   shipped pair. `RunTests.ps1` hands every engine shard its own, and a suite that opens a socket
   stays inside the 100 ports from N up (`Testing/SuitePorts.cs`). A player never needs it)
+- `--master-server=url` (the master server the menu's multiplayer door lists games on and joins by code
+  through, `https://host[/path]` or a bare host name, which takes https. It beats the hand-set
+  `netMasterServer` key in `options.json`; an empty value turns it off, and an unreadable one turns it
+  off with a warning. Off, nothing changes for LAN and direct play. A `--det` run reads no saved key.
+  Hosting for and joining internet guests also needs the WebRTC library (`InstallWebRtc.ps1`);
+  `server/README.md` sets up the server. `--net-host`/`--net-join` never use it)
 - `--coop` (plain splitscreen free flight defaults to **FFA**, every
   human on their own team (`AimAssist.TeamOfPilot`), so aim assist, world turrets and AI gunners
   treat the other humans as hostile. `--coop` opts a plain `--fly`/`--stunt` session into one

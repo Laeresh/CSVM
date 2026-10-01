@@ -11,3 +11,14 @@ analysis/session-baseline/baseline.txt text eol=lf
 # The COPYRIGHT file of the musl-1.2.3 release, kept byte-identical (LF) so its checkout can be
 # compared with upstream's by hash. Git converts nothing in it, whatever core.autocrlf says.
 packaging/LICENSE-musl -text
+
+# The master server's deployment files are read on a Linux host, often copied there from a
+# Windows checkout rather than cloned: a CR in .env, the coturn config or the systemd unit ends up
+# inside a value. Checked out LF on every OS.
+server/.env.example text eol=lf
+server/Caddyfile text eol=lf
+server/Dockerfile text eol=lf
+server/Dockerfile.dockerignore text eol=lf
+server/docker-compose.yml text eol=lf
+server/coturn/*.conf text eol=lf
+server/systemd/*.service text eol=lf

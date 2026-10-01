@@ -947,6 +947,101 @@ internal static class MenuOriginalConnectionSuites
         }
     }
 
+    [Suite("menu-original-master-list",
+        "The games list with a master server set and no LAN socket: Connect over LAN TCP/IP opens the "
+        + "list on the master server's one Dogfight, its row reads the listing's five columns, and "
+        + "Join Game after PLAYER INFORMATION opens the join through the code opener with that game's "
+        + "code rather than an address, landing the guest on the host's Dogfight. The server is a "
+        + "canned list and the wire the loopback")]
+    internal static void TheMasterServersGames(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        const string listed = "{\"games\":[{\"code\":\"K7Q-X3M\",\"name\":\"Pirates\",\"kind\":\"dogfight\",\"players\":1,"
+            + "\"cap\":8,\"status\":\"waiting\",\"version\":\"unknown\"}]}";
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(17));
+        var hostDoor = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => throw new InvalidOperationException("the host does not join"))
+        {
+            PlayerName = "Zachary",
+        };
+        var opened = new List<string>();
+        var guestDoor = new NetPlayFeature(
+            (_, _, _) => throw new InvalidOperationException("a guest does not host"),
+            (_, _) => throw new InvalidOperationException("a listed game joins by its code"))
+        {
+            Master = new MasterDirectory(_ => System.Threading.Tasks.Task.FromResult(listed)),
+            OpenCode = code =>
+            {
+                opened.Add(code);
+                return mesh[1];
+            },
+        };
+        var ends = new List<End>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-master-list");
+        try
+        {
+            hostDoor.OpenDogfightHost(NetSeats.MaxPlayers - 1);
+            var guest = Open(ctx, layout, guestDoor, ends);
+            if (guest == null)
+            {
+                return;
+            }
+
+            var shell = guest.Shell;
+            ClickRow(ctx, guest, OriginalShell.MultiplayerKey);
+            ClickRow(ctx, guest, OriginalConnectionScreen.ConnectKey);
+            ctx.Check(shell.Screen == OriginalScreen.ConnectionGames,
+                $"Connect opens the games list with no LAN socket, the master server standing for the search ({shell.Screen})");
+            for (int frame = 0; frame < 6 && shell.Connection.Listed.Count == 0; frame++)
+            {
+                hostDoor.Step(Dt);
+                Pump(ends.ToArray());
+            }
+
+            var rows = shell.Connection.Listed;
+            ctx.Check(rows.Count == 1 && rows[0].Code == "K7Q-X3M", $"the list carries the master server's one game ({rows.Count})");
+            if (rows.Count != 1)
+            {
+                return;
+            }
+
+            var cells = shell.Connection.Cells(rows[0]);
+            ctx.Check(cells.Count == 5 && cells[0] == "Pirates" && cells[1] == "1/8" && cells[2] == "Dogfight" && cells[4] == "Waiting",
+                $"its row reads the listing's five columns ({string.Join(" | ", cells)})");
+            ClickRow(ctx, guest, OriginalConnectionScreen.GameKey(0));
+            ClickRow(ctx, guest, OriginalConnectionScreen.JoinKey);
+            Answer(ctx, guest, "Nathan");
+            for (int frame = 0; frame < 6; frame++)
+            {
+                hostDoor.Step(Dt);
+                Pump(ends.ToArray());
+            }
+
+            ctx.Check(opened.SequenceEqual(new[] { "K7Q-X3M" }), $"Join Game opens the join by the game's code ({string.Join(", ", opened)})");
+            ctx.Check(guestDoor.IsDogfightGuest && guestDoor.JoinName == "K7Q-X3M",
+                $"and lands the guest on the host's Dogfight ({guestDoor.Stage}, {guestDoor.JoinName}, {guestDoor.Fault})");
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            guestDoor.Discard();
+            hostDoor.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
     // The Connection page's Host with a password typed into GAME INFORMATION. The host's own PLAYER
     // INFORMATION keeps the join's Password greyed. True when the lobby opened.
     private static bool HostWithAPassword(TestContext ctx, End host)

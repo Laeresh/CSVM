@@ -227,6 +227,10 @@ public sealed record SessionSpec
     /// <c>--net-host</c> or <c>--net-join</c> takes it too. Null when absent or out of range. The
     /// test runner hands every engine shard its own.</summary>
     public int? NetPortBase { get; private set; }
+    /// <summary><c>--master-server=url</c>: the master server the menu's multiplayer door lists
+    /// games on and joins by code through, beating the saved <c>netMasterServer</c> option. An
+    /// empty or unreadable value is "" and turns the master server off. Null when absent.</summary>
+    public string? MasterServer { get; private set; }
     /// <summary><b>Resolved.</b> Open the aircraft's per-part HP sliders at launch, a modifier on
     /// <see cref="SessionMode.Viewer"/> (the parked plane) or <see cref="SessionMode.Fly"/> (the
     /// flown one), dropped by the modes that build no aircraft at all. The lab itself is always
@@ -1125,6 +1129,15 @@ public sealed record SessionSpec
             else if (arg == "--net-host") { netHost = ""; }
             else if (arg.StartsWith("--net-host=")) { netHost = arg["--net-host=".Length..]; }
             else if (arg.StartsWith("--net-join=")) { s.NetJoin = arg["--net-join=".Length..]; }
+            else if (arg.StartsWith("--master-server="))
+            {
+                string value = arg["--master-server=".Length..];
+                s.MasterServer = MasterAddress.Parse(value) != null ? value : "";
+                if (value.Length > 0 && s.MasterServer.Length == 0)
+                {
+                    notes.Add(new Note("core", $"--master-server: '{value}' is not an http or https address, the master server is off"));
+                }
+            }
             else if (arg.StartsWith("--net-port-base="))
             {
                 string value = arg["--net-port-base=".Length..];

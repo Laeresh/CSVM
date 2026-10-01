@@ -6,6 +6,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CSVM", "CSVM.csproj", "{A1B
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CSVM.Tests", "..\CSVM.Tests\CSVM.Tests.csproj", "{A1B2C3D4-0000-4000-8000-000000000002}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MasterServer", "..\server\MasterServer\MasterServer.csproj", "{FEB18FAE-A948-4823-8EDE-0C7B3351D8E5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MasterServer.Tests", "..\server\MasterServer.Tests\MasterServer.Tests.csproj", "{44398970-0F98-4B41-B303-A70B63CB240E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -23,5 +27,13 @@ Global
 		{A1B2C3D4-0000-4000-8000-000000000002}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1B2C3D4-0000-4000-8000-000000000002}.ExportDebug|Any CPU.ActiveCfg = Debug|Any CPU
 		{A1B2C3D4-0000-4000-8000-000000000002}.ExportRelease|Any CPU.ActiveCfg = Release|Any CPU
+		{FEB18FAE-A948-4823-8EDE-0C7B3351D8E5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FEB18FAE-A948-4823-8EDE-0C7B3351D8E5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FEB18FAE-A948-4823-8EDE-0C7B3351D8E5}.ExportDebug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FEB18FAE-A948-4823-8EDE-0C7B3351D8E5}.ExportRelease|Any CPU.ActiveCfg = Release|Any CPU
+		{44398970-0F98-4B41-B303-A70B63CB240E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{44398970-0F98-4B41-B303-A70B63CB240E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{44398970-0F98-4B41-B303-A70B63CB240E}.ExportDebug|Any CPU.ActiveCfg = Debug|Any CPU
+		{44398970-0F98-4B41-B303-A70B63CB240E}.ExportRelease|Any CPU.ActiveCfg = Release|Any CPU
 	EndGlobalSection
 EndGlobal

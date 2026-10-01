@@ -32,6 +32,10 @@ public interface INetLink
     /// <summary>Payloads taken off the socket while no listener was bound; see
     /// <see cref="INetTransport.Bind"/>, which replays them.</summary>
     int PendingPayloads { get; }
+
+    /// <summary>Why the link went down, as a player reads it, or "" when the carrier has no word
+    /// for it. A board shows it in place of a bare refusal.</summary>
+    string LinkFault => "";
 }
 
 /// <summary>

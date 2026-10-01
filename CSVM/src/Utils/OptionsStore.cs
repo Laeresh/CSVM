@@ -239,6 +239,12 @@ public sealed class OptionsDef
     /// <summary>The game name the Game Information box last took, which prefills it next session.
     /// </summary>
     public string? NetGameName { get; set; }
+
+    /// <summary>The master server the multiplayer door lists games on and joins by code through,
+    /// as <see cref="MasterAddress.Parse"/> reads it. ⚠ No screen offers this; the key is set by
+    /// hand and <c>--master-server=</c> beats it. Null leaves the door to LAN and direct play.
+    /// </summary>
+    public string? NetMasterServer { get; set; }
 }
 
 /// <summary>
@@ -387,6 +393,7 @@ public sealed class OptionsStore
             }
 
             Write(w, "netGameName", def.NetGameName);
+            Write(w, "netMasterServer", def.NetMasterServer);
             w.WriteEndObject();
         }
 
@@ -444,6 +451,7 @@ public sealed class OptionsStore
                         ? place
                         : null,
                 NetGameName = ReadShaped(root, "netGameName", static v => v.Length <= NameLimit),
+                NetMasterServer = ReadShaped(root, "netMasterServer", static v => MasterAddress.Parse(v) != null),
             };
         }
         catch (JsonException)

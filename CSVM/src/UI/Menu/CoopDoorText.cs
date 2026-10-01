@@ -222,10 +222,10 @@ public static class CoopDoorText
         return $"{SessionName(advert, missionName)}. {Capital(GameCalled(advert))}{Players(advert.Players)} at {net.Address}. {state}";
     }
 
-    /// <summary>A campaign host's band: the port, the router's address and the guests on the
-    /// wire. <see cref="HostAddressLine"/> follows on a second line when it has
-    /// one. Empty while the door is not a campaign host, so a board with the door shut draws
-    /// nothing extra.</summary>
+    /// <summary>A campaign host's band: the port, the router's address, the guests on the wire,
+    /// and the master server's join code once it gives one. The second line is
+    /// <see cref="HostAddressLine"/> when it has one. Empty while the door is not a campaign host,
+    /// so a board with the door shut draws nothing extra.</summary>
     public static string HostBand(NetPlayFeature net)
     {
         ArgumentNullException.ThrowIfNull(net);
@@ -244,9 +244,14 @@ public static class CoopDoorText
         };
         int guests = net.Peers;
         string joined = guests == 1 ? "1 guest" : $"{guests.ToString(CultureInfo.InvariantCulture)} guests";
+        string code = net.JoinCode is { } listed ? $"  CODE {listed}" : "";
         string address = HostAddressLine(net);
-        return address.Length > 0 ? $"NETWORK OPEN  {where}  {joined}\n{address}" : $"NETWORK OPEN  {where}  {joined}";
+        return address.Length > 0 ? $"NETWORK OPEN  {where}  {joined}{code}\n{address}" : $"NETWORK OPEN  {where}  {joined}{code}";
     }
+
+    /// <summary>The lobby chat's note naming the code internet guests join this host by, which the
+    /// master server gave it.</summary>
+    public static string JoinCodeNote(string code) => $"Internet guests join with code {code}.";
 
     /// <summary>A host band's second line: the IPv6 address a guest outside this network types,
     /// and the copy key. Without one it says so and names the LAN address. Empty while the door is

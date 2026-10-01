@@ -2337,8 +2337,10 @@ public partial class Launcher : Node3D
         // The multiplayer door. The carrier and the router arrive as delegates. That is what
         // keeps the feature, and every board over it, clear of the socket and the engine.
         // Which carrier they open is `Net/NetCarrier.cs`'s, never this registration's.
+        var version = Net.NetBuildVersion.Parse(BuildVersion.Current);
+        var master = MasterServer();
         _netDoor = new NetPlayFeature(
-            (port, guests, bind) => Net.NetCarrier.Host(port, guests, bind),
+            (port, guests, bind) => Net.NetCarrier.HostListed(port, guests, bind, master == null ? null : () => MasterServerLink.Open(master)),
             (address, port) => Net.NetCarrier.Join(address, port),
             new Net.RouterAccess(
                 Net.NetCarrier.PortMap,
@@ -2349,11 +2351,13 @@ public partial class Launcher : Node3D
                 Net.NetCarrier.PinholeClose),
             Net.NetCarrier.Lan)
         {
-            Version = Net.NetBuildVersion.Parse(BuildVersion.Current),
+            Version = version,
             LanNetworks = LocalNetworks.Ipv4,
             StableIpv6 = Net.NetCarrier.StableIpv6,
             LanIpv4 = Net.NetCarrier.LanIpv4,
             CopyText = DisplayServer.ClipboardSet,
+            Master = master == null ? null : new Net.MasterDirectory(cancel => MasterServerLink.FetchGames(master, cancel)),
+            OpenCode = master == null ? null : code => Net.NetCarrier.JoinCode(() => MasterServerLink.Open(master), code, version),
         };
         host.Features.Add(_netDoor);
         host.AddSeat(seat);
@@ -2386,6 +2390,21 @@ public partial class Launcher : Node3D
         }
 
         return reason;
+    }
+
+    // The master server the door lists on. --master-server= beats the saved option. A pinned run
+    // reads no saved one, so no suite or golden ever asks a server anything.
+    private System.Uri? MasterServer()
+    {
+        string? saved = _spec.Det ? null : OptionsStore.UserOptions().Load().NetMasterServer;
+        var master = MasterAddress.Parse(_spec.MasterServer ?? saved);
+        if (master != null)
+        {
+            string webRtc = Net.WebRtcTransport.Available ? "loaded" : "not installed, so no internet host or join";
+            Log.Info("core", $"net: master server {master} (WebRTC library {webRtc})");
+        }
+
+        return master;
     }
 
     // The mouse in window pixels, the pointer half of seat 0: the viewport's last known position,

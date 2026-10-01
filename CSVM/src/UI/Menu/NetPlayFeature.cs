@@ -75,6 +75,10 @@ public sealed class NetPlayFeature : IMenuFeature
     /// <summary>What a LAN search asks at unless a suite points it elsewhere.</summary>
     public const string BroadcastAddress = LanBroadcast.Limited;
 
+    /// <summary>How long a join by code may stand at <see cref="NetDoorStage.Joining"/>. The
+    /// carrier gives up first with its own reason; this bounds a carrier that never says.</summary>
+    public const double CodeJoinTimeoutSeconds = 30.0;
+
     private readonly Func<int, int, string, INetTransport> _openHost;
     private readonly Func<string, int, INetTransport> _openJoin;
     private readonly Func<string, int, ILanSocket>? _lan;
@@ -103,6 +107,9 @@ public sealed class NetPlayFeature : IMenuFeature
     private LanSearch? _search;
     private int _hostPeer = -1;
     private INetLink? _link;
+    private INetListing? _listing;
+    private bool _byCode;
+    private string? _codeNoted;
     private NetSessionKind _kind = NetSessionKind.Dogfight;
     private byte _missionSeq = SessionAdvertMessage.NoMission;
     private string _hostName = "";
@@ -160,6 +167,25 @@ public sealed class NetPlayFeature : IMenuFeature
     /// <see cref="Port"/> where the address names none. Its text is the address a player writes.
     /// </summary>
     public NetEndpoint JoinTarget => NetEndpoint.Parse(Address, Port);
+
+    /// <summary>What a board names the join by: the join code for a join by code, else
+    /// <see cref="JoinTarget"/> as a player writes it.</summary>
+    public string JoinName => JoinsByCode(out string code) ? code : JoinTarget.ToString();
+
+    /// <summary>The master server's half of the games list, or null when no master server is set,
+    /// which leaves the list to the LAN search alone.</summary>
+    public MasterDirectory? Master { get; init; }
+
+    /// <summary>Opens a join to the game the master server lists under a code, or null when no
+    /// master server is set. A typed address in a code's form joins through this.</summary>
+    public Func<string, INetTransport>? OpenCode { get; init; }
+
+    /// <summary>The code the master server listed this host's game under, or null.</summary>
+    public string? JoinCode => IsHost ? _listing?.JoinCode : null;
+
+    /// <summary>Why this host's game is not on the master server's list, or "" while it is or no
+    /// master server is set.</summary>
+    public string ListingFault => IsHost ? _listing?.ListingFault ?? "" : "";
 
     /// <summary>Why the last open failed, or "" when none has. Shown on the board rather than
     /// thrown: a taken port and a refused join are both things a player fixes and retries.</summary>
@@ -257,17 +283,32 @@ public sealed class NetPlayFeature : IMenuFeature
         }
     }
 
-    /// <summary>Whether this door can search the LAN and answer a search.</summary>
-    public bool CanSearch => _lan != null;
+    /// <summary>Whether this door can search the LAN or ask a master server for games.</summary>
+    public bool CanSearch => _lan != null || Master != null;
 
-    /// <summary>Whether a LAN search is open.</summary>
-    public bool Searching => _search != null;
+    /// <summary>Whether a LAN search or a master server's list is open.</summary>
+    public bool Searching => _search != null || Master is { Asking: true };
 
     /// <summary>How many rounds the open search has asked, 0 while none is open.</summary>
     public int SearchRounds => _search?.Rounds ?? 0;
 
-    /// <summary>The open doors the LAN search heard, empty while none is open.</summary>
-    public IReadOnlyList<LanGame> Games => _search?.Games ?? (IReadOnlyList<LanGame>)Array.Empty<LanGame>();
+    /// <summary>The open doors the LAN search heard, then the games the master server lists, empty
+    /// while neither is open.</summary>
+    public IReadOnlyList<LanGame> Games
+    {
+        get
+        {
+            var lan = _search?.Games ?? (IReadOnlyList<LanGame>)Array.Empty<LanGame>();
+            if (Master is not { Asking: true, Games.Count: > 0 } master)
+            {
+                return lan;
+            }
+
+            var games = new List<LanGame>(lan);
+            games.AddRange(master.Games);
+            return games;
+        }
+    }
 
     /// <summary>Why the LAN search would not open, or "" when it did.</summary>
     public string SearchFault { get; private set; } = "";
@@ -790,10 +831,12 @@ public sealed class NetPlayFeature : IMenuFeature
         }
 
         EndLinger();
+        bool byCode = JoinsByCode(out string code);
         try
         {
             var (host, port) = JoinTarget;
-            _transport = new NetLobby(_openJoin(host, port), Version, joinPassword: Password);
+            var carrier = byCode ? OpenCode!(code) : _openJoin(host, port);
+            _transport = new NetLobby(carrier, Version, joinPassword: Password);
         }
         catch (Exception e) when (e is InvalidOperationException or ArgumentException)
         {
@@ -801,6 +844,7 @@ public sealed class NetPlayFeature : IMenuFeature
             return;
         }
 
+        _byCode = byCode;
         _link = _transport.Inner as INetLink;
         _hostPeer = -1;
         Fault = "";
@@ -817,7 +861,8 @@ public sealed class NetPlayFeature : IMenuFeature
     /// that ran it closes it.</summary>
     public void JoinGame(LanGame game)
     {
-        if (_transport != null || string.IsNullOrWhiteSpace(game.Address) || game.Port is < 1 or > 65535)
+        bool byCode = game.Code != null && OpenCode != null;
+        if (_transport != null || string.IsNullOrWhiteSpace(game.Address) || (!byCode && game.Port is < 1 or > 65535))
         {
             return;
         }
@@ -828,8 +873,8 @@ public sealed class NetPlayFeature : IMenuFeature
             return;
         }
 
-        Address = game.Address;
-        Port = game.Port;
+        Address = game.Code ?? game.Address;
+        Port = byCode ? Port : game.Port;
         OpenJoin();
     }
 
@@ -838,6 +883,7 @@ public sealed class NetPlayFeature : IMenuFeature
     /// <see cref="Games"/>. The answers land on later steps.</summary>
     public void Search()
     {
+        Master?.Ask();
         if (_lan == null)
         {
             return;
@@ -860,11 +906,13 @@ public sealed class NetPlayFeature : IMenuFeature
         _search.Ask();
     }
 
-    /// <summary>Closes the LAN search and forgets what it heard.</summary>
+    /// <summary>Closes the LAN search and the master server's list, and forgets what both heard.
+    /// </summary>
     public void StopSearch()
     {
         _search?.Dispose();
         _search = null;
+        Master?.Forget();
     }
 
     /// <summary>Drives the socket while the board is up. This is the only place a join lands, and
@@ -966,6 +1014,8 @@ public sealed class NetPlayFeature : IMenuFeature
 
         _transport = null;
         _link = null;
+        _listing = null;
+        _byCode = false;
         _released = false;
         _admitted.Clear();
         _refused.Clear();
@@ -1010,6 +1060,7 @@ public sealed class NetPlayFeature : IMenuFeature
     {
         StepLinger(dt);
         _search?.Poll();
+        Master?.Poll(dt);
         if (_transport == null)
         {
             return;
@@ -1028,7 +1079,9 @@ public sealed class NetPlayFeature : IMenuFeature
                 return;
             }
 
-            _responder?.Poll(CurrentAdvert(), Port);
+            var flying = CurrentAdvert();
+            _responder?.Poll(flying, Port);
+            _listing?.List(MasterDirectory.ListingOf(flying, Version));
             return;
         }
 
@@ -1057,6 +1110,8 @@ public sealed class NetPlayFeature : IMenuFeature
             var advert = CurrentAdvert();
             _transport.Advertise(advert);
             _responder?.Poll(advert, Port);
+            _listing?.List(MasterDirectory.ListingOf(advert, Version));
+            NoteJoinCode();
             return;
         }
 
@@ -1117,6 +1172,7 @@ public sealed class NetPlayFeature : IMenuFeature
         }
 
         _joining += dt;
+        double timeout = _byCode ? CodeJoinTimeoutSeconds : JoinTimeoutSeconds;
         if (_link?.LinkState == EnetLinkState.Up || (_link == null && _transport.AllPeers.Count > 0))
         {
             Stage = NetDoorStage.Joined;
@@ -1124,11 +1180,30 @@ public sealed class NetPlayFeature : IMenuFeature
         }
         else if (_link?.LinkState == EnetLinkState.Down)
         {
-            Fail($"{JoinTarget} refused the join");
+            Fail(_link.LinkFault is { Length: > 0 } why ? $"{JoinName}: {why}" : $"{JoinName} refused the join");
         }
-        else if (_joining >= JoinTimeoutSeconds)
+        else if (_joining >= timeout)
         {
-            Fail($"{JoinTarget} did not answer in {JoinTimeoutSeconds:0} seconds");
+            Fail($"{JoinName} did not answer in {timeout:0} seconds");
+        }
+    }
+
+    // A typed address in a code's written form, dash included, joins by code when a master server
+    // is set. The dash is what keeps a six-letter host name from reading as a code.
+    private bool JoinsByCode(out string code)
+    {
+        code = "";
+        return OpenCode != null && Address.Contains('-', StringComparison.Ordinal) && MasterWire.TryCode(Address, out code);
+    }
+
+    // The Multiplayer Lobby's chat names the join code once the master server gives one, and again
+    // if a reopened listing gives another.
+    private void NoteJoinCode()
+    {
+        if (JoinCode is { } code && code != _codeNoted && _dogfight is { Shown: true } lobby)
+        {
+            lobby.Note(CoopDoorText.NoteName, CoopDoorText.JoinCodeNote(code));
+            _codeNoted = code;
         }
     }
 
@@ -1153,6 +1228,8 @@ public sealed class NetPlayFeature : IMenuFeature
         }
 
         _link = _transport.Inner as INetLink;
+        _listing = _transport.Inner as INetListing;
+        _codeNoted = null;
         _kind = kind;
         Fault = "";
         Stage = NetDoorStage.Hosting;
@@ -1435,6 +1512,8 @@ public sealed class NetPlayFeature : IMenuFeature
         _responder = null;
         _transport = null;
         _link = null;
+        _listing = null;
+        _byCode = false;
         _released = false;
         _admitted.Clear();
         _refused.Clear();
@@ -1456,12 +1535,14 @@ public sealed class NetPlayFeature : IMenuFeature
 
     private DoorReading Read() => new(
         _transport, _transport?.Changes ?? 0, _transport?.Held ?? 0, Stage, Fault, Router.PortMap, Router.Pinhole, _search,
-        _search?.Changes ?? 0, SearchFault, Link, _admitted.Count, _dogfight, Copies);
+        _search?.Changes ?? 0, SearchFault, Link, _admitted.Count, _dogfight, Copies, Master?.Answers ?? 0, Master?.Fault ?? "",
+        JoinCode, ListingFault);
 
     // Everything a board draws from this door that can move without an input event. The lobby's
     // and the search's own counters stand for what arrived through them.
     private readonly record struct DoorReading(
         NetLobby? Wire, int WireChanges, int Held, NetDoorStage Stage, string Fault, UpnpPortMapResult? PortMap,
         UpnpPinholeResult? Pinhole, LanSearch? Search, int SearchChanges, string SearchFault, EnetLinkState? Link,
-        int Admitted, DogfightLobby? Dogfight, int Copies);
+        int Admitted, DogfightLobby? Dogfight, int Copies, int MasterAnswers, string MasterFault, string? JoinCode,
+        string ListingFault);
 }

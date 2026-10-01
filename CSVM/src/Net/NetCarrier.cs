@@ -5,9 +5,9 @@ namespace CSVM.Net;
 
 /// <summary>
 /// Which carrier a match runs over, chosen once. The menu door the launcher registers and the
-/// command line's own open both come through here. A build therefore changes carrier with no edit
-/// above the seam. The switch is <see cref="SteamTransport.SteamBuild"/>: without it a match runs
-/// over ENet by direct IP, with it over the Steam carrier.
+/// command line's own open both come through here, so no edit above the seam changes carrier. The
+/// switch is <see cref="SteamTransport.SteamBuild"/>: without it a match runs over ENet by direct
+/// IP, with it over the Steam carrier. A master server adds WebRTC beside ENet for the door.
 /// ⚠ Nothing above the seam may branch on <see cref="UsesSteam"/>. A carrier that will not open
 /// throws, and a board shows that the way it shows a taken port.
 /// </summary>
@@ -68,4 +68,47 @@ public static class NetCarrier
     public static INetTransport Join(string address, int port) => UsesSteam
         ? SteamTransport.Join(address, port)
         : EnetTransport.Join(address, port);
+
+    /// <summary>The menu door's host: <see cref="Host"/>, and beside it as one carrier a listed
+    /// WebRTC host over sockets <paramref name="master"/> opens. That needs a master server and the
+    /// WebRTC extension; without either it is <see cref="Host"/> alone and nothing else changes.
+    /// </summary>
+    public static INetTransport HostListed(int port, int maxGuests, string bindAddress, Func<IMasterSocket>? master)
+    {
+        var direct = Host(port, maxGuests, bindAddress);
+        if (master == null || UsesSteam)
+        {
+            return direct;
+        }
+
+        if (!WebRtcTransport.Available)
+        {
+            Log.Warn("core", $"net: a master server is set but this build has no WebRTC library; hosting for LAN and direct guests only");
+            return direct;
+        }
+
+        try
+        {
+            return new MergedTransport(direct, WebRtcTransport.Host(master, maxGuests));
+        }
+        catch (InvalidOperationException e)
+        {
+            Log.Warn("core", $"net: the WebRTC host would not open ({e.Message}); hosting for LAN and direct guests only");
+            return direct;
+        }
+    }
+
+    /// <summary>Starts a join to the game the master server lists under <paramref name="code"/>,
+    /// over a socket <paramref name="master"/> opens. Throws when this build has no WebRTC library
+    /// or the code is not one.</summary>
+    public static INetTransport JoinCode(Func<IMasterSocket> master, string code, NetBuildVersion version)
+    {
+        ArgumentNullException.ThrowIfNull(master);
+        if (!WebRtcTransport.Available)
+        {
+            throw new InvalidOperationException("joining by code needs the WebRTC library, which this build lacks (run InstallWebRtc.ps1)");
+        }
+
+        return WebRtcTransport.Join(master(), code, version);
+    }
 }

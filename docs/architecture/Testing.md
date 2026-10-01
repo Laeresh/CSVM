@@ -41,6 +41,12 @@ engine shard its own base, and these offsets keep one shard's suites apart, so n
 share a port. `Walk` bounds each suite's fallback walk and `At` turns an offset into a port. The
 report's `shard.netPortBase` is the base the process used, which `RunTests.ps1` checks.
 
+## src/Testing/LoopbackMaster.cs
+The master server's socket side in one process, for the WebRTC suites: a host is given a code, a
+guest naming it is numbered from 2 and announced, and a signal reaches only the end it names with
+the sender written as its source. It hands out no ICE servers, so a link stands on this machine's
+host candidates. The list, the expiry and the limits are the server's (`server/MasterServer`).
+
 ## src/Testing/PhaseAttribution.cs
 Godot-free and pure (`CSVM.Tests` proves it without the engine): buckets a `StartupProfile`'s raw
 phase names into archive/decode, sound preparation and runtime/world construction, and does the

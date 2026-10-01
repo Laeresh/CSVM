@@ -705,6 +705,29 @@ profiles, bindings, capture, prompts and glyphs never see the library. What diff
   `ExportRelease.ps1` ships in the zip, with the DLL's hash in `BUILD-INFO.txt`; and
   `SDL_JOYSTICK_DIRECTINPUT=0` in the launch scripts, a workaround for Godot's SDL3 (BL-033).
 
+## The WebRTC library and the master server
+
+**`InstallWebRtc.ps1` (repo root)** downloads webrtc-native 1.2.2's
+`godot-extension-webrtc_native.zip` from the godotengine release, checks its SHA-256 against the pin
+(GitHub's published digest), and unpacks the extension manifest, its licences and the Windows and
+Linux x86_64 libraries (debug and release) into `CSVM/addons/webrtc_native/`, which is git-ignored.
+It also adds the manifest to `CSVM/.godot/extension_list.cfg`, where a run that never opened the
+editor finds extensions; an editor import writes the same line. Unlike SDL2 the extension must sit
+inside the project folder Godot opens, so each checkout or worktree that should play over the
+internet runs it once. `-Verify` checks without installing.
+
+The game needs it only for internet play through a master server (`--master-server=`,
+`docs/cli.md`): `Net/WebRtcTransport.cs` reports `Available` false without it, the launcher logs that
+at startup, and LAN and direct play are unchanged. `ExportRelease.ps1` does not require it; Godot's
+export carries the platform's library when the extension is installed, and a build exported without
+it lists master-server games but cannot host or join them. The `webrtc-transport` suite skips
+without it.
+
+**`server/`** is the master server itself, a .NET 8 minimal API (`server/MasterServer/`) with its
+xUnit project (`server/MasterServer.Tests/`), both in `CSVM.sln`, so `dotnet build` and the units
+stage cover them. It compiles the game's `CSVM/src/Net/MasterProtocol.cs` rather than a copy. The
+Dockerfile, `docker-compose.yml` (master, coturn, Caddy), the coturn configuration, a systemd unit
+and the step-by-step deployment are in `server/README.md`.
 ## The mech3ax fork (`tools/mech3ax/`)
 
 **Crimson Skies support lives in the fork, not upstream.** Upstream removed it, so the fork is its

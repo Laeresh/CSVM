@@ -1,0 +1,26 @@
+# The master server without Docker: a published build in /opt/csvm-master run by its own user,
+# behind Caddy and coturn installed from the distribution (server/README.md, "Without Docker").
+# The settings live in /etc/csvm-master.env, which holds the TURN secret, so it is readable by
+# root only; systemd reads it before dropping to the service user.
+
+[Unit]
+Description=CSVM master server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=csvm-master
+Group=csvm-master
+WorkingDirectory=/opt/csvm-master
+EnvironmentFile=/etc/csvm-master.env
+Environment=ASPNETCORE_URLS=http://127.0.0.1:8080
+ExecStart=/usr/bin/dotnet /opt/csvm-master/csvm-master.dll
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

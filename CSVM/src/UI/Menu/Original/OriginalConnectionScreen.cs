@@ -665,7 +665,7 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
         switch (net.Stage)
         {
             case NetDoorStage.Joining:
-                text = $"Connecting to {net.JoinTarget} ...";
+                text = $"Connecting to {net.JoinName} ...";
                 answer = new(OriginalShell.DialogCancelKey, CampaignBoards.DialogCenterKey, _text.Word(101, "Cancel"), () => EndJoin(net));
                 break;
             case NetDoorStage.Joined:

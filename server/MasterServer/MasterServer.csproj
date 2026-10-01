@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>CSVM.Master</RootNamespace>
+    <AssemblyName>csvm-master</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The wire is the game's own file, compiled here as well, so the two ends cannot drift.
+         It names no engine type, which is what lets a plain web project build it. -->
+    <Compile Include="..\..\CSVM\src\Net\MasterProtocol.cs" Link="MasterProtocol.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="MasterServer.Tests" />
+  </ItemGroup>
+</Project>

@@ -558,6 +558,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/HitchSidecar.cs`, the hitch detector's write path: queues a tripped record and drains it to one `[perf] hitch` line plus one JSON sidecar line.
 - `src/Utils/HoldToRepeat.cs`, tap-versus-hold timing for one button: an initial delay, then a repeat every interval until release.
 - `src/Utils/HostAddress.cs`, the stable global IPv6 address and the LAN IPv4 address a host names to its guests, with the temporary, deprecated, ULA and link-local addresses excluded.
+- `src/Utils/MasterAddress.cs`, a master server's address as the option and the flag spell it, and the URLs of its paths, the socket's under the WebSocket scheme.
 - `src/Utils/LocalNetworks.cs`, the IPv4 address and mask of every adapter that is up, read from the system for the LAN search, outside `Net` because that may not name `System.Net`.
 - `src/Utils/Log.cs`, the diagnostic log: a fixed category vocabulary over four levels, a filtered console and an always-complete file sink (`.scratch/logs/`, `logs/` in an exported build).
 - `src/Utils/MeasuredRenderTime.cs`, the root viewport's measured render CPU and GPU times, published by the render thread so a frame reads them without waiting for it.
@@ -603,6 +604,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Testing/TestHarness.cs`, `--run-tests`: the suite registry, `TestContext`, the PASS/FAIL/SKIP table, `test-report.json` and the process exit code.
 - `src/Testing/SuiteShards.cs`, the `shard:<index>/<count>` term and the deterministic weighted division behind it, over `analysis/engine-suite-weights.json`.
 - `src/Testing/SuitePorts.cs`, where each socket-opening suite opens its socket: an offset into this process's `--net-port-base` block, so concurrent shards never share a port.
+- `src/Testing/LoopbackMaster.cs`, the master server's socket side in one process: codes, guest numbers and signal routing, with no ICE servers, for the WebRTC suites.
 - `src/Testing/PhaseAttribution.cs`, buckets a build's `StartupProfile` phases into archive/decode, sound preparation and world construction for the report.
 - `src/Testing/CountingEmitterFactory.cs`, the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
 - `src/Testing/RecordingEmitterRenderer.cs`, the no-GPU `IEmitterRenderer` fake: keeps a `Puffer`'s particles instead of drawing, so its modes are testable.
@@ -635,6 +637,7 @@ The process and the per-launch session: the top family bar `Testing`, so nothing
 - `src/Launch/TuningWarmup.cs`, the startup pass that registers every `Config` key before the orphan report and `--dump-config` read the registry.
 - `src/Launch/MenuAudioService.cs`, the menus' audio host: the music channel, the briefing narration player, the cue player behind `MenuCueTable`, and the AUDIO page's live mix preview.
 - `src/Launch/MenuCueTable.cs`, the menu cue table: cue name to wav under the rof tree's `ASSETS/SOUNDS`, the four the globals script binds.
+- `src/Launch/MasterServerLink.cs`, the shipped way to the master server over .NET's HTTP and WebSocket clients: the games list fetch and the socket with its two loops.
 
 ### `src/Session/`, the session-build layer
 
@@ -828,7 +831,7 @@ in [`formats/extraction.md`](formats/extraction.md).
 
 What carries bytes between peers: the in-process carrier the suites run on, the ENet carrier a
 match ships over, the Steam carrier behind a build define, and the one place a build picks between
-them. Only the ENet carrier and the port mapping name an engine type, so a session cannot learn
+them. Only the ENet and WebRTC carriers and the port mapping name an engine type, so a session cannot learn
 what it is being carried by. The
 original's own message set, with ids and guarantees, is in [`org/multiplayer-messages.md`](org/multiplayer-messages.md).
 
@@ -838,6 +841,9 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/EnetTransport.cs`, the shipped carrier: the seam over Godot's ENet peer, hosting on a port or joining by address, with every roster change and payload reported out of one poll.
 - `src/Net/SteamTransport.cs`, the Steam carrier's place in the seam with no SDK behind it: every way in throws "not built with the Steamworks SDK", and `SteamBuild` is the `CSVM_STEAM` define.
 - `src/Net/NetCarrier.cs`, which carrier a match runs over, chosen once: the door's registration and the command line both open through it, and a build define is the whole of the choice.
+- `src/Net/WebRtcTransport.cs`, the WebRTC carrier: a host listed on the master server and a guest joining by code, negotiated through its socket with STUN and a TURN fallback, the third type allowed to name a Godot networking type.
+- `src/Net/WebRtcFraming.cs`, the frame a WebRTC payload rides in: the session channel and a per-channel sequence, with the sequenced discard a WebRTC data channel lacks.
+- `src/Net/MergedTransport.cs`, several host carriers as one roster, so a host takes ENet and WebRTC guests in one session, each guest renumbered from 2.
 - `src/Net/NetEndpoint.cs`, a host and port parsed from a typed or command-line address, a bare IPv6 address all host, and written back with the host bracketed.
 - `src/Net/NetPorts.cs`, the game and LAN discovery ports this process opens by default: the shipped pair, or the pair `--net-port-base` moves for a test process.
 - `src/Net/UpnpPortMap.cs`, a best-effort port mapping through Godot's UPnP client: five outcomes a host can show, never a throw, and never required for a match to be joinable.
@@ -857,6 +863,10 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/LanBroadcast.cs`, where a search asks: the limited broadcast and each IPv4 network's directed broadcast once, since Windows sends the limited one out of one adapter.
 - `src/Net/LoopbackLan.cs`, the in-process datagram network the suites and aids search on: broadcast to a port, no real socket, no firewall dialog.
 - `src/Net/LanDiscoverySocket.cs`, the shipped `ILanSocket` over Godot's UDP peer with broadcast allowed, the second type allowed to name a Godot networking type.
+- `src/Net/MasterProtocol.cs`, the master server's wire, compiled by the game and the server alike: paths, type words, limits, the join code and the JSON.
+- `src/Net/MasterSocket.cs`, the master server's socket as the carriers speak it, whole messages polled from the frame, with no socket API named.
+- `src/Net/MasterRegistration.cs`, a host's listing on the master server: the first send once the socket opens, a change at once, the rest on the heartbeat, and the code back.
+- `src/Net/MasterDirectory.cs`, the games list's master-server half: a fetch at most every five seconds, each listed game a row joined by its code, and the listing a host's advert makes.
 - `src/Net/NetMessages.cs`, the message vocabulary: one struct per message, each declaring its type word and reliability class, over a shared four-byte header.
 - `src/Net/NetWorldMessages.cs`, the host-owned world's messages: an AI's pose, fire and hit claim, a generator launch, a zeppelin's and a surface vehicle's path sample, and the world event.
 - `src/Net/NetCoopMessages.cs`, the co-op boards' lobby messages: the host's flow one guest follows (screen, mission, round, Ready mask, hangar, result), the host's campaign films, its hangar with each plane's holder, and a guest's plane pick and Ready under a round.

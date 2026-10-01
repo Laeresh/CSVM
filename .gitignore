@@ -15,6 +15,8 @@
 /CSVM/obj/
 /CSVM.Tests/bin/
 /CSVM.Tests/obj/
+/server/*/bin/
+/server/*/obj/
 *.screenshot.png
 # F12 in-game screenshots (rendered game frames = game-derived, must not be committed)
 /Screenshots/
@@ -96,3 +98,5 @@ analysis/capture-rigs/*-log.txt
 .mcp.json
 .pi/mcp.json
 .claude/settings.local.json
+# The webrtc-native GDExtension, fetched by InstallWebRtc.ps1 (binaries are never committed)
+/CSVM/addons/webrtc_native/

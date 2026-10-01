@@ -1,8 +1,8 @@
 # Net
 
 The network seam: what carries bytes between peers, the in-process carrier the suites run on, the
-ENet carrier a match ships over, and the one place a build picks between them. Only the ENet
-carrier and the port mapping name an engine type beyond Godot's plain math structs, and nothing
+ENet carrier a match ships over, the WebRTC carrier internet play rides, and the one place a build
+picks between them. Only the carriers and the port mapping name an engine type beyond Godot's plain math structs, and nothing
 here names a socket API, which is what lets one session run over the loopback in a plain unit test
 and over ENet in a match; the boundary and its exemptions are asserted over compiled metadata by
 `CSVM.Tests/NetNamespaceDependencyTests.cs`, which also holds every Steam name to the Steam
@@ -44,7 +44,8 @@ These are the design rules every module below is shaped by, and every multiplaye
   8 to 15 take the remake's own derived colours and the fan wraps. Co-op caps at four humans (`n/4`),
   the campaign's P1 to P4 field.
 - **The carrier is a flag.** ENet ships, by LAN search or direct IP with an IPv4 UPnP mapping or an
-  IPv6 pinhole. A Steam carrier (Networking Sockets, relay, lobbies) is added behind `CsvmSteam`
+  IPv6 pinhole. With a master server set (`--master-server=`, `server/README.md`), a host also lists
+  its game there and takes WebRTC guests, who join by code with STUN and a TURN fallback. A Steam carrier (Networking Sockets, relay, lobbies) is added behind `CsvmSteam`
   without touching a session; listing the game on Steam is a distribution and legal decision, not
   the code's.
 - **Two seams above the transport.** On the session side `INetTransport`; on the aircraft side a
@@ -65,7 +66,8 @@ These are the design rules every module below is shaped by, and every multiplaye
   returns every guest to the Connection screen with "Host closed the game". The game is advertised
   under the name Game Information gives it, with an optional password the host checks before a
   guest is admitted, and the host can boot a guest from the lobby or the cabin. A guest joins from
-  the Multiplayer Connection screen, by LAN search into the games list or by Internet IP address.
+  the Multiplayer Connection screen, by LAN search into the games list or by Internet IP address,
+  and with a master server set by its games in the same list or a typed join code.
   The Connection screen's Host opens the Multiplayer Lobby, where Dogfight is the one live mode;
   co-op has no lobby. The Built-in menu, off by default, keeps its own network boards.
 - **A pause halts nothing.** In a network session the pause sheet is an overlay (`PauseState`):
@@ -84,7 +86,8 @@ payload can be sent under, `INetTransportListener` is what a transport tells its
 joined, a peer left, a payload landed), and `INetTransport` is the carrier: the peer roster,
 `Send` of a byte span with its class and channel, `Bind` of the one listener, `Disconnect`, and
 `Step`, which is the only place a payload is ever delivered. `INetPeerAddress` is the optional
-address a carrier names a peer by, the key a boot bans. A session holds the interface and constructs
+address a carrier names a peer by, the key a boot bans; `INetListing` a host carrier's master-server
+listing and its join code. A session holds the interface and constructs
 neither implementation itself. Read `LoopbackTransport.cs` for the carrier the suites use.
 
 ## src/Net/LoopbackConditions.cs
@@ -129,9 +132,55 @@ the command line's own open both come through `Host` and `Join`, so a build chan
 no edit above the seam. `UsesSteam` is the switch, `Name` the log word. `PortMap`/`PortUnmap` are
 the router door a direct-IP host asks for, `Pinhole` (given the address) and `PinholeClose` its
 IPv6 pinhole, and `StableIpv6`/`LanIpv4` the addresses it names (`Utils/HostAddress.cs`). All are
-null for a carrier reachable without them. The launcher opens the pinhole for the stable address.
-⚠ Nothing above the seam branches on the carrier.
+null for a carrier reachable without them. `HostListed` adds a listed WebRTC host beside ENet as a
+`MergedTransport` when a master server is set and the extension loaded; `JoinCode` joins by code.
 
+## src/Net/WebRtcTransport.cs
+The carrier for internet play through the master server, over Godot's `WebRtcMultiplayerPeer` and
+the webrtc-native extension (`Available` is the test for it; `InstallWebRtc.ps1` fetches it). `Host`
+lists through `MasterRegistration` and offers each guest the server announces; `Join` asks for a
+code, answers the host's offer and closes its socket once linked. The server relays SDP and ICE
+candidates only; STUN and TURN come with each announcement. Three default data channels carry the
+classes, the session channel rides `WebRtcFraming`. A host reopens a dropped socket after
+`ReopenSeconds`; a guest that has not linked in `JoinTimeoutSeconds` is down with a `LinkFault`.
+Read `Testing/WebRtcTransportSuites.cs`.
+
+## src/Net/WebRtcFraming.cs
+The four-byte header every WebRTC payload rides in: the session channel, a flags byte and, for a
+sequenced payload, its 16-bit sequence on that channel to that peer. A WebRTC data channel has one
+delivery mode, so the carrier sends both unreliable classes unordered and the receiver discards a
+sequenced payload not newer than the newest from that sender on that channel, wrap included.
+Engine-free. Read `WebRtcFramingTests.cs`.
+
+## src/Net/MergedTransport.cs
+Several host carriers as one `INetTransport`, which is how a host with a master server takes ENet
+guests (LAN, direct IP) and WebRTC guests in one session. Each carrier numbers its own guests, so
+this gives every guest an id from 2 up and maps both ways; the host stays peer 1. The link answers
+from the first carrier, the addresses and the listing from whichever carrier has them.
+
+## src/Net/MasterProtocol.cs
+The master server's wire, one file compiled by the game and by `server/MasterServer` alike, so it
+names no other engine file. `MasterWire` holds the paths, the type words, the limits both ends keep
+(16 KiB a message, the 15 s heartbeat, the 45 s expiry), the join code's form (`TryCode`) and the
+JSON; `MasterGame` is one listing, `MasterMessage` one socket message either way, `MasterIceServer`
+one STUN or TURN entry. Add a word or field, never rename one. Read `MasterWireTests.cs` and
+`server/MasterServer.Tests/`.
+
+## src/Net/MasterSocket.cs
+`IMasterSocket`, the master server's socket as the WebRTC carrier speaks it: whole messages queued
+out and polled in from the frame, a state and a fault. Nothing here names a socket API; the shipped
+one is `Launch/MasterServerLink.cs`'s and the suites pass `Testing/LoopbackMaster.cs`'s.
+
+## src/Net/MasterRegistration.cs
+A host's listing on the master server, engine-free: the first listing goes as `host` once the socket
+opens, a changed one goes at once as `update`, an unchanged one every `MasterWire.HeartbeatSeconds`.
+`Take` reads the code the server gave, or its refusal into `Fault`. Read `MasterDirectoryTests.cs`.
+
+## src/Net/MasterDirectory.cs
+The games list's master-server half, engine-free: `Ask` fetches the list through a delegate at most
+every `RefreshSeconds`, `Poll` takes a finished answer, and every listed game becomes a `LanGame`
+row carrying its code in place of an address. `ListingOf` turns a host's advert into the listing
+it carries. The door, `UI/Menu/NetPlayFeature.cs`, holds one when a master server is set.
 ## src/Net/NetEndpoint.cs
 A host and the port a join opens on, as one value. `Parse` splits an address as a player types it
 or `--net-join` names it: a port follows a closing bracket or a lone colon, so a bare IPv6 address

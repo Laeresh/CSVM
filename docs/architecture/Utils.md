@@ -70,6 +70,12 @@ or Teredo one; `LanIPv4()` is the private IPv4 address on an adapter with a gate
 `Choose`, `ChooseLan` and `ParseLinuxTable` take data, so a unit test supplies the candidates.
 `EnetTransport` binds the stable address, and `NetCarrier` hands both reads to the door.
 
+## src/Utils/MasterAddress.cs
+A master server's address as the options file and `--master-server=` spell it: `Parse` takes an
+http or https URL or a bare host name (which takes https), keeps a path prefix, and refuses a
+query or another scheme; `At` is the URL of a path under it, a socket's in the ws or wss scheme of
+the same security. Plain text work over `Uri`. Read `MasterWireTests.cs`.
+
 ## src/Utils/BuildVersion.cs
 The build's own version, read once from `application/config/version` in `project.godot`, which is
 the number's one home. Three surfaces state it back so a report names its build without being

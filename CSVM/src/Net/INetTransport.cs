@@ -52,6 +52,24 @@ public interface INetPeerAddress
 }
 
 /// <summary>
+/// A host carrier that lists its game on the master server. The door hands it the listing on every
+/// step. The carrier sends it when it changes and on the heartbeat. It reads back the code a guest
+/// joins by. A carrier with no master server has none of this.
+/// </summary>
+public interface INetListing
+{
+    /// <summary>The code the master server listed the game under, or null while it has not.</summary>
+    string? JoinCode { get; }
+
+    /// <summary>Why the game is not listed, as a player reads it, or "" while nothing went wrong.
+    /// </summary>
+    string ListingFault { get; }
+
+    /// <summary>The listing the game carries from now on.</summary>
+    void List(MasterGame listing);
+}
+
+/// <summary>
 /// The carrier a session sends bytes over, with no idea what the bytes mean. It offers the peer
 /// roster, one send per payload with its reliability class, and a listener the arrivals and
 /// roster changes are reported to. Payloads are byte spans, so the message vocabulary sits
