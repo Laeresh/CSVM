@@ -2,6 +2,7 @@ using System.IO;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Hangar;
 using CSVM.Session.Roster;
+using CSVM.Spec;
 using CSVM.Utils;
 
 namespace CSVM.Testing;

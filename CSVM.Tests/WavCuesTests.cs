@@ -55,7 +55,7 @@ public class WavCuesTests
     [ExtractedDataFact]
     public void TheExtractedNarrationStillCarriesItsCuePoints()
     {
-        var soundsh = CSVM.SessionPaths.PreferUnzipped(
+        var soundsh = CSVM.Extraction.SessionPaths.PreferUnzipped(
             Path.Combine(TestData.ExtractedRoot!, "soundsh.zip"));
 
         var times = WavCues.ReadFrom(soundsh, "c1-HA-m1_briefing.wav");

@@ -1,5 +1,6 @@
 using System;
 using CSVM;
+using CSVM.Spec;
 using CSVM.UI.Menu;
 using Xunit;
 

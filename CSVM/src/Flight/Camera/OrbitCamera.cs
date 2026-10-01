@@ -1,14 +1,14 @@
 using Godot;
 
-namespace CSVM.UI.Overlays;
+namespace CSVM.Flight.Camera;
 
 /// <summary>
 /// The static inspection view's orbit-camera controller: LMB-drag orbit, mouse-wheel zoom, and
-/// AABB-based framing of a subject. Shared by <see cref="CSVM.Session.Launch.GameSession"/> and the
+/// AABB-based framing of a subject. Shared by <see cref="CSVM.Launch.GameSession"/> and the
 /// <c>--anim-lab</c> mode. Owns the orbit state and steers a <see cref="Camera3D"/> it does not
 /// own; the host keeps ownership of the placement flags and F11/F12. <see cref="Frame"/>'s own doc
 /// covers how the camera FOV sizes the orbit distance.
-/// ⚠ <see cref="Frame"/>'s <c>lookAt</c> is a pivot point, not a direction: with the eye it also
+/// ⚠ <see cref="Frame"/>'s <c>lookAt</c> is a pivot point, not a direction. With the eye it also
 /// sets the orbit radius, so a direction-only placement must be synthesized into a pivot first.
 /// </summary>
 public sealed class OrbitCamera

@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using CSVM.Bindings;
+using CSVM.Extraction;
 using CSVM.Sticks;
 using CSVM.UI.Boards;
 using CSVM.Utils;
@@ -108,10 +110,10 @@ public sealed partial class CinemaScreen : Node
     /// <summary>How many pictures have reached the screen.</summary>
     public int FramesShown => _cinema.FramesShown;
 
-    /// <summary>Opens the cinema a name means under <paramref name="dataRoot"/>, or null when the
-    /// file is not there or will not decode, because a flow that cannot show a cinema still has to
+    /// <summary>Opens the cinema a name means under <paramref name="dataRoot"/>. Returns null when
+    /// the file is not there or will not decode. A flow that cannot show a cinema still has to
     /// reach the screen after it. The name resolves without regard to case
-    /// (<see cref="CSVM.SessionPaths.Cinema"/>).</summary>
+    /// (<see cref="CSVM.Extraction.SessionPaths.Cinema"/>).</summary>
     public static CinemaScreen? Open(string dataRoot, string name, CinemaSkip skip)
     {
         string path = SessionPaths.Cinema(dataRoot, name);

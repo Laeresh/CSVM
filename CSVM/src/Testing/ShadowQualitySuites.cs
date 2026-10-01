@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 

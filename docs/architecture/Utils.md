@@ -108,7 +108,7 @@ up from a dark tone over about a second once the session reports the first frame
 meant to see. Owns the tone, the fade length, the clamp on the huge delta a blocking build hands
 the frame that closes over it, and the hold cap that releases a cover no session ever answers. A
 `--det` run builds a disabled ramp that covers nothing, so no pinned golden and no `--frames=N`
-shot sees it. Engine-free; `UI/Screens/SessionStartFade.cs` paints it and `Session/Launch/Launcher.cs` owns when
+shot sees it. Engine-free; `UI/Screens/SessionStartFade.cs` paints it and `Launch/Launcher.cs` owns when
 one is raised.
 
 ## src/Utils/HitchMonitor.cs
@@ -159,7 +159,7 @@ direct. Why the wait matters: `docs/verification.md` PERF-43.
 
 ## src/Utils/SceneCopy.cs
 A node subtree's copy for the three places that duplicate one in play: the splitscreen cloud decks
-(`Session/Launch/GameSession.cs`), the staged chute figures (`Mech3/WorldSession.cs`) and the glTF
+(`Launch/GameSession.cs`), the staged chute figures (`Mech3/WorldSession.cs`) and the glTF
 export (`Tooling/GltfExporter.cs`). `Duplicate()` builds each geometry node's property list, which
 under the separate render thread queues a call that writes into the caller's finished stack frame
 and kills the process. The copy reads a geometry node's properties off its class, then its
@@ -273,7 +273,7 @@ a present key, else the caller's in-code `const` default, read through at the po
 are `moduleCamelCase.fieldCamelCase`, grouped one nesting level in the JSON and flattened to
 dot-keys. Nothing writes the file and `config.json` is git-ignored, so the consts stay canonical;
 querying a key is also what registers it for `--dump-config`. `Config` names none of the modules
-that read it: the startup read of every key is `Session/Launch/TuningWarmup.cs`.
+that read it: the startup read of every key is `Launch/TuningWarmup.cs`.
 
 ## src/Utils/EffectsLevel.cs
 The original's graphics EffectsLevel option as a config key (`graphics.effectsLevel`: `high`,
@@ -293,7 +293,7 @@ session, refuses one. `--graphics=` beats the saved `graphicsMode` option (`Opti
 beats the `graphics.mode` config key, which beats the default; an unknown word at any layer warns
 and falls back. `--det` drops both machine-state layers and keeps only an explicit `--graphics=`,
 which is how a golden or a deterministic capture pins the mode on purpose. The mode itself is
-written up as a divergence in `docs/architecture/Root.md`.
+written up as a divergence in `docs/architecture/Spec.md`.
 
 ## src/Utils/AntiAliasingSetting.cs
 The anti-aliasing method, a VIDEO page display setting over `DisplayWords.AntiAliasingChoices`: `off`, `fxaa`, `smaa`,
@@ -316,7 +316,7 @@ split-screen panes share the world's one sun. Why each level stands where it doe
 
 ## src/Utils/ViewportQuality.cs
 What `AntiAliasingSetting` and `RenderScaleSetting` write on a 3D viewport, gathered here because
-there are four viewports to write them on: the root viewport `Session/Launch/Launcher.cs` owns, and the SubViewports
+there are four viewports to write them on: the root viewport `Launch/Launcher.cs` owns, and the SubViewports
 `Flight/Hud/CockpitOverlay.cs`, `Flight/Camera/SpyglassView.cs` and `UI/Boards/SplitScreen.cs` build. `Apply` runs once per viewport at
 construction and remembers it weakly; `ReapplyAll` writes the settings resolved now on every one still alive (a live mode switch, an Options apply). FXAA and SMAA go to `ScreenSpaceAA`, TAA to `UseTaa`. Below native the scale runs through
 `Scaling3DModeEnum.Fsr2` under `fsr2` and `Fsr` otherwise, and above native through `Bilinear`, the one mode Godot
@@ -336,7 +336,7 @@ cost. `Launcher` folds `ClutterReach` into the clutter fade global at startup an
 ## src/Utils/SunShadow.cs
 The shadow settings one `DirectionalLight3D` hands another, clamped to the receiving pass's far
 plane: `Flight/Hud/CockpitOverlay.cs`'s own sun takes the session sun's at build and on a live
-graphics-mode switch, and `Session/Launch/EnhancedLook.cs` resets the session sun from a fresh light
+graphics-mode switch, and `Launch/EnhancedLook.cs` resets the session sun from a fresh light
 through it. Below Flight and Session so both share one field list.
 
 ## src/Utils/VSyncSetting.cs
@@ -347,7 +347,7 @@ config key (true turns it on), then off and uncapped; a word outside `DisplayWor
 reads as never set, and `Default` is the word a never-set VIDEO row shows. `SavedWord` holds the
 `--det` guard. `Apply` is the one place `DisplayServer.WindowSetVsyncMode` and `Engine.MaxFps` are
 called, by `Launcher`'s startup and its Options apply, and logs the source that won. The cap is a
-render rate and reaches no simulation. Read `Session/Launch/Launcher.cs` next for both call sites.
+render rate and reaches no simulation. Read `Launch/Launcher.cs` next for both call sites.
 
 ## src/Utils/DisplayModeSetting.cs
 The window's display mode over `DisplayWords.DisplayModes`: a bordered window, a borderless one filling
@@ -410,7 +410,7 @@ and `Voice` sending into it. A resource rather than an `AudioServer.AddBus` call
 bus exists before the first node enters the tree. Every site that builds an `AudioStreamPlayer` or
 `AudioStreamPlayer3D` sets `Bus` from here at construction, because Godot resolves an unknown or
 unset bus name to Master with no error and a misplaced player is therefore silent about it. Bus 0
-carries the developer `--volume=` gain and the focus mute (`Session/Launch/Launcher.cs`); the three
+carries the developer `--volume=` gain and the focus mute (`Launch/Launcher.cs`); the three
 children carry the player's mix, written by `AudioMix`. The `audio-buses` suite holds both.
 
 ## src/Utils/AudioMix.cs
@@ -418,7 +418,7 @@ The player's mix: four 0..100 levels (Master, Music, Effects, Voice) into one li
 `category/100 x master/100`, floored at -80 dB so a level of 0 is silence rather than negative infinity. Master multiplies
 the other three instead of being a level of its own, so `Apply` writes only the three child buses and refuses index 0,
 which keeps `--volume=0` silencing a scripted run whatever the levels say. `Apply` takes a nullable level per category
-and falls back to the shipped default; it is the startup apply (`Session/Launch/Launcher.cs`), the live one, and idempotent.
+and falls back to the shipped default; it is the startup apply (`Launch/Launcher.cs`), the live one, and idempotent.
 `SavedLevels(det)` is the levels' one reader and answers four nulls under `--det`, so a mix saved at one machine's
 controls never reaches a scripted run. `Capture`/`Restore` take and put back the three child buses' gains verbatim, for
 the AUDIO page's preview, which owes back the mix it opened over. The arithmetic is pure and unit-tested.
@@ -427,7 +427,7 @@ the AUDIO page's preview, which owes back the mix it opened over. The arithmetic
 The developer output gain, the whole of what bus 0 carries: `Resolve` takes the command line's `--volume=` over the
 `audio.volume` config key over a default that is silence in a repo run and the resting gain in an exported one, and
 `VolumeDb` converts it with the same -80 dB floor `AudioMix` uses. The config key is read even where the flag beats it,
-so it self-registers for `--dump-config`. Resolution only: `Session/Launch/Launcher.cs` is the one caller that writes the bus,
+so it self-registers for `--dump-config`. Resolution only: `Launch/Launcher.cs` is the one caller that writes the bus,
 and is where a launch resolving to the resting gain writes nothing at all, keeping a full-volume launch byte-identical
 in output and console log. ⚠ The player's four saved levels are no part of this gain. They multiply on the three child
 buses underneath it (`AudioMix`), so the two reach the output as a product and a level saved at the controls cannot
@@ -444,8 +444,8 @@ older build wrote stays in the options file unread. Presentation names are plain
 The background of the process's one `WorldEnvironment`, which is a `ProceduralSkyMaterial` as the
 lighting rig builds it and belongs to no menu and no mission. `Black` writes flat black and `Sky`
 puts the sky back, leaving the sky material in place either way, and `IsBlack` is what a suite asks
-of a frame. `Session/Launch/Launcher.cs` owns every call: black on each menu show and at the quits that
+of a frame. `Launch/Launcher.cs` owns every call: black on each menu show and at the quits that
 still draw a frame, the sky at each launch, before a world or the cockpit pass's copy of the
 environment can read it. A menu frame with no presentation on screen is what this exists for: the
 apply's switch runs a frame after the exit that asked for it, and the presentation is already
-hidden. Read `Session/Launch/Launcher.cs` next for the three sites.
+hidden. Read `Launch/Launcher.cs` next for the three sites.

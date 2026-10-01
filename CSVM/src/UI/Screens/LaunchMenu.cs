@@ -11,6 +11,7 @@ using CSVM.Net;
 using CSVM.Session;
 using CSVM.Session.Campaign;
 using CSVM.Session.InstantAction;
+using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
 using CSVM.UI.Hangar;
@@ -913,7 +914,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     /// <summary>Opens the campaign on the named profile's scrapbook, at the mission a finished
-    /// mission just flew, cabin on its far side after <see cref="Session.Launch.Launcher"/>'s deferred
+    /// mission just flew, cabin on its far side after <see cref="Launch.Launcher"/>'s deferred
     /// hop. The profile is re-read from the store, the same discipline as
     /// <see cref="OpenCampaignCabin"/>, so the shown record is what the mission just wrote. A win on
     /// the campaign's last mission watches the closing film first
@@ -3763,7 +3764,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         bool banded = !CampaignBoards.DetailPaned(page, row, flow.Layout) && !detail.Contains('\n');
         _boardRoot.Show(
             CampaignBoards.For(page, row, _pressFrames > 0, detail, flow.Modal, flow.Layout),
-            BoardPalette.For(page.Screen),
+            CampaignBoards.Palette(page.Screen),
             banded ? detail : string.Empty,
             CampaignFooter(flow));
     }

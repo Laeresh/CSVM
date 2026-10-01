@@ -5,7 +5,7 @@ using CSVM.Flight.Modes;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM.Session.Launch;
+namespace CSVM.Launch;
 
 /// <summary>
 /// A live graphics switch drawn over, so the stall reads as work rather than a crash. The flight is

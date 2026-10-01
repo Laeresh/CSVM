@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CSVM;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;

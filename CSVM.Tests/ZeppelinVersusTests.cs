@@ -1,6 +1,7 @@
 using System;
 using CSVM.Flight.Modes;
 using CSVM.Net;
+using CSVM.Spec;
 using Godot;
 using Xunit;
 

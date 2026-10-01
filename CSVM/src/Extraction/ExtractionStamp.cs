@@ -3,7 +3,7 @@ using System.IO;
 using System.Text.Json;
 using CSVM.Utils;
 
-namespace CSVM.Session.Launch;
+namespace CSVM.Extraction;
 
 /// <summary>How an extraction tree's stamp stands against <see cref="ExtractionStamp.Schema"/>.</summary>
 public enum StampStanding

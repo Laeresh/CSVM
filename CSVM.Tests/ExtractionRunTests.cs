@@ -6,7 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using CSVM.Extraction;
-using CSVM.Session.Launch;
+using CSVM.Spec;
 using Xunit;
 
 namespace CSVM.Tests;

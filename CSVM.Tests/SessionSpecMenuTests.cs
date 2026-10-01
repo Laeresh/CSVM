@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using CSVM;
+using CSVM.Bindings;
 using CSVM.Mech3;
+using CSVM.Spec;
 using Xunit;
 
 namespace CSVM.Tests;

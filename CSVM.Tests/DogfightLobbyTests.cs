@@ -629,7 +629,7 @@ public sealed class DogfightLobbyTests
     {
         static bool Ships(string chapter, string mission)
         {
-            string path = CSVM.SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, mission);
+            string path = CSVM.Extraction.SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, mission);
             return System.IO.File.Exists(path) || System.IO.Directory.Exists(path);
         }
 

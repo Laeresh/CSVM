@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Flight.Hud;
-using CSVM.Session.Launch;
+using CSVM.Launch;
 using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.Tooling;
 using CSVM.Utils;
 using Godot;
@@ -611,7 +613,7 @@ internal static class GraphicsSwitchSuites
             CaptureDirector = new CaptureDirector(spec),
             MasterSeed = 1,
             Camera = camera,
-            Orbit = new UI.Overlays.OrbitCamera(camera),
+            Orbit = new Flight.Camera.OrbitCamera(camera),
             Sun = sun,
             Env = env,
             MenuDriven = false,

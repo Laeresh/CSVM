@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using CSVM.Extraction;
 using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
@@ -108,13 +109,13 @@ public sealed class CampaignFeature : IMenuFeature
 
     /// <summary>The chapter cinema every cabin door runs its handoff through, or null when the
     /// caller has none and a cabin door simply opens the cabin. One instance serves both
-    /// presentations, and its latch is what stops a film replaying (<c>Session/Launch/Launcher.cs</c>).
+    /// presentations, and its latch is what stops a film replaying (<c>Launch/Launcher.cs</c>).
     /// </summary>
     public ChapterCinema? ChapterCinema { get; }
 
-    /// <summary>The closing cinema the scrapbook door a flown mission takes runs its handoff
-    /// through, or null when the caller has none and that door simply opens the book. One instance
-    /// serves both presentations (<c>Session/Launch/Launcher.cs</c>), and the flown mission's own result
+    /// <summary>The closing cinema a flown mission's scrapbook door runs its handoff through. It is
+    /// null when the caller has none, and that door then simply opens the book. One instance
+    /// serves both presentations (<c>Launch/Launcher.cs</c>), and the flown mission's own result
     /// is what decides whether it plays.</summary>
     public ClosingCinema? ClosingCinema { get; }
 
@@ -533,7 +534,7 @@ public sealed class CampaignFeature : IMenuFeature
 
         if (!_guestBuilds.TryGetValue(at, out var def))
         {
-            def = CSVM.Session.Launch.CustomPlaneWire.Def(_guestHangar[at].Build);
+            def = CSVM.Flight.Hangar.CustomPlaneWire.Def(_guestHangar[at].Build);
             _guestBuilds[at] = def;
         }
 
@@ -1113,7 +1114,7 @@ public sealed class CampaignFeature : IMenuFeature
 
         if (!_hangarBuilds.TryGetValue(plane.Name, out var build))
         {
-            build = CSVM.Session.Launch.CustomPlaneWire.Build(Planes?.Load(plane.Name) ?? CampaignProgression.BuildForOwned(plane));
+            build = CSVM.Flight.Hangar.CustomPlaneWire.Build(Planes?.Load(plane.Name) ?? CampaignProgression.BuildForOwned(plane));
             _hangarBuilds[plane.Name] = build;
         }
 

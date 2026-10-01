@@ -2,13 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using CSVM.Extraction;
 using CSVM.Flight;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Modes;
+using CSVM.Launch;
 using CSVM.Net;
 using CSVM.Session;
-using CSVM.Session.Launch;
 using CSVM.Session.Roster;
+using CSVM.Spec;
 using CSVM.Tooling;
 using CSVM.Utils;
 using Godot;
@@ -650,7 +652,7 @@ internal static class NetSessionSuites
             CaptureDirector = new CaptureDirector(spec),
             MasterSeed = seed,
             Camera = camera,
-            Orbit = new UI.Overlays.OrbitCamera(camera),
+            Orbit = new Flight.Camera.OrbitCamera(camera),
             Sun = sun,
             Env = new Godot.Environment(),
             MenuDriven = false,

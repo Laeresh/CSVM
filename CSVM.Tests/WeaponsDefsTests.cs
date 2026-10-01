@@ -1,5 +1,6 @@
 using System.IO;
 using System.Linq;
+using CSVM.Extraction;
 using CSVM.Flight.Weapons;
 using CSVM.Tooling;
 using Xunit;

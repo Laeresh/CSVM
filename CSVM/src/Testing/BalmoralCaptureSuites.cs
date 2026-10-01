@@ -2,11 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
+using CSVM.Spec;
 using Godot;
 
 namespace CSVM.Testing;

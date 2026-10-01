@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using CSVM.Bindings;
+using CSVM.Effects;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Audio;
@@ -16,6 +19,7 @@ using CSVM.Session.InstantAction;
 using CSVM.Session.Objectives;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.Tooling;
 using CSVM.UI.Boards;
 using CSVM.UI.Overlays;
@@ -23,7 +27,7 @@ using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM.Session.Launch;
+namespace CSVM.Launch;
 
 /// <summary>
 /// The per-launch session node: one aircraft from the player's own extracted game data under orbit
@@ -35,7 +39,7 @@ namespace CSVM.Session.Launch;
 ///
 /// ⚠ Do not add a Teardown(); return-to-menu is a bare QueueFree and the session subtree frees
 /// atomically under <c>_worldRoot</c>. ⚠ Do not parse an arg here: a new flag is a SessionSpec
-/// change. Module entry: docs/architecture.md on src/Session/Launch/GameSession.cs.
+/// change. Module entry: docs/architecture.md on src/Launch/GameSession.cs.
 /// </summary>
 public partial class GameSession : Node3D
 {
@@ -386,7 +390,7 @@ public partial class GameSession : Node3D
     private StuntRace? _race;
     // One menu reader per player, built with that player's own pad binding, so a board menu can be
     // driven by its owner alone. Null before the rigs exist.
-    private UI.Screens.MenuInput[]? _menuInputs;
+    private UI.Boards.MenuInput[]? _menuInputs;
     // Who is holding the sim clock and why, shared by every rig and by every board that halts.
     // Null before the rigs exist.
     private PauseState? _pauseState;
@@ -983,7 +987,7 @@ public partial class GameSession : Node3D
     /// <summary>Follow a live graphics-mode switch the launcher has already applied to the shaders,
     /// the sun, the Environment and the clutter fade. A layer only one mode builds is built or
     /// freed, and every build-time choice is made again. The zone is lit last, under the other arm.
-    /// docs/architecture/Root.md lists what follows and what waits for the next load.</summary>
+    /// docs/architecture/Spec.md lists what follows and what waits for the next load.</summary>
     public void ApplyGraphicsMode()
     {
         bool enhanced = GraphicsMode.Enhanced;
@@ -5819,18 +5823,18 @@ public partial class GameSession : Node3D
     // keyboard, and a session with no per-player split reads every connected pad (null).
     // ⚠ Through ForSessionSeat, never a bare MenuInput. An unseated reader reads no stick, so the
     // pause Controls page would save its empty menu rows over the stick profile's.
-    private UI.Screens.MenuInput[] BuildMenuInputs(int[][]? padAssignment)
+    private UI.Boards.MenuInput[] BuildMenuInputs(int[][]? padAssignment)
     {
-        var inputs = new UI.Screens.MenuInput[Math.Max(1, _rigs.Count)];
+        var inputs = new UI.Boards.MenuInput[Math.Max(1, _rigs.Count)];
         for (int i = 0; i < inputs.Length; i++)
-            inputs[i] = UI.Screens.MenuInput.ForSessionSeat(i, padAssignment?[i]);
+            inputs[i] = UI.Boards.MenuInput.ForSessionSeat(i, padAssignment?[i]);
         return inputs;
     }
 
     // The reader a board menu drives its cursor from, for a roster seat. The readers are this
     // machine's players in order, so the seat goes through its local player first: a guest's own
     // seat is not 0. A seat with no local player here falls back to player 1, who always exists.
-    private UI.Screens.MenuInput MenuInputFor(int seat)
+    private UI.Boards.MenuInput MenuInputFor(int seat)
     {
         var inputs = _menuInputs ??= BuildMenuInputs(null);
         int local = LocalPlayerOf(seat);
@@ -5858,7 +5862,7 @@ public partial class GameSession : Node3D
         }
 
         var (chapterNumber, missionNumber) = campaign.Address;
-        var sheet = UI.Boards.PauseSheet.Load(
+        var sheet = UI.Screens.PauseSheet.Load(
             _zrdrPath, _messagesPath,
             UI.Menu.EscapeDialog.CampaignKey(chapterNumber, missionNumber), instantAction: false);
         if (sheet == null)
@@ -5884,7 +5888,7 @@ public partial class GameSession : Node3D
             return null;
         }
 
-        var sheet = UI.Boards.PauseSheet.LoadMultiplayer(_zrdrPath, _messagesPath, key);
+        var sheet = UI.Screens.PauseSheet.LoadMultiplayer(_zrdrPath, _messagesPath, key);
         if (sheet == null)
         {
             Log.Warn("ui", $"pause: no escape.zrd or Loading.zrd sheet for {_spec.Chapter} ({key})");
@@ -5893,7 +5897,7 @@ public partial class GameSession : Node3D
 
         Log.Info("ui", $"pause: {_spec.Chapter} Dogfight draws {sheet.State.Key}");
         return UI.Menu.Original.OriginalPauseBoard.Build(
-            pauseState, MenuInputFor, _dataRoot, sheet, () => UI.Boards.PauseReadout.Empty);
+            pauseState, MenuInputFor, _dataRoot, sheet, () => UI.Screens.PauseReadout.Empty);
     }
 
     // An Instant Action sortie's own sheet: ia_escape.zrd's blackboard for its chapter and mission
@@ -5909,7 +5913,7 @@ public partial class GameSession : Node3D
 
         string key = UI.Menu.EscapeDialog.InstantActionKey(
             CampaignSequence.ChapterNumber(_spec.Chapter), letter);
-        var sheet = UI.Boards.PauseSheet.Load(_zrdrPath, _messagesPath, key, instantAction: true);
+        var sheet = UI.Screens.PauseSheet.Load(_zrdrPath, _messagesPath, key, instantAction: true);
         if (sheet == null)
         {
             Log.Warn("ui", $"pause: no ia_escape.zrd sheet for {_spec.Chapter} {ia.Def.MissionType}");
@@ -5918,7 +5922,7 @@ public partial class GameSession : Node3D
 
         Log.Info("ui", $"pause: {_spec.Chapter} {ia.Def.MissionType} draws {sheet.State.Key}");
         return UI.Menu.Original.OriginalPauseBoard.Build(
-            pauseState, MenuInputFor, _dataRoot, sheet, () => UI.Boards.PauseReadout.Empty);
+            pauseState, MenuInputFor, _dataRoot, sheet, () => UI.Screens.PauseReadout.Empty);
     }
 
     // The parchment's own row order, which is the briefing's: every keyed IDENTITY by priority.
@@ -5938,21 +5942,21 @@ public partial class GameSession : Node3D
         }
     }
 
-    private UI.Boards.PauseReadout PauseReadout(
-        UI.Boards.PauseSheet sheet,
+    private UI.Screens.PauseReadout PauseReadout(
+        UI.Screens.PauseSheet sheet,
         CampaignDirector campaign,
         IReadOnlyList<UI.Menu.BriefingObjective> objectives,
         Flight.Modes.PauseState pauseState,
         AnimRuntime? runtime)
     {
         var graph = campaign.Graph;
-        var rows = UI.Boards.PauseReadout.Rows(objectives, n => graph?.CompletedOf(n) ?? false);
+        var rows = UI.Screens.PauseReadout.Rows(objectives, n => graph?.CompletedOf(n) ?? false);
 
-        var icons = new List<UI.Boards.PauseWorldIcon>();
+        var icons = new List<UI.Screens.PauseWorldIcon>();
         if (RigOf(pauseState.OwnerPlayerIndex)?.Controller is { } own)
         {
             var forward = -own.GlobalTransform.Basis.Z;
-            if (UI.Boards.PauseReadout.Icon(
+            if (UI.Screens.PauseReadout.Icon(
                 sheet.Shared.OwnShip, own.GlobalPosition.X, own.GlobalPosition.Z,
                 forward.X, forward.Z) is { } ship)
             {
@@ -5966,7 +5970,7 @@ public partial class GameSession : Node3D
         foreach (var hull in runtime?.FindNodes(PirateZepNode) ?? Array.Empty<Node3D>())
         {
             var nose = -hull.GlobalTransform.Basis.Z;
-            if (UI.Boards.PauseReadout.Icon(
+            if (UI.Screens.PauseReadout.Icon(
                 sheet.Shared.MyZep, hull.GlobalPosition.X, hull.GlobalPosition.Z,
                 nose.X, nose.Z) is { } zeppelin)
             {
@@ -5986,7 +5990,7 @@ public partial class GameSession : Node3D
             Log.Info("ui", $"pause icon {icon.Bitmap} at ({icon.WorldX:0}, {icon.WorldZ:0}) {where} the chart");
         }
 
-        return new UI.Boards.PauseReadout(rows, campaign.Memento, icons);
+        return new UI.Screens.PauseReadout(rows, campaign.Memento, icons);
     }
 
     private Flight.Camera.PlayerRig? RigOf(int playerIndex)
@@ -6360,7 +6364,7 @@ public partial class GameSession : Node3D
         // the owner's reader, so the keys driving the leaf would drive the menu under it too.
         _pauseBoard.Visible = false;
         _pauseBoard.ProcessMode = ProcessModeEnum.Disabled;
-        var pollers = new List<UI.Screens.MenuInput>();
+        var pollers = new List<UI.Boards.MenuInput>();
         var flying = new List<FlightController>();
         foreach (var rig in _rigs)
         {

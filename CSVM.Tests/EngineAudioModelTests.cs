@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Audio;
 using CSVM.Flight.Camera;

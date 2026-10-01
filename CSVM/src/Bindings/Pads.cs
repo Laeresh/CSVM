@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM;
+namespace CSVM.Bindings;
 
 /// <summary>
 /// Single source of truth for which gamepads exist. Every input reader goes through here rather

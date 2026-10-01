@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Tooling;
 using Xunit;
 

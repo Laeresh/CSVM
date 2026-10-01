@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using CSVM.Mech3;
+using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Overlays;
-using CSVM.UI.Screens;
 
-namespace CSVM.UI.Boards;
+namespace CSVM.UI.Screens;
 
 /// <summary>One row of the pause parchment: the objective's own words and whether it is done.
 /// A done row keeps the colour an open row has and takes the mark instead

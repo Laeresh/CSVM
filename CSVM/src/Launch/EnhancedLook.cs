@@ -1,10 +1,11 @@
 using System.Diagnostics;
 using CSVM.Mech3;
 using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM.Session.Launch;
+namespace CSVM.Launch;
 
 /// <summary>
 /// The enhanced graphics mode's settings on a sun and an Environment, in both directions. They go
@@ -96,7 +97,7 @@ public static class EnhancedLook
     private const float TonemapAgxWhite = 6.0f;
     private const float TonemapAgxContrast = 1.0f;
 
-    // The zone default FOG_COLOR (Flight/Airframe/Weather.cs's no-weather zone), which is the colour a
+    // The zone default FOG_COLOR (Effects/Weather.cs's no-weather zone), which is the colour a
     // horizon dome fades into at eye level. Enhanced mode's sky until a flown zone writes its own
     // over it, so a world with no weather.json still reflects a plausible sky.
     private static readonly Color DefaultSkyColor = new(0.69f, 0.69f, 0.69f);

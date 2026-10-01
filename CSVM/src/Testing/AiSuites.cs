@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Audio;
@@ -12,6 +13,7 @@ using CSVM.Session.Campaign;
 using CSVM.Session.InstantAction;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.Tooling;
 using CSVM.Utils;
 using Godot;
@@ -98,7 +100,7 @@ internal static class AiSuites
                     RigCount = 2,
                     Rigs = rigs,
                     PauseState = pauseState,
-                    MenuInputFor = _ => new UI.Screens.MenuInput(),
+                    MenuInputFor = _ => new UI.Boards.MenuInput(),
                     ExitSession = () => { },
                 }, new FixedFlightStarts());
             humanRoster.SetTargetSubParts(targetSource);

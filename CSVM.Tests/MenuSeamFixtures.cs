@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM;
+using CSVM.Spec;
 using CSVM.UI.Menu;
 
 namespace CSVM.Tests;

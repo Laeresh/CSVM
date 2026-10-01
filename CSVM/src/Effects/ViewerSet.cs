@@ -1,4 +1,4 @@
-namespace CSVM.Flight.Camera;
+namespace CSVM.Effects;
 
 using System.Collections.Generic;
 using Godot;

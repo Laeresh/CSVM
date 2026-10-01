@@ -1,6 +1,6 @@
-# Root
+# Spec
 
-The three files at the root of `CSVM/src` (`SessionSpec.cs`, `SessionPaths.cs`, `Pads.cs`), plus the enhanced graphics mode, a rendering divergence that spans every namespace.
+The `CSVM.Spec` family (`src/Spec/`, the launch args as one value) and the enhanced graphics mode, a rendering divergence that spans every namespace.
 
 One `## src/...` entry per module, body at most 8 lines, 12 for the highest-traffic modules.
 
@@ -30,7 +30,7 @@ leaving the fog where it is; `LIGHT_STATE` point lights are mirrored onto real
 scales its colour above 1.0 to feed an Environment glow pass, and an AgX tonemap rolls the
 resulting HDR scene off instead of clipping it; SSAO adds contact shading in ambient light, and
 SSR reflects the shoreline off water surfaces the engine already classifies as `"water"`
-(`Session/Launch/EnhancedLook.cs`); the sky those water surfaces reflect where SSR finds nothing is
+(`Launch/EnhancedLook.cs`); the sky those water surfaces reflect where SSR finds nothing is
 the flown zone's own `FOG_COLOR`, painted flat over Godot's procedural placeholder as a `Sky`
 resource (`EnhancedLook.ApplyEnvironment`, `WeatherRig.WriteSkyColor`). The cockpit interior pass
 and every splitscreen pane pick up the same settings and the same per-zone updates, since both
@@ -87,24 +87,7 @@ What follows the switch, and how:
 
 Nothing waits for the next mission load.
 
-## src/Pads.cs
-Single source of truth for which gamepads exist: every reader goes through it rather than
-`Input.GetConnectedJoypads()`. Owns the phantom-device policy (span every pad, never `pads[0]`),
-`Disabled` (`--no-pads`) and the focus gate that suppresses reads without un-joining anyone.
-`AssignPads` is the launch-time roster split: P2 to P4 take roster POSITIONS in order and P1 gets
-every pad none of them claimed, so a device occupying a position without producing input takes that
-seat and leaves the real pad in P1's pool, flying P1's plane beside P1's own. `LogPads` records the
-roster with position and id separately, which is what makes that mismatch readable afterwards. A
-menu-driven launch binds by device id instead (`Launcher.BindMenuPads`) and so seats no phantom.
-
-## src/SessionPaths.cs
-Static resolver for the extracted-data paths (`ChapterTextures`/`ChapterGamez`/`ChapterZrdr`/
-`MissionZrdr`) under a data root, plus `PreferUnzipped` (an unpacked sibling dir beats its `.zip`)
-and the `--zip-assets` switch that inverts it. A chapter or mission in either case maps through
-`Extraction/ZbdTree.cs` to the case the extraction wrote. The `rtextureN` tier decode is on `docs/tooling.md`;
-the `--gamez=`/`--textures=` override policy stays in `GameSession`, not here.
-
-## src/SessionSpec.cs
+## src/Spec/SessionSpec.cs
 Everything the command line settles about a session as one immutable, engine-free record:
 `Parse(args)` parses **and** resolves, so a consumer reads an answer instead of re-deriving one, and
 the pure arg parsers (`ParseVec3`, `ParsePlanes`, `ParseHold`, …) are public so they are testable.

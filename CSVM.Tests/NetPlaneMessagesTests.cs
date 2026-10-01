@@ -2,7 +2,6 @@ using System;
 using System.Linq;
 using CSVM.Flight.Hangar;
 using CSVM.Net;
-using CSVM.Session.Launch;
 using Xunit;
 
 namespace CSVM.Tests;

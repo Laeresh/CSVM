@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using CSVM.Flight.Camera;
 using CSVM.Mech3;
 using Godot;
 

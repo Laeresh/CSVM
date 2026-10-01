@@ -4,7 +4,7 @@ using CSVM.Utils;
 using CSVM.Video;
 using Godot;
 
-namespace CSVM.UI.Screens;
+namespace CSVM.UI.Boards;
 
 /// <summary>
 /// A movie as something a composition can draw: a <see cref="MoviePlayback"/> and the

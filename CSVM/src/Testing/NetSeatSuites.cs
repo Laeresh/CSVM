@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using CSVM.Bindings;
+using CSVM.Extraction;
 using CSVM.Flight;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
@@ -14,6 +15,7 @@ using CSVM.Net;
 using CSVM.Session;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
+using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
 
@@ -319,7 +321,7 @@ internal static class NetSeatSuites
                 VersusMatch = match,
                 PadAssignment = padAssignment,
                 PauseState = new PauseState(),
-                MenuInputFor = _ => new UI.Screens.MenuInput(),
+                MenuInputFor = _ => new UI.Boards.MenuInput(),
                 ExitSession = () => { },
             }, field.Picker);
 

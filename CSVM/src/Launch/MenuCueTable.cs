@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace CSVM.Session.Launch;
+namespace CSVM.Launch;
 
 /// <summary>
 /// The menu cue table: which wav under <c>extracted/rof/ASSETS/SOUNDS</c> a semantic cue name

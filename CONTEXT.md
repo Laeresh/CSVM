@@ -235,6 +235,15 @@ The round live picture of the selected target drawn at its edge marker while the
 screen and inside the range gate. The picture alone is the **disc**.
 _Avoid_: zoom window, magnifier, picture-in-picture, scope
 
+## Code layout
+
+**Family**:
+A ranked group of namespaces in the family order `CSVM.Tests/FamilyOrderTests.cs` enforces: a
+top-level namespace such as `Flight` or `Session`, or `UI.Boards`, which ranks apart from the rest
+of `UI`. A type names only types in its own family or a lower one. Distinct from a **Format
+family**, which groups data formats.
+_Avoid_: layer, tier, module (a module is one file's entry in `docs/architecture/`)
+
 ## Format documentation
 
 **Format family**:
