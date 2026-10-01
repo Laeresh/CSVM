@@ -67,9 +67,9 @@ public sealed class ClutterBuilder
     // shapes, so CollisionObject3D._update_shapes() would clear the body and re-add nothing.
     private const float CollisionRegion = 1024f;
 
-    // One sprite shader per variant the decoration models actually ask for, process-wide so a live
-    // mode switch can rewrite each in place. Main thread only, like the builder.
-    private static readonly Dictionary<int, Shader> SpriteShaders = new();
+    // One sprite shader pair per variant the decoration models actually ask for, process-wide so a
+    // live mode switch finds the other mode's compiled (ShaderTwins). Main thread only.
+    private static readonly Dictionary<int, ModeShader> SpriteShaders = new();
 
     private readonly GameZ _gamez;
     private readonly TextureArchive _textures;
@@ -1205,14 +1205,17 @@ public sealed class ClutterBuilder
 
     // Key bits: 1 lit, 2 fogged, 4 clampUv, 8 spherical, 16 blend. Next free bit is 32.
     // ⚠ Keep the graphics mode out of the key: the cutout variant's coverage lines follow it
-    // through SceneBuilder's mode twins, one process-lifetime pair per key.
-    private Shader SpriteShader(bool lit, bool fogged, bool clampUv, bool spherical, bool blend)
+    // through ShaderTwins, one process-lifetime pair per key.
+    private ModeShader SpriteShader(bool lit, bool fogged, bool clampUv, bool spherical, bool blend)
     {
         int key = (lit ? 1 : 0) | (fogged ? 2 : 0) | (clampUv ? 4 : 0) | (spherical ? 8 : 0) | (blend ? 16 : 0);
-        SceneBuilder.EnsureCurrentText();
-        if (!SpriteShaders.TryGetValue(key, out var shader))
-            SpriteShaders[key] = shader = SceneBuilder.RegenerableShader(() => ShaderCode(lit, fogged, clampUv, spherical, blend), "clutter-sprite");
-        return SceneBuilder.ForMode(shader);
+        ShaderTwins.EnsureCurrent();
+        if (!SpriteShaders.TryGetValue(key, out var twins))
+        {
+            SpriteShaders[key] = twins = ShaderTwins.Make(() => ShaderCode(lit, fogged, clampUv, spherical, blend),
+                "clutter-sprite", $"clutter-sprite:{key:x}");
+        }
+        return twins;
     }
 
     // All instances of one kind as a single MultiMesh draw call. Null when an isolation run
@@ -1235,11 +1238,8 @@ public sealed class ClutterBuilder
         // SceneBuilder's world surfaces; wrapping bleeds the texture's opposite edge in at the
         // UV border (the hairline-seam / tracer-tail artifact).
         bool clampUv = SceneBuilder.UvsWithinUnitSquare(_gamez.Meshes[kind.MeshIndex].Polygons, pass: 0);
-        var mat = SceneBuilder.Track(new ShaderMaterial
-        {
-            Shader = SpriteShader(kind.Lit, kind.Fogged, clampUv,
-                kind.Billboard == SceneBuilder.BillboardKind.Spherical, blend),
-        });
+        var mat = ShaderTwins.Follow(new ShaderMaterial(), SpriteShader(kind.Lit, kind.Fogged, clampUv,
+            kind.Billboard == SceneBuilder.BillboardKind.Spherical, blend));
         if (tex != null)
             mat.SetShaderParameter("albedo_tex", tex);
 

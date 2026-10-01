@@ -868,7 +868,7 @@ public partial class GameSession : Node3D
         try
         {
             sw = Stopwatch.StartNew();
-            SceneBuilder.ReleaseUnusedMaterials();
+            ShaderTwins.ReleaseUnused();
             LoadArchives(state);
             LoadProgress.Report(LoadStep.Archives);
             // The SOUND archive is scoped to this build everywhere but the lab, whose node owns its
@@ -1579,7 +1579,7 @@ public partial class GameSession : Node3D
     private void WarmShadersNow()
     {
         long start = Stopwatch.GetTimestamp();
-        int twins = SceneBuilder.WarmOtherMode();
+        int twins = ShaderTwins.WarmOtherMode();
         int cards = _cloudField?.WarmOtherMode() ?? 0;
         Log.Info("world", $"shader warm-up: other mode's twins={twins} cloud_cards={cards} at load ms={Stopwatch.GetElapsedTime(start).TotalMilliseconds:0.0}");
     }

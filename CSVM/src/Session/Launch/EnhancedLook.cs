@@ -127,7 +127,7 @@ public static class EnhancedLook
         SwitchProfile.Begin();
         GraphicsMode.Set(enhanced);
         HasSwitched = true;
-        var regen = SceneBuilder.RegenerateShaders();
+        var regen = ShaderTwins.Regenerate();
         SwitchProfile.Mark("shaders");
         ApplySun(sun, enhanced, skipped);
         SwitchProfile.Mark("sun");

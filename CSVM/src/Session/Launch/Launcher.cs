@@ -1134,7 +1134,7 @@ public partial class Launcher : Node3D
 
         if (_session is { InSession: true } && GameClock.Current is { } diagClock)
         {
-            SceneBuilder.EnhancedDrawn |= GraphicsMode.Enhanced;
+            ShaderTwins.EnhancedDrawn |= GraphicsMode.Enhanced;
             Tooling.ShaderDiagnostics.Tick(GetTree().Root, diagClock.Frame);
         }
 

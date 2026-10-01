@@ -452,7 +452,7 @@ public sealed class PlaneBuilder
     {
         if (_flareMaterial == null)
         {
-            _flareMaterial = new ShaderMaterial { Shader = new Shader { Code = FlareShaderCode } };
+            _flareMaterial = new ShaderMaterial { Shader = ShaderTwins.Pooled(FlareShaderCode, "plane-flare") };
             if (_textures.Find(WingLights.FlareTexture) is { } tex)
                 _flareMaterial.SetShaderParameter("albedo_tex", tex);
             _flareMaterial.SetShaderParameter("tint", WingLights.FlareColor);

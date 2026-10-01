@@ -1977,23 +1977,20 @@ public sealed partial class ProjectilePool : Node3D
     /// splash <c>splash1.flt</c>/<c>bsplsh.flt</c>), collision-exempt, tracked for a short life and
     /// freed. Returns false, leaving the stand-in spark to show, when there is no world scene, the
     /// name resolves to nothing, or the node built no mesh.</summary>
-    // Installs this instance's own translucent twin as a surface override, so its own
-    // per-instance uniform drives the fade without editing the shared cached material every other
-    // splash's mesh also points at. Cached per source material (SceneBuilder.FadeShaderFor).
+    // Installs this instance's own translucent twin as a surface override. Its own per-instance
+    // uniform then drives the fade without editing the shared cached material every other splash's
+    // mesh also points at. Cached per source material (ShaderTwins.FadeCopy).
     // A source with no alpha path is counted, not swallowed: the splash plays its scale curves
     // without a fade rather than throwing.
     private void EnsureSplashFade(MeshInstance3D mi)
     {
         if (mi.Mesh is not { } mesh || mesh.GetSurfaceCount() == 0)
             return;
-        if (mesh.SurfaceGetMaterial(0) is not ShaderMaterial { Shader: { } sh } sm)
+        if (mesh.SurfaceGetMaterial(0) is not ShaderMaterial { Shader: not null } sm)
             return;
         if (!_splashFadeTwins.TryGetValue(sm, out var twin))
         {
-            var fadeShader = SceneBuilder.FadeShaderFor(sh);
-            twin = fadeShader != null ? SceneBuilder.Track((ShaderMaterial)sm.Duplicate()) : null;
-            if (twin != null)
-                twin.Shader = fadeShader;
+            twin = ShaderTwins.FadeCopy(sm);
             _splashFadeTwins[sm] = twin;
             if (twin == null)
                 Log.Info("weapons", $"splash fade: source shader has no alpha path, fade skipped, curves unaffected");

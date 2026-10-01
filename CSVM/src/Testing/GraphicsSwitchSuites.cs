@@ -188,12 +188,13 @@ internal static class GraphicsSwitchSuites
         + "switch to Original and back makes no new shader and rewrites no shader's text, so Godot "
         + "compiles nothing new: it only moves each material onto the twin it already compiled, "
         + "and no drawn material is left on the other mode's twin, the cockpit gauges' own copies "
-        + "and the fade twins included")]
+        + "and the fade twins included; under either mode the cache keys whose texts agree draw "
+        + "one shader between them")]
     internal static void ShaderTwins(TestContext ctx)
     {
         RequireData(ctx);
         bool wasEnhanced = GraphicsMode.Enhanced;
-        bool wasDrawn = Mech3.SceneBuilder.EnhancedDrawn;
+        bool wasDrawn = Mech3.ShaderTwins.EnhancedDrawn;
         var rig = Open(ctx, enhanced: true);
         try
         {
@@ -204,27 +205,31 @@ internal static class GraphicsSwitchSuites
             }
 
             // What the launcher sets on the first Enhanced frame, which a suite never draws.
-            Mech3.SceneBuilder.EnhancedDrawn = true;
-            int warmed = Mech3.SceneBuilder.WarmOtherMode();
-            ctx.Check(Mech3.SceneBuilder.OtherModeWarm,
+            Mech3.ShaderTwins.EnhancedDrawn = true;
+            int warmed = Mech3.ShaderTwins.WarmOtherMode();
+            ctx.Check(Mech3.ShaderTwins.OtherModeWarm,
                 $"the warm-up leaves every cache shader with its Original twin ({warmed} made now)");
-            int made = Mech3.SceneBuilder.TwinsMade;
-            int rewrites = Mech3.SceneBuilder.TextRewrites;
+            int made = Mech3.ShaderTwins.Made;
+            int rewrites = Mech3.ShaderTwins.TextRewrites;
             Switch(rig, false);
             int staleOriginal = StaleMaterials(rig);
+            var (originalShaders, originalTexts) = DrawnKeyShaders(rig);
             Switch(rig, true);
             int staleEnhanced = StaleMaterials(rig);
-            ctx.Check(Mech3.SceneBuilder.TwinsMade == made,
-                $"the two switches make no new shader ({Mech3.SceneBuilder.TwinsMade - made} made)");
-            ctx.Check(Mech3.SceneBuilder.TextRewrites == rewrites,
-                $"and rewrite no shader's text ({Mech3.SceneBuilder.TextRewrites - rewrites} rewritten)");
+            var (enhancedShaders, enhancedTexts) = DrawnKeyShaders(rig);
+            ctx.Check(originalShaders == originalTexts && enhancedShaders == enhancedTexts && originalTexts > 0,
+                $"keys whose texts agree draw one shader between them ({originalShaders} shaders for {originalTexts} texts under Original, {enhancedShaders} for {enhancedTexts} under Enhanced)");
+            ctx.Check(Mech3.ShaderTwins.Made == made,
+                $"the two switches make no new shader ({Mech3.ShaderTwins.Made - made} made)");
+            ctx.Check(Mech3.ShaderTwins.TextRewrites == rewrites,
+                $"and rewrite no shader's text ({Mech3.ShaderTwins.TextRewrites - rewrites} rewritten)");
             ctx.Check(staleOriginal == 0 && staleEnhanced == 0,
                 $"no drawn material stays on the other mode's twin ({staleOriginal} under Original, {staleEnhanced} under Enhanced)");
         }
         finally
         {
             rig.Close();
-            Mech3.SceneBuilder.EnhancedDrawn = wasDrawn;
+            Mech3.ShaderTwins.EnhancedDrawn = wasDrawn;
             Restore(wasEnhanced);
         }
     }
@@ -357,6 +362,24 @@ internal static class GraphicsSwitchSuites
         return found;
     }
 
+    // The distinct cache shaders the session draws, and their distinct texts.
+    private static (int Shaders, int Texts) DrawnKeyShaders(Rig rig)
+    {
+        var shaders = new HashSet<Shader>();
+        Walk(rig.Session, node =>
+        {
+            if (node is GeometryInstance3D geometry)
+            {
+                foreach (var material in Materials(geometry))
+                {
+                    if (Mech3.ShaderTwins.IsKeyShader(material.Shader))
+                        shaders.Add(material.Shader);
+                }
+            }
+        });
+        return (shaders.Count, shaders.Select(s => s.Code).Distinct(StringComparer.Ordinal).Count());
+    }
+
     // Drawn materials whose cache shader is not the standing mode's twin.
     private static int StaleMaterials(Rig rig)
     {
@@ -367,11 +390,10 @@ internal static class GraphicsSwitchSuites
                 return;
             foreach (var material in Materials(geometry))
             {
-                if (Mech3.SceneBuilder.FamilyOf(material.Shader) != null
-                    && !ReferenceEquals(Mech3.SceneBuilder.ForMode(material.Shader), material.Shader))
-                {
+                // A cache shader on a material that follows no key could not follow a switch either.
+                bool loose = Mech3.ShaderTwins.IsKeyShader(material.Shader) && !Mech3.ShaderTwins.IsTracked(material);
+                if (loose || Mech3.ShaderTwins.IsStale(material))
                     stale++;
-                }
             }
         });
         return stale;
@@ -382,7 +404,7 @@ internal static class GraphicsSwitchSuites
     {
         GraphicsMode.Set(wasEnhanced);
         ViewDistance.Set(null);
-        Mech3.SceneBuilder.RegenerateShaders();
+        Mech3.ShaderTwins.Regenerate();
         EffectsLevel.RegisteredScaleSq = EnhancedLook.ClutterFadeScaleSq();
         RenderingServer.GlobalShaderParameterSet(EffectsLevel.ShaderParam, EffectsLevel.RegisteredScaleSq);
     }
@@ -413,7 +435,7 @@ internal static class GraphicsSwitchSuites
     private static Rig Open(TestContext ctx, bool enhanced)
     {
         GraphicsMode.Set(enhanced);
-        Mech3.SceneBuilder.RegenerateShaders();
+        Mech3.ShaderTwins.Regenerate();
         EffectsLevel.RegisteredScaleSq = EnhancedLook.ClutterFadeScaleSq();
         RenderingServer.GlobalShaderParameterSet(EffectsLevel.ShaderParam, EffectsLevel.RegisteredScaleSq);
         var spec = SessionSpec.Parse(new[] { $"--chapter={ctx.Chapter}", "--players=1", "--mute", "--no-pads" });
@@ -510,7 +532,7 @@ internal static class GraphicsSwitchSuites
             {
                 foreach (var material in Materials(geometry))
                 {
-                    string key = material.Shader.Code.GetHashCode().ToString("x8", CultureInfo.InvariantCulture) + ":" + (Mech3.SceneBuilder.FamilyOf(material.Shader) ?? geometry.GetType().Name);
+                    string key = material.Shader.Code.GetHashCode().ToString("x8", CultureInfo.InvariantCulture) + ":" + (Mech3.ShaderTwins.FamilyOf(material.Shader) ?? geometry.GetType().Name);
                     Count(shaders, key);
                     TextByKey[key] = material.Shader.Code;
                     if (material.Shader.Code.Contains("csky_cloud_puffs", StringComparison.Ordinal))

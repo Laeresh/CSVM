@@ -386,36 +386,13 @@ void fragment() {
     private static readonly string AircraftSpecularLiteral =
         AircraftSpecular.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture);
 
-    // ⚠ Process-wide, not per builder: Godot compiles a Shader the first time a material takes it,
-    // and each generated text is a pure function of its key, so a per-builder memo made every later
-    // builder recompile a shader byte-identical to one already live, on the frame path where an AI
-    // spawn builds an aircraft (docs/verification.md PERF-22). Anything an instance field varies the
-    // text by belongs in the key (`DebugClutterFlag`), or two builders that disagree about it share
-    // one shader. Main thread only, like every other builder path.
-    private static readonly Dictionary<int, Shader> BiasShaders = new(); // keyed by feature bits
-    private static readonly Dictionary<int, Shader> BillboardShaders = new(); // cloud sprites, keyed by blend/scissor bits
-    private static readonly Dictionary<int, Shader> CylindricalShaders = new(); // Y/X-axis facades, keyed by axis/blend/scissor/glow bits
-    // Every mode-dependent generated shader, by each of its two mode twins. A twin's text is never
-    // rewritten, since Godot drops a rewritten shader's variants and pipelines and rebuilds them one
-    // shader at a time. A switch moves each tracked material onto the other twin instead
-    // (RegenerateShaders). Process-lifetime like the caches.
-    private static readonly Dictionary<Shader, ModeTwins> TwinOf = new();
-    private static readonly List<ModeTwins> AllTwins = new();
-
-    // Each cache entry's fade twins, the per-instance translucent copies FadeShaderFor hands out.
-    private static readonly Dictionary<Shader, ModeTwins> FadeOf = new();
-
-    // Every material a cache shader was handed to, held until a later session finds nothing else
-    // holds it (ReleaseUnusedMaterials). RegenerateShaders moves each onto its twin.
-    // ⚠ Hold the wrapper; never a WeakReference or an instance id. Godot remakes a material's C#
-    // wrapper while the material lives. A weak one loses materials still drawing, and a wrapper
-    // remade from an id can release its material twice at exit.
-    private static readonly List<ShaderMaterial> Tracked = new();
-
-    // The mode the tracked materials last followed, null before the first. A getter finding it stale
-    // moves them first (EnsureCurrentText), so a suite resolving the mode directly still builds with
-    // that mode's own shaders.
-    private static bool? _textEnhanced;
+    // ⚠ Keep these process-wide, not per builder. A per-builder memo made every later builder compile
+    // a text already live, on the frame path where an AI spawn builds an aircraft (PERF-22). Anything
+    // an instance field varies the text by belongs in the key (`DebugClutterFlag`). Each entry holds
+    // one shader per graphics mode (ShaderTwins), so a switch recompiles nothing. Main thread only.
+    private static readonly Dictionary<int, ModeShader> BiasShaders = new(); // keyed by feature bits
+    private static readonly Dictionary<int, ModeShader> BillboardShaders = new(); // cloud sprites, keyed by blend/scissor bits
+    private static readonly Dictionary<int, ModeShader> CylindricalShaders = new(); // Y/X-axis facades, keyed by axis/blend/scissor/glow bits
 
     private readonly GameZ _gamez;
     private readonly TextureArchive _textures;
@@ -475,7 +452,6 @@ void fragment() {
     // shader variant rather than a parameter, so by the time a surface is committed it is reachable
     // nowhere else. The material cache also hands one object back for every surface sharing it.
     private readonly Dictionary<Material, TransparencyClass> _materialAlpha = new();
-    private Shader? _lightShader;
 
     /// <param name="fullbright">Render unshaded, like the original's world pass: texture × baked
     /// vertex colour, ignoring scene lights.</param>
@@ -527,20 +503,6 @@ void fragment() {
     // because it also keys the shader/material caches below. None on a legacy extraction: there
     // is no per-axis fallback, so those meshes render static.
     private enum CylAxis { None, Y, X }
-
-    /// <summary>Gets whether every cache shader has both twins.</summary>
-    public static bool OtherModeWarm => AllTwins.All(t => t.Has(!GraphicsMode.Enhanced));
-
-    /// <summary>Gets how many twins the caches have made in this process, for an instrument.</summary>
-    public static int TwinsMade { get; private set; }
-
-    /// <summary>Gets how many cache shaders had their text rewritten in this process, each one a
-    /// shader Godot compiles again. Only a first switch to Enhanced before one has drawn does it.</summary>
-    public static int TextRewrites { get; private set; }
-
-    /// <summary>Gets or sets a value indicating whether an Enhanced frame has drawn in this process.
-    /// That is when Godot builds the advanced shader variants its passes need. The launcher sets it.</summary>
-    public static bool EnhancedDrawn { get; set; }
 
     public int MeshInstanceCount { get; private set; }
 
@@ -713,124 +675,6 @@ void fragment() {
     internal static bool UvsWithinUnitSquare(List<GameZPolygon> polys, int pass) =>
         UvAxesWithinUnitSquare(polys, pass) == UvClampAxes.Both;
 
-    /// <summary>A generated opaque shader's translucent twin. Its appended <c>ALPHA</c> line gives
-    /// a runtime fade on an opaque world piece an alpha to drive.
-    /// ⚠ Install it per instance, never into the shared caches: ALPHA moves it to the transparent
-    /// pass. Null when the code cannot take the line (no <c>csky_opacity</c> preamble, or no
-    /// <c>col</c> local). A cache shader's twin follows the mode; its material must pass
-    /// <see cref="Track"/>. Any other source gets a fresh one, which its caller memoizes.</summary>
-    internal static Shader? FadeShaderFor(Shader source)
-    {
-        if (TwinOf.TryGetValue(source, out var twins))
-            return FadeCode(source.Code) != null ? twins.FadeFor(twins.IsEnhanced(source)) : null;
-        return FadeCode(source.Code) is { } code ? new Shader { Code = code } : null;
-    }
-
-    /// <summary>Moves every tracked material onto its shader's twin for the current
-    /// <see cref="GraphicsMode.Enhanced"/>, making a twin that does not exist yet. No shader's text
-    /// changes, so nothing Godot compiled is thrown away. Main thread only, like the caches.</summary>
-    internal static RegenerateStats RegenerateShaders()
-    {
-        _textEnhanced = GraphicsMode.Enhanced;
-        long start = System.Diagnostics.Stopwatch.GetTimestamp();
-        int made = TwinsMade;
-        int moved = 0;
-        int retexted = 0;
-        // ⚠ Until an Enhanced frame has drawn, Godot has not built the advanced variants its passes
-        // need, and building them later covers every live shader. A second twin here would double
-        // that, so the one live shader takes the Enhanced text instead.
-        if (GraphicsMode.Enhanced && !EnhancedDrawn)
-        {
-            foreach (var twins in AllTwins)
-                retexted += twins.Retext(true) ? 1 : 0;
-        }
-        Tracked.RemoveAll(m => !GodotObject.IsInstanceValid(m));
-        foreach (var material in Tracked)
-        {
-            if (material.Shader is not { } shader)
-                continue;
-            var twin = ForMode(shader);
-            if (!ReferenceEquals(twin, shader))
-            {
-                material.Shader = twin;
-                moved++;
-            }
-        }
-        return new RegenerateStats(AllTwins.Count, Tracked.Count, moved, TwinsMade - made, retexted,
-            System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds);
-    }
-
-    /// <summary>The twin of <paramref name="shader"/> for the current mode, made on first use, or
-    /// the shader itself when no cache made it.</summary>
-    internal static Shader ForMode(Shader shader) =>
-        TwinOf.TryGetValue(shader, out var twins) ? twins.For(GraphicsMode.Enhanced)
-        : FadeOf.TryGetValue(shader, out var faded) ? faded.FadeFor(GraphicsMode.Enhanced)
-        : shader;
-
-    /// <summary>Hands <paramref name="material"/> to <see cref="RegenerateShaders"/>, which keeps its
-    /// shader on the current mode's twin. Every material a cache shader goes on must pass here.</summary>
-    internal static ShaderMaterial Track(ShaderMaterial material)
-    {
-        Tracked.Add(material);
-        return material;
-    }
-
-    /// <summary>Drops every tracked material nothing but this list holds any more. A new session
-    /// calls it before it builds, when the last one's world is gone. ⚠ Never during a build or a
-    /// switch: a builder makes its materials before it puts them on meshes.</summary>
-    internal static void ReleaseUnusedMaterials() =>
-        Tracked.RemoveAll(m => !GodotObject.IsInstanceValid(m) || m.GetReferenceCount() <= 1);
-
-    /// <summary>A generated shader with a twin per graphics mode, whose text
-    /// <paramref name="code"/> writes under the mode standing when it runs. Returns the current
-    /// mode's twin. For a process-lifetime shader cache whose text reads
-    /// <see cref="GraphicsMode.Enhanced"/>.</summary>
-    internal static Shader RegenerableShader(Func<string> code, string family)
-    {
-        EnsureCurrentText();
-        var twins = new ModeTwins(code, family);
-        AllTwins.Add(twins);
-        return twins.For(GraphicsMode.Enhanced);
-    }
-
-    /// <summary>Makes every cache shader's other-mode twin and has Godot compile it now. A later
-    /// switch then finds it compiled. <paramref name="budgetMs"/> bounds one call, and the rest waits
-    /// for the next. Returns how many twins it made.</summary>
-    internal static int WarmOtherMode(double budgetMs = double.PositiveInfinity)
-    {
-        bool other = !GraphicsMode.Enhanced;
-        long start = System.Diagnostics.Stopwatch.GetTimestamp();
-        int made = 0;
-        foreach (var twins in AllTwins)
-        {
-            if (twins.Has(other))
-                continue;
-            twins.Warm(other);
-            made++;
-            if (System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds >= budgetMs)
-                break;
-        }
-        return made;
-    }
-
-    /// <summary>Moves the tracked materials when the mode moved since they last followed. Every cache
-    /// getter calls it first, so no cache hands out the other mode's twin.</summary>
-    internal static void EnsureCurrentText()
-    {
-        if (_textEnhanced != GraphicsMode.Enhanced)
-            RegenerateShaders();
-    }
-
-    /// <summary>Which generated family a shader belongs to, or null for one no cache made. For an
-    /// instrument.</summary>
-    internal static string? FamilyOf(Shader shader) =>
-        TwinOf.TryGetValue(shader, out var twins) ? twins.Family
-        : FadeOf.ContainsKey(shader) ? "fade-twin" : null;
-
-    /// <summary>Every twin the caches made, with its family, for an instrument.</summary>
-    internal static IEnumerable<(Shader Shader, string Family)> RegisteredShaders() =>
-        TwinOf.Select(kv => (kv.Key, kv.Value.Family)).Concat(FadeOf.Keys.Select(s => (s, "fade-twin")));
-
     /// <summary>The surface class one texture name names, <c>"water"</c>, <c>"buildings"</c>, or
     /// null for the untagged default. The collision buckets are built from this
     /// (<see cref="CollidersForMesh"/>), and <c>MapEdgeExtender</c>'s <c>--dump-tilegrid</c> census
@@ -922,13 +766,13 @@ void fragment() {
 
     /// <summary>Puts each sky sprite's look for the standing graphics mode back on its material. That
     /// is the keyed, blended copy under Enhanced and the opaque texture on the faithful path. The
-    /// live mode switch calls it after <see cref="RegenerateShaders"/>.</summary>
+    /// live mode switch calls it after <see cref="ShaderTwins.Regenerate"/>.</summary>
     internal void FollowGraphicsMode()
     {
         bool enhanced = GraphicsMode.Enhanced;
         foreach (var swap in _keyedSwaps)
         {
-            swap.Material.Shader = ForMode(enhanced ? swap.KeyedShader : swap.PlainShader);
+            ShaderTwins.Follow(swap.Material, enhanced ? swap.KeyedShader : swap.PlainShader);
             swap.Material.SetShaderParameter("albedo_tex", enhanced ? swap.KeyedTex : swap.PlainTex);
             NoteAlpha(swap.Material, enhanced || swap.PlainBlend, !enhanced && swap.PlainScissor);
         }
@@ -937,7 +781,7 @@ void fragment() {
             if (enhanced)
                 DrawPool(swap);
             else
-                swap.Material.Shader = ForMode(swap.PlainShader);
+                ShaderTwins.Follow(swap.Material, swap.PlainShader);
         }
     }
 
@@ -1457,8 +1301,7 @@ void fragment() {
 
             if (!_lightMaterialCache.TryGetValue(key, out var mat))
             {
-                _lightShader ??= new Shader { Code = LightShaderCode };
-                mat = new ShaderMaterial { Shader = _lightShader };
+                mat = new ShaderMaterial { Shader = ShaderTwins.Pooled(LightShaderCode, "light") };
                 mat.SetShaderParameter("range_far", key.Far);
                 mat.SetShaderParameter("fade_slope", key.Slope);
                 mat.SetShaderParameter("blink_period", key.Blink);
@@ -1720,7 +1563,7 @@ void fragment() {
                 scissor: false, glow: true, lit: true, fogged: fogged, clampUv: clampUv);
             if (keyed != null)
             {
-                var shader = billboard.Shader;
+                var shader = GetBillboardShader(true, false, true, true, fogged, clampUv);
                 NoteKeyed(new KeyedSwap(billboard, shader, tex, true, false, shader, keyed));
             }
             RegisterCycle(_gamez.Materials[materialIndex], billboard); // same albedo_tex, see GetCylindricalMaterial
@@ -1897,7 +1740,7 @@ void fragment() {
                 // mask's own colour. The faithful path never reaches the pool.
                 var pooled = new PooledSwap(billboard, texName,
                     GetBillboardShader(plainBlend, plainScissor, false, lit, fogged, clampUv),
-                    new Lazy<Shader>(() => GetBillboardShader(keyed != null || plainBlend, keyed == null && plainScissor, false, lit, fogged, clampUv, pooled: true)));
+                    new Lazy<ModeShader>(() => GetBillboardShader(keyed != null || plainBlend, keyed == null && plainScissor, false, lit, fogged, clampUv, pooled: true)));
                 _pooledSwaps.Add(pooled);
                 if (GraphicsMode.Enhanced)
                     DrawPool(pooled);
@@ -1934,7 +1777,7 @@ void fragment() {
         swap.Tint ??= CloudPuffs.MaskTint(_textures.FindImage(swap.TexName)) ?? Colors.Transparent;
         if (CloudPuffs.Far() is not { } pool || swap.Tint == Colors.Transparent)
             return;
-        swap.Material.Shader = ForMode(swap.PooledShader.Value);
+        ShaderTwins.Follow(swap.Material, swap.PooledShader.Value);
         CloudPuffs.Apply(swap.Material, pool, swap.Tint.Value);
     }
 
@@ -1956,12 +1799,8 @@ void fragment() {
         bool scrolls = tex != null && scroll != Vector2.Zero;
         if (tex == null)
             edgeClamp = UvClampAxes.None;
-        var mat = new ShaderMaterial
-        {
-            Shader = GetBiasShader(shaded: !_fullbright, textured: tex != null, blend, scissor, doubleSided,
-                scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade, water),
-        };
-        Track(mat);
+        var mat = ShaderTwins.Follow(new ShaderMaterial(), GetBiasShader(shaded: !_fullbright, textured: tex != null,
+            blend, scissor, doubleSided, scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade, water));
         NoteAlpha(mat, blend, scissor);
         float bias = Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) + rank * SurfaceRankBias;
         if (noClutter)
@@ -1994,8 +1833,8 @@ void fragment() {
     // fogged surface then emits the shader text it always did, free of a mix()'s float rounding.
     // Key bits: 1-64 the flags, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade.
     // Then 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage.
-    // ⚠ Keep the graphics mode out of the key: RegenerateShaders rewrites one Shader per key.
-    private Shader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
+    // ⚠ Keep the graphics mode out of the key: each key holds one shader per mode (ShaderTwins).
+    private ModeShader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
         bool clutterFade = false, bool water = false)
     {
@@ -2012,34 +1851,21 @@ void fragment() {
             | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (debugClutter ? 4096 : 0)
             | (water ? 16384 : 0) | (sunVertexLit ? 32768 : 0) | (gammaBlend ? 65536 : 0)
             | (noAlphaCoverage ? 131072 : 0);
-        EnsureCurrentText();
-        if (BiasShaders.TryGetValue(key, out var cached))
-            return ForMode(cached);
-
-        var shader = RegenerableShader(() => BiasShaderCode(shaded, textured, blend, scissor, doubleSided,
-            scroll, clampUv, lit, fogged, edgeClamp, clutterFade, water, sunVertexLit, gammaBlend, debugClutter,
-            noAlphaCoverage), "world");
-        BiasShaders[key] = shader;
-        return shader;
+        ShaderTwins.EnsureCurrent();
+        if (!BiasShaders.TryGetValue(key, out var twins))
+        {
+            BiasShaders[key] = twins = ShaderTwins.Make(() => BiasShaderCode(shaded, textured, blend, scissor,
+                doubleSided, scroll, clampUv, lit, fogged, edgeClamp, clutterFade, water, sunVertexLit, gammaBlend,
+                debugClutter, noAlphaCoverage), "world", $"world:{key:x}");
+        }
+        return twins;
     }
 
-    // The generators below are static so a recipe in Regenerable holds no builder alive, and kept
+    // The generators below are static so a recipe in ShaderTwins holds no builder alive. They stay
     // beside their getters, which costs one SA1204 suppression per block.
 #pragma warning disable SA1204
-    // A fade twin's text off its source's, the half of RegenerateShaders' bookkeeping the twins use.
-    private static string? FadeCode(string code)
-    {
-        if (!code.Contains(InstanceUniformsInclude, StringComparison.Ordinal)
-            || !code.Contains("vec4 col = ", StringComparison.Ordinal))
-            return null;
-        int close = code.LastIndexOf('}');
-        if (close < 0)
-            return null;
-        return code[..close] + $"    ALPHA = col.a{OpacityTerm};\n" + code[close..];
-    }
-
-    // The bias shader's text under the current graphics mode, a pure function of its arguments and
-    // GraphicsMode.Enhanced, so RegenerateShaders can call it again on a switch.
+    // The bias shader's text under the current graphics mode. A pure function of its arguments and
+    // GraphicsMode.Enhanced, so ShaderTwins can write it again under either mode.
     private static string BiasShaderCode(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp, bool clutterFade, bool water,
         bool sunVertexLit, bool gammaBlend, bool debugClutter, bool noAlphaCoverage)
@@ -2275,7 +2101,7 @@ void fragment() {{");
     private ShaderMaterial BillboardMaterial(ImageTexture tex, bool blend, bool scissor, bool glow, bool lit, bool fogged,
         bool clampUv, bool pooled = false)
     {
-        var mat = Track(new ShaderMaterial { Shader = GetBillboardShader(blend, scissor, glow, lit, fogged, clampUv, pooled) });
+        var mat = ShaderTwins.Follow(new ShaderMaterial(), GetBillboardShader(blend, scissor, glow, lit, fogged, clampUv, pooled));
         mat.SetShaderParameter("albedo_tex", tex);
         NoteAlpha(mat, blend, scissor);
         return mat;
@@ -2283,21 +2109,21 @@ void fragment() {{");
 
     // Key bits taken: 1 blend, 2 scissor, 4 glow, 8 !lit, 16 !fogged, 32 clampUv, 128 the rendered
     // cloud puff pool. Next free bit is 256. The graphics mode stays out of the key, as in GetBiasShader.
-    private Shader GetBillboardShader(bool blend, bool scissor, bool glow, bool lit, bool fogged, bool clampUv,
+    private ModeShader GetBillboardShader(bool blend, bool scissor, bool glow, bool lit, bool fogged, bool clampUv,
         bool pooled = false)
     {
         // A glow variant already ignores csky_world_light, so `lit` cannot split its key.
         lit |= glow;
         int key = (blend ? 1 : 0) | (scissor ? 2 : 0) | (glow ? 4 : 0) | (lit ? 0 : 8) | (fogged ? 0 : 16)
             | (clampUv ? 32 : 0) | (pooled ? 128 : 0);
-        EnsureCurrentText();
-        if (BillboardShaders.TryGetValue(key, out var cached))
-            return ForMode(cached);
-
-        var shader = RegenerableShader(() => BillboardShaderCode(blend, scissor, glow, lit, fogged, clampUv, pooled),
-            pooled ? "billboard-pooled" : "billboard");
-        BillboardShaders[key] = shader;
-        return shader;
+        ShaderTwins.EnsureCurrent();
+        if (!BillboardShaders.TryGetValue(key, out var twins))
+        {
+            string family = pooled ? "billboard-pooled" : "billboard";
+            BillboardShaders[key] = twins = ShaderTwins.Make(
+                () => BillboardShaderCode(blend, scissor, glow, lit, fogged, clampUv, pooled), family, $"{family}:{key:x}");
+        }
+        return twins;
     }
 
     // The billboard shader's text under the current graphics mode (see BiasShaderCode).
@@ -2393,7 +2219,7 @@ void fragment() {{
     private ShaderMaterial CylindricalBillboardMaterial(ImageTexture tex, CylAxis axis, bool blend, bool scissor,
         bool glow, bool lit, bool fogged, bool clampUv)
     {
-        var mat = Track(new ShaderMaterial { Shader = GetCylindricalShader(axis, blend, scissor, glow, lit, fogged, clampUv) });
+        var mat = ShaderTwins.Follow(new ShaderMaterial(), GetCylindricalShader(axis, blend, scissor, glow, lit, fogged, clampUv));
         mat.SetShaderParameter("albedo_tex", tex);
         NoteAlpha(mat, blend, scissor);
         return mat;
@@ -2401,19 +2227,19 @@ void fragment() {{
 
     // Key bits taken: 1 axis, 2 blend, 4 scissor, 8 glow, 16 !lit, 32 !fogged, 64 clampUv. Next
     // free bit is 128. The graphics mode stays out of the key, as in GetBiasShader.
-    private Shader GetCylindricalShader(CylAxis axis, bool blend, bool scissor, bool glow, bool lit, bool fogged,
+    private ModeShader GetCylindricalShader(CylAxis axis, bool blend, bool scissor, bool glow, bool lit, bool fogged,
         bool clampUv)
     {
         lit |= glow; // a glow variant already ignores csky_world_light, same key
         int key = (axis == CylAxis.X ? 1 : 0) | (blend ? 2 : 0) | (scissor ? 4 : 0) | (glow ? 8 : 0)
             | (lit ? 0 : 16) | (fogged ? 0 : 32) | (clampUv ? 64 : 0);
-        EnsureCurrentText();
-        if (CylindricalShaders.TryGetValue(key, out var cached))
-            return ForMode(cached);
-
-        var shader = RegenerableShader(() => CylindricalShaderCode(axis, blend, scissor, glow, lit, fogged, clampUv), "cylindrical");
-        CylindricalShaders[key] = shader;
-        return shader;
+        ShaderTwins.EnsureCurrent();
+        if (!CylindricalShaders.TryGetValue(key, out var twins))
+        {
+            CylindricalShaders[key] = twins = ShaderTwins.Make(
+                () => CylindricalShaderCode(axis, blend, scissor, glow, lit, fogged, clampUv), "cylindrical", $"cylindrical:{key:x}");
+        }
+        return twins;
     }
 
     // The single-axis billboard's text under the current graphics mode (see BiasShaderCode).
@@ -2488,102 +2314,22 @@ void fragment() {{
     }
 #pragma warning restore SA1204
 
-    /// <summary>What one <see cref="RegenerateShaders"/> did. It names the cache entries, the tracked
-    /// materials and how many moved, the twins made, the shaders rewritten and the wall time.</summary>
-    internal readonly record struct RegenerateStats(int Entries, int Tracked, int Moved, int TwinsMade, int Retexted, double Ms);
-
-    // One cache entry's two shaders, one per graphics mode, each made on first use.
-    private sealed class ModeTwins(Func<string> code, string family)
-    {
-        private Shader? _original;
-        private Shader? _enhanced;
-        private Shader? _fadeOriginal;
-        private Shader? _fadeEnhanced;
-
-        public string Family { get; } = family;
-
-        public bool Has(bool enhanced) => (enhanced ? _enhanced : _original) != null;
-
-        public Shader For(bool enhanced) => (enhanced ? _enhanced : _original) ?? Make(enhanced);
-
-        public bool IsEnhanced(Shader shader) => ReferenceEquals(shader, _enhanced);
-
-        // The translucent twin of one mode's shader. A text with no ALPHA path keeps its piece
-        // opaque, so a fade across a switch shows it whole rather than in the other mode.
-        public Shader FadeFor(bool enhanced)
-        {
-            if ((enhanced ? _fadeEnhanced : _fadeOriginal) is { } known)
-                return known;
-            string source = For(enhanced).Code;
-            var fade = new Shader { Code = FadeCode(source) ?? source };
-            if (enhanced)
-                _fadeEnhanced = fade;
-            else
-                _fadeOriginal = fade;
-            FadeOf[fade] = this;
-            return fade;
-        }
-
-        // Asking for the RID has Godot create the shader and start its compile now.
-        public void Warm(bool enhanced) => For(enhanced).GetRid();
-
-        // Gives the other mode's only shader this mode's text, in place, when this mode has none.
-        public bool Retext(bool enhanced)
-        {
-            var from = enhanced ? _original : _enhanced;
-            if (Has(enhanced) || from == null)
-                return false;
-            from.Code = TextFor(enhanced);
-            TextRewrites++;
-            _original = enhanced ? null : from;
-            _enhanced = enhanced ? from : null;
-            return true;
-        }
-
-        private Shader Make(bool enhanced)
-        {
-            var shader = new Shader { Code = TextFor(enhanced) };
-            if (enhanced)
-                _enhanced = shader;
-            else
-                _original = shader;
-            TwinOf[shader] = this;
-            TwinsMade++;
-            return shader;
-        }
-
-        // The text is written under the mode it is for, the flag put back after.
-        private string TextFor(bool enhanced)
-        {
-            bool standing = GraphicsMode.Enhanced;
-            GraphicsMode.Set(enhanced);
-            try
-            {
-                return code();
-            }
-            finally
-            {
-                GraphicsMode.Set(standing);
-            }
-        }
-    }
-
     // One sky sprite's material under both modes. The plain texture keeps its own alpha verdict,
     // and the keyed copy takes the blend shader Enhanced draws it through.
-    private sealed record KeyedSwap(ShaderMaterial Material, Shader PlainShader, ImageTexture PlainTex,
-        bool PlainBlend, bool PlainScissor, Shader KeyedShader, ImageTexture KeyedTex);
+    private sealed record KeyedSwap(ShaderMaterial Material, ModeShader PlainShader, ImageTexture PlainTex,
+        bool PlainBlend, bool PlainScissor, ModeShader KeyedShader, ImageTexture KeyedTex);
 
     // One placed cloud's billboard under both modes: the faithful sprite shader and the pooled one.
     // Tint is the mask's, read once; Transparent marks a mask with nothing to tint by.
-    private sealed class PooledSwap(ShaderMaterial material, string texName, Shader plainShader, Lazy<Shader> pooledShader)
+    private sealed class PooledSwap(ShaderMaterial material, string texName, ModeShader plainShader, Lazy<ModeShader> pooledShader)
     {
         public ShaderMaterial Material { get; } = material;
 
         public string TexName { get; } = texName;
 
-        public Shader PlainShader { get; } = plainShader;
+        public ModeShader PlainShader { get; } = plainShader;
 
-        public Lazy<Shader> PooledShader { get; } = pooledShader;
+        public Lazy<ModeShader> PooledShader { get; } = pooledShader;
 
         public Color? Tint { get; set; }
     }

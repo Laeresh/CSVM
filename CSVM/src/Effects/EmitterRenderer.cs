@@ -192,9 +192,9 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
 
     // One compiled Shader per code variant (blend × soft), shared by every renderer. A Shader per
     // emitter cost about 6 ms to compile, on every live miss and on each emitter a crash rig builds
-    // ahead. ⚠ Keep the graphics mode out of the key: SceneBuilder.RegenerateShaders rewrites each
-    // text on a live switch.
-    private static readonly Dictionary<(bool Mix, bool Soft), Shader> ShaderVariants = new();
+    // ahead. ⚠ Keep the graphics mode out of the key. Each variant holds one shader per mode
+    // (ShaderTwins), and a live switch moves the materials between them.
+    private static readonly Dictionary<(bool Mix, bool Soft), Mech3.ModeShader> ShaderVariants = new();
 
     // One quad for every layer in the process: the mesh is a unit billboard and the per-instance
     // scale lives in the MultiMesh transforms, so nothing about it is per emitter. The material
@@ -325,12 +325,15 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
     private static string Literal(float value)
         => value.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture);
 
-    private static Shader ShaderFor(bool mix, bool soft)
+    private static Mech3.ModeShader ShaderFor(bool mix, bool soft)
     {
-        Mech3.SceneBuilder.EnsureCurrentText();
-        if (!ShaderVariants.TryGetValue((mix, soft), out var shader))
-            ShaderVariants[(mix, soft)] = shader = Mech3.SceneBuilder.RegenerableShader(() => VariantCode(mix, soft, GraphicsMode.Enhanced), "emitter");
-        return Mech3.SceneBuilder.ForMode(shader);
+        Mech3.ShaderTwins.EnsureCurrent();
+        if (!ShaderVariants.TryGetValue((mix, soft), out var twins))
+        {
+            ShaderVariants[(mix, soft)] = twins = Mech3.ShaderTwins.Make(
+                () => VariantCode(mix, soft, GraphicsMode.Enhanced), "emitter", $"emitter:{(mix ? "mix" : "add")}{(soft ? "-soft" : "")}");
+        }
+        return twins;
     }
 
     // One variant's text under a graphics mode, a pure function of its three arguments.
@@ -384,10 +387,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         public static Layer Build(MultiMeshEmitterRenderer owner, Node3D parent, int capacity,
             float cullMargin, bool additive)
         {
-            var mat = Mech3.SceneBuilder.Track(new ShaderMaterial
-            {
-                Shader = ShaderFor(!additive, owner._softParticles),
-            });
+            var mat = Mech3.ShaderTwins.Follow(new ShaderMaterial(), ShaderFor(!additive, owner._softParticles));
             mat.SetShaderParameter("atlas", owner._atlas);
             mat.SetShaderParameter("frame_count", (float)owner._frameCount);
             var layer = new Layer();
