@@ -39,6 +39,11 @@ public sealed class WeatherRig
     private const float FaithfulSunEnergy = 1.6f;
     private const float FaithfulAmbientEnergy = 0.9f;
 
+    // TUNE, enhanced mode only: the sun's specular by day and at night (EnhancedSunSpecular).
+    // Godot's own 0.5 made the sun's and above all the moon's glint on the water too bright.
+    private const float DaySunSpecular = 0.35f;
+    private const float NightSunSpecular = 0.1f;
+
     // ⚠ TUNE, enhanced mode only, and a PROXY the original never uses: it lights from SUNLIGHT and
     // darkens from FOG_COLOR independently, so nothing in the game reads one off the other. What
     // licenses it is that the two populations do not overlap: every zone under a night sky authors
@@ -146,6 +151,10 @@ public sealed class WeatherRig
     // and the authored fog_color (FogVolumeWhiteout). Disarmed everywhere but C5, where it costs
     // nothing: Density short-circuits on the flag before touching a volume.
     private FogVolumeWhiteout _fogWhiteout = FogVolumeWhiteout.Disarmed;
+    // The enhanced volumetric banks standing in those same volumes, whose scattering colour is the
+    // applied zone's. Null in the faithful path and in a chapter that authors no volume, so the
+    // zone apply carries no graphics-mode test of its own.
+    private FogVolumeBanks? _fogBanks;
     // The fog edge trigger: which zone's fog globals are live, and the state they were applied for.
     // Rebuilt by LoadWeather (a new mission is a new zone table); disarmed outright by an explicit
     // --sky-zone.
@@ -167,6 +176,10 @@ public sealed class WeatherRig
     // world's animations start inside the world build, ahead of this rig.
     private bool _zoneWritten;
     private AnimRuntime.FogStateChange? _pendingFogState;
+    // The zone ApplyZone last wrote and any FOG_STATE written over it since, so a live
+    // graphics-mode switch can put both back in the same last-writer order under the other arm.
+    private WeatherState.ZoneWeather? _appliedZone;
+    private AnimRuntime.FogStateChange? _fogStateOverZone;
 
     // The session's drawn aircraft and zeppelins, read fresh each frame. A wave spawns and an
     // airframe is shot down long after this rig is built, so a held list goes stale.
@@ -244,6 +257,13 @@ public sealed class WeatherRig
         return (diffuse * SunEnergyPerDiffuse, ambient * AmbientEnergyPerAuthored);
     }
 
+    /// <summary>The enhanced sun's <c>LightSpecular</c> for one zone: the strength of its direct
+    /// highlight on glossy surfaces, the water's glint above all. Lower at night, where the moon's
+    /// glint otherwise stands out against a dark sea. Reflections of the scenery are the water
+    /// material's own and do not read it.</summary>
+    public static float EnhancedSunSpecular(WeatherState.ZoneWeather fog) =>
+        IsNightZone(fog) ? NightSunSpecular : DaySunSpecular;
+
     /// <summary>The faithful path's Godot energies for one zone's authored SUNLIGHT. Each scalar
     /// scales its own day-level energy and is capped there, so a dim zone darkens what the scene
     /// lights shade while a bright one keeps the day level. The in-flight aircraft does not read
@@ -314,6 +334,17 @@ public sealed class WeatherRig
         panorama.Panorama = ImageTexture.CreateFromImage(image);
     }
 
+    /// <summary>Publishes <paramref name="sun"/>'s bearing as the <c>csky_sun_dir</c> global, the
+    /// unit world direction TOWARD the sun (a Godot light shines down its local -Z, so that is its
+    /// +Z). Called at lighting setup and on every zone apply, so a shader reading it never grades
+    /// against a bearing the light no longer has. Public because <c>Launcher</c> builds the
+    /// light.</summary>
+    public static void WriteSunDirection(DirectionalLight3D sun)
+    {
+        var basis = sun.IsInsideTree() ? sun.GlobalBasis : sun.Basis;
+        RenderingServer.GlobalShaderParameterSet("csky_sun_dir", basis.Z.Normalized());
+    }
+
     /// <summary>Registers a second (sun, env) pair, a cockpit overlay's cloned copies, so every
     /// future zone change reaches it too, not only the zone live when it was built. Both lighting
     /// arms mirror the LEVELS and COLOURS they resolve. <paramref name="env"/> may be null (a suite
@@ -322,6 +353,18 @@ public sealed class WeatherRig
     /// frame in the pass's own basis.</summary>
     public void RegisterExtraLighting(DirectionalLight3D sun, Godot.Environment? env)
         => _extraLighting.Add((sun, env));
+
+    /// <summary>A live graphics-mode switch: write the current zone again, since both the fog range
+    /// and which lighting arm drives the sun and ambient depend on the mode. A rig with no zone
+    /// written yet has nothing to redo.</summary>
+    public void ReapplyZone()
+    {
+        var over = _fogStateOverZone;
+        if (_appliedZone is { } fog)
+            ApplyZone(fog);
+        if (over is { } fogState)
+            ApplyFogState(fogState);
+    }
 
     /// <summary>Loads the mission's weather.json and resolves the rendered zone, builds the
     /// per-rig domes via <paramref name="buildDomes"/> (needs the resolved zone), then applies
@@ -353,6 +396,7 @@ public sealed class WeatherRig
             _pendingFogState = fog;
             return;
         }
+        _fogStateOverZone = fog;
         if (fog.Color is { } color)
         {
             var linear = color.SrgbToLinear();
@@ -397,6 +441,12 @@ public sealed class WeatherRig
         _fogVolumes = volumes;
         _fogWhiteout = FogVolumeWhiteout.From(spec, volumes);
     }
+
+    /// <summary>The enhanced volumetric banks built over the same volumes
+    /// (<see cref="CSVM.Effects.FogVolumeBanks"/>), so <see cref="ApplyZone"/> can paint them the
+    /// zone's own fog colour. Null in the faithful path; never called leaves the banks unpainted,
+    /// which is what a session with no weather.json gets anyway.</summary>
+    public void SetFogBanks(FogVolumeBanks? banks) => _fogBanks = banks;
 
     /// <summary>The cloud deck's own gamez <c>zone_id</c> (<c>WorldBuilder.CloudDeckZoneId</c>),
     /// the one piece of the zone gate that cannot ride a visual layer, because the deck is a
@@ -608,9 +658,10 @@ public sealed class WeatherRig
     // The energy/colour half of ApplyEnhancedLighting, shared by the session sun/env and every
     // registered clone, so the two can never drift onto different formulas.
     private static void ApplyEnhancedSunAndEnv(DirectionalLight3D sun, Godot.Environment? env,
-        float sunEnergy, Color sunColor, float ambientEnergy, Color ambientColor, Color skyColor)
+        float sunEnergy, float sunSpecular, Color sunColor, float ambientEnergy, Color ambientColor, Color skyColor)
     {
         sun.LightEnergy = sunEnergy;
+        sun.LightSpecular = sunSpecular;
         sun.LightColor = sunColor;
         if (env == null)
             return;
@@ -826,6 +877,8 @@ public sealed class WeatherRig
     // Launcher._Ready, so a second Add on an in-process relaunch of a foggy mission crashes.
     private Vector2 ApplyZone(WeatherState.ZoneWeather fog)
     {
+        _appliedZone = fog;
+        _fogStateOverZone = null;
         // FOG_COLOR is a DX7-era sRGB framebuffer value; the shader mixes ALBEDO in linear
         // space, so convert here. See docs/org/weather.md for the 176-gray measurement.
         var fogLinear = fog.FogColor.SrgbToLinear();
@@ -850,11 +903,12 @@ public sealed class WeatherRig
         // It shades aircraft only; the world is fullbright and casts no shadow from it.
         // ⚠ One light for the whole session: in splitscreen both panes wear rig 0's zone.
         _sun.Rotation = fog.SunOrientation;
-        // The same bearing and the uncollapsed pair, for the lit cloud cards, which shade per
-        // vertex off normals that turn with the camera (docs/org/vertexLighting.md). Both modes:
-        // a card is unshaded. csky_sun_dir points toward the light, as max(N.L, 0) wants.
-        var toSun = (_sun.IsInsideTree() ? _sun.GlobalBasis : _sun.Basis).Z.Normalized();
-        RenderingServer.GlobalShaderParameterSet("csky_sun_dir", toSun);
+        // The bearing and the uncollapsed pair, in both modes, for the lit cloud cards and the
+        // enhanced billboard grades (docs/org/vertexLighting.md). It points toward the light.
+        WriteSunDirection(_sun);
+        // The volumetric banks scatter in the zone's own fog colour, so the cards' backdrop and the
+        // haze they stand in cannot drift apart across a zone change.
+        _fogBanks?.ApplyZone(fog.FogColor);
         RenderingServer.GlobalShaderParameterSet("csky_sun_light",
             new Vector2(fog.SunAmbient, fog.SunDiffuse));
         // The same term with its colours, for the faithful aircraft, which carries no collapse.
@@ -888,10 +942,11 @@ public sealed class WeatherRig
             _sun.DirectionalShadowFadeStart = EnhancedShadowFadeStart;
         }
         (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog);
-        ApplyEnhancedSunAndEnv(_sun, _env, sunEnergy, fog.SunColorDiffuse, ambientEnergy,
+        float sunSpecular = EnhancedSunSpecular(fog);
+        ApplyEnhancedSunAndEnv(_sun, _env, sunEnergy, sunSpecular, fog.SunColorDiffuse, ambientEnergy,
             fog.SunColorAmbient, fog.FogColor);
         foreach (var (sun, env) in _extraLighting)
-            ApplyEnhancedSunAndEnv(sun, env, sunEnergy, fog.SunColorDiffuse, ambientEnergy,
+            ApplyEnhancedSunAndEnv(sun, env, sunEnergy, sunSpecular, fog.SunColorDiffuse, ambientEnergy,
                 fog.SunColorAmbient, fog.FogColor);
     }
 

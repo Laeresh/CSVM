@@ -411,6 +411,58 @@ member, and it does not go here.
   thread clock (PERF-36). Unfixed, it reads 97 to 131 ms per copy and 18 to 22 ms to re-ask 200
   names. Fixed, it reads 6.4 ms and 0.2 ms, under bars of 40 and 5 ms.
 
+- **PERF-38**, **A scripted `--campaign=` run spends its first minute in the mission's intro
+  cutscene, so read `ai_planes` before crediting a window to the mission: 0 means the film, not
+  the fight.** CM24 under `--det` read 8.5 ms frames for 30 sim seconds of intro, and 17 to 23 ms
+  once the film was skipped and 22 AI planes flew.
+- **PERF-39**, **`gpu_ms` and `render_cpu_ms` measure the root viewport alone, so a splitscreen
+  frame's cost is every pane's measured time summed; a `frame_ms` that stays flat while that sum
+  moves says the frame is CPU-bound.** Four-pane CM24 held 31.7 ms frames while the panes' GPU sum
+  ran from 11.3 to 19.5 ms across shadow settings. In splitscreen the root viewport draws no world,
+  so both read near zero there.
+- **PERF-44**, **Split a draw count by viewport and by pass (`ViewportGetRenderInfo`, visible and
+  shadow) before crediting it to a source: the frame's total cannot show a viewport nobody sees.**
+  Four-pane CM24's 20,500 draws held about 6,400 from the root viewport, which rendered the whole
+  world at the window's size behind the opaque pane backdrop.
+- **PERF-40**, **`script_ms` is Godot's `TIME_PROCESS`, which runs from the process pass through the
+  draw and its present, so it holds the render as well as the scripts. Split a frame with the gap
+  terms instead: `phys_engine_ms`, `defer_ms`, `draw_ms` and `idle_ms`, with `proc_ms` and ticks per
+  frame times `phys_tick_ms`, sum to `frame_ms`.** On the Deck in CM24 `script_ms` read 20 to 60 ms
+  beside a 4.1 ms `proc_ms`, where `draw_ms` was 11.3 ms and `defer_ms` about 3 ms of each frame.
+- **PERF-41**, **Count a `dotnet-trace` capture's samples from the `.nettrace`, never read its
+  speedscope conversion as a timeline: the main thread is sampled only while it runs managed code,
+  and the conversion stretches each sample to the next, charging native time to the managed stack
+  before it.** The speedscope view of a CM24 trace put managed callbacks at 100 % of the main
+  thread; the samples themselves covered 28 % of its wall time.
+- **PERF-42**, **Judge a Deck target on the Deck: engine-native terms (the transform flush, the
+  physics step, the draw) grow far more from the author's machine to the Deck than managed phases
+  do, so a desktop profile ranks the Deck's costs wrongly.** In CM24 `phys_engine_ms` grew 5 to 7
+  times and `defer_ms` about 3 times, while the AI and animation phases grew 1.2 to 1.4 times.
+- **PERF-43**, **Under the separate render thread, a `RenderingServer` getter called in the frame
+  waits for the previous draw, so its wait reads as `proc_ms` or `phys_tick_ms`, and `draw_ms` is
+  only the draw's hand-off. A Godot debug build prints `causing RenderingServer synchronizations on
+  every frame` for each such call; the frame's own wait for the render thread is in `defer_ms`.**
+  The per-frame render-time read raised CM24's `proc_ms` on the Deck from 3.8 to 10.3 ms.
+- **PERF-45**, **The first frame a process draws with TAA stalls for every Shader object alive, not
+  for what that frame draws: Godot then builds the advanced scene-shader group (20 variants a shader
+  beside the base group's 8) for every version (`ShaderRD::enable_group`, a disk-cache hit loading
+  synchronously on the render thread) and recompiles every surface's pipelines for the new flags.
+  Count the live shaders with `--debug-shaders` before reading such a stall, and read it as
+  Godot's, not the frame's.** A first switch to Enhanced on CM24 stalled 10.2 s over 217 shaders,
+  8.6 s over 138 once texts were shared; one hidden TAA frame at load took the same build there.
+- **PERF-46**, **Under the separate render thread a per-instance `MultiMesh` getter is a synchronous
+  round trip, so a loop of them over a large MultiMesh costs about a microsecond each in waits. Keep
+  the state you need to read in a mirror of your own, and fill a new MultiMesh with one `Buffer`
+  write.** Reading C5's 199,685 clutter placements back took 290 to 440 ms of every graphics switch.
+- **PERF-47**, **Count each pane's spyglass disc as a viewport of its own: it renders the whole
+  world through the pane's cull mask, sun shadows included, on every frame a target is off screen,
+  and a flight with several players holds one most of the time.** In four-pane C5 flight the four
+  discs drew 5,400 of 11,700 draws, more than the panes' own world draws.
+- **PERF-48**, **Compare four-pane frame times only within one interleaved batch: the same build's
+  `frame_ms` on the author's machine moves by more than a change's effect between batches an hour
+  apart.** C5 four-pane with the merge off read 14.8 and 15.1 ms in one batch and 13.3 and 13.4 ms
+  in a later one, against a merge effect of 0.4 to 1.8 ms.
+
 ## LOG, logs, error censuses, and exit codes
 
 - **LOG-1**, **An empty report may mean the mode did not build the feature.**
@@ -467,7 +519,7 @@ member, and it does not go here.
 - **WORLD-25**, **A registry total counts bindings, not coverage: a larger census can mean one
   definition claimed objects it does not describe.**
 - **WORLD-26**, **Anchor an effect to the object it decorates, not to a parameter that merely
-  describes it.** C3 authors a sun yaw of 135 while its `sun` node sits at yaw 45.
+  describes it.** C3 authors a sun pitch of −25 while its `sun` node sits 34.4° above the horizon.
 - **WORLD-27**, **`--play-anim` proves a definition RUNS; it says nothing about whether the game
   ever reaches it, so drive the real entry point before concluding the definition is at fault.**
 - **WORLD-28**, **A suite world built without collision, or with no `ContactMask` wired, poses

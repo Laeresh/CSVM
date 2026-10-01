@@ -31,7 +31,6 @@ public sealed class GroundShadowSilhouette
     private readonly bool[] _covered;
     private readonly int[] _ramp;
     private readonly byte[] _texels;
-    private readonly Image _image;
     private readonly ImageTexture _texture;
 
     private GroundShadowSilhouette(Node3D model, string node, Part[] parts, Aabb box)
@@ -43,8 +42,7 @@ public sealed class GroundShadowSilhouette
         _covered = new bool[size * size];
         _ramp = new int[size * size];
         _texels = new byte[size * size];
-        _image = Image.CreateFromData(size, size, false, Image.Format.L8, _texels);
-        _texture = ImageTexture.CreateFromImage(_image);
+        _texture = Utils.TextureUpload.Create(size, size, Image.Format.L8, _texels);
         Box = box;
     }
 
@@ -174,8 +172,7 @@ public sealed class GroundShadowSilhouette
         GroundShadowLaw.Spread(_covered, size, size, _ramp, GroundShadowLaw.TexelScale);
         for (int i = 0; i < _ramp.Length; i++)
             _texels[i] = (byte)Mathf.RoundToInt(GroundShadowLaw.Coverage(_ramp[i]) * 255f);
-        _image.SetData(size, size, false, Image.Format.L8, _texels);
-        _texture.Update(_image);
+        Utils.TextureUpload.Replace(_texture, size, size, Image.Format.L8, _texels);
     }
 
     // The transform of a node relative to an ancestor, walked through the parents so it is

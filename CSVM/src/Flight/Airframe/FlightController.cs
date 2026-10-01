@@ -115,6 +115,10 @@ public partial class FlightController : Node3D
     /// instance per rendered player view.</summary>
     public SpeedCue? SpeedCue;
 
+    /// <summary>The enhanced presentation's wind streaks around this pane's camera, drawn over the
+    /// authored wisps above; null on the faithful path. One instance per rendered player view.</summary>
+    public WindStreaks? WindStreaks;
+
     /// <summary>Deflects the plane's ailerons/elevators/rudders with stick input;
     /// advanced each frame. Null if the model has no control-surface nodes.</summary>
     public ControlSurfaceAnimator? Surfaces;
@@ -286,6 +290,11 @@ public partial class FlightController : Node3D
     /// <summary>Restarts the whole race (the session owns every player's plane, so it does the
     /// work). Invoked when a player presses R on the shared results board.</summary>
     public Action? RestartRace;
+
+    /// <summary>What <see cref="InputAction.ToggleGraphicsMode"/> does, set by the session for a
+    /// seat somebody sits at: the launcher's live switch, which is process-wide rather than this
+    /// plane's. Null leaves the action inert, as on an AI or a suite's bare rig.</summary>
+    public Action? ToggleGraphicsMode;
 
     /// <summary>The dogfight this plane is one seat of, or null outside <c>--vs</c>. Set, once
     /// <see cref="VersusMatch.Completed"/> the results board is up and any player's R there means
@@ -678,6 +687,7 @@ public partial class FlightController : Node3D
     private IFlightInputSource? _suppliedInputSource;
     private bool _pausePrev;                     // previous frame's pause-key state (edge detection)
     private (bool All, bool Team) _chatPrev;     // previous frame's two chat keys (edge detection)
+    private bool _graphicsTogglePrev;            // the same edge for ToggleGraphicsMode
     private bool _haltPrev;                      // previous frame's clock-halt state (orbit seeding)
     private bool _boardPrev;                     // previous frame's board-up state (re-entry latch)
     // A network pause's sheet is up over a flight that keeps running. The seat is then wholly
@@ -1419,6 +1429,7 @@ public partial class FlightController : Node3D
         Nitro.Reset();
         _aiNitroArmed = false;
         SpeedCue?.Reset();
+        WindStreaks?.Reset();
         _model.Reset(_spawnPos, _spawnAttitude, _spawnSpeed, _throttle);
         _simPrev = _simCurr = _renderPose = new Transform3D(_model.Attitude, _model.Position);
         GlobalTransform = _simCurr;
@@ -2390,6 +2401,7 @@ public partial class FlightController : Node3D
         bool halted = false;
         if (AllowPause || !Inert)
             halted = PollPauseAndHalt(clock);
+        PollGraphicsModeToggle();
         // ⚠ Ahead of the inert return as well. A seat flagged inert mid-session must give the
         // pointer back, and this is the only frame that would notice.
         StepMouseCapture(halted || _sheetOverFlight);
@@ -2467,6 +2479,11 @@ public partial class FlightController : Node3D
             // The zoom pair (BL-433), never while orbiting: the weapon lab's held orbit reads the
             // same two actions for its dolly (OrbitInput).
             _cam.UpdateZoom(simDt);
+            // The enhanced presentation's chase cues, stepped whichever view draws this frame so
+            // a view change never springs a stale lag. Rated max speed is the airframe's own
+            // fd_speed, the scale every authored speed figure is quoted on.
+            _cam.StepEnhancedCues(simDt, _renderPose.Basis,
+                _model.Speed / Mathf.Max(1f, _model.Stats.FdSpeed));
             // Default to the external FOV global; the FirstPerson arm below overrides it, so a
             // look-behind while SELECTED Cockpit/Nose gets the first-person FOV back on release.
             _cam.RestoreExternalFov();
@@ -2574,6 +2591,10 @@ public partial class FlightController : Node3D
                 SpeedCue.Update(simDt, _model.Position, _model.Attitude, cameraPos.Y,
                     HeightAboveWorldGround(cameraPos), ViewportAspect(_viewCamera));
             }
+            // The enhanced streak field over those wisps. LoadFactorDemand is the pre-clamp
+            // demand, an instrument reading with no force term behind it, which is what this is.
+            WindStreaks?.Update(simDt, _model.VelocityDir * _model.Speed, speedFrac,
+                _model.LoadFactorDemand);
         }
 
         // Spin the propeller/rotor blur discs: they keep turning even at idle (windmilling)
@@ -2616,6 +2637,12 @@ public partial class FlightController : Node3D
         }
         SpeedCue?.Dispose(freeNow);
         SpeedCue = null;
+        if (WindStreaks is { } streaks)
+        {
+            streaks.GetParent()?.RemoveChild(streaks);
+            streaks.QueueFree();
+            WindStreaks = null;
+        }
         Race?.Remove(PlayerIndex);
         Race = null;
         SmokeScreens = null;
@@ -3522,6 +3549,7 @@ public partial class FlightController : Node3D
         // No plume survives a dead engine.
         ExhaustSmoke?.Reset();
         SpeedCue?.Reset();
+        WindStreaks?.Reset();
     }
 
     // Every world-positioned loop this aircraft owns, stopped now. A downed or inert host takes no
@@ -3726,6 +3754,10 @@ public partial class FlightController : Node3D
         if (frame == _inputFrame)
             return;
         _inputFrame = frame;
+        // An AI rig is bound to no keyboard and no pad, so its resolve always reads neutral, which
+        // is the readers' state before any poll. A mission flies twenty of them.
+        if (!IsHumanPiloted)
+            return;
         // Splitscreen P2-P4 are pad-only and the field can change after construction, so the gate is
         // re-read rather than captured. The pad-half reader is never given the keyboard.
         bool keys = KeyboardFlies;
@@ -3859,6 +3891,17 @@ public partial class FlightController : Node3D
     // behind it.
     private bool PauseTogglePressed() =>
         AllowPause && !InPhotoMode && !InPauseLeaf && _actions.Held(InputAction.Pause);
+
+    // The graphics-mode action's edge, polled beside the pause so it works over a halted sim too.
+    // ⚠ Silent under photo mode and the options leaf, whose pages own the keyboard.
+    private void PollGraphicsModeToggle()
+    {
+        bool down = ToggleGraphicsMode != null && !InPhotoMode && !InPauseLeaf
+            && _actions.Held(InputAction.ToggleGraphicsMode);
+        if (down && !_graphicsTogglePrev)
+            ToggleGraphicsMode!();
+        _graphicsTogglePrev = down;
+    }
 
     // One frame of the pause key, and the halt it mirrors into the shared clock. Polled from
     // _Process, not the sim step: a halted sim takes no steps and could never resume itself.

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Flight.Camera;
+using CSVM.Mech3;
 using Godot;
 
 namespace CSVM.Effects;
@@ -124,11 +125,22 @@ public sealed class WorldWind
 /// blowing on every emitter in the process.</summary>
 public sealed class EffectAmbience
 {
+    // Cycles of flicker phase between one fire and the next, so neighbouring fires do not pulse
+    // in lockstep (the burst lights' own stride).
+    private const float FirePhaseStride = 0.618f;
+
     // Every pane's camera pose this frame, refilled in place from the session's ViewerSet. A list
     // rather than a single pose: the fade is evaluated per particle against all of them.
     private readonly List<ViewerSet.ViewerPose> _viewers = new();
 
+    // The emitters burning fire this frame, the one direction an emitter writes here. Each lights
+    // its surroundings under Enhanced through SubmitFires.
+    private readonly List<Puffer> _fires = new();
+
     private readonly bool _frozen;
+
+    // Registrations so far, which space the fires' flicker phases apart.
+    private int _firesRegistered;
 
     public EffectAmbience()
     {
@@ -156,6 +168,10 @@ public sealed class EffectAmbience
     /// range, see <see cref="Puffer.DistanceAlpha"/>, which evaluates the bands against each entry
     /// and keeps the most favourable answer.</summary>
     public IReadOnlyList<ViewerSet.ViewerPose> Viewers => _viewers;
+
+    /// <summary>The emitters whose live particles include a fire column this frame, Enhanced
+    /// Graphics only (<see cref="Puffer"/> publishes nothing on the faithful path).</summary>
+    internal IReadOnlyList<Puffer> Fires => _fires;
 
     /// <summary>Publishes this frame's wind. Throws on <see cref="Still"/>, see the class
     /// remark.</summary>
@@ -186,6 +202,40 @@ public sealed class EffectAmbience
     {
         Writable();
         viewers.Poses(_viewers);
+    }
+
+    /// <summary>A <see cref="WorldLights"/> source: one light per burning emitter, at its fire
+    /// particles' centroid. Drops an emitter freed since it last burned. Registered by the session
+    /// that owns both (<c>WorldLights.AddSource</c>).</summary>
+    public void SubmitFires(WorldLights lights)
+    {
+        for (int i = _fires.Count - 1; i >= 0; i--)
+        {
+            var fire = _fires[i];
+            if (!GodotObject.IsInstanceValid(fire))
+            {
+                _fires.RemoveAt(i);
+                continue;
+            }
+            if (fire.IsVisibleInTree())
+                lights.AddFire(fire.FireCentroid, fire.FireMeanSize, fire.FireCount, fire.FirePhase);
+        }
+    }
+
+    /// <summary>Records that <paramref name="puffer"/> started or stopped burning, called on the
+    /// change only. Still air has no world to light, so it ignores the call rather than throwing:
+    /// a lab's emitters burn too.</summary>
+    internal void SetBurning(Puffer puffer, bool burning)
+    {
+        if (_frozen)
+            return;
+        if (!burning)
+        {
+            _fires.Remove(puffer);
+            return;
+        }
+        puffer.FirePhase = _firesRegistered++ * FirePhaseStride;
+        _fires.Add(puffer);
     }
 
     private void Writable()

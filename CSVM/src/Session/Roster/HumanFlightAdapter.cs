@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Effects;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Audio;
 using CSVM.Flight.Camera;
@@ -180,6 +181,8 @@ internal sealed class HumanFlightAdapter
             Log.Info("flight", $"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");
         // The engine pick's nitrous bit (ids 3-5) installs the injector, the original's veh+0x946.
         controller.Nitro.Installed = custom != null && Flight.Hangar.CustomPlaneBuild.HasNitrous(custom);
+        // The graphics-mode action, for a seat somebody sits at here, like the pause key below.
+        controller.ToggleGraphicsMode = remote ? null : _human.ToggleGraphicsMode;
         // Every human joins team 1 in an Instant Action mission, splitscreen included, the
         // per-pilot team fallback would otherwise collide with an enemy's. --coop asks the same
         // in plain flight; SessionSpec.Resolve already drops Coop when --vs is set.
@@ -575,6 +578,17 @@ internal sealed class HumanFlightAdapter
             controller.SpeedCue = SpeedCue.Build(_world.ChapterZrdrPath, _aircraft.Textures, _worldRoot,
                 _world.Ambience,
                 rig.VisualLayer == 0 ? null : node => SplitScreen.SetVisualLayer(node, rig.VisualLayer));
+        }
+
+        // The enhanced streak field rides the same per-pane path for the same reason, and it
+        // centres on whichever camera renders it, so each pilot needs a private one. It builds on
+        // the empty stage too, being remake-only rather than chapter data.
+        if (WindStreaks.Create() is { } streaks)
+        {
+            if (rig.VisualLayer != 0)
+                SplitScreen.SetVisualLayer(streaks, rig.VisualLayer);
+            _worldRoot.AddChild(streaks);
+            controller.WindStreaks = streaks;
         }
 
         controller.Name = $"player{pi + 1}";

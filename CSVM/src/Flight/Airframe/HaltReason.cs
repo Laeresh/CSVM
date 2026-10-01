@@ -17,4 +17,8 @@ public enum HaltReason
 
     /// <summary>A results board is up. Dropped by a rerun, never by a player's pause key.</summary>
     Ended = 2,
+
+    /// <summary>A live graphics switch is drawn over (<c>Session.Launch.SwitchCover</c>). Dropped by
+    /// the cover once the frames after the switch settle.</summary>
+    Switching = 4,
 }

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CSVM.Flight.Camera;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight.Hud;
@@ -30,6 +31,9 @@ public sealed partial class CockpitOverlay : CanvasLayer
     // The panel's own shader materials, whose point-light term needs the world position of this
     // pass's origin (SceneBuilder's `light_origin`).
     private readonly List<ShaderMaterial> _materials = new();
+
+    // The shadow-quality revision the light last copied the sun at (FollowSunShadow).
+    private int _shadowRevision = Utils.ShadowQualitySetting.Revision;
 
     private CockpitOverlay(SubViewport view, Camera3D camera, Node3D interior,
         DirectionalLight3D? light, DirectionalLight3D? sun)
@@ -120,6 +124,36 @@ public sealed partial class CockpitOverlay : CanvasLayer
         if (_light != null && _sun != null && GodotObject.IsInstanceValid(_sun))
         {
             _light.Basis = _sun.GlobalBasis;
+            FollowSunShadow();
+        }
+    }
+
+    /// <summary>Re-copy the world sun's shadow onto this pass's light. It does so only where the
+    /// shadow quality has moved the sun since the last copy. The per-frame <see cref="Sync"/>
+    /// calls it, and it is public so the suite can drive it without a rig.</summary>
+    public void FollowSunShadow()
+    {
+        if (_light == null || _sun == null || !GodotObject.IsInstanceValid(_sun)
+            || _shadowRevision == Utils.ShadowQualitySetting.Revision)
+        {
+            return;
+        }
+
+        _shadowRevision = Utils.ShadowQualitySetting.Revision;
+        SunShadow.Copy(_sun, _light, _camera.Far);
+    }
+
+    /// <summary>Re-take the session sun's colour, specular and shadows after a live graphics-mode
+    /// switch re-dressed it, clamped to this pass's far plane as at build. The zone's energies
+    /// arrive after this through <c>WeatherRig.RegisterExtraLighting</c>.</summary>
+    public void FollowSun()
+    {
+        if (_light != null && _sun != null && GodotObject.IsInstanceValid(_sun))
+        {
+            _light.LightColor = _sun.LightColor;
+            _light.LightSpecular = _sun.LightSpecular;
+            _shadowRevision = Utils.ShadowQualitySetting.Revision;
+            SunShadow.Copy(_sun, _light, _camera.Far);
         }
     }
 
@@ -145,6 +179,9 @@ public sealed partial class CockpitOverlay : CanvasLayer
             Msaa3D = (Viewport.Msaa)(int)ProjectSettings.GetSetting(
                 "rendering/anti_aliasing/quality/msaa_3d", 0).AsInt32(),
         };
+        // Asked like every 3D viewport, and answered with nothing: the pass is transparent, which
+        // the temporal and upscaling resolves do not keep (see ViewportQuality.Apply).
+        Utils.ViewportQuality.Apply(view);
         if (env != null)
         {
             // The sky stays: a transparent viewport never paints its background, and clearing it
@@ -161,27 +198,14 @@ public sealed partial class CockpitOverlay : CanvasLayer
                 Name = "interior_sun",
                 LightEnergy = sun.LightEnergy,
                 LightColor = sun.LightColor,
-                // Copied off the live sun, which by this point in the build already carries the
-                // flown zone's settings (WeatherRig.Build runs ahead of BuildCockpitPasses),
-                // false in original mode, since the world sun's own flag never turns on there.
-                ShadowEnabled = sun.ShadowEnabled,
+                // The zone's specular, which the enhanced zone apply writes on the sun before this
+                // pass is registered to take it. The faithful sun keeps Godot's default.
+                LightSpecular = sun.LightSpecular,
             };
-            if (sun.ShadowEnabled)
-            {
-                light.DirectionalShadowMode = sun.DirectionalShadowMode;
-                light.DirectionalShadowSplit1 = sun.DirectionalShadowSplit1;
-                light.DirectionalShadowSplit2 = sun.DirectionalShadowSplit2;
-                light.DirectionalShadowSplit3 = sun.DirectionalShadowSplit3;
-                light.DirectionalShadowBlendSplits = sun.DirectionalShadowBlendSplits;
-                light.ShadowBias = sun.ShadowBias;
-                light.ShadowNormalBias = sun.ShadowNormalBias;
-                light.LightAngularDistance = sun.LightAngularDistance;
-                light.ShadowBlur = sun.ShadowBlur;
-                // Clamped to this pass's own camera far plane: the world sun's distance is a
-                // zone's fog far (thousands of metres, always past 100 m), and passing it through
-                // would push every PSSM split past what this near-field pass ever renders.
-                light.DirectionalShadowMaxDistance = Mathf.Min(sun.DirectionalShadowMaxDistance, camera.Far);
-            }
+            // Copied off the live sun, which by this point in the build already carries the flown
+            // zone's settings (WeatherRig.Build runs ahead of BuildCockpitPasses). Clamped to this
+            // pass's far plane, since a zone's fog far would push every split past the pass.
+            SunShadow.Copy(sun, light, camera.Far);
         }
         return new CockpitOverlay(view, camera, interior, light, sun)
         {
@@ -259,7 +283,12 @@ public sealed partial class CockpitOverlay : CanvasLayer
             {
                 if (used >= _flashes.Count)
                 {
-                    var twin = new OmniLight3D { Name = $"interior_flash_{used}", ShadowEnabled = false };
+                    var twin = new OmniLight3D
+                    {
+                        Name = $"interior_flash_{used}",
+                        ShadowEnabled = false,
+                        OmniAttenuation = Mech3.WorldLights.OmniAttenuation,
+                    };
                     _view.AddChild(twin);
                     _flashes.Add(twin);
                 }

@@ -141,6 +141,10 @@ public sealed class SceneBuilder
     /// and every generated shader exactly as they are.</summary>
     public bool DebugClutterFlag;
 
+    /// <summary>Meshes, by gamez mesh index, whose instances stay out of every shadow map. Set by
+    /// the caller before building; null lets every mesh cast.</summary>
+    public Func<int, bool>? CastsNoShadow;
+
     /// <summary>Which transparency classes this builder leaves unbuilt (<c>--hide-alpha</c>,
     /// <c>docs/cli.md</c>). Set by the caller before building, like <see cref="DebugClutterFlag"/>,
     /// because a hidden class is dropped at the surface rather than switched off at runtime. Empty
@@ -205,6 +209,22 @@ public sealed class SceneBuilder
     /// clutter MultiMesh still be forced blue per instance.</summary>
     internal const string ClutterFlagTintLine = "    ALBEDO = mix(COLOR.rgb, csky_tint.rgb, csky_tint.a);";
 
+    /// <summary>Enhanced Graphics only: the render-mode token that hands a cutout's alpha to the
+    /// MSAA coverage mask, so its edge resolves through the project's 4x samples instead of
+    /// stepping 1 bit per pixel. Appended to the CUTOUT arm alone, never to a blended one, whose
+    /// alpha already resolves in the transparent pass and would come out dithered instead.
+    /// The <c>_and_one</c> spelling hardens the resolved alpha back toward the scissor's own hard
+    /// step, so the plain mode ships (<c>docs/org/textures.md</c>).</summary>
+    internal const string CoverageMode = ", alpha_to_coverage";
+
+    /// <summary>The fragment half of <see cref="CoverageMode"/>, and not optional. The opaque pass
+    /// writes alpha 1 unless the edge built-in is set, so the render mode alone changes no pixel.
+    /// ⚠ The value is an OFFSET Godot adds to <c>ALPHA_SCISSOR_THRESHOLD</c>, not an alpha. At 0
+    /// the edge sits on the scissor's own 0.5, the faithful silhouette. At 0.5 it sits at 1.0,
+    /// which halves an opaque texel's coverage wherever the texture magnifies.</summary>
+    internal const string CoverageLines = "    ALPHA_ANTIALIASING_EDGE = 0.0;\n"
+        + "    ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));";
+
     /// <summary>Multiplies every depth bias this builder emits. Each is a fraction of VIEW
     /// DISTANCE, so a subtree mounted at a scale other than 1 has all of them compressed by that
     /// factor while the renderer's depth noise floor stays put; a caller mounting one passes the
@@ -227,10 +247,17 @@ public sealed class SceneBuilder
     /// ⚠ Set before building, like <see cref="DepthBiasScale"/>: it keys the shader.</summary>
     internal bool GammaBlendAlpha;
 
+    /// <summary>Keep this builder's cutouts on the plain scissor under Enhanced, without the
+    /// <see cref="CoverageMode"/> arm. ⚠ Set for a subtree drawn into a transparent viewport (the
+    /// cockpit pass). Coverage writes the resolved sample fraction into the target's alpha, so the
+    /// composite shows the world through a gauge face. Set before building: it keys the shader.</summary>
+    internal bool NoAlphaCoverage;
+
     /// <summary>Names the sky sprites whose opaque texture paints the sky's own colour as a
-    /// backdrop: the moon and the star field. Their materials take <see cref="ColorKeyed"/>'s copy
-    /// and blend, so only the figure draws. Null keys nothing, which is the faithful path.
-    /// ⚠ Set before building, like <see cref="DepthBiasScale"/>: it decides the material.</summary>
+    /// backdrop: the moon and the star field. Under Enhanced their materials take
+    /// <see cref="ColorKeyed"/>'s copy and blend, so only the figure draws. The faithful path keeps
+    /// the opaque texture, and <see cref="FollowGraphicsMode"/> swaps between the two. Null keys
+    /// nothing. ⚠ Set before building, like <see cref="DepthBiasScale"/>: it decides the material.</summary>
     internal Func<string, bool>? KeyedBackdropTexture;
 
     /// <summary>The world's conflict ranks (<see cref="ConflictRank"/>), set by the caller before
@@ -359,15 +386,13 @@ void fragment() {
     private static readonly string AircraftSpecularLiteral =
         AircraftSpecular.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture);
 
-    // ⚠ Process-wide, not per builder: Godot compiles a Shader the first time a material takes it,
-    // and each generated text is a pure function of its key, so a per-builder memo made every later
-    // builder recompile a shader byte-identical to one already live, on the frame path where an AI
-    // spawn builds an aircraft (docs/verification.md PERF-22). Anything an instance field varies the
-    // text by belongs in the key (`DebugClutterFlag`), or two builders that disagree about it share
-    // one shader. Main thread only, like every other builder path.
-    private static readonly Dictionary<int, Shader> BiasShaders = new(); // keyed by feature bits
-    private static readonly Dictionary<int, Shader> BillboardShaders = new(); // cloud sprites, keyed by blend/scissor bits
-    private static readonly Dictionary<int, Shader> CylindricalShaders = new(); // Y/X-axis facades, keyed by axis/blend/scissor/glow bits
+    // ⚠ Keep these process-wide, not per builder. A per-builder memo made every later builder compile
+    // a text already live, on the frame path where an AI spawn builds an aircraft (PERF-22). Anything
+    // an instance field varies the text by belongs in the key (`DebugClutterFlag`). Each entry holds
+    // one shader per graphics mode (ShaderTwins), so a switch recompiles nothing. Main thread only.
+    private static readonly Dictionary<int, ModeShader> BiasShaders = new(); // keyed by feature bits
+    private static readonly Dictionary<int, ModeShader> BillboardShaders = new(); // cloud sprites, keyed by blend/scissor bits
+    private static readonly Dictionary<int, ModeShader> CylindricalShaders = new(); // Y/X-axis facades, keyed by axis/blend/scissor/glow bits
 
     private readonly GameZ _gamez;
     private readonly TextureArchive _textures;
@@ -413,6 +438,11 @@ void fragment() {
     private readonly Dictionary<(int Material, int Axis, bool Lit, bool Fogged, bool ClampUv), Material> _cylindricalMaterialCache = new();
     // One keyed copy per KeyedBackdropTexture texture, shared by every material that samples it.
     private readonly Dictionary<string, ImageTexture> _keyedBackdrops = new(StringComparer.OrdinalIgnoreCase);
+    // Every material KeyedBackdropTexture names, with its look under both modes (FollowGraphicsMode).
+    private readonly List<KeyedSwap> _keyedSwaps = new();
+
+    // Every placed cloud's billboard, drawn from the rendered pool under Enhanced (DrawPool).
+    private readonly List<PooledSwap> _pooledSwaps = new();
     // Every textured material this builder made, paired with the texture name it resolved
     // from, the registry a live repaint needs (the viewer's livery lab re-runs the paint
     // and swaps each material's albedo in place, instead of rebuilding the whole aircraft
@@ -422,7 +452,9 @@ void fragment() {
     // shader variant rather than a parameter, so by the time a surface is committed it is reachable
     // nowhere else. The material cache also hands one object back for every surface sharing it.
     private readonly Dictionary<Material, TransparencyClass> _materialAlpha = new();
-    private Shader? _lightShader;
+    // A fullbright builder's committed surface arrays, per built mesh in surface order. Reading a
+    // surface back from Godot copies it off the GPU and waits for the render thread.
+    private readonly Dictionary<ArrayMesh, List<Godot.Collections.Array>> _builtArrays = new();
 
     /// <param name="fullbright">Render unshaded, like the original's world pass: texture × baked
     /// vertex colour, ignoring scene lights.</param>
@@ -476,6 +508,9 @@ void fragment() {
     private enum CylAxis { None, Y, X }
 
     public int MeshInstanceCount { get; private set; }
+
+    /// <summary>Mesh instances built with shadow casting off by <see cref="CastsNoShadow"/>.</summary>
+    public int ShadowlessMeshCount { get; private set; }
     public int ColliderCount { get; private set; }
 
     /// <summary>Mesh instances this builder moved onto a <see cref="ZoneGate"/> layer, indexed by
@@ -643,24 +678,6 @@ void fragment() {
     internal static bool UvsWithinUnitSquare(List<GameZPolygon> polys, int pass) =>
         UvAxesWithinUnitSquare(polys, pass) == UvClampAxes.Both;
 
-    /// <summary>The translucent twin of a generated opaque shader: the same code with the blend
-    /// variants' <c>ALPHA</c> line appended, so a runtime fade landing on an opaque-pass world piece
-    /// has an alpha path to drive. Writing ALPHA moves the twin into the transparent pass, so
-    /// ⚠ callers must install it per instance, never into the shared caches. Null when the code
-    /// cannot take the line: no preamble means <c>csky_opacity</c> is undeclared, and no
-    /// <c>col</c> local means there is no alpha to read.</summary>
-    internal static Shader? FadeShaderFor(Shader source)
-    {
-        string code = source.Code;
-        if (!code.Contains(InstanceUniformsInclude, StringComparison.Ordinal)
-            || !code.Contains("vec4 col = ", StringComparison.Ordinal))
-            return null;
-        int close = code.LastIndexOf('}');
-        if (close < 0)
-            return null;
-        return new Shader { Code = code[..close] + $"    ALPHA = col.a{OpacityTerm};\n" + code[close..] };
-    }
-
     /// <summary>The surface class one texture name names, <c>"water"</c>, <c>"buildings"</c>, or
     /// null for the untagged default. The collision buckets are built from this
     /// (<see cref="CollidersForMesh"/>), and <c>MapEdgeExtender</c>'s <c>--dump-tilegrid</c> census
@@ -750,6 +767,27 @@ void fragment() {
         return mesh;
     }
 
+    /// <summary>Puts each sky sprite's look for the standing graphics mode back on its material. That
+    /// is the keyed, blended copy under Enhanced and the opaque texture on the faithful path. The
+    /// live mode switch calls it after <see cref="ShaderTwins.Regenerate"/>.</summary>
+    internal void FollowGraphicsMode()
+    {
+        bool enhanced = GraphicsMode.Enhanced;
+        foreach (var swap in _keyedSwaps)
+        {
+            ShaderTwins.Follow(swap.Material, enhanced ? swap.KeyedShader : swap.PlainShader);
+            swap.Material.SetShaderParameter("albedo_tex", enhanced ? swap.KeyedTex : swap.PlainTex);
+            NoteAlpha(swap.Material, enhanced || swap.PlainBlend, !enhanced && swap.PlainScissor);
+        }
+        foreach (var swap in _pooledSwaps)
+        {
+            if (enhanced)
+                DrawPool(swap);
+            else
+                ShaderTwins.Follow(swap.Material, swap.PlainShader);
+        }
+    }
+
     /// <summary>The cross-node draw-order tie-break for one gamez node. Every instance uniform
     /// named <c>node_bias</c>, placed world, clutter decorations, map-edge tiles, comes from
     /// here, so the three cannot drift apart.</summary>
@@ -761,6 +799,21 @@ void fragment() {
         ConflictRanks.TryGetValue(nodeIndex, out int rank);
         return Math.Min(rank, ConflictRankCap) * ConflictRankBias * DepthBiasScale;
     }
+
+    /// <summary>Whether <paramref name="material"/> is one of this builder's depth-biased world
+    /// materials drawn in the opaque pass, so its surfaces may share one draw (<see cref="WorldMerge"/>).
+    /// A billboard spins about its own instance's origin and a blend sorts per instance, so neither is.
+    /// It must follow its key (<see cref="ShaderTwins.Follow"/>), so a switch moves the shared draw too.</summary>
+    internal bool IsStaticOpaque(Material? material) =>
+        material is ShaderMaterial { Shader: { } shader } shaderMaterial
+        && _materialAlpha.TryGetValue(material, out var alpha) && alpha != TransparencyClass.BlendSurface
+        && ShaderTwins.FamilyOf(shader) == "world" && ShaderTwins.IsTracked(shaderMaterial);
+
+    /// <summary>The arrays a surface of this fullbright builder's mesh was committed from. Any other
+    /// mesh gets Godot's read-back, which copies the surface off the GPU.</summary>
+    internal Godot.Collections.Array SurfaceArrays(ArrayMesh mesh, int surface) =>
+        _builtArrays.TryGetValue(mesh, out var kept) && surface < kept.Count
+            ? kept[surface] : mesh.SurfaceGetArrays(surface);
 
     private static CylAxis GetCylindricalAxis(GameZMesh mesh) => ClassifyBillboard(mesh) switch
     {
@@ -1075,6 +1128,11 @@ void fragment() {
                     ZoneGatedMeshes[node.ZoneId]++;
                 }
                 mi.SetInstanceShaderParameter("node_bias", NodeBiasOf(node.Index));
+                if (CastsNoShadow?.Invoke(node.MeshIndex) == true)
+                {
+                    mi.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+                    ShadowlessMeshCount++;
+                }
                 // Billboard meshes were recentered on their quad center; put the instance
                 // there so the material's billboard pivots at the center, not the node origin.
                 if (_meshPivotCache.TryGetValue(node.MeshIndex, out var pivot))
@@ -1261,8 +1319,7 @@ void fragment() {
 
             if (!_lightMaterialCache.TryGetValue(key, out var mat))
             {
-                _lightShader ??= new Shader { Code = LightShaderCode };
-                mat = new ShaderMaterial { Shader = _lightShader };
+                mat = new ShaderMaterial { Shader = ShaderTwins.Pooled(LightShaderCode, "light") };
                 mat.SetShaderParameter("range_far", key.Far);
                 mat.SetShaderParameter("fade_slope", key.Slope);
                 mat.SetShaderParameter("blink_period", key.Blink);
@@ -1446,8 +1503,19 @@ void fragment() {
             // mesh, and the classes are isolated from each other, not from the world.
             if (alpha != TransparencyClass.None && HiddenAlpha.HasFlag(alpha))
                 continue;
-            st.SetMaterial(surfaceMaterial);
-            st.Commit(arrayMesh);
+            // What SurfaceTool.Commit does, with the arrays kept for the world's merge. Commit adds
+            // no surface for a group that emitted no triangle, so neither does this.
+            var arrays = st.CommitToArrays();
+            if (arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array().Length == 0)
+                continue;
+            arrayMesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+            arrayMesh.SurfaceSetMaterial(arrayMesh.GetSurfaceCount() - 1, surfaceMaterial);
+            if (_fullbright)
+            {
+                if (!_builtArrays.TryGetValue(arrayMesh, out var kept))
+                    _builtArrays[arrayMesh] = kept = new List<Godot.Collections.Array>();
+                kept.Add(arrays);
+            }
         }
         return arrayMesh;
     }
@@ -1519,8 +1587,14 @@ void fragment() {
         Material mat;
         if (tex != null)
         {
-            tex = KeyedBackdrop(texName!, tex) ?? tex;
-            var billboard = BillboardMaterial(tex, blend: true, scissor: false, glow: true, lit: true, fogged: fogged, clampUv: clampUv);
+            var keyed = KeyedBackdrop(texName!, tex);
+            var billboard = BillboardMaterial(keyed != null && GraphicsMode.Enhanced ? keyed : tex, blend: true,
+                scissor: false, glow: true, lit: true, fogged: fogged, clampUv: clampUv);
+            if (keyed != null)
+            {
+                var shader = GetBillboardShader(true, false, true, true, fogged, clampUv);
+                NoteKeyed(new KeyedSwap(billboard, shader, tex, true, false, shader, keyed));
+            }
             RegisterCycle(_gamez.Materials[materialIndex], billboard); // same albedo_tex, see GetCylindricalMaterial
             mat = billboard;
         }
@@ -1544,10 +1618,18 @@ void fragment() {
         {
             bool blend = _textures.LastHadAlpha && _textures.LastAlphaIsSoft;
             bool scissor = _textures.LastHadAlpha && !blend;
-            if (KeyedBackdrop(texName!, tex) is { } keyed)
+            var (plainTex, plainBlend, plainScissor) = (tex, blend, scissor);
+            var keyed = KeyedBackdrop(texName!, tex);
+            if (keyed != null && GraphicsMode.Enhanced)
                 (tex, blend, scissor) = (keyed, true, false);
             bool glow = texName != null && _glowTexture != null && _glowTexture(texName);
             var billboard = CylindricalBillboardMaterial(tex, axis, blend, scissor, glow, lit, fogged, clampUv);
+            if (keyed != null)
+            {
+                NoteKeyed(new KeyedSwap(billboard,
+                    GetCylindricalShader(axis, plainBlend, plainScissor, glow, lit, fogged, clampUv), plainTex, plainBlend, plainScissor,
+                    GetCylindricalShader(axis, true, false, glow, lit, fogged, clampUv), keyed));
+            }
             // A billboard shader samples the same albedo_tex, so a flipbook drives it identically,
             // and the fire cycles land HERE rather than on the bias path: fire1/fire2/flame01 are
             // all Facade/CylindricalY meshes (EffectCycles).
@@ -1666,7 +1748,9 @@ void fragment() {
             bool blend = _textures.LastHadAlpha
                 && (_textures.LastAlphaIsSoft || (_blendTexture != null && _blendTexture(texName)));
             bool scissor = _textures.LastHadAlpha && !blend;
-            if (KeyedBackdrop(texName, tex) is { } keyed)
+            var (plainTex, plainBlend, plainScissor) = (tex, blend, scissor);
+            var keyed = KeyedBackdrop(texName, tex);
+            if (keyed != null && GraphicsMode.Enhanced)
                 (tex, blend, scissor) = (keyed, true, false);
             // Cloud sprites face the camera and take a billboard material: no depth bias, since a
             // free-floating sprite has nothing coplanar to fight, but the SAME cylindrical fog, so
@@ -1675,9 +1759,33 @@ void fragment() {
             {
                 var billboard = BillboardMaterial(tex, blend, scissor, glow: false, lit: lit, fogged: fogged, clampUv: clampUv);
                 RegisterCycle(src, billboard); // same albedo_tex, see GetCylindricalMaterial
+                if (keyed != null)
+                {
+                    NoteKeyed(new KeyedSwap(billboard,
+                        GetBillboardShader(plainBlend, plainScissor, false, lit, fogged, clampUv), plainTex, plainBlend, plainScissor,
+                        GetBillboardShader(true, false, false, lit, fogged, clampUv), keyed));
+                }
+                // Enhanced only: the placed clouds draw the fuller rendered pool, tinted by this
+                // mask's own colour. The faithful path never reaches the pool.
+                var pooled = new PooledSwap(billboard, texName,
+                    GetBillboardShader(plainBlend, plainScissor, false, lit, fogged, clampUv),
+                    new Lazy<ModeShader>(() => GetBillboardShader(keyed != null || plainBlend, keyed == null && plainScissor, false, lit, fogged, clampUv, pooled: true)));
+                _pooledSwaps.Add(pooled);
+                if (GraphicsMode.Enhanced)
+                    DrawPool(pooled);
                 return billboard;
             }
-            var textured = BiasMaterial(priority, rank, noClutter, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade, ClassifySurface(texName) == "water");
+            bool water = ClassifySurface(texName) == "water";
+            var textured = BiasMaterial(priority, rank, noClutter, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade, water);
+            if (keyed != null)
+            {
+                bool scrolls = scroll != Vector2.Zero;
+                NoteKeyed(new KeyedSwap(textured,
+                    GetBiasShader(!_fullbright, true, plainBlend, plainScissor, doubleSided, scrolls, clampUv, lit, fogged, edgeClamp, clutterFade, water),
+                    plainTex, plainBlend, plainScissor,
+                    GetBiasShader(!_fullbright, true, true, false, doubleSided, scrolls, clampUv, lit, fogged, edgeClamp, clutterFade, water),
+                    keyed));
+            }
             _texturedMaterials.Add((textured, texName)); // for a live repaint, see Repaint()
             RegisterCycle(src, textured);
             return textured;
@@ -1686,6 +1794,20 @@ void fragment() {
         var color = src?.Color ?? Colors.White;
         return BiasMaterial(priority, rank, noClutter, doubleSided, null, color, blend: color.A < 1f, scissor: false,
             scroll: Vector2.Zero, clampUv: false, lit: lit, fogged: fogged, pass: pass, clutterFade: clutterFade);
+    }
+
+    // Keeps a sky sprite's two looks, and puts the standing mode's on its material.
+    private void NoteKeyed(KeyedSwap swap) => _keyedSwaps.Add(swap);
+
+    // Puts a placed cloud on the rendered pool. The mask's tint is read on the first Enhanced draw,
+    // so a faithful session never decodes it. A missing pool or an empty mask keeps the sprite.
+    private void DrawPool(PooledSwap swap)
+    {
+        swap.Tint ??= CloudPuffs.MaskTint(_textures.FindImage(swap.TexName)) ?? Colors.Transparent;
+        if (CloudPuffs.Far() is not { } pool || swap.Tint == Colors.Transparent)
+            return;
+        ShaderTwins.Follow(swap.Material, swap.PooledShader.Value);
+        CloudPuffs.Apply(swap.Material, pool, swap.Tint.Value);
     }
 
     // Records the verdict a world material's shader was generated for. Every constructor that can
@@ -1706,11 +1828,8 @@ void fragment() {
         bool scrolls = tex != null && scroll != Vector2.Zero;
         if (tex == null)
             edgeClamp = UvClampAxes.None;
-        var mat = new ShaderMaterial
-        {
-            Shader = GetBiasShader(shaded: !_fullbright, textured: tex != null, blend, scissor, doubleSided,
-                scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade, water),
-        };
+        var mat = ShaderTwins.Follow(new ShaderMaterial(), GetBiasShader(shaded: !_fullbright, textured: tex != null,
+            blend, scissor, doubleSided, scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade, water));
         NoteAlpha(mat, blend, scissor);
         float bias = Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) + rank * SurfaceRankBias;
         if (noClutter)
@@ -1720,7 +1839,9 @@ void fragment() {
         bias += pass * OverlayPassBias;
         bias = Mathf.Clamp(bias * DepthBiasScale, -MaxScaledBias, MaxScaledBias);
         mat.SetShaderParameter("depth_bias", bias);
-        if (!_fullbright && GraphicsMode.Enhanced && ShadowLookupOffset != 0f)
+        // Written under either mode. The faithful shader declares no such uniform and ignores it,
+        // and a live switch to Enhanced finds it already on the material.
+        if (!_fullbright && ShadowLookupOffset != 0f)
             mat.SetShaderParameter("shadow_lookup_offset", ShadowLookupOffset);
         if (tex != null)
             mat.SetShaderParameter("albedo_tex", tex);
@@ -1737,37 +1858,61 @@ void fragment() {
         return mat;
     }
 
-    // `lit` / `fogged` are the model's own authored render flags. They select shader VARIANTS
-    // rather than driving a uniform on purpose: a lit, fogged surface then emits byte-for-byte
-    // the shader text it always did, so honouring the flags cannot perturb the overwhelming
-    // majority of the world through float rounding in a mix().
-    // Key bits: 1-64 the flags above, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade,
-    // 4096 DebugClutterFlag, 8192 enhanced, 16384 water, 32768 sun, 65536 gamma blend; free 131072.
-    private Shader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
+    // `lit` / `fogged` are authored render flags that select shader VARIANTS, not a uniform. A lit,
+    // fogged surface then emits the shader text it always did, free of a mix()'s float rounding.
+    // Key bits: 1-64 the flags, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade.
+    // Then 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage.
+    // ⚠ Keep the graphics mode out of the key: each key holds one shader per mode (ShaderTwins).
+    private ModeShader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
         bool clutterFade = false, bool water = false)
+    {
+        // Only a lit world surface can take the water arm, and only a shaded one the sun term.
+        water &= !shaded && lit;
+        bool sunVertexLit = shaded && _sunVertexLit;
+        // Only a blending surface has an alpha to correct; a scissor compares against a fixed 0.5
+        // and moving its alpha would move the cutout silhouette instead of the composite.
+        bool gammaBlend = blend && GammaBlendAlpha;
+        bool debugClutter = DebugClutterFlag;
+        bool noAlphaCoverage = NoAlphaCoverage;
+        int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0)
+            | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256)
+            | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (debugClutter ? 4096 : 0)
+            | (water ? 16384 : 0) | (sunVertexLit ? 32768 : 0) | (gammaBlend ? 65536 : 0)
+            | (noAlphaCoverage ? 131072 : 0);
+        ShaderTwins.EnsureCurrent();
+        if (!BiasShaders.TryGetValue(key, out var twins))
+        {
+            BiasShaders[key] = twins = ShaderTwins.Make(() => BiasShaderCode(shaded, textured, blend, scissor,
+                doubleSided, scroll, clampUv, lit, fogged, edgeClamp, clutterFade, water, sunVertexLit, gammaBlend,
+                debugClutter, noAlphaCoverage), "world", $"world:{key:x}");
+        }
+        return twins;
+    }
+
+    // The generators below are static so a recipe in ShaderTwins holds no builder alive. They stay
+    // beside their getters, which costs one SA1204 suppression per block.
+#pragma warning disable SA1204
+    // The bias shader's text under the current graphics mode. A pure function of its arguments and
+    // GraphicsMode.Enhanced, so ShaderTwins can write it again under either mode.
+    private static string BiasShaderCode(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
+        bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp, bool clutterFade, bool water,
+        bool sunVertexLit, bool gammaBlend, bool debugClutter, bool noAlphaCoverage)
     {
         // Enhanced mode only: a world surface authored `lighting: true` shades under the real scene
         // lights off its decoded normals. `lighting: false` is self-lit by intent and keeps the
         // fullbright arm, so `fullbright` rather than `!shaded` selects the terms that arm owns.
         bool worldLit = GraphicsMode.Enhanced && !shaded && lit;
         bool fullbright = !shaded && !worldLit;
-        // ⚠ The water arm exists only inside the lit world arm, so original mode never sets its key
-        // bit and its shader text cannot move.
+        // ⚠ The water arm exists only inside the lit world arm, so original mode's shader text
+        // cannot move.
         bool waterLit = worldLit && water;
         // The original's own aircraft light: unshaded, the per-vertex sun term times the authored
         // colour, clamped, then the texel (docs/org/vertexLighting.md). No Godot light reaches it.
-        bool sunLit = shaded && _sunVertexLit && !GraphicsMode.Enhanced;
-        // Only a blending surface has an alpha to correct; a scissor compares against a fixed 0.5
-        // and moving its alpha would move the cutout silhouette instead of the composite.
-        bool gammaBlend = blend && GammaBlendAlpha;
-        int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0)
-            | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256)
-            | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (DebugClutterFlag ? 4096 : 0)
-            | (GraphicsMode.Enhanced ? 8192 : 0) | (waterLit ? 16384 : 0) | (sunLit ? 32768 : 0)
-            | (gammaBlend ? 65536 : 0);
-        if (BiasShaders.TryGetValue(key, out var cached))
-            return cached;
+        bool sunLit = sunVertexLit && !GraphicsMode.Enhanced;
+        // The coverage arm samples albedo_tex for its edge derivative, so an untextured cutout keeps
+        // the plain scissor. The archive cannot produce one, since a verdict needs a texture.
+        bool coverage = scissor && textured && GraphicsMode.Enhanced && !noAlphaCoverage;
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("shader_type spatial;");
@@ -1778,6 +1923,8 @@ void fragment() {
             : "render_mode skip_vertex_transform, cull_front");
         if (fullbright || sunLit)
             sb.Append(", unshaded");
+        if (coverage)
+            sb.Append(CoverageMode);
         sb.AppendLine(";");
         sb.AppendLine("uniform float depth_bias = 0.0;");
         if (shaded && !sunLit && GraphicsMode.Enhanced)
@@ -1961,19 +2108,19 @@ void fragment() {{");
         // The debug overlays' per-instance tint, a no-op at alpha 0. Under --debug-clutterflag the
         // fullbright world shows the flag colour EmitTriangle wrote into COLOR instead of the lit,
         // fogged texture, which C5's night art would otherwise swallow whole.
-        sb.AppendLine(DebugClutterFlag && !shaded ? ClutterFlagTintLine : TintLine);
+        sb.AppendLine(debugClutter && !shaded ? ClutterFlagTintLine : TintLine);
         if (blend || scissor)
             sb.AppendLine(gammaBlend
                 ? $"    ALPHA = csky_srgb_to_linear(vec3(col.a)).r{OpacityTerm};"
                 : $"    ALPHA = col.a{OpacityTerm};");
         if (scissor)
             sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
+        if (coverage)
+            sb.AppendLine(CoverageLines);
         sb.AppendLine("}");
-
-        var shader = new Shader { Code = sb.ToString() };
-        BiasShaders[key] = shader;
-        return shader;
+        return sb.ToString();
     }
+#pragma warning restore SA1204
 
     // A camera-facing billboard material for the cloud sprites (cloud1/cloud2, flat 2D cards
     // in the source). Unlike the bias shader it does no depth bias (free-floating sprites have
@@ -1981,25 +2128,38 @@ void fragment() {{");
     // distant sprites fade into the fog wall in step with the terrain they float over. blend /
     // scissor follow the alpha classification (cloud1/cloud2 are soft-alpha ⇒ blend).
     private ShaderMaterial BillboardMaterial(ImageTexture tex, bool blend, bool scissor, bool glow, bool lit, bool fogged,
-        bool clampUv)
+        bool clampUv, bool pooled = false)
     {
-        var mat = new ShaderMaterial { Shader = GetBillboardShader(blend, scissor, glow, lit, fogged, clampUv) };
+        var mat = ShaderTwins.Follow(new ShaderMaterial(), GetBillboardShader(blend, scissor, glow, lit, fogged, clampUv, pooled));
         mat.SetShaderParameter("albedo_tex", tex);
         NoteAlpha(mat, blend, scissor);
         return mat;
     }
 
-    // Key bits taken: 1 blend, 2 scissor, 4 glow, 8 !lit, 16 !fogged, 32 clampUv, 64 enhanced
-    // mode. Next free bit is 128.
-    private Shader GetBillboardShader(bool blend, bool scissor, bool glow, bool lit, bool fogged, bool clampUv)
+    // Key bits taken: 1 blend, 2 scissor, 4 glow, 8 !lit, 16 !fogged, 32 clampUv, 128 the rendered
+    // cloud puff pool. Next free bit is 256. The graphics mode stays out of the key, as in GetBiasShader.
+    private ModeShader GetBillboardShader(bool blend, bool scissor, bool glow, bool lit, bool fogged, bool clampUv,
+        bool pooled = false)
     {
         // A glow variant already ignores csky_world_light, so `lit` cannot split its key.
         lit |= glow;
         int key = (blend ? 1 : 0) | (scissor ? 2 : 0) | (glow ? 4 : 0) | (lit ? 0 : 8) | (fogged ? 0 : 16)
-            | (clampUv ? 32 : 0) | (GraphicsMode.Enhanced ? 64 : 0);
-        if (BillboardShaders.TryGetValue(key, out var cached))
-            return cached;
+            | (clampUv ? 32 : 0) | (pooled ? 128 : 0);
+        ShaderTwins.EnsureCurrent();
+        if (!BillboardShaders.TryGetValue(key, out var twins))
+        {
+            string family = pooled ? "billboard-pooled" : "billboard";
+            BillboardShaders[key] = twins = ShaderTwins.Make(
+                () => BillboardShaderCode(blend, scissor, glow, lit, fogged, clampUv, pooled), family, $"{family}:{key:x}");
+        }
+        return twins;
+    }
 
+    // The billboard shader's text under the current graphics mode (see BiasShaderCode).
+#pragma warning disable SA1204
+    private static string BillboardShaderCode(bool blend, bool scissor, bool glow, bool lit, bool fogged, bool clampUv,
+        bool pooled)
+    {
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("shader_type spatial;");
         // Fullbright like the rest of the world, double-sided, no shadows. fog_disabled turns
@@ -2008,6 +2168,8 @@ void fragment() {{");
         sb.Append("render_mode unshaded, cull_disabled, shadows_disabled, fog_disabled");
         if (blend)
             sb.Append(", blend_mix, depth_draw_never");
+        if (scissor && GraphicsMode.Enhanced)
+            sb.Append(CoverageMode);
         sb.AppendLine(";");
         // A sprite whose UVs never leave the unit square never needs the sampler to wrap, and
         // wrapping it bleeds the texture's opposite edge in at the UV border, the same
@@ -2028,6 +2190,11 @@ void fragment() {{");
             sb.AppendLine(InstanceUniformsInclude);
         sb.AppendLine(SrgbInclude); // DX7 gamma-space vertex modulate (world/cloud pass)
         sb.AppendLine(FacadeInclude);
+        if (pooled)
+            sb.AppendLine(CloudPuffs.Include);
+        // A pooled cloud sprite takes its rendered puff, turn, mirror and size off its own position.
+        string pose = pooled ? "\n" + CloudPuffs.PoseLines : string.Empty;
+        string sample = pooled ? "csky_puff_sample(v_puff_card_uv, v_puff_pose, v_puff_layer)" : SampleAlbedo("UV");
         sb.AppendLine($@"
 void vertex() {{
     // The SphericalY facade pose, keeping the instance scale (Godot's billboard_keep_scale, by
@@ -2038,11 +2205,11 @@ void vertex() {{
         vec4(face[0], 0.0), vec4(face[1], 0.0), vec4(face[2], 0.0), MODEL_MATRIX[3]);
     MODELVIEW_MATRIX[0] *= length(MODEL_MATRIX[0].xyz);
     MODELVIEW_MATRIX[1] *= length(MODEL_MATRIX[1].xyz);
-    MODELVIEW_MATRIX[2] *= length(MODEL_MATRIX[2].xyz);
+    MODELVIEW_MATRIX[2] *= length(MODEL_MATRIX[2].xyz);{pose}
 }}
 
 void fragment() {{
-    vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * {SampleAlbedo("UV")};");
+    vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * {sample};");
         // Cylindrical distance fog, identical to the world shader: VERTEX is the view-space
         // position in fragment; INV_VIEW_MATRIX lifts it back to world for the horizontal camera
         // distance + the fragment-altitude fade. A model authored `fog: false` skips it.
@@ -2066,12 +2233,12 @@ void fragment() {{
         }
         if (scissor)
             sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
+        if (scissor && GraphicsMode.Enhanced)
+            sb.AppendLine(CoverageLines);
         sb.AppendLine("}");
-
-        var shader = new Shader { Code = sb.ToString() };
-        BillboardShaders[key] = shader;
-        return shader;
+        return sb.ToString();
     }
+#pragma warning restore SA1204
 
     // A single-axis (Y or X) cylindrical billboard: the mesh spins about that one fixed world axis
     // to face the camera on the other two, so trees, lampposts, flames and cables stay upright
@@ -2081,28 +2248,41 @@ void fragment() {{
     private ShaderMaterial CylindricalBillboardMaterial(ImageTexture tex, CylAxis axis, bool blend, bool scissor,
         bool glow, bool lit, bool fogged, bool clampUv)
     {
-        var mat = new ShaderMaterial { Shader = GetCylindricalShader(axis, blend, scissor, glow, lit, fogged, clampUv) };
+        var mat = ShaderTwins.Follow(new ShaderMaterial(), GetCylindricalShader(axis, blend, scissor, glow, lit, fogged, clampUv));
         mat.SetShaderParameter("albedo_tex", tex);
         NoteAlpha(mat, blend, scissor);
         return mat;
     }
 
-    // Key bits taken: 1 axis, 2 blend, 4 scissor, 8 glow, 16 !lit, 32 !fogged, 64 clampUv,
-    // 128 enhanced mode. Next free bit is 256.
-    private Shader GetCylindricalShader(CylAxis axis, bool blend, bool scissor, bool glow, bool lit, bool fogged,
+    // Key bits taken: 1 axis, 2 blend, 4 scissor, 8 glow, 16 !lit, 32 !fogged, 64 clampUv. Next
+    // free bit is 128. The graphics mode stays out of the key, as in GetBiasShader.
+    private ModeShader GetCylindricalShader(CylAxis axis, bool blend, bool scissor, bool glow, bool lit, bool fogged,
         bool clampUv)
     {
         lit |= glow; // a glow variant already ignores csky_world_light, same key
         int key = (axis == CylAxis.X ? 1 : 0) | (blend ? 2 : 0) | (scissor ? 4 : 0) | (glow ? 8 : 0)
-            | (lit ? 0 : 16) | (fogged ? 0 : 32) | (clampUv ? 64 : 0) | (GraphicsMode.Enhanced ? 128 : 0);
-        if (CylindricalShaders.TryGetValue(key, out var cached))
-            return cached;
+            | (lit ? 0 : 16) | (fogged ? 0 : 32) | (clampUv ? 64 : 0);
+        ShaderTwins.EnsureCurrent();
+        if (!CylindricalShaders.TryGetValue(key, out var twins))
+        {
+            CylindricalShaders[key] = twins = ShaderTwins.Make(
+                () => CylindricalShaderCode(axis, blend, scissor, glow, lit, fogged, clampUv), "cylindrical", $"cylindrical:{key:x}");
+        }
+        return twins;
+    }
 
+    // The single-axis billboard's text under the current graphics mode (see BiasShaderCode).
+#pragma warning disable SA1204
+    private static string CylindricalShaderCode(CylAxis axis, bool blend, bool scissor, bool glow, bool lit,
+        bool fogged, bool clampUv)
+    {
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("shader_type spatial;");
         sb.Append("render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled");
         if (blend)
             sb.Append(", blend_mix, depth_draw_never");
+        if (scissor && GraphicsMode.Enhanced)
+            sb.Append(CoverageMode);
         sb.AppendLine(";");
         // Clamp when the facade's UVs never leave the unit square, see GetBillboardShader.
         sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, "
@@ -2156,10 +2336,30 @@ void fragment() {{
         }
         if (scissor)
             sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
+        if (scissor && GraphicsMode.Enhanced)
+            sb.AppendLine(CoverageLines);
         sb.AppendLine("}");
+        return sb.ToString();
+    }
+#pragma warning restore SA1204
 
-        var shader = new Shader { Code = sb.ToString() };
-        CylindricalShaders[key] = shader;
-        return shader;
+    // One sky sprite's material under both modes. The plain texture keeps its own alpha verdict,
+    // and the keyed copy takes the blend shader Enhanced draws it through.
+    private sealed record KeyedSwap(ShaderMaterial Material, ModeShader PlainShader, ImageTexture PlainTex,
+        bool PlainBlend, bool PlainScissor, ModeShader KeyedShader, ImageTexture KeyedTex);
+
+    // One placed cloud's billboard under both modes: the faithful sprite shader and the pooled one.
+    // Tint is the mask's, read once; Transparent marks a mask with nothing to tint by.
+    private sealed class PooledSwap(ShaderMaterial material, string texName, ModeShader plainShader, Lazy<ModeShader> pooledShader)
+    {
+        public ShaderMaterial Material { get; } = material;
+
+        public string TexName { get; } = texName;
+
+        public ModeShader PlainShader { get; } = plainShader;
+
+        public Lazy<ModeShader> PooledShader { get; } = pooledShader;
+
+        public Color? Tint { get; set; }
     }
 }

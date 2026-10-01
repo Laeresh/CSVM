@@ -179,8 +179,9 @@
 
 .PARAMETER Graphics
     "original" (default) or "enhanced" -- appends --graphics=enhanced to the perf and hitch
-    launches ONLY, never to goldens or the engine suites, which stay original-mode by
-    construction. Printed in the perf/hitch stage headers. "original" appends nothing, so the
+    launches ONLY, never to goldens or the engine suites. The goldens' enhanced shots name the
+    flag in their own manifest args, so the set is the same whichever value this takes. Printed
+    in the perf/hitch stage headers. "original" appends nothing, so the
     default launch argument lists are byte-identical to a run that omits this parameter.
 
 .EXAMPLE

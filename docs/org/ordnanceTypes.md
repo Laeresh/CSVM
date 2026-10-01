@@ -793,6 +793,40 @@ all keep their decoded placement, and the switch is the ordinary `graphics.mode`
 callee name it may re-base; the `impact-orientation` suite pins both presentations, measuring the
 drawn mesh's disc normal against the reversed flight vector.
 
+### The burst light in Enhanced Graphics
+
+The HE burst authors a point light of its own. `he_ground_effect` runs `he_light_seq`, which sets
+`LIGHT_STATE he_light` ACTIVE at the `he_ring` node with `RANGE (4, 20)` and
+`COLOR (1.0, 0.86, 0.29)`, then walks six signed `LIGHT_ANIMATION` range deltas that grow the max
+from 20 m to 420 m over 0.41 s and switches the light INACTIVE again; the same definition's `FBFX`
+frame-buffer wash runs 1.2 s. On the faithful presentation CSVM renders that authored light: the
+effects runtime contributes its `LIGHT_STATE` lights into the world's `WorldLights` through
+`AddSource`, and the `burst-light` suite pins the ramp. `torpedo_ground_effect` authors
+`torp_light` the same way.
+
+⚠ **Remake-only, and Enhanced Graphics only.** Under `GraphicsMode.Enhanced` every played burst
+effect (`he_ground_effect`, `torpedo_ground_effect`, `large_fireball`, `small_fireball`, the
+seeker's `ballflare.flt` and the flash rocket's `flash_effect`) registers a short-lived light with
+the world's `WorldLights` ([`../architecture/Mech3.md`](../architecture/Mech3.md)), so a detonation
+lights the terrain, buildings and aircraft around it. Each def has its own shape (colour, peak
+gain, range and decay), all remake values with no counterpart in the data: HE and the fireballs a
+red-orange, the torpedo redder and more than twice HE's gain and reach, the seeker's four bursts
+weaker each, the flash a large white-blue flash. The authored `he_light` and `torp_light` share one
+colour, (1.0, 0.86, 0.29), so the burst light does not borrow it. The light stands 30 m above the
+hit with no distance falloff inside its range: Enhanced terrain is lit by the omni alone, and a
+light at ground level with Godot's default falloff meets flat ground edge-on and is spent within
+about 20 m. It flickers, and it ends with the effect it came from rather than on a clock. It
+replaces the authored light of the def it comes from: the runtime still plays and tweens
+`he_light`, `torp_light` and the flash's light but does not submit them
+(`AnimRuntime.LightReplacedAnimNames`), because the authored ramp's faint 320 m to 420 m wash beside
+the bright short envelope read as no burst light at all. CSVM: `EffectCatalogue.BurstLightShapes`
+names which effects throw one and holds their shapes, `WorldEffectsFactory.RegisterBurstLight`
+decides, `WorldLights.AddBurst` holds the envelope, and the `burst-light-envelope` and `burst-light`
+suites pin both presentations. The heat shimmer over the same burst (`Effects/HeatShimmer.cs`) is
+that same remake-only, Enhanced-only layer: it reads the fireball names alone
+(`EffectCatalogue.BurstLightAnimNames`, not the seeker or flash) and the same liveness, so every
+fireball refracts the air over it, and the faithful presentation carries no shimmer.
+
 ### Which row a burst reads
 
 The surface id `FUN_005ac7a0` indexes the table with comes off the hit record it is handed

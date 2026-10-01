@@ -24,7 +24,7 @@ doubled period) and classifies each texture's alpha twice, for two unrelated rea
 manifest, the one reader that sees the `Simple` textures. That manifest also supplies
 `RenderFlags`, whose bit 2 (`IsAdditive`) is the whole sprite-blend rule, and whose bit 3 decides `TruncatesAlpha`, the faithful path's 4-bit alpha that `PlanePainter` also applies.
 `Build` is the one construction path (decode, classify, drop-in, mip chain, alpha truncation), `Find` caches it, `BuildMipped` hands it to `--dump-mips` un-cached, and `MipBias` reads the chapter's authored LOD
-bias for `Launcher`. [../org/textures.md](../org/textures.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../formats/gamez.md](../formats/gamez.md).
+bias for `Launcher`. `FollowAlphaDepth` decodes the alpha-plane textures `Find` handed out again at a live switch's depth and uploads them in place. [../org/textures.md](../org/textures.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../formats/gamez.md](../formats/gamez.md).
 
 ## src/Mech3/SceneBuilder.cs
 Shared GameZ-subtree to MeshInstance3D builder: triangulation, material and mesh caches,
@@ -38,7 +38,17 @@ trimesh per surface class and soil and by sidedness, both halves on one body reg
 `WorldCollision`; `MissionStructureTeamMeta` is the channel `DestructibleRegistry` reads a pool's
 team through. A textured surface takes `csky_world_light` on its `lighting` flag alone, and every
 mip-mapped arm fetches through `SampleAlbedo`, the one `csky_sample_albedo` carrying the chapter's
-LOD bias, reused by `Clutter` and `MeshLab`. `AlphaOf` reads back the transparency verdict a built material's shader was generated for, the registry `HiddenAlpha` (`--hide-alpha`) drops a class by, dropping the surface rather than the instance so the classes isolate from each other. A blended world surface lying within `GroundLayerMinUp` of level (a terrain strip, a road, a shadow decal; never the caller's blend list, the cloud deck and sky) takes `GroundLayerRenderPriority` and draws ahead of every other transparent draw, so a clutter card standing on it composites over it: the card kinds are chapter-wide MultiMeshes whose one sort key is the forest's centre, so the depth sort put a nearer strip over the card's soft edge. A `sunVertexLit` builder (the in-flight aircraft) draws original mode's shaded arm unshaded, with the original's per-vertex sun term, whose ambient half is the Danger Zone photograph's fill at an armed `PhotoEyeParam` eye. Arms and selection: [Root.md](Root.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
+LOD bias, reused by `Clutter` and `MeshLab`. `AlphaOf` reads back the transparency verdict a built material's shader was generated for, the registry `HiddenAlpha` (`--hide-alpha`) drops a class by, dropping the surface rather than the instance so the classes isolate from each other. A blended world surface lying within `GroundLayerMinUp` of level (a terrain strip, a road, a shadow decal; never the caller's blend list, the cloud deck and sky) takes `GroundLayerRenderPriority` and draws ahead of every other transparent draw, so a clutter card standing on it composites over it: the card kinds are chapter-wide MultiMeshes whose one sort key is the forest's centre, so the depth sort put a nearer strip over the card's soft edge. A `sunVertexLit` builder (the in-flight aircraft) draws original mode's shaded arm unshaded, with the original's per-vertex sun term, whose ambient half is the Danger Zone photograph's fill at an armed `PhotoEyeParam` eye. Under Enhanced Graphics the cutout arm also takes `CoverageMode` and the `CoverageLines` built-ins that feed it, so a scissored edge resolves through the project's MSAA samples. The shader caches key on everything but the graphics mode, and each key is a `ModeShader` whose materials follow it across a switch (`ShaderTwins.cs`); `FollowGraphicsMode` swaps the sky sprites' keyed copies (`KeyedBackdropTexture`). Arms and selection: [Root.md](Root.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
+
+## src/Mech3/ShaderTwins.cs
+The generated shaders behind every shader cache (`SceneBuilder`'s three, `Clutter`'s sprites,
+`EmitterRenderer`'s variants), one `Shader` per text, and the materials wearing them. A cache key is
+a `ModeShader` with one shader per graphics mode, so keys whose texts agree in a mode share one and
+Godot compiles it once. `Follow` records the key a material wears, `Copy` and `FadeCopy` the key a
+duplicate wears, and `Regenerate` moves each onto its key's shader for the standing mode with no
+text changed. `WarmOtherMode` compiles the other mode ahead; before an Enhanced frame has drawn
+(`EnhancedDrawn`) a first switch to Enhanced rewrites in place. `Pooled` also serves constant texts
+made per instance (plane flare, light sprites, ground shadow). Read `Session/Launch/EnhancedLook.cs`.
 
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame
@@ -56,6 +66,15 @@ finds the cross-node pairs that are coplanar, same-priority, same-subface and ge
 counts conflicting layers beneath it, not nodes before it. Every edge runs low node index → high,
 so the layering is a topological order of the original's own draw order and cannot invert authored
 layering. `WorldBuilder.RankConflicts` runs it before the build; 11–45 ms per chapter.
+
+## src/Mech3/CloudPuffs.cs
+Enhanced Graphics only: the rendered cloud puff pools that stand in for the authored `cloud1`/`cloud2`
+masks, loaded once as texture arrays from `data/cloud_puffs/` (our own Blender renders, with the
+script that makes them): the translucent deck set for `FogVolumeClutter`'s `fvol` cards and the
+fuller set for the placed cloud sprites `SceneBuilder` builds. `MaskTint` carries the authored mask's
+colour and peak opacity onto a puff, `Apply` sets a pooled material, and `PoseLines` plus
+`shaders/csky_cloud_puffs.gdshaderinc` give each card its puff, turn, mirror and size off a hash of
+its own position. The faithful path never reads it. Read `Effects/FogVolumeClutter.cs` next.
 
 ## src/Mech3/WorldCollision.cs
 Owns every `SceneBuilder`-built collider's `Disabled` flag and derives it: enabled exactly while the
@@ -99,7 +118,9 @@ Counts and destroys the decorations a crater swallows. A decoration dies outrigh
 test, no animation and no model swap, because the original's crater path reads no template field at
 all. `ClutterBuilder` bakes every placement of one kind into one MultiMesh, so dying means the
 instance's basis collapses to zero (the draw call and its custom data stay intact) and its shared
-collision shape is switched off on the region body it was attached to by RID. Read `Clutter.cs`.
+collision shape is switched off on the region body it was attached to by RID. A MultiMesh a
+`ClutterInstances` owns is read and written through it, so a flattened stamp survives a recut.
+Read `Clutter.cs`.
 
 ## src/Mech3/PlaneBuilder.cs
 Builds one aircraft from its GameZ subtree, skipping the cockpit, damage, destroyed and shadow
@@ -126,7 +147,8 @@ session share a decode. `.BM` layout: [../formats/rof.md](../formats/rof.md).
 ## src/Mech3/PlanePainter.cs
 Applies a `PaintScheme` to one aircraft: composites its skins from the pattern's region masks and
 swaps the three decal placeholders. `SkinNameFor` decides which `.BM` a model texture is painted
-from, the original pairing the two by table rather than by name. The composite formula, the
+from, the original pairing the two by table rather than by name. `FollowAlphaDepth` paints every live
+painter's alpha-plane skins and decals again in place at a live switch's depth. The composite formula, the
 shading-plane choice and the bottom-up `.BM` rows are decode, and belong to
 [../formats/paint.md](../formats/paint.md),
 [../formats/rof.md](../formats/rof.md) and [../org/paint.md](../org/paint.md). Read those before changing a composite step.
@@ -177,25 +199,35 @@ billboard geometry and anything authoring `intersect_surface: false` from collid
 helpers (`HorizonZonesOf`, `CloudDeckAltitudeOf`, `DomeZonesToBuild`, `DetachedWorldAabb`,
 `FogVolumeZoneIdOf`, `MatchNodes`) are pure and test off engine. Deck and dome: [../formats/weather.md](../formats/weather.md), [../org/weather.md](../org/weather.md).
 
+## src/Mech3/WorldMerge.cs
+Under Enhanced Graphics in flight, the placed world's static opaque surfaces that share an exact
+node frame, material, `node_bias`, zone layer and shadow setting drawn as one mesh at that frame, from
+the arrays `SceneBuilder.SurfaceArrays` kept, so no vertex rounds differently. Built last in the
+session build and followed by the live switch: the faithful path draws every node itself, the merge
+kept out of the tree for a switch back. A member draws a residual of its blends and billboards boxed
+as its whole mesh. Static means visible and never handed out by a name query
+(`AnimRuntime.ClaimedNodes`); a later claim, a visibility change, `Release` or a moved transform the
+sweep finds puts the node back on its own mesh. Colliders are untouched. Read `SceneBuilder.cs`.
+
 ## src/Mech3/MapEdgeExtender.cs
 A rolling window of repeated border tiles and clutter continuing the world past the map edge, one
 window per session shared by every player camera and diffed only on a cell crossing. Clutter copies
 grow from `ClutterBuilder.ExportedKinds`, each keeping its source stamp's fade thresholds and
-drawing only while `ClutterActivation` shows that stamp.
-`ClassifyGroundMesh`, `IsCompletionStrip` and `FoldAxis` are pure statics pinned by
-`MapEdgeTileTests`/`MapEdgeFoldTests`; `--dump-tilegrid` writes the per-cell acceptance census
-`WriteCensus` builds. The original's own continuation behaviour and the per-chapter fold
+drawing only while `ClutterActivation` shows that stamp; under Enhanced each copied kind's node
+stops at its farthest fade (`ClutterInstances.RangeEnd`, `FollowClutterFade`).
+`ClassifyGroundMesh`, `IsCompletionStrip` and `FoldAxis` are pure statics pinned by `MapEdgeTileTests`/`MapEdgeFoldTests`;
+`--dump-tilegrid` writes the per-cell acceptance census `WriteCensus` builds. The original's own continuation behaviour and the per-chapter fold
 measurements: [../formats/world-structure.md](../formats/world-structure.md). Read `Clutter.cs` next.
 
 ## src/Mech3/Clutter.cs
 Stamps the boot-script clutter templates across placed polygons carrying the template's ground texture,
 one stamp per integer UV repeat of the polygon's UV lattice: sprites become one fullbright billboard
 MultiMesh per kind, turned toward the camera as that kind's own `FacadeMode` says, solids go through
-`SceneBuilder.SharedMesh`, `ClassifyBillboard` the split. A card blends or scissors on the archive's own alpha verdict, one shader variant each, and the blended variant writes its body's depth through a prepass: a kind is one MultiMesh, a single draw in buffer order that sorts nothing, so a card writing no depth at all is painted over by every later card and kind whatever their distances. `BlendCardKinds`/`ScissorCardKinds` count the kinds each way, the census an `--hide-alpha` isolation is read against, and a hidden class builds no MultiMesh for its kinds. Every stamp carries its far fade as MultiMesh custom
+`SceneBuilder.SharedMesh`, `ClassifyBillboard` the split. A card blends or scissors on the archive's own alpha verdict, one shader variant each. The scissored variant takes `SceneBuilder.CoverageMode` under Enhanced Graphics, and the blended variant writes its body's depth through a prepass: a kind is one MultiMesh (one per map cell under Enhanced, `ClutterInstances`), a single draw in buffer order that sorts nothing, so a card writing no depth at all is painted over by every later card and kind whatever their distances. `BlendCardKinds`/`ScissorCardKinds` count the kinds each way, the census an `--hide-alpha` isolation is read against, and a hidden class builds no MultiMesh for its kinds. Every stamp carries its far fade as MultiMesh custom
 data under `EffectsLevel`, and samples through `SceneBuilder.SampleAlbedo` for the chapter's mip bias. `TemplateNames` reads `AddClutterTemplates` unfiltered, the per-polygon `no_clutter` gate deciding
 which patch a district dresses; `OverrideTemplateNames` is `--clutter-templates=`'s replacement.
 A decoration is a node chain, and `FirstWithMesh` hands back the translation down to the node carrying the mesh, so a stamp lands where the chain puts the drawn card: C5's lamp glow rides 4.75 m up its post. A solid decoration's chain carries SEVERAL meshes, which `ExtraMeshes` collects (nearest LOD only, each in the drawn mesh's frame) so `Kind.ExtraParts` draws and collides the whole building: 12 of C5's city blocks hold two street walls and a roof cap on further nodes, and drawing the first mesh alone leaves them open on two sides.
-Placement runtime: [../org/clutter.md](../org/clutter.md); authored side: [../formats/clutter.md](../formats/clutter.md), [../formats/templates.md](../formats/templates.md).
+`Recut` draws every kind again after a live graphics-mode switch or View Distance change, and the sprite shaders follow the mode as `SceneBuilder.RegenerableShader` twins. Placement runtime: [../org/clutter.md](../org/clutter.md); authored side: [../formats/clutter.md](../formats/clutter.md), [../formats/templates.md](../formats/templates.md).
 
 ## src/Mech3/ClutterActivation.cs
 Keeps every clutter stamp drawn exactly while the world node it was stamped from is visible in the
@@ -204,6 +236,16 @@ syncs on its `VisibilityChanged` and `TreeEntered`, so a mission script's area v
 `NodeSetActive` or a record born inactive hides the trees with the ground. A hidden stamp collapses
 its basis and switches off its shared shape as a crater's victim does, and a show restores only
 what this hid. `Version` lets `MapEdgeExtender`'s copies follow their source stamps. Read `ClutterCull.cs`.
+
+## src/Mech3/ClutterInstances.cs
+One clutter kind's drawn instances behind the kind's own placement index. The faithful path keeps
+the kind's single MultiMesh (`Whole`). Under Enhanced Graphics `Cells` cuts it into square map
+cells about twice the kind's farthest fade across, each its own node with a visibility range at that
+fade, so a pane draws only the cells in reach instead of every stamp in the chapter. Reads and
+writes take the clutter root's frame and are mirrored here, which keeps `ClutterActivation`, the
+suites and `ClutterCull`'s writes off the cells. Both layouts' buffers are kept once made, so
+`Recut` after a live mode switch or View Distance change swaps nodes and writes only the stamps
+since hidden or flattened; a new cell edge is cut with one buffer upload per cell. Read `Clutter.cs`.
 
 ## src/Mech3/ClutterTemplates.cs
 The chapter's `templates.zrd` (`ClutterTemplateSpec.Load`/`.Parse`): one `ClutterKindProps` per
@@ -455,14 +497,14 @@ decode and its addresses are [../formats/sounds.md](../formats/sounds.md). Calle
 `Flight/Audio/GunVoice.cs`, `Flight/Ai/AiWeaponAudio.cs`.
 
 ## src/Mech3/WorldLights.cs
-Packs the `LIGHT_STATE` point lights, each as colour times ambient + diffuse, into the 2xN texture
-(`csky_light_data`, `csky_light_count`) the original-mode world and aircraft shaders read as the
-per-vertex point term ([../org/vertexLighting.md](../org/vertexLighting.md)). `Commit`'s distance
-fade and `MaxActive` significance rank answer to the NEAREST viewer handed in
-(`AnimRuntime.LightViewerPositions`, from `GameSession`'s `ViewerSet`). The world runtime owns the
-frame (`Begin`/`Add`/`Commit`); the world-effects runtime contributes through `AddSource`, so a
-burst ranks against the beacons in one set. With a parent `Node3D` in enhanced mode, `Commit`
-mirrors the committed set onto pooled `OmniLight3D` nodes ([Root.md](Root.md)).
+Packs the `LIGHT_STATE` point lights, each as colour times ambient + diffuse, into the 2xN texture (`csky_light_data`,
+`csky_light_count`) the original-mode world and aircraft shaders read as the per-vertex point term
+([../org/vertexLighting.md](../org/vertexLighting.md)). `Commit`'s distance fade and `MaxActive` significance rank answer
+to the NEAREST viewer handed in (`AnimRuntime.LightViewerPositions`, from `GameSession`'s `ViewerSet`). The world runtime
+owns the frame (`Begin`/`Add`/`Commit`); the world-effects runtime contributes through `AddSource`, so a burst ranks
+against the beacons in one set. With a parent `Node3D` in enhanced mode, `Commit` mirrors the same rank onto pooled
+`OmniLight3D` nodes ([Root.md](Root.md)), up to `OmniBudget` for the effects level while the texture keeps `MaxActive`. Enhanced alone, `AddBurst` adds an explosion flash in a per-def `BurstShape`, lifted and unattenuated, aged on `Begin`'s dt and
+dying with its effect, which replaces the burst def's own authored light (`AnimRuntime.LightReplacedAnimNames`). `AddFire` is one burning emitter's light, ranked below the rest. The pool reads the mode on every commit, and `FollowGraphicsMode` drops the live bursts on a switch to the faithful path.
 
 ## src/Mech3/MissionSetup.cs
 Parses + applies the per-mission `.gw` interp script that decides which world entities a mission
@@ -497,7 +539,7 @@ range gates read the players through `RangePositions`: the last pose they flew, 
 `PlayerRangeHeld` says a cutscene is posing their aeroplanes, and `RangeGates` says which machine answers each gate (`Anim/RangeGateAuthority.cs`). `FastForward` is the per-definition
 rate a held key raises a cutscene to (`Anim/CutsceneFastForward.cs`), which `Advance` spends as repeated passes of the instance walk. `CollectLateStarts` and `CatchUp` step only the instances started in between, with their motions, for a guest's late director event. `SuppressedMotionAnims` names the definitions whose `OBJECT_MOTION` events this runtime drops, for a pose another writer owns, which also ends a definition that motion was sustaining (docs/verification.md, INSTR-74). What binds a member is on that member:
 the pool-slot checkout reset, the prewarm's scope, the mission-trigger closure, the undercover
-probe's decode, the death call's site follow. Each dispatch axis is a sibling module; the router keeps the case labels and the public fields callers configure: `SequenceRunner.cs`, `Anim/MotionSet.cs`, `Anim/NameResolver.cs`, `Anim/EmitterDirector.cs`, `Anim/SoundChannel.cs`, `Anim/LightChannel.cs`, `Anim/PoseChannel.cs`, `Anim/TemplateStage.cs`. Decode: docs/org/sequences.md.
+probe's decode, the death call's site follow. Each dispatch axis is a sibling module; the router keeps the case labels and the public fields callers configure: `SequenceRunner.cs`, `Anim/MotionSet.cs`, `Anim/NameResolver.cs`, `Anim/EmitterDirector.cs`, `Anim/SoundChannel.cs`, `Anim/LightChannel.cs`, `Anim/PoseChannel.cs`, `Anim/TemplateStage.cs`. `ClaimedNodes` and `NodeClaimed` say which nodes a name query has handed out, the set `WorldMerge` leaves alone. Decode: docs/org/sequences.md.
 
 ## src/Mech3/Anim/
 `AnimRuntime`'s private nested types promoted to top-level `internal` types in their own namespace,
@@ -576,7 +618,7 @@ rather than being voided by them), the scoped tier chain
 (NAME match, symbol narrowing, root lift) and the bind census. Node identity is
 constructor-supplied, never the node type's inherited `Equals`; `DropFreed` retires the rows naming a freed node and `DropNodes` those naming a live subtree a second staging replaces, since a name resolves to whichever claimant was indexed first. `AdmissibleStaging` filters every tier, the owner's verdict on one pooled
 copy, and `RefusesGlobalTier` withholds the last tier from a plain name written by a definition
-the world holds several instances of. Decode: [../org/sequences.md](../org/sequences.md).
+the world holds several instances of. `Claimed` hears each node a `FindAll` answer or `Anchors` first hands out. Decode: [../org/sequences.md](../org/sequences.md).
 
 ## src/Mech3/Anim/CutsceneFastForward.cs
 The rate one cutscene episode's own definitions run at while the player holds a key through a scene

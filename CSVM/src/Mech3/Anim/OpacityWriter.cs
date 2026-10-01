@@ -13,13 +13,11 @@ namespace CSVM.Mech3.Anim;
 internal sealed class OpacityWriter
 {
     // Source material to its translucent twin, null when it cannot be made translucent. The twin
-    // set recognises an override this writer installed. The shader-level cache lets materials
-    // sharing one generated shader share one twin shader.
+    // set recognises an override this writer installed. Twins of one generated shader share one
+    // fade shader (ShaderTwins.FadeCopy).
     private readonly Dictionary<ShaderMaterial, ShaderMaterial?> _fadeTwinCache = new();
 
     private readonly HashSet<Material> _fadeTwins = new();
-
-    private readonly Dictionary<Shader, Shader?> _fadeShaderCache = new();
 
     /// <summary>Writes <paramref name="alpha"/> over the subtree and returns how many geometry
     /// nodes have an alpha path to show it. Opacity 1 removes the twins again.</summary>
@@ -67,7 +65,7 @@ internal sealed class OpacityWriter
                 any = true;
                 continue;
             }
-            if (fading && FadeTwinOf(sm, sh) is { } twin)
+            if (fading && FadeTwinOf(sm) is { } twin)
             {
                 mi.SetSurfaceOverrideMaterial(i, twin);
                 any = true;
@@ -76,18 +74,13 @@ internal sealed class OpacityWriter
         return any;
     }
 
-    private ShaderMaterial? FadeTwinOf(ShaderMaterial source, Shader shader)
+    private ShaderMaterial? FadeTwinOf(ShaderMaterial source)
     {
         if (_fadeTwinCache.TryGetValue(source, out var twin))
             return twin;
-        if (!_fadeShaderCache.TryGetValue(shader, out var fadeShader))
-            _fadeShaderCache[shader] = fadeShader = SceneBuilder.FadeShaderFor(shader);
-        if (fadeShader != null)
-        {
-            twin = (ShaderMaterial)source.Duplicate();
-            twin.Shader = fadeShader;
+        twin = ShaderTwins.FadeCopy(source);
+        if (twin != null)
             _fadeTwins.Add(twin);
-        }
         _fadeTwinCache[source] = twin;
         return twin;
     }

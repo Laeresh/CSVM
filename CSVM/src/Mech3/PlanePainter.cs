@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -24,12 +26,19 @@ public sealed class PlanePainter
     private static readonly Dictionary<string, string> SkinAliases =
         new(StringComparer.OrdinalIgnoreCase) { ["dev_fusalage"] = "dev_fusalage1" };
 
+    // Every painter still reachable, so a live graphics-mode switch can repaint the textures whose
+    // alpha depth follows the mode (FollowAlphaDepth). Weak, so a plane freed is a painter dropped.
+    private static readonly List<WeakReference<PlanePainter>> Live = new();
+
     private readonly TextureArchive _textures;
     private readonly PatternLibrary _library;
     private readonly PaintScheme _scheme;
     private readonly string _prefix;
     // baseName -> the substitute texture (painted skin or swapped decal); null = leave as is.
     private readonly Dictionary<string, ImageTexture?> _cache = new(StringComparer.OrdinalIgnoreCase);
+
+    // baseName -> the archive texture a painted skin copied its alpha from.
+    private readonly Dictionary<string, ImageTexture?> _originals = new(StringComparer.OrdinalIgnoreCase);
 
     /// <param name="skinPrefix">The aircraft's skin-texture prefix without the underscore
     /// ("blo", "kes", …). <see cref="PrefixFor"/> derives it from the model's own materials.</param>
@@ -39,9 +48,17 @@ public sealed class PlanePainter
         _library = library;
         _scheme = scheme;
         _prefix = skinPrefix;
+        lock (Live)
+        {
+            Live.RemoveAll(w => !w.TryGetTarget(out _));
+            Live.Add(new WeakReference<PlanePainter>(this));
+        }
     }
 
     public PaintScheme Scheme => _scheme;
+
+    /// <summary>The skins and decals this painter substituted, for an instrument to read.</summary>
+    public IEnumerable<ImageTexture> Painted => _cache.Values.OfType<ImageTexture>();
 
     /// <summary>Skins this painter actually repainted, for a one-line build summary.</summary>
     public int PaintedSkins { get; private set; }
@@ -49,6 +66,27 @@ public sealed class PlanePainter
     /// <summary>True when this scheme's pattern ships no skins for this aircraft, so only its
     /// decals can change. The original's UI never offers such a combination.</summary>
     public bool PatternMissesAircraft => !_library.Covers(_scheme.FolderName, _prefix);
+
+    /// <summary>Paints again, in place, every live painter's skins and decals over
+    /// <paramref name="textures"/> whose alpha depth follows the graphics mode. Runs after the
+    /// archive's own <see cref="TextureArchive.FollowAlphaDepth"/>. Returns the textures painted.</summary>
+    public static int FollowAlphaDepth(TextureArchive textures) =>
+        LiveOver(textures).Sum(painter => painter.RepaintAlphaDepth());
+
+    /// <summary>The painters still reachable that paint from <paramref name="textures"/>.</summary>
+    public static List<PlanePainter> LiveOver(TextureArchive textures)
+    {
+        var painters = new List<PlanePainter>();
+        lock (Live)
+        {
+            foreach (var weak in Live)
+            {
+                if (weak.TryGetTarget(out var painter) && painter._textures == textures)
+                    painters.Add(painter);
+            }
+        }
+        return painters;
+    }
 
     /// <summary>The aircraft's skin-texture prefix, read off the model's own material names
     /// (every skin of one aircraft shares it: blo_wing, blo_fin, blo_noselogo…). Data-driven
@@ -108,6 +146,7 @@ public sealed class PlanePainter
             s => baseName.EndsWith(s, StringComparison.OrdinalIgnoreCase));
         ImageTexture? made = decalSlot >= 0 ? DecalFor(decalSlot) : PaintedSkin(baseName, original);
         _cache[baseName] = made;
+        _originals[baseName] = original;
         return made ?? original;
     }
 
@@ -134,10 +173,15 @@ public sealed class PlanePainter
     // the substitution does not disturb SceneBuilder's alpha classification.
     private ImageTexture? DecalFor(int slot)
     {
-        int index = slot switch { 0 => _scheme.NoseDecal, 1 => _scheme.TailDecal, _ => _scheme.WingDecal };
-        var texName = _textures.FindByDecalIndex(index);
-        if (texName == null)
-            return null;
+        var texName = DecalTextureName(slot);
+        return texName != null && DecalImage(texName) is { } img ? ImageTexture.CreateFromImage(img) : null;
+    }
+
+    private string? DecalTextureName(int slot) => _textures.FindByDecalIndex(
+        slot switch { 0 => _scheme.NoseDecal, 1 => _scheme.TailDecal, _ => _scheme.WingDecal });
+
+    private Image? DecalImage(string texName)
+    {
         var img = _textures.FindImage(texName);
         if (img == null)
             return null;
@@ -145,13 +189,21 @@ public sealed class PlanePainter
         // The swapped-in decal is uploaded like the archive's own textures (see TextureArchive.Find).
         if (_textures.TruncatesAlpha(texName))
             TextureArchive.TruncateAlphaToNibble(img);
-        return ImageTexture.CreateFromImage(img);
+        return img;
     }
 
     // Paints one skin from the pattern's mask set. Null when this pattern ships no .BM for
     // that part (it stays the shipped ZBD texture), which is normal: a pattern covers the
     // airframe skins, not spinners, shadows or cockpit interiors.
     private ImageTexture? PaintedSkin(string baseName, ImageTexture? original)
+    {
+        if (SkinImage(baseName, original) is not { } img)
+            return null;
+        PaintedSkins++;
+        return ImageTexture.CreateFromImage(img);
+    }
+
+    private Image? SkinImage(string baseName, ImageTexture? original)
     {
         if (!baseName.StartsWith(_prefix + "_", StringComparison.OrdinalIgnoreCase))
             return null;
@@ -216,7 +268,35 @@ public sealed class PlanePainter
         // The copied base alpha is already truncated; the box-filtered levels below it are not.
         if (_textures.TruncatesAlpha(baseName))
             TextureArchive.TruncateAlphaToNibble(img);
-        PaintedSkins++;
-        return ImageTexture.CreateFromImage(img);
+        return img;
+    }
+
+    // Paints again, in place, each skin and decal whose alpha depth follows the graphics mode. The
+    // archive has already uploaded the skins' own textures at the standing depth.
+    private int RepaintAlphaDepth()
+    {
+        int repainted = 0;
+        foreach (var (baseName, made) in _cache)
+        {
+            if (made == null)
+                continue;
+            int slot = Array.FindIndex(DecalSuffixes, s => baseName.EndsWith(s, StringComparison.OrdinalIgnoreCase));
+            Image? img = null;
+            if (slot >= 0)
+            {
+                if (DecalTextureName(slot) is { } texName && _textures.UploadsFourBitAlpha(texName))
+                    img = DecalImage(texName);
+            }
+            else if (_textures.UploadsFourBitAlpha(baseName))
+            {
+                img = SkinImage(baseName, _originals.GetValueOrDefault(baseName));
+            }
+            if (img != null)
+            {
+                TextureUpload.Replace(made, img);
+                repainted++;
+            }
+        }
+        return repainted;
     }
 }

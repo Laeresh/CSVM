@@ -1041,7 +1041,7 @@ internal static class CombatSuites
     }
 
     [Suite("muzzle-light-first-person-point-term",
-        "in original mode a first-person shot's bigmuzzle_lt/muzzle_lt pair reaches the bound WorldLights set with its authored near/far and colour and lights no omni, while an unbound pool keeps the omni pair")]
+        "in original mode a first-person shot's bigmuzzle_lt/muzzle_lt pair reaches the bound WorldLights set with its authored near/far and colour and lights no omni, while an unbound pool keeps the omni pair, each at its pair's half-weight range with no inverse-distance term")]
     internal static void MuzzleLightFirstPersonPointTerm(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -1092,6 +1092,13 @@ internal static class CombatSuites
             ctx.Same(2, unbound.ActiveMuzzleLights().Count(),
                 $"ABLE-TO-FAIL CONTROL: with no point set bound the pair falls back to two omnis");
             ctx.Same(0, unbound.PendingPointFlashes().Count(), $"…and queues nothing");
+            var omniRanges = unbound.GetChildren().OfType<OmniLight3D>().Where(o => o.Visible)
+                .Select(o => (o.OmniRange, o.OmniAttenuation)).OrderByDescending(o => o.OmniRange).ToList();
+            ctx.Check(omniRanges.Count == 2
+                      && Mathf.IsEqualApprox(omniRanges[0].OmniRange, WorldLights.OmniRange(13.5f, 21.25f))
+                      && Mathf.IsEqualApprox(omniRanges[1].OmniRange, WorldLights.OmniRange(12.9f, 18.25f))
+                      && omniRanges.All(o => o.OmniAttenuation == WorldLights.OmniAttenuation),
+                $"each omni takes its pair's half-weight range and no inverse-distance term: {string.Join(", ", omniRanges)}");
         }
         finally
         {

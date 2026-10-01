@@ -19,7 +19,8 @@ internal static class RenderPoseSuites
         "clock and exactly on its simulation pose on a fixed-step one: the book is keyed on the " +
         "node recorded and leaves every other node alone, a draw lands on the segment between the " +
         "pair at the clock's own physics fraction, the restore every physics callback opens with " +
-        "puts the exact simulation pose back so the interpolation cannot feed itself, and a node " +
+        "puts the exact simulation pose back so the interpolation cannot feed itself, even over a " +
+        "write that went around the book, while leaving a node already on its pose, and a node " +
         "nothing rewrote over a tick is dropped on its final pose rather than tweened toward a " +
         "stale one")]
     internal static void RenderPosesRule(TestContext ctx)
@@ -76,9 +77,19 @@ internal static class RenderPoseSuites
             RenderPoses.Restore(1UL);       // the second callback inside the same tick
             ctx.Check(subject.Position == Second, $"the restore returns the exact simulation pose");
 
+            // The restore skips a node already on its pose. A write that went around the book must
+            // still be seen and undone, inside one tick and across a roll alike.
+            subject.Position = First + Vector3.Up;
+            RenderPoses.Restore(1UL);
+            ctx.Check(subject.Position == Second, $"a repeated restore undoes a write that bypassed the book, read {subject.Position.X:0.0} m");
+            RenderPoses.Restore(1UL);
+            ctx.Check(subject.Position == Second, $"a repeated restore leaves a node already on its pose exactly there");
+            subject.Position = First + Vector3.Up;
+
             // A motion that ended writes nothing on the next tick, so the node is left on its
             // final simulation pose and dropped rather than tweened back toward the older one.
             RenderPoses.Restore(2UL);       // a fresh tick with no Record following it
+            ctx.Check(subject.Position == Second, $"a rolling restore undoes a write that bypassed the book, read {subject.Position.X:0.0} m");
             RenderPoses.Draw();
             ctx.Check(subject.Position == Second, $"a finished mover is left on its final pose");
             ctx.Same(0L, RenderPoses.Count, $"a finished mover is dropped from the book");

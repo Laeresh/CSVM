@@ -21,6 +21,14 @@ internal static class CloudFieldSuites
     // are parallel, and a parallel face is still tested on its own distance.
     private const float SameNormal = 0.999f;
 
+    // ⚠ Metres, and an engine limit rather than a preference: a FogVolume box wider than this
+    // contributes nothing to the froxel pass on this build, silently, which is why the banks tile
+    // their authored bounds (Effects/FogVolumeBanks.cs). Pinned so a widened tile cannot ship mute.
+    private const float WidestRenderedBox = 2048f;
+
+    // How far a tiled bank's union may miss the authored bounds it was laid over, in metres.
+    private const float BoundsTolerance = 0.01f;
+
     // How far apart the two headings' away-side factors must land before the card counts as
     // directionally shaded. The authored bottom normals sit about 18 degrees off the card's own
     // +Z. A half-turn swings them right across the light, and the real gap is far wider.
@@ -34,7 +42,24 @@ internal static class CloudFieldSuites
     // A --cloud-jitter value wide enough that nearly every lattice card moves, in metres.
     private const float ProbeJitter = 40f;
 
+    // The authored cloud masks' constant RGB: C1's white card and C5's dark haze.
+    private const float WhiteCard = 239f / 255f;
+    private const float DarkHaze = 25f / 255f;
+
+    // The rendered pool's size, data/cloud_puffs/veil_1 to veil_8.
+    private const int PuffPoolSize = 8;
+
+    // The placed clusters' pool's size, data/cloud_puffs/far_1 to far_6.
+    private const int FarPoolSize = 6;
+
     private static readonly Vector3 ProbeSun = new Vector3(0.62f, 0.3f, 0.72f).Normalized();
+
+    // The two fvol kinds every shipped deck chapter scatters, and the masks they are skinned with
+    // (docs/formats/fogvol.md). C1's masks are RGB 239 and C5's RGB 25, so the pair shows the tint
+    // carrying each chapter's own colour rather than the puff's.
+    private static readonly string[] PuffKinds = { "cloudsprite1", "cloudsprite2" };
+    private static readonly string[] AuthoredMasks = { "cloud1.tif", "cloud2.tif" };
+    private static readonly string[] PuffChapters = { "C1", "C5" };
 
     // Per chapter: the pinned placement counts (base, map-edge extension), the normal tally, and
     // the authored `lighting` flag of the chapter's own cloud card. The tally is sprites on a face
@@ -47,6 +72,15 @@ internal static class CloudFieldSuites
         ("C1", 10524, 13176, 23700, 0, false),
         ("C1C", 11452, 13176, 23386, 1242, true),
         ("C5", 19197, 0, 17095, 2102, true),
+    };
+
+    // Per chapter: how many fvol volumes the gamez ships and whether its fogvol.zrd arms the
+    // in-volume whiteout. The arming decides whether the chapter builds an enhanced bank.
+    // The counts are docs/formats/fogvol.md's own census.
+    private static readonly (string Chapter, int Volumes, bool Armed)[] BankChapters =
+    {
+        ("C1", 9, false),
+        ("C5", 17, true),
     };
 
     [Suite("cloud-field-fade",
@@ -110,6 +144,370 @@ internal static class CloudFieldSuites
                 }
             });
         }
+    }
+
+    [Suite("cloud-puffs",
+        "the rendered cloud puff pool replaces the authored fvol masks under Enhanced Graphics "
+        + "alone: on the faithful presentation every card samples its authored mask and never the "
+        + "pool; under Enhanced both mapped kinds sample the whole pool, tinted by the mask's own "
+        + "colour and peak opacity, with the rim sample deepened by the size ratio, and each card "
+        + "picks its puff, tilt, mirror and size off a hash of its own position, so the placements "
+        + "match the faithful field's and a second build's exactly; C1's white cards and C5's "
+        + "dark haze both keep their authored colour; and C1's placed cloudparent sprites draw "
+        + "their masks on the faithful presentation and the fuller placed-cloud pool under "
+        + "Enhanced, every one of them, at the same places")]
+    internal static void CloudPuffPools(TestContext ctx)
+    {
+        var pool = CloudPuffs.Deck();
+        ctx.Check(pool != null && pool.GetLayers() == PuffPoolSize && pool.GetWidth() > 64 && pool.HasMipmaps(),
+            $"the rendered puff pool reads as {PuffPoolSize} mipmapped layers: {pool?.GetLayers()} of {pool?.GetWidth()}px");
+        foreach (var kindName in PuffKinds)
+        {
+            ctx.Check(FogVolumeClutter.DrawsRenderedPuffs(kindName), $"{kindName} draws from the rendered pool");
+        }
+        foreach (var chapter in PuffChapters)
+        {
+            string zrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter);
+            string texturePath = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
+            ctx.RequireData(zrdr, $"{chapter} fogvol.zrd");
+            ctx.RequireData(texturePath, $"{chapter} textures");
+            ctx.WithWorld(chapter, collision: false, world =>
+            {
+                using var textures = new TextureArchive(texturePath);
+                var spec = FogVolumeSpec.Load(zrdr);
+                var volumes = FogVolumeSpec.VolumesOf(world.Gamez);
+                var authored = new List<Rid>();
+                foreach (var name in AuthoredMasks)
+                {
+                    if (textures.Find(name) is { } mask)
+                    {
+                        authored.Add(mask.GetRid());
+                    }
+                }
+                Utils.GraphicsMode.Resolve(Utils.GraphicsMode.Default);
+                var faithful = CheckPuffArm(ctx, chapter, BuildField(world.Gamez, textures, spec, volumes), authored, pool, enhanced: false);
+                Utils.GraphicsMode.Resolve(Utils.GraphicsMode.EnhancedWord);
+                try
+                {
+                    var enhanced = CheckPuffArm(ctx, chapter, BuildField(world.Gamez, textures, spec, volumes), authored, pool, enhanced: true);
+                    var again = CheckPuffArm(ctx, chapter, BuildField(world.Gamez, textures, spec, volumes), authored, pool, enhanced: true);
+                    // The pose is a function of the placement alone, so equal placements mean equal
+                    // choices. The Enhanced field must not move off the faithful one.
+                    ctx.Check(SamePlacements(faithful, enhanced), $"{chapter} Enhanced placements match the faithful field's");
+                    ctx.Check(SamePlacements(enhanced, again), $"{chapter} a second Enhanced build places every card identically");
+                }
+                finally
+                {
+                    Utils.GraphicsMode.Resolve(Utils.GraphicsMode.Default);
+                }
+            });
+        }
+        CheckPlacedClouds(ctx);
+        ctx.Check(!Utils.GraphicsMode.Enhanced, $"the graphics setting is back on the faithful presentation");
+    }
+
+    [Suite("fogvol-banks",
+        "the enhanced volumetric bank under the cloud cards: one bank per authored fvol volume "
+        + "and none at all on the faithful presentation, where the Environment's froxel pass is "
+        + "left off; each bank tiles its own volume's bounds exactly, in boxes no wider than the "
+        + "engine still renders; the scattering colour follows the applied zone; and a chapter "
+        + "whose fogvol.zrd arms the in-volume whiteout builds no bank, since the lit city takes "
+        + "no froxel fog and a bank there would black out only the backdrop behind it")]
+    internal static void CloudBanks(TestContext ctx)
+    {
+        foreach (var (chapter, expectVolumes, armed) in BankChapters)
+        {
+            string zrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter);
+            ctx.RequireData(zrdr, $"{chapter} fogvol.zrd");
+            ctx.WithWorld(chapter, collision: false, world =>
+            {
+                var spec = FogVolumeSpec.Load(zrdr);
+                var volumes = FogVolumeSpec.VolumesOf(world.Gamez);
+                var whiteout = FogVolumeWhiteout.From(spec, volumes);
+                ctx.Same(expectVolumes, volumes.Count, $"{chapter} authored fvol volumes");
+                ctx.Check(whiteout.Armed == armed, $"{chapter} fogvol.zrd arms the in-volume whiteout: {whiteout.Armed}");
+                using var env = new Godot.Environment();
+                // The faithful presentation first, and with the same Environment: a session that
+                // builds no bank must actively clear the flag, since one Environment outlives it.
+                Utils.GraphicsMode.Resolve(Utils.GraphicsMode.Default);
+                ctx.Check(Effects.FogVolumeBanks.Create(volumes, spec) == null,
+                    $"{chapter} builds no volumetric bank on the faithful presentation");
+                Effects.FogVolumeBanks.ApplyFroxelFog(env, enabled: false);
+                ctx.Check(!env.VolumetricFogEnabled, $"{chapter} leaves the froxel pass off where there are no banks");
+
+                Utils.GraphicsMode.Resolve(Utils.GraphicsMode.EnhancedWord);
+                try
+                {
+                    CheckBanks(ctx, chapter, volumes, spec, whiteout, env);
+                }
+                finally
+                {
+                    Utils.GraphicsMode.Resolve(Utils.GraphicsMode.Default);
+                }
+            });
+        }
+        ctx.Check(!Utils.GraphicsMode.Enhanced, $"the graphics setting is back on the faithful presentation");
+    }
+
+    private static FogVolumeClutter? BuildField(GameZ gamez, TextureArchive textures, FogVolumeSpec? spec,
+        IReadOnlyList<FogVolumeBox> volumes)
+    {
+        Utils.Rng.Rewind();
+        return FogVolumeClutter.Create(gamez, textures, spec, volumes);
+    }
+
+    // One presentation's cards: which sprite each samples, and what the enhanced arm carries over.
+    // Returns every card's transform and custom data, kind by kind, for the placement comparison.
+    private static List<(Transform3D, Color)> CheckPuffArm(TestContext ctx, string chapter, FogVolumeClutter? field,
+        List<Rid> authored, Texture2DArray? pool, bool enhanced)
+    {
+        var placements = new List<(Transform3D, Color)>();
+        string arm = enhanced ? "Enhanced" : "faithful";
+        ctx.Check(field != null, $"{chapter} builds its cloud field on the {arm} presentation");
+        if (field == null)
+        {
+            return placements;
+        }
+        try
+        {
+            int examined = 0;
+            foreach (var child in field.GetChildren())
+            {
+                if (child is not MultiMeshInstance3D { MaterialOverride: ShaderMaterial mat, Multimesh: { } mm } instance)
+                {
+                    continue;
+                }
+                examined++;
+                for (int i = 0; i < mm.InstanceCount; i++)
+                {
+                    placements.Add((mm.GetInstanceTransform(i), mm.GetInstanceCustomData(i)));
+                }
+                string kind = instance.Name.ToString();
+                string code = mat.Shader.Code;
+                if (!enhanced || pool == null || !FogVolumeClutter.DrawsRenderedPuffs(kind))
+                {
+                    var sampled = mat.GetShaderParameter("albedo_tex").As<Texture2D>();
+                    ctx.Check(sampled != null && authored.Contains(sampled.GetRid()), $"{chapter} {arm} {kind} samples its authored mask");
+                    ctx.Check(!code.Contains("puff_tex", System.StringComparison.Ordinal),
+                        $"{chapter} {arm} {kind} shader never reads the rendered pool");
+                    if (!enhanced)
+                    {
+                        ctx.Check(!code.Contains("cloud_puffs", System.StringComparison.Ordinal),
+                            $"{chapter} {arm} {kind} shader carries no puff tint");
+                    }
+                    continue;
+                }
+                var sampledPool = mat.GetShaderParameter("puff_tex").As<Texture2DArray>();
+                ctx.Check(sampledPool != null && sampledPool.GetRid() == pool.GetRid(), $"{chapter} {arm} {kind} samples the rendered pool");
+                ctx.Same(pool.GetLayers(), (int)mat.GetShaderParameter("puff_layers").AsSingle(), $"{chapter} {arm} {kind} picks among every layer");
+                // The pose must key on the card's own position, never on its index in the buffer.
+                ctx.Check(code.Contains("csky_puff_pose(MODEL_MATRIX[3].xyz", System.StringComparison.Ordinal)
+                          && code.Contains("csky_puff_sample(v_puff_card_uv", System.StringComparison.Ordinal)
+                          && !code.Contains("INSTANCE_ID", System.StringComparison.Ordinal),
+                    $"{chapter} {arm} {kind} picks its puff off a hash of its own position and samples it upright");
+                var tint = mat.GetShaderParameter("puff_tint").AsColor();
+                var want = chapter == "C5" ? DarkHaze : WhiteCard;
+                ctx.Check(Mathf.Abs(tint.R - want) < 0.02f && Mathf.Abs(tint.G - want) < 0.03f && tint.A > 0.9f,
+                    $"{chapter} {arm} {kind} carries its authored mask colour {tint} (about {want:0.00})");
+                float lod = mat.GetShaderParameter("rim_lod").AsSingle();
+                float wantLod = 3f + Mathf.Log(pool.GetWidth() / 64f) / Mathf.Log(2f);
+                ctx.Check(Mathf.Abs(lod - wantLod) < 1e-3f, $"{chapter} {arm} {kind} rim sample at level {lod:0.##}");
+            }
+            ctx.Check(examined > 0, $"{chapter} {arm} cloud card materials examined count={examined}");
+        }
+        finally
+        {
+            field.Free();
+        }
+        return placements;
+    }
+
+    // The placed cloud clusters, C1's cloudparent facades. The faithful world draws every one with
+    // its authored mask and none from a pool. An Enhanced world draws the same sprites at the same
+    // places from the fuller pool, tinted by the mask's colour and posed off its position.
+    private static void CheckPlacedClouds(TestContext ctx)
+    {
+        var far = CloudPuffs.Far();
+        ctx.Check(far != null && far.GetLayers() == FarPoolSize && far.GetWidth() > 64 && far.HasMipmaps(),
+            $"the placed-cloud pool reads as {FarPoolSize} mipmapped layers: {far?.GetLayers()} of {far?.GetWidth()}px");
+        if (far == null)
+        {
+            return;
+        }
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, "C1"), $"C1 textures");
+        Utils.GraphicsMode.Resolve(Utils.GraphicsMode.Default);
+        (int Authored, int Pooled, Vector3 Sum) faithful = default, enhanced = default;
+        ctx.WithWorld("C1", collision: false, world => faithful = PlacedSprites(ctx, world, far, "faithful"));
+        Utils.GraphicsMode.Resolve(Utils.GraphicsMode.EnhancedWord);
+        try
+        {
+            ctx.WithPrivateWorld("C1", collision: false, world => enhanced = PlacedSprites(ctx, world, far, "Enhanced"));
+        }
+        finally
+        {
+            Utils.GraphicsMode.Resolve(Utils.GraphicsMode.Default);
+        }
+        ctx.Check(faithful.Authored > 0 && faithful.Pooled == 0,
+            $"C1 faithful placed clouds: {faithful.Authored} with the authored masks, {faithful.Pooled} from a pool");
+        ctx.Check(enhanced.Authored == 0 && enhanced.Pooled == faithful.Authored,
+            $"C1 Enhanced placed clouds: {enhanced.Pooled} from the pool, {enhanced.Authored} left on the masks");
+        ctx.Check(faithful.Sum.IsEqualApprox(enhanced.Sum), $"C1 placed clouds stand where the faithful world puts them");
+        ctx.Note($"C1 placed clouds: {faithful.Authored} sprite(s)");
+    }
+
+    // Counts one world's cloud sprites by what they sample, checking every pooled one's settings.
+    private static (int Authored, int Pooled, Vector3 Sum) PlacedSprites(TestContext ctx, TestWorld world,
+        Texture2DArray far, string arm)
+    {
+        var masks = new List<Rid>();
+        foreach (var name in AuthoredMasks)
+        {
+            if (world.Textures.Find(name) is { } mask)
+            {
+                masks.Add(mask.GetRid());
+            }
+        }
+        int authored = 0, pooled = 0, wrong = 0;
+        var sum = Vector3.Zero;
+        var stack = new Stack<Node>();
+        stack.Push(world.Stage);
+        while (stack.Count > 0)
+        {
+            var node = stack.Pop();
+            foreach (var child in node.GetChildren())
+            {
+                stack.Push(child);
+            }
+            if (node is not MeshInstance3D { Mesh: { } mesh } mi)
+            {
+                continue;
+            }
+            for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+            {
+                if ((mi.MaterialOverride ?? mi.GetSurfaceOverrideMaterial(s) ?? mesh.SurfaceGetMaterial(s))
+                    is not ShaderMaterial { Shader: { } shader } mat
+                    || !shader.Code.Contains("csky_facade_spherical", System.StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                if (mat.GetShaderParameter("puff_tex").As<Texture2DArray>() is { } pool)
+                {
+                    pooled++;
+                    sum += mi.Position;
+                    var tint = mat.GetShaderParameter("puff_tint").AsColor();
+                    if (pool.GetRid() != far.GetRid() || Mathf.Abs(tint.R - WhiteCard) > 0.02f
+                        || !shader.Code.Contains("csky_puff_pose(MODEL_MATRIX[3].xyz", System.StringComparison.Ordinal)
+                        || !shader.Code.Contains("csky_puff_sample(v_puff_card_uv", System.StringComparison.Ordinal))
+                    {
+                        wrong++;
+                    }
+                }
+                else if (mat.GetShaderParameter("albedo_tex").As<Texture2D>() is { } tex && masks.Contains(tex.GetRid()))
+                {
+                    authored++;
+                    sum += mi.Position;
+                }
+                break;
+            }
+        }
+        ctx.Same(0, wrong, $"C1 {arm} pooled placed clouds off the far pool, tint, position-keyed pose or upright UV");
+        return (authored, pooled, sum);
+    }
+
+    private static bool SamePlacements(List<(Transform3D, Color)> a, List<(Transform3D, Color)> b)
+    {
+        if (a.Count == 0 || a.Count != b.Count)
+        {
+            return false;
+        }
+        for (int i = 0; i < a.Count; i++)
+        {
+            if (a[i].Item1 != b[i].Item1 || a[i].Item2 != b[i].Item2)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // One chapter's enhanced banks: the count, the tiling, the froxel arm and the zone colour.
+    // Where the chapter arms the whiteout, no bank at all.
+    private static void CheckBanks(TestContext ctx, string chapter, IReadOnlyList<FogVolumeBox> volumes,
+        FogVolumeSpec? spec, FogVolumeWhiteout whiteout, Godot.Environment env)
+    {
+        var banks = Effects.FogVolumeBanks.Create(volumes, spec);
+        if (whiteout.Armed)
+        {
+            ctx.Check(banks == null, $"{chapter} builds no volumetric bank where the whiteout is armed");
+            banks?.Free();
+            return;
+        }
+        ctx.Check(banks != null, $"{chapter} builds volumetric banks under Enhanced Graphics");
+        if (banks == null)
+        {
+            return;
+        }
+        try
+        {
+            ctx.Same(volumes.Count, banks.BankCount, $"{chapter} one bank per authored volume");
+            ctx.Check(banks.TileCount >= banks.BankCount, $"{chapter} bank boxes {banks.TileCount} for {banks.BankCount} bank(s)");
+            Effects.FogVolumeBanks.ApplyFroxelFog(env, enabled: true);
+            ctx.Check(env.VolumetricFogEnabled && env.VolumetricFogDensity == 0f,
+                $"{chapter} arms the froxel pass with no global density, the banks carrying it all");
+            CheckBankBoxes(ctx, chapter, banks, volumes);
+            // The zone colour arrives from the rig's own apply.
+            var zone = new Color(0.25f, 0.5f, 0.75f);
+            banks.ApplyZone(zone);
+            var want = zone.SrgbToLinear();
+            ctx.Check(banks.Albedo.IsEqualApprox(want), $"{chapter} bank scatters in {want} (zone {zone})");
+            ctx.Check(banks.Density > 0f, $"{chapter} bank density {banks.Density:0.####} /m");
+        }
+        finally
+        {
+            banks.Free();
+        }
+    }
+
+    // The tiling: every box is a Box-shaped FogVolume no wider than this engine renders, and one
+    // volume's boxes union back to exactly the authored bounds they stand in, with no gap or
+    // overhang. A bank that missed its own volume would fog air the cards never cover.
+    private static void CheckBankBoxes(TestContext ctx, string chapter, Effects.FogVolumeBanks banks,
+        IReadOnlyList<FogVolumeBox> volumes)
+    {
+        int boxes = 0, tooWide = 0, wrongShape = 0, missed = 0;
+        foreach (var volume in volumes)
+        {
+            Aabb? union = null;
+            foreach (var child in banks.GetChildren())
+            {
+                if (child is not FogVolume fog || !fog.Name.ToString().StartsWith($"bank_{volume.Name}_", System.StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                boxes++;
+                if (fog.Shape != RenderingServer.FogVolumeShape.Box)
+                {
+                    wrongShape++;
+                }
+                if (fog.Size.X > WidestRenderedBox + BoundsTolerance || fog.Size.Z > WidestRenderedBox + BoundsTolerance)
+                {
+                    tooWide++;
+                }
+                var box = new Aabb(fog.Position - (fog.Size * 0.5f), fog.Size);
+                union = union is { } grown ? grown.Merge(box) : box;
+            }
+            if (union is not { } laid
+                || !laid.Position.IsEqualApprox(volume.Box.Position)
+                || !laid.Size.IsEqualApprox(volume.Box.Size))
+            {
+                missed++;
+            }
+        }
+        ctx.Same(banks.TileCount, boxes, $"{chapter} bank boxes reached through their volumes' own names");
+        ctx.Same(0, wrongShape, $"{chapter} bank boxes that are not box-shaped");
+        ctx.Same(0, tooWide, $"{chapter} bank boxes wider than the {WidestRenderedBox:0} m this engine renders");
+        ctx.Same(0, missed, $"{chapter} volumes whose bank tiles do not union back to their own bounds");
+        ctx.Note($"{chapter} volumetric banks: {banks.BankCount} volume(s) over {boxes} box(es), density {banks.Density:0.####} /m");
     }
 
     // The per-instance half of the fade law. Each sprite's custom data must decode to a unit

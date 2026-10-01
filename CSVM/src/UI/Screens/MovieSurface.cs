@@ -16,7 +16,6 @@ namespace CSVM.UI.Screens;
 public sealed class MovieSurface
 {
     private readonly MoviePlayback _playback;
-    private readonly Image _image;
 
     /// <summary>Plays <paramref name="movie"/> <paramref name="loops"/> times over, endlessly
     /// when that count is zero. The first picture is decoded here, so the texture carries the
@@ -25,9 +24,7 @@ public sealed class MovieSurface
     {
         _playback = new MoviePlayback(movie, loops);
         _playback.Advance(0.0);
-        _image = Image.CreateFromData(
-            _playback.Width, _playback.Height, false, Image.Format.Rgba8, _playback.Pixels);
-        Texture = ImageTexture.CreateFromImage(_image);
+        Texture = TextureUpload.Create(_playback.Width, _playback.Height, Image.Format.Rgba8, _playback.Pixels);
     }
 
     /// <summary>What the picture is drawn from. It is made once and updated in place, so a caller
@@ -66,8 +63,7 @@ public sealed class MovieSurface
             return false;
         }
 
-        _image.SetData(_playback.Width, _playback.Height, false, Image.Format.Rgba8, _playback.Pixels);
-        Texture.Update(_image);
+        TextureUpload.Replace(Texture, _playback.Width, _playback.Height, Image.Format.Rgba8, _playback.Pixels);
         return true;
     }
 }

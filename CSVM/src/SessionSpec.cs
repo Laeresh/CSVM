@@ -844,6 +844,16 @@ public sealed record SessionSpec
     /// readout (<c>F14</c>) at launch, the scripted twin for a deterministic screenshot of it.
     /// Null = flag absent (off); no value = compact.</summary>
     public string? DebugFps { get; private set; }
+
+    /// <summary><c>--debug-shaders</c>: the shader census, the frames after a live switch and every
+    /// frame over 33 ms with the pipelines it compiled (<c>Tooling/ShaderDiagnostics.cs</c>).</summary>
+    public bool DebugShaders { get; private set; }
+
+    /// <summary><c>--shader-warmup=auto|load|off</c>: whether a load compiles the other graphics
+    /// mode's shaders, so a live switch only swaps them. The default <c>auto</c> does so once this
+    /// process has switched.</summary>
+    public string ShaderWarmup { get; private set; } = "auto";
+
     /// <summary><b>Resolved.</b> Null outside <c>--freecam</c>/<c>--anim-lab</c>: the shared
     /// selection lives in the two world-observation modes, the viewer's LMB is already the orbit
     /// drag, and flight has no cursor.</summary>
@@ -977,6 +987,21 @@ public sealed record SessionSpec
     /// still ask for the enhanced path on purpose. An unrecognised word is null with a warning
     /// (kept, not treated as given), the same rule <c>--collision=</c> uses for a bad value.</summary>
     public string? GraphicsMode { get; private set; }
+
+    /// <summary><c>--shadow-quality=off|low|medium|high|ultra</c>, the enhanced sun's shadow level.
+    /// Null when not given, and for an unrecognised word with a warning. Beats the saved option and
+    /// the config key, including under <c>--det</c>, the same rule <see cref="GraphicsMode"/> keeps.</summary>
+    public string? ShadowQuality { get; private set; }
+
+    /// <summary><c>--view-distance=normal|far|veryfar|unlimited</c>, how far Enhanced draws the
+    /// clutter before its fade. Null when not given, and for an unknown word with a warning. Beats
+    /// the saved option and the config key, including under <c>--det</c>.</summary>
+    public string? ViewDistance { get; private set; }
+
+    /// <summary><c>--debug-graphics-switch=N[,N...]</c>: the sim frames at which the running session
+    /// flips the graphics mode, as the Toggle Graphics Mode action does but unsaved. The scripted
+    /// twin of the live switch, so a capture shows a world after a round trip. Empty = none.</summary>
+    public IReadOnlyList<long> DebugGraphicsSwitch { get; private set; } = Array.Empty<long>();
 
     // ---- Everything else ------------------------------------------------------------------------
 
@@ -1138,6 +1163,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--debug-wingmen=")) { s.DebugWingmen = int.Parse(arg["--debug-wingmen=".Length..]); }
             else if (arg.StartsWith("--debug-preset=")) { s.DebugPreset = int.Parse(arg["--debug-preset=".Length..]); }
             else if (arg.StartsWith("--debug-pointer=")) { s.DebugPointer = ParseDebugPointer(arg["--debug-pointer=".Length..]); }
+            else if (arg.StartsWith("--debug-graphics-switch=")) { s.DebugGraphicsSwitch = ParseFrameList(arg["--debug-graphics-switch=".Length..]); }
             else if (arg.StartsWith("--debug-marquee=")) { s.DebugMarquee = double.TryParse(arg["--debug-marquee=".Length..], NumberStyles.Float, CultureInfo.InvariantCulture, out double phase) ? Math.Max(0d, phase) : null; }
             else if (arg.StartsWith("--paint=")) { s.PaintNames = arg["--paint=".Length..].Split(',', StringSplitOptions.TrimEntries); }
             else if (arg.StartsWith("--paint-color=")) { s.PaintColorOverride = ParsePaintColors(arg["--paint-color=".Length..]); }
@@ -1160,6 +1186,19 @@ public sealed record SessionSpec
             else if (arg == "--debug-names") { s.DebugNames ??= "meshes"; }
             else if (arg.StartsWith("--debug-names=")) { s.DebugNames = arg["--debug-names=".Length..]; }
             else if (arg == "--debug-fps") { s.DebugFps ??= "compact"; }
+            else if (arg == "--debug-shaders") { s.DebugShaders = true; }
+            else if (arg.StartsWith("--shader-warmup="))
+            {
+                string want = arg["--shader-warmup=".Length..];
+                if (want is "auto" or "load" or "off")
+                {
+                    s.ShaderWarmup = want;
+                }
+                else
+                {
+                    notes.Add(new Note("world", $"--shader-warmup={want} is not one of auto/load/off, keeping {s.ShaderWarmup}"));
+                }
+            }
             else if (arg.StartsWith("--debug-fps=")) { s.DebugFps = arg["--debug-fps=".Length..]; }
             else if (arg == "--debug-select") { s.DebugSelect ??= ""; }
             else if (arg.StartsWith("--debug-select=")) { s.DebugSelect = arg["--debug-select=".Length..]; }
@@ -1504,6 +1543,30 @@ public sealed record SessionSpec
                 else
                 {
                     notes.Add(new Note("world", $"--graphics={want} is not original/enhanced, keeping the config key's value"));
+                }
+            }
+            else if (arg.StartsWith("--shadow-quality="))
+            {
+                string want = arg["--shadow-quality=".Length..];
+                if (Utils.ShadowQualitySetting.IsWord(want))
+                {
+                    s.ShadowQuality = want;
+                }
+                else
+                {
+                    notes.Add(new Note("world", $"--shadow-quality={want} is not one of {string.Join("/", Utils.ShadowQualitySetting.Words)}, keeping the saved option's value"));
+                }
+            }
+            else if (arg.StartsWith("--view-distance="))
+            {
+                string want = arg["--view-distance=".Length..];
+                if (Utils.ViewDistance.IsWord(want))
+                {
+                    s.ViewDistance = want;
+                }
+                else
+                {
+                    notes.Add(new Note("world", $"--view-distance={want} is not one of {string.Join("/", Utils.ViewDistance.Words)}, keeping the saved option's value"));
                 }
             }
             else if (arg == "--dump-mips") { s.DumpMips = true; }
@@ -1912,6 +1975,20 @@ public sealed record SessionSpec
         }
         steps.Sort((a, b) => a.Item1.CompareTo(b.Item1));
         return steps.ToArray();
+    }
+
+    /// <summary>Parse <c>--debug-graphics-switch=</c>: comma-separated sim frames, ascending, a word
+    /// that is not a whole number dropped.</summary>
+    public static long[] ParseFrameList(string spec)
+    {
+        var frames = new List<long>();
+        foreach (string part in spec.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (long.TryParse(part, NumberStyles.Integer, CultureInfo.InvariantCulture, out long frame) && frame >= 0)
+                frames.Add(frame);
+        }
+        frames.Sort();
+        return frames.ToArray();
     }
 
     /// <summary>Parse <c>--paint-color=</c>: up to three '/'-separated byte triples (body / dark

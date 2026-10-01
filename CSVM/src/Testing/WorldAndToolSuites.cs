@@ -126,6 +126,33 @@ internal static class WorldAndToolSuites
         }
     }
 
+    // The coverage arm is Enhanced-only, so the faithful text has to be asserted as UNCHANGED. A
+    // token leaking into that arm would repin every faithful golden.
+    // Read off a built world rather than off the generator, since what ships is the text the
+    // materials actually carry. Able to fail: dropping the mode guard puts the token in both arms.
+    [Suite("alpha-coverage-text",
+        "Enhanced Graphics only: every cutout surface of the built world, and every clutter sprite "
+        + "card, carries the alpha-to-coverage render mode with the edge built-ins that feed it, the "
+        + "edge offset at 0 so it sits on the scissor's own threshold, no "
+        + "blended surface carries either, and the faithful presentation compiles the same world "
+        + "with no coverage token anywhere")]
+    internal static void AlphaCoverageText(TestContext ctx)
+    {
+        bool wasEnhanced = Utils.GraphicsMode.Enhanced;
+        try
+        {
+            Utils.GraphicsMode.Resolve(Utils.GraphicsMode.EnhancedWord);
+            CoverageTextArm(ctx, enhanced: true);
+            Utils.GraphicsMode.Resolve(Utils.GraphicsMode.Default);
+            CoverageTextArm(ctx, enhanced: false);
+        }
+        finally
+        {
+            Utils.GraphicsMode.Resolve(wasEnhanced
+                ? Utils.GraphicsMode.EnhancedWord : Utils.GraphicsMode.Default);
+        }
+    }
+
     // Enhanced mode keys the opaque sky sprites' backdrops, since its tonemap moves them off the
     // sky's colour. Able to fail: an unkeyed copy keeps the corner opaque, and a looser name match
     // keys C2's moonbackdrop scenery.
@@ -527,7 +554,7 @@ internal static class WorldAndToolSuites
                 $"the pane drawing the same frame stands out of the fill's reach pane={paneReach:0.#}m reach={SceneBuilder.PhotoEyeReach}m");
 
             // The frame's end: leaving the tree before the draw lands takes the same disarm the
-            // post-draw callback does.
+            // step after the draw does.
             controller.RemoveChild(photo);
             int left = instances.Count(i => i.GetInstanceShaderParameter(SceneBuilder.PhotoEyeParam).AsVector4() != Vector4.Zero);
             ctx.Check(left == 0 && photo.Filled.Count == 0,
@@ -1501,7 +1528,8 @@ internal static class WorldAndToolSuites
     [Suite("wing-flare-pose",
         "a player plane's wing-light flares pose through the facade look-at and never through the "
         + "camera's basis, and a flare seen from its authored quad's edge still draws, against an "
-        + "unposed copy of the same quad that draws nothing there")]
+        + "unposed copy of the same quad that draws nothing there; each flare's lamp takes the "
+        + "authored falloff pair with no inverse-distance term")]
     internal static void WingFlarePose(TestContext ctx)
     {
         const string plane = "player_pfighter";
@@ -1537,6 +1565,13 @@ internal static class WorldAndToolSuites
                 flareMaterial ??= mi.MaterialOverride;
             }
         }
+        // Each flare's lamp takes the authored falloff pair the way every world lamp does.
+        CSVM.Flight.Airframe.WingLightBlinker.Build(builder.WingFlares, AnimRuntime.HighLod);
+        var lamps = builder.WingFlares.SelectMany(f => f.GetChildren().OfType<OmniLight3D>()).ToList();
+        float lampRange = WorldLights.OmniRange(WingLights.FlareRangeMin, WingLights.FlareRangeMax);
+        ctx.Check(lamps.Count == 2 && lamps.All(l => l.OmniAttenuation == WorldLights.OmniAttenuation
+                                                     && Mathf.IsEqualApprox(l.OmniRange, lampRange)),
+            $"each wing lamp has no inverse-distance term and the {lampRange:0.00} m half-weight range: {string.Join(", ", lamps.Select(l => $"{l.OmniRange:0.00}/{l.OmniAttenuation}"))}");
         built.Free();
         ctx.Check(builder.WingFlares.Count == 2, $"{plane} carries two wing flares count={builder.WingFlares.Count}");
         if (quad == null || flareMaterial == null)
@@ -2180,7 +2215,8 @@ internal static class WorldAndToolSuites
     [Suite("splitscreen-listeners",
         "every 2–4P pane is a 3D audio listener, which a SubViewport is not by default, the "
         + "pinned listener model (A2), and the one thing standing between splitscreen and a "
-        + "world with no listener at all")]
+        + "world with no listener at all; the main viewport draws no world while the panes stand "
+        + "and draws it again after them")]
     internal static void SplitscreenListeners(TestContext ctx)
     {
         var main = ctx.Host.GetViewport();
@@ -2194,6 +2230,7 @@ internal static class WorldAndToolSuites
             $"a fresh SubViewport is NOT an audio listener, so each pane must set it");
         bare.Free();
 
+        bool mainDrew = !main.Disable3D;
         for (int players = 2; players <= SplitScreen.MaxPlayers; players++)
         {
             var split = SplitScreen.Build(players, main);
@@ -2206,12 +2243,16 @@ internal static class WorldAndToolSuites
                     ctx.Check(view.AudioListenerEnable3D,
                         $"{players}P pane {view.Name} is a 3D audio listener");
                 }
+                ctx.Check(main.Disable3D,
+                    $"{players}P: the main viewport draws no world behind the panes");
             }
             finally
             {
                 ctx.Host.RemoveChild(split);
                 split.Free();
             }
+            ctx.Check(!main.Disable3D == mainDrew,
+                $"{players}P: and draws it again as it did once the panes are gone");
         }
     }
 
@@ -2228,7 +2269,9 @@ internal static class WorldAndToolSuites
         + "the able-to-fail control against P1 alone drops the same light, and the one-viewer "
         + "case reads exactly what it read before; the packed factor is the authored colour times "
         + "ambient + diffuse and the shader term takes no dot product; given a parent node the same commit mirrors "
-        + "one OmniLight3D per committed light in enhanced mode and none at all in original mode")]
+        + "one OmniLight3D per committed light in enhanced mode and none at all in original mode; "
+        + "under Enhanced an authored light's omni has no inverse-distance term, reaches half "
+        + "weight where the authored ramp does, and takes the ambient + diffuse scalar")]
     internal static void WorldLightsNearestViewer(TestContext ctx)
     {
         var p1 = Vector3.Zero;
@@ -2324,11 +2367,211 @@ internal static class WorldAndToolSuites
             }
             mirrored.Dispose();
             ctx.Same(0, omniParent.GetChildCount(), $"Dispose frees every spawned omni");
+
+            // Under Enhanced an authored light's omni has no inverse-distance term. Its range puts
+            // half weight where the authored ramp's is, and its energy takes the authored scalar.
+            CSVM.Utils.GraphicsMode.Resolve(CSVM.Utils.GraphicsMode.EnhancedWord);
+            try
+            {
+                var authored = new WorldLights(omniParent);
+                authored.Begin();
+                authored.Add(nearP1, Colors.White, 7f, 20f);
+                authored.Add(nearP1, Colors.White, 7f, 20f, 0.5f);
+                authored.Commit(new[] { p1 });
+                var omnis = new List<OmniLight3D>();
+                foreach (var child in omniParent.GetChildren())
+                {
+                    if (child is OmniLight3D omni)
+                        omnis.Add(omni);
+                }
+                ctx.Same(2, omnis.Count, $"enhanced mirrors both authored lights");
+                if (omnis.Count == 2)
+                {
+                    float range = omnis[0].OmniRange;
+                    float atMid = Mathf.Pow(1f - Mathf.Pow(13.5f / range, 4f), 2f);
+                    ctx.Check(omnis[0].OmniAttenuation == 0f && omnis[1].OmniAttenuation == 0f,
+                        $"the omnis carry no inverse-distance term (attenuation {omnis[0].OmniAttenuation})");
+                    ctx.Check(range > 13.5f && range < 20f && Mathf.Abs(atMid - 0.5f) < 0.01f,
+                        $"a 7-20 m light's omni reaches half weight at 13.5 m, where the ramp does (range {range:0.00}, weight {atMid:0.000})");
+                    ctx.Check(Mathf.IsEqualApprox(omnis[1].LightEnergy, omnis[0].LightEnergy * 0.5f),
+                        $"the authored scalar scales the omni's energy ({omnis[1].LightEnergy:0.000} against {omnis[0].LightEnergy:0.000})");
+                }
+                authored.Dispose();
+            }
+            finally
+            {
+                CSVM.Utils.GraphicsMode.Resolve(CSVM.Utils.GraphicsMode.Default);
+            }
         }
         finally
         {
             ctx.Host.RemoveChild(omniParent);
             omniParent.Free();
+        }
+    }
+
+    // Synthetic lights and a fake-renderer emitter, like the suite above. What is pinned is the
+    // budget and the source's lifetime; the look is the user's at the controls.
+    [Suite("world-lights-enhanced-budget",
+        "Under Enhanced the omni pool reaches past the data texture's 16 rows to the effects level's "
+        + "budget from one rank, the faithful path commits at most 16 and spawns no omni, a burning "
+        + "emitter submits one light at its fire centroid and drops it with its last fire frame while "
+        + "its smoke lives on, and a beacon keeps its slot against a crowd of equally near fires")]
+    internal static void WorldLightsEnhancedBudget(TestContext ctx)
+    {
+        var viewer = new[] { Vector3.Zero };
+        bool wasEnhanced = CSVM.Utils.GraphicsMode.Enhanced;
+        var parent = new Node3D();
+        ctx.Host.AddChild(parent);
+        try
+        {
+            ctx.Check(WorldLights.OmniBudget("high") == 64 && WorldLights.OmniBudget("medium") == 48
+                      && WorldLights.OmniBudget("low") == 32 && WorldLights.OmniBudget("bogus") == 64,
+                $"the omni budget follows the effects level, an unknown word taking high's");
+
+            CSVM.Utils.GraphicsMode.Resolve(CSVM.Utils.GraphicsMode.Default);
+            var faithful = new WorldLights(parent);
+            faithful.Begin();
+            for (int i = 0; i < 40; i++)
+                faithful.Add(new Vector3(i, 0f, -20f), Colors.White, 1f, 10f);
+            faithful.AddFire(new Vector3(0f, 0f, -10f), 8f, 10, 0f);
+            faithful.Commit(viewer);
+            ctx.Check(faithful.CommittedPositions.Count == WorldLights.MaxActive && faithful.LiveCount == 40
+                      && parent.GetChildCount() == 0,
+                $"the faithful path commits {faithful.CommittedPositions.Count} of {faithful.LiveCount} live, takes no fire and spawns no omni");
+            faithful.Dispose();
+
+            CSVM.Utils.GraphicsMode.Resolve(CSVM.Utils.GraphicsMode.EnhancedWord);
+            var enhanced = new WorldLights(parent, omniBudget: 32);
+            enhanced.Begin();
+            for (int i = 0; i < 40; i++)
+                enhanced.Add(new Vector3(i, 0f, -20f), Colors.White, 1f, 10f);
+            enhanced.Commit(viewer);
+            int visible = 0;
+            foreach (var child in parent.GetChildren())
+            {
+                if (child is OmniLight3D { Visible: true })
+                    visible++;
+            }
+            ctx.Check(enhanced.CommittedPositions.Count == WorldLights.MaxActive && enhanced.OmniCount == 32 && visible == 32,
+                $"Enhanced keeps 16 texture rows and lights {enhanced.OmniCount} omnis ({visible} visible) of 40 live under a budget of 32");
+
+            // One beacon among 80 fires as near and as wide. The fires' weight keeps it in the
+            // texture's head; the control shows the same crowd authored instead takes its slot.
+            var beacon = new Vector3(0f, 0f, -50f);
+            enhanced.Begin();
+            enhanced.Add(beacon, Colors.White, 7f, 20f);
+            for (int i = 0; i < 80; i++)
+                enhanced.AddFire(new Vector3(i - 40f, -5f, -50f), 8f, 10, i * 0.1f);
+            enhanced.Commit(viewer);
+            ctx.Check(enhanced.CommittedPositions.Count > 0 && enhanced.CommittedPositions[0] == beacon,
+                $"the beacon ranks first against 80 fires as near as it is");
+            enhanced.Begin();
+            for (int i = 0; i < 80; i++)
+                enhanced.Add(new Vector3(i - 40f, -5f, -50f), Colors.White, 7f, 20f, 2f);
+            enhanced.Add(beacon, Colors.White, 7f, 20f);
+            enhanced.Commit(viewer);
+            ctx.Check(!enhanced.CommittedPositions.Contains(beacon),
+                $"ABLE-TO-FAIL CONTROL: 80 brighter authored lights at the same spot do take the beacon's row");
+            enhanced.Dispose();
+
+            WorldLightsFireSource(ctx, parent, viewer);
+        }
+        finally
+        {
+            CSVM.Utils.GraphicsMode.Resolve(wasEnhanced ? CSVM.Utils.GraphicsMode.EnhancedWord : CSVM.Utils.GraphicsMode.Default);
+            ctx.Host.RemoveChild(parent);
+            parent.Free();
+        }
+    }
+
+    // A flipbook that burns for the first half of each particle's life and smokes for the second.
+    // The light's end can then be told apart from the emitter's. The harness clock is detached, as
+    // in puffer-modes: nothing steps it, so particles would never age.
+    internal static void WorldLightsFireSource(TestContext ctx, Node3D parent, Vector3[] viewer)
+    {
+        var clock = CSVM.Utils.GameClock.Current;
+        CSVM.Utils.GameClock.Current = null;
+        try
+        {
+            WorldLightsFireSourceUnclocked(ctx, parent, viewer);
+        }
+        finally
+        {
+            CSVM.Utils.GameClock.Current = clock;
+        }
+    }
+
+    internal static void WorldLightsFireSourceUnclocked(TestContext ctx, Node3D parent, Vector3[] viewer)
+    {
+        var state = new PufferState
+        {
+            Name = "fire_light_puffer",
+            Number = 1,
+            TimeInterval = 1f / 60f,
+            SizeMin = 4f,
+            SizeMax = 4f,
+            LifetimeMin = 1f,
+            LifetimeMax = 1f,
+            TextureSequence = new[] { (0f, "fire_f01"), (0.5f, "smoke101") },
+        };
+        var fireColumns = new[] { true, false };
+        var amb = new CSVM.Effects.EffectAmbience();
+        var lights = new WorldLights(parent);
+        lights.AddSource(amb.SubmitFires);
+        var puffer = CSVM.Effects.Puffer.CreateWith(state, new RecordingEmitterRenderer(), sustained: true,
+            ambience: amb, fireColumns: fireColumns);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            const float step = 1f / 60f;
+            var at = new Vector3(0f, 10f, -30f);
+            for (int i = 0; i < 20; i++)
+            {
+                puffer.Emit(at, Basis.Identity, step);
+                puffer._Process(step);
+            }
+            lights.Begin(step);
+            lights.Commit(viewer);
+            ctx.Check(amb.Fires.Count == 1 && lights.LiveCount == 1 && lights.OmniCount == 1,
+                $"a burning emitter submits one light for {puffer.FireCount} fire particles (fires {amb.Fires.Count}, live {lights.LiveCount}, omnis {lights.OmniCount})");
+            ctx.Check(puffer.FireCentroid.DistanceTo(at) < 0.5f && lights.CommittedPositions.Count == 1
+                      && lights.CommittedPositions[0].Y > at.Y,
+                $"the light stands above the fire centroid {puffer.FireCentroid}");
+
+            puffer.Stop();
+            int frames = 0;
+            while (puffer.FireCount > 0 && frames++ < 120)
+                puffer._Process(step);
+            lights.Begin(step);
+            lights.Commit(viewer);
+            ctx.Check(amb.Fires.Count == 0 && lights.LiveCount == 0 && puffer.LiveCount > 0,
+                $"the light goes with the last fire frame while {puffer.LiveCount} smoke particles live on (fires {amb.Fires.Count}, live {lights.LiveCount})");
+        }
+        finally
+        {
+            lights.Dispose();
+            puffer.Free();
+        }
+
+        CSVM.Utils.GraphicsMode.Resolve(CSVM.Utils.GraphicsMode.Default);
+        var faithfulAmb = new CSVM.Effects.EffectAmbience();
+        var faithful = CSVM.Effects.Puffer.CreateWith(state, new RecordingEmitterRenderer(), sustained: true,
+            ambience: faithfulAmb, fireColumns: fireColumns);
+        ctx.Host.AddChild(faithful);
+        try
+        {
+            for (int i = 0; i < 20; i++)
+            {
+                faithful.Emit(Vector3.Zero, Basis.Identity, 1f / 60f);
+                faithful._Process(1f / 60f);
+            }
+            ctx.Check(faithful.LiveCount > 0 && faithfulAmb.Fires.Count == 0 && faithful.FireCount == 0,
+                $"the faithful path's emitter burns without registering a fire");
+        }
+        finally
+        {
+            faithful.Free();
         }
     }
 
@@ -2433,6 +2676,112 @@ internal static class WorldAndToolSuites
             ctx.Host.RemoveChild(stage);
             stage.Free();
         }
+    }
+
+    // One mode's world, counted by shader class. A private world: the mode is resolved around the
+    // build, so a cached one would hand the next suite a world compiled under the other mode.
+    private static void CoverageTextArm(TestContext ctx, bool enhanced)
+    {
+        string mode = enhanced ? "enhanced" : "faithful";
+        ctx.WithPrivateWorld(ctx.Chapter, collision: false, world =>
+        {
+            int cutouts = 0, cutoutsCovered = 0, blends = 0, blendsCovered = 0;
+            int sprites = 0, spritesCovered = 0, spriteCards = 0;
+            foreach (var (code, sprite) in ShaderTextUnder(world.Stage).Concat(ClutterShaderText(ctx, "C5")))
+            {
+                spriteCards += sprite ? 1 : 0;
+                bool blend = code.Contains("blend_mix");
+                bool cutout = code.Contains("ALPHA_SCISSOR_THRESHOLD");
+                // Both halves or neither, since the render mode alone is a no-op. The edge is an offset
+                // on the scissor threshold, so only 0.0 keeps the faithful cut (docs/org/textures.md).
+                bool covered = code.Contains(SceneBuilder.CoverageMode.TrimStart(',', ' '))
+                    && code.Contains("ALPHA_ANTIALIASING_EDGE = 0.0;")
+                    && code.Contains("ALPHA_TEXTURE_COORDINATE");
+                bool token = code.Contains("alpha_to_coverage") || code.Contains("ALPHA_ANTIALIASING_EDGE");
+                if (blend)
+                {
+                    blends++;
+                    blendsCovered += token ? 1 : 0;
+                }
+                else if (cutout)
+                {
+                    cutouts++;
+                    cutoutsCovered += covered ? 1 : 0;
+                    sprites += sprite ? 1 : 0;
+                    spritesCovered += sprite && covered ? 1 : 0;
+                }
+            }
+
+            ctx.Check(cutouts > 0 && blends > 0,
+                $"{mode}: {ctx.Chapter} builds both classes of alpha surface, cutout={cutouts} blended={blends}");
+            ctx.Check(sprites > 0,
+                $"{mode}: C5's clutter sprite cards are among them, cutout={sprites} of {spriteCards} card shaders");
+            ctx.Same(enhanced ? cutouts : 0, cutoutsCovered,
+                $"{mode}: cutout shaders carrying the coverage arm={cutoutsCovered} of {cutouts}");
+            ctx.Same(enhanced ? sprites : 0, spritesCovered,
+                $"{mode}: clutter sprite shaders carrying it={spritesCovered} of {sprites}");
+            ctx.Same(0, blendsCovered,
+                $"{mode}: blended shaders carrying any coverage token={blendsCovered} of {blends}");
+        });
+    }
+
+    // The clutter sprite cards' texts, from a builder of their own: the harness world is built
+    // without the stamped decorations, so their shaders are not under its stage to read.
+    private static List<(string Code, bool Sprite)> ClutterShaderText(TestContext ctx, string chapter)
+    {
+        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
+        ctx.RequireData(gamezPath, $"{chapter} gamez");
+        ctx.RequireData(texturesPath, $"{chapter} textures");
+        ctx.RequireData(ctx.InterpPath, $"interp.json");
+        using var textures = new TextureArchive(texturesPath);
+        var builder = new ClutterBuilder(GameZ.Load(gamezPath), textures);
+        var root = builder.Build(ClutterBuilder.TemplateNames(ctx.InterpPath, chapter));
+        try
+        {
+            return root == null ? new List<(string, bool)>() : ShaderTextUnder(root);
+        }
+        finally
+        {
+            root?.Free();
+        }
+    }
+
+    // Every distinct shader text under a built world, with whether it is a clutter sprite card's.
+    // A MultiMesh draw alone does not say so: the 3D decorations are instanced the same way and
+    // take the world's own bias shader, which is the one carrying the depth-bias uniform.
+    private static List<(string Code, bool Sprite)> ShaderTextUnder(Node node)
+    {
+        var seen = new HashSet<string>();
+        var found = new List<(string Code, bool Sprite)>();
+        void Take(Material? material, bool instanced)
+        {
+            if (material is not ShaderMaterial { Shader: { } shader } || !seen.Add(shader.Code))
+            {
+                return;
+            }
+            found.Add((shader.Code, instanced && !shader.Code.Contains("uniform float depth_bias")));
+        }
+        void Walk(Node n)
+        {
+            if (n is MultiMeshInstance3D multi)
+            {
+                Take(multi.MaterialOverride, instanced: true);
+            }
+            else if (n is MeshInstance3D mesh)
+            {
+                for (int i = 0; i < mesh.GetSurfaceOverrideMaterialCount(); i++)
+                {
+                    Take(mesh.GetActiveMaterial(i), instanced: false);
+                }
+            }
+            foreach (var child in n.GetChildren())
+            {
+                Walk(child);
+            }
+        }
+        Walk(node);
+        return found;
     }
 
     // Counts a texture's alpha bytes over its whole mip chain, and those off a replicated nibble.

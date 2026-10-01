@@ -452,7 +452,11 @@ vertex light:
 
 ⚠ The term is per vertex, as in the original, so a light smaller than a surface's vertex spacing
 lights that surface only where it reaches a vertex. Billboard and cylindrical facade materials take
-no point term, and in enhanced mode the omnis light the world instead.
+no point term, and in enhanced mode the omnis light the world instead. ⚠ An enhanced omni cannot
+take the linear ramp: Godot's omni falloff is `(1 - (d/r)^4)^2 × d^-attenuation`. `WorldLights`,
+the wing-tip lamps and the muzzle flashes run it at attenuation 0 and sets the range so the omni is at half weight midway between the
+authored near and far range, where the ramp is; Godot's default attenuation 1.0 spends a 20 m
+light within a few metres. The omni keeps Godot's `N·L`, which the original's term has none of.
 
 ## Specular: the device turns it off and no material exists to turn it back on
 

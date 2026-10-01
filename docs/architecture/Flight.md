@@ -247,7 +247,7 @@ holds the state and the camera; `ResetToChase` is the player's own destroy callb
 radius is per plane and dynamic, `Dist + DistFactor` times speed plus `DistTransient`'s authored
 throttle term; `ExternalRadius` bounds it and carries the numpad zoom outward from the near bound.
 `ChaseSwing` turns the chase offset, its image up and its look-ahead point together by `Head`'s angles, so the snap cluster and the mouse orbit the camera while a settled head returns the exact identity; `PadSwing` then turns the finished chase pose rigidly about the aircraft for the look stick, and `StepHead` is where the placing view hands the head its elevation floor. Cockpit and Nose mount rigidly at the
-authored `cockpit_camera` marker with `Head`'s angles and their own FOV; every other pose restores `ExternalFovDeg`, the decoded 60 degree horizontal base the whole port draws the world at, which `GameSession` and `Launcher` also read when they build a camera. Steers a `Camera3D` it does not own, `FlightController` its only host. Decode: [../org/cameraViews.md](../org/cameraViews.md).
+authored `cockpit_camera` marker with `Head`'s angles and their own FOV; every other pose restores `ExternalFovDeg`, the decoded 60 degree horizontal base the whole port draws the world at, which `GameSession` and `Launcher` also read when they build a camera, and the three static cuts take that angle undecorated. `StepEnhancedCues` is the enhanced presentation's whole arm, a lagged attitude the chase pose is built from and a speed widening of that external FOV, inert on the faithful path. Steers a `Camera3D` it does not own, `FlightController` its only host. Decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Flight/Camera/StaticCameras.cs
 The three cameras that hold a WORLD point and re-aim at the aeroplane: the crash cut, the death
@@ -398,7 +398,7 @@ The Danger Zone camera's eye, one per human pilot, the `PaneRequest` `StuntCaptu
 roll-free look back at the aircraft. The node is a `SubViewport` on the pane's world that poses its
 camera in `_Process` after the controller's, at the external FOV with no HUD, shows a first-person
 pilot's airframe through `CockpitVisibility`, arms the fill light (`csky_photo_eye`) on its pilot's
-instances, renders once, disarms, and reads back after `FramePostDraw`. Decode:
+instances, renders once, and disarms and reads back on the frame after that draw was issued. Decode:
 [../formats/campaign-screens.md](../formats/campaign-screens.md), "The danger-zone slot".
 
 ## src/Flight/Airframe/ZeppelinBroadside.cs

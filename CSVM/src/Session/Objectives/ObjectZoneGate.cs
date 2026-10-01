@@ -52,8 +52,14 @@ public sealed class ObjectZoneGate
             uint layer = ZoneGate.LayerFor(zone);
             if (layer != 0)
                 GatedObjects++;
+            // Written only on a change. A mission's roster is thousands of meshes, and each write
+            // is an engine call whether or not the mask moved.
+            uint wanted = layer != 0 ? layer : DefaultLayer;
+            if (entry.Written == wanted)
+                continue;
             foreach (var mesh in entry.Meshes)
-                mesh.Layers = layer != 0 ? layer : DefaultLayer;
+                mesh.Layers = wanted;
+            entry.Written = wanted;
         }
         Sweep(objects);
     }
@@ -97,6 +103,9 @@ public sealed class ObjectZoneGate
         public List<VisualInstance3D> Meshes { get; }
 
         public Aabb Extent { get; }
+
+        // The mask this gate last wrote on every mesh, 0 before the first write.
+        public uint Written { get; set; }
 
         public static Entry Measure(Node3D root)
         {

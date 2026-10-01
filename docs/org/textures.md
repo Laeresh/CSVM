@@ -163,8 +163,14 @@ Nothing else in 881 textures carries it, and every member is a glow or emissive 
 same set minus `bigflare01/02` and the impact rings. That correlation is what identifies the bit;
 it is not an inference from the extractor's field name.
 
-**Sprites that do NOT carry it**, which is every sprite any puffer names: `fire_f01`, `fire_f02`,
-`fire_f06`, `smoke101`, `smoke102`, `smoke103`, `exp_yel01`, `thickblksmoke`. All alpha-mixed.
+**Sprites that do NOT carry it**, which is every sprite any puffer names. The 145 `zrdr` files
+that define a `PUFFER_STATE` name 26 distinct textures between them, and the census above holds
+none of them: `bit01` … `bit04`, `cloud1`, `cloud2`, `exp_gre01`, `exp_red01`, `exp_yel01`,
+`fire_f01` … `fire_f06`, `fireflare1`, `magnesiumtip`, `poleflare`, `smoke101` … `smoke103`,
+`splashbase`, `thickblksmoke01` … `thickblksmoke03`, `watersquirt`. All alpha-mixed (the words
+seen are 0, 3 for `splashbase` and 8 for the two clouds). The additive `fire101` … `fire112`
+flipbook belongs to `effects.zrd`'s `EFFECTS` table, which installs on gamez mesh materials
+rather than on a puffer, so nothing in an install reaches the particle path's additive branch.
 
 ## What this means for particles
 
@@ -408,6 +414,39 @@ split path is reachable only by a frame list nothing authors. The flagged textur
 mesh polygons and the HUD instead: the `fire101`…`fire112` flipbook, the lens flares, the impact
 rings and the HUD hilites. Those draw through `SceneBuilder`, which does not read the word yet.
 
+Because blend cannot tell a flame from smoke here, Enhanced Graphics selects the sprites that
+bloom by name instead: `MultiMeshEmitterRenderer.IsFireSprite` names `fire_f01` … `fire_f06`, the
+flipbook every explosion puffer sequences, and that column's `ALBEDO` is multiplied by 2.0 so its
+hottest texels cross the 1.0 glow threshold `Launcher.EnableGlowAndTonemap` sets. The multiplier
+is uniform and the flipbook's own authored falloff decides which frames halo: alpha-weighted
+linear peaks run 0.814, 0.714, 0.540, 0.429, 0.292, 0.268 across the six frames, so the first two
+clear 1.0 and the tail stays under it. The sprites deliberately left out reach 1.0 unaided and
+would halo on every gun strike or pole lamp (`magnesiumtip` 1.000, `poleflare` 1.000, `exp_yel01`
+0.981, `fireflare1` 0.911), and luminance alone cannot be the gate because `smoke101` peaks at
+1.000 against `fire_f03`'s 0.540. The faithful presentation compiles the shader with no gain term.
+
+The same seam names the sprites Enhanced Graphics grades by the sun:
+`MultiMeshEmitterRenderer.IsSmokeSprite` names `smoke101` … `smoke103` and
+`thickblksmoke01` … `thickblksmoke03`, the six the puffer states use for smoke, and the mix
+variant alone grades those columns across the quad by `csky_sun_dir` projected into the
+billboard's own right and up. The graded value is clamped under the glow threshold, since
+`smoke101` already reaches 1.0 and a lift without the clamp would bloom smoke that the fire
+flipbook is meant to have to itself. The measured effect is small: at a C1 rocket plume with the
+sun 25° up and to one side, a gradient amplitude of 0.2 lifts one puff's sun-side against its
+far-side luminance from ratio 1.046 to 1.061 and moves no pixel by more than 7 of 255 levels, and
+0.45 reaches 1.075 and 12 levels. The reason is that a plume is a stack of overlapping quads, so
+one quad's gradient is averaged against its neighbours' rather than summed with them.
+
+⚠ **The cloud cards' transmission rim does not transfer to these masks, do not add it back.**
+Measured on the same plume with the gradient off, the rim of
+[`Effects/FogVolumeClutter.cs`](../../CSVM/src/Effects/FogVolumeClutter.cs) (gain 0.12, core
+shadow 0.20, three taps toward the sun) moves at most 3 levels of 255 with the sun to one side and
+4 at the backlit pose it exists for, for three extra texture samples per smoke fragment. The
+sprite masks are smooth blobs, so the rim's brightening lands exactly where the alpha is too low
+to reach the frame. A second reason applies to the sample itself: the puffer atlas packs its
+frames side by side with no mip chain, so the reference technique's blurred level would read the
+neighbouring frame rather than a blur of this one.
+
 ⚠ **The word is per archive, not per name.** `bigflare01`, `ring_he` and `beflare5` are flagged in
 some chapters and not in others, so an install-wide name table would answer wrongly for whichever
 chapter it was not built from.
@@ -435,6 +474,20 @@ The verdict reaches the scattered decorations too: `Clutter`'s billboard shader 
 as the same texture does on a world surface. Soft also suppresses `ScissorMipsKeepCoverage`, whose
 only job is to stop a cutout thinning at distance, leaving a blended card the plain box-filtered
 mip chain the original sampled.
+
+Enhanced Graphics resolves the cutouts the rule leaves behind through coverage rather than a
+sharper cut: the scissored arm of every world, facade and clutter shader also takes
+`alpha_to_coverage` and writes `ALPHA_ANTIALIASING_EDGE = 0.0`, so the edge spends the project's
+four MSAA samples instead of stepping one bit per pixel. ⚠ Godot adds that built-in to
+`ALPHA_SCISSOR_THRESHOLD` (`clamp(threshold + edge, 0, 1)` in its scene shader), so 0.0 is what
+puts the coverage edge on the scissor's own 0.5. Written as 0.5 it moved the edge to 1.0: an
+opaque texel then took half coverage wherever its texture magnified (mip 0), which veiled the C3
+dome's cloud puffs and cut them along a triangle's diagonal where one triangle of a quad sat at
+mip 0 and the other did not, and it eroded every cutout's silhouette. The render mode
+alone changes nothing, because Godot's opaque pass writes alpha 1 unless that edge built-in is
+set, and `alpha_to_coverage_and_one` hardens the result back toward the plain cut, which is why
+the plain mode ships. The faithful presentation emits none of it, so its shader text and the
+goldens pinned on it are untouched.
 
 All of that is a different question from `LastAlphaClass`, the extractor's own
 `None`/`Simple`/`Full` field, which is the header bit itself and the only reader that sees the

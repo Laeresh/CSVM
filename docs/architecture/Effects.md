@@ -13,7 +13,7 @@ bit) into an `IEmitterRenderer` (`EmitterRenderer.cs`); this class owns only the
 The authored state picks burst, distance-trail or sustained mode; callers drive it through
 `Emit`/`Stop`, `Burst` and the hard-kill `Clear`, and `CreateWith` reaches all three with no atlas,
 archive or GPU. `_Process` writes the frame's draws farthest-first against pane 0. `BirthAlpha` is
-an opacity each particle keeps from birth, 1 except on the code-built exhaust trail. The distance fade, the accumulator, the pools and the two unauthored-interval constants carry their own constraint. Keys and decode: [../formats/effects.md](../formats/effects.md), [../org/puffer.md](../org/puffer.md).
+an opacity each particle keeps from birth, 1 except on the code-built exhaust trail. `FollowAlphaDepth` bakes an archive's atlases again in place when their frames change depth on a live switch. The distance fade, the accumulator, the pools and the two unauthored-interval constants carry their own constraint. Keys and decode: [../formats/effects.md](../formats/effects.md), [../org/puffer.md](../org/puffer.md).
 
 ## src/Effects/WorldWind.cs
 Two types delivering the mission's authored wind to every puffer. `WorldWind` is the gust model, a
@@ -23,7 +23,7 @@ stream, authored in `weather.zrd`'s `WIND` block (schema:
 `EffectAmbience` is the seam holding the per-frame state a `Puffer` reads, the wind and every
 pane's camera pose. `GameSession` owns the one instance and `WeatherRig.Tick` writes it per frame;
 the world build's emitter factory closes over that same instance, so its emitters fade and cull
-like the player's own. `Still` is the camera-less null object an unwired puffer reads. Read `Puffer.cs` next.
+like the player's own. `Still` is the camera-less null object an unwired puffer reads. Under Enhanced it also holds the emitters burning a fire column, and `SubmitFires`, a `WorldLights` source, lights each. Read `Puffer.cs` next.
 
 ## src/Effects/PufferEmitterFactory.cs
 The one real implementation of the animation layer's `IEmitterFactory` seam (`Mech3/Anim/IEmitter.cs`):
@@ -36,8 +36,8 @@ hand the factory in through `WorldSession.Options`. A texture-less state is a st
 `Puffer`'s lower seam. `IEmitterRenderer` takes live particles (`Attach` sizes the pool, `Grow`
 re-sizes it, `Write` per particle, `Show` publishes the frame), reaching the three emitter modes
 without a GPU via `RecordingEmitterRenderer`. `MultiMeshEmitterRenderer` draws them as MultiMeshes of camera-billboarded quads, over one
-process-wide unit quad and one compiled shader per blend and soft pair, and owns that shader: quad-rim fade, flipbook column from
-per-instance custom data, the soft-particle depth fade, `csky_srgb_to_linear` on the `COLORS` ramp, the
+process-wide unit quad and one compiled shader per blend and soft pair, with a twin per graphics mode that a live switch moves the layers onto (`SceneBuilder.RegenerableShader`) while the per-column gain and grade are read per particle, and owns that shader: quad-rim fade, flipbook column from
+per-instance custom data, the soft-particle depth fade, `csky_srgb_to_linear` on the `COLORS` ramp, the two per-column marks Enhanced Graphics grades by (`IsFireSprite`, an ALBEDO gain over the glow threshold that the mixed alpha's clamp carries through; `IsSmokeSprite`, a `csky_sun_dir` gradient across the quad in the mix variant alone, clamped under that threshold: the faithful text carries neither term), the
 mission's distance fog off the sky's globals, and a mixed alpha that lands on DX7's byte-space mix. Blend arrives per atlas column from `Puffer.Create`,
 keeping this seam free of `TextureArchive`; a column set spanning both draws one MultiMesh per
 blend, each in write order and depth-sorted on its cloud's AABB centre. Read `Puffer.cs` next.
@@ -50,7 +50,17 @@ MultiMesh per sprite kind, plus a map-edge continuation
 resolve through `ClutterBuilder.FindTemplateRoot`. `BandData` packs each sprite's own face normal
 and the one draw both `far_fade_range` pairs are interpolated with into a custom-data slot, which
 `csky_clutter_fade_alpha_angled` turns into the view-angle fade; that draw takes its own
-`Rng.CloudBands` stream. The shipped field is that decoded lattice plus a remake-only X/Z offset per card (`ShippedJitter`, 30 m, overridden by `--cloud-jitter=`), drawn off `Rng.CloudJitter` and reaching no other population. The quad is posed by `csky_facade_spherical` (`shaders/csky_facade.gdshaderinc`), a world-up look-at standing in for the original's SphericalY tracker, which reads the eye's position and not its basis, so neither the camera's roll nor a sideways move turns a card ([../org/cloudCards.md](../org/cloudCards.md)). A `lighting: true` card (C1C, C2B, C5) carries its three authored normals and takes the original's per-vertex `AMBIENT + DIFFUSE x max(N.L, 0)` through that same pose off `WeatherRig`'s uncollapsed globals, never `csky_world_light` ([../org/vertexLighting.md](../org/vertexLighting.md)). Gating: `GameSession`/`WorldBuilder`/`WeatherRig`. Schema: [../formats/fogvol.md](../formats/fogvol.md).
+`Rng.CloudBands` stream. The shipped field is that decoded lattice plus a remake-only X/Z offset per card (`ShippedJitter`, 30 m, overridden by `--cloud-jitter=`), drawn off `Rng.CloudJitter` and reaching no other population. The quad is posed by `csky_facade_spherical` (`shaders/csky_facade.gdshaderinc`), a world-up look-at standing in for the original's SphericalY tracker, which reads the eye's position and not its basis, so neither the camera's roll nor a sideways move turns a card ([../org/cloudCards.md](../org/cloudCards.md)). A `lighting: true` card (C1C, C2B, C5) carries its three authored normals and takes the original's per-vertex `AMBIENT + DIFFUSE x max(N.L, 0)` through that same pose off `WeatherRig`'s uncollapsed globals, never `csky_world_light` ([../org/vertexLighting.md](../org/vertexLighting.md)). Under `GraphicsMode.Enhanced` alone, `ShaderCode` layers a grade by the global `csky_sun_dir` over either variant, leaving the faithful and lit text byte-identical, and draws both kinds from the deck pool of rendered puffs (`Mech3/CloudPuffs.cs`), tinted by the authored mask's colour, each card picking its puff, tilt, mirror and size off a hash of its own position. `FollowGraphicsMode` moves each kind onto the card shader for the standing mode, one compiled per text and kept, and writes its pool and cull margin again; `WarmOtherMode` compiles the other mode's ahead. Gating: `GameSession`/`WorldBuilder`/`WeatherRig`. Schema: [../formats/fogvol.md](../formats/fogvol.md).
+
+## src/Effects/FogVolumeBanks.cs
+Enhanced Graphics only: the soft volumetric bank standing inside each authored `fvol*` volume, under
+the cards `FogVolumeClutter` lays over the same geometry. `Create` builds one bank per volume, each
+laying its own bounds down as `FogVolume` boxes over one shared `FogMaterial`, and `ApplyFroxelFog`
+arms the Environment's froxel pass for a world that built some and clears it for one that did not,
+with zero global density so the banks carry it all and the authored `csky_fog_*` ramp is not hazed
+twice. `WeatherRig`'s zone apply calls `ApplyZone`, so the scattering colour is the zone's own, or
+the chapter's authored whiteout colour where `fogvol.zrd` arms one, which also sets the density.
+Every constant is TUNE, including the tile width, which is an engine limit. Volumes: [../formats/fogvol.md](../formats/fogvol.md).
 
 ## src/Effects/Precipitation.cs
 Rain and snow from `weather.json`'s precipitation block (`WeatherState.PrecipData`): ONE MultiMesh
@@ -60,3 +70,32 @@ SNOW flutters as flakes; RAIN streaks along the data's world fall velocity. The 
 procedural (`MakeFlakeTexture`/`MakeStreakTexture`), the original having drawn untextured
 primitives no archive carries. Schema and the data-to-look TUNE mapping:
 [../formats/weather.md](../formats/weather.md).
+
+## src/Effects/WindStreaks.cs
+Remake-only wind streaks, a layer OVER the authored speed cue (`Flight/Hud/SpeedCue.cs`) rather than a
+replacement: one MultiMesh of thin procedural quads in a camera-centred wrap box on
+`Precipitation`'s pattern, aligned to the aircraft's world velocity, with the same near and rim
+fades. `Create` returns null unless `GraphicsMode.Enhanced` and the `graphics.windStreaks` config key is on (it ships off); `HumanFlightAdapter` gives each player
+pane its own, `FlightController` drives it, and a live switch takes it out of the tree and back. `Update` is the whole law: opacity zero below a
+cruise fraction of `PlaneStats.FdSpeed`, rising with the speed fraction plus a term on
+`FlightModel.LoadFactorDemand`, length growing with airspeed, and the drift accumulated on the CPU
+rather than off a clock, since the rate changes with airspeed. Every constant is TUNE.
+
+## src/Effects/HeatShimmer.cs
+Remake-only heat shimmer over a fireball, built only under `GraphicsMode.Enhanced` and only where
+`WorldEffectsFactory.RegisterHeatShimmer` decides: one billboard quad per burst from a fixed pool,
+all of them in ONE MultiMesh, so every live burst shares one draw and one colour-buffer copy. The
+quad samples `hint_screen_texture` at a `csky_time`-driven noise offset scaled by a radial mask and
+by the fireball's own liveness, and writes it back with no gain, so it lifts no pixel over the glow
+bar. That copy is taken before the transparent pass and holds no fire or smoke, which is why the
+quad stands clear above the flame. `Spawn` recycles the oldest slot at the cap, `Step` retires a
+quad the frame its liveness goes false, and every size, lift, decay and amplitude constant is TUNE.
+
+## src/Effects/ScorchField.cs
+Remake-only scorch marks, a layer OVER the crater carve (`Mech3/CraterField.cs`) and never instead
+of it: a capped pool of `Decal` nodes sharing one procedural radial burn texture built on first use,
+projected along the struck surface normal and faded out over their own life. `Create` returns null
+unless `GraphicsMode.Enhanced`, so the faithful build holds no pool, no node and no texture.
+`GameSession.RegisterScorch` is the one decision point (a bowl was carved, or the impact played one
+of `EffectCatalogue`'s fireballs); `Flight/Projectile.ScorchSink` is the hook and skips water. Size
+comes from the weapon's crater radius. Every size, darkness and life constant is TUNE.

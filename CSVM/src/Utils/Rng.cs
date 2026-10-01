@@ -44,6 +44,10 @@ public static class Rng
     // reason: every knob value then lays the same decoded field and moves only the offsets.
     public const string CloudJitter = "cloudjitter";
     public const string Precip = "precip";
+    // The enhanced wind-streak field's per-instance seeds (WindStreaks). Its own stream, not
+    // Rng.Precip, because the field is built only under the enhanced presentation. A shared stream
+    // would make the faithful path's rain scatter depend on which graphics mode ran.
+    public const string WindStreaks = "windstreaks";
     // The mission's global wind gust (WorldWind). Its own stream, not Puffer's: the wind
     // is one random walk for the whole world, stepped once per frame by WeatherRig, while
     // Rng.Puffer is drawn per emitter at spawn, sharing one would make every puffer's scatter a

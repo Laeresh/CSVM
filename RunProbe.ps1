@@ -26,6 +26,12 @@
     because --screenshot implies --det, which drops every saved option (DET-8). This is the
     only way a scripted capture lands at a size a player actually runs.
 
+.PARAMETER EngineArgs
+    Godot's own options, forwarded BEFORE the `--` separator, e.g.
+    `-EngineArgs '--render-thread','safe'` to A/B the project's render thread model, or
+    `-EngineArgs '--log-file','<path>'` to keep every native ERROR line in one file. Pass them as a
+    string array: PowerShell splits an unquoted comma list itself.
+
 .PARAMETER TimeoutSec
     Kill the run if it has not exited after this many seconds and exit 124 (the GNU
     timeout convention, so "hung and killed" is distinguishable from "ran and failed").
@@ -47,6 +53,7 @@
 param(
     [int]$TimeoutSec = 300,
     [ValidatePattern('^\d+x\d+$')][string]$Resolution = "",
+    [string[]]$EngineArgs = @(),
     # Everything else -- the Godot/CSVM arguments, forwarded verbatim. `--flag=value`
     # tokens never collide with the named parameter above (PowerShell only binds
     # single-dash names), so callers that pass no -TimeoutSec are untouched.
@@ -80,6 +87,7 @@ $HiddenDesktop = Open-HiddenDesktop -Name "csvm-probe"
 # Engine options belong before the `--`; everything after it is the CSVM argument list.
 $Engine = @("--path", $ProjectDir, "res://scenes/Main.tscn")
 if ($Resolution) { $Engine += @("--resolution", $Resolution) }
+$Engine += @($EngineArgs)
 $Launch = $Engine + @("--") + @($GodotArgs)
 
 # SHELL-19: the argument string is re-split by the callee, and a path may carry a space, so

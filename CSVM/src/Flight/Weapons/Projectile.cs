@@ -69,6 +69,13 @@ public sealed partial class ProjectilePool : Node3D
     /// option asks for any rocket. Wired to <c>CraterField.TryCarve</c> in a collidable flight.</summary>
     public System.Func<Vector3, Node?, bool>? CraterSink;
 
+    /// <summary>Where an Enhanced ground burst's scorch mark goes: the hit point, the struck
+    /// surface normal, the impact effect that played there and whether the same hit carved a bowl.
+    /// Asked only for a direct strike on ground that is neither an aircraft nor water. Wired to the
+    /// session's <c>Effects.ScorchField</c> and null on the faithful path, which builds no field
+    /// (docs/org/craters.md, "How CSVM builds it").</summary>
+    public System.Action<Vector3, Vector3, string?, bool>? ScorchSink;
+
     /// <summary>Plays a named IMPACT effect (its puffer half) at a hit point through the world-effects
     /// runtime. These are the gun/rocket smoke and fireballs whose <c>ANIMATION</c> is an ON_CALL
     /// effect def rather than a gamez model. Null in views with no anim runtime. After the point come the
@@ -894,6 +901,17 @@ public sealed partial class ProjectilePool : Node3D
         if (Structures != null)
         {
             into.AddStructures(Structures);
+        }
+    }
+
+    /// <summary>The mission structures a turret on <paramref name="team"/> can pick, the narrowing
+    /// <see cref="AimCandidateSet.AddTurretStructures"/> makes. A turret scans once per tick, so the
+    /// whole registry's engine calls per gun are what this saves.</summary>
+    public void CollectTurretStructures(AimCandidateSet into, int team)
+    {
+        if (Structures != null)
+        {
+            into.AddTurretStructures(Structures, team);
         }
     }
 
@@ -1959,23 +1977,20 @@ public sealed partial class ProjectilePool : Node3D
     /// splash <c>splash1.flt</c>/<c>bsplsh.flt</c>), collision-exempt, tracked for a short life and
     /// freed. Returns false, leaving the stand-in spark to show, when there is no world scene, the
     /// name resolves to nothing, or the node built no mesh.</summary>
-    // Installs this instance's own translucent twin as a surface override, so its own
-    // per-instance uniform drives the fade without editing the shared cached material every other
-    // splash's mesh also points at. Cached per source material (SceneBuilder.FadeShaderFor).
+    // Installs this instance's own translucent twin as a surface override. Its own per-instance
+    // uniform then drives the fade without editing the shared cached material every other splash's
+    // mesh also points at. Cached per source material (ShaderTwins.FadeCopy).
     // A source with no alpha path is counted, not swallowed: the splash plays its scale curves
     // without a fade rather than throwing.
     private void EnsureSplashFade(MeshInstance3D mi)
     {
         if (mi.Mesh is not { } mesh || mesh.GetSurfaceCount() == 0)
             return;
-        if (mesh.SurfaceGetMaterial(0) is not ShaderMaterial { Shader: { } sh } sm)
+        if (mesh.SurfaceGetMaterial(0) is not ShaderMaterial { Shader: not null } sm)
             return;
         if (!_splashFadeTwins.TryGetValue(sm, out var twin))
         {
-            var fadeShader = SceneBuilder.FadeShaderFor(sh);
-            twin = fadeShader != null ? (ShaderMaterial)sm.Duplicate() : null;
-            if (twin != null)
-                twin.Shader = fadeShader;
+            twin = ShaderTwins.FadeCopy(sm);
             _splashFadeTwins[sm] = twin;
             if (twin == null)
                 Log.Info("weapons", $"splash fade: source shader has no alpha path, fade skipped, curves unaffected");
@@ -2114,6 +2129,11 @@ public sealed partial class ProjectilePool : Node3D
         // is what separates `wep_02`'s bound `buildings` row from the guns' unbound one.
         if (modelled || effectBound)
             outcome = ImpactOutcome.Resolve(weapon, surface, modelled, hasEffectsRuntime, suppression, cratered, effectBound);
+
+        // The scorch follows the carve decision, not the effect sink. A mark is owed on struck
+        // ground where either carve rule cut a bowl or a fireball burned. Water takes none.
+        if (shapeIdx >= 0 && collider is not AircraftBody && surface != SurfaceRegistry.Water)
+            ScorchSink?.Invoke(point, normal, outcome.EffectName, carved);
 
         // Verification breadcrumb: the first few impacts confirm hit detection and surface
         // classification without needing a lucky screenshot; then it goes quiet.
@@ -2827,38 +2847,40 @@ public sealed partial class ProjectilePool : Node3D
                 if (pointTerm)
                     QueuePointFlash(muzzle, anchor, MuzzleSecondaryOffset + at, near, far, tint);
                 else
-                    EmitLight(muzzle, anchor, MuzzleSecondaryOffset + at, far, tint);
+                    EmitLight(muzzle, anchor, MuzzleSecondaryOffset + at, near, far, tint);
             }
             return;
         }
         // The def's 3rdperson_lts variants: RANDOM_WEIGHT 0.333 / 0.333 / else, each a range band
         // and a colour; the range within the band is a random pick.
         float roll = _rng.Randf();
-        float range;
+        float bandNear, range;
         Color color;
         if (roll < 0.333f)
         {
+            bandNear = 1.0f;
             range = RandRange(1.0f, 2.0f);
             color = new Color(0.88f, 0.78f, 0.36f);
         }
         else if (roll < 0.667f)
         {
+            bandNear = 1.25f;
             range = RandRange(1.25f, 3.25f);
             color = new Color(0.93f, 0.78f, 0.36f);
         }
         else
         {
+            bandNear = 2.0f;
             range = RandRange(2.0f, 3.75f);
             color = new Color(0.93f, 0.78f, 0.36f);
         }
-        EmitLight(muzzle, anchor, MuzzleSecondaryOffset, range, color);
+        EmitLight(muzzle, anchor, MuzzleSecondaryOffset, bandNear, range, color);
     }
 
     // Lights one pooled OmniLight3D at the given offset in the muzzle frame for MuzzleLightLife.
-    // An anchor node keeps it there while the flash lives; without one the light stays where it
-    // was lit. Silently drops the flash when the pool is at cap, which is what a volley past
-    // MaxMuzzleLights costs.
-    private void EmitLight(Transform3D muzzle, Node3D? anchor, Vector3 local, float range, Color color)
+    // It takes the near/far pair the way every world lamp does (WorldLights.OmniRange). An anchor
+    // keeps it in place while the flash lives. A volley past MaxMuzzleLights drops the flash.
+    private void EmitLight(Transform3D muzzle, Node3D? anchor, Vector3 local, float near, float far, Color color)
     {
         LightFlash? slot = null;
         foreach (var l in _lights)
@@ -2879,13 +2901,14 @@ public sealed partial class ProjectilePool : Node3D
                 {
                     ShadowEnabled = false,
                     LightEnergy = MuzzleLightEnergy,
+                    OmniAttenuation = WorldLights.OmniAttenuation,
                     Visible = false,
                 },
             };
             AddChild(slot.Light);
             _lights.Add(slot);
         }
-        slot.Light.OmniRange = range;
+        slot.Light.OmniRange = WorldLights.OmniRange(near, far);
         slot.Light.LightColor = color;
         slot.Light.GlobalPosition = muzzle.Origin + (muzzle.Basis.Orthonormalized() * local);
         slot.Light.Visible = true;

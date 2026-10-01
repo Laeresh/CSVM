@@ -129,6 +129,7 @@ public sealed class PlaneBuilder
                 // The panel is a wall of soft-alpha decals over dark instruments, which is where
                 // the linear-space composite departs visibly from the original's (see the field).
                 GammaBlendAlpha = true,
+                NoAlphaCoverage = true,
             };
         }
         _spinningProps = spinningProps;
@@ -451,7 +452,7 @@ public sealed class PlaneBuilder
     {
         if (_flareMaterial == null)
         {
-            _flareMaterial = new ShaderMaterial { Shader = new Shader { Code = FlareShaderCode } };
+            _flareMaterial = new ShaderMaterial { Shader = ShaderTwins.Pooled(FlareShaderCode, "plane-flare") };
             if (_textures.Find(WingLights.FlareTexture) is { } tex)
                 _flareMaterial.SetShaderParameter("albedo_tex", tex);
             _flareMaterial.SetShaderParameter("tint", WingLights.FlareColor);

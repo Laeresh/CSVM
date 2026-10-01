@@ -30,7 +30,9 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/GameZ.cs`, GameZ extraction loader (zip or dir): nodes/models/materials/textures JSON → C# objects, either extraction shape.
 - `src/Mech3/TextureArchive.cs`, texture lookup (zip or dir): resolves the name quirks, classifies each texture's alpha (soft vs hard).
 - `src/Mech3/SceneBuilder.cs`, shared GameZ-subtree → MeshInstance3D builder: triangulation, LOD, depth bias, billboards, fog, UV scroll.
+- `src/Mech3/ShaderTwins.cs`, every generated shader one per text, each cache key's pair per graphics mode, and the materials that follow a key across a live switch.
 - `src/Mech3/ZoneGate.cs`, the original's per-node `zone_id` visibility gate: the rule, its visual-layer allocation, and the per-camera cull mask.
+- `src/Mech3/CloudPuffs.cs`, Enhanced only: the rendered cloud puff pools for the deck cards and the placed cloud sprites, their tint and per-card pose.
 - `src/Mech3/ConflictRank.cs`, the world's cross-node draw-order tie-break: ranks nodes by their conflict graph, one slot per coplanar layer.
 - `src/Mech3/WorldCollision.cs`, derives every world collider's `Disabled` flag from its owner's tree visibility and the fade channel.
 - `src/Mech3/CraterShape.cs`, one crater as geometry: the 7-vertex rim at radius 20, the bowl under it, the footprint the no-overlap rule compares.
@@ -46,9 +48,11 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/ControlSurfaces.cs`, classifies left/right aileron, elevator and rudder mesh nodes and their hinge axes (X ailerons/elevators, Y rudders).
 - `src/Mech3/WingLights.cs`, the one source for wingtip nav lights: flare node names, glow texture, warm-amber colour, blink period.
 - `src/Mech3/WorldBuilder.cs`, builds a chapter world: placed + partition subtrees, cloud deck, camera-anchored skydome, edge extender.
+- `src/Mech3/WorldMerge.cs`, under Enhanced the static world's opaque surfaces sharing a node frame and material drawn as one mesh.
 - `src/Mech3/MapEdgeExtender.cs`, rolling window of repeated border tiles and clutter continuing the world past the map edge, one per session.
 - `src/Mech3/Clutter.cs`, stamps the boot-script clutter templates onto matching-textured terrain at the polygon's own UV lattice.
 - `src/Mech3/ClutterActivation.cs`, draws each clutter stamp only while the world node it was stamped from is visible.
+- `src/Mech3/ClutterInstances.cs`, a clutter kind's drawn instances: one MultiMesh, or under Enhanced one range-culled node per map cell.
 - `src/Mech3/ClutterTemplates.cs`, the `templates.zrd` reader: each clutter decoration model's authored substitution table, scale range and fade distances.
 - `src/Mech3/FogVolumes.cs`, the `fogvol.zrd` reader + the gamez `fvol*` volume census: what the ambient cloud field scatters, and where.
 - `src/Mech3/Zrdr.cs`, zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's list.
@@ -305,7 +309,11 @@ only `Airframe`, and nothing else in `Flight` names `Hangar`.
 - `src/Effects/PufferEmitterFactory.cs`, the animation runtime's `IEmitterFactory` seam implemented over `Puffer`, one per built world.
 - `src/Effects/EmitterRenderer.cs`, the `IEmitterRenderer` seam under `Puffer` and the `MultiMesh` billboard-shader renderer behind it.
 - `src/Effects/FogVolumeClutter.cs`, the authored ambient cloud field: `fogvol.zrd` clutter scattered through its `fvol*` volumes, one MultiMesh per kind.
+- `src/Effects/FogVolumeBanks.cs`, Enhanced Graphics only: the volumetric bank inside each authored `fvol*` volume, under the cards.
 - `src/Effects/Precipitation.cs`, weather.json rain/snow: one camera-following MultiMesh of flakes or streaks, self-animating on the GPU.
+- `src/Effects/ScorchField.cs`, the enhanced presentation's scorch marks: a capped pool of decals with one procedural burn texture, laid over the crater carve.
+- `src/Effects/WindStreaks.cs`, the enhanced presentation's camera-local wind streaks, keyed to airspeed and load factor, over the authored speed cue.
+- `src/Effects/HeatShimmer.cs`, the enhanced presentation's refracting quads over a fireball: one pooled MultiMesh reading the screen texture while the burst burns.
 - `src/Effects/WorldWind.cs`, the mission's global wind (static vector plus random-walk gust) and `EffectAmbience`, the seam a `Puffer` reads it through.
 
 ### `src/UI/`, screens, overlays and the inspection labs
@@ -535,13 +543,14 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/EffectsLevel.cs`, the original's EffectsLevel option and the clutter fade's squared distance scale it drives, plus the remake's far-fade switch.
 - `src/Utils/FolderOpener.cs`, creates a folder if missing and shows it in the system file browser, logging the open or the failure; the stamp's icons and the profiles folder button use it.
 - `src/Utils/GameClock.cs`, the session sim clock every sim consumer takes dt from: run mode (realtime/fixed), halt and single-step, time scale, the holds.
-- `src/Utils/GraphicsMode.cs`, the opt-in enhanced-lighting setting, resolved once at launch into the one boolean every scene builder reads.
+- `src/Utils/GraphicsMode.cs`, the opt-in enhanced-lighting setting, resolved at launch into the one boolean every scene builder reads, and switched live after it.
 - `src/Utils/HitchMonitor.cs`, the always-on frame-hitch detector: a frame far costlier than its recent neighbours gets a record; it logs nothing itself.
 - `src/Utils/HitchSidecar.cs`, the hitch detector's write path: queues a tripped record and drains it to one `[perf] hitch` line plus one JSON sidecar line.
 - `src/Utils/HoldToRepeat.cs`, tap-versus-hold timing for one button: an initial delay, then a repeat every interval until release.
 - `src/Utils/HostAddress.cs`, the stable global IPv6 address and the LAN IPv4 address a host names to its guests, with the temporary, deprecated, ULA and link-local addresses excluded.
 - `src/Utils/LocalNetworks.cs`, the IPv4 address and mask of every adapter that is up, read from the system for the LAN search, outside `Net` because that may not name `System.Net`.
 - `src/Utils/Log.cs`, the diagnostic log: a fixed category vocabulary over four levels, a filtered console and an always-complete file sink (`.scratch/logs/`, `logs/` in an exported build).
+- `src/Utils/MeasuredRenderTime.cs`, the root viewport's measured render CPU and GPU times, published by the render thread so a frame reads them without waiting for it.
 - `src/Utils/MasterVolume.cs`, the developer gain on bus 0: `--volume=` over the `audio.volume` key over silence in a repo run, resolution only, with the player's mix a separate product underneath it.
 - `src/Utils/MonitorSetting.cs`, the screen the window sits on: the machine's screens labelled, the saved index dropped where no screen answers to it, and the one place the window's screen is set.
 - `src/Utils/OptionsStore.cs`, version-tolerant JSON persistence of the process-wide options (words, display settings, volume levels) in `user://options.json`, written atomically.
@@ -552,16 +561,26 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/GcTrace.cs`, the `--perf` GC readout: pause per wall second, collections, and the finalizable-object count that sets the pause, per ten-second window.
 - `src/Utils/PresentationResolution.cs`, the requested-versus-active menu presentation resolver, force flag, then `--presentation=`, then Original, availability checked separately.
 - `src/Utils/ProcessPassCost.cs`, the wall cost of one whole `_Process` pass and how many passes a window held, measured by a bracket pair spanning the pass.
+- `src/Utils/EngineGapCost.cs`, the frame time outside every scene-tree callback, split into the engine step after a tick, the end-of-frame flush, the draw and the idle rest.
 - `src/Utils/RenderPoses.cs`, the render half of the fixed-tick simulation: the pose a realtime session draws between two simulation steps.
+- `src/Utils/RenderScaleSetting.cs`, the render scale: the saved/config ladder over 50 to 200 percent of native, capped at native under FSR 2.2, resolved once at launch for the four 3D viewports.
 - `src/Utils/ResolutionSetting.cs`, the window size: the sizes a screen can hold, the saved one against the screen's own size, and the one place the window size is set.
 - `src/Utils/Rng.cs`, the session's one master seed and the named subsystem generators every random draw derives from.
+- `src/Utils/SceneCopy.cs`, a node subtree's copy in place of `Duplicate()`, which under the separate render thread corrupts memory on any geometry node.
 - `src/Utils/ScriptedWindow.cs`, Win32-only window hiding for scripted runs; `ScriptedWindow.Hide()` uses `ShowWindow(SW_HIDE)` on the native window.
 - `src/Utils/ShaderTime.cs`, the `csky_time` global uniform: the clock's GPU twin, replacing `TIME` in every generated shader; wraps at 3600 s.
 - `src/Utils/LoadProgress.cs`, the load screen's progress under a blocking build: the authored milestone table, the monotonic setter and the throttled repaint pump.
 - `src/Utils/StartCover.cs`, the session-start cover's ramp: the dark tone, the hold until the first real frame, the one-second fade, and nothing at all under `--det`.
 - `src/Utils/StartupProfile.cs`, the always-on `[perf] startup …` line: every session build split into the phases it spends its time in.
+- `src/Utils/TextureUpload.cs`, new pixels for a texture the game repaints while it runs, one Image per upload so a queued update never reads a refilled one.
+- `src/Utils/SwitchProfile.cs`, the live graphics-mode switch's per-step stopwatch, written on the switch's log line.
 - `src/Utils/TapHoldButton.cs`, one button carrying two actions split by how long it is held; the caller feeds it the button level and switches on the answer.
+- `src/Utils/AntiAliasingSetting.cs`, the anti-aliasing method (off, FXAA, SMAA, TAA, FSR 2.2): the saved/config ladder over the graphics mode's own default, resolved once at launch.
+- `src/Utils/ShadowQualitySetting.cs`, the Enhanced sun's shadow quality (off, low, medium, high, ultra): the flag/saved/config ladder over ultra (high on an integrated GPU), and what each level writes on the sun and the renderer.
 - `src/Utils/WallCostBank.cs`, one `--perf` cost meter (bracket, banked milliseconds, worst span, count, tally) and the bracket node; the three cost facades are instances of it.
+- `src/Utils/ViewDistance.cs`, enhanced mode's view distance: how much further clutter draws before its fade, the fog untouched, switched live on an apply.
+- `src/Utils/SunShadow.cs`, the shadow settings one directional light hands another, which the cockpit pass and the enhanced look share.
+- `src/Utils/ViewportQuality.cs`, what the anti-aliasing method and the render scale write on a 3D viewport, in one call the four viewport construction sites share.
 - `src/Utils/VSyncSetting.cs`, the frame pacing: the flag/saved/config ladder, and the one place the vsync mode and the frame cap are applied to the engine.
 - `src/Utils/WorldBackdrop.cs`, the persistent environment's background: flat black while the menu owns the screen, the sky again at every launch.
 
@@ -591,6 +610,7 @@ The `--dump-*` probes, the capture loop, the golden-image hash and the glTF expo
 - `src/Tooling/EnvelopeMargins.cs`, one flight scenario's distance from every term that could bound it, plus the decoded branches it drove.
 - `src/Tooling/GoldenShot.cs`, the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Tooling/ProbeRunner.cs`, the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
+- `src/Tooling/ShaderDiagnostics.cs`, `--debug-shaders`: the shader census, the frames after a live switch and every frame over 33 ms.
 - `src/Tooling/CaptureDirector.cs`, the `--screenshot=`/`--shots=`/`--frames=` capture state machine, F11's camera-pose print and F12's save, ticked from `_Process`.
 - `src/Tooling/GltfExporter.cs`, exports the viewer plane subtree to glTF (mesh + livery + baked damage) for `--export-gltf=`/F10, on a throwaway duplicate.
 
@@ -604,6 +624,8 @@ delegate to, in six sub-namespaces, one folder each. `Launch` sits on top and no
 
 - `src/Session/Launch/Launcher.cs`, Main.tscn's root: the once-per-process bootstrap, what outlives a session, the menu host, and every path a session starts or ends.
 - `src/Session/Launch/GameSession.cs`, the per-launch session node: ordered build phases over one `SessionSpec`, owning the clock, world root, panes and runtimes.
+- `src/Session/Launch/EnhancedLook.cs`, the enhanced mode's sun shadows, screen-space passes, tonemap and sky on a sun and an Environment, on or back to the faithful defaults.
+- `src/Session/Launch/SwitchCover.cs`, a live graphics switch over a flying world: the flight held, a load board over the window, the switch run once it presents, both dropped when frames settle.
 - `src/Session/Launch/TuningWarmup.cs`, the startup pass that registers every `Config` key before the orphan report and `--dump-config` read the registry.
 - `src/Session/Launch/ExtractionStamp.cs`, reads the extraction provenance stamp at boot and warns once when it is stale or unreadable; `Behind` is the blocking read, `Schema` the promise a test pins.
 - `src/Session/Launch/MenuAudioService.cs`, the menus' audio host: the music channel, the briefing narration player, the cue player behind `MenuCueTable`, and the AUDIO page's live mix preview.

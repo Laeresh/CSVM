@@ -88,6 +88,9 @@ public sealed partial class MapEdgeExtender : Node3D
     private readonly ClutterActivation? _activation;
     private readonly Dictionary<(int, int), List<ClutterCopy>> _copies = new();
 
+    // Each live cell's clutter nodes with what their visibility range is cut from.
+    private readonly Dictionary<(int, int), List<EdgeDraw>> _draws = new();
+
     // The focus cells the current window was built around, one per player (splitscreen serves
     // every pane from one window). Empty until the first Update.
     private readonly List<(int, int)> _centerCells = new();
@@ -187,6 +190,10 @@ public sealed partial class MapEdgeExtender : Node3D
 
     /// <summary>The in-map cells' legend colour. See <see cref="ParityLegendColors"/>.</summary>
     internal static Color InMapLegendColor => InMapTint;
+
+    /// <summary>A point half a cell past the map's first corner, a focus whose window is all
+    /// extension. Read by the suites.</summary>
+    internal Vector3 BeyondCorner => new(_x0 - (_tileX * 0.5f), 0f, _z0 - (_tileZ * 0.5f));
 
     // ---------------------------------------------------------------- fold mapping
 
@@ -301,6 +308,7 @@ public sealed partial class MapEdgeExtender : Node3D
             node.QueueFree();
         _live.Clear();
         _copies.Clear();
+        _draws.Clear();
         // Forces the next Update past its no-op check, which rebuilds the window around the
         // unchanged focus.
         _centerCells.Clear();
@@ -365,6 +373,7 @@ public sealed partial class MapEdgeExtender : Node3D
             {
                 _live.Remove(cell);
                 _copies.Remove(cell);
+                _draws.Remove(cell);
             }
 
         // A fold change (F15/F16) drops the whole window and rebuilds it here, which is ~10x a
@@ -387,6 +396,17 @@ public sealed partial class MapEdgeExtender : Node3D
             LastRebuildMs = ms;
             string mode = _repeat ? "repeat" : "mirror";
             Log.Info("world", $"map edge: built {built} cells in {ms:F0} ms (block {_blockCells}, {mode})");
+        }
+    }
+
+    /// <summary>The clutter copies' visibility ranges follow the standing mode and fade scale. The
+    /// map's own clutter cells do the same after a live switch or View Distance change.</summary>
+    public void FollowClutterFade()
+    {
+        foreach (var draws in _draws.Values)
+        {
+            foreach (var draw in draws)
+                draw.ApplyRange();
         }
     }
 
@@ -451,6 +471,17 @@ public sealed partial class MapEdgeExtender : Node3D
     /// border cell hitting any of the three. Null when built without a census.</summary>
     internal string? WriteCensus(string? chapter) => BuildCensusReport(chapter);
 
+    /// <summary>Every live clutter copy node's visibility range end, 0 where it has none. Read by
+    /// the suites.</summary>
+    internal IEnumerable<float> ClutterRanges()
+    {
+        foreach (var draws in _draws.Values)
+        {
+            foreach (var draw in draws)
+                yield return draw.Node.VisibilityRangeEnd;
+        }
+    }
+
     // World transform mapping source cell (sx, sz) geometry onto target cell (ix, iz):
     // pure translation on an unflipped axis, reflection about the shared mirror plane on a
     // flipped one (x' = 2a − x with a = the plane between the copies).
@@ -508,7 +539,11 @@ public sealed partial class MapEdgeExtender : Node3D
         }
 
         if (_clutter != null && _sprites.TryGetValue((sx, sz), out var sprites))
-            _copies[(ix, iz)] = AddCellClutter(cell, mirror, sprites);
+        {
+            var draws = new List<EdgeDraw>();
+            _copies[(ix, iz)] = AddCellClutter(cell, mirror, sprites, draws);
+            _draws[(ix, iz)] = draws;
+        }
         if (_tinted)
             ApplyTint(cell, ix, iz);
         return cell;
@@ -562,7 +597,7 @@ public sealed partial class MapEdgeExtender : Node3D
     // that would have to rebuild on the frame the camera crosses a cell boundary.
     // Returns every copy it made, so a later activation change can reach it (SyncActivation).
     private List<ClutterCopy> AddCellClutter(Node3D cell, Transform3D mirror,
-        List<(int Kind, Transform3D Xf, Color Fade, int Source)> sprites)
+        List<(int Kind, Transform3D Xf, Color Fade, int Source)> sprites, List<EdgeDraw> draws)
     {
         var copies = new List<ClutterCopy>();
         // Group the cell's decorations per kind (kept in kind order for determinism). Each copy
@@ -628,6 +663,9 @@ public sealed partial class MapEdgeExtender : Node3D
             };
             if (kind.Solid)
                 mmi.SetInstanceShaderParameter("node_bias", kind.NodeBias);
+            var draw = EdgeDraw.Of(mmi, kind.Mesh.GetAabb(), placements);
+            draw.ApplyRange();
+            draws.Add(draw);
             cell.AddChild(mmi);
         }
         return copies;
@@ -965,6 +1003,31 @@ public sealed partial class MapEdgeExtender : Node3D
     // export placement it copies.
     private readonly record struct ClutterCopy(MultiMesh Mm, int Index, int Kind, int Source,
         Transform3D Xf, Rid Body, int Shape);
+
+    // One copied kind's node in a cell, with its stamps' farthest fade and the radius of their
+    // bounds. Under Enhanced the node stops drawing past that fade, as a map clutter cell does.
+    private readonly record struct EdgeDraw(MultiMeshInstance3D Node, float Far2, float Radius, bool NeverFades)
+    {
+        public static EdgeDraw Of(MultiMeshInstance3D node, Aabb meshBox,
+            List<(Transform3D Xf, Color Fade, int Source)> placements)
+        {
+            Aabb? bounds = null;
+            float far2 = 0f;
+            bool neverFades = false;
+            foreach (var (xf, fade, _) in placements)
+            {
+                var box = xf * meshBox;
+                bounds = bounds?.Merge(box) ?? box;
+                far2 = Mathf.Max(far2, fade.G);
+                neverFades |= fade.G <= 0f;
+            }
+            float radius = (bounds!.Value.Size * 0.5f).Length() + node.ExtraCullMargin;
+            return new EdgeDraw(node, far2, radius, neverFades);
+        }
+
+        public void ApplyRange() => Node.VisibilityRangeEnd = ClutterInstances.RangeEnd(
+            GraphicsMode.Enhanced, NeverFades, Far2, Radius, EffectsLevel.RegisteredScaleSq);
+    }
 
     // A census row. A class rather than a tuple because it is serialized straight to JSON, and the
     // property names ARE the report's column names.

@@ -28,6 +28,8 @@ internal static class TerrainCarve
     /// ArrayMesh or when the ring met no ground, which is the original's Clip Failed.</summary>
     internal static Cut? Carve(Node3D owner, CollisionObject3D? struck, in CraterShape shape)
     {
+        // A merged node draws a residual of its mesh, and the carve must cut the whole one.
+        WorldMerge.Release(owner);
         if (owner.GetNodeOrNull<MeshInstance3D>("mesh") is not { Mesh: ArrayMesh src } mi)
         {
             return null;

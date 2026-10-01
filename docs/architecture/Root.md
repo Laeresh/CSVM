@@ -22,15 +22,17 @@ matte material (`SceneBuilder.cs`'s lit-world arm); a `DirectionalLight3D` and t
 ambient are driven from the mission's authored `SUNLIGHT_DIFFUSE`/`SUNLIGHT_AMBIENT` values and
 colours instead of the launcher's hardcoded numbers (`WeatherRig.cs`); the sun casts PSSM shadow
 maps, with each zone's authored fog pushed out 2x and the shadow's max distance following that
-pushed far so shadows never end in clear air; `LIGHT_STATE` point lights are mirrored onto real
+pushed far so shadows never end in clear air; the clutter's far fade follows the same push, and
+the View Distance option (`Utils/ViewDistance.cs`) pushes that fade alone further, up to no fade,
+leaving the fog where it is; `LIGHT_STATE` point lights are mirrored onto real
 `OmniLight3D` nodes that light the world and the aircraft, not only the per-vertex point term's data texture
 (`WorldLights.cs`); the light-source class of glow-arm sprites (flares, beacons, signal lamps)
 scales its colour above 1.0 to feed an Environment glow pass, and an AgX tonemap rolls the
 resulting HDR scene off instead of clipping it; SSAO adds contact shading in ambient light, and
 SSR reflects the shoreline off water surfaces the engine already classifies as `"water"`
-(`Launcher.cs`'s `SetupLighting`); the sky those water surfaces reflect where SSR finds nothing is
+(`Session/Launch/EnhancedLook.cs`); the sky those water surfaces reflect where SSR finds nothing is
 the flown zone's own `FOG_COLOR`, painted flat over Godot's procedural placeholder as a `Sky`
-resource (`Launcher.cs`'s `UseMissionSky`, `WeatherRig.WriteSkyColor`). The cockpit interior pass
+resource (`EnhancedLook.ApplyEnvironment`, `WeatherRig.WriteSkyColor`). The cockpit interior pass
 and every splitscreen pane pick up the same settings and the same per-zone updates, since both
 duplicate or share the session's own sun and Environment (`CockpitOverlay.cs`, `SplitScreen.cs`).
 
@@ -40,7 +42,7 @@ original's own substitute for shadow mapping, so under enhanced mode, where the 
 shadow maps, the pass is not built at all and the aircraft's own shadow is the mapped one.
 
 The energy mapping from authored SUNLIGHT units to Godot light energies, the 2x fog-range push and
-the shadow distance following it, the night key read off `FOG_COLOR` luminance with its 0.25
+the shadow distance following it, the View Distance reaches, the night key read off `FOG_COLOR` luminance with its 0.25
 separator and its 0.6 / 0.15 energy cap, and how far SSR smears on wave-less water planes are TUNE:
 judged at the controls against captures, not derived from a decoded rule. The night key in
 particular is a proxy the original never uses, which lights from SUNLIGHT and darkens from
@@ -49,9 +51,41 @@ FOG_COLOR independently.
 Both Options screens expose the mode as a two-way row saved into the menu plan's options store
 ([../menu-presentations.md](../menu-presentations.md)); every reader in this codebase consults the
 resolved `GraphicsMode.Enhanced` boolean only, so neither the store nor the screens reach any of
-them. The saved word changes on Apply and the world takes it on the next start, since the shader
-memos and the Environment are built from the value resolved once at launch, which is why each
-screen's description line says so.
+them. An Apply switches the running world, over a paused flight as well, and the Toggle Graphics
+Mode flight action (`G` by default) flips it and saves it the same way; `--debug-graphics-switch=`
+is the scripted twin. The sequence is `EnhancedLook.Switch`, and a world switched away and back reads
+as a fresh session in that mode (the `graphics-live-switch` suite). The world is not rebuilt: each
+cached shader keeps a compiled twin per mode, and `SceneBuilder.RegenerateShaders` moves every
+material onto the standing mode's twin, so no text changes and Godot compiles nothing again. A twin
+not yet made costs its compile on the switch that first needs it; a load after the process has
+switched once compiles them ahead (`--shader-warmup=`, the `graphics-shader-twins` suite).
+
+What follows the switch, and how:
+
+- Moved onto the other mode's compiled twin: every `SceneBuilder`, `Clutter` and puffer shader,
+  their fade twins, the cloud field's card shaders (`FogVolumeClutter.FollowGraphicsMode`) and the
+  sky sprites' keyed copies. The puffer fire gain and smoke grade are read per particle.
+- Swapped onto the rendered cloud puffs and back: the deck cards' pool, tint, rim depth and cull
+  margin, and the placed clouds' billboards (`SceneBuilder`'s pooled swap). The first switch to
+  Enhanced reads each mask's tint and loads the pools, which a faithful session never touches.
+- Re-dressed: the sun (shadows at the `ShadowQualitySetting` level, the atlas and filter, its
+  specular and colour), the Environment's SSAO, SSR, glow, tonemap, sky and froxel fog, each cockpit
+  pass's copy of both, and the weather zone, written again last (fog push, energies, shadow distance).
+- Re-resolved: the clutter fade scale, the anti-aliasing method whose default follows the mode, and
+  the render scale, on every live 3D viewport (`ViewportQuality.ReapplyAll`).
+- Built or freed: the ground shadow, the scorch field, the volumetric banks, the heat shimmer pool,
+  the world lights' omni pool and burst lights, and the clutter's cells (`ClutterInstances.Recut`).
+  A seat's wind streak field leaves the tree and comes back, still stepped, so its drift carries over.
+- Uploaded again, first of all: a texture's alpha depth. The faithful path uploads an alpha-plane
+  texture at the original's 16 alpha levels and Enhanced keeps 256. `EnhancedLook.FollowAlphaDepth`
+  decodes each one the archive handed out again from the archive and updates it in place, then
+  bakes the puffer atlases and paints the plane skins and decals made from them again. Decoding
+  again costs 60 to 110 ms a switch; keeping the 8-bit chains instead would hold 7 to 8 MB for the
+  whole session. ⚠ Never cut the depth in a shader: cutting after filtering changes the pixels.
+- Read per use already: the chase camera's trail and speed widening, the rocket ring's orientation,
+  the muzzle flash's point term and the spyglass picture's minimum size.
+
+Nothing waits for the next mission load.
 
 ## src/Pads.cs
 Single source of truth for which gamepads exist: every reader goes through it rather than

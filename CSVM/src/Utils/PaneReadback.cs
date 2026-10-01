@@ -12,12 +12,11 @@ public delegate bool PaneRequest(Action<Image?> landed);
 
 /// <summary>
 /// A viewport's pixels read back off the frame path, behind every live <see cref="PaneRequest"/>.
-/// The request copies the viewport's render target through
-/// <see cref="RenderingDevice.TextureGetDataAsync"/>, which delivers the bytes a few frames later
-/// (the device's frame queue), and the image is built and handed over on a worker thread, so the
-/// frame that asks pays for neither the GPU stall nor the decode. A run with no rendering device
-/// (the compatibility renderer, a headless run) or a render target in a format this does not
-/// decode falls back to the synchronous <see cref="Texture2D.GetImage"/>.
+/// The request copies the render target through <see cref="RenderingDevice.TextureGetDataAsync"/>,
+/// which delivers the bytes a few device frames later. A worker builds and hands over the image, so
+/// the frame that asks pays for neither the GPU stall nor the decode. With no rendering device, or
+/// a render target format this does not decode, it reads through <see cref="Texture2D.GetImage"/>.
+/// Under the separate render thread the request runs on that thread, which alone may call the device.
 /// </summary>
 public static class PaneReadback
 {
@@ -32,21 +31,29 @@ public static class PaneReadback
         }
 
         bool opaque = !viewport.TransparentBg;
-        if (RenderingServer.GetRenderingDevice() is { } device
-            && RenderingServer.TextureGetRdTexture(RenderingServer.ViewportGetTexture(viewport.GetViewportRid())) is { IsValid: true } texture
-            && device.TextureGetFormat(texture) is { } format
-            && IsRgba8(format.Format))
+        var target = viewport.GetViewportRid();
+        if (RenderingServer.GetRenderingDevice() is { } device)
         {
-            int width = (int)format.Width;
-            int height = (int)format.Height;
-            var err = device.TextureGetDataAsync(texture, 0,
-                Callable.From((byte[] data) => Develop(() => Build(data, width, height, opaque), landed)));
-            if (err == Error.Ok)
+            if (!RenderingServer.IsOnRenderThread())
             {
+                // ⚠ Never call the device from this thread: under the separate render thread it
+                // refuses every caller but its own. Queued behind the last draw, the request reads
+                // the frame a synchronous read here would have answered.
+                RenderingServer.CallOnRenderThread(Callable.From(() =>
+                {
+                    if (!RequestAsync(device, target, opaque, landed))
+                    {
+                        var read = RenderingServer.Texture2DGet(RenderingServer.ViewportGetTexture(target));
+                        Develop(() => read is { } frame && !frame.IsEmpty() ? frame : null, landed);
+                    }
+                }));
                 return true;
             }
 
-            Log.Warn("core", $"pane readback: async request refused ({err}), reading synchronously");
+            if (RequestAsync(device, target, opaque, landed))
+            {
+                return true;
+            }
         }
 
         var image = viewport.GetTexture()?.GetImage();
@@ -57,6 +64,30 @@ public static class PaneReadback
 
         Develop(() => image, landed);
         return true;
+    }
+
+    // The asynchronous copy, on the thread that owns the device. False when the render target is in
+    // a format this does not decode or the device refused, and the caller reads synchronously.
+    private static bool RequestAsync(RenderingDevice device, Rid viewport, bool opaque, Action<Image?> landed)
+    {
+        if (RenderingServer.TextureGetRdTexture(RenderingServer.ViewportGetTexture(viewport)) is not { IsValid: true } texture
+            || device.TextureGetFormat(texture) is not { } format
+            || !IsRgba8(format.Format))
+        {
+            return false;
+        }
+
+        int width = (int)format.Width;
+        int height = (int)format.Height;
+        var err = device.TextureGetDataAsync(texture, 0,
+            Callable.From((byte[] data) => Develop(() => Build(data, width, height, opaque), landed)));
+        if (err == Error.Ok)
+        {
+            return true;
+        }
+
+        Log.Warn("core", $"pane readback: async request refused ({err}), reading synchronously");
+        return false;
     }
 
     // The render target formats the bytes can be taken as-is from. Anything else keeps Godot's

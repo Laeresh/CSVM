@@ -166,6 +166,8 @@ public partial class GameSession : Node3D
     // The boards' Restart item on an Instant Action or campaign mission: the Launcher frees this
     // session and builds a fresh one. Nothing here can put a mission's opposition back on its own.
     private readonly Action _restartSession;
+    // The graphics-mode action every local seat's controller fires; the switch is the Launcher's.
+    private readonly Action? _toggleGraphicsMode;
     // A campaign mission's end: the Launcher frees this session and reopens the launchscreen on
     // the named profile's debrief, carrying the result so a page can be opened on it. Null
     // outside a menu-driven process (a --campaign= run from the command line has no cabin to
@@ -408,6 +410,8 @@ public partial class GameSession : Node3D
     private NetTrailerTargets? _netTrailers;
     // rolling mirrored-tile window past the map edge
     private Mech3.MapEdgeExtender? _edgeExtender;
+    // the static world's merged draws under Enhanced (null outside flight)
+    private Mech3.WorldMerge? _worldMerge;
     // the splitscreen pane rig (null in single player)
     private UI.Boards.SplitScreen? _split;
 
@@ -417,6 +421,18 @@ public partial class GameSession : Node3D
     private Node3D? _worldRoot;
     // the session's LIGHT_STATE point lights (see WorldLights)
     private WorldLights? _worldLights;
+    // The faithful path's projected aircraft shadow, null in enhanced mode, which casts shadow maps
+    // instead. Held so a live graphics-mode switch can build it or free it.
+    private GroundShadowPass? _groundShadows;
+    // The enhanced-only world layers and the mode-dependent builds, held so a live graphics-mode
+    // switch can build, free or rewrite each (ApplyGraphicsMode). Null where the build made none.
+    private Effects.ScorchField? _scorches;
+    private Effects.FogVolumeClutter? _cloudField;
+    private Effects.FogVolumeBanks? _cloudBanks;
+    private IReadOnlyList<Mech3.FogVolumeBox>? _fogVolumes;
+    private Mech3.FogVolumeSpec? _fogVolumeSpec;
+    private ClutterBuilder? _clutter;
+    private SceneBuilder? _worldScene;
     // The session-owned texture archive, kept open past the build scope so the data-driven crash can
     // bake its effect puffers lazily at crash time (the same reason --anim-lab keeps it open, but that
     // path hands it to the AnimLab node instead). Disposed by ReturnToMenu on teardown so a map reload
@@ -494,6 +510,7 @@ public partial class GameSession : Node3D
         _menuPads = ctx.MenuPads;
         _exitSession = ctx.ExitSession;
         _restartSession = ctx.RestartSession;
+        _toggleGraphicsMode = ctx.ToggleGraphicsMode;
         _pauseOptionsFactory = ctx.PauseOptions;
         _campaignMissionEnded = ctx.CampaignMissionEnded;
         _instantActionWrapup = ctx.InstantActionWrapup;
@@ -514,6 +531,15 @@ public partial class GameSession : Node3D
     /// <summary>The session's per-player rigs, the Launcher's F11 placement print reads them.</summary>
     internal List<PlayerRig> Rigs => _rigs;
 
+    /// <summary>The map-edge continuation, null where the world has none. Read by the suites.</summary>
+    internal Mech3.MapEdgeExtender? EdgeExtender => _edgeExtender;
+
+    /// <summary>The static world's merged draws, null outside flight. Read by the suites.</summary>
+    internal Mech3.WorldMerge? WorldMerge => _worldMerge;
+
+    /// <summary>The world's clutter, null where it has none. Read by the suites.</summary>
+    internal ClutterBuilder? Clutter => _clutter;
+
     /// <summary>The launch as this session resolved it. A campaign launch settles its chapter and
     /// mission here, out of the story position, so the Launcher's own copy never names them.</summary>
     internal SessionSpec Spec => _spec;
@@ -533,6 +559,9 @@ public partial class GameSession : Node3D
     /// <summary>The master every stream in this session was derived from, which on a guest is the
     /// host's.</summary>
     internal ulong MasterSeed => _masterSeed;
+
+    /// <summary>The session's texture archive, for an instrument reading its textures.</summary>
+    internal TextureArchive? SessionTextures => _sessionTextures;
 
     /// <summary>The whole match's roster in seat order, empty outside a network match.</summary>
     internal IReadOnlyList<Net.NetSeat> NetSeats => _netSeats;
@@ -844,6 +873,7 @@ public partial class GameSession : Node3D
         try
         {
             sw = Stopwatch.StartNew();
+            ShaderTwins.ReleaseUnused();
             LoadArchives(state);
             LoadProgress.Report(LoadStep.Archives);
             // The SOUND archive is scoped to this build everywhere but the lab, whose node owns its
@@ -937,12 +967,101 @@ public partial class GameSession : Node3D
         }
 
         FinishFraming(state);
+        BuildWorldMerge(state);
+        // By default only once this process has switched. The warm-up costs what one switch does,
+        // and a player who never switches would pay it at every load.
+        if (_spec.ShaderWarmup == "load" || (_spec.ShaderWarmup == "auto" && EnhancedLook.HasSwitched))
+            WarmShadersNow();
         _simulation = new SessionSimulation(new SessionSimulationRuntime(this));
         _startup?.EndBuild();
         InSession = true;
         HoldStart();
         LoadProgress.Report(LoadStep.Finished);
         return true;
+    }
+
+    /// <summary>Follow a live graphics-mode switch the launcher has already applied to the shaders,
+    /// the sun, the Environment and the clutter fade. A layer only one mode builds is built or
+    /// freed, and every build-time choice is made again. The zone is lit last, under the other arm.
+    /// docs/architecture/Root.md lists what follows and what waits for the next load.</summary>
+    public void ApplyGraphicsMode()
+    {
+        bool enhanced = GraphicsMode.Enhanced;
+        // First: every step below that builds anything bakes from the archive's textures.
+        EnhancedLook.FollowAlphaDepth(_sessionTextures);
+        SwitchProfile.Mark("alpha");
+        _worldScene?.FollowGraphicsMode();
+        SwitchProfile.Mark("world");
+        // After the world's own materials, whose blend verdicts decide what merges.
+        _worldMerge?.Follow(enhanced);
+        SwitchProfile.Mark("merge");
+        _clutter?.Recut();
+        _edgeExtender?.FollowClutterFade();
+        SwitchProfile.Mark("clutter");
+        _cloudField?.FollowGraphicsMode();
+        SwitchProfile.Mark("cloudfield");
+        _worldLights?.FollowGraphicsMode();
+        SwitchProfile.Mark("lights");
+        _worldEffectsFactory?.FollowGraphicsMode();
+        SwitchProfile.Mark("effects");
+        FollowCloudBanks();
+        SwitchProfile.Mark("banks");
+        foreach (var rig in _rigs)
+        {
+            if (rig.Controller?.CockpitPass?.Env is { } env)
+            {
+                EnhancedLook.ApplyEnvironment(env, enhanced, _spec.SkippedPasses);
+                Effects.FogVolumeBanks.ApplyFroxelFog(env, _cloudBanks != null);
+            }
+        }
+        SwitchProfile.Mark("cockpit");
+        FollowWindStreaks();
+        SwitchProfile.Mark("streaks");
+        FollowSun();
+        SwitchProfile.Mark("zone");
+        if (enhanced)
+        {
+            Drop(_groundShadows);
+            _groundShadows = null;
+        }
+        else if (_groundShadows == null && _worldRoot != null && _projectiles != null)
+        {
+            BuildGroundShadows();
+        }
+        if (_plane != null && BuildsCollision)
+        {
+            if (enhanced && _scorches == null && Effects.ScorchField.Create() is { } scorches)
+            {
+                _scorches = scorches;
+                _plane.AddChild(scorches);
+            }
+            else if (!enhanced && _scorches != null)
+            {
+                Drop(_scorches);
+                _scorches = null;
+            }
+        }
+        SwitchProfile.Mark("shadows");
+    }
+
+    /// <summary>A live View Distance change under Enhanced cuts the clutter cells again. Their size
+    /// and visibility range come from the fade scale the launcher just wrote, as do the map edge's
+    /// copies' ranges.</summary>
+    public void FollowClutterFade()
+    {
+        _clutter?.Recut();
+        _edgeExtender?.FollowClutterFade();
+    }
+
+    /// <summary>After the launcher re-dressed the session sun: each cockpit pass re-takes it, then
+    /// the zone is written again over them all. ⚠ Keep the zone last. The Environment and sun
+    /// writes put back defaults the zone's sky colour, energies and shadow distance overwrite.
+    /// </summary>
+    public void FollowSun()
+    {
+        foreach (var rig in _rigs)
+            rig.Controller?.CockpitPass?.FollowSun();
+        _weatherRig?.ReapplyZone();
     }
 
     public override void _Notification(int what)
@@ -1221,6 +1340,20 @@ public partial class GameSession : Node3D
         }
     }
 
+    // The enhanced scorch's one decision point, the way RegisterBurstLight is the burst light's: a
+    // hit marks the ground it burned when it carved a bowl, or when its effect is one of the
+    // fireballs EffectCatalogue names for the burst light. Every other impact, the gun hits among
+    // them, leaves the surface alone. One crater radius serves every weapon because all six CRATER
+    // carriers author the block bare (docs/org/craters.md). Internal so the scorch suite decides as
+    // a session does rather than modelling it.
+    internal static void RegisterScorch(Effects.ScorchField scorches, Vector3 at, Vector3 normal,
+        string? effectName, bool carved)
+    {
+        if (!carved && (effectName == null || !EffectCatalogue.IsBurstLight(effectName)))
+            return;
+        scorches.Mark(at, normal, CraterShape.RimRadius, carved);
+    }
+
     /// <summary>Carries out one step of the build the load screen still owes and answers
     /// whether more is left. The wave aeroplanes are that work. They belong to the load, where
     /// there is no frame budget, rather than to the launch frame that needs one.</summary>
@@ -1449,6 +1582,17 @@ public partial class GameSession : Node3D
         _gatedScan.AddRange(AllAircraft());
         _zeppelins?.CollectHosts(_gatedScan);
         return _gatedScan;
+    }
+
+    // The whole warm-up at once, while the load screen is still up (--shader-warmup=load).
+    private void WarmShadersNow()
+    {
+        long start = Stopwatch.GetTimestamp();
+        int twins = ShaderTwins.WarmOtherMode();
+        int cards = _cloudField?.WarmOtherMode() ?? 0;
+        // The other mode's twins first, so the advanced variants the hidden frame builds cover them.
+        bool advanced = EnhancedLook.WarmAdvancedVariants(this);
+        Log.Info("world", $"shader warm-up: other mode's twins={twins} cloud_cards={cards} advanced_variants={(advanced ? "hidden frame" : "not owed")} at load ms={Stopwatch.GetElapsedTime(start).TotalMilliseconds:0.0}");
     }
 
     // Loads the session's core archives (gamez, textures, sounds, sound defs/groups) and routes the
@@ -1707,13 +1851,24 @@ public partial class GameSession : Node3D
         state.DeckUndimmedMeshes = builder.CloudDeckUndimmedMeshes;
         // Owned by the session so a teardown drops the previous world's lights.
         _worldLights = session.Lights;
+        // Under Enhanced every burning emitter lights its surroundings; on the faithful path no
+        // emitter registers, so the source submits nothing.
+        _worldLights?.AddSource(_ambience.SubmitFires);
         state.CrashProgram = session.Program;
         state.WorldScene = session.Builder.Scene;
+        _worldScene = session.Builder.Scene;
+        _clutter = session.Clutter;
         state.WorldRuntime = session.Runtime;
         // The mission's craters, which need world colliders both to find the terrain a round struck
         // and to cut that terrain's own trimesh. Owned by the session, so they last exactly as long
         // as the mission does and a new launch starts on uncratered ground.
         state.Craters = BuildsCollision ? new CraterField(session.Root) : null;
+        // The enhanced scorch marks over those carves, a remake-only layer: null on the faithful
+        // path, where the field, its decal pool and its texture are never built at all.
+        _scorches = BuildsCollision ? Effects.ScorchField.Create() : null;
+        state.Scorches = _scorches;
+        if (_scorches != null)
+            session.Root.AddChild(_scorches);
         // After the bootstrap: an intro definition has already raised its codes, and this is where
         // the host picks up the two nodes it drives.
         _cutscene?.BindWorld(session.Runtime, session.Aircraft);
@@ -1909,8 +2064,11 @@ public partial class GameSession : Node3D
             // rig, and needs no per-frame driving unlike the dome/deck/whiteout below.
             var fogVolumes = Mech3.FogVolumeSpec.VolumesOf(state.Gamez);
             var fogVolumeSpec = Mech3.FogVolumeSpec.Load(SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter));
+            _fogVolumes = fogVolumes;
+            _fogVolumeSpec = fogVolumeSpec;
             var cloudField = Effects.FogVolumeClutter.Create(state.Gamez, state.Textures,
                 fogVolumeSpec, fogVolumes, _spec.CloudJitter);
+            _cloudField = cloudField;
             if (cloudField != null)
             {
                 _worldRoot!.AddChild(cloudField);
@@ -1930,6 +2088,11 @@ public partial class GameSession : Node3D
                 UI.Boards.SplitScreen.SetVisualLayer(cloudField, fvolLayer);
             }
 
+            // Enhanced Graphics only: the volumetric bank under those cards. --no-fog covers it as
+            // it covers the zone fog and the whiteout, and the Environment flag is cleared for a
+            // world that builds none, the froxel pass costing its buffer wherever it is left on.
+            var cloudBanks = BuildCloudBanks();
+
             // The sun goes in with the weather: its bearing is the zone's own SUNLIGHT_ORIENTATION,
             // applied by the same zone-apply that writes the fog. The ambience is the wind seam and
             // the viewer set carries each pane's camera pose for the puffer distance fade.
@@ -1944,6 +2107,9 @@ public partial class GameSession : Node3D
             // second consumer rather than re-loaded. Tick resolves each camera's weather state from
             // it, and its in-volume whiteout where fog_zone is armed.
             _weatherRig.SetFogVolumes(fogVolumes, fogVolumeSpec);
+            // The banks' scattering colour is the applied zone's, so the rig that owns the zone
+            // apply writes it, at build and on every later zone change.
+            _weatherRig.SetFogBanks(cloudBanks);
             // The flown objects the band's per-object gate moves between layers (ObjectZoneGate).
             // A plane or a zeppelin on the far side of the overcast stops drawing.
             _weatherRig.SetGatedObjects(GatedObjects);
@@ -2564,6 +2730,15 @@ public partial class GameSession : Node3D
             // Route a CRATER weapon's ground strike to the mission's crater field. The pool asks only
             // for a node carrying can_modify, which no shipped node does (Mech3.CraterField).
             CraterSink = state.Craters != null ? state.Craters.TryCarve : null,
+            // And the scorch that layers over the carve under Enhanced (Effects.ScorchField).
+            // Read through the field, which a live mode switch builds or frees.
+            ScorchSink = state.Craters != null
+                ? (at, normal, effectName, carved) =>
+                {
+                    if (_scorches is { } scorch)
+                        RegisterScorch(scorch, at, normal, effectName, carved);
+                }
+            : null,
             // The same equal-power splitscreen factor FlightAudio's own-ship loops take, plus the
             // nearest-human snapshot shared with WorldSession and the world-effects runtime.
             MixGain = mixGain,
@@ -2592,8 +2767,7 @@ public partial class GameSession : Node3D
         // The original's per-frame ground shadow, one quad under every aircraft. Roster and rigs
         // are read fresh, so waves are covered and each pane's own pilot takes the player's shape
         // there. Enhanced graphics mode builds nothing here and casts real shadow maps instead.
-        GroundShadowPass.Build(_worldRoot!, AllAircraft, PlayerPositionsSnapshot, () => _rigs,
-            () => _weatherRig?.SunlightRgb ?? WeatherRig.DefaultSunlightRgb);
+        BuildGroundShadows();
 
         // The smoke screens' own smoke, wired here rather than at their construction because the
         // chapter's textures and anim program are only resolved this far into the build. Same
@@ -2753,6 +2927,7 @@ public partial class GameSession : Node3D
             MenuInputFor = MenuInputFor,
             ExitsToMenu = _menuDriven,
             ExitSession = _exitSession,
+            ToggleGraphicsMode = _toggleGraphicsMode,
             SpawnList = spawnList,
             SpawnBase = spawnBase,
             StuntZones = stuntZones,
@@ -3849,6 +4024,32 @@ public partial class GameSession : Node3D
         }
         if (state.Textures.MissingTextures.Count > 0)
             Log.Info("world", $"[textures] {state.Textures.MissingTextures.Count} referenced texture(s) absent from this install: {string.Join(", ", state.Textures.MissingTextures)}");
+    }
+
+    // Flight only: the inspection modes pick and edit single nodes, which a merged draw would not show.
+    // ⚠ Keep it last in the build, after every placement and hide, so what stands visible is what
+    // the mission shows.
+    private void BuildWorldMerge(BuildState state)
+    {
+        if (!_spec.Fly || state.NodeSubtree != null || _plane == null || _worldScene == null)
+            return;
+        var parked = _unplacedWatch;
+        _worldMerge = new Mech3.WorldMerge(_plane, _worldScene, state.WorldRuntime,
+            () => ParkedAndDeck(parked));
+        _plane.AddChild(_worldMerge);
+        _worldMerge.Follow(GraphicsMode.Enhanced);
+    }
+
+    // What the merge leaves alone besides the runtime's claims: the parked vehicles and the cloud deck.
+    // The deck follows the camera, and the weather rig sets its visibility per pane.
+    private IEnumerable<Node3D> ParkedAndDeck(WorldBuilder? builder)
+    {
+        if (builder == null)
+            yield break;
+        foreach (var parked in builder.ParkedEntities)
+            yield return parked;
+        if (builder.CloudDeck is { } deck)
+            yield return deck;
     }
 
     // The post-build framing pass: subject framing for the static views, the freecam/anim-lab mesh
@@ -5498,6 +5699,76 @@ public partial class GameSession : Node3D
         return -1;
     }
 
+    // A layer a switch drops leaves the tree now and is freed at the frame's end. ⚠ Do not QueueFree
+    // alone: the node would draw, and count, for the rest of the frame.
+    private void Drop(Node? node)
+    {
+        if (node == null)
+            return;
+        node.GetParent()?.RemoveChild(node);
+        node.QueueFree();
+    }
+
+    // The bank follows a switch. It is freed, then built again where the mode builds one, and handed
+    // to the weather rig that colours it.
+    private void FollowCloudBanks()
+    {
+        if (_fogVolumes == null)
+            return;
+        Drop(_cloudBanks);
+        _cloudBanks = null;
+        _weatherRig?.SetFogBanks(BuildCloudBanks());
+    }
+
+    // Each seat's wind streak field leaves the tree on the faithful path and comes back under
+    // Enhanced; a seat with none gets one built. The seat keeps its field stepped, so a round trip
+    // draws the drift and seeds a fresh one would. The roster's teardown frees it in or out of the
+    // tree (FlightController.DetachRosterBindings).
+    private void FollowWindStreaks()
+    {
+        foreach (var rig in _seatRigs)
+        {
+            if (rig.Controller is not { } controller)
+                continue;
+            var streaks = controller.WindStreaks;
+            if (!GraphicsMode.Enhanced)
+            {
+                streaks?.GetParent()?.RemoveChild(streaks);
+                continue;
+            }
+            if (streaks == null && Effects.WindStreaks.Create() is { } created)
+            {
+                if (rig.VisualLayer != 0)
+                    SplitScreen.SetVisualLayer(created, rig.VisualLayer);
+                controller.WindStreaks = streaks = created;
+            }
+            if (streaks != null && !streaks.IsInsideTree())
+                _worldRoot!.AddChild(streaks);
+        }
+    }
+
+    // The Enhanced volumetric bank under the cloud cards, at the build and on a live switch.
+    // --no-fog covers it as it covers the zone fog. A world with none clears the froxel
+    // flag, since the pass costs its buffer wherever it is on.
+    private Effects.FogVolumeBanks? BuildCloudBanks()
+    {
+        _cloudBanks = _spec.NoFog || _fogVolumes == null ? null : Effects.FogVolumeBanks.Create(_fogVolumes, _fogVolumeSpec);
+        if (_env != null)
+            Effects.FogVolumeBanks.ApplyFroxelFog(_env, _cloudBanks != null);
+        if (_cloudBanks != null)
+        {
+            _worldRoot!.AddChild(_cloudBanks);
+            Log.Info("world", $"fogvol banks: {_cloudBanks.BankCount} volumetric bank(s) under the cards over {_cloudBanks.TileCount} fog box(es), density {_cloudBanks.Density:0.####} per metre");
+        }
+        return _cloudBanks;
+    }
+
+    // Built at the flight build's projectile-pool step and again on a switch to original mode.
+    // A no-op in enhanced mode (GroundShadowPass.Build).
+    private void BuildGroundShadows() =>
+        _groundShadows = GroundShadowPass.Build(_worldRoot!, AllAircraft, PlayerPositionsSnapshot, () => _rigs,
+            () => _weatherRig?.SunlightRgb ?? WeatherRig.DefaultSunlightRgb);
+
     // One interior render pass per rig, on that player's own HUD parent, so splitscreen gets a
     // pass per pane rather than one for the window (--no-cockpit-pass opts out). Built after the rigs, since
     // the interior it moves is the plane build's and the sun and environment it copies are the
@@ -5524,9 +5795,9 @@ public partial class GameSession : Node3D
         Log.Info("flight", $"cockpit: interior drawn in its own pass at the origin for {_rigs.Count} rig(s)");
     }
 
-    // Gives every rig a cloudlayer deck to anchor under its own camera: rig 0 takes the world's
+    // Gives every rig a cloudlayer deck to anchor under its own camera. Rig 0 takes the world's
     // deck, the rest get copies on their player's visual layer. ⚠ Re-apply the instance uniforms
-    // from the source; they are RenderingServer state and Duplicate drops them.
+    // from the source; they are RenderingServer state and no copy carries them.
     private void AssignCloudDecks(Node3D deck)
     {
         _rigs[0].Deck = deck;
@@ -5535,7 +5806,7 @@ public partial class GameSession : Node3D
         var parent = deck.GetParent();
         for (int i = 1; i < _rigs.Count; i++)
         {
-            var copy = (Node3D)deck.Duplicate();
+            var copy = Utils.SceneCopy.Of(deck);
             copy.Name = $"cloud_deck{i + 1}";
             CopyInstanceShaderParams(deck, copy);
             SplitScreen.SetVisualLayer(copy, _rigs[i].VisualLayer);
@@ -6568,6 +6839,7 @@ public partial class GameSession : Node3D
         public SceneBuilder? WorldScene;
         public AnimRuntime? WorldRuntime;
         public CraterField? Craters;
+        public Effects.ScorchField? Scorches;
 
         /// <summary>The chapter's resolved approach rows, kept so the actor build can re-bind the
         /// trigger once the roster's own approach nodes exist (<see cref="Mech3.RosterMarkers"/>).
