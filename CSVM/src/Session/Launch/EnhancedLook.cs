@@ -109,19 +109,25 @@ public static class EnhancedLook
     /// <summary>The live graphics-mode switch, the one sequence the launcher runs and the round-trip
     /// suite drives. It sets the flag, regenerates the shaders and re-dresses <paramref name="sun"/>
     /// and <paramref name="env"/>. Then the clutter fade and the display quality are resolved again,
-    /// and <paramref name="session"/> rebuilds what the two modes build differently. A no-op when the
-    /// mode already stands.</summary>
-    public static void Switch(bool enhanced, DirectionalLight3D sun, Godot.Environment? env,
+    /// and <paramref name="session"/> rebuilds what the two modes build differently. Returns whether it
+    /// switched: not when the mode already stands, nor for a network session.</summary>
+    public static bool Switch(bool enhanced, DirectionalLight3D sun, Godot.Environment? env,
         EnhancedPasses skipped, bool det, GameSession? session, string why)
     {
         if (enhanced == GraphicsMode.Enhanced)
-            return;
+            return false;
+        // ⚠ Never switch a network session. Its shared world has no pause to hold the stall in.
+        if (session?.NetLink != null)
+        {
+            Log.Info("world", $"graphics mode: {why} refused, a network session switches no graphics mode");
+            return false;
+        }
         long start = Stopwatch.GetTimestamp();
         Tooling.ShaderDiagnostics.BeginSwitch();
         SwitchProfile.Begin();
         GraphicsMode.Set(enhanced);
         HasSwitched = true;
-        var regen = SceneBuilder.RegenerateShaders();
+        var regen = ShaderTwins.Regenerate();
         SwitchProfile.Mark("shaders");
         ApplySun(sun, enhanced, skipped);
         SwitchProfile.Mark("sun");
@@ -135,6 +141,49 @@ public static class EnhancedLook
         SwitchProfile.End();
         Log.Info("world", $"graphics mode: {GraphicsMode.Key}={(enhanced ? "enhanced" : "original")} (switched live by {why}) ms={Stopwatch.GetElapsedTime(start).TotalMilliseconds:0.0} shader_entries={regen.Entries} materials={regen.Tracked} moved={regen.Moved} twins_made={regen.TwinsMade} rewritten={regen.Retexted} steps=[{SwitchProfile.Line()}]");
         Tooling.ShaderDiagnostics.NoteSwitch();
+        return true;
+    }
+
+    /// <summary>Has Godot build the advanced scene-shader variants a TAA frame needs, for every shader
+    /// alive, while the load screen is still up. It draws one frame of a hidden 256x256 viewport under
+    /// <paramref name="host"/> with TAA and SSAO on and an empty world. Only an Original process that
+    /// has drawn no Enhanced frame needs it; the first Enhanced frame does it otherwise. Returns
+    /// whether it raised the viewport. The engine's side is docs/verification.md PERF-45.</summary>
+    public static bool WarmAdvancedVariants(Node host)
+    {
+        if (GraphicsMode.Enhanced || ShaderTwins.EnhancedDrawn)
+            return false;
+        // ⚠ Keep the viewport this size or larger. At 2x2 the screen-space passes ask for more mips
+        // than the buffer holds, and the Deck crashed on the null texture that leaves.
+        var view = new SubViewport
+        {
+            Name = "advanced_variant_warm",
+            Size = new Vector2I(256, 256),
+            OwnWorld3D = true,
+            World3D = new World3D(),
+            UseTaa = true,
+            RenderTargetUpdateMode = SubViewport.UpdateMode.Once,
+        };
+        view.AddChild(new Camera3D
+        {
+            Current = true,
+            Environment = new Godot.Environment { SsaoEnabled = true, SsrEnabled = true },
+        });
+        host.AddChild(view);
+        // From here every new shader compiles the advanced group with its base one.
+        ShaderTwins.EnhancedDrawn = true;
+        var tree = host.GetTree();
+        int frames = 0;
+        void Drop()
+        {
+            if (++frames < 3 && GodotObject.IsInstanceValid(view))
+                return;
+            tree.ProcessFrame -= Drop;
+            if (GodotObject.IsInstanceValid(view))
+                view.QueueFree();
+        }
+        tree.ProcessFrame += Drop;
+        return true;
     }
 
     /// <summary>The View Distance on the running world: the clutter fade's scale, and the clutter

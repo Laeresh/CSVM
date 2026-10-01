@@ -288,8 +288,8 @@ fog instead of ending at the authored metres. Enhanced mode scales it by
 ## src/Utils/GraphicsMode.cs
 The opt-in enhanced-lighting mode's setting (`original` or `enhanced`, default `original`),
 resolved by `Launcher._Ready` into the single boolean `GraphicsMode.Enhanced` every scene builder
-reads. `Set` is the live switch, called only by `Launcher.SwitchGraphicsMode`, which then brings the
-built world into line. `--graphics=` beats the saved `graphicsMode` option (`OptionsStore`), which
+reads. `Set` is the live switch (`EnhancedLook.Switch`), and `SwitchLocked`, true in a network
+session, refuses one. `--graphics=` beats the saved `graphicsMode` option (`OptionsStore`), which
 beats the `graphics.mode` config key, which beats the default; an unknown word at any layer warns
 and falls back. `--det` drops both machine-state layers and keeps only an explicit `--graphics=`,
 which is how a golden or a deterministic capture pins the mode on purpose. The mode itself is

@@ -230,13 +230,20 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
   follows, texture alpha depth included, with no mission reload. View Distance is a Remake-menu row,
   a `graphics.viewDistance` key and `--view-distance`, default Far. Graphics mode, View Distance,
   AA, Render Scale and Shadow Quality all apply live.
-- **Shader twins per mode.** Each generated shader keeps one compiled copy per graphics mode, and a
-  switch moves materials between them, so Godot recompiles nothing. `--shader-warmup=auto|load|off`
-  compiles the other mode's copies at load (auto: once the process has switched). From Enhanced
-  with the warm-up, C1 switches in 0.2 s on the author's machine against 2.5 to 5.7 s, and in 0.7 s
-  on the Deck against 3.1 to 6.5 s. **Open:** the C5 clutter recut (2.5 to 3.0 s of a Deck switch),
-  the stall on the first frame after a first switch to Enhanced (5 to 14 s, Godot building the
-  advanced variants), and the identical shader texts CM24's world compiles twice.
+- **Shader twins per mode.** Each cache key keeps one compiled shader per graphics mode, keys whose
+  texts agree share one, and a switch moves each material onto its key's shader, so Godot recompiles
+  nothing (`Mech3/ShaderTwins.cs`). `--shader-warmup=auto|load|off` compiles the other mode's shaders
+  at load (auto: once the process has switched); `load` in an Original process also draws one hidden
+  TAA frame, which moves Godot's advanced-variant build from the first switch to the first frames at
+  load. The clutter keeps both its layouts and writes only the stamps moved since. With the load
+  warm-up a switch costs 0.2 to 1.3 s on the author's machine (C1 to CM24) and 0.3 to 0.9 s on the
+  Deck (C1, C5). **Open:** under the default `auto`, a process's first switch to Enhanced still
+  stalls 4.9 to 9.5 s on the author's machine and 6.2 to 6.9 s on the Deck, and the first switch
+  that makes the Original shaders costs 1.8 to 4.7 s and 2.7 to 3.7 s: Godot builds the variants of
+  every live shader (`docs/verification.md` PERF-45).
+- **The switch cover.** A switch over a flying world runs under a load board with the flight held,
+  its catch-up ticks spent while held and a player's pause kept (`SwitchCover`). A network session
+  refuses the switch, and its Options row draws dead.
 
 ## Dependency and parallelism notes
 

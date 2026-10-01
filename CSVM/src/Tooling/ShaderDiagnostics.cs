@@ -121,14 +121,15 @@ internal static class ShaderDiagnostics
             entry.Texts.Add(shader.Code);
             byFamily[family] = (entry.Shaders + 1, entry.Texts);
         }
-        var registered = SceneBuilder.RegisteredShaders().GroupBy(r => r.Family)
+        var registered = ShaderTwins.Registered().GroupBy(r => r.Family)
             .Select(g => $"{g.Key}:{g.Count()}");
         Log.Info("perf", $"shader-diag census {when} mode={(GraphicsMode.Enhanced ? "enhanced" : "original")} drawn={shaders.Count} texts={byFamily.Values.Sum(v => v.Texts.Count)} families=[{string.Join(" ", byFamily.Select(kv => $"{kv.Key}:{kv.Value.Shaders}/{kv.Value.Texts.Count}"))}] registered=[{string.Join(" ", registered)}] pipelines={Print(Pipelines())}");
+        Log.Info("perf", $"shader-diag keys {ShaderTwins.SharedCensus()} made={ShaderTwins.Made} reused={ShaderTwins.Reused}");
     }
 
     private static string Family(Shader shader)
     {
-        if (SceneBuilder.FamilyOf(shader) is { } family)
+        if (ShaderTwins.FamilyOf(shader) is { } family)
             return family;
         return FamilyByOwner.TryGetValue(shader, out var owner) ? owner : "other";
     }
@@ -142,7 +143,7 @@ internal static class ShaderDiagnostics
             {
                 for (var m = material; m != null; m = m.NextPass)
                 {
-                    if (m is ShaderMaterial { Shader: { } shader } && into.Add(shader) && SceneBuilder.FamilyOf(shader) == null)
+                    if (m is ShaderMaterial { Shader: { } shader } && into.Add(shader) && ShaderTwins.FamilyOf(shader) == null)
                         FamilyByOwner[shader] = owner;
                 }
             }

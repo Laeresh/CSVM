@@ -226,7 +226,7 @@ public sealed partial class GroundShadowPass : Node3D
         if (_casters.TryGetValue(key, out var known))
             return known;
         var shape = GroundShadowSilhouette.For(model, key.Own);
-        var material = new ShaderMaterial { Shader = new Shader { Code = ShaderCode } };
+        var material = new ShaderMaterial { Shader = Mech3.ShaderTwins.Pooled(ShaderCode, "ground-shadow") };
         material.SetShaderParameter("coverage", shape.Texture);
         var quad = new MeshInstance3D
         {

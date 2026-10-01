@@ -532,6 +532,9 @@ public partial class GameSession : Node3D
     /// <summary>The map-edge continuation, null where the world has none. Read by the suites.</summary>
     internal Mech3.MapEdgeExtender? EdgeExtender => _edgeExtender;
 
+    /// <summary>The world's clutter, null where it has none. Read by the suites.</summary>
+    internal ClutterBuilder? Clutter => _clutter;
+
     /// <summary>The launch as this session resolved it. A campaign launch settles its chapter and
     /// mission here, out of the story position, so the Launcher's own copy never names them.</summary>
     internal SessionSpec Spec => _spec;
@@ -865,7 +868,7 @@ public partial class GameSession : Node3D
         try
         {
             sw = Stopwatch.StartNew();
-            SceneBuilder.ReleaseUnusedMaterials();
+            ShaderTwins.ReleaseUnused();
             LoadArchives(state);
             LoadProgress.Report(LoadStep.Archives);
             // The SOUND archive is scoped to this build everywhere but the lab, whose node owns its
@@ -1576,9 +1579,11 @@ public partial class GameSession : Node3D
     private void WarmShadersNow()
     {
         long start = Stopwatch.GetTimestamp();
-        int twins = SceneBuilder.WarmOtherMode();
+        int twins = ShaderTwins.WarmOtherMode();
         int cards = _cloudField?.WarmOtherMode() ?? 0;
-        Log.Info("world", $"shader warm-up: other mode's twins={twins} cloud_cards={cards} at load ms={Stopwatch.GetElapsedTime(start).TotalMilliseconds:0.0}");
+        // The other mode's twins first, so the advanced variants the hidden frame builds cover them.
+        bool advanced = EnhancedLook.WarmAdvancedVariants(this);
+        Log.Info("world", $"shader warm-up: other mode's twins={twins} cloud_cards={cards} advanced_variants={(advanced ? "hidden frame" : "not owed")} at load ms={Stopwatch.GetElapsedTime(start).TotalMilliseconds:0.0}");
     }
 
     // Loads the session's core archives (gamez, textures, sounds, sound defs/groups) and routes the

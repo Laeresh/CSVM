@@ -27,12 +27,16 @@ internal static class GraphicsSwitchSuites
     // Every shader text a reading met, by its census key, for the mismatch artifact.
     private static readonly Dictionary<string, string> TextByKey = new(StringComparer.Ordinal);
 
+    // A 3 s switch, a fast frame, a 7.5 s variant build and the settled frames, in milliseconds.
+    private static readonly double[] FastFrames = { 5.0, 5.0, 3000.0, 6.0, 7500.0, 5.0, 5.0, 5.0 };
+
     [Suite("graphics-live-switch",
         "a whole flight session switched Enhanced to Original to Enhanced reads as a fresh Enhanced "
         + "session, and its Original half as a fresh Original one: the enhanced-only layers (scorch "
         + "field, volumetric banks, wind streaks, heat shimmer) are built or gone and the ground "
         + "shadow is the reverse, the clutter is one MultiMesh per kind on the faithful path and cells "
-        + "with ranges under Enhanced, the map edge's clutter copies carry ranges under Enhanced alone, every world, clutter, cloud and streak material carries the "
+        + "with ranges under Enhanced, a crater-flattened and a hidden stamp stay down through both switches with every drawn clutter buffer holding what the world last wrote, "
+        + "the map edge's clutter copies carry ranges under Enhanced alone, every world, clutter, cloud and streak material carries the "
         + "shader text a fresh build gives it, the rendered cloud puffs draw under Enhanced alone with "
         + "a fresh build's pool and tint, every alpha-plane texture, puffer atlas and painted skin holds the alpha depth a fresh build uploads (16 levels on the faithful path), the Environment's passes, tonemap and froxel fog and the "
         + "cockpit pass's copy match, the sun and the pass's light cast at the resolved shadow level "
@@ -72,10 +76,16 @@ internal static class GraphicsSwitchSuites
                 }
 
                 var freshEnhanced = Read(enhanced);
+                var stamps = MoveStamps(enhanced);
+                string movedHeld = StampsHeld(enhanced, stamps);
                 Switch(enhanced, false);
                 var switchedOriginal = Read(enhanced);
+                string originalHeld = StampsHeld(enhanced, stamps);
                 Switch(enhanced, true);
                 var roundTrip = Read(enhanced);
+                string roundTripHeld = StampsHeld(enhanced, stamps);
+                ctx.Check(stamps != null && movedHeld.Length == 0 && originalHeld.Length == 0 && roundTripHeld.Length == 0,
+                    $"a crater-flattened and a hidden stamp stay down through both switches, and every drawn clutter buffer holds every stamp as the world last wrote it ({stamps?.ToString() ?? "no clutter"}; {movedHeld}{originalHeld}{roundTripHeld})");
 
                 Same(ctx, "Original after a switch from Enhanced", freshOriginal, switchedOriginal);
                 Same(ctx, "Enhanced after a round trip through Original", freshEnhanced, roundTrip);
@@ -181,12 +191,13 @@ internal static class GraphicsSwitchSuites
         + "switch to Original and back makes no new shader and rewrites no shader's text, so Godot "
         + "compiles nothing new: it only moves each material onto the twin it already compiled, "
         + "and no drawn material is left on the other mode's twin, the cockpit gauges' own copies "
-        + "and the fade twins included")]
+        + "and the fade twins included; under either mode the cache keys whose texts agree draw "
+        + "one shader between them")]
     internal static void ShaderTwins(TestContext ctx)
     {
         RequireData(ctx);
         bool wasEnhanced = GraphicsMode.Enhanced;
-        bool wasDrawn = Mech3.SceneBuilder.EnhancedDrawn;
+        bool wasDrawn = Mech3.ShaderTwins.EnhancedDrawn;
         var rig = Open(ctx, enhanced: true);
         try
         {
@@ -197,29 +208,214 @@ internal static class GraphicsSwitchSuites
             }
 
             // What the launcher sets on the first Enhanced frame, which a suite never draws.
-            Mech3.SceneBuilder.EnhancedDrawn = true;
-            int warmed = Mech3.SceneBuilder.WarmOtherMode();
-            ctx.Check(Mech3.SceneBuilder.OtherModeWarm,
+            Mech3.ShaderTwins.EnhancedDrawn = true;
+            int warmed = Mech3.ShaderTwins.WarmOtherMode();
+            ctx.Check(Mech3.ShaderTwins.OtherModeWarm,
                 $"the warm-up leaves every cache shader with its Original twin ({warmed} made now)");
-            int made = Mech3.SceneBuilder.TwinsMade;
-            int rewrites = Mech3.SceneBuilder.TextRewrites;
+            int made = Mech3.ShaderTwins.Made;
+            int rewrites = Mech3.ShaderTwins.TextRewrites;
             Switch(rig, false);
             int staleOriginal = StaleMaterials(rig);
+            var (originalShaders, originalTexts) = DrawnKeyShaders(rig);
             Switch(rig, true);
             int staleEnhanced = StaleMaterials(rig);
-            ctx.Check(Mech3.SceneBuilder.TwinsMade == made,
-                $"the two switches make no new shader ({Mech3.SceneBuilder.TwinsMade - made} made)");
-            ctx.Check(Mech3.SceneBuilder.TextRewrites == rewrites,
-                $"and rewrite no shader's text ({Mech3.SceneBuilder.TextRewrites - rewrites} rewritten)");
+            var (enhancedShaders, enhancedTexts) = DrawnKeyShaders(rig);
+            ctx.Check(originalShaders == originalTexts && enhancedShaders == enhancedTexts && originalTexts > 0,
+                $"keys whose texts agree draw one shader between them ({originalShaders} shaders for {originalTexts} texts under Original, {enhancedShaders} for {enhancedTexts} under Enhanced)");
+            ctx.Check(Mech3.ShaderTwins.Made == made,
+                $"the two switches make no new shader ({Mech3.ShaderTwins.Made - made} made)");
+            ctx.Check(Mech3.ShaderTwins.TextRewrites == rewrites,
+                $"and rewrite no shader's text ({Mech3.ShaderTwins.TextRewrites - rewrites} rewritten)");
             ctx.Check(staleOriginal == 0 && staleEnhanced == 0,
                 $"no drawn material stays on the other mode's twin ({staleOriginal} under Original, {staleEnhanced} under Enhanced)");
         }
         finally
         {
             rig.Close();
-            Mech3.SceneBuilder.EnhancedDrawn = wasDrawn;
+            Mech3.ShaderTwins.EnhancedDrawn = wasDrawn;
             Restore(wasEnhanced);
         }
+    }
+
+    [Suite("graphics-switch-cover",
+        "a live switch under its cover runs in order: the flight is held and the cover is in the tree "
+        + "before the switch runs, the switch waits for the cover's second frame, the hold stands "
+        + "through a stall and a slow frame after it and drops with the cover once three frames settle, "
+        + "on a machine whose ordinary frame is slow as well; "
+        + "the stall reaches the sim clock's accumulator as no step; a pause the player had up stands "
+        + "after the cover drops; with no pause state the clock is held and put back as it was; and the "
+        + "load warm-up's hidden TAA frame is raised once by an Original process alone")]
+    internal static void SwitchCoverOrder(TestContext ctx)
+    {
+        var flying = CoverRun(ctx, paused: false, FastFrames);
+        ctx.Check(flying.Order == "held,covered,work" && flying.WorkFrame == 2,
+            $"the hold and the cover come first and the switch runs on the cover's second frame ({flying.Order} at frame {flying.WorkFrame})");
+        ctx.Check(flying.HeldThroughStall && flying.Steps == 0,
+            $"the clock stays held through the stall frames and takes no step from them ({flying.Steps} step(s))");
+        ctx.Check(flying.Dropped && !flying.CoverInTree && !flying.HeldAfter && flying.StepsAfter == 1,
+            $"the cover drops after three settled frames and the flight resumes one step at a time (dropped {flying.Dropped}, in tree {flying.CoverInTree}, held {flying.HeldAfter}, {flying.StepsAfter} step(s) next frame)");
+
+        var paused = CoverRun(ctx, paused: true, FastFrames);
+        var slow = CoverRun(ctx, paused: false, new[] { 150.0, 150.0, 4000.0, 150.0, 6000.0, 150.0, 150.0, 150.0 });
+        ctx.Check(slow.Dropped && slow.HeldThroughStall && !slow.HeldAfter,
+            $"on a machine whose ordinary frame takes 150 ms the cover still drops after three such frames, held through the stalls (dropped {slow.Dropped})");
+        ctx.Check(paused.Order == "held,covered,work" && paused.Dropped && paused.PausedAfter && paused.HeldAfter,
+            $"over the pause sheet the same order runs, and the pause still stands after the cover drops (paused {paused.PausedAfter}, held {paused.HeldAfter})");
+
+        AdvancedVariantFrame(ctx);
+
+        foreach (bool wasHalted in new[] { false, true })
+        {
+            var clock = new GameClock { Mode = GameClock.RunMode.FixedAccum, Halted = wasHalted };
+            var overlay = new ColorRect();
+            var cover = SwitchCover.Begin(ctx.Host, overlay, null, clock, () => { }, "graphics-switch-cover");
+            bool held = clock.Halted;
+            while (!cover.Tick(5.0))
+            {
+            }
+            ctx.Check(held && clock.Halted == wasHalted,
+                $"with no pause state the cover holds the clock and puts it back {(wasHalted ? "halted" : "running")} (held {held}, after {clock.Halted})");
+        }
+    }
+
+    // The load warm-up's hidden TAA frame: raised once by an Original process that has drawn no
+    // Enhanced frame, and never by an Enhanced one. Freed before it draws, so this shard builds no
+    // advanced variants.
+    private static void AdvancedVariantFrame(TestContext ctx)
+    {
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        bool wasDrawn = Mech3.ShaderTwins.EnhancedDrawn;
+        var host = new Node();
+        ctx.Host.AddChild(host);
+        try
+        {
+            GraphicsMode.Set(true);
+            Mech3.ShaderTwins.EnhancedDrawn = false;
+            bool underEnhanced = EnhancedLook.WarmAdvancedVariants(host);
+            GraphicsMode.Set(false);
+            bool first = EnhancedLook.WarmAdvancedVariants(host);
+            var view = host.GetChildCount() == 1 ? host.GetChild(0) as SubViewport : null;
+            bool again = EnhancedLook.WarmAdvancedVariants(host);
+            ctx.Check(!underEnhanced && first && !again && view is { UseTaa: true } && Mech3.ShaderTwins.EnhancedDrawn,
+                $"an Original process with no Enhanced frame raises one hidden TAA viewport, once (Enhanced {underEnhanced}, first {first}, again {again}, TAA {view?.UseTaa})");
+        }
+        finally
+        {
+            host.Free();
+            GraphicsMode.Set(wasEnhanced);
+            Mech3.ShaderTwins.EnhancedDrawn = wasDrawn;
+        }
+    }
+
+    // One cover over a pause state and a sim clock, ticked through the frames.
+    private static CoverReading CoverRun(TestContext ctx, bool paused, double[] frames)
+    {
+        var pause = new Flight.Modes.PauseState();
+        if (paused)
+            pause.TryToggle(0);
+        var clock = new GameClock { Mode = GameClock.RunMode.FixedAccum, Halted = pause.ClockHeld };
+        var overlay = new ColorRect();
+        var order = new List<string>();
+        int frame = 0, workFrame = -1;
+        SwitchCover? cover = null;
+        cover = SwitchCover.Begin(ctx.Host, overlay, pause, clock, () =>
+        {
+            if (pause.ClockHeld && clock.Halted)
+                order.Add("held");
+            if (overlay.IsInsideTree() && cover!.Stage == SwitchCover.Phase.Showing)
+                order.Add("covered");
+            order.Add("work");
+            workFrame = frame;
+        }, "graphics-switch-cover");
+        bool heldThroughStall = true;
+        long stepsBefore = clock.Frame;
+        foreach (double ms in frames)
+        {
+            frame++;
+            clock.BeginFrame(ms / 1000.0);
+            bool done = cover.Tick(ms);
+            heldThroughStall &= done || (pause.ClockHeld && clock.Halted);
+        }
+        long steps = clock.Frame - stepsBefore;
+        bool dropped = cover.Stage == SwitchCover.Phase.Done;
+        clock.Halted = pause.ClockHeld;
+        clock.BeginFrame(1.5 * GameClock.FixedDt);
+        return new CoverReading(string.Join(",", order), workFrame, heldThroughStall, (int)steps, dropped,
+            overlay.IsInsideTree(), pause.ClockHeld, pause.Paused, clock.Steps);
+    }
+
+    // Flattens one stamp of the largest clutter kind with a crater. Hides another through the kind's
+    // index, as the activation does in flight.
+    private static MovedStamps? MoveStamps(Rig rig)
+    {
+        if (ClutterRoot(rig.Session) is not { } root || rig.Session.Clutter?.ExportedKinds is not { } kinds)
+            return null;
+        var kind = kinds.Where(k => k.Instances != null).MaxBy(k => k.Instances!.InstanceCount);
+        if (kind?.Instances is not { InstanceCount: > 2 } stamps)
+            return null;
+        int flattened = 0, hidden = stamps.InstanceCount / 2;
+        var at = root.GlobalTransform * stamps.GetInstanceTransform(flattened).Origin;
+        int killed = Mech3.ClutterCull.Destroy(root, Mech3.CraterShape.At(at, radius: 0.01f));
+        var placed = stamps.GetInstanceTransform(hidden);
+        stamps.SetInstanceTransform(hidden, new Transform3D(placed.Basis.Scaled(Vector3.Zero), placed.Origin));
+        return new MovedStamps(kind, flattened, hidden, killed);
+    }
+
+    // What disagrees between the moved stamps, the kinds' indices and the drawn clutter buffers read
+    // straight back from the renderer; empty when nothing does.
+    private static string StampsHeld(Rig rig, MovedStamps? moved)
+    {
+        if (moved == null || ClutterRoot(rig.Session) is not { } root)
+            return "no clutter; ";
+        var problems = new StringBuilder();
+        var stamps = moved.Kind.Instances!;
+        if (stamps.GetInstanceTransform(moved.Flattened).Basis.Determinant() != 0f)
+            problems.Append("the flattened stamp stands; ");
+        if (stamps.GetInstanceTransform(moved.Hidden).Basis.Determinant() != 0f)
+            problems.Append("the hidden stamp stands; ");
+        int indexed = 0;
+        foreach (var kind in rig.Session.Clutter!.ExportedKinds!)
+        {
+            for (int i = 0; kind.Instances != null && i < kind.Instances.InstanceCount; i++)
+                indexed += kind.Instances.GetInstanceTransform(i).Basis.Determinant() == 0f ? 1 : 0;
+        }
+        int drawn = 0;
+        Walk(root, node =>
+        {
+            if (node is MultiMeshInstance3D { Multimesh: { } mm })
+            {
+                for (int i = 0; i < mm.InstanceCount; i++)
+                    drawn += mm.GetInstanceTransform(i).Basis.Determinant() == 0f ? 1 : 0;
+            }
+        });
+        if (indexed != drawn || indexed < 2)
+            problems.Append(CultureInfo.InvariantCulture, $"the indices hold {indexed} collapsed stamp(s) and the drawn buffers {drawn}; ");
+        return problems.ToString();
+    }
+
+    private static Node3D? ClutterRoot(Node session)
+    {
+        Node3D? found = null;
+        Walk(session, node => found ??= node is Node3D { Name: var name } n && name == "clutter" ? n : null);
+        return found;
+    }
+
+    // The distinct cache shaders the session draws, and their distinct texts.
+    private static (int Shaders, int Texts) DrawnKeyShaders(Rig rig)
+    {
+        var shaders = new HashSet<Shader>();
+        Walk(rig.Session, node =>
+        {
+            if (node is GeometryInstance3D geometry)
+            {
+                foreach (var material in Materials(geometry))
+                {
+                    if (Mech3.ShaderTwins.IsKeyShader(material.Shader))
+                        shaders.Add(material.Shader);
+                }
+            }
+        });
+        return (shaders.Count, shaders.Select(s => s.Code).Distinct(StringComparer.Ordinal).Count());
     }
 
     // Drawn materials whose cache shader is not the standing mode's twin.
@@ -232,11 +428,10 @@ internal static class GraphicsSwitchSuites
                 return;
             foreach (var material in Materials(geometry))
             {
-                if (Mech3.SceneBuilder.FamilyOf(material.Shader) != null
-                    && !ReferenceEquals(Mech3.SceneBuilder.ForMode(material.Shader), material.Shader))
-                {
+                // A cache shader on a material that follows no key could not follow a switch either.
+                bool loose = Mech3.ShaderTwins.IsKeyShader(material.Shader) && !Mech3.ShaderTwins.IsTracked(material);
+                if (loose || Mech3.ShaderTwins.IsStale(material))
                     stale++;
-                }
             }
         });
         return stale;
@@ -247,7 +442,7 @@ internal static class GraphicsSwitchSuites
     {
         GraphicsMode.Set(wasEnhanced);
         ViewDistance.Set(null);
-        Mech3.SceneBuilder.RegenerateShaders();
+        Mech3.ShaderTwins.Regenerate();
         EffectsLevel.RegisteredScaleSq = EnhancedLook.ClutterFadeScaleSq();
         RenderingServer.GlobalShaderParameterSet(EffectsLevel.ShaderParam, EffectsLevel.RegisteredScaleSq);
     }
@@ -278,7 +473,7 @@ internal static class GraphicsSwitchSuites
     private static Rig Open(TestContext ctx, bool enhanced)
     {
         GraphicsMode.Set(enhanced);
-        Mech3.SceneBuilder.RegenerateShaders();
+        Mech3.ShaderTwins.Regenerate();
         EffectsLevel.RegisteredScaleSq = EnhancedLook.ClutterFadeScaleSq();
         RenderingServer.GlobalShaderParameterSet(EffectsLevel.ShaderParam, EffectsLevel.RegisteredScaleSq);
         var spec = SessionSpec.Parse(new[] { $"--chapter={ctx.Chapter}", "--players=1", "--mute", "--no-pads" });
@@ -375,7 +570,7 @@ internal static class GraphicsSwitchSuites
             {
                 foreach (var material in Materials(geometry))
                 {
-                    string key = material.Shader.Code.GetHashCode().ToString("x8", CultureInfo.InvariantCulture) + ":" + (Mech3.SceneBuilder.FamilyOf(material.Shader) ?? geometry.GetType().Name);
+                    string key = material.Shader.Code.GetHashCode().ToString("x8", CultureInfo.InvariantCulture) + ":" + (Mech3.ShaderTwins.FamilyOf(material.Shader) ?? geometry.GetType().Name);
                     Count(shaders, key);
                     TextByKey[key] = material.Shader.Code;
                     if (material.Shader.Code.Contains("csky_cloud_puffs", StringComparison.Ordinal))
@@ -577,6 +772,15 @@ internal static class GraphicsSwitchSuites
             text.Append($"  shaders {Shaders}");
             return text.ToString();
         }
+    }
+
+    private sealed record CoverReading(string Order, int WorkFrame, bool HeldThroughStall, int Steps, bool Dropped,
+        bool CoverInTree, bool HeldAfter, bool PausedAfter, int StepsAfter);
+
+    private sealed record MovedStamps(Mech3.ClutterBuilder.KindExport Kind, int Flattened, int Hidden, int Killed)
+    {
+        public override string ToString() => string.Create(CultureInfo.InvariantCulture,
+            $"{Kind.Texture} stamp {Flattened} flattened with {Killed} killed, stamp {Hidden} hidden");
     }
 
     private sealed record CellReading(int Cells, int Ranged, float MaxRange, string Text, float EdgeMax)

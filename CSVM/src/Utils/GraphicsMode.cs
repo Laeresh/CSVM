@@ -26,6 +26,11 @@ public static class GraphicsMode
     /// only by <see cref="Set"/>. Every reader takes this rather than querying Config itself.</summary>
     public static bool Enhanced { get; private set; }
 
+    /// <summary>Gets or sets whether the running session refuses a live switch, which a network
+    /// session does. The launcher writes it every frame; the options pages draw the mode row dead
+    /// while it is set.</summary>
+    public static bool SwitchLocked { get; set; }
+
     /// <summary>Whether a mode word is one the original vocabulary knows.</summary>
     public static bool TryParse(string mode, out bool enhanced)
     {

@@ -38,7 +38,17 @@ trimesh per surface class and soil and by sidedness, both halves on one body reg
 `WorldCollision`; `MissionStructureTeamMeta` is the channel `DestructibleRegistry` reads a pool's
 team through. A textured surface takes `csky_world_light` on its `lighting` flag alone, and every
 mip-mapped arm fetches through `SampleAlbedo`, the one `csky_sample_albedo` carrying the chapter's
-LOD bias, reused by `Clutter` and `MeshLab`. `AlphaOf` reads back the transparency verdict a built material's shader was generated for, the registry `HiddenAlpha` (`--hide-alpha`) drops a class by, dropping the surface rather than the instance so the classes isolate from each other. A blended world surface lying within `GroundLayerMinUp` of level (a terrain strip, a road, a shadow decal; never the caller's blend list, the cloud deck and sky) takes `GroundLayerRenderPriority` and draws ahead of every other transparent draw, so a clutter card standing on it composites over it: the card kinds are chapter-wide MultiMeshes whose one sort key is the forest's centre, so the depth sort put a nearer strip over the card's soft edge. A `sunVertexLit` builder (the in-flight aircraft) draws original mode's shaded arm unshaded, with the original's per-vertex sun term, whose ambient half is the Danger Zone photograph's fill at an armed `PhotoEyeParam` eye. Under Enhanced Graphics the cutout arm also takes `CoverageMode` and the `CoverageLines` built-ins that feed it, so a scissored edge resolves through the project's MSAA samples. The shader caches key on everything but the graphics mode, and each entry keeps one compiled twin per mode (`RegenerableShader`, `FadeShaderFor`): every material a cache shader goes on passes `Track`, and `RegenerateShaders` moves each onto the standing mode's twin, so no shader's text changes and Godot compiles nothing again. `WarmOtherMode` compiles the other mode's twins ahead, the first switch to Enhanced before an Enhanced frame has drawn rewrites in place instead (`EnhancedDrawn`), and `FollowGraphicsMode` swaps the sky sprites' keyed copies (`KeyedBackdropTexture`). Arms and selection: [Root.md](Root.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
+LOD bias, reused by `Clutter` and `MeshLab`. `AlphaOf` reads back the transparency verdict a built material's shader was generated for, the registry `HiddenAlpha` (`--hide-alpha`) drops a class by, dropping the surface rather than the instance so the classes isolate from each other. A blended world surface lying within `GroundLayerMinUp` of level (a terrain strip, a road, a shadow decal; never the caller's blend list, the cloud deck and sky) takes `GroundLayerRenderPriority` and draws ahead of every other transparent draw, so a clutter card standing on it composites over it: the card kinds are chapter-wide MultiMeshes whose one sort key is the forest's centre, so the depth sort put a nearer strip over the card's soft edge. A `sunVertexLit` builder (the in-flight aircraft) draws original mode's shaded arm unshaded, with the original's per-vertex sun term, whose ambient half is the Danger Zone photograph's fill at an armed `PhotoEyeParam` eye. Under Enhanced Graphics the cutout arm also takes `CoverageMode` and the `CoverageLines` built-ins that feed it, so a scissored edge resolves through the project's MSAA samples. The shader caches key on everything but the graphics mode, and each key is a `ModeShader` whose materials follow it across a switch (`ShaderTwins.cs`); `FollowGraphicsMode` swaps the sky sprites' keyed copies (`KeyedBackdropTexture`). Arms and selection: [Root.md](Root.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
+
+## src/Mech3/ShaderTwins.cs
+The generated shaders behind every shader cache (`SceneBuilder`'s three, `Clutter`'s sprites,
+`EmitterRenderer`'s variants), one `Shader` per text, and the materials wearing them. A cache key is
+a `ModeShader` with one shader per graphics mode, so keys whose texts agree in a mode share one and
+Godot compiles it once. `Follow` records the key a material wears, `Copy` and `FadeCopy` the key a
+duplicate wears, and `Regenerate` moves each onto its key's shader for the standing mode with no
+text changed. `WarmOtherMode` compiles the other mode ahead; before an Enhanced frame has drawn
+(`EnhancedDrawn`) a first switch to Enhanced rewrites in place. `Pooled` also serves constant texts
+made per instance (plane flare, light sprites, ground shadow). Read `Session/Launch/EnhancedLook.cs`.
 
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame
@@ -108,7 +118,9 @@ Counts and destroys the decorations a crater swallows. A decoration dies outrigh
 test, no animation and no model swap, because the original's crater path reads no template field at
 all. `ClutterBuilder` bakes every placement of one kind into one MultiMesh, so dying means the
 instance's basis collapses to zero (the draw call and its custom data stay intact) and its shared
-collision shape is switched off on the region body it was attached to by RID. Read `Clutter.cs`.
+collision shape is switched off on the region body it was attached to by RID. A MultiMesh a
+`ClutterInstances` owns is read and written through it, so a flattened stamp survives a recut.
+Read `Clutter.cs`.
 
 ## src/Mech3/PlaneBuilder.cs
 Builds one aircraft from its GameZ subtree, skipping the cockpit, damage, destroyed and shadow
@@ -220,10 +232,10 @@ One clutter kind's drawn instances behind the kind's own placement index. The fa
 the kind's single MultiMesh (`Whole`). Under Enhanced Graphics `Cells` cuts it into square map
 cells about twice the kind's farthest fade across, each its own node with a visibility range at that
 fade, so a pane draws only the cells in reach instead of every stamp in the chapter. Reads and
-writes take the clutter root's frame, which keeps `ClutterActivation` and the suites off the cells;
-`ClutterCull` walks the cells as ordinary MultiMeshes. `Draw` keeps the builder's node as a
-prototype, so `Recut` draws the kind again, whole or cut, after a live mode switch or View Distance
-change, keeping any stamp since hidden or flattened. Read `Clutter.cs`.
+writes take the clutter root's frame and are mirrored here, which keeps `ClutterActivation`, the
+suites and `ClutterCull`'s writes off the cells. Both layouts' buffers are kept once made, so
+`Recut` after a live mode switch or View Distance change swaps nodes and writes only the stamps
+since hidden or flattened; a new cell edge is cut with one buffer upload per cell. Read `Clutter.cs`.
 
 ## src/Mech3/ClutterTemplates.cs
 The chapter's `templates.zrd` (`ClutterTemplateSpec.Load`/`.Parse`): one `ClutterKindProps` per
