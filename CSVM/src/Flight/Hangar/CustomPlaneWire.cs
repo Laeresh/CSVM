@@ -1,7 +1,6 @@
-using CSVM.Flight.Hangar;
 using CSVM.Net;
 
-namespace CSVM.Session.Launch;
+namespace CSVM.Flight.Hangar;
 
 /// <summary>
 /// The bridge between a saved custom plane and the build the wire carries. Each field that shapes

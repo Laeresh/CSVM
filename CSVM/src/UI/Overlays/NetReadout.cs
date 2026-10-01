@@ -6,7 +6,7 @@ namespace CSVM.UI.Overlays;
 /// <summary>
 /// The <c>--debug-net</c> line in the top-left corner: a network match's desync counters as
 /// <see cref="Net.NetInstruments.Describe"/> writes them, the same text the launcher logs once a
-/// second. Built once by <see cref="CSVM.Session.Launcher"/> and only under the flag, so an
+/// second. Built once by <see cref="CSVM.Launch.Launcher"/> and only under the flag, so an
 /// ordinary run and the golden sweep never build it. Shown only while a session holds a wire.
 /// </summary>
 public sealed partial class NetReadout : Node

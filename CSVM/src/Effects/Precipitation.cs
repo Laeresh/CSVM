@@ -1,5 +1,4 @@
 using System;
-using CSVM.Flight.Airframe;
 using CSVM.Utils;
 using Godot;
 

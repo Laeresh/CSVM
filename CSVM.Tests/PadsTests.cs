@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CSVM;
+using CSVM.Bindings;
 using Xunit;
 
 namespace CSVM.Tests;

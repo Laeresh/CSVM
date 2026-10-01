@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using CSVM;
-using CSVM.Flight.Airframe;
+using CSVM.Effects;
+using CSVM.Extraction;
 using CSVM.Mech3;
 using Xunit;
 

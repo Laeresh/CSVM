@@ -2,10 +2,12 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text;
+using CSVM.Extraction;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.Session.Objectives;
+using CSVM.Spec;
 using CSVM.UI.Hangar;
 using Godot;
 

@@ -1,7 +1,7 @@
 using System;
 using System.Text;
 
-namespace CSVM.UI.Screens;
+namespace CSVM.UI.Boards;
 
 /// <summary>
 /// The characters the keyboard typed, as the pilot's own layout produced them, which is what every

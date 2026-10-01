@@ -2,9 +2,9 @@ using System;
 
 namespace CSVM.UI.Screens;
 
-/// <summary>How a cinema reaches the screen: the film's name, the continuation to run on the frame
-/// it stops (played out or skipped), and the presses that end it early.
-/// <c>Session/Launch/Launcher.cs</c>'s <c>PlayCinema</c> has this shape and is handed over as itself; a
+/// <summary>How a cinema reaches the screen. It takes the film's name, the continuation to run on
+/// the frame it stops (played out or skipped), and the presses that end it early.
+/// <c>Launch/Launcher.cs</c>'s <c>PlayCinema</c> has this shape and is handed over as itself; a
 /// suite hands over a stand-in that records what it was asked for. Every flow that plays a film
 /// takes this one type, so a caller writes the call once and a suite's recorder fits all of
 /// them.</summary>

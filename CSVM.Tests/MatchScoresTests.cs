@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using CSVM.Extraction;
 using CSVM.Flight.Modes;
 using CSVM.Mech3;
 using Xunit;

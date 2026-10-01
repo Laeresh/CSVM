@@ -9,7 +9,7 @@ using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM;
+namespace CSVM.Spec;
 
 /// <summary>The session shapes, closed. Every launch is exactly one of these; <c>Stunt</c>,
 /// <c>Versus</c>, <c>Players</c>, <c>EmptyStage</c>, <c>NodeName</c> and <c>DamageLab</c> are
@@ -2093,7 +2093,7 @@ public sealed record SessionSpec
         this with { Chapter = chapter, Mission = mission, ChapterGiven = true };
 
     /// <summary>A copy with <see cref="Zeppelins"/>/<see cref="Generators"/> turned on for a
-    /// campaign mission that ships the data; <see cref="Session.Launch.GameSession"/> calls this once
+    /// campaign mission that ships the data; <see cref="Launch.GameSession"/> calls this once
     /// <see cref="WithCampaignMission"/> has settled the chapter/mission <see cref="FromCampaign"/>
     /// could not yet know. ORs rather than overwrites, so an explicit CLI flag survives.</summary>
     public SessionSpec WithCampaignZeppelins(bool hasZeppelins, bool hasGenerators) =>

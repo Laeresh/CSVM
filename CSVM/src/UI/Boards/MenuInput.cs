@@ -3,11 +3,10 @@ using System.Collections.Generic;
 using CSVM.Bindings;
 using CSVM.Flight.Airframe;
 using CSVM.Sticks;
-using CSVM.UI.Boards;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM.UI.Screens;
+namespace CSVM.UI.Boards;
 
 /// <summary>
 /// One launchscreen player's input source: the keyboard (player 1 only) and that player's own
@@ -295,18 +294,18 @@ public sealed class MenuInput
     /// edge-detects per device. Gated like every other pad read, so nobody joins while the
     /// window is in the background.</summary>
     public static bool JoinPressed(int pad) =>
-        !CSVM.Pads.InputBlocked && Input.IsJoyButtonPressed(pad, JoyButton.Start);
+        !CSVM.Bindings.Pads.InputBlocked && Input.IsJoyButtonPressed(pad, JoyButton.Start);
 
     /// <summary>Whether a pad is pressing A, the join board's sign-on gesture. Raw and static for
     /// the reason <see cref="JoinPressed"/> is: the pad has no player until it signs on, so no
     /// seat's bindings can answer for it.</summary>
     public static bool SignOnPressed(int pad) =>
-        !CSVM.Pads.InputBlocked && Input.IsJoyButtonPressed(pad, JoyButton.A);
+        !CSVM.Bindings.Pads.InputBlocked && Input.IsJoyButtonPressed(pad, JoyButton.A);
 
     /// <summary>Whether a pad is pressing B, the board's sign-off gesture. Raw for the same reason:
     /// the answer must name the pad that moved, not the seat that holds it.</summary>
     public static bool SignOffPressed(int pad) =>
-        !CSVM.Pads.InputBlocked && Input.IsJoyButtonPressed(pad, JoyButton.B);
+        !CSVM.Bindings.Pads.InputBlocked && Input.IsJoyButtonPressed(pad, JoyButton.B);
 
     /// <summary>One frame of one cursor axis: a fresh press or a direction flip fires immediately
     /// and arms the initial delay, a held direction repeats on the timer, and letting go releases
@@ -532,7 +531,7 @@ public sealed class MenuInput
     // real one somebody is holding.
     private int ScanActivePad()
     {
-        foreach (int pad in CSVM.Pads.For(Pads))
+        foreach (int pad in CSVM.Bindings.Pads.For(Pads))
         {
             if (Input.IsJoyButtonPressed(pad, JoyButton.A) ||
                 Input.IsJoyButtonPressed(pad, JoyButton.B) ||

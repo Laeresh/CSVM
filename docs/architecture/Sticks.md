@@ -118,7 +118,7 @@ the rows. A changed screen save turns it into a user file. The layout and rule a
 Seat 1's `SkipCutscene` off the active profile's Menu rows alone: `Pressed` (the edge) and `Held`,
 one `Poll` per frame. `Prime` swallows a trigger already down, so the press that opened a screen
 cannot skip it. Reads nothing for any other seat or with sticks off. Polled by
-`UI/Screens/CinemaScreen.cs`, `UI/Screens/BootCard.cs` and `Session/Launch/GameSession.cs` (into
+`UI/Screens/CinemaScreen.cs`, `UI/Screens/BootCard.cs` and `Launch/GameSession.cs` (into
 `CutsceneController.TakeStickPress`). Rules in `docs/org/input.md`, "Skip Cutscene, the stick's
 skip"; covered by `CSVM.Tests/StickSkipTests.cs`.
 
@@ -144,3 +144,9 @@ the `Stick` prefix and print an unnamed stick's control alone, since the column 
 wide. When two unnamed models share the row, each unnamed caption keeps its model
 (`231D/0200 Button 5`) so the two read apart. `Prefix`, `Column` and `Columns`' two-argument form
 are the pure forms a test drives with its own names.
+
+## src/Sticks/StickSplit.cs
+An `IDeviceState` filter that passes a seat's flight-stick identities alone (`SticksOnly`) or
+everything else (`WithoutSticks`), deciding by `StickModel.TryFromDevice`. `FlightController` polls
+one keymap through each, so a pad row and a stick row on the same action resolve apart for
+`AnalogAxes`. The seat's own reader stays the only thing that reads hardware.

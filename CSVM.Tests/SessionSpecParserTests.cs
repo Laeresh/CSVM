@@ -3,6 +3,7 @@ using System.Threading;
 using CSVM;
 using CSVM.Mech3;
 using CSVM.Net;
+using CSVM.Spec;
 using CSVM.UI.Menu;
 using Godot;
 using Xunit;

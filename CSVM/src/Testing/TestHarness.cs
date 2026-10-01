@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using CSVM.Effects;
+using CSVM.Extraction;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
 using CSVM.Utils;
@@ -1149,7 +1150,7 @@ public sealed class TestContext
                     EmitterFactory = EmitterFactory,
                     ArchiveEmitterFactory = (tex, parent) => new PufferEmitterFactory(tex, parent, ambience),
                     ExtraPrewarmNames = ExtraPrewarmSoundNames,
-                    Cutscenes = CutsceneRoots ? CSVM.Session.Launch.GameSession.CutsceneWorldNames : null,
+                    Cutscenes = CutsceneRoots ? CSVM.Launch.GameSession.CutsceneWorldNames : null,
                     LandingTriggers = CutsceneRoots,
                     PlanesGamezPath = PlanesGamezPath,
                     Decode = _decode,

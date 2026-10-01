@@ -71,6 +71,25 @@ procedural (`MakeFlakeTexture`/`MakeStreakTexture`), the original having drawn u
 primitives no archive carries. Schema and the data-to-look TUNE mapping:
 [../formats/weather.md](../formats/weather.md).
 
+## src/Effects/Weather.cs
+`WeatherState`, the flown mission's own weather.json as per-zone `ZoneWeather` records: fog colour,
+ranges and altitude, the sunlight block resolved into a world light, a sun orientation and its two
+uncollapsed colours, the cloud-cover whiteout band, wind, and precipitation. `DefaultDiffuse` and
+`DefaultAmbient` are the install's modal day pair, public because both lighting mappings anchor a
+zone against them. `ResolveZone` picks the flown zone by name, falling back to the one zone whose
+horizon subtree carries meshes where the requested one is empty and this mission also fogs it;
+`CameraWeatherState` and `ZoneForState` are the per-frame camera zone `WeatherRig.Tick` publishes.
+Schema: [../formats/weather.md](../formats/weather.md); runtime: [../org/weather.md](../org/weather.md).
+
+## src/Effects/ViewerSet.cs
+The "what do the cameras see" registry, session-owned and bound once after the rigs are built, so
+every draw rule needing it shares one registration, single player included. `Cameras` hands back
+the raw bound list for a consumer that needs each viewer's own field of view and pane height and
+already skips a freed instance; `Positions` and `Poses` are the two derived shapes, the latter
+filling a caller-owned buffer for a consumer that republishes the set every frame. It carries
+cameras, not the screen-size or view-depth arithmetic, which stays in `ScreenSize`. Its consumers
+are the tracer floor, the puffer distance fade, the screen wash and the world-light budget.
+
 ## src/Effects/WindStreaks.cs
 Remake-only wind streaks, a layer OVER the authored speed cue (`Flight/Hud/SpeedCue.cs`) rather than a
 replacement: one MultiMesh of thin procedural quads in a camera-centred wrap box on

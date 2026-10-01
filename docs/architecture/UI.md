@@ -1,6 +1,6 @@
 # UI
 
-The launchscreen and splitscreen rig, the in-flight pause and results boards, plus the interactive debug labs. Six sub-namespaces, one folder each, beside the `UI.Menu` presentation tree (`docs/menu-presentations.md`), and one page for all of them: `UI.Boards` (the widget library every screen draws with: the composed board, its view, fit and palette, the board menu, the splitscreen rig and the canvas-layer order), `UI.Campaign` (the campaign pages, their flow and the scrapbook), `UI.Screens` (launch, boot, cinema, load, pause, results and wrap-up boards, and the seat input they poll), `UI.Hangar` (the hangar pages and the plane-picking tables they share), `UI.Overlays` (the debug and HUD overlays) and `UI.Labs` (the inspection labs). Nothing else in `UI` names `Labs`, `Hangar` names nothing else in `UI`, and `Campaign`, `Screens`, `Overlays` and `Labs` are built from `Boards`. Every lab has a scripted `--debug-*` twin so a finding can be reproduced headlessly; see `docs/cli.md`. The module index in `docs/architecture.md` groups the entries by sub-namespace.
+The launchscreen and splitscreen rig, the in-flight pause and results boards, plus the interactive debug labs. Six sub-namespaces, one folder each, beside the `UI.Menu` presentation tree (`docs/menu-presentations.md`), and one page for all of them: `UI.Boards` (the widget library every screen draws with: the composed board, its view, fit and palette, the board menu and the seat input it polls, the splitscreen rig and the canvas-layer order), `UI.Campaign` (the campaign pages, their flow and the scrapbook), `UI.Screens` (launch, boot, cinema, load, pause, results and wrap-up boards), `UI.Hangar` (the hangar pages and the plane-picking tables they share), `UI.Overlays` (the debug and HUD overlays) and `UI.Labs` (the inspection labs). Nothing else in `UI` names `Labs`, `Hangar` names only `Boards` and the shared `UI.Menu` (`CSVM.Tests/FamilyOrderTests.cs` holds these rules), and `Campaign`, `Screens`, `Overlays` and `Labs` are built from `Boards`. Every lab has a scripted `--debug-*` twin so a finding can be reproduced headlessly; see `docs/cli.md`. The module index in `docs/architecture.md` groups the entries by sub-namespace.
 
 One `## src/...` entry per module, body at most 8 lines, 12 for the highest-traffic modules.
 
@@ -218,8 +218,8 @@ section and row and reads through `CampaignLayout` with the value the board drew
 existed as its fallback, so a screen composes the same with or without the file; the briefing's
 chrome is `Briefing.zrd`'s own, and a slot marked pinned keeps a measured value instead. `SlotOf`
 and `DialogSlot` answer a plaque's rectangle for a pointer to hit-test, `DetailSlot` and
-`DetailPaned` the description panes, and `DialogChrome` the messagebox widget set a box draws and
-where its pane lands. The pinned values: [../org/campaign-board.md](../org/campaign-board.md).
+`DetailPaned` the description panes, `DialogChrome` the messagebox widget set a box draws and
+where its pane lands, and `Palette` the `BoardPalette` a screen writes in. The pinned values: [../org/campaign-board.md](../org/campaign-board.md).
 
 ## src/UI/Campaign/CampaignLayout.cs
 The decoded menu layout as the campaign boards read it: one widget row's authored geometry and art
@@ -256,7 +256,7 @@ rather than score or world sound. The picture fills the same 800x600 rectangle `
 board into, so a cinema and the screen it hands off to own one area of the window. `Open` answers
 null for a file that will not read, `Ended` is how a flow learns it stopped, and `CinemaSkip` is
 which presses end it early, the per-cinema differences there being the original's own. It mounts
-itself on `HudLayers.Cinema` and frees itself; `Session/Launch/Launcher.cs`'s `PlayCinema` is the seam.
+itself on `HudLayers.Cinema` and frees itself; `Launch/Launcher.cs`'s `PlayCinema` is the seam.
 The three authored sets live here as constants and `CinemaSkips` answers them.
 
 ## src/UI/Screens/CinemaSkips.cs
@@ -271,7 +271,7 @@ cinema's set is, and why they differ, is [../formats/cinemas.md](../formats/cine
 
 ## src/UI/Screens/CinemaHandoff.cs
 What every cinema flow shares. `CinemaPlay` is the shape of the call that puts a film on screen, which
-`Session/Launch/Launcher.cs` satisfies by handing over `PlayCinema` itself. `Once` wraps the continuation a film hands off to: a
+`Launch/Launcher.cs` satisfies by handing over `PlayCinema` itself. `Once` wraps the continuation a film hands off to: a
 skip can land on the frame the film plays out and both paths end it, so the next screen opens once however many times the
 cinema reports it stopped; the boot block, whose continuations start the next film, chains unwrapped. `CinemaFilm` is for
 the screen a film stands in front of rather than a flow that chains them: `Play` spans one film, `Up` says the film owns
@@ -287,7 +287,7 @@ for a film, one that puts up a still and one that takes the card down as the fir
 name, position and duration is the reader's ([../formats/cinemas.md](../formats/cinemas.md)), which
 is also where the card's one showing, the unseen fade and the films running back to back are
 settled; `Held` is the one member that says how much of an authored hold reaches the screen.
-`BootCard` supplies the stills, `Session/Launch/Launcher.cs`'s `PlayCinema` the films.
+`BootCard` supplies the stills, `Launch/Launcher.cs`'s `PlayCinema` the films.
 
 ## src/UI/Screens/BootCard.cs
 The boot sequence's engine half, and the only file that knows a boot still is drawn at all: the
@@ -344,7 +344,7 @@ mode's name and nothing else. `LoadMotion` is the moving half, the fill strip an
 throwing, since this screen is shown while everything else is still loading. The dialogs, the beat
 sheet and the face mapping: [../org/loading-screen.md](../org/loading-screen.md).
 
-## src/UI/Boards/PauseScreens.cs
+## src/UI/Screens/PauseScreens.cs
 What the Original presentation's pause screen is made of, engine-free: the frame behind it, the
 mission's chart at its authored source crop, the pins and icons its dialog's script places, the
 objectives parchment, the memento, and the labelled button strips, the block's four plus the remake's own PHOTO MODE at the place that block leaves free. An Instant Action sortie's dialog carries none of that and draws the load screen's blackboard instead, its four texts composed through `LoadScreens` and its parchment left off by the dialog's own script; a Dogfight's `LoadMultiplayer` sheet is its mode's `escape.zrd` briefing, or `Loading.zrd`'s where that file numbers the row differently, with no propeller.
@@ -530,7 +530,7 @@ menu carries no control hints, the original's pause sheet having none. It shares
 the same pause on a layer of its own. The pauser's mouse shares the cursor on `BoardMenuPointer`'s rule when they hold the keyboard seat, so a pad pauser's board reads no pointer. It writes no mouse mode, since the flight's halt releases the capture and the resume takes it again, and it is `Reprime`d when photo mode or the Preferences leaf closes.
 The Original presentation puts `OriginalPauseBoard` in its place.
 
-## src/UI/Screens/MenuInput.cs
+## src/UI/Boards/MenuInput.cs
 One player's menu input source: the keyboard flag, a `Pads` binding and the edge and auto-repeat
 state, with `Poll(dt)` filling the cursor axes, accept, back and start out of the `Menu` binding
 context (`src/Bindings/`) from three readings of one seat: keyboard live, keyboard minus the
@@ -539,7 +539,7 @@ seat reads a set of pads and no binding may hold a connection index. `Typed` and
 text field, `PadMove`/`PadMoveX` are the axes such a screen reads instead, since W, A, S and D
 are letters there. `Typed` is read off `TypedText`, so each character is the one the pilot's own layout produced, and `Paste` is a Ctrl+V or Shift+Insert chord whose text a box reads through the `Clipboard` seam; `TypeableKeys` names the US key positions text entry takes off the cursor bindings. `Device` and `DeviceMoved` come from an `ActiveDevice` over a fourth reading, the keyboard half alone, so a board hint names the side the seat last used and knows the tick it changed; `Hint` composes one such line. Wrapped by `Menu/BuiltIn/BuiltInSeat.cs`, bound by `MenuSeatDevices`; it also serves the in-flight boards. Beside all of that stand three static raw pad reads, `JoinPressed`, `SignOnPressed` and `SignOffPressed` for Start, A and B: a pad no seat owns has no keymap, so nothing bound can answer for the join gesture or the join board's two. Player 1 also reads the flight sticks, and its menu stick rows follow the active profiles (`Sticks/StickProfileSet.cs`); a joined seat never reads a stick.
 
-## src/UI/Screens/TypedText.cs
+## src/UI/Boards/TypedText.cs
 The characters the keyboard typed as the pilot's own layout produced them, engine-free, which every
 `MenuInput.Typed` reads. A polled key code names a US key position, so a German ':' (Shift and the
 period key) read that way is '>'; only a key event's Unicode carries the character. The launcher
@@ -644,7 +644,7 @@ its own, and the Escape or pad-B read that raises `Exit` for `GameSession.ExitPh
 It decides nothing about the mode itself. The hint fades rather than persisting, since the mode
 exists to compose a frame, and the fade runs on wall time because photo mode holds the clock. Pad
 reads go through the seat's own device filter, so in splitscreen another player's pad cannot close a
-mode that is not theirs. The mode itself is `Session/Launch/GameSession.cs`'s.
+mode that is not theirs. The mode itself is `Launch/GameSession.cs`'s.
 
 ## src/UI/Overlays/PerfHud.cs
 The frame-cost readout (key F14, `--debug-fps` presets it): fps, the current frame's cost and the
@@ -807,13 +807,6 @@ an ordered script rather than a token set. Only the pool the registry resolves i
 node can carry several; the rest are listed read-only with the reason, because driving a twin would
 damage a pool nothing can ever hit.
 
-## src/UI/Overlays/OrbitCamera.cs
-The static inspection view's orbit-camera controller (drag to orbit, wheel to zoom, AABB framing):
-owns the orbit state and drives a camera it does not own. `Frame` takes the eye and pivot the host
-resolved, and `MergedAabb` merges a subtree's world-space mesh boxes, shared with the anim lab. The
-`lookAt` argument is a pivot point rather than a direction, since with the eye it also sets the
-radius the wheel and the drag work in.
-
 ## src/UI/Labs/AnimLab.cs
 The `--anim-lab` debugger: a quiet world stage with a pinned seed, a fixed-dt clock, a transport
 panel, a def picker, an `AnimTimeline`, a spectator freecam following the shared selection, and a
@@ -923,7 +916,7 @@ The shared menu audio contract: a presentation requests a `MenuCue` by semantic 
 stops narration at moments it owns, and states through `PreviewMix`/`EndMixPreview` the mix a page
 that sets one stands at and which `MenuMixLevel` a frame moved; the service owns resolution,
 playback, volume, the buses and the handoff into a launching session. The host implementation is
-`MenuAudioService` (`src/Session/Launch/MenuAudioService.cs`); Built-in's one call site is the briefing
+`MenuAudioService` (`src/Launch/MenuAudioService.cs`); Built-in's one call site is the briefing
 narration.
 
 ## src/UI/Menu/MenuExit.cs
@@ -1321,7 +1314,7 @@ The four cue names the Original presentation asks the shared audio service for: 
 a button press, and an edit box's keystroke and reject sounds, which are the four the original's
 globals script binds. The names are semantic and the cue table owns which wav each resolves to, so
 the presentation names no file. The contract is `IMenuAudio.cs` and the table is
-`src/Session/Launch/MenuCueTable.cs`.
+`src/Launch/MenuCueTable.cs`.
 
 ## src/UI/Menu/Original/PointerSeat.cs
 Seat 0 with a pointer: wraps the seat that polls the keyboard and the unclaimed pads and adds the
@@ -1464,7 +1457,7 @@ chapter's own base def), the mission type, the lives, the four waves, the wingme
 picks and a preset. `Refusal`/`CanLaunch`, `BuildDef`, `LaunchWingmanFit` and `BuildExit` are the gate and the launch.
 `Discard` resets every field. Decode: [../formats/instant-action.md](../formats/instant-action.md).
 
-## src/UI/Screens/MovieSurface.cs
+## src/UI/Boards/MovieSurface.cs
 A movie as something a composition can draw: a `CSVM.Video.MoviePlayback` and the `ImageTexture`
 its pixels are uploaded to, made once and updated in place. There is no node, so a caller hangs
 the texture where its own layout row puts it and this surface never learns which screen that is.

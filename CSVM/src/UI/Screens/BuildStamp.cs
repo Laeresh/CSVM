@@ -11,7 +11,7 @@ namespace CSVM.UI.Screens;
 /// screenshot a stranger sends then carries its build, and the number is not taken for the
 /// original game's own. Two mouse-only icons left of it open the logs folder and the user folder,
 /// so a player filing a bug report can find the log. Built once by
-/// <see cref="CSVM.Session.Launch.Launcher"/>, which shows it over every menu presentation and the
+/// <see cref="CSVM.Launch.Launcher"/>, which shows it over every menu presentation and the
 /// extraction screen and hides it in flight. The number's home: <see cref="BuildVersion"/>.
 /// </summary>
 public sealed partial class BuildStamp : Node

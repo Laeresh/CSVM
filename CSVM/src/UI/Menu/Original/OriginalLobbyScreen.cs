@@ -8,6 +8,7 @@ using CSVM.Mech3;
 using CSVM.Net;
 using CSVM.Session;
 using CSVM.Session.Campaign;
+using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
 using CSVM.UI.Hangar;
@@ -1138,7 +1139,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         var options = lobby.Options;
         var seat = new MenuSeatChoice(
             PlanePickerRoster.AirframeNode(lobby.Airframe), _pads(), CampaignLoadout.For(lobby.LaunchFit, _stock()),
-            CSVM.Session.Launch.CustomPlaneWire.Def(lobby.Build));
+            CSVM.Flight.Hangar.CustomPlaneWire.Def(lobby.Build));
         return new LaunchExit(
             DogfightLobby.ChapterOf(options.Environment), new[] { seat }, MenuMode.Versus,
             Match: DogfightLobby.RulesOf(options), Net: net.BuildLaunch());
@@ -1314,7 +1315,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private LoadoutDef? StockDef(int airframe)
     {
         var stock = _stock()?.ForModel(PlanePickerRoster.AirframeNode(airframe));
-        return stock != null && CSVM.Session.Launch.CustomPlaneWire.Def(Lobby?.Build) is { } custom
+        return stock != null && CSVM.Flight.Hangar.CustomPlaneWire.Def(Lobby?.Build) is { } custom
             ? CustomPlaneBuild.LoadoutFor(custom, stock)
             : stock;
     }
@@ -1357,7 +1358,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                     }
 
                     return new DropdownList(items, current, _ => true, i =>
-                        lobby.PickCustom(CSVM.Session.Launch.CustomPlaneWire.Build(saved[i])!,
+                        lobby.PickCustom(CSVM.Flight.Hangar.CustomPlaneWire.Build(saved[i])!,
                             saved[i].HasLoadout ? CoopFit.Of(saved[i].Ammo, saved[i].Ordnance) : default));
                 }
 

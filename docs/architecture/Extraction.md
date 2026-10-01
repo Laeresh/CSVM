@@ -144,3 +144,20 @@ unzbd) stops the run before the `.rof` half; a missing `crimson.rof` fails; a mi
 movies or no string rows only warn. `ExtractionProgress` carries a phase, a fraction (ZBD 0 to 0.85)
 and console lines; cancel throws. `RunToConsole` prints header, lines and `Summary`, answering 0 or 1.
 Blocks its thread. Read `ZbdExtraction.cs` next.
+
+## src/Extraction/SessionPaths.cs
+Static resolver for the extracted-data paths (`ChapterTextures`/`ChapterGamez`/`ChapterZrdr`/
+`MissionZrdr`) under a data root, plus `PreferUnzipped` (an unpacked sibling dir beats its `.zip`)
+and the `--zip-assets` switch that inverts it. A chapter or mission in either case maps through
+`Extraction/ZbdTree.cs` to the case the extraction wrote. The `rtextureN` tier decode is on `docs/tooling.md`;
+the `--gamez=`/`--textures=` override policy stays in `GameSession`, not here.
+
+## src/Extraction/ExtractionStamp.cs
+Reads the provenance stamp the extraction scripts leave at `extracted/VERSION.json` (unzbd version
+line, exe hash, fork commit, schema integer) and compares its schema against this class's own
+`Schema` const, in `Launcher._Ready` right after the base paths settle, with at most one warning line
+per boot naming the fix. An unstamped tree only warns, since a dev tree holds valid extractions older
+than the stamp. `Standing` (unstamped, current, older, newer) is what stops a menu launch at the
+extraction screen on another schema (`UI/Screens/ExtractionFlow.cs`); `Behind` is the read for a
+caller that blocks, true only for a stamped schema under the one asked for. `Schema` also lives in both
+extraction scripts, and `CSVM.Tests/ExtractionStampTests.cs` refuses a bump that moves fewer than all three.

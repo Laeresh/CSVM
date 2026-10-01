@@ -1,6 +1,7 @@
 using System.IO;
 using System.Linq;
 using CSVM;
+using CSVM.Extraction;
 using CSVM.Mech3;
 using Xunit;
 

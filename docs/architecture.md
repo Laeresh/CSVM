@@ -20,6 +20,14 @@ and landed-work stories go in the commit message.
   file precisely so they cannot drift apart; `PROJECT_CONTEXT.md` carries only the namespace-level
   map and must not grow a per-module list again.
 
+**The family order.** The top-level namespaces are ranked families, lowest first: `Utils`,
+`Extraction`, `Mech3`, `Video`, `Bindings`, `Sticks`, `Effects`, `Net`, `UI.Boards`, `Flight`,
+`Spec`, `Session`, `Tooling`, `UI`, `Launch`, `Testing`. A type names only types in its own family
+or a lower one; `Tooling` naming `Testing` is the one standing exception, and the remaining
+inversions are listed pair by pair. The sub-namespace rules the index states under `Flight` and
+`UI` are the same test's within-family rows. `CSVM.Tests/FamilyOrderTests.cs` holds the table,
+the rows and the pair list, and is the authority where this paragraph and it differ.
+
 ## Module index
 
 ### `src/Mech3/`, extraction readers, world and scene building
@@ -123,7 +131,8 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 The plane as a flying, shooting, damageable thing, plus its HUD and stunt mode. Reads plane stats
 from the extracted zrdr; owns the arcade physics and everything drawn over the pilot's view. Eight
 sub-namespaces, one folder each. `Airframe`, `Weapons` and `Ai` name each other; `Camera` names
-only `Airframe`, and nothing else in `Flight` names `Hangar`.
+only `Airframe`, and nothing else in `Flight` names `Hangar` (the family order's within-family
+rows).
 
 **`Flight.Airframe`**, the flying node, its physics, collision, damage and the weapon-effect registries it carries.
 
@@ -139,12 +148,10 @@ only `Airframe`, and nothing else in `Flight` names `Hangar`.
 - `src/Flight/Airframe/BeeperTags.cs`, the beeper's paint and the seeker's pick: the world tag list with its countdown and tail, the tagging gate, the selection rule.
 - `src/Flight/Airframe/HaltReason.cs`, why the clock is stopped; the clock advances only when no reason is set.
 - `src/Flight/Airframe/PhysicsConstants.cs`, `NomGravity`, the single `nom_gravity` value the flight model and its tests share.
-- `src/Flight/Airframe/Weather.cs`, weather.json reader → `WeatherState`: per-zone fog, sunlight, cloud whiteout, wind, precipitation.
 - `src/Flight/Airframe/FlightModel.cs`, the arcade velocity-vector flight physics: thrust/drag/gravity/lift, stall, calibrated control rates.
 - `src/Flight/Airframe/StickRamp.cs`, the keyboard stick as an accumulator: a held key ramps the axis at 2.5/s, release or reversal drops it to centre in one frame.
 - `src/Flight/Airframe/MouseFlight.cs`, the mouse as a stick: a cursor offset over the pane per axis, each deadzoned and rescaled, plus the autogyro exchange; engine-free.
 - `src/Flight/Airframe/AnalogAxes.cs`, the pad share of the flight command through the pad curve and the flight-stick share linear, plus the lever read that releases on an unplugged stick.
-- `src/Flight/Airframe/StickSplit.cs`, a device-state filter passing a seat's flight sticks alone or everything but them, so pad and stick rows of one keymap resolve apart.
 - `src/Flight/Airframe/PropAnimator.cs`, spins the collected prop/rotor discs about their local axes, throttle-scaled (idle floor 0.4); `--fly` only.
 - `src/Flight/Airframe/ExhaustSmoke.cs`, the original's code-built exhaust trail: near-black smoke whose strength charges from the commanded lever running ahead of the live one.
 - `src/Flight/Airframe/FuelTank.cs`, the flown tank: burns with the lever, and a dry one freezes the throttle lever where it stands. Engine-free.
@@ -237,7 +244,7 @@ only `Airframe`, and nothing else in `Flight` names `Hangar`.
 - `src/Flight/Camera/OrbitLock.cs`, the re-lock rule behind that key: nearest first, then outward, engine-free.
 - `src/Flight/Camera/PlaneShake.cs`, the plane-wobble oscillators (gunfire buzz, overspeed rattle, hit rocks, nitro engage) summed to roll on `ShakePivot`.
 - `src/Flight/Camera/PlayerRig.cs`, one rendered view's state: camera, SubViewport, HUD parent, visual layer, controller, own sky/deck/puffs.
-- `src/Flight/Camera/ViewerSet.cs`, the session-owned "every pane's camera" registry, bound once after the rigs are built; the tracer floor is its first consumer.
+- `src/Flight/Camera/OrbitCamera.cs`, the static inspection view's orbit camera: orbit, zoom and AABB framing over a camera it does not own.
 
 **`Flight.Hud`**, everything drawn over the pilot's view, and the cockpit.
 
@@ -293,6 +300,7 @@ only `Airframe`, and nothing else in `Flight` names `Hangar`.
 - `src/Flight/Hangar/CustomPlaneBuild.cs`, the join from a saved plane onto what a spawn consumes: the loadout over the stock fit, the paint, the armoured zones.
 - `src/Flight/Hangar/HangarEconomy.cs`, the hangar's decoded economy over a built plane: the component tables, per-line costs and weights, the totals and the verdict.
 - `src/Flight/Hangar/HangarPaintTables.cs`, the paint screen's decoded swatch and pattern tables plus the decal names, as CSVM data; the colour resolver is pure.
+- `src/Flight/Hangar/CustomPlaneWire.cs`, a saved custom plane to and from the wire's plane build, read back held to the decoded ranges every machine flies.
 
 **`Flight.Audio`**, own-plane audio and the cue selection both audio paths share.
 
@@ -315,15 +323,17 @@ only `Airframe`, and nothing else in `Flight` names `Hangar`.
 - `src/Effects/WindStreaks.cs`, the enhanced presentation's camera-local wind streaks, keyed to airspeed and load factor, over the authored speed cue.
 - `src/Effects/HeatShimmer.cs`, the enhanced presentation's refracting quads over a fireball: one pooled MultiMesh reading the screen texture while the burst burns.
 - `src/Effects/WorldWind.cs`, the mission's global wind (static vector plus random-walk gust) and `EffectAmbience`, the seam a `Puffer` reads it through.
+- `src/Effects/Weather.cs`, weather.json reader → `WeatherState`: per-zone fog, sunlight, cloud whiteout, wind, precipitation.
+- `src/Effects/ViewerSet.cs`, the session-owned "every pane's camera" registry, bound once after the rigs are built; the tracer floor is its first consumer.
 
 ### `src/UI/`, screens, overlays and the inspection labs
 
 The launchscreen and splitscreen rig, the in-flight pause and results boards, plus the interactive debug labs. Every lab has a scripted
 `--debug-*` twin so a finding can be reproduced headlessly, see `docs/cli.md`. Six sub-namespaces, one folder each, beside
-the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` are built from `Boards`; `Hangar` names nothing
-else in `UI`, and nothing names `Labs`.
+the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` are built from `Boards`; `Hangar` names only
+`Boards` and the shared `UI.Menu`, and nothing names `Labs` (the family order's within-family rows).
 
-**`UI.Boards`**, the widget library every screen draws with: the composed board and its view, fit, palette and faces, the board menu, the list and slider widgets, the splitscreen rig and the canvas-layer order.
+**`UI.Boards`**, the widget library every screen draws with: the composed board and its view, fit, palette and faces, the board menu and the seat input it polls, the list and slider widgets, the splitscreen rig and the canvas-layer order.
 
 - `src/UI/Boards/BoardMenu.cs`, a board's cursor and item list, engine-free, so the selection rules test off engine.
 - `src/UI/Boards/BoardMenuItem.cs`, the rows a board menu can offer: Resume, Photo, Restart, Exit.
@@ -345,10 +355,12 @@ else in `UI`, and nothing names `Labs`.
 - `src/UI/Boards/ComposedBoardView.cs`, the Godot half of the boards: a composed board drawn through `BoardFit` at nearest filtering, the art and movie cache, the hint band.
 - `src/UI/Boards/BoardPalette.cs`, the ink a campaign board writes in, one palette per background family.
 - `src/UI/Boards/SeatStrip.cs`, the shape both presentations' player chip strip shares: the face, the corner inset, the cell a chip centres in, and the ink a seat takes.
-- `src/UI/Boards/PauseScreens.cs`, what the Original presentation's pause screen is made of: the mission's chart at its crop, the parchment, the memento and the strips, the authored four and the remake's photo strip.
 - `src/UI/Boards/ScreenFlash.cs`, the full-screen wash, two channels per pane: the proximity-routed burst ramp and the victim-routed blend, composited at paint time.
 - `src/UI/Boards/BlendWash.cs`, one pane's victim-routed wash: the sonic, flash and smoke blend rule and its attack, sustain and release envelope.
 - `src/UI/Boards/PanelFocus.cs`, the one rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
+- `src/UI/Boards/MenuInput.cs`, one player's menu input source: keyboard flag, a `Pads` binding, edge and auto-repeat polling, and the typed characters a field needs.
+- `src/UI/Boards/TypedText.cs`, the typed-character feed every menu seat reads: each key event's own character under the pilot's layout, and the paste chords.
+- `src/UI/Boards/MovieSurface.cs`, a movie as a texture the composition can draw: one `ImageTexture` the playback's pixels are uploaded into, and no node at all.
 
 **`UI.Campaign`**, the campaign pages, the out-of-mission flow, the campaign board chrome both presentations compose and the scrapbook.
 
@@ -372,10 +384,8 @@ else in `UI`, and nothing names `Labs`.
 - `src/UI/Campaign/CampaignBoards.cs`, the fixed chrome of the eight campaign screens, and the composer that turns a page and a cursor into one board.
 - `src/UI/Campaign/CampaignLayout.cs`, the decoded menu layout as the boards read it: geometry and art by section and key, every read carrying its own fallback.
 
-**`UI.Screens`**, the launchscreen, boot, cinema and load screens, the pause, results and wrap-up boards, and the seat input they poll.
+**`UI.Screens`**, the launchscreen, boot, cinema and load screens, the pause, results and wrap-up boards.
 
-- `src/UI/Screens/MenuInput.cs`, one player's menu input source: keyboard flag, a `Pads` binding, edge and auto-repeat polling, and the typed characters a field needs.
-- `src/UI/Screens/TypedText.cs`, the typed-character feed every menu seat reads: each key event's own character under the pilot's layout, and the paste chords.
 - `src/UI/Screens/MenuSeatDevices.cs`, the pad side of the shared player setup: seat 0's claimed pad, the join and sign-on gestures, hotplug, the flight binding.
 - `src/UI/Screens/MenuControlsSeats.cs`, the rebinding screen's seat bookkeeping for any presentation: which seats it offers, their pad identities and staged keymaps.
 - `src/UI/Screens/ShotGrid.cs`, the Danger Zone photographs' grid rule and the cursor that walks the grid, engine-free.
@@ -390,7 +400,6 @@ else in `UI`, and nothing names `Labs`.
 - `src/UI/Screens/PauseBoard.cs`, the shared pause board and its Resume · Photo · Preferences · Restart · Exit menu, one whole-window CanvasLayer.
 - `src/UI/Screens/LaunchMenu.cs`, the Built-in presentation's launchscreen: the screen graph, the Godot controls, per-seat polling, and the hangar and campaign doors.
 - `src/UI/Screens/InstantActionWrapupPage.cs`, the wrap-up page's content over the decoded section: the heading, the four rows off one frozen snapshot, the further lines on post-its, a stunt run's photographs, the outcome's tick box, the plaque.
-- `src/UI/Screens/MovieSurface.cs`, a movie as a texture the composition can draw: one `ImageTexture` the playback's pixels are uploaded into, and no node at all.
 - `src/UI/Screens/CinemaScreen.cs`, one cinema over the whole window: the picture in the board's own rectangle, the sound pushed to a generator on the Voice bus, and the skip.
 - `src/UI/Screens/CinemaSkips.cs`, the one member that decides what skips what, and the reading of a device event that feeds it: the three authored sets against a press, a pad button among them.
 - `src/UI/Screens/CinemaHandoff.cs`, what every cinema flow shares: the shape of the call that puts a film on screen, and the latch that opens the next screen once however many times the film says it stopped.
@@ -407,8 +416,9 @@ else in `UI`, and nothing names `Labs`.
 - `src/UI/Screens/InstallPicker.cs`, the install folder picker: Godot's own directory dialog embedded in the window, with pad buttons to go up a folder and take the one shown.
 - `src/UI/Screens/SelectionService.cs`, the shared `--freecam` and `--anim-lab` selection: click-pick, the `cs_name` ancestor ladder, a breadcrumb and a highlight box.
 - `src/UI/Screens/ExportSet.cs`, the node lab's Ctrl+click export set: cyan outlines, the breadcrumb's count, and one combined glTF at world transforms.
+- `src/UI/Screens/PauseScreens.cs`, what the Original presentation's pause screen is made of: the mission's chart at its crop, the parchment, the memento and the strips, the authored four and the remake's photo strip.
 
-**`UI.Hangar`**, the Build Custom Plane pages and the plane-picking tables they share with the campaign pages; names nothing else in `UI`.
+**`UI.Hangar`**, the Build Custom Plane pages and the plane-picking tables they share with the campaign pages; names only `UI.Boards` and the shared `UI.Menu`.
 
 - `src/UI/Hangar/PlanePickerRoster.cs`, the roster every human plane picker draws: the stock airframes then the store's saved customs. Engine-free.
 - `src/UI/Hangar/PlaneDiagrams.cs`, the original's plan and head-on diagram sheets sliced per airframe, shared by ammo selection, the flight check and the hangar.
@@ -441,7 +451,6 @@ else in `UI`, and nothing names `Labs`.
 - `src/UI/Overlays/TargetingOverlay.cs`, the targeting overlay (F15): a line from every gunner to its acquired target, coloured by the gate holding the trigger.
 - `src/UI/Overlays/DebugKillTarget.cs`, the kill key (F17): kills player 1's selected target through its own death path; inert on a turret, which has no health key.
 - `src/UI/Overlays/DebugMarkerToggle.cs`, the all-aircraft markers key (F16): writes `TargetHud.MarkAll` on every human pane at once, the key twin of `--debug-markers`.
-- `src/UI/Overlays/OrbitCamera.cs`, the static inspection view's orbit camera: orbit, zoom and AABB framing over a camera it does not own.
 
 **`UI.Labs`**, the inspection labs; nothing else in `UI` names them.
 
@@ -614,22 +623,22 @@ The `--dump-*` probes, the capture loop, the golden-image hash and the glTF expo
 - `src/Tooling/CaptureDirector.cs`, the `--screenshot=`/`--shots=`/`--frames=` capture state machine, F11's camera-pose print and F12's save, ticked from `_Process`.
 - `src/Tooling/GltfExporter.cs`, exports the viewer plane subtree to glTF (mesh + livery + baked damage) for `--export-gltf=`/F10, on a throwaway duplicate.
 
-### `src/Session/`, the launch/session layer
+### `src/Launch/`, the composition root
 
-The `Launcher` scene root, the per-launch `GameSession` node, and the session-build clusters they
-delegate to, in six sub-namespaces, one folder each. `Launch` sits on top and nothing else in
-`Session` names it; `Objectives` sits at the bottom and names one other (`Campaign`, once).
+The process and the per-launch session: the top family bar `Testing`, so nothing else names it.
 
-**`Session.Launch`**, the process and the per-launch session.
+- `src/Launch/Launcher.cs`, Main.tscn's root: the once-per-process bootstrap, what outlives a session, the menu host, and every path a session starts or ends.
+- `src/Launch/GameSession.cs`, the per-launch session node: ordered build phases over one `SessionSpec`, owning the clock, world root, panes and runtimes.
+- `src/Launch/EnhancedLook.cs`, the enhanced mode's sun shadows, screen-space passes, tonemap and sky on a sun and an Environment, on or back to the faithful defaults.
+- `src/Launch/SwitchCover.cs`, a live graphics switch over a flying world: the flight held, a load board over the window, the switch run once it presents, both dropped when frames settle.
+- `src/Launch/TuningWarmup.cs`, the startup pass that registers every `Config` key before the orphan report and `--dump-config` read the registry.
+- `src/Launch/MenuAudioService.cs`, the menus' audio host: the music channel, the briefing narration player, the cue player behind `MenuCueTable`, and the AUDIO page's live mix preview.
+- `src/Launch/MenuCueTable.cs`, the menu cue table: cue name to wav under the rof tree's `ASSETS/SOUNDS`, the four the globals script binds.
 
-- `src/Session/Launch/Launcher.cs`, Main.tscn's root: the once-per-process bootstrap, what outlives a session, the menu host, and every path a session starts or ends.
-- `src/Session/Launch/GameSession.cs`, the per-launch session node: ordered build phases over one `SessionSpec`, owning the clock, world root, panes and runtimes.
-- `src/Session/Launch/EnhancedLook.cs`, the enhanced mode's sun shadows, screen-space passes, tonemap and sky on a sun and an Environment, on or back to the faithful defaults.
-- `src/Session/Launch/SwitchCover.cs`, a live graphics switch over a flying world: the flight held, a load board over the window, the switch run once it presents, both dropped when frames settle.
-- `src/Session/Launch/TuningWarmup.cs`, the startup pass that registers every `Config` key before the orphan report and `--dump-config` read the registry.
-- `src/Session/Launch/ExtractionStamp.cs`, reads the extraction provenance stamp at boot and warns once when it is stale or unreadable; `Behind` is the blocking read, `Schema` the promise a test pins.
-- `src/Session/Launch/MenuAudioService.cs`, the menus' audio host: the music channel, the briefing narration player, the cue player behind `MenuCueTable`, and the AUDIO page's live mix preview.
-- `src/Session/Launch/MenuCueTable.cs`, the menu cue table: cue name to wav under the rof tree's `ASSETS/SOUNDS`, the four the globals script binds.
+### `src/Session/`, the session-build layer
+
+The session-build clusters `GameSession` delegates to, in five sub-namespaces, one folder each.
+`Objectives` sits at the bottom and names one other (`Campaign`, once).
 
 **`Session.InstantAction`**, one Instant Action mission.
 
@@ -738,6 +747,7 @@ both sit on top of these types.
 - `src/Bindings/LaunchBindings.cs`, where a seat's keymap comes from when the seat is built: the player's saved file, or the shipped defaults, plus seat 1's stick rows.
 - `src/Bindings/IStickRows.cs`, the seam seat 1's keymap is completed through from the stick profiles, so this namespace never names the stick library.
 - `src/Bindings/PadRumble.cs`, one seat's controller rumble on the original's own effect table, routed to the pads that seat's bindings read.
+- `src/Bindings/Pads.cs`, single owner of "which gamepads exist": the phantom-device policy, the launch-time roster split, the focus gate and `--no-pads`.
 
 ### `src/Sticks/`, flight sticks through SDL2
 
@@ -762,6 +772,7 @@ filling only the models Godot's pad roster lacks.
 - `src/Sticks/StickLabels.cs`, a stick's caption prefix for the rebinding screens: its profile's short name, else `Stick` and its model (the Stick column keeps the model only when two unnamed sticks share a row).
 - `src/Sticks/StickShape.cs`, the flight-stick shape test: three axes or more, axes 0 and 1 resting near centre in the roster's rest sample.
 - `src/Sticks/GenericStickDefault.cs`, the in-memory default for the one stick-shaped unprofiled model: X, Y, Rz, Z lever, two fire buttons, hat menus.
+- `src/Sticks/StickSplit.cs`, a device-state filter passing a seat's flight sticks alone or everything but them, so pad and stick rows of one keymap resolve apart.
 
 ### `src/Video/`, the MPEG-1 cinema decoder
 
@@ -809,6 +820,8 @@ in [`formats/extraction.md`](formats/extraction.md).
 - `src/Extraction/UnzbdTool.cs`, the bundled unzbd as a child process: its platform file name and release path, one run with both streams drained, and its identity for the stamp.
 - `src/Extraction/ExtractionRun.cs`, the whole extraction in order (install check, ZBD half, `.rof` half, stamps) with one progress stream, cancel, summary and exit code, for `--extract` and the extraction screen.
 - `src/Extraction/ExtractionStampWriter.cs`, writes `extracted/VERSION.json` without a BOM, merging one half's field and the engine's schema into what is there.
+- `src/Extraction/SessionPaths.cs`, resolves the extracted-data paths (per-chapter gamez/texture/zrdr, per-mission zrdr) under a data root in `ZbdTree`'s case, unpacked folder or `.zip`.
+- `src/Extraction/ExtractionStamp.cs`, reads the extraction provenance stamp at boot and warns once when it is stale or unreadable; `Behind` is the blocking read, `Schema` the promise a test pins.
 
 ### `src/Net/`, the network seam
 
@@ -862,10 +875,10 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/NetSession.cs`, a session's own end of the wire: typed sends under each type's declared class, dispatch to per-type handlers, the join a host answers with and a guest checks, the host's relay between guests, and the counters a suite reads.
 - `src/Net/NetInstruments.cs`, one machine's desync counters over its own traffic: sequence gaps as drops, stale and late arrivals, and reliable events out of their causal order.
 
-### Session root and tests
+### `src/Spec/`, the launch spec
 
-- `src/Pads.cs`, single owner of "which gamepads exist": the phantom-device policy, the launch-time roster split, the focus gate and `--no-pads`.
-- `src/SessionPaths.cs`, resolves the extracted-data paths (per-chapter gamez/texture/zrdr, per-mission zrdr) under a data root in `ZbdTree`'s case, unpacked folder or `.zip`.
-- `src/SessionSpec.cs`, the launch args as one immutable, engine-free value: `Parse` parses **and** resolves, plus the pure arg parsers the tests reach.
+- `src/Spec/SessionSpec.cs`, the launch args as one immutable, engine-free value: `Parse` parses **and** resolves, plus the pure arg parsers the tests reach.
+
+### `CSVM.Tests/`, the unit tests
 
 - `CSVM.Tests/`, the xUnit project (`dotnet test`): engine-free reader units on hand-authored fixtures + `extracted/` golden counts, skipped when absent; plus eight former in-engine suites moved here as `Probes.*`/plain-static/`StuntMission`/`GaugeCluster` facts.

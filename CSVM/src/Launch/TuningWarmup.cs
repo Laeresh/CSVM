@@ -7,7 +7,7 @@ using CSVM.Session.Roster;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM.Session.Launch;
+namespace CSVM.Launch;
 
 /// <summary>Exercises each Config-wired module's tunable reads once, with throwaway instances and
 /// no game data. <see cref="Config"/>'s registry then knows the full key set before

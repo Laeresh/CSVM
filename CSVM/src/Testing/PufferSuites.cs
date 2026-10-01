@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CSVM.Effects;
-using CSVM.Flight.Camera;
+using CSVM.Extraction;
 using CSVM.Flight.Hud;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;

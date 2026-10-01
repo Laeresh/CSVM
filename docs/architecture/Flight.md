@@ -1,6 +1,6 @@
 # Flight
 
-The plane as a flying, shooting, damageable thing, plus its HUD and stunt mode. Reads plane stats from the extracted zrdr; owns the arcade physics and everything drawn over the pilot's view. Eight sub-namespaces, one folder each, and one page for all of them: `Flight.Airframe` (the flying node, its physics, collision and damage), `Flight.Weapons` (fire control, the projectile pool, targeting, turrets), `Flight.Ai` (the AI pilot and the surface hulls), `Flight.Camera`, `Flight.Hud`, `Flight.Modes` (stunt, Dogfight and the pause state), `Flight.Hangar` (the custom plane and its economy) and `Flight.Audio`. `Airframe`, `Weapons` and `Ai` name each other, since the controller owns the pilot and the pool that both drive it back; `Camera` names only `Airframe`, and nothing else in `Flight` names `Hangar`. The module index in `docs/architecture.md` groups the entries by sub-namespace.
+The plane as a flying, shooting, damageable thing, plus its HUD and stunt mode. Reads plane stats from the extracted zrdr; owns the arcade physics and everything drawn over the pilot's view. Eight sub-namespaces, one folder each, and one page for all of them: `Flight.Airframe` (the flying node, its physics, collision and damage), `Flight.Weapons` (fire control, the projectile pool, targeting, turrets), `Flight.Ai` (the AI pilot and the surface hulls), `Flight.Camera`, `Flight.Hud`, `Flight.Modes` (stunt, Dogfight and the pause state), `Flight.Hangar` (the custom plane and its economy) and `Flight.Audio`. `Airframe`, `Weapons` and `Ai` name each other, since the controller owns the pilot and the pool that both drive it back; `Camera` names only `Airframe`, and nothing else in `Flight` names `Hangar`; `CSVM.Tests/FamilyOrderTests.cs` holds both rules. The module index in `docs/architecture.md` groups the entries by sub-namespace.
 
 One `## src/...` entry per module, body at most 8 lines, 12 for the highest-traffic modules.
 
@@ -853,16 +853,6 @@ through `TryToggle`; `ForceResume` drops a pause whoever owns it, for a rerun or
 from a menu. A network session's pause is an `Overlay`: the sheet is up and `ClockHeld` stays
 false. Off-engine coverage: `CSVM.Tests/PauseStateTests.cs`. Read `PauseBoard` next.
 
-## src/Flight/Airframe/Weather.cs
-`WeatherState`, the flown mission's own weather.json as per-zone `ZoneWeather` records: fog colour,
-ranges and altitude, the sunlight block resolved into a world light, a sun orientation and its two
-uncollapsed colours, the cloud-cover whiteout band, wind, and precipitation. `DefaultDiffuse` and
-`DefaultAmbient` are the install's modal day pair, public because both lighting mappings anchor a
-zone against them. `ResolveZone` picks the flown zone by name, falling back to the one zone whose
-horizon subtree carries meshes where the requested one is empty and this mission also fogs it;
-`CameraWeatherState` and `ZoneForState` are the per-frame camera zone `WeatherRig.Tick` publishes.
-Schema: [../formats/weather.md](../formats/weather.md); runtime: [../org/weather.md](../org/weather.md).
-
 ## src/Flight/Audio/FlightAudio.cs
 The own plane's non-positional audio: the engine, overspeed whine and rattle loops, plus the
 one-shots a crash, a ground or water explosion, a survivable graze, an engine stop and a stunt
@@ -999,12 +989,6 @@ sums both into the keyboard and mouse deflections and clamps each axis. `LeverPo
 Throttle (lever) as the furthest of its bindings still connected, a stick binding counting only
 while `Connected` lists its model and read from the stick half binding by binding, and `StepLever`
 releases the takeover when none is, so an unplugged stick does not read as half throttle. Engine-free.
-
-## src/Flight/Airframe/StickSplit.cs
-An `IDeviceState` filter that passes a seat's flight-stick identities alone (`SticksOnly`) or
-everything else (`WithoutSticks`), deciding by `StickModel.TryFromDevice`. `FlightController` polls
-one keymap through each, so a pad row and a stick row on the same action resolve apart for
-`AnalogAxes`. The seat's own reader stays the only thing that reads hardware.
 
 ## src/Flight/Camera/MouseCapture.cs
 The mouse a flight seat takes while it flies, under either mouse scheme. A captured pointer reports
@@ -1331,15 +1315,6 @@ behind a cull mask. `CameraWeatherState` is a per-rig field rather than a shared
 splitscreen panes can sit in different states at the same instant; `Session/WeatherRig.Tick`
 writes it each frame.
 
-## src/Flight/Camera/ViewerSet.cs
-The "what do the cameras see" registry, session-owned and bound once after the rigs are built, so
-every draw rule needing it shares one registration, single player included. `Cameras` hands back
-the raw bound list for a consumer that needs each viewer's own field of view and pane height and
-already skips a freed instance; `Positions` and `Poses` are the two derived shapes, the latter
-filling a caller-owned buffer for a consumer that republishes the set every frame. It carries
-cameras, not the screen-size or view-depth arithmetic, which stays in `ScreenSize`. Its consumers
-are the tracer floor, the puffer distance fade, the screen wash and the world-light budget.
-
 ## src/Flight/Airframe/CollisionLayers.cs
 The named physics collision layers, world and aircraft, plus the combined mask. The first and only
 place a layer bit is given a meaning; a new layer goes here rather than inline at a collider.
@@ -1452,3 +1427,16 @@ wrapped node's world at each call rather than caching it, since the node may be 
 joins the tree, and `Sweep` holds the airframe's whole per-part cast and rest-info dance,
 including the small nudge past the first overlap that a rest query coming back empty exactly at
 the unsafe fraction requires.
+
+## src/Flight/Camera/OrbitCamera.cs
+The static inspection view's orbit-camera controller (drag to orbit, wheel to zoom, AABB framing):
+owns the orbit state and drives a camera it does not own. `Frame` takes the eye and pivot the host
+resolved, and `MergedAabb` merges a subtree's world-space mesh boxes, shared with the anim lab. The
+`lookAt` argument is a pivot point rather than a direction, since with the eye it also sets the
+radius the wheel and the drag work in.
+
+## src/Flight/Hangar/CustomPlaneWire.cs
+The bridge between a saved `CustomPlaneDef` and the `Net/NetPlaneMessages.cs` build the wire
+carries. `Build` copies every field that decides how the plane flies, takes hits or looks; `Def`
+reads one back held to the decoded ranges, which is what every machine, the owner's included, flies.
+The ammunition and ordnance picks stay behind, since the seat's `CoopFit` carries them.

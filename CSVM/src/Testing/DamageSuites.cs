@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
@@ -8,6 +9,7 @@ using CSVM.Flight.Hud;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Roster;
+using CSVM.Spec;
 using CSVM.Tooling;
 using Godot;
 

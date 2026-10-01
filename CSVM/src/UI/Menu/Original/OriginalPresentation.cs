@@ -1326,7 +1326,7 @@ public sealed class OriginalPresentation : IMenuPresentation
                     or OriginalScreen.Video or OriginalScreen.ControlsPrefs or OriginalScreen.Keys ? _preferencesPalette
                 : _shell.IsHangarScreen ? _hangarPalette
                 : _shell.CampaignPage == CampaignScreen.Cabin ? CabinPalette
-                : _shell.CampaignPage is { } campaign ? BoardPalette.For(campaign)
+                : _shell.CampaignPage is { } campaign ? CampaignBoards.Palette(campaign)
                 : _palette;
             _view.Show(_shell.Compose(), palette, string.Empty, string.Empty);
         }

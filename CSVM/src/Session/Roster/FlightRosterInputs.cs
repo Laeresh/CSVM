@@ -10,7 +10,8 @@ using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.World;
-using CSVM.UI.Screens;
+using CSVM.Spec;
+using CSVM.UI.Boards;
 using Godot;
 
 namespace CSVM.Session.Roster;

@@ -1,14 +1,19 @@
 using System.Collections.Generic;
 using System.IO;
 using CSVM.Bindings;
+using CSVM.Effects;
+using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
+using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
 using CSVM.Session.Campaign;
 using CSVM.Session.Objectives;
 using CSVM.Session.World;
+using CSVM.Spec;
+using CSVM.UI.Boards;
 using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
@@ -18,7 +23,7 @@ using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM.Session.Launch;
+namespace CSVM.Launch;
 
 /// <summary>
 /// Main.tscn's root: the once-per-process bootstrap, and everything that persists across
@@ -940,11 +945,11 @@ public partial class Launcher : Node3D
         // hide a character from the menu seats.
         if (@event is InputEventKey key)
         {
-            if (UI.Screens.MenuInput.IsPasteChord(key))
+            if (UI.Boards.MenuInput.IsPasteChord(key))
             {
-                UI.Screens.TypedText.Live.FeedPaste();
+                UI.Boards.TypedText.Live.FeedPaste();
             }
-            else if (UI.Screens.MenuInput.IsCopyChord(key))
+            else if (UI.Boards.MenuInput.IsCopyChord(key))
             {
                 // A hosting door is the one thing on a menu with something to copy.
                 if (_menuHost is { Shown: true })
@@ -954,7 +959,7 @@ public partial class Launcher : Node3D
             }
             else
             {
-                UI.Screens.TypedText.Live.Feed(key.Pressed, key.Echo, key.Unicode);
+                UI.Boards.TypedText.Live.Feed(key.Pressed, key.Echo, key.Unicode);
             }
         }
 
@@ -1012,7 +1017,7 @@ public partial class Launcher : Node3D
 
     public override void _Process(double delta)
     {
-        UI.Screens.TypedText.Live.Stamp(Engine.GetProcessFrames());
+        UI.Boards.TypedText.Live.Stamp(Engine.GetProcessFrames());
         // The --run-tests clock is the only one this node owns; the session node advances its own
         // at the very top of the frame (ProcessPriority -1000, one notch ahead of this).
         if (_clock is { } clock)
@@ -1805,7 +1810,7 @@ public partial class Launcher : Node3D
         }
 
         string missionZrdr = SessionPaths.MissionZrdr(_dataRoot, named.ChapterFolder, named.MissionFolder);
-        var sheet = UI.Boards.PauseSheet.Load(
+        var sheet = UI.Screens.PauseSheet.Load(
             _zrdrPath, _messagesPath,
             UI.Menu.EscapeDialog.CampaignKey(named.Campaign, named.Mission), instantAction: false);
         if (sheet == null)
@@ -1817,7 +1822,7 @@ public partial class Launcher : Node3D
         var readout = PauseAidReadout(sheet, missionZrdr, completed);
         var pause = new Flight.Modes.PauseState();
         var board = OriginalPauseBoard.Build(
-            pause, _ => new UI.Screens.MenuInput { Keyboard = true }, _dataRoot, sheet, () => readout);
+            pause, _ => new UI.Boards.MenuInput { Keyboard = true }, _dataRoot, sheet, () => readout);
         var layer = new CanvasLayer { Name = "pause_board_aid", Layer = UI.Boards.HudLayers.Board };
         layer.AddChild(board);
         AddChild(layer);
@@ -1839,7 +1844,7 @@ public partial class Launcher : Node3D
 
         string key = UI.Menu.EscapeDialog.InstantActionKey(
             Mech3.CampaignSequence.ChapterNumber(chapter), letter);
-        var sheet = UI.Boards.PauseSheet.Load(_zrdrPath, _messagesPath, key, instantAction: true);
+        var sheet = UI.Screens.PauseSheet.Load(_zrdrPath, _messagesPath, key, instantAction: true);
         if (sheet == null)
         {
             Log.Warn("ui", $"pause aid: no ia_escape.zrd sheet for {chapter} {missionType} ({key})");
@@ -1848,8 +1853,8 @@ public partial class Launcher : Node3D
 
         var pause = new Flight.Modes.PauseState();
         var board = OriginalPauseBoard.Build(
-            pause, _ => new UI.Screens.MenuInput { Keyboard = true }, _dataRoot, sheet,
-            () => UI.Boards.PauseReadout.Empty);
+            pause, _ => new UI.Boards.MenuInput { Keyboard = true }, _dataRoot, sheet,
+            () => UI.Screens.PauseReadout.Empty);
         var layer = new CanvasLayer { Name = "pause_board_aid", Layer = UI.Boards.HudLayers.Board };
         layer.AddChild(board);
         AddChild(layer);
@@ -1857,24 +1862,24 @@ public partial class Launcher : Node3D
         Log.Info("ui", $"pause aid: {chapter} {missionType} draws {sheet.State.Key}");
     }
 
-    private UI.Boards.PauseReadout PauseAidReadout(UI.Boards.PauseSheet sheet, string missionZrdr, int completed)
+    private UI.Screens.PauseReadout PauseAidReadout(UI.Screens.PauseSheet sheet, string missionZrdr, int completed)
     {
         var objectives = UI.Menu.BriefingObjectives.Load(
             Mech3.Zrdr.LoadFile(missionZrdr, "objectives.json"), Mech3.Messages.Load(_messagesPath));
-        var rows = new List<UI.Boards.PauseObjective>(objectives.Count);
+        var rows = new List<UI.Screens.PauseObjective>(objectives.Count);
         for (int i = 0; i < objectives.Count; i++)
         {
-            rows.Add(new UI.Boards.PauseObjective(objectives[i].Text, i < completed));
+            rows.Add(new UI.Screens.PauseObjective(objectives[i].Text, i < completed));
         }
 
-        var icons = new List<UI.Boards.PauseWorldIcon>();
+        var icons = new List<UI.Screens.PauseWorldIcon>();
         if (sheet.Shared.OwnShip.Length > 0
             && Flight.Modes.SpawnPoints.LoadPlayerInit(missionZrdr) is { } init)
         {
             // Through the readout's own conversion off a nose vector, never off the spawn's heading
             // degrees. Those are the mission data's yaw, which runs opposite the compass.
             var nose = new Basis(Vector3.Up, Mathf.DegToRad(init.Spawn.HeadingDeg)) * Vector3.Forward;
-            if (UI.Boards.PauseReadout.Icon(
+            if (UI.Screens.PauseReadout.Icon(
                 sheet.Shared.OwnShip, init.Spawn.Position.X, init.Spawn.Position.Z,
                 nose.X, nose.Z) is { } ship)
             {
@@ -1889,7 +1894,7 @@ public partial class Launcher : Node3D
             }
         }
 
-        return new UI.Boards.PauseReadout(rows, SeatedMemento(), icons);
+        return new UI.Screens.PauseReadout(rows, SeatedMemento(), icons);
     }
 
     // The picture the seated profile hangs, read back off the store the cabin's chooser writes.

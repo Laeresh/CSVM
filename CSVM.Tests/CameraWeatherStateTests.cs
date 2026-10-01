@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using CSVM.Flight.Airframe;
+using CSVM.Effects;
 using CSVM.Mech3;
 using Godot;
 using Xunit;

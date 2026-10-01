@@ -313,6 +313,17 @@ public static class CampaignBoards
         },
     };
 
+    /// <summary>The palette a campaign screen writes in, by its background family.</summary>
+    public static BoardPalette Palette(CampaignScreen screen) => screen switch
+    {
+        CampaignScreen.FlightCheck or CampaignScreen.Ammo
+            or CampaignScreen.PlaneSelection => BoardPalette.Paper,
+        CampaignScreen.PreviousMissions or CampaignScreen.Scrapbook
+            or CampaignScreen.ScrapbookZoom => BoardPalette.Album,
+        CampaignScreen.Briefing => BoardPalette.Parchment,
+        _ => BoardPalette.Panel,
+    };
+
     /// <summary>The board for a page with the cursor on <paramref name="focusedRow"/>. A row the
     /// page names a button for becomes that button's plaque; every other row lists down the
     /// screen's own authored text slots. <paramref name="pressed"/> draws the focused plaque in

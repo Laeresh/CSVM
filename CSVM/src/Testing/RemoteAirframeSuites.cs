@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using CSVM.Bindings;
+using CSVM.Extraction;
 using CSVM.Flight;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;

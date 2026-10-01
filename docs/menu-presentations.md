@@ -47,7 +47,7 @@ extracted menu artwork to be usable, and every other presentation is additive be
 
 `PresentationRegistry` (`CSVM/src/UI/Menu/PresentationRegistry.cs`) holds one factory per
 `PresentationId`, a non-empty ordinal token, the word `--presentation=` names. `Launcher.BuildMenuHost`
-(`CSVM/src/Session/Launch/Launcher.cs`) fills the registry once per process:
+(`CSVM/src/Launch/Launcher.cs`) fills the registry once per process:
 
 ```
 registry.Register(PresentationId.BuiltIn,  () => new BuiltInPresentation(...));
@@ -373,7 +373,7 @@ around rectangles the layout authors at differing widths.
 `BeginNarration(wavName)` starts spoken narration, replacing any playing and ducking the music,
 `EndNarration()` stops it, idempotent, and `PreviewMix(levels, moved)`/`EndMixPreview()` carry the
 mix a page that sets one stands at. The presentation chooses which cue to ask for and when; the
-service (`MenuAudioService`, `CSVM/src/Session/Launch/MenuAudioService.cs`) owns lookup, decoding,
+service (`MenuAudioService`, `CSVM/src/Launch/MenuAudioService.cs`) owns lookup, decoding,
 playback, volume, the buses and the handoff into a launching session. A cue name the table lacks, a
 missing file or a failed decode is logged once and cached as silence; a presentation never learns
 whether a sound exists.
@@ -419,7 +419,7 @@ the script: `ZB = 0` stands on every `@ctl@SK` object the shipped scripts build,
 `GLOBALS.SCRIPT`'s menu music, which plays on while the menu is up, so the field settles nothing.
 Film of the original is the only thing that would.
 
-The cue table (`MenuCueTable`, `CSVM/src/Session/Launch/MenuCueTable.cs`) resolves the four names the
+The cue table (`MenuCueTable`, `CSVM/src/Launch/MenuCueTable.cs`) resolves the four names the
 original's globals script binds: `menu.rollover`, `menu.click`, `menu.text`, `menu.text-error`, each
 to a wav under the extracted rof tree's `ASSETS/SOUNDS`. Original asks for all four
 (`OriginalCues`); Built-in asks for none and uses the service for briefing narration alone. A new
@@ -527,19 +527,17 @@ Shared contracts, features and readers live in the namespace `CSVM.UI.Menu` exac
 and the other board types stay presentation-side in `CSVM.UI.Boards`, beside the other flat UI
 sub-namespaces (`CSVM.UI.Campaign`, `.Screens`, `.Hangar`, `.Overlays`, `.Labs`).
 
-Two scans over the compiled metadata enforce it (`CSVM.Tests/MenuNamespaceDependencyTests.cs`,
+A scan over the compiled metadata enforces it (`CSVM.Tests/MenuNamespaceDependencyTests.cs`,
 through `AssemblyDependencyScan`, which walks signatures and method-body IL alike without loading
-the assembly):
-
-- no type in `CSVM.UI.Menu` references `Godot.*` or any `CSVM.UI.*` type outside that exact
-  namespace, which is what keeps every feature free of both presentations and of the engine;
-- nothing in `CSVM.UI` or any of its sub-namespaces names `GameSession`, `Launcher` or
-  `LauncherContext`, which is what keeps every presentation from building a session or reaching
-  the launcher.
+the assembly): no type in `CSVM.UI.Menu` references `Godot.*` or any `CSVM.UI.*` type outside that
+exact namespace, which is what keeps every feature free of both presentations and of the engine.
+Nothing in `CSVM.UI` names `GameSession` or `Launcher` because `UI` ranks below `Launch` in the
+family order (`CSVM.Tests/FamilyOrderTests.cs`), which keeps every presentation from building a
+session or reaching the launcher.
 
 The scanner's own fixtures prove it sees a signature-level and a body-only reference, and a scan
-matching no types fails rather than passing. A new presentation's namespace falls under the second
-scan automatically; anything it adds to the shared namespace falls under the first.
+matching no types fails rather than passing. A new presentation's namespace falls under the family
+order automatically; anything it adds to the shared namespace falls under the scan.
 
 ## The `--menu=` aid convention
 
@@ -686,7 +684,7 @@ Five layers, each catching what the others cannot:
 - **Engine-free contracts.** The seam fixtures (`MenuSeamContractTests`, two fake presentations
   driving one fake feature to the same exit), the host (`MenuHostTests`), the store and the
   resolution rule, every feature's own tests, the shell tests over hand-authored layouts, the
-  coverage check, the manifest cases, and the two metadata scans. `dotnet test` runs them all;
+  coverage check, the manifest cases, the metadata scan and the family order. `dotnet test` runs them all;
   those over the player's data are `[ExtractedDataFact]`s.
 - **Hand-authored legal fixtures.** `CSVM.Tests/fixtures/menu-layout/` for the decoder and
   `fixtures/menu-layout-original/` for the shell: invented geometry and file names in the shipped

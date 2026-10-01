@@ -6,7 +6,7 @@ namespace CSVM.Flight.Camera;
 /// <summary>
 /// The re-lock rule behind <see cref="SpectatorCamera"/>'s target key: nearest first, then a step
 /// outward on each further press. Split out as positions rather than nodes so it is testable
-/// without a running engine, the same shape <see cref="CSVM.Pads.AssignPads(int,
+/// without a running engine, the same shape <see cref="CSVM.Bindings.Pads.AssignPads(int,
 /// System.Collections.Generic.IReadOnlyList{int})"/> uses.
 /// </summary>
 public static class OrbitLock
