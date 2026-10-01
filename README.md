@@ -140,11 +140,20 @@ reproduced or redistributed here**; the engine is an independent implementation.
 
 This is an unofficial fan project, **not affiliated with, endorsed by, or sponsored by
 Microsoft or Zipper Interactive**. "Crimson Skies" and all related names, marks and artwork
-are the property of their respective owners.
+are the property of their respective owners. Crimson Skies © Microsoft Corporation.
 
 No game content is distributed here. The engine requires — and reads at runtime — game files
 from your own legally-obtained copy of Crimson Skies. Nothing in this repository will run
 without it.
+
+Screenshots and videos of CSVM running show the original game's artwork and sound, which
+makes them Game Content under Microsoft's
+[Game Content Usage Rules](https://www.xbox.com/en-us/developers/rules). Wherever this project
+publishes one, it carries the notice those rules ask for:
+
+> Crimson Skies © Microsoft Corporation. CSVM's screenshots and videos were created under
+> Microsoft's "Game Content Usage Rules" using assets from Crimson Skies, and they are not
+> endorsed by or affiliated with Microsoft.
 
 ## License
 

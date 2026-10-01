@@ -201,7 +201,7 @@ never modified.
 
 This is an unofficial fan project, **not affiliated with, endorsed by, or sponsored by
 Microsoft or Zipper Interactive**. "Crimson Skies" and all related names, marks and
-artwork are the property of their respective owners.
+artwork are the property of their respective owners. Crimson Skies © Microsoft Corporation.
 
 No game content is distributed in this archive. The engine requires, and reads at runtime,
 game files from your own legally-obtained copy of Crimson Skies. Nothing in this archive
