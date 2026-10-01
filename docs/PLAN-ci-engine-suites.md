@@ -122,7 +122,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ The `ci` tier: a checked-in list CI requires to pass, where a skip fails
 2. ☑ Drop unused `RequireData` gates, and make the unguarded loads skip
 3. ☐ The CI engine job: Linux Godot 4.7 .NET, headless, `--run-tests=tier:ci`
-4. ☐ Move the three world-as-terrain suites onto `EmptyStage`
+4. ☑ Move the three world-as-terrain suites onto `EmptyStage`
 
 ### Wave B, the synthetic data root and the stand-in plane
 
@@ -266,7 +266,38 @@ it red. Wall time recorded against a budget in `analysis/verification-budgets.js
 handles it); a CI allowlist must match the existing one rather than grow its own. Never widen the
 error allowlist to get the job green.
 
-## A4 ☐ Move the three world-as-terrain suites onto `EmptyStage`
+## A4 ☑ Move the three world-as-terrain suites onto `EmptyStage`
+
+**Landed.** `forward-rotation` and `launch-direction-cache` no longer build a chapter world. Both
+launch hand-built OBJECT_MOTION bodies with no gravity block from a probe node, and read only the
+node's local transform back, so their host is now `WithMotionHost` in
+`AnimationAndEffectsSuites.cs`: a plain parent node and a bare `new AnimRuntime()` bound to it over
+an empty `AnimProgram`. That answers the open question: an `AnimRuntime` stands up without a
+`WorldSession` through its existing internal constructor and `Bind`, the way `CoopCutsceneSuites`
+and `TargetingSuites` already build one, so no production code changed and no chapter path moved.
+Neither suite needs the grid or a collider, since neither is a contact case, so `EmptyStage` itself
+is not used. Both PASS headless with an empty data root, and each FAILs when its launch input is
+broken (azimuth 90 for the +X throw; a +X cruise for the +Z one). A full catalog run with an empty
+data root went from 51 PASS, 2 FAIL, 442 SKIP to 53 PASS, 2 FAIL, 440 SKIP.
+
+`ground-contact` stays install-bound. It reads the chapter's own program
+(`world.Session.Program.ByAnimName("gunshell")`, `AnimationAndEffectsSuites.cs:382`) and asserts
+that the extracted `gunshell` event still authors `no_altitude` (`:403`), which is a check on the
+shipped data. It also takes `world.Runtime.Destructibles.All.First().Def` as the motion's owner
+(`:264`, `:439`), though any hand-built `AnimDefinition` would serve there. With the `gunshell` leg
+removed and a hand-built owner, every other leg PASSES on `EmptyStage.Build(collision: true)` with
+an empty data root (a trial, reverted), so splitting that leg into its own suite would bring the rest
+onto the tier. That split adds a suite to the catalog and is left for a decision.
+
+**Still owed to the Windows run.** The real-install battery should be unchanged: `forward-rotation`
+and `launch-direction-cache` PASS with the same notes (1.000 and 0.333 rad/s; the cruise ends at
+1600 m along +Z), now without building or reusing C1, and `ground-contact` PASSES on C1 as before.
+No coverage is lost: neither moved suite used C1's terrain (both built the world with
+`collision: false`), their ranged launches draw from min = max ranges so the runtime's seed decides
+nothing, and the chapter runtime's contact mask and inherited velocity never reach a body with no
+gravity block.
+
+**Original approach (kept for reference).**
 
 **Goal.** `ground-contact`, `forward-rotation` and `launch-direction-cache` run on the code-built
 stage and join the tier.

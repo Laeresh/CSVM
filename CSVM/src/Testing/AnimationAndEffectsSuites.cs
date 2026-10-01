@@ -556,11 +556,8 @@ internal static class AnimationAndEffectsSuites
         "an OBJECT_MOTION tumble turns at the authored RATE about its own launch direction's horizontal perpendicular, scaled by that direction's length, a vector-translation launch about its compiled direction, and not at all when that is zero")]
     internal static void ForwardRotation(TestContext ctx)
     {
-        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        WithMotionHost(ctx, "forward-rotation-host", (root, runtime) =>
         {
-            var runtime = world.Runtime;
-            var root = world.Session.Root;
-
             static Dictionary<string, object?> Vec(float x, float y, float z) =>
                 new() { ["x"] = x, ["y"] = y, ["z"] = z };
             static Dictionary<string, object?> Range(float v) =>
@@ -690,11 +687,8 @@ internal static class AnimationAndEffectsSuites
         "a vector-form OBJECT_MOTION's third triple is the compiled launch DIRECTION the tumble reads back, not a random spread: two bodies fly the identical path and end exactly where initial × run_time puts them")]
     internal static void LaunchDirectionCache(TestContext ctx)
     {
-        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        WithMotionHost(ctx, "launch-direction-host", (root, runtime) =>
         {
-            var runtime = world.Runtime;
-            var root = world.Session.Root;
-
             static Dictionary<string, object?> Vec(Vector3 v) =>
                 new() { ["x"] = v.X, ["y"] = v.Y, ["z"] = v.Z };
 
@@ -745,6 +739,28 @@ internal static class AnimationAndEffectsSuites
                 $"a longer third triple moves the body not one metre further end={scaled}");
             ctx.Note($"cruise end {first} against the authored placement 1600 m along +Z");
         });
+    }
+
+    // The whole host a hand-built OBJECT_MOTION with no gravity reads: a parent node, and a bare
+    // runtime for its rest pose, RNG and contact mask. A chapter world adds nothing such a body
+    // touches, so a suite on this host runs without an install.
+    // ⚠ Do not use it for a contact case: the mask stays 0, so every gravity body selects no tier.
+    internal static void WithMotionHost(TestContext ctx, string name, System.Action<Node3D, AnimRuntime> body)
+    {
+        var root = new Node3D { Name = name };
+        var runtime = new AnimRuntime { AutoStart = false, ManualAdvance = true };
+        ctx.Host.AddChild(root);
+        ctx.Host.AddChild(runtime);
+        try
+        {
+            runtime.Bind(root, new AnimProgram());
+            body(root, runtime);
+        }
+        finally
+        {
+            runtime.Free();
+            root.Free();
+        }
     }
 
     // ---- a chain of OBJECT_MOTION events on one placed node: the Barracuda's drive -------------
