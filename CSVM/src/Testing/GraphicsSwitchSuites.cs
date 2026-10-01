@@ -229,6 +229,78 @@ internal static class GraphicsSwitchSuites
         }
     }
 
+    [Suite("graphics-switch-cover",
+        "a live switch under its cover runs in order: the flight is held and the cover is in the tree "
+        + "before the switch runs, the switch waits for the cover's second frame, the hold stands "
+        + "through a stall and a slow frame after it and drops with the cover once three frames settle; "
+        + "the stall reaches the sim clock's accumulator as no step; a pause the player had up stands "
+        + "after the cover drops; and with no pause state the clock is held and put back as it was")]
+    internal static void SwitchCoverOrder(TestContext ctx)
+    {
+        var flying = CoverRun(ctx, paused: false);
+        ctx.Check(flying.Order == "held,covered,work" && flying.WorkFrame == 2,
+            $"the hold and the cover come first and the switch runs on the cover's second frame ({flying.Order} at frame {flying.WorkFrame})");
+        ctx.Check(flying.HeldThroughStall && flying.Steps == 0,
+            $"the clock stays held through the stall frames and takes no step from them ({flying.Steps} step(s))");
+        ctx.Check(flying.Dropped && !flying.CoverInTree && !flying.HeldAfter && flying.StepsAfter == 1,
+            $"the cover drops after three settled frames and the flight resumes one step at a time (dropped {flying.Dropped}, in tree {flying.CoverInTree}, held {flying.HeldAfter}, {flying.StepsAfter} step(s) next frame)");
+
+        var paused = CoverRun(ctx, paused: true);
+        ctx.Check(paused.Order == "held,covered,work" && paused.Dropped && paused.PausedAfter && paused.HeldAfter,
+            $"over the pause sheet the same order runs, and the pause still stands after the cover drops (paused {paused.PausedAfter}, held {paused.HeldAfter})");
+
+        foreach (bool wasHalted in new[] { false, true })
+        {
+            var clock = new GameClock { Mode = GameClock.RunMode.FixedAccum, Halted = wasHalted };
+            var overlay = new ColorRect();
+            var cover = SwitchCover.Begin(ctx.Host, overlay, null, clock, () => { }, "graphics-switch-cover");
+            bool held = clock.Halted;
+            while (!cover.Tick(5.0))
+            {
+            }
+            ctx.Check(held && clock.Halted == wasHalted,
+                $"with no pause state the cover holds the clock and puts it back {(wasHalted ? "halted" : "running")} (held {held}, after {clock.Halted})");
+        }
+    }
+
+    // One cover over a pause state and a sim clock. It is ticked through a 3 s switch, a fast frame,
+    // a 7.5 s variant build and the settled frames.
+    private static CoverReading CoverRun(TestContext ctx, bool paused)
+    {
+        var pause = new Flight.Modes.PauseState();
+        if (paused)
+            pause.TryToggle(0);
+        var clock = new GameClock { Mode = GameClock.RunMode.FixedAccum, Halted = pause.ClockHeld };
+        var overlay = new ColorRect();
+        var order = new List<string>();
+        int frame = 0, workFrame = -1;
+        SwitchCover? cover = null;
+        cover = SwitchCover.Begin(ctx.Host, overlay, pause, clock, () =>
+        {
+            if (pause.ClockHeld && clock.Halted)
+                order.Add("held");
+            if (overlay.IsInsideTree() && cover!.Stage == SwitchCover.Phase.Showing)
+                order.Add("covered");
+            order.Add("work");
+            workFrame = frame;
+        }, "graphics-switch-cover");
+        bool heldThroughStall = true;
+        long stepsBefore = clock.Frame;
+        foreach (double ms in new[] { 5.0, 5.0, 3000.0, 6.0, 7500.0, 5.0, 5.0, 5.0 })
+        {
+            frame++;
+            clock.BeginFrame(ms / 1000.0);
+            bool done = cover.Tick(ms);
+            heldThroughStall &= done || (pause.ClockHeld && clock.Halted);
+        }
+        long steps = clock.Frame - stepsBefore;
+        bool dropped = cover.Stage == SwitchCover.Phase.Done;
+        clock.Halted = pause.ClockHeld;
+        clock.BeginFrame(1.5 * GameClock.FixedDt);
+        return new CoverReading(string.Join(",", order), workFrame, heldThroughStall, (int)steps, dropped,
+            overlay.IsInsideTree(), pause.ClockHeld, pause.Paused, clock.Steps);
+    }
+
     // Flattens one stamp of the largest clutter kind with a crater. Hides another through the kind's
     // index, as the activation does in flight.
     private static MovedStamps? MoveStamps(Rig rig)
@@ -641,6 +713,9 @@ internal static class GraphicsSwitchSuites
             return text.ToString();
         }
     }
+
+    private sealed record CoverReading(string Order, int WorkFrame, bool HeldThroughStall, int Steps, bool Dropped,
+        bool CoverInTree, bool HeldAfter, bool PausedAfter, int StepsAfter);
 
     private sealed record MovedStamps(Mech3.ClutterBuilder.KindExport Kind, int Flattened, int Hidden, int Killed)
     {

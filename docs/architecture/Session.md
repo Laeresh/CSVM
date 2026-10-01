@@ -50,11 +50,20 @@ The ammunition and ordnance picks stay behind, since the seat's `CoopFit` carrie
 The enhanced graphics mode on a running process. On one sun and one Environment, in both directions:
 PSSM sun shadows at the `ShadowQualitySetting` level, SSAO, SSR, glow, the AgX tonemap and the
 mission-coloured sky, with the `SessionSpec.EnhancedPasses` doors; the off direction writes a fresh
-object's defaults back. `Switch` is the whole live mode switch the launcher and the suites run:
+object's defaults back. `Switch` is the whole live mode switch, refused for a network session:
 shaders, sun, Environment, clutter fade, display quality, then `GameSession.ApplyGraphicsMode`, which
-opens with `FollowAlphaDepth` (textures, atlases, painted skins). Its log line carries
-`Utils/SwitchProfile.cs`'s steps; `HasSwitched` lets a later load warm the other mode's shaders.
-`ApplyViewDistance` is the live View Distance; `Utils/SunShadow.cs` carries the sun to the cockpit.
+opens with `FollowAlphaDepth`. Its log line carries `Utils/SwitchProfile.cs`'s steps; `HasSwitched`
+lets a later load warm the other mode's shaders. `ApplyViewDistance` is the live View Distance;
+`Utils/SunShadow.cs` carries the sun to the cockpit; `SwitchCover.cs` draws a switch over.
+
+## src/Session/Launch/SwitchCover.cs
+A live graphics switch over a flying world, drawn over so the stall does not read as a crash. The
+launcher's `RequestGraphicsSwitch` builds one for the G action, the Options apply and
+`--debug-graphics-switch`: it raises `HaltReason.Switching` on the session's `PauseState` (or holds
+the clock directly where there is none), puts a blackboard `LoadBoard` over the whole window,
+runs `EnhancedLook.Switch` on the cover's second frame, and drops both once three frames come in
+under 50 ms. A pause the player had up stays up, and the stall's catch-up ticks pass while held.
+`GraphicsMode.SwitchLocked` greys the Options row in a network session. Read `EnhancedLook.cs`.
 
 ## src/Session/Launch/TuningWarmup.cs
 The startup pass that fills `Config`'s key registry before `Config.ReportOrphans` and
