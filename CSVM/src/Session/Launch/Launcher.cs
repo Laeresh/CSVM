@@ -1525,6 +1525,9 @@ public partial class Launcher : Node3D
             _syntheticError = $"{e.GetType().Name}: {e.Message}";
             return;
         }
+        Flight.Weapons.StockLoadouts.Supplement =
+            Tooling.SyntheticPlane.LoadoutsUnder(Tooling.SyntheticData.FixturesUnder(_repoRoot));
+        SessionSpec.DefaultPlane = Tooling.SyntheticPlane.Plane;
         string families = string.Join(",", System.Linq.Enumerable.Select(Tooling.SyntheticData.Families, f => f.Name));
         Log.Warn("core", $"SYNTHETIC DATA: --synthetic-data reads the invented tree {_dataRoot} (families {families}) in place of the data root {replaced}{(installThere ? ", whose extraction this run does not read" : "")}");
     }

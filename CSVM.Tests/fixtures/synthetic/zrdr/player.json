@@ -1,0 +1,26 @@
+[
+  [
+    "nom_gravity", [16.0],
+    "stall_mag", [1.1],
+    "crash",
+    [
+      "bounce_factor", [0.5],
+      "armor_damage_range", [10.0, 150.0],
+      "health_damage_range", [10.0, 150.0]
+    ],
+    "min_ai_active_dist", [1800.0],
+    "ai_skill_parameters",
+    [
+      "daredevil_chance", [0.3, 0.9],
+      "sixth_sense_chance", [0.4, 0.8],
+      "sixth_sense_factor", [0.95, 1.05],
+      "dead_eye_angle", [5.0, 1.0],
+      "quick_draw_angle", [45.0, 80.0],
+      "quick_draw_chance", [0.1, 0.5],
+      "steady_hand_chance", [0.6, 0.1],
+      "stun_recovery_interval", [4.0, 1.0],
+      "talker_chance", [0.3, 0.9],
+      "constitution_chance", [0.4, 0.9]
+    ]
+  ]
+]

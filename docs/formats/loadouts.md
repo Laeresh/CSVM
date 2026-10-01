@@ -43,6 +43,7 @@ Keyed by **vehicle def name** (`vehicle.json`), matching `PlaneStats`. Per plane
 | `guns[].ammo` | `slug` / `dumdum` / `ap` / `magnesium`, stock is always `slug` |
 | `guns[].markers` | the firepoint node(s) this group fires from (see binding rule) |
 | `guns[].turret` | present + `true` on turret slots, parsed but **inert in M3** (see below) |
+| `guns[].weapon` | optional `wep_*` id that replaces the caliber + ammo resolution below; no stock plane carries it. The synthetic tree's stand-in names its invented gun this way, from a second file of this shape (`StockLoadouts.Supplement`) |
 | `hardpoints.count` | number of underwing pylons carried; **which** physical `pylonN` markers get used is `Loadout.PylonFillOrder`, not `1..count` (below) |
 | `hardpoints.stock[]` | the `wep_*` id each pylon carries in stock fit, in `PylonFillOrder` order; its length equals `hardpoints.count` |
 

@@ -1859,6 +1859,7 @@ internal static class PufferSuites
         string texturePath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
         ctx.RequireData(texturePath, $"{ctx.Chapter} texture archive");
         using var textures = new TextureArchive(texturePath);
+        ctx.RequireTexture(textures, "fire_f01");
 
         // The premise this arm was written on: no puffer sprite is additive, so blend cannot
         // separate the fireball from the smoke and the fire flipbook is named instead.
@@ -1907,6 +1908,7 @@ internal static class PufferSuites
         string texturePath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
         ctx.RequireData(texturePath, $"{ctx.Chapter} texture archive");
         using var textures = new TextureArchive(texturePath);
+        ctx.RequireTexture(textures, "smoke101");
 
         ctx.Check(MultiMeshEmitterRenderer.IsSmokeSprite("smoke101")
                   && MultiMeshEmitterRenderer.IsSmokeSprite("THICKBLKSMOKE03"),

@@ -446,7 +446,12 @@ public sealed record SessionSpec
 
     // ---- The aircraft -------------------------------------------------------------------------
 
-    public string PlaneName { get; private set; } = "player_bhawk";
+    /// <summary>The aircraft a spec flies when <c>--plane=</c> names none, set once at startup.
+    /// <c>--synthetic-data</c> points it at the stand-in, the one aircraft its tree carries. A spec
+    /// a suite builds without naming a plane then flies what the data holds.</summary>
+    public static string DefaultPlane { get; set; } = "player_bhawk";
+
+    public string PlaneName { get; private set; } = DefaultPlane;
     /// <summary>The <c>--plane=</c> list; empty when a single plane (or none) was named.</summary>
     public IReadOnlyList<string> PlaneNames { get; private set; } = Array.Empty<string>();
     /// <summary><b>Resolved.</b> Splitscreen panes. A <c>--plane=</c> list of several states the
@@ -1718,6 +1723,11 @@ public sealed record SessionSpec
         {
             notes.Add(new Note("core", $"--synthetic-data with --extract would extract into the invented tree, ignoring --synthetic-data"));
             s.SyntheticData = false;
+        }
+
+        if (s.SyntheticData && s.PlaneNames.Count == 0)
+        {
+            s.PlaneName = Tooling.SyntheticPlane.Plane;
         }
 
         if (netHost != null)

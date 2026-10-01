@@ -132,9 +132,11 @@ prints a `not checked:` line per omitted surface, and never satisfies the landin
 
 **The ci engine tier (`--run-tests=tier:ci`) is what CI requires, and a skip in it fails.** Its
 membership is checked in as `SuiteCatalog.CiTier`, one name per line and sorted. A suite earns its
-place by passing `RunCiSuites.ps1` (below): headless, with an empty data root (no extraction), with
-no IPv6 loopback and no OS shell or real display. It joins when it stops needing the install, and
-leaves rather than taking an exception when it starts needing one. The suites on the `headlessOnly`
+place by passing `RunCiSuites.ps1` (below): headless, with no extraction but the `--synthetic-data`
+tree of invented records, with no IPv6 loopback and no OS shell or real display, and by being shown
+to go red when one of its inputs in that tree is broken. It joins when it stops needing the install,
+and leaves rather than taking an exception when it starts needing one. The plane suites skip without
+the switch, so the tier is only green with it. The suites on the `headlessOnly`
 list in `analysis/headless-limits.json` (a unit test keeps them off the tier), `enet-dual-stack`,
 `enet-stable-ipv6-reply` and `build-stamp-focus` are out for that reason.
 The ENet and LAN discovery suites bound to `127.0.0.1` are in. The tier carries
@@ -152,7 +154,9 @@ CSVM/CSVM.sln` and one `<godot> --headless --path CSVM --import`, with Godot 4.7
 from the official release, checked against the release's `SHA512-SUMS.txt` and cached per release.
 A contributor runs those two commands and then `./RunCiSuites.ps1 -Godot <path to the mono build>`
 (`-Selector` for another selector than `tier:ci`, `-NetPortBase`, `-TimeoutSec`). It starts one
-headless Godot with `CSVM_DATA_ROOT` at a fresh empty folder and the XDG folders inside
+headless Godot with `CSVM_DATA_ROOT` at a fresh empty folder, `--synthetic-data` (so the run reads
+the invented tree written for its process id, and the report must name that root and
+`syntheticData: true`; `-NoSyntheticData` runs over the empty folder alone) and the XDG folders inside
 `.scratch/ci-suites/`, which it wipes first and which receives `godot.out`, `godot.err` and a copy of
 the screened engine log; the job uploads those, `.scratch/test-report.json` and `.scratch/logs/` on
 every outcome. ⚠ **The verdict comes from the report, not from Godot's exit code.** A headless

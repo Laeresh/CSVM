@@ -31,6 +31,12 @@ public sealed class StockLoadouts
     /// where <c>GlobalizePath</c> + System.IO cannot reach it.</summary>
     public static string DefaultPath => "res://data/stock_loadouts.json";
 
+    /// <summary>A second file of the same shape, set once at startup. Its planes join the
+    /// committed ones when <see cref="DefaultPath"/> is loaded. The synthetic-data switch names the
+    /// stand-in's fit here, since its invented aircraft is in no committed table. Null, the
+    /// default, reads the committed file alone.</summary>
+    public static string? Supplement { get; set; }
+
     public IReadOnlyDictionary<string, LoadoutDef> All => _byDef;
 
     /// <summary>The Ammo Selection screen's dropdown rosters, empty when the file omits them.</summary>
@@ -56,49 +62,12 @@ public sealed class StockLoadouts
             return loadouts;
         }
         using var doc = JsonDocument.Parse(viaGodot ? Godot.FileAccess.GetFileAsBytes(path) : File.ReadAllBytes(path));
-        if (!doc.RootElement.TryGetProperty("planes", out var planes) || planes.ValueKind != JsonValueKind.Object)
+        ReadPlanes(doc.RootElement, path, loadouts._byDef);
+        if (path == DefaultPath && Supplement is { } extra)
         {
-            throw new InvalidDataException($"stock loadouts: no 'planes' object in {path}");
-        }
-        foreach (var plane in planes.EnumerateObject())
-        {
-            var body = plane.Value;
-            var def = new LoadoutDef
-            {
-                Def = plane.Name,
-                Model = Str(body, "model"),
-                Display = Str(body, "display"),
-            };
-            if (body.TryGetProperty("guns", out var guns) && guns.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var g in guns.EnumerateArray())
-                {
-                    var spec = new GunSpec
-                    {
-                        Slot = Int(g, "slot"),
-                        Mount = Str(g, "mount"),
-                        Caliber = Int(g, "caliber"),
-                        Ammo = Str(g, "ammo"),
-                        Turret = g.TryGetProperty("turret", out var t) && t.ValueKind == JsonValueKind.True,
-                    };
-                    if (g.TryGetProperty("markers", out var markers) && markers.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var m in markers.EnumerateArray())
-                        {
-                            if (m.GetString() is { } name)
-                            {
-                                spec.Markers.Add(name);
-                            }
-                        }
-                    }
-                    def.Guns.Add(spec);
-                }
-            }
-            if (body.TryGetProperty("hardpoints", out var hp) && hp.ValueKind == JsonValueKind.Object)
-            {
-                def.Hardpoints = new HardpointSpec { Count = Int(hp, "count"), Stock = Strings(hp, "stock") };
-            }
-            loadouts._byDef[def.Def] = def;
+            // ⚠ Never skip a missing supplement silently: a run that set one expects its planes armed.
+            using var extraDoc = JsonDocument.Parse(File.ReadAllBytes(extra));
+            ReadPlanes(extraDoc.RootElement, extra, loadouts._byDef);
         }
 
         if (doc.RootElement.TryGetProperty("selectable", out var selectable)
@@ -129,6 +98,58 @@ public sealed class StockLoadouts
             }
         }
         return null;
+    }
+
+    private static void ReadPlanes(JsonElement root, string path, Dictionary<string, LoadoutDef> into)
+    {
+        if (!root.TryGetProperty("planes", out var planes) || planes.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidDataException($"stock loadouts: no 'planes' object in {path}");
+        }
+        foreach (var plane in planes.EnumerateObject())
+        {
+            var body = plane.Value;
+            var def = new LoadoutDef
+            {
+                Def = plane.Name,
+                Model = Str(body, "model"),
+                Display = Str(body, "display"),
+            };
+            if (body.TryGetProperty("guns", out var guns) && guns.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var g in guns.EnumerateArray())
+                {
+                    var spec = new GunSpec
+                    {
+                        Slot = Int(g, "slot"),
+                        Mount = Str(g, "mount"),
+                        Caliber = Int(g, "caliber"),
+                        Ammo = Str(g, "ammo"),
+                        Turret = g.TryGetProperty("turret", out var t) && t.ValueKind == JsonValueKind.True,
+                        // A weapon outside the caliber matrix is named outright (docs/formats/loadouts.md).
+                        WeaponId = g.TryGetProperty("weapon", out var w) && w.ValueKind == JsonValueKind.String
+                            ? w.GetString()
+                            : null,
+                    };
+                    if (g.TryGetProperty("markers", out var markers) && markers.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var m in markers.EnumerateArray())
+                        {
+                            if (m.GetString() is { } name)
+                            {
+                                spec.Markers.Add(name);
+                            }
+                        }
+                    }
+                    def.Guns.Add(spec);
+                }
+            }
+            if (body.TryGetProperty("hardpoints", out var hp) && hp.ValueKind == JsonValueKind.Object)
+            {
+                def.Hardpoints = new HardpointSpec { Count = Int(hp, "count"), Stock = Strings(hp, "stock") };
+            }
+            into[def.Def] = def;
+        }
     }
 
     private static string Str(JsonElement e, string key) =>

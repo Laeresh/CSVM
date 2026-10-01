@@ -1190,6 +1190,11 @@ internal static class WorldAndToolSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
         using var textures = new TextureArchive(texturesPath);
+        foreach (string name in DropInSamples)
+        {
+            ctx.RequireTexture(textures, name);
+        }
+
         var colors = new Dictionary<string, Color>();
         foreach (string name in DropInSamples)
         {

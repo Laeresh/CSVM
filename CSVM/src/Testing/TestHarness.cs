@@ -920,6 +920,17 @@ public sealed class TestContext
         }
     }
 
+    /// <summary>On the synthetic tree, skips a suite whose body reads a shipped texture by
+    /// <paramref name="name"/> that the invented archive does not carry. ⚠ Never skip on a real
+    /// extraction: a shipped name missing there is a broken tree, which the body reports.</summary>
+    public void RequireTexture(TextureArchive textures, string name)
+    {
+        if (SyntheticData && textures.FindImage(name) == null)
+        {
+            throw new SuiteSkippedException($"the synthetic texture archive carries no {name}");
+        }
+    }
+
     /// <summary>Leaves a suite's full report in the scratch folder, so a failure is diagnosable
     /// without re-running the equivalent <c>--dump-*</c> tool by hand. Absolute path, inside
     /// <c>.scratch/</c>, where every suite artifact belongs. The one exception is a suite proving

@@ -127,8 +127,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B, the synthetic data root and the stand-in plane
 
 11. ☑ A synthetic data root written at run time
-12. ☐ The stand-in plane: model, markers and plane records
-13. ☐ Stand-in weapons, shakes and messages
+12. ☑ The stand-in plane: model, markers and plane records
+13. ☑ Stand-in weapons, shakes and messages
 14. ☐ Generated texture and sound archives
 15. ☐ Bring the plane-only suites onto the tier
 
@@ -445,7 +445,45 @@ and say so in the log; a suite on the real install never reads a synthetic file.
 **⚠ Traps.** The synthetic root must never be picked up by a local run that has a real install, or
 the local battery would pass on invented data.
 
-## B12 ☐ The stand-in plane: model, markers and plane records
+## B12 ☑ The stand-in plane: model, markers and plane records
+
+**Landed, with B13.** The two land together because a flight session cannot boot without
+`weapons.json` and `shakes.json`. `Tooling/SyntheticPlane.cs` adds two families to the synthetic tree.
+`plane` writes `planes/` for `probe_plane`: a legacy-shape `nodes.json` and `materials.json` from
+`fixtures/synthetic/planes/`, and a `models.json` generated from `boxes.json` (one outward-wound box
+per mesh index, fourteen in all). The tree is `geometry` → `healthy` → one LOD (fuselage with
+a canopy child, wings, tailplane, fin, `player_damage_on` with `pdp1`..`pdp8`), the `markers` rig
+(`firepoint1`..`8` in mirror pairs, `pylon1`..`8` odd to port with `|x|` falling, `target`,
+`cockpit_camera`, `exhaust1`/`2`, `ground_level`), `dontmove` (`staticprop1`, `prop1`), `destroyed`
+(`piece1`..`3`) and a `cockpit1` interior with `pcdp4`/`pcdp6`. It also writes `zrdr/vehicle.json`
+(`player_airplane`, the `pprobe` player def with ten dynamics keys, four zones carrying `pdpanelN`
+injure entries and six collision probes, and the `probe` AI def with skills and a `weapons` block),
+`engines.json` (three rows, stock power 0.85), `player.json` (gravity 16, `crash`, every
+`ai_skill_parameters` pair) and the unit tests' own `maneuvers.json`, plus an empty `C1/zrdr/` scope.
+Every value is invented and chosen to fly: `--dump-flight=probe_plane` reads a level top speed of
+232 mph against `fd_speed` 268 mph, a 2.9 s roll and a level eighth-throttle cruise. Two seams make
+the stand-in the plane a synthetic run flies: `SessionSpec.DefaultPlane` (set by `Launcher` under the
+switch, and `Parse` applies it when `--synthetic-data` names no `--plane=`) and
+`StockLoadouts.Supplement` (the stand-in's fit, read in place from `fixtures/synthetic/`, whose guns
+name `wep_probe_gun` through a new optional `guns[].weapon` key). A real install sets neither.
+
+Verified here: `--stage=empty --fly --synthetic-data --det` boots headless with no `--plane=`,
+builds 51 nodes and 19 mesh instances, arms two gun groups and two hardpoints, and logs zero engine
+error lines; with `--fire --fire-rockets` nose down from 150 m every gun and rocket impact lands on
+`ground/col`. The warnings left are the stand-in's honest gaps: no `camparam.json` (built-in
+defaults), no `ai.json` turret table, no sound archive, no tracer, muzzle or compass textures (B14),
+and no `plane_reset`/`pdpanelN` anim defs, so torn panels pair by geometry.
+
+**Still owed to the Windows run.** The real-install battery should be unchanged: nothing reads the
+new families without the switch, `DefaultPlane` and `Supplement` are only set under it, and a stock
+file with no `weapon` key parses as before. The three texture gates added for B11's five suites
+skip only under the switch, so on the install `puffer-fire-glow`, `puffer-smoke-sun` and
+`tex-dropin` PASS as before. Over an empty root `tier:ci` now needs the switch: without it the 22
+plane suites added here skip, which the tier counts as failures. On the real checkout both
+`--run-tests=tier:ci` (the plane suites fly the shipped default plane) and `--run-tests=tier:ci
+--synthetic-data` (the stand-in, the install named unread) should pass 75/0/0.
+
+**Original approach (kept for reference).**
 
 **Goal.** An invented aircraft builds through `PlaneBuilder`, flies, and carries the markers the
 flight, camera, HUD and damage code reads.
@@ -467,7 +505,71 @@ and `player.json` records from `docs/formats/`. <TODO: the minimum marker and no
 **⚠ Traps.** Do not shape the stand-in to make a suite pass; shape it from the format pages, and
 let a suite that needs a real value be retargeted in B15.
 
-## B13 ☐ Stand-in weapons, shakes and messages
+## B13 ☑ Stand-in weapons, shakes and messages
+
+**Landed, with B12** (the record above has the shared part). The `armament` family writes
+`zrdr/weapons.json` (`wep_probe_gun`, a 30-calibre `CANNON` at 9 rounds a second and 700 m/s, and
+`wep_probe_rocket`, a `HIGH_EXPLOSIVE` rocket with `ACCELERATION`, `LOCK_ON` and an 8 m fuse inside
+a 20 m blast), `zrdr/shakes.json` (all six sources, the `high_speed` gate at 1.15 of `fd_speed`) and
+`messages.json` (the `MSG_PROBE_*` names and invented wordings of the HUD's crash, kill and
+auto-dock keys). New records rather than the unit fixtures, whose tripwire keys and unresolved
+effect names are the point of their own tests. The settled question: the ordnance suites need the
+ids, not the values. `launch-velocity-decay`, `motor-acceleration`, `ordnance-*`, `disabling-hits`,
+`blast-*`, `scorch-decals` and `shootable-flyout` fail with "`wep_NN` … all resolve", so B15
+retargets them to a weapon picked by class from the loaded catalogue.
+
+`RunCiSuites.ps1` now passes `--synthetic-data` (`-NoSyntheticData` opts out) and accepts a report
+only when it names the tree written for its own Godot process id and `syntheticData: true`; every
+other check stands. The guard on this container refused `pwsh`, so the script was not run here:
+the same `--run-tests=tier:ci --net-port-base=50000 --synthetic-data` over an empty root reported
+75/0/0, its 21 unexpected lines all the text-server pattern the script excuses.
+
+The tier, run with the switch, went from 53 to 75 members, each passing by name with zero
+unexpected engine errors and each shown to go red on one broken input in the tree, then restored:
+`ai-actor`, `ai-pursues-structure`, `death-camera`, `empty-stage-net`, `remote-airframe` (no control
+authority and a 12 m/s `fd_speed`); `flyby-camera` (ten times the drag, mass and gravity);
+`inert-aircraft`, `target-input`, `team-model` (zero weapon damage); `cockpit-overlay-pass`,
+`targeting-candidates` (marker rig and `cockpit1` renamed away); `cockpit-panel-staging`,
+`damage-staging-pool` (no `pdpanelN` entries); `gltf-export`, `hostile-marker-hud` (every box a
+point); `plane-shader-reuse` (skin textures absent); `scene-build-throw-frees` (no meshed node with
+a child); `flight-roster-transaction`, `flight-telemetry-gate` (no AI def); `flight-live-respawn-gate`
+(no fuel tank, so it skips, a tier failure); `bindings-prompt-device`, `hud-auto-dock-line` (an empty
+message table). Ten more pass with the kit but no input break turned them red, so they wait for a
+code-mutation check in B15: `ai-far-field-plant`, `ai-spawn-jitter`, `cutscene-handoff-speed`,
+`debug-kill-target`, `look-stick`, `look-stick-edge`, `muzzle-flash-cockpit-hidden`,
+`muzzle-light-first-person-point-term`, `spyglass-marker-hud`, `menu-player-setup-seats`.
+
+Plane-only suites that fail on the stand-in, for B15. Asserting a real record's value:
+`ai-gunnery` ("the same bearing is taken at rating 9 (89°)", the shipped `quick_draw_angle`),
+`ai-modes` ("player.json min_ai_active_dist is the decoded 2000 m"), `air-to-air` (its fuse
+precondition `blastRadius >= 60f`), `graze-bounce` (`IsEqualApprox(stats.BounceFactor, 0.6f)`),
+`plane-wobble-walk` (swing gaps of 8 to 11 ticks, "the authored 4 Hz" nitro), `cockpit-interior` (the
+shipped interior's named set: `gauges`, `structure`, `nosedamage`, `ggindicator0`, `lowalt_on`,
+`stallwarning_on`, `bullet1`..`5` with three or more quads each), `hud-kill-line`
+(`player_kestrel`/`medkestrel` and the shipped rows), `menu-free-flight-journey` (the Top Speed of
+`player_autogyro`). Naming a shipped airframe: `ai-plane-defs`, `ai-target-rescore`,
+`airframe-collider-hit-rate`, `airframe-hull-coverage`, `damage-stage-slots`, `engine-note`,
+`flight-mouse-capture`, `flight-mouse-scheme`, `gasbag-ordnance-gate`, `instant-action`,
+`warhawk-torpedo-run`, `wing-flare-pose`, `wingman-station`, `loadout-bind`, `loadout-forrig`,
+`weapons-fire` (`wep_30` by calibre). Missing a family: the smoke textures (`exhaust-smoke`,
+`exhaust-smoke-ai`) and the sound archive (`ai-engine-*`, `engine-*`, `audio-buses`, which skip),
+both B14; the `ai.json` turret table (`carried-turrets`, `aircraft-first-targeting`,
+`ranked-pool-carried-turret-dedup`, `target-pool` and seven `turret-*`/`world-turrets` suites); a
+chapter gamez or `MP1` scope (the `net-*` suites, which skip; C21, C22).
+
+B11's five texture-gated suites: `cockpit-panel-staging` and `damage-staging-pool` now pass and
+joined the tier. `puffer-fire-glow` (`fire_f01`), `puffer-smoke-sun` (`smoke101`) and `tex-dropin`
+(shipped names) read textures by name that the synthetic archive lacks, so each now calls the new
+`TestContext.RequireTexture`, which skips only under the switch, and they SKIP with it.
+
+The full catalog over an empty root without the switch is unchanged at 53 PASS, 2 FAIL
+(`build-stamp-focus`, `enet-dual-stack`), 440 SKIP. With the switch it reads 85 PASS, 136 FAIL,
+274 SKIP: a `zrdr/` folder now exists, so every suite gated only on it runs, and 63 then miss
+`cm_sequence.json`, 11 miss `ai.json`, 13 name a shipped airframe and 49 fail an assertion (shipped
+data or names, plus the two environment failures above and two headless-only suites). No tier
+member is among them, and CI runs only the tier.
+
+**Original approach (kept for reference).**
 
 **Goal.** The stand-in carries one gun and one rocket the weapon, ordnance and AI suites can fire.
 

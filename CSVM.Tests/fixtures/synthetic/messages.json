@@ -1,0 +1,15 @@
+{
+  "language_id": 1033,
+  "entries": [
+    { "key": "MSG_PROBE_PLANE", "id": 1, "value": "Probe Plane" },
+    { "key": "MSG_PROBE_GUN", "id": 2, "value": "Probe Gun" },
+    { "key": "MSG_PROBE_ROCKET", "id": 3, "value": "Probe Rocket" },
+    { "key": "MSG_UNKNOWN", "id": 4, "value": "Unnamed probe" },
+    { "key": "MSG_CRASH", "id": 5, "value": "Probe crashed" },
+    { "key": "MSG_SHOT_DOWN", "id": 6, "value": "probe shot down" },
+    { "key": "MSG_WINGMAN_SHOT_DOWN", "id": 7, "value": "Probe wingman lost" },
+    { "key": "MSG_DESTROYED", "id": 8, "value": "probe destroyed" },
+    { "key": "MSG_PRESS_AUTOLAND", "id": 9, "value": "Probe dock: press %1" },
+    { "key": "MSG_CLICK_AUTOLAND", "id": 10, "value": "Probe dock: click %1" }
+  ]
+}

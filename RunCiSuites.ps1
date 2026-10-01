@@ -1,8 +1,9 @@
 <#
 .SYNOPSIS
     The CI engine stage: the in-engine suites a selector names (default the ci tier), run in one
-    headless Godot over an empty data root and judged from the harness's report. Exit 0 only when
-    every selected suite passed and the engine log held no error a headless run does not explain.
+    headless Godot over the synthetic data root (--synthetic-data, written over an empty data root)
+    and judged from the harness's report. Exit 0 only when every selected suite passed and the
+    engine log held no error a headless run does not explain.
 
 .DESCRIPTION
     What the engine job in .github/workflows/checks.yml runs, and what a contributor runs on Linux
@@ -14,7 +15,10 @@
         ./RunCiSuites.ps1 -Godot <godot>
 
     The Godot process gets CSVM_DATA_ROOT at a fresh empty folder, so no suite reads an extraction,
-    this tree's own extracted/ included, and XDG_DATA_HOME, XDG_CONFIG_HOME and XDG_CACHE_HOME at
+    this tree's own extracted/ included. It also gets --synthetic-data, so the harness writes the
+    invented tree of CSVM.Tests/fixtures/ records into .scratch/synthetic-data/<pid>/ and reads that
+    in place of the empty folder; -NoSyntheticData runs over the empty folder alone. It gets
+    XDG_DATA_HOME, XDG_CONFIG_HOME and XDG_CACHE_HOME at
     fresh folders, so user:// starts empty on Linux (macOS Godot ignores them and keeps the user's
     own). Everything lands in .scratch/ci-suites/, wiped at the start of each run: the process's
     stdout and stderr, and a copy of the engine log the harness screened. The report is the
@@ -25,7 +29,8 @@
     windowed one does not. analysis/headless-limits.json lists those patterns, and this script
     applies them exactly as sandbox/LinuxRelease.ps1 does. The run fails on any of:
       - Godot killed by the watchdog, exiting with anything but 0 or 1, or writing no fresh report
-      - a report for another selector, data root or port base than this run's
+      - a report for another selector, data root or port base than this run's, or whose
+        syntheticData flag disagrees with the switch this run passed
       - a FAILed suite; under tier:ci a listed suite that SKIPs is already a FAIL in the report
       - an engine log the harness did not screen, or an allowlisted pattern over its cap
       - an unexpected engine error line that no headless pattern matches
@@ -44,6 +49,10 @@
 .PARAMETER TimeoutSec
     Kill the run after this many seconds and fail it. Default 900.
 
+.PARAMETER NoSyntheticData
+    Run over the empty data root alone, without --synthetic-data. The ci tier fails that way, since
+    its plane suites then skip; it is for reading what the rest of a selection does with no data.
+
 .EXAMPLE
     ./RunCiSuites.ps1 -Godot ~/godot/Godot_v4.7-stable_mono_linux_x86_64/Godot_v4.7-stable_mono_linux.x86_64
 
@@ -55,7 +64,8 @@ param(
     [Parameter(Mandatory = $true)][string]$Godot,
     [string]$Selector = "tier:ci",
     [int]$NetPortBase = 30000,
-    [int]$TimeoutSec = 900
+    [int]$TimeoutSec = 900,
+    [switch]$NoSyntheticData
 )
 
 $ErrorActionPreference = "Stop"
@@ -98,6 +108,7 @@ foreach ($a in @("--headless", "--path", (Join-Path $RepoRoot "CSVM"), "res://sc
                  "--run-tests=$Selector", "--net-port-base=$NetPortBase")) {
     $psi.ArgumentList.Add($a)
 }
+if (-not $NoSyntheticData) { $psi.ArgumentList.Add("--synthetic-data") }
 $psi.WorkingDirectory = $RepoRoot
 $psi.UseShellExecute = $false
 $psi.RedirectStandardOutput = $true
@@ -109,7 +120,7 @@ $psi.Environment["XDG_CACHE_HOME"] = "$xdg/cache"
 
 Write-Host "== engine suites, headless: --run-tests=$Selector =="
 Write-Host "  godot      $Godot"
-Write-Host "  data root  $DataRoot (empty)"
+Write-Host "  data root  $DataRoot (empty)$(if ($NoSyntheticData) { '' } else { ', replaced by --synthetic-data' })"
 Write-Host "  output     $OutDir"
 $watch = [Diagnostics.Stopwatch]::StartNew()
 $proc = [Diagnostics.Process]::Start($psi)
@@ -149,8 +160,15 @@ if (-not (Test-Path -LiteralPath $Report)) {
     if ($json.selector -ne $Selector) {
         $null = $problems.Add("the report is for selector '$($json.selector)', not '$Selector'")
     }
-    if (-not $json.dataRoot -or (Get-FullPath $json.dataRoot) -ne (Get-FullPath $DataRoot)) {
-        $null = $problems.Add("the report read data root '$($json.dataRoot)', not the empty $DataRoot")
+    # With the switch the harness reads the tree it wrote for its own process id, never the empty
+    # folder, so that tree is the one root a fresh, synthetic report may name.
+    $wantRoot = if ($NoSyntheticData) { $DataRoot } else { Join-Path $Scratch "synthetic-data/$($proc.Id)" }
+    $wantWhat = if ($NoSyntheticData) { "the empty" } else { "this run's synthetic" }
+    if (-not $json.dataRoot -or (Get-FullPath $json.dataRoot) -ne (Get-FullPath $wantRoot)) {
+        $null = $problems.Add("the report read data root '$($json.dataRoot)', not $wantWhat $wantRoot")
+    }
+    if ([bool]$json.syntheticData -ne (-not $NoSyntheticData)) {
+        $null = $problems.Add("the report's syntheticData is '$($json.syntheticData)', but this run $(if ($NoSyntheticData) { 'did not pass' } else { 'passed' }) --synthetic-data")
     }
     if ($null -eq $json.shard.netPortBase -or [int]$json.shard.netPortBase -ne $NetPortBase) {
         $null = $problems.Add("the report opened its sockets from net port base '$($json.shard.netPortBase)', not $NetPortBase")

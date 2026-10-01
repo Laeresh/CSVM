@@ -1,0 +1,48 @@
+[
+  [
+    "VERSION", [2],
+    "NO_AMMO_WARNING", ["snd_probe_emptyclip"],
+    "BALLISTICS",
+    [
+      "wep_probe_gun",
+      [
+        "DESC", ["MSG_PROBE_GUN"],
+        "NAME", ["probegun"],
+        "CALIBER", [30],
+        "CLUSTER_SIZE", [600],
+        "AMMO_LIMIT", [1200],
+        "FIRE_RATE", [9],
+        "VELOCITY", [700],
+        "RANGE", [1000],
+        "GRAVITY", [0],
+        "CANNON_SPREAD", [4],
+        "ARMOR_DAMAGE", [2],
+        "HEALTH_DAMAGE", [2],
+        "CANNON", null,
+        "FIRE", ["SOUND", ["snd_probe_fire"]],
+        "IMPACT", ["default", ["SOUND", ["snd_probe_hit"]]]
+      ],
+      "wep_probe_rocket",
+      [
+        "DESC", ["MSG_PROBE_ROCKET"],
+        "NAME", ["proberocket"],
+        "PRIORITY", [5],
+        "CLUSTER_SIZE", [2],
+        "AMMO_LIMIT", [8],
+        "ROCKET", null,
+        "HIGH_EXPLOSIVE", null,
+        "FIRE_RATE", [1],
+        "VELOCITY", [160],
+        "ACCELERATION", [80],
+        "RANGE", [2500],
+        "TURN_RATE", [0.001],
+        "LOCK_ON", [1.5],
+        "ARMOR_DAMAGE", [40],
+        "HEALTH_DAMAGE", [40],
+        "IMPACT_PROXIMITY", [20],
+        "DETONATION_DISTANCE", [8],
+        "IMPACT", ["default", ["SOUND", ["snd_probe_boom"]]]
+      ]
+    ]
+  ]
+]

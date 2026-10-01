@@ -33,6 +33,8 @@ public static class SyntheticData
     public static readonly IReadOnlyList<SyntheticFamily> Families = new SyntheticFamily[]
     {
         new("chapter-textures", SyntheticTextures.WriteChapter),
+        new("plane", SyntheticPlane.WritePlane),
+        new("armament", SyntheticPlane.WriteArmament),
     };
 
     /// <summary>Where the hand-authored records sit in a repo checkout. An exported build has no
@@ -212,4 +214,13 @@ public sealed class SyntheticTree
     /// <summary>Writes generated <paramref name="bytes"/> to <paramref name="relative"/> under
     /// <see cref="Extracted"/>.</summary>
     public void WriteBytes(string relative, byte[] bytes) => File.WriteAllBytes(Under(relative), bytes);
+
+    /// <summary>Creates the folder <paramref name="relative"/> under <see cref="Extracted"/>, for a
+    /// scope a loader is handed whole even when the tree has nothing to put in it yet.</summary>
+    public string Folder(string relative)
+    {
+        string path = Path.Combine(Extracted, relative.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(path);
+        return path;
+    }
 }

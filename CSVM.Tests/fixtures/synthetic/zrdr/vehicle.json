@@ -1,0 +1,71 @@
+[
+  [
+    "player_airplane",
+    [
+      "flight_ceiling", [2200],
+      "engine_sound", ["snd_probe_engine"]
+    ],
+    "pprobe",
+    [
+      "kind_of", ["player_airplane"],
+      "nodename", ["probe_plane"],
+      "title", ["MSG_PROBE_PLANE"],
+      "engine", [2],
+      "fuel", [90],
+      "dynamics",
+      [
+        "pitch_torque", [2.0],
+        "roll_torque", [5.0],
+        "rudder_torque", [1.2],
+        "return_rate", [2.5],
+        "ang_momentum_damp", [4.5],
+        "rec_moments_inertia", [0.9, 0.7, 1.1],
+        "fd_speed", [120],
+        "drag_factor", [1.0],
+        "veh_weight", [3000],
+        "ref_area", [300]
+      ],
+      "destroyable_parts",
+      [
+        ["nose", 30, 30, "critical", "engine",
+         "injure_anims", [[0.25, "pdpanel7", "probe_plane"]]],
+        ["tail", 20, 20,
+         "injure_anims", [[0.25, "pdpanel8", "probe_plane"]]],
+        ["leftwing", 25, 25,
+         "injure_anims", [[0.6, "pdpanel3", "probe_plane"], [0.35, "pdpanel2", "probe_plane"], [0.1, "pdpanel5", "probe_plane"]]],
+        ["rightwing", 25, 25,
+         "injure_anims", [[0.6, "pdpanel4", "probe_plane"], [0.35, "pdpanel1", "probe_plane"], [0.1, "pdpanel6", "probe_plane"]]]
+      ],
+      "collision",
+      [
+        [0.0, 0.0, -4.6],
+        [0.0, -0.1, 4.5],
+        [5.0, -0.1, 0.5],
+        [0.0, 0.7, -0.5],
+        [-5.0, -0.1, -0.5],
+        [0.0, -0.7, 3.0]
+      ]
+    ],
+    "probe",
+    [
+      "title", ["MSG_PROBE_PLANE"],
+      "armor", [60],
+      "health", [60],
+      "dare_devil", [5],
+      "natural_touch", [5],
+      "sixth_sense", [5],
+      "dead_eye", [5],
+      "quick_draw", [5],
+      "steady_hand", [5],
+      "stun_recovery", [5],
+      "talker", [5],
+      "constitution", [5],
+      "weapons",
+      [
+        ["wep_probe_gun", 400, 0.5, 0, 800],
+        ["wep_probe_rocket", 4, 3, 150, 1500]
+      ],
+      "collision", [[0.0, 0.0, 0.0]]
+    ]
+  ]
+]
