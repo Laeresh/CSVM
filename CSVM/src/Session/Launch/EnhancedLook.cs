@@ -145,7 +145,7 @@ public static class EnhancedLook
     }
 
     /// <summary>Has Godot build the advanced scene-shader variants a TAA frame needs, for every shader
-    /// alive, while the load screen is still up. It draws one frame of a hidden 2x2 viewport under
+    /// alive, while the load screen is still up. It draws one frame of a hidden 256x256 viewport under
     /// <paramref name="host"/> with TAA and SSAO on and an empty world. Only an Original process that
     /// has drawn no Enhanced frame needs it; the first Enhanced frame does it otherwise. Returns
     /// whether it raised the viewport. The engine's side is docs/verification.md PERF-45.</summary>
@@ -153,10 +153,12 @@ public static class EnhancedLook
     {
         if (GraphicsMode.Enhanced || ShaderTwins.EnhancedDrawn)
             return false;
+        // ⚠ Keep the viewport this size or larger. At 2x2 the screen-space passes ask for more mips
+        // than the buffer holds, and the Deck crashed on the null texture that leaves.
         var view = new SubViewport
         {
             Name = "advanced_variant_warm",
-            Size = new Vector2I(2, 2),
+            Size = new Vector2I(256, 256),
             OwnWorld3D = true,
             World3D = new World3D(),
             UseTaa = true,

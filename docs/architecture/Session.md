@@ -61,8 +61,8 @@ A live graphics switch over a flying world, drawn over so the stall does not rea
 launcher's `RequestGraphicsSwitch` builds one for the G action, the Options apply and
 `--debug-graphics-switch`: it raises `HaltReason.Switching` on the session's `PauseState` (or holds
 the clock directly where there is none), puts a blackboard `LoadBoard` over the whole window,
-runs `EnhancedLook.Switch` on the cover's second frame, and drops both once three frames come in
-under 50 ms. A pause the player had up stays up, and the stall's catch-up ticks pass while held.
+runs `EnhancedLook.Switch` on the cover's second frame, and drops both once three frames in a row
+come in under 50 ms or twice the fastest since (never past 500 ms). A player's pause stays up.
 `GraphicsMode.SwitchLocked` greys the Options row in a network session. Read `EnhancedLook.cs`.
 
 ## src/Session/Launch/TuningWarmup.cs

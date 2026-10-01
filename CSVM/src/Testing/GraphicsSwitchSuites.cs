@@ -27,6 +27,9 @@ internal static class GraphicsSwitchSuites
     // Every shader text a reading met, by its census key, for the mismatch artifact.
     private static readonly Dictionary<string, string> TextByKey = new(StringComparer.Ordinal);
 
+    // A 3 s switch, a fast frame, a 7.5 s variant build and the settled frames, in milliseconds.
+    private static readonly double[] FastFrames = { 5.0, 5.0, 3000.0, 6.0, 7500.0, 5.0, 5.0, 5.0 };
+
     [Suite("graphics-live-switch",
         "a whole flight session switched Enhanced to Original to Enhanced reads as a fresh Enhanced "
         + "session, and its Original half as a fresh Original one: the enhanced-only layers (scorch "
@@ -237,13 +240,14 @@ internal static class GraphicsSwitchSuites
     [Suite("graphics-switch-cover",
         "a live switch under its cover runs in order: the flight is held and the cover is in the tree "
         + "before the switch runs, the switch waits for the cover's second frame, the hold stands "
-        + "through a stall and a slow frame after it and drops with the cover once three frames settle; "
+        + "through a stall and a slow frame after it and drops with the cover once three frames settle, "
+        + "on a machine whose ordinary frame is slow as well; "
         + "the stall reaches the sim clock's accumulator as no step; a pause the player had up stands "
         + "after the cover drops; with no pause state the clock is held and put back as it was; and the "
         + "load warm-up's hidden TAA frame is raised once by an Original process alone")]
     internal static void SwitchCoverOrder(TestContext ctx)
     {
-        var flying = CoverRun(ctx, paused: false);
+        var flying = CoverRun(ctx, paused: false, FastFrames);
         ctx.Check(flying.Order == "held,covered,work" && flying.WorkFrame == 2,
             $"the hold and the cover come first and the switch runs on the cover's second frame ({flying.Order} at frame {flying.WorkFrame})");
         ctx.Check(flying.HeldThroughStall && flying.Steps == 0,
@@ -251,7 +255,10 @@ internal static class GraphicsSwitchSuites
         ctx.Check(flying.Dropped && !flying.CoverInTree && !flying.HeldAfter && flying.StepsAfter == 1,
             $"the cover drops after three settled frames and the flight resumes one step at a time (dropped {flying.Dropped}, in tree {flying.CoverInTree}, held {flying.HeldAfter}, {flying.StepsAfter} step(s) next frame)");
 
-        var paused = CoverRun(ctx, paused: true);
+        var paused = CoverRun(ctx, paused: true, FastFrames);
+        var slow = CoverRun(ctx, paused: false, new[] { 150.0, 150.0, 4000.0, 150.0, 6000.0, 150.0, 150.0, 150.0 });
+        ctx.Check(slow.Dropped && slow.HeldThroughStall && !slow.HeldAfter,
+            $"on a machine whose ordinary frame takes 150 ms the cover still drops after three such frames, held through the stalls (dropped {slow.Dropped})");
         ctx.Check(paused.Order == "held,covered,work" && paused.Dropped && paused.PausedAfter && paused.HeldAfter,
             $"over the pause sheet the same order runs, and the pause still stands after the cover drops (paused {paused.PausedAfter}, held {paused.HeldAfter})");
 
@@ -300,9 +307,8 @@ internal static class GraphicsSwitchSuites
         }
     }
 
-    // One cover over a pause state and a sim clock. It is ticked through a 3 s switch, a fast frame,
-    // a 7.5 s variant build and the settled frames.
-    private static CoverReading CoverRun(TestContext ctx, bool paused)
+    // One cover over a pause state and a sim clock, ticked through the frames.
+    private static CoverReading CoverRun(TestContext ctx, bool paused, double[] frames)
     {
         var pause = new Flight.Modes.PauseState();
         if (paused)
@@ -323,7 +329,7 @@ internal static class GraphicsSwitchSuites
         }, "graphics-switch-cover");
         bool heldThroughStall = true;
         long stepsBefore = clock.Frame;
-        foreach (double ms in new[] { 5.0, 5.0, 3000.0, 6.0, 7500.0, 5.0, 5.0, 5.0 })
+        foreach (double ms in frames)
         {
             frame++;
             clock.BeginFrame(ms / 1000.0);

@@ -19,14 +19,18 @@ public sealed class SwitchCover
     // Frames the cover stands before the switch runs, so the renderer has presented it.
     private const int ShowFrames = 2;
 
-    // A frame at or under this many milliseconds counts toward settling.
+    // A frame counts toward settling at or under this many milliseconds, or under twice the fastest
+    // frame since the switch. A machine whose ordinary frame runs past the fixed bar still settles.
     private const double SettledMs = 50.0;
+
+    // No frame this long counts toward settling, however slow the frames around it.
+    private const double StallMs = 500.0;
 
     // Settled frames in a row that drop the cover.
     private const int SettledRun = 3;
 
-    // Frames after the switch the cover stands at most, whatever they read.
-    private const int MaxFrames = 600;
+    // Wall milliseconds after the switch the cover stands at most, whatever the frames read.
+    private const double MaxMs = 30000.0;
 
     private readonly CanvasLayer _layer;
     private readonly PauseState? _pause;
@@ -37,6 +41,8 @@ public sealed class SwitchCover
     private int _frames;
     private int _settled;
     private double _workMs;
+    private double _sinceMs;
+    private double _fastestMs = double.PositiveInfinity;
 
     private SwitchCover(CanvasLayer layer, PauseState? pause, GameClock? clock, Action work, string why)
     {
@@ -104,8 +110,11 @@ public sealed class SwitchCover
                 break;
             case Phase.Settling:
                 _frames++;
-                _settled = frameMs <= SettledMs ? _settled + 1 : 0;
-                if (_settled >= SettledRun || _frames >= MaxFrames)
+                _sinceMs += frameMs;
+                _fastestMs = Math.Min(_fastestMs, frameMs);
+                double bar = Math.Min(StallMs, Math.Max(SettledMs, 2.0 * _fastestMs));
+                _settled = frameMs <= bar ? _settled + 1 : 0;
+                if (_settled >= SettledRun || _sinceMs >= MaxMs)
                     Drop();
                 break;
         }
