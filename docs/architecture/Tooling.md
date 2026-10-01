@@ -87,14 +87,14 @@ code. The shape is what `Mech3/TextureArchive.cs` reads, from the header fields 
 [../org/textures.md](../org/textures.md).
 
 ## src/Tooling/SyntheticPlane.cs
-The synthetic tree's stand-in aircraft `probe_plane`, in two families. `plane` writes `planes/` (the
-fixture `nodes.json` and `materials.json`, and a `models.json` generated from `boxes.json`, one
-outward-wound box per entry) and the `vehicle.json`, `engines.json`, `player.json` and
-`maneuvers.json` records under `zrdr/`. `armament` writes one gun and one rocket in `weapons.json`,
-`shakes.json` and `messages.json`. Its stock fit is read in place as `StockLoadouts.Supplement`, and
-`SessionSpec.DefaultPlane` names it, both set by `Launcher` under the switch. Shapes:
-[../formats/gamez.md](../formats/gamez.md), [../formats/markers.md](../formats/markers.md),
-[../formats/vehicle.md](../formats/vehicle.md), [../formats/weapons.md](../formats/weapons.md).
+The synthetic tree's two stand-in aircraft, in two families: `probe_plane`, the default, and
+`player_pfighter`, named for the lobby door's starter airframe in `PlanePickerRoster` with every record
+invented. `plane` writes `planes/` (the fixture `nodes.json` and `materials.json`, and a `models.json`
+generated from `boxes.json`, one outward-wound box per entry) and the `vehicle.json`, `engines.json`,
+`player.json` and `maneuvers.json` records under `zrdr/`. `armament` writes one gun and one rocket in
+`weapons.json`, `shakes.json` and `messages.json`. The fits are read in place as `StockLoadouts.Supplement`
+and `SessionSpec.DefaultPlane` names the probe, both set by `Launcher` under the switch. Shapes:
+[gamez](../formats/gamez.md), [markers](../formats/markers.md), [vehicle](../formats/vehicle.md), [weapons](../formats/weapons.md).
 
 ## src/Tooling/SyntheticShell.cs
 The synthetic tree's Original shell, `extracted/rof/`: `fixtures/menu-layout-original/LAYOUT.CSV`

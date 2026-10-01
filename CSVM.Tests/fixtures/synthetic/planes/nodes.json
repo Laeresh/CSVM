@@ -1031,5 +1031,1099 @@
     }
    }
   }
+ },
+ {
+  "Object3d": {
+   "name": "player_pfighter",
+   "mesh_index": -1,
+   "children": [
+    52,
+    101
+   ],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "geometry",
+   "mesh_index": -1,
+   "children": [
+    53,
+    72,
+    94,
+    97
+   ],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "healthy",
+   "mesh_index": -1,
+   "children": [
+    54
+   ],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Lod": {
+   "name": "probe_fighter_lod",
+   "mesh_index": -1,
+   "children": [
+    55,
+    57,
+    60,
+    61,
+    62,
+    63
+   ],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   },
+   "range": {
+    "min": 0.0,
+    "max": 1500.0
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "probe_fighter_fuselage",
+   "mesh_index": 14,
+   "children": [
+    56
+   ],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "probe_fighter_canopy",
+   "mesh_index": 15,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.45,
+     "z": -0.2
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "probe_fighter_wings",
+   "mesh_index": 16,
+   "children": [
+    58,
+    59
+   ],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "wing_flare1",
+   "mesh_index": 28,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": -6.85,
+     "y": -0.2,
+     "z": -0.2
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "wing_flare2",
+   "mesh_index": 28,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 6.85,
+     "y": -0.2,
+     "z": -0.2
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "probe_fighter_tailplane",
+   "mesh_index": 17,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "probe_fighter_fin1",
+   "mesh_index": 18,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": -1.85,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "probe_fighter_fin2",
+   "mesh_index": 18,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 1.85,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "player_damage_on",
+   "mesh_index": -1,
+   "children": [
+    64,
+    65,
+    66,
+    67,
+    68,
+    69,
+    70,
+    71
+   ],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "pdp1",
+   "mesh_index": 19,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 4.8,
+     "y": 0.0,
+     "z": -0.2
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "pdp2",
+   "mesh_index": 19,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": -4.8,
+     "y": 0.0,
+     "z": -0.2
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "pdp3",
+   "mesh_index": 19,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": -2.6,
+     "y": 0.0,
+     "z": -0.2
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "pdp4",
+   "mesh_index": 19,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 2.6,
+     "y": 0.0,
+     "z": -0.2
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "pdp5",
+   "mesh_index": 19,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": -6.0,
+     "y": 0.0,
+     "z": -0.2
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "pdp6",
+   "mesh_index": 19,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 6.0,
+     "y": 0.0,
+     "z": -0.2
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "pdp7",
+   "mesh_index": 20,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": -2.6
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "pdp8",
+   "mesh_index": 20,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 2.6
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "markers",
+   "mesh_index": -1,
+   "children": [
+    73,
+    74,
+    75,
+    76,
+    77,
+    78,
+    79,
+    80,
+    81,
+    82,
+    83,
+    84,
+    85,
+    86,
+    87,
+    88,
+    89,
+    90,
+    91,
+    92,
+    93
+   ],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "firepoint1",
+   "mesh_index": -1,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": -0.3,
+     "y": 0.2,
+     "z": -3.45
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "firepoint2",
+   "mesh_index": -1,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 0.3,
+     "y": 0.2,
+     "z": -3.45
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "firepoint3",
+   "mesh_index": -1,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": -0.55,
+     "y": -0.2,
+     "z": -2.6
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "firepoint4",
+   "mesh_index": -1,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 0.55,
+     "y": -0.2,
+     "z": -2.6
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "firepoint5",
+   "mesh_index": -1,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": -1.9,
+     "y": -0.2,
+     "z": -0.95
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "firepoint6",
+   "mesh_index": -1,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 1.9,
+     "y": -0.2,
+     "z": -0.95
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "firepoint7",
+   "mesh_index": -1,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": -3.7,
+     "y": -0.2,
+     "z": -0.95
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "firepoint8",
+   "mesh_index": -1,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 3.7,
+     "y": -0.2,
+     "z": -0.95
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "pylon1",
+   "mesh_index": -1,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": -5.6,
+     "y": -0.45,
+     "z": -0.1
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "pylon2",
+   "mesh_index": -1,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 5.6,
+     "y": -0.45,
+     "z": -0.1
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "pylon3",
+   "mesh_index": -1,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": -4.6,
+     "y": -0.45,
+     "z": -0.1
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "pylon4",
+   "mesh_index": -1,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 4.6,
+     "y": -0.45,
+     "z": -0.1
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "pylon5",
+   "mesh_index": -1,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": -3.6,
+     "y": -0.45,
+     "z": -0.1
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "pylon6",
+   "mesh_index": -1,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 3.6,
+     "y": -0.45,
+     "z": -0.1
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "pylon7",
+   "mesh_index": -1,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": -2.6,
+     "y": -0.45,
+     "z": -0.1
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "pylon8",
+   "mesh_index": -1,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 2.6,
+     "y": -0.45,
+     "z": -0.1
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "target",
+   "mesh_index": -1,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.2
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "cockpit_camera",
+   "mesh_index": -1,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.7,
+     "z": -0.15
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "exhaust1",
+   "mesh_index": -1,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": -0.4,
+     "y": 0.0,
+     "z": -2.9
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "exhaust2",
+   "mesh_index": -1,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 0.4,
+     "y": 0.0,
+     "z": -2.9
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "ground_level",
+   "mesh_index": -1,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": -1.3,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "dontmove",
+   "mesh_index": -1,
+   "children": [
+    95,
+    96
+   ],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "staticprop1",
+   "mesh_index": 21,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": -3.5
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "prop1",
+   "mesh_index": 22,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": -3.55
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "destroyed",
+   "mesh_index": -1,
+   "children": [
+    98,
+    99,
+    100
+   ],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "piece1",
+   "mesh_index": 23,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": -1.6
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "piece2",
+   "mesh_index": 24,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": -3.4,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "piece3",
+   "mesh_index": 24,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 3.4,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "cockpit1",
+   "mesh_index": -1,
+   "children": [
+    102,
+    103,
+    104
+   ],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "probe_fighter_dash",
+   "mesh_index": 25,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "pcdp4",
+   "mesh_index": 26,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "pcdp6",
+   "mesh_index": 27,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
  }
 ]

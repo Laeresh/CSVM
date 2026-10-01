@@ -125,6 +125,7 @@ public static class SuiteCatalog
         "net-spawn-rotation",
         "net-start-together",
         "net-team-deathmatch",
+        "net-versus-host-left",
         "options-difficulty-launch",
         "options-targeting-launch",
         "options-view-launch",

@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using CSVM.Flight.Weapons;
 using Xunit;
 
@@ -13,6 +14,11 @@ namespace CSVM.Tests;
 [Trait("Tier", "Quick")]
 public class LoadoutTests
 {
+    // Every firepoint and pylon the rig can carry, the shape the lab loadout covers.
+    private static readonly string[] FullRig = Enumerable.Range(1, 8)
+        .SelectMany(i => new[] { $"firepoint{i}", $"pylon{i}" })
+        .ToArray();
+
     private static string ConfigPath =>
         Path.Combine(TestData.RepoRoot, "CSVM", "data", "stock_loadouts.json");
 
@@ -203,6 +209,43 @@ public class LoadoutTests
         pylon.Ammo = 1;
         Assert.True(gun.Armed(infinite: false));
         Assert.True(pylon.Armed(infinite: false));
+    }
+
+    [Fact]
+    public void TheRigLoadoutKeepsAWeaponTheStockFitNames()
+    {
+        // A named weapon sits outside the caliber matrix; rebuilding the slot from Caliber and Ammo
+        // alone binds a matrix weapon in its place. A slot stock leaves out takes the first gun's.
+        var stock = new LoadoutDef { Def = "rig_probe" };
+        stock.Guns.Add(new GunSpec { Slot = 1, Caliber = 30, Ammo = "slug", WeaponId = "wep_named" });
+        stock.Guns.Add(new GunSpec { Slot = 2, Caliber = 50, Ammo = "ap" });
+
+        var rig = Loadout.RigDef(FullRig, stock);
+
+        Assert.Equal(new[] { 1, 2, 3, 4 }, rig.Guns.Select(g => g.Slot));
+        Assert.Equal("wep_named", rig.Guns[0].WeaponId);
+        Assert.Null(rig.Guns[1].WeaponId);
+        Assert.Equal((50, "ap"), (rig.Guns[1].Caliber, rig.Guns[1].Ammo));
+        Assert.Equal("wep_named", rig.Guns[2].WeaponId);
+        Assert.Equal(new[] { "firepoint7", "firepoint8" }, rig.Guns[0].Markers);
+    }
+
+    [Fact]
+    public void EveryShippedFitsRigLoadoutStillComposesItsWeaponFromCaliberAndAmmo()
+    {
+        // No shipped fit names a weapon. Every rig slot therefore carries none, and Bind composes
+        // the matrix id from Caliber and Ammo.
+        foreach (var (def, loadout) in Load().All)
+        {
+            var rig = Loadout.RigDef(FullRig, loadout);
+            Assert.Equal(4, rig.Guns.Count);
+            foreach (var gun in rig.Guns)
+            {
+                var stockGun = loadout.Guns.FirstOrDefault(g => g.Slot == gun.Slot) ?? loadout.Guns[0];
+                Assert.True(gun.WeaponId == null, $"{def} slot {gun.Slot}: {gun.WeaponId}");
+                Assert.Equal((stockGun.Caliber, stockGun.Ammo), (gun.Caliber, gun.Ammo));
+            }
+        }
     }
 
     private static StockLoadouts Load() => StockLoadouts.Load(ConfigPath);

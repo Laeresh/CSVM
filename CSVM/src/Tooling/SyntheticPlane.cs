@@ -6,10 +6,10 @@ using System.Text.Json;
 namespace CSVM.Tooling;
 
 /// <summary>
-/// The synthetic tree's stand-in aircraft, <see cref="Plane"/>, in two families. The plane family
-/// is its model under <c>planes/</c>, a box-built airframe carrying the marker rig. It also holds
-/// the <c>vehicle.json</c>, <c>engines.json</c> and <c>player.json</c> records and the maneuver
-/// library. The armament family is
+/// The synthetic tree's two stand-in aircraft, <see cref="Plane"/> and <see cref="Fighter"/>, in
+/// two families. The plane family is their models under <c>planes/</c>, box-built airframes each
+/// carrying the marker rig. It also holds the <c>vehicle.json</c>, <c>engines.json</c> and
+/// <c>player.json</c> records and the maneuver library. The armament family is
 /// one gun and one rocket in <c>weapons.json</c>, the shake sources and the message table. Every
 /// record is hand-authored from <c>docs/formats/</c>; only <c>models.json</c> is generated, from
 /// the box list beside the nodes.
@@ -18,6 +18,11 @@ public static class SyntheticPlane
 {
     /// <summary>The stand-in's model root, and the <c>nodename</c> its player def names.</summary>
     public const string Plane = "probe_plane";
+
+    /// <summary>The second stand-in's model root. ⚠ The name is the code's, not invented: the lobby
+    /// door seats this starter airframe from <c>PlanePickerRoster.StockAirframes</c>. A suite that
+    /// needs two distinct airframes finds it there. Everything under the name is invented.</summary>
+    public const string Fighter = "player_pfighter";
 
     // A record written for the tree keeps its path under extracted/ beneath this fixtures folder.
     private const string Records = "synthetic/";
@@ -56,13 +61,13 @@ public static class SyntheticPlane
         (new[] { 0, 1, 5, 4 }, 0f, -1f, 0f),
     };
 
-    /// <summary>The stand-in's stock fit, which a run reads in place as
+    /// <summary>The stand-ins' stock fits, which a run reads in place as
     /// <c>StockLoadouts.Supplement</c>. A loadout is engine config, not extracted data, so it stays
     /// out of the tree.</summary>
     public static string LoadoutsUnder(string fixturesRoot) =>
         Path.Combine(fixturesRoot, "synthetic", "stock_loadouts.json");
 
-    /// <summary>Writes the model under <c>planes/</c> and the plane records under <c>zrdr/</c>.
+    /// <summary>Writes the models under <c>planes/</c> and the plane records under <c>zrdr/</c>.
     /// It also writes the empty C1 chapter scope a flight is handed for its speed cue.</summary>
     public static void WritePlane(SyntheticTree tree)
     {

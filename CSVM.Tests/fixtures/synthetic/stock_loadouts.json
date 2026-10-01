@@ -10,6 +10,17 @@
          "markers": ["firepoint5", "firepoint6"]}
       ],
       "hardpoints": {"count": 2, "stock": ["wep_probe_rocket", "wep_probe_rocket"]}
+    },
+    "pprobefighter": {
+      "model": "player_pfighter",
+      "display": "Probe Fighter",
+      "guns": [
+        {"slot": 1, "mount": "Fighter Wing Guns", "caliber": 30, "ammo": "slug", "weapon": "wep_probe_gun",
+         "markers": ["firepoint7", "firepoint8"]},
+        {"slot": 4, "mount": "Fighter Nose Guns", "caliber": 30, "ammo": "slug", "weapon": "wep_probe_gun",
+         "markers": ["firepoint1", "firepoint2"]}
+      ],
+      "hardpoints": {"count": 4, "stock": ["wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket", "wep_probe_rocket"]}
     }
   }
 }

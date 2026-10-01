@@ -68,6 +68,77 @@
         ["wep_probe_rocket", 4, 3, 150, 1500]
       ],
       "collision", [[0.0, 0.0, 0.0]]
+    ],
+    "pprobefighter",
+    [
+      "kind_of", ["player_airplane"],
+      "nodename", ["player_pfighter"],
+      "title", ["MSG_PROBE_FIGHTER"],
+      "engine_sound", ["snd_probe_fighter_engine"],
+      "engine", [3],
+      "fuel", [70],
+      "dynamics",
+      [
+        "pitch_torque", [2.7],
+        "roll_torque", [6.6],
+        "rudder_torque", [1.6],
+        "return_rate", [3.3],
+        "ang_momentum_damp", [5.4],
+        "rec_moments_inertia", [0.75, 0.55, 1.05],
+        "fd_speed", [135],
+        "drag_factor", [0.9],
+        "veh_weight", [2600],
+        "ref_area", [260]
+      ],
+      "destroyable_parts",
+      [
+        ["nose", 22, 22, "critical", "engine",
+         "injure_anims", [[0.3, "pdpanel7", "player_pfighter"]]],
+        ["tail", 16, 16,
+         "injure_anims", [[0.3, "pdpanel8", "player_pfighter"]]],
+        ["leftwing", 18, 18,
+         "injure_anims", [[0.55, "pdpanel3", "player_pfighter"], [0.3, "pdpanel2", "player_pfighter"], [0.1, "pdpanel5", "player_pfighter"]]],
+        ["rightwing", 18, 18,
+         "injure_anims", [[0.55, "pdpanel4", "player_pfighter"], [0.3, "pdpanel1", "player_pfighter"], [0.1, "pdpanel6", "player_pfighter"]]]
+      ],
+      "collision",
+      [
+        [0.0, 0.0, -3.5],
+        [0.0, -0.1, 3.6],
+        [6.8, -0.2, -0.2],
+        [0.0, 0.8, -0.2],
+        [-6.8, -0.2, -0.2],
+        [0.0, -0.5, 2.0]
+      ]
+    ],
+    "probefighter",
+    [
+      "title", ["MSG_PROBE_FIGHTER"],
+      "mode", ["jet"],
+      "armor", [45],
+      "health", [45],
+      "dare_devil", [7],
+      "natural_touch", [6],
+      "sixth_sense", [4],
+      "dead_eye", [6],
+      "quick_draw", [7],
+      "steady_hand", [4],
+      "stun_recovery", [6],
+      "talker", [3],
+      "constitution", [4],
+      "weapons",
+      [
+        ["wep_probe_gun", 300, 0.4, 0, 700],
+        ["wep_probe_rocket", 2, 4, 200, 1400]
+      ],
+      "collision", [[0.0, 0.0, 0.0]]
+    ],
+    "wingman",
+    [
+      "kind_of", ["probefighter"],
+      "mode", ["wingman"],
+      "dare_devil", [3],
+      "steady_hand", [7]
     ]
   ]
 ]

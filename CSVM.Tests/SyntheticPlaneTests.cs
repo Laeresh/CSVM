@@ -119,6 +119,48 @@ public class SyntheticPlaneTests
         Assert.All(fit.Hardpoints.Stock, id => Assert.Equal(rocket.Id, id));
     }
 
+    [Fact]
+    public void TheFighterIsASecondDistinctAirframeWithItsOwnRigDefsAndFit()
+    {
+        string root = Built();
+        var gamez = GameZ.Load(Path.Combine(root, "extracted", "planes"));
+        string zrdr = Path.Combine(root, "extracted", "zrdr");
+
+        var probeRig = MarkerRig.Extract(gamez, SyntheticPlane.Plane)!;
+        var fighterRig = MarkerRig.Extract(gamez, SyntheticPlane.Fighter);
+        Assert.NotNull(fighterRig);
+        Assert.Equal(8, fighterRig.Markers.Count(m => m.Kind == MarkerRig.MarkerKind.Firepoint));
+        Assert.Equal(8, fighterRig.Markers.Count(m => m.Kind == MarkerRig.MarkerKind.Pylon));
+        Assert.NotEqual(Marker(probeRig, "pylon1"), Marker(fighterRig, "pylon1"));
+        Assert.NotEqual(Marker(probeRig, "firepoint1"), Marker(fighterRig, "firepoint1"));
+
+        // The two airframes fly apart: distinct defs, dynamics, engine row and engine sound.
+        var probe = PlaneStats.Load(zrdr, SyntheticPlane.Plane);
+        var fighter = PlaneStats.Load(zrdr, SyntheticPlane.Fighter);
+        Assert.Equal("pprobefighter", fighter.DefName);
+        Assert.NotEqual(probe.RollTorque, fighter.RollTorque);
+        Assert.NotEqual(probe.VehWeight, fighter.VehWeight);
+        Assert.NotEqual(probe.EnginePower, fighter.EnginePower);
+        Assert.NotEqual(probe.EngineSound, fighter.EngineSound);
+        Assert.Equal(6, fighter.CollisionProbes.Count);
+        Assert.Contains(fighter.DestroyableParts, p => p.InjureAnims.Any(a => a.Anim == "pdpanel4"));
+        Assert.Equal("probefighter", PlaneStats.LoadForAi(zrdr, SyntheticPlane.Fighter).AiDefName);
+
+        // Laid over the committed config, the fighter's fit replaces the shipped plane on its model.
+        var stock = StockLoadouts.Load(Path.Combine(TestData.RepoRoot, "CSVM", "data", "stock_loadouts.json"));
+        Assert.NotNull(stock.ForModel(SyntheticPlane.Fighter));
+        stock.Overlay(SyntheticPlane.LoadoutsUnder(TestData.Fixture()));
+        var fit = stock.ForModel(SyntheticPlane.Fighter);
+        Assert.NotNull(fit);
+        Assert.Equal("pprobefighter", fit.Def);
+        Assert.Single(stock.All.Values, d => d.Model == SyntheticPlane.Fighter);
+        Assert.All(fit.Guns, g => Assert.Equal("wep_probe_gun", g.WeaponId));
+        Assert.Equal(4, fit.Hardpoints!.Count);
+        Assert.Equal(12, stock.All.Count);
+    }
+
+    private static Vector3 Marker(MarkerRig rig, string name) => rig.Markers.Single(m => m.Name == name).Local;
+
     private static string Built()
     {
         string root = Path.Combine(TestData.TempDir(), "root");

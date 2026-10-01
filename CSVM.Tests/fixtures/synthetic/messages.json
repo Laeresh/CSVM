@@ -10,6 +10,7 @@
     { "key": "MSG_WINGMAN_SHOT_DOWN", "id": 7, "value": "Probe wingman lost" },
     { "key": "MSG_DESTROYED", "id": 8, "value": "probe destroyed" },
     { "key": "MSG_PRESS_AUTOLAND", "id": 9, "value": "Probe dock: press %1" },
-    { "key": "MSG_CLICK_AUTOLAND", "id": 10, "value": "Probe dock: click %1" }
+    { "key": "MSG_CLICK_AUTOLAND", "id": 10, "value": "Probe dock: click %1" },
+    { "key": "MSG_PROBE_FIGHTER", "id": 11, "value": "Probe Fighter" }
   ]
 }

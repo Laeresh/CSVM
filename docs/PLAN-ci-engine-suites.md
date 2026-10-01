@@ -725,6 +725,24 @@ by suite. `tier:ci` with the switch passes 104/0/0. The 43 FAILs, by class:
 battery should show the same PASS/FAIL/SKIP per suite as before, and `tier:ci` with and without the
 switch 104/0/0.
 
+**PFIGHTER landed: `player_pfighter` as an invented stand-in.** The synthetic tree carries a second
+airframe under the name the lobby door seats from `PlanePickerRoster.StockAirframes`; its boxes,
+markers, dynamics, engine row and sound, AI flavour, `wingman` def and fit are invented
+(`fixtures/README.md`). Under the switch its supplement fit replaces the committed def on that model
+(`StockLoadouts.Overlay`). `Loadout.ForRig` now keeps a stock slot's named `weapon` (`RigDef`, unit
+tested), so `weapons-fire` mounts and fires both invented weapons and fails only on the shipped
+48-weapon count, a B15b retarget; a slot naming no weapon binds as before. `net-versus-host-left`
+joins the tier (116): three passes with the switch, and red when a released Dogfight guest stops
+watching its host. Still red with the switch: `wingman-station` (`settled < baseline + NitroReformM`,
+608 m against 312 m of 100 m; the nitro leg's recovery rests on the shipped airframe's speed margin),
+`wing-flare-pose` (headless only: its pixel reads return -1 on the dummy renderer, its structure checks
+pass), `net-custom-planes` (needs `player_fbrand` and `player_avenger`, the host's and guest's custom
+airframes) and `net-kill-line` (its named-host leg now builds and fails on the shipped
+`MSG_DESTROYED_BY_X` wording). `net-two-session` still SKIPs on `C1/MP1`. Full catalog with the switch
+125 PASS, 50 FAIL, 324 SKIP against 124, 49, 326; without it 58, 2, 439, unchanged suite by suite.
+The Windows battery should be unchanged: no shipped fit names a weapon, and `Overlay` runs only under
+the switch.
+
 **Goal.** Each bucket C suite either passes on the stand-in and joins the tier, or is split into a
 logic half (on the tier) and a parity half (local).
 

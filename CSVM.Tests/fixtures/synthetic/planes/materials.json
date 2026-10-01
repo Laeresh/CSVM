@@ -3,5 +3,6 @@
   {"Colored": {"color": {"r": 150.0, "g": 156.0, "b": 166.0}, "alpha": 255.0, "soil": "Default"}},
   {"Colored": {"color": {"r": 40.0, "g": 40.0, "b": 44.0}, "alpha": 255.0, "soil": "Default"}},
   {"Textured": {"texture": "probe_panel", "soil": "Default"}},
-  {"Colored": {"color": {"r": 170.0, "g": 60.0, "b": 40.0}, "alpha": 255.0, "soil": "Default"}}
+  {"Colored": {"color": {"r": 170.0, "g": 60.0, "b": 40.0}, "alpha": 255.0, "soil": "Default"}},
+  {"Colored": {"color": {"r": 92.0, "g": 108.0, "b": 70.0}, "alpha": 255.0, "soil": "Default"}}
 ]
