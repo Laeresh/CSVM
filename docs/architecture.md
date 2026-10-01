@@ -48,6 +48,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/ControlSurfaces.cs`, classifies left/right aileron, elevator and rudder mesh nodes and their hinge axes (X ailerons/elevators, Y rudders).
 - `src/Mech3/WingLights.cs`, the one source for wingtip nav lights: flare node names, glow texture, warm-amber colour, blink period.
 - `src/Mech3/WorldBuilder.cs`, builds a chapter world: placed + partition subtrees, cloud deck, camera-anchored skydome, edge extender.
+- `src/Mech3/WorldMerge.cs`, under Enhanced the static world's opaque surfaces sharing a node frame and material drawn as one mesh.
 - `src/Mech3/MapEdgeExtender.cs`, rolling window of repeated border tiles and clutter continuing the world past the map edge, one per session.
 - `src/Mech3/Clutter.cs`, stamps the boot-script clutter templates onto matching-textured terrain at the polygon's own UV lattice.
 - `src/Mech3/ClutterActivation.cs`, draws each clutter stamp only while the world node it was stamped from is visible.

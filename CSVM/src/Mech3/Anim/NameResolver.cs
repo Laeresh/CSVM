@@ -45,6 +45,11 @@ public sealed class NameResolver<TNode>
     /// parts), not to world nodes. The genuine building templates lift ≤ 9 instances.</summary>
     public int MaxRootLift = 16;
 
+    /// <summary>Called for each node a name query hands out. That is a <see cref="FindAll"/> answer
+    /// as it is computed or extended, never a memo hit, and every <see cref="Anchors"/> result. A node
+    /// may arrive more than once.</summary>
+    public Action<TNode>? Claimed;
+
     private const int CensusCap = 12;
 
     // The two NAME wildcards, read here as "one authored definition, several world instances"
@@ -374,6 +379,7 @@ public sealed class NameResolver<TNode>
                     copied = true;
                 }
                 result.Add(row.Node);
+                Claimed?.Invoke(row.Node);
             }
         }
         _findCache[key] = new FindEntry(result, _index.Count);
@@ -467,9 +473,12 @@ public sealed class NameResolver<TNode>
             }
             var multi = MultiTargetAnchors(def);
             RecordAnchoring(def, multi.Count > 0 ? AnchorKind.ByName : AnchorKind.None);
+            NoteClaimed(multi);
             return multi;
         }
         var (anchors, how) = ComputeAnchors(def);
+        // A root lift's anchor is a parent no query returned, so it is handed out here.
+        NoteClaimed(anchors);
         // Outside the census gate on purpose: RefusesGlobalTier reads this on every resolve,
         // where the census is closed and ReportResolution is off.
         if (how == AnchorKind.ByRootLift)
@@ -856,6 +865,21 @@ public sealed class NameResolver<TNode>
             }
         }
         return kept.Count > 0 && kept.Count < anchors.Count ? kept : null;
+    }
+
+    private void NoteClaimed(List<TNode?> nodes)
+    {
+        if (Claimed == null)
+        {
+            return;
+        }
+        foreach (var node in nodes)
+        {
+            if (node != null)
+            {
+                Claimed(node);
+            }
+        }
     }
 
     // One census entry per definition identity (anchor name + animation name, AnimProgram's own

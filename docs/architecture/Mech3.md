@@ -199,6 +199,16 @@ billboard geometry and anything authoring `intersect_surface: false` from collid
 helpers (`HorizonZonesOf`, `CloudDeckAltitudeOf`, `DomeZonesToBuild`, `DetachedWorldAabb`,
 `FogVolumeZoneIdOf`, `MatchNodes`) are pure and test off engine. Deck and dome: [../formats/weather.md](../formats/weather.md), [../org/weather.md](../org/weather.md).
 
+## src/Mech3/WorldMerge.cs
+Under Enhanced Graphics in flight, the placed world's static opaque surfaces that share an exact
+node frame, material, `node_bias`, zone layer and shadow setting drawn as one mesh at that frame, from
+the arrays `SceneBuilder.SurfaceArrays` kept, so no vertex rounds differently. Built last in the
+session build and followed by the live switch: the faithful path draws every node itself, the merge
+kept out of the tree for a switch back. A member draws a residual of its blends and billboards boxed
+as its whole mesh. Static means visible and never handed out by a name query
+(`AnimRuntime.ClaimedNodes`); a later claim, a visibility change, `Release` or a moved transform the
+sweep finds puts the node back on its own mesh. Colliders are untouched. Read `SceneBuilder.cs`.
+
 ## src/Mech3/MapEdgeExtender.cs
 A rolling window of repeated border tiles and clutter continuing the world past the map edge, one
 window per session shared by every player camera and diffed only on a cell crossing. Clutter copies
@@ -529,7 +539,7 @@ range gates read the players through `RangePositions`: the last pose they flew, 
 `PlayerRangeHeld` says a cutscene is posing their aeroplanes, and `RangeGates` says which machine answers each gate (`Anim/RangeGateAuthority.cs`). `FastForward` is the per-definition
 rate a held key raises a cutscene to (`Anim/CutsceneFastForward.cs`), which `Advance` spends as repeated passes of the instance walk. `CollectLateStarts` and `CatchUp` step only the instances started in between, with their motions, for a guest's late director event. `SuppressedMotionAnims` names the definitions whose `OBJECT_MOTION` events this runtime drops, for a pose another writer owns, which also ends a definition that motion was sustaining (docs/verification.md, INSTR-74). What binds a member is on that member:
 the pool-slot checkout reset, the prewarm's scope, the mission-trigger closure, the undercover
-probe's decode, the death call's site follow. Each dispatch axis is a sibling module; the router keeps the case labels and the public fields callers configure: `SequenceRunner.cs`, `Anim/MotionSet.cs`, `Anim/NameResolver.cs`, `Anim/EmitterDirector.cs`, `Anim/SoundChannel.cs`, `Anim/LightChannel.cs`, `Anim/PoseChannel.cs`, `Anim/TemplateStage.cs`. Decode: docs/org/sequences.md.
+probe's decode, the death call's site follow. Each dispatch axis is a sibling module; the router keeps the case labels and the public fields callers configure: `SequenceRunner.cs`, `Anim/MotionSet.cs`, `Anim/NameResolver.cs`, `Anim/EmitterDirector.cs`, `Anim/SoundChannel.cs`, `Anim/LightChannel.cs`, `Anim/PoseChannel.cs`, `Anim/TemplateStage.cs`. `ClaimedNodes` and `NodeClaimed` say which nodes a name query has handed out, the set `WorldMerge` leaves alone. Decode: docs/org/sequences.md.
 
 ## src/Mech3/Anim/
 `AnimRuntime`'s private nested types promoted to top-level `internal` types in their own namespace,
@@ -608,7 +618,7 @@ rather than being voided by them), the scoped tier chain
 (NAME match, symbol narrowing, root lift) and the bind census. Node identity is
 constructor-supplied, never the node type's inherited `Equals`; `DropFreed` retires the rows naming a freed node and `DropNodes` those naming a live subtree a second staging replaces, since a name resolves to whichever claimant was indexed first. `AdmissibleStaging` filters every tier, the owner's verdict on one pooled
 copy, and `RefusesGlobalTier` withholds the last tier from a plain name written by a definition
-the world holds several instances of. Decode: [../org/sequences.md](../org/sequences.md).
+the world holds several instances of. `Claimed` hears each node a `FindAll` answer or `Anchors` first hands out. Decode: [../org/sequences.md](../org/sequences.md).
 
 ## src/Mech3/Anim/CutsceneFastForward.cs
 The rate one cutscene episode's own definitions run at while the player holds a key through a scene

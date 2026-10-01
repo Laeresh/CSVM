@@ -237,6 +237,67 @@ internal static class GraphicsSwitchSuites
         }
     }
 
+    [Suite("world-merge",
+        "an Enhanced flight session draws its static world's opaque surfaces merged by shared node frame "
+        + "and material, and every material's placed-world vertices once: the same count as on the faithful "
+        + "path, which draws every node itself with no merged mesh in the tree, and the same after a "
+        + "switch back; a member a visibility change, a name query or a direct release reaches draws its "
+        + "own whole mesh again and the count holds")]
+    internal static void WorldMergeDraws(TestContext ctx)
+    {
+        RequireData(ctx);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        var rig = Open(ctx, enhanced: true);
+        try
+        {
+            if (!rig.Built || rig.Session.WorldMerge is not { } merge)
+            {
+                ctx.Check(false, $"the Enhanced flight session builds with a world merge");
+                return;
+            }
+            int groups = merge.GroupCount;
+            ctx.Check(merge.Merged && groups > 0 && merge.SurfaceCount >= 2 * groups,
+                $"the merge stands: {merge.SurfaceCount} surface(s) of {merge.MemberCount} node(s) in {groups} mesh(es)");
+            var merged = PlacedVertices(rig);
+
+            Switch(rig, false);
+            var original = PlacedVertices(rig);
+            ctx.Check(!merge.Merged && merge.GetChildCount() == 0,
+                $"on the faithful path no merged mesh is in the tree ({merge.GetChildCount()} child(ren))");
+            ctx.Check(merged.Text == original.Text,
+                $"every material draws as many placed-world vertices merged as each node does itself ({merged} against {original})");
+            ctx.Check(merged.Nodes < original.Nodes,
+                $"ABLE-TO-FAIL CONTROL: the merge draws them in fewer surface draws ({merged.Nodes} against {original.Nodes})");
+
+            Switch(rig, true);
+            var back = PlacedVertices(rig);
+            ctx.Check(merge.Merged && merge.GroupCount == groups && back.Text == original.Text,
+                $"a switch back draws the kept merge again ({merge.GroupCount} mesh(es), {back})");
+
+            int members = merge.MemberCount;
+            var hidden = merge.MemberMeshes.First();
+            var owner = (Node3D)hidden.GetParent();
+            owner.Visible = false;
+            owner.Visible = true;
+            var claimed = merge.MemberMeshes.First();
+            var claimedOwner = (Node3D)claimed.GetParent();
+            int found = merge.Runtime?.FindNodes(claimedOwner.GetMeta(Mech3.AnimRuntime.NameMeta).AsString()).Count ?? 0;
+            var direct = merge.MemberMeshes.First();
+            Mech3.WorldMerge.Release((Node3D)direct.GetParent());
+            var released = PlacedVertices(rig);
+            ctx.Check(merge.MemberCount <= members - 3 && !merge.MemberMeshes.Contains(hidden)
+                    && !merge.MemberMeshes.Contains(claimed) && !merge.MemberMeshes.Contains(direct),
+                $"a visibility change, a name query ({found} found) and a direct release each release their node ({members} to {merge.MemberCount} member(s))");
+            ctx.Check(released.Text == original.Text,
+                $"and the released nodes draw their whole meshes, every vertex still once ({released})");
+        }
+        finally
+        {
+            rig.Close();
+            Restore(wasEnhanced);
+        }
+    }
+
     [Suite("graphics-switch-cover",
         "a live switch under its cover runs in order: the flight is held and the cover is in the tree "
         + "before the switch runs, the switch waits for the cover's second frame, the hold stands "
@@ -416,6 +477,35 @@ internal static class GraphicsSwitchSuites
             }
         });
         return (shaders.Count, shaders.Select(s => s.Code).Distinct(StringComparer.Ordinal).Count());
+    }
+
+    // Vertices drawn per material by the placed world's mesh instances and the merged meshes, visible
+    // ones only. A surface drawn twice or lost moves its material's count.
+    private static VertexReading PlacedVertices(Rig rig)
+    {
+        var counts = new SortedDictionary<ulong, long>();
+        int nodes = 0;
+        Walk(rig.Session, node =>
+        {
+            if (node is not MeshInstance3D { Mesh: ArrayMesh mesh } mi || !mi.IsVisibleInTree())
+                return;
+            bool placed = mi.Name == "mesh" && mi.GetParent() is Node3D owner && owner.HasMeta(Mech3.AnimRuntime.IndexMeta);
+            if (!placed && mi.GetParent() is not Mech3.WorldMerge)
+                return;
+            for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+            {
+                if (mesh.SurfaceGetMaterial(s) is { } material)
+                {
+                    nodes++;
+                    ulong id = material.GetInstanceId();
+                    counts[id] = counts.GetValueOrDefault(id) + mesh.SurfaceGetArrayLen(s);
+                }
+            }
+        });
+        var text = new StringBuilder();
+        foreach (var (id, count) in counts)
+            text.Append(CultureInfo.InvariantCulture, $"{id:x}:{count} ");
+        return new VertexReading(nodes, counts.Count, counts.Values.Sum(), text.ToString());
     }
 
     // Drawn materials whose cache shader is not the standing mode's twin.
@@ -787,6 +877,12 @@ internal static class GraphicsSwitchSuites
     {
         public override string ToString() => string.Create(CultureInfo.InvariantCulture,
             $"{Cells} cell(s), {Ranged} ranged, farthest {MaxRange:0} m, edge farthest {EdgeMax:0} m");
+    }
+
+    private sealed record VertexReading(int Nodes, int Materials, long Vertices, string Text)
+    {
+        public override string ToString() => string.Create(CultureInfo.InvariantCulture,
+            $"{Vertices} vertices of {Materials} material(s) in {Nodes} surface draw(s)");
     }
 
     // One session, its pane and the lights the launcher would own for it.

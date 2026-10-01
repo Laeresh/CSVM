@@ -410,6 +410,8 @@ public partial class GameSession : Node3D
     private NetTrailerTargets? _netTrailers;
     // rolling mirrored-tile window past the map edge
     private Mech3.MapEdgeExtender? _edgeExtender;
+    // the static world's merged draws under Enhanced (null outside flight)
+    private Mech3.WorldMerge? _worldMerge;
     // the splitscreen pane rig (null in single player)
     private UI.Boards.SplitScreen? _split;
 
@@ -531,6 +533,9 @@ public partial class GameSession : Node3D
 
     /// <summary>The map-edge continuation, null where the world has none. Read by the suites.</summary>
     internal Mech3.MapEdgeExtender? EdgeExtender => _edgeExtender;
+
+    /// <summary>The static world's merged draws, null outside flight. Read by the suites.</summary>
+    internal Mech3.WorldMerge? WorldMerge => _worldMerge;
 
     /// <summary>The world's clutter, null where it has none. Read by the suites.</summary>
     internal ClutterBuilder? Clutter => _clutter;
@@ -962,6 +967,7 @@ public partial class GameSession : Node3D
         }
 
         FinishFraming(state);
+        BuildWorldMerge(state);
         // By default only once this process has switched. The warm-up costs what one switch does,
         // and a player who never switches would pay it at every load.
         if (_spec.ShaderWarmup == "load" || (_spec.ShaderWarmup == "auto" && EnhancedLook.HasSwitched))
@@ -986,6 +992,9 @@ public partial class GameSession : Node3D
         SwitchProfile.Mark("alpha");
         _worldScene?.FollowGraphicsMode();
         SwitchProfile.Mark("world");
+        // After the world's own materials, whose blend verdicts decide what merges.
+        _worldMerge?.Follow(enhanced);
+        SwitchProfile.Mark("merge");
         _clutter?.Recut();
         _edgeExtender?.FollowClutterFade();
         SwitchProfile.Mark("clutter");
@@ -4015,6 +4024,32 @@ public partial class GameSession : Node3D
         }
         if (state.Textures.MissingTextures.Count > 0)
             Log.Info("world", $"[textures] {state.Textures.MissingTextures.Count} referenced texture(s) absent from this install: {string.Join(", ", state.Textures.MissingTextures)}");
+    }
+
+    // Flight only: the inspection modes pick and edit single nodes, which a merged draw would not show.
+    // ⚠ Keep it last in the build, after every placement and hide, so what stands visible is what
+    // the mission shows.
+    private void BuildWorldMerge(BuildState state)
+    {
+        if (!_spec.Fly || state.NodeSubtree != null || _plane == null || _worldScene == null)
+            return;
+        var parked = _unplacedWatch;
+        _worldMerge = new Mech3.WorldMerge(_plane, _worldScene, state.WorldRuntime,
+            () => ParkedAndDeck(parked));
+        _plane.AddChild(_worldMerge);
+        _worldMerge.Follow(GraphicsMode.Enhanced);
+    }
+
+    // What the merge leaves alone besides the runtime's claims: the parked vehicles and the cloud deck.
+    // The deck follows the camera, and the weather rig sets its visibility per pane.
+    private IEnumerable<Node3D> ParkedAndDeck(WorldBuilder? builder)
+    {
+        if (builder == null)
+            yield break;
+        foreach (var parked in builder.ParkedEntities)
+            yield return parked;
+        if (builder.CloudDeck is { } deck)
+            yield return deck;
     }
 
     // The post-build framing pass: subject framing for the static views, the freecam/anim-lab mesh

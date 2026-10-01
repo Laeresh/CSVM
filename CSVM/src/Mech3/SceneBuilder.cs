@@ -452,6 +452,9 @@ void fragment() {
     // shader variant rather than a parameter, so by the time a surface is committed it is reachable
     // nowhere else. The material cache also hands one object back for every surface sharing it.
     private readonly Dictionary<Material, TransparencyClass> _materialAlpha = new();
+    // A fullbright builder's committed surface arrays, per built mesh in surface order. Reading a
+    // surface back from Godot copies it off the GPU and waits for the render thread.
+    private readonly Dictionary<ArrayMesh, List<Godot.Collections.Array>> _builtArrays = new();
 
     /// <param name="fullbright">Render unshaded, like the original's world pass: texture × baked
     /// vertex colour, ignoring scene lights.</param>
@@ -796,6 +799,21 @@ void fragment() {
         ConflictRanks.TryGetValue(nodeIndex, out int rank);
         return Math.Min(rank, ConflictRankCap) * ConflictRankBias * DepthBiasScale;
     }
+
+    /// <summary>Whether <paramref name="material"/> is one of this builder's depth-biased world
+    /// materials drawn in the opaque pass, so its surfaces may share one draw (<see cref="WorldMerge"/>).
+    /// A billboard spins about its own instance's origin and a blend sorts per instance, so neither is.
+    /// It must follow its key (<see cref="ShaderTwins.Follow"/>), so a switch moves the shared draw too.</summary>
+    internal bool IsStaticOpaque(Material? material) =>
+        material is ShaderMaterial { Shader: { } shader } shaderMaterial
+        && _materialAlpha.TryGetValue(material, out var alpha) && alpha != TransparencyClass.BlendSurface
+        && ShaderTwins.FamilyOf(shader) == "world" && ShaderTwins.IsTracked(shaderMaterial);
+
+    /// <summary>The arrays a surface of this fullbright builder's mesh was committed from. Any other
+    /// mesh gets Godot's read-back, which copies the surface off the GPU.</summary>
+    internal Godot.Collections.Array SurfaceArrays(ArrayMesh mesh, int surface) =>
+        _builtArrays.TryGetValue(mesh, out var kept) && surface < kept.Count
+            ? kept[surface] : mesh.SurfaceGetArrays(surface);
 
     private static CylAxis GetCylindricalAxis(GameZMesh mesh) => ClassifyBillboard(mesh) switch
     {
@@ -1485,8 +1503,19 @@ void fragment() {
             // mesh, and the classes are isolated from each other, not from the world.
             if (alpha != TransparencyClass.None && HiddenAlpha.HasFlag(alpha))
                 continue;
-            st.SetMaterial(surfaceMaterial);
-            st.Commit(arrayMesh);
+            // What SurfaceTool.Commit does, with the arrays kept for the world's merge. Commit adds
+            // no surface for a group that emitted no triangle, so neither does this.
+            var arrays = st.CommitToArrays();
+            if (arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array().Length == 0)
+                continue;
+            arrayMesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+            arrayMesh.SurfaceSetMaterial(arrayMesh.GetSurfaceCount() - 1, surfaceMaterial);
+            if (_fullbright)
+            {
+                if (!_builtArrays.TryGetValue(arrayMesh, out var kept))
+                    _builtArrays[arrayMesh] = kept = new List<Godot.Collections.Array>();
+                kept.Add(arrays);
+            }
         }
         return arrayMesh;
     }

@@ -454,6 +454,14 @@ member, and it does not go here.
   round trip, so a loop of them over a large MultiMesh costs about a microsecond each in waits. Keep
   the state you need to read in a mirror of your own, and fill a new MultiMesh with one `Buffer`
   write.** Reading C5's 199,685 clutter placements back took 290 to 440 ms of every graphics switch.
+- **PERF-47**, **Count each pane's spyglass disc as a viewport of its own: it renders the whole
+  world through the pane's cull mask, sun shadows included, on every frame a target is off screen,
+  and a flight with several players holds one most of the time.** In four-pane C5 flight the four
+  discs drew 5,400 of 11,700 draws, more than the panes' own world draws.
+- **PERF-48**, **Compare four-pane frame times only within one interleaved batch: the same build's
+  `frame_ms` on the author's machine moves by more than a change's effect between batches an hour
+  apart.** C5 four-pane with the merge off read 14.8 and 15.1 ms in one batch and 13.3 and 13.4 ms
+  in a later one, against a merge effect of 0.4 to 1.8 ms.
 
 ## LOG, logs, error censuses, and exit codes
 
