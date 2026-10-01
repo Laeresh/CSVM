@@ -450,14 +450,16 @@ compose, so the Original strip is drawn and unbound and Built-in's row is left o
 
 **Photo mode is a fifth strip the original does not author.** It is this port's own feature, so the
 sheet stands it in the authored plates and label offset the block's own RESUME carries, between
-RESUME and PREFERENCES in the order a cursor walks, and the four authored strips keep their own
+RESUME and RESTART in the sheet's row order, and the four authored strips keep their own
 points. Where it stands is read off the block rather than fixed: the campaign block's two columns
 of two leave a 128-pixel channel between them on RESUME's row, which the 132-pixel plate takes with
 two columns of overlap at each neighbour's rounded end, while `ia_escape.zrd`'s three across leave
 no channel (their midpoint is RESTART's own point) and the strip takes the free cell under RESTART
 instead, level with MAINMENU. The rule is which of the two candidate points covers less authored
-plate. The hit test answers the earlier row in walk order for a column two strips share. Built-in's
-board keeps its own Photo Mode row.
+plate. The hit test answers the earlier row for a column two strips share. The pad and arrow
+cursor does not walk the row order: both blocks stand as a grid, so a press moves to the strip
+drawn in that direction, the nearest in the same column or row band, wrapping to the band's far
+end. Built-in's board keeps its own Photo Mode row.
 
 **The progress bar in a campaign dialog is not drawn.** Every campaign `escape.zrd` dialog carries a
 `PROGRESS` entry at `[90, 548]` copied from its `Loading.zrd` sibling, and `FUN_004a0d20` binds no

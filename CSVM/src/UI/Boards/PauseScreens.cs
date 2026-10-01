@@ -284,6 +284,32 @@ public static class PauseScreens
         return -1;
     }
 
+    /// <summary>The strip a pad or arrow press moves the cursor to. Read off where the strips are
+    /// drawn, not their row order, since both blocks stand as a grid. Vertical wins a diagonal. The nearest strip ahead in the same column (or row) band, else the band's far end,
+    /// else the nearest ahead anywhere, else the farthest behind. Pure, so testable off engine.
+    /// ⚠ Do not renumber the rows to change a walk; <see cref="RowAt"/> reads walk order.</summary>
+    public static int Step(IReadOnlyList<EscapeButton?> strips, int from, int moveX, int moveY)
+    {
+        ArgumentNullException.ThrowIfNull(strips);
+        if ((moveX == 0 && moveY == 0) || strips.Count < 2)
+        {
+            return from;
+        }
+
+        bool vertical = moveY != 0;
+        int dir = Math.Sign(vertical ? moveY : moveX);
+        if (from < 0 || from >= strips.Count || strips[from] is not { } current)
+        {
+            return ((from + dir) % strips.Count + strips.Count) % strips.Count;
+        }
+
+        return Nearest(strips, from, current.At, vertical, dir, banded: true, ahead: true)
+            ?? Nearest(strips, from, current.At, vertical, dir, banded: true, ahead: false)
+            ?? Nearest(strips, from, current.At, vertical, dir, banded: false, ahead: true)
+            ?? Nearest(strips, from, current.At, vertical, dir, banded: false, ahead: false)
+            ?? from;
+    }
+
     /// <summary>Composes the screen for one pause. <paramref name="focusedRow"/> is the strip the
     /// cursor stands on and <paramref name="pressed"/> whether it is held, which is what picks
     /// between the three authored strip bitmaps and their three label inks.
@@ -387,6 +413,39 @@ public static class PauseScreens
                 marked,
                 Italic: true, Shrink: true),
         };
+    }
+
+    // One pass of Step's search. Distance along the move is signed. So the nearest strip ahead and
+    // the farthest behind (the wrap) are both its minimum, and the row index settles a tie.
+    private static int? Nearest(
+        IReadOnlyList<EscapeButton?> strips, int from, BriefingPoint at, bool vertical, int dir,
+        bool banded, bool ahead)
+    {
+        int? best = null;
+        (float Along, float Across) bestKey = default;
+        for (int row = 0; row < strips.Count; row++)
+        {
+            if (row == from || strips[row] is not { } strip)
+            {
+                continue;
+            }
+
+            float along = (vertical ? strip.At.Y - at.Y : strip.At.X - at.X) * dir;
+            float across = Math.Abs(vertical ? strip.At.X - at.X : strip.At.Y - at.Y);
+            if ((ahead ? along <= 0f : along >= 0f)
+                || (banded && across >= (vertical ? StripWidth : StripHeight)))
+            {
+                continue;
+            }
+
+            if (best is null || along < bestKey.Along || (along == bestKey.Along && across < bestKey.Across))
+            {
+                best = row;
+                bestKey = (along, across);
+            }
+        }
+
+        return best;
     }
 
     // How much of the authored plates a strip standing at this point would cover, in square pixels.

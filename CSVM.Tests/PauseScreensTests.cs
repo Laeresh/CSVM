@@ -391,6 +391,54 @@ public class PauseScreensTests
         Assert.Null(PauseSheet.Load("no-zrdr", "no-messages", "loading_c61", instantAction: false));
     }
 
+    /// <summary>The campaign block's two columns, with PHOTO MODE in the channel on RESUME's row.
+    /// Each arrow moves to the strip drawn that way and wraps within its row or column. The walk
+    /// never zigzags between the rows.</summary>
+    [Theory]
+    [InlineData(1, 0, new[] { 1, 3, 4, 0, 2 })]
+    [InlineData(-1, 0, new[] { 3, 0, 4, 1, 2 })]
+    [InlineData(0, 1, new[] { 2, 2, 0, 4, 3 })]
+    [InlineData(0, -1, new[] { 2, 2, 0, 4, 3 })]
+    public void TheCampaignSheetsCursorStepsToTheStripDrawnThatWay(int moveX, int moveY, int[] to)
+    {
+        var strips = StripsAt((107f, 528f), (237f, 528f), (127f, 559f), (367f, 528f), (347f, 559f));
+
+        Assert.Equal(to, Enumerable.Range(0, strips.Length).Select(row => PauseScreens.Step(strips, row, moveX, moveY)));
+    }
+
+    /// <summary>The Instant Action block's three across, with PHOTO MODE under RESTART and no strip
+    /// under RESUME. A vertical step from RESUME takes the nearest strip of the other row.</summary>
+    [Theory]
+    [InlineData(1, 0, new[] { 2, 4, 3, 0, 1 })]
+    [InlineData(-1, 0, new[] { 3, 4, 0, 2, 1 })]
+    [InlineData(0, 1, new[] { 1, 2, 1, 4, 3 })]
+    [InlineData(0, -1, new[] { 1, 2, 1, 4, 3 })]
+    public void TheBlackboardsCursorStepsToTheStripDrawnThatWay(int moveX, int moveY, int[] to)
+    {
+        var strips = StripsAt((352f, 510f), (497f, 550f), (497f, 510f), (642f, 510f), (642f, 550f));
+
+        Assert.Equal(to, Enumerable.Range(0, strips.Length).Select(row => PauseScreens.Step(strips, row, moveX, moveY)));
+    }
+
+    [Fact]
+    public void NoMoveStaysADiagonalStepsVerticallyAndAMissingStripStepsInRowOrder()
+    {
+        var strips = StripsAt((107f, 528f), (237f, 528f), (127f, 559f), (367f, 528f), (347f, 559f));
+        var gapped = new[] { strips[0], null, strips[2], strips[3], strips[4] };
+
+        Assert.Equal(3, PauseScreens.Step(strips, 3, 0, 0));
+        Assert.Equal(2, PauseScreens.Step(strips, 0, 1, 1));
+        Assert.Equal(2, PauseScreens.Step(gapped, 1, 0, 1));
+        Assert.Equal(0, PauseScreens.Step(gapped, 1, 0, -1));
+        Assert.Equal(3, PauseScreens.Step(gapped, 0, 1, 0));
+    }
+
+    // Strips at authored points, in the sheet's row order: RESUME, PHOTO MODE, RESTART, PREFERENCES, QUIT.
+    private static EscapeButton?[] StripsAt(params (float X, float Y)[] points) =>
+        points.Select(p => (EscapeButton?)new EscapeButton(
+            "STRIP", new BriefingPoint(p.X, p.Y), "n", "r", "a", string.Empty, new BriefingPoint(66f, 7f)))
+            .ToArray();
+
     private static EscapeMap Map(EscapeRect clip, EscapeRect world) =>
         new("HA-m1MAP", new BriefingPoint(16f, 19f), clip, world);
 
