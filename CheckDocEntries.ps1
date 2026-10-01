@@ -200,7 +200,7 @@ if (Test-Path -LiteralPath $srcRoot) {
         ForEach-Object { $_.Value } | Select-Object -Unique)
 
     $allCs = @(Get-ChildItem -LiteralPath $srcRoot -Filter *.cs -Recurse -File)
-    $allCs = $allCs | Where-Object { $_.FullName -notmatch '\\(obj|bin|\.godot)\\' }
+    $allCs = $allCs | Where-Object { $_.FullName -notmatch '[\\/](obj|bin|\.godot)[\\/]' }
     foreach ($cs in $allCs) {
         $rel = $cs.FullName.Substring($srcRoot.Length + 1).Replace('\', '/')
         if ($rel -match '(^|/)Testing/[^/]*Suites\.cs$') { continue }
