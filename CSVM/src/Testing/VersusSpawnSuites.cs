@@ -198,6 +198,86 @@ internal static class VersusSpawnSuites
         ctx.Note($"{ctx.Chapter}/{MpMission}: {table.Count}-entry free-for-all block, seats on entries {string.Join(", ", seen)}");
     }
 
+    [Suite("versus-spawn-empty-stage",
+        "Dogfight on --stage=empty opens on the stage's own code-built spawn ring: the picker "
+        + "answers with it in place of a net.zrd table, every entry sits on the ring at the stage's "
+        + "spawn altitude with its nose aimed in, two seats open on opposite entries and four on a "
+        + "compass cross at the multiplayer opening state, a team match walks the one block, an "
+        + "explicit --pos still wins, and the stage without --vs still reads no table")]
+    internal static void VersusEmptyStageRing(TestContext ctx)
+    {
+        var spec = SessionSpec.Parse(new[] { "--vs", "--stage=empty", "--players=4", "--spawn=0" });
+        var picker = new SpawnPicker(spec);
+        var table = picker.LoadSpawnList("", spec.Scenario);
+        ctx.Check(spec.EmptyStage && spec.SpawnAt == null && picker.NetSpawns
+                  && table is { Count: EmptyStage.SpawnRingEntries },
+            $"the picker answers an empty-stage Dogfight with the stage's ring: {table?.Count ?? 0} entries, net={picker.NetSpawns}, override={spec.SpawnAt?.ToString() ?? "none"}");
+        if (table == null)
+        {
+            return;
+        }
+
+        // Aimed in: the nose's bearing is the skew away from the bearing to the origin, no more.
+        float cosSkew = Mathf.Cos(Mathf.DegToRad(EmptyStage.SpawnRingSkewDeg + 0.5f));
+        var bad = new List<int>();
+        for (int i = 0; i < table.Count; i++)
+        {
+            var p = table[i].Position;
+            var inward = new Vector3(-p.X, 0f, -p.Z).Normalized();
+            var nose = table[i].Forward with { Y = 0f };
+            bool onRing = Mathf.Abs(new Vector2(p.X, p.Z).Length() - EmptyStage.SpawnRingRadius) < 0.5f
+                          && Mathf.IsEqualApprox(p.Y, EmptyStage.SpawnAltitude);
+            if (!onRing || nose.Normalized().Dot(inward) < cosSkew)
+            {
+                bad.Add(i);
+            }
+        }
+
+        ctx.Check(bad.Count == 0,
+            $"every entry sits {EmptyStage.SpawnRingRadius:0} m out at {EmptyStage.SpawnAltitude:0} m with its nose within {EmptyStage.SpawnRingSkewDeg:0} degrees of the origin (off: {string.Join(", ", bad)})");
+
+        var two = picker.ChooseStarts(table, "", picker.ChooseSpawnBase(table), 2);
+        float apart = two[0].Pos.DistanceTo(two[1].Pos);
+        ctx.Check(apart > EmptyStage.SpawnRingRadius * 1.99f,
+            $"two seats open on opposite entries, {apart:0} m apart");
+        var four = picker.ChooseStarts(table, "", picker.ChooseSpawnBase(table), 4);
+        float closest = float.MaxValue;
+        for (int a = 0; a < four.Count; a++)
+        {
+            for (int b = a + 1; b < four.Count; b++)
+            {
+                closest = Mathf.Min(closest, four[a].Pos.DistanceTo(four[b].Pos));
+            }
+        }
+
+        ctx.Check(closest > EmptyStage.SpawnRingRadius * 1.41f,
+            $"four seats open on a compass cross, the closest pair {closest:0} m apart");
+        ctx.Check(Mathf.IsEqualApprox(four[0].ThrottleFrac, SpawnPoints.MultiplayerThrottleFrac)
+                  && Mathf.IsEqualApprox(four[0].SpeedMps, SpawnPoints.MultiplayerSpeedMps),
+            $"on the original's multiplayer opening state: throttle={four[0].ThrottleFrac:0.00} speed={four[0].SpeedMps:0.#}m/s");
+
+        // A team match on a table of one block opens every team on block 0, still apart.
+        var teamPicker = new SpawnPicker(spec) { SeatTeams = new[] { 1, 2 } };
+        var teamTable = teamPicker.LoadSpawnList("", spec.Scenario);
+        teamPicker.PlanTeams(teamTable, 0);
+        ctx.Check(teamPicker.SeatEntries is [0, 1],
+            $"a team match walks the ring's one block ({string.Join(", ", teamPicker.SeatEntries ?? Array.Empty<int>())})");
+
+        var placed = SessionSpec.Parse(new[] { "--vs", "--stage=empty", "--players=2", "--pos=100,400,0" });
+        var placedPicker = new SpawnPicker(placed);
+        var placedTable = placedPicker.LoadSpawnList("", placed.Scenario);
+        var (pos, _) = placedPicker.ChooseSpawn(placedTable, "", 0, 0, "");
+        ctx.Check(pos.IsEqualApprox(new Vector3(100f, 400f, 0f)),
+            $"an explicit --pos still beats the ring ({pos.X:0},{pos.Y:0},{pos.Z:0})");
+
+        // ABLE-TO-FAIL CONTROL: a flight on the stage keeps the single pose over the origin.
+        var fly = SessionSpec.Parse(new[] { "--fly", "--stage=empty" });
+        var flyPicker = new SpawnPicker(fly);
+        ctx.Check(flyPicker.LoadSpawnList("", fly.Scenario) == null && !flyPicker.NetSpawns
+                  && fly.SpawnAt == new Vector3(0f, EmptyStage.SpawnAltitude, 0f),
+            $"ABLE-TO-FAIL CONTROL: the stage without --vs reads no table and starts over the origin");
+    }
+
     // The placement closure GameSession installs: the living field read fresh at the respawn, so a
     // seat still on its crash camera neither holds a list entry nor pulls one away.
     private static (Vector3 Pos, Vector3 LookAt)? Placement(VersusSpawnRotation rotation,

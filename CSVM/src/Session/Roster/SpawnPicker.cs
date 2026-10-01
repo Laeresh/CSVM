@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Flight.Modes;
+using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
 
@@ -42,9 +44,10 @@ public sealed class SpawnPicker : IFlightStarts
     }
 
     /// <summary>Whether <see cref="LoadSpawnList"/> answered with a multiplayer mission's
-    /// <c>net.zrd</c> table rather than with an <c>ia.json</c> scenario list. It changes the
-    /// logged tag and <see cref="StartState"/>, which then opens on the original's own
-    /// multiplayer throttle and speed (docs/formats/net-spawns.md).</summary>
+    /// <c>net.zrd</c> table, or the empty stage's <see cref="EmptyStage.SpawnRing"/> in its place,
+    /// rather than with an <c>ia.json</c> scenario list. It changes the logged tag and
+    /// <see cref="StartState"/>, which then opens on the original's own multiplayer throttle and
+    /// speed (docs/formats/net-spawns.md).</summary>
     public bool NetSpawns { get; private set; }
 
     /// <summary>Each seat's lobby team, 0 for none, set before <see cref="LoadSpawnList"/> by a
@@ -60,22 +63,34 @@ public sealed class SpawnPicker : IFlightStarts
     /// </summary>
     public (int Start, int Count)[]? SeatBlocks { get; private set; }
 
-    private bool Teamed => SeatTeams != null && System.Linq.Enumerable.Any(SeatTeams, t => t > 0);
+    private bool Teamed => SeatTeams != null && SeatTeams.Any(t => t > 0);
+
+    // What a log line names the launch and its multiplayer table by. The empty stage has neither a
+    // chapter nor a net.zrd, so naming them there would point a reader at data the run never read.
+    private string Where => _spec.EmptyStage ? "stage=empty" : $"{_spec.Chapter}/{_spec.Mission}";
+
+    private string NetTable => _spec.EmptyStage ? "spawn ring" : "net.zrd";
 
     /// <summary>The one spawn list the session walks: the mission's <c>ia.json</c> entries for
     /// <paramref name="scenario"/>, else a Dogfight launch's <c>net.zrd</c> free-for-all block. With
     /// neither it is null, which leaves <see cref="ChooseSpawn"/> on PLAYER_INIT. A team match takes the whole
-    /// table. Sets <see cref="NetSpawns"/> for the rest of the session, so call it once per launch.
+    /// table. A Dogfight on the empty stage walks <see cref="EmptyStage.SpawnRing"/>, one block.
+    /// Sets <see cref="NetSpawns"/> for the rest of the session, so call it once per launch.
     /// </summary>
     public List<SpawnPoint>? LoadSpawnList(string missionZrdrPath, string scenario)
     {
         SeatEntries = null;
         SeatBlocks = null;
         NetSpawns = false;
-        // The empty stage has no mission, so there is nothing to read: ChooseSpawn takes the
-        // --pos/default override placed over the grid origin.
+        // The empty stage has no mission, so there is nothing to read. A flight takes the --pos
+        // override placed over the grid origin; a Dogfight walks the stage's own table.
         if (_spec.EmptyStage)
-            return null;
+        {
+            if (!_spec.Versus)
+                return null;
+            NetSpawns = true;
+            return EmptyStage.SpawnRing.Select(s => new SpawnPoint(s.Position, s.HeadingDeg)).ToList();
+        }
         var ia = SpawnPoints.LoadIa(missionZrdrPath, scenario);
         if (ia is { Count: > 0 })
             return ia;
@@ -147,7 +162,7 @@ public sealed class SpawnPicker : IFlightStarts
         // own constants to the same placement call every other mode reaches through PLAYER_INIT.
         if (NetSpawns)
         {
-            Log.Info("flight", $"start [{_spec.Chapter}/{_spec.Mission} net.zrd] throttle={SpawnPoints.MultiplayerThrottleFrac:0.00} speed={SpawnPoints.MultiplayerSpeedMps:0.#}m/s ({SpawnPoints.MultiplayerSpeedMps * 2.2369363f:0}mph)");
+            Log.Info("flight", $"start [{Where} {NetTable}] throttle={SpawnPoints.MultiplayerThrottleFrac:0.00} speed={SpawnPoints.MultiplayerSpeedMps:0.#}m/s ({SpawnPoints.MultiplayerSpeedMps * 2.2369363f:0}mph)");
             return (SpawnPoints.MultiplayerThrottleFrac, SpawnPoints.MultiplayerSpeedMps);
         }
 
@@ -200,7 +215,7 @@ public sealed class SpawnPicker : IFlightStarts
             int i = SeatEntries is { } entries && playerIndex < entries.Length
                 ? entries[playerIndex]
                 : (spawnBase + playerIndex) % spawns.Count;
-            string list = NetSpawns ? "net.zrd" : ScenarioOverride ?? _spec.Scenario;
+            string list = NetSpawns ? NetTable : ScenarioOverride ?? _spec.Scenario;
             return LogSpawn($"{tag}{list} #{i} of {spawns.Count}", spawns[i]);
         }
         // No instant-action spawns (only IA1 folders have ia.json), use the story-mission
@@ -243,7 +258,7 @@ public sealed class SpawnPicker : IFlightStarts
     // (-Z) rotated by the heading (yaw about up), and logs it for cross-checking the data.
     private (Vector3 pos, Vector3 lookAt) LogSpawn(string label, SpawnPoint s)
     {
-        Log.Info("flight", $"spawn [{_spec.Chapter}/{_spec.Mission} {label}] pos=({s.Position.X:0},{s.Position.Y:0},{s.Position.Z:0}) heading={s.HeadingDeg:0}°");
+        Log.Info("flight", $"spawn [{Where} {label}] pos=({s.Position.X:0},{s.Position.Y:0},{s.Position.Z:0}) heading={s.HeadingDeg:0}°");
         return (s.Position, s.Position + s.Forward);
     }
 }

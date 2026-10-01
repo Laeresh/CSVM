@@ -149,25 +149,16 @@ internal static class NetSessionSuites
         + "aeroplane's path is an order of magnitude worse")]
     internal static void AircraftStateTracksItsOwner(TestContext ctx)
     {
-        string missionZrdr = RequireMatchData(ctx);
-        var spec = SessionSpec.Parse(new[]
-        {
-            "--vs", $"--chapter={ctx.Chapter}", $"--mission={MpMission}", "--players=1", "--mute",
-            "--no-pads", TrackedFlight,
-        });
-        var table = new SpawnPicker(spec).LoadSpawnList(missionZrdr, spec.Scenario);
-        if (table is not { Count: >= 2 })
-        {
-            throw new SuiteSkippedException($"{ctx.Chapter}/{MpMission} authors no usable net.zrd table");
-        }
+        var spec = NetCombatSuites.MatchSpec(ctx, out _, TrackedFlight);
+        var airframes = NetCombatSuites.AirframesFor(spec);
 
         // The same link the join is asserted over. Aircraft state is the unreliable sequenced
         // class, so a quarter of these samples never land and the buffer covers the gaps.
         var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.03, 0.01, 0.25), new Random(9311));
         var roster = new NetSeat[]
         {
-            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = Airframes[0] },
-            new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
+            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = airframes[0] },
+            new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = airframes[1] },
         };
         NetSeats.Validate(roster);
 
@@ -209,23 +200,14 @@ internal static class NetSessionSuites
         + "under its pause, and switches its graphics mode live and back")]
     internal static void PauseSheetLeavesANetworkFlightRunning(TestContext ctx)
     {
-        string missionZrdr = RequireMatchData(ctx);
-        var spec = SessionSpec.Parse(new[]
-        {
-            "--vs", $"--chapter={ctx.Chapter}", $"--mission={MpMission}", "--players=1", "--mute",
-            "--no-pads", TrackedFlight,
-        });
-        var table = new SpawnPicker(spec).LoadSpawnList(missionZrdr, spec.Scenario);
-        if (table is not { Count: >= 2 })
-        {
-            throw new SuiteSkippedException($"{ctx.Chapter}/{MpMission} authors no usable net.zrd table");
-        }
+        var spec = NetCombatSuites.MatchSpec(ctx, out _, TrackedFlight);
+        var airframes = NetCombatSuites.AirframesFor(spec);
 
         var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.03, 0.01, 0.25), new Random(4127));
         var roster = new NetSeat[]
         {
-            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = Airframes[0] },
-            new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
+            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = airframes[0] },
+            new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = airframes[1] },
         };
         NetSeats.Validate(roster);
 
@@ -661,7 +643,7 @@ internal static class NetSessionSuites
             NetSeats = isHost ? roster : null,
             NetTransport = transport,
             NetHost = isHost,
-            NetAirframes = transport == null ? null : Airframes,
+            NetAirframes = transport == null ? null : NetCombatSuites.AirframesFor(spec),
         });
         pane.AddChild(session);
         return new Ends(pane, session, session.StartSession());

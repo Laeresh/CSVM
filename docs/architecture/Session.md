@@ -85,13 +85,13 @@ only when neither is authored. Instant Action enemies are the exception, for the
 
 ## src/Session/Roster/SpawnPicker.cs
 Resolves each player's flight spawn: `LoadSpawnList` (which list the session walks, the mission's
-`ia.json` scenario or a Dogfight launch's `net.zrd` block, the whole table when `SeatTeams` names a team, which `PlanTeams` walks by team block), `ChooseSpawnBase` (the shared
-`--spawn=`-or-random list index), `ChooseSpawn` (a player's position and look-at from that list,
-`objectives.json`'s `PLAYER_INIT`, or the `--spawn-at=` debug override), `StartState` (the field's
-throttle and speed) and `LogSpawn`. Constructed once per session build. Also the plain
-`IFlightStarts`: `ChooseStarts` loops its own `ChooseSpawn`, the placement every session flies
-except a splitscreen race or a co-op campaign mission. `StartGrid` takes its anchor from here, so
-this type owns it. Data: [spawns](../formats/spawns.md), [net](../formats/net-spawns.md).
+`ia.json` scenario or a Dogfight launch's `net.zrd` block, the whole table when `SeatTeams` names a
+team, which `PlanTeams` walks by team block, or on `--stage=empty` the stage's `SpawnRing`),
+`ChooseSpawnBase` (the shared `--spawn=`-or-random index), `ChooseSpawn` (a player's position and
+look-at from that list, `PLAYER_INIT`, or the `--pos=` override), `StartState` (the field's throttle
+and speed) and `LogSpawn`. Built once per session. Also the plain `IFlightStarts`: `ChooseStarts`
+loops `ChooseSpawn` for every session but a splitscreen race or a co-op campaign mission, and
+`StartGrid` takes its anchor from here. Data: [spawns](../formats/spawns.md), [net](../formats/net-spawns.md).
 
 ## src/Session/Roster/IFlightStarts.cs
 Where every pilot in a session starts: `ChooseStarts(spawns, missionZrdrPath, spawnBase,

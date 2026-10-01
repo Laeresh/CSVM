@@ -134,7 +134,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C, arena and shell fixtures
 
-21. ☐ A code-built spawn table for a match on the empty stage
+21. ☑ A code-built spawn table for a match on the empty stage
 22. ☐ An invented multiplayer map for the team and flag suites
 23. ☑ The Original shell's remaining layout screens
 24. ☐ Anim, effect and weather records for the remaining D suites
@@ -688,7 +688,68 @@ retargeted check failing on a broken input before adding it to the tier.
 
 # Wave C, arena and shell fixtures
 
-## C21 ☐ A code-built spawn table for a match on the empty stage
+## C21 ☑ A code-built spawn table for a match on the empty stage
+
+**Landed.** A `--vs` launch on `--stage=empty` walks `EmptyStage.SpawnRing`, a code-built
+free-for-all block of `net.zrd` records: 16 entries (one whole block, so all `NetSeats.MaxPlayers`
+seats open apart) on a 600 m ring about the origin at the stage's 300 m spawn altitude. Each nose is
+aimed 10 degrees right of the origin, so two opposite seats pass about 208 m abeam; aimed dead at the
+origin, a hands-off two-seat run rammed nose to nose. Entry i takes the bit-reversed slot, so
+entries 0 and 1 are opposite and 0 to 3 a compass cross. The records are `(position, heading)`
+tuples, since `Mech3` names no `Flight` type; `SpawnPicker.LoadSpawnList` maps them to `SpawnPoint`
+and sets `NetSpawns`, so `StartState` (the multiplayer throttle and speed), the seat walk,
+`PlanTeams` (every team on block 0, the fallback for a map with no team block) and the respawn
+rotation run unchanged. `SessionSpec` no longer defaults the `--pos` override over the origin for
+`--vs` on the stage, and an explicit `--pos` still wins. The empty stage's log lines read
+`[stage=empty ... spawn ring]`; a chapter's read as before, string for string, and every chapter
+path is untouched. The single-player stage keeps its one pose over the origin.
+
+In the suites, `NetCombatSuites.Arena` launches a match on `C1/MP1` when the data root carries its
+mission zrdr (with the chapter gamez gate as before) and on `--stage=empty` when it does not, and
+notes `arena: ...` in the report either way. `MatchSpec`, `net-enet-join`, `net-soak` and
+`net-guest-keymap` use it; `net-aircraft-replication` and `net-pause-overlay` now build through
+`MatchSpec`. `AirframesFor` seats both roster entries on the spec's plane in the empty arena (the
+stand-in under the switch) and the shipped `player_pfighter`/`player_fbrand` pair on `MP1`;
+`Roster` takes the spec. The synthetic `player.json` authors an invented `score_suicide` of -3, so
+`net-combat-events`' authored-scores control has a value unlike the fallback to read.
+`net-two-session` stays on `MP1` alone, since its airframe-crossing check needs two airframes.
+The new install-free `versus-spawn-empty-stage` asserts the ring, the two- and four-seat openings,
+the team walk, the `--pos` override and the flight control.
+
+The tier goes from 95 to 106: `versus-spawn-empty-stage` and ten network suites, each passing three
+consecutive runs with `--synthetic-data` and shown red on a broken input. A ring of radius 0 failed
+`net-combat-events`, `net-match-state`, `net-pause-overlay`, `net-relay-star`,
+`net-spawn-rotation` and `versus-spawn-empty-stage`; a two-entry ring with seat 1 on an airframe
+the tree lacks failed `net-enet-join`, `net-flight-chat`, `net-soak` and `net-start-together` and
+skipped `net-guest-keymap` (a tier failure). `net-flight-chat`, `net-match-state` and
+`net-spawn-rotation` were not in the survey's eleven and pass on the ring too.
+
+Verified on Linux, headless, empty data root: `--vs --stage=empty --synthetic-data --players=2 --det`
+spawns P1 at (0,300,-600) heading 170 and P2 at (0,300,600) heading -10, 1200 m apart and facing
+in. The full catalog without the switch reads 58 PASS, 2 FAIL (`build-stamp-focus`,
+`enet-dual-stack`), 439 SKIP against 57/2/439 before, the one change being the new suite; every
+network suite still skips on `planes gamez not found`. `--run-tests=tier:ci --synthetic-data` passes
+106/0/0, its 37 engine error lines all the excused text-server pattern, and the full catalog with
+the switch reads 115 PASS, 155 FAIL, 229 SKIP. The guard on this container
+refused `pwsh`, so `RunCiSuites.ps1` and the content gate were not run here.
+
+Still off the tier. Asserting a shipped value, for B15: `net-versus-lives`
+(`first.StartsWith("guest1 / Destroyed by host / You Have ONE Life Left!")` and
+`lines.StartsWith("Game Over: / No Enemies Left / guest1 / Destroyed by host")`), `net-kill-line`
+(`host / Destroyed by guest1`, the shipped wording), and `net-aircraft-replication`
+(`flight.Flying && flown > 200f && turn > 30f`: the stand-in turns 28 degrees in 240 steps on the
+held stick 0.6,0.9,0,1). Needing something else: `net-custom-planes` and `net-versus-host-left`
+build through the lobby door, which seats `PlanePickerRoster`'s starter airframe
+(`player_pfighter`) over `StockAirframes`, neither in the synthetic tree; `net-rearm-deathmatch`
+needs an MP map's `rearm_node_1`/`rearm_node_2`, and `net-team-deathmatch` its team blocks (C22).
+These now FAIL with the switch where they skipped, off the tier.
+
+**Still owed to the Windows run.** The full `RunTests.ps1` battery should be unchanged plus one
+PASS (`versus-spawn-empty-stage`): the install carries `C1/MP1`, so every touched network suite flies
+the real table as before, noting `arena: C1/MP1 and its net.zrd table`. Optionally,
+`--run-tests=tier:ci --synthetic-data` on the real checkout should pass all 106.
+
+**Original approach (kept for reference).**
 
 **Goal.** A Dogfight on `--stage=empty` places every seat from a spawn table the stage builds in
 code, so the network match suites run without a multiplayer map.

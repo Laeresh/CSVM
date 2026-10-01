@@ -59,8 +59,6 @@ internal static class NetSoakSuites
     // behind a delivered payload, so the inferred count can meet the carrier's.
     private const int FlushFireSteps = 12;
 
-    private static readonly string[] Airframes = { "player_pfighter", "player_fbrand" };
-
     // The matrix. The clean cell is the instruments' own control. The other three step latency,
     // jitter and loss up together, from a good broadband link to a poor wireless one.
     private static readonly Cell[] Matrix =
@@ -83,6 +81,7 @@ internal static class NetSoakSuites
     internal static void SoakTheLink(TestContext ctx)
     {
         var spec = SoakSpec(ctx);
+        var airframes = NetCombatSuites.AirframesFor(spec);
         var weapons = WeaponDefs.Load(ctx.ZrdrPath);
         var gun = weapons.All.FirstOrDefault(w => w.IsCannon && w.HealthDamage is > 0f);
         if (gun == null)
@@ -93,8 +92,8 @@ internal static class NetSoakSuites
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(MeshSeed));
         var roster = new NetSeat[]
         {
-            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = Airframes[0] },
-            new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
+            new() { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = airframes[0] },
+            new() { PeerId = 1, SeatIndex = 1, Callsign = "guest", PlaneNode = airframes[1] },
         };
         NetSeats.Validate(roster);
 
@@ -334,17 +333,13 @@ internal static class NetSoakSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, "MP1");
         ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
-        ctx.RequireData(missionZrdr, $"{ctx.Chapter}/MP1 zrdr");
         // Both limits off, so no number of kills or minutes ends the match mid-matrix and holds
         // every world at the wrap-up board.
-        return SessionSpec.Parse(new[]
+        return SessionSpec.Parse(new[] { "--vs" }.Concat(NetCombatSuites.Arena(ctx)).Concat(new[]
         {
-            "--vs", $"--chapter={ctx.Chapter}", "--mission=MP1", "--players=1", "--mute",
-            "--no-pads", TrackedFlight, "--vs-kills=0", "--vs-time=0",
-        });
+            "--players=1", "--mute", "--no-pads", TrackedFlight, "--vs-kills=0", "--vs-time=0",
+        }).ToArray());
     }
 
     private static int Rounds(FlightController gun) =>

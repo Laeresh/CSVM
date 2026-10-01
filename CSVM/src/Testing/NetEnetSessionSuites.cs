@@ -23,8 +23,6 @@ namespace CSVM.Testing;
 /// </summary>
 internal static class NetEnetSessionSuites
 {
-    private const string MpMission = "MP1";
-
     // Loopback only. A wildcard bind is what makes Windows ask about the firewall, and a test run
     // must never put a dialog on anybody's screen.
     private const string Loopback = "127.0.0.1";
@@ -43,10 +41,6 @@ internal static class NetEnetSessionSuites
     // Sim steps both sessions are driven through after the join, at the fixed step.
     private const int LockstepSteps = 24;
 
-    // The airframe order both peers read a roster's airframe index against. Two different entries,
-    // so a seat's pick crossing the wire cannot be satisfied by the two ends sharing a default.
-    private static readonly string[] Airframes = { "player_pfighter", "player_fbrand" };
-
     [Suite("net-enet-join",
         "a host session and a guest session in one process joined over two ENet sockets on "
         + "127.0.0.1: the sockets link, the host's handshake and roster are held by the guest's "
@@ -57,15 +51,10 @@ internal static class NetEnetSessionSuites
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
         ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
-        ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{MpMission} zrdr");
-
-        var spec = SessionSpec.Parse(new[]
-        {
-            "--vs", $"--chapter={ctx.Chapter}", $"--mission={MpMission}", "--players=1", "--mute",
-        });
+        var spec = SessionSpec.Parse(new[] { "--vs" }.Concat(NetCombatSuites.Arena(ctx))
+            .Concat(new[] { "--players=1", "--mute" }).ToArray());
+        var airframes = NetCombatSuites.AirframesFor(spec);
 
         var hostWire = OpenHost(out int port, out string why);
         if (hostWire == null)
@@ -97,8 +86,8 @@ internal static class NetEnetSessionSuites
 
             var roster = new NetSeat[]
             {
-                new() { PeerId = hostWire.LocalPeer, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = Airframes[0] },
-                new() { PeerId = hostWire.Peers[0], SeatIndex = 1, Callsign = "guest", PlaneNode = Airframes[1] },
+                new() { PeerId = hostWire.LocalPeer, SeatIndex = 0, IsLocal = true, Callsign = "host", PlaneNode = airframes[0] },
+                new() { PeerId = hostWire.Peers[0], SeatIndex = 1, Callsign = "guest", PlaneNode = airframes[1] },
             };
             NetSeats.Validate(roster);
 
@@ -290,7 +279,7 @@ internal static class NetEnetSessionSuites
             NetSeats = isHost ? roster : null,
             NetTransport = transport,
             NetHost = isHost,
-            NetAirframes = Airframes,
+            NetAirframes = NetCombatSuites.AirframesFor(spec),
         });
         pane.AddChild(session);
         return new Ends(pane, session, session.StartSession());

@@ -2462,13 +2462,17 @@ public sealed record SessionSpec
         {
             Warn("core", "--direction ignored: flight steers the nose from the spawn override, which needs --pos");
         }
-        // The empty stage has no mission spawn list to draw from, so the subject starts over the
-        // grid origin, through the same fields --pos resolves into, so an explicit placement wins.
+        // The empty stage has no mission spawn list, so the subject starts over the grid origin. It
+        // goes through the fields --pos resolves into, so an explicit placement wins. A Dogfight
+        // walks the stage's own spawn ring instead, which a default here would beat.
         if (EmptyStage)
         {
             if (Fly)
             {
-                SpawnAt ??= new Vector3(0f, Mech3.EmptyStage.SpawnAltitude, 0f);
+                if (!Versus)
+                {
+                    SpawnAt ??= new Vector3(0f, Mech3.EmptyStage.SpawnAltitude, 0f);
+                }
             }
             else
             {

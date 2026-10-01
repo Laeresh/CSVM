@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using CSVM.Utils;
 using Godot;
 
@@ -38,6 +39,19 @@ public sealed class EmptyStage
     /// which every airframe in the table turns inside.</summary>
     public const int PatrolRingNodes = 8;
 
+    /// <summary>The Dogfight spawn ring's radius, metres. Two seats on opposite entries open
+    /// 1200 m apart and closing, so a match's first pass comes within seconds.</summary>
+    public const float SpawnRingRadius = 600f;
+
+    /// <summary>Entries on the Dogfight spawn ring: one whole 16-entry <c>net.zrd</c> block
+    /// (docs/formats/net-spawns.md), so every seat a match admits opens on its own entry. A power of
+    /// two, which the spread order in <see cref="SpawnRing"/> needs.</summary>
+    public const int SpawnRingEntries = 16;
+
+    /// <summary>How far right of the origin every ring entry's nose is aimed, degrees. Opposite
+    /// seats then pass about 208 m abeam rather than ramming nose to nose hands-off.</summary>
+    public const float SpawnRingSkewDeg = 10f;
+
     /// <summary>The freecam eye when nothing placed it: back and above the origin, looking at it.</summary>
     public static readonly Vector3 CameraPos = new(0f, 120f, 300f);
 
@@ -65,6 +79,14 @@ public sealed class EmptyStage
     /// anything and a run repeats. ⚠ Built in code, like the grid texture: the stage must boot with
     /// no chapter assets present.</summary>
     public static AiNet PatrolNet { get; } = BuildPatrolNet();
+
+    /// <summary>The stage's own Dogfight spawn table, one free-for-all block of <c>net.zrd</c>
+    /// records (position, heading in degrees). Its <see cref="SpawnRingEntries"/> entries sit on a
+    /// <see cref="SpawnRingRadius"/> ring at <see cref="SpawnAltitude"/>, each aimed
+    /// <see cref="SpawnRingSkewDeg"/> right of the origin. Every leading run is spread: entries 0 and
+    /// 1 are opposite, 0 to 3 a compass cross, 0 to 7 its eight points. ⚠ Built in code: a match here
+    /// must boot with no multiplayer map present.</summary>
+    public static IReadOnlyList<(Vector3 Position, float HeadingDeg)> SpawnRing { get; } = BuildSpawnRing();
 
     /// <summary>The stage subtree, the caller adds it to the session root exactly as it adds a
     /// built world.</summary>
@@ -151,6 +173,35 @@ public sealed class EmptyStage
             Edges = edges,
             Volumes = PatrolVolumes,
         };
+    }
+
+    // The ring is the patrol net's frame: slot 0 due north, the angle running clockwise seen from
+    // above. Entry i takes the slot whose index is i's bits reversed, so each leading run halves
+    // the gaps. A heading yaws the -Z nose left, so 180 minus the bearing faces the origin.
+    private static (Vector3 Position, float HeadingDeg)[] BuildSpawnRing()
+    {
+        int bits = 0;
+        while ((1 << bits) < SpawnRingEntries)
+        {
+            bits++;
+        }
+        var ring = new (Vector3 Position, float HeadingDeg)[SpawnRingEntries];
+        for (int i = 0; i < SpawnRingEntries; i++)
+        {
+            int slot = 0;
+            for (int b = 0; b < bits; b++)
+            {
+                if ((i & (1 << b)) != 0)
+                {
+                    slot |= 1 << (bits - 1 - b);
+                }
+            }
+            float bearing = 360f * slot / SpawnRingEntries;
+            float angle = Mathf.DegToRad(bearing);
+            ring[i] = (new Vector3(Mathf.Sin(angle) * SpawnRingRadius, SpawnAltitude,
+                -Mathf.Cos(angle) * SpawnRingRadius), Mathf.Wrap(180f - bearing - SpawnRingSkewDeg, -180f, 180f));
+        }
+        return ring;
     }
 
     private static StandardMaterial3D GridMaterial()

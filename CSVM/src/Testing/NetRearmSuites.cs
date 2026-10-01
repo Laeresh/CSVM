@@ -247,7 +247,7 @@ internal static class NetRearmSuites
         SessionSpec? guestSpec = null, Action<GameSession[]>? opened = null)
     {
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(meshSeed));
-        var roster = NetCombatSuites.Roster(2).Select((seat, i) => seat with { TeamId = teams[i] }).ToArray();
+        var roster = NetCombatSuites.Roster(2, spec).Select((seat, i) => seat with { TeamId = teams[i] }).ToArray();
         var ambient = NetCombatSuites.Ambient.Save();
         var ends = new List<NetCombatSuites.Ends>();
         try

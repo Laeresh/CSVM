@@ -449,6 +449,7 @@
     "turret-self-fire": 2.826,
     "turret-structure-targets": 1.065,
     "turret-vessel-targets": 1.171,
+    "versus-spawn-empty-stage": 0.03,
     "versus-spawn-net-table": 0.03,
     "versus-spawn-rotation": 0.9,
     "vessel-fuse": 2.31,

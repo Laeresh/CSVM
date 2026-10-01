@@ -77,7 +77,8 @@ internal static class NetCombatSuites
     // NetClockSlew.SnapSeconds on purpose: a snap is countable and a walk is not.
     private const double SlewLeadSeconds = 6.0;
 
-    // The airframe order every peer reads a roster's airframe index against.
+    // The airframe order every peer reads a roster's airframe index against. Two different
+    // entries, so a seat's pick crossing the wire cannot be satisfied by both ends sharing a default.
     private static readonly string[] Airframes = { "player_pfighter", "player_fbrand" };
 
     [Suite("net-combat-events",
@@ -92,7 +93,7 @@ internal static class NetCombatSuites
         // A clean link: every assertion below is about a rule, and a dropped round would read as
         // a broken rule. The lossy link is asserted on in net-aircraft-replication.
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(4211));
-        var roster = Roster(2);
+        var roster = Roster(2, spec);
         var weapons = WeaponDefs.Load(ctx.ZrdrPath);
         var gun = weapons.All.FirstOrDefault(w => w.IsCannon && w.HealthDamage is > 0f);
         if (gun == null)
@@ -146,7 +147,7 @@ internal static class NetCombatSuites
         // The star itself, cut before any session binds. Neither guest ever sees the other as a
         // peer, so anything that reaches it came through the host.
         mesh[1].Disconnect(2);
-        var roster = Roster(3);
+        var roster = Roster(3, spec);
 
         var ambient = Ambient.Save();
         Ends? host = null;
@@ -201,7 +202,7 @@ internal static class NetCombatSuites
         // The star, cut before any session binds. An ask reaches the host alone and a grant comes
         // back from it alone, so nothing here is two guests agreeing between themselves.
         mesh[1].Disconnect(2);
-        var roster = Roster(3);
+        var roster = Roster(3, spec);
 
         var ambient = Ambient.Save();
         Ends? host = null;
@@ -260,7 +261,7 @@ internal static class NetCombatSuites
         // The star, cut before any session binds. A guest's state came from the host or from
         // nowhere, since the two guests never see each other at all.
         mesh[1].Disconnect(2);
-        var roster = Roster(3);
+        var roster = Roster(3, spec);
 
         var ambient = Ambient.Save();
         Ends? host = null;
@@ -423,28 +424,57 @@ internal static class NetCombatSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
         ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
-        ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{MpMission} zrdr");
-        var args = new List<string>
-        {
-            "--vs", $"--chapter={ctx.Chapter}", $"--mission={MpMission}", "--players=1", "--mute",
-            "--no-pads",
-        };
+        var args = new List<string> { "--vs" };
+        args.AddRange(Arena(ctx));
+        args.AddRange(new[] { "--players=1", "--mute", "--no-pads" });
         args.AddRange(extraArgs);
         var spec = SessionSpec.Parse(args.ToArray());
         var loaded = new SpawnPicker(spec).LoadSpawnList(missionZrdr, spec.Scenario);
         if (loaded is not { Count: >= 2 })
         {
-            throw new SuiteSkippedException($"{ctx.Chapter}/{MpMission} authors no usable net.zrd table");
+            throw new SuiteSkippedException($"{ArenaTable(ctx, spec)} holds no usable spawn table");
         }
 
         table = loaded;
         return spec;
     }
 
-    // The field, seat 0 on the host and one seat per guest after it.
-    internal static NetSeat[] Roster(int seats)
+    // A match flies the data root's MP map when the root carries one, so a run on the install keeps
+    // walking the shipped table. Otherwise it flies the empty stage and its own spawn ring. The MP
+    // map's gates run only when it is chosen, and the note names the arena in the report.
+    internal static string[] Arena(TestContext ctx, bool gateChapterGamez = true)
     {
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
+        if (!System.IO.File.Exists(missionZrdr) && !System.IO.Directory.Exists(missionZrdr))
+        {
+            ctx.Note($"arena: --stage=empty and its spawn ring, the data root carries no {ctx.Chapter}/{MpMission}");
+            return new[] { "--stage=empty" };
+        }
+
+        if (gateChapterGamez)
+        {
+            ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
+        }
+
+        ctx.Note($"arena: {ctx.Chapter}/{MpMission} and its net.zrd table");
+        return new[] { $"--chapter={ctx.Chapter}", $"--mission={MpMission}" };
+    }
+
+    // What a skip names as the table a match walked, so an empty-stage skip points at the ring.
+    internal static string ArenaTable(TestContext ctx, SessionSpec spec) =>
+        spec.EmptyStage ? "the empty stage's spawn ring" : $"{ctx.Chapter}/{MpMission}'s net.zrd";
+
+    // The airframe order a match's peers read a seat's airframe index against. The empty arena
+    // stands on a data root with no MP map, so its seats fly the plane that root defaults to.
+    // Two entries either way, so a suite indexing seat 1 reads the same on both. One airframe
+    // there cannot show a pick crossing the wire; the run on the install still does.
+    internal static string[] AirframesFor(SessionSpec spec) =>
+        spec.EmptyStage ? new[] { spec.PlaneName, spec.PlaneName } : Airframes;
+
+    // The field, seat 0 on the host and one seat per guest after it.
+    internal static NetSeat[] Roster(int seats, SessionSpec match)
+    {
+        var airframes = AirframesFor(match);
         var roster = new NetSeat[seats];
         for (int i = 0; i < seats; i++)
         {
@@ -454,7 +484,7 @@ internal static class NetCombatSuites
                 SeatIndex = i,
                 IsLocal = i == 0,
                 Callsign = i == 0 ? "host" : $"guest{i}",
-                PlaneNode = Airframes[i % Airframes.Length],
+                PlaneNode = airframes[i % airframes.Length],
             };
         }
 
@@ -715,7 +745,7 @@ internal static class NetCombatSuites
     private static GameSession[]? Pair(TestContext ctx, SessionSpec spec, int seed, List<Ends> ends)
     {
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(seed));
-        var host = Ends.Open(ctx, spec, mesh[0], isHost: true, HostSeed, Roster(2));
+        var host = Ends.Open(ctx, spec, mesh[0], isHost: true, HostSeed, Roster(2, spec));
         ends.Add(host);
         var guest = Ends.Open(ctx, spec, mesh[1], isHost: false, HostSeed + 1, null);
         ends.Add(guest);
@@ -1386,7 +1416,7 @@ internal static class NetCombatSuites
                 NetSeats = isHost ? roster : null,
                 NetTransport = transport,
                 NetHost = isHost,
-                NetAirframes = airframes ?? Airframes,
+                NetAirframes = airframes ?? AirframesFor(spec),
                 NetSeatFit = seatFit,
                 NetCoopWingman = coopWingman,
                 NetSeatBuild = seatBuild,
