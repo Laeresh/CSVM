@@ -120,7 +120,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A, CI runs the install-free suites
 
 1. ☐ The `ci` tier: a checked-in list CI requires to pass, where a skip fails
-2. ☐ Drop unused `RequireData` gates, and make the unguarded loads skip
+2. ☑ Drop unused `RequireData` gates, and make the unguarded loads skip
 3. ☐ The CI engine job: Linux Godot 4.7 .NET, headless, `--run-tests=tier:ci`
 4. ☐ Move the three world-as-terrain suites onto `EmptyStage`
 
@@ -182,7 +182,15 @@ red on the skip.
 GPU) belongs off the list, not on it with an exception. Keep the list a judgement about the set,
 like the quick tier, rather than an attribute on each body.
 
-## A2 ☐ Drop unused `RequireData` gates, and make the unguarded loads skip
+## A2 ☑ Drop unused `RequireData` gates, and make the unguarded loads skip
+
+**Landed.** The nine suites that loaded `zrdr.zip` with no gate (`campaign-danger-zones`, `campaign-mission-cash`, `campaign-mission-end`, `campaign-objectives-hud`, `campaign-persistence`, `hangar-door-wake`, `mission-radio`, `music-states`, `persist-chain-kill`) now `RequireData` every install input they read before the first read, so they SKIP with an empty data root instead of failing. Eight menu suites lost a `zrdr` gate their body never uses and now PASS headless with an empty data root: `menu-coop-door`, `menu-host-pointer`, `menu-host-tracer`, `menu-host-address`, `menu-net-door`, `menu-controls-seats`, `menu-player-setup-journey`, `menu-zone-layout`. Every assertion in them reads the same on the real install: stats lines, the langui labels and the instant action defs differ with and without `zrdr`, and none of the eight asserts on them. A full catalog run with an empty data root went from 43 PASS, 11 FAIL, 441 SKIP to 51 PASS, 2 FAIL, 442 SKIP; the two failures are `build-stamp-focus` and `enet-dual-stack`, both environment limits that are not this item.
+
+Two suites keep their gate because the body asserts on install data: `menu-hangar-journey` (the paint screen composes a preview from the decal art, and the decal row shows its tile) and `menu-instant-action-journey` (the ace is the environment's own, which `InstantAction.Defaults()` cannot supply). Each is a split candidate: the rest of either journey reads nothing from the install. `render-thread-handoffs` had no data gate to drop; it skips headless for want of a rendering device and runs windowed. `net-team-deathmatch` already skipped with an empty root, because its `MatchScores.Load` argument tolerates a missing archive, so the earlier reading of it as a FAIL was wrong.
+
+**Still owed to the Windows run.** The real-install battery should be unchanged: the nine now-guarded suites PASS as before, the eight ungated suites PASS as before, and the two gated journeys PASS. `menu-zone-layout` and the other ungated suites run without the decal tile art on CI, so the tile leg of the paint screen is still covered only by the real-install run. `menu-player-setup-journey` prints 21 headless text-server error lines (a zero font size), already on `HeadlessEngineErrors` in `sandbox/LinuxRelease.ps1`; the CI job needs the same allowance.
+
+**Original approach (kept for reference).**
 
 **Goal.** Every bucket A suite runs with no install, and no suite fails for want of an input it
 does not check for.

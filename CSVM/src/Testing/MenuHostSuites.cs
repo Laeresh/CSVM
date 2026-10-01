@@ -33,7 +33,6 @@ internal static class MenuHostSuites
         + "hover keeps the pad's row, and a click off the locked airframe is refused")]
     internal static void MenuHostPointer(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         var exits = new List<MenuExit>();
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();
@@ -74,7 +73,6 @@ internal static class MenuHostSuites
         + "and airframe cursors kept and the selection dropped")]
     internal static void MenuHostTracer(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         var exits = new List<MenuExit>();
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();

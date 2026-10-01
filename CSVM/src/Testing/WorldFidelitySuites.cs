@@ -466,6 +466,7 @@ internal static class WorldFidelitySuites
         + "hangar")]
     internal static void HangarDoorWake(TestContext ctx)
     {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         CampaignMission? found = null;
         foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
         {
@@ -482,6 +483,7 @@ internal static class WorldFidelitySuites
         }
 
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, DoorChapter, DoorMission);
+        ctx.RequireData(missionZrdr, $"{DoorChapter}/{DoorMission} zrdr");
         var script = ObjectiveScript.Load(missionZrdr);
         var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Zachary"), null);
         ctx.WithWorld(DoorChapter, collision: false, DoorMission, world =>

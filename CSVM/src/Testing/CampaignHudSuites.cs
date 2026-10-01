@@ -45,14 +45,17 @@ internal static class CampaignHudSuites
         "COMPLETED_SOUND_GROUP, one of its groups reaches a real player (BL-483)")]
     internal static void CampaignObjectivesHud(TestContext ctx)
     {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.MessagesPath, $"messages file");
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
         if (FirstMissionOf(missions, ctx.Chapter) is not { } mission)
         {
             throw new SuiteSkippedException($"chapter {ctx.Chapter} holds no campaign mission");
         }
 
-        var script = ObjectiveScript.Load(
-            SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder));
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder);
+        ctx.RequireData(missionZrdr, $"{mission.ChapterFolder}/{mission.MissionFolder} zrdr");
+        var script = ObjectiveScript.Load(missionZrdr);
         var messages = Messages.Load(ctx.MessagesPath);
         var profile = CampaignProfileDef.NewProfile("Zachary");
         var director = CampaignDirector.Create(script, mission, profile, null);
@@ -145,14 +148,16 @@ internal static class CampaignHudSuites
         + "for its length and nobody else")]
     internal static void MissionRadioCallouts(TestContext ctx)
     {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
         if (FirstMissionOf(missions, ctx.Chapter) is not { } mission)
         {
             throw new SuiteSkippedException($"chapter {ctx.Chapter} holds no campaign mission");
         }
 
-        var script = ObjectiveScript.Load(
-            SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder));
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder);
+        ctx.RequireData(missionZrdr, $"{mission.ChapterFolder}/{mission.MissionFolder} zrdr");
+        var script = ObjectiveScript.Load(missionZrdr);
         var defs = SoundDefs.Load(ctx.ZrdrPath);
         var groups = SoundDefs.LoadGroups(ctx.ZrdrPath);
         var report = new StringBuilder();
