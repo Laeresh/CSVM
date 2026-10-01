@@ -616,6 +616,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // rest of its tally as LastDockingHookPark when the park finishes.
     private readonly List<string> _hookSeedsUnbound = new();
 
+    // Every node a name query has handed out (NameResolver.Claimed), by instance id, the way the
+    // resolver's own identity keys a node.
+    private readonly Dictionary<ulong, Node3D> _claimed = new();
+
     private Node3D _root = null!;
 
     private AnimProgram _program = null!;
@@ -741,7 +745,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         _templateStage = stage;
         _resolver = new NameResolver<Node3D>(Node3DIdentity.Instance, _templateStage.RootsFor, IsInstanceValid,
-            StagingAdmits, StagedCopyRootOf);
+            StagingAdmits, StagedCopyRootOf)
+        {
+            Claimed = OnClaimed,
+        };
         _templateStage.Wire(
             FindAll,
             Anchors,
@@ -753,6 +760,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             s => IndexWorld(s, indexByPointer: false),
             ApplyResetStatesWithin);
     }
+
+    /// <summary>Raised the first time a name query hands a node out, this runtime's own or a caller's
+    /// through <see cref="FindNodes"/>. That is before any write the query was made for.</summary>
+    public event Action<Node3D>? NodeClaimed;
 
     /// <summary>Running count of ballistic <see cref="MotionRuntime"/> bodies launched, the debris
     /// pieces a death or crash flings (translation/translation_range/scale/forward_rotation over a
@@ -964,6 +975,35 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// the same wildcard matching and the same memoized index the dispatch uses, exposed so an
     /// inspect tool asks the engine instead of re-implementing the matcher. Read-only.</summary>
     public IReadOnlyList<Node3D> FindNodes(string pattern, Node3D? scope = null) => FindAll(pattern, scope);
+
+    /// <summary>Every live node a name query has handed out so far. Every node a definition's symbol
+    /// table or node prerequisite binds is added, run or not. A renderer that copies static nodes
+    /// leaves these subtrees alone and follows <see cref="NodeClaimed"/> after.</summary>
+    public List<Node3D> ClaimedNodes()
+    {
+        var nodes = new List<Node3D>();
+        foreach (var node in _claimed.Values)
+        {
+            if (IsInstanceValid(node))
+                nodes.Add(node);
+        }
+        if (_program == null)
+            return nodes;
+        foreach (var def in _program.Defs)
+        {
+            foreach (int index in def.NodeRefs.Values)
+            {
+                if (FindNodeByIndex(index) is { } bound)
+                    nodes.Add(bound);
+            }
+            foreach (var prereq in def.PrereqNodes)
+            {
+                if (prereq.Ptr is { } ptr && FindNodeByIndex(ptr) is { } leaf)
+                    nodes.Add(leaf);
+            }
+        }
+        return nodes;
+    }
 
     /// <summary>Runs the bootstrap passes against a built world. A separate call (not folded into
     /// construction) so a caller can set build-time-only collaborators (notably
@@ -4794,6 +4834,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // owns the index, the wildcard matcher, and the memoization. Callers must treat the returned
     // list as read-only.
     private List<Node3D> FindAll(string pattern, Node3D? scope) => _resolver.FindAll(pattern, scope);
+
+    private void OnClaimed(Node3D node)
+    {
+        if (_claimed.TryAdd(node.GetInstanceId(), node))
+            NodeClaimed?.Invoke(node);
+    }
 
     // Any still-visible node named like a destroyed variant that no definition touched:
     // hide it and report, each name is a data-coverage gap (a def we failed to anchor).

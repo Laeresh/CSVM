@@ -176,6 +176,17 @@ public sealed class WorldBuilder
     /// renaming is free to have touched the built name.</summary>
     public IReadOnlyList<Node3D> CloudClusters => _cloudClusters;
 
+    /// <summary>Gets the subtree built for each entity the chapter parks at the world origin for a
+    /// mission to place. These are vehicles, never static scenery.</summary>
+    public IEnumerable<Node3D> ParkedEntities
+    {
+        get
+        {
+            foreach (var (_, built) in _parkedAtOrigin)
+                yield return built;
+        }
+    }
+
     /// <summary>This world's shared scene builder, its mesh/material/shape caches and its
     /// fullbright world materials. Handed to <see cref="ClutterBuilder"/> so the clutter's 3D
     /// city-block decorations render as real world geometry (same shader, same fog, same depth

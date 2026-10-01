@@ -443,6 +443,14 @@ member, and it does not go here.
   only the draw's hand-off. A Godot debug build prints `causing RenderingServer synchronizations on
   every frame` for each such call; the frame's own wait for the render thread is in `defer_ms`.**
   The per-frame render-time read raised CM24's `proc_ms` on the Deck from 3.8 to 10.3 ms.
+- **PERF-45**, **Count each pane's spyglass disc as a viewport of its own: it renders the whole
+  world through the pane's cull mask, sun shadows included, on every frame a target is off screen,
+  and a flight with several players holds one most of the time.** In four-pane C5 flight the four
+  discs drew 5,400 of 11,700 draws, more than the panes' own world draws.
+- **PERF-46**, **Compare four-pane frame times only within one interleaved batch: the same build's
+  `frame_ms` on the author's machine moves by more than a change's effect between batches an hour
+  apart.** C5 four-pane with the merge off read 14.8 and 15.1 ms in one batch and 13.3 and 13.4 ms
+  in a later one, against a merge effect of 0.4 to 1.8 ms.
 
 ## LOG, logs, error censuses, and exit codes
 

@@ -783,6 +783,7 @@ PERF-39).
   (`MapEdgeExtender.FollowClutterFade`). Four-pane CM24 20,500 → 10,700 draws, one pane 4,200 →
   2,550. The static world merge was not built: after these two it is a minor term in CM24, and in
   C5 a census groups the 3,056 placed-node surfaces into 1,810 by material in 512 m cells.
+- **The static world merge** (`Mech3/WorldMerge.cs`, Enhanced flight only). @@MERGE@@
 
 **Against the goal.** Every target reads met. Deck, 1280x800, one pane, 67% TAA, Shadow Quality
 High, separate render thread, two passes: CM24 67.5 fps (14.9 ms, from 57.5 to 58.5), CM23 96 to

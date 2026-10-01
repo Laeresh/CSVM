@@ -462,6 +462,7 @@
     "world-emitter-ambience": 2.65,
     "world-lights-enhanced-budget": 0.03,
     "world-lights-nearest-viewer": 0.002,
+    "world-merge": 2.9,
     "world-query-reuse": 0.005,
     "world-sound-falloff": 0.05,
     "world-turrets": 3.756,
