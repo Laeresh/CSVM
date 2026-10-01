@@ -959,7 +959,9 @@
    "children": [
     48,
     49,
-    50
+    50,
+    105,
+    106
    ],
    "transformation": {
     "translation": {
@@ -2111,6 +2113,105 @@
   "Object3d": {
    "name": "pcdp6",
    "mesh_index": 27,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "probe_lamp_on",
+   "mesh_index": 29,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "probe_holes",
+   "mesh_index": -1,
+   "children": [
+    107,
+    108,
+    109
+   ],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "bul9a",
+   "mesh_index": 30,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "bul9b",
+   "mesh_index": 31,
+   "children": [],
+   "transformation": {
+    "translation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    },
+    "rotation": {
+     "x": 0.0,
+     "y": 0.0,
+     "z": 0.0
+    }
+   }
+  }
+ },
+ {
+  "Object3d": {
+   "name": "bul9c",
+   "mesh_index": 32,
    "children": [],
    "transformation": {
     "translation": {

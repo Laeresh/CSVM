@@ -110,8 +110,8 @@ public sealed class SuiteCatalogTests
         Assert.Empty(TestHarness.SkipFailures("tier:nosuchtier"));
 
         // A union refuses a skip only from the ci tier's own members.
-        var union = TestHarness.SkipFailures("suite:weapons-fire, tier:ci");
-        Assert.False(union.ContainsKey("weapons-fire"));
+        var union = TestHarness.SkipFailures("suite:chapter-census, tier:ci");
+        Assert.False(union.ContainsKey("chapter-census"));
         Assert.Equal(SuiteCatalog.CiTier.Count, union.Count);
     }
 

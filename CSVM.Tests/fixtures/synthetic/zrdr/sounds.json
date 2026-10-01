@@ -21,7 +21,9 @@
         ["snd_probe_pass1", "probe_pass1.wav", "SFX"],
         ["snd_probe_pass2", "probe_pass2.wav", "SFX"],
         ["snd_probe_ricochet1", "probe_ricochet1.wav", "3D", "SFX", "RANGE", [10, 120]],
-        ["snd_probe_ricochet2", "probe_ricochet2.wav", "3D", "SFX", "RANGE", [10, 120]]
+        ["snd_probe_ricochet2", "probe_ricochet2.wav", "3D", "SFX", "RANGE", [10, 120]],
+        ["snd_probe_windowhit1", "probe_windowhit1.wav", "SFX"],
+        ["snd_probe_windowhit2", "probe_windowhit2.wav", "SFX"]
       ],
       "probe_radio",
       [
@@ -49,6 +51,7 @@
     [
       ["probe_warning_sg", "DYNAMIC_WEIGHTS", 0.5, ["snd_probe_pass1"], ["snd_probe_pass2"]],
       ["probe_ricochet_sg", "DYNAMIC_WEIGHTS", 0.5, ["snd_probe_ricochet1"], ["snd_probe_ricochet2"]],
+      ["window_hit_sg", "DYNAMIC_WEIGHTS", 0.5, ["snd_probe_windowhit1"], ["snd_probe_windowhit2"]],
       ["music_prebattle_sg", "MUSIC", "DYNAMIC_WEIGHTS", 0.5, ["snd_probe_music_prebattle1"], ["snd_probe_music_prebattle2"]],
       ["music_battle_sg", "MUSIC", "DYNAMIC_WEIGHTS", 0.5, ["snd_probe_music_battle1"], ["snd_probe_music_battle2"]],
       ["music_primaryobj_sg", "MUSIC", "DYNAMIC_WEIGHTS", 0.5, ["snd_probe_music_primaryobj1"], ["snd_probe_music_primaryobj2"]],

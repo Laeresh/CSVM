@@ -774,6 +774,33 @@ error lines all the text-server pattern.
 literal it replaced, and each literal still runs, so the full `RunTests.ps1` battery should show the
 same PASS/FAIL/SKIP per suite as before.
 
+**B15b-2 landed: the flight, AI, combat, sound and HUD suites read their expectations off the
+loaded records.** Each check that pinned a shipped value now compares against the record it loaded
+(`SuiteConstants.PlayerGlobal` reads a `player.json` float raw beside the typed field), and the
+literal stays under `!ctx.SyntheticData` with its old wording, so the install still pins it. Twelve
+suites join `tier:ci` (144 with B15b-1's fourteen beside them): `ai-engine-rearm` (the airframe's own `damaged_engine_sound`),
+`ai-gunnery` (a bearing between the record's rating-1 and rating-9 quick-draw cones), `ai-modes`
+(`min_ai_active_dist` read back, the approach keyed to the attack volume, the climb-out allowed 8 s),
+`aim-assist` (the four `sticky_bullet_*` read back, the cone as the gun's own `CANNON_SPREAD`),
+`air-to-air` (an invented fused blast rocket; the Fury sponge runs on the install only),
+`cockpit-interior` (the builder's own parking predicate over the loaded interior; the gauge drive
+needs an authored panel), `engine-voice-duck` (the record's limiter, any sub-second bark),
+`graze-bounce` (the `crash` block's `bounce_factor`), `hud-kill-line` (the table's rows and Dogfight
+templates, the default airframe off the install), `incoming-fire-cues` (each cue against its own
+group's members), `plane-wobble-walk` (the ramp law's swing from the record's nitro) and
+`weapons-fire` (every weapon the table defines). The invented records grew to reach them:
+`sticky_bullet_*` and `voiceover_volume_limiter` globals, `wep_probe_blastrocket`, a retuned nitro
+shake, `window_hit_sg`, four HUD keys and a parked lamp and hole group in the probe's cockpit
+(`fixtures/README.md`). Each passed three runs by name and went red on one broken input.
+`ground-shadow` now SKIPs naming `player_autogyro`; it also needs C1's terrain. `wingman-station`
+stays red: after the burn both stand-ins top out at the same thrust-limited speed, so the escort
+regains only what the leader's turns give back (705 to 608 m over 80 s against a 312 m baseline).
+Full catalog with the switch 138 PASS, 38 FAIL, 323 SKIP against 126, 51, 322 (the thirteen above
+and nothing else); without it 58, 2, 439, unchanged suite by suite. **Owed to the Windows run:**
+the full battery should show the same PASS/FAIL per suite. Two relational checks are new there:
+`plane-wobble-walk`'s window around the shipped nitro's computed swing (the 8 to 11 literal still
+runs), and `cockpit-interior`'s drawn group over every `bulNx` quad.
+
 **Goal.** Each bucket C suite either passes on the stand-in and joins the tier, or is split into a
 logic half (on the tier) and a parity half (local).
 

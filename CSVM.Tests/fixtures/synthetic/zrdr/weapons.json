@@ -252,6 +252,25 @@
         "VELOCITY", [1],
         "DAMAGE", [0],
         "FIRE", ["SOUND", ["snd_probe_launch"]]
+      ],
+      "wep_probe_blastrocket",
+      [
+        "DESC", ["MSG_PROBE_BLAST_ROCKET"],
+        "NAME", ["probeblast"],
+        "PRIORITY", [4],
+        "CLUSTER_SIZE", [2],
+        "AMMO_LIMIT", [6],
+        "ROCKET", null,
+        "HIGH_EXPLOSIVE", null,
+        "FIRE_RATE", [1],
+        "VELOCITY", [620],
+        "RANGE", [2200],
+        "ARMOR_DAMAGE", [30],
+        "HEALTH_DAMAGE", [30],
+        "IMPACT_PROXIMITY", [66],
+        "DETONATION_DISTANCE", [11],
+        "FIRE", ["SOUND", ["snd_probe_launch"]],
+        "IMPACT", ["default", ["SOUND", ["snd_probe_boom"]]]
       ]
     ]
   ]

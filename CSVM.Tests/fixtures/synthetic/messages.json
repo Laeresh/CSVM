@@ -22,6 +22,11 @@
     { "key": "MSG_PROBE_BEEPER", "id": 38, "value": "Probe marker rocket" },
     { "key": "MSG_PROBE_FLAK", "id": 39, "value": "Probe airburst rocket" },
     { "key": "MSG_PROBE_INCENDIARY", "id": 40, "value": "Probe motor rocket" },
-    { "key": "MSG_PROBE_SMOKER", "id": 41, "value": "Probe smoke pot" }
+    { "key": "MSG_PROBE_SMOKER", "id": 41, "value": "Probe smoke pot" },
+    { "key": "MSG_PROBE_BLAST_ROCKET", "id": 12, "value": "Probe Blast Rocket" },
+    { "key": "MSG_TIME_EXPIRED", "id": 13, "value": "Probe clock out" },
+    { "key": "MSG_MISSION_LOST", "id": 14, "value": "Probe sortie failed" },
+    { "key": "MSG_MP_SUICIDE", "id": 15, "value": "%1 probe self-loss" },
+    { "key": "MSG_DESTROYED_BY_X", "id": 16, "value": "probe downed by %1" }
   ]
 }

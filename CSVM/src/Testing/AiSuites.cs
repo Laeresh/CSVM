@@ -1858,18 +1858,34 @@ internal static class AiSuites
             Step(1);
             ctx.Check(ReferenceEquals(gunner.Target, target), $"a cleared target re-acquires next tick");
 
-            // --- the quick-draw gate: 80° off the target's tail axis (a beam-ish shot). At
-            // rating 1 the ~54° cone refuses it; at rating 9 the 89° cone takes it.
-            var beamPos = targetPos + new Vector3(0.9848f, 0f, 0.1736f) * 500f; // 80° off +Z
-            ai.PlaceHeld(beamPos, targetPos);
-            int ammoAtBeam = gun.Ammo;
-            Step(60);
-            ctx.Check(!gunner.WantsFire && gun.Ammo == ammoAtBeam,
-                $"a beam-ish shot is refused at quick-draw rating 1 (~54°) rounds={ammoAtBeam - gun.Ammo}");
-            gunner.QuickDrawAngleDeg = skills.QuickDrawAngleDeg(9);
-            Step(60);
-            ctx.Check(gun.Ammo < ammoAtBeam,
-                $"the same bearing is taken at rating 9 (89°) rounds={ammoAtBeam - gun.Ammo}");
+            // --- the quick-draw gate: a beam-ish shot off the target's tail axis, refused inside
+            // rating 1's cone and taken inside rating 9's. The bearing sits between the two cones the
+            // record gives; on the install the shipped 80° bearing between ~54° and 89° runs too.
+            float quickDraw1 = skills.QuickDrawAngleDeg(1), quickDraw9 = skills.QuickDrawAngleDeg(9);
+            Vector3 BeamAt(float deg) => targetPos
+                + new Vector3(Mathf.Sin(Mathf.DegToRad(deg)), 0f, Mathf.Cos(Mathf.DegToRad(deg))) * 500f;
+            void QuickDraw(Vector3 at, string refused, string taken)
+            {
+                gunner.QuickDrawAngleDeg = quickDraw1;
+                ai.PlaceHeld(at, targetPos);
+                int ammoAtBeam = gun.Ammo;
+                Step(60);
+                ctx.Check(!gunner.WantsFire && gun.Ammo == ammoAtBeam, $"{refused} rounds={ammoAtBeam - gun.Ammo}");
+                gunner.QuickDrawAngleDeg = quickDraw9;
+                Step(60);
+                ctx.Check(gun.Ammo < ammoAtBeam, $"{taken} rounds={ammoAtBeam - gun.Ammo}");
+            }
+
+            float beamDeg = (quickDraw1 + quickDraw9) * 0.5f;
+            var beamPos = BeamAt(beamDeg);
+            QuickDraw(beamPos, $"a shot {beamDeg:0.#}° off the tail is refused at quick-draw rating 1 ({quickDraw1:0.#}°)",
+                $"the same bearing is taken at rating 9 ({quickDraw9:0.#}°)");
+            if (!ctx.SyntheticData)
+            {
+                beamPos = targetPos + new Vector3(0.9848f, 0f, 0.1736f) * 500f; // 80° off +Z
+                QuickDraw(beamPos, $"a beam-ish shot is refused at quick-draw rating 1 (~54°)",
+                    $"the same bearing is taken at rating 9 (89°)");
+            }
 
             // --- the aim gate: nose 30° off the bearing clamps to the airframe's 11° and leaves
             // a 19° residual, past the gun's 10°, so the shot is refused with quick draw willing.
@@ -2087,9 +2103,17 @@ internal static class AiSuites
         if (gun == null)
             return;
 
-        // The shipped range gates the machine runs on.
-        ctx.Check(Mathf.IsEqualApprox(skills.MinAiActiveDist, 2000f),
-            $"player.json min_ai_active_dist is the decoded 2000 m got={skills.MinAiActiveDist:0}");
+        // The range gates the machine runs on, read back against the record; the install pins the
+        // shipped radius too.
+        float activeDist = skills.MinAiActiveDist;
+        ctx.Check(SuiteConstants.PlayerGlobal(ctx.ZrdrPath, "min_ai_active_dist") is { } authored
+            && Mathf.IsEqualApprox(activeDist, authored),
+            $"player.json min_ai_active_dist reaches the machine as authored got={activeDist:0}");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(Mathf.IsEqualApprox(skills.MinAiActiveDist, 2000f),
+                $"player.json min_ai_active_dist is the decoded 2000 m got={skills.MinAiActiveDist:0}");
+        }
         ctx.Check(Mathf.IsEqualApprox(stats.AiAttackRange, 2000f)
             && Mathf.IsEqualApprox(stats.AiReturnRange, 1200f),
             $"vehicle.json attack/return_range are the decoded 2000/1200 m got={stats.AiAttackRange:0}/{stats.AiReturnRange:0}");
@@ -2151,7 +2175,8 @@ internal static class AiSuites
             string? lastRoll = null;
             machine.RollLogged += line => lastRoll = line;
 
-            var aiPos = targetPos + new Vector3(0f, 0f, 2600f); // outside the 2000 m radius
+            // Outside the radius the promotion admits a quarry from, the airframe's attack volume.
+            var aiPos = targetPos + new Vector3(0f, 0f, stats.AiAttackRange + 600f);
             var pilot = AiPilot.HoldingCourse(aiPos, targetPos);
             pilot.Gunner = new AiGunner(new RandomNumberGenerator { Seed = 20260813 })
             {
@@ -2193,14 +2218,14 @@ internal static class AiSuites
             // pursue, announced in the decoded vocabulary.
             ctx.Check(machine.Mode == AiMode.Patrol, $"the machine starts on patrol");
             Step(1);
-            ctx.Check(machine.Mode == AiMode.Patrol && Dist() > 2000f,
-                $"outside min_ai_active_dist it stays on patrol d={Dist():0} m");
+            ctx.Check(machine.Mode == AiMode.Patrol && Dist() > stats.AiAttackRange,
+                $"outside the attack radius it stays on patrol d={Dist():0} m");
             int budget = 60 * 60;
             while (machine.Mode == AiMode.Patrol && budget-- > 0)
                 Step(1);
             ctx.Check(machine.Mode == AiMode.Pursue,
                 $"the approach activates it into pursue d={Dist():0} m");
-            ctx.Check(Dist() <= 2010f, $"…at the activation radius, not before d={Dist():0} m");
+            ctx.Check(Dist() <= stats.AiAttackRange + 10f, $"…at the activation radius, not before d={Dist():0} m");
             ctx.Check(transitions.Contains("patrol>pursue"),
                 $"…logged as patrol>pursue transitions=[{string.Join(" ", transitions)}]");
 
@@ -2338,8 +2363,18 @@ internal static class AiSuites
             ctx.Check(machine.ClimbOutAltitude > yBefore,
                 $"…ordering a climb-out to {machine.ClimbOutAltitude:0} m from {yBefore:0} m");
             Step(240);
+            // How fast it climbs back past the order's altitude is the airframe's: the install's
+            // plane is past it inside 4 s. Any airframe must be back past it while the override
+            // holds, inside 8 s of the order.
+            if (!ctx.SyntheticData)
+            {
+                ctx.Check(ai.WorldPosition.Y > yBefore,
+                    $"the plane is climbing out y={ai.WorldPosition.Y:0} from {yBefore:0}");
+            }
+            for (int i = 0; i < 240 && ai.WorldPosition.Y <= yBefore && machine.Mode == AiMode.AvoidCrash; i++)
+                Step(1);
             ctx.Check(ai.WorldPosition.Y > yBefore,
-                $"the plane is climbing out y={ai.WorldPosition.Y:0} from {yBefore:0}");
+                $"the plane climbs back out past the order's altitude y={ai.WorldPosition.Y:0} from {yBefore:0}");
             terrainBlocked = false;
             Step(120);
             ctx.Check(machine.Mode != AiMode.AvoidCrash,
@@ -3325,6 +3360,20 @@ internal static class AiSuites
             engineA.Listeners = () => new[] { posA };
             engineB.Listeners = () => new[] { posB };
 
+            // The swap is told apart by the damaged definition the airframe's own record names. The
+            // install pins the shipped name too.
+            string? damagedName = aiCache.TryGetValue(ctx.PlaneName, out var shared) ? shared.DamagedEngineSound : null;
+            ctx.Check(damagedName != null, $"{ctx.PlaneName} names a damaged engine definition ({damagedName ?? "-"})");
+            if (damagedName == null)
+            {
+                return;
+            }
+            if (!ctx.SyntheticData)
+            {
+                ctx.Check(damagedName == "snd_damagedengine",
+                    $"{ctx.PlaneName} swaps to the shipped snd_damagedengine ({damagedName})");
+            }
+
             const float dt = 1f / 60f;
             var drive = new EngineDrive(0.5f, 0f, 0f);
             var damagedA = new List<string>();
@@ -3340,7 +3389,7 @@ internal static class AiSuites
                     {
                         return;
                     }
-                    bool damaged = line.Contains("snd_damagedengine");
+                    bool damaged = line.Contains($"-> {damagedName} ");
                     bool fromA = line.Contains(a.Name.ToString());
                     if (damaged && fromA)
                         damagedA.Add(line);

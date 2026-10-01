@@ -9,6 +9,11 @@
       "health_damage_range", [10.0, 150.0]
     ],
     "min_ai_active_dist", [1800.0],
+    "sticky_bullet_catchup_rate", [4.0],
+    "sticky_bullet_forget_interval", [1.2],
+    "sticky_bullet_dist_factor", [0.0001],
+    "sticky_bullet_inaccuracy", [0.8],
+    "voiceover_volume_limiter", [0.45],
     "warning_shot_sound", ["probe_warning_sg"],
     "bullet_hit_sound", ["probe_ricochet_sg"],
     "rattle",

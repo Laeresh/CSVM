@@ -90,7 +90,9 @@ an all-purpose helper. Per-suite traps live as comments on the suites themselves
 
 ## src/Testing/SuiteConstants.cs
 The shared golden inputs used by more than one scenario module: airframe and weapon counts, puffer
-timing, the destructible census, texture samples, and the ordnance-burst step and slack.
+timing, the destructible census, texture samples, and the ordnance-burst step and slack. It also
+reads a `player.json` float back raw (`PlayerGlobal`), so a check can hold a typed field to the
+record it came from on any data tree.
 
 ## src/Testing/BurstTimeline.cs
 The three value types describing an authored ordnance-burst timeline and its observed dispatches.

@@ -400,8 +400,7 @@ internal static class WorldAndToolSuites
                 $"scaled to the port's interior scale scale={interior.Scale.X:0.###}");
             ctx.Check(builder.MeshInstanceCount > plain.MeshInstanceCount,
                 $"the interior adds meshes plain={plain.MeshInstanceCount} with={builder.MeshInstanceCount}");
-            // The panel the pilot reads and the two torn-skin panels B12 drives, both hidden.
-            ctx.Check(FindNamed(interior, "gauges") != null, $"the interior carries its gauges subtree");
+            // The two torn-skin panels B12 drives, both hidden.
             foreach (var panel in new[] { "pcdp4", "pcdp6" })
             {
                 var node = FindNamed(interior, panel);
@@ -411,34 +410,12 @@ internal static class WorldAndToolSuites
             // ⚠ The windshield bullet-hole quads and the two warning lamps ship active:true. An
             // unparked build renders white splats across the sky on a pristine plane. The parking
             // follows reset_bulletholes: the bulNx quads dark, the bulletN groups over them drawn.
-            foreach (var lamp in new[] { "lowalt_on", "stallwarning_on" })
+            ParkedStates(ctx, interior);
+            bool gauged = FindNamed(interior, "gauges") != null;
+            if (!ctx.SyntheticData)
             {
-                var node = FindNamed(interior, lamp);
-                ctx.Check(node != null, $"the interior carries {lamp}");
-                ctx.Check(node is not { Visible: true }, $"{lamp} is parked hidden on a pristine plane");
+                CockpitNamedSet(ctx, interior);
             }
-            foreach (var group in new[] { "bullet1", "bullet2", "bullet3", "bullet4", "bullet5" })
-            {
-                var node = FindNamed(interior, group);
-                ctx.Check(node is { Visible: true }, $"the interior carries {group}, drawn");
-                if (node == null)
-                    continue;
-                int quads = 0, lit = 0;
-                foreach (var child in node.GetChildren())
-                {
-                    if (child is not Node3D quad)
-                        continue;
-                    quads++;
-                    if (quad.Visible)
-                        lit++;
-                }
-                ctx.Check(quads >= 3 && lit == 0,
-                    $"{group}'s {quads} hole quads are parked hidden on a pristine plane, lit={lit}");
-            }
-            // …and the panel geometry beside them is NOT parked: the states are a named set, not a
-            // blanket hide, so a wrong predicate that hid the dashboard would fail here.
-            foreach (var kept in new[] { "gauges", "structure", "nosedamage", "ggindicator0" })
-                ctx.Check(FindNamed(interior, kept) is { Visible: true }, $"{kept} still renders");
 
             // The exterior panels stay DamageVisuals' alone: the interior pair must not join them.
             foreach (var node in builder.DamagePanels)
@@ -473,8 +450,13 @@ internal static class WorldAndToolSuites
                 && markers is { Visible: true } && dontmove is { Visible: true },
                 $"a held external view restores the aircraft while Cockpit stays selected");
 
-            DrivenPanel(ctx, interior);
-            DrivenBelts(ctx, interior, builder, planesGamez, textures);
+            // The gauge drive needs an authored panel. A tree without one has nothing to drive;
+            // the install always carries one.
+            if (gauged || !ctx.SyntheticData)
+            {
+                DrivenPanel(ctx, interior);
+                DrivenBelts(ctx, interior, builder, planesGamez, textures);
+            }
         }
         finally
         {
@@ -482,6 +464,78 @@ internal static class WorldAndToolSuites
             withInterior?.Free();
             textures.Dispose();
         }
+    }
+
+    // The parked set as the builder's own predicate names it in whatever interior was loaded. Each
+    // named node is dark, the group over each hole quad is drawn, and meshes outside the set render.
+    // Able to fail: a pass that misses a named node, hides a hole group, or hides everything.
+    internal static void ParkedStates(TestContext ctx, Node3D interior)
+    {
+        var parked = new List<Node3D>();
+        var drawnMeshes = new List<Node3D>();
+        void Walk(Node3D node)
+        {
+            if (PlaneBuilder.IsInteriorDrivenState(AnimRuntime.NameOf(node)))
+                parked.Add(node);
+            else if (node is MeshInstance3D && node.Visible
+                     && !AnimRuntime.NameOf(node).StartsWith("pcdp", System.StringComparison.OrdinalIgnoreCase))
+                drawnMeshes.Add(node);
+            foreach (var child in node.GetChildren())
+            {
+                if (child is Node3D n3d)
+                    Walk(n3d);
+            }
+        }
+        Walk(interior);
+        ctx.Check(parked.Count > 0, $"the interior names {parked.Count} driven-state node(s) for the parking pass");
+        foreach (var node in parked)
+        {
+            string name = AnimRuntime.NameOf(node);
+            ctx.Check(!node.Visible, $"{name} is parked hidden on a pristine plane");
+            if (!name.EndsWith("_on", System.StringComparison.OrdinalIgnoreCase))
+            {
+                ctx.Check(node.GetParent() is Node3D { Visible: true },
+                    $"…and the hole group over {name} is drawn ({(node.GetParent() as Node3D)?.Name.ToString() ?? "-"})");
+            }
+        }
+        ctx.Check(drawnMeshes.Count > 0,
+            $"the panel geometry outside the set still renders, so the parking is not a blanket hide ({drawnMeshes.Count} meshes)");
+    }
+
+    // The shipped interior's own named set, which only the install carries. It holds the gauges
+    // panel and the two warning lamps. It also holds five bullet-hole groups of three or more quads
+    // each, and the panel parts that must keep rendering.
+    internal static void CockpitNamedSet(TestContext ctx, Node3D interior)
+    {
+        ctx.Check(FindNamed(interior, "gauges") != null, $"the interior carries its gauges subtree");
+        foreach (var lamp in new[] { "lowalt_on", "stallwarning_on" })
+        {
+            var node = FindNamed(interior, lamp);
+            ctx.Check(node != null, $"the interior carries {lamp}");
+            ctx.Check(node is not { Visible: true }, $"{lamp} is parked hidden on a pristine plane");
+        }
+        foreach (var group in new[] { "bullet1", "bullet2", "bullet3", "bullet4", "bullet5" })
+        {
+            var node = FindNamed(interior, group);
+            ctx.Check(node is { Visible: true }, $"the interior carries {group}, drawn");
+            if (node == null)
+                continue;
+            int quads = 0, lit = 0;
+            foreach (var child in node.GetChildren())
+            {
+                if (child is not Node3D quad)
+                    continue;
+                quads++;
+                if (quad.Visible)
+                    lit++;
+            }
+            ctx.Check(quads >= 3 && lit == 0,
+                $"{group}'s {quads} hole quads are parked hidden on a pristine plane, lit={lit}");
+        }
+        // …and the panel geometry beside them is NOT parked. The states are a named set, not a
+        // blanket hide, so a wrong predicate that hid the dashboard would fail here.
+        foreach (var kept in new[] { "gauges", "structure", "nosedamage", "ggindicator0" })
+            ctx.Check(FindNamed(interior, kept) is { Visible: true }, $"{kept} still renders");
     }
 
     // The photograph's fill light, proved in the three things the pixels follow from, since a

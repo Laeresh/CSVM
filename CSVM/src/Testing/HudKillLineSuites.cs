@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
@@ -49,9 +50,14 @@ internal static class HudKillLineSuites
         string shotDown = strings.Get(HudMessages.ShotDownKey);
         string wingman = strings.Get(HudMessages.WingmanKey);
         string destroyed = strings.Get(HudMessages.DestroyedKey);
-        ctx.Check(shotDown == "was shot down" && wingman == "Wingman was shot down"
-                  && destroyed == "was destroyed",
-            $"the three decoded rows read out of the string table: '{shotDown}' / '{wingman}' / '{destroyed}'");
+        ctx.Check(Rows(strings, HudMessages.ShotDownKey, HudMessages.WingmanKey, HudMessages.DestroyedKey),
+            $"the three decoded rows read out of the string table as three wordings: '{shotDown}' / '{wingman}' / '{destroyed}'");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(shotDown == "was shot down" && wingman == "Wingman was shot down"
+                      && destroyed == "was destroyed",
+                $"the three decoded rows read out of the string table: '{shotDown}' / '{wingman}' / '{destroyed}'");
+        }
 
         Wording(ctx, strings, shotDown, wingman, destroyed);
         Pilot(ctx, strings, shotDown, wingman);
@@ -107,13 +113,19 @@ internal static class HudKillLineSuites
                 }
             };
 
+            // The install flies the Medusa Kestrel the line was reported on. Any other tree flies its
+            // own default airframe under its first AI flavour, and the line names it by its title.
             var at = new Vector3(0f, 500f, 0f);
-            ai = roster.SpawnAi(new AiSpawn("player_kestrel", at, at + Vector3.Forward,
-                AiPilot.HoldingCourse(at, at + Vector3.Forward), Scheme: null,
-                Team: InstantActionRuntime.EnemyTeam, AiDef: "medkestrel"));
+            ai = roster.SpawnAi(new AiSpawn(ctx.SyntheticData ? ctx.PlaneName : "player_kestrel", at,
+                at + Vector3.Forward, AiPilot.HoldingCourse(at, at + Vector3.Forward), Scheme: null,
+                Team: InstantActionRuntime.EnemyTeam, AiDef: ctx.SyntheticData ? null : "medkestrel"));
             string name = PlaneRoster.PlaneDisplayName(ai.Stats!);
-            ctx.Check(name == "Medusa Kestrel",
-                $"the spawned aircraft carries the title the line names it by: '{name}'");
+            ctx.Check(name.Length > 0, $"the spawned aircraft carries a title the line names it by: '{name}'");
+            if (!ctx.SyntheticData)
+            {
+                ctx.Check(name == "Medusa Kestrel",
+                    $"the spawned aircraft carries the title the line names it by: '{name}'");
+            }
             ctx.Check(HudMessages.IsAeroplane(ai.Stats) && ai.Team == InstantActionRuntime.EnemyTeam,
                 $"…as an aeroplane on an enemy team mode={ai.Stats?.VehicleMode ?? "<none>"} team={ai.Team}");
 
@@ -133,7 +145,7 @@ internal static class HudKillLineSuites
             // The same real aircraft as the death that does word a line: a hull spent in the air.
             HudMessages.PostKill(stack, strings, ai, AimAssist.PlayerTeam, victimIsViewer: false,
                 viewerName: "Nathan Zachary");
-            ctx.Check(stack.LineAt(0) == $"Medusa Kestrel {shotDown}",
+            ctx.Check(stack.LineAt(0) == $"{name} {shotDown}",
                 $"its death posts the decoded line: '{stack.LineAt(0) ?? "<none>"}'");
             ctx.Check(stack.SideAt(0) == HudMessages.Side.Enemy,
                 $"…in the enemy colour arm side={stack.SideAt(0)}");
@@ -227,8 +239,13 @@ internal static class HudKillLineSuites
         string crash = strings.Get(HudMessages.CrashKey);
         string expired = strings.Get(HudMessages.TimeExpiredKey);
         string lost = strings.Get(HudMessages.MissionLostKey);
-        ctx.Check(crash == "Fatal Crash!" && expired == "Time Expired" && lost == "Mission LOST!",
-            $"the three notice rows read out of the string table: '{crash}' / '{expired}' / '{lost}'");
+        ctx.Check(Rows(strings, HudMessages.CrashKey, HudMessages.TimeExpiredKey, HudMessages.MissionLostKey),
+            $"the three notice rows read out of the string table as three wordings: '{crash}' / '{expired}' / '{lost}'");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(crash == "Fatal Crash!" && expired == "Time Expired" && lost == "Mission LOST!",
+                $"the three notice rows read out of the string table: '{crash}' / '{expired}' / '{lost}'");
+        }
 
         HudMessages.PostCrash(stack, strings);
         ctx.Check(stack.LineAt(0) == crash && stack.SideAt(0) == HudMessages.Side.Friendly,
@@ -243,15 +260,32 @@ internal static class HudKillLineSuites
             $"…both in the stack's default colour side={stack.SideAt(0)}/{stack.SideAt(1)}");
         stack.Clear();
 
+        // The Dogfight lines are the table's two templates filled with the pilots' names; the
+        // install pins the shipped wordings too.
+        ctx.Check(Rows(strings, HudMessages.SelfDestroyedKey, HudMessages.DestroyedByKey),
+            $"the two Dogfight templates read out of the string table: '{strings.Get(HudMessages.SelfDestroyedKey)}' / '{strings.Get(HudMessages.DestroyedByKey)}'");
+        string selfLoss = strings.Format(HudMessages.SelfDestroyedKey, "P2");
+        string killedBy = strings.Format(HudMessages.DestroyedByKey, "P1");
         HudMessages.PostMatchKill(stack, strings, HudMessages.MatchDeath.NoKiller, "P2", null);
-        ctx.Check(stack.LineAt(0) == "P2 Self-Destroyed" && stack.LineAt(1) == null,
-            $"a Dogfight death no killer owns still words itself, with no killer named: '{stack.LineAt(0) ?? "<none>"}'");
+        ctx.Check(stack.LineAt(0) == selfLoss && selfLoss.Contains("P2") && stack.LineAt(1) == null,
+            $"a Dogfight death no killer owns still words itself from its template, with no killer named: '{stack.LineAt(0) ?? "<none>"}'");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(stack.LineAt(0) == "P2 Self-Destroyed" && stack.LineAt(1) == null,
+                $"a Dogfight death no killer owns still words itself, with no killer named: '{stack.LineAt(0) ?? "<none>"}'");
+        }
         stack.Clear();
 
         HudMessages.PostMatchKill(stack, strings, HudMessages.MatchDeath.Killer, "P2", "P1");
-        ctx.Check(stack.LineAt(0) == "P2" && stack.LineAt(1) == "Destroyed by P1"
+        ctx.Check(stack.LineAt(0) == "P2" && stack.LineAt(1) == killedBy && killedBy.Contains("P1")
                   && stack.SideAt(0) == HudMessages.Side.Enemy && stack.SideAt(1) == HudMessages.Side.Enemy,
-            $"a Dogfight kill reads the victim over its killer, both in the enemy arm: '{stack.LineAt(0) ?? "<none>"}' / '{stack.LineAt(1) ?? "<none>"}' side={stack.SideAt(0)}/{stack.SideAt(1)}");
+            $"a Dogfight kill reads the victim over its killer's template, both in the enemy arm: '{stack.LineAt(0) ?? "<none>"}' / '{stack.LineAt(1) ?? "<none>"}' side={stack.SideAt(0)}/{stack.SideAt(1)}");
+        if (!ctx.SyntheticData)
+        {
+            ctx.Check(stack.LineAt(0) == "P2" && stack.LineAt(1) == "Destroyed by P1"
+                      && stack.SideAt(0) == HudMessages.Side.Enemy && stack.SideAt(1) == HudMessages.Side.Enemy,
+                $"a Dogfight kill reads the victim over its killer, both in the enemy arm: '{stack.LineAt(0) ?? "<none>"}' / '{stack.LineAt(1) ?? "<none>"}' side={stack.SideAt(0)}/{stack.SideAt(1)}");
+        }
         stack.Clear();
     }
 
@@ -328,5 +362,14 @@ internal static class HudKillLineSuites
         ctx.Check(stack.LineAt(0) == "after" && stack.LineAt(1) == null,
             $"a spent slot 0 has nothing to push, so the next line enters alone");
         stack.Clear();
+    }
+
+    // Whether the table words every key, each differently. A key the table lacks reads back as
+    // itself, which is the miss this tells apart from a row.
+    private static bool Rows(Messages strings, params string[] keys)
+    {
+        var words = keys.Select(strings.Get).ToList();
+        return words.Select((w, i) => w.Length > 0 && w != keys[i]).All(found => found)
+            && words.Distinct(System.StringComparer.Ordinal).Count() == words.Count;
     }
 }

@@ -80,6 +80,7 @@ internal static class GroundShadowSuites
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
+        ctx.RequirePlane(RotorPlane);
 
         var report = new StringBuilder();
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);

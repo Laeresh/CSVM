@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
+using CSVM.Flight.Camera;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.InstantAction;
@@ -109,8 +110,19 @@ internal static class PlaneWobbleSuites
                 $"the engage reaches the plane node (boosting={rig.Nitro.Boosting}, peak {engagePeak:E2} rad)");
             ctx.Check(biggestStep < engagePeak * 0.5f,
                 $"…ramping into each turn rather than wrapping like a sawtooth (biggest tick step {biggestStep:E2} of peak {engagePeak:E2})");
-            ctx.Check(gaps.Count >= 4 && gaps.All(g => g is >= 8 and <= 11),
-                $"…at the ramp law's own rate rather than the authored 4 Hz (gaps [{string.Join(",", gaps)}])");
+            // The ramp law's swing off the record's own nitro: (1+k)/(4·f·k) s, k = e^(-damp/2f),
+            // with the substep and tick quantisation either side. A sawtooth wrapping at the
+            // authored rate alternates one-tick and whole-period gaps instead.
+            var nitro = ShakeDefs.Load(ctx.ZrdrPath).Nitro;
+            float k = nitro is { Frequency: > 0f } n ? Mathf.Exp(-n.Damp / (2f * n.Frequency)) : 0f;
+            float swingTicks = nitro != null && k > 0f ? (1f + k) / (4f * nitro.Frequency * k) / Dt : 0f;
+            ctx.Check(swingTicks > 0f && gaps.Count >= 4 && gaps.All(g => g >= swingTicks - 1.5f && g <= swingTicks + 2f),
+                $"…at the ramp law's own rate for the record's nitro ({swingTicks:0.0} ticks a swing) rather than its authored frequency (gaps [{string.Join(",", gaps)}])");
+            if (!ctx.SyntheticData)
+            {
+                ctx.Check(gaps.Count >= 4 && gaps.All(g => g is >= 8 and <= 11),
+                    $"…at the ramp law's own rate rather than the authored 4 Hz (gaps [{string.Join(",", gaps)}])");
+            }
         }
         finally
         {

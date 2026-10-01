@@ -38,8 +38,8 @@
   ],
   "nitro",
   [
-    "frequency", [5.0],
-    "damp", [3.5],
+    "frequency", [3.0],
+    "damp", [4.0],
     "sawtooth", [1],
     "magnitude", [0.03]
   ]

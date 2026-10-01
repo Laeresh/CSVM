@@ -109,6 +109,12 @@ public class SyntheticPlaneTests
         // The ordnance records beside them are invented too, and each names itself through the table.
         Assert.All(weapons.All, w => Assert.StartsWith("wep_probe_", w.Id, System.StringComparison.Ordinal));
         Assert.All(weapons.All, w => Assert.NotEqual(w.DescKey, w.DisplayName));
+        // The fused blast rocket: a trigger distance past 8 m and a radius over twice it.
+        var blast = weapons.Get("wep_probe_blastrocket");
+        Assert.NotNull(blast);
+        Assert.True(blast.IsRocket && blast.HighExplosive);
+        Assert.Equal("Probe Blast Rocket", blast.DisplayName);
+        Assert.True(blast.DetonationDistance > 8f && blast.ImpactProximity >= 2f * blast.DetonationDistance);
         Assert.All(weapons.All, w => Assert.Empty(w.UnhandledKeys));
 
         var shakes = ShakeDefs.Load(zrdr);
