@@ -26,6 +26,13 @@ an AI spawn prefers an explicit scheme, then its own def's `paint_*`, and reache
 only when neither is authored. Instant Action enemies are the exception, for the reason
 `InstantActionRuntime.cs` gives. Paint decode: [../org/paint.md](../org/paint.md).
 
+## src/Session/Roster/HumanFieldPlanes.cs
+Which aircraft each human in the field flies, read off a `SessionSpec`: `PlaneFor(spec, index)`
+gives a player their own pick, or the last plane named when the list is shorter, and
+`InstantActionOverride(spec, node)` says whether an Instant Action def's one `player_plane` binds
+every human (a def read off a file) or is only player 1's pick (the launchscreen wizard's def).
+Pure over the spec. The built aircraft's display name is `Flight/Airframe/PlaneRoster.cs`'s.
+
 ## src/Session/Roster/SpawnPicker.cs
 Resolves each player's flight spawn: `LoadSpawnList` (which list the session walks, the mission's
 `ia.json` scenario or a Dogfight launch's `net.zrd` block, the whole table when `SeatTeams` names a team, which `PlanTeams` walks by team block), `ChooseSpawnBase` (the shared

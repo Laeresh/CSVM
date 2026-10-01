@@ -1,28 +1,11 @@
 using System;
-using CSVM.Spec;
 
 namespace CSVM.Flight.Airframe;
 
-/// <summary>Pure lookups over a <see cref="SessionSpec"/>'s plane roster: which plane a player
-/// flies and a readable display name for it. No session state, so these take the spec explicitly
-/// rather than caching one.</summary>
+/// <summary>Pure display-name lookups for an aircraft and a scenario. Which plane a human flies is
+/// <c>Session.Roster.HumanFieldPlanes</c>'s, since that reads the launch spec.</summary>
 public static class PlaneRoster
 {
-    /// <summary>The plane player <paramref name="index"/> flies: their own pick when the
-    /// launchscreen (or a --plane= list) gave one, else the last one named, so a single
-    /// --plane= puts everybody in the same aircraft.</summary>
-    public static string PlaneFor(SessionSpec spec, int index) =>
-        spec.PlaneNames.Count == 0 ? spec.PlaneName : spec.PlaneNames[Math.Min(index, spec.PlaneNames.Count - 1)];
-
-    /// <summary>The aircraft an Instant Action mission forces on every human, or null to leave
-    /// each player the pick <see cref="PlaneFor"/> returns. A def read off a file (<c>--ia=</c>,
-    /// <c>ia.zrd.json</c>) names one <c>player_plane</c> and no human behind it picked anything,
-    /// so it stands for all of them. The launchscreen wizard's def carries PLAYER 1's pick in that
-    /// same field (<c>LaunchMenu.FireLaunch</c>), so honouring it would fly P2..P4 in
-    /// player 1's aircraft instead of their own.</summary>
-    public static string? InstantActionOverride(SessionSpec spec, string? iaPlayerNode) =>
-        spec.IaDef != null ? null : iaPlayerNode;
-
     /// <summary>A readable plane name: the def's own authored <c>title</c> where it has been
     /// resolved ("Medusa Kestrel"), else derived from the vehicle.json def name, the player defs
     /// are "p&lt;name&gt;" (pbloodhawk, ppeacemaker, pfury, …), so strip the leading p and

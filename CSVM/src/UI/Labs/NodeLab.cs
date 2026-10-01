@@ -106,45 +106,14 @@ public sealed partial class NodeLab : Node
     public int BottomMargin { get; init; } = 16;
 
     /// <summary><c>--debug-nodelab[=deps,dest,open,node=&lt;cs_name&gt;]</c>: open the panel at
-    /// launch and dump the requested readouts to the log once the selection has settled, the
-    /// scripted stand-in for pressing N and reading the panel, which live input cannot do here.</summary>
+    /// launch and dump the requested readouts to the log once the selection has settled. It stands
+    /// in for pressing N and reading the panel, which live input cannot do here. The grammar is <see cref="Spec.SessionSpec.ParseNodeLabSpec"/>, so a bad token was reported
+    /// at launch and never reaches this.</summary>
     public string? DebugSpec { get; init; }
 
     /// <summary>Whether the panel is showing. Nothing is built until it first opens, so a capture
     /// without N, and without <c>--debug-nodelab</c>, renders as if this file did not exist.</summary>
     public bool IsOpen => _open;
-
-    /// <summary>Parses <c>--debug-nodelab[=spec]</c>: a comma-separated list of <c>deps</c>,
-    /// <c>dest</c>, <c>open</c> and <c>node=&lt;cs_name&gt;</c>. Unknown tokens are reported and
-    /// dropped rather than silently disabling the dump the run was launched for.</summary>
-    public static string ParseDebugSpec(string spec, List<string>? rejected = null)
-    {
-        var kept = new List<string>();
-        foreach (string token in spec.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            if (token.Equals("all", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-            if (token.Equals("deps", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("dest", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("open", StringComparison.OrdinalIgnoreCase)
-                || token.StartsWith("node=", StringComparison.OrdinalIgnoreCase))
-            {
-                kept.Add(token);
-                continue;
-            }
-            // A caller that supplies the list wants the tokens back as data, not in the log, that
-            // is what lets the spec normalise a value without a Godot runtime to print into.
-            if (rejected != null)
-            {
-                rejected.Add(token);
-                continue;
-            }
-            Log.Warn("ui", $"--debug-nodelab token '{token}' is not deps/dest/open/all/node=<cs_name>, ignoring it");
-        }
-        return string.Join(",", kept);
-    }
 
     public override void _Ready()
     {

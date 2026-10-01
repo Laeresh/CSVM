@@ -2690,10 +2690,10 @@ public partial class GameSession : Node3D
                             $"the eleven airframes, flying '{_spec.PlaneName}' instead");
         }
 
-        // What the mission forces on every human, which the wizard's own def does not: its
-        // player_plane IS player 1's pick, so PlaneRoster.InstantActionOverride hands it back
-        // as null and each pane flies the aircraft its pilot selected.
-        string? iaOverride = PlaneRoster.InstantActionOverride(_spec, iaPlayerNode);
+        // What the mission forces on every human. The wizard's own def forces nothing, since its
+        // player_plane IS player 1's pick. HumanFieldPlanes.InstantActionOverride returns null for
+        // it, so each pane flies the aircraft its pilot selected.
+        string? iaOverride = HumanFieldPlanes.InstantActionOverride(_spec, iaPlayerNode);
         // One spawn list for the session; each player takes the next index (wrapping).
         _spawnPicker.ScenarioOverride = iaRt != null ? iaScenario : null;
         // The world build (above) has already run the intro's own animation bootstrap, so
@@ -3028,7 +3028,7 @@ public partial class GameSession : Node3D
         // Splitscreen binds P1 only: the panel is one overlay, not one per pane.
         if (_rigs.Count > 0 && _rigs[0].Controller is { Damage: not null } p1)
         {
-            var p1Stats = StatsFor(iaOverride ?? PlaneRoster.PlaneFor(_spec, 0));
+            var p1Stats = StatsFor(iaOverride ?? HumanFieldPlanes.PlaneFor(_spec, 0));
             _damageLab = new DamageLab(p1Stats,
                 new FlightDamageTarget(p1, _rigs.Count > 1 ? "P1" : null), _spec.DamagePreset)
             {
@@ -3934,7 +3934,7 @@ public partial class GameSession : Node3D
         {
             var flown = new List<string>(_rigs.Count);
             for (int pi = 0; pi < _rigs.Count; pi++)
-                flown.Add($"P{pi + 1} '{iaOverride ?? PlaneRoster.PlaneFor(_spec, pi)}'");
+                flown.Add($"P{pi + 1} '{iaOverride ?? HumanFieldPlanes.PlaneFor(_spec, pi)}'");
             state.What += $" + splitscreen {string.Join(", ", flown)}";
         }
         else

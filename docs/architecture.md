@@ -137,7 +137,7 @@ rows).
 **`Flight.Airframe`**, the flying node, its physics, collision, damage and the weapon-effect registries it carries.
 
 - `src/Flight/Airframe/PlaneStats.cs`, typed per-plane stats from vehicle/engines/player.json: dynamics, engine sound, destroyable parts.
-- `src/Flight/Airframe/PlaneRoster.cs`, pure lookups over a `SessionSpec`'s plane roster: which plane a player flies, and its display name.
+- `src/Flight/Airframe/PlaneRoster.cs`, pure display-name lookups: an aircraft's readable name from its stats, and a humanized scenario name.
 - `src/Flight/Airframe/ZeppelinBroadside.cs`, the pure broadside law: the decoded side arc, the per-cannon deploy machine and re-fire timer, the lead and gasbag picks.
 - `src/Flight/Airframe/ZeppelinDamage.cs`, the pure zeppelin kill arithmetic: the survivor count over the `healthy` list, the engine recount, the gasbag gate, stages.
 - `src/Flight/Airframe/ZeppelinMotion.cs`, the kinematic zeppelin motion law: forward-only net flight under the record's limits, the eased steer law, the stop approach.
@@ -679,6 +679,7 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 - `src/Session/Roster/AiAirframePool.cs`, the wave aeroplanes built in the loading screen and held out of the tree, so a launch binds one instead of building it.
 - `src/Session/Roster/CrashRigQueue.cs`, the queue of crash rigs for aeroplanes already flying, advanced one build step a frame so a launch costs less on its frame.
 - `src/Session/Roster/LiveryResolver.cs`, each player's livery from a `SessionSpec`: the paint catalog, the pattern-mask library and the per-player scheme pick.
+- `src/Session/Roster/HumanFieldPlanes.cs`, each human's aircraft from a `SessionSpec`: the per-player pick and the Instant Action override.
 - `src/Session/Roster/SpawnPicker.cs`, each player's flight spawn: the shared spawn-list index and the per-player point; also the plain `IFlightStarts`.
 - `src/Session/Roster/IFlightStarts.cs`, the spawn-placement seam: one call answering for the whole field, and the `FlightStart` pair every rig is placed from.
 - `src/Session/Roster/StartGrid.cs`, the abreast starting grid: every pilot fanned about one anchor spawn, the whole field lifted as one to clear terrain.

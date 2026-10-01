@@ -92,7 +92,7 @@ Nothing waits for the next mission load.
 ## src/Spec/SessionSpec.cs
 Everything the command line settles about a session as one immutable, engine-free record:
 `Parse(args)` parses **and** resolves, so a consumer reads an answer instead of re-deriving one, and
-the pure arg parsers (`ParseVec3`, `ParsePlanes`, `ParseHold`, …) are public so they are testable.
+the pure arg parsers (`ParseVec3`, `ParsePlanes`, `ParseHold`, the lab grammars `ParseNodeLabSpec` and `ParseDamageScript`, …) are public so they are testable.
 `SessionMode` is closed (Menu/Fly/Viewer/Freecam/AnimLab), with the `Stunt`, `Versus` (and its `CaptureTheFlag` or `ZeppelinVsZeppelin`) and `Coop`
 modifiers and `SessionProbe` beside it. `FromMenu` and `FromCampaign` are the launchscreen's and the
 campaign cabin's counterparts to a command line, each carrying its own no-re-resolve rule on itself. `FromMenu` flies every Dogfight on its type's multiplayer map (`DeathmatchMission`, `CtfMission`, `ZvzMission`) whatever `--mission` says, so every machine in one match builds the same mission;

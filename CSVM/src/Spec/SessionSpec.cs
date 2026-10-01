@@ -867,12 +867,12 @@ public sealed record SessionSpec
     /// selection lives in the two world-observation modes, the viewer's LMB is already the orbit
     /// drag, and flight has no cursor.</summary>
     public string? DebugSelect { get; private set; }
-    /// <summary><b>Resolved.</b> Filtered to the lab's token grammar
-    /// (<c>UI.Labs.NodeLab.ParseDebugSpec</c>, called with a reject list so it hands them back as data
-    /// instead of logging), and null outside <c>--freecam</c>/<c>--anim-lab</c>.</summary>
+    /// <summary><b>Resolved.</b> Filtered to the node lab's token grammar
+    /// (<see cref="ParseNodeLabSpec"/>), each dropped token a <c>ui</c> warning note, and null
+    /// outside <c>--freecam</c>/<c>--anim-lab</c>. The lab reads it as already checked.</summary>
     public string? DebugNodeLab { get; private set; }
     /// <summary><b>Resolved.</b> Same treatment as <see cref="DebugNodeLab"/>, through
-    /// <c>UI.Labs.WorldDamageLab.ParseDebugSpec</c>.</summary>
+    /// <see cref="ParseDamageScript"/>.</summary>
     public string? DebugDamage { get; private set; }
     public int DebugJoin { get; private set; }
     /// <summary><c>--debug-waves=N</c> (launchscreen only): pre-configure the first N
@@ -2091,6 +2091,57 @@ public sealed record SessionSpec
         return list;
     }
 
+    /// <summary>Parse <c>--debug-nodelab[=spec]</c>, the node lab's comma-separated token set. It
+    /// keeps <c>deps</c>, <c>dest</c>, <c>open</c> and <c>node=&lt;cs_name&gt;</c> in order.
+    /// <c>all</c> is accepted and dropped, since an empty value already dumps every readout. Any
+    /// other token is dropped, and appended to <paramref name="rejected"/> when one is supplied.</summary>
+    public static string ParseNodeLabSpec(string spec, List<string>? rejected = null)
+    {
+        var kept = new List<string>();
+        foreach (string token in spec.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (token.Equals("all", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            if (token.Equals("deps", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("dest", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("open", StringComparison.OrdinalIgnoreCase)
+                || token.StartsWith("node=", StringComparison.OrdinalIgnoreCase))
+            {
+                kept.Add(token);
+                continue;
+            }
+            rejected?.Add(token);
+        }
+        return string.Join(",", kept);
+    }
+
+    /// <summary>Parse <c>--debug-damage[=script]</c>, the world damage lab's ordered script:
+    /// <c>node=&lt;cs_name&gt;</c>, <c>pool=&lt;n&gt;</c>, <c>hp=&lt;value&gt;</c>, <c>kill</c>,
+    /// <c>reset</c>, <c>tick=&lt;seconds&gt;</c> and <c>open</c>, comma-separated. Any other step is
+    /// dropped, and appended to <paramref name="rejected"/> when one is supplied.</summary>
+    public static string ParseDamageScript(string spec, List<string>? rejected = null)
+    {
+        var kept = new List<string>();
+        foreach (string step in spec.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (step.Equals("open", StringComparison.OrdinalIgnoreCase)
+                || step.Equals("kill", StringComparison.OrdinalIgnoreCase)
+                || step.Equals("reset", StringComparison.OrdinalIgnoreCase)
+                || step.StartsWith("node=", StringComparison.OrdinalIgnoreCase)
+                || step.StartsWith("pool=", StringComparison.OrdinalIgnoreCase)
+                || step.StartsWith("hp=", StringComparison.OrdinalIgnoreCase)
+                || step.StartsWith("tick=", StringComparison.OrdinalIgnoreCase))
+            {
+                kept.Add(step);
+                continue;
+            }
+            rejected?.Add(step);
+        }
+        return string.Join(",", kept);
+    }
+
     /// <summary>Parse <c>--hitch-inject=</c>: <c>[alloc:]&lt;ms&gt;[@frame]</c>. The <c>alloc:</c>
     /// prefix is the allocation-burst form (moves the GC/allocated-bytes columns); its absence is
     /// the busy-wait form (proves only the timing path). <paramref name="defaultFrame"/> is what a
@@ -2336,11 +2387,11 @@ public sealed record SessionSpec
             Warn("ui", "--canopy-holes needs a flown aircraft (--fly/--stunt); ignoring it");
             CanopyHoles = null;
         }
-        // The two lab spec grammars live in their labs; the reject list keeps them from logging,
-        // which is what lets this run with no engine under it.
-        DebugNodeLab = FilterSpec(DebugNodeLab, UI.Labs.NodeLab.ParseDebugSpec, "--debug-nodelab token",
+        // A malformed lab value is reported here, at launch, so the lab only ever sees tokens its
+        // own reader acts on.
+        DebugNodeLab = FilterSpec(DebugNodeLab, ParseNodeLabSpec, "--debug-nodelab token",
             "is not deps/dest/open/all/node=<cs_name>");
-        DebugDamage = FilterSpec(DebugDamage, UI.Labs.WorldDamageLab.ParseDebugSpec, "--debug-damage step",
+        DebugDamage = FilterSpec(DebugDamage, ParseDamageScript, "--debug-damage step",
             "is not node=/pool=/hp=/kill/reset/tick=/open");
 
         // --stage= replaces the chapter world outright, so it is a flight/spectator affair: there
@@ -2482,7 +2533,7 @@ public sealed record SessionSpec
         }
     }
 
-    // Runs a lab's own token filter over a spec value without letting it log.
+    // Runs a lab flag's token grammar over its value and reports each dropped token as a note.
     private string? FilterSpec(string? spec, Func<string, List<string>?, string> filter,
         string what, string wanted)
     {

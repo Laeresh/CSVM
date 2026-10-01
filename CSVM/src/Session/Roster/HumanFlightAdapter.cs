@@ -114,7 +114,7 @@ internal sealed class HumanFlightAdapter
         var seat = pi < _human.NetSeats.Count ? _human.NetSeats[pi] : null;
         bool remote = seat is { IsLocal: false };
         // Each player flies their own pick; an Instant Action mission overrides it for every human
-        // alike (PlaneRoster.InstantActionOverride settles which do). A mission's own swap outranks
+        // alike (HumanFieldPlanes.InstantActionOverride settles which do). A mission's own swap outranks
         // both. In a network match the roster's pick comes first: every peer builds the same field.
         string planeName = swap?.PlaneNode
             ?? (seat is { PlaneNode.Length: > 0 } ? seat.PlaneNode : null)

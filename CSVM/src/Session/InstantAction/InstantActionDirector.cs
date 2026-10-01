@@ -834,7 +834,7 @@ public sealed class InstantActionDirector
         if (_rigs is not { Count: > 0 } || _rigs[0].Controller?.Stunt is not { } run)
             return null;
         var store = ScoreStore.Load();
-        string key = $"{_spec.Chapter}/{_spec.Mission}/{PlaneRoster.PlaneFor(_spec, 0)}";
+        string key = $"{_spec.Chapter}/{_spec.Mission}/{HumanFieldPlanes.PlaneFor(_spec, 0)}";
         return BuildStuntSummary(run, store, key);
     }
 

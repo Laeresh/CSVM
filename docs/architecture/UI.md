@@ -37,7 +37,7 @@ instance: `Build(stock, customs)` lists the stock rows in their given order, the
 `CustomPlaneDef` in the store's name-sorted order, each carrying its store name and its airframe's
 stock node, skipping a campaign plane nobody has exported. `AirframeNode` and `AirframeOf` are the
 airframe-id to `player_*` node table and its inverse, `IndexOf` the after-build auto-select's
-case-blind lookup. Deliberately not `Flight.Airframe.PlaneRoster`, which answers "which plane does player N
+case-blind lookup. Deliberately not `Session.Roster.HumanFieldPlanes`, which answers "which plane does player N
 fly" off a `SessionSpec`: this is the menu-side list, that one the session-side read. Tests:
 `CSVM.Tests/PlanePickerRosterTests.cs`.
 
@@ -789,7 +789,8 @@ The node lab (key N) in `--freecam` and `--anim-lab`: the world's `cs_name` tree
 per-node frame, hide and glTF export into `Exports/`, the export set's three buttons, a dependency readout for the current selection (anim defs, destructible
 pools, geometry and textures, colliders) and a destructibles view with coverage columns, plus
 top-level branches for props parked beside the world content. `--debug-nodelab` is the scripted
-twin. A row's text and colour follow live visibility, re-read on the panel's own status cadence.
+twin, its token grammar checked at launch by `SessionSpec`. A row's text and colour follow live
+visibility, re-read on the panel's own status cadence.
 
 ## src/UI/Screens/ExportSet.cs
 The node lab's export set: the nodes gathered with Ctrl+click or the panel's ± set, written as one
@@ -803,7 +804,7 @@ to its wreck) leaves on its own. Nothing is drawn until the first node joins.
 The world damage lab (key F19) in `--freecam` and `--anim-lab`: the destructible pools of whatever
 the selection holds, each with live HP, and a slider with kill and reset on the one a weapon hit
 reaches, driving the anim runtime's damage and reset calls. `--debug-damage` is the scripted twin,
-an ordered script rather than a token set. Only the pool the registry resolves is drivable, since a
+an ordered script rather than a token set, checked at launch by `SessionSpec`. Only the pool the registry resolves is drivable, since a
 node can carry several; the rest are listed read-only with the reason, because driving a twin would
 damage a pool nothing can ever hit.
 

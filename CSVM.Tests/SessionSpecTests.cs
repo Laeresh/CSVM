@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using CSVM;
 using CSVM.Effects;
@@ -800,6 +801,41 @@ public class SessionSpecTests
         var s = S("--freecam", "--debug-nodelab=deps,bogus,dest");
         Assert.Equal("deps,dest", s.DebugNodeLab);
         Assert.Contains(s.Warnings, w => w.Category == "ui" && w.Message.Contains("bogus"));
+    }
+
+    /// <summary>The damage script keeps its steps in order, because the lab runs them in order.
+    /// A malformed step is reported at launch as a <c>ui</c> warning naming the step.</summary>
+    [Fact]
+    public void ADamageScriptKeepsItsStepsInOrderAndReportsTheRest()
+    {
+        var s = S("--freecam", "--debug-damage=node=bld_a,hp=50,explode,tick=2,kill");
+        Assert.Equal("node=bld_a,hp=50,tick=2,kill", s.DebugDamage);
+        Assert.Contains(s.Warnings, w => w.Category == "ui"
+            && w.Message == "--debug-damage step 'explode' is not node=/pool=/hp=/kill/reset/tick=/open, ignoring it");
+    }
+
+    /// <summary>The two lab grammars read alone. The node lab accepts <c>all</c> and keeps nothing
+    /// for it, while the damage script has no <c>all</c>. Case is kept, and surrounding whitespace
+    /// is not part of a token.</summary>
+    [Theory]
+    [InlineData("all", "", "")]
+    [InlineData(" DEPS , node=Foo ,x", "DEPS,node=Foo", "x")]
+    [InlineData("open,dest,deps", "open,dest,deps", "")]
+    public void TheNodeLabGrammarKeepsOnlyItsTokens(string spec, string kept, string rejected)
+    {
+        var rejects = new List<string>();
+        Assert.Equal(kept, SessionSpec.ParseNodeLabSpec(spec, rejects));
+        Assert.Equal(rejected, string.Join(",", rejects));
+    }
+
+    [Theory]
+    [InlineData("pool=1,reset,open", "pool=1,reset,open", "")]
+    [InlineData("all,kill", "kill", "all")]
+    public void TheDamageScriptGrammarKeepsOnlyItsSteps(string spec, string kept, string rejected)
+    {
+        var rejects = new List<string>();
+        Assert.Equal(kept, SessionSpec.ParseDamageScript(spec, rejects));
+        Assert.Equal(rejected, string.Join(",", rejects));
     }
 
     // ---- Placement -----------------------------------------------------------------------------

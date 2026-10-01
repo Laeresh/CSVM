@@ -47,7 +47,6 @@ public sealed class FamilyOrderTests
 
     private static readonly string[] Allowed =
     {
-        "CSVM.Flight.Airframe.PlaneRoster -> CSVM.Spec.SessionSpec",
         "CSVM.Session.Campaign.CampaignDirector -> CSVM.UI.Hangar.PlanePickerRoster",
         "CSVM.Session.Campaign.ChapterCinema -> CSVM.UI.Screens.CinemaHandoff",
         "CSVM.Session.Campaign.ChapterCinema -> CSVM.UI.Screens.CinemaPlay",
@@ -62,8 +61,6 @@ public sealed class FamilyOrderTests
         "CSVM.Session.Roster.HumanFlightAdapter -> CSVM.UI.Hangar.HangarPaintPage",
         "CSVM.Session.Roster.HumanFlightAdapter -> CSVM.UI.Screens.ResultsBoard",
         "CSVM.Session.Roster.HumanFlightAdapter -> CSVM.UI.Screens.StuntScoreboard",
-        "CSVM.Spec.SessionSpec -> CSVM.UI.Labs.NodeLab",
-        "CSVM.Spec.SessionSpec -> CSVM.UI.Labs.WorldDamageLab",
     };
 
     [Fact]

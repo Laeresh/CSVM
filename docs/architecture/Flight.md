@@ -568,12 +568,11 @@ curves, `destroyable_parts` as `DestroyablePart` records with the def-level inju
 `collision` probe list, and `AiTargetBias`/`AiStructBias`, the def's two acquisition rank terms, and `AiAttackDwell`/`AiNotPursuitDwell`, the pursuit timers, and `SpinPropsAnim`/`StopPropsAnim`, the propeller pair, all read off the chain the vehicle spawns as. `Load` resolves down the player chain, `LoadForAi` takes only the damage model off the AI chain, and the `With*` family layers roster, difficulty and hangar overrides on.
 
 ## src/Flight/Airframe/PlaneRoster.cs
-Static, spec-free lookups over a `SessionSpec`'s plane roster: `PlaneFor(spec, index)`,
-`PlaneDisplayName(stats)`, `Humanize(s)`. A plane's display name is the def's AUTHORED `title`
-(`PlaneStats.AiTitle`, "Medusa Kestrel") where something has resolved it through the string table,
-and the def-name derivation ("Bloodhawk") otherwise, which is what a player load and a bare rig get.
-No session state: every call takes the `SessionSpec` explicitly rather than caching one, since
-these are pure over their arguments.
+Static display-name lookups: `PlaneDisplayName(stats)` and `Humanize(s)`. A plane's display name is
+the def's AUTHORED `title` (`PlaneStats.AiTitle`, "Medusa Kestrel") where something has resolved it
+through the string table, and the def-name derivation ("Bloodhawk") otherwise, which is what a
+player load and a bare rig get. Which plane each human flies reads the launch spec, so it is
+`Session/Roster/HumanFieldPlanes.cs`, a family above.
 
 ## src/Flight/Modes/SpawnPoints.cs
 Reads the flight spawn from a mission's OWN zrdr, a different archive than the shared `--zrdr`, in
