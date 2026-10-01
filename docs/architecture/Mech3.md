@@ -108,7 +108,9 @@ Counts and destroys the decorations a crater swallows. A decoration dies outrigh
 test, no animation and no model swap, because the original's crater path reads no template field at
 all. `ClutterBuilder` bakes every placement of one kind into one MultiMesh, so dying means the
 instance's basis collapses to zero (the draw call and its custom data stay intact) and its shared
-collision shape is switched off on the region body it was attached to by RID. Read `Clutter.cs`.
+collision shape is switched off on the region body it was attached to by RID. A MultiMesh a
+`ClutterInstances` owns is read and written through it, so a flattened stamp survives a recut.
+Read `Clutter.cs`.
 
 ## src/Mech3/PlaneBuilder.cs
 Builds one aircraft from its GameZ subtree, skipping the cockpit, damage, destroyed and shadow
@@ -220,10 +222,10 @@ One clutter kind's drawn instances behind the kind's own placement index. The fa
 the kind's single MultiMesh (`Whole`). Under Enhanced Graphics `Cells` cuts it into square map
 cells about twice the kind's farthest fade across, each its own node with a visibility range at that
 fade, so a pane draws only the cells in reach instead of every stamp in the chapter. Reads and
-writes take the clutter root's frame, which keeps `ClutterActivation` and the suites off the cells;
-`ClutterCull` walks the cells as ordinary MultiMeshes. `Draw` keeps the builder's node as a
-prototype, so `Recut` draws the kind again, whole or cut, after a live mode switch or View Distance
-change, keeping any stamp since hidden or flattened. Read `Clutter.cs`.
+writes take the clutter root's frame and are mirrored here, which keeps `ClutterActivation`, the
+suites and `ClutterCull`'s writes off the cells. Both layouts' buffers are kept once made, so
+`Recut` after a live mode switch or View Distance change swaps nodes and writes only the stamps
+since hidden or flattened; a new cell edge is cut with one buffer upload per cell. Read `Clutter.cs`.
 
 ## src/Mech3/ClutterTemplates.cs
 The chapter's `templates.zrd` (`ClutterTemplateSpec.Load`/`.Parse`): one `ClutterKindProps` per

@@ -32,7 +32,8 @@ internal static class GraphicsSwitchSuites
         + "session, and its Original half as a fresh Original one: the enhanced-only layers (scorch "
         + "field, volumetric banks, wind streaks, heat shimmer) are built or gone and the ground "
         + "shadow is the reverse, the clutter is one MultiMesh per kind on the faithful path and cells "
-        + "with ranges under Enhanced, the map edge's clutter copies carry ranges under Enhanced alone, every world, clutter, cloud and streak material carries the "
+        + "with ranges under Enhanced, a crater-flattened and a hidden stamp stay down through both switches with every drawn clutter buffer holding what the world last wrote, "
+        + "the map edge's clutter copies carry ranges under Enhanced alone, every world, clutter, cloud and streak material carries the "
         + "shader text a fresh build gives it, the rendered cloud puffs draw under Enhanced alone with "
         + "a fresh build's pool and tint, every alpha-plane texture, puffer atlas and painted skin holds the alpha depth a fresh build uploads (16 levels on the faithful path), the Environment's passes, tonemap and froxel fog and the "
         + "cockpit pass's copy match, the sun and the pass's light cast at the resolved shadow level "
@@ -72,10 +73,16 @@ internal static class GraphicsSwitchSuites
                 }
 
                 var freshEnhanced = Read(enhanced);
+                var stamps = MoveStamps(enhanced);
+                string movedHeld = StampsHeld(enhanced, stamps);
                 Switch(enhanced, false);
                 var switchedOriginal = Read(enhanced);
+                string originalHeld = StampsHeld(enhanced, stamps);
                 Switch(enhanced, true);
                 var roundTrip = Read(enhanced);
+                string roundTripHeld = StampsHeld(enhanced, stamps);
+                ctx.Check(stamps != null && movedHeld.Length == 0 && originalHeld.Length == 0 && roundTripHeld.Length == 0,
+                    $"a crater-flattened and a hidden stamp stay down through both switches, and every drawn clutter buffer holds every stamp as the world last wrote it ({stamps?.ToString() ?? "no clutter"}; {movedHeld}{originalHeld}{roundTripHeld})");
 
                 Same(ctx, "Original after a switch from Enhanced", freshOriginal, switchedOriginal);
                 Same(ctx, "Enhanced after a round trip through Original", freshEnhanced, roundTrip);
@@ -220,6 +227,62 @@ internal static class GraphicsSwitchSuites
             Mech3.SceneBuilder.EnhancedDrawn = wasDrawn;
             Restore(wasEnhanced);
         }
+    }
+
+    // Flattens one stamp of the largest clutter kind with a crater. Hides another through the kind's
+    // index, as the activation does in flight.
+    private static MovedStamps? MoveStamps(Rig rig)
+    {
+        if (ClutterRoot(rig.Session) is not { } root || rig.Session.Clutter?.ExportedKinds is not { } kinds)
+            return null;
+        var kind = kinds.Where(k => k.Instances != null).MaxBy(k => k.Instances!.InstanceCount);
+        if (kind?.Instances is not { InstanceCount: > 2 } stamps)
+            return null;
+        int flattened = 0, hidden = stamps.InstanceCount / 2;
+        var at = root.GlobalTransform * stamps.GetInstanceTransform(flattened).Origin;
+        int killed = Mech3.ClutterCull.Destroy(root, Mech3.CraterShape.At(at, radius: 0.01f));
+        var placed = stamps.GetInstanceTransform(hidden);
+        stamps.SetInstanceTransform(hidden, new Transform3D(placed.Basis.Scaled(Vector3.Zero), placed.Origin));
+        return new MovedStamps(kind, flattened, hidden, killed);
+    }
+
+    // What disagrees between the moved stamps, the kinds' indices and the drawn clutter buffers read
+    // straight back from the renderer; empty when nothing does.
+    private static string StampsHeld(Rig rig, MovedStamps? moved)
+    {
+        if (moved == null || ClutterRoot(rig.Session) is not { } root)
+            return "no clutter; ";
+        var problems = new StringBuilder();
+        var stamps = moved.Kind.Instances!;
+        if (stamps.GetInstanceTransform(moved.Flattened).Basis.Determinant() != 0f)
+            problems.Append("the flattened stamp stands; ");
+        if (stamps.GetInstanceTransform(moved.Hidden).Basis.Determinant() != 0f)
+            problems.Append("the hidden stamp stands; ");
+        int indexed = 0;
+        foreach (var kind in rig.Session.Clutter!.ExportedKinds!)
+        {
+            for (int i = 0; kind.Instances != null && i < kind.Instances.InstanceCount; i++)
+                indexed += kind.Instances.GetInstanceTransform(i).Basis.Determinant() == 0f ? 1 : 0;
+        }
+        int drawn = 0;
+        Walk(root, node =>
+        {
+            if (node is MultiMeshInstance3D { Multimesh: { } mm })
+            {
+                for (int i = 0; i < mm.InstanceCount; i++)
+                    drawn += mm.GetInstanceTransform(i).Basis.Determinant() == 0f ? 1 : 0;
+            }
+        });
+        if (indexed != drawn || indexed < 2)
+            problems.Append(CultureInfo.InvariantCulture, $"the indices hold {indexed} collapsed stamp(s) and the drawn buffers {drawn}; ");
+        return problems.ToString();
+    }
+
+    private static Node3D? ClutterRoot(Node session)
+    {
+        Node3D? found = null;
+        Walk(session, node => found ??= node is Node3D { Name: var name } n && name == "clutter" ? n : null);
+        return found;
     }
 
     // Drawn materials whose cache shader is not the standing mode's twin.
@@ -577,6 +640,12 @@ internal static class GraphicsSwitchSuites
             text.Append($"  shaders {Shaders}");
             return text.ToString();
         }
+    }
+
+    private sealed record MovedStamps(Mech3.ClutterBuilder.KindExport Kind, int Flattened, int Hidden, int Killed)
+    {
+        public override string ToString() => string.Create(CultureInfo.InvariantCulture,
+            $"{Kind.Texture} stamp {Flattened} flattened with {Killed} killed, stamp {Hidden} hidden");
     }
 
     private sealed record CellReading(int Cells, int Ranged, float MaxRange, string Text, float EdgeMax)

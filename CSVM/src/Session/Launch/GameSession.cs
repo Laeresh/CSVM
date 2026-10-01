@@ -532,6 +532,9 @@ public partial class GameSession : Node3D
     /// <summary>The map-edge continuation, null where the world has none. Read by the suites.</summary>
     internal Mech3.MapEdgeExtender? EdgeExtender => _edgeExtender;
 
+    /// <summary>The world's clutter, null where it has none. Read by the suites.</summary>
+    internal ClutterBuilder? Clutter => _clutter;
+
     /// <summary>The launch as this session resolved it. A campaign launch settles its chapter and
     /// mission here, out of the story position, so the Launcher's own copy never names them.</summary>
     internal SessionSpec Spec => _spec;
