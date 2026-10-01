@@ -226,7 +226,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
-- `BL-1014` `[Cleanup]` `[L]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **`FlightController.cs`
+- `BL-1014` `[Cleanup]` `[L]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`FlightController.cs`
   is 4490 lines and changes for unrelated reasons; the responsibilities that have their own
   state and rules leave as real modules.** *Evidence:* one review range added 1045 lines to the
   file over about 90 scattered hunks for six reasons that share no state: the engine-out propeller
@@ -237,7 +237,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   never crosses the flight tick (the view-mode dispatch, the mouse capture, the photograph
   latch, head-look are the candidates) and give each a type with its own public members that the
   controller composes, measuring the split by the controller's public member count before and
-  after. *⚠ Traps:* a new `partial` file is not a split; the repo's standing rule is that a partial
+  after. *Decision:* do the split. *⚠ Traps:* a new `partial` file is not a split; the repo's standing rule is that a partial
   is not a deepening, and the existing three are accepted, not a pattern to extend. Do not move the
   flight tick's own steps (forces, contact, damage) out; they share the accumulator and belong
   together. *Cross-refs:* `BL-1015`, `BL-1016` (the same shape in `GameSession.cs` and
@@ -596,7 +596,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* the numpad views' three level keys (`Kp2`/`Kp4`/`Kp6`), which sit at this same
   base elevation (`git log --grep=BL-150`), `docs/formats/camparam.md` (`thirdp_pitch`, and the Known limits paragraph this corrects),
   `docs/org/cameraViews.md` (head-look controller, the chase placement's own elevation).
-- `BL-1023` `[Feature]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: trace]` **In smooth look
+- `BL-1023` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **In smooth look
   mode (`J`) a released right stick leaves the view where it was aimed, in the chase view and in
   first person alike, the way a released numpad direction or mouse pan already does.** Today the
   stick is absolute in every look mode: stick position is view position and centring the stick
@@ -612,8 +612,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   a stick that never quite centres is unjudged at the controls. *Fix shape:* one rule for both
   views: in `LookMode.FreeLook` the stick's last aim is held on release (the chase path keeps the
   last `PadLook` angle pair rather than resuming `Chase`), and in snap mode both views return as
-  they do now. A user decision first, since the absolute stick is a UX call of this port with no
-  original to match, and a persistent stick changes how `K` and the centre key read on a pad.
+  they do now. *Decision:* the stick holds its aim in smooth mode, in both views; the absolute
+  stick was a UX call of this port with no original to match.
   *⚠ Traps:* the persistence must take the stick's aim at the moment it crossed into the centre
   band, not the filter's lagged value after it, or the parked view drifts a little toward centre
   on every release; do not add a second mode key for the pad, `J` and `K` are the original's two
@@ -647,7 +647,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   third set of sizes for the HUD. *Cross-refs:* `BL-449`, whose landing prompted this wording,
   `git log --grep=BL-951`.
 
-- `BL-1016` `[Cleanup]` `[L]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **`OriginalOptionsScreen.cs`
+- `BL-1016` `[Cleanup]` `[L]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`OriginalOptionsScreen.cs`
   is 2535 lines and 326 members after absorbing four screens; each page becomes its own module
   behind the one form, and the two new `OriginalShell` partials fold into real types.** *Evidence:*
   the Audio, Video, Game Options and Controls screens were deleted into this one class. Its own
@@ -658,8 +658,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   other partials into the `IOriginalScreenModule` seam. *Fix shape:* one page module per former
   screen behind `IOriginalScreenModule` or a page-sized sibling of it, the form keeping only the
   frame, the ACCEPT/CANCEL plaques and the page switch; the cheats and the dialog become the
-  types their file names already suggest, owned by the shell rather than spliced into it. *⚠ Traps:*
-  the pages share the plaque-row pair and the section pitch table, so extract those first or the
+  types their file names already suggest, owned by the shell rather than spliced into it.
+  *Decision:* do the split. *⚠ Traps:* the pages share the plaque-row pair and the section pitch table, so extract those first or the
   four modules duplicate them; a page module that reaches back into the form's fields for its
   layout is the form in another file. *Cross-refs:* `BL-1014`, `BL-1015`,
   `docs/menu-presentations.md`, `docs/architecture/UI.md`.
@@ -802,7 +802,7 @@ usual.
   race has a defined start (`StuntRace.cs`, `ScoreStore.GetBest`/`RecordIfBest`), and would want
   their own key namespace, since a countdown makes race and solo totals diverge again.
 
-- `BL-1015` `[Cleanup]` `[L]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **`GameSession.cs`
+- `BL-1015` `[Cleanup]` `[L]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`GameSession.cs`
   is 4402 lines and changes for unrelated reasons; the build steps and the per-mode runtimes it
   hosts leave as real modules.** *Evidence:* one review range added 532 lines over scattered hunks
   for the load screen, the Instant Action and campaign flows, the results boards, the debris and
@@ -811,7 +811,8 @@ usual.
   ordered build steps that read `BuildState` and write one subsystem each (the pattern
   `WorldEffectsFactory` already follows) move behind a build pipeline the session composes, and
   the mode-specific tails (Instant Action, campaign, versus) move onto the directors that already
-  own those modes. Measure by the session's public member count. *⚠ Traps:* a `partial` file is
+  own those modes. Measure by the session's public member count. *Decision:* do the split.
+  *⚠ Traps:* a `partial` file is
   not a split. The per-frame tick order across the runtimes is the one thing the session must
   keep in one place; do not scatter it into the extracted modules. *Cross-refs:* `BL-1014`,
   `BL-1016`, `docs/architecture/Session.md`.
@@ -867,7 +868,7 @@ usual.
   ending never waits for this tick (it is sent where it happens), so slowing the rate delays only
   the clock, and the reading must not be taken from a match that ended.
 
-- `BL-1026` `[Feature]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: trace]` **A guest's
+- `BL-1026` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **A guest's
   rematch key does nothing in a network match.** *Evidence:* `GameSession.RestartMatch` refuses
   outright off the host, because a guest that restarted would zero its own board and fly a round
   nobody else is in; `net-match-state` asserts that refusal. The host's R restarts the round for
@@ -875,7 +876,8 @@ usual.
   why. *Fix shape:* either a rematch request on the wire the host may answer (which needs a rule
   for who may ask and what happens when two ask), or the guest's board dropping the Restart item
   and saying the host calls the rematch. The second is a board change alone and settles the
-  silence; the first is a lobby question. *⚠ Traps:* do not let a guest's request restart the
+  silence; the first is a lobby question. *Decision:* the second, the guest's board drops Restart
+  and says the host calls the rematch; no request on the wire. *⚠ Traps:* do not let a guest's request restart the
   match directly, the host is the only writer of match state.
 
 - `BL-1041` `[Tuning]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: trace]` **The soak's
