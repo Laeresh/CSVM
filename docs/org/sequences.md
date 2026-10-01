@@ -39,6 +39,9 @@ bottom rather than hidden.
 | `004ecedc`–`004ecf53` | The per-instance **tick walk**, one ascending pass over the sequence array, stepping each slot at most once. The containing function is undefined in the database; the loop block is the citable unit |
 | `FUN_00516820` | The reader-side condition parser, one branch per keyword, writing the condition flag word |
 | `FUN_004ec6a0` | `FBFX_COLOR_FROM_TO`, dispatch slot 36, the model for "a timed event reports STILL RUNNING until its run time is up" |
+| `FUN_004ea7d0` | `OBJECT_MOTION_SI_SCRIPT`, dispatch slot 12 (`DAT_00727e10`): holds its sequence until the script's frames run out, posing on the first dispatch |
+| `FUN_004ea3b0` / `FUN_004ea350` | The SI frame evaluator (one frame's cubic or linear channels, written as SET poses) and the frame-cursor advance it steps through |
+| `FUN_004d1d50` | Set an `Object3d` node's translation (class data `+0x54`..`+0x5c`); `FUN_004d1e50` beside it is the ADD form `OBJECT_MOTION` uses |
 | `004e82b0` | `LIGHT_ANIMATION`, dispatch slot 5, advances one tick's worth of the authored delta per dispatch, clamps the last tick to the remainder, and returns still-running on the same test |
 | `FUN_004f7120` | `PUFFER_STATE` reader/parser, reached from a sequence's `PUFFER_STATE` event; decoded in [`org/puffer.md`](puffer.md) |
 | `FUN_004efaf0` | The node-name tier chain: animation root subtree, main root subtree, the two interned lists, then the world |
@@ -917,6 +920,35 @@ The consequence for the sequence is the same in both cases: **the ramp is the ev
 the chain waits for it.** Reporting 0 collapses `he_light_seq`'s authored 0.41 s flicker, seven
 ramps, into a single frame, each tween overwriting the previous, and `he_ground_effect`'s six-step
 1.2 s white↔violet wash into one instant.
+
+## An SI script holds its sequence and poses absolutely
+
+`OBJECT_MOTION_SI_SCRIPT` (`FUN_004ea7d0`, dispatch slot 12, written to `DAT_00727e10` by
+`FUN_004ee1a0`) is a timed event in the sense above, with the script itself as the run time:
+
+- **It returns 1 until the frame cursor passes the script's end, then 2.** The cursor (event
+  `+0x20`) advances through `FUN_004ea350` and is compared against the script record's byte size
+  (`+0x14`). The next event of the sequence therefore starts when the last frame ends, which is
+  what the C1 train's ~327 s loop reads.
+- **The first dispatch poses frame 0 in the same call.** On state byte 0 (`seq+0x20`) the handler
+  zeroes the frame cursor, the frame-local time (`+0x1c`) and the frame index (`+0x48`), then runs
+  `FUN_004ea3b0` before returning. Activation events ahead of it in the sequence and the opening
+  pose land in one tick walk, so a node an SI script brings on is never drawn at its rest pose.
+- **The pose is a SET in the parent frame.** `FUN_004ea3b0` evaluates the frame's cubic
+  (`script+0xc` non-zero) or linear channels and writes translation through `FUN_004d1d50`
+  (`Object3d`) or `FUN_004d2710` (`Camera`), never the ADD `FUN_004d1e50`. An authored offset
+  (event `+0x24`..`+0x2c`, rotation `+0x30`.., scale factors `+0x3c`..) is folded in only under
+  event flag bits `0x1`/`0x2`/`0x4` at `+0xc`, and that word is the compiled record's first
+  field, which every compiled `OBJECT_MOTION_SI_SCRIPT` in the install ships as 0. The node ends
+  exactly on the script's last frame.
+
+So the event after an SI script starts from the script's final pose. C1/M05's
+`attack_balloon<nn>` is the worked case: its script brings the balloon and its lifeboat from about
+978 m down onto the sea by about 57 s, the definition's own `Animation`-clock splash calls at
+55, 56 and 57 s fire `sm_splash` at the lifeboat as it touches, the boat is switched off and
+`lifespin_start<nn>` invalidated (which wakes that wave's `patrolboat_<n>` through the mission
+script), and only then does `rise` lift the balloon from y 0 to its 50 to 65 m station. The dip to
+the water is the authored entrance, not a hand-off fault.
 
 ## A definition ends only when no sequence of it is still stepping
 

@@ -53,12 +53,25 @@ internal static class CampaignMarkerSuites
 
     private const float AltitudeTolerance = 0.5f;
 
-    // OBJECTIVE10, the shipped script's own wake trigger for wave 1: WAKE_ANIM attack_wave1 then
-    // ADD_OBJECTIVE_TARGET, which is what carries the group from its rest pose through the
-    // SiScript entrance that passes close to the water before the rise sequence lifts it.
+    // OBJECTIVE10 is the shipped wake trigger for wave 1: WAKE_ANIM attack_wave1, then
+    // ADD_OBJECTIVE_TARGET. Its SiScript entrance brings the group down to the water, and the rise
+    // sequence lifts it.
     private const int WakeObjective = 10;
     private const float WakeStepDt = 0.1f;
-    private const int WakeSteps = 700; // 70 s: past the entrance's lowest pass over the water.
+    private const int WakeSteps = 700; // 70 s: past the entrance's touchdown and into the climb.
+
+    // Wave 1's first balloon definition: its SI entrance, then the rise sequence that lifts it
+    // off the water.
+    private const string EntranceAnim = "attack_balloon11";
+    private const string RiseSequence = "rise";
+
+    // The entrance's steepest authored descent moves the assembly under 4 m per 0.1 s tick. A
+    // frame drawn at rest before the entrance pose lands would jump it about 978 m.
+    private const float MaxStepPerTick = 10f;
+
+    // How long after the script ends the climb is measured from, so the rise's first tick is
+    // inside the window rather than on its edge.
+    private const float ClimbSettle = 1f;
 
     // ScanForCompletion resolves one objective per tick, so a removal needs more than one.
     private const float RetireSeconds = 3f;
@@ -235,7 +248,9 @@ internal static class CampaignMarkerSuites
         + "when the balloon its objective watches goes inactive while the boat is still afloat; "
         + "driven through the shipped OBJECTIVE10 wake trigger, the marker is offered from the "
         + "tick the wave wakes and tracks the live assembly through its whole SiScript entrance, "
-        + "never a stale reading that predates the balloon")]
+        + "never a stale reading that predates the balloon; the assembly is first drawn at its "
+        + "entrance's opening frame, comes down without a jump to the water inside its authored "
+        + "splash window, and climbs at the rise sequence's rate")]
     internal static void CampaignBalloonMarker(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -440,11 +455,11 @@ internal static class CampaignMarkerSuites
         return merged;
     }
 
-    // The wave-1 wake drive over its own BUILT world: the site is offered the instant OBJECTIVE10
-    // wakes, and its SiScript entrance carries the whole assembly from a hidden altitude down
-    // past the water before the rise sequence lifts it to attack height. Samples the marker every
-    // tick across that entrance and checks it never reads outside the group's own currently built
-    // geometry, which is what a stale, balloon-less merge would do.
+    // The wave-1 wake drive over its own BUILT world. The site is offered the instant OBJECTIVE10
+    // wakes. Its SiScript entrance brings the assembly from a hidden altitude down to the water,
+    // and the rise sequence lifts it to attack height. The marker is sampled every tick across
+    // that entrance. It must never read outside the group's currently built geometry, as a stale
+    // merge would.
     private static void DriveBalloonWake(TestContext ctx, TestWorld world, CampaignDirector director,
         MissionTargets targets, Messages messages, StringBuilder report)
     {
@@ -467,10 +482,14 @@ internal static class CampaignMarkerSuites
             return;
         }
 
+        var assembly = group.GetChild<Node3D>(0);
+        bool hiddenBeforeWake = !assembly.IsVisibleInTree();
+
         // OBJECTIVE10 itself gates on nothing once awake, so its ADD_OBJECTIVE_TARGET fires on
         // completion the very next Step after Wake rather than inside Wake itself; a real session
         // never renders the gap, since both happen well inside one frame's Step call.
         graph.Wake(WakeObjective);
+        var firstShown = (Visible: assembly.IsVisibleInTree(), Y: assembly.GlobalPosition.Y - group.GlobalPosition.Y);
         graph.Step(WakeStepDt);
 
         var sites = new ObjectiveSites(director, messages, targets, world.Runtime);
@@ -478,8 +497,10 @@ internal static class CampaignMarkerSuites
         int offered = 0, tracked = 0;
         float worstMargin = float.MaxValue;
         string worstAt = "";
+        var altitude = new float[WakeSteps];
         for (int i = 0; i < WakeSteps; i++)
         {
+            altitude[i] = assembly.IsVisibleInTree() ? assembly.GlobalPosition.Y - group.GlobalPosition.Y : float.NaN;
             pilot.Fly(listener);
             if (Find(pilot.Selection.Pool.Enemy, BalloonSite) is { } marked && WorldBox(group) is { } built)
             {
@@ -503,6 +524,101 @@ internal static class CampaignMarkerSuites
             $"'{BalloonSite}' is offered from the tick its wave wakes through the whole sampled entrance");
         ctx.Same(offered, tracked,
             $"and the marker never reads outside the group's own live geometry, so it is never a stale reading that predates the balloon");
+        CheckEntranceProfile(ctx, world, hiddenBeforeWake, firstShown, altitude, report);
+    }
+
+    // The wave's altitude against the entrance's own data (docs/org/sequences.md, "An SI script
+    // holds its sequence"). It is drawn first at the script's opening frame, never at rest on the
+    // water, and never jumps between ticks. It reaches the water inside the authored splash window,
+    // then climbs at the rise rate. Every expected value is read off the shipped definition.
+    private static void CheckEntranceProfile(TestContext ctx, TestWorld world, bool hiddenBeforeWake,
+        (bool Visible, float Y) firstShown, float[] altitude, StringBuilder report)
+    {
+        var def = world.Session.Program.ByAnimName(EntranceAnim) is { Count: > 0 } defs ? defs[0] : null;
+        var entrance = def == null ? null : FirstEvent(def, e => e.Kind == "ObjectMotionSiScript");
+        var script = entrance == null ? null : world.Session.Program.ScriptFor(def!, (int)(entrance.Data.Num("index") ?? 0f));
+        var rise = def == null ? null : FirstEvent(def, e => e.Kind == "ObjectMotionFromTo", RiseSequence);
+        if (def == null || script == null || script.Frames.Count == 0 || script.Frames[0].Translate == null || rise == null)
+        {
+            ctx.Check(false, $"'{EntranceAnim}' carries its SI entrance and its '{RiseSequence}' sequence");
+            return;
+        }
+
+        float opening = script.Frames[0].Translate!.At(0f).Y;
+        float splashOpens = float.MaxValue;
+        foreach (var seq in def.Sequences)
+        {
+            foreach (var e in seq.Events)
+            {
+                if (e.StartOffset == "Animation" && e.StartTime > 0f)
+                {
+                    splashOpens = Mathf.Min(splashOpens, e.StartTime);
+                }
+            }
+        }
+
+        float maxStep = 0f, lowest = float.MaxValue, lowestAt = 0f;
+        string maxStepAt = "";
+        for (int i = 0; i < altitude.Length; i++)
+        {
+            if (float.IsNaN(altitude[i]))
+            {
+                continue;
+            }
+
+            if (altitude[i] < lowest)
+            {
+                (lowest, lowestAt) = (altitude[i], i * WakeStepDt);
+            }
+
+            float prev = i == 0 ? firstShown.Y : altitude[i - 1];
+            if (!float.IsNaN(prev) && Mathf.Abs(altitude[i] - prev) > maxStep)
+            {
+                maxStep = Mathf.Abs(altitude[i] - prev);
+                maxStepAt = $"t={i * WakeStepDt:0.0}s {prev:0.00} -> {altitude[i]:0.00}";
+            }
+        }
+
+        float riseRate = (rise.Data.Obj("translate")?.Vec3("to").Y ?? 0f) / (rise.Data.Num("run_time") ?? 1f);
+        int climbFrom = Mathf.CeilToInt((script.Duration + ClimbSettle) / WakeStepDt);
+        int climbTo = altitude.Length - 1;
+        float climbed = altitude[climbTo] - altitude[climbFrom];
+        float expected = riseRate * (climbTo - climbFrom) * WakeStepDt;
+
+        report.AppendLine($"wave 1 entrance: hidden before wake {hiddenBeforeWake}, first drawn at {firstShown.Y:0.00} m "
+            + $"(script opens at {opening:0.00} m), largest tick step {maxStep:0.00} m ({maxStepAt}), lowest {lowest:0.00} m "
+            + $"at t={lowestAt:0.0}s (script ends {script.Duration:0.00}s, splash window opens {splashOpens:0.0}s), "
+            + $"climbed {climbed:0.00} m over {(climbTo - climbFrom) * WakeStepDt:0.0}s against the rise's {expected:0.00} m");
+        ctx.Check(hiddenBeforeWake, $"the mission setup keeps '{BalloonSite}' hidden until its wave wakes");
+        ctx.Check(firstShown.Visible && Mathf.Abs(firstShown.Y - opening) < AltitudeTolerance,
+            $"the wake shows the assembly at the entrance's opening frame, {firstShown.Y:0.00} m against {opening:0.00} m, never at rest on the water");
+        ctx.Check(maxStep <= MaxStepPerTick,
+            $"and no tick jumps the assembly more than {MaxStepPerTick} m ({maxStep:0.00} m, {maxStepAt})");
+        ctx.Check(lowestAt >= splashOpens && lowestAt <= script.Duration && Mathf.Abs(lowest) < AltitudeTolerance,
+            $"it comes down to the water inside the authored splash window ({lowest:0.00} m at t={lowestAt:0.0}s), the boat it carries delivered to the sea");
+        ctx.Check(Mathf.Abs(climbed - expected) < AltitudeTolerance,
+            $"then climbs at the '{RiseSequence}' sequence's {riseRate:0.00} m/s ({climbed:0.00} m against {expected:0.00} m)");
+    }
+
+    private static AnimEvent? FirstEvent(AnimDefinition def, Func<AnimEvent, bool> match, string sequence = "")
+    {
+        foreach (var seq in def.Sequences)
+        {
+            if (!string.Equals(seq.Name, sequence, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            foreach (var e in seq.Events)
+            {
+                if (match(e))
+                {
+                    return e;
+                }
+            }
+        }
+
+        return null;
     }
 
     private static void DriveLabels(TestContext ctx, TestWorld world, CampaignDirector director,

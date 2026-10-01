@@ -969,6 +969,11 @@ member, and it does not go here.
   whatever a played-out film leaves in the world is never seen. Advance the world runtime and tick
   the cutscene beside each step.** With both added, CM09's opening film handed off by itself after
   3193 steps on host and guest and left its wingman prop drawn about 50 m from the seats on both.
+- **INSTR-98**, **Before calling a scripted trace a fault, read the same definition's own timed
+  events against it: an effect the data fires at a node at a given instant says where the author
+  put that node then.** C1/M05's attack-balloon trace reaches the sea at 57 s, which reads as a
+  hand-off fault until its own definition is read: it calls `sm_splash` at the lifeboat at 55, 56
+  and 57 s.
 
 ## SRC, sources and documents
 

@@ -170,25 +170,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Effects & animation runtime
 
-- `BL-674` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` `[CM10]` **CM10's attack-balloon wave flies from 990 m down to water level and back up
-  during its scripted entrance, where the original's balloons come in from above.** *Verdict at
-  the controls:* in the original the wave arrives from above; in CSVM the balloons sometimes appear
-  on the water, jump into the sky, and slowly descend, which is wrong. *Evidence:* driving C1/M05's shipped `OBJECTIVE10` wake and
-  sampling the assembly every 0.1 s for 70 s traces its world Y from 990 m (the hidden entrance
-  altitude) to -0.26 m at about t = 57.3 s, then climbing again at the `rise` sequence's authored
-  3.33 units per second. The objective marker follows it down, which is the symptom `BL-656` was
-  filed on; that item is disproven because the marker is tracking the geometry correctly, and the
-  geometry is what goes to the water. The motion is the entrance's own SiScript-to-`rise` handoff,
-  so it lives in the animation runtime (`PoseChannel.cs`, `FromToMotion.cs`, `ScriptPlayback.cs`),
-  not in `ObjectiveSites.cs`. *Fix shape:* find where the handoff between the entrance script and
-  `rise` drops the altitude the original keeps, and why the wave is sometimes visible at the water
-  before the jump (a first frame drawn before the entrance pose is applied is the first suspect).
-  *⚠ Traps:* do not add an altitude floor to the
-  assembly, and do not offset the marker upward; both were removed on decoded evidence and the
-  balloons descend as they attack, so no constant is right at two altitudes. The anchor rule itself
-  is the original's (`FUN_004cf2c0`, midpoint of the node's active bounding box) and is correct.
-  *Cross-refs:* `BL-656`'s closing commit, `PT-111`, `docs/org/targeting.md` "Where a mission
-  structure is".
+- `BL-674` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` `[CM10]` **CM10's
+  attack balloons were seen at the controls appearing on the water, jumping into the sky and
+  slowly descending; no headless drive reproduces it.** *Verdict at the controls:* in the original
+  the wave arrives from above; in CSVM the balloons sometimes appear on the water, jump into the
+  sky, and slowly descend, which is wrong. *What is settled:* the dip to the water is the
+  original's authored entrance, not a runtime fault. The SI-script handler `FUN_004ea7d0` poses
+  absolutely and holds its sequence until the script's last frame, so `rise` starts from the
+  script's end at the water; the definition's own splash events at 55 to 57 s and the patrol boat
+  that wakes at the hand-off agree (`docs/org/sequences.md`, "An SI script holds its sequence and
+  poses absolutely"). The wave opens at 978 m inside the 970 to 1124 m cloud layer, so it may be
+  first seen at its touchdown. `campaign-balloon-marker` pins that profile, and removing
+  `ScriptPlayback`'s opening seek reproduces the reported jump exactly, so the suite would catch
+  that cause. *Owed:* (1) in the original, watch one wave of CM10 from its wake to its touchdown
+  at about 57 s: does it come down to the sea and drop a patrol boat? (2) in CSVM, if the wave is
+  seen on the water before it has descended, note the mission time and whether the view was the
+  spyglass or a pane; the realtime render path (`RenderPoses` booking a node after its first
+  motion tick) is reasoned, not measured on screen. *⚠ Traps:* do not add an altitude floor to the
+  assembly or offset the marker upward; the decode makes the dive faithful. *Cross-refs:*
+  `BL-656`'s closing commit, `docs/org/targeting.md` "Where a mission structure is".
 
 - `BL-537` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **Effect pools at four players, judged in play.** The pool sizes in `CSVM/data/effect_pools.json` were re-judged on a build with no first-use construction cost: rockets and the sonic burst never wrap, a four-object simultaneous death wraps `flame_ball_01` at 4 and 6 slots and is quiet at 8 (now shipped), and seven or more identical deaths in one frame wrap at the 16 ceiling and cannot be sized away. At the controls the single-player half reads right: four fireballs burn out in place, and the seven-death wrap is not visible under the debris. Still owed: a 4-player splitscreen session with everyone firing, judged for anything that reads as shared between panes, and the ceiling for many-player builds (at 16 players the default root wants 19 and gets 16). The instrument is `AnimRuntime.PoolRecycles` and the `anim: effect pool for '<name>' recycled slot` DEBUG line in the log file sink; the sizes staged print on the world-effects build line. ⚠ Raise only a root that logs a recycle, never the default; the three gun roots stay at 1; a root sized 0 clamps to 1. Each slot copies the root's subtree (155 templates at 1 player, 263 at 4).
   *Cross-refs:* `PT-129` (the four-player flight that judges it), `BL-296` (the other splitscreen-scoped item).
