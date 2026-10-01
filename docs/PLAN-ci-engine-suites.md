@@ -135,7 +135,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C, arena and shell fixtures
 
 21. ☑ A code-built spawn table for a match on the empty stage
-22. ☐ An invented multiplayer map for the team and flag suites
+22. ☑ An invented multiplayer map for the team and flag suites
 23. ☑ The Original shell's remaining layout screens
 24. ☐ Anim, effect and weather records for the remaining D suites
 
@@ -829,7 +829,81 @@ suites pass with the synthetic root.
 **⚠ Traps.** The real MP-map suites must keep running on the real table locally; the empty-stage
 path is a fallback, not a replacement.
 
-## C22 ☐ An invented multiplayer map for the team and flag suites
+## C22 ☑ An invented multiplayer map for the team and flag suites
+
+**Landed.** No real-named map entered the synthetic tree: the empty stage carries the records itself,
+in the shapes the real loaders return. A team Dogfight on `--stage=empty` walks
+`EmptyStage.SpawnTable`, the free-for-all ring as block 0 and then four 16-entry team blocks in the
+staging-stack shape `net.zrd` authors (`docs/formats/net-spawns.md`). Block N stands at team N's base
+1.5 km out (team 1 north, 2 south, 3 east, 4 west): a square of four positions 100 m apart on four
+rungs 100 m apart from 300 m, the whole block facing the origin. `SpawnPicker.LoadSpawnList` answers
+a teamed launch there with the whole 80-entry table, so `PlanTeams`, `SpawnPoints.TeamBlocks`, the
+respawn blocks and the rotation run unchanged; an un-teamed launch still walks the 16-entry ring. A
+`--vs` build of the stage also stands `EmptyStage.ArenaNodes` (`Build(arena: true)`): two bases, each
+a `cs_flag_n` on the ground, its hidden carried `cs_flg_lightn`, and a `rearm_node_n` 300 m inward
+and 50 m up, bare nodes carrying the gamez name meta. `FlagRuntime` finds them through the session
+tree search it already makes. `RearmRuntime` takes the arena as `Arena` after its world lookup, and
+`GameSession.WireRearmBases` opens on either. Every chapter path is unchanged: the arena field is
+null there, and the rearm lookup reads the world first.
+
+In the suites, `NetCombatSuites.Arena` takes the mission, so `net-capture-the-flag` flies `C1/MP2`
+when the data root carries it (gating the chapter gamez as before) and the stage otherwise.
+`net-team-deathmatch` reads its table through a `SpawnPicker` seated on its teams, which on the
+install is the same `LoadNetTable` of `MP1`. `versus-spawn-empty-stage`'s team leg now asserts that
+four seats on teams 1, 2, 1, 2 open on entries 16, 32, 17 and 33, each at its own team's base. The
+synthetic `player.json` adds an invented `score_kill` of 2. With the fallback kill of 1, its
+`score_suicide` of -3 made the team suite's target (four kills and a teamkill) 1, so the first kill
+ended the match; a kill k serves with any suicide between -2k and 0.
+
+The tier goes from 115 to 116 with `net-team-deathmatch`, which passed three consecutive runs with
+`--synthetic-data` beside `versus-spawn-empty-stage`. Both went red with the team blocks replaced by
+copies of the ring (the team suite's "no team opening stands on any free-for-all entry's ground"
+control, and the stage suite's own-base check), and the team suite went red with `score_kill`
+removed, the match ending on the first kill.
+
+Verified on Linux, headless, empty data root, port base 56000: build 0 errors, `dotnet format` clean,
+the `-t:Rebuild` StyleCop step reports no `SA` warning, units 5498 pass, 1 fail, 305 skip (the one
+failure is `StickRosterTests.ALinuxBuildWithNoSystemSdl2RunsWithoutSticksAndNamesTheSoname`, which
+finds this container's system SDL2). `--run-tests=tier:ci --synthetic-data` passes 116/0/0, its 37
+engine error lines all the allowed text-server pattern. The full catalog without the switch reads
+58 PASS, 2 FAIL (`build-stamp-focus`, `enet-dual-stack`), 439 SKIP before and after, suite by suite.
+The worktree guard refused `pwsh`, so `RunCiSuites.ps1` and the content gate were not run here.
+
+Still off the tier, for B15b, with the exact need:
+- `net-rearm-deathmatch` runs on the stage: both machines list the arena's two bases under
+  `AnyBase` at 25 m, and the restore, the host's full-hull report, once per entry and the re-entry
+  all pass. It fails only `Restored`'s `own == Rearmed` (`const string Rearmed = "Rearmed!"`): the
+  synthetic `messages.json` has no `MSG_MP_REARMED`, so the pane reads the key.
+- `net-capture-the-flag` runs on the stage and every flag rule passes: both flags built at distinct
+  homes, the take, the flag hung on the aeroplane, the voice lines, the flag lines, capture and
+  return scoring, the float on a death, the catch, the `ejectflag` relay, the throw running out and
+  the second capture with its board title. Eight marker checks fail. The `Reads` on `ctf_1`,
+  `ctf_2`, `cs_flag_1`, `cs_flag_2` and `cs_flg_light1` expect the shipped "Your Base"/"Enemy Base",
+  "Your Flag At Base"/"Enemy Flag At Base", "{Your|Enemy} Flag Captured by {carrier}" and
+  "Your Flag Floating"/"Enemy Flag Floating"; the carrier's tag expects
+  `$"{carrier}  Holds Your flag"` and reads `MSG_HOLDS_FLAG`; and the away marker's `near is < 30f`
+  finds no marker. Two needs: the wording, and a target-site feed on the stage.
+  `GameSession.BindsMissionTargetTable` excludes the empty stage and `ObjectiveSites` resolves a
+  site through an `AnimRuntime`, so every marker reads "off" there.
+- Needing a second airframe or `player_pfighter`: `net-two-session` (the `player_pfighter` and
+  `player_fbrand` crossing), `net-seats` (`RemotePlane = "player_fbrand"`, beside its `MP1` and
+  chapter zrdr gates), `net-ai-world` and `net-ai-voice` (`--ai=player_pfighter:n=2` over a standing
+  destructible pool, the second also shipped voice sets), `net-lobby-deathmatch-mp1` (the menu
+  door's `player_pfighter` on `MP1`), `net-custom-planes` and `net-versus-host-left`.
+- Shipped wording or data: `net-kill-line` (as C21 lists), `net-player-voice` (the "Jack" and
+  "Gruff Male" voice sets).
+- `versus-spawn-net-table`: its subject is `SpawnPicker` reading a map's `net.zrd` file. The stage
+  reads no file and `versus-spawn-empty-stage` covers its walk, so it would need an invented mission
+  zrdr, which this item's arena decision keeps out of the synthetic tree.
+- `net-rearm-zeppelins` flies `MP3`'s two hulls, which is bucket E.
+
+**Still owed to the Windows run.** The full `RunTests.ps1` battery should be unchanged: on the
+install `net-team-deathmatch` reads the same `MP1` table through the picker, `net-capture-the-flag`
+flies `C1/MP2` behind the same gates, the rearm runtime reads the world before an arena that is
+null there, and `versus-spawn-empty-stage` (install-free) passes with its new team leg. Optionally,
+`--run-tests=tier:ci --synthetic-data` on the real checkout should pass all 116.
+
+**Original approach (kept for reference).**
 
 **Goal.** The team, flag and network AI suites run on an invented mission zrdr with free-for-all,
 team and flag blocks.

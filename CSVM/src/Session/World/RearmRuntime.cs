@@ -21,7 +21,12 @@ internal sealed class RearmRuntimeInputs
     /// <summary>Each seat's lobby team, or null for a match with no teams.</summary>
     public IReadOnlyList<int>? SeatTeams { get; init; }
 
-    public required AnimRuntime World { get; init; }
+    /// <summary>The mission world, whose nodes are looked up first. Null on the empty stage.</summary>
+    public AnimRuntime? World { get; init; }
+
+    /// <summary>The empty stage's match arena (<see cref="EmptyStage.Arena"/>), looked up by node
+    /// name after <see cref="World"/>. Null on a chapter.</summary>
+    public Node3D? Arena { get; init; }
 
     public bool CaptureTheFlag { get; init; }
 
@@ -79,7 +84,7 @@ internal sealed class RearmRuntime
         ArgumentNullException.ThrowIfNull(inputs);
         bool zeppelins = inputs.Zeppelins != null;
         var nodes = new List<(Node3D, int, int)>();
-        for (int index = 1; Find(inputs.World, RearmBases.NodeName(index, zeppelins)) is { } node; index++)
+        for (int index = 1; Find(inputs, RearmBases.NodeName(index, zeppelins)) is { } node; index++)
         {
             int team = zeppelins ? inputs.Zeppelins!.Rules.TeamOfHull(index - 1) : index;
             nodes.Add((node, team, zeppelins ? inputs.Zeppelins!.Rules.HullOf(team) : -1));
@@ -141,11 +146,20 @@ internal sealed class RearmRuntime
         }
     }
 
-    private static Node3D? Find(AnimRuntime world, string name)
+    private static Node3D? Find(RearmRuntimeInputs inputs, string name)
     {
-        foreach (var node in world.FindNodes(name))
+        foreach (var node in inputs.World?.FindNodes(name) ?? Array.Empty<Node3D>())
         {
             if (GodotObject.IsInstanceValid(node) && node.IsInsideTree())
+            {
+                return node;
+            }
+        }
+
+        foreach (var child in inputs.Arena?.GetChildren() ?? new Godot.Collections.Array<Node>())
+        {
+            if (child is Node3D node && node.IsInsideTree() && node.HasMeta(AnimRuntime.NameMeta)
+                && node.GetMeta(AnimRuntime.NameMeta).AsString().Equals(name, StringComparison.OrdinalIgnoreCase))
             {
                 return node;
             }

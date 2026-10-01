@@ -126,16 +126,12 @@ internal static class NetFlagSuites
 
     private static SessionSpec Spec(TestContext ctx)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, SessionSpec.CtfMission);
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
-        ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{SessionSpec.CtfMission} zrdr");
-        return SessionSpec.Parse(new[]
-        {
-            "--vs", $"--chapter={ctx.Chapter}", $"--mission={SessionSpec.CtfMission}", "--players=1", "--mute",
-            "--no-pads", "--ctf", TrackedFlight, $"--vs-kills={ScoreTarget(ctx)}",
-        });
+        return SessionSpec.Parse(new[] { "--vs" }
+            .Concat(NetCombatSuites.Arena(ctx, mission: SessionSpec.CtfMission))
+            .Concat(new[] { "--players=1", "--mute", "--no-pads", "--ctf", TrackedFlight, $"--vs-kills={ScoreTarget(ctx)}" })
+            .ToArray());
     }
 
     // Two flags on every machine, at the same homes, each at its base with its carried twin hidden.

@@ -419,6 +419,9 @@ public partial class GameSession : Node3D
     // session builds hangs under _worldRoot, so Esc-to-menu can free it and a new session node
     // build again. The camera, lights and global shader params live on the Launcher and persist.
     private Node3D? _worldRoot;
+    // The empty stage's match arena, the flag and rearm nodes a Dogfight there stands on. Null on a
+    // chapter, whose own world holds them.
+    private Node3D? _stageArena;
     // the session's LIGHT_STATE point lights (see WorldLights)
     private WorldLights? _worldLights;
     // The faithful path's projected aircraft shadow, null in enhanced mode, which casts shadow maps
@@ -1691,9 +1694,10 @@ public partial class GameSession : Node3D
     private void BuildEmptyStage(BuildState state)
     {
         long mark = StartupProfile.Mark();
-        var stage = EmptyStage.Build(collision: _spec.Fly || _spec.ForceCollision);
+        var stage = EmptyStage.Build(collision: _spec.Fly || _spec.ForceCollision, arena: _spec.Versus);
         StartupProfile.Record("world", mark);
         _plane = stage.Root;
+        _stageArena = stage.Arena;
         state.MeshInstances = stage.MeshInstanceCount;
         state.Colliders = stage.ColliderCount;
         state.What = "empty stage";
@@ -5312,7 +5316,7 @@ public partial class GameSession : Node3D
     // only at its hulls' own nodes, so a match that could not seat both hulls has no base at all.
     private void WireRearmBases(AnimRuntime? world, string zrdrPath, Messages? strings)
     {
-        if (_versus == null || world == null || (_spec.ZeppelinVsZeppelin && _zvzPlay == null))
+        if (_versus == null || (world == null && _stageArena == null) || (_spec.ZeppelinVsZeppelin && _zvzPlay == null))
         {
             return;
         }
@@ -5323,6 +5327,7 @@ public partial class GameSession : Node3D
             IsLocal = seat => _netSeats.Count == 0 || (seat >= 0 && seat < _netSeats.Count && _netSeats[seat].IsLocal),
             SeatTeams = SeatTeams(),
             World = world,
+            Arena = _stageArena,
             CaptureTheFlag = _spec.CaptureTheFlag,
             Zeppelins = _zvzPlay,
             Hulls = _zeppelins,

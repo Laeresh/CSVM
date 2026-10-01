@@ -805,8 +805,9 @@ Callers are serial by construction. An instance lives as long as its holder.
 ## src/Mech3/EmptyStage.cs
 The `--stage=empty` test stage: a flat collidable 20 km ground plane under a 100 m grid, standing in
 for a chapter world so flight and ballistics runs boot in about 2 s with nothing else in the frame.
-It carries the stage's one patrol net, `PatrolNet`, a closed eight-node 1000 m ring about the origin at
-the spawn altitude whose 2500/1500/700 m volumes a vehicle on it runs by; `--ai=<plane>:grid` and
-`--zep=...:net=grid` reach it through `ResolveNet`, ahead of the chapter `neindex` lookup. It also
-carries `SpawnRing`, the Dogfight table a `--vs` match here walks in place of a `net.zrd` block: sixteen
-entries 600 m out, aimed in. Built in code, like the grid texture: no chapter assets are here.
+Its patrol net, `PatrolNet`, is a closed eight-node 1000 m ring at the spawn altitude with its own
+2500/1500/700 m volumes, which `--ai=<plane>:grid` and `--zep=...:net=grid` reach through `ResolveNet`.
+A `--vs` match walks `SpawnRing` in place of `net.zrd`, sixteen entries 600 m out and aimed in, and a
+team match `SpawnTable`, that ring plus four team blocks at the teams' bases. `Build(arena: true)`
+stands `ArenaNodes`, two bases' `cs_flag_n`, `cs_flg_lightn` and `rearm_node_n`. All of it is built in
+code, like the grid texture: no chapter assets are here.

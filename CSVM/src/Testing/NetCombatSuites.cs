@@ -440,14 +440,15 @@ internal static class NetCombatSuites
     }
 
     // A match flies the data root's MP map when the root carries one, so a run on the install keeps
-    // walking the shipped table. Otherwise it flies the empty stage and its own spawn ring. The MP
-    // map's gates run only when it is chosen, and the note names the arena in the report.
-    internal static string[] Arena(TestContext ctx, bool gateChapterGamez = true)
+    // walking the shipped table. Otherwise it flies the empty stage, its own spawn table and its
+    // arena of flags and rearm nodes. The MP map's gates run only when it is chosen, and the note
+    // names the arena in the report. A mode with its own map names it, as Capture the Flag does MP2.
+    internal static string[] Arena(TestContext ctx, bool gateChapterGamez = true, string mission = MpMission)
     {
-        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, mission);
         if (!System.IO.File.Exists(missionZrdr) && !System.IO.Directory.Exists(missionZrdr))
         {
-            ctx.Note($"arena: --stage=empty and its spawn ring, the data root carries no {ctx.Chapter}/{MpMission}");
+            ctx.Note($"arena: --stage=empty and its spawn ring, the data root carries no {ctx.Chapter}/{mission}");
             return new[] { "--stage=empty" };
         }
 
@@ -456,8 +457,8 @@ internal static class NetCombatSuites
             ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
         }
 
-        ctx.Note($"arena: {ctx.Chapter}/{MpMission} and its net.zrd table");
-        return new[] { $"--chapter={ctx.Chapter}", $"--mission={MpMission}" };
+        ctx.Note($"arena: {ctx.Chapter}/{mission} and its net.zrd table");
+        return new[] { $"--chapter={ctx.Chapter}", $"--mission={mission}" };
     }
 
     // What a skip names as the table a match walked, so an empty-stage skip points at the ring.

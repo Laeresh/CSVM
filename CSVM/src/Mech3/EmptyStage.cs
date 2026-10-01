@@ -52,6 +52,28 @@ public sealed class EmptyStage
     /// seats then pass about 208 m abeam rather than ramming nose to nose hands-off.</summary>
     public const float SpawnRingSkewDeg = 10f;
 
+    /// <summary>Team blocks after the free-for-all block in <see cref="SpawnTable"/>: one per lobby
+    /// team, four, the count of a map that supports four-team play (docs/formats/net-spawns.md).
+    /// </summary>
+    public const int TeamBlockCount = 4;
+
+    /// <summary>How far each team's base stands from the origin, metres. Well outside
+    /// <see cref="SpawnRingRadius"/>, so no team opening shares ground with a free-for-all entry.
+    /// </summary>
+    public const float TeamBaseRadius = 1500f;
+
+    /// <summary>Metres between neighbouring positions of a team block's square, and between the
+    /// rungs of its altitude ladder.</summary>
+    public const float TeamBlockSpacing = 100f;
+
+    /// <summary>The bases the match arena stands, team 1's and team 2's: each a
+    /// <c>cs_flag_n</c> flag with its carried twin and a <c>rearm_node_n</c>.</summary>
+    public const int ArenaBases = 2;
+
+    /// <summary>How far a base's rearm node stands from its flag toward the origin, and how high,
+    /// metres. Clear of the flag's reach, so a pilot at one is not at the other.</summary>
+    public static readonly Vector3 RearmOffset = new(0f, 50f, 300f);
+
     /// <summary>The freecam eye when nothing placed it: back and above the origin, looking at it.</summary>
     public static readonly Vector3 CameraPos = new(0f, 120f, 300f);
 
@@ -88,6 +110,19 @@ public sealed class EmptyStage
     /// must boot with no multiplayer map present.</summary>
     public static IReadOnlyList<(Vector3 Position, float HeadingDeg)> SpawnRing { get; } = BuildSpawnRing();
 
+    /// <summary>The stage's whole Dogfight table, the shape a team match walks:
+    /// <see cref="SpawnRing"/> as block 0, then <see cref="TeamBlockCount"/> team blocks. Block n is
+    /// a staging stack at team n's base (<see cref="TeamBase"/>), facing the origin. Its square of
+    /// four positions repeats on four rungs, all <see cref="TeamBlockSpacing"/> apart.
+    /// ⚠ Built in code: a match here must boot with no multiplayer map present.</summary>
+    public static IReadOnlyList<(Vector3 Position, float HeadingDeg)> SpawnTable { get; } = BuildSpawnTable();
+
+    /// <summary>The match arena's named nodes, (name, position). Each of the
+    /// <see cref="ArenaBases"/> bases stands its <c>cs_flag_n</c> on the ground with the carried
+    /// <c>cs_flg_lightn</c> beside it. Its <c>rearm_node_n</c> stands at <see cref="RearmOffset"/>.
+    /// The names are the ones the flag and rearm runtimes look a mission world up by.</summary>
+    public static IReadOnlyList<(string Name, Vector3 Position)> ArenaNodes { get; } = BuildArenaNodes();
+
     /// <summary>The stage subtree, the caller adds it to the session root exactly as it adds a
     /// built world.</summary>
     public Node3D Root { get; private set; } = null!;
@@ -96,9 +131,14 @@ public sealed class EmptyStage
 
     public int ColliderCount { get; private set; }
 
+    /// <summary>The match arena's subtree, holding <see cref="ArenaNodes"/>, or null when the
+    /// stage was built without one.</summary>
+    public Node3D? Arena { get; private set; }
+
     /// <param name="collision">Attach the ground collider (true in flight, so weapons and the
     /// airframe have something to hit; false for a plane-less look at the stage).</param>
-    public static EmptyStage Build(bool collision)
+    /// <param name="arena">Stand <see cref="ArenaNodes"/> on the stage, for a Dogfight.</param>
+    public static EmptyStage Build(bool collision, bool arena = false)
     {
         var stage = new EmptyStage();
         var root = new Node3D { Name = "empty_stage" };
@@ -140,7 +180,22 @@ public sealed class EmptyStage
         }
 
         Log.Info("world", $"stage empty: {HalfExtent * 2f / 1000f:0.#} km ground grid, cell={CellMetres:0} m, collision={(collision ? "on" : "off")}");
+        if (arena)
+        {
+            stage.Arena = BuildArena();
+            root.AddChild(stage.Arena);
+            Log.Info("world", $"stage empty: match arena, {ArenaBases} bases with flags and rearm nodes, {TeamBlockCount} team blocks");
+        }
+
         return stage;
+    }
+
+    /// <summary>Team <paramref name="team"/>'s base on the ground, <see cref="TeamBaseRadius"/> out.
+    /// Team 1 stands due north of the origin, team 2 due south, team 3 east and team 4 west.</summary>
+    public static Vector3 TeamBase(int team)
+    {
+        float angle = Mathf.DegToRad(TeamBearing(team));
+        return new Vector3(Mathf.Sin(angle) * TeamBaseRadius, 0f, -Mathf.Cos(angle) * TeamBaseRadius);
     }
 
     /// <summary><see cref="PatrolNet"/> when <paramref name="idOrName"/> names it, else null, so a
@@ -202,6 +257,62 @@ public sealed class EmptyStage
                 -Mathf.Cos(angle) * SpawnRingRadius), Mathf.Wrap(180f - bearing - SpawnRingSkewDeg, -180f, 180f));
         }
         return ring;
+    }
+
+    // Opposing pairs first, so a two-team match faces across the origin.
+    private static float TeamBearing(int team) => team switch { 1 => 0f, 2 => 180f, 3 => 90f, _ => 270f };
+
+    // Bare nodes carrying the gamez name meta, which is what a lookup by node name reads. The
+    // carried flag starts hidden, as the flag runtime keeps it while the flag is home.
+    private static Node3D BuildArena()
+    {
+        var arena = new Node3D { Name = "arena" };
+        foreach (var (name, position) in ArenaNodes)
+        {
+            var node = new Node3D { Name = name, Position = position };
+            node.SetMeta(AnimRuntime.NameMeta, name);
+            node.Visible = !name.StartsWith("cs_flg_light", StringComparison.Ordinal);
+            arena.AddChild(node);
+        }
+
+        return arena;
+    }
+
+    private static (string Name, Vector3 Position)[] BuildArenaNodes()
+    {
+        var nodes = new List<(string, Vector3)>();
+        for (int team = 1; team <= ArenaBases; team++)
+        {
+            var home = TeamBase(team);
+            var inward = new Basis(Vector3.Up, Mathf.DegToRad(-TeamBearing(team))) * RearmOffset;
+            string n = team.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            nodes.Add(("cs_flag_" + n, home));
+            nodes.Add(("cs_flg_light" + n, home));
+            nodes.Add(("rearm_node_" + n, home + inward));
+        }
+
+        return nodes.ToArray();
+    }
+
+    // Entry e of a team block sits at position e % 4 of the square on rung e / 4. A team's first
+    // seats then open side by side on the lowest rung.
+    private static (Vector3 Position, float HeadingDeg)[] BuildSpawnTable()
+    {
+        var table = new List<(Vector3 Position, float HeadingDeg)>(SpawnRing);
+        for (int team = 1; team <= TeamBlockCount; team++)
+        {
+            var basis = new Basis(Vector3.Up, Mathf.DegToRad(-TeamBearing(team)));
+            float heading = Mathf.Wrap(180f - TeamBearing(team), -180f, 180f);
+            for (int entry = 0; entry < SpawnRingEntries; entry++)
+            {
+                float across = ((entry % 2) - 0.5f) * TeamBlockSpacing;
+                float along = (((entry / 2) % 2) - 0.5f) * TeamBlockSpacing;
+                float rung = SpawnAltitude + ((entry / 4) * TeamBlockSpacing);
+                table.Add((TeamBase(team) + (basis * new Vector3(across, 0f, along)) + (Vector3.Up * rung), heading));
+            }
+        }
+
+        return table.ToArray();
     }
 
     private static StandardMaterial3D GridMaterial()

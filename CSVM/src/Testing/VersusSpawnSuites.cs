@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Modes;
@@ -202,8 +203,9 @@ internal static class VersusSpawnSuites
         "Dogfight on --stage=empty opens on the stage's own code-built spawn ring: the picker "
         + "answers with it in place of a net.zrd table, every entry sits on the ring at the stage's "
         + "spawn altitude with its nose aimed in, two seats open on opposite entries and four on a "
-        + "compass cross at the multiplayer opening state, a team match walks the one block, an "
-        + "explicit --pos still wins, and the stage without --vs still reads no table")]
+        + "compass cross at the multiplayer opening state, a team match opens each team on its own "
+        + "block at its own base, an explicit --pos still wins, and the stage without --vs still "
+        + "reads no table")]
     internal static void VersusEmptyStageRing(TestContext ctx)
     {
         var spec = SessionSpec.Parse(new[] { "--vs", "--stage=empty", "--players=4", "--spawn=0" });
@@ -256,12 +258,19 @@ internal static class VersusSpawnSuites
                   && Mathf.IsEqualApprox(four[0].SpeedMps, SpawnPoints.MultiplayerSpeedMps),
             $"on the original's multiplayer opening state: throttle={four[0].ThrottleFrac:0.00} speed={four[0].SpeedMps:0.#}m/s");
 
-        // A team match on a table of one block opens every team on block 0, still apart.
-        var teamPicker = new SpawnPicker(spec) { SeatTeams = new[] { 1, 2 } };
+        // A team match takes the whole table and opens each team on its own block, at its own base.
+        var teams = new[] { 1, 2, 1, 2 };
+        var teamPicker = new SpawnPicker(spec) { SeatTeams = teams };
         var teamTable = teamPicker.LoadSpawnList("", spec.Scenario);
         teamPicker.PlanTeams(teamTable, 0);
-        ctx.Check(teamPicker.SeatEntries is [0, 1],
-            $"a team match walks the ring's one block ({string.Join(", ", teamPicker.SeatEntries ?? Array.Empty<int>())})");
+        ctx.Check(teamTable is { Count: (EmptyStage.TeamBlockCount + 1) * SpawnPoints.NetBlock }
+                  && teamPicker.SeatEntries is [16, 32, 17, 33],
+            $"a team match walks team n's block n of the whole {teamTable?.Count ?? 0}-entry table ({string.Join(", ", teamPicker.SeatEntries ?? Array.Empty<int>())})");
+        var teamStarts = teamPicker.ChooseStarts(teamTable, "", 0, teams.Length);
+        var offBase = Enumerable.Range(0, teams.Length).Where(seat =>
+            (teamStarts[seat].Pos with { Y = 0f }).DistanceTo(EmptyStage.TeamBase(teams[seat])) > EmptyStage.TeamBlockSpacing).ToList();
+        ctx.Check(offBase.Count == 0 && teamStarts[0].Pos.DistanceTo(teamStarts[1].Pos) > EmptyStage.TeamBaseRadius,
+            $"and four seats stand at their own team's base, the two teams across the origin (off base: {string.Join(", ", offBase)})");
 
         var placed = SessionSpec.Parse(new[] { "--vs", "--stage=empty", "--players=2", "--pos=100,400,0" });
         var placedPicker = new SpawnPicker(placed);

@@ -124,6 +124,7 @@ public static class SuiteCatalog
         "net-soak",
         "net-spawn-rotation",
         "net-start-together",
+        "net-team-deathmatch",
         "options-difficulty-launch",
         "options-targeting-launch",
         "options-view-launch",

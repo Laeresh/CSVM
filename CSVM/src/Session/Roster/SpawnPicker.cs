@@ -44,10 +44,10 @@ public sealed class SpawnPicker : IFlightStarts
     }
 
     /// <summary>Whether <see cref="LoadSpawnList"/> answered with a multiplayer mission's
-    /// <c>net.zrd</c> table, or the empty stage's <see cref="EmptyStage.SpawnRing"/> in its place,
-    /// rather than with an <c>ia.json</c> scenario list. It changes the logged tag and
-    /// <see cref="StartState"/>, which then opens on the original's own multiplayer throttle and
-    /// speed (docs/formats/net-spawns.md).</summary>
+    /// <c>net.zrd</c> table, or the empty stage's own table in its place, rather than with an
+    /// <c>ia.json</c> scenario list. It changes the logged tag and <see cref="StartState"/>, which
+    /// then opens on the original's own multiplayer throttle and speed
+    /// (docs/formats/net-spawns.md).</summary>
     public bool NetSpawns { get; private set; }
 
     /// <summary>Each seat's lobby team, 0 for none, set before <see cref="LoadSpawnList"/> by a
@@ -73,10 +73,9 @@ public sealed class SpawnPicker : IFlightStarts
 
     /// <summary>The one spawn list the session walks: the mission's <c>ia.json</c> entries for
     /// <paramref name="scenario"/>, else a Dogfight launch's <c>net.zrd</c> free-for-all block. With
-    /// neither it is null, which leaves <see cref="ChooseSpawn"/> on PLAYER_INIT. A team match takes the whole
-    /// table. A Dogfight on the empty stage walks <see cref="EmptyStage.SpawnRing"/>, one block.
-    /// Sets <see cref="NetSpawns"/> for the rest of the session, so call it once per launch.
-    /// </summary>
+    /// neither it is null, which leaves <see cref="ChooseSpawn"/> on PLAYER_INIT. A team match takes the
+    /// whole table. The empty stage walks <see cref="EmptyStage.SpawnRing"/>, or for a team match
+    /// <see cref="EmptyStage.SpawnTable"/>. Sets <see cref="NetSpawns"/>, so call it once per launch.</summary>
     public List<SpawnPoint>? LoadSpawnList(string missionZrdrPath, string scenario)
     {
         SeatEntries = null;
@@ -89,7 +88,8 @@ public sealed class SpawnPicker : IFlightStarts
             if (!_spec.Versus)
                 return null;
             NetSpawns = true;
-            return EmptyStage.SpawnRing.Select(s => new SpawnPoint(s.Position, s.HeadingDeg)).ToList();
+            var stage = Teamed ? EmptyStage.SpawnTable : EmptyStage.SpawnRing;
+            return stage.Select(s => new SpawnPoint(s.Position, s.HeadingDeg)).ToList();
         }
         var ia = SpawnPoints.LoadIa(missionZrdrPath, scenario);
         if (ia is { Count: > 0 })
@@ -114,7 +114,7 @@ public sealed class SpawnPicker : IFlightStarts
         if (!NetSpawns || !Teamed || spawns is not { Count: > 0 })
             return;
         (SeatEntries, SeatBlocks) = SpawnPoints.TeamBlocks(spawns.Count, SeatTeams!, spawnBase);
-        Log.Info("flight", $"net.zrd: team match over {spawns.Count} entries, openings {string.Join(",", SeatEntries)}");
+        Log.Info("flight", $"{NetTable}: team match over {spawns.Count} entries, openings {string.Join(",", SeatEntries)}");
     }
 
     /// <summary>The spawn index player 1 starts from: --spawn=N if given, else a random pick per

@@ -140,8 +140,8 @@ suites skip without the switch, so the tier is only green with it. The suites on
 list in `analysis/headless-limits.json` (a unit test keeps them off the tier), `enet-dual-stack`,
 `enet-stable-ipv6-reply` and `build-stamp-focus` are out for that reason.
 The ENet and LAN discovery suites bound to `127.0.0.1` are in. A network match suite flies the
-install's `C1/MP1` when the data root carries it and `--stage=empty`'s spawn ring when it does not,
-and notes which. The tier carries
+install's `C1/MP1` (Capture the Flag `C1/MP2`) when the data root carries it, and otherwise
+`--stage=empty` with its own spawn table and arena of flags and rearm nodes, and notes which. The tier carries
 `SuiteTier.SkipFails`, so a listed suite that SKIPs reports FAIL with its skip reason and the run
 exits nonzero; any other selector, including `suite:<name>` on a listed suite, keeps SKIP as a
 non-failure, so the local battery is unchanged. The tier checks mechanisms on invented or absent
