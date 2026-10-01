@@ -668,6 +668,29 @@ loader's own checks become the thing under test.
 
 ## B15 ☐ Bring the plane-only suites onto the tier
 
+**Open work (read this first).** `tier:ci` holds 151 suites and passes headless with
+`--synthetic-data` and no extraction. With the switch the full catalog shows 159 PASS, 17 FAIL, 324
+SKIP; without it 58 PASS, 2 FAIL, 440 SKIP. What remains, each with its owner:
+
+- **Two more invented airframes, author-approved:** `player_fbrand` and `player_avenger` as stand-ins
+  under the code's names, like `player_pfighter` (geometry, stats, markers, fit and sounds invented).
+  They unblock `net-custom-planes` and `net-seats`.
+- **C24** (below): anim, effect and weather records, plus an invented `voice.json` family for
+  `ai-voice`, `voice-runtime` and `net-player-voice`.
+- **Off the tier by design or judgement:** `wingman-station` (the nitro leg rests on the shipped
+  airframe's speed margin; retuning the shared stand-in would move other suites), `ground-shadow` and
+  `flyout-rack-pose` (C1 terrain and FLYOUT models), `menu-original-hangar` and
+  `menu-original-instant-action` (a split would run every check in both halves; they need invented art,
+  strings and an ammo field first).
+- **Headless-only candidates:** `puffer-smoke-sun`, `wing-flare-pose` and `muzzle-flash-rides-muzzle`
+  read renderer output. They join `analysis/headless-limits.json` only after a headless run of the
+  Windows export confirms them, the file's own rule.
+- **Order fragility:** `scene-build-throw-frees` counts live objects and fails in the full catalog
+  with the switch when an earlier suite's deferred frees land in its window. It passes alone and inside
+  `tier:ci`; watch it if the tier's order changes.
+- **The campaign family** (about 69 suites) skips on `cm_sequence.json`; bringing it over needs an
+  invented campaign sequence and mission, which is larger than any item here.
+
 **B15a landed: precise gates under `--synthetic-data`.** A suite that needs an input the invented
 tree lacks now SKIPs naming it, so a FAIL with the switch means code or a shipped-value assertion,
 never "the tree lacks X". Two new `TestContext` gates sit beside `RequireData` and `RequireTexture`.
