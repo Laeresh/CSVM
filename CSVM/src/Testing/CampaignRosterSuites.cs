@@ -884,7 +884,7 @@ internal static class CampaignRosterSuites
     // that speaks is not the one whose mode moved. The mission's own roster decides both, so the
     // suite spawns C1/M02's through the director and drives the site a flown mission drives.
     [Suite("ai-voice-mission",
-        "BL-934's gap between a hand-built speaker and a flown mission: C1/M02's shipped roster "
+        "The gap between a hand-built speaker and a flown mission: C1/M02's shipped roster "
         + "spawned through CampaignDirector on the session's own mission prewarm set, where the "
         + "enemy blakepeace_2_1 authors accentID -1 and registers no speaker of its own, yet its "
         + "patrol-to-pursue commit against the human rig still rolls the computed bearing "

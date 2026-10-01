@@ -663,9 +663,9 @@ average up-facing sun incidence, **one TUNE constant** calibrated to the C1/IA1 
 clamp 1.0. **Matched-pose footage supports the calibration** (`CAP-11`, at
 0.426 / 0.784 / clamp 1.0, C1B terrain −12%, C2B deck tops −9%, C2 suburb +5–15%;
 `git log --grep=BL-110`, evidence `playtest/CAP-11/README.md`). One exemption the original applies
-that we do not: water renders unmodulated (`BL-304`). A second reading, that night cloud sprites are
-directionally moonlit rather than uniformly dimmed (`BL-325`), is open on its footage but cannot
-come from the lighting gate: C1B's clouds are placed `cloudparent` facades and every one of them in
+that we do not: water renders unmodulated (`BL-304`). Night cloud sprites are uniformly dimmed, not
+directionally moonlit: the original shows no moon side on a C1B cloud, and none could come from the
+lighting gate either: C1B's clouds are placed `cloudparent` facades and every one of them in
 every deck chapter is authored `lighting: false`, so the original's sun reaches none of them
 ([`../org/vertexLighting.md`](../org/vertexLighting.md)). `Weather.WorldLightFactor` computes it (`ZoneWeather.WorldLight`); `WeatherRig` sets
 the global shader scalar `csky_world_light`, **linearised** first, so the shader's

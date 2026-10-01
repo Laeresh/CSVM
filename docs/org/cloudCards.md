@@ -11,6 +11,14 @@ the sun does to a lit one, is [`vertexLighting.md`](vertexLighting.md); the read
 the cards are scattered through are [`../formats/fogvol.md`](../formats/fogvol.md); the fog colour
 and the dome the faded field reveals are [`weather.md`](weather.md).
 
+⚠ **Three cloud populations, never one phrase for two.** `cloudsprite1`/`cloudsprite2` are the
+`fvol*` scatter this page decodes (the deck field, world-locked and tiled); `cloudparent` are
+discrete world-placed clusters (C1B's 70, C1's 28, C4's 45); the plane-local ambient wisps each
+chapter's `speed_cue.zrd` emits ahead of the player are a third
+([`../formats/effects.md`](../formats/effects.md)). A claim about one is no evidence about the
+others, and the first two share their textures, so `--tex-override` on `cloud1.tif`/`cloud2.tif`
+paints both: separate them by altitude or cluster position, never by texture.
+
 ## The answer in one paragraph
 
 **Nothing touches a cloud card's colour.** The card's authored per-vertex 240 reaches the Direct3D

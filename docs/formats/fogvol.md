@@ -134,8 +134,8 @@ per-frame consumer `FUN_0042ee40`, the same frame update that runs the `CLOUD_CO
 
 ⚠ **Everything above this section is what `fogvol.zrd` + the gamez author. This section is not
 that.** The original's field reads as everywhere, past the map the way `cloudparent` does NOT
-(`CAP-12`'s own caveat: `cloudparent` stops at the map edge; extending it would invent content,
-the two populations' vocabulary is `BL-325`'s note). Neither
+(`CAP-12`'s own caveat: `cloudparent` stops at the map edge; extending it would invent content;
+the populations' vocabulary is in [`../org/cloudCards.md`](../org/cloudCards.md)). Neither
 `fogvol.zrd` nor the gamez says anything about content past `World.area`, there is nothing to
 decode here, only a deliberate engine-side match to the terrain's own continuation
 (`MapEdgeExtender.cs`, docs/architecture.md), landed as `A5` (user playtest, : "it is

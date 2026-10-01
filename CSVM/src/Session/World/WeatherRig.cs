@@ -1098,11 +1098,11 @@ public sealed class WeatherRig
     /// were measured against.</summary>
     public sealed class BandFlicker
     {
-        // ⚠ TUNE, the decompile's rate multiplier is read from a per-mission weather-struct field
-        // (≈ +0x934) that no reader decodes and no capture pins a value for. Picked so the MIDPOINT
-        // of the re-randomized drift speed (0.2..1.0, mean 0.6) traverses the full [0,1] range in a
-        // few seconds: 5.5 * 0.6 * 0.1 = 0.33/s -> ~3 s at the mean, 1.8-9.2 s across the
-        // randomized range.
+        // ⚠ TUNE, judged at the controls against the original's in-cloud shimmer. The decompile's
+        // rate multiplier is read from a per-mission weather-struct field (≈ +0x934) that no
+        // reader decodes. Picked so the drift speed's midpoint (0.2..1.0, mean 0.6) traverses
+        // the full [0,1] range in a few seconds. That is 5.5 * 0.6 * 0.1 = 0.33/s: ~3 s at the
+        // mean, 1.8-9.2 s across the randomized range.
         public const float DefaultRate = 5.5f;
 
         // ⚠ TUNE, how many `Apply` calls (sim frames) the amplitude ramps in over: 30 = 0.5 s

@@ -114,11 +114,11 @@ public class PlaneDamageTests
         Assert.Equal(30f, damage.WholeHealth, 4);
     }
 
-    /// <summary>Which quotient the injure staging must read (BL-384 items 1 and 2, from BL-297's
-    /// decode). FUN_004b3d70 divides health only, and while a zone's armor stands its health
-    /// cannot move, so no per-part threshold is crossed. The combined progression crosses them
-    /// early: a Bloodhawk zone stripped of armor sits at combined 0.5, which is already the
-    /// shipped leftwing pdpanel5 threshold, with the airframe untouched. DamageVisuals.OnPartDamage
+    /// <summary>Which quotient the injure staging must read (BL-384 items 1 and 2, decoded in
+    /// `git log --grep=BL-297`). FUN_004b3d70 divides health only, and while a zone's armor
+    /// stands its health cannot move, so no per-part threshold is crossed. The combined progression crosses them
+    /// early. A Bloodhawk zone stripped of armor sits at combined 0.5 with the airframe untouched,
+    /// already the shipped leftwing pdpanel5 threshold. DamageVisuals.OnPartDamage
     /// takes HealthFraction for exactly this reason; feeding it Fraction tears panels early.</summary>
     [Fact]
     public void StrippingAZonesArmorCrossesAShippedPanelThresholdOnTheCombinedScaleButNotOnHealth()

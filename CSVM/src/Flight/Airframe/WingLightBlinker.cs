@@ -25,7 +25,8 @@ public sealed class WingLightBlinker
     // on the boundary isn't dropped to float round-off.
     private const double FlashDuration = (2.0 / 60.0) + 0.0001;
 
-    // TUNE: the def authors range/colour only, no light intensity.
+    // TUNE: the def authors range/colour only, no light intensity; the soft glow reads right at
+    // the controls.
     private const float LightEnergy = 1.0f;
 
     private readonly List<(Node3D Flare, OmniLight3D Light)> _lamps;

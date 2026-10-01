@@ -644,8 +644,9 @@ authored at 255 the two agree for every `N·L >= 1/3` and the remake is the brig
 below it, so the ratio `1 / (0.5 + 1.5 N·L)` applies only where the authored colour is low enough
 for the original's product to stay under white. C4 authors the identical scalar pair and shows no
 deficit on the surfaces `CAP-12` measured, which are the cloud deck, `lighting: false` there and
-so lit by neither engine. What a reproduction costs, and the look verdict it is owed, is on
-`BL-322`.
+so lit by neither engine. The remake does not reproduce the term: against `CAP-58`'s matched C5
+pairs both the tower walls and the bridge read like the original at the controls, and taking the
+term would darken every away-facing surface of every chapter.
 
 ⚠ **The PNG alpha channel is not a substitute for the field.** It distinguishes `Full` from `None`
 but loses the one to ten `Simple` textures per chapter, which carry the bit too, so the pixel

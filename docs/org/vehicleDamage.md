@@ -342,7 +342,7 @@ Two consequences for a per-part list. Each part carries its own copy of a shared
 slot, so an entry authored on all four player zones fires up to four times over a flight, once as
 each zone first crosses. And because the fraction is health-only while `FUN_004b7f80` blocks health
 damage outright until a part's armour is spent, a fully-armoured part crosses nothing at all: even a
-0.99 entry waits for the armour pool. Decoded 2026-08-15 (`BL-297`).
+0.99 entry waits for the armour pool.
 
 ### Which airframe a stage's anim binds to
 
@@ -405,7 +405,9 @@ subtree (inst`+0x6c`), the context node (inst`+0x48`), the anim's two local tabl
 airframe resolves to the same node whichever context started the anim, because a miss in the context
 subtree falls through to the global lookup. The `pdpN` panel nodes are unique, so a stage naming
 `pdp1` sparks at `pdp1` regardless of which part's list started it. There is no part-relative
-retarget on this path. Decoded 2026-08-15 (`BL-297`).
+retarget on this path. ⚠ The original at the controls shows no spark burst on the airframe when
+it is hit, so what an executed spark stage visibly draws there is open; `BL-281` owns reconciling
+the two before the remake's burst is removed.
 
 A missing anchor is a **soft** failure, unlike a missing root. When a node reference resolves to
 zero after the whole chain, `FUN_00521180` logs the same `0x00634220` message, stores zero in the

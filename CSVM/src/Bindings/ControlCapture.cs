@@ -22,18 +22,20 @@ public sealed class ControlCapture
     /// is the seat's own Back, so the gesture is the one every other screen uses.</summary>
     public const JoyButton CancelButton = JoyButton.B;
 
-    /// <summary>How near centre an axis must sit before the capture will accept a move on it, so a
-    /// stick that never returns to rest can never be latched. TUNE (`BL-693`).</summary>
+    /// <summary>How near centre an axis must sit before the capture will accept a move on it. A
+    /// stick that never returns to rest can never be latched. TUNE, judged with a real pad.</summary>
     public const float RestBand = 0.25f;
 
     /// <summary>How far an axis must travel from rest to count as the player's choice. Well past
-    /// <see cref="RestBand"/>, so drift and a sloppy centre cannot reach it. TUNE (`BL-693`).
+    /// <see cref="RestBand"/>, so drift and a sloppy centre cannot reach it. TUNE, judged with a
+    /// real pad.
     /// </summary>
     public const float MoveThreshold = 0.6f;
 
     /// <summary>The deadzone stamped on a captured axis, which is also its digital threshold
     /// (<see cref="BindingControl.Deadzone"/>). It is a constant rather than the travel the capture
-    /// saw, because the value a stick crosses is not the value it settles at. TUNE (`BL-693`).
+    /// saw, because the value a stick crosses is not the value it settles at. TUNE, judged with a
+    /// real pad.
     /// </summary>
     public const float CapturedDeadzone = 0.5f;
 

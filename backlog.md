@@ -134,95 +134,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   only the trail shows; and the DISTANCE interval hides behind an inverted flag
   (`has_interval_value` false, key off `interval_type`).
 
-- `BL-297` `[Research]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **Panel-damage semantics: what the original actually
-  shows when a part is damaged, the user's re-test verdict is that our authored-data reading has
-  the feature wrong.** User at the controls 2026-08-06, after `BL-288`'s pooling fix landed
-  (bursts no longer teleport, that mechanical fix stands and is not in question): (1) nose
-  damage sprays effects at the WINGS; (2) panels appear to tear while armor should still be
-  absorbing; (3) identical repeated debris bursts read as "the same panel flies away again", a
-  torn panel should be gone once. Expectation: debris matches the point of destruction, is
-  health-gated, and each panel tears exactly once.
-  *Evidence (data reading, 2026-08-06):* the per-part `injure_anims` DO map panels to their part
-  (`extracted/zrdr/vehicle.zrd.json`, player-1: nose→`pdpanel7`, tail→`pdpanel8`,
-  leftwing→`pdpanel5`/`4`/`3` at 0.5/0.3/0.15, rightwing→`pdpanel6`/`1`/`2` at 0.4/0.3/0.15). The
-  cross-part bleed the user sees is authored *elsewhere* in our reading: (a) every part's 0.99
-  `<part>_damage_effects` shim → `random_gun_impact`, which sparks a random `pdp1` (40%)/`pdp2`
-  (40%) and ALWAYS `pdp4`, wing sites, whatever part was hit; (b) the vehicle-level 0.85
-  `player_fuelleak` (ANY part's fraction) plays a gunhit flash + fuel vapor at a random `pdp1–3`.
-  The "repeats" have two shapes: `pdpanel7` (nose) is authored to throw FOUR `gimmeflakes` bursts
-  within 0.4 s (one extended burst), and every panel's burst uses the same 7-flake `planeflakes`
-  template, so successive panels' bursts look identical.
-  *Decoded 2026-08-15 (`crimson.exe`). All three symptoms are settled without the capture.*
-  Write-up: `docs/org/vehicleDamage.md` ("Damage staging", the two new subsections).
-  **(2) armor, answered; ours is wrong.** Not a scale ambiguity: `FUN_004b3d70` keys the per-part
-  `injure_anims` on `[part+0x30] / [part+0x2c]`, health only, and `FUN_004b7f80` zeroes the health
-  damage outright while the part's armour pool covers the incoming armour damage. So a fully-armoured
-  part crosses NO per-part threshold, not even the 0.99 `<part>_damage_effects` shim: the original
-  shows nothing at all on a fresh armoured plane. Our combined armour+HP scale
-  (`PartState.Fraction`) was why panels tore early; that is **fixed**, the per-part loop re-based on
-  `PartState.HealthFraction` and the hull loop split out onto `SummaryHealthFraction`
-  (`git log --grep=BL-384`). Owed at the controls as `PT-80`.
-  **(1) location, answered; ours is faithful in mechanism and wrong in timing.** `FUN_00521180` binds
-  an anim's node names through `FUN_004efaf0`, which searches the instance's context subtree, then
-  the anim's local tables, then a GLOBAL by-name lookup (`FUN_004d0280(7, name)`). `pdpN` names are
-  unique on the airframe, so a context miss falls through and finds the same node anyway: the
-  context disambiguates a name, it never redirects one. There is no part-relative retarget on this
-  path, so the original really does spark wing sites on a nose hit. It just does not do it until
-  that part's armour is gone.
-  **(3) repetition, answered; a panel tears once.** The handle arrays (part`+0x4c`, inst`+0x890`)
-  start an entry only when its slot reads zero and clear the slot on the UPWARD crossing alone,
-  never when the anim ends. So each entry fires once per downward crossing and can only re-fire
-  after a repair (`FUN_004b3e20` wipes, `FUN_004b8180` restages). The `pdp4` repeat the user saw is
-  authored and faithful: `<part>_damage_effects` is a separate entry on each of the four zones with
-  its own slot, so `pdp4` legitimately sparks up to four times a flight, once as each zone first
-  crosses.
-  *Fix shape:* no code change is owned here. Symptom (2) is fixed (`git log --grep=BL-384`),
-  and is `PT-80`'s to confirm at the controls. Symptoms (1) and (3)
-  are faithful-as-authored and this item closes on them once `CAP-29` confirms the look. Do NOT
-  resolve `random_gun_impact`/`player_fuelleak`'s panel pick to the nearest pdpN. The decode says
-  the original does not do that.
-  *What `CAP-29` still owes:* the look only. Does the flung debris read as a piece of that panel or
-  as generic flakes, and what visibly changes on the airframe. Questions (a) and (b) are now
-  confirmation, not decision.
-  *Not decoded:* whether the interpreter's selection event really is the 40/40/always-`pdp4`
-  weighted pick our data reading describes. The exe executes the authored def; what was verified is
-  where the nodes resolve, not how the random branch is evaluated.
-  *⚠ Traps:* do not "fix" by suppressing the authored shims wholesale (`CAP-27` already probes
-  whether the spark shim exists at all in the original, coordinate, don't overlap). Do not
-  re-open `BL-288`'s pooling, the theft mechanism was real and its fix is verified independent
-  of these semantics.
-  *Cross-refs:* `CAP-29` (the capture), `CAP-27` (spark-shim existence), `BL-288` landing
-  (`PLAN-m3-polish-10` A1), `DamageVisuals.cs` (the consumer),
-  `extracted/zrdr/vehicle.zrd.json` (the authority).
-
 ## Weapons & combat
-
-- `BL-693` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The rebinding screen's three axis-capture constants are
-  picked, not measured.** *Evidence:* `ControlCapture.RestBand` **0.25**, `MoveThreshold` **0.6** and
-  `CapturedDeadzone` **0.5** are what decide whether a stick or a trigger a player pushes becomes a
-  binding, and none of them has a decode behind it: the original cannot bind an axis to a command at
-  all (`docs/org/input.md`, `FUN_00537090`'s four typed slots), so there is nothing to match. The
-  ordering is the rule and is deliberate, `RestBand` < `CapturedDeadzone` < `MoveThreshold`: an axis
-  must be seen inside the rest band before a move counts, so drift cannot latch; the move must clear
-  a threshold well past that band, so a sloppy centre cannot either; and the deadzone stamped on the
-  binding sits between the two, because the value a stick crosses is not the value it settles at.
-  *Owed at the controls:* with a real pad, bind a flight action to a stick direction and to a trigger.
-  Does 0.6 feel like a decisive push rather than a nudge, and does 0.25 forgive the stick the pad
-  actually rests at? Then fly the result: at 0.5 the bound half of the stick has to feel like a
-  button, on and off, without a dead patch a player reads as a broken binding.
-  ⚠ A trigger already bound at another deadzone is not a second control: `ActionMap.SameControl`
-  ignores the deadzone on purpose, so capturing the right trigger takes it from both Camera Boost
-  (0.5) and Camera Dolly Out (0) rather than stacking a third reading. Raising or lowering these
-  numbers does not change that, and must not be used to try to.
-  *Cross-refs:* `PT-120` (the pad sitting that judges the three), `BL-296`, `docs/org/input.md`, `docs/org/targeting.md`, `docs/controls.md`.
-
-- `BL-603` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The human rig sweeps the mesh hull where the original sweeps its def's six
-  `collision` probes.** *Evidence:* decoded for `BL-601` (`git log --grep=BL-601`): `FUN_0048d7f0`
-  carries the def's `collision` list as rays from the previous pose, six points on the `p*` player
-  defs; `FlightController.SweepProbes` does that for an AI rig and keeps the mesh-derived hull sweep
-  for the human rig, which is wider than the six points. *Fix shape:* fly a slot the six points
-  clear and the hull does not (CM13's dbase arch on dzpath2) in both games; if the original passes,
-  sweep the player's probes too. *Cross-refs:* `PlaneStats.CollisionProbes`, `docs/formats/vehicle.md`.
 
 ## Flight model & collision physics
 
@@ -245,187 +157,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Environment & world
 
-- `BL-272` `[Tuning]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Precipitation: every unit mapping from `weather.json` to a look is invented, and
-  one remake-only rule is deliberately held back** (`Precipitation.cs:29-62`, type/tint/rate/density
+- `BL-272` `[Tuning]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Precipitation: snow's unit mapping from `weather.json` to a look is invented
+  and unjudged; rain reads like the original** (`Precipitation.cs:29-62`, type/tint/rate/density
   are authored; fall speed, box size, particle counts, streak length/width, sway are 16 TUNE
   constants; the sprites themselves are procedural stand-ins for the original's untextured
   line/point primitives, and rain streaking along fall-direction-vs-velocity is a documented
-  remake-only rule pending an A/B). Needs original rain and snow footage to calibrate, worth a CAP
-  when weather work resumes.
-  ⚠ One calibration fact is already on file (`CAP-11`, 2026-08-07, user): C2B IA1's rain falls
-  below the cloud cover as **one-pixel-wide streaks**, narrow enough that the 2560-wide Game DVR
-  capture swallows them entirely, while ours are plainly visible in the same scene
-  (`playtest/CAP-11/csvm-c2b-low.png`). Streak width is the first constant to revisit.
-
-- `BL-322` `[Research]` `[L]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` `[C5]` **The original shades a lit surface per vertex and clamps the
-  product at white, so reproducing its sun term darkens every away-facing surface of every chapter
-  and cannot darken a C5 city block at all** (split out of `BL-303` at its close). Explicitly NOT
-  fog, `BL-303`'s own adjunct note, and the Wave B fog work moved none of it.
-  *Evidence, decoded:* the whole term is in `docs/org/vertexLighting.md`, "The sun's own term, and
-  where the product is clamped". `SUNLIGHT_BICOLORED` is light flag `0x400` (`FUN_004dbe80`, tested
-  once per light at `0x00568a7f`) and it selects whether the ambient half of the term carries
-  `SUNLIGHT_COLOR_AMBIENT` or reuses `SUNLIGHT_COLOR_DIFFUSE`; `FUN_00472ea0` writes both colours on
-  every zone apply, so the second one always exists and the bit only decides whether it is read. All
-  32 C5 zone blocks author white for both, so **in C5 the bit is a no-op on the value** and the term
-  is the single scalar `0.5 + 1.5 × max(N·L, 0)`. It is live elsewhere: 28 of the install's 212 zone
-  blocks are bicolored with two different colours, C4's `IA1` pairing a warm diffuse with a cool
-  ambient. C5 also places exactly one `Light` node among 11,438 and authors no `LIGHT_STATE` at all,
-  and the two point-light lists `FUN_00568790` fills add their term without the directional loop's
-  `− 1`, so nothing but the sun ever reaches the accumulator there.
-  *The measured band is refuted on the family it was read off:* `FUN_00554550` multiplies the
-  per-vertex factor by the **authored vertex colour** and clamps the product at 255 (`0x00555289`
-  then `0x005552b2`), where `Weather.WorldLightFactor` clamps its collapsed scalar to 1 *before* the
-  multiply. All 8,549 authored vertex colours on C5's `cblock1`-`cblock7` city-block skins are 255,
-  so the original's product saturates at white for every `N·L ≥ 1/3` and draws exactly what we draw,
-  and is *darker* than us below it. Only the `bldg1`-`bldg4` tower skins (51 % to 71 % at 255, tenth
-  percentile 0 to 112) stay unsaturated, and there the ratio ours/theirs is `1 / (0.5 + 1.5 N·L)`,
-  which is 0.66 at `N·L` 0.68 and 0.58 at 0.82. So the term can produce the measured band, but not
-  on the low-rise blocks a midtown frame is mostly made of.
-  *Frame-wide is ruled out, so this is a surface term, not exposure or gamma:* the five HUD gauge
-  discs are the same 2D art at the same pixels in both frames and read ours/orig **0.97** (rockets
-  0.97, ALT 1.07, damage 0.80, guns 1.03, MPH 1.00; the "2400" readout box 0.96). Nothing ×0.6
-  survives into the capture or onto the composite.
-  ⚠ **The `CAP-11` C5 pair is not a matched pose.** `t0.5-c5-spawn-night-city.png` looks north over
-  midtown from altitude and `csvm-c5-night-city.png` sits over water, so 10.2/15.5 and 21.7/37.6
-  compare *different buildings*, and the decode above says the difference between two buildings is
-  exactly what decides the ratio. C5's sky dome cannot serve as the in-world control either: at a
-  level view its rows read 0.83, 0.69 and 0.43 of the original's from zenith to horizon, a gradient
-  mismatch of its own rather than one scalar. The matched poses are the `CAP-58` stills below.
-  *Matched poses, `playtest/CAP-58/pairs/`:* seven original spawn stills of C5 `IA1`, each paired
-  with our render of the same `dogfight_ace` entry (`--pos`/`--direction` from `ia.zrd`, frame 30),
-  original above ours in `pair1`..`pair7`, `sheet.png` the overview and `patches.png` the measured
-  regions. Every still matched an entry by its scenery, so seven of the eight spawns are covered
-  (entries 0, 1, 2, 3, 4, 5, 7; entry 6 was not caught). Frame-wide the pose matches (the bridge
-  towers stand at the same screen columns), but the original's chase camera holds the aircraft
-  smaller and the horizon lower than ours, so regions were placed per image, not shared (`BL-885`).
-  *What the pairs show:* the answer depends on the surface, in both directions. On the `bldg`
-  tower skins in `pair2` (entry 7, amid the towers) the wall between the windows is darker in ours:
-  the right tower's face turned away from the camera reads ours/theirs 0.48 at the median and its
-  face toward the camera 0.44, the tenth percentile 1 in ours against 5 to 12 in the original. The
-  two faces stand at right angles and read the same ratio, so these pairs show a flat halving of
-  the wall texel, not a term that differs by facing. Plain surfaces go the other way: the bridge
-  deck underside (`pair5`) reads 1.26 at the median and the bridge tower masonry (`pair4`) 1.30,
-  both brighter in ours. The HUD control holds, the ALT gauge disc reads 0.98 (mean), so nothing
-  frame-wide is in either number. The original stills are JPEG and the wall levels sit near black,
-  so the tenth-percentile figures carry compression noise and only the medians are quoted as
-  ratios. No pair holds a close plain `cblock` wall toward the camera, so the low-rise blocks are
-  still unmeasured. This is a luminance reading of matched frames, and the verdict on whether the
-  tower walls are too dark or the deck too bright stays with the eye at the controls.
-  *Fix shape:* per lit vertex, `drawn = clamp(authored_vertex_colour × (SUNLIGHT_AMBIENT +
-  SUNLIGHT_DIFFUSE × max(dot(N, L), 0)), 0, 1)` in place of `ALBEDO *= csky_world_light`. Four
-  files: `Weather.cs` stops collapsing (the uncollapsed pair is already on `ZoneWeather`),
-  `WeatherRig.cs` publishes the pair and the sun direction beside `csky_world_light`,
-  `csky_atmosphere.gdshaderinc` declares them, and `SceneBuilder.cs`'s shaded world variant reads a
-  normal instead of the flat scalar. It is not a one-uniform change: 66 % of C5's 21,577 lit
-  polygons and 57 % of C1's 16,580 carry no normal array, so `SceneBuilder` has to emit a face
-  normal per polygon for those rather than the smoothed normal `SurfaceTool` generates.
-  ⚠ **Taking it is a look change on every lit surface of every chapter, and its largest effect is a
-  darkening nobody has asked for.** A vertex authored at 255 facing away from the sun halves, and
-  most of a city at night faces away from a sun bearing −135°. That is owed a verdict at the
-  controls and not a luminance distance.
-  *Playtest after fix:* the C5 night poses in `playtest/CAP-11/README.md`.
-
-- `BL-325` `[Research]` `[Blocked: CAP-59]` `[M]` `[Next: look]` `[Impact: low]`
-  `[Evidence: footage]` **The C1B night clouds are lit flat, where the original's footage may show
-  a cloud lit by which side of it turns to the moon.**
-  *Evidence:* `CAP-11` C1B (`playtest/CAP-11/`): cloud cores p90 **218** at t16 against **70** at
-  t5, and our spawn pose (`--chapter=C1B --pos=-5406,55,-7200 --direction=-0.391,0,-0.921`) at
-  p90 173.0 whole frame, 165.7 on the moon side, 175.3 away.
-  ⚠ **The measured split may not be a moon side at all.** At t5 the dim cloud hangs directly
-  beside the moon, far off and deep in the night fog; at t16 the bright cloud is close to the
-  aircraft and also on the moon's bearing. Both frames put their
-  cloud on the moon's side, so the 218/70 split reads as distance through the fog, not as the side
-  a cloud turns to the moon. Moderately sure, from two stills.
-  *What the mechanism can reach:* not that frame in any case. C1B ships **no `fvol` volumes**
-  (`FogVolumeTests` `C1B "0|-|206.25|bare|cloudsprite:absent"`), and its **70 placed
-  `cloudparent` facades** (1,620 card nodes) are authored `lighting: false` with an empty normal
-  array, so the original's per-vertex term has neither the gate nor the geometry. What that term
-  does buy is on the `fvol` cards, and `FogVolumeClutter` applies it for the chapters authoring
-  `lighting: true` (C1C, C2B, C5), per vertex off the zone's uncollapsed `SUNLIGHT`, while C1B
-  moves by nothing. Nothing here touches `SceneBuilder` or `WeatherRig` lighting.
-  *What would settle it:* `CAP-59`, one C1B cloud filmed from two headings at the same range, one
-  with the moon behind the camera and one with it behind the cloud.
-  ⚠ **Vocabulary, three populations, never one phrase for two:** **`cloudsprite1`/`cloudsprite2`**
-  are the `fvol*` clutter scatter (the deck field, world-locked and tiled); **`cloudparent`** are
-  discrete world-placed clusters (C1B's 70, C1's 28, C4's 45); and the **plane-local ambient
-  wisps** each chapter's `speed_cue.zrd` emits 60 m ahead of the player (`Flight.Hud.SpeedCue`,
-  `docs/formats/effects.md`) are a third. A claim about one is not evidence about the others, and
-  the first two **share their textures**, `--tex-override` on `cloud1.tif`/`cloud2.tif` paints
-  both (`SHOT-21`), so separate them by altitude or cluster position, never by texture.
-  ⚠ Traps: `csky_world_light` is CAP-11-calibrated on terrain, so a directional cloud term must be
-  cloud-local. Nothing in the original scales a cloud card's colour except its own per-vertex term
-  (decoded, `docs/org/cloudCards.md`), so this must not become a global cloud brightness knob.
-  *Playtest after fix:* the C1B night spawn above against `playtest/CAP-11/`'s t5 and t16 frames,
-  saying for every puff how far off it is and which side of the moon it faces; and one lit chapter
-  (C1C above the band) for a verdict on whether the per-vertex shading on the `fvol` cards reads
-  like the original.
-  *Cross-refs:* `docs/org/cloudCards.md` (the deck field's lattice, its decoded perturbation and
-  the shipped 30 m offset over it), `docs/formats/effects.md`'s speed-cue section (the third
-  population), `docs/org/vertexLighting.md`'s facade section, `CAP-11`, `CAP-59`.
-
-- `BL-329` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The D32 in-cloud flicker's rate and ramp are declared
-  TUNE, not decoded** (`PLAN-weather-decompile-match` D32, 2026-08-09;
-  `Session/WeatherRig.BandFlicker`). `FUN_0042ee40`'s drift rate multiplies a per-mission
-  weather-struct field ≈ `+0x934` that no reader decodes and no capture pins a value for, so
-  `BandFlicker.DefaultRate = 5.5f` is picked, not measured: at the re-randomized drift speed's
-  midpoint (0.2..1.0, mean 0.6) it traverses the blend parameter's full [0,1] range in `5.5 * 0.6 *
-  0.1 = 0.33`/s, i.e. ~3 s at the mean and 1.8–9.2 s across the randomized range, "a full traverse
-  in a few seconds", not a decoded figure. `BandFlicker.RampFrames = 30` (0.5 s at the fixed 60 Hz
-  step) is the amplitude ramp that keeps a session's frame 0 (and any static probe/golden capture
-  at a rig's first tick) reading the unremapped `WeatherState.WhiteoutAmount` exactly, its length
-  is also a guess, chosen only to be short next to a flight and long next to one frame.
-  *Evidence:* `PLAN-weather-decompile-match`'s D32 entry; the curve shapes themselves
-  (`BandFlicker.LogCurve`/`AtanCurve`/`Remap`) ARE decoded from `FUN_0042ee40` and are not part of
-  this TUNE, only the rate and ramp length are a judgement call.
-  *Fix shape:* none pending, needs in-cloud footage of the original with visible timing (a static
-  screenshot cannot show a drift rate) before either constant can move off a guess.
-  *Playtest after fix:* fly into C1's cloud band and hold in the RAMP, not the opaque core, the
-  core (1032–1062 m) is fully whited out and the flicker's own guard skips it there by design
-  (`--freecam --chapter=C1 --pos=-2000,1000,-1792 --direction=0,0,-1` sits in the bottom ramp),
-  and compare the shimmer's pace against any original in-cloud footage (`CAP-12`'s C4 take has
-  in-cloud frames) once such footage is reviewed for timing rather than just colour.
-  *Cross-refs:* `docs/architecture.md`'s `Session/World/WeatherRig.cs` entry (D32 bullet).
-
-- `BL-341` `[Research]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: data]` `[C5]` **Reopened `BL-250`: with the real `no_clutter` gate landed, 7.6% of C5's ground
-  (13.8 million m², the flagged overlay area with no base layer beneath it) renders bare, and
-  whether that is what the original does is untested.** `BL-250` closed 2026-08-07 on a curated
-  list (`ClutterBuilder.BuriedClutterDistricts`, excluding `cblock4/5/6` map-wide) that turned out
-  to be standing in for a mechanism nobody had decoded yet. B13/B15
-  (`PLAN-clutter-uv-placement`) landed that mechanism, `PlaceOnMesh` now skips a
-  polygon carrying the decoded `no_clutter` flag, the flag SELECTS which of two coplanar layers
-  decorates rather than meaning "bare here", and the curated list was retired because it was wrong
-  on 14.1% of the map even though it happened to be right where `CAP-22` looked (78.3% of C5's
-  ground by area is genuinely tower country). *Evidence:* B15's landing commit
-  (`git log --grep="B15: land BL-305"`) measured the gate against every flagged/base pair in C5
-  and found 35% of flagged overlay area has no coplanar base polygon underneath it at all, for
-  that ground the gate now has nothing left to fall back on and leaves it undecorated. *Fix
-  shape:* find what the original actually draws on that 7.6%, either a third layering mechanism
-  this plan didn't decode, or the original genuinely leaves it bare too (which would close this
-  outright). Start from a located landmark pose, the gate itself was confirmed by the user's own
-  flyover 1 km north of C5's `brooklynbridge` node, not by a nadir (`SHOT-28`,
-  `docs/verification.md`), and not from `CAP-22`'s pose, which
-  cannot resolve this question (it already reads correctly). *⚠ Traps:* (a) do not re-curate a
-  list as a stopgap, that is exactly the mistake this item exists to not repeat. (b) A nadir
-  shot cannot distinguish a painted rooftop from bare ground any better than it could distinguish
-  a rooftop from a building (`SHOT-28`); use a low oblique. *Cross-refs:* `BL-250` and `BL-305`
-  (both closed, the doubled-district curation and the C5 packing bug the gate that surfaced this
-  replaced; `git log --grep=BL-305`. Do not reopen either ID; IDs are never reused, per this
-  file's own rule).
+  remake-only rule). Rain reads like the original at the controls under C2B IA1's cloud cover,
+  streak width included, so its constants stand. *Owed:* snow, flown against the original or its
+  footage in a chapter that authors it; the snow constants are the ones still invented.
+  ⚠ `CAP-11`'s C2B take shows the original's rain as one-pixel-wide streaks that the 2560-wide
+  Game DVR capture swallows, so a capture of that size is no instrument for streak width.
 
 ## Effects & animation runtime
 
-- `BL-674` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: data]` `[CM10]` **CM10's attack-balloon wave flies from 990 m down to water level and back up
-  during its scripted entrance.** *Evidence:* driving C1/M05's shipped `OBJECTIVE10` wake and
+- `BL-674` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` `[CM10]` **CM10's attack-balloon wave flies from 990 m down to water level and back up
+  during its scripted entrance, where the original's balloons come in from above.** *Verdict at
+  the controls:* in the original the wave arrives from above; in CSVM the balloons sometimes appear
+  on the water, jump into the sky, and slowly descend, which is wrong. *Evidence:* driving C1/M05's shipped `OBJECTIVE10` wake and
   sampling the assembly every 0.1 s for 70 s traces its world Y from 990 m (the hidden entrance
   altitude) to -0.26 m at about t = 57.3 s, then climbing again at the `rise` sequence's authored
   3.33 units per second. The objective marker follows it down, which is the symptom `BL-656` was
   filed on; that item is disproven because the marker is tracking the geometry correctly, and the
   geometry is what goes to the water. The motion is the entrance's own SiScript-to-`rise` handoff,
   so it lives in the animation runtime (`PoseChannel.cs`, `FromToMotion.cs`, `ScriptPlayback.cs`),
-  not in `ObjectiveSites.cs`. *Fix shape:* first decide whether the original does this at all, by
-  watching a CM10 wave arrive in footage or at the controls; a balloon that dips to the sea on its
-  way in may be authored. Only if it does not, find whether the handoff between the entrance script
-  and `rise` drops an altitude the original keeps. *⚠ Traps:* do not add an altitude floor to the
+  not in `ObjectiveSites.cs`. *Fix shape:* find where the handoff between the entrance script and
+  `rise` drops the altitude the original keeps, and why the wave is sometimes visible at the water
+  before the jump (a first frame drawn before the entrance pose is applied is the first suspect).
+  *⚠ Traps:* do not add an altitude floor to the
   assembly, and do not offset the marker upward; both were removed on decoded evidence and the
   balloons descend as they attack, so no constant is right at two altitudes. The anchor rule itself
   is the original's (`FUN_004cf2c0`, midpoint of the node's active bounding box) and is correct.
@@ -437,61 +195,31 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Audio
 
-- `BL-281` `[Tuning]` `[Blocked: CAP-27]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The ricochet sounds are audible but very faint.** `PT-25` (c), 2026-08-05:
-  `snd_ricochet1–4` play under the per-impact spark burst but sit too low to read. A mix-gain
-  question with no reference recording behind it, to be judged at the controls rather than derived. ⚠ Judge only after `CAP-27` decides
-  whether the original has this effect at all: `BL-090` already calls the 0.99 `injure_anims`
-  entry that drives it "plausibly an authoring leftover", present on 1 of 11 aircraft, so the
-  capture may delete the feature rather than tune it.
-
-- `BL-934` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **The dynamic enemy and
-  ally voice lines dispatch in the suite and are now heard at the controls, but far more rarely
-  than the original's: one friendly line in a squadron fight and no enemy line, where the
-  original's Blake talks every few seconds.**
-  *Verdict at the controls:* first "still no dynamic voice from friends or foes, not even on
-  friendly fire, nothing in the logs"; after the flat radio path (`git log --grep=BL-978`, a line
-  was placed at the speaker and attenuated by distance) "Frequency of voice lines is a lot lower
-  then the original, Fighting in C01 against Paladin Blake and he talks every few seconds in the
-  original. Fighing a Squadrion i only heard one friendly voice line but no enemies". The rate is
-  the items below (`BL-986` to `BL-995`); this item is the re-listen after they land, `PT-161`.
-  ⚠ "Nothing in the logs" is not yet evidence of no dispatch: the `ai voice:` lines
-  are `Log.Info` on the `sound` category, so run with `--log=sound:debug` and read for
-  `ai voice: <name>: trigger #`. A speaker whose pilot owns a family's clips but had none
-  prewarmed now warns once per family (`owns the clips but none was prewarmed`), so a silent pilot
-  without that warning is not a prewarm gap. A campaign sortie that carries no such line with the
-  category up is a third cause, the trigger evaluation itself (talker test, the human-quarry rule
-  on the bearing and attack call-outs), and gets its own diagnosis here.
-  *Evidence:* the first silence was the mode-machine subscription sitting inside `RegisterAi`'s voiced
-  branch, so an aircraft carrying no accent was never watched, and the shipped rosters leave nearly
-  every enemy on `accentID` -1 while voicing the player's own flight. A flown C1 session now logs
-  `ai voice: ai2_player_pfighter: trigger #8 -> snd_id7_WA-Enemy-6 (Talker test passed. Play AI
-  sound #8.)`, an accentless hostile committing to the human and a voiced ally speaking the bearing
-  call-out, and the `ai-voice-mission` suite holds the same chain over C1/M02's shipped roster
-  through to a playing stream on the radio's Voice-bus player; a playing stream is not an audible
-  line (`docs/verification.md`). *⚠ Traps:* combat lines and the scripted lines now share
-  `Mech3/MissionRadio.cs`'s one queue, so a scripted line on air holds a bark past its 0.8 s
-  tolerance and drops it, which is the original's rule and not a silence to fix; the aircraft that speaks is never the enemy that was spotted, so a silent enemy
-  is not the symptom; a pilot silent on one trigger is often data, since VO 4 (accent 13) owns no
-  `WA-*` or `TA-*` family and the DI tiers read the whole-vehicle health pool, so a wingman whose
-  armor soaked the hits stays at full health. *Playtest:* `PT-161` (C1/M02 from the campaign with
-  `--log=sound:debug`; keep the log). *Cross-refs:* `docs/formats/combat-voice.md`,
-  `git log --grep=BL-934`, `git log --grep=BL-978` (the flat radio path),
-  `git log --grep=BL-977` (the Instant Action prewarm gap),
-  the saved Voice level (`Utils/AudioMix.cs`, the `audio-buses` suite) if the lines dispatch and
-  stay inaudible; `git log --grep=BL-986` (the attack pair now raised off the quarry rather than
-  off the mode edge, which was the largest single cause of the low rate) and `git log --grep=BL-991`
-  (`PR-DngrZn`, the last trigger id to be wired).
+- `BL-281` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **The original shows no spark burst on the airframe when it is hit, so
+  our per-impact spark burst and the `snd_ricochet1–4` sounds under it go.** *Evidence:* the user's
+  verdict from the original: taking hits shows no spark burst on the airframe itself, distinct from
+  smoke at the contact point. Ours plays one, driven by the 0.99 `injure_anims` entry (`BL-090` item
+  2 called it "plausibly an authoring leftover", present on 1 of 11 aircraft), with the ricochet
+  sounds faint underneath it. *Fix shape:* stop drawing the burst and playing its ricochets, at
+  the consumer (`DamageVisuals.cs`), not by editing extracted data.
+  *⚠ Traps:* the closed `BL-297` decode (`git log --grep=BL-297`, `docs/org/vehicleDamage.md`
+  "Damage staging") found that the exe runs every part's authored 0.99 `<part>_damage_effects`
+  shim once that part's armour is gone and resolves its `pdpN` nodes by name, so `pdp4` sparks up
+  to four times a flight. Before deleting anything, settle which effect the user's recall covers:
+  the 1-of-11 per-impact burst alone, or every shim spark; and find what the original does with an
+  entry it executes yet does not visibly draw. Remove the one that is not in the original, and keep
+  the vehicleDamage decode consistent with the result.
 
 ## Cameras & views
 
-- `BL-266` `[Research]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **Plane wobble: residual decode questions after the
+- `BL-266` `[Research]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **Plane wobble: residual decode questions after the
   wiring landed.** *Decision:* the dive rattle and the nitro wobble both read too small and janky
   next to the original's, and the mechanism was the reason rather than any magnitude. Both now run
-  the original's own component block. **Owed sortie:** fly the merged build against
+  the original's own component block. At the controls, against
   `OriginalScreenshots/Videos/Dive Wobble.mkv` and `OriginalScreenshots/Videos/Nitro Wobble.mkv`,
-  a dive past rated max for the first and a nitro engage for the second, and judge the ported
-  amplitude and rate before touching `DiveRattleKickScale` or `NitroWobbleKickScale` (both default
-  to the faithful step). The oscillators are wired (`ShakeDefs`/`PlaneShake`, visual-only roll on
+  the dive rattle, the nitro wobble and the gun-fire buzz all read right at their faithful step, so
+  `DiveRattleKickScale`, `NitroWobbleKickScale` and `GunBuzzKickScale` stay at 1. What remains is
+  decode. The oscillators are wired (`ShakeDefs`/`PlaneShake`, visual-only roll on
   the plane node; law and measurement in [`docs/formats/shakes.md`](docs/formats/shakes.md) and
   `analysis/gun-wobble-shake/`). The dressing behind the shake is a decoded camera
   random-walk (`crimson.exe`), not the remake's dated sawtooth, details below.
@@ -512,9 +240,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     `fire_bullet` authors `sawtooth 1` and `frequency 15.0`, so the original's step is
     `mag × 15 × 4 × 1.2` and the kick is a **velocity** of ±36·mag rad/s into block 0's `[3]`, not
     a displacement. A displacement walk at ±36 would render roughly forty times the original's
-    angle, so the number cannot simply be swapped; `_fire` keeps its landed step until (a)'s own
-    look decides, and the choice is between the whole component block (as (d)/(e) took) and the
-    envelope it has. `docs/org/shakes.md`, "`fire_bullet`, per-shot roll".
+    angle, so the number cannot simply be swapped. The landed step reads right at the controls, so
+    porting the whole component block (as (d)/(e) took) is a fidelity change with no symptom behind
+    it. `docs/org/shakes.md`, "`fire_bullet`, per-shot roll".
   - **(d) the dive rattle now runs the original's component block, ported.** The per-frame player
     updater `FUN_0048c470` reads block 4's `min_speed`/`magnitude_quotient` and calls the same
     `FUN_0042c070`/`FUN_0042be10` dispatcher the `fire_bullet` path uses on component index 4
@@ -561,19 +289,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     component blocks and every kicker"). The nitro engage is wired
     (`FlightController.AdvanceNitro`); a round fired, a round taken, the overspeed arm and a
     collision contact are decoded and still unwired.
-  - **(fidelity) judge the port, then dial.** Playtest owed on all three knobs, each defaulting to
-    its faithful step: `GunBuzzKickScale` against the firing clip, and `DiveRattleKickScale` and
-    `NitroWobbleKickScale` on the sortie named at the top of this entry. Two honest caveats: the
-    fire source's **decay model (τ≈80 ms) is an engineering guess, not a decode**, and its step is
-    the one (a) now flags as wrong-sized; and the ported dive rattle is about 1.1× the replaced
-    sawtooth's RMS but 2.2× its peak, so the mechanism alone only partly answers "too small" and
-    the look is what decides whether a knob moves.
+  - The fire source's **decay model (τ≈80 ms) is an engineering guess, not a decode**, though the
+    result reads right at the controls.
   ⚠ Traps: `SHAKES_CAMERA` is NOT the fire-path shake mechanism, its sole carrier among all
   48 weapons is `wep_26` "FW", a zero-damage scripted fake weapon (a scripted detonation-shake
   marker); the fire path is the unflagged `fire_bullet` source. And the near-match trap: several
   magnitude candidates coincide with authored constants, wire nothing on one coincidence (the
   caliber law stood because the candidates separated by an order of magnitude each way).
-- `BL-885` `[Fidelity]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` **The chase camera's base elevation is authored
+- `BL-885` `[Fidelity]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The chase camera's base elevation is authored
   (`thirdp_pitch`), where CSVM holds a hand-picked 15.7°.** The chase placement builds its direction
   from the head's shown azimuth and the head's shown elevation PLUS the camparam block's `+0x28`:
   `FUN_0042c7f0` loads `DAT_0064ef58` at `0042c881`, adds `[ECX + 0x28]` at `0042c88d` and hands the
@@ -593,6 +316,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   camera level with the aeroplane sees less ground and more sky, and the original's own footage is
   the reference. ⚠ **Do not read the 15.7° as wrong-by-construction**: it was picked to look right
   and has never been judged against the authored figure side by side.
+  *Decision:* build the authored elevation behind a toggle first, so both chase cameras can be A/B'd
+  in CSVM at the controls; the default stays 15.7° and no golden is re-pinned until that judgement.
   *Cross-refs:* the numpad views' three level keys (`Kp2`/`Kp4`/`Kp6`), which sit at this same
   base elevation (`git log --grep=BL-150`), `docs/formats/camparam.md` (`thirdp_pitch`, and the Known limits paragraph this corrects),
   `docs/org/cameraViews.md` (head-look controller, the chase placement's own elevation).
@@ -713,8 +438,8 @@ usual.
   per-def volume terms feeding `Projectile.cs`'s `def.Volume * 0.2f * MixGain * distanceGain`
   (line ~2238), not the `1/sqrt(N)` splitscreen term itself, which is confirmed correct.
 
-- `BL-434` `[Research]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: trace]` **Splitscreen cockpit interior/audio behaviour is unprofiled and unjudged
-  past one pilot.** `PLAN-cockpit-view` (Decision 5) built cockpit rendering and the
+- `BL-434` `[Bug]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Splitscreen cockpit view hides a pilot's aircraft body in every pane, and
+  the interior/audio behaviour is unprofiled past one pilot.** `PLAN-cockpit-view` (Decision 5) built cockpit rendering and the
   `cockpit_engine_sound` swap verified single-player-only, no further. (a) **Per-viewport interior
   draw cost is now profiled, not yet judged**: `analysis/campaign-coop-4p-perf/FINDINGS.md` (D33)
   measured CM18 (C4/M03) at 1P/4P x external/cockpit: cockpit view adds ~5% more draws at both
@@ -728,10 +453,12 @@ usual.
   `_cp` def specifically. (c) **Today's hiding mechanism is node visibility on a shared plane node, not a
   per-viewport render flag**: `CockpitVisibility` hides the OWN rig's `healthy` body node, so a
   pilot sitting in the cockpit hides THAT AIRCRAFT'S body in every pane that can see it, not just
-  their own, a cross-pane effect unjudged at `N > 1`.
-  *Fix shape:* isolate the draw-count growth's split between the cockpit subtree and the rest of a
-  4P rig; a splitscreen listen for the cockpit-swap/`MixGain` interaction; confirm or fix the
-  cross-pane body-hide visually at the controls with 2+ cockpit-view pilots in the same session.
+  their own. Confirmed at the controls: with two cockpit-view pilots, each pane shows the other
+  aircraft without its body.
+  *Fix shape:* (c) first: hide the body per viewport instead of per node, a render layer on the
+  body that only its own pilot's camera culls, so every other pane still draws it. Then isolate the
+  draw-count growth's split between the cockpit subtree and the rest of a 4P rig, and a splitscreen
+  listen for the cockpit-swap/`MixGain` interaction.
   *Cross-refs:* `PLAN-cockpit-view` B11 ("Splitscreen posture"), `BL-389` (splitscreen weapon
   mix, same playtest family).
 
@@ -754,16 +481,19 @@ usual.
 
 ## Missions, modes & campaign
 
-- `BL-314` `[Feature]` `[Blocked: PT-45]` `[L]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **Race countdown, a rolling start on rails before the run clock
-  opens.** The abreast starting grid landed 2026-08-08 (`StartGrid`), so every pilot in a splitscreen
-  stunt race now begins on one line, on one heading, at one altitude. What is still missing is the
-  moment a race starts: today the clock is running the instant the world appears, so whoever's
-  loading screen ends first is flying first. Deliberately split off from the grid rather than landing
-  with it, because it changes a **deliberate** clock rule and that rule deserves its own scrutiny.
-  Do not start it before `PT-45` has judged the grid at the controls, a countdown over a grid nobody
-  has flown tunes the presentation of an unvalidated start.
+- `BL-314` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A network stunt race: a timed, Trackmania-style run over the network,
+  started together by a countdown.** Splitscreen needs no countdown, since every pane shares one
+  load and nobody gets a head start; the abreast grid (`StartGrid`) reads right at the controls
+  there. The case left is a network race, where machines finish loading at different times. Stunt
+  mode does not exist over the network yet (the original's stunt mode is single-player Instant
+  Action only), so that comes first.
 
-  **The shape, as decided.** (a) A **rolling start**, not a full freeze: the aircraft stay
+  **The race, as the user designed it.** Everyone starts together at the same point, with no
+  collision between the aeroplanes; anyone may respawn as often as they like; when the timer runs
+  out, the fastest completion time wins. With no collision a shared start point needs no grid,
+  so the network race need not use `StartGrid` at all.
+
+  **The countdown's shape, as decided.** (a) A **rolling start**, not a full freeze: the aircraft stay
   physics-alive and moving through the count, which reads as a race start rather than four parked
   planes popping into motion, and is exactly as fair as a freeze since nobody may manoeuvre. (b) The
   countdown flight is **on rails**, a kinematic level walk of the field, driven straight into
@@ -793,10 +523,9 @@ usual.
   3. **Do not simulate the count and do not freeze the sim.** A physics-alive count that is actually
      flown re-opens the sink (`FlightController.Respawn`'s start state) and diverges per plane; a hard freeze
      was rejected as the presentation this mode wants. Both are the alternatives already considered.
-  4. **The instrument is a hand-flown sitting, not a screenshot.** A race grid is not photographable
-     (chase-cam panes; a 60 m neighbour is out of frustum), and `--det` cannot reach this path at
-     all, so an automated check can prove only that scripted runs are unchanged. Everything about
-     whether the count *feels* like a race start comes from `PT-45`'s sortie.
+  4. **The instrument is a hand-flown sitting, not a screenshot.** `--det` cannot reach the race
+     path at all, so an automated check can prove only that scripted runs are unchanged. Whether the
+     count *feels* like a race start comes from a two-machine sitting.
 
   *Unlocked by the grid, noted here rather than promised:* race best-times become feasible once a
   race has a defined start (`StuntRace.cs`, `ScoreStore.GetBest`/`RecordIfBest`), and would want
@@ -915,22 +644,3 @@ usual.
   guest's `LocalOrdinal` and its menu seats handling several; `Admit` counting a guest's local
   seats against the four-human co-op cap. *⚠ Traps:* the Ready gate must wait on every local seat,
   not one per machine.
-
-- `BL-284` `[Bug]` `[Blocked: CAP-34]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Wing-light flare: soft round glow vs the original's sharp star burst.** Follow-up from
-  `BL-119`: with the blink at the measured ~1 frame, the flare reads as a compact soft amber glow,
-  much closer than the old billboard blob, but the PT-03 reference still shows sharp radiating star
-  points that our plain radial `oil_liteflare` sprite does not produce. Whether the original draws
-  the flare from every angle is answered by data: the flare mesh is a `Facade`/`SphericalY` model,
-  and `PlaneBuilder`'s flare material poses it through `csky_facade_spherical`
-  (`git log --grep=BL-1039`). The orbit clip settles the star shape alone; any player plane works: `vehicle.zrd.json`
-  wires `wing_lights_blink` (or `brigand`'s own `wing_lights_brigand`) into every player craft's
-  `start_anims` except the Bloodhawk, which has neither the anim nor flare nodes. (Earlier notes
-  here said only piratefighter/brigand carried it, that read `wing_light.zrd.json`'s two
-  `ANIMATION_DEFINITION`s alone; `vehicle.zrd.json`'s per-plane `start_anims` is the wider
-  wiring and is what the runtime actually plays from, per `WingLights.cs`'s doc comment.) Also riding
-  here: `WingLightBlinker.LightEnergy = 1.0` is a declared TUNE, the def authors the point
-  lights' range/colour only, no intensity.
-  ⚠ Traps: (a) Godot's billboard mode is the rejected fix, PT-03's screenshot is against it; the
-  facade look-at the flare takes reads the eye's position alone, so a bank cannot roll it.
-  (b) don't edit or swap the sprite to fake the star: the star points may be the original engine's
-  flare *rendering* (a cross-flare pass), not the texture asset, the orbit clip decides first.
