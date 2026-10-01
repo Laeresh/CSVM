@@ -34,7 +34,10 @@ internal static class MenuInstantActionSuites
     private static readonly MenuCommands Left = new() { MoveX = -1 };
     private static readonly MenuCommands Right = new() { MoveX = 1 };
 
-    [Suite("menu-instant-action-journey",
+    // Without the install an environment's base def is InstantAction.Defaults(). The wizard's rows,
+    // presets and launch fields are the menu's own, so only the ace, which the base def carries,
+    // needs the install. That check is menu-instant-action-journey's.
+    [Suite("menu-instant-action-journey-core",
         "Built-in's Instant Action journey pinned end to end: a real LaunchMenu is driven Mode to "
         + "Environment, the Table of Contents applies a preset, Mission type steps the lives, the "
         + "ace duel skips Waves and Wingmen both ways, the wave editor edits a slot live and a new "
@@ -42,12 +45,11 @@ internal static class MenuInstantActionSuites
         + "wingman loadout, the launch leaves as a LaunchExit carrying the built InstantActionDef, "
         + "the fields survive a return from flight, and the --menu= and --debug-* aids open their "
         + "states; every check is what the screens do today")]
-    internal static void MenuInstantActionJourney(TestContext ctx)
+    internal static void MenuInstantActionJourneyCore(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         var exits = new List<MenuExit>();
         var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
-        var menu = MenuSuiteHost.Build(ctx, host, seat, "menu-instant-action-journey");
+        var menu = MenuSuiteHost.Build(ctx, host, seat, "menu-instant-action-journey-core");
         ctx.Host.AddChild(menu);
         var launches = new Launches(exits);
         try
@@ -62,6 +64,43 @@ internal static class MenuInstantActionSuites
             Launch(ctx, menu, launches);
             Return(ctx, menu, launches);
             Aids(ctx, menu, launches);
+        }
+        finally
+        {
+            ctx.Host.RemoveChild(menu);
+            menu.QueueFree();
+        }
+    }
+
+    [Suite("menu-instant-action-journey",
+        "Built-in's Instant Action launch over the install: the Girl Trouble preset's squadron "
+        + "launched from Sky Haven through the wizard carries the environment's own ace, not the "
+        + "built-in default the def falls back to without the install")]
+    internal static void MenuInstantActionJourney(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var exits = new List<MenuExit>();
+        var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
+        var menu = MenuSuiteHost.Build(ctx, host, seat, "menu-instant-action-journey");
+        ctx.Host.AddChild(menu);
+        var launches = new Launches(exits);
+        try
+        {
+            // The core journey's launch: the first preset applied, then Accept through Mission,
+            // Waves, Wingmen and both presses on the Aircraft screen. The first show builds the
+            // seats the preset writes its aircraft onto.
+            menu.ShowMenu();
+            menu.DebugPreset(0);
+            menu.ShowMenu("environment");
+            for (int press = 0; press < 6 && launches.Count == 0; press++)
+            {
+                menu.Drive(Accept);
+            }
+
+            var def = launches.Count == 1 ? launches[0].InstantAction : null;
+            ctx.Check(launches.Count == 1 && launches[0].Chapter == "C4" && def != null
+                && def.AceName != "Marshall Bill Redmann" && def.AceName.Length > 0,
+                $"the ace is the environment's own, not the built-in default ({launches.Count} launches, {(launches.Count == 1 ? launches[0].Chapter : "-")}, {def?.AceName})");
         }
         finally
         {
@@ -420,8 +459,6 @@ internal static class MenuInstantActionSuites
             $"the second as the preset had it ({def.Waves[1]})");
         ctx.Check(def.Waves[2] == InstantAction.EmptyWave && def.Waves[3] == InstantAction.EmptyWave,
             $"the two unused slots as the empty wave");
-        ctx.Check(def.AceName != "Marshall Bill Redmann" && def.AceName.Length > 0,
-            $"the ace is the environment's own, not the built-in default ({def.AceName})");
         ctx.Check(menu.ShownScreen == "Plane" && menu.Visible,
             $"the menu keeps its state for the host to hide ({menu.ShownScreen})");
     }

@@ -141,7 +141,10 @@ The ENet and LAN discovery suites bound to `127.0.0.1` are in. The tier carries
 `SuiteTier.SkipFails`, so a listed suite that SKIPs reports FAIL with its skip reason and the run
 exits nonzero; any other selector, including `suite:<name>` on a listed suite, keeps SKIP as a
 non-failure, so the local battery is unchanged. The tier checks mechanisms on invented or absent
-data and never replaces the full local battery.
+data and never replaces the full local battery. A suite whose install reads sit in a few legs
+splits rather than staying off: those legs keep the original name and its `RequireData` gates, the
+rest move to a `<name>-core` suite on the tier, and no leg runs in both, so the local battery still
+makes every check once.
 
 **`RunCiSuites.ps1` is the CI engine stage, and runs locally on Linux or macOS the same way.** The
 `engine` job in `.github/workflows/checks.yml` runs it on `ubuntu-latest` after `dotnet build

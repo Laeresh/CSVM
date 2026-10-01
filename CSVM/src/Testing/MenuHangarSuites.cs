@@ -41,7 +41,10 @@ internal static class MenuHangarSuites
     private static readonly MenuCommands Right = new() { MoveX = 1 };
     private static readonly MenuCommands Left = new() { MoveX = -1 };
 
-    [Suite("menu-hangar-journey",
+    // No check here depends on the install: a label is Built-in's own or is read back through the
+    // string table the screen drew from. The paint art, which only the install has, is
+    // menu-hangar-journey's.
+    [Suite("menu-hangar-journey-core",
         "Built-in's hangar journey pinned end to end: a real LaunchMenu opens the flow from the Mode "
         + "screen's Build Custom Plane row and from the Instant Action plane pick's trailing row, "
         + "walks plane selection, airframe (the first confirm picks and an edited build's swap raises "
@@ -55,12 +58,11 @@ internal static class MenuHangarSuites
         + "draws the Purchase Now row refused with the hangar limit under it at the decoded slot cap "
         + "and live again one plane sold back, and drops an open build on a presentation switch; "
         + "every check is what the screens do today")]
-    internal static void MenuHangarJourney(TestContext ctx)
+    internal static void MenuHangarJourneyCore(TestContext ctx)
     {
-        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         var exits = new List<MenuExit>();
         var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
-        var menu = MenuSuiteHost.Build(ctx, host, seat, "menu-hangar-journey");
+        var menu = MenuSuiteHost.Build(ctx, host, seat, "menu-hangar-journey-core");
         ctx.Host.AddChild(menu);
         var store = menu.PlaneStore!;
         string scratch = ScratchName();
@@ -79,6 +81,29 @@ internal static class MenuHangarSuites
             CampaignPages(ctx, menu);
             CampaignSlotCap(ctx, menu);
             Delete(ctx, menu, store, scratch);
+        }
+        finally
+        {
+            ctx.Host.RemoveChild(menu);
+            menu.QueueFree();
+            MenuSuiteHost.DropScratchPlanes(ctx, "menu-hangar-journey-core");
+        }
+    }
+
+    [Suite("menu-hangar-journey",
+        "Built-in's hangar art from the install: the paint screen a walked Devastator build reaches "
+        + "composes a preview of its paint, and the --menu=paint aid's nose decal row shows the "
+        + "decal's own tile beside the rows")]
+    internal static void MenuHangarJourney(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var exits = new List<MenuExit>();
+        var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
+        var menu = MenuSuiteHost.Build(ctx, host, seat, "menu-hangar-journey");
+        ctx.Host.AddChild(menu);
+        try
+        {
+            PaintArt(ctx, menu);
         }
         finally
         {
@@ -321,7 +346,6 @@ internal static class MenuHangarSuites
         menu.Drive(Right);
         ctx.Check(flow.Scratch.PaintPattern != pattern && HangarPaintTables.Default.Available(flow.Scratch.PaintPattern, flow.Scratch.Airframe),
             $"Right steps to the next pattern this airframe may wear ({pattern} -> {flow.Scratch.PaintPattern})");
-        ctx.Check(flow.Page.Art != null, $"the paint screen composes a preview");
         menu.Drive(Back);
         ctx.Check(flow.Screen == HangarScreen.Hardpoints, $"Back returns to hardpoints ({flow.Screen})");
         menu.Drive(Accept);
@@ -441,7 +465,33 @@ internal static class MenuHangarSuites
         menu.ShowMenu("paint");
         ctx.Check(menu.Hangar?.Screen == HangarScreen.Paint && menu.Hangar.Scratch is { Airframe: 7, PaintPattern: 4, NoseDecal: 40 } && menu.ShownRow == HangarPaintPage.NoseDecalRow,
             $"--menu=paint opens the paint screen on a Fury in Fortune Hunters colours with a nose decal ({menu.Hangar?.Scratch.Airframe}, {menu.Hangar?.Scratch.PaintPattern}, {menu.Hangar?.Scratch.NoseDecal})");
-        ctx.Check(menu.Hangar?.Page.RowArt(menu.ShownRow) != null, $"with the decal's tile beside the rows");
+    }
+
+    // Both pieces of paint art are cut from the install's icon layers and decal sheet. Each is asked
+    // of a state the core journey reaches without it.
+    private static void PaintArt(TestContext ctx, LaunchMenu menu)
+    {
+        // The journey's build: a Devastator walked page by page to paint, one pattern stepped on.
+        menu.ShowMenu("airframe");
+        if (menu.Hangar is not { } flow)
+        {
+            ctx.Check(false, $"--menu=airframe opens the hangar flow ({menu.ShownScreen})");
+            return;
+        }
+
+        flow.FocusRow(HangarFeature.DefaultAirframe);
+        for (int guard = 0; flow.Screen != HangarScreen.Paint && guard < HangarFlow.Order.Length + 1; guard++)
+        {
+            menu.Drive(Accept);
+        }
+
+        menu.Drive(Right);
+        ctx.Check(flow.Screen == HangarScreen.Paint && flow.Page.Art != null,
+            $"the paint screen composes a preview ({flow.Screen}, airframe {flow.Scratch.Airframe}, pattern {flow.Scratch.PaintPattern})");
+
+        menu.ShowMenu("paint");
+        ctx.Check(menu.Hangar is { Screen: HangarScreen.Paint } paint && paint.Page.RowArt(menu.ShownRow) != null,
+            $"with the decal's tile beside the rows (--menu=paint, row {menu.ShownRow})");
     }
 
     private static void CampaignDoor(TestContext ctx, LaunchMenu menu)

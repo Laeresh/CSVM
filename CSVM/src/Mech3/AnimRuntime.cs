@@ -2197,11 +2197,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// it. A respawn re-poses only these, and leaves nodes other animators drive alone.</summary>
     internal bool HasPosed(Node3D node) => _rest.ContainsKey(node);
 
-    // Thin forwards into the pose family, kept here because their callers name this runtime:
-    // MotionRuntime.Create reads the landing-resume mark as `rt.ConsumeLandingResume`, the
-    // `ground-contact` suite arms it through `runtime.MarkLandingResume`, and OpacityFade and the
-    // zeppelin dormancy pose write through `rt.SetSubtreeOpacity`. The state and the bodies live
-    // in PoseChannel.
+    // Thin forwards into the pose family, kept here because their callers name this runtime.
+    // MotionRuntime.Create reads the landing-resume mark, and the ground-contact-core suite arms it.
+    // OpacityFade and the zeppelin dormancy pose write through SetSubtreeOpacity. The state and the
+    // bodies live in PoseChannel.
     internal bool ConsumeLandingResume(Node3D target) => Pose.ConsumeLandingResume(target);
 
     internal void MarkLandingResume(Node3D target) => Pose.MarkLandingResume(target);

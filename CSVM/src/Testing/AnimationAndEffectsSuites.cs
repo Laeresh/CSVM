@@ -147,15 +147,14 @@ internal static class AnimationAndEffectsSuites
 
     // ---- contact: the flight ends where the world says ------------------------------------------
 
-    // A gravity-bearing OBJECT_MOTION must be cut short by real geometry instead of running its
-    // authored RUN_TIME out below the terrain, through whichever of the two tiers its flags select, and
-    // must pick its BOUNCE_SEQUENCE branch from the surface it struck. Driven as a synthetic body
-    // thrown downward from a known height, so flight time, resting height and branch are predictable.
-    // ⚠ Keep the last case, the same bodies with no mask handed over, running their full clock far
-    // below the surface: without it a suite that fired no query at all would pass its landing checks.
-    [Suite("ground-contact",
-        "a gravity-bearing OBJECT_MOTION is cut short by real geometry through the right tier (default column, do_intersections sweep, no_altitude neither), rests on the surface and picks its BOUNCE_SEQUENCE branch from what it struck, and does none of it without a mask")]
-    internal static void GroundContact(TestContext ctx)
+    // A gravity-bearing OBJECT_MOTION is cut short by real geometry through the tier its flags select,
+    // and takes its BOUNCE_SEQUENCE branch from the surface it struck. Each body is built by hand and
+    // thrown down from a known height over the empty stage, so flight, rest and branch are predictable.
+    // ⚠ Keep the last case, whose unmasked bodies run their full clock far below the surface.
+    // Without it, a suite that fired no query would pass every landing check.
+    [Suite("ground-contact-core",
+        "a hand-built gravity-bearing OBJECT_MOTION over the empty stage's collider is cut short through the right tier (default column, do_intersections sweep, no_altitude neither), rests on the surface, picks its BOUNCE_SEQUENCE branch from what it struck, resumes a bounce from the landing without the dive's momentum, and does none of it without a mask")]
+    internal static void GroundContactCore(TestContext ctx)
     {
         const float Tick = 1f / 60f;
         const float Authored = 20f;      // the run time these bodies carry; contact must beat it
@@ -163,16 +162,17 @@ internal static class AnimationAndEffectsSuites
         const string Land = "testhit_ground";
         const string Wet = "testhit_water";
 
-        ctx.WithWorld(ctx.Chapter, collision: true, world =>
-        {
-            var runtime = world.Runtime;
-            var root = world.Session.Root;
+        // The motions' owner only keys them in the set and rides a landing to the dispatch this
+        // suite makes by hand, so any definition serves.
+        var owner = new AnimDefinition { Name = "ground-contact-owner", AnimName = "ground-contact-owner" };
 
+        WithMotionHost(ctx, "ground-contact-stage", ground: true, body: (root, runtime) =>
+        {
             // A suite that builds no colliders would pass every contact check by taking the
             // fallback and proving nothing, so the collision world is asserted before anything
             // else is asked of it.
             var space = root.GetWorld3D()?.DirectSpaceState;
-            ctx.Check(space != null, $"the world built a collision space to sweep against chapter={ctx.Chapter}");
+            ctx.Check(space != null, $"the stage built a collision space to sweep against");
             if (space == null)
             {
                 return;
@@ -183,7 +183,7 @@ internal static class AnimationAndEffectsSuites
             var from = new Vector3(0f, 400f, 0f);
             var probe = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
                 from, new Vector3(0f, -400f, 0f), CollisionLayers.World));
-            ctx.Check(probe.Count > 0, $"a downward probe finds chapter geometry chapter={ctx.Chapter}");
+            ctx.Check(probe.Count > 0, $"a downward probe finds the stage's ground");
             if (probe.Count == 0)
             {
                 return;
@@ -261,7 +261,7 @@ internal static class AnimationAndEffectsSuites
                     }
 
                     var set = new MotionSet();
-                    set.Add(motion, world.Runtime.Destructibles.All.First().Def, null);
+                    set.Add(motion, owner, null);
                     float flown = 0f;
                     string? bounce = null;
                     float cap = limit > 0f ? limit : Authored;
@@ -375,51 +375,6 @@ internal static class AnimationAndEffectsSuites
             ctx.Check(watchdog.Bounce == Land,
                 $"a watchdog end owes the default branch, from its null surface bounce={watchdog.Bounce ?? "(none)"}");
 
-            // The veto on REAL extracted data. Every case above builds its gravity block by hand, which pins
-            // the branch but not that no_altitude survives extraction and reaches Create at all. gunshell is
-            // its only author install-wide, and it is reachable because muzzleburst_effects CallAnimations it.
-            {
-                var shellDefs = world.Session.Program.ByAnimName("gunshell");
-                AnimData? shell = null;
-                foreach (var def in shellDefs)
-                {
-                    foreach (var seq in def.Sequences)
-                    {
-                        foreach (var ev in seq.Events)
-                        {
-                            if (ev.Kind == "ObjectMotion" && ev.Data.Obj("translation_range") != null)
-                            {
-                                shell ??= ev.Data;
-                            }
-                        }
-                    }
-                }
-
-                ctx.Check(shell != null,
-                    $"the chapter program carries gunshell's launch defs={shellDefs.Count} chapter={ctx.Chapter}");
-                if (shell != null)
-                {
-                    ctx.Check(shell.Obj("gravity")?.Bool("no_altitude") == true,
-                        $"and the extracted event still authors no_altitude value={shell.Obj("gravity")?.Bool("no_altitude")}");
-                    var node = new Node3D { Name = "ground-contact-gunshell" };
-                    root.AddChild(node);
-                    node.GlobalPosition = new Vector3(0f, surfaceY + DropHeight, 0f);
-                    uint maskWas = runtime.ContactMask;
-                    runtime.ContactMask = CollisionLayers.World;
-                    try
-                    {
-                        var casing = MotionRuntime.Create(runtime, node, shell, shell.Num("run_time") ?? 2f);
-                        ctx.Check(casing is { ContactTier: MotionContactTier.None },
-                            $"so the one def that opts out selects no tier even with a mask wired tier={casing?.ContactTier}");
-                    }
-                    finally
-                    {
-                        runtime.ContactMask = maskWas;
-                        node.QueueFree();
-                    }
-                }
-            }
-
             // The bounce is a CONTINUATION: the sequence a landing dispatches re-launches the very node that
             // landed, and MotionRuntime.Create ordinarily re-homes a ballistic launch to the node's authored
             // rest pose, which shows as the crash jumping back to the crash point once per piece.
@@ -436,7 +391,7 @@ internal static class AnimationAndEffectsSuites
                 {
                     var first = MotionRuntime.Create(runtime, node, Body(), Authored);
                     var set = new MotionSet();
-                    set.Add(first!, world.Runtime.Destructibles.All.First().Def, null);
+                    set.Add(first!, owner, null);
                     bool landed = false;
                     for (int i = 0; i < (int)(Authored / Tick) + 2 && !first!.Finished; i++)
                     {
@@ -541,6 +496,82 @@ internal static class AnimationAndEffectsSuites
             // ⚠ Two decoded rules are deliberately not asserted here. With a downward column, the
             // descending-step admission and complex's widening of it can only save the query, never change the
             // outcome; both are transcribed in TryGroundColumn, and the query's shape is what to re-check.
+        });
+    }
+
+    // The no_altitude veto on the shipped data. Every case in ground-contact-core builds its gravity
+    // block by hand, which pins the branch. It does not show that the flag survives extraction and
+    // reaches Create. The only author install-wide is gunshell, reachable because
+    // muzzleburst_effects CallAnimations it, so this suite reads the chapter's own program.
+    [Suite("ground-contact",
+        "the chapter program's own gunshell launch, the install's one no_altitude author, still carries the flag after extraction and selects no contact tier with the mask wired over a collidable chapter")]
+    internal static void GroundContact(TestContext ctx)
+    {
+        const float DropHeight = 60f;    // the height ground-contact-core drops its bodies from
+
+        ctx.WithWorld(ctx.Chapter, collision: true, world =>
+        {
+            var runtime = world.Runtime;
+            var root = world.Session.Root;
+
+            // The veto is asked over live colliders, so a world that built none is caught first.
+            var space = root.GetWorld3D()?.DirectSpaceState;
+            ctx.Check(space != null, $"the world built a collision space to sweep against chapter={ctx.Chapter}");
+            if (space == null)
+            {
+                return;
+            }
+
+            var probe = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                new Vector3(0f, 400f, 0f), new Vector3(0f, -400f, 0f), CollisionLayers.World));
+            ctx.Check(probe.Count > 0, $"a downward probe finds chapter geometry chapter={ctx.Chapter}");
+            if (probe.Count == 0)
+            {
+                return;
+            }
+
+            float surfaceY = probe["position"].AsVector3().Y;
+
+            // The casing's launch is gunshell's first ranged OBJECT_MOTION.
+            var shellDefs = world.Session.Program.ByAnimName("gunshell");
+            AnimData? shell = null;
+            foreach (var def in shellDefs)
+            {
+                foreach (var seq in def.Sequences)
+                {
+                    foreach (var ev in seq.Events)
+                    {
+                        if (ev.Kind == "ObjectMotion" && ev.Data.Obj("translation_range") != null)
+                        {
+                            shell ??= ev.Data;
+                        }
+                    }
+                }
+            }
+
+            ctx.Check(shell != null,
+                $"the chapter program carries gunshell's launch defs={shellDefs.Count} chapter={ctx.Chapter}");
+            if (shell != null)
+            {
+                ctx.Check(shell.Obj("gravity")?.Bool("no_altitude") == true,
+                    $"and the extracted event still authors no_altitude value={shell.Obj("gravity")?.Bool("no_altitude")}");
+                var node = new Node3D { Name = "ground-contact-gunshell" };
+                root.AddChild(node);
+                node.GlobalPosition = new Vector3(0f, surfaceY + DropHeight, 0f);
+                uint maskWas = runtime.ContactMask;
+                runtime.ContactMask = CollisionLayers.World;
+                try
+                {
+                    var casing = MotionRuntime.Create(runtime, node, shell, shell.Num("run_time") ?? 2f);
+                    ctx.Check(casing is { ContactTier: MotionContactTier.None },
+                        $"so the one def that opts out selects no tier even with a mask wired tier={casing?.ContactTier}");
+                }
+                finally
+                {
+                    runtime.ContactMask = maskWas;
+                    node.QueueFree();
+                }
+            }
         });
     }
 
@@ -743,11 +774,14 @@ internal static class AnimationAndEffectsSuites
 
     // The whole host a hand-built OBJECT_MOTION with no gravity reads: a parent node, and a bare
     // runtime for its rest pose, RNG and contact mask. A chapter world adds nothing such a body
-    // touches, so a suite on this host runs without an install.
-    // ⚠ Do not use it for a contact case: the mask stays 0, so every gravity body selects no tier.
-    internal static void WithMotionHost(TestContext ctx, string name, System.Action<Node3D, AnimRuntime> body)
+    // touches, so a suite on this host runs without an install. With ground, the parent is the
+    // empty stage's collidable grid, whose top face is y = 0.
+    // ⚠ Do not run a contact case here without setting the mask: it stays 0, so every gravity body selects no tier.
+    internal static void WithMotionHost(TestContext ctx, string name, System.Action<Node3D, AnimRuntime> body,
+        bool ground = false)
     {
-        var root = new Node3D { Name = name };
+        var root = ground ? EmptyStage.Build(collision: true).Root : new Node3D();
+        root.Name = name;
         var runtime = new AnimRuntime { AutoStart = false, ManualAdvance = true };
         ctx.Host.AddChild(root);
         ctx.Host.AddChild(runtime);

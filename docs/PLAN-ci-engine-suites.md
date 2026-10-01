@@ -327,6 +327,18 @@ No coverage is lost: neither moved suite used C1's terrain (both built the world
 nothing, and the chapter runtime's contact mask and inherited velocity never reach a body with no
 gravity block.
 
+**Splits.** Three suites now run as an install-free `-core` half on the tier and a data half under
+the original name and gate, and no check runs in both. `ground-contact-core` carries every
+hand-built case of `ground-contact` over the empty stage's collider (`WithMotionHost` with
+`ground: true`, a hand-built `AnimDefinition` as the owner); `ground-contact` keeps only the
+extracted `gunshell` leg on C1. `menu-hangar-journey-core` is the hangar journey less its two art
+checks, which `menu-hangar-journey` keeps (the paint preview on a walked Devastator, the decal tile
+under `--menu=paint`). `menu-instant-action-journey-core` is the Instant Action journey less the ace
+check, which `menu-instant-action-journey` keeps on a Girl Trouble launch from Sky Haven. The tier
+holds 56 suites, all PASS headless with an empty data root, and the three originals SKIP there as
+before. The author's run should show all six PASS; the core contact legs now land on the stage's
+flat ground at y = 0 instead of C1's terrain at the origin.
+
 **Original approach (kept for reference).**
 
 **Goal.** `ground-contact`, `forward-rotation` and `launch-direction-cache` run on the code-built
