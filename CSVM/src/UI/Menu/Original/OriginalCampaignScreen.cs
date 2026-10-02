@@ -1452,15 +1452,17 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             return;
         }
 
+        // A guest with no callsign is asked about by the player tag its chip shows.
         var guest = machines[from];
+        string name = guest.Name.Length > 0 ? guest.Name : SplitScreen.PlayerTag(guest.Slot);
         var boot = Yes(() => net.Boot(guest.Peer));
         if (from + 1 < machines.Count)
         {
-            _host.RaiseDialog(CoopDoorText.BootQuestion(guest.Name), DialogIcon.Query, boot, NoCentred(() => AskBoot(from + 1)), Cancel());
+            _host.RaiseDialog(CoopDoorText.BootQuestion(name), DialogIcon.Query, boot, NoCentred(() => AskBoot(from + 1)), Cancel());
             return;
         }
 
-        _host.RaiseDialog(CoopDoorText.BootQuestion(guest.Name), DialogIcon.Query, boot, No());
+        _host.RaiseDialog(CoopDoorText.BootQuestion(name), DialogIcon.Query, boot, No());
     }
 
     private void OpenCoopDoor()

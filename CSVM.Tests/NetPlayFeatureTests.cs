@@ -1126,6 +1126,44 @@ public class NetPlayFeatureTests
         Assert.Equal(3, host.CoopGuests.Count);
     }
 
+    [Fact]
+    public void EveryCoopSeatIsNamedByItsCallsignOnEveryMachine()
+    {
+        var mesh = LoopbackTransport.Mesh(4, Clean, new Random(59));
+        var host = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]) { PlayerName = "Zachary" };
+        host.OpenCoopHost(NetSeats.MaxPlayers - 1);
+        host.Offer(3, "Zachary", 1);
+        string[] callsigns = { "Nathan", "", "Sheila" };
+        var guests = new List<NetPlayFeature>();
+        for (int i = 1; i < mesh.Count; i++)
+        {
+            int end = i;
+            var guest = new NetPlayFeature((_, _, _) => mesh[end], (_, _) => mesh[end]) { PlayerName = callsigns[i - 1] };
+            guest.OpenJoin();
+            guests.Add(guest);
+        }
+
+        for (int frame = 0; frame < 6; frame++)
+        {
+            host.Step(0.016);
+            guests.ForEach(guest => guest.Step(0.016));
+        }
+
+        // The host reads each guest's callsign off its pick; a guest with none goes by its tag.
+        string[] want = { "Zachary", "Nathan", "", "Sheila" };
+        Assert.Equal(want, Enumerable.Range(0, 4).Select(host.CoopSeatName).ToArray());
+
+        // Each guest reads the host's and the other guests' off the host's player list.
+        foreach (var guest in guests)
+        {
+            Assert.True(guest.IsCoopGuest);
+            Assert.Equal(want, Enumerable.Range(0, 4).Select(guest.CoopSeatName).ToArray());
+        }
+
+        // ABLE-TO-FAIL CONTROL: a slot past the field names nobody.
+        Assert.Equal("", guests[0].CoopSeatName(4));
+    }
+
     // A co-op host with one local seat and one guest seated behind it, both on their boards.
     private static (NetPlayFeature Host, NetPlayFeature Guest) CoopPair(int seed)
     {

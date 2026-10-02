@@ -50,6 +50,9 @@ public static class NetDoorAid
     /// <summary>The version of the one sample game this build does not play with.</summary>
     public static NetBuildVersion OtherVersion { get; } = new(0, 2);
 
+    /// <summary>The callsigns a co-op aid's guests go by, in player order after the host.</summary>
+    public static IReadOnlyList<string> GuestNames { get; } = new[] { "Nathan", "Sheila", "Lucy" };
+
     /// <summary>The games the aid's LAN answers with, each at its own documentation address. They
     /// are a campaign waiting with room, one full, one in the air, a Dogfight, and a Dogfight on a
     /// build of another version.</summary>
@@ -121,15 +124,26 @@ public static class NetDoorAid
     }
 
     /// <summary>Answers Ready on <paramref name="airframe"/> for the guest at <paramref name="guest"/>,
-    /// under the round <paramref name="host"/> has under way, and lets the host hear it.</summary>
-    public static void AnswerReady(NetPlayFeature host, INetTransport guest, int airframe)
+    /// under the round <paramref name="host"/> has under way, and lets the host hear it. The pick
+    /// carries <paramref name="name"/> as the guest's callsign.</summary>
+    public static void AnswerReady(NetPlayFeature host, INetTransport guest, int airframe, string name = "")
     {
         ArgumentNullException.ThrowIfNull(host);
         ArgumentNullException.ThrowIfNull(guest);
-        Span<byte> bytes = stackalloc byte[CoopPickMessage.Size];
-        new CoopPickMessage(host.CoopEpoch, true, (byte)airframe).Write(bytes);
-        guest.Send(guest.Peers[0], bytes, NetReliability.Reliable);
-        host.Step(0.0);
+        Answer(host, guest, new CoopPickMessage(host.CoopEpoch, true, (byte)airframe, default, name));
+    }
+
+    /// <summary>Has each of <paramref name="guests"/> answer <paramref name="host"/> with a pick that
+    /// is not Ready, carrying its callsign from <see cref="GuestNames"/>, as a guest that answered
+    /// Player Information does.</summary>
+    public static void NameGuests(NetPlayFeature host, IReadOnlyList<INetTransport> guests)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+        ArgumentNullException.ThrowIfNull(guests);
+        for (int i = 0; i < guests.Count && i < GuestNames.Count; i++)
+        {
+            Answer(host, guests[i], new CoopPickMessage(host.CoopEpoch, false, CoopGuestPick.StarterAirframe, default, GuestNames[i]));
+        }
     }
 
     /// <summary>A shut Dogfight host door and two shut guest doors, all on one loopback wire. The
@@ -259,7 +273,8 @@ public static class NetDoorAid
     /// <summary>A door joined as <see cref="JoinedGuest"/> that has also heard its host name its
     /// boards as <paramref name="flow"/>, so a guest's campaign follows them. When given, the host
     /// has first named its hangar as <paramref name="hangar"/>. With <paramref name="ready"/> the
-    /// guest has answered Ready under that round.</summary>
+    /// guest has answered Ready under that round. The host goes by <see cref="HostName"/> and each
+    /// guest by <see cref="GuestNames"/> in player order, this one included.</summary>
     public static NetPlayFeature CoopGuest(CoopFlowMessage flow, bool ready, IReadOnlyList<CoopHangarMessage>? hangar = null)
     {
         var door = Joined(flow.MissionSeq, flow.Humans, out var host);
@@ -269,6 +284,17 @@ public static class NetDoorAid
             plane.Write(word);
             host.Send(host.Peers[0], word, NetReliability.Reliable);
         }
+
+        var rows = new List<DogfightLobbySeat> { new(HostName, 0, false, true) };
+        for (int slot = 1; slot < flow.Humans; slot++)
+        {
+            rows.Add(new DogfightLobbySeat(slot - 1 < GuestNames.Count ? GuestNames[slot - 1] : "", 0, false, false));
+        }
+
+        door.PlayerName = flow.Slot >= 1 && flow.Slot - 1 < GuestNames.Count ? GuestNames[flow.Slot - 1] : "";
+        Span<byte> names = stackalloc byte[DogfightRosterMessage.Size];
+        new DogfightRosterMessage(0, flow.Slot, rows).Write(names);
+        host.Send(host.Peers[0], names, NetReliability.Reliable);
 
         Span<byte> bytes = stackalloc byte[CoopFlowMessage.Size];
         flow.Write(bytes);
@@ -339,6 +365,14 @@ public static class NetDoorAid
         door.Step(0.0);
         host = mesh[0];
         return door;
+    }
+
+    private static void Answer(NetPlayFeature host, INetTransport guest, CoopPickMessage pick)
+    {
+        Span<byte> bytes = stackalloc byte[CoopPickMessage.Size];
+        pick.Write(bytes);
+        guest.Send(guest.Peers[0], bytes, NetReliability.Reliable);
+        host.Step(0.0);
     }
 
     private static INetTransport Carrier(INetTransport end, AidInternet internet) =>

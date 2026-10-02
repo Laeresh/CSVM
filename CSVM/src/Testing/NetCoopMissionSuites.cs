@@ -617,7 +617,10 @@ internal static class NetCoopMissionSuites
         mine.WarpTo(new Vector3(p[0], p[1], p[2]), 0f, 0f);
         mine.Held = true;
         steps = 0;
-        for (; steps < SkipWindowSteps && (!graph.CompletedOf(CabbieDelivered) || !theirs.Inert); steps++)
+        // A lossy link may deliver the removal and the replayed objective steps apart. The window
+        // therefore waits on every condition the checks below read.
+        for (; steps < SkipWindowSteps && (!graph.CompletedOf(CabbieDelivered) || !theirs.Inert || !replica.CompletedOf(CabbieDelivered));
+             steps++)
         {
             FlyOnce(ends, doors);
         }

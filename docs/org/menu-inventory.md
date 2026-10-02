@@ -297,10 +297,10 @@ named in it; `WaveEdit` is the twelfth and has no aid, which is the warning unde
 | `campaign-planeselection[:export]` | plane selection, or its export messagebox | `Campaign` |
 | `campaign-hangar` | the hangar over the profile's wallet | `Campaign` → `Hangar` |
 | `campaign-fly` | walks a real profile to Fly Mission and launches | `Campaign` |
-| `campaign-coop[:guests[:code\|offline]]` | the cabin with the co-op network door open over a loopback wire holding that many guests (0 by default), its band and remote chips drawn; Original draws the same pose with its CLOSE NETWORK plaque, and its second argument poses a master server that listed the host under `K7Q-X3M` (`code`, the band names the code and PRIVATE and no address) or one the host cannot reach (`offline`, the band says why there is no code) | `Campaign` |
+| `campaign-coop[:guests[:code\|offline]]` | the cabin with the co-op network door open over a loopback wire holding that many guests (0 by default), its band and remote chips drawn; Original draws the same pose with its CLOSE NETWORK plaque, its chips naming the host Zachary and the guests Nathan, Sheila and Lucy, and its second argument poses a master server that listed the host under `K7Q-X3M` (`code`, the band names the code and PRIVATE and no address) or one the host cannot reach (`offline`, the band says why there is no code) | `Campaign` |
 | `campaign-coop-ask` | Original only: HOST CO-OP's GAME INFORMATION over the cabin on the aids' sample answer, its Listing chooser on Private | `Campaign` |
-| `campaign-coop-guest[:board]` | Original only: a co-op guest joined to a loopback host, standing on the board the host names (`cabin` by default, `briefing`, `flightcheck`, `ready`, `debrief`), the host's rows greyed and the guest band drawn, on the first plane of the host's hangar no earlier seat flies, with its own plane and ammo pickers; `ready` is the check after the guest's Ready, `debrief` the host's won result | `Campaign` |
-| `campaign-coop-ready` | Original only: a co-op host's flight check with two guests, the first Ready and the second not, so FLY MISSION is greyed and the strip's chips say Ready | `Campaign` |
+| `campaign-coop-guest[:board]` | Original only: a co-op guest joined to a loopback host, standing on the board the host names (`cabin` by default, `briefing`, `flightcheck`, `ready`, `debrief`), the host's rows greyed and the guest band drawn, on the first plane of the host's hangar no earlier seat flies, with its own plane and ammo pickers, its chips naming the host Zachary, itself Nathan and the third human Sheila; `ready` is the check after the guest's Ready, `debrief` the host's won result | `Campaign` |
+| `campaign-coop-ready` | Original only: a co-op host's flight check with two guests, the first Ready and the second not, so FLY MISSION is greyed and the strip's chips say Ready, named as `campaign-coop` names them | `Campaign` |
 | `connection` | Original only: the Multiplayer Connection page | out of scope |
 | `connection:gameinfo`, `connection:playerinfo` | Original only: the Connection page with GAME INFORMATION or PLAYER INFORMATION standing over it on the aids' sample answer (game and callsign Zachary, eight players, Gruff Male), over an in-process door | out of scope |
 | `connection:code` | Original only: the Connection page over an in-process door with a master server set, Join by code picked with `K7Q-X3M` in its box and the cursor there | out of scope |
@@ -593,7 +593,10 @@ constants rather than reading a layout.
   The band line naming the code (else the address) carries a COPY control, a 44-wide box at the
   band's right end whose row spans the line, a stop just before the door in the cursor's walk; the
   line names Ctrl+C only after a key last moved the cursor. The original has no co-op campaign, so
-  no script describes it.
+  no script describes it. On every machine the seat strip calls each seat by the callsign its
+  player gave Player Information, a seat with none by its player tag, and the band counts the
+  guests, as the lobby's player count (10048) stands over its named list. BOOT asks about a guest
+  by the same word its chip shows.
 
 ### Screen by screen
 

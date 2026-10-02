@@ -600,6 +600,45 @@ public sealed class NetPlayFeature : IMenuFeature
     // The cap this host's advert names and its admission keeps: the chosen one inside its kind's.
     private int HostCap => MaxPlayers > 0 ? NetPlayerInfo.ClampPlayers(_kind, MaxPlayers) : NetPlayerInfo.PlayerCap(_kind);
 
+    /// <summary>The callsign of co-op player <paramref name="slot"/>, counted from 0 in player order,
+    /// or "" for a seat with none, which goes by its player tag. A seat's first player at its machine
+    /// goes by <see cref="PlayerName"/> there. A host reads each guest's from its pick, and a guest
+    /// reads every other seat's from the host's player list.</summary>
+    public string CoopSeatName(int slot)
+    {
+        if (IsCoopHost)
+        {
+            if (slot < _localPlayers)
+            {
+                return slot == 0 ? PlayerName : "";
+            }
+
+            foreach (var guest in CoopGuests)
+            {
+                if (guest.Slot == slot)
+                {
+                    return guest.Name;
+                }
+            }
+
+            return "";
+        }
+
+        if (CoopFlow is not { } flow)
+        {
+            return "";
+        }
+
+        int local = slot - flow.Slot;
+        if (local >= 0 && local < CoopSeats)
+        {
+            return local == 0 ? PlayerName : "";
+        }
+
+        var rows = _transport?.DogfightRoster?.Rows;
+        return rows != null && slot >= 0 && slot < rows.Count ? rows[slot].Name : "";
+    }
+
     /// <summary>Takes what the Game and Player Information boxes answered. The callsign, the voice
     /// and the password are always taken: a host's from Game Information, a joining player's from
     /// Player Information. The game's name, cap and Public or Private choice are taken when
@@ -1569,12 +1608,20 @@ public sealed class NetPlayFeature : IMenuFeature
         }
 
         var seated = new List<(int Peer, int Seats)>(_admitted.Count);
+        int humans = _localPlayers;
         foreach (int peer in _admitted)
         {
             seated.Add((peer, GrantedTo(peer)));
+            humans += GrantedTo(peer);
         }
 
-        HostFlow.Send(_transport, seated, _localPlayers, _epoch, ReadyNow);
+        var names = new string[humans];
+        for (int slot = 0; slot < humans; slot++)
+        {
+            names[slot] = CoopSeatName(slot);
+        }
+
+        HostFlow.Send(_transport, seated, _localPlayers, _epoch, ReadyNow, names);
     }
 
     // At once rather than on the next step, so a film's end reaches a guest before the board after it.

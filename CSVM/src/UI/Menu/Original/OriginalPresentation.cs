@@ -1187,14 +1187,17 @@ public sealed class OriginalPresentation : IMenuPresentation
             case CampaignCoopAid:
                 // The cabin with its network door open over the aids' loopback door, the same pose
                 // as Built-in's aid of this name. The colon arguments are the guests on its wire and
-                // what its master server does.
+                // what its master server does. The host and each guest go by a callsign.
                 _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
                 string[] coop = argument.Split(':');
                 int.TryParse(coop[0], System.Globalization.NumberStyles.None,
                     System.Globalization.CultureInfo.InvariantCulture, out int guests);
-                var door = NetDoorAid.Host(guests, out _, out _, NetDoorAid.InternetOf(coop.Length > 1 ? coop[1] : string.Empty));
+                var door = NetDoorAid.Host(guests, out _, out var named, NetDoorAid.InternetOf(coop.Length > 1 ? coop[1] : string.Empty));
+                door.PlayerName = NetDoorAid.HostName;
                 _shell.StandInNetDoor(door);
                 NetDoorAid.OpenCoopHost(door, CampaignAidProfiles.MissionsFlown, localPlayers: 1);
+                _shell.StepNet(0.0);
+                NetDoorAid.NameGuests(door, named);
                 _shell.StepNet(0.0);
                 argument = string.Empty;
                 break;
@@ -1212,11 +1215,14 @@ public sealed class OriginalPresentation : IMenuPresentation
             case CampaignCoopReadyAid:
                 _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
                 var ready = NetDoorAid.Host(2, out _, out var guestEnds);
+                ready.PlayerName = NetDoorAid.HostName;
                 _shell.StandInNetDoor(ready);
                 NetDoorAid.OpenCoopHost(ready, CampaignAidProfiles.MissionsFlown, localPlayers: 1);
                 _shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignFlightCheck);
                 _shell.StepNet(0.0);
-                NetDoorAid.AnswerReady(ready, guestEnds[0], _shell.Campaign.SeatedAirframe ?? HangarFeature.DefaultAirframe);
+                NetDoorAid.NameGuests(ready, guestEnds);
+                NetDoorAid.AnswerReady(ready, guestEnds[0], _shell.Campaign.SeatedAirframe ?? HangarFeature.DefaultAirframe,
+                    NetDoorAid.GuestNames[0]);
                 _shell.StepNet(0.0);
                 break;
             case "campaign-previous":

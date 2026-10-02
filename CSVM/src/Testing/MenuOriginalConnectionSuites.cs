@@ -45,8 +45,8 @@ internal static class MenuOriginalConnectionSuites
         + "Private host still gives, and CLOSE "
         + "NETWORK gives all three back, the Multiplayer plaque opens the Connection page, which with no "
         + "master server greys its Join by code way and says why, its Connect over LAN TCP/IP lists the host as one row of five columns, Join Game lands the "
-        + "guest on the host's cabin after PLAYER INFORMATION, a second guest joins, the host's chips "
-        + "name both guests by their callsigns, a fourth human is seated and a fifth is "
+        + "guest on the host's cabin after PLAYER INFORMATION, a second guest joins, every machine's chips "
+        + "name the host and both guests by their callsigns, a fourth human is seated and a fifth is "
         + "refused as full, a silent drop tells a guest the host left, and CLOSE NETWORK tells the "
         + "other the host closed the game and puts it back on the Connection page")]
     internal static void TheConnectionPage(TestContext ctx)
@@ -118,6 +118,9 @@ internal static class MenuOriginalConnectionSuites
             Pump(ends.ToArray());
             ctx.Check(DrawsOver(host.Shell.Compose(), "Nathan" + LaunchMenu.RemoteChipMark) && DrawsOver(host.Shell.Compose(), "Sheila" + LaunchMenu.RemoteChipMark),
                 $"the host's chips name each guest by its callsign ({string.Join(", ", hostDoor.CoopGuests.Select(g => g.Name))})");
+            ChipsNamed(ctx, host, "the host", "Zachary", "Nathan" + LaunchMenu.RemoteChipMark, "Sheila" + LaunchMenu.RemoteChipMark);
+            ChipsNamed(ctx, told, "the first guest", "Zachary" + LaunchMenu.RemoteChipMark, "Nathan", "Sheila" + LaunchMenu.RemoteChipMark);
+            ChipsNamed(ctx, dropped, "the second guest", "Zachary" + LaunchMenu.RemoteChipMark, "Nathan" + LaunchMenu.RemoteChipMark, "Sheila");
             FillTheGame(ctx, ends, hostDoor, doors[3], doors[4]);
             DropOne(ctx, dropped, mesh[0], mesh[2].LocalPeer);
             CloseTheGame(ctx, host, told, ends, hostDoor, unmapped);
@@ -3114,6 +3117,16 @@ internal static class MenuOriginalConnectionSuites
             $"and the advert reads full ({hostDoor.Advertising?.Status}, {hostDoor.Advertising?.Players})");
         ctx.Check(fifth.Stage == NetDoorStage.Failed && fifth.Fault == CoopDoorText.GameFull,
             $"a fifth human is refused as full ({fifth.Stage}, {fifth.Fault})");
+    }
+
+    // Every machine's strip names all three pilots by the callsigns Player Information gave them,
+    // its own unmarked. A tag in place of a name means a callsign never crossed the wire.
+    private static void ChipsNamed(TestContext ctx, End end, string who, params string[] chips)
+    {
+        var drawn = end.Shell.Compose().Overlays.SelectMany(panel => panel.Lines).Select(line => line.Text).ToList();
+        var tags = drawn.Where(text => text.StartsWith('P') && text.Length > 1 && char.IsDigit(text[1])).ToList();
+        ctx.Check(chips.All(drawn.Contains) && tags.Count == 0,
+            $"{who}'s strip names every pilot by its callsign ({string.Join(" | ", chips.Where(drawn.Contains))}; tags {string.Join(" | ", tags)})");
     }
 
     // A link cut with no close notice reads as the host leaving. The page takes the guest back to

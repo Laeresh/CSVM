@@ -1053,7 +1053,13 @@ guest back from flight joins a film still playing. A launch ends a guest's film 
 guest flies with its host. A guest a patch older drops `0x5A` as unknown and plays no film.
 The name is the guest's callsign from Player Information, else its last-played pilot read without
 writing, and the host's roster calls the guest by it; a guest with neither is called by its player
-number. The host's own first seat takes the host's callsign the same way. A guest leaving the flight
+number. The host's own first seat takes the host's callsign the same way. A guest learns every
+other seat's callsign from the Dogfight roster `0x54`, which the host also sends each co-op guest
+before its flow and again whenever a name changes: one row per human in player order, carrying the
+name alone, the host's row marked and the reading guest's first seat as its own row, with no Ready,
+no airframe and round 0, since the flow carries the Ready marks. A build a patch older keeps the
+list unread, since its co-op guest stands no Dogfight lobby, and a guest of a host that sends none
+calls those seats by their player tags. A guest leaving the flight
 through its pause sheet sets the left flag, and the host takes its seat out at once, as it does
 for a dropped link.
 

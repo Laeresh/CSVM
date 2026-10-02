@@ -222,8 +222,9 @@ internal static class MenuOriginalCoopFlowSuites
         ctx.Check(Row(host.Shell, nameof(BoardButton.FlyMission)) is { Enabled: false } && field.Current == 0,
             $"ABLE-TO-FAIL CONTROL: before any Ready the host's FLY MISSION is greyed, the guest on its first check");
         var chips = guest.Shell.Compose().Overlays.SelectMany(panel => panel.Lines).Select(line => line.Text).ToArray();
-        ctx.Check(chips.Contains("P2") && chips.Contains("P3") && chips.Contains("P1" + CSVM.UI.Screens.LaunchMenu.RemoteChipMark),
-            $"the guest's strip marks P2 and P3 its own and P1 the host's ({string.Join(" | ", chips)})");
+        string hostChip = host.Door.PlayerName + CSVM.UI.Screens.LaunchMenu.RemoteChipMark;
+        ctx.Check(host.Door.PlayerName.Length > 0 && chips.Contains("P2") && chips.Contains("P3") && chips.Contains(hostChip),
+            $"the guest's strip marks P2 and P3 its own and names the host's seat by its callsign ({string.Join(" | ", chips)})");
         ClickRow(ctx, guest, nameof(BoardButton.FlyMission));
         Pump(host, guest, frames: 4);
         ctx.Check(field.Current == 1 && guest.Shell.Screen == OriginalScreen.CampaignFlightCheck,

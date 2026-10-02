@@ -280,6 +280,10 @@ member, and it does not go here.
   tests on pool threads, so the item lands in the blocked thread's local queue, which other threads
   steal from only when the global queue is empty. Give such work its own thread.** The extraction
   worker's cancel test failed 4 of 13 full unit passes with the item never started after 10 s.
+- **DET-17**, **A lossy-loopback suite waits on every condition its checks read, since one seeded
+  loss draw serves every send on the mesh and one more message anywhere reshuffles which words
+  land together.** One added lobby message delivered the Cabbie's removal a step before its replayed
+  objective, and a window that waited on the removal alone failed its check.
 
 ## PERF, performance
 

@@ -8,14 +8,15 @@ namespace CSVM.UI.Menu;
 /// <summary>
 /// What a co-op host names to its guests about its boards: the board, the mission, the progress,
 /// the hangar it offers and the debrief's result. Each hangar plane names its holding seat. It also
-/// holds the film it shares. It builds each guest's flow and hangar words and sends one again only
-/// when it changed. The round of picks is the door's, so the door advances it on <see cref="Show"/>'s
+/// holds the film it shares. It builds each guest's flow, hangar words and player list of callsigns,
+/// and sends one again only when it changed. The round of picks is the door's, so the door advances it on <see cref="Show"/>'s
 /// answer and hands it to every send.
 /// </summary>
 public sealed class CoopHostFlow
 {
     private readonly Dictionary<int, CoopFlowMessage> _sent = new();
     private readonly Dictionary<int, CoopHangarMessage[]> _hangarSent = new();
+    private readonly Dictionary<int, DogfightRosterMessage> _namesSent = new();
     private CoopHangarMessage[] _hangar = Array.Empty<CoopHangarMessage>();
     private int[] _seatPlanes = Array.Empty<int>();
     private byte _seq;
@@ -99,15 +100,17 @@ public sealed class CoopHostFlow
     }
 
     // Each guest's flow differs only in its own player number and its seat count; one goes out
-    // whenever it changed. A guest's seats follow one another from its number. The hangar words go
-    // first, so a guest opening its campaign on the flow already holds them.
+    // whenever it changed. A guest's seats follow one another from its number. The hangar words and
+    // the player list go first, so a guest opening its campaign on the flow already holds them.
     internal void Send(NetLobby wire, IReadOnlyList<(int Peer, int Seats)> seated, int localPlayers, byte round,
-        Func<int, int, bool> readyNow)
+        Func<int, int, bool> readyNow, IReadOnlyList<string> names)
     {
         foreach (var (peer, _) in seated)
         {
             SendHangar(wire, peer);
         }
+
+        SendNames(wire, seated, localPlayers, names);
 
         byte mask = 0;
         int slot = localPlayers;
@@ -145,6 +148,7 @@ public sealed class CoopHostFlow
             {
                 _sent.Remove(peer);
                 _hangarSent.Remove(peer);
+                _namesSent.Remove(peer);
             }
         }
     }
@@ -154,6 +158,7 @@ public sealed class CoopHostFlow
     {
         _sent.Clear();
         _hangarSent.Clear();
+        _namesSent.Clear();
     }
 
     internal CoopFilmMessage StartFilm(NetCoopFilm film, int chapter)
@@ -181,6 +186,7 @@ public sealed class CoopHostFlow
     {
         _sent.Clear();
         _hangarSent.Clear();
+        _namesSent.Clear();
         _hangar = Array.Empty<CoopHangarMessage>();
         _seatPlanes = Array.Empty<int>();
         Screen = NetCoopScreen.Cabin;
@@ -204,6 +210,32 @@ public sealed class CoopHostFlow
         }
 
         return false;
+    }
+
+    // Every player's callsign rides the Dogfight lobby's player list, names alone: no Ready, no
+    // airframe, round 0, the host's row marked. A build a patch older keeps it unread, since its
+    // co-op guest stands no Dogfight lobby. Each guest's list marks its own first seat.
+    private void SendNames(NetLobby wire, IReadOnlyList<(int Peer, int Seats)> seated, int localPlayers, IReadOnlyList<string> names)
+    {
+        var rows = new DogfightLobbySeat[Math.Min(names.Count, DogfightRosterMessage.MaxRows)];
+        for (int slot = 0; slot < rows.Length; slot++)
+        {
+            rows[slot] = new DogfightLobbySeat(names[slot] ?? "", 0, false, slot == 0);
+        }
+
+        int first = localPlayers;
+        foreach (var (peer, seats) in seated)
+        {
+            var list = new DogfightRosterMessage(0, (byte)Math.Min(first, byte.MaxValue), rows);
+            first += seats;
+            if (_namesSent.TryGetValue(peer, out var told) && told == list)
+            {
+                continue;
+            }
+
+            wire.Tell(peer, list);
+            _namesSent[peer] = list;
+        }
     }
 
     // Every word this peer has not heard as it stands now.

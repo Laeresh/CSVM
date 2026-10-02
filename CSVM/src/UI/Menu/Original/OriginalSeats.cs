@@ -264,16 +264,17 @@ public sealed partial class OriginalShell
                 int local = slot - flow.Slot;
                 bool own = local >= 0 && local < guest.CoopSeats;
                 bool ready = own ? guest.CoopReadyAt(local) : flow.IsReady(slot);
-                chips.Add(Chip(slot, own, ready, own && local == 0 ? guest.PlayerName : ""));
+                chips.Add(Chip(slot, own, ready, guest.CoopSeatName(slot)));
             }
 
             return chips;
         }
 
+        // A co-op host's own first seat goes by its callsign, as a lobby host's row does.
         var seats = _setup.Seats;
         for (int i = 0; i < seats.Count; i++)
         {
-            chips.Add(new CampaignChip(SplitScreen.PlayerTag(i), i, 1, true, false));
+            chips.Add(Chip(i, true, false, _net is { IsCoopHost: true } open ? open.CoopSeatName(i) : ""));
         }
 
         if (_net is { IsCoopHost: true } host)
