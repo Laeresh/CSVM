@@ -146,8 +146,10 @@ $pass = [Convert]::ToBase64String($hmac.ComputeHash([Text.Encoding]::UTF8.GetByt
 On the Trickle ICE page, add `turn:csvm.example.org:3478` with that username and password, set
 *ICE transports* to *relay*, and gather. A row of type `relay` showing the VPS's address means
 TURN works. An `authentication` error means the secret in `.env` and the one you typed differ.
-From the VPS itself, `docker compose exec coturn turnutils_uclient -u "$USER" -w "$PASS" -y
-127.0.0.1` runs coturn's own client against it as well.
+From the VPS itself, `docker compose exec -T coturn turnutils_uclient -c -u "$USER" -w "$PASS" -y
+<PUBLIC_IP>` runs coturn's own client against it as well, and should end with `Total lost packets 0`.
+Keep the `-c`: without it the client opens an RTCP relay beside each one, five relays for one
+credential, and coturn's quota of four answers `486 Allocation Quota Reached`.
 
 **Signalling.** The game itself is the check: see the next section.
 
@@ -216,7 +218,10 @@ The same three pieces, installed from the distribution:
 4. Copy `systemd/csvm-master.service` to `/etc/systemd/system/`, then
    `sudo systemctl daemon-reload && sudo systemctl enable --now csvm-master`.
 5. Copy `coturn/turnserver.conf` to `/etc/turnserver.conf` and append
-   `static-auth-secret=...`, `realm=csvm.example.org` and `external-ip=203.0.113.10`; set
+   `static-auth-secret=...`, `realm=csvm.example.org`, `external-ip=203.0.113.10`,
+   `listening-ip=203.0.113.10`, `listening-ip=127.0.0.1` and `relay-ip=203.0.113.10` (unbound,
+   coturn also relays on every other address the host has, such as Docker's bridges, while
+   `external-ip` names the public one in every allocation, so those relays never connect); set
    `TURNSERVER_ENABLED=1` in `/etc/default/coturn` if your distribution has that file, then
    `sudo systemctl restart coturn`.
 6. Put this in `/etc/caddy/Caddyfile` and `sudo systemctl reload caddy`:
@@ -232,7 +237,8 @@ Then the checks in step 6.
 ## What was not verified
 
 The server, its socket and the game's client code are covered by tests that run in memory, and a
-WebRTC link between two game peers was negotiated and carried traffic inside one process. These
-steps were written without a VPS: Docker, Caddy and coturn were not run, so the compose file,
-the Caddyfile, the coturn configuration and the systemd unit are untested as written, and no link
-has crossed two real NATs or a TURN relay yet.
+WebRTC link between two game peers was negotiated and carried traffic inside one process. The
+Docker path (steps 1 to 6) has run on a Debian 13 VPS: the certificate, the games list over HTTPS,
+and TURN over UDP and TCP through the public address all answered. The STUN check from a home
+network, the path without Docker and the systemd unit have not been run, and no game link has
+crossed two real NATs or a TURN relay yet.
