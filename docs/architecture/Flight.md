@@ -795,8 +795,11 @@ latched until it is outside all of them. `Session/World/RearmRuntime.cs` runs it
 ## src/Flight/Modes/ScoreStore.cs
 Stunt best-time persistence: one JSON object in `user://stunt_scores.json` keyed
 `chapter/mission/plane`, with `GetBest` and `RecordIfBest`, which never worsens a record and
-answers whether the run was a new best. The public `Load()` always opens the player's own file;
-the internal path overload exists only so a suite can point at a throwaway directory instead.
+answers whether the run was a new best. A session takes its store from
+`ForSession(spec.ScoresPath, spec.ScoresThrowaway)`: the `--scores=` file, an in-memory throwaway
+that never saves when `SessionSpec.ScoresThrowaway` holds (`--det`, a scripted run,
+`--debug-scoreboard`), else the player's own file. The internal overloads let a suite name the
+file instead; `stunt-scores-scripted` pins the choice.
 `CustomPlaneStore` is the same file-backed shape for a heavier record.
 
 ## src/Flight/Modes/StuntRace.cs

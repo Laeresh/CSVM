@@ -361,6 +361,17 @@ public sealed record SessionSpec
     /// profiles. Null when the flag was absent. Kept as the raw value; resolving it is
     /// <see cref="Session.Campaign.CampaignProfileStore.ForSession"/>'s job.</summary>
     public string? ProfilesDir { get; private set; }
+    /// <summary><c>--scores=&lt;path&gt;</c>: the stunt best-time file this process reads and writes
+    /// in place of <c>user://stunt_scores.json</c>. Null when the flag was absent. Kept as the raw
+    /// value; resolving it is <see cref="Flight.Modes.ScoreStore.ForSession(string, bool)"/>'s job.</summary>
+    public string? ScoresPath { get; private set; }
+    /// <summary><b>Resolved.</b> This run's stunt bests are kept in memory and never saved. It holds
+    /// for a pinned run (<see cref="Det"/>), a scripted one (<see cref="ScriptedBy"/>, even under
+    /// <c>--no-det</c>) and synthetic splits (<see cref="DebugScoreboard"/>). The <c>--scores=</c>
+    /// flag beats it. The player's record then holds only played runs, and a scripted board reads
+    /// the same on every machine.</summary>
+    public bool ScoresThrowaway =>
+        string.IsNullOrWhiteSpace(ScoresPath) && (Det || ScriptedBy.Length > 0 || DebugScoreboard);
     /// <summary><c>--no-crash-loss</c>: losing the aircraft leaves the campaign mission running,
     /// so a session being debugged can fly on past a crash. The game default is the original's
     /// rule, which ends the mission lost (<c>docs/formats/objectives.md</c>, "Win and loss").
@@ -1537,6 +1548,7 @@ public sealed record SessionSpec
                 s.HasContentArg = true;
             }
             else if (arg.StartsWith("--profiles=")) { s.ProfilesDir = arg["--profiles=".Length..]; }
+            else if (arg.StartsWith("--scores=")) { s.ScoresPath = arg["--scores=".Length..]; }
             else if (arg.StartsWith("--spawn=")) { s.SpawnIndex = int.Parse(arg["--spawn=".Length..]); }
             else if (arg.StartsWith("--spawn-at=")) { s.SpawnAt = ParseVec3(arg["--spawn-at=".Length..]); Deprecate("--spawn-at", "--pos"); }
             else if (arg.StartsWith("--spawn-dir=")) { s.SpawnDir = ParseVec3(arg["--spawn-dir=".Length..]); Deprecate("--spawn-dir", "--direction"); }

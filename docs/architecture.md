@@ -289,7 +289,7 @@ rows).
 - `src/Flight/Modes/StuntCapture.cs`, the Danger Zone camera: one latched photograph per marker per run, written beside the saves with its sting.
 - `src/Flight/Modes/DangerZonePhotograph.cs`, the Danger Zone camera's own eye: the decoded pose ahead of the aircraft looking back, on a viewport sharing the pane's world.
 - `src/Flight/Modes/StuntRace.cs`, splitscreen stunt race bookkeeping: one `Racer` per player, finish placings, standings, rematch reset.
-- `src/Flight/Modes/ScoreStore.cs`, stunt best-time persistence: `user://stunt_scores.json` keyed chapter/mission/plane, faster runs only.
+- `src/Flight/Modes/ScoreStore.cs`, stunt best-time persistence: `user://stunt_scores.json` keyed chapter/mission/plane, faster runs only; a scripted run's store is a throwaway.
 - `src/Flight/Modes/MatchScores.cs`, what each network match scoring event is worth: `player.zrd`'s nine `score_*` keys, each with the executable's fallback.
 - `src/Flight/Modes/VersusMatch.cs`, Dogfight deathmatch bookkeeping: one signed score plus kills and deaths per player, team totals in a team match, the host-fed clock, threshold and time-out completion, standings.
 - `src/Flight/Modes/FlagMatch.cs`, Capture the Flag's rules, engine-free: the flags, the proximity asks and cooldowns, the host's decision, the drop and throw, the points.

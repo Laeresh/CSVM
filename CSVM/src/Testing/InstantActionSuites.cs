@@ -1568,6 +1568,93 @@ internal static class InstantActionSuites
             $"a splitscreen end records the pilot whose OWN run completed and not the other: p1 new={p1Summary.NewBest} p2 new={p2Summary.NewBest}");
     }
 
+    // The store choice both stunt records go through, over a seeded file under ctx.ScratchDir that
+    // stands in for the player's user://stunt_scores.json. ⚠ Never point this at the real store:
+    // the control below writes into whatever file it is handed.
+    [Suite("stunt-scores-scripted",
+        "a --det --debug-scoreboard stunt run records its synthetic best into a throwaway store: " +
+        "the solo scoreboard and the Instant Action summary both claim NEW BEST over no stored " +
+        "best, and the player's store file is byte-identical afterwards; --scores= writes the " +
+        "named file instead; the control, a played run, records into the player's file and keeps " +
+        "its other entries")]
+    internal static void StuntScoresScripted(TestContext ctx)
+    {
+        string chapter = "C1", mission = "IA1";
+        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+        ctx.RequireData(gamezPath, $"{chapter} gamez");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, mission);
+        ctx.RequireData(missionZrdr, $"{chapter}/{mission} zrdr");
+        ctx.RequireData(ctx.MessagesPath, $"messages.json");
+        var gamez = GameZ.Load(gamezPath);
+        var messages = Messages.Load(ctx.MessagesPath);
+        StuntMission Fresh() => StuntMission.Load(gamez, missionZrdr, messages)
+            ?? throw new SuiteSkippedException($"{chapter}/{mission} ships no Danger Zones");
+
+        string dir = Path.Combine(ctx.ScratchDir, "StuntScoresScripted");
+        Directory.CreateDirectory(dir);
+        string player = Path.Combine(dir, "player_scores.json");
+        string named = Path.Combine(dir, "named_scores.json");
+        if (File.Exists(named))
+        {
+            File.Delete(named);
+        }
+        const string other = "C1/IA1/player_other";
+        File.WriteAllText(player, $"{{\n  \"{other}\": {{ \"best\": 300.0, \"date\": \"2000-01-01\" }}\n}}");
+        byte[] seeded = File.ReadAllBytes(player);
+        const string key = "stunt-scores-scripted/IA1/player_test";
+        string[] scriptedArgs = { $"--chapter={chapter}", $"--mission={mission}", "--stunt", "--debug-scoreboard", "--det" };
+        var scripted = SessionSpec.Parse(scriptedArgs);
+
+        // The solo board, completed the way --debug-scoreboard completes it.
+        var soloRun = Fresh();
+        var soloStore = ScoreStore.ForSession(scripted.ScoresPath, scripted.ScoresThrowaway, player);
+        var board = StuntScoreboard.Build(soloRun, "Test Plane", chapter, soloStore, key, exitsToMenu: true,
+            new PauseState(), _ => new MenuInput());
+        ctx.Host.AddChild(board);
+        try
+        {
+            soloRun.DebugCompleteAll();
+            ctx.Check(soloStore.Throwaway && board.Visible && soloStore.GetBest(key) == soloRun.Elapsed,
+                $"the scripted solo board wakes and records its synthetic total in its own store: throwaway={soloStore.Throwaway} visible={board.Visible} best={soloStore.GetBest(key)}");
+        }
+        finally
+        {
+            board.Free();
+        }
+        ctx.Check(seeded.SequenceEqual(File.ReadAllBytes(player)),
+            $"…and the player's store file is byte-identical afterwards");
+
+        // The Instant Action wrap-up's record, through a second scripted store. No best carries
+        // over from the first, so the board reads the same whatever ran before it.
+        var iaRun = Fresh();
+        iaRun.DebugCompleteAll();
+        var iaSummary = InstantActionDirector.BuildStuntSummary(iaRun, ScoreStore.ForSession(scripted.ScoresPath, scripted.ScoresThrowaway, player), key);
+        ctx.Check(iaSummary.NewBest && iaSummary.PrevBest == null,
+            $"the scripted Instant Action summary claims NEW BEST over no stored best: prev={iaSummary.PrevBest} new={iaSummary.NewBest}");
+        ctx.Check(seeded.SequenceEqual(File.ReadAllBytes(player)),
+            $"…and the player's store file is still byte-identical");
+
+        // --scores= names the file a scripted run records into.
+        var namedRun = Fresh();
+        namedRun.DebugCompleteAll();
+        var namedSpec = SessionSpec.Parse(scriptedArgs.Append($"--scores={named}").ToArray());
+        InstantActionDirector.BuildStuntSummary(namedRun, ScoreStore.ForSession(namedSpec.ScoresPath, namedSpec.ScoresThrowaway, player), key);
+        ctx.Check(ScoreStore.Load(named).GetBest(key) == namedRun.Elapsed && seeded.SequenceEqual(File.ReadAllBytes(player)),
+            $"--scores= records into the named file and leaves the player's alone: named best={ScoreStore.Load(named).GetBest(key)}");
+
+        // The control: a played run records into the very file the scripted runs left alone.
+        var playedRun = Fresh();
+        playedRun.DebugCompleteAll();
+        var played = SessionSpec.Parse(new[] { $"--chapter={chapter}", $"--mission={mission}", "--stunt" });
+        var playedStore = ScoreStore.ForSession(played.ScoresPath, played.ScoresThrowaway, player);
+        var playedSummary = InstantActionDirector.BuildStuntSummary(playedRun, playedStore, key);
+        var reloaded = ScoreStore.Load(player);
+        ctx.Check(!playedStore.Throwaway && playedSummary.NewBest && reloaded.GetBest(key) == playedRun.Elapsed,
+            $"the control, a played run, records into the player's file: throwaway={playedStore.Throwaway} new={playedSummary.NewBest} best={reloaded.GetBest(key)}");
+        ctx.Check(reloaded.GetBest(other) == 300f,
+            $"…and the entry already there survives the write: {reloaded.GetBest(other)}");
+    }
+
     // The inert state: an aircraft built complete and held out until Activate.
     // ⚠ Compare a live control, inert aircraft, and that aircraft activated with real physics, targeting,
     // shots, and simulation; absence alone can pass for the wrong reason (METHOD-9/METHOD-10).

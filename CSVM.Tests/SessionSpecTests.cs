@@ -1140,6 +1140,27 @@ public class SessionSpecTests
         Assert.Equal("x", cabin.ProfilesDir);
     }
 
+    /// <summary>A pinned, scripted or synthetic run keeps its stunt bests out of the player's
+    /// record, and a played run keeps them. The `--scores=` flag names the file either way.</summary>
+    [Fact]
+    public void ScriptedRunsKeepStuntBestsOffThePlayersRecord()
+    {
+        Assert.False(S("--stunt").ScoresThrowaway);
+        Assert.False(S("--stunt", "--chapter=C4").ScoresThrowaway);
+        Assert.True(S("--stunt", "--det").ScoresThrowaway);
+        Assert.True(S("--stunt", "--screenshot=x.png").ScoresThrowaway);
+        Assert.True(S("--stunt", "--screenshot=x.png", "--no-det").ScoresThrowaway);
+        Assert.True(S("--stunt", "--debug-scoreboard").ScoresThrowaway);
+        Assert.True(S("--stunt", "--debug-scoreboard", "--no-det").ScoresThrowaway);
+        Assert.Null(S("--stunt").ScoresPath);
+
+        var named = S("--stunt", "--debug-scoreboard", "--det", @"--scores=.scratch\probe\scores.json");
+        Assert.Equal(@".scratch\probe\scores.json", named.ScoresPath);
+        Assert.False(named.ScoresThrowaway);
+        Assert.Empty(named.Warnings);
+        Assert.False(S("--scores=x").HasContentArg);
+    }
+
     /// <summary>Globals are recorded, never applied, that is what keeps the type reachable from
     /// here, with no engine under it.</summary>
     [Fact]

@@ -192,7 +192,8 @@ internal sealed class SessionBoards
     public Control BuildSoloStuntBoard(StuntMission run, string planeDisplay, string context,
         string scoreKey, Action rerun, StuntCapture shots)
     {
-        var board = StuntScoreboard.Build(run, planeDisplay, context, ScoreStore.Load(), scoreKey,
+        var scores = ScoreStore.ForSession(_in.Spec.ScoresPath, _in.Spec.ScoresThrowaway);
+        var board = StuntScoreboard.Build(run, planeDisplay, context, scores, scoreKey,
             _in.MenuDriven, _in.PauseState, InputFor);
         board.Restart = rerun;
         board.Exit = _in.Exit;
