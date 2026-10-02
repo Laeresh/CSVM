@@ -89,7 +89,8 @@ internal static class NetCoopMissionSuites
     [Suite("net-coop-mission",
         "a co-op campaign mission flown by a host and two guests, one process, lossy loopback: each "
         + "guest is seated under its player name or its player number and in its chosen voice, the "
-        + "host's seat in Nathan Zachary's, every machine builds each "
+        + "host's seat in Nathan Zachary's, each pane marks its partners' aeroplanes by those names, "
+        + "every machine builds each "
         + "seat with its own pilot's ammunition, a guest's director has no profile store and the "
         + "user's profiles are untouched, a guest walking out through its pause sheet leaves at "
         + "once, the host alone ends the mission and a guest holds its result, Retry clears every "
@@ -936,6 +937,9 @@ internal static class NetCoopMissionSuites
                                 && e.Session.NetSeats[1].Callsign == GuestName
                                 && e.Session.NetSeats[2].Callsign == "P3"),
             $"each machine seats the named guest as {GuestName} and the unnamed one as P3 ({string.Join(" | ", names)})");
+        // Each machine flies the seat of its own place in the field, which PilotNames reads by.
+        NetTeamSuites.PilotNames(ctx, ends.Select(e => e.Session).ToArray(),
+            "each machine's pane reads its co-op partners' aeroplanes by their callsigns");
         // The host's seat is the scripted player and speaks as Nathan Zachary. Lucy speaks in the
         // voice she chose, and the third guest chose none.
         var voices = ends.Select(e => string.Join(",", e.Session.NetSeats.Select(s => s.Voice))).ToArray();

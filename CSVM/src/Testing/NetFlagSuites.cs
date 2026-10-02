@@ -55,12 +55,14 @@ internal static class NetFlagSuites
     [Suite("net-capture-the-flag",
         "three sessions on the chapter's MP2 map, two seats on lobby team 1 and one on team 2: every "
         + "machine builds a flag per team at its cs_flag_n, its base and flag markers reading Your or "
-        + "Enemy by the pane's side; a guest takes the enemy flag at its base, the flag hangs on its "
+        + "Enemy by the pane's side, and every other seat's aeroplane by its callsign; a guest takes "
+        + "the enemy flag at its base, the flag hangs on its "
         + "aeroplane on every machine, the base flag hides and the away marker and the carrier's tag "
         + "name the carrier; bringing it home "
         + "scores score_enemy_flag; a carrier's death floats the flag on every machine; a pilot catches its own "
         + "floating flag and returning it scores score_return_flag; a guest carrier's ejectflag typed into the chat "
-        + "floats its flag on every machine through the host and sends no chat line; the uncaught flag goes home "
+        + "floats its flag on every machine through the host and sends no chat line, its marker back on its "
+        + "callsign; the uncaught flag goes home "
         + "when its 15 s throw runs out, scoring nobody; and a second capture ends the match on the Score limit by team")]
     internal static void AMatchOfFlagsAcrossThreeMachines(TestContext ctx)
     {
@@ -246,6 +248,10 @@ internal static class NetFlagSuites
             $"the carrier's ejectflag floats the flag on every machine ({Rows(peers)})");
         ctx.Check(peers[2].SeatRigs[2].Controller is { Crashed: false, Destroyed: false } && peers.All(p => p.SeatRigs[2].Controller!.MarkerName == null),
             $"and the carrier flies on untagged");
+        var named = new[] { 0, 1 }.Select(m => NetTeamSuites.RefOf(NetTeamSuites.Cycles(peers[m], m),
+            s => ReferenceEquals(s, peers[m].SeatRigs[2].Controller))?.DisplayName ?? "missing").ToArray();
+        ctx.Check(named.All(n => n == peers[0].NetSeats[2].Callsign),
+            $"and the other machines read it by its callsign again, not its airframe ({string.Join(" | ", named)})");
         ctx.Check(peers.Select((p, i) => p.Wire.Chat!.Chat.Posted == posted[i] && p.Wire.Chat!.LinesSent == sent[i]).All(same => same),
             $"and neither console line was posted or sent as chat ({string.Join(",", peers.Select(p => $"{p.Wire.Chat!.Chat.Posted}/{p.Wire.Chat!.LinesSent}"))})");
         var scores = peers.Select(p => Enumerable.Range(0, 3).Select(p.Dogfight!.Match.ScoreOf).ToArray()).ToArray();
@@ -288,6 +294,7 @@ internal static class NetFlagSuites
         Reads(ctx, peers, "every pane reads team 1's flag at its base by side", "cs_flag_1",
             m => $"{Side(m, 1, "Your Flag At Base", "Enemy Flag At Base")}|Red Squadron");
         Reads(ctx, peers, "and no pane has an away marker for a flag at home", "cs_flg_light1", _ => "off");
+        NetTeamSuites.PilotNames(ctx, peers, "with no flag taken, every pane reads every other seat's aeroplane by its callsign");
     }
 
     // Team 1's flag held by seat 2. Its at-base marker is off and its away marker names the carrier

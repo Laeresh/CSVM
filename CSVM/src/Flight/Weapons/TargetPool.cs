@@ -232,16 +232,15 @@ public sealed class TargetPool
         switch (kind)
         {
             case AimTargetKind.Vehicle when c.Source is SurfaceVehicle hull:
-                // ⚠ The hull's own block slot 20 alone, and an EMPTY one draws no name line: most
-                // ship blocks author none and the original then labels nothing there (docs/org/
+                // The hull's block slot 20, else its def's own title, resolved at spawn (docs/org/
                 // targeting.md). Never the airframe-style fallback the aeroplane arm takes below.
                 return TargetRef.ForHull(c, cls, name, hull.MarkerName, objective: objective);
             case AimTargetKind.Vehicle:
                 var plane = c.Source as FlightController;
                 var dmg = plane?.Damage;
                 // A mode's tag (a flag carrier's) replaces the name line while it stands, read by
-                // the selecting pane's own side.
-                string? tag = plane?.MarkerName?.Invoke(ownTeam);
+                // the selecting pane's own side. Under it, a network seat reads by its callsign.
+                string? tag = plane?.MarkerName?.Invoke(ownTeam) ?? plane?.PilotName;
                 // The MARKER prints the airframe's common name (plane type alone, decision 10),
                 // not the node name the selection is held and pinned by. A rig with no flight model
                 // bound has no airframe to name, and falls back to that node name.

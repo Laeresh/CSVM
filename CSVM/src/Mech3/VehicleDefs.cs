@@ -239,6 +239,20 @@ public sealed class VehicleDefs
         return null;
     }
 
+    /// <summary>The def's <c>title</c> message key, the nearest authored one up the <c>kind_of</c>
+    /// chain. Every vehicle spawned from the def carries it until its block's slot 20 replaces it
+    /// (<c>FUN_00475820</c>, docs/org/targeting.md). Null when nothing up the chain authors
+    /// one.</summary>
+    public string? TitleOf(string def)
+    {
+        foreach (var d in Chain(def))
+        {
+            if (d.Str("title") is { Length: > 0 } title)
+                return title;
+        }
+        return null;
+    }
+
     private string? PlayerNodeOf(string playerDef) =>
         _defs.TryGetValue(playerDef, out var d) && d.Str("nodename") is { Length: > 0 } node ? node : null;
 

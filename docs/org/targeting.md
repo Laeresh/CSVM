@@ -956,30 +956,46 @@ green and every other seat in its identity colour.
 assigns the text into the `std::string` at entity `+0x10` at `0x0047c9c8`. A key the string table
 does not know is copied verbatim instead (`0x0047ca98`–`0x0047cafd`).
 
-⚠ **A block that authors an empty `title` gets no name line at all**, the branch at `0x0047c9a7`
-leaves the string empty. That is 239 of the install's 414 roster blocks, so most enemies in the
-original show a box and no name.
+⚠ **A block that authors an empty `title` keeps its vehicle definition's title.** The branch at
+`0x0047c9a7` skips the assign, so entity `+0x10` keeps what `FUN_00475820` (def to entity copy,
+called from the same spawn before the slot-20 read) put there: the def's `+0xc`, which the
+definition parser `FUN_00479240` fills with the def's `title` already resolved to display text
+(`FUN_0059cd40` then `_strdup`, `0x004792f6`–`0x00479305`). An unnamed CM10 patrol boat therefore
+reads `Patrol boat` (`MSG_VEH_PATROLBOAT`, the `patrolboat` def's own title), which the original
+shows at the controls.
 
-**Three authors write that string, and the vehicle definition is none of them.**
+**Five authors write that string.**
 
-- **The campaign roster**, as above: `aiv` slot 20 through the block struct's `+0xc`.
+- **The vehicle definition**, in `FUN_00475820`, first on every `FUN_0047c210` spawn: the def's
+  resolved `title` (`MSG_VEH_*`, `MSG_TRGT_*`) into entity `+0x10`.
+- **The campaign roster**, as above: `aiv` slot 20 through the block struct's `+0xc`, replacing the
+  def's title only when the block authors one.
 - **Instant Action**, in `FUN_0045a390`, which builds the same block struct three times and writes
   `+0xc` in each: the player's flight from five hardcoded string ids (`0x32c9`, `0x32cb`, `0x32cc`,
   `0x32cd`, `0x32e4`) at `0x0045a7ae`, the ace from `ia.zrd`'s `ace_name` at `0x0045ab0a`, and each
   enemy group from its own `enemy_name` at `0x0045ae73`. `ia.zrd`'s parser resolves both keys at
-  parse time (`0x0045946b`, `0x00458e36`), so they arrive as display text. This is why an Instant
-  Action Kestrel carries a name line while an unnamed campaign block does not.
+  parse time (`0x0045946b`, `0x00458e36`), so they arrive as display text.
 - **A template-less generator spawn**, in `FUN_00451bf0`, which assigns entity `+0x10` directly from
   the `egen.zrd` record's `vehicle`/`title` value at `0x004520ee`. That path takes the value RAW,
   with no string-table lookup, so whatever the file authors is displayed literally. The two are
   complementary: an `egen` record that resolved a roster block runs the roster path above instead.
+- **A network peer's aircraft**, in `FUN_00497990`, which runs on every machine once for each peer
+  that arrives. It copies the lobby player's name (lobby record `+0x10`, the callsign) into the
+  remote record's CString at `+0x34`, spawns the aircraft through `FUN_0047b650`, keeps the entity at
+  record `+0x30`, then reads record `+0x34` at `0x00497f20` and assigns it into entity `+0x10` at
+  `0x00497f90`, over the def's title. So another player's aircraft, the host's included, reads by
+  callsign, and Line 1 is untouched. The Capture the Flag handler `FUN_0049a300` rewrites the string
+  with the carrier tag and assigns record `+0x34` back when the flag leaves (`0x0049a47b`,
+  `0x0049abc1`, [`multiplayer-ctf.md`](multiplayer-ctf.md), "Markers"). CSVM stamps a network seat's
+  callsign on its aircraft as `FlightController.PilotName`, the mode tag's fallback, and co-op
+  seats take it the same way.
 
-⚠ **The `vehicle.zrd` def's own `title` (`MSG_VEH_*`) is read by none of them.** `FUN_00479240`,
-the vehicle-definition parser, stores it at that definition's `+0xc` (`0x004792ca`–`0x00479305`),
-a different object. ⚠ "No fourth author exists" is NOT established: the sweep covered the entity
-constructor's site and all five of its callers, not the whole image.
+⚠ "No sixth author exists" is NOT established: the sweep covered the entity constructor's site, all
+five of its callers and the def copy, not the whole image, and the network author was found from the
+flag handler's restore, not by that sweep.
 
-**A surface hull is named by the same author, off its own block's slot 20.** `FUN_0047c210` is THE
+**A surface hull is named by the same two authors, its def's title then its block's slot 20.**
+`FUN_0047c210` is THE
 vehicle spawn and not the aeroplane's: it allocates the 0xa20-byte entity, links it into
 `VehicleList` and runs one body for every dynamics class. Its two arguments are the `vehicle.zrd`
 DEFINITION, matched by name out of the definition list `DAT_0071daac`…`DAT_0071dab0` with the
@@ -987,19 +1003,20 @@ record's trailing `_N` stripped, and the roster BLOCK; the campaign's record loo
 calls it once per mission vehicle record at `0x0047531e` with no class test on the way in. The
 definition's `mode` (def `+0xa4`, [`aiPilot.md`](aiPilot.md)) is read once inside, at `0x0047c2b4`,
 and its `ship`/`tank` arm (`0x0047c2ca`–`0x0047c2fa`) only prepares the model before rejoining the
-shared body at `0x0047c2fd`. The slot-20 read at `0x0047c9a2` and the assignment into entity
-`+0x10` sit in that shared body, so a boat reaches them exactly as an aeroplane does.
+shared body at `0x0047c2fd`. The def copy `FUN_00475820`, the slot-20 read at `0x0047c9a2` and the
+assignment into entity `+0x10` sit in that shared body, so a boat reaches them exactly as an
+aeroplane does.
 
 The reader is class-blind at the other end too: `FUN_004579e0` takes the player's selection
 `+0x948`, dereferences the target wrapper's `+4` (the wrapped entity, written by `FUN_004a6330`)
 and reads the length at entity `+0x18` and the pointer at `+0x14`, with no RTTI test and no virtual
 call on that path.
 
-So the name line's split is per BLOCK and never per class. Of the install's 23 `mode ship` blocks
+So the name line is never decided per class. Of the install's 23 `mode ship` blocks
 (`patrolboat_*`, `t_truck_*`) only C1B/M03's four author the slot, as `MSG_VEH_PATROLBOAT` and so
 "Patrol boat"; C1/M05's twelve, C5/M01's six and C2/M01's `patrolboat_eg0` generator template leave
-it empty and draw a box with no name over it, which is the same silence 239 of the 414 blocks ask
-for.
+it empty and keep their def's title, `patrolboat`'s "Patrol boat" or `t_truck`'s
+`MSG_TRGT_TURRET_TRUCK`.
 
 **Line 3** is the `%d o'clock` bearing. `FUN_0049d940` computes the hour and formats
 `MSG_N_OCLOCK` (`extracted/messages.json` id 132, `"%1!d! o'clock"`) into a 256-byte buffer, and
@@ -1070,7 +1087,7 @@ there.
 | Marker box | fixed 20 × 16 px with 4 px arms, gated on the selected gun's `RANGE` through a lead solve | the same shape and the same gate, scaled through `HudMetrics` rather than fixed in pixels (see below) |
 | Label | three lines, 15 px pitch, below the box (above near the bottom edge), centred | the same, `TargetHud.LabelLines` and the flip-above test |
 | Label content | `<name> [<category>] -` / proper name / `%d o'clock` | the same three lines, off `TargetRef`'s own label halves and display name |
-| Name line's source | the roster block's `title` alone, aeroplane and surface hull alike; an unnamed block shows no name | a campaign spawn takes the block's `title` (`AiSpawn.PilotName`), and where it has none the remake keeps an airframe title the original does not print there. A hull takes the same slot through `SurfaceVehicleRuntime`'s own resolve into `SurfaceVehicle.MarkerName` and prints NOTHING where its block authors none, which is the original exactly |
+| Name line's source | the roster block's `title`, else the vehicle def's own `title`, aeroplane and surface hull alike | the same pair: a campaign aeroplane takes the block's `title` (`AiSpawn.PilotName`), else its AI def's (`PlaneStats.AiTitleKey`), resolved in `AiFlightAssembler`. A hull resolves the same pair through `SurfaceVehicleRuntime` into `SurfaceVehicle.MarkerName`, the block's slot first and `VehicleDefs.TitleOf` second |
 | Colour | red hostile, green friendly, blue non-destructive objective | the same, `TargetHud.MarkerColor`, with the four destructive objective categories red and the rest blue |
 | Off screen | edge position plus the same three lines, clamped with a 3 px margin | the same edge position, `EdgeMarker.Resolve`, with `TargetHud.EdgeLabelAnchor` hanging the three lines off it by the decoded +3 / -45; the per-line 3 px clamp is not ported |
 

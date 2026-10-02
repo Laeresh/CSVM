@@ -157,7 +157,7 @@ engine's YXZ. Three differences remain, none of them a rescaling:
   its own, and the original never stops integrating.
 
 `GunBuzzKickScale`, `DiveRattleKickScale` and `NitroWobbleKickScale` stay at `1`, the original's
-own kick; whether the result reads right against the original's clips is a look at the controls.
+own kick, which reads right against the original's dive, nitro and gun clips at the controls.
 
 ## The seven component blocks and every kicker
 

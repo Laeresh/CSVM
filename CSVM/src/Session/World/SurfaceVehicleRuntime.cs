@@ -65,9 +65,8 @@ public sealed partial class SurfaceVehicleRuntime : Node, ISurfaceVehicles
     /// every hull's gun silent, which is what a muted or soundless session gets.</summary>
     public GunVoiceHome? Voices { get; set; }
 
-    /// <summary>The string table a block's slot-20 title resolves through into
-    /// <see cref="SurfaceVehicle.MarkerName"/>. Null leaves every hull unnamed, which is the
-    /// shipped case for all but four blocks anyway.</summary>
+    /// <summary>The string table a block's slot-20 title, or the def's own, resolves through into
+    /// <see cref="SurfaceVehicle.MarkerName"/>. Null leaves every hull unnamed.</summary>
     public Messages? Strings { get; set; }
 
     /// <summary>Whether every hull, built or yet to be built, follows another machine's samples.
@@ -196,19 +195,26 @@ public sealed partial class SurfaceVehicleRuntime : Node, ISurfaceVehicles
         return radius > 0f ? radius : VehicleDefs.DefaultAttackRadiusM;
     }
 
-    // The hull's target-box name, resolved here because this is the seam where the string table
-    // and the block meet, the same reason the aircraft spawner resolves its own there
-    // (AiFlightAssembler.Assemble). An unresolved key is dropped rather than drawn: the raw
-    // MSG_* spelling on the HUD is worse than the blank line most blocks ask for anyway. A miss
-    // reads as the key echoed back, which is Messages.Get's own contract.
+    // The hull's target-box name: the block's slot-20 title, else the def's own title. The
+    // original's spawn copies the def's title first and slot 20 may replace it (docs/org/
+    // targeting.md). Resolved here because this is the seam where the string table, the def and
+    // the block meet. An unresolved key is dropped rather than drawn: the raw MSG_* spelling on
+    // the HUD is worse than a blank line. A miss reads as the key echoed back, which is
+    // Messages.Get's own contract.
     private string MarkerNameOf(RosterSpawnPlan plan)
     {
-        if (plan.Title is not { Length: > 0 } key || Strings is not { } strings)
+        if (Strings is not { } strings)
         {
             return "";
         }
-        string text = strings.Get(key);
-        return text == key ? "" : text;
+        foreach (string? key in new[] { plan.Title, _defs.TitleOf(plan.Def) })
+        {
+            if (key is { Length: > 0 } && strings.Get(key) is var text && text != key)
+            {
+                return text;
+            }
+        }
+        return "";
     }
 
     // The water surface under the authored spot: a downward probe on the world mask, carried on

@@ -374,7 +374,7 @@ at its authored spot, its height read off the water, indexed on the world runtim
 definitions anchor on it and register its destructible pool. `GameSession` builds one lazily for
 the roster phase and the generator block; `SessionSimulation` steps it after the generators that
 may launch another hull. A plane reads it as `Flight/Weapons/ISurfaceVehicles.cs`. `CollectVehicles` offers every hull to the aim assist's vehicle list
-([../org/aim-assist.md](../org/aim-assist.md)); `Projectiles`/`Weapons`/`Voices` arm and voice its gun on the attack radius `AttackRadiusOf` resolves in the engine's own write order, the block's and net's slot over the def's `attack` over the decoded 400 m default and never a zero reach ([../org/aiPilot.md](../org/aiPilot.md)); `Strings` names it, slot 20 into `MarkerName`.
+([../org/aim-assist.md](../org/aim-assist.md)); `Projectiles`/`Weapons`/`Voices` arm and voice its gun on the attack radius `AttackRadiusOf` resolves in the engine's own write order, the block's and net's slot over the def's `attack` over the decoded 400 m default and never a zero reach ([../org/aiPilot.md](../org/aiPilot.md)); `Strings` names it, slot 20 else the def's title into `MarkerName`.
 A guest's `Replicate`d runtime puts every hull it holds or spawns on the host's samples. Read `Flight/Ai/SurfaceVehicle.cs` next.
 
 ## src/Session/World/CutsceneController.cs

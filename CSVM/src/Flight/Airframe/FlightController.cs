@@ -768,9 +768,14 @@ public partial class FlightController : Node3D
     public string? ObjectiveCategory { get; set; }
 
     /// <summary>The name line a pane on a given team reads on this aircraft's marker while a mode
-    /// tags it. Null keeps the airframe's own name. A flag carrier is the one tag
-    /// (docs/org/multiplayer-ctf.md "Markers").</summary>
+    /// tags it. Null falls back to <see cref="PilotName"/>, then the airframe's own name. A flag
+    /// carrier is the one tag (docs/org/multiplayer-ctf.md "Markers").</summary>
     public Func<int, string>? MarkerName { get; set; }
+
+    /// <summary>A network seat's callsign, the marker's name line for a human pilot in a network
+    /// session, co-op included (docs/org/targeting.md, the network author). Null everywhere else,
+    /// which keeps the airframe's own name.</summary>
+    public string? PilotName { get; set; }
 
     /// <summary>The weapon lab's hold: the airframe holds its pose while everything else in the
     /// session keeps running (props, guns, rounds, world sim). ⚠ NOT the P halt
