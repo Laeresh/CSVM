@@ -560,12 +560,13 @@ observed without data says nothing about the floor.
 rather than inside a sandbox: it drives WSL Debian over the tarball `ExportRelease.ps1 -Linux`
 built (`-Tarball` names another) and the author's install (`CrimsonSkiesGame\` under this tree or
 the one `CSVM_DATA_ROOT` names; `-Install` names another). It fails on any failure and prints
-RunTests.ps1-style stage lines and one verdict; a full run takes about 95 s (extraction 21 s, the
-suites 70 s at six shards). Three stages, each run even when an earlier one failed, where it still
+RunTests.ps1-style stage lines and one verdict; a full run takes about 4.5 min (extraction 40 s,
+the suites 210 s at six shards). Three stages, each run even when an earlier one failed, where it still
 can:
 
 - **payload**: the archive's listing against `packaging/MANIFEST.md`'s Linux table, read from that
-  file rather than restated: every named entry present (a folder name must hold a file), nothing
+  file rather than restated: every named entry present (a folder name must hold a file, a name
+  with a `*` must match one), nothing
   at the root the table does not name, `CSVM.x86_64` and `tools/unzbd` at `-rwxr-xr-x`, the
   notice stamped for the Linux payload, and no carriage return in any top-level text file (a file
   with no NUL byte).
@@ -597,7 +598,7 @@ What the check had to learn:
 - **Some suites cannot pass headless on any platform.** They read back what only a renderer or a
   display produces (mesh and MultiMesh instance data, viewport pixels, windows and screens). The
   `$HeadlessOnly` table at the top of the script lists them with the reason each fails, beside
-  `$HeadlessEngineErrors`, the two engine error lines only a headless process prints. The same
+  `$HeadlessEngineErrors`, the engine error lines only a headless process prints. The same
   suites and the same error counts come out of the Windows export run headless, which is how an
   entry is admitted: a suite that fails on Linux alone is a Linux bug and never goes on the list.
   Listed suites still run, and one that passes is reported so a stale entry is seen.
