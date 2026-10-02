@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Extraction;
+using CSVM.Flight.Airframe;
 using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
@@ -117,6 +118,22 @@ internal static class NetTeamSuites
     internal static TargetRef? RefOf(TargetPool pool, Func<object?, bool> source) =>
         pool.Enemy.Concat(pool.Ally).Concat(pool.NonAircraft).Where(t => source(t.Source))
             .Select(t => (TargetRef?)t).FirstOrDefault();
+
+    /// <summary>Checks that machine <c>m</c>'s pane, seat <c>m</c>, reads each other seat's aeroplane
+    /// by that seat's callsign (<c>FUN_00497990</c>). Any cycle may file it.</summary>
+    internal static void PilotNames(TestContext ctx, GameSession[] peers, string what)
+    {
+        var got = peers.SelectMany((p, m) => Enumerable.Range(0, p.SeatRigs.Count).Where(s => s != m)
+            .Select(s => (Machine: m, Seat: s, Name: RefOf(Cycles(p, m),
+                src => ReferenceEquals(src, p.SeatRigs[s].Controller))?.DisplayName ?? "missing"))).ToArray();
+        ctx.Check(got.All(g => g.Name == peers[g.Machine].NetSeats[g.Seat].Callsign),
+            $"{what} ({string.Join(" | ", got.Select(g => $"m{g.Machine}:s{g.Seat} {g.Name}"))})");
+        // ABLE-TO-FAIL CONTROL. A callsign equal to its airframe's name would pass the line above
+        // with the plane type still printed.
+        var planes = peers[0].SeatRigs.Select(r => r.Controller?.Stats is { } stats ? PlaneRoster.PlaneDisplayName(stats) : "").ToArray();
+        ctx.Check(peers[0].NetSeats.Select((seat, s) => seat.Callsign != planes[s]).All(apart => apart),
+            $"ABLE-TO-FAIL CONTROL: no seat's callsign is its airframe's name ({string.Join(",", planes)})");
+    }
 
     // The opening placement, read before any step. Each seat stands on its team's block, walked by
     // its place in the team, on the same entry on every machine.

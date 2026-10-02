@@ -239,8 +239,8 @@ public sealed class TargetPool
                 var plane = c.Source as FlightController;
                 var dmg = plane?.Damage;
                 // A mode's tag (a flag carrier's) replaces the name line while it stands, read by
-                // the selecting pane's own side.
-                string? tag = plane?.MarkerName?.Invoke(ownTeam);
+                // the selecting pane's own side. Under it, a network seat reads by its callsign.
+                string? tag = plane?.MarkerName?.Invoke(ownTeam) ?? plane?.PilotName;
                 // The MARKER prints the airframe's common name (plane type alone, decision 10),
                 // not the node name the selection is held and pinned by. A rig with no flight model
                 // bound has no airframe to name, and falls back to that node name.

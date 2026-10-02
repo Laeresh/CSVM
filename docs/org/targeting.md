@@ -986,8 +986,9 @@ shows at the controls.
   `0x00497f90`, over the def's title. So another player's aircraft, the host's included, reads by
   callsign, and Line 1 is untouched. The Capture the Flag handler `FUN_0049a300` rewrites the string
   with the carrier tag and assigns record `+0x34` back when the flag leaves (`0x0049a47b`,
-  `0x0049abc1`, [`multiplayer-ctf.md`](multiplayer-ctf.md), "Markers"). CSVM prints a human seat's
-  plane type instead (#116).
+  `0x0049abc1`, [`multiplayer-ctf.md`](multiplayer-ctf.md), "Markers"). CSVM stamps a network seat's
+  callsign on its aircraft as `FlightController.PilotName`, the mode tag's fallback, and co-op
+  seats take it the same way.
 
 ⚠ "No sixth author exists" is NOT established: the sweep covered the entity constructor's site, all
 five of its callers and the def copy, not the whole image, and the network author was found from the
