@@ -71,7 +71,8 @@ public static class CoopDoorText
     /// <summary>A host's word when this machine holds no stable global IPv6 address.</summary>
     public const string NoIpv6 = "No global IPv6 address";
 
-    /// <summary>The name a Dogfight host's own address notes stand under in its lobby chat.</summary>
+    /// <summary>The name a Dogfight host's pinned lines (<see cref="HostLobbyLines"/>) stand under
+    /// in its lobby chat.</summary>
     public const string NoteName = "Network";
 
     /// <summary>Why a host with a master server set has no join code when its build cannot open
@@ -244,8 +245,8 @@ public static class CoopDoorText
 
     /// <summary>A campaign host's band. With a join code it names the guests, the code and the copy
     /// key, and on a second line whether the game is listed. Without one it names the port, the
-    /// router's address and the guests, then <see cref="HostAddressLine"/>, then why there is no
-    /// code. Empty while the door is not a campaign host.</summary>
+    /// router's address and the guests, then <see cref="HostFallbackLines"/>. Empty while the door
+    /// is not a campaign host.</summary>
     public static string HostBand(NetPlayFeature net)
     {
         ArgumentNullException.ThrowIfNull(net);
@@ -271,9 +272,34 @@ public static class CoopDoorText
             not null => $"port {port}, this network only",
             null => $"port {port}",
         };
-        var lines = new List<string> { $"NETWORK OPEN  {where}  {joined}", HostAddressLine(net), InternetLine(net) };
-        lines.RemoveAll(line => line.Length == 0);
+        var lines = new List<string> { $"NETWORK OPEN  {where}  {joined}" };
+        lines.AddRange(HostFallbackLines(net));
         return string.Join("\n", lines);
+    }
+
+    /// <summary>What a host without a join code shows in its place. That is the address guests type
+    /// (<see cref="HostAddressLine"/>), then why there is no code (<see cref="InternetLine"/>), each
+    /// left out when empty. Empty with a code and while not hosting.</summary>
+    public static IReadOnlyList<string> HostFallbackLines(NetPlayFeature net)
+    {
+        ArgumentNullException.ThrowIfNull(net);
+        if (!net.IsHost || net.JoinCode != null)
+        {
+            return Array.Empty<string>();
+        }
+
+        var lines = new List<string> { HostAddressLine(net), InternetLine(net) };
+        lines.RemoveAll(line => line.Length == 0);
+        return lines;
+    }
+
+    /// <summary>A Dogfight host's lines pinned over its lobby chat under <see cref="NoteName"/>,
+    /// by the co-op band's rule: <see cref="HostCodeLine"/> alone with a join code, else
+    /// <see cref="HostFallbackLines"/>. Empty while not hosting.</summary>
+    public static IReadOnlyList<string> HostLobbyLines(NetPlayFeature net)
+    {
+        ArgumentNullException.ThrowIfNull(net);
+        return net.JoinCode != null ? new[] { HostCodeLine(net) } : HostFallbackLines(net);
     }
 
     /// <summary>A Dogfight host's standing line about internet guests: its code, whether it is
@@ -368,39 +394,6 @@ public static class CoopDoorText
 
         string onLan = lan.Length > 0 ? $"; guests on this network type {lan}" : "";
         return $"This machine has no global IPv6 address{onLan}.{copy}";
-    }
-
-    /// <summary>The lines a Dogfight host's own lobby chat shows under <see cref="NoteName"/> when
-    /// it opens: the address to give and the copy key. Each fits a typed chat line.</summary>
-    public static IReadOnlyList<string> HostAddressNotes(NetPlayFeature net)
-    {
-        ArgumentNullException.ThrowIfNull(net);
-        if (!net.IsHost || !net.NamesHostAddress)
-        {
-            return Array.Empty<string>();
-        }
-
-        var lines = new List<string>();
-        string lan = net.HostLanIpv4 is { } v4 ? net.Dial(v4) : "";
-        if (net.HostIpv6 is { } v6)
-        {
-            lines.Add($"Guests type {net.Dial(v6)}");
-            lines.Add(lan.Length > 0 ? $"or {lan} on this network. {CopyPress} copies the first." : $"{CopyPress} copies it.");
-            return lines;
-        }
-
-        lines.Add($"{NoIpv6}.");
-        if (lan.Length > 0)
-        {
-            lines.Add($"Guests on this network type {lan}.");
-        }
-
-        if (net.GuestAddress.Length > 0)
-        {
-            lines.Add($"{CopyPress} copies {net.GuestAddress}.");
-        }
-
-        return lines;
     }
 
     /// <summary>What the router said about a host's port, as a sentence for the door's status

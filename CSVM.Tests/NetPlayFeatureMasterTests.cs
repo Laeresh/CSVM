@@ -248,6 +248,39 @@ public class NetPlayFeatureMasterTests
     }
 
     [Fact]
+    public void ADogfightLobbyPinsTheCodeAloneOnceThereIsOneAndTheAddressWithItsReasonWithout()
+    {
+        const string stable = "2001:db8::7";
+        string address = $"IPv6  {stable}  {CoopDoorText.CopyPress}";
+        var mesh = LoopbackTransport.Mesh(1, Clean, new Random(14));
+        var listed = new ListedCarrier(mesh[0]);
+        var door = new NetPlayFeature((_, _, _) => listed, (_, _) => mesh[0]) { StableIpv6 = () => stable };
+        door.OpenDogfightHost(NetSeats.MaxPlayers - 1);
+        door.Step(0.016);
+        Assert.Equal(new[] { address, CoopDoorText.AwaitingCode }, CoopDoorText.HostLobbyLines(door));
+
+        listed.JoinCode = "K7Q-X3M";
+        Assert.Equal(new[] { CoopDoorText.HostCodeLine(door) }, CoopDoorText.HostLobbyLines(door));
+        Assert.DoesNotContain(CoopDoorText.HostLobbyLines(door), line => line.Contains(stable, StringComparison.Ordinal));
+
+        listed.JoinCode = null;
+        listed.Fault = "the server refused the listing";
+        Assert.Equal(new[] { address, "No internet code: the server refused the listing" }, CoopDoorText.HostLobbyLines(door));
+
+        var offline = new NetPlayFeature((_, _, _) => End(15), (_, _) => End(15))
+        {
+            StableIpv6 = () => stable,
+            Master = new MasterDirectory(_ => Task.FromResult(Listed)),
+        };
+        offline.OpenDogfightHost(NetSeats.MaxPlayers - 1);
+        Assert.Equal(new[] { address, $"No internet code: {CoopDoorText.NoWebRtc}" }, CoopDoorText.HostLobbyLines(offline));
+
+        // The pinned rows are the only place the address shows: no chat note was posted.
+        Assert.Empty(door.Dogfight!.Chat);
+        Assert.Empty(offline.Dogfight!.Chat);
+    }
+
+    [Fact]
     public void AHostWithAMasterServerButNoListingSaysWhyAndOneWithoutSaysNothing()
     {
         var mesh = LoopbackTransport.Mesh(1, Clean, new Random(9));

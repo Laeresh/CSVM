@@ -887,11 +887,6 @@ public sealed class NetPlayFeature : IMenuFeature
         {
             _hostName = PlayerName;
             _dogfight.Show();
-            foreach (string line in CoopDoorText.HostAddressNotes(this))
-            {
-                _dogfight.Note(CoopDoorText.NoteName, line);
-            }
-
             _transport.Advertise(CurrentAdvert());
         }
     }

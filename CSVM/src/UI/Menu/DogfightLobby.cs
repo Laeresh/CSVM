@@ -727,11 +727,6 @@ public sealed class DogfightLobby
         return true;
     }
 
-    /// <summary>Shows a line in this pilot's own chat panel under <paramref name="name"/>, sent to
-    /// nobody. The host's address goes here, where the lobby already has room for a sentence.
-    /// </summary>
-    public void Note(string name, string text) => Add(new LobbyChatMessage(name ?? "", text ?? ""));
-
     /// <summary>Posts a notice under no name in this host's chat and every seated guest's, as the
     /// original posts its lobby notices (langui 10499 to 10506). Refused on a guest.</summary>
     public bool Announce(string text)

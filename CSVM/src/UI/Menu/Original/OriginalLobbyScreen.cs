@@ -307,6 +307,11 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>The chat box's line as typed so far.</summary>
     public string ChatDraft => _chat;
 
+    /// <summary>The rows pinned over the chat under <see cref="CoopDoorText.NoteName"/>: a host's
+    /// join code, else its address and why there is no code (<see cref="CoopDoorText.HostLobbyLines"/>).
+    /// Empty on a guest.</summary>
+    public IReadOnlyList<string> NetworkRows => _net() is { } net ? CoopDoorText.HostLobbyLines(net) : Array.Empty<string>();
+
     /// <summary>The peer whose row the host picked for Boot, or -1 while none is picked or that
     /// guest has left.</summary>
     public int PickedPeer => Lobby is { IsHost: true } lobby && RowOf(lobby, _picked) > 0 ? _picked : -1;
@@ -1508,15 +1513,20 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         float pitch = size + 2f;
         int fits = Math.Max(1, (int)(ChatHeight / pitch));
 
-        // A host's word about internet guests stands pinned over the chat for as long as it hosts,
-        // where a one-shot note would scroll away.
-        string pinned = _net() is { } net ? CoopDoorText.HostCodeLine(net) : string.Empty;
-        int top = pinned.Length > 0 && fits > 1 ? 1 : 0;
-        if (top > 0)
+        // ⚠ Do not post the host's address as a chat note; it would outlive the code that replaces it.
+        // The pinned rows follow the door each frame, so the address shows only while there is no code.
+        var pinned = NetworkRows;
+        int top = Math.Min(pinned.Count, fits - 1);
+        for (int i = 0; i < top; i++)
         {
-            layers.Lines.Add(new BoardLine(CoopDoorText.NoteName, ChatX + 4f, ChatY, ChatNameColumn - 8f, size, BoardInk.Row, -1,
-                Face: face, Colour: Black));
-            layers.Lines.Add(new BoardLine(pinned, ChatX + ChatNameColumn, ChatY, ChatWidth - ChatNameColumn - 4f, size,
+            float y = ChatY + (i * pitch);
+            if (i == 0)
+            {
+                layers.Lines.Add(new BoardLine(CoopDoorText.NoteName, ChatX + 4f, y, ChatNameColumn - 8f, size, BoardInk.Row, -1,
+                    Face: face, Colour: Black));
+            }
+
+            layers.Lines.Add(new BoardLine(pinned[i], ChatX + ChatNameColumn, y, ChatWidth - ChatNameColumn - 4f, size,
                 BoardInk.Row, -1, Face: face, Colour: Pinned));
         }
 

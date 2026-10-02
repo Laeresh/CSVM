@@ -1135,6 +1135,112 @@ internal static class MenuOriginalConnectionSuites
         }
     }
 
+    [Suite("menu-original-lobby-network",
+        "A Dogfight host's lobby names its address only when it has no internet code. Three hosts open "
+        + "through the Connection page's Host, each with a stable IPv6 address to name: one the master "
+        + "server listed under a code, one with a master server set but no WebRTC carrier, and one with "
+        + "no master server. The listed host's Network rows pin the code alone; the other two pin the "
+        + "address, the WebRTC one with its reason under it. None of the three posts a chat note. The "
+        + "server is a canned list and the wire the loopback")]
+    internal static void TheLobbysNetworkRows(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        const string stable = "2001:db8::7";
+        var coded = NamedHost(NetDoorAid.Listed, true, stable, 21);
+        var offline = NamedHost(end => end, true, stable, 22);
+        var lan = NamedHost(end => end, false, stable, 23);
+        var ends = new List<End>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-lobby-network");
+        try
+        {
+            string[]? codeRows = HostTheLobby(ctx, layout, coded, ends);
+            string code = $"Internet code {NetDoorAid.SampleCode}, public, on the games list. {CoopDoorText.CopyPress} copies it.";
+            ctx.Check(codeRows != null && codeRows.SequenceEqual(new[] { code }),
+                $"with a code the Network rows pin the code alone ({Joined(codeRows)})");
+            ctx.Check(codeRows != null && !codeRows.Any(row => row.Contains(stable, StringComparison.Ordinal)),
+                $"and name no address");
+
+            // The harness's port base is not the default port, so the address is written bracketed.
+            string address = $"IPv6  [{stable}]:{offline.Port.ToString(System.Globalization.CultureInfo.InvariantCulture)}  {CoopDoorText.CopyPress}";
+            string[]? offlineRows = HostTheLobby(ctx, layout, offline, ends);
+            ctx.Check(offlineRows != null && offlineRows.SequenceEqual(new[] { address, $"No internet code: {CoopDoorText.NoWebRtc}" }),
+                $"without WebRTC they pin the address with the reason under it ({Joined(offlineRows)})");
+
+            string[]? lanRows = HostTheLobby(ctx, layout, lan, ends);
+            ctx.Check(lanRows != null && lanRows.SequenceEqual(new[] { address }),
+                $"with no master server they pin the address ({Joined(lanRows)})");
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            coded.Discard();
+            offline.Discard();
+            lan.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
+    // A Dogfight host door on its own loopback end, wrapped by carrier, naming a stable IPv6 address.
+    // With master it has a master server set, an empty canned list.
+    private static NetPlayFeature NamedHost(Func<INetTransport, INetTransport> carrier, bool master, string ipv6, int seed)
+    {
+        var end = LoopbackTransport.Mesh(1, LoopbackConditions.Perfect, new Random(seed))[0];
+        return new NetPlayFeature((_, _, _) => carrier(end), (_, _) => throw new InvalidOperationException("the host does not join"))
+        {
+            Master = master ? new MasterDirectory(_ => System.Threading.Tasks.Task.FromResult("{\"games\":[]}")) : null,
+            StableIpv6 = () => ipv6,
+        };
+    }
+
+    // The Connection page's Host on its own Original end. Returns the lobby's pinned Network rows as
+    // drawn, or null when no lobby opened.
+    private static string[]? HostTheLobby(TestContext ctx, MenuLayout layout, NetPlayFeature door, List<End> ends)
+    {
+        var host = Open(ctx, layout, door, ends);
+        if (host == null)
+        {
+            return null;
+        }
+
+        ClickRow(ctx, host, OriginalShell.MultiplayerKey);
+        ClickRow(ctx, host, OriginalConnectionScreen.HostKey);
+        Answer(ctx, host, "Zachary", "Pirates");
+        Pump(host);
+        Pump(host);
+        var lobby = door.Dogfight;
+        ctx.Check(host.Shell.Screen == OriginalScreen.Lobby && lobby != null, $"Host opens the lobby ({host.Shell.Screen}, {door.Stage})");
+        if (lobby == null)
+        {
+            return null;
+        }
+
+        var notes = lobby.Chat.Where(line => line.Name == CoopDoorText.NoteName).Select(line => line.Text).ToList();
+        ctx.Check(notes.Count == 0, $"the host's chat carries no {CoopDoorText.NoteName} note ({string.Join(" | ", notes)})");
+        var board = host.Shell.Compose();
+        var rows = host.Shell.Lobby.NetworkRows.ToArray();
+        ctx.Check(rows.Length > 0 && board.Lines.Any(line => line.Text == CoopDoorText.NoteName) && rows.All(row => board.Lines.Any(line => line.Text == row)),
+            $"the lobby draws its {CoopDoorText.NoteName} rows over the chat ({Joined(rows)})");
+        ctx.Check(rows.Any(row => row.Contains(door.HostIpv6 ?? "-", StringComparison.Ordinal))
+                  == board.Lines.Any(line => line.Text.Contains(door.HostIpv6 ?? "-", StringComparison.Ordinal)),
+            $"and names the address nowhere else on the board");
+        return rows;
+    }
+
+    private static string Joined(string[]? rows) => rows == null ? "no lobby" : string.Join(" | ", rows);
+
     // The Connection page's Host on a carrier the master server listed. The lobby pins the code over
     // its chat, and the copy key copies the code rather than an address.
     private static void ShowTheCode(TestContext ctx, End host, List<string> copied)

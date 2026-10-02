@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using CSVM.Net;
 using CSVM.UI.Menu;
 using Xunit;
@@ -8,8 +7,8 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The address a hosting door names to its guests, the words the boards and the lobby show for it,
-/// and its copy onto the clipboard. The addresses and the clipboard are seams, so every case here
+/// The address a hosting door names to its guests, the words its boards and lobby rows show for
+/// it, and its copy onto the clipboard. The addresses and the clipboard are seams, so every case here
 /// names its own and records what was copied.
 /// </summary>
 public class HostAddressDoorTests
@@ -124,7 +123,7 @@ public class HostAddressDoorTests
         Assert.False(door.NamesHostAddress);
         Assert.Equal("", CoopDoorText.HostAddressLine(door));
         Assert.Equal("", CoopDoorText.HostAddressStatus(door));
-        Assert.Empty(CoopDoorText.HostAddressNotes(door));
+        Assert.Empty(CoopDoorText.HostLobbyLines(door));
         Assert.False(door.CopyGuestAddress());
 
         // ABLE-TO-FAIL CONTROL: an address seam with no clipboard names the address but copies nothing.
@@ -173,19 +172,18 @@ public class HostAddressDoorTests
     }
 
     [Fact]
-    public void ADogfightHostsLobbyShowsTheAddressUnderTheNetworkName()
+    public void ADogfightHostWithNoMasterServerPinsTheAddressAndPostsNoChatNote()
     {
         var door = Door(() => Stable, () => Lan, _ => { });
         door.OpenDogfightHost(NetSeats.MaxPlayers - 1);
 
-        var notes = door.Dogfight!.Chat.Where(line => line.Name == CoopDoorText.NoteName).Select(line => line.Text).ToList();
-        Assert.Equal(CoopDoorText.HostAddressNotes(door), notes);
-        Assert.Contains(notes, text => text.Contains(Stable, StringComparison.Ordinal));
-        Assert.All(notes, text => Assert.True(text.Length <= 80, text));
+        Assert.Equal(new[] { $"IPv6  {Stable}  {CoopDoorText.CopyPress}" }, CoopDoorText.HostLobbyLines(door));
+        Assert.Empty(door.Dogfight!.Chat);
 
         var none = Door(() => null, () => null, _ => { });
         none.OpenDogfightHost(NetSeats.MaxPlayers - 1);
-        Assert.Contains(none.Dogfight!.Chat, line => line.Text == $"{CoopDoorText.NoIpv6}.");
+        Assert.Equal(new[] { CoopDoorText.NoIpv6 }, CoopDoorText.HostLobbyLines(none));
+        Assert.Empty(none.Dogfight!.Chat);
     }
 
     private static NetPlayFeature Door(Func<string?> ipv6, Func<string?> lan, Action<string>? copy, UpnpPortMapResult? map = null)

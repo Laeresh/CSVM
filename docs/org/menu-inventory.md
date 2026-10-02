@@ -305,7 +305,7 @@ named in it; `WaveEdit` is the twelfth and has no aid, which is the warning unde
 | `connection:gameinfo`, `connection:playerinfo` | Original only: the Connection page with GAME INFORMATION or PLAYER INFORMATION standing over it on the aids' sample answer (game and callsign Zachary, eight players, Gruff Male), over an in-process door | out of scope |
 | `connection:code` | Original only: the Connection page over an in-process door with a master server set, Join by code picked with `K7Q-X3M` in its box and the cursor there | out of scope |
 | `connection-games[:searching]` | Original only: the LAN games list over an in-process LAN answering with five sample games, one of another build version, or with none so the Searching box stands | out of scope |
-| `lobby[:host\|guest[:mission\|plane\|ammo\|rockets\|scores\|outlaw\|outlaw-rockets[:code\|offline]]]` | Original only: the Multiplayer Lobby as its host or first guest, over an in-process wire with two guests, Time 5 and Limited Lives set, the first guest Ready and one chat line from each, on the named tab; `outlaw` and `outlaw-rockets` open the outlaw list on Airframes or Rockets with two airframes and All Rockets outlawed; a third argument, `code` or `offline`, poses the host's master server as `campaign-coop`'s does, which the host's pinned chat line shows | out of scope |
+| `lobby[:host\|guest[:mission\|plane\|ammo\|rockets\|scores\|outlaw\|outlaw-rockets[:code\|offline]]]` | Original only: the Multiplayer Lobby as its host or first guest, over an in-process wire with two guests, Time 5 and Limited Lives set, the first guest Ready and one chat line from each, on the named tab; `outlaw` and `outlaw-rockets` open the outlaw list on Airframes or Rockets with two airframes and All Rockets outlawed; a third argument, `code` or `offline`, poses the host's master server as `campaign-coop`'s does, which the host's pinned Network rows show | out of scope |
 | `network-coopjoin` | the Network board of a guest joined over the loopback to a campaign host, the session named in its status | `Network` |
 | `network-coopwait` | that guest's waiting board | `Network` |
 | `loadboard[:mission_type]` | the load screen's blackboard, over the menu, writing that mission type's own dialog | out of scope |
@@ -572,7 +572,10 @@ constants rather than reading a layout.
   no scroll bar. Leave Game always lands on the Connection page. The host's options lock while it
   is Ready, and any option change clears every Ready. A guest's plane and ammo picks stay live, and
   a changed pick clears that guest's own Ready. The Lives box is greyed until Limited Lives is
-  ticked, then reads 3 (the remake's own default) and takes 1..99. A Built-in Dogfight host serves
+  ticked, then reads 3 (the remake's own default) and takes 1..99. A host's chat pane carries
+  remake-only rows pinned at its top under the name Network, in the picked sub-tab's red: the
+  internet join code alone while the master server has listed the game, else the address guests
+  type and, under it, why there is no code, as the co-op band reads. A Built-in Dogfight host serves
   an Original guest too: its launch waits for that guest's Ready and flies its pick on one of the
   seven lobby environments.
 - **The cabin's network door.** Remake-only: a paper plaque in the `FC_B_CHANGEPLANE` convention at
