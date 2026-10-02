@@ -857,6 +857,7 @@ public sealed class OriginalPresentation : IMenuPresentation
 
         // And again after the frame, so a screen change this frame is what the next poll reads.
         _host.Seats[0].CapturingText = _shell.CapturingText;
+        _shell.FollowKeyboard();
         // The same for the player rows, so the press that opened a rebinding page leaves it already
         // holding its seats rather than blank until the next frame.
         if (_shell.Screen is OriginalScreen.ControlsPrefs or OriginalScreen.Keys)
@@ -902,6 +903,8 @@ public sealed class OriginalPresentation : IMenuPresentation
         {
             host.Seats[0].CapturingText = false;
         }
+
+        ScreenKeyboard.Hide(OriginalShell.KeyboardOwner);
 
         StopNarration();
         // Off screen the AUDIO page's preview goes with it, the mix it opened over put back: a hide

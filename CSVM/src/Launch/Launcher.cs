@@ -858,6 +858,14 @@ public partial class Launcher : Node3D
         _buildStamp = new UI.Screens.BuildStamp(_repoRoot, _exported);
         AddChild(_buildStamp);
 
+        // The strip over Steam's on-screen keyboard, process-wide because the menus, the extraction
+        // screen and the flight chat all raise it. It draws nothing on any other machine.
+        AddChild(new UI.Screens.ScreenKeyboardEcho());
+        if (ScreenKeyboard.Available)
+        {
+            Log.Info("core", $"screen keyboard: available (SteamOS in Game Mode)");
+        }
+
         // --debug-net, process-wide like the two above: the session it reads comes and goes.
         if (_spec.DebugNet)
         {

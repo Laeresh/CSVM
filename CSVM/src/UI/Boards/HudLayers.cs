@@ -86,4 +86,9 @@ internal static class HudLayers
     /// <see cref="PerfReadout"/> because a cinema is the picture being judged rather than a mode
     /// screen hiding a process-wide fact.</summary>
     public const int Cinema = 12;
+
+    /// <summary>The echo strip over Steam's on-screen keyboard (<c>UI.Screens.ScreenKeyboardEcho</c>).
+    /// Above everything, because it repeats a field the keyboard may have covered, and it shows only
+    /// while that keyboard is up.</summary>
+    public const int KeyboardEcho = 13;
 }

@@ -53,6 +53,11 @@ public sealed record MenuCommands
     /// <summary>Confirm the focused thing (edge).</summary>
     public bool Accept { get; init; }
 
+    /// <summary>Whether <see cref="Accept"/> came from no keyboard key: a pad, a stick or a pointer.
+    /// A text field answers such a press with the on-screen keyboard where one exists
+    /// (<see cref="Utils.ScreenKeyboard"/>). A key's press stays the field's own Enter.</summary>
+    public bool KeylessAccept { get; init; }
+
     /// <summary>Leave the current screen or modal (edge).</summary>
     public bool Back { get; init; }
 

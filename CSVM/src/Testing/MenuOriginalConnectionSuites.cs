@@ -676,6 +676,88 @@ internal static class MenuOriginalConnectionSuites
         }
     }
 
+    [Suite("menu-original-screen-keyboard",
+        "Steam's on-screen keyboard on the Original Connection page, its URLs recorded: taps on "
+        + "plaques raise nothing, a tap in the IP Address box raises it without connecting, the "
+        + "echo strip repeats the box's words, the focus leaving the box lowers it and coming back "
+        + "alone raises nothing, a pad's Accept in the box raises it without connecting, and a key's "
+        + "Enter lowers it and is the box's own Connect")]
+    internal static void TheOnScreenKeyboard(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var door = new NetPlayFeature(
+            (_, _, _) => throw new InvalidOperationException("the guest does not host"),
+            (_, _) => throw new InvalidOperationException("an empty address is never joined"));
+        var ends = new List<End>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-screen-keyboard");
+        var echo = new ScreenKeyboardEcho();
+        ctx.Host.AddChild(echo);
+        var keyboard = new ScreenKeyboardRecorder();
+        try
+        {
+            var guest = Open(ctx, layout, door, ends);
+            if (guest == null)
+            {
+                return;
+            }
+
+            ClickRow(ctx, guest, OriginalShell.MultiplayerKey);
+            ClickRow(ctx, guest, OriginalConnectionScreen.InternetKey);
+            ctx.Check(keyboard.Urls.Count == 0, $"ABLE-TO-FAIL CONTROL: taps on plaques raise nothing ({keyboard.Said})");
+            ClickRow(ctx, guest, OriginalConnectionScreen.AddressKey);
+            ctx.Check(keyboard.Said == CSVM.Utils.ScreenKeyboard.OpenUrl
+                      && CSVM.Utils.ScreenKeyboard.Shown?.Id == OriginalConnectionScreen.AddressKey,
+                $"a tap in the IP Address box raises the keyboard for it ({keyboard.Said}, {CSVM.Utils.ScreenKeyboard.Shown?.Id})");
+            ctx.Check(guest.Shell.Screen == OriginalScreen.Connection && guest.Shell.Dialog == null && door.Stage == NetDoorStage.Shut,
+                $"and does not connect ({guest.Shell.Screen}, {guest.Shell.Dialog?.Message}, {door.Stage})");
+            echo._Process(0);
+            ctx.Check(echo.Line == $"{door.Address}_", $"the echo strip repeats the box's words with a caret ({echo.Line})");
+
+            Press(guest, new MenuCommands { MoveY = 1 });
+            echo._Process(0);
+            ctx.Check(keyboard.Urls.Count == 2 && keyboard.Urls[1] == CSVM.Utils.ScreenKeyboard.CloseUrl && echo.Line.Length == 0,
+                $"the focus leaving the box lowers it and the strip goes ({guest.Shell.FocusedKey}, {keyboard.Said})");
+            Press(guest, new MenuCommands { MoveY = -1 });
+            ctx.Check(guest.Shell.FocusedKey == OriginalConnectionScreen.AddressKey && keyboard.Urls.Count == 2,
+                $"coming back onto the box alone raises nothing ({guest.Shell.FocusedKey}, {keyboard.Said})");
+
+            Press(guest, new MenuCommands { Accept = true, KeylessAccept = true });
+            ctx.Check(keyboard.Urls.Count == 3 && guest.Shell.Dialog == null,
+                $"a pad's Accept in the box raises it and does not connect ({keyboard.Said}, {guest.Shell.Dialog?.Message})");
+
+            for (int i = 0; i < 64 && door.Address.Length > 0; i++)
+            {
+                Press(guest, new MenuCommands { Erase = true });
+            }
+
+            Press(guest, new MenuCommands { Accept = true });
+            ctx.Check(keyboard.Urls.Count == 4 && keyboard.Urls[3] == CSVM.Utils.ScreenKeyboard.CloseUrl && guest.Shell.Dialog != null,
+                $"a key's Enter lowers it and is the box's Connect, refusing the emptied address ({keyboard.Said}, {guest.Shell.Dialog?.Message})");
+        }
+        finally
+        {
+            keyboard.Dispose();
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            door.Discard();
+            ctx.Host.RemoveChild(echo);
+            echo.QueueFree();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
     [Suite("lan-discovery",
         "The shipped LAN discovery socket on the loopback: a responder bound on the discovery port "
         + "answers a search sent to 127.0.0.1 by unicast with the advert and game port it was "
@@ -2597,6 +2679,13 @@ internal static class MenuOriginalConnectionSuites
     }
 
     private static OriginalRow? Row(OriginalShell shell, string key) => shell.Rows.FirstOrDefault(row => row.Key == key);
+
+    // One scripted frame on an end.
+    private static void Press(End end, MenuCommands commands)
+    {
+        end.Seat.Enqueue(commands);
+        end.Host.Tick(Dt);
+    }
 
     private static bool Draws(ComposedBoard board, string text) =>
         board.Lines.Any(line => line.Text.Contains(text, StringComparison.Ordinal));

@@ -123,3 +123,9 @@ features the launcher wires; `Build` stands a launchscreen on a host over the su
 menu suite reads `user://Planes`; `DropScratchPlanes` removes it. Seat 0 joins through the setup
 feature, so it is added after the features; the controls feature is the form that saves nothing.
 A suite that drives the multiplayer door passes its own `netDoor`; `UI/Menu/MenuHost.cs` is the host.
+
+## src/Testing/ScreenKeyboardRecorder.cs
+A suite's stand-in for Steam's on-screen keyboard: `Utils/ScreenKeyboard.cs` reads as available
+and every URL it would open is recorded instead. Disposing it lowers whatever is still up and puts
+back the detected state and the real handler. Used by `menu-screen-keyboard` and
+`menu-original-screen-keyboard`.

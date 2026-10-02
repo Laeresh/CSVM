@@ -895,6 +895,8 @@ public partial class GameSession : Node3D
             // Restore the persistent (Launcher-owned) main camera: splitscreen stood it down while
             // the panes rendered, and the launchscreen and the next session expect it current.
             _camera.Current = true;
+            // A line still open when the session ends leaves no field for the keyboard to type into.
+            ScreenKeyboard.Hide(SessionNet.ChatKeyboardOwner);
         }
     }
 

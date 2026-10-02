@@ -70,6 +70,76 @@ internal static class MenuNetPlaySuites
         }
     }
 
+    [Suite("menu-screen-keyboard",
+        "Steam's on-screen keyboard on Built-in's multiplayer board, its URLs recorded: off a "
+        + "SteamOS device a pad's Accept on the address row raises nothing, on one it raises the "
+        + "keyboard there without leaving the row, the echo strip repeats the address and masks the "
+        + "password, focus moving off the field lowers it and coming back alone raises nothing, and "
+        + "a key's Enter in the field lowers it")]
+    internal static void TheOnScreenKeyboard(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var exits = new List<MenuExit>();
+        var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
+        var menu = LaunchMenu.Build(ctx.ZrdrPath, ctx.DataRoot, host, seat.Input);
+        var door = host.Features.Get<NetPlayFeature>();
+        var echo = new ScreenKeyboardEcho();
+        ctx.Host.AddChild(menu);
+        ctx.Host.AddChild(echo);
+        var keyboard = new ScreenKeyboardRecorder();
+        try
+        {
+            var pad = new MenuCommands { Accept = true, KeylessAccept = true };
+            menu.ShowMenu();
+            OpenBoard(ctx, menu);
+            menu.Drive(Up);
+            ctx.Check(menu.ShownRow == 1, $"Up from Host stands on the address row ({menu.ShownRow}, {menu.ShownRowText})");
+            CSVM.Utils.ScreenKeyboard.Available = false;
+            menu.Drive(pad);
+            ctx.Check(keyboard.Urls.Count == 0, $"ABLE-TO-FAIL CONTROL: off a SteamOS device the pad's Accept raises nothing ({keyboard.Said})");
+            CSVM.Utils.ScreenKeyboard.Available = true;
+
+            menu.Drive(pad);
+            ctx.Check(keyboard.Said == CSVM.Utils.ScreenKeyboard.OpenUrl && CSVM.Utils.ScreenKeyboard.Shown?.Id == "address",
+                $"on one the pad's Accept raises the keyboard for the address ({keyboard.Said}, {CSVM.Utils.ScreenKeyboard.Shown?.Id})");
+            ctx.Check(menu.ShownScreen == "Network" && menu.ShownRow == 1, $"and the press is spent there ({menu.ShownScreen}, {menu.ShownRow})");
+            echo._Process(0);
+            ctx.Check(echo.Line == $"Address:  {door.Address}_", $"the echo strip repeats the address with a caret ({echo.Line})");
+
+            menu.Drive(Down);
+            echo._Process(0);
+            ctx.Check(keyboard.Urls.Count == 2 && keyboard.Urls[1] == CSVM.Utils.ScreenKeyboard.CloseUrl && echo.Line.Length == 0,
+                $"the cursor leaving the field lowers it and the strip goes ({keyboard.Said}, '{echo.Line}')");
+            menu.Drive(Up);
+            ctx.Check(keyboard.Urls.Count == 2, $"coming back onto the field alone raises nothing ({keyboard.Said})");
+
+            menu.Drive(pad);
+            menu.Drive(Accept);
+            ctx.Check(keyboard.Urls.Count == 4 && keyboard.Urls[3] == CSVM.Utils.ScreenKeyboard.CloseUrl && menu.ShownRow == 1,
+                $"a key's Enter in the field lowers it ({keyboard.Said}, {menu.ShownRow})");
+
+            door.Password = "abc";
+            for (int i = 0; i < 5; i++)
+            {
+                menu.Drive(Down);
+            }
+
+            menu.Drive(pad);
+            echo._Process(0);
+            ctx.Check(CSVM.Utils.ScreenKeyboard.Shown?.Id == "password" && echo.Line == "Password:  ***_",
+                $"the password raises it masked ({CSVM.Utils.ScreenKeyboard.Shown?.Id}, {echo.Line})");
+        }
+        finally
+        {
+            keyboard.Dispose();
+            door.Discard();
+            ctx.Host.RemoveChild(echo);
+            echo.QueueFree();
+            ctx.Host.RemoveChild(menu);
+            menu.QueueFree();
+        }
+    }
+
     [Suite("menu-host-address",
         "a hosting door names the address a guest types and copies it: the Built-in board's status "
         + "line names a stand-in stable IPv6 address bracketed with the walked port and the LAN "
