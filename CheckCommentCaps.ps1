@@ -204,12 +204,27 @@ function Get-ChangedLines {
     $map
 }
 
-# The working tree's added line ranges against one commit, per file.
+# The working tree's added lines against one commit, per file, as one-line ranges.
+#
+# A line whose exact text the same diff also removes is a moved line, not a written one, and is
+# left out. Over a range that deletes or moves a lot of code (CI diffing a whole push), the line
+# alignment pairs old lines with the wrong neighbours and reports untouched comments as added.
+# The alignment depends on the diff algorithm and no algorithm avoids it; the text does not.
 function Get-AddedRanges {
     param([string]$Root, [string]$Against)
+    $diff = & git -C $Root diff --diff-algorithm=histogram $Against -U0 -- CSVM/src CSVM.Tests 2>$null
+    $removed = @{}
+    $inCs = $false
+    foreach ($row in @($diff)) {
+        if ($row -match '^diff --git ') { $inCs = $row -match '\.cs$'; continue }
+        if ($inCs -and $row -match '^-(?!-- )') {
+            $t = $row.Substring(1)
+            $removed[$t] = 1 + [int]$removed[$t]
+        }
+    }
     $map = @{}
     $file = $null
-    $diff = & git -C $Root diff $Against -U0 -- CSVM/src CSVM.Tests 2>$null
+    $line = 0
     foreach ($row in @($diff)) {
         if ($row -match '^\+\+\+ b/(.*\.cs)$') {
             $file = (Join-Path $Root ($Matches[1] -replace '/', $sep))
@@ -217,11 +232,12 @@ function Get-AddedRanges {
             continue
         }
         if ($row -match '^\+\+\+ ') { $file = $null; continue }
-        if ($file -and $row -match '^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@') {
-            $start = [int]$Matches[1]
-            # An unmatched group is $null, not '': testing -ne '' read a one-line hunk as zero lines.
-            $count = if ($Matches[2]) { [int]$Matches[2] } else { 1 }
-            if ($count -gt 0) { $map[$file] += ,@($start, ($start + $count - 1)) }
+        if (-not $file) { continue }
+        if ($row -match '^@@ -\d+(?:,\d+)? \+(\d+)') { $line = [int]$Matches[1]; continue }
+        if ($row.StartsWith('+')) {
+            $t = $row.Substring(1)
+            if ($removed[$t]) { $removed[$t]-- } else { $map[$file] += ,@($line, $line) }
+            $line++
         }
     }
     $map

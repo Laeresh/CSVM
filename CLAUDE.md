@@ -26,7 +26,9 @@ landing gate for any change under `CSVM/`.
   with one of those, so reading, grepping or quoting the runner never builds. The Rebuild is
   deliberate: analyzer warnings are emitted only when the compiler runs, and an incremental build
   of an up-to-date tree reports nothing. (4) The content gate,
-  [`CheckCommitContent.ps1`](CheckCommitContent.ps1), before a commit.
+  [`CheckCommitContent.ps1`](CheckCommitContent.ps1), before a commit, and again before a push
+  with the comment caps scoped as CI scopes them (everything the branch adds over `origin/main`),
+  which catches what a pull, a merge or the escape hatch let past the commit gate.
   ⚠ **Hook (3) formats the tree the command names.** An absolute `RunTests.ps1` path names its
   own tree, a `git -C <tree>` anywhere in the command names one, and only a command naming
   neither falls back to the session's ambient cwd. A `Set-Location` inside the same command is

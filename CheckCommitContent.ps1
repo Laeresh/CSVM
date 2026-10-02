@@ -73,6 +73,26 @@ $gitGlobal = '(?:-[Cc]\s+' + $anyToken +
     '|--[a-z][a-z-]*|-[a-zA-Z])'
 $commitInvocation = '(?:^|[\r\n;|&{(])\s*&?\s*git(?:\s+' + $gitGlobal + ')*\s+commit(?:\s|$)'
 
+# A push runs the same checks with the comment caps scoped the way CI scopes them: everything the
+# pushed branch adds over the remote's main, not just the working tree against HEAD. A commit gate
+# never sees what a pull or a merge brought in, and a commit made with the escape hatch set is
+# never checked at all; both used to surface only as a red CI run on main.
+$pushInvocation = '(?:^|[\r\n;|&{(])\s*&?\s*git(?:\s+' + $gitGlobal + ')*\s+push(?:\s|$)'
+
+# The base CI will diff the pushed branch against: where it forks from the remote's main (a push
+# to main is then exactly "what this push adds"), else its upstream, else its parent.
+function Get-PushBase {
+    param([string]$Root)
+    foreach ($ref in @('origin/HEAD', 'origin/main', 'origin/master')) {
+        if (-not (git -C $Root rev-parse -q --verify ($ref + '^{commit}') 2>$null)) { continue }
+        $mb = git -C $Root merge-base HEAD $ref 2>$null
+        if ($mb) { return [string]$mb }
+    }
+    $up = git -C $Root rev-parse -q --verify '@{upstream}' 2>$null
+    if ($up) { return [string]$up }
+    return 'HEAD^'
+}
+
 # A path as written on the command line, minus the quoting.
 function Get-UnquotedPath {
     param([string]$Raw)
@@ -547,6 +567,35 @@ function Invoke-SelfTest {
             'git --work-tree=' + $wt + ' commit -m x') | Out-Null
         Assert-Row 'guard  a --work-tree-scoped commit is checked end to end' ($LASTEXITCODE -eq 2)
 
+        # Row 13: the push gate. A long sentence committed with no gate run (a pull, a merge, the
+        # escape hatch) passes a commit check on the clean tree and blocks the push, and a block
+        # that only moved is not charged to the push that moved it.
+        $fxP = Join-Path $base 'fxpush'
+        $longLine = '// ' + ((1..30 | ForEach-Object { 'word' }) -join ' ') + '.' + [char]10
+        Write-Chars -File (Join-Path $fxP 'CSVM.Tests/Old.cs') -Codes ([int[]][char[]](
+            $longLine + 'class Old { }' + [char]10))
+        git -C $fxP init -q 2>&1 | Out-Null
+        git -C $fxP config user.email 'selftest@example.invalid' | Out-Null
+        git -C $fxP config user.name 'selftest' | Out-Null
+        git -C $fxP add -A 2>&1 | Out-Null
+        git -C $fxP commit -q -m 'seed' 2>&1 | Out-Null
+        git -C $fxP update-ref refs/remotes/origin/main HEAD 2>&1 | Out-Null
+        Write-Chars -File (Join-Path $fxP 'CSVM.Tests/Old.cs') -Codes ([int[]][char[]]('class Old { }' + [char]10))
+        Write-Chars -File (Join-Path $fxP 'CSVM.Tests/Moved.cs') -Codes ([int[]][char[]](
+            $longLine + 'class Moved { }' + [char]10))
+        git -C $fxP add -A 2>&1 | Out-Null
+        git -C $fxP commit -q -m 'move' 2>&1 | Out-Null
+        & (Join-Path $scriptRoot 'CheckCommitContent.ps1') -Command ('git -C ' + $fxP + ' push') | Out-Null
+        Assert-Row 'row 13 a moved over-cap block passes the push' ($LASTEXITCODE -eq 0)
+        Write-Chars -File (Join-Path $fxP 'CSVM.Tests/New.cs') -Codes ([int[]][char[]](
+            ('// ' + ((1..30 | ForEach-Object { 'fresh' }) -join ' ') + '.' + [char]10 + 'class New { }' + [char]10)))
+        git -C $fxP add -A 2>&1 | Out-Null
+        git -C $fxP commit -q -m 'ungated' 2>&1 | Out-Null
+        & (Join-Path $scriptRoot 'CheckCommitContent.ps1') -Command ('git -C ' + $fxP + ' commit -m x') | Out-Null
+        Assert-Row 'row 13 an ungated commit leaves a tree the commit check passes' ($LASTEXITCODE -eq 0)
+        & (Join-Path $scriptRoot 'CheckCommitContent.ps1') -Command ('git -C ' + $fxP + ' push -u origin main') | Out-Null
+        Assert-Row 'row 13 and the push of it blocks' ($LASTEXITCODE -eq 2)
+
         # The trigger itself. It is the single point of failure for the whole gate: every harness
         # calls this script unconditionally and this pattern decides whether anything runs, so the
         # forms git accepts between "git" and its subcommand are enumerated here rather than
@@ -581,6 +630,15 @@ function Invoke-SelfTest {
             'git commit-tree HEAD -m x') $false
         Assert-Trigger 'trigger  a non-global token before commit is not a commit' (
             'git log commit') $false
+        function Assert-PushTrigger {
+            param([string]$Name, [string]$CommandLine, [bool]$Expected)
+            Assert-Row $Name (($CommandLine -match $pushInvocation) -eq $Expected)
+        }
+        Assert-PushTrigger 'trigger  a bare push' 'git push' $true
+        Assert-PushTrigger 'trigger  git -C <tree> push -u origin b' 'git -C Z:\wt push -u origin b' $true
+        Assert-PushTrigger 'trigger  a push after a commit' 'git commit -m x && git push' $true
+        Assert-PushTrigger 'trigger  git log --grep=push is not a push' 'git log --grep=push' $false
+        Assert-PushTrigger 'trigger  a push quoted in a message is not one' 'Write-Host "git push"' $false
     }
     finally {
         if (Test-Path -LiteralPath $wt) { git -C $main worktree remove --force $wt 2>&1 | Out-Null }
@@ -614,12 +672,14 @@ if (-not $Root) {
     # The one trigger every harness relies on; see $commitInvocation above for why it is shaped
     # the way it is. No harness carries a trigger of its own, because three that did all carried
     # the same wrong one.
-    if ($Command -notmatch $commitInvocation) { exit 0 }
+    $isCommit = $Command -match $commitInvocation
+    if (-not $isCommit -and $Command -notmatch $pushInvocation) { exit 0 }
     if ($env:CSVM_SKIP_CONTENT_CHECKS) {
         [Console]::Error.WriteLine('CSVM_SKIP_CONTENT_CHECKS is set: content checks skipped.')
         exit 0
     }
     $Root = Get-TargetRoots -CommandLine $Command
+    if (-not $isCommit -and $Root) { $Against = Get-PushBase -Root $Root[0] }
 }
 
 $message = ''
