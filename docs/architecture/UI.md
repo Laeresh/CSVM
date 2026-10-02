@@ -295,6 +295,20 @@ their background, and [../org/campaign-board.md](../org/campaign-board.md) says 
 `EscapeBlackboard` is the one crossing, the load screen's own chalk under the near-black labels the
 escape strips' light plates need, which an Instant Action pause is the only screen to want both of.
 
+## src/UI/Boards/ChromeType.cs
+The type scale for chrome the original never painted, read by the join board, the in-flight
+overlays (`StuntRunHud`, `TargetHud`, `VersusHud`) and the stunt results board. It owns three
+things: the face (the theme's default font, varied for italic and bold), one size ladder
+(`ChromeSize`) in frame units, and metres for a printed distance. A frame unit is the board's own
+authored pixel, 1/600 of the frame's height, so a composed board takes a rung as authored and a
+surface stated at another reference (1440 for the HUD through `HudMetrics`, 720 for a results
+board) converts it through `InReference`. Painted original artwork carries no type scale and does
+not read this one: `BoardPalette` and the composed campaign boards keep their layout's own sizes.
+
+## src/UI/Boards/ChromeSize.cs
+The rungs of `ChromeType`'s ladder, largest first: 26, 22, 19, 17, 15 and 13 frame units for the
+boards, 11, 8 and 6 for in-flight text. Each member's comment names where the rung stands today.
+
 ## src/UI/Boards/SeatStrip.cs
 The shape both presentations' player chip strip shares, so the two corners cannot drift apart: the
 face, the inset from the top-right corner, the cell a chip centres in where a strip cannot measure

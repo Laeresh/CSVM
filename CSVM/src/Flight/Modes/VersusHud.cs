@@ -29,13 +29,15 @@ public sealed partial class VersusHud : Control
     public IReadOnlyList<PlayerRig>? Rigs;
 
     // 1440p reference metrics (scaled by HudMetrics, matches TargetHud's calibration).
-    private const int RefStatusFont = 19;
-    private const int RefMarkerFont = 14;
     private const float RefStatusY = 100f;    // same slot as StuntRunHud's run-status line
     private const float RefArrowLen = 18f;
     private const float RefArrowHalf = 8f;
     private const float RefTextGap = 8f;
     private const float RefOnScreenLift = 22f; // gap above a plane's own projected point
+
+    // The status line's and the markers' sizes, chrome type scale rungs in the same reference.
+    private static readonly float RefStatusFont = ChromeType.InReference(ChromeSize.Readout, HudMetrics.ReferenceHeight);
+    private static readonly float RefMarkerFont = ChromeType.InReference(ChromeSize.Label, HudMetrics.ReferenceHeight);
 
     private static readonly Color HudBlue = new(0.55f, 0.78f, 1f);
     private static readonly Color Shadow = new(0f, 0f, 0f, 0.75f);
@@ -90,7 +92,7 @@ public sealed partial class VersusHud : Control
         float s = Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
         if (s <= 0f)
             return;
-        var font = GetThemeDefaultFont();
+        var font = ChromeType.Face(this);
         int statusFont = Mathf.Max(1, Mathf.RoundToInt(RefStatusFont * s * HudMetrics.StatusTextScale));
         float cx = Size.X / 2f;
 

@@ -58,20 +58,18 @@ public sealed class OriginalJoinBoard : IOriginalScreenModule
     private const float BackX = 500f;
     private const float ContinueX = 620f;
 
-    // The board's own sizes, the prototype's, until a shared menu type scale exists to take them over.
-    private const float HeadingFont = 26f;
-    private const float ArticlesFont = 22f;
-    private const float SubtitleFont = 14f;
-    private const float TagFont = 14f;
-    private const float DeviceFont = 17f;
-    private const float RuleFont = 15f;
-    private const float StatusFont = 13f;
-
     // The rule under an entry, the scrapbook's own faded brown.
     private const byte RuleR = 90;
     private const byte RuleG = 80;
     private const byte RuleB = 60;
     private const float RuleOpacity = 0.55f;
+
+    // The board's sizes, rungs of the chrome type scale in its own authored pixels.
+    private static readonly float HeadingFont = ChromeType.Size(ChromeSize.Heading);
+    private static readonly float ArticlesFont = ChromeType.Size(ChromeSize.Title);
+    private static readonly float DeviceFont = ChromeType.Size(ChromeSize.Body);
+    private static readonly float RuleFont = ChromeType.Size(ChromeSize.Text);
+    private static readonly float SmallFont = ChromeType.Size(ChromeSize.Caption);
 
     private readonly IOriginalScreenHost _host;
     private readonly IJoinRoster? _roster;
@@ -185,7 +183,7 @@ public sealed class OriginalJoinBoard : IOriginalScreenModule
         ArgumentNullException.ThrowIfNull(layers);
         layers.Backdrop.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, Background), 0f, 0f));
         layers.Lines.Add(new BoardLine("CREW MANIFEST", ManifestX, ManifestY, 0f, HeadingFont, BoardInk.Heading, Bold: true));
-        layers.Lines.Add(new BoardLine("four seats, no stowaways", ManifestX, SubtitleY, 0f, SubtitleFont, BoardInk.Detail, Italic: true));
+        layers.Lines.Add(new BoardLine("four seats, no stowaways", ManifestX, SubtitleY, 0f, SmallFont, BoardInk.Detail, Italic: true));
         for (int entry = 0; entry < Entries; entry++)
         {
             ComposeEntry(entry, layers);
@@ -231,13 +229,13 @@ public sealed class OriginalJoinBoard : IOriginalScreenModule
         float y = EntryTop + (entry * EntryPitch);
         layers.Fills.Add(new BoardFill(ManifestX, y, ChipWidth, ChipHeight, 0, 0, 0,
             signed ? 1f : 0.25f, Ink: SeatStrip.Ink(entry)));
-        layers.Lines.Add(new BoardLine(SplitScreen.PlayerTag(entry), ManifestX, y + TagDrop, ChipWidth, TagFont,
+        layers.Lines.Add(new BoardLine(SplitScreen.PlayerTag(entry), ManifestX, y + TagDrop, ChipWidth, SmallFont,
             BoardInk.Dialog, Justify: BoardJustify.Center, Bold: true));
         if (signed)
         {
             layers.Lines.Add(new BoardLine(roster!.Device(entry), WordsX, y + DeviceDrop, WordsWidth, DeviceFont,
                 BoardInk.Row, Italic: true));
-            layers.Lines.Add(new BoardLine("signed on", WordsX, y + StatusDrop, 0f, StatusFont,
+            layers.Lines.Add(new BoardLine("signed on", WordsX, y + StatusDrop, 0f, SmallFont,
                 BoardInk.Detail, Italic: true));
         }
         else
@@ -245,7 +243,7 @@ public sealed class OriginalJoinBoard : IOriginalScreenModule
             layers.Lines.Add(new BoardLine("open seat", WordsX, y + DeviceDrop, WordsWidth, DeviceFont,
                 BoardInk.Detail, Italic: true));
             layers.Lines.Add(new BoardLine(BoardLine.GlyphSlot + " to sign on", WordsX, y + StatusDrop, 0f,
-                StatusFont, BoardInk.Detail, Italic: true)
+                SmallFont, BoardInk.Detail, Italic: true)
             {
                 Glyph = ControlGlyphs.PadA,
             });

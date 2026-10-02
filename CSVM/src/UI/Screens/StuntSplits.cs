@@ -1,4 +1,5 @@
 using CSVM.Flight.Modes;
+using CSVM.UI.Boards;
 using Godot;
 
 namespace CSVM.UI.Screens;
@@ -12,11 +13,12 @@ namespace CSVM.UI.Screens;
 /// </summary>
 public static class StuntSplits
 {
-    // Section metrics at 720p (scaled by the board's own scale). All TUNE.
-    private const int HeaderFont = 14;
-    private const int RowFont = 17;
-    private const int TotalFont = 23;
-    private const int BestFont = 16;
+    // Section sizes, chrome type scale rungs at the boards' 720p reference (scaled by the board's
+    // own scale).
+    private static readonly float HeaderFont = ChromeType.InReference(ChromeSize.Note, ResultsBoard.ReferenceHeight);
+    private static readonly float RowFont = ChromeType.InReference(ChromeSize.Text, ResultsBoard.ReferenceHeight);
+    private static readonly float TotalFont = ChromeType.InReference(ChromeSize.Lead, ResultsBoard.ReferenceHeight);
+    private static readonly float BestFont = ChromeType.InReference(ChromeSize.Caption, ResultsBoard.ReferenceHeight);
 
     private static readonly Color TotalColor = new(0.96f, 0.98f, 1f);
     private static readonly Color BestColor = new(0.60f, 0.75f, 0.95f);

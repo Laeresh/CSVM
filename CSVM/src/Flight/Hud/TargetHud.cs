@@ -4,6 +4,7 @@ using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Weapons;
+using CSVM.UI.Boards;
 using Godot;
 
 namespace CSVM.Flight.Hud;
@@ -73,7 +74,6 @@ public sealed partial class TargetHud : Control
     internal static readonly Color HudGreen = new(0.6f, 1f, 0.6f);
 
     // 1440p reference metrics (scaled by HudMetrics, matches VersusHud's calibration).
-    private const int RefMarkerFont = 14;
     private const float RefOnScreenLift = 22f; // gap above a plane's own projected point
     private const float RefStaggerStep = 18f;  // --debug-markers: gap between two edge tags on one bearing
 
@@ -107,6 +107,10 @@ public sealed partial class TargetHud : Control
     private const float RefLabelAbove = 30f;   // flipped, the block starts box top − 30
 
     private static readonly Color HudBlue = new(0.55f, 0.78f, 1f);
+
+    // The label's size, the chrome type scale's marker rung in the 1440p reference. The decoded
+    // 15-pixel pitch below is what bounds it: a larger rung runs the three lines into each other.
+    private static readonly float RefMarkerFont = ChromeType.InReference(ChromeSize.Label, HudMetrics.ReferenceHeight);
 
     private static readonly Color Shadow = new(0f, 0f, 0f, 0.75f);
 
@@ -290,7 +294,7 @@ public sealed partial class TargetHud : Control
             tag.Append(' ').Append(name);
         }
 
-        tag.Append(' ').Append(Mathf.RoundToInt(rangeM)).Append(" m");
+        tag.Append(' ').Append(ChromeType.Metres(rangeM));
         if (target.Health is { } health)
         {
             tag.Append(" H").Append(Mathf.RoundToInt(health * 100f));
@@ -535,7 +539,7 @@ public sealed partial class TargetHud : Control
         float s = Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
         if (s <= 0f)
             return;
-        var font = GetThemeDefaultFont();
+        var font = ChromeType.Face(this);
         int markerFont = Mathf.Max(1, Mathf.RoundToInt(RefMarkerFont * s * HudMetrics.MarkerTextScale));
 
         // The shipped marker, drawn in BOTH modes unlike the hostile tracker below: --debug-markers

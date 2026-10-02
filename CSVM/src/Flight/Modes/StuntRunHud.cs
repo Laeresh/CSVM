@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CSVM.Flight.Hud;
+using CSVM.UI.Boards;
 using Godot;
 
 namespace CSVM.Flight.Modes;
@@ -25,11 +26,13 @@ public sealed partial class StuntRunHud : Control
     public int PlayerIndex;
 
     // 1440p reference metrics (scaled by viewport height).
-    private const int RefStatusFont = 19;    // the run-status line
-    private const int RefBannerFont = 26;    // intro / all-complete banners
     private const float RefStatusY = 100f;   // run-status baseline y, just under the compass tape
     private const float IntroDuration = 5f;  // s the run-start line shows (fades the last second)
     private const float FlashDuration = 1.6f;// s a zone-cleared flash shows
+
+    // The status line's and the banners' sizes, chrome type scale rungs in the same reference.
+    private static readonly float RefStatusFont = ChromeType.InReference(ChromeSize.Readout, HudMetrics.ReferenceHeight);
+    private static readonly float RefBannerFont = ChromeType.InReference(ChromeSize.Note, HudMetrics.ReferenceHeight);
 
     private static readonly Color HudBlue = MarkerDraw.HudBlue;
     private static readonly Color HudGreen = new(0.60f, 1f, 0.70f); // completion feedback
@@ -70,7 +73,7 @@ public sealed partial class StuntRunHud : Control
         float s = Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
         if (s <= 0f)
             return;
-        var font = GetThemeDefaultFont();
+        var font = ChromeType.Face(this);
         // Never round a scaled font down to 0, a quarter-height 4P pane scales hard.
         int statusFont = Mathf.Max(1, Mathf.RoundToInt(RefStatusFont * s * HudMetrics.StatusTextScale));
         int bannerFont = Mathf.Max(1, Mathf.RoundToInt(RefBannerFont * s));

@@ -257,27 +257,38 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
-- `BL-181` `[Tuning]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Marker HUD + scoreboard layout is a provisional pass, not a
-  fidelity sign-off.** Playtested 2026-07-30
-  (`./RunGame.ps1 --stunt --chapter=C4 --plane=player_fury`): the stunt run HUD and scoreboard placement,
-  fonts and distance units "work for now." The verdict is explicitly contingent: it says these read
-  acceptably in isolation, and a fidelity sign-off needs them read against the chrome the rest of the
-  game's UI uses, which does not exist yet. ⚠ **The composed campaign boards do not discharge this,
-  and should not be read as doing so.** They are painted original artwork positioned at authored
-  pixels with a per-background ink palette (`BoardPalette`), so they carry no type scale, no distance
-  units and no shared font choice for an in-flight overlay to match. What this waits on is a UI
-  surface that defines those three things for chrome the original did not paint, which is what the
-  menu-hub milestone was standing in for. That surface now exists in first draft: the Original
-  join board (`OriginalJoinBoard.cs`) hand-sets seven font sizes (heading 26, articles 22, subtitle
-  and tag 14, device 17, rule 15, status 13) with a comment saying the shared scale takes them over.
-  *Fix shape:* lift the join board's sizes into the type scale (one font choice, a size scale and
-  a distance-unit convention for chrome the original never painted), pose the board on it, then
-  re-review `StuntRunHud.cs`/`TargetHud.cs`/`StuntScoreboard.cs` placement against it rather than in
-  isolation. Built-in's Start-to-join strip behind `--force-builtin` is the second join path
-  `BL-951` said must fold into the board's own gesture; it folds in here. *⚠ Traps:* the board
-  landed before the scale, so its sizes are a draft to lift, not a reference to match; do not add a
-  third set of sizes for the HUD. *Cross-refs:* `BL-449`, whose landing prompted this wording,
-  `git log --grep=BL-951`.
+- `BL-181` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The stunt HUD, target marker and stunt
+  scoreboard now read one chrome type scale; the fidelity sign-off against it is owed at the
+  controls.** The earlier verdict on the stunt run HUD and scoreboard ("work for now") was
+  contingent on a shared chrome that did not exist. It exists now: `UI/Boards/ChromeType.cs` is the
+  type scale for chrome the original never painted, with one face (the theme default, varied for
+  italic and bold), one size ladder (`ChromeSize`: 26, 22, 19, 17, 15, 13, 11, 8 and 6 frame units,
+  a frame unit being the board's authored pixel, 1/600 of the frame height) and whole metres for a
+  printed distance. The join board is posed on it (its draft 14 folded into 13: the subtitle and the
+  P1 to P4 chip tags are one pixel smaller at 720p). `StuntRunHud`, `TargetHud` and `VersusHud` take
+  their face and their three sizes from the bottom rungs, pixel-identical at 720p (every golden is
+  hash-identical); at 1080p the marker label grows from 10 to 11 px, and at 4K the marker,
+  status and banner lines each grow one pixel. `StuntScoreboard` and its `StuntSplits` section (shared with
+  Instant Action's wrap-up board) moved onto the ladder: title and context unchanged at 720p,
+  column heads 14 to 13, rows 17 to 18, total 23 to 22, best line 16 to 15. No placement changed:
+  the HUD's positions hang off the original's own decoded HUD geometry, and the stunt HUD prints no
+  distance (the only printed distance is the `--debug-markers` tag). Before/after crops accompany
+  the landing commit (`git log --grep=BL-181`).
+  *Playtest:* `./RunGame.ps1 --stunt --chapter=C4 --plane=player_fury`, fly a zone or two and read
+  the run clock, the intro banner, the zone-cleared flash and the zone marker's label, then finish
+  the run (or add `--debug-scoreboard`) and read the scoreboard; then a target HUD case,
+  `./RunGame.ps1 --chapter=C1 --plane=player_bhawk --ai=player_kestrel,player_fury`, and read the
+  bracket label and the off-screen edge label. Judge the sizes against the join board
+  (`--menu=join-board:2 --presentation=original`); pass closes this, a size complaint names the rung.
+  *Left open:* Built-in's Start-to-join strip behind `--force-builtin` (`LaunchMenu.cs`) is the
+  second join path `BL-951` said must fold into the board's own gesture; folding it means a join
+  screen in Built-in, not a small change, so it stays. The rest of the results-board family
+  (`VersusBoard`, `StuntRaceBoard`, `IaWrapupBoard`'s own heading, `PauseBoard`, the board menu's
+  rows) and `FlightHud`'s top-left text block are still off the ladder. *⚠ Traps:* the composed
+  campaign boards and `BoardPalette` are painted original artwork and carry no type scale; do not
+  pose them on this one. Do not give the HUD sizes of its own beside the ladder. The marker label's
+  rung is bounded by the decoded 15-pixel line pitch, so a larger one runs its three lines together.
+  *Cross-refs:* `git log --grep=BL-951`.
 
 ## Splitscreen
 

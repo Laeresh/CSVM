@@ -409,7 +409,7 @@ public sealed partial class ComposedBoardView : Control
                 Mathf.Max(1f, fit.Length(2f)));
         }
 
-        var font = GetThemeDefaultFont();
+        var font = ChromeType.Face(this);
         _marqueeMoving = false;
         foreach (var line in board.Lines)
         {

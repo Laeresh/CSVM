@@ -19,6 +19,10 @@ public abstract partial class ResultsBoard : Control
     // The share of the window an over-tall panel is shrunk into. TUNE.
     internal const float PanelRoom = 0.96f;
 
+    // The window height every board metric is stated at, the reference a chrome type scale rung
+    // converts into for a board (ChromeType.InReference).
+    internal const float ReferenceHeight = 720f;
+
     // The shared board style: one palette so every board reads as the same screen. All TUNE.
     internal static readonly Color TitleColor = new(0.93f, 0.96f, 1f);
     internal static readonly Color ContextColor = new(0.60f, 0.75f, 0.95f);
@@ -271,7 +275,7 @@ public abstract partial class ResultsBoard : Control
     // The board spans the whole window, not a pane, so it scales on the window height alone
     // (no HudMetrics pane damping, which is for HUD elements drawn inside a pane). The one
     // per-pane board, StuntScoreboard, overrides this.
-    protected virtual float BoardScale() => Mathf.Max(0.5f, Size.Y > 0f ? Size.Y / 720f : 1f);
+    protected virtual float BoardScale() => Mathf.Max(0.5f, Size.Y > 0f ? Size.Y / ReferenceHeight : 1f);
 
     /// <summary>Frees any previous panel, builds the styled panel at scale <paramref name="s"/>
     /// and returns its body. Populate implementations start here.</summary>
