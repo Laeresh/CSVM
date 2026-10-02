@@ -125,8 +125,8 @@ internal static class NetWorldSuites
             // loaded word and the start word have both crossed.
             NetStartSuites.UntilStarted(host.Session, guest.Session);
             Lockstep(1, host.Session, guest.Session);
-            var mine = host.Session.NetWorld!;
-            var theirs = guest.Session.NetWorld!;
+            var mine = host.Session.Wire.World!;
+            var theirs = guest.Session.Wire.World!;
             Admission(ctx, mine, theirs);
             if (mine.Admitted < 2 || theirs.Admitted < 2)
             {
@@ -202,8 +202,8 @@ internal static class NetWorldSuites
 
             NetStartSuites.UntilStarted(host.Session, guest.Session);
             Lockstep(1, host.Session, guest.Session);
-            var mine = host.Session.NetWorld!;
-            var theirs = guest.Session.NetWorld!;
+            var mine = host.Session.Wire.World!;
+            var theirs = guest.Session.Wire.World!;
             ctx.Check(mine.Admitted == 2 && theirs.Admitted == 2,
                 $"both ends admit the two AI aircraft (host {mine.Admitted}, guest {theirs.Admitted})");
             var hostVoice = host.Session.AiVoice;
@@ -277,9 +277,9 @@ internal static class NetWorldSuites
     {
         said.Clear();
         heard.Clear();
-        int sent = host.NetWorld!.VoiceRaisesSent;
-        int taken = guest.NetWorld!.VoiceRaisesTaken;
-        host.AiVoice!.RaiseAttackCallOut(host.NetWorld.AiAt(ordinal)!, quarry);
+        int sent = host.Wire.World!.VoiceRaisesSent;
+        int taken = guest.Wire.World!.VoiceRaisesTaken;
+        host.AiVoice!.RaiseAttackCallOut(host.Wire.World.AiAt(ordinal)!, quarry);
         var raised = said.ToList();
         string shown = string.Join(" ", raised.Select(r => $"{r.Ordinal}:{r.Trigger}{(r.Team is { } t ? $"@{t}" : "")}"));
         ctx.Check(raised.Count(r => r == (ordinal, Flight.Ai.AiVoiceDispatcher.WaAttack, null)) == 1
@@ -294,9 +294,9 @@ internal static class NetWorldSuites
         ctx.Note($"AI {ordinal} voice raise (ordinal:trigger@team): host {shown}, guest {got}");
         ctx.Check(heard.SequenceEqual(said) && heard.Count(r => r == (ordinal, Flight.Ai.AiVoiceDispatcher.WaAttack, null)) == 1,
             $"the guest raises the same {said.Count} call-out(s) for AI {ordinal}, WA-Attack once ({got})");
-        int crossed = guest.NetWorld.VoiceRaisesTaken - taken;
-        ctx.Check(host.NetWorld.VoiceRaisesSent - sent == said.Count && crossed == said.Count,
-            $"one event per raise, sent and taken ({host.NetWorld.VoiceRaisesSent - sent} sent, {crossed} taken)");
+        int crossed = guest.Wire.World.VoiceRaisesTaken - taken;
+        ctx.Check(host.Wire.World.VoiceRaisesSent - sent == said.Count && crossed == said.Count,
+            $"one event per raise, sent and taken ({host.Wire.World.VoiceRaisesSent - sent} sent, {crossed} taken)");
     }
 
     // Each end deals its AI their pilots itself, from its own copy of the voice table, and the two
@@ -336,8 +336,8 @@ internal static class NetWorldSuites
     // The guest's AI follows the host's, and not the placement the guest gave it at its own build.
     private static void Tracking(TestContext ctx, GameSession host, GameSession guest)
     {
-        var mine = host.NetWorld!;
-        var theirs = guest.NetWorld!;
+        var mine = host.Wire.World!;
+        var theirs = guest.Wire.World!;
         float gap = theirs.AiAt(0)!.WorldPosition.DistanceTo(mine.AiAt(0)!.WorldPosition);
         var hostPath = new[] { new List<Vector3>(), new List<Vector3>() };
         var guestPath = new List<Vector3>();
@@ -365,8 +365,8 @@ internal static class NetWorldSuites
     // The host's AI fires; its rounds are built on the guest under that AI's shooter id.
     private static void Fire(TestContext ctx, GameSession host, GameSession guest)
     {
-        var gunner = host.NetWorld!.AiAt(0)!;
-        var copy = guest.NetWorld!.AiAt(0)!;
+        var gunner = host.Wire.World!.AiAt(0)!;
+        var copy = guest.Wire.World!.AiAt(0)!;
         var pool = guest.SeatRigs[1].Controller!.Projectiles!;
         pool.ScoredShooters.Add(copy.PlayerIndex);
         int before = pool.CannonRoundsFired;
@@ -383,8 +383,8 @@ internal static class NetWorldSuites
     // A guest's round on an AI is claimed to the host; the host spends it and the guest does not.
     private static void Hits(TestContext ctx, GameSession host, GameSession guest, WeaponDef gun)
     {
-        var owned = host.NetWorld!.AiAt(0)!;
-        var copy = guest.NetWorld!.AiAt(0)!;
+        var owned = host.Wire.World!.AiAt(0)!;
+        var copy = guest.Wire.World!.AiAt(0)!;
         if (owned.Damage == null || copy.Damage == null)
         {
             ctx.Check(false, $"the AI airframe carries a damage ledger to read");
@@ -393,21 +393,21 @@ internal static class NetWorldSuites
 
         float ownedBefore = Ledger(owned);
         float copyBefore = Ledger(copy);
-        int taken = host.NetWorld.AiHitsTaken;
+        int taken = host.Wire.World.AiHitsTaken;
         copy.Body!.TakeProjectileHit(gun, copy.WorldPosition, 0, guest.SeatRigs[1].Controller!.PlayerIndex);
         ctx.Check(Mathf.IsEqualApprox(Ledger(copy), copyBefore),
             $"a guest's hit on an AI spends nothing on the guest's copy ({Ledger(copy):0.0} of {copyBefore:0.0})");
         Lockstep(SettleSteps, host, guest);
-        ctx.Check(host.NetWorld.AiHitsTaken == taken + 1 && Ledger(owned) < ownedBefore,
-            $"and lands on the host's AI as one claim ({ownedBefore:0.0} to {Ledger(owned):0.0}, {host.NetWorld.AiHitsTaken - taken} claim(s))");
+        ctx.Check(host.Wire.World.AiHitsTaken == taken + 1 && Ledger(owned) < ownedBefore,
+            $"and lands on the host's AI as one claim ({ownedBefore:0.0} to {Ledger(owned):0.0}, {host.Wire.World.AiHitsTaken - taken} claim(s))");
 
         // ABLE-TO-FAIL CONTROL. The same strike under the host seat's shooter id is the host's to
         // decide, so the guest sends nothing and the claim count stands.
-        taken = host.NetWorld.AiHitsTaken;
+        taken = host.Wire.World.AiHitsTaken;
         copy.Body.TakeProjectileHit(gun, copy.WorldPosition, 0, guest.SeatRigs[0].Controller!.PlayerIndex);
         Lockstep(SettleSteps, host, guest);
-        ctx.Check(host.NetWorld.AiHitsTaken == taken,
-            $"ABLE-TO-FAIL CONTROL: a round the guest did not fire is not claimed ({host.NetWorld.AiHitsTaken - taken} claim(s))");
+        ctx.Check(host.Wire.World.AiHitsTaken == taken,
+            $"ABLE-TO-FAIL CONTROL: a round the guest did not fire is not claimed ({host.Wire.World.AiHitsTaken - taken} claim(s))");
 
         // The host's side of the same rule. A round of the guest's seat is the guest's to claim.
         float waiting = Ledger(owned);
@@ -422,17 +422,17 @@ internal static class NetWorldSuites
     // An AI the host kills dies on the guest, and only that one.
     private static void Deaths(TestContext ctx, GameSession host, GameSession guest)
     {
-        var victim = guest.NetWorld!.AiAt(1)!;
-        int applied = guest.NetWorld.WorldEventsApplied;
-        var other = guest.NetWorld.AiAt(0)!;
+        var victim = guest.Wire.World!.AiAt(1)!;
+        int applied = guest.Wire.World.WorldEventsApplied;
+        var other = guest.Wire.World.AiAt(0)!;
         // A ram on the guest is the guest's half of the contact alone; the AI's half is the host's.
         other.TakeCollisionHit(1e6f, 1e6f, other.WorldPosition, guest.SeatRigs[1].Controller!.PlayerIndex);
         ctx.Check(!victim.Crashed && !other.Crashed,
             $"the guest's copies of both AI are flying before the host kills one, a lethal ram on the guest included (crashed {victim.Crashed}, {other.Crashed})");
-        host.NetWorld!.AiAt(1)!.DebugForceCrash(host.SeatRigs[0].Controller!.PlayerIndex);
+        host.Wire.World!.AiAt(1)!.DebugForceCrash(host.SeatRigs[0].Controller!.PlayerIndex);
         Lockstep(SettleSteps, host, guest);
         ctx.Check(victim.Crashed && !other.Crashed,
-            $"the host's AI kill reaches the guest as that AI's death and no other's (crashed {victim.Crashed}, the other {other.Crashed}; {guest.NetWorld.WorldEventsApplied - applied} world event(s) applied)");
+            $"the host's AI kill reaches the guest as that AI's death and no other's (crashed {victim.Crashed}, the other {other.Crashed}; {guest.Wire.World.WorldEventsApplied - applied} world event(s) applied)");
     }
 
     // The guest's debug kill key reaches the host, which kills the AI and the pool itself. The
@@ -440,22 +440,22 @@ internal static class NetWorldSuites
     private static void DebugKills(TestContext ctx, GameSession host, GameSession guest)
     {
         var pilot = guest.SeatRigs[1].Controller!;
-        var key = new UI.Overlays.DebugKillTarget(() => pilot, () => guest.NetWorld!.World);
+        var key = new UI.Overlays.DebugKillTarget(() => pilot, () => guest.Wire.World!.World);
         try
         {
             ctx.Check(UI.Overlays.DebugKillTarget.LethalWeapon(pilot) != null,
                 $"the guest's fit carries a weapon a lethal claim can name");
-            var owned = host.NetWorld!.AiAt(0)!;
-            var copy = guest.NetWorld!.AiAt(0)!;
-            int taken = host.NetWorld.AiHitsTaken;
+            var owned = host.Wire.World!.AiAt(0)!;
+            var copy = guest.Wire.World!.AiAt(0)!;
+            int taken = host.Wire.World.AiHitsTaken;
             key.KillSource(copy, "ai0", pilot.PlayerIndex);
             // ABLE-TO-FAIL CONTROL. A key that crashed the guest's copy locally fails here, and the
             // host's AI then flies on to fail the check after the settle.
             ctx.Check(!copy.Crashed && !owned.Crashed,
                 $"ABLE-TO-FAIL CONTROL: the guest's key press crashes nothing on either end at once (guest copy {copy.Crashed}, host AI {owned.Crashed})");
             Lockstep(SettleSteps, host, guest);
-            ctx.Check(owned.Crashed && host.NetWorld.AiHitsTaken == taken + 1,
-                $"a guest's debug kill reaches the host as one claim and kills the host's AI (crashed {owned.Crashed}, {host.NetWorld.AiHitsTaken - taken} claim(s))");
+            ctx.Check(owned.Crashed && host.Wire.World.AiHitsTaken == taken + 1,
+                $"a guest's debug kill reaches the host as one claim and kills the host's AI (crashed {owned.Crashed}, {host.Wire.World.AiHitsTaken - taken} claim(s))");
             ctx.Check(copy.Crashed,
                 $"and the guest's copy dies from the host's death broadcast (crashed {copy.Crashed})");
             DebugKillPool(ctx, host, guest, key, pilot.PlayerIndex);
@@ -470,8 +470,8 @@ internal static class NetWorldSuites
     private static void DebugKillPool(TestContext ctx, GameSession host, GameSession guest,
         UI.Overlays.DebugKillTarget key, int killer)
     {
-        var mineWorld = host.NetWorld!.World;
-        var theirWorld = guest.NetWorld!.World;
+        var mineWorld = host.Wire.World!.World;
+        var theirWorld = guest.Wire.World!.World;
         if (mineWorld == null || theirWorld == null)
         {
             ctx.Check(false, $"both ends build a world runtime to hold the pools");
@@ -490,14 +490,14 @@ internal static class NetWorldSuites
 
         var owned = mineWorld.Destructibles.All[index];
         var copy = theirWorld.Destructibles.All[index];
-        int taken = host.NetWorld!.DestructibleHitsTaken;
+        int taken = host.Wire.World!.DestructibleHitsTaken;
         key.KillSource(copy, copy.Anchor.Name, killer);
         // ABLE-TO-FAIL CONTROL. The guest's pool is untouched until the host's health arrives.
         ctx.Check(copy.Status != DestructibleRegistry.State.Destroyed && owned.Status != DestructibleRegistry.State.Destroyed,
             $"ABLE-TO-FAIL CONTROL: the key press on '{copy.Anchor.Name}' kills it on neither end at once ({copy.Status} on the guest, {owned.Status} on the host)");
         Lockstep(SettleSteps, host, guest);
-        ctx.Check(owned.Status == DestructibleRegistry.State.Destroyed && host.NetWorld.DestructibleHitsTaken == taken + 1,
-            $"a guest's debug kill on a pool reaches the host as one claim and kills it there ({owned.Status}, {host.NetWorld.DestructibleHitsTaken - taken} claim(s))");
+        ctx.Check(owned.Status == DestructibleRegistry.State.Destroyed && host.Wire.World.DestructibleHitsTaken == taken + 1,
+            $"a guest's debug kill on a pool reaches the host as one claim and kills it there ({owned.Status}, {host.Wire.World.DestructibleHitsTaken - taken} claim(s))");
         ctx.Check(copy.Status == DestructibleRegistry.State.Destroyed,
             $"and the guest's pool dies from the host's event ({copy.Status}, HP {copy.Health:0})");
     }
@@ -505,8 +505,8 @@ internal static class NetWorldSuites
     // A pool on the guest dies when the host kills it, and a guest's own hit spends nothing.
     private static void Destructibles(TestContext ctx, GameSession host, GameSession guest)
     {
-        var mineWorld = host.NetWorld!.World;
-        var theirWorld = guest.NetWorld!.World;
+        var mineWorld = host.Wire.World!.World;
+        var theirWorld = guest.Wire.World!.World;
         if (mineWorld == null || theirWorld == null)
         {
             ctx.Check(false, $"both ends build a world runtime to hold the pools");
@@ -550,9 +550,9 @@ internal static class NetWorldSuites
     private static void Chips(TestContext ctx, GameSession host, GameSession guest,
         DestructibleRegistry.Instance owned, DestructibleRegistry.Instance copy)
     {
-        var mineWorld = host.NetWorld!.World!;
+        var mineWorld = host.Wire.World!.World!;
         int stage = owned.DamageStage;
-        int sent = host.NetWorld.ChipSamplesSent;
+        int sent = host.Wire.World.ChipSamplesSent;
         float chip = owned.MaxHealth * ChipFraction;
         for (int i = 0; i < ChipHits; i++)
         {
@@ -567,7 +567,7 @@ internal static class NetWorldSuites
         ctx.Check(!Mathf.IsEqualApprox(copy.Health, owned.Health),
             $"ABLE-TO-FAIL CONTROL: before the sample the guest's pool reads {copy.Health:0.##} against the host's {owned.Health:0.##}");
         Lockstep(SettleSteps, host, guest);
-        int samples = host.NetWorld.ChipSamplesSent - sent;
+        int samples = host.Wire.World.ChipSamplesSent - sent;
         ctx.Note($"chip damage: {samples} sample(s) for {ChipHits} hits, guest HP {copy.Health:0.##} against the host's {owned.Health:0.##}");
         ctx.Check(Mathf.IsEqualApprox(copy.Health, owned.Health) && copy.DamageStage == owned.DamageStage
                   && copy.Status != DestructibleRegistry.State.Destroyed,

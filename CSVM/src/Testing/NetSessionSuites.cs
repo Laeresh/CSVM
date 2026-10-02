@@ -400,7 +400,7 @@ internal static class NetSessionSuites
     private static void SheetOverNetFlight(TestContext ctx, string name, GameSession pauser,
         GameSession far, GameSession host, GameSession guest)
     {
-        int seat = pauser.NetLink!.LocalSeat;
+        int seat = pauser.Wire.Link!.LocalSeat;
         var pilot = pauser.SeatRigs[seat].Controller!;
         var clock = pauser.SimClock!;
         var pause = pauser.Pause!;
@@ -411,8 +411,8 @@ internal static class NetSessionSuites
         pause.TryToggle(pilot.PlayerIndex);
         bool halted = pilot.PollPauseForTest(clock);
         var own = pilot.WorldPosition;
-        int sent = pauser.NetLink.Sent;
-        int received = far.NetLink!.Received;
+        int sent = pauser.Wire.Link.Sent;
+        int received = far.Wire.Link!.Received;
         Lockstep(host, guest);
 
         float flown = pilot.WorldPosition.DistanceTo(own);
@@ -424,8 +424,8 @@ internal static class NetSessionSuites
         ctx.Check(stick.Pitch == 0f && stick.Roll == 0f && stick.Yaw == 0f,
             $"…on a centred stick, so the sheet's keys fly nothing ({stick.Pitch:0.0},{stick.Roll:0.0},{stick.Yaw:0.0})");
         // The far copy's own motion is no evidence here: its buffer extrapolates a silent owner.
-        ctx.Check(pauser.NetLink.Sent > sent && far.NetLink.Received > received,
-            $"…while its states keep crossing (sent {sent} to {pauser.NetLink.Sent}, the far end received {received} to {far.NetLink.Received})");
+        ctx.Check(pauser.Wire.Link.Sent > sent && far.Wire.Link.Received > received,
+            $"…while its states keep crossing (sent {sent} to {pauser.Wire.Link.Sent}, the far end received {received} to {far.Wire.Link.Received})");
 
         pause.ForceResume();
         pilot.PollPauseForTest(clock);
@@ -546,8 +546,8 @@ internal static class NetSessionSuites
                                  && p.First.Callsign == p.Second.Callsign
                                  && p.First.PlaneNode == p.Second.PlaneNode),
             $"every seat crosses intact: {string.Join(", ", guest.NetSeats.Select(s => $"{s.SeatIndex}:{s.Callsign}/{s.PlaneNode}@{s.PeerId}"))}");
-        int here = host.NetLink!.LocalSeat;
-        int there = guest.NetLink!.LocalSeat;
+        int here = host.Wire.Link!.LocalSeat;
+        int there = guest.Wire.Link!.LocalSeat;
         ctx.Check(here == 0 && there == 1
                   && host.NetSeats[0].IsLocal && !host.NetSeats[1].IsLocal
                   && !guest.NetSeats[0].IsLocal && guest.NetSeats[1].IsLocal,
@@ -577,13 +577,13 @@ internal static class NetSessionSuites
     // guest's join pump, and the guest must take it there: an unknown word here is that race.
     private static void Traffic(TestContext ctx, GameSession host, GameSession guest)
     {
-        var link = host.NetLink!;
-        var far = guest.NetLink!;
+        var link = host.Wire.Link!;
+        var far = guest.Wire.Link!;
         string counters = $"sent {link.Sent}, received {far.Received}, unknown {far.DroppedUnknown}, malformed {far.Malformed}";
         ctx.Check(link.Sent == 3 && far.Received == 3 && far.DroppedUnknown == 0 && far.Malformed == 0,
             $"the join is two reliable payloads, then the host's start hold, and none is unknown ({counters})");
-        byte hostRound = host.StartGate?.Round ?? 0;
-        byte guestRound = guest.StartGate?.Round ?? 0;
+        byte hostRound = host.Wire.StartGate?.Round ?? 0;
+        byte guestRound = guest.Wire.StartGate?.Round ?? 0;
         ctx.Check(hostRound != 0 && guestRound == hostRound,
             $"and the guest's start gate took that hold's round from inside its join (host {hostRound}, guest {guestRound})");
 

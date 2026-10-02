@@ -1137,7 +1137,7 @@ public partial class Launcher : Node3D
 
         if (_switchCover?.Tick(frameMs) == true)
             _switchCover = null;
-        GraphicsMode.SwitchLocked = _session is { InSession: true, NetLink: not null };
+        GraphicsMode.SwitchLocked = _session is { InSession: true, Wire.Link: not null };
 
         if (_session is { InSession: true } && GameClock.Current is { } diagClock)
         {
@@ -2533,7 +2533,7 @@ public partial class Launcher : Node3D
     // pause to hold it in, and the stall would freeze one seat in a live match.
     private void RequestGraphicsSwitch(bool enhanced, string why, bool save)
     {
-        if (_session is { InSession: true, NetLink: not null })
+        if (_session is { InSession: true, Wire.Link: not null })
         {
             Log.Info("world", $"graphics mode: {why} refused, a network session switches no graphics mode");
             return;
@@ -3031,7 +3031,7 @@ public partial class Launcher : Node3D
         }
 
         _sinceNetReadout = 0.0;
-        if (_session?.NetLink is not { } net)
+        if (_session?.Wire.Link is not { } net)
         {
             readout.Show(null);
             return;
@@ -3093,7 +3093,7 @@ public partial class Launcher : Node3D
             {
                 if (guest.Left)
                 {
-                    _session.TakeGuestLeft(guest.Peer);
+                    _session.Wire.TakeGuestLeft(guest.Peer);
                 }
             }
 

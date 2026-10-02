@@ -102,8 +102,8 @@ internal static class NetAiSpawnSuites
             }
 
             Lockstep(1, host.Session, guest.Session);
-            var mine = host.Session.NetWorld!;
-            var theirs = guest.Session.NetWorld!;
+            var mine = host.Session.Wire.World!;
+            var theirs = guest.Session.Wire.World!;
             int first = mine.Admitted;
             ctx.Check(theirs.Admitted == first && guestGen.Replicated && !hostGen.Replicated,
                 $"both ends start from {first} admitted AI and only the guest replicates its generators");
@@ -141,7 +141,7 @@ internal static class NetAiSpawnSuites
         List<(GeneratorAircraftLaunch Launch, FlightController Aircraft)> launches)
     {
         var seen = new Dictionary<int, Vector3>();
-        var theirs = guest.NetWorld!;
+        var theirs = guest.Wire.World!;
         bool second = false;
         int settle = SettleSteps;
         for (int s = 0; s < LaunchSteps && settle > 0; s++)
@@ -214,8 +214,8 @@ internal static class NetAiSpawnSuites
     // Both copies trace the host's own paths, and not each other's.
     private static void Tracking(TestContext ctx, GameSession host, GameSession guest, int first)
     {
-        var mine = host.NetWorld!;
-        var theirs = guest.NetWorld!;
+        var mine = host.Wire.World!;
+        var theirs = guest.Wire.World!;
         var hostPath = new[] { new List<Vector3>(), new List<Vector3>() };
         var guestPath = new[] { new List<Vector3>(), new List<Vector3>() };
         for (int s = 0; s < FlightSteps; s++)
@@ -244,10 +244,10 @@ internal static class NetAiSpawnSuites
     // A sample naming an ordinal the guest never admitted is dropped, and admits nothing.
     private static void Unknown(TestContext ctx, GameSession host, GameSession guest)
     {
-        var theirs = guest.NetWorld!;
+        var theirs = guest.Wire.World!;
         int admitted = theirs.Admitted;
         ushort ordinal = (ushort)(admitted + 5);
-        host.NetLink!.Broadcast(
+        host.Wire.Link!.Broadcast(
             new AiStateMessage(ordinal, 0, new Vector3(0f, 500f, 0f), Quaternion.Identity, Vector3.Zero,
                 0.5f, 0f, 0f, 0f, false),
             NetChannels.Events);
@@ -259,9 +259,9 @@ internal static class NetAiSpawnSuites
     // The host's deactivation and reactivation reach the guest's copy; a cutscene park does not.
     private static void Presence(TestContext ctx, GameSession host, GameSession guest, int first)
     {
-        var owned = host.NetWorld!.AiAt(first)!;
-        var copy = guest.NetWorld!.AiAt(first)!;
-        int applied = guest.NetWorld.WorldEventsApplied;
+        var owned = host.Wire.World!.AiAt(first)!;
+        var copy = guest.Wire.World!.AiAt(first)!;
+        int applied = guest.Wire.World.WorldEventsApplied;
         owned.Inert = true;
         Lockstep(SettleSteps, host, guest);
         bool followedOut = copy.Inert;
@@ -269,7 +269,7 @@ internal static class NetAiSpawnSuites
         Lockstep(SettleSteps, host, guest);
         bool followedIn = !copy.Inert;
         ctx.Check(followedOut && followedIn,
-            $"the host's deactivation of ordinal {first} reaches the guest, and so does its return (out {followedOut}, back {followedIn}, {guest.NetWorld.WorldEventsApplied - applied} event(s))");
+            $"the host's deactivation of ordinal {first} reaches the guest, and so does its return (out {followedOut}, back {followedIn}, {guest.Wire.World.WorldEventsApplied - applied} event(s))");
 
         // ABLE-TO-FAIL CONTROL. A cutscene park sets the park before the inert bit, as the
         // cutscene host does. Each end's own cutscene parks its own copy, so nothing is sent.

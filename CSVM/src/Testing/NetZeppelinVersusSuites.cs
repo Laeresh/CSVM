@@ -380,7 +380,7 @@ internal static class NetZeppelinVersusSuites
     private static void WholeAgain(TestContext ctx, GameSession[] peers)
     {
         var hulls = new[] { "multiplayer1zep", "multiplayer2zep" };
-        var parts = peers.Select(p => p.NetWorld?.World?.Destructibles.All
+        var parts = peers.Select(p => p.Wire.World?.World?.Destructibles.All
             .Where(inst => hulls.Any(h => string.Equals(inst.Owner, h, StringComparison.OrdinalIgnoreCase))).ToList()
             ?? new List<DestructibleRegistry.Instance>()).ToArray();
         ctx.Check(peers.All(p => hulls.All(h => !p.ZeppelinHulls!.IsDead(h) && p.ZeppelinHulls.SurvivorsOf(h) == 5)),
@@ -402,7 +402,7 @@ internal static class NetZeppelinVersusSuites
     private static void Kill(GameSession[] peers, string hull, string part, int seat)
     {
         var host = peers[0];
-        if (Pool(host, hull, part) is { } pool && host.NetWorld?.World is { } world)
+        if (Pool(host, hull, part) is { } pool && host.Wire.World?.World is { } world)
         {
             world.DamageAt(pool.Anchor, Overkill, host.SeatRigs[seat].Controller!.PlayerIndex);
         }
@@ -411,7 +411,7 @@ internal static class NetZeppelinVersusSuites
     }
 
     private static DestructibleRegistry.Instance? Pool(GameSession peer, string hull, string part) =>
-        peer.NetWorld?.World?.Destructibles.All.FirstOrDefault(inst =>
+        peer.Wire.World?.World?.Destructibles.All.FirstOrDefault(inst =>
             string.Equals(inst.Owner, hull, StringComparison.OrdinalIgnoreCase)
             && string.Equals(AnimRuntime.NameOf(inst.Anchor), part, StringComparison.OrdinalIgnoreCase));
 

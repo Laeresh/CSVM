@@ -648,6 +648,12 @@ The process and the per-launch session: the top family bar `Testing`, so nothing
 - `src/Launch/SessionProbes.cs`, the build's scripted probes that report and quit, and the `--destroy=`/`--debug-objective=` build-time forces.
 - `src/Launch/InspectionLabs.cs`, the build's inspection steps: the parked-plane view and its labs, freecam, anim lab, selection labs, flight labs and debug overlays.
 - `src/Launch/SessionBoards.cs`, the whole-window boards over a flight: the pause board and options leaf, the results boards, the menu readers and photo mode.
+- `src/Launch/SessionNet.cs`, the session's end of the wire: the join, the seat list, the state relay, combat, chat, the clock and start gate, and the world links.
+- `src/Launch/ProjectileStage.cs`, the flight's shared projectile pool build step and its world, crater, scorch and wash sinks.
+- `src/Launch/SessionVoices.cs`, the mission radio and combat voice build step, with the AI skills table the voice and the activation floor read.
+- `src/Launch/KillLines.cs`, the kill and crash lines each pane's message stack posts, the roster's AI included.
+- `src/Launch/OppositionStage.cs`, the opposition build steps: the `--ai` squadrons, zeppelins, enemy generators and world AA emplacements.
+- `src/Launch/ObjectiveReadouts.cs`, the objectives readouts and the objective-site feed on the target cycles, campaign or mission table.
 - `src/Launch/EnhancedLook.cs`, the enhanced mode's sun shadows, screen-space passes, tonemap and sky on a sun and an Environment, on or back to the faithful defaults.
 - `src/Launch/SwitchCover.cs`, a live graphics switch over a flying world: the flight held, a load board over the window, the switch run once it presents, both dropped when frames settle.
 - `src/Launch/TuningWarmup.cs`, the startup pass that registers every `Config` key before the orphan report and `--dump-config` read the registry.

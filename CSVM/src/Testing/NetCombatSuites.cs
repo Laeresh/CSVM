@@ -168,9 +168,9 @@ internal static class NetCombatSuites
                 return;
             }
 
-            ctx.Check(first.Session.NetLink!.Peers.Count == 1 && second.Session.NetLink!.Peers.Count == 1
-                      && host.Session.NetLink!.Peers.Count == 2,
-                $"the two guests hold one peer each and the host holds both ({first.Session.NetLink!.Peers.Count}, {second.Session.NetLink!.Peers.Count}, {host.Session.NetLink!.Peers.Count})");
+            ctx.Check(first.Session.Wire.Link!.Peers.Count == 1 && second.Session.Wire.Link!.Peers.Count == 1
+                      && host.Session.Wire.Link!.Peers.Count == 2,
+                $"the two guests hold one peer each and the host holds both ({first.Session.Wire.Link!.Peers.Count}, {second.Session.Wire.Link!.Peers.Count}, {host.Session.Wire.Link!.Peers.Count})");
 
             // Past the start barrier first. A guest's loaded word is the host's own to take, and is
             // never forwarded, so it belongs outside the relay count.
@@ -398,7 +398,7 @@ internal static class NetCombatSuites
             KillLines(ctx, peers, "the guest crashes with nobody to charge", "guest1 Self-Destroyed", null,
                 () => guest.SeatRigs[1].Controller!.DebugForceCrash());
             KillLines(ctx, peers, "a turret owner's kill", "guest1", "Killed by host Turret",
-                () => guest.NetLink!.Send(guest.NetLink.HostPeer,
+                () => guest.Wire.Link!.Send(guest.Wire.Link.HostPeer,
                     new DeathMessage(1, 0, NetDeathCause.TurretOwner, 0u), NetChannels.Events));
             foreach (var end in Enumerable.Reverse(ends))
             {
@@ -862,18 +862,18 @@ internal static class NetCombatSuites
         // ABLE-TO-FAIL CONTROL. Every tick so far carried a host clock of zero against a guest
         // clock of zero, and left the offset alone. The reading below is the clock, not the
         // arrival of a message.
-        ctx.Check(guests.All(g => g.NetClock!.Snaps == 0 && Math.Abs(g.NetClock!.Target) < 1e-6),
-            $"ABLE-TO-FAIL CONTROL: ticks with both clocks at zero leave the offset at zero ({string.Join(", ", guests.Select(g => $"{g.NetClock!.Target:0.000} s over {g.NetClock!.Snaps} snap(s)"))})");
+        ctx.Check(guests.All(g => g.Wire.Clock!.Snaps == 0 && Math.Abs(g.Wire.Clock!.Target) < 1e-6),
+            $"ABLE-TO-FAIL CONTROL: ticks with both clocks at zero leave the offset at zero ({string.Join(", ", guests.Select(g => $"{g.Wire.Clock!.Target:0.000} s over {g.Wire.Clock!.Snaps} snap(s)"))})");
 
         // One frame of the host alone, which is the only thing in this rig that moves a session
         // clock. Long enough that the reading is past the slew's snap threshold.
         peers[0]._Process(SlewLeadSeconds);
         Lockstep(TickSteps, peers);
         string reading = string.Join(", ",
-            guests.Select(g => $"offset {g.NetClock!.Offset:0.000} s, target {g.NetClock!.Target:0.000} s over {g.NetClock!.Snaps} snap(s)"));
-        ctx.Check(guests.All(g => g.NetClock!.Snaps == 1
-                                  && g.NetClock!.Target > NetClockSlew.SnapSeconds
-                                  && Math.Abs(g.NetClock!.Target - SlewLeadSeconds) < 0.05),
+            guests.Select(g => $"offset {g.Wire.Clock!.Offset:0.000} s, target {g.Wire.Clock!.Target:0.000} s over {g.Wire.Clock!.Snaps} snap(s)"));
+        ctx.Check(guests.All(g => g.Wire.Clock!.Snaps == 1
+                                  && g.Wire.Clock!.Target > NetClockSlew.SnapSeconds
+                                  && Math.Abs(g.Wire.Clock!.Target - SlewLeadSeconds) < 0.05),
             $"the host's session clock reaches both guests' slew through the same tick ({reading})");
         ctx.Note($"slew over a harness match: {reading}");
     }
@@ -1082,7 +1082,7 @@ internal static class NetCombatSuites
         int seat = 2;
         int odd = placed[0];
         var before = new int?[] { null, peers[1].Dogfight!.SpawnsTaken, peers[2].Dogfight!.SpawnsTaken };
-        peers[0].NetLink!.Broadcast(
+        peers[0].Wire.Link!.Broadcast(
             new SpawnMessage((byte)seat, NetSpawnKind.Respawn, (ushort)odd), NetChannels.Events);
         StepUntilGranted(peers, before);
 
@@ -1240,7 +1240,7 @@ internal static class NetCombatSuites
     private static void Causes(TestContext ctx, GameSession host, GameSession guest)
     {
         var scores = host.Dogfight!.Match.Scores;
-        var link = guest.NetLink!;
+        var link = guest.Wire.Link!;
         link.Send(link.HostPeer, new DeathMessage(1, NetMessage.NoSeat, NetDeathCause.Suicide, 0u),
             NetChannels.Events);
         Lockstep(SettleSteps, host, guest);
@@ -1287,10 +1287,10 @@ internal static class NetCombatSuites
     // host's forwarding the only thing between them.
     private static void Relay(TestContext ctx, GameSession host, GameSession first, GameSession second)
     {
-        var link = host.NetLink!;
+        var link = host.Wire.Link!;
         int receivedBefore = link.Received;
         int relayedBefore = link.Relayed;
-        int answeredBefore = host.NetPing?.Answered ?? 0;
+        int answeredBefore = host.Wire.Ping?.Answered ?? 0;
         var gun = first.SeatRigs[1].Controller!;
         var pool = second.SeatRigs[1].Controller!.Projectiles!;
         pool.ScoredShooters.Add(gun.PlayerIndex);
@@ -1322,7 +1322,7 @@ internal static class NetCombatSuites
         // Every arrival is forwarded to exactly one machine, the other guest. An echo would
         // forward it twice, and a relay that rewrote the sender would land it on the wrong seat.
         // A clock question is the host's own to answer and is the one arrival never forwarded.
-        int questions = (host.NetPing?.Answered ?? 0) - answeredBefore;
+        int questions = (host.Wire.Ping?.Answered ?? 0) - answeredBefore;
         int received = link.Received - receivedBefore - questions;
         int relayed = link.Relayed - relayedBefore;
         ctx.Check(received > 0 && relayed == received,

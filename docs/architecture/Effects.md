@@ -115,6 +115,6 @@ Remake-only scorch marks, a layer OVER the crater carve (`Mech3/CraterField.cs`)
 of it: a capped pool of `Decal` nodes sharing one procedural radial burn texture built on first use,
 projected along the struck surface normal and faded out over their own life. `Create` returns null
 unless `GraphicsMode.Enhanced`, so the faithful build holds no pool, no node and no texture.
-`GameSession.RegisterScorch` is the one decision point (a bowl was carved, or the impact played one
+`ProjectileStage.RegisterScorch` is the one decision point (a bowl was carved, or the impact played one
 of `EffectCatalogue`'s fireballs); `Flight/Projectile.ScorchSink` is the hook and skips water. Size
 comes from the weapon's crater radius. Every size, darkness and life constant is TUNE.

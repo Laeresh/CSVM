@@ -118,7 +118,7 @@ public static class EnhancedLook
         if (enhanced == GraphicsMode.Enhanced)
             return false;
         // ⚠ Never switch a network session. Its shared world has no pause to hold the stall in.
-        if (session?.NetLink != null)
+        if (session?.Wire.Link != null)
         {
             Log.Info("world", $"graphics mode: {why} refused, a network session switches no graphics mode");
             return false;

@@ -165,7 +165,7 @@ internal static class AiAirframePoolSuites
                 new HumanRosterBindings { RigCount = 1 });
             roster = built;
 
-            GameSession.OrderWaveAirframes(built, defs, templates);
+            OppositionStage.OrderWaveAirframes(built, defs, templates);
             ctx.Check(built.OwedAirframes > 0, $"{Chapter}/{Mission}'s generators order at least one wave aeroplane");
             int prebuilt = 0;
             while (built.BuildOrderedAirframe())

@@ -108,8 +108,8 @@ internal static class NetStartSuites
                 $"[slow guest] the guest's aeroplane starts within {ReleaseSteps} steps of its build, with the host's mission clock at most {StartSkewSeconds:0.00} s in ({hostClockAtStart:0.00} s)");
             ctx.Check(hostPlane.GlobalPosition.DistanceTo(hostFrom) >= StillMetres,
                 $"[slow guest] and the host's own aeroplane is flying by then");
-            ctx.Check(host.Session.StartGate?.Release == NetStartRelease.Everyone && guest.Session.StartGate?.Release == NetStartRelease.Started,
-                $"[slow guest] the host opened on every guest loaded and the guest on the host's word ({host.Session.StartGate?.Release}, {guest.Session.StartGate?.Release})");
+            ctx.Check(host.Session.Wire.StartGate?.Release == NetStartRelease.Everyone && guest.Session.Wire.StartGate?.Release == NetStartRelease.Started,
+                $"[slow guest] the host opened on every guest loaded and the guest on the host's word ({host.Session.Wire.StartGate?.Release}, {guest.Session.Wire.StartGate?.Release})");
         }
         finally
         {
@@ -147,8 +147,8 @@ internal static class NetStartSuites
             drift = firstPlane.GlobalPosition.DistanceTo(firstFrom);
             ctx.Check(match.Elapsed > 0f && drift >= StillMetres,
                 $"[dropped] the second guest's link dropping releases the host and the first guest ({match.Elapsed:0.00} s, {drift:0.00} m)");
-            ctx.Check(host.Session.StartGate?.Release == NetStartRelease.Left,
-                $"[dropped] and the host names the drop as what released it ({host.Session.StartGate?.Release})");
+            ctx.Check(host.Session.Wire.StartGate?.Release == NetStartRelease.Left,
+                $"[dropped] and the host names the drop as what released it ({host.Session.Wire.StartGate?.Release})");
         }
         finally
         {
@@ -159,7 +159,7 @@ internal static class NetStartSuites
 
     // The aeroplane this machine flies, read off its own seat's rig.
     private static Node3D? Own(GameSession session) =>
-        session.NetLink is { LocalSeat: >= 0 } link && link.LocalSeat < session.SeatRigs.Count
+        session.Wire.Link is { LocalSeat: >= 0 } link && link.LocalSeat < session.SeatRigs.Count
             ? session.SeatRigs[link.LocalSeat].Controller
             : null;
 

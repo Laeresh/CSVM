@@ -176,7 +176,7 @@ internal static class AiWaveLaunchHitchSuites
             // The load screen, stood in for. A launch orders its generators' aeroplanes, and the
             // screen builds them before the first frame. The window below measures what a launch
             // costs with that build behind the load rather than inside it.
-            GameSession.OrderWaveAirframes(built, defs, templates);
+            OppositionStage.OrderWaveAirframes(built, defs, templates);
             long loadMark = ThreadCpuClock.Now();
             window.Prebuilt = 0;
             while (built.BuildOrderedAirframe())

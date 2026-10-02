@@ -1,12 +1,14 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Effects;
+using CSVM.Extraction;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Hud;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
+using CSVM.Session.Objectives;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
 using CSVM.Spec;
@@ -543,6 +545,69 @@ internal sealed class InspectionLabs
             // the parked aircraft IS the subject.
             Deprioritise = flownPlanes,
         });
+    }
+
+    /// <summary>F13 / <c>--debug-ainets</c>: the chapter's AI patrol nets under the world subject,
+    /// with each patrolling AI's live leash. The original never renders this route data
+    /// (docs/formats/ai-nets.md). It is built before any AI exists, so the aircraft and the
+    /// trailer offsets come through suppliers. Chapter-scoped data, so the caller skips it on a
+    /// <c>--node=</c> stage.</summary>
+    public void BuildAiNetsOverlay(BuildState state, Node3D plane,
+        Func<IReadOnlyList<FlightController>> aiPlanes, Func<NetTrailerTargets?> trailers)
+    {
+        var spec = _in.Spec;
+        plane.AddChild(new AiNetsOverlay(SessionPaths.ChapterZrdr(state.DataRoot, spec.Chapter), spec.Chapter)
+        {
+            DebugShow = spec.DebugAiNets != null,
+            Filter = spec.DebugAiNets ?? "",
+            CollectLeashes = into =>
+            {
+                foreach (var ai in aiPlanes())
+                {
+                    if (ai is { InPlay: true } && ai.Pilot is { Patrol: { CurrentIndex: >= 0 } patrol } pilot)
+                    {
+                        into.Add(new AiNetLeash(ai.WorldPosition, patrol.CurrentTarget,
+                            patrol.Net.Id, pilot.SteeringPatrol));
+                    }
+                }
+            },
+            // An anchored net is drawn where it actually is, not where the file says. Zero until
+            // the rigs are built, which is before anything flies it.
+            TrailerOffsetOf = net => trailers()?.OffsetOf(net) ?? Vector3.Zero,
+        });
+    }
+
+    /// <summary>The flight's debug keys over the live field. F15 shows who is aiming at whom, F17
+    /// kills player 1's target, and F16 marks every live aircraft on every pane's targeting HUD.
+    /// Each reads through a supplier: waves, spawns and deaths change the field after the build,
+    /// and a pane's HUD is built after this call.</summary>
+    public void BuildFlightDebugOverlays(IReadOnlyList<PlayerRig> rigs,
+        Func<IReadOnlyList<TurretController>> turrets, Func<IReadOnlyList<FlightController>> aircraft,
+        Func<AnimRuntime?> world)
+    {
+        var worldRoot = _in.WorldRoot;
+        worldRoot.AddChild(new TargetingOverlay(turrets, aircraft)
+        {
+            DebugShow = _in.Spec.DebugTargets,
+        });
+
+        // P1-only, the same precedent F19/F51 set for a single-pane debug tool: the playtester's
+        // escape hatch when a stray enemy blocks an objective chain.
+        worldRoot.AddChild(new DebugKillTarget(() => rigs.Count > 0 ? rigs[0].Controller : null, world));
+
+        worldRoot.AddChild(new DebugMarkerToggle(() =>
+        {
+            var huds = new List<Flight.Hud.TargetHud>();
+            foreach (var rig in rigs)
+            {
+                if (rig.Controller?.PilotHud.TargetHud is { } hud)
+                {
+                    huds.Add(hud);
+                }
+            }
+
+            return huds;
+        }));
     }
 
     /// <summary>What one session's labs are built over.</summary>

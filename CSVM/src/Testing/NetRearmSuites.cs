@@ -71,8 +71,8 @@ internal static class NetRearmSuites
             Restored(ctx, peers, guest, pylon, "the team 3 guest at a base no node of its team names");
 
             Lockstep(ReportSteps, peers);
-            ctx.Check(peers[0].RepairsTaken == 1 && peers[1].RepairsTaken == 0,
-                $"and the host's copy of the guest hears its full hull once, the guest nothing from itself ({peers[0].RepairsTaken}/{peers[1].RepairsTaken})");
+            ctx.Check(peers[0].Wire.RepairsTaken == 1 && peers[1].Wire.RepairsTaken == 0,
+                $"and the host's copy of the guest hears its full hull once, the guest nothing from itself ({peers[0].Wire.RepairsTaken}/{peers[1].Wire.RepairsTaken})");
             OncePerEntry(ctx, peers, guest, baseAt);
 
             Place(guest, inside + (Vector3.Right * Away));
@@ -364,10 +364,10 @@ internal static class NetRearmSuites
     private static void Kill(GameSession[] peers, string hull, string part, int seat)
     {
         var host = peers[0];
-        var pool = host.NetWorld?.World?.Destructibles.All.FirstOrDefault(inst =>
+        var pool = host.Wire.World?.World?.Destructibles.All.FirstOrDefault(inst =>
             string.Equals(inst.Owner, hull, StringComparison.OrdinalIgnoreCase)
             && string.Equals(AnimRuntime.NameOf(inst.Anchor), part, StringComparison.OrdinalIgnoreCase));
-        if (pool != null && host.NetWorld?.World is { } world)
+        if (pool != null && host.Wire.World?.World is { } world)
         {
             world.DamageAt(pool.Anchor, Overkill, host.SeatRigs[seat].Controller!.PlayerIndex);
         }

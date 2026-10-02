@@ -809,7 +809,7 @@ internal static class CampaignRosterSuites
             runtime = new AiVoiceRuntime(voice, sounds, radio, new System.Random(5));
             ctx.Host.AddChild(runtime);
 
-            // The exact conversion GameSession.RegisterAiVoice applies in production: a null
+            // The exact conversion SessionVoices.RegisterAi applies in production: a null
             // override falls back to rating 5, otherwise each chance is read at its OWN rating.
             // What is under test is the two overrides CampaignDirector passes in, not this.
             void RegisterVoice(FlightController? ai, int? accentId, int? talkerOverride, int? constitutionOverride)
@@ -962,7 +962,7 @@ internal static class CampaignRosterSuites
             var human = player;
             runtime.RegisterPlayer(human);
 
-            // GameSession.RegisterAiVoice's own shape: every spawn is handed over, accent or none.
+            // SessionVoices.RegisterAi's own shape: every spawn is handed over, accent or none.
             void RegisterVoice(FlightController? ai, int? accentId, int? talkerOverride, int? constitutionOverride)
             {
                 if (ai == null)

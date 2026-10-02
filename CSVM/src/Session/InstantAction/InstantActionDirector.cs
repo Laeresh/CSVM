@@ -81,7 +81,7 @@ public sealed class InstantActionDirector
     /// included, is set here where a suite can drive it.</summary>
     internal delegate FlightController? SpawnAuthoredAircraft(AiSpawn spawn);
 
-    /// <summary>GameSession.RegisterAiVoice: the voice runtime serves non-mission spawns too.</summary>
+    /// <summary>SessionVoices.RegisterAi: the voice runtime serves non-mission spawns too.</summary>
     internal delegate void RegisterAiVoice(FlightController? ai, int? accentId, int? talkerOverride,
         int? constitutionOverride);
 

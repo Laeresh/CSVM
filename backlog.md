@@ -391,29 +391,6 @@ usual.
   race has a defined start (`StuntRace.cs`, `ScoreStore.GetBest`/`RecordIfBest`), and would want
   their own key namespace, since a countdown makes race and solo totals diverge again.
 
-- `BL-1015` `[Cleanup]` `[L]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`GameSession.cs`
-  is 4703 lines and still changes for unrelated reasons; the flight build's remaining steps and
-  the network wiring it hosts leave as real modules.** *Evidence:* the sky (`SkyStage.cs`), the
-  scripted probes (`SessionProbes.cs`), the inspection labs (`InspectionLabs.cs`) and the boards
-  (`SessionBoards.cs`) are build steps over `BuildState.cs`, and the Dogfight tail is
-  `Session/World/VersusDirector.cs`. What stays is `BuildFlightRigs`, about 900 lines of steps
-  sharing nothing but `BuildState`: the projectile pool and its sinks, the `--ai` squadrons,
-  zeppelins, generators and emplacements, the kill and crash lines, the voice and radio, the
-  campaign's objectives readout and target sites, and the F15 to F17 debug overlays. Beside it sit
-  about 600 lines of network wiring: combat, the clock and start gate, the director, world,
-  positional-start, cutscene and chat links and the aircraft-state relay. *Fix shape:* the
-  opposition, the campaign readouts and the debug overlays move behind steps that read
-  `BuildState`, the way `SkyStage` does; the network wiring moves to one module the session
-  composes, taking the seat lists, the wire and the Dogfight director through its inputs. Measure
-  by the session's public and internal member count, 11 and 41 now. *Decision:* do the split.
-  *⚠ Traps:* a `partial` file is not a split. The per-frame tick order across the runtimes is the
-  one thing the session must keep in one place; do not scatter it into the extracted modules. A
-  module that reads the session's fields is the session in another file. The net combat's death
-  report is what reaches `VersusDirector.ScoreDeath`, so the two must not be wired in a
-  different order. *Cross-refs:* the same split in `FlightController.cs` (`git log --grep=BL-1014`),
-  the options form's landed split into page modules (`OriginalOptionsScreen.cs`),
-  `docs/architecture/Launch.md`, `docs/architecture/Session.md`.
-
 ## Tooling, platform & docs
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: data]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in

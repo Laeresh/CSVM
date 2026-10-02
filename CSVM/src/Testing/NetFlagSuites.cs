@@ -231,8 +231,8 @@ internal static class NetFlagSuites
         Put(peers, seat: 2, peers[2].Dogfight!.Flags!.Flags.HomeOf(1));
         Lockstep(AskSteps, peers);
         Held(ctx, peers, "taken a third time", team: 1, holder: 2);
-        var posted = peers.Select(p => p.NetChat!.Chat.Posted).ToArray();
-        var sent = peers.Select(p => p.NetChat!.LinesSent).ToArray();
+        var posted = peers.Select(p => p.Wire.Chat!.Chat.Posted).ToArray();
+        var sent = peers.Select(p => p.Wire.Chat!.LinesSent).ToArray();
         Type(peers, seat: 1, NetChatLink.EjectFlagCommand);
         Lockstep(AskSteps, peers);
         Held(ctx, peers, "ABLE-TO-FAIL CONTROL: the console's ejectflag from a pilot carrying nothing leaves the flag held", team: 1, holder: 2);
@@ -246,8 +246,8 @@ internal static class NetFlagSuites
             $"the carrier's ejectflag floats the flag on every machine ({Rows(peers)})");
         ctx.Check(peers[2].SeatRigs[2].Controller is { Crashed: false, Destroyed: false } && peers.All(p => p.SeatRigs[2].Controller!.MarkerName == null),
             $"and the carrier flies on untagged");
-        ctx.Check(peers.Select((p, i) => p.NetChat!.Chat.Posted == posted[i] && p.NetChat!.LinesSent == sent[i]).All(same => same),
-            $"and neither console line was posted or sent as chat ({string.Join(",", peers.Select(p => $"{p.NetChat!.Chat.Posted}/{p.NetChat!.LinesSent}"))})");
+        ctx.Check(peers.Select((p, i) => p.Wire.Chat!.Chat.Posted == posted[i] && p.Wire.Chat!.LinesSent == sent[i]).All(same => same),
+            $"and neither console line was posted or sent as chat ({string.Join(",", peers.Select(p => $"{p.Wire.Chat!.Chat.Posted}/{p.Wire.Chat!.LinesSent}"))})");
         var scores = peers.Select(p => Enumerable.Range(0, 3).Select(p.Dogfight!.Match.ScoreOf).ToArray()).ToArray();
         int flown = AskSteps;
         Lockstep((int)(FlagMatch.ThrowSeconds / GameClock.FixedDt) - flown - AskSteps, peers);
@@ -373,7 +373,7 @@ internal static class NetFlagSuites
     // A line typed into the chat on the machine that flies the seat, and sent.
     private static void Type(GameSession[] peers, int seat, string text)
     {
-        var link = peers[seat].NetChat!;
+        var link = peers[seat].Wire.Chat!;
         link.Open(seat, team: false);
         foreach (char c in text)
         {

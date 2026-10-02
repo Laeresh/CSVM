@@ -93,7 +93,7 @@ internal static class ModeTargetTableSuites
 
     private static bool Binds(SessionSpec spec, bool hasDirector, bool stunting = false,
         bool hasWorld = true, int rigs = 1) =>
-        GameSession.BindsMissionTargetTable(spec, hasDirector, stunting, hasWorld, rigs);
+        ObjectiveReadouts.BindsMissionTargetTable(spec, hasDirector, stunting, hasWorld, rigs);
 
     // One mode's session: its own table, the director-free feed over the built world, and the
     // three cycles a pilot standing in it would walk.

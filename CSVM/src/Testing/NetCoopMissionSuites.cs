@@ -448,7 +448,7 @@ internal static class NetCoopMissionSuites
     private static void IntroHandsOffClean(TestContext ctx, Ends[] ends, NetPlayFeature[] doors,
         System.Text.StringBuilder report)
     {
-        var runtimes = ends.Select(e => e.Session.NetWorld?.World).ToArray();
+        var runtimes = ends.Select(e => e.Session.Wire.World?.World).ToArray();
         var props = runtimes.Select(r => r?.FindNodes(AircraftStage.PropNode) is { Count: > 0 } found ? found[0] : null)
             .ToArray();
         if (props.Any(p => p == null))
@@ -774,8 +774,8 @@ internal static class NetCoopMissionSuites
 
         Fly(SettleSteps, new[] { next, again }, new[] { hostDoor, guestDoor });
         ctx.Check(!next.Session.StartHeld && !again.Session.StartHeld
-                  && next.Session.StartGate?.Release == NetStartRelease.Everyone,
-            $"and both machines start once it has loaded ({next.Session.StartGate?.Release}, {again.Session.StartGate?.Release})");
+                  && next.Session.Wire.StartGate?.Release == NetStartRelease.Everyone,
+            $"and both machines start once it has loaded ({next.Session.Wire.StartGate?.Release}, {again.Session.Wire.StartGate?.Release})");
         ctx.Check(next.Session.NetSeats.Count == 2 && again.Session.NetSeats.Count == 2
                   && next.Session.SeatRigs[1].Controller is { Inert: false },
             $"the guest's seat stands in the restarted field on both machines and flies on the host ({next.Session.NetSeats.Count}, {again.Session.NetSeats.Count} seat(s))");
@@ -1130,9 +1130,9 @@ internal static class NetCoopMissionSuites
         ctx.Check(hostSeats.Count == 3 && guestSeats.Count == 3
                   && hostSeats[1].PeerId == hostSeats[2].PeerId && !hostSeats[1].IsLocal && !hostSeats[2].IsLocal,
             $"the host's field holds the guest's machine at seats 1 and 2 ({hostSeats.Count} seat(s))");
-        ctx.Check(guest.Session.NetLink is { LocalSeat: 1, LocalSeatCount: 2 } && guestSeats[1].IsLocal && guestSeats[2].IsLocal
+        ctx.Check(guest.Session.Wire.Link is { LocalSeat: 1, LocalSeatCount: 2 } && guestSeats[1].IsLocal && guestSeats[2].IsLocal
                   && !guestSeats[0].IsLocal,
-            $"the join names the guest both seats ({guest.Session.NetLink?.LocalSeat}, {guest.Session.NetLink?.LocalSeatCount})");
+            $"the join names the guest both seats ({guest.Session.Wire.Link?.LocalSeat}, {guest.Session.Wire.Link?.LocalSeatCount})");
         ctx.Check(guest.Session.SeatRigs[1].Controller is { RemotePoses: null, InPlay: true }
                   && guest.Session.SeatRigs[2].Controller is { RemotePoses: null, InPlay: true },
             $"the guest flies both its seats itself, each in play");
@@ -1219,7 +1219,7 @@ internal static class NetCoopMissionSuites
             {
                 foreach (var guest in doors[e].CoopGuests.Where(g => g.Left))
                 {
-                    ends[e].Session.TakeGuestLeft(guest.Peer);
+                    ends[e].Session.Wire.TakeGuestLeft(guest.Peer);
                 }
             }
         }

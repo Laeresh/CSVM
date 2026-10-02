@@ -121,8 +121,8 @@ internal static class NetEnetSessionSuites
             }
 
             Join(ctx, host.Session, guest.Session);
-            var link = host.Session.NetLink!;
-            var far = guest.Session.NetLink!;
+            var link = host.Session.Wire.Link!;
+            var far = guest.Session.Wire.Link!;
             // The host flies while the guest's socket is held. An aircraft-state sample can land
             // before the guest exists to claim it, and the replay drops that one unclaimed. The
             // next sample follows three steps later, so only a parse failure is a fault.
@@ -173,8 +173,8 @@ internal static class NetEnetSessionSuites
                                  && p.First.Callsign == p.Second.Callsign
                                  && p.First.PlaneNode == p.Second.PlaneNode),
             $"every seat crosses intact: {string.Join(", ", guest.NetSeats.Select(s => $"{s.SeatIndex}:{s.Callsign}/{s.PlaneNode}"))}");
-        int here = host.NetLink!.LocalSeat;
-        int there = guest.NetLink!.LocalSeat;
+        int here = host.Wire.Link!.LocalSeat;
+        int there = guest.Wire.Link!.LocalSeat;
         ctx.Check(here == 0 && there == 1
                   && host.NetSeats[0].IsLocal && !host.NetSeats[1].IsLocal
                   && !guest.NetSeats[0].IsLocal && guest.NetSeats[1].IsLocal,
