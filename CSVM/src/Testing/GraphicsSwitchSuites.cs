@@ -36,7 +36,7 @@ internal static class GraphicsSwitchSuites
     [Suite("graphics-live-switch",
         "a whole flight session switched Enhanced to Original to Enhanced reads as a fresh Enhanced "
         + "session, and its Original half as a fresh Original one: the enhanced-only layers (scorch "
-        + "field, volumetric banks, wind streaks, heat shimmer) are built or gone and the ground "
+        + "field, wind streaks, heat shimmer) are built or gone and the ground "
         + "shadow is the reverse, the clutter is one MultiMesh per kind on the faithful path and cells "
         + "with ranges under Enhanced, a crater-flattened and a hidden stamp stay down through both switches with every drawn clutter buffer holding what the world last wrote, "
         + "the map edge's clutter copies carry ranges under Enhanced alone, every world, clutter, cloud and streak material carries the "
@@ -828,7 +828,7 @@ internal static class GraphicsSwitchSuites
         Walk(rig.Session, node =>
         {
             string name = node.Name.ToString();
-            if (name is "scorch_field" or "fog_volume_banks" or "wind_streaks" or "heat_shimmer" or "ground_shadows")
+            if (name is "scorch_field" or "wind_streaks" or "heat_shimmer" or "ground_shadows")
                 layers[name] = layers.GetValueOrDefault(name) + 1;
             switch (node)
             {
