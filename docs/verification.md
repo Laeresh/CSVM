@@ -974,6 +974,14 @@ member, and it does not go here.
   put that node then.** C1/M05's attack-balloon trace reaches the sea at 57 s, which reads as a
   hand-off fault until its own definition is read: it calls `sm_splash` at the lifeboat at 55, 56
   and 57 s.
+- **INSTR-99**, **A RefCounted object whose only owner was a dropped C# wrapper must not be reached
+  by the engine (a signal it emits, a native `Ref` taken to it) between that wrapper's collection
+  and its finalizer: the binding is left with a released handle, and the finalizer then logs
+  `Handle is not initialized` from `SetGodotObjectPtr`. Hunt it with `--debug-finalizers`, which
+  holds the finalizer per suite (or `=run` across the run) so the error lands at a known boundary.**
+  A Resource reached through a node's signal after its wrapper was collected reproduced the release
+  check's trace on the first run, and the original shard 3/6's 70 suites produced none under the gate
+  either way.
 
 ## SRC, sources and documents
 

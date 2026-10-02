@@ -124,6 +124,7 @@ public static class TestHarness
         var totals = new PhaseAttribution.Categorized();
         double totalBuildSeconds = 0, totalDisposalSeconds = 0, totalRestSeconds = 0, totalOverrunSeconds = 0;
         int totalWorldsBuilt = 0;
+        var runGate = ctx.AuditFinalizersAcrossRun ? FinalizerGate.Hold() : null;
         foreach (var suite in selected)
         {
             ctx.Failures.Clear();
@@ -134,6 +135,9 @@ public static class TestHarness
             // the suite rather than of how many draws its predecessors left in this one process.
             Rng.Rewind();
             var orphansAtStart = TestContext.OrphanNodeIdSet();
+            // ⚠ Never nest a suite gate inside the run gate. Its opening drain waits on the finalizer
+            // thread the run gate holds, and the process hangs.
+            var gate = ctx.AuditFinalizers && runGate == null ? FinalizerGate.Hold() : null;
             var watch = System.Diagnostics.Stopwatch.StartNew();
             SuiteStatus status;
             string detail = suite.What;
@@ -220,10 +224,22 @@ public static class TestHarness
             // in the run that brings it in.
             string orphanSuffix = orphansLeft != 0 ? $" orphans_left={orphansLeft} [{orphanRoots}]" : "";
             Log.Info("test", $"suite {suite.Name} {status.ToString().ToUpperInvariant()} in {wallSeconds:0.00}s{phaseSuffix}{orphanSuffix}");
+            if (gate != null)
+            {
+                int handleErrors = gate.ReleaseAndDrain();
+                Log.Info("test", $"finalizer gate suite={suite.Name} held={gate.Held} collections={gate.Collections} handle_errors={handleErrors}");
+                gate.Dispose();
+            }
         }
         var releaseWatch = System.Diagnostics.Stopwatch.StartNew();
         ctx.ReleaseWorlds();
         releaseWatch.Stop();
+        if (runGate != null)
+        {
+            int handleErrors = runGate.ReleaseAndDrain();
+            Log.Info("test", $"finalizer gate run suites={selected.Count} held={runGate.Held} collections={runGate.Collections} handle_errors={handleErrors}");
+            runGate.Dispose();
+        }
         double finalDisposalSeconds = releaseWatch.Elapsed.TotalSeconds;
 
         double totalWallSeconds = results.Sum(r => r.Seconds);
@@ -777,6 +793,15 @@ public sealed class TestContext
     /// <c>loadout-bind</c> suite is shown able to fail on real bad input rather than a planted
     /// assertion.</summary>
     public string? LoadoutOverride { get; init; }
+
+    /// <summary><c>--debug-finalizers</c>: run every suite inside a <see cref="FinalizerGate"/>, so
+    /// a wrapper finalized after its object was reached again natively errors at that suite's
+    /// boundary.</summary>
+    public bool AuditFinalizers { get; init; }
+
+    /// <summary><c>--debug-finalizers=run</c>: one <see cref="FinalizerGate"/> over the whole run,
+    /// which also catches an object a later suite reaches after an earlier one dropped it.</summary>
+    public bool AuditFinalizersAcrossRun { get; init; }
 
     /// <summary>Installs a fake in place of the real <c>PufferEmitterFactory</c> for the next world
     /// this builds, null (the default) leaves <see cref="WorldSession.Options.EmitterFactory"/> null

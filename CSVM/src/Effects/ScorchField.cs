@@ -150,7 +150,7 @@ public sealed partial class ScorchField : Node3D
                     Mathf.Clamp(alpha, 0f, 1f)));
             }
         }
-        _burnTexture = ImageTexture.CreateFromImage(img);
+        _burnTexture = TextureUpload.Create(img);
         return _burnTexture;
     }
 

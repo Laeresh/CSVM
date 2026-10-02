@@ -546,7 +546,7 @@ public sealed partial class Puffer : Node3D
         TextureArchive textures, bool sequenced)
     {
         var (image, diesDark) = BakeImage(names, textures, sequenced);
-        return (image == null ? null : ImageTexture.CreateFromImage(image), diesDark);
+        return (image == null ? null : TextureUpload.Create(image), diesDark);
     }
 
     private static (Image? Atlas, bool DiesDark) BakeImage(IReadOnlyList<string> names,

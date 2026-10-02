@@ -332,7 +332,7 @@ public sealed class WeatherRig
             return;
         var image = Image.CreateEmpty(SkyPanoramaWidth, SkyPanoramaHeight, false, Image.Format.Rgbaf);
         image.Fill(skyColor.SrgbToLinear());
-        panorama.Panorama = ImageTexture.CreateFromImage(image);
+        panorama.Panorama = TextureUpload.Create(image);
     }
 
     /// <summary>Publishes <paramref name="sun"/>'s bearing as the <c>csky_sun_dir</c> global, the

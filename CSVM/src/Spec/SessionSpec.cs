@@ -1041,6 +1041,16 @@ public sealed record SessionSpec
     public bool NoVsync { get; private set; }
     public bool Perf { get; private set; }
     public bool GcTypes { get; private set; }
+
+    /// <summary><c>--debug-finalizers</c>: <c>--run-tests</c> parks the finalizer thread for each
+    /// suite and drains it at the suite's end (<c>Testing.FinalizerGate</c>).</summary>
+    public bool DebugFinalizers { get; private set; }
+
+    /// <summary><c>--debug-finalizers=run</c>: one gate over the whole <c>--run-tests</c> run,
+    /// drained after the last suite, so a wrapper one suite drops stays unfinalized through the
+    /// next.</summary>
+    public bool DebugFinalizersAcrossRun { get; private set; }
+
     public bool NoFocus { get; private set; }
 
     /// <summary><c>--zip-assets</c>: read the <c>.zip</c> archives even where an unpacked sibling
@@ -1163,6 +1173,8 @@ public sealed record SessionSpec
             else if (arg == "--no-det") { s.NoDet = true; }
             else if (arg == "--perf") { s.Perf = true; }
             else if (arg == "--gc-types") { s.Perf = true; s.GcTypes = true; }
+            else if (arg == "--debug-finalizers") { s.DebugFinalizers = true; }
+            else if (arg == "--debug-finalizers=run") { s.DebugFinalizersAcrossRun = true; }
             else if (arg.StartsWith("--log=")) { logSpecs.Add(arg["--log=".Length..]); }
             else if (arg.StartsWith("--anim-lod=")) { s.AnimLod = int.Parse(arg["--anim-lod=".Length..]); }
             else if (arg.StartsWith("--movie=")) { s.MovieName = arg["--movie=".Length..]; s.HasContentArg = true; }

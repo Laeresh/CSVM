@@ -4,6 +4,7 @@ using System.IO;
 using System.Text;
 using CSVM.Extraction;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.UI.Boards;
@@ -1111,7 +1112,7 @@ public sealed partial class ComposedBoardView : Control
             {
                 NormalizeGamma(image, gamma);
             }
-            texture = ImageTexture.CreateFromImage(image);
+            texture = TextureUpload.Create(image);
         }
 
         _textures[path] = texture;
@@ -1129,7 +1130,7 @@ public sealed partial class ComposedBoardView : Control
 
         if (!_held.TryGetValue(pixels, out var texture))
         {
-            texture = ImageTexture.CreateFromImage(pixels);
+            texture = TextureUpload.Create(pixels, callerKeeps: true);
             _held[pixels] = texture;
         }
 

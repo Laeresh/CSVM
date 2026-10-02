@@ -724,7 +724,7 @@ void fragment() {
                 img.SetPixel(x, y, c);
             }
         img.GenerateMipmaps();
-        return ImageTexture.CreateFromImage(img);
+        return TextureUpload.Create(img);
     }
 
     /// <summary>The built <see cref="ArrayMesh"/> for one gamez model index, from this builder's

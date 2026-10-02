@@ -93,7 +93,7 @@ public sealed partial class ObjectivesHud : Node
         }
 
         var img = Image.LoadFromFile(path);
-        return img != null ? ImageTexture.CreateFromImage(img) : null;
+        return img != null ? TextureUpload.Create(img) : null;
     }
 
     /// <summary>The current display lines: one per <see cref="ObjectiveGraph.Rows"/> row, in the

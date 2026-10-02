@@ -4431,7 +4431,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             var image = Image.CreateFromData(art.Image.Width, art.Image.Height, false,
                 Image.Format.Rgba8, art.Image.Rgba);
-            texture = ImageTexture.CreateFromImage(image);
+            texture = TextureUpload.Create(image);
             source = art.Image;
         }
 

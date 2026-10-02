@@ -1014,7 +1014,7 @@ public sealed class TextureArchive : IDisposable
         }
 
         var img = Build(baseName, out bool resolved, out _);
-        ImageTexture? tex = img != null ? ImageTexture.CreateFromImage(img) : null;
+        ImageTexture? tex = img != null ? TextureUpload.Create(img) : null;
         if (!resolved && _reportedMissing.Add(baseName))
         {
             // Report each distinct miss once. Log.Warn is a plain line, GD.PushWarning would
@@ -1060,8 +1060,8 @@ public sealed class TextureArchive : IDisposable
         {
             if (Build(baseName, out _, out _) is { } img)
             {
-                TextureUpload.Replace(tex, img);
                 bytes += img.GetDataSize();
+                TextureUpload.Replace(tex, img);
             }
         }
         (LastHadAlpha, LastAlphaIsSoft, LastAlphaClass) = last;

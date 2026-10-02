@@ -2080,7 +2080,7 @@ internal static class PufferSuites
     {
         var image = Image.CreateEmpty(2, 1, false, Image.Format.Rgba8);
         image.Fill(Colors.White);
-        var renderer = new MultiMeshEmitterRenderer(ImageTexture.CreateFromImage(image), 1,
+        var renderer = new MultiMeshEmitterRenderer(TextureUpload.Create(image), 1,
             new[] { false }, softParticles: false);
         var owner = new Node3D();
         ctx.Host.AddChild(owner);
@@ -2152,7 +2152,7 @@ internal static class PufferSuites
         image.Fill(Colors.White);
         // A column set spanning both blends, so one Attach builds both lists and each blend's own
         // fog target is read off the shader it was compiled with.
-        var renderer = new MultiMeshEmitterRenderer(ImageTexture.CreateFromImage(image), 2,
+        var renderer = new MultiMeshEmitterRenderer(TextureUpload.Create(image), 2,
             new[] { true, false }, softParticles: false);
         var owner = new Node3D();
         ctx.Host.AddChild(owner);

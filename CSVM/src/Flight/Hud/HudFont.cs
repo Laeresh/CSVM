@@ -172,7 +172,7 @@ public sealed class HudFont
             runCount = idx;
         }
 
-        var tex = ImageTexture.CreateFromImage(img);
+        var tex = TextureUpload.Create(img);
         return tex;
     }
 

@@ -173,14 +173,13 @@ metadata, surface materials and blend shapes; other nodes copy through their own
 uniforms stay behind, as under `Duplicate()`.
 
 ## src/Utils/TextureUpload.cs
-New pixels for a texture the game repaints while it runs: the ground shadow's silhouette, the world
-light table, the cinema and the menu movies. Each upload builds its own `Image`, because under the
-separate render thread the update is queued and read later, and an Image refilled in place with
-`SetData` swaps its buffer under that reader. `Create` makes the texture and `Replace` hands it the
-next picture, holding each Image by a second native reference until the render thread lets go, so
-that thread never swaps the C# wrapper's GC handle, a swap that corrupts the managed heap when it
-races the main thread's. The live alpha-depth follow hands a finished mipmapped Image to the same
-holding `Replace`.
+Every hand-over of an `Image` to a texture: the archive's textures, generated cards and HUD art at
+creation, and the repaints (ground shadow, light table, movies, the alpha-depth follow). Under the
+separate render thread an update is queued and read later, and a headless run queues creation too,
+so each upload builds its own Image. `Create` makes a texture and `Replace` hands it the next
+picture, holding each Image by a second native reference until the render thread lets go, so that
+thread never swaps the C# wrapper's GC handle, a swap that races the main thread and the finalizer.
+`Create` takes `callerKeeps` for a picture the caller still owns.
 
 ## src/Utils/SwitchProfile.cs
 The live graphics-mode switch's stopwatch: `EnhancedLook.Switch` and `GameSession.ApplyGraphicsMode`

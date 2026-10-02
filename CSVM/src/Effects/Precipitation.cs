@@ -136,7 +136,7 @@ public sealed partial class Precipitation : Node3D
                 float a = 1f - Mathf.SmoothStep(0.15f, 0.95f, r);
                 img.SetPixel(x, y, new Color(1f, 1f, 1f, a));
             }
-        return ImageTexture.CreateFromImage(img);
+        return TextureUpload.Create(img);
     }
 
     // A soft vertical streak (thin bright line, fading at both ends): the rain drop. Symmetric
@@ -153,7 +153,7 @@ public sealed partial class Precipitation : Node3D
                 float along = Mathf.Sin(Mathf.Pi * (y + 0.5f) / h); // fade to 0 at both ends
                 img.SetPixel(x, y, new Color(1f, 1f, 1f, across * along));
             }
-        return ImageTexture.CreateFromImage(img);
+        return TextureUpload.Create(img);
     }
 
     private void Init(WeatherState.PrecipData p, float cloudBottom, float cloudTop)

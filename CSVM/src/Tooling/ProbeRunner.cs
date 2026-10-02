@@ -269,6 +269,8 @@ public sealed class ProbeRunner
             PlaneName = spec.PlaneName,
             Mute = spec.Mute,
             LoadoutOverride = spec.LoadoutOverride,
+            AuditFinalizers = spec.DebugFinalizers,
+            AuditFinalizersAcrossRun = spec.DebugFinalizersAcrossRun,
             Host = host,
             Camera = camera,
         };
