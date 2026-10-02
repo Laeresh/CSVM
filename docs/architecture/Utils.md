@@ -454,3 +454,17 @@ still draw a frame, the sky at each launch, before a world or the cockpit pass's
 environment can read it. A menu frame with no presentation on screen is what this exists for: the
 apply's switch runs a frame after the exit that asked for it, and the presentation is already
 hidden. Read `Launch/Launcher.cs` next for the three sites.
+
+## src/Utils/ScreenKeyboard.cs
+Steam's on-screen keyboard, raised through `OS.ShellOpen("steam://open/keyboard")` and lowered
+through `steam://close/keyboard`, so no Steamworks SDK is needed and a non-Steam shortcut gets it.
+`Available` is read once from the environment: `SteamDeck` or `SteamOS` set to 1, under
+`XDG_CURRENT_DESKTOP=gamescope`, which is Game Mode; Desktop Mode would open it behind the window.
+One `ScreenKeyboardField` holds it at a time. An owner raises it with `Show` on a pad press or a
+tap, never on focus, and calls `Follow` each frame so leaving its field lowers it. The owners are
+`Original/OriginalShell.cs`, `Screens/LaunchMenu.cs`, `Screens/NoGameDataScreen.cs` and `Launch/SessionNet.cs`.
+
+## src/Utils/ScreenKeyboardField.cs
+One field the on-screen keyboard can be raised for: its owner and id, the label and the live text
+the echo strip repeats (masked where the field masks it), and whether the strip repeats it at all.
+The in-flight chat opts out, its line being drawn at the top left already. `ScreenKeyboard.cs` holds it.

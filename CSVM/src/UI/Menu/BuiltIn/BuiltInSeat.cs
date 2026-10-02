@@ -37,6 +37,7 @@ public sealed class BuiltInSeat : IMenuInputSource
             MoveY = Input.Move,
             MoveX = Input.MoveX,
             Accept = Input.Accept,
+            KeylessAccept = Input.KeylessAccept,
             Back = Input.Back,
             Join = Input.Start,
             Loadout = Input.Loadout,

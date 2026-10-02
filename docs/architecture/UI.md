@@ -537,7 +537,7 @@ context (`src/Bindings/`) from three readings of one seat: keyboard live, keyboa
 typeable keys, and the pad alone. Its pad rows sit on the seat-local `SeatPads` identity, since a
 seat reads a set of pads and no binding may hold a connection index. `Typed` and `Erase` serve a
 text field, `PadMove`/`PadMoveX` are the axes such a screen reads instead, since W, A, S and D
-are letters there. `Typed` is read off `TypedText`, so each character is the one the pilot's own layout produced, and `Paste` is a Ctrl+V or Shift+Insert chord whose text a box reads through the `Clipboard` seam; `TypeableKeys` names the US key positions text entry takes off the cursor bindings. `Device` and `DeviceMoved` come from an `ActiveDevice` over a fourth reading, the keyboard half alone, so a board hint names the side the seat last used and knows the tick it changed; `Hint` composes one such line. Wrapped by `Menu/BuiltIn/BuiltInSeat.cs`, bound by `MenuSeatDevices`; it also serves the in-flight boards. Beside all of that stand three static raw pad reads, `JoinPressed`, `SignOnPressed` and `SignOffPressed` for Start, A and B: a pad no seat owns has no keymap, so nothing bound can answer for the join gesture or the join board's two. Player 1 also reads the flight sticks, and its menu stick rows follow the active profiles (`Sticks/StickProfileSet.cs`); a joined seat never reads a stick.
+are letters there. `Typed` is read off `TypedText`, so each character is the one the pilot's own layout produced, and `Paste` is a Ctrl+V or Shift+Insert chord whose text a box reads through the `Clipboard` seam; `KeylessAccept` is an accept the keyboard half did not give, which a text field answers with `Utils/ScreenKeyboard.cs`; `TypeableKeys` names the US key positions text entry takes off the cursor bindings. `Device` and `DeviceMoved` come from an `ActiveDevice` over a fourth reading, the keyboard half alone, so a board hint names the side the seat last used and knows the tick it changed; `Hint` composes one such line. Wrapped by `Menu/BuiltIn/BuiltInSeat.cs`, bound by `MenuSeatDevices`; it also serves the in-flight boards. Beside all of that stand three static raw pad reads, `JoinPressed`, `SignOnPressed` and `SignOffPressed` for Start, A and B: a pad no seat owns has no keymap, so nothing bound can answer for the join gesture or the join board's two. Player 1 also reads the flight sticks, and its menu stick rows follow the active profiles (`Sticks/StickProfileSet.cs`); a joined seat never reads a stick.
 
 ## src/UI/Boards/TypedText.cs
 The characters the keyboard typed as the pilot's own layout produced them, engine-free, which every
@@ -666,6 +666,13 @@ and `Launcher` keeps their clicks from Original's polled pointer. Built once by 
 presentation at once. It draws on `HudLayers.PerfReadout`, above the boards, and is hidden in
 flight. Pinned by `build-stamp-icons` and `build-stamp-focus`; the number is `Utils/BuildVersion.cs`.
 
+## src/UI/Screens/ScreenKeyboardEcho.cs
+A strip across the top of the screen repeating the field Steam's on-screen keyboard types into, its
+label and its text with a caret, since the keyboard covers the lower half where a field such as the
+lobby chat line is drawn. Built once by `Launcher` beside `BuildStamp`, on `HudLayers.KeyboardEcho`
+above everything; it shows while `Utils/ScreenKeyboard.cs` names a field that asks to be echoed and
+reads that field's text every frame. Original's boxes carry no label, so their text stands alone.
+
 ## src/UI/Overlays/NetReadout.cs
 The `--debug-net` corner readout: a network match's desync counters as
 `Net/NetInstruments.cs`'s `Describe` writes them, one section to a line. Built by `Launcher` only
@@ -681,7 +688,7 @@ naming another schema. Views follow `ExtractionFlow.View`: the install folder fi
 the failures with Try again and Choose another folder. Every press is a focusable button, so a
 pad's d-pad and A drive it; Esc or B cancels a run and quits otherwise. A success hands back once
 to `Launcher`, which re-resolves the data paths and enters the menu in the same process.
-The picker's controller hint label does not wrap, since the dialog grows to its content's minimum.
+The picker's controller hint label does not wrap, since the dialog grows to its content's minimum. A pad's A or a tap on the folder field raises `Utils/ScreenKeyboard.cs`; focus alone does not.
 
 ## src/UI/Screens/ExtractionFlow.cs
 The extraction screen's state, engine-free so a unit drives it with a fake runner. A stamp naming
@@ -897,7 +904,7 @@ definition persisted data.
 
 ## src/UI/Menu/MenuCommands.cs
 The device-neutral input seam: `MenuCommands` is one frame of one seat's semantic commands
-(auto-repeated cursor steps, edge presses, typed text and a paste, an optional window-pixel `MenuPointer` whose
+(auto-repeated cursor steps, edge presses with `KeylessAccept` marking an accept no key gave, typed text and a paste, an optional window-pixel `MenuPointer` whose
 primary button arrives as a press and an edge and whose secondary as a held state driving no command
 of its own), and `IMenuInputSource` is the per-seat producer (`Poll`/`Prime`/`CapturingText`). A
 source is not synonymous with a pad: keyboard-plus-unclaimed-pads, one claimed pad, a mouse or a
