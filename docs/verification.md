@@ -656,11 +656,18 @@ member, and it does not go here.
 - **SHELL-20**, **Under `$ErrorActionPreference = 'Stop'`, redirecting a native command's stderr
   makes its failure terminating, so a probe whose failure is the answer must lift the preference and
   read the exit code instead.**
-- **SHELL-21**, **Read a "broken" golden's own `pixmd5=` line against the manifest before calling it
-  a move: a change to the compiled code of `csky_atmosphere.gdshaderinc` makes some shots save their
-  screenshot and then never exit.** The cause is not decoded and is not the new code: `c1-crash`
-  hangs 3 of 3 with only the include's divisor guard moved from 0.001 to 0.0011, against 7 of 7
-  clean exits with the compiled code unchanged.
+- **SHELL-21**, **A run that saves its screenshot and then never exits is Godot's worker pool
+  deadlocking at exit over a queued low-priority task, so `Launcher._ExitTree` empties that queue
+  first; still read a "broken" golden's own `pixmd5=` line against the manifest before calling it a
+  move.** Godot 4.7's `WorkerThreadPool::exit_languages_threads` waits for every worker to count
+  itself idle, which a worker does only with both task queues empty; one that wakes to a waiting
+  low-priority task sleeps again uncounted, and nothing wakes it. Background pipeline compiles are
+  low-priority tasks, so a change to the compiled code of a shader most materials share (any edit
+  to `csky_atmosphere.gdshaderinc` that is not a comment) leaves a backlog at the quit of a short
+  shot. A hung `c1-crash`'s native stacks: the main thread in that wait, the render pump yielding,
+  every other worker idle. A killed hang also never saves the pipeline cache, so the same shots hang
+  on the next run too. With the drain, the shots that hung showed 0.3 to 6.4 s of backlog at quit
+  and exited; every other shot settles in about 1 ms.
 
 ## INSTR, building instruments
 

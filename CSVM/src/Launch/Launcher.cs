@@ -945,6 +945,7 @@ public partial class Launcher : Node3D
     // sidecar's flush-interval loss bound (HitchSidecar's own doc) covers instead.
     public override void _ExitTree()
     {
+        DrainLowPriorityTasks();
         _hitchSidecar.Flush();
         _musicArchive?.Dispose();
         _musicArchive = null;
@@ -1544,6 +1545,22 @@ public partial class Launcher : Node3D
 
             Callable.From(() => GetTree().Quit(code)).CallDeferred();
         });
+    }
+
+    /// <summary>Empties the worker pool's low-priority queue before the engine's exit asks every
+    /// worker to report idle. A worker that finds a low-priority task still queued then sleeps
+    /// uncounted, and nothing wakes it, so the process hangs after its last frame. Pipelines left
+    /// compiling in the background after a shader change fill that queue. docs/verification.md
+    /// SHELL-21 holds the stacks and the measurement.
+    /// ⚠ The sentinel must be low priority: the queue is FIFO, so its completion is the proof.</summary>
+    private void DrainLowPriorityTasks()
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        // The render thread's last frame may still be queueing compiles; settle it first.
+        RenderingServer.ForceSync();
+        long sentinel = WorkerThreadPool.AddTask(Callable.From(() => { }), highPriority: false, "ExitDrain");
+        WorkerThreadPool.WaitForTaskCompletion(sentinel);
+        Log.Info("core", $"exit drain: low-priority tasks settled in {watch.Elapsed.TotalMilliseconds:0.0} ms");
     }
 
     // The boot sequence in fmv.zrd's own order, its card and waits and fade included: the reader's

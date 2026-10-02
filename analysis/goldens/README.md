@@ -69,7 +69,8 @@ A failing shot tells you *that* pixels moved, never *why*. Do not diagnose by st
 go to the headless instruments: `--tex-census` / `--tex-override` for "is this surface drawing",
 `--debug-anim` for pose, condition and emitter state, `--perf` for the frame split, the mesh lab for
 shading and normals. The saved `.scratch/goldens/<shot>.png` is for eyeballing *which* thing moved so
-you know which instrument to reach for.
+you know which instrument to reach for. The next run deletes it, so a moved shot's PNG and logs are
+also copied to `.scratch/goldens-failures/<stamp>/`, which the stage's FAIL line names.
 
 ## What the set does and does not cover
 

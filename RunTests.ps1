@@ -1257,6 +1257,15 @@ if ($SkipGoldensNow) {
             Write-Host "  ok   $($shot.name)  $($state.Hash)" -ForegroundColor DarkGray
         } else {
             $moved += "$($shot.name) $($shot.hash) -> $($state.Hash) ($($state.Png))"
+            if (-not $RegenGoldens) {
+                # The next run deletes this image at its start, and an unexplained move is only
+                # judged by diffing the moved frame against the pinned one.
+                if ($failureRoot -eq $null) {
+                    $failureRoot = Join-Path $ScratchDir "goldens-failures\$failureStamp"
+                }
+                Save-GoldenFailureEvidence -FailureDir $failureRoot -ShotName $shot.name `
+                    -Attempt $state.Attempt -ShotLog $state.Log -Png $state.Png
+            }
             $color = if ($RegenGoldens) { "DarkYellow" } else { "Red" }
             Write-Host "  MOVED $($shot.name): $($shot.hash) -> $($state.Hash)" -ForegroundColor $color
             Write-Host "        actual image: $($state.Png)" -ForegroundColor $color
@@ -1298,7 +1307,7 @@ if ($SkipGoldensNow) {
     } else {
         $names = @($moved | ForEach-Object { ($_ -split ' ')[0] }) + @($broken | ForEach-Object { ($_ -split ':')[0] })
         Add-Stage -Name "goldens" -Status "FAIL" -Seconds $watch.Elapsed.TotalSeconds `
-            -Detail "$($moved.Count) moved, $($broken.Count) broken of $shotCount [$($names -join ', ')]; actual images in $GoldenDir"
+            -Detail "$($moved.Count) moved, $($broken.Count) broken of $shotCount [$($names -join ', ')]; actual images in $GoldenDir$(if ($failureRoot) { ", kept in $failureRoot" })"
         foreach ($m in $moved) {
             Write-Host "  !! moved: $m" -ForegroundColor Red
         }

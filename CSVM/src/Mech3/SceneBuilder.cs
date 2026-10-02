@@ -364,10 +364,8 @@ void fragment() {
     // picked by eye against the original's screenshots, at the controls and not by a luminance
     // distance. Sunlight reads as a sheen, not as gloss.
     private const float AircraftSpecular = 0.25f;
-    // The per-vertex sun term's colour triples (WeatherRig.SunVertexLight).
-    // ⚠ Declare them here, never in csky_atmosphere.gdshaderinc, which every world shader
-    // includes. Declared in that include, a headless probe never exits; the cause is not decoded
-    // (docs/verification.md SHELL-21).
+    // The per-vertex sun term's colour triples (WeatherRig.SunVertexLight), declared by the one
+    // builder whose arms read them.
     private const string SunVertexLightDecl =
         "global uniform vec3 csky_sun_ambient_rgb;\nglobal uniform vec3 csky_sun_diffuse_rgb;\n"
         + "global uniform vec3 csky_sun_fill_rgb;";
