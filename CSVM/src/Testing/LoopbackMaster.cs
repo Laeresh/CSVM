@@ -20,6 +20,19 @@ internal sealed class LoopbackMaster
     /// <summary>Opens one socket, already open.</summary>
     public IMasterSocket Open() => new End(this);
 
+    /// <summary>Tells guest <paramref name="peer"/>'s host that it left, while its signals still
+    /// route. A guest that closes the moment it links can produce that order.</summary>
+    public void TellHostLeft(int peer)
+    {
+        foreach (var game in _games.Values)
+        {
+            if (game.Guests.ContainsKey(peer))
+            {
+                Deliver(game.Host, new MasterMessage { T = MasterWire.Left, Peer = peer });
+            }
+        }
+    }
+
     private void Route(End from, MasterMessage message)
     {
         Carried++;

@@ -26,6 +26,11 @@ public sealed class WebRtcTransport : INetTransport, INetLink, INetPeerAddress, 
     /// <summary>How long a host keeps a guest's negotiation that has not linked, in seconds.</summary>
     public const double NegotiationSeconds = 30.0;
 
+    /// <summary>How long a host keeps an unlinked guest after the master says it left, in seconds.
+    /// A guest closes its socket once its own end links. The host's end can report that link later,
+    /// so the master's word alone must not cut it.</summary>
+    public const double LeftGraceSeconds = 10.0;
+
     /// <summary>How long a host waits before it reopens a master socket that closed, in seconds.
     /// </summary>
     public const double ReopenSeconds = 10.0;
@@ -97,6 +102,21 @@ public sealed class WebRtcTransport : INetTransport, INetLink, INetPeerAddress, 
 
     /// <summary>How many sequenced payloads arrived stale and were dropped.</summary>
     public int DiscardedStale => _framing.DiscardedStale;
+
+    /// <summary>How many guests a host is negotiating with that have not linked.</summary>
+    internal int Negotiating
+    {
+        get
+        {
+            int count = 0;
+            foreach (var remote in _remotes.Values)
+            {
+                count += remote.Linked ? 0 : 1;
+            }
+
+            return count;
+        }
+    }
 
     /// <summary>Lists a game on the master server <paramref name="open"/> connects to and admits up
     /// to <paramref name="maxPeers"/> guests negotiating through it. The host is peer 1. A socket
@@ -312,7 +332,7 @@ public sealed class WebRtcTransport : INetTransport, INetLink, INetPeerAddress, 
                     Apply(from, message);
                     break;
                 case MasterWire.Left when _host && message.Peer is int gone && _remotes.TryGetValue(gone, out var remote) && !remote.Linked:
-                    Drop(gone);
+                    remote.LeftAt = double.IsNaN(remote.LeftAt) ? _clock : remote.LeftAt;
                     break;
                 case MasterWire.Error or MasterWire.Closed when !_host && !_linked:
                     Fail(message.Why ?? "the host's game is gone");
@@ -474,9 +494,19 @@ public sealed class WebRtcTransport : INetTransport, INetLink, INetPeerAddress, 
 
         foreach (var (peer, remote) in new List<KeyValuePair<int, Remote>>(_remotes))
         {
-            if (!remote.Linked && _clock - remote.Since > NegotiationSeconds)
+            if (remote.Linked)
+            {
+                continue;
+            }
+
+            if (_clock - remote.Since > NegotiationSeconds)
             {
                 Log.Info("core", $"net: WebRTC guest {peer} did not link in {NegotiationSeconds:0} s; dropped");
+                Drop(peer);
+            }
+            else if (_clock - remote.LeftAt > LeftGraceSeconds)
+            {
+                Log.Info("core", $"net: WebRTC guest {peer} left the master and did not link in {LeftGraceSeconds:0} s; dropped");
                 Drop(peer);
             }
         }
@@ -611,6 +641,9 @@ public sealed class WebRtcTransport : INetTransport, INetLink, INetPeerAddress, 
         public string? Address { get; set; }
 
         public bool Linked { get; set; }
+
+        // When the master said this guest left, NaN until it does.
+        public double LeftAt { get; set; } = double.NaN;
 
         public WebRtcPeerConnection.SessionDescriptionCreatedEventHandler Described { get; set; } = null!;
 

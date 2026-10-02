@@ -144,7 +144,7 @@ code, answers the host's offer and closes its socket once linked. The server rel
 candidates only; STUN and TURN come with each announcement. Three default data channels carry the
 classes, the session channel rides `WebRtcFraming`. A host reopens a dropped socket after
 `ReopenSeconds`; a guest that has not linked in `JoinTimeoutSeconds` is down with a `LinkFault`.
-Read `Testing/WebRtcTransportSuites.cs`.
+An unlinked guest the server says left is kept `LeftGraceSeconds`. Read `Testing/WebRtcTransportSuites.cs`.
 
 ## src/Net/WebRtcFraming.cs
 The four-byte header every WebRTC payload rides in: the session channel, a flags byte and, for a
