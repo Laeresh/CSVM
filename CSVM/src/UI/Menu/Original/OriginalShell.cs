@@ -5,6 +5,7 @@ using CSVM.Net;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
 using CSVM.UI.Screens;
+using CSVM.Utils;
 using CSVM.Video;
 
 namespace CSVM.UI.Menu.Original;
@@ -227,6 +228,10 @@ public sealed record OriginalPreferencesInks(MenuLayoutColor Text, MenuLayoutCol
 /// </summary>
 public sealed partial class OriginalShell : IOriginalScreenHost
 {
+    /// <summary>The owner this shell raises the on-screen keyboard under, its edit boxes' keys
+    /// being the field ids.</summary>
+    public const string KeyboardOwner = "original";
+
     /// <summary>The Campaign row's key on the top level.</summary>
     public const string CampaignKey = "MM_B_CAMPAIGN";
 
@@ -692,6 +697,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// guest's. The pointer, when present, is in authored pixels.</summary>
     public OriginalStep Step(MenuCommands commands) => StepSeat(0, commands);
 
+    /// <summary>Lowers the on-screen keyboard once the box it was raised for no longer takes
+    /// text. The presentation calls it after every frame.</summary>
+    public void FollowKeyboard() => ScreenKeyboard.Follow(KeyboardOwner, CapturingText ? FocusedKey : null);
+
     /// <summary>One menu frame of the network door, whatever screen shows: the door is stepped, the
     /// cabin's co-op offer renewed and the Connection pages kept current. Returns whether the
     /// picture changed. It has whenever the door's <see cref="NetPlayFeature.Revision"/> moved,
@@ -1097,7 +1106,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
 
         if (exit == null && commands.Accept && focus >= 0 && rows[focus].Enabled)
         {
-            exit = Activate(rows[focus], cues, byPointer: false);
+            exit = Activate(rows[focus], cues, byPointer: false, keyless: commands.KeylessAccept);
             changed = true;
         }
         else if (exit == null && commands.Back)
@@ -1564,11 +1573,30 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         return -1;
     }
 
+    // An edit box as the keyboard sees it. Its words are read off the row each time, so the echo
+    // strip shows them masked wherever the box draws them masked.
+    private ScreenKeyboardField KeyboardField(string key) =>
+        new(KeyboardOwner, key, string.Empty, () => BoxText(key));
+
+    private string BoxText(string key)
+    {
+        foreach (var row in Rows)
+        {
+            if (row.Key == key)
+            {
+                return row.Label;
+            }
+        }
+
+        return string.Empty;
+    }
+
     // The byPointer flag is whether the gesture is a pointer release on the row rather than the
     // cursor's Accept. Only an edit box tells the two apart. A click in one puts the caret there
     // and does nothing else. Accept in it takes the box's own default button (MB.JM), which on the
-    // profile screen is CM_B_START (docs/formats/campaign-screens.md).
-    private MenuExit? Activate(OriginalRow row, List<string> cues, bool byPointer)
+    // profile screen is CM_B_START (docs/formats/campaign-screens.md). A tap or a keyless Accept
+    // raises the on-screen keyboard instead, where there is one.
+    private MenuExit? Activate(OriginalRow row, List<string> cues, bool byPointer, bool keyless = false)
     {
         if (row.Kind != OriginalRowKind.ListRow)
         {
@@ -1582,9 +1610,20 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             return null;
         }
 
-        if (byPointer && row.Kind == OriginalRowKind.TextField)
+        if (row.Kind == OriginalRowKind.TextField)
         {
-            return null;
+            if ((byPointer || keyless) && ScreenKeyboard.Show(KeyboardField(row.Key)))
+            {
+                return null;
+            }
+
+            if (byPointer)
+            {
+                return null;
+            }
+
+            // A key's Accept is the box's Enter, which is where the typing ends.
+            ScreenKeyboard.Hide(KeyboardOwner);
         }
 
         // A standing network box takes its own rows, which are the only rows while it stands.

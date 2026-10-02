@@ -77,6 +77,11 @@ public sealed class MenuInput
     public bool DeviceMoved;
 
     public bool Accept;     // pressed this frame (edge)
+
+    /// <summary><see cref="Accept"/> with no keyboard key behind it, so a pad's or a stick's. A text
+    /// field raises the on-screen keyboard for it rather than taking it as Enter.</summary>
+    public bool KeylessAccept;
+
     public bool Back;       // pressed this frame (edge)
     /// <summary>Back on the pad alone, without Escape, for a reader whose Escape is already spoken
     /// for elsewhere. A board menu's is: Escape toggles the pause that owns the board, so reading
@@ -403,6 +408,7 @@ public sealed class MenuInput
         bool accept = RawAccept();
         Accept = accept && !_acceptPrev;
         _acceptPrev = accept;
+        KeylessAccept = Accept && !_keysOnly.Held(InputAction.MenuAccept);
 
         bool back = RawBack();
         Back = back && !_backPrev;
@@ -462,7 +468,7 @@ public sealed class MenuInput
         // Seeds the handover's own counts too, so a button still held from whatever raised this
         // screen is not read as the press that hands the hints to the other device.
         _device.Observe(_keysOnly.Current, _padOnly.Current, Keyboard, _sticksOnly.Current);
-        Accept = Back = PadBack = Start = Loadout = Presets = Unbind = DeviceMoved = false;
+        Accept = KeylessAccept = Back = PadBack = Start = Loadout = Presets = Unbind = DeviceMoved = false;
     }
 
     // The letters, the digit row, the space bar and then the punctuation, in that order. The

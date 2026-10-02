@@ -74,6 +74,12 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// in place of <see cref="RemoteChipMark"/>.</summary>
     public const string ReadyChipMark = " ready";
 
+    /// <summary>The owner this menu raises the on-screen keyboard under.</summary>
+    public const string KeyboardOwner = "builtin";
+
+    /// <summary>The campaign profile name's field id, the one field armed by its own press.</summary>
+    public const string CampaignNameField = "campaign-name";
+
     // The multiplayer door's eleven rows, in the order they are drawn. Two fields a player edits,
     // two ways a socket opens, and the way on to the map. Then the original's Game and Player
     // Information: the game's name, password and cap, and the callsign and voice. Last the host's
@@ -330,6 +336,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The campaign's out-of-mission flow while it is open. One door (the Mode screen's Campaign
     // row); its own screens are the flow's pages, so a new one needs no change here.
     private CampaignFlow? _campaign;
+    // Whether the campaign's name field was armed after the last frame. It tells the press that
+    // arms the field from the frames it merely stays armed.
+    private bool _campaignNameArmed;
     // The shared campaign feature the flow walks: the host's one instance, opened over a store on
     // every door and discarded with the flow, so a switch of presentation drops the same seated
     // profile Original would have been reading.
@@ -853,7 +862,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     /// <summary>Hide the menu (the host is about to build a session).</summary>
-    public void HideMenu() => Visible = false;
+    public void HideMenu()
+    {
+        Visible = false;
+        ScreenKeyboard.Hide(KeyboardOwner);
+    }
 
     /// <summary>The control drawing player 1's row <paramref name="index"/>, or null when that row
     /// is not drawn (outside a list's window, or a composed campaign board). A check injects the
@@ -875,6 +888,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         try
         {
             dirty = HandleInput();
+            FollowKeyboard();
         }
         finally
         {
@@ -1056,6 +1070,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         for (int i = 1; i < _slots.Count; i++)
             _slots[i].Frame = _slots[i].Seat.Source.Poll((float)delta);
         dirty |= HandleInput();
+        FollowKeyboard();
         // After the input, so a press that opened or left the briefing is already reflected: the
         // reveal is a clock the page cannot own, and the narration is a node the page cannot hold.
         dirty |= TickCampaignAudio(delta);
@@ -1299,6 +1314,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             MoveY = frame.MoveY != 0 ? frame.MoveY : pointer.MoveY,
             Accept = frame.Accept || pointer.Accept,
+            KeylessAccept = frame.KeylessAccept || pointer.Accept,
             Back = frame.Back || pointer.Back,
         };
     }
@@ -1450,6 +1466,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         if (CampaignFilmOwnsFrame(out bool swallowed))
         {
             return swallowed;
+        }
+
+        if (RaiseKeyboard())
+        {
+            return true;
         }
 
         bool dirty = false;
@@ -2036,6 +2057,74 @@ public sealed partial class LaunchMenu : CanvasLayer
     private int NetNameRow() =>
         _screen == Screen.Network && !_coopWait && _net != null
         && _netIndex is NetGameNameRow or NetPasswordRow or NetCallsignRow ? _netIndex : -1;
+
+    // The text field taking player 1's typing, as the on-screen keyboard sees it, or null. The
+    // campaign's name field counts only once armed, since its own press is what arms it.
+    private ScreenKeyboardField? KeyboardField()
+    {
+        if (_screen == Screen.Campaign && _campaign is { CapturesText: true } campaign)
+        {
+            return new ScreenKeyboardField(KeyboardOwner, CampaignNameField, "Name",
+                () => campaign.Page.TextEntry?.Text ?? string.Empty);
+        }
+
+        if (AddressField() is { } address)
+        {
+            return new ScreenKeyboardField(KeyboardOwner, "address", "Address", () => address.Address);
+        }
+
+        if (NetNameRow() is var row and >= 0 && _net is { } net)
+        {
+            return row switch
+            {
+                NetGameNameRow => new ScreenKeyboardField(KeyboardOwner, "game-name", "Game name", () => net.GameName),
+                NetPasswordRow => new ScreenKeyboardField(KeyboardOwner, "password", "Password", () => new string('*', net.Password.Length)),
+                _ => new ScreenKeyboardField(KeyboardOwner, "callsign", "Callsign", () => net.PlayerName),
+            };
+        }
+
+        if (NamePage() != null && _hangar is { Row: HangarNamePage.NameRow } flow)
+        {
+            return new ScreenKeyboardField(KeyboardOwner, "plane-name", "Name", () => flow.Scratch.Name);
+        }
+
+        return null;
+    }
+
+    // A keyless Accept on a text field raises the on-screen keyboard and is spent there. A key's
+    // Accept is the field's Enter, which ends the typing before the row acts on it.
+    private bool RaiseKeyboard()
+    {
+        var p1 = _slots[0].Input;
+        if (!p1.Accept || KeyboardField() is not { } field)
+        {
+            return false;
+        }
+
+        if (_slots[0].Frame.KeylessAccept && ScreenKeyboard.Show(field))
+        {
+            p1.Accept = false;
+            return true;
+        }
+
+        ScreenKeyboard.Hide(KeyboardOwner);
+        return false;
+    }
+
+    // After every frame. The campaign's name field raises the keyboard on the keyless press that
+    // armed it, and any field that stopped taking text lowers it.
+    private void FollowKeyboard()
+    {
+        var field = Visible ? KeyboardField() : null;
+        bool campaign = field?.Id == CampaignNameField;
+        if (campaign && !_campaignNameArmed && _slots[0].Frame.KeylessAccept)
+        {
+            ScreenKeyboard.Show(field!);
+        }
+
+        _campaignNameArmed = campaign;
+        ScreenKeyboard.Follow(KeyboardOwner, field?.Id);
+    }
 
     // The door takes what the options remember once, before the board or the campaign's door
     // first shows it. Original's boxes open on the same answers.

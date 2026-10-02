@@ -25,6 +25,12 @@ namespace CSVM.Launch;
 /// Module entry: docs/architecture/Launch.md on src/Launch/SessionNet.cs.</summary>
 internal sealed class SessionNet
 {
+    /// <summary>The owner the in-flight chat raises the on-screen keyboard under.</summary>
+    internal const string ChatKeyboardOwner = "chat";
+
+    // The chat's one line, the only field that owner holds.
+    private const string ChatKeyboardField = "line";
+
     // How many transport steps a guest gives the host's answer before it gives up and fails the
     // build. Ten seconds of simulated link at the fixed step. ⚠ This advances the transport's own
     // clock, not the wall clock. It bounds simulated delivery time and is not a timeout, so a
@@ -199,6 +205,7 @@ internal sealed class SessionNet
     {
         Clock?.Advance(delta);
         Chat?.Chat.Advance((float)delta);
+        ScreenKeyboard.Follow(ChatKeyboardOwner, Chat is { Chat.Typing: true } ? ChatKeyboardField : null);
     }
 
     /// <summary>The shared clock's round trip, for every kind of session: a guest asks the host's
@@ -669,7 +676,13 @@ internal sealed class SessionNet
         }
 
         pilot.KeyboardHeld = () => chat.HoldsKeyboard;
-        pilot.ChatAsked += team => chat.Open(seat, team);
+        pilot.ChatAsked += team =>
+        {
+            chat.Open(seat, team);
+            // The chat panel already draws the line at the top left, clear of the keyboard.
+            ScreenKeyboard.Show(new ScreenKeyboardField(ChatKeyboardOwner, ChatKeyboardField, string.Empty,
+                () => chat.Chat.Draft, Echoed: false));
+        };
     }
 
     // One round this machine fired, told to the field so every other copy of the aeroplane
