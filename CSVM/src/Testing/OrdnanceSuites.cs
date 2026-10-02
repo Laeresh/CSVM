@@ -2423,7 +2423,9 @@ internal static class OrdnanceSuites
         "a fused burst reads the default IMPACT row (FUN_005ac3a0): a wep_07 fusing on its own target " +
         "draws flak_effect at the round, a wep_10 fusing on the same target draws its named-and-" +
         "empty default row's nothing rather than the player row's large_fireball, the same burst " +
-        "on a non-aircraft target draws nothing, and a wep_11 into the ground hands its authored " +
+        "on a non-aircraft target draws nothing, a wep_30 round on an aircraft hands its player row's " +
+        "3040slug_gunhit to the effects runtime with no stand-in sprite beside it while the same " +
+        "round on the ground keeps its sprite, and a wep_11 into the ground hands its authored " +
         "ballflare.flt to the effects runtime (the white growing flare) instead of standing a " +
         "static gamez-template instance in for it")]
     internal static void OrdnanceImpactEffects(TestContext ctx)
@@ -2434,9 +2436,9 @@ internal static class OrdnanceSuites
         ctx.RequireData(texturesPath, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         if (!weapons.TryGet("wep_10", out var beeper) || !weapons.TryGet("wep_11", out var seeker)
-            || !weapons.TryGet("wep_07", out var flak))
+            || !weapons.TryGet("wep_07", out var flak) || !weapons.TryGet("wep_30", out var gun))
         {
-            ctx.Check(false, $"wep_07, wep_10 and wep_11 resolve");
+            ctx.Check(false, $"wep_07, wep_10, wep_11 and wep_30 resolve");
             return;
         }
 
@@ -2454,6 +2456,9 @@ internal static class OrdnanceSuites
             $"wep_11's default row authors ballflare.flt + snd_missile_seeker (the white ground flare)");
         ctx.Check(seeker.ImpactFor(SurfaceRegistry.Player) is { Animation: "large_fireball" },
             $"wep_11's player row authors large_fireball");
+        ctx.Check(gun.ImpactFor(SurfaceRegistry.Player) is { Animation: "3040slug_gunhit" }
+                && gun.ImpactFor(SurfaceRegistry.Default) is { Animation: "3040slug_gunhit" },
+            $"wep_30's player and default rows both author 3040slug_gunhit");
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
@@ -2461,6 +2466,7 @@ internal static class OrdnanceSuites
         ProjectilePool? pool = null;
         FlightController? victim = null;
         Node3D? mark = null;
+        StaticBody3D? plate = null;
         try
         {
             var effects = new List<(string Name, Vector3 At)>();
@@ -2536,11 +2542,43 @@ internal static class OrdnanceSuites
             var onMark = Fly(beeper, mark, controlFrom);
             ctx.Check(onMark == null,
                 $"the same burst on a non-aircraft target plays the empty default row: nothing (played={onMark?.Name ?? "nothing"})");
+
+            // A gun round striking the airframe: the player row's gunhit reaches the runtime and no
+            // stand-in sprite draws beside it. CONTROL: the same round on a plate keeps its spark.
+            ctx.SyncPhysics();
+            var fuselage = victim.WorldPosition
+                + (victim.Collider?.Parts.Where(p => p.Name == "fuselage").Select(p => p.Local.Origin).FirstOrDefault() ?? Vector3.Zero);
+            var onAirframe = Strike(gun, fuselage + new Vector3(0f, 0f, -30f), fuselage);
+            ctx.Check(onAirframe is { Name: "3040slug_gunhit", Sprites: 0 },
+                $"a {gun.Id} round on an aircraft hands the player row's 3040slug_gunhit to the effects runtime and draws no stand-in sprite (played={onAirframe.Name ?? "nothing"} sprites={onAirframe.Sprites})");
+            var groundAt = origin + new Vector3(-4000f, 0f, 0f);
+            plate = CombatSuites.Plate("impact-fx-ground", new Vector3(40f, 0.2f, 40f), groundAt);
+            ctx.Host.AddChild(plate);
+            ctx.SyncPhysics();
+            var onGround = Strike(gun, groundAt + new Vector3(0f, 30f, 0f), groundAt);
+            ctx.Check(onGround is { Name: "3040slug_gunhit", Sprites: 1 },
+                $"and the same round on the ground hands the default row's gunhit over and still draws its one stand-in sprite (played={onGround.Name ?? "nothing"} sprites={onGround.Sprites})");
+
+            // Steps one round from `from` toward `at` until it draws or plays, then reads both. The
+            // idle steps first let the per-name gun-effect throttle lapse between two strikes.
+            (string? Name, int Sprites) Strike(WeaponDef weapon, Vector3 from, Vector3 at)
+            {
+                live.Clear();
+                for (int i = 0; i < 12; i++)
+                    live.SimStep(1f / 60f);
+                effects.Clear();
+                live.Spawn(weapon, new Transform3D(Basis.Identity, from), Vector3.Zero, shooterId: 0,
+                    aimDir: (at - from).Normalized());
+                for (int i = 0; i < 60 && effects.Count == 0 && live.ImpactSpriteCount == 0; i++)
+                    live.SimStep(1f / 60f);
+                return (effects.Count > 0 ? effects[0].Name : null, live.ImpactSpriteCount);
+            }
         }
         finally
         {
             victim?.Free();
             mark?.Free();
+            plate?.Free();
             pool?.Free();
             textures.Dispose();
         }

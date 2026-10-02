@@ -328,12 +328,12 @@ authored-rotation rule and the per-airframe name variants: [../formats/hud.md](.
 
 ## src/Flight/Weapons/ImpactOutcome.cs
 "What should happen when this weapon hits this surface id" as a value: the effect name and which
-`IMPACT` slot it came from, the sound, the stand-in burst and the damage/blast-radius pair.
-`Resolve` is the whole decision, with no Godot type, no scene and no sound archive behind it, so a
-unit test reaches the dispatch directly; `ImpactSuppression` is the mask a weapon's impact hook
-returns. `ProjectilePool.Impact` reads the struck surface id and calls it, `Apply` performs the
-answer and decides nothing. The stand-in ladder (whose `effectBound` arm keeps a burst off a row the
-effects runtime renders) and the `default`-row backfill are decoded at their own members.
+`IMPACT` slot it came from, the sound, the stand-in burst, whether the effects runtime is owed the
+name (`EffectOwed`, so a struck aircraft, which stands nothing in, still plays its row's `*_gunhit`)
+and the damage/blast-radius pair. `Resolve` is the whole decision, with no Godot type, scene or sound
+archive behind it; `ImpactSuppression` is the mask a weapon's impact hook returns.
+`ProjectilePool.Impact` reads the struck surface id and calls it, `Apply` performs the answer and
+decides nothing. The stand-in ladder and the `default`-row backfill are decoded at their members.
 Decode: [../org/weaponImpact.md](../org/weaponImpact.md), [../formats/weapons.md](../formats/weapons.md).
 
 ## src/Flight/Airframe/CraterGate.cs
@@ -354,7 +354,7 @@ impact that follows, the struck material's `IMPACT` row for a ray hit and the `d
 self-ended round ([../org/ordnanceTypes.md](../org/ordnanceTypes.md), "Which row a burst reads").
 Visuals: tracers and tip discs, the flash triad (none from the firing pilot's Cockpit view), the
 muzzle light (the first-person pair joins the `WorldLights` point term in original mode via
-`BindPointLights`), the `IMPACT` effect, sound, stand-in burst and water splash. Damage and presentation
+`BindPointLights`), the `IMPACT` effect, sound, stand-in burst (none on an aircraft) and water splash. Damage and presentation
 leave through the sinks (`DamageSink` behind `WorldDamageGate`, `EffectSink`, `WashSink`, `BeeperTags`, and
 `TurretAcquiredPlayer`, the seam both turret families report an acquired player through); a burst gathers
 bodies and aircraft nearest-first, cover-tested, never the firing plane. Remake-own rules: the velocity decay

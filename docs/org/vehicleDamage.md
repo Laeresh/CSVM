@@ -451,6 +451,9 @@ nodes that `plane_reset` leaves inactive, and none is torn yet at 0.99. ⚠ **Do
 "every hit sparks".** The per-impact effects on an aircraft are the weapon's `player` IMPACT row
 ([`../formats/weapons.md`](../formats/weapons.md)): on most guns a `*_gunhit` definition, which is
 black smoke, flung chips and an occasional point light, and `f18sparks2` on four weapon entries.
+CSVM plays that row at the contact point and draws nothing of its own beside it: an aircraft is the
+one surface `ImpactOutcome.StandInFor` stands no sprite in for, and `EffectOwed` still hands the
+row's name to the effects runtime. The shim above is kept as decoded (`PlaneDamageEffectAnims`).
 
 ### The AI stage anchors exist on ten of the eleven airframes
 

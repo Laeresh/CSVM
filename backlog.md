@@ -178,37 +178,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Audio
 
-- `BL-281` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The user
-  recalls no spark burst on the airframe when it is hit in the original, but the spark the item was
-  written against is decoded as running in the original, and a different, invented spark is the one
-  every airframe of ours shows on every hit.** *Evidence:* the user's verdict from the original:
-  taking hits shows no spark burst on the airframe itself, distinct from smoke at the contact point.
-  Two effects of ours could be what that verdict removes:
-  1. **The Devastator's first-damage spark** (`<part>_damage_effects` at 0.99, via
-     `random_gun_impact` to `yellow_sparks_follow`). The executable runs it with real bindings onto
-     the Devastator's own `pdp1`/`pdp2`/`pdp4` panels; the decode is `docs/org/vehicleDamage.md`,
-     "The first-damage spark shim". It is not per impact: each zone sparks once, when its health
-     first drops after its armour is spent, so at most four times a flight, on the Devastator alone
-     (16 sparks of 0.01 to 0.08 m and 6 chips for under a second, with a `snd_ricochet1-4` sequence).
-     What the decode leaves open is whether a puffer at an inactive node renders, since all three
-     panels are hidden torn skins at that point.
-  2. **The per-hit stand-in flash.** `ImpactOutcome.StandInFor` returns `ImpactStandIn.Spark` for a
-     round on an aircraft, so `ProjectilePool.Apply` draws a 3 m additive `slug_muzzle2` sprite for
-     0.14 s at the contact point of every round on every airframe. The original's `player` IMPACT
-     rows author no such sprite: the guns name a `*_gunhit` definition (black smoke, flung chips and
-     an occasional point light), which is the smoke at the contact point the verdict keeps.
-  *Question for the user:* which spark did you mean? (a) the flash on every hit: remove the
-  stand-in sprite on aircraft hits and keep the Devastator's decoded first-damage spark; (b) also
-  remove the Devastator's spark and the ricochet sequence inside it, against the decode; or (c) only
-  the Devastator's spark. *Decision:* (a), remove the invented per-hit flash and keep the
-  Devastator's decoded first-damage spark. *Fix shape per answer:* (a) in `ImpactOutcome.StandInFor`, an aircraft hit
-  stands in nothing visible while the effects runtime still receives the row's name (the sink call
-  in `Apply` is gated on the stand-in today, so the gate needs its own condition); (b) or (c) drop
-  `PlaneDamageEffectAnims` from `DamageVisuals.RigAnimFor`, keeping the entry's crossing slot.
-  ⚠ The `snd_ricochet1-4` sounds have two other callers that stay whatever the answer: the
-  decoded `bullet_hit_sound` cue on a cannon round striking your own aircraft (`FUN_004b9bc0`,
-  `docs/org/weaponFire.md`) and the gun rows' own `SOUND bullet_hit_sg`.
-
 ## Cameras & views
 
 - `BL-266` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **Plane wobble:
