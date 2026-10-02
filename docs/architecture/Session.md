@@ -552,13 +552,22 @@ land on one frame, and `BuildFlightCrashRuntime` is the one-call form. The bind 
 
 ## src/Session/World/WeatherRig.cs
 Applies the flown mission's weather, driving each rig's skydome, whiteout, deck regime and zone gate every frame, plus the one session-wide `ObjectZoneGate.cs` pass; the whiteout is one pane-filling overlay per rig, carrying the cloud band and the fog-volume curtain on `HudLayers.Whiteout`, under that pane's own cockpit pass, so the window whites out and the interior stays clear.
-`ApplyZone` writes the zone's authored fog and its `SUNLIGHT` pair through one arm per
+Each rig keeps its own fog (`FogOf`), moved by its own camera-state edge and published through `FogViewTable.cs`; the first rig's edge also runs `ApplyZone`, the one-per-session `SUNLIGHT` pair through one arm per
 graphics mode, mirrored onto every registered extra (sun, env) pair so a cockpit overlay crosses
 zones too; both arms put the ambient half through `WriteColorAmbient`, colour-sourced and never a sky
 contribution, so a night zone's scene fill is darker than a day zone's. `ApplyFogState` is the
 animation runtime's `FOG_STATE` sink, writing only the fields the event carries under the same
 last-writer order. Enhanced mode also caps a night zone, paints the sky the zone's own fog colour and
 pushes the fog range out, which the sun's shadow distance follows. `SunlightRgb` publishes the applied pair scaled by its authored colours, for the reader that needs the light rather than an energy. Both arms also set `csky_sun_dir` and `csky_sun_light`, the same bearing and pair uncollapsed, for the lit cloud cards, which shade per vertex off normals that turn with the camera, and `csky_sun_ambient_rgb`/`csky_sun_diffuse_rgb` (`SunVertexLight`, the bicolored rule) for the in-flight aircraft's per-vertex term ([../org/vertexLighting.md](../org/vertexLighting.md)), plus `csky_sun_fill_rgb` (`PhotographFill`), the Danger Zone photograph's raised ambient half. Decode: [../org/weather.md](../org/weather.md), authored side [../formats/weather.md](../formats/weather.md).
+
+## src/Session/World/FogViewTable.cs
+The per-view fog table: every camera drawing the shared world (each splitscreen pane and each live
+spyglass picture) with the fog colour, range, altitude and world light of its own rig's zone, packed
+into the `csky_view_0`..`_7` mat4 globals and the `csky_view_count` global that
+`shaders/csky_atmosphere.gdshaderinc` searches, nearest eye first. While every view carries the
+same record the count stays 0 and the shaders read the plain `csky_fog_*` globals, so a single view
+renders as it always did. `WeatherRig.cs` fills it each frame; a session teardown and the test
+harness clear it.
 
 ## src/Session/Objectives/ObjectZoneGate.cs
 The per-object half of the zone gate, ticked by `WeatherRig` over the session's aircraft and

@@ -644,6 +644,9 @@ public partial class Launcher : Node3D
         // overrides it from WeatherState.WorldLight below.
         RenderingServer.GlobalShaderParameterAdd("csky_world_light",
             RenderingServer.GlobalShaderParameterType.Float, 1.0f);
+        // The per-view table beside them, empty, so every shader reads the four above until a
+        // splitscreen pane's zone differs from the first one's.
+        FogViewTable.RegisterGlobals();
         // The same SUNLIGHT uncollapsed, for the cloud cards and the enhanced billboard grades
         // (docs/org/vertexLighting.md). The defaults, ambient 1 and diffuse 0, draw a card as
         // authored in a view without mission weather.

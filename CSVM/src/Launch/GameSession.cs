@@ -883,6 +883,8 @@ public partial class GameSession : Node3D
             // idempotent, and null-guarded (a failed build never set it).
             _worldLights?.Dispose();
             _worldLights = null;
+            // The same for the per-view fog table, whose eyes are this session's cameras.
+            FogViewTable.Clear();
             // Not a node, so QueueFree cannot reach it. Null-guarded: a failed build already
             // disposed and nulled it, so there is no double free.
             _sessionTextures?.Dispose();
@@ -1970,7 +1972,7 @@ public partial class GameSession : Node3D
             DebugCollision = state.DebugCollision,
             // Read through the field rather than captured by value: the rig is built after these
             // bindings, and a zone apply rewrites the band while the mission runs.
-            FogRange = () => _sky?.Weather?.FogGlobals.Range ?? Vector2.Zero,
+            FogRange = rigIndex => _sky?.Weather?.FogOf(rigIndex).Range ?? Vector2.Zero,
         };
         var humanBindings = new HumanRosterBindings
         {

@@ -512,7 +512,10 @@ internal sealed class HumanFlightAdapter
         {
             var targetHud = TargetHud.Build(pi, rig.Camera, _world.Projectiles);
             pilotHud.TargetHud = targetHud;
-            targetHud.FogRange = _world.FogRange;   // the spyglass's range gate, null on a bare rig
+            // The spyglass's range gate reads this pane's own fog band; null on a bare rig.
+            var fogRange = _world.FogRange;
+            int paneIndex = rig.Index;
+            targetHud.FogRange = fogRange == null ? null : () => fogRange(paneIndex);
             if (verbose)
                 Log.Info("flight", $"targeting HUD: selected-target marker (brackets + label, edge arrow off screen)");
 

@@ -2017,8 +2017,9 @@ void fragment() {
             : "    v_point_gain = vec3(0.0);\n"
               + "    if (csky_light_count > 0) {\n"
               + "        vec3 point = csky_point_light((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz);\n"
-              + "        v_point_gain = csky_srgb_to_linear(clamp(COLOR.rgb * (csky_world_light + point), 0.0, 1.0))\n"
-              + "            - csky_srgb_to_linear(COLOR.rgb * csky_world_light);\n"
+              + "        float world_light = csky_world_light_at(CAMERA_POSITION_WORLD);\n"
+              + "        v_point_gain = csky_srgb_to_linear(clamp(COLOR.rgb * (world_light + point), 0.0, 1.0))\n"
+              + "            - csky_srgb_to_linear(COLOR.rgb * world_light);\n"
               + "    }\n";
         sb.AppendLine($@"
 void vertex() {{
@@ -2061,7 +2062,7 @@ void fragment() {{");
         // `lighting: false`. Neither lit arm applies it: a real sun carries that energy there, and
         // a scalar on ALBEDO would dim the surface a second time.
         if (fullbright && lit)
-            sb.AppendLine("    ALBEDO *= csky_world_light;");
+            sb.AppendLine("    ALBEDO *= csky_world_light_at(CAMERA_POSITION_WORLD);");
         if (shaded && !sunLit)
         {
             sb.AppendLine("    ROUGHNESS = 0.85;");
@@ -2102,8 +2103,8 @@ void fragment() {{");
             // a fogged albedo still varies with its normal at full fog. csky_fog_color is linear,
             // the space FOG.rgb resolves in and the one the fullbright arm's mix lands in.
             sb.AppendLine(worldLit
-                ? "    FOG = vec4(csky_fog_color, csky_fog_on * fog_amt);"
-                : "    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);");
+                ? "    FOG = vec4(csky_fog_color_at(CAMERA_POSITION_WORLD), csky_fog_on * fog_amt);"
+                : "    ALBEDO = mix(ALBEDO, csky_fog_color_at(CAMERA_POSITION_WORLD), csky_fog_on * fog_amt);");
         }
         // The debug overlays' per-instance tint, a no-op at alpha 0. Under --debug-clutterflag the
         // fullbright world shows the flag colour EmitTriangle wrote into COLOR instead of the lit,
@@ -2219,11 +2220,11 @@ void fragment() {{
         // Glow flares are light sources: no SUNLIGHT night dimming (a lamp doesn't get
         // darker at night, it's what lights the scene), and neither is a model the artists
         // authored `lighting: false`. Clouds ride the world brightness.
-        string lightTerm = glow || !lit ? "col.rgb" : "col.rgb * csky_world_light";
+        string lightTerm = glow || !lit ? "col.rgb" : "col.rgb * csky_world_light_at(CAMERA_POSITION_WORLD)";
         if (glow && GraphicsMode.Enhanced)
             lightTerm = $"col.rgb * {EmissiveLiteral}";
         sb.AppendLine(fogged
-            ? $"    ALBEDO = mix({lightTerm}, csky_fog_color, fog_amt);"
+            ? $"    ALBEDO = mix({lightTerm}, csky_fog_color_at(CAMERA_POSITION_WORLD), fog_amt);"
             : $"    ALBEDO = {lightTerm};");
         // Only the variants that took the preamble above have csky_tint declared at all.
         if (blend || scissor)
@@ -2322,11 +2323,11 @@ void fragment() {{
         if (fogged)
             sb.AppendLine(@"    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);");
-        string cylLight = glow || !lit ? "col.rgb" : "col.rgb * csky_world_light";
+        string cylLight = glow || !lit ? "col.rgb" : "col.rgb * csky_world_light_at(CAMERA_POSITION_WORLD)";
         if (glow && GraphicsMode.Enhanced)
             cylLight = $"col.rgb * {EmissiveLiteral}";
         sb.AppendLine(fogged
-            ? $"    ALBEDO = mix({cylLight}, csky_fog_color, fog_amt);"
+            ? $"    ALBEDO = mix({cylLight}, csky_fog_color_at(CAMERA_POSITION_WORLD), fog_amt);"
             : $"    ALBEDO = {cylLight};");
         // As in GetBillboardShader: csky_tint exists only where the preamble was taken.
         if (blend || scissor)

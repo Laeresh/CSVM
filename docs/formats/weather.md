@@ -678,8 +678,8 @@ the terrain's washed-yellow → saturated-green hue independent of brightness.
 ### `SUNLIGHT_ORIENTATION` - the shading direction
 
 Read per zone into `ZoneWeather.SunOrientation` and written to the world's one
-`DirectionalLight3D` by the same zone-apply that writes the fog, so it follows a zone change
-(`WeatherRig.ApplyZone`). It varies by chapter and is adopted with **no TUNE**:
+`DirectionalLight3D` by the first rig's zone apply, beside that rig's fog, so it follows a zone
+change (`WeatherRig.ApplyZone`). It varies by chapter and is adopted with **no TUNE**:
 
 | Chapter | `[pitch, yaw]°` |
 |---|---|

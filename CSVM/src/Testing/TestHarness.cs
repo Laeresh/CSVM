@@ -165,6 +165,9 @@ public static class TestHarness
                 // watch, so the disposal is charged to the suite that built the world.
                 ctx.EvictCollidableWorlds();
                 ctx.FreeQueuedNodes();
+                // A suite ticking two weather rigs in different zones leaves the fog table
+                // published, and the next suite's render would search those freed cameras.
+                Session.World.FogViewTable.Clear();
             }
             watch.Stop();
             // Measured after the flush, so only nodes the suite dropped without freeing count.

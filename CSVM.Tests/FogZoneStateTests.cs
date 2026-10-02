@@ -107,8 +107,8 @@ public class FogZoneStateTests
         Assert.Equal(16f / 255f, zone3Fog.FogColor.R, 3);
         Assert.Equal(16f / 255f, zone3Fog.FogColor.G, 3);
         Assert.Equal(16f / 255f, zone3Fog.FogColor.B, 3);
-        // ZONE3's own SUNLIGHT block (diffuse 1.5 / ambient 0.5) rode along with the fog, the
-        // same ApplyZone call writes csky_world_light from this same ZoneWeather record.
+        // ZONE3's own SUNLIGHT block (diffuse 1.5 / ambient 0.5) rode along with the fog. The
+        // same edge writes the view's world light from this same ZoneWeather record.
         Assert.Equal(1f, zone3Fog.WorldLight, 3);
 
         var outOf = trigger.Next(1, weather!);

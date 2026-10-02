@@ -351,7 +351,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             .Replace("SCREEN_UNIFORM", mix
                 ? "uniform sampler2D screen_texture : hint_screen_texture, filter_nearest;" : "")
             .Replace("COMPOSITE", !mix ? "" : enhanced ? EnhancedMixComposite : GammaMixComposite)
-            .Replace("FOG_TARGET", mix ? "csky_fog_color" : "vec3(0.0)")
+            .Replace("FOG_TARGET", mix ? "csky_fog_color_at(CAMERA_POSITION_WORLD)" : "vec3(0.0)")
             .Replace("SOFT_EXPR", soft ? "clamp((VERTEX.z - scene_z) / 1.5, 0.0, 1.0)" : "1.0")
             // The faithful text carries no gain at all, not a gain of one: the presentation
             // this project delivers must compile the shader it always compiled. GAIN_MUL sits

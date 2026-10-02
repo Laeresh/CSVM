@@ -214,6 +214,7 @@
     "flight-roster-transaction": 0.722,
     "flight-telemetry-gate": 0.518,
     "flyout-rack-pose": 2.700,
+    "fog-per-view": 1.13,
     "fog-state": 1.161,
     "fogvol-census": 7.07,
     "forward-rotation": 0.003,

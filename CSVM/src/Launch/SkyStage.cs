@@ -111,6 +111,20 @@ internal sealed class SkyStage
         AssignCloudDecks(state.CloudDeck);
     }
 
+    // Where one rig's spyglass picture stands while it renders, null while it is idle or the
+    // rig has no aircraft. The picture's own viewport is not a Node3D, so its camera's local
+    // transform is its world one.
+    private static Vector3? SpyglassEye(PlayerRig rig)
+    {
+        if (rig.Controller is not { } controller || !GodotObject.IsInstanceValid(controller)
+            || controller.PilotHud.TargetHud?.Picture is not { } picture
+            || !GodotObject.IsInstanceValid(picture) || !picture.Live)
+        {
+            return null;
+        }
+        return picture.Eye.Origin;
+    }
+
     private static void CopyInstanceShaderParams(Node source, Node copy)
     {
         if (source is GeometryInstance3D from && copy is GeometryInstance3D to)
@@ -172,6 +186,9 @@ internal sealed class SkyStage
         // The flown objects the band's per-object gate moves between layers (ObjectZoneGate).
         // A plane or a zeppelin on the far side of the overcast stops drawing.
         weather.SetGatedObjects(_gatedObjects);
+        // Each pane's spyglass picture draws the world from its own eye, so it takes a fog-table
+        // entry of its own wearing that pane's fog.
+        weather.SetSpyglassEyes(SpyglassEye);
         // The horizon's zone children go in with the mission's weather. The zone the fog and the
         // dome share is picked from both, since three chapters ship an empty zone2.
         weather.Build(state.MissionZrdrPath, _rigs, builder.HorizonZones(),

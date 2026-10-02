@@ -158,10 +158,11 @@ internal sealed class FlightWorldBindings
     public string MissionZrdrPath { get; init; } = "";
     public bool DebugCollision { get; init; }
 
-    /// <summary>The live fog band (near, far) the spyglass's range gate reads. A closure rather
-    /// than the pair itself: the zone apply rewrites it mid-mission, and the weather rig is built
-    /// after these bindings are.</summary>
-    public Func<Vector2>? FogRange { get; init; }
+    /// <summary>The live fog band (near, far) the spyglass's range gate reads, for one pane by its
+    /// <c>PlayerRig.Index</c>: each pane wears its own camera's zone. A closure rather than the
+    /// pair itself: the zone apply rewrites it mid-mission, and the weather rig is built after
+    /// these bindings are.</summary>
+    public Func<int, Vector2>? FogRange { get; init; }
 }
 
 internal sealed class HumanRosterBindings
