@@ -1288,7 +1288,7 @@ internal static class CampaignSuites
             host.BindWorld(runtime);
             cockpit = Seat.Build(ctx, planesGamez, textures, Flight.Camera.PilotViewMode.Cockpit, 0);
             chase = Seat.Build(ctx, planesGamez, textures, Flight.Camera.PilotViewMode.Chase, 1);
-            if (cockpit.Body == null || cockpit.Interior == null || cockpit.Pilot.CockpitPass == null)
+            if (cockpit.Body == null || cockpit.Interior == null || cockpit.Pilot.Dressing.Pass == null)
             {
                 ctx.Check(false, $"the seat build carries an airframe body, an interior and its pass");
                 return;
@@ -1322,7 +1322,7 @@ internal static class CampaignSuites
         chase.ApplyView();
         ctx.Check(cockpit.Interior is { Visible: true } && cockpit.BodyHidden,
             $"the cockpit seat enters the episode with the interior drawn and the airframe hidden, which is what that view leaves standing");
-        ctx.Check(cockpit.Pilot.CockpitPass is { Visible: true },
+        ctx.Check(cockpit.Pilot.Dressing.Pass is { Visible: true },
             $"…and its interior pass drawing over the pane");
 
         host.Host(CutsceneController.CodeHoldsWorld, IntroAnim);
@@ -1331,7 +1331,7 @@ internal static class CampaignSuites
             $"the presentation code takes the view off the aircraft, which is what stops the arm re-asserting anything");
         ctx.Check(cockpit.BodyDrawn,
             $"so the code draws the airframe itself, and the episode's camera frames an aeroplane rather than nothing ({exit} leg)");
-        ctx.Check(cockpit.Interior is { Visible: false } && cockpit.Pilot.CockpitPass is { Visible: false },
+        ctx.Check(cockpit.Interior is { Visible: false } && cockpit.Pilot.Dressing.Pass is { Visible: false },
             $"…with the cockpit interior and its pass off the screen, so no panel hangs over the shot ({exit} leg)");
         ctx.Check(chase.BodyDrawn && chase.Interior is { Visible: false },
             $"…and the chase seat, which was already drawing its airframe, is untouched");
@@ -1349,7 +1349,7 @@ internal static class CampaignSuites
             $"{exit} hands the view back");
         ctx.Check(cockpit.Interior is { Visible: true } && cockpit.BodyHidden,
             $"…and puts the cockpit seat back in the cockpit it chose, rather than leaving it outside its own aeroplane");
-        ctx.Check(cockpit.Pilot.CockpitPass is { Visible: true },
+        ctx.Check(cockpit.Pilot.Dressing.Pass is { Visible: true },
             $"…with its interior pass drawing again");
         ctx.Check(cockpit.Pilot.ViewMode == Flight.Camera.PilotViewMode.Cockpit
                   && chase.Pilot.ViewMode == Flight.Camera.PilotViewMode.Chase,
@@ -2179,8 +2179,11 @@ internal static class CampaignSuites
                 PadDevices = System.Array.Empty<int>(),
                 AllowPause = false,
                 PinnedViewMode = view,
-                Cockpit = Flight.Hud.CockpitVisibility.Bind(model, builder.CockpitInterior, index),
-                CockpitInterior = builder.CockpitInterior,
+                Dressing =
+                {
+                    Visibility = Flight.Hud.CockpitVisibility.Bind(model, builder.CockpitInterior, index),
+                    Interior = builder.CockpitInterior,
+                },
                 Name = $"CutsceneSeat{index}",
             };
             var body = WorldAndToolSuites.FindNamed(model, "healthy");
@@ -2193,7 +2196,7 @@ internal static class CampaignSuites
             // plane model, which is why hiding the airframe cannot take the panel with it.
             if (builder.CockpitInterior is { } interior)
             {
-                pilot.CockpitPass = Flight.Hud.CockpitOverlay.Build(ctx.Host, interior, null, null);
+                pilot.Dressing.Pass = Flight.Hud.CockpitOverlay.Build(ctx.Host, interior, null, null);
             }
 
             pilot.Setup(new Flight.Airframe.FlightModel(Flight.Airframe.PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName)),
@@ -2209,11 +2212,11 @@ internal static class CampaignSuites
         }
 
         // The write the per-frame camera arm makes on an ordinary flying frame in this seat's view.
-        internal void ApplyView() => Pilot.Cockpit?.Apply(View, Flight.Camera.PilotView.IsFirstPerson(View));
+        internal void ApplyView() => Pilot.Dressing.Visibility?.Apply(View, Flight.Camera.PilotView.IsFirstPerson(View));
 
         internal void Free()
         {
-            Pilot.CockpitPass?.Free();
+            Pilot.Dressing.Pass?.Free();
             Pilot.Free();
             Rig.Camera.Free();
         }

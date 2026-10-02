@@ -49,7 +49,7 @@ internal sealed class FlightRosterPolicy
     /// off by default, which is the decoded head rule.</summary>
     public bool NearestAfterKill { get; init; }
     /// <summary>The saved automatic head turn
-    /// (<see cref="CSVM.Flight.Airframe.FlightController.AutoHeadTurn"/>), null where never set, which
+    /// (<see cref="CSVM.Flight.Camera.SeatLook.AutoHeadTurn"/>), null where never set, which
     /// leaves the <c>headLook.autohead</c> config key deciding.</summary>
     public bool? AutoHeadTurn { get; init; }
     public bool AutoFire { get; init; }

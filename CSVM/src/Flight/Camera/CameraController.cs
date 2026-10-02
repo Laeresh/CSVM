@@ -140,6 +140,9 @@ public sealed class CameraController
 
     private readonly Camera3D _camera;
 
+    // The view-selection controls' last readings, one slot per control (StepViewKeys).
+    private readonly bool[] _viewKeyPrev = new bool[5];
+
     // A named action as this player's keymap resolves it. A rebound Look Back or zoom follows the
     // binding, and the controller never learns about devices or window focus.
     private readonly Func<InputAction, bool> _held;
@@ -294,6 +297,24 @@ public sealed class CameraController
         }
         FlybyActive = true;
         Statics.ResetFlyby();
+    }
+
+    /// <summary>One frame of the view-selection controls, each acted on once per press. The cycle
+    /// (<see cref="CycleCockpitViews"/>) and the direct Chase select come from each device half on
+    /// its own edge, so a pad-only pilot reaches every view. The flyby comes last. The bindings are
+    /// this port's; the original's binding menu also puts its cycle on a joystick button.</summary>
+    public void StepViewKeys(bool cycleKey, bool chaseKey, bool cyclePad, bool chasePad, bool flyby)
+    {
+        if (ViewKeyEdge(0, cycleKey))
+            CycleCockpitViews();
+        if (ViewKeyEdge(1, chaseKey))
+            SelectChase();
+        if (ViewKeyEdge(2, cyclePad))
+            CycleCockpitViews();
+        if (ViewKeyEdge(3, chasePad))
+            SelectChase();
+        if (ViewKeyEdge(4, flyby))
+            EnterFlyby();
     }
 
     /// <summary>Enter the death camera: one spot chosen on the next step and held for the whole
@@ -854,5 +875,13 @@ public sealed class CameraController
         var (offset, aim) = AuthoredRig(Head.Elevation, Head.Azimuth, _camParams.ThirdpHeight,
             _camParams.ThirdpPitchRad);
         return (attitude * offset * EffectiveRadius, attitude * aim);
+    }
+
+    // One view-selection control's press edge against its own slot, so each press acts once.
+    private bool ViewKeyEdge(int slot, bool down)
+    {
+        bool pressed = down && !_viewKeyPrev[slot];
+        _viewKeyPrev[slot] = down;
+        return pressed;
     }
 }

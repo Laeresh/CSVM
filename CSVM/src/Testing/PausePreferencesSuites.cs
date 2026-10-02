@@ -160,14 +160,14 @@ internal static class PausePreferencesSuites
 
             bool fallback = Config.GetBool("headLook.autohead", false);
             Frame(clock, seats);
-            ctx.Check(one.AutoHeadTurn == null && Leans(one) == fallback && Leans(two) == fallback,
+            ctx.Check(one.Look.AutoHeadTurn == null && Leans(one) == fallback && Leans(two) == fallback,
                 $"ABLE-TO-FAIL CONTROL: with nothing saved both seats fly the config key's head turn ({fallback}; leaning {Leans(one)}, {Leans(two)})");
             ctx.Check(!Nearest(one) && !Nearest(two),
                 $"ABLE-TO-FAIL CONTROL: and the decoded head rule after a kill ({Nearest(one)}, {Nearest(two)})");
 
             AcceptGameOptions(leaf, seats, toggle: true);
-            ctx.Check(applied?.AutoHeadTurn == true && one.AutoHeadTurn == true && two.AutoHeadTurn == true,
-                $"toggling Auto Head Turn over the pause puts it on both flying seats at once (applied {applied?.AutoHeadTurn}, seats {one.AutoHeadTurn}, {two.AutoHeadTurn})");
+            ctx.Check(applied?.AutoHeadTurn == true && one.Look.AutoHeadTurn == true && two.Look.AutoHeadTurn == true,
+                $"toggling Auto Head Turn over the pause puts it on both flying seats at once (applied {applied?.AutoHeadTurn}, seats {one.Look.AutoHeadTurn}, {two.Look.AutoHeadTurn})");
             ctx.Check(applied?.NearestAfterKill == true && Nearest(one) && Nearest(two),
                 $"and toggling Next Target puts both seats on the nearest target after a kill (applied {applied?.NearestAfterKill}, seats {Nearest(one)}, {Nearest(two)})");
             ctx.Check(ReferenceEquals(one.Targeting, selection),
@@ -178,8 +178,8 @@ internal static class PausePreferencesSuites
 
             AcceptGameOptions(leaf, seats, toggle: true);
             Frame(clock, seats);
-            ctx.Check(one.AutoHeadTurn == false && two.AutoHeadTurn == false && !Leans(one) && !Leans(two),
-                $"toggling the head turn off again puts the head straight ahead on the next frame (seats {one.AutoHeadTurn}, {two.AutoHeadTurn}; {Target(one)}, {Target(two)})");
+            ctx.Check(one.Look.AutoHeadTurn == false && two.Look.AutoHeadTurn == false && !Leans(one) && !Leans(two),
+                $"toggling the head turn off again puts the head straight ahead on the next frame (seats {one.Look.AutoHeadTurn}, {two.Look.AutoHeadTurn}; {Target(one)}, {Target(two)})");
             ctx.Check(!Nearest(one) && !Nearest(two),
                 $"and toggling Next Target off puts both seats back on the head rule ({Nearest(one)}, {Nearest(two)})");
 
@@ -188,15 +188,15 @@ internal static class PausePreferencesSuites
             OptionsStore.UserOptions().Save(new OptionsDef());
             foreach (var seat in seats)
             {
-                seat.AutoHeadTurn = !fallback;
+                seat.Look.AutoHeadTurn = !fallback;
                 seat.Targeting!.NearestAfterKill = true;
             }
 
             AcceptGameOptions(leaf, seats, toggle: false);
             Frame(clock, seats);
-            ctx.Check(applied?.AutoHeadTurn == null && one.AutoHeadTurn == null && two.AutoHeadTurn == null
+            ctx.Check(applied?.AutoHeadTurn == null && one.Look.AutoHeadTurn == null && two.Look.AutoHeadTurn == null
                 && Leans(one) == fallback && Leans(two) == fallback,
-                $"an accept carrying never-set values restores the config key's head turn on both seats (seats {one.AutoHeadTurn?.ToString() ?? "null"}, {two.AutoHeadTurn?.ToString() ?? "null"}; leaning {Leans(one)}, {Leans(two)})");
+                $"an accept carrying never-set values restores the config key's head turn on both seats (seats {one.Look.AutoHeadTurn?.ToString() ?? "null"}, {two.Look.AutoHeadTurn?.ToString() ?? "null"}; leaning {Leans(one)}, {Leans(two)})");
             ctx.Check(applied?.NearestAfterKill == null && !Nearest(one) && !Nearest(two),
                 $"and the decoded head rule after a kill ({Nearest(one)}, {Nearest(two)})");
         }

@@ -416,7 +416,7 @@ internal static class NetSessionSuites
         Lockstep(host, guest);
 
         float flown = pilot.WorldPosition.DistanceTo(own);
-        ctx.Check(pause.Paused && pilot.SheetOverFlightForTest() && !halted && !clock.Halted,
+        ctx.Check(pause.Paused && pilot.Pause.SheetOverFlight && !halted && !clock.Halted,
             $"the {name}'s sheet is up over a clock that is not halted (paused {pause.Paused}, halted {clock.Halted})");
         ctx.Check(flown > 10f,
             $"…and its aeroplane flies on under the sheet ({flown:0.0} m over {LockstepSteps} steps)");
@@ -429,7 +429,7 @@ internal static class NetSessionSuites
 
         pause.ForceResume();
         pilot.PollPauseForTest(clock);
-        ctx.Check(!pause.Paused && !pilot.SheetOverFlightForTest(),
+        ctx.Check(!pause.Paused && !pilot.Pause.SheetOverFlight,
             $"…and the resume hands the {name}'s seat back");
     }
 

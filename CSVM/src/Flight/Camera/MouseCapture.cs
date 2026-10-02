@@ -5,12 +5,11 @@ using Godot;
 namespace CSVM.Flight.Camera;
 
 /// <summary>The mouse a flight seat takes from the desktop, and the virtual cursor that stands in
-/// for the OS one while it holds it. A captured pointer stops reporting a position, so the absolute
-/// reads the stick and head-look grew up on are fed from relative motion instead: this accumulates
-/// that motion into a cursor confined to the pane, which the stick reads through the same offset and
-/// the same gate as the real one. Two things differ: travel is scaled from mouse counts, and the
-/// centre band is wider. Pure arithmetic with no device and no display in it, so a unit drives the
-/// whole law; <see cref="FlightController"/> owns the mode write and the release.
+/// for the OS one while it holds it. A captured pointer stops reporting a position. The stick and
+/// head-look are fed from relative motion instead, accumulated here into a cursor confined to the
+/// pane. The stick reads it through the same offset and the same gate as the real one. Two things
+/// differ: travel is scaled from mouse counts, and the centre band is wider. It is pure arithmetic
+/// that a unit drives whole; <see cref="SeatMouse"/> owns the mode write and the release.
 /// </summary>
 public sealed class MouseCapture
 {

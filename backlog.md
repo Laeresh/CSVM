@@ -138,24 +138,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
-- `BL-1014` `[Cleanup]` `[L]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`FlightController.cs`
-  is 4490 lines and changes for unrelated reasons; the responsibilities that have their own
-  state and rules leave as real modules.** *Evidence:* one review range added 1045 lines to the
-  file over about 90 scattered hunks for six reasons that share no state: the engine-out propeller
-  audio, mouse capture and the virtual cursor, the pilot view mode, contact resolution, the Danger
-  Zone photograph, and head-look with the pause. The class is already `partial` across
-  `FlightControllerBuild.cs`, `BeeperTags.cs` and `SmokeScreens.cs`, which hides the size without
-  reducing the public surface any caller sees. *Fix shape:* pick the responsibilities whose state
-  never crosses the flight tick (the view-mode dispatch, the mouse capture, the photograph
-  latch, head-look are the candidates) and give each a type with its own public members that the
-  controller composes, measuring the split by the controller's public member count before and
-  after. *Decision:* do the split. *⚠ Traps:* a new `partial` file is not a split; the repo's standing rule is that a partial
-  is not a deepening, and the existing three are accepted, not a pattern to extend. Do not move the
-  flight tick's own steps (forces, contact, damage) out; they share the accumulator and belong
-  together. *Cross-refs:* `BL-1015` (the same shape in `GameSession.cs`); the options form
-  (`OriginalOptionsScreen.cs`) is a landed split of the same shape, five page modules behind a
-  narrow form seam; `docs/architecture/Flight.md`.
-
 ## Environment & world
 
 - `BL-272` `[Tuning]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Precipitation: snow's unit mapping from `weather.json` to a look is invented
@@ -410,7 +392,7 @@ usual.
   own those modes. Measure by the session's public member count. *Decision:* do the split.
   *⚠ Traps:* a `partial` file is
   not a split. The per-frame tick order across the runtimes is the one thing the session must
-  keep in one place; do not scatter it into the extracted modules. *Cross-refs:* `BL-1014`,
+  keep in one place; do not scatter it into the extracted modules. *Cross-refs:* the same split in `FlightController.cs` (`git log --grep=BL-1014`),
   the options form's landed split into page modules (`OriginalOptionsScreen.cs`),
   `docs/architecture/Session.md`.
 

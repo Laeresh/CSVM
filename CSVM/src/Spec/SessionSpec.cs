@@ -712,7 +712,7 @@ public sealed record SessionSpec
     public bool ViewModeExplicit { get; private set; }
     /// <summary>Whether the pilot's head turns with the aircraft in the cockpit, as the options
     /// file has it. It is null where never set, which leaves the <c>headLook.autohead</c> config
-    /// key deciding (<see cref="Flight.Airframe.FlightController.AutoHeadTurn"/>). Dropped under
+    /// key deciding (<see cref="Flight.Camera.SeatLook.AutoHeadTurn"/>). Dropped under
     /// <c>--det</c> like every other saved option.</summary>
     public bool? AutoHeadTurn { get; private set; }
     /// <summary>The <c>--look=x,y</c> right-stick deflection held for the whole

@@ -181,6 +181,7 @@ rows).
 - `src/Flight/Airframe/DamageLab.cs`, the `--damage` and F19 slider panel: one slider per part, driving a parked plane's visuals or the flown plane's real ledger.
 - `src/Flight/Airframe/FlightController.cs`, the flying-aircraft node: input → FlightModel → transform, weapons, collision, crash and respawn.
 - `src/Flight/Airframe/FlightControllerBuild.cs`, FlightRoster's internal, write-once construction handoff for a controller before tree attachment.
+- `src/Flight/Airframe/PropellerSlot.cs`, one aircraft's propeller slot: the spinning discs or the stopped blade, and the engine-out, death and spawn edges that move it.
 - `src/Flight/Airframe/IFlightInputSource.cs`, the seam a sim step reads this frame's pilot intent through; `Bind` resolves one of its three adapters once per aircraft.
 
 **`Flight.Weapons`**, fire control, the projectile pool, targeting and turrets.
@@ -237,7 +238,9 @@ rows).
 - `src/Flight/Camera/CameraController.cs`, the flown plane's camera: chase, numpad fixed views, look-behind, the selected view mode and the lab's held-airframe orbit.
 - `src/Flight/Camera/StaticCameras.cs`, the crash, death and flyby cameras: one placement law, one terrain clearance, and the flyby's watch-and-switch re-site.
 - `src/Flight/Camera/HeadLook.cs`, the pilot's head in a first-person view: snap directions, free-look, the centre key and the smoothing to the shown angles.
+- `src/Flight/Camera/SeatLook.cs`, one seat's look controls read into the head, their scripted twins, the chase view's stick swing and the Auto Head Turn option.
 - `src/Flight/Camera/MouseCapture.cs`, the mouse a flying seat captures: relative motion into a virtual cursor confined to the pane, the capture guard and what a board restores.
+- `src/Flight/Camera/SeatMouse.cs`, the desktop mouse one flight seat holds: the mode write and release, the stick's cursor offset and head-look's pan travel.
 - `src/Flight/Camera/Spyglass.cs`, the spyglass's decoded rules, engine-free: the fog-derived range gate with its engage/release pair, the framing field of view, and the camera pose.
 - `src/Flight/Camera/SpyglassView.cs`, the spyglass picture: a square `SubViewport` on the shared world with a camera of its own, one per pane, rendering only while it is aimed.
 - `src/Flight/Camera/SpyglassSun.cs`, the spyglass discs' shadowless copy of the sun under Enhanced, on a layer only the disc cameras draw.
@@ -252,6 +255,7 @@ rows).
 - `src/Flight/Hud/TargetHud.cs`, the per-pane targeting HUD: the selected target's bracket and label, the spyglass disc and its gates, the nearest-hostile fallback, the F16 / `--debug-markers` every-aircraft overlay.
 - `src/Flight/Hud/WeaponCursor.cs`, `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
 - `src/Flight/Hud/CockpitVisibility.cs`, the per-mode hiding of the pilot's OWN plane in first person, from that pilot's pane alone; `Rules` is pure, `Bind`/`Apply` write it onto a built model.
+- `src/Flight/Hud/FirstPersonDressing.cs`, what a pilot's own aircraft wears in first person, frame by frame: the body hide, the interior pass and the panel needles.
 - `src/Flight/Hud/CockpitOverlay.cs`, the shipped cockpit pass: the interior drawn in a `SubViewport` world of its own, composited under the HUD; one per player, `--no-cockpit-pass` opts out.
 - `src/Flight/Hud/CockpitGauges.cs`, the 3D instrument panel inside `cockpit1`: needles, horizon ball, belts and lamps, driven off `GaugeCluster`'s state.
 - `src/Flight/Hud/WarningShotCue.cs`, the decoded incoming-fire shield (player.json `warning_shot_*`): which gun rounds on the player are discarded, and which tell.
@@ -291,6 +295,7 @@ rows).
 - `src/Flight/Modes/VersusSpawnRotation.cs`, Dogfight respawn placement: the per-seat spawn-list ledger and the roomy point a downed seat rotates onto.
 - `src/Flight/Modes/VersusHud.cs`, per-pane Dogfight status line: remaining time, this player's kills, the leader, and the hostile marker.
 - `src/Flight/Modes/PauseState.cs`, who is holding the sim clock and why: the pause owner and the results-board halt, engine-free.
+- `src/Flight/Modes/SeatPause.cs`, one seat's pause key and the halt it mirrors, the photo-mode and options-leaf silences, and the network sheet over a running flight.
 
 **`Flight.Hangar`**, the custom plane, its store and economy, and the difficulty setting.
 

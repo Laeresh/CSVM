@@ -189,7 +189,7 @@ internal static class LookStickSuites
         for (int i = 1; i <= frames; i++)
         {
             float s = EdgePeak * (i <= EdgeRampFrames ? i : frames - i) / EdgeRampFrames;
-            plane.PinnedLook = new Vector2(s, 0.5f * s);
+            plane.Look.PinnedLook = new Vector2(s, 0.5f * s);
             Step(clock, plane, 1);
             var pose = PlaneFramePose(ctx.Camera, plane);
             float move = (pose.Origin - prev.Origin).Length();
@@ -218,10 +218,10 @@ internal static class LookStickSuites
         StringBuilder report)
     {
         var settled = PlaneFramePose(ctx.Camera, plane);
-        plane.PinnedLook = new Vector2(StickX, 0f);
+        plane.Look.PinnedLook = new Vector2(StickX, 0f);
         Step(clock, plane, SettleFrames);
         var held = PlaneFramePose(ctx.Camera, plane);
-        plane.PinnedLook = Vector2.Zero;
+        plane.Look.PinnedLook = Vector2.Zero;
         Step(clock, plane, 1);
         var first = PlaneFramePose(ctx.Camera, plane);
         Step(clock, plane, SettleFrames);
@@ -246,10 +246,10 @@ internal static class LookStickSuites
     {
         var settled = PlaneFramePose(ctx.Camera, plane);
         Press(clock, plane, InputAction.SmoothLookMode);
-        plane.PinnedLook = new Vector2(StickX, 0f);
+        plane.Look.PinnedLook = new Vector2(StickX, 0f);
         Step(clock, plane, SettleFrames);
         var held = PlaneFramePose(ctx.Camera, plane);
-        plane.PinnedLook = Vector2.Zero;
+        plane.Look.PinnedLook = Vector2.Zero;
         Step(clock, plane, ParkFrames);
         var parked = PlaneFramePose(ctx.Camera, plane);
         Press(clock, plane, release);
@@ -299,7 +299,7 @@ internal static class LookStickSuites
             Settle(clock, plane);
             float swingDeg = SwingDegOf(mode, ctx.Camera, plane, out float sideX);
             // Release: the pin is the only stick in a headless run, so zeroing it IS letting go.
-            plane.PinnedLook = Vector2.Zero;
+            plane.Look.PinnedLook = Vector2.Zero;
             Settle(clock, plane);
             float releasedDeg = SwingDegOf(mode, ctx.Camera, plane, out _);
             report.AppendLine($"{PilotView.Name(mode)}: held {swingDeg:0.##}° side x={sideX:0.###}, " +
@@ -373,7 +373,7 @@ internal static class LookStickSuites
             && Mathf.Abs(floored.ElevationFloor - HeadLook.ChaseElevationFloor) < 1e-6f,
             $"a chase frame floors the head at the decoded {HeadLook.ChaseElevationFloor:0.0000} rad rather than first person's level floor (read {plane.Head?.ElevationFloor:0.0000})");
 
-        plane.PinnedView = SnapDigit;
+        plane.Look.PinnedView = SnapDigit;
         Step(clock, plane, PanFrames);
         float panRad = plane.Head?.Azimuth ?? 0f;
         float expectedRad = (Mathf.Pi / 2f)
@@ -388,7 +388,7 @@ internal static class LookStickSuites
         ctx.Check(Mathf.Abs(held.Y - settled.Y) < 0.02f,
             $"at the chase rig's own elevation, a swing about the up axis lifting nothing (held y={held.Y:0.###}, settled y={settled.Y:0.###})");
 
-        plane.PinnedView = 0;
+        plane.Look.PinnedView = 0;
         Step(clock, plane, SettleFrames);
         var back = OffsetDir(ctx.Camera, plane);
         float offDeg = Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(back.Dot(settled), -1f, 1f)));

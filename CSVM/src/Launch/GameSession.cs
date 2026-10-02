@@ -1023,7 +1023,7 @@ public partial class GameSession : Node3D
         SwitchProfile.Mark("banks");
         foreach (var rig in _rigs)
         {
-            if (rig.Controller?.CockpitPass?.Env is { } env)
+            if (rig.Controller?.Dressing.Pass?.Env is { } env)
             {
                 EnhancedLook.ApplyEnvironment(env, enhanced, _spec.SkippedPasses);
                 Effects.FogVolumeBanks.ApplyFroxelFog(env, _cloudBanks != null);
@@ -1076,7 +1076,7 @@ public partial class GameSession : Node3D
     public void FollowSun()
     {
         foreach (var rig in _rigs)
-            rig.Controller?.CockpitPass?.FollowSun();
+            rig.Controller?.Dressing.Pass?.FollowSun();
         _weatherRig?.ReapplyZone();
     }
 
@@ -5819,10 +5819,10 @@ public partial class GameSession : Node3D
         }
         foreach (var rig in _rigs)
         {
-            if (rig.Controller is not { CockpitInterior: { } interior } controller)
+            if (rig.Controller is not { Dressing.Interior: { } interior } controller)
                 continue;
             var overlay = Flight.Hud.CockpitOverlay.Build(rig.HudParent, interior, _sun, _env);
-            controller.CockpitPass = overlay;
+            controller.Dressing.Pass = overlay;
             // The overlay's cloned sun/env carry the zone live at its build; registering them
             // keeps a later mid-flight zone change reaching the interior pass too. Both modes,
             // since the faithful path's aircraft light moves per zone as well.
@@ -6329,7 +6329,7 @@ public partial class GameSession : Node3D
         if (found is not { Controller: { } pilot } rig)
             return;
         SuspendBoards();
-        pilot.BeginPhotoMode();
+        pilot.Pause.BeginPhotoMode();
         pilot.CameraOwned = true;   // The controller writes this pane's camera no more.
         pilot.SetViewedFromOutside(true);
         pilot.SetPilotHudVisible(false);
@@ -6372,7 +6372,7 @@ public partial class GameSession : Node3D
             // froze, and halted is its own no-write branch, so the rules would stay off until
             // flight resumed.
             pilot.SetViewedFromOutside(false);
-            pilot.EndPhotoMode();   // seeds the pause edge, or the held Escape unpauses too
+            pilot.Pause.EndPhotoMode();   // seeds the pause edge, or the held Escape unpauses too
         }
         _photoPilot = null;
         RestoreBoards();
@@ -6406,7 +6406,7 @@ public partial class GameSession : Node3D
         {
             if (rig.Controller is { } controller)
             {
-                controller.BeginPauseLeaf();
+                controller.Pause.BeginPauseLeaf();
                 flying.Add(controller);
             }
 
@@ -6440,7 +6440,7 @@ public partial class GameSession : Node3D
         // the sheet that just came back or resume the mission behind it.
         foreach (var rig in _rigs)
         {
-            rig.Controller?.EndPauseLeaf();
+            rig.Controller?.Pause.EndPauseLeaf();
             MenuInputFor(rig.Index).Prime();
         }
     }

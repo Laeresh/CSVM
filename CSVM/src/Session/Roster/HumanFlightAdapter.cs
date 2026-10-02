@@ -164,21 +164,27 @@ internal sealed class HumanFlightAdapter
         var controller = new FlightController
         {
             DebugCollision = _world.DebugCollision,
-            PinnedView = _policy.View,
             PinnedViewMode = _policy.ViewMode,
             ChaseRig = _policy.ChaseRig,
-            AutoHeadTurn = _policy.AutoHeadTurn,
-            PinnedLook = _policy.PinnedLook,
+            Look =
+            {
+                PinnedView = _policy.View,
+                AutoHeadTurn = _policy.AutoHeadTurn,
+                PinnedLook = _policy.PinnedLook,
+            },
             HudParent = remote ? null : rig.Viewport,
-            // Null when the airframe ships no cockpit1, the rig then hides nothing, as before B11.
-            Cockpit = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior, pi),
-            CockpitInterior = planeBuilder.CockpitInterior,
-            CockpitPanel = CockpitGauges.Bind(planeBuilder),
+            // Each part is null when the airframe ships no cockpit1, and the rig then dresses nothing.
+            Dressing =
+            {
+                Visibility = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior, pi),
+                Interior = planeBuilder.CockpitInterior,
+                Panel = CockpitGauges.Bind(planeBuilder),
+            },
             Scheme = scheme,
             Painter = planeBuilder.Painter,
             ShippedSkins = swap is { ShippedSkins: true },
         };
-        if (verbose && controller.Cockpit != null)
+        if (verbose && controller.Dressing.Visibility != null)
             Log.Info("flight", $"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");
         // The engine pick's nitrous bit (ids 3-5) installs the injector, the original's veh+0x946.
         controller.Nitro.Installed = custom != null && Flight.Hangar.CustomPlaneBuild.HasNitrous(custom);

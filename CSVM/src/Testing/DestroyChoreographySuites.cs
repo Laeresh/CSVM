@@ -1389,8 +1389,8 @@ internal static class DestroyChoreographySuites
                 Fly(Dt);
                 foreach (var rig in built)
                 {
-                    ctx.Check(!rig.PropsStopped && Shown(rig, "prop1") && !Shown(rig, "staticprop1"),
-                        $"{rig.Name}: opens with the spinning discs on the slot on its first frame stopped={rig.PropsStopped} prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")}");
+                    ctx.Check(!rig.Propellers.Stopped && Shown(rig, "prop1") && !Shown(rig, "staticprop1"),
+                        $"{rig.Name}: opens with the spinning discs on the slot on its first frame stopped={rig.Propellers.Stopped} prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")}");
                     SpawnPropsSuites.CheckSilentSpawn(ctx, rig, "the spawn");
                 }
 
@@ -1407,9 +1407,9 @@ internal static class DestroyChoreographySuites
                 // The rising edge, read on the frame the choke lands rather than the next step.
                 foreach (var rig in built)
                 {
-                    ctx.Check(rig.TryChokeEngine(3f) && rig.PropsStopped
+                    ctx.Check(rig.TryChokeEngine(3f) && rig.Propellers.Stopped
                               && rig.CrashRuntime!.AnimStateOf("stopprops") == Running,
-                        $"{rig.Name}: the choke put stopprops on the slot on its own frame stopped={rig.PropsStopped} state={rig.CrashRuntime!.AnimStateOf("stopprops")}");
+                        $"{rig.Name}: the choke put stopprops on the slot on its own frame stopped={rig.Propellers.Stopped} state={rig.CrashRuntime!.AnimStateOf("stopprops")}");
                 }
 
                 // Inside the choke's own three seconds, so the reading below is the engine-out
@@ -1419,7 +1419,7 @@ internal static class DestroyChoreographySuites
                           && !Shown(ai, "prop1") && Shown(ai, "staticprop1"), 2.5f);
                 foreach (var rig in built)
                 {
-                    ctx.Check(rig.EngineDeadRemainingS > 0f && rig.PropsStopped
+                    ctx.Check(rig.EngineDeadRemainingS > 0f && rig.Propellers.Stopped
                               && !Shown(rig, "prop1") && Shown(rig, "staticprop1"),
                         $"{rig.Name}: …and the cross-fade left the still blade alone on the aeroplane while the engine is out prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")} dead={rig.EngineDeadRemainingS:0.00} s after={down:0.00} s");
                 }
@@ -1429,9 +1429,9 @@ internal static class DestroyChoreographySuites
                 FlyUntil(() => human.EngineDeadRemainingS == 0f && ai.EngineDeadRemainingS == 0f, 4f);
                 foreach (var rig in built)
                 {
-                    ctx.Check(rig.EngineDeadRemainingS == 0f && !rig.PropsStopped
+                    ctx.Check(rig.EngineDeadRemainingS == 0f && !rig.Propellers.Stopped
                               && Shown(rig, "prop1") && !Shown(rig, "staticprop1"),
-                        $"{rig.Name}: the timer expiring put the blur discs back stopped={rig.PropsStopped} prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")}");
+                        $"{rig.Name}: the timer expiring put the blur discs back stopped={rig.Propellers.Stopped} prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")}");
                 }
 
                 // Past the definition's own 0.1 s ANIMATION_OFFSET, which is all that is left of it
@@ -1463,7 +1463,7 @@ internal static class DestroyChoreographySuites
                     ctx.Same(Executed, rig.CrashRuntime!.AnimStateOf("stopprops"),
                         $"{rig.Name}: the second choke's wind-down has run to its end before the crash after={wind:0.00} s");
                     rig.DebugForceCrash();
-                    ctx.Check(rig.PropsStopped && rig.CrashRuntime!.AnimStateOf("stopprops") == Executed,
+                    ctx.Check(rig.Propellers.Stopped && rig.CrashRuntime!.AnimStateOf("stopprops") == Executed,
                         $"{rig.Name}: the crash on a choked aeroplane left that wind-down where it was rather than playing a second state={rig.CrashRuntime!.AnimStateOf("stopprops")}");
                 }
 
@@ -1478,7 +1478,7 @@ internal static class DestroyChoreographySuites
                                             && Shown(ai, "prop1") && !Shown(ai, "staticprop1"), 4f);
                 foreach (var rig in built)
                 {
-                    ctx.Check(!rig.PropsStopped && Shown(rig, "prop1") && !Shown(rig, "staticprop1"),
+                    ctx.Check(!rig.Propellers.Stopped && Shown(rig, "prop1") && !Shown(rig, "staticprop1"),
                         $"{rig.Name}: the respawn put the blur discs back on a hull that went down stopped prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")} after={spun:0.00} s");
                     SpawnPropsSuites.CheckSilentSpawn(ctx, rig, "the respawn");
                 }
@@ -1496,9 +1496,9 @@ internal static class DestroyChoreographySuites
 
                     float overkill = (ledger.WholeHealthMax + ledger.WholeArmorMax) * 4f;
                     rig.TakeCollisionHit(overkill, overkill, rig.GlobalPosition, 0);
-                    ctx.Check(rig.Destroyed && rig.PropsStopped
+                    ctx.Check(rig.Destroyed && rig.Propellers.Stopped
                               && rig.CrashRuntime!.AnimStateOf("stopprops") == Running,
-                        $"{rig.Name}: the kill put stopprops on the slot on its own frame destroyed={rig.Destroyed} stopped={rig.PropsStopped} state={rig.CrashRuntime!.AnimStateOf("stopprops")}");
+                        $"{rig.Name}: the kill put stopprops on the slot on its own frame destroyed={rig.Destroyed} stopped={rig.Propellers.Stopped} state={rig.CrashRuntime!.AnimStateOf("stopprops")}");
                 }
 
                 // ⚠ Read the kill's cross-fade as OPACITY, never as visibility. The destroy def
@@ -1532,7 +1532,7 @@ internal static class DestroyChoreographySuites
                                                 && Shown(ai, "prop1") && !Shown(ai, "staticprop1"), 4f);
                 foreach (var rig in built)
                 {
-                    ctx.Check(!rig.PropsStopped && Shown(rig, "prop1") && !Shown(rig, "staticprop1")
+                    ctx.Check(!rig.Propellers.Stopped && Shown(rig, "prop1") && !Shown(rig, "staticprop1")
                               && rig.CrashRuntime!.AnimStateOf("stopprops") != Running,
                         $"{rig.Name}: the respawn took the wind-down off the slot and put the blur discs back prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")} stop={rig.CrashRuntime!.AnimStateOf("stopprops")} after={restored:0.00} s");
                     SpawnPropsSuites.CheckSilentSpawn(ctx, rig, "the respawn inside the wind-down");

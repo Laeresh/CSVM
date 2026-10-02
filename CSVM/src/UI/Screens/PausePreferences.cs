@@ -337,7 +337,7 @@ public sealed partial class PausePreferences : Control
         {
             if (IsInstanceValid(seat) && seat.IsHumanPiloted)
             {
-                seat.AutoHeadTurn = applied.AutoHeadTurn;
+                seat.Look.AutoHeadTurn = applied.AutoHeadTurn;
                 if (seat.Targeting is { } targeting)
                 {
                     targeting.NearestAfterKill = applied.NearestAfterKill == true;

@@ -243,7 +243,7 @@ Engine-free, so the decisions unit-test without a camera, while
 The flown aircraft's camera: the roll-following chase pose and the head that swings it, the
 look-behind, the right-stick look-around, the weapon lab's held-airframe orbit, the three static
 cameras through `Statics`, and the pilot's selected view mode (`PilotViewMode` decides, this class
-holds the state and the camera; `ResetToChase` is the player's own destroy callback). The chase
+holds the state and the camera, `StepViewKeys` takes the selection controls' press edges, and `ResetToChase` is the player's own destroy callback). The chase
 radius is per plane and dynamic, `Dist + DistFactor` times speed plus `DistTransient`'s authored
 throttle term; `ExternalRadius` bounds it and carries the numpad zoom outward from the near bound.
 The settled chase pose is the launch's `ChaseRig`: the hand-picked default, or `AuthoredRig`, the decoded one off camparam's `thirdp_*` pair. `ChaseSwing` turns either rig's offset and aim together by `Head`'s angles, so the snap cluster and the mouse orbit the camera while a settled head returns the exact identity; `PadSwing` then turns the finished chase pose rigidly about the aircraft for the look stick, and `StepHead` is where the placing view hands the head its elevation floor. Cockpit and Nose mount rigidly at the
@@ -267,7 +267,16 @@ the snap, free-look, padlock, the centre key and autohead all reach the eye thro
 `LookMode` is the original's own mode byte (0 snap, 1 free-look, 2 padlock) and `SelectMode` writes it exactly once a frame: the `K`, `L` and `J` selectors on their press edge, then `HeadLookInput.ForceSnap` (the cockpit look-back); no device writes it, so both the numpad and the mouse obey the mode the keys chose, and padlock is left only by its own exit scan, which `Step` runs after the frame's bearing so the frame a direction arrives on still aims at the target and the snap state owns the next one.
 A snap frame with no direction and no held pan zeroes the targets, and it and a padlock frame with nothing offered are the only kinds that consult `IdleAim`, the no-input hook `AutoheadTarget` fills; a free-look frame holds the pose the pan reached until a selector, a further pan or the centre key moves it.
 `HeadLookInput.Looking` claims the pan with no motion on it, in either mode, so a held control over a still mouse holds the pose. `Nearest` wraps the padlock target onto the near side of the shown angle, the original's own crossing of the tail, and is scoped to that arm alone so the clamped relative paths still swing back through the front.
-`StickLookFilter` is this file's other type, the centre band and 40 ms lag the raw look stick passes through before it aims anything, one instance inside the head and one in `FlightController` for the chase swing, which eases its released pair home at the head's rates, or parks it in free-look as `HoldsStickAim` says; ask its `Active` whether the stick is claiming a view, never its filtered pair. Engine-free apart from `Mathf`; owned by `CameraController` as `Head`, stepped by `FlightController` on the sim clock.
+`StickLookFilter` is this file's other type, the centre band and 40 ms lag the raw look stick passes through before it aims anything, one instance inside the head and one in `SeatLook` for the chase swing, which eases its released pair home at the head's rates, or parks it in free-look as `HoldsStickAim` says; ask its `Active` whether the stick is claiming a view, never its filtered pair. Engine-free apart from `Mathf`; owned by `CameraController` as `Head`, stepped by `FlightController` on the sim clock.
+
+## src/Flight/Camera/SeatLook.cs
+One flight seat's look controls, read once a frame into `HeadLookInput`: the snap cluster, the mouse
+pan under the held free-look control (`SeatMouse.LookTravel`), the look stick through the pad curve,
+the centre key and the three mode selectors, with `PinnedView` (`--view=` digits) and `PinnedLook`
+(`--look=`) behind the live controls. `StepChase` is the chase view's own swing of the stick through
+a `StickLookFilter` that eases home or parks as `HeadLook.HoldsStickAim` says, cut back to centre by
+`CutAway`. `Autohead` answers the head's idle aim under `AutoHeadTurn`. Every read takes `muted`
+while a network pause's sheet is up. `FlightController` owns one as `Look`; read `HeadLook.cs` next.
 
 ## src/Flight/Hud/CockpitVisibility.cs
 The per-mode hiding the original applies to the pilot's OWN aircraft in a first-person view: Cockpit
@@ -278,6 +287,15 @@ so a held look-behind brings the body back. The interior takes node visibility. 
 move from the seat's `UI.Boards.SplitScreen.OwnAirframeLayer` onto its `FirstPersonLayer`, which only
 that pilot's pane and disc leave out, so other panes and the Danger Zone photograph still draw them.
 Decode: [../org/cameraViews.md](../org/cameraViews.md).
+
+## src/Flight/Hud/FirstPersonDressing.cs
+What one pilot's own aircraft wears in a first-person view: `Visibility` (`CockpitVisibility`),
+`Interior`, `Panel` (`CockpitGauges`) and `Pass` (`CockpitOverlay`), all null on a rig built no
+interior. `Show` applies one frame's rules to the pose the camera took, not the selection, so a
+held look-behind brings the body back, and takes the screen-space cluster off while the panel is
+on screen; `Leave` takes everything off for an outside vantage; `DriveNeedles` moves the panel
+after the HUD's own feed. `FlightController` owns one as `Dressing`. Decode:
+[../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Flight/Hud/CockpitOverlay.cs
 The cockpit interior's own render pass, the shipped path `--no-cockpit-pass` opts out of. It re-parents
@@ -860,6 +878,15 @@ through `TryToggle`; `ForceResume` drops a pause whoever owns it, for a rerun or
 from a menu. A network session's pause is an `Overlay`: the sheet is up and `ClockHeld` stays
 false. Off-engine coverage: `CSVM.Tests/PauseStateTests.cs`. Read `PauseBoard` next.
 
+## src/Flight/Modes/SeatPause.cs
+One flight seat's pause key, polled once per rendered frame: the press edge that toggles the shared
+`PauseState` (or the bare clock without one), the halt mirrored into `GameClock.Halted`, and the
+two screens that silence the key, photo mode and the pause's options leaf, whose `End*` calls seed
+the edge from the hands so a held Escape does not resume. `SheetOverFlight` is the network pause's
+sheet over a running flight, which holds the whole seat and mutes its look controls. `Poll` returns
+a `PauseFrame` and the host performs its two edges, the audio's hold and the re-entry latch.
+`FlightController` owns one as `Pause`. Read `PauseState.cs` next.
+
 ## src/Flight/Audio/FlightAudio.cs
 The own plane's non-positional audio: the engine, overspeed whine and rattle loops, plus the
 one-shots a crash, a ground or water explosion, a survivable graze, an engine stop and a stunt
@@ -1004,8 +1031,17 @@ one frozen position, so this scales relative motion into a virtual cursor confin
 `MouseFlight.Offset`, and banks the raw travel for head-look. `Centred` widens the stick's centre
 band to `CentreBand` on this path only, ahead of the decoded 0.1. `Allowed` is the guard: a real
 display with somebody at the controls, so the test desktop and `--det` keep their mouse mode.
-`Restorable` is what a board with its own pointer puts back, never a capture. `FlightController` owns the mode write and release, and
+`Restorable` is what a board with its own pointer puts back, never a capture. `SeatMouse` owns the mode write and release, and
 `Session/Roster/FlightRosterInputs.cs` resolves the guard once per session. Read `MouseFlight.cs` next.
+
+## src/Flight/Camera/SeatMouse.cs
+The desktop mouse one flight seat holds while it flies: `MouseCapture`'s arithmetic plus the engine
+half it leaves out. `Step` takes the mouse on a wanted frame and gives it back on any other, writing
+`Input.MouseMode`; `Release` puts back only a capture this seat made. `Stick` is the cursor offset
+the mouse-flying stick reads, off the virtual cursor while held and the pane's own pointer
+otherwise, and `LookTravel` is head-look's pan. `Allowed` is the session's once-resolved guard and
+`StickForTest` a suite's pinned offset. The host decides which frames want the mouse and hands its
+own node, whose viewport is measured only when needed. `FlightController` owns one as `Mouse`.
 
 ## src/Flight/Airframe/NitroSystem.cs
 The original's nitro boost lifecycle, engine-free: a 30-unit tank burned at 4/s while boosting and
@@ -1034,6 +1070,15 @@ disc's absolute pose from its stored rest pose through `SpinMotion.ComposeSpin`,
 accumulate-from-rest decode `AnimRuntime` plays the ambient world's `XYZ_ROTATION` spins through, so
 a long flight session cannot drift. `FlightController` drives it throttle-scaled with a
 `PropIdleSpin` floor and zero while crashed. `--fly` only; the static viewer keeps the still disc.
+
+## src/Flight/Airframe/PropellerSlot.cs
+One aircraft's propeller presentation slot, the original's `+0x6cc`: the spin definition turning
+the blur discs, or the stop definition's still blade and `snd_propstop`. `Sync` is the engine-out
+pair of edges, `Stop` the death routine's wind-down and `Respawned` a fresh airframe's spin; each
+takes the rig and the model it acts on, and asks for the rig only on a change, so a slot already in
+place never forces an armed rig's build. `SpinAnim` and `StopAnim` are the two definitions the
+airframe's def names, bound from its stats. `FlightController` owns one as `Propellers`. Decode:
+[../org/ordnanceTypes.md](../org/ordnanceTypes.md).
 
 ## src/Flight/Airframe/ExhaustSmoke.cs
 The engine exhaust smoke, the original's one code-built puffer (`FUN_004afa20`, one per
@@ -1183,7 +1228,7 @@ a `RailPose`, the danger-zone ribbon's pose in place of the model step, the swee
 weapon fire as `FireControl`'s engine adapter and the crash and respawn paths (`Respawn` takes what its `RespawnPlacement` hook answers, `RespawnAt` a pose handed to it instead, and `RespawnRequest` withholds the return altogether for a seat whose placement is somebody else's to grant), and `Rearm`, a rearm base's in-flight restore of parts, damage stages and every slot. It keeps no rule it
 can delegate: the camera is `CameraController`'s, the pilot HUD `FlightHud`'s, this frame's stick
 one `IFlightInputSource`, the states an aircraft moves between `AircraftLifecycle`'s, and what a
-contact costs `AircraftContactResolver`'s. This node reads the devices, performs what each of those
+contact costs `AircraftContactResolver`'s. The seat's rendered-frame parts are modules it composes and steps, none reaching back into it: `Mouse` (`SeatMouse`), `Look` (`SeatLook`), `Pause` (`SeatPause`), `Dressing` (`FirstPersonDressing`) and the propeller slot `Propellers` (`PropellerSlot`). This node reads the devices, performs what each of those
 reports, and holds the state the engine can only hold as state. Every physics query runs through the
 one `IWorldQuery` bound in `Bind`, and contact detection fills one `ContactReport` from the hull
 sweep, the AI probe rays or the anti-tunnelling centre ray. An AI aircraft is this SAME node with
