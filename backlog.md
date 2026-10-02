@@ -153,11 +153,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Effects & animation runtime
 
-- `BL-674` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` `[CM10]` **CM10's
-  attack balloons were seen at the controls appearing on the water, jumping into the sky and
-  slowly descending; no headless drive reproduces it.** *Verdict at the controls:* in the original
-  the wave arrives from above; in CSVM the balloons sometimes appear on the water, jump into the
-  sky, and slowly descend, which is wrong. *What is settled:* the dip to the water is the
+- `BL-674` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` `[CM10]` **CM10's
+  attack-balloon target marker sits on the water until the balloon has loaded in, then jumps up to
+  the balloon; the original's marker never does.** *Verdict at the controls:* the balloon itself
+  does not jump. Its "(Destroy) Attack Balloon" marker label is drawn at the water beside the
+  patrol boat while the balloon is not yet posed, and moves to the balloon's real position once
+  it is (`Z:\CSVM\Screenshots\crimsonskies_2026-10-02_22-22-57-643.png`, marker on the water;
+  `crimsonskies_2026-10-02_22-22-59-782.png`, two seconds later, marker up in the sky with its
+  lead line). So the fault is in what the marker reads before the target's first pose, not in the
+  entrance motion. *Where to look:* the marker's anchor for a target whose node has not been
+  booked by `RenderPoses` yet (it booked on its first motion tick); the structure's authored
+  placement at the water is the likely value the marker reads in that window. The original shows
+  no marker for the wave until it is posed, or shows it at the posed balloon. *What is settled:*
+  the dip to the water is the
   original's authored entrance, not a runtime fault. The SI-script handler `FUN_004ea7d0` poses
   absolutely and holds its sequence until the script's last frame, so `rise` starts from the
   script's end at the water; the definition's own splash events at 55 to 57 s and the patrol boat
@@ -165,12 +173,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   poses absolutely"). The wave opens at 978 m inside the 970 to 1124 m cloud layer, so it may be
   first seen at its touchdown. `campaign-balloon-marker` pins that profile, and removing
   `ScriptPlayback`'s opening seek reproduces the reported jump exactly, so the suite would catch
-  that cause. *Owed:* (1) in the original, watch one wave of CM10 from its wake to its touchdown
-  at about 57 s: does it come down to the sea and drop a patrol boat? (2) in CSVM, if the wave is
-  seen on the water before it has descended, note the mission time and whether the view was the
-  spyglass or a pane; the realtime render path (`RenderPoses` booking a node after its first
-  motion tick) is reasoned, not measured on screen. *⚠ Traps:* do not add an altitude floor to the
-  assembly or offset the marker upward; the decode makes the dive faithful. *Cross-refs:*
+  that cause of a balloon jump; it does not cover the marker. *⚠ Traps:* do not add an altitude
+  floor to the assembly or offset the marker upward; the decode makes the dive faithful, and the
+  fix is to anchor the marker to the posed balloon (or hide it until there is one), not to move
+  it. A headless drive has not reproduced this, so the suite that pins the fix needs the marker's
+  screen anchor sampled on the frames before the first pose. *Cross-refs:*
   `BL-656`'s closing commit, `docs/org/targeting.md` "Where a mission structure is".
 
 - `BL-537` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **Effect pools at four players, judged in play.** The pool sizes in `CSVM/data/effect_pools.json` were re-judged on a build with no first-use construction cost: rockets and the sonic burst never wrap, a four-object simultaneous death wraps `flame_ball_01` at 4 and 6 slots and is quiet at 8 (now shipped), and seven or more identical deaths in one frame wrap at the 16 ceiling and cannot be sized away. At the controls the single-player half reads right: four fireballs burn out in place, and the seven-death wrap is not visible under the debris. Still owed: a 4-player splitscreen session with everyone firing, judged for anything that reads as shared between panes, and the ceiling for many-player builds (at 16 players the default root wants 19 and gets 16). The instrument is `AnimRuntime.PoolRecycles` and the `anim: effect pool for '<name>' recycled slot` DEBUG line in the log file sink; the sizes staged print on the world-effects build line. ⚠ Raise only a root that logs a recycle, never the default; the three gun roots stay at 1; a root sized 0 clamps to 1. Each slot copies the root's subtree (155 templates at 1 player, 263 at 4).
@@ -180,32 +187,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Cameras & views
 
-- `BL-266` `[Fidelity]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` **Plane wobble:
-  re-judge the three kick knobs on the ported rendered rotation.** `PlaneShake` now runs the
-  original's seven component blocks as decoded ([`docs/org/shakes.md`](docs/org/shakes.md), "The
-  rendered rotation"): every source (gun buzz, the three being-hit sources, dive rattle, contact,
-  nitro) is a random velocity kick into its block, and the summed position turns `ShakePivot` as a
-  rotation vector at twice its length, roll on the `×2.5` component, pitch and yaw on the other two.
-  So the dive and the nitro engage roll about four times what was judged before and move the nose,
-  while a gun burst rolls less than the former displacement walk (about 2.7e-3 rad RMS for wep40 at
-  8/s, against 6.1e-3; `analysis/gun-wobble-shake/FINDINGS.md`, "The port"). `GunBuzzKickScale`,
-  `DiveRattleKickScale` and `NitroWobbleKickScale` are all at 1, the original's own kick.
-  *Sortie:* fly a gun plane (`--plane=player_bhawk`) in the chase view over C1 and, side by side
-  with `Z:\CSVM\OriginalScreenshots\Videos\Dive Wobble.mkv`, `Nitro Wobble.mkv` and
-  `Gun Wobble and animation.mp4`: dive until the speed passes the plane's rated maximum and hold it
-  there a few seconds; with a nitrous engine fitted, press `N` at a full tank; hold `Space` for a
-  3 s burst in level flight; take gun rounds with `--incoming` and an HE rocket with
-  `--incoming=120,wep_06`; scrape the ground or a building once. Then the cockpit view for one
-  burst, where the interior turns and the view does not. *Question:* does each knob read right at
-  1, and if not, which way and by how much? ⚠ Traps: dial only the three knobs, never
-  `magnitude_factor`, `magnitude_quotient` or the nitro `magnitude`, which are decode; a port
-  that only rescales the roll leaves the nose still, which the original never does; `SHAKES_CAMERA`
-  is not the fire-path mechanism (it routes `wep_26`'s hits to the empty explosion source); wire
-  nothing on one coincidence of a magnitude candidate with an authored constant.
-- `BL-885` `[Fidelity]` `[S]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` **The chase camera's settled pose is authored
-  (`thirdp_height` + `thirdp_pitch`, 7.57° above the tail and aimed along the nose), where CSVM
-  rests at a hand-picked 15.7° aimed ahead of the nose.** The decoded rig is built and runs under
-  `--chase-rig=authored`; the default stays `picked` and no golden moves until the look below.
+- `BL-885` `[Fidelity]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **Make the
+  authored chase rig (`thirdp_height` + `thirdp_pitch`, 7.57° above the tail and aimed along the
+  nose) the default, in place of the hand-picked 15.7° aimed ahead of the nose.** *Decision:* the
+  user compared both rigs at the controls and chose the authored one as the original's chase
+  camera: "the authored one, make it default". The decoded rig is built and runs under
+  `--chase-rig=authored`; `picked` is still the default until this lands.
   The decode (`docs/org/cameraViews.md`, "The chase rig"): `FUN_0042c7f0` swings the plane-frame
   vector `(0, thirdp_height·w²·1.0145, 1.0145)` by the head's elevation PLUS `thirdp_pitch`
   (`0042c88d`) and its azimuth (`FUN_0053f550`), and aims the camera along the same swing.
@@ -213,56 +200,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   so the settled camera is 7.57° above the tail (Balmoral 11.11°), not "dead astern at 0.29°".
   `w²` fades the lift as the head swings: the level numpad keys sit at about 3.7° on the flanks and
   0.29° below level nose-on, where the picked rig holds all three at 15.7°.
-  *Sortie:* `.\RunGame.ps1 --chapter=C1 --plane=player_bhawk --chase-rig=picked`, then the same
-  with `--chase-rig=authored`; fly level and through a few turns in each, then hold `Kp4`, `Kp6`
-  and `Kp2`. Compare where the aircraft sits under the reticle and how much ground the frame shows
-  against the original's `Z:\CSVM\OriginalScreenshots\C1 IA1 Fog river.png` (a level chase still
-  over the C1 river) and the numpad keys against `Z:\CSVM\OriginalScreenshots\Videos\CAP-07 Numpad
-  1,2,3,6,9,8,7,4.mp4`. The question: which rig reads as the original's chase camera?
-  *If authored:* make it the default and re-pin every chase golden in that commit (every flight
-  shot moves). *If picked:* close with the reason, the decoded rig staying behind the flag.
-  ⚠ **Do not read the 15.7° as wrong-by-construction**: it was picked to look right and has never
-  been judged against the authored figure side by side. ⚠ The authored rig ports the direction and
-  aim only; the original's `pos_catch_up`/`look_catch_up` easing of the aircraft frame is not
-  ported by either rig, so a hard roll still trails on CSVM's own rates.
+  *Fix shape:* `authored` becomes the default; keep `--chase-rig=picked` as the A/B door (or retire
+  it and the 15.7° constant if nothing else reads them). Re-pin every chase golden in that commit,
+  with crops showing the move is the camera alone (every flight shot moves); update `docs/cli.md`,
+  `docs/formats/camparam.md`'s Known limits and the chase-rig suite's default case.
+  ⚠ Traps: the authored rig ports the direction and aim only; the original's
+  `pos_catch_up`/`look_catch_up` easing of the aircraft frame is not ported by either rig, so a
+  hard roll still trails on CSVM's own rates. That is a separate gap and not part of this change.
   *Cross-refs:* the numpad views' three level keys (`git log --grep=BL-150`),
   `docs/formats/camparam.md` (`thirdp_height`, `thirdp_pitch`, Known limits), `docs/cli.md`
   (`--chase-rig`).
 
 ## HUD & UI
 
-- `BL-181` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The stunt HUD, target marker and stunt
-  scoreboard now read one chrome type scale; the fidelity sign-off against it is owed at the
-  controls.** The earlier verdict on the stunt run HUD and scoreboard ("work for now") was
-  contingent on a shared chrome that did not exist. It exists now: `UI/Boards/ChromeType.cs` is the
-  type scale for chrome the original never painted, with one face (the theme default, varied for
-  italic and bold), one size ladder (`ChromeSize`: 26, 22, 19, 17, 15, 13, 11, 8 and 6 frame units,
-  a frame unit being the board's authored pixel, 1/600 of the frame height) and whole metres for a
-  printed distance. The join board is posed on it (its draft 14 folded into 13: the subtitle and the
-  P1 to P4 chip tags are one pixel smaller at 720p). `StuntRunHud`, `TargetHud` and `VersusHud` take
-  their face and their three sizes from the bottom rungs, pixel-identical at 720p (every golden is
-  hash-identical); at 1080p the marker label grows from 10 to 11 px, and at 4K the marker,
-  status and banner lines each grow one pixel. `StuntScoreboard` and its `StuntSplits` section (shared with
-  Instant Action's wrap-up board) moved onto the ladder: title and context unchanged at 720p,
-  column heads 14 to 13, rows 17 to 18, total 23 to 22, best line 16 to 15. No placement changed:
-  the HUD's positions hang off the original's own decoded HUD geometry, and the stunt HUD prints no
-  distance (the only printed distance is the `--debug-markers` tag). Before/after crops accompany
-  the landing commit (`git log --grep=BL-181`).
-  *Playtest:* `./RunGame.ps1 --stunt --chapter=C4 --plane=player_fury`, fly a zone or two and read
-  the run clock, the intro banner, the zone-cleared flash and the zone marker's label, then finish
-  the run (or add `--debug-scoreboard`) and read the scoreboard; then a target HUD case,
-  `./RunGame.ps1 --chapter=C1 --plane=player_bhawk --ai=player_kestrel,player_fury`, and read the
-  bracket label and the off-screen edge label. Judge the sizes against the join board
-  (`--menu=join-board:2 --presentation=original`); pass closes this, a size complaint names the rung.
-  *Left open:* Built-in's Start-to-join strip behind `--force-builtin` (`LaunchMenu.cs`) is the
-  second join path `BL-951` said must fold into the board's own gesture; folding it means a join
-  screen in Built-in, not a small change, so it stays. The rest of the results-board family
-  (`VersusBoard`, `StuntRaceBoard`, `IaWrapupBoard`'s own heading, `PauseBoard`, the board menu's
-  rows) and `FlightHud`'s top-left text block are still off the ladder. *⚠ Traps:* the composed
-  campaign boards and `BoardPalette` are painted original artwork and carry no type scale; do not
-  pose them on this one. Do not give the HUD sizes of its own beside the ladder. The marker label's
-  rung is bounded by the decoded 15-pixel line pitch, so a larger one runs its three lines together.
-  *Cross-refs:* `git log --grep=BL-951`.
 
 ## Splitscreen
 
