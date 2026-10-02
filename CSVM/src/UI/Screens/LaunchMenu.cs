@@ -74,10 +74,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// in place of <see cref="RemoteChipMark"/>.</summary>
     public const string ReadyChipMark = " ready";
 
-    // The multiplayer door's ten rows, in the order they are drawn. Two fields a player edits,
+    // The multiplayer door's eleven rows, in the order they are drawn. Two fields a player edits,
     // two ways a socket opens, and the way on to the map. Then the original's Game and Player
-    // Information: the game's name, password and cap, and the callsign and voice. The door's own
-    // state is the feature's; these are this screen's row numbers alone.
+    // Information: the game's name, password and cap, and the callsign and voice. Last the host's
+    // Public or Private listing. The door's own state is the feature's; these are row numbers alone.
     private const int NetPortRow = 0;
     private const int NetAddressRow = 1;
     private const int NetHostRow = 2;
@@ -88,7 +88,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     private const int NetPlayersRow = 7;
     private const int NetCallsignRow = 8;
     private const int NetVoiceRow = 9;
-    private const int NetworkRows = 10;
+    private const int NetListingRow = 10;
+    private const int NetworkRows = 11;
 
     // Base metrics at 720p, scaled up on taller viewports (like StuntScoreboard). All TUNE.
     private const int TitleFont = 40;
@@ -1798,6 +1799,9 @@ public sealed partial class LaunchMenu : CanvasLayer
                         int voices = PilotVoices.All.Count;
                         door.Voice = (((PilotVoices.Clamp(door.Voice) + dir) % voices) + voices) % voices;
                         return true;
+                    case NetListingRow:
+                        door.Private = !door.Private;
+                        return true;
                     default:
                         return false;
                 }
@@ -2149,6 +2153,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         switch (_netIndex)
         {
             case NetPortRow:
+            case NetListingRow:
                 HandleMoveX(1);
                 break;
             case NetHostRow:
@@ -2766,8 +2771,11 @@ public sealed partial class LaunchMenu : CanvasLayer
             return;
         }
 
+        // This door asks nothing, so it opens on the campaign's default listing and no password,
+        // whatever the Multiplayer board holds.
         SeedNetInfo();
         net.Close();
+        net.ForgetAnswers();
         net.OpenCoopHost(NetSeats.MaxPlayers - _slots.Count);
         OfferCoopMission(flow);
         flow.SetMessage(net.Fault.Length > 0 ? $"The network did not open: {net.Fault}" : "");
@@ -4284,6 +4292,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         NetPlayersRow => $"Max players     {(_net is { } door ? ShownCap(door) : NetPlayerInfo.DefaultPlayers).ToString(CultureInfo.InvariantCulture)}",
         NetCallsignRow => $"Callsign        {_net?.PlayerName}",
         NetVoiceRow => $"Voice           {PilotVoices.All[PilotVoices.Clamp(_net?.Voice ?? PilotVoices.Default)].Name}",
+        NetListingRow => $"Listing         {CoopDoorText.ListingWord(_net?.Private ?? false)}",
         _ when _net is { } net && net.IsCoopGuest => CoopDoorText.WaitRow,
         _ => "Continue → Map",
     };
@@ -4312,7 +4321,8 @@ public sealed partial class LaunchMenu : CanvasLayer
         string pinhole = CoopDoorText.HostPinholeStatus(net);
         mapped += pinhole.Length > 0 ? $" {pinhole}" : "";
         string address = CoopDoorText.HostAddressStatus(net);
-        string where = address.Length > 0 ? $" {address}" : "";
+        string code = CoopDoorText.HostCodeLine(net);
+        string where = (code.Length > 0 ? $" {code}" : "") + (address.Length > 0 ? $" {address}" : "");
         return net.Stage switch
         {
             NetDoorStage.Hosting =>
@@ -4559,7 +4569,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             // W/A/S/D are dead on the address row (MenuInput.TextEntry), so the arrows are named
             // alone, as the hangar's own name screen names them.
             Screen.Network when _coopWait => "↑↓  Navigate",
-            Screen.Network => "↑↓  Choose row       ←→  Port, players, voice       Type / Backspace  Address, names",
+            Screen.Network => "↑↓  Choose row       ←→  Port, players, voice, listing       Type / Backspace  Address, names",
             // Dogfight's map screen carries the two match rows, whose stepper is an unbound axis
             // nobody can guess at. Free Flight's map screen has nothing sideways and says so.
             Screen.Chapter when MatchRowCount > 0 => "↑↓  Choose map or rule       ←→  Change",

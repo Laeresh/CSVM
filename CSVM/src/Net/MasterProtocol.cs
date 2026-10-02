@@ -17,7 +17,7 @@ public static class MasterWire
     /// <summary>The games list, an HTTP GET.</summary>
     public const string GamesPath = "/api/games";
 
-    /// <summary>The health check, an HTTP GET answering the listed count.</summary>
+    /// <summary>The health check, an HTTP GET answering how many games are hosted.</summary>
     public const string HealthPath = "/api/health";
 
     /// <summary>The socket a host registers on and a join negotiates over.</summary>
@@ -197,6 +197,7 @@ public static class MasterWire
             Players = Math.Clamp(game.Players, 0, PlayerLimit),
             Cap = Math.Clamp(game.Cap, 0, PlayerLimit),
             Password = game.Password,
+            Unlisted = game.Unlisted,
             Status = Known(game.Status, Statuses),
             Mission = game.Mission is >= 0 and < 256 ? game.Mission : -1,
             Version = Cut(game.Version, VersionLimit),
@@ -263,7 +264,7 @@ public static class MasterWire
     }
 }
 
-/// <summary>One game as the master server lists it: what the games list shows, and the code a
+/// <summary>One game as the master server holds it: what the games list shows, and the code a
 /// guest joins it by. A host sends it without a code; the server fills the code in. Plain words and
 /// numbers rather than this build's enums, since the server compiles this file without the rest of
 /// the engine.</summary>
@@ -287,6 +288,12 @@ public sealed class MasterGame
 
     /// <summary>Whether the host asks a password before it admits a guest.</summary>
     public bool Password { get; set; }
+
+    /// <summary>Whether the game stays off the games list, reached by its code alone. Written only
+    /// when set, so a listed game's text is what older builds send, and their games stay listed.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Unlisted { get; set; }
 
     /// <summary>One of <see cref="MasterWire.Statuses"/>.</summary>
     public string Status { get; set; } = "";

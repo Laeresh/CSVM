@@ -31,7 +31,8 @@ internal static class MenuNetPlaySuites
 
     [Suite("menu-net-door",
         "Built-in's multiplayer door driven as a player drives it: the Mode screen's last row "
-        + "opens a ten-row board, its cap and voice rows step inside their ranges, the port row steps, "
+        + "opens an eleven-row board, its cap and voice rows step inside their ranges, its listing row "
+        + "flips Public and Private, the port row steps, "
         + "Host remembers the voice and opens a real ENet socket on the "
         + "loopback address and the status line reports it, Continue walks on to the Dogfight map "
         + "screen with one pilot seated, and Back off the board hangs up")]
@@ -156,8 +157,8 @@ internal static class MenuNetPlaySuites
             $"and its description says what it is for ({menu.ShownDetail})");
 
         menu.Drive(Accept);
-        ctx.Check(menu.ShownScreen == "Network" && menu.ShownRowCount == 10,
-            $"Accept opens the board, ten rows ({menu.ShownScreen}, {menu.ShownRowCount})");
+        ctx.Check(menu.ShownScreen == "Network" && menu.ShownRowCount == 11,
+            $"Accept opens the board, eleven rows ({menu.ShownScreen}, {menu.ShownRowCount})");
         ctx.Check(menu.ShownHeading == "MULTIPLAYER"
                   && menu.ShownBreadcrumb == $"{LaunchMenu.NetworkRow}  ›  Map  ›  Aircraft",
             $"its heading and breadcrumb ({menu.ShownHeading}, {menu.ShownBreadcrumb})");
@@ -199,6 +200,12 @@ internal static class MenuNetPlaySuites
         ctx.Check(menu.ShownRowText == "Voice           Nathan Zachary", $"the voice opens on the list's first ({menu.ShownRowText})");
         menu.Drive(Right);
         ctx.Check(door.Voice == 1 && menu.ShownRowText == "Voice           Jack", $"and Right picks the next ({door.Voice}, {menu.ShownRowText})");
+        menu.Drive(Down);
+        ctx.Check(menu.ShownRowText == "Listing         Public" && !door.Private, $"the listing opens on a Dogfight's Public ({menu.ShownRowText})");
+        menu.Drive(Right);
+        bool flipped = door.Private && menu.ShownRowText == "Listing         Private";
+        menu.Drive(Right);
+        ctx.Check(flipped && !door.Private, $"and Right flips it to Private and back ({flipped}, {door.Private})");
         for (int i = 0; i < 3; i++)
         {
             menu.Drive(Down);
@@ -254,7 +261,7 @@ internal static class MenuNetPlaySuites
         // ABLE-TO-FAIL CONTROL. The fields belong to the player, not to the socket, so an open
         // door refuses to move the port under itself. A board that let this through would host
         // on one port and tell the player another. Down from the last row wraps onto the first.
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < 7; i++)
         {
             menu.Drive(Down);
         }

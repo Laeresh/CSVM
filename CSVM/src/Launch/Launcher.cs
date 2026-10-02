@@ -953,10 +953,11 @@ public partial class Launcher : Node3D
             }
             else if (UI.Boards.MenuInput.IsCopyChord(key))
             {
-                // A hosting door is the one thing on a menu with something to copy.
+                // A hosting door is the one thing on a menu with something to copy: its join code,
+                // else its address.
                 if (_menuHost is { Shown: true })
                 {
-                    _netDoor?.CopyGuestAddress();
+                    _netDoor?.CopyForGuests();
                 }
             }
             else

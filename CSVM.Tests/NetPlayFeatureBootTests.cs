@@ -167,6 +167,44 @@ public class NetPlayFeatureBootTests
         Assert.Equal(1, host.Peers);
     }
 
+    [Fact]
+    public void ASessionsPasswordAndListingEndWithItSoNoLaterOpenInheritsThem()
+    {
+        // Every open takes a fresh end, since a carrier binds one lobby in its life.
+        var door = new NetPlayFeature(
+            (_, _, _) => LoopbackTransport.Mesh(1, Clean, new Random(127))[0], (_, _) => LoopbackTransport.Mesh(1, Clean, new Random(127))[0]);
+        door.Take(new NetPlayerInfo { GameName = "Friday Fliers", Callsign = "Zachary", Password = "swordfish", Private = true }, game: true);
+        door.OpenDogfightHost(NetSeats.MaxPlayers - 1);
+        Assert.True(door.Advertising!.Value.Password);
+        Assert.True(door.Private);
+        door.Close();
+
+        // A co-op host opened with no box asks nothing and takes its own kind's listing.
+        Assert.Equal("", door.Password);
+        door.OpenCoopHost(NetPlayFeature.CoopHumans - 1);
+        Assert.False(door.Advertising!.Value.Password);
+        Assert.True(door.Private);
+        door.Close();
+        door.OpenDogfightHost(NetSeats.MaxPlayers - 1);
+        Assert.False(door.Private);
+        door.Close();
+
+        // A join's answer ends with the join, here one nobody answers.
+        var nobody = LoopbackTransport.Mesh(1, Clean, new Random(131))[0];
+        var silent = new NetPlayFeature((_, _, _) => nobody, (_, _) => nobody);
+        silent.Take(new NetPlayerInfo { Callsign = "Zachary", Password = "kestrel" }, game: false);
+        silent.OpenJoin();
+        silent.Step(NetPlayFeature.JoinTimeoutSeconds + 1.0);
+        Assert.Equal(NetDoorStage.Failed, silent.Stage);
+        Assert.Equal("", silent.Password);
+
+        // ABLE-TO-FAIL CONTROL: answers given to a failed door survive its Close. The boards close a
+        // failed door between the box's OK and the open.
+        silent.Take(new NetPlayerInfo { Callsign = "Zachary", Password = "kestrel" }, game: false);
+        silent.Close();
+        Assert.Equal("kestrel", silent.Password);
+    }
+
     private static NetPlayFeature Guest(LoopbackTransport end, string callsign, string password = "")
     {
         var door = new NetPlayFeature((_, _, _) => end, (_, _) => end);

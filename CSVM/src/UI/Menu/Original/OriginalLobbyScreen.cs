@@ -223,6 +223,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private static readonly BoardTint LaunchBlink = new(255, 50, 25);
     private static readonly BoardTint OwnName = new(255, 0, 0);
 
+    // The remake's pinned internet line, in the picked sub-tab's dark red so it reads apart from chat.
+    private static readonly BoardTint Pinned = Picked;
+
     // The picked row's fill, the script's KEA.NF on the player list (MULTIPLAYERLOBBY_READY.SCRIPT).
     private static readonly (byte R, byte G, byte B) PickedRow = (209, 180, 120);
 
@@ -1504,10 +1507,23 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
         float pitch = size + 2f;
         int fits = Math.Max(1, (int)(ChatHeight / pitch));
-        int first = Math.Max(0, chat.Count - fits);
+
+        // A host's word about internet guests stands pinned over the chat for as long as it hosts,
+        // where a one-shot note would scroll away.
+        string pinned = _net() is { } net ? CoopDoorText.HostCodeLine(net) : string.Empty;
+        int top = pinned.Length > 0 && fits > 1 ? 1 : 0;
+        if (top > 0)
+        {
+            layers.Lines.Add(new BoardLine(CoopDoorText.NoteName, ChatX + 4f, ChatY, ChatNameColumn - 8f, size, BoardInk.Row, -1,
+                Face: face, Colour: Black));
+            layers.Lines.Add(new BoardLine(pinned, ChatX + ChatNameColumn, ChatY, ChatWidth - ChatNameColumn - 4f, size,
+                BoardInk.Row, -1, Face: face, Colour: Pinned));
+        }
+
+        int first = Math.Max(0, chat.Count - (fits - top));
         for (int i = first; i < chat.Count; i++)
         {
-            float y = ChatY + ((i - first) * pitch);
+            float y = ChatY + ((i - first + top) * pitch);
             layers.Lines.Add(new BoardLine(chat[i].Name, ChatX + 4f, y, ChatNameColumn - 8f, size, BoardInk.Row, -1,
                 Face: face, Colour: chat[i].Name == own ? OwnName : Black));
             layers.Lines.Add(new BoardLine(chat[i].Text, ChatX + ChatNameColumn, y, ChatWidth - ChatNameColumn - 4f, size,

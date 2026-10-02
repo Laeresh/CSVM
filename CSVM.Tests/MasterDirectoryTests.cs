@@ -53,6 +53,20 @@ public class MasterDirectoryTests
     }
 
     [Fact]
+    public void APrivateHostsListingIsUnlistedAndItsAdvertIsUnchanged()
+    {
+        var advert = new SessionAdvertMessage(NetSessionKind.CampaignCoop, 7, 1, "Zachary", NetSessionStatus.Waiting, 4, false);
+
+        var hidden = MasterDirectory.ListingOf(advert, new NetBuildVersion(0, 2), unlisted: true);
+        var open = MasterDirectory.ListingOf(advert, new NetBuildVersion(0, 2));
+        hidden.Code = "ABC-DEF";
+
+        Assert.True(hidden.Unlisted);
+        Assert.False(open.Unlisted);
+        Assert.Equal(advert, MasterDirectory.ToGame(hidden).Advert);
+    }
+
+    [Fact]
     public void TheServerIsAskedAtMostOnceEveryRefresh()
     {
         int asked = 0;

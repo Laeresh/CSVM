@@ -148,7 +148,7 @@ public static class MasterApp
                 int dropped = _hub.Sweep();
                 if (dropped > 0)
                 {
-                    _log.LogInformation("csvm-master: dropped {Dropped} silent game(s), {Listed} listed", dropped, _hub.Count);
+                    _log.LogInformation("csvm-master: dropped {Dropped} silent game(s), {Hosted} hosted", dropped, _hub.Count);
                 }
             }
         }

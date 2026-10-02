@@ -34,6 +34,18 @@ public class NetPlayerInfoTests
         Assert.Equal(8, new NetPlayerInfo().MaxPlayers);
     }
 
+    [Fact]
+    public void ACoopHostStartsPrivateADogfightHostPublicAndTheChoiceIsNeverRemembered()
+    {
+        Assert.True(NetPlayerInfo.DefaultPrivate(NetSessionKind.CampaignCoop));
+        Assert.False(NetPlayerInfo.DefaultPrivate(NetSessionKind.Dogfight));
+        Assert.Null(new NetPlayerInfo().Private);
+
+        var saved = new OptionsDef();
+        new NetPlayerInfo { Callsign = "Laeresh", GameName = "DaRein", Private = true }.Remember(saved, game: true);
+        Assert.Null(NetPlayerInfo.Remembered(saved).Private);
+    }
+
     [Theory]
     [InlineData("Laeresh", true)]
     [InlineData(" Ace ", true)]
