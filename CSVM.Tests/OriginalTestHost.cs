@@ -68,6 +68,8 @@ internal abstract class OriginalTestHost<TModule> : IOriginalScreenHost
 
     public (float X, float Y)? Pointer { get; protected set; }
 
+    public CopyWay CopyWay { get; set; }
+
     public virtual CustomPlaneStore? CampaignPlanes => null;
 
     public virtual UiStrings MenuStrings => UiStrings.Empty;

@@ -387,6 +387,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     // the pointer moves. A screen drawn under a still pointer keeps the bitmap it arrived with.
     private bool _pointerLive;
     private (float X, float Y)? _pointer;
+    private CopyWay _copyWay;
     // A thumb drag in progress: which list, where the pointer took hold and where the window stood.
     private (string Key, float StartY, int StartTop)? _drag;
     private int _pickedChapter = -1;
@@ -629,6 +630,11 @@ public sealed partial class OriginalShell : IOriginalScreenHost
 
     /// <summary>The pointer's last authored position, or null when the seat has none.</summary>
     public (float X, float Y)? Pointer => _pointer;
+
+    /// <summary>The device a host's copy hint names, the one the seat last moved. A command names
+    /// the pad or the keyboard by the seat's hint side, and a pointer's move or press names it.
+    /// </summary>
+    public CopyWay CopyWay => _copyWay;
 
     // The campaign's table where one is open, the hangar's otherwise, empty with neither: the words
     // the messagebox answers and the per-seat screen's ratings take. Either family may have loaded one.
@@ -948,6 +954,9 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         // A typed cheat holding the keyboard swallows the frame's characters: the script's own
         // focus moved the caret off whatever edit box the screen carries.
         bool changed = TypingCheat ? _cheats.Type(_screen, commands) : TypeName(commands, cues);
+        var copyWay = FollowCopyWay(_copyWay, commands, _pointer);
+        changed |= copyWay != _copyWay;
+        _copyWay = copyWay;
         if (OnSeatWalk && _pickingSeat is not { Joined: true })
         {
             // The seat this screen was picking for has gone. The walk moves on or ends, and a
@@ -1247,6 +1256,19 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         }
 
         return fileName;
+    }
+
+    // A command names the pad or the keyboard by the seat's hint side. A pointer names itself only
+    // when it moved or pressed, since a seat reports its standing pointer every frame.
+    private static CopyWay FollowCopyWay(CopyWay was, MenuCommands commands, (float X, float Y)? pointer)
+    {
+        if (commands.MoveX != 0 || commands.MoveY != 0 || commands.Accept || commands.Back
+            || commands.Typed.Length > 0 || commands.Erase || commands.Paste)
+        {
+            return commands.OnPad ? CopyWay.Pad : CopyWay.Keys;
+        }
+
+        return commands.Pointer is { } at && (at.Clicked || pointer != (at.X, at.Y)) ? CopyWay.Pointer : was;
     }
 
     private static int HitTest(IReadOnlyList<OriginalRow> rows, float x, float y)
@@ -2035,6 +2057,8 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     int IOriginalScreenHost.PressedRow => _pressed;
 
     int IOriginalScreenHost.HoveredRow => _hover;
+
+    CopyWay IOriginalScreenHost.CopyWay => _copyWay;
 
     int IOriginalScreenHost.FocusBeforeDialog => _box.FocusBefore;
 

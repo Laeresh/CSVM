@@ -904,7 +904,7 @@ definition persisted data.
 
 ## src/UI/Menu/MenuCommands.cs
 The device-neutral input seam: `MenuCommands` is one frame of one seat's semantic commands
-(auto-repeated cursor steps, edge presses with `KeylessAccept` marking an accept no key gave, typed text and a paste, an optional window-pixel `MenuPointer` whose
+(auto-repeated cursor steps, edge presses with `KeylessAccept` marking an accept no key gave, typed text and a paste, `OnPad` naming the side a hint words itself for, an optional window-pixel `MenuPointer` whose
 primary button arrives as a press and an edge and whose secondary as a held state driving no command
 of its own), and `IMenuInputSource` is the per-seat producer (`Poll`/`Prime`/`CapturingText`). A
 source is not synonymous with a pad: keyboard-plus-unclaimed-pads, one claimed pad, a mouse or a
@@ -1071,7 +1071,7 @@ idiom every refusal and confirm goes through, whose box is the one `OriginalShel
 the screen as a `ComposedBoard` whose backdrop takes a section's `movie` row at its bottom, and every page's row kinds live here,
 `OriginalSlider` among them. A pointer press arms a row and only the release still on it activates (`ArmedKey`), on an edit box taking the
 caret alone where Accept in one reaches the screen's own commit; the pointer's bitmap answers an enter or leave (`PointerLive`); and a film
-in front of the board takes every frame, the tail of the press that ended it included (`CinemaFilm`). Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
+in front of the board takes every frame, the tail of the press that ended it included (`CinemaFilm`). `CopyWay` is the device the seat last moved, which a host's copy hint names. Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalShellDialog.cs
 The standing messagebox as a type of its own, which the shell holds one of: the `OriginalDialog`/`OriginalDialogAnswer` pair,
@@ -1085,7 +1085,7 @@ and a door onto a new screen closes the box it left behind. [../org/campaign-boa
 
 ## src/UI/Menu/Original/OriginalScreenHost.cs
 The two sides of the seam between `OriginalShell` and a standalone screen module. `IOriginalScreenHost` is what a module reads off the shell and
-calls back into it for: the screen showing, the per-screen focus cursor every family shares, the pointer's row and position, whether a dialog stands,
+calls back into it for: the screen showing, the per-screen focus cursor every family shares, the pointer's row and position, the device a copy hint names, whether a dialog stands,
 the string table and the art measurer, the seat strip and the shell's own plate-row rule, the film a cinema plays in front of the board and the one
 frame a screenshot aid replays, and the crossings into another family (the hangar a Build door opens, the walk FLY MISSION begins, a campaign resume, a roster re-read, the mission the cabin's typed cheat launches). The shell implements it explicitly, so the narrower vocabulary stays
 the modules' own, and each module's tests implement it as a fake and build the module with no shell at all. `IOriginalScreenModule` is the other
@@ -1280,7 +1280,7 @@ caret, the inventory's plane line on the middle of the dashed box the background
 
 ## src/UI/Menu/Original/OriginalCampaignScreen.cs
 The Original campaign, one standalone module over the shared `CampaignFeature`: the profile screen,
-the cabin (with a co-op host's HOST CO-OP and BOOT), the table of contents, the flight check, ammo and plane selection, the book, a scrap's
+the cabin (with a co-op host's HOST CO-OP, BOOT and the band's COPY), the table of contents, the flight check, ammo and plane selection, the book, a scrap's
 zoom and the briefing. What each screen draws is the shared board component, so the module hosts
 the Built-in campaign pages in a `CampaignFlow` of its own and copies every composed layer into the
 board it hands back, the cabin's painting going down as backdrop so the mission pull-down's paper stands over it; that flow is never walked, its screen and cursor mirroring this module's. The
@@ -1302,7 +1302,7 @@ The geometry and strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 The original's Multiplayer Lobby, one `IOriginalScreenModule` over the door's `DogfightLobby`, with its four tabs (Mission Options, Select Plane, Select Ammo, Game Scores) in the scripts' own placements and art.
 The host's option controls are live until it is Ready, a guest's are drawn greyed with the host's values, and all three types fly; Capture the Flag greys the two environments with no flags and the team count, and adds the own-flag-home box, and Zeppelin vs Zeppelin greys the team count. A host picks a guest's row in the player list, and Boot removes that guest. The player list draws each team's row over its members; the team button creates (standing `OriginalTeamBox`), joins the picked team row or leaves, while its pilot is not Ready. Restrict Number of Teams and its count boxes are live on the host, the victory radios arm Time, Score or both, and a refused LAUNCH! raises the original's 10518 to 10520 or the remake's own line. The Lives box is live only while Limited Lives is ticked. Select... (View... on a guest) is live while Outlaw Components is ticked and stands `OriginalOutlawList` over the tab page with the tabs greyed. A toggle of Outlaw Components empties the list.
 Every player picks a stock plane, or one of its saved custom planes while the host allows them, and its ammunition, live at all times. Ready is live once the options have been heard, and a refused Ready raises the original's langui 10517 dialog with each reason. `Land` stands a completed match's peers back here on Game Scores, which is greyed until then. LAUNCH! is live on the host once every row is Ready, and hands the shell a Versus `LaunchExit` on the environment's chapter with the lobby's rules and the door's wire; `GuestLaunch` is a guest's same exit once its host has launched.
-Leave Game closes the door and lands on the Connection page. A host's chat carries `NetworkRows` pinned at its top, by the co-op band's rule (`CoopDoorText.HostLobbyLines`): the join code alone, else the address with why there is no code. The shell follows a Dogfight guest into this screen and out of it when the link ends. Geometry and strings: [../org/menu-inventory.md](../org/menu-inventory.md).
+Leave Game closes the door and lands on the Connection page. A host's chat carries `NetworkRows` pinned at its top, by the co-op band's rule (`CoopDoorText.HostLobbyLines`): the join code alone, else the address with why there is no code. Its first row is the COPY control's row, so a click, a tap or a pad's Accept copies through the door. The shell follows a Dogfight guest into this screen and out of it when the link ends. Geometry and strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalOutlawList.cs
 The lobby's outlaw list pane, which `OriginalLobbyScreen` builds, draws and answers while it is open, and `OutlawRows`, the pure map from each of its five sub-tabs' rows to a `NetPlaneRules` flag and the string naming it.
@@ -1467,7 +1467,7 @@ Wire: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Coverage
 ## src/UI/Menu/CoopDoorText.cs
 The words the network door is drawn in, engine-free and built off the door alone: the host's band
 (`HostBand`: the join code and Public or Private when there is one, else port, router address, guest
-count, then `HostFallbackLines`: `HostAddressLine` and `InternetLine`'s reason), a Dogfight host's `HostCodeLine` and its lobby's pinned rows by the band's rule (`HostLobbyLines`), the router's answers
+count, then `HostFallbackLines`: `HostAddressLine` and `InternetLine`'s reason), a Dogfight host's `HostCodeLine` and its lobby's pinned rows by the band's rule (`HostLobbyLines`), each naming Ctrl+C only for `CopyWay.Keys`, and what a COPY control copies (`CopyTarget`), the router's answers
 (`RouterStatus`, `PinholeStatus`; `HostPinholeStatus` omits an address already named), what a
 guest types (`HostAddressStatus` on the board), an advert's session (`SessionName`), the join and waiting boards' status (`JoinedStatus`,
 `WaitingStatus`, naming a join by code by its code), why a guest cannot join by code (`NoMasterServer`, `NoWebRtc`, `CodeJoinUnavailable`), the games list's cells with a version and a Need Password mark (`Status`), a guest's band and its line for players the cap left out (`GuestBand`, `SeatsShort`), the booted and wrong-password refusals, the refusal naming both

@@ -84,4 +84,9 @@ public sealed record MenuCommands
 
     /// <summary>This seat's pointer, or null when its devices have none.</summary>
     public MenuPointer? Pointer { get; init; }
+
+    /// <summary>Whether this seat's hints name its pad rather than its keyboard: the side its last
+    /// real press came from (<see cref="Bindings.ActiveDevice"/>). It commands nothing; a screen
+    /// reads it only to word a hint.</summary>
+    public bool OnPad { get; init; }
 }

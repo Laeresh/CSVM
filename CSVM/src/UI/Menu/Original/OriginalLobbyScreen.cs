@@ -154,6 +154,11 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>Leave Game, back to the Connection page.</summary>
     public const string LeaveKey = "MPL_B_LEAVE";
 
+    /// <summary>The remake's COPY control on a host's first pinned Network row, which copies its
+    /// join code or address. The row spans the line, so a click or a tap on the code copies it.
+    /// </summary>
+    public const string CopyKey = "MPL_B_COPY";
+
     /// <summary>How many rows the player list shows.</summary>
     public const int VisiblePlayers = 11;
 
@@ -188,6 +193,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private const float ChatWidth = 735f;
     private const float ChatHeight = 165f;
     private const float ChatNameColumn = 100f;
+    private const float CopyWidth = 48f;
     private const float DisabledArrow = 0.45f;
     private const int IconFrames = 11;
 
@@ -309,8 +315,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
     /// <summary>The rows pinned over the chat under <see cref="CoopDoorText.NoteName"/>: a host's
     /// join code, else its address and why there is no code (<see cref="CoopDoorText.HostLobbyLines"/>).
-    /// Empty on a guest.</summary>
-    public IReadOnlyList<string> NetworkRows => _net() is { } net ? CoopDoorText.HostLobbyLines(net) : Array.Empty<string>();
+    /// The copy hint follows the seat's device. Empty on a guest.</summary>
+    public IReadOnlyList<string> NetworkRows =>
+        _net() is { } net ? CoopDoorText.HostLobbyLines(net, _host.CopyWay) : Array.Empty<string>();
 
     /// <summary>The peer whose row the host picked for Boot, or -1 while none is picked or that
     /// guest has left.</summary>
@@ -678,6 +685,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                 return _net() is { } net && lobby is { CanLaunch: true } ? Exit(net, lobby) : null;
             case LeaveKey:
                 Leave();
+                return null;
+            case CopyKey:
+                _net()?.CopyForGuests();
                 return null;
             case BootKey:
                 // The script re-presses the picked row after the boot, which lets the pick go.
@@ -1163,6 +1173,20 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         new(key, label, OriginalRowKind.TextField, x, y, width, height, enabled, column, null);
 
 
+    // The COPY control over the first pinned Network row, where the code or the address with the
+    // copy mark always stands. Null while the host shows nothing to copy, and on a guest.
+    private OriginalRow? CopyRow()
+    {
+        if (_net() is not { } net || CoopDoorText.CopyTarget(net).Length == 0)
+        {
+            return null;
+        }
+
+        float size = _text.Regular(10575)?.Pixels ?? MultiplayerBoardText.TextFallback;
+        return new OriginalRow(CopyKey, CoopDoorText.CopyButton, OriginalRowKind.TextButton, ChatX + ChatNameColumn, ChatY - 1f,
+            ChatWidth - ChatNameColumn - 4f, size + 2f, true, 0, null);
+    }
+
     // Every widget of the showing tab and its frame, in focus order. The tabs and the page come
     // first, then the player list's plaques, the chat line and Leave Game. The outlaw list stands
     // in the page's place with the tabs greyed, as the Select... press's mail(1) to each does.
@@ -1216,6 +1240,11 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         rows.Add(_text.Strip(TeamKey, LargeArt, 105f, 325f, lobby is { Ready: false } && !_outlaw.IsOpen, 0, 131f, 37f));
         rows.Add(new OriginalRow(ReadyKey, string.Empty, OriginalRowKind.Radio, 250f, 325f, 58f, 37f,
             lobby is { HasOptions: true }, 0, new BoardArt(BoardArtLibrary.Ui, ReadyArt, 8)));
+        if (CopyRow() is { } copy)
+        {
+            rows.Add(copy);
+        }
+
         rows.Add(Box(ChatKey, _chat, 88f, 552f, 481f, 18f, lobby != null, 0));
         rows.Add(_text.Strip(SendKey, SmallArt, 577f, 548f, lobby != null, 1, 74f, 37f));
         rows.Add(_text.Strip(LeaveKey, LargeArt, 655f, 548f, true, 1, 131f, 37f));
@@ -1517,6 +1546,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         // The pinned rows follow the door each frame, so the address shows only while there is no code.
         var pinned = NetworkRows;
         int top = Math.Min(pinned.Count, fits - 1);
+        float copy = CopyRow() != null ? CopyWidth + 6f : 0f;
         for (int i = 0; i < top; i++)
         {
             float y = ChatY + (i * pitch);
@@ -1526,7 +1556,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                     Face: face, Colour: Black));
             }
 
-            layers.Lines.Add(new BoardLine(pinned[i], ChatX + ChatNameColumn, y, ChatWidth - ChatNameColumn - 4f, size,
+            layers.Lines.Add(new BoardLine(pinned[i], ChatX + ChatNameColumn, y, ChatWidth - ChatNameColumn - 4f - (i == 0 ? copy : 0f), size,
                 BoardInk.Row, -1, Face: face, Colour: Pinned));
         }
 
@@ -1544,6 +1574,12 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     // One widget in its state, and the words the script writes beside it.
     private void ComposeWidget(OriginalRow row, bool focused, bool pressed, BoardLayers layers)
     {
+        if (row.Key == CopyKey)
+        {
+            ComposeCopy(row, focused, pressed, layers);
+            return;
+        }
+
         // A player row's name is the list's own line, so the row draws only its pick and focus.
         if (OriginalWidgets.Indexed(row.Key, PlayerKeyPrefix) is { } listed)
         {
@@ -1595,6 +1631,25 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                 ComposePlaque(row, focused, pressed, layers);
                 break;
         }
+    }
+
+    // The COPY box at the right end of the line its row spans, the line itself being the pinned
+    // row's words. The focus outlines the box, which is what a pad presses.
+    private void ComposeCopy(OriginalRow row, bool focused, bool pressed, BoardLayers layers)
+    {
+        var box = row with { X = row.X + row.Width - CopyWidth, Width = CopyWidth };
+        var fill = pressed ? PickedRow : (R: (byte)222, G: (byte)207, B: (byte)156);
+        layers.Fills.Add(new BoardFill(box.X, box.Y, box.Width, box.Height, fill.R, fill.G, fill.B));
+        layers.Fills.Add(new BoardFill(box.X, box.Y, box.Width, box.Height, 0, 0, 0, Border: true));
+        if (focused)
+        {
+            layers.Fills.Add(_host.FocusMark(box));
+        }
+
+        var face = _text.Regular(10575);
+        float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
+        layers.Lines.Add(new BoardLine(CoopDoorText.CopyButton, box.X, box.Y + 1f, box.Width, size, BoardInk.Row, -1,
+            Justify: BoardJustify.Center, Face: face, Colour: Pinned));
     }
 
     private void ComposeDropdown(OriginalRow row, bool focused, BoardLayers layers)

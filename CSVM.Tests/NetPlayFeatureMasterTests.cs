@@ -209,6 +209,39 @@ public class NetPlayFeatureMasterTests
     }
 
     [Fact]
+    public void OnlyAKeyboardIsToldTheCopyKeyAndTheControlCopiesWhatTheLineNames()
+    {
+        const string stable = "2001:db8::7";
+        var mesh = LoopbackTransport.Mesh(1, Clean, new Random(9));
+        var listed = new ListedCarrier(mesh[0]);
+        var door = new NetPlayFeature((_, _, _) => listed, (_, _) => mesh[0])
+        {
+            StableIpv6 = () => stable,
+            CopyText = _ => { },
+        };
+        Assert.Equal("", CoopDoorText.CopyTarget(door));
+        door.OpenDogfightHost(NetSeats.MaxPlayers - 1);
+
+        // Without a code the address line carries the mark, and the control copies that address.
+        Assert.Equal(stable, CoopDoorText.CopyTarget(door));
+        Assert.Equal($"IPv6  {stable}  {CoopDoorText.CopyPress}", CoopDoorText.HostAddressLine(door, CopyWay.Keys));
+        Assert.Equal($"IPv6  {stable}", CoopDoorText.HostAddressLine(door, CopyWay.Pad));
+        Assert.Equal($"IPv6  {stable}", CoopDoorText.HostAddressLine(door, CopyWay.Pointer));
+
+        listed.JoinCode = "K7Q-X3M";
+        Assert.Equal("K7Q-X3M", CoopDoorText.CopyTarget(door));
+        const string line = "Internet code K7Q-X3M, public, on the games list.";
+        Assert.Equal($"{line} {CoopDoorText.CopyPress} copies it.", CoopDoorText.HostCodeLine(door, CopyWay.Keys));
+        Assert.Equal(line, CoopDoorText.HostCodeLine(door, CopyWay.Pad));
+        Assert.Equal(new[] { line }, CoopDoorText.HostLobbyLines(door, CopyWay.Pointer));
+
+        // ABLE-TO-FAIL CONTROL: once copied, every device reads the copied state.
+        Assert.True(door.CopyForGuests());
+        Assert.Equal($"{line} It is copied.", CoopDoorText.HostCodeLine(door, CopyWay.Pad));
+        Assert.Equal($"{line} It is copied.", CoopDoorText.HostCodeLine(door, CopyWay.Keys));
+    }
+
+    [Fact]
     public void ACoopBandShowsTheCodeInPlaceOfTheAddressAndTheAddressWithItsReasonWithoutOne()
     {
         const string stable = "2001:db8::7";

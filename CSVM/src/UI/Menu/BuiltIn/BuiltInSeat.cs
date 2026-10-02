@@ -46,6 +46,7 @@ public sealed class BuiltInSeat : IMenuInputSource
             Erase = Input.Erase,
             Paste = Input.Paste,
             Unbind = Input.Unbind,
+            OnPad = Input.Device == CSVM.Bindings.DeviceSide.Pad,
         };
     }
 

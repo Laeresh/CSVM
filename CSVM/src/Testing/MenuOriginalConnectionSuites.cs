@@ -1241,15 +1241,16 @@ internal static class MenuOriginalConnectionSuites
         string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-lobby-network");
         try
         {
+            // Each host is opened by pointer clicks, so its lines name no copy key (CopyWay.Pointer).
             string[]? codeRows = HostTheLobby(ctx, layout, coded, ends);
-            string code = $"Internet code {NetDoorAid.SampleCode}, public, on the games list. {CoopDoorText.CopyPress} copies it.";
+            string code = $"Internet code {NetDoorAid.SampleCode}, public, on the games list.";
             ctx.Check(codeRows != null && codeRows.SequenceEqual(new[] { code }),
                 $"with a code the Network rows pin the code alone ({Joined(codeRows)})");
             ctx.Check(codeRows != null && !codeRows.Any(row => row.Contains(stable, StringComparison.Ordinal)),
                 $"and name no address");
 
             // The harness's port base is not the default port, so the address is written bracketed.
-            string address = $"IPv6  [{stable}]:{offline.Port.ToString(System.Globalization.CultureInfo.InvariantCulture)}  {CoopDoorText.CopyPress}";
+            string address = $"IPv6  [{stable}]:{offline.Port.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
             string[]? offlineRows = HostTheLobby(ctx, layout, offline, ends);
             ctx.Check(offlineRows != null && offlineRows.SequenceEqual(new[] { address, $"No internet code: {CoopDoorText.NoWebRtc}" }),
                 $"without WebRTC they pin the address with the reason under it ({Joined(offlineRows)})");
@@ -1272,6 +1273,169 @@ internal static class MenuOriginalConnectionSuites
             CSVM.Utils.OptionsStore.DirectoryOverride = options;
         }
     }
+
+    [Suite("menu-original-copy-code",
+        "A host copies its join code without a keyboard, in a Dogfight host's lobby and on a co-op host's "
+        + "cabin band. The code's line carries a COPY control at its end. A click on the code copies it, a "
+        + "tap with no hover before it copies it, and a pad's cursor walk reaches COPY, whose Accept copies "
+        + "it. Each goes through the door's own copy and draws the line's copied state. The hint names "
+        + "Ctrl+C after a key moved the cursor and no key after a pointer or a pad did. The listed carrier "
+        + "stands for the master server and the wire is the loopback")]
+    internal static void TheCopyControl(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var copied = new List<string>();
+        var dogfightEnd = LoopbackTransport.Mesh(1, LoopbackConditions.Perfect, new Random(41))[0];
+        var dogfight = new NetPlayFeature(
+            (_, _, _) => NetDoorAid.Listed(dogfightEnd), (_, _) => throw new InvalidOperationException("the host does not join"))
+        {
+            CopyText = copied.Add,
+            Master = new MasterDirectory(_ => System.Threading.Tasks.Task.FromResult("{\"games\":[]}")),
+        };
+        var coopEnd = LoopbackTransport.Mesh(1, LoopbackConditions.Perfect, new Random(42))[0];
+        var coop = new NetPlayFeature(
+            (_, _, _) => NetDoorAid.Listed(coopEnd),
+            (_, _) => throw new InvalidOperationException("the host does not join"),
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }))
+        {
+            CopyText = copied.Add,
+        };
+        var ends = new List<End>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-copy-code");
+        try
+        {
+            var lobby = Open(ctx, layout, dogfight, ends);
+            var cabin = Open(ctx, layout, coop, ends);
+            if (lobby == null || cabin == null)
+            {
+                return;
+            }
+
+            ClickRow(ctx, lobby, OriginalShell.MultiplayerKey);
+            ClickRow(ctx, lobby, OriginalConnectionScreen.HostKey);
+            Answer(ctx, lobby, "Zachary", "Pirates");
+            Pump(lobby);
+            ctx.Check(lobby.Shell.Screen == OriginalScreen.Lobby && dogfight.JoinCode == NetDoorAid.SampleCode,
+                $"Host opens the lobby under the listed code ({lobby.Shell.Screen}, {dogfight.JoinCode})");
+            string listed = $"Internet code {NetDoorAid.SampleCode}, public, on the games list.";
+            CopyEveryWay(ctx, lobby, copied, OriginalLobbyScreen.CopyKey, "the lobby",
+                $"{listed} {CoopDoorText.CopyPress} copies it.", listed, $"{listed} It is copied.");
+
+            cabin.Shell.Campaign.OpenCampaignOver(CampaignAidProfiles.Store(seeded: true, progressed: true), CampaignAidProfiles.Planes());
+            cabin.Shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
+            OpenForTheMatch(ctx, cabin, coop);
+            string band = $"NETWORK OPEN  0 guests  CODE {NetDoorAid.SampleCode}";
+            CopyEveryWay(ctx, cabin, copied, OriginalCampaignScreen.CoopCopyKey, "the cabin's band",
+                $"{band}  {CoopDoorText.CopyPress}", band, $"{band}  copied");
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            dogfight.Discard();
+            coop.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
+    // One host's code line through every way. A key's step names Ctrl+C and a pointer's or a pad's
+    // names none. The pad walks to COPY and accepts, then a click and a tap on the code's words each
+    // copy again. Every copy is the door's, so the clipboard seam gains the code each time.
+    private static void CopyEveryWay(
+        TestContext ctx, End end, List<string> copied, string key, string where, string keysLine, string bareLine, string copiedLine)
+    {
+        string code = NetDoorAid.SampleCode;
+        var row = Row(end.Shell, key);
+        var neighbour = end.Shell.Rows.FirstOrDefault(other => row != null && other.Column == row.Column && other.Enabled && other.Visible && other.Key != key);
+        ctx.Check(row != null && neighbour != null, $"{where} carries its {CoopDoorText.CopyButton} row beside another in its column ({neighbour?.Key})");
+        if (row == null || neighbour == null)
+        {
+            return;
+        }
+
+        Press(end, new MenuCommands { MoveY = 1 });
+        ctx.Check(end.Shell.CopyWay == CopyWay.Keys && DrawsExactly(end.Shell.Compose(), keysLine),
+            $"after a key's step {where} names {CoopDoorText.CopyPress} ({end.Shell.CopyWay}, {Lines(end, code)})");
+
+        // The pointer comes to rest on a row of the control's column, which is where the pad starts.
+        Press(end, new MenuCommands { Pointer = Window(ctx, neighbour.X + (neighbour.Width / 2f), neighbour.Y + (neighbour.Height / 2f)) });
+        ctx.Check(end.Shell.CopyWay == CopyWay.Pointer && DrawsExactly(end.Shell.Compose(), bareLine),
+            $"after the pointer moved {where} names no key ({end.Shell.CopyWay}, {Lines(end, code)})");
+        Press(end, new MenuCommands { MoveY = 1, OnPad = true });
+        var board = end.Shell.Compose();
+        ctx.Check(end.Shell.CopyWay == CopyWay.Pad && DrawsExactly(board, bareLine) && DrawsExactly(board, CoopDoorText.CopyButton),
+            $"after a pad's step it names no key, its {CoopDoorText.CopyButton} control drawn ({end.Shell.CopyWay}, {Lines(end, code)})");
+
+        // The walk leaves the control first when it starts there, so reaching it is the column's own.
+        int steps = 0;
+        int limit = end.Shell.Rows.Count + 2;
+        do
+        {
+            Press(end, new MenuCommands { MoveY = 1, OnPad = true });
+            steps++;
+        }
+        while (end.Shell.FocusedKey != key && steps < limit);
+        ctx.Check(end.Shell.FocusedKey == key, $"the pad's cursor walk reaches {where}'s {CoopDoorText.CopyButton} ({end.Shell.FocusedKey}, {steps} steps)");
+        int start = copied.Count;
+        Press(end, new MenuCommands { Accept = true, KeylessAccept = true, OnPad = true });
+        ctx.Check(copied.Count == start + 1 && copied[^1] == code && DrawsExactly(end.Shell.Compose(), copiedLine),
+            $"the pad's Accept on it copies the code and the line says so ({string.Join(", ", copied)})");
+
+        // A point on the drawn line's own words, read off the board rather than the row. The press
+        // lands on the code itself, not only on the control.
+        var words = end.Shell.Compose().Lines.FirstOrDefault(line => line.Text == copiedLine);
+        ctx.Check(words != null, $"{where} draws the code's line ({Lines(end, code)})");
+        if (words == null)
+        {
+            return;
+        }
+
+        // The board measures no text, so the code's place is its index at half an em per character.
+        float wordsX = words.X + (words.Text.IndexOf(code, StringComparison.Ordinal) * words.Size * 0.5f) + words.Size;
+        float wordsY = words.Y + (words.Size / 2f);
+        int before = copied.Count;
+        var at = Window(ctx, wordsX, wordsY);
+        Press(end, new MenuCommands { Pointer = at });
+        Press(end, new MenuCommands { Pointer = at with { Pressed = true, Clicked = true } });
+        Press(end, new MenuCommands { Pointer = at });
+        ctx.Check(copied.Count == before + 1 && copied[^1] == code && DrawsExactly(end.Shell.Compose(), copiedLine),
+            $"a click on the code's words copies it ({copied.Count - before} copies, {Lines(end, code)})");
+
+        Press(end, new MenuCommands { Pointer = Window(ctx, 2f, 598f) });
+        var tap = Window(ctx, wordsX + 6f, wordsY);
+        Press(end, new MenuCommands { Pointer = tap with { Pressed = true, Clicked = true } });
+        Press(end, new MenuCommands { Pointer = tap });
+        ctx.Check(copied.Count == before + 2 && copied[^1] == code && DrawsExactly(end.Shell.Compose(), copiedLine),
+            $"a tap on them, the press landing where no hover stood, copies it again ({copied.Count - before} copies)");
+    }
+
+    // An authored point as the seat's pointer reports it, in window pixels.
+    private static MenuPointer Window(TestContext ctx, float x, float y)
+    {
+        var size = ctx.Host.GetViewport().GetVisibleRect().Size;
+        var fit = BoardFit.For(size.X, size.Y);
+        return new MenuPointer(fit.X(x), fit.Y(y), false, false, 0);
+    }
+
+    private static bool DrawsExactly(ComposedBoard board, string text) => board.Lines.Any(line => line.Text == text);
+
+    // The drawn lines naming the code, for a failure's message.
+    private static string Lines(End end, string code) =>
+        string.Join(" | ", end.Shell.Compose().Lines.Select(line => line.Text).Where(text => text.Contains(code, StringComparison.Ordinal)));
 
     // A Dogfight host door on its own loopback end, wrapped by carrier, naming a stable IPv6 address.
     // With master it has a master server set, an empty canned list.
@@ -1338,7 +1502,8 @@ internal static class MenuOriginalConnectionSuites
         Answer(ctx, host, "Zachary", "Pirates");
         Pump(host);
         var door = host.Door;
-        string pinned = $"Internet code {NetDoorAid.SampleCode}, public, on the games list. {CoopDoorText.CopyPress} copies it.";
+        // Opened by clicks, so the line names no copy key.
+        string pinned = $"Internet code {NetDoorAid.SampleCode}, public, on the games list.";
         ctx.Check(host.Shell.Screen == OriginalScreen.Lobby && Draws(host.Shell.Compose(), pinned),
             $"the host's lobby pins its code over the chat ({host.Shell.Screen}, {CoopDoorText.HostCodeLine(door)})");
         bool took = door.CopyForGuests();

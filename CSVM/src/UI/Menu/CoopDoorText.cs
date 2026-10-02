@@ -5,6 +5,21 @@ using CSVM.Net;
 
 namespace CSVM.UI.Menu;
 
+/// <summary>Which device a host's copy hint names: the one the menu's seat last moved. A keyboard
+/// copies on <see cref="CoopDoorText.CopyPress"/>; a pad and a pointer press the COPY control beside
+/// the code, so their lines name no key.</summary>
+public enum CopyWay
+{
+    /// <summary>The keyboard, whose hint is <see cref="CoopDoorText.CopyPress"/>.</summary>
+    Keys,
+
+    /// <summary>A pad, which walks to the COPY control and presses it.</summary>
+    Pad,
+
+    /// <summary>A mouse or a touch screen, which clicks or taps the code or its COPY control.</summary>
+    Pointer,
+}
+
 /// <summary>
 /// The words the campaign's network door is shown in, on both of its ends. A host's campaign
 /// boards carry a band naming its join code, or without one the port and the address guests reach
@@ -67,6 +82,10 @@ public static class CoopDoorText
 
     /// <summary>The press that copies a host's address, as its boards name it.</summary>
     public const string CopyPress = "Ctrl+C";
+
+    /// <summary>The Original presentation's control beside a host's code or address that copies it.
+    /// </summary>
+    public const string CopyButton = "COPY";
 
     /// <summary>A host's word when this machine holds no stable global IPv6 address.</summary>
     public const string NoIpv6 = "No global IPv6 address";
@@ -244,10 +263,10 @@ public static class CoopDoorText
     }
 
     /// <summary>A campaign host's band. With a join code it names the guests, the code and the copy
-    /// key, and on a second line whether the game is listed. Without one it names the port, the
-    /// router's address and the guests, then <see cref="HostFallbackLines"/>. Empty while the door
-    /// is not a campaign host.</summary>
-    public static string HostBand(NetPlayFeature net)
+    /// key <paramref name="way"/> offers, and on a second line whether the game is listed. Without
+    /// one it names the port, the router's address and the guests, then
+    /// <see cref="HostFallbackLines"/>. Empty while the door is not a campaign host.</summary>
+    public static string HostBand(NetPlayFeature net, CopyWay way = CopyWay.Keys)
     {
         ArgumentNullException.ThrowIfNull(net);
         if (!net.IsCoopHost)
@@ -261,7 +280,7 @@ public static class CoopDoorText
         // A code reaches this host from anywhere, so the address a guest would type is not shown.
         if (net.JoinCode is { } code)
         {
-            return $"NETWORK OPEN  {joined}  CODE {code}{CopyMark(net, code)}\n{Listing(net.Private)}";
+            return $"NETWORK OPEN  {joined}  CODE {code}{CopyMark(net, code, way)}\n{Listing(net.Private)}";
         }
 
         string port = net.Port.ToString(CultureInfo.InvariantCulture);
@@ -273,14 +292,14 @@ public static class CoopDoorText
             null => $"port {port}",
         };
         var lines = new List<string> { $"NETWORK OPEN  {where}  {joined}" };
-        lines.AddRange(HostFallbackLines(net));
+        lines.AddRange(HostFallbackLines(net, way));
         return string.Join("\n", lines);
     }
 
     /// <summary>What a host without a join code shows in its place. That is the address guests type
     /// (<see cref="HostAddressLine"/>), then why there is no code (<see cref="InternetLine"/>), each
     /// left out when empty. Empty with a code and while not hosting.</summary>
-    public static IReadOnlyList<string> HostFallbackLines(NetPlayFeature net)
+    public static IReadOnlyList<string> HostFallbackLines(NetPlayFeature net, CopyWay way = CopyWay.Keys)
     {
         ArgumentNullException.ThrowIfNull(net);
         if (!net.IsHost || net.JoinCode != null)
@@ -288,7 +307,7 @@ public static class CoopDoorText
             return Array.Empty<string>();
         }
 
-        var lines = new List<string> { HostAddressLine(net), InternetLine(net) };
+        var lines = new List<string> { HostAddressLine(net, way), InternetLine(net) };
         lines.RemoveAll(line => line.Length == 0);
         return lines;
     }
@@ -296,16 +315,30 @@ public static class CoopDoorText
     /// <summary>A Dogfight host's lines pinned over its lobby chat under <see cref="NoteName"/>,
     /// by the co-op band's rule: <see cref="HostCodeLine"/> alone with a join code, else
     /// <see cref="HostFallbackLines"/>. Empty while not hosting.</summary>
-    public static IReadOnlyList<string> HostLobbyLines(NetPlayFeature net)
+    public static IReadOnlyList<string> HostLobbyLines(NetPlayFeature net, CopyWay way = CopyWay.Keys)
     {
         ArgumentNullException.ThrowIfNull(net);
-        return net.JoinCode != null ? new[] { HostCodeLine(net) } : HostFallbackLines(net);
+        return net.JoinCode != null ? new[] { HostCodeLine(net, way) } : HostFallbackLines(net, way);
+    }
+
+    /// <summary>What a host's COPY control copies, the text <see cref="NetPlayFeature.CopyForGuests"/>
+    /// puts on the clipboard: the join code, else the address <see cref="HostAddressLine"/> names.
+    /// Empty where no line of the host's carries a copy mark, and while not hosting.</summary>
+    public static string CopyTarget(NetPlayFeature net)
+    {
+        ArgumentNullException.ThrowIfNull(net);
+        if (!net.IsHost)
+        {
+            return "";
+        }
+
+        return net.JoinCode ?? (net.NamesHostAddress ? net.GuestAddress : "");
     }
 
     /// <summary>A Dogfight host's standing line about internet guests: its code, whether it is
-    /// listed and the copy key, or why there is no code. Empty while the door is not hosting or no
-    /// master server is set.</summary>
-    public static string HostCodeLine(NetPlayFeature net)
+    /// listed and the copy key <paramref name="way"/> offers, or why there is no code. Empty while
+    /// the door is not hosting or no master server is set.</summary>
+    public static string HostCodeLine(NetPlayFeature net, CopyWay way = CopyWay.Keys)
     {
         ArgumentNullException.ThrowIfNull(net);
         if (!net.IsHost)
@@ -318,9 +351,9 @@ public static class CoopDoorText
             return InternetLine(net);
         }
 
-        string copy = net.Copied == code ? "It is copied." : $"{CopyPress} copies it.";
+        string copy = net.Copied == code ? " It is copied." : way == CopyWay.Keys ? $" {CopyPress} copies it." : "";
         string listed = net.Private ? "private, not on the games list" : "public, on the games list";
-        return $"Internet code {code}, {listed}. {copy}";
+        return $"Internet code {code}, {listed}.{copy}";
     }
 
     /// <summary>Why a host has no join code yet: still asking, or the fault, cut to one band line.
@@ -351,9 +384,9 @@ public static class CoopDoorText
     public static string ListingWord(bool isPrivate) => isPrivate ? PrivateWord : PublicWord;
 
     /// <summary>A host band's second line: the IPv6 address a guest outside this network types,
-    /// and the copy key. Without one it says so and names the LAN address. Empty while the door is
-    /// not hosting or names no address.</summary>
-    public static string HostAddressLine(NetPlayFeature net)
+    /// and the copy key <paramref name="way"/> offers. Without one it says so and names the LAN
+    /// address. Empty while the door is not hosting or names no address.</summary>
+    public static string HostAddressLine(NetPlayFeature net, CopyWay way = CopyWay.Keys)
     {
         ArgumentNullException.ThrowIfNull(net);
         if (!net.IsHost || !net.NamesHostAddress)
@@ -361,7 +394,7 @@ public static class CoopDoorText
             return "";
         }
 
-        string copy = net.GuestAddress.Length == 0 ? "" : CopyMark(net, net.GuestAddress);
+        string copy = net.GuestAddress.Length == 0 ? "" : CopyMark(net, net.GuestAddress, way);
         if (net.HostIpv6 is { } v6)
         {
             return $"IPv6  {net.Dial(v6)}{copy}";
@@ -500,7 +533,10 @@ public static class CoopDoorText
     /// <summary>The co-op host's question before its cabin's BOOT removes a guest.</summary>
     public static string BootQuestion(string name) => $"Boot {(name.Length > 0 ? name : "this guest")} from the game?";
 
-    private static string CopyMark(NetPlayFeature net, string shown) => net.Copied == shown ? "  copied" : $"  {CopyPress}";
+    // A pad's and a pointer's way is the COPY control the screen draws beside the line, so they
+    // name no key.
+    private static string CopyMark(NetPlayFeature net, string shown, CopyWay way) =>
+        net.Copied == shown ? "  copied" : way == CopyWay.Keys ? $"  {CopyPress}" : "";
 
     private static string Listing(bool isPrivate) =>
         isPrivate ? "PRIVATE  internet guests need the code" : "PUBLIC  on the games list";

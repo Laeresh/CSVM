@@ -40,6 +40,9 @@ public interface IOriginalScreenHost
     /// <summary>The pointer's last authored position, or null when the seat has none.</summary>
     (float X, float Y)? Pointer { get; }
 
+    /// <summary>The device a host's copy hint names, the one the seat last moved.</summary>
+    CopyWay CopyWay { get; }
+
     /// <summary>The campaign's own build store, where a purchase over the cabin's wallet writes.</summary>
     CustomPlaneStore? CampaignPlanes { get; }
 

@@ -29,6 +29,10 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     /// <summary>The co-op host's BOOT plaque beside the door, live while a guest is seated.</summary>
     public const string CoopBootKey = "NET_BOOT";
 
+    /// <summary>The co-op host's COPY control on the band line naming its code or address. The row
+    /// spans the line, so a click or a tap on the code copies it as the control does.</summary>
+    public const string CoopCopyKey = "NET_COPY";
+
     // The roster's own list colours, CAMPAIGN.SCRIPT's sub-script VB. The selection bar behind the
     // picked row is 0xff800000, the frame around the row under the pointer 0xffff0000.
     private const byte RosterBarRed = 0x80;
@@ -44,6 +48,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     private const float CoopBandSize = 13f;
     private const float CoopBandWidth = 520f;
     private const float CoopBandGround = 0.6f;
+    private const float CoopCopyWidth = 44f;
 
     private readonly CampaignFeature? _campaign;
     private readonly PlayerSetupFeature _setup;
@@ -450,6 +455,14 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             {
                 var door = _net()!;
                 bool open = door.IsCoopHost;
+                if (open && CoopDoorText.CopyTarget(door).Length > 0)
+                {
+                    // Over the band's first line with a code, else its second, the address line.
+                    float y = CoopBandY - 2f + (door.JoinCode != null ? 0f : CoopBandSize + 4f);
+                    rows.Add(new OriginalRow(CoopCopyKey, CoopDoorText.CopyButton, OriginalRowKind.TextButton,
+                        CoopDoorX, y, CoopBandWidth - 8f, CoopBandSize + 4f, true, 0, null));
+                }
+
                 var row = _host.PlaqueRow(
                     CoopDoorKey, open ? CoopDoorText.CloseNetworkButton : CoopDoorText.HostCoopButton, 0,
                     open || door.Stage is NetDoorStage.Shut or NetDoorStage.Failed, 0);
@@ -542,6 +555,12 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         if (row.Key == CoopBootKey)
         {
             AskBoot(0);
+            return null;
+        }
+
+        if (row.Key == CoopCopyKey)
+        {
+            _net()?.CopyForGuests();
             return null;
         }
 
@@ -1631,16 +1650,36 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             return;
         }
 
+        ComposeBand(CoopDoorText.HostBand(_net()!, _host.CopyWay), layers);
         for (int i = 0; i < rows.Count; i++)
         {
+            bool pressed = !_host.DialogOpen && _host.PressedRow == i;
             if (rows[i].Key is CoopDoorKey or CoopBootKey)
             {
-                bool pressed = !_host.DialogOpen && _host.PressedRow == i;
                 _host.ComposeGenericRow(rows[i], i == focus && !_host.DialogOpen, pressed, i, layers);
             }
+            else if (rows[i].Key == CoopCopyKey)
+            {
+                ComposeCopy(rows[i], i == focus && !_host.DialogOpen, pressed, layers);
+            }
+        }
+    }
+
+    // The COPY box at the right end of the band line its row spans. The focus outlines the box,
+    // which is what a pad presses.
+    private void ComposeCopy(OriginalRow row, bool focused, bool pressed, BoardLayers layers)
+    {
+        var box = row with { X = row.X + row.Width - CoopCopyWidth, Width = CoopCopyWidth };
+        byte ground = pressed ? (byte)90 : (byte)40;
+        layers.Fills.Add(new BoardFill(box.X, box.Y, box.Width, box.Height, ground, ground, ground));
+        layers.Fills.Add(new BoardFill(box.X, box.Y, box.Width, box.Height, 226, 224, 206, Border: true));
+        if (focused)
+        {
+            layers.Fills.Add(_host.FocusMark(box));
         }
 
-        ComposeBand(CoopDoorText.HostBand(_net()!), layers);
+        layers.Lines.Add(new BoardLine(CoopDoorText.CopyButton, box.X, box.Y + 2f, box.Width, CoopBandSize,
+            BoardInk.Row, -1, Justify: BoardJustify.Center, Colour: new BoardTint(226, 224, 206)));
     }
 
     private void ActivateCabin(OriginalRow row, int pageRow)
