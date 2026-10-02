@@ -222,7 +222,7 @@ malformed answer parses to nothing. Read `IgdAddressTests.cs`.
 The router mapping's rules, engine-free behind `IUpnpGateway`. A gateway that answered, usable or
 not, is asked its external address first; a private, shared or reserved one returns
 `NoPublicAddress` with no delete and no add, since no mapping behind a carrier's NAT is reachable.
-A mapping asks a finite lease of `LeaseSeconds` (TUNE, `BL-1043`), and one that draws error 725
+A mapping asks a finite lease of `LeaseSeconds` (TUNE), and one that draws error 725
 gets a permanent one. A fresh add first deletes the stale mapping on the port and on the port the
 last run remembered, by exact port only; a renewal only adds again. `NextRenewal` says when
 `RouterAccess.cs` asks next: half the lease after a grant, an eighth after a failed renewal, never for a permanent
