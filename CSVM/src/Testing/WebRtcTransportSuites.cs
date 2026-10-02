@@ -109,6 +109,63 @@ internal static class WebRtcTransportSuites
             $"a code nobody listed fails the join with the master's reason ('{lost.Fault}')");
     }
 
+    [Suite("webrtc-left-before-link",
+        "a host told a guest left before its own end reports the link keeps negotiating: the guest "
+        + "still links and both ends are told, and a guest that never links after leaving is dropped "
+        + "once the grace runs out")]
+    internal static void ALeftBeforeTheLinkDoesNotCutIt(TestContext ctx)
+    {
+        if (!WebRtcTransport.Available)
+        {
+            throw new SuiteSkippedException(
+                $"the webrtc-native extension is not loaded ({WebRtcTransport.ExtensionClass} is not a class); run InstallWebRtc.ps1");
+        }
+
+        var master = new LoopbackMaster();
+        WebRtcTransport? host = null;
+        WebRtcTransport? guest = null;
+        WebRtcTransport? silent = null;
+        try
+        {
+            host = WebRtcTransport.Host(master.Open, 3);
+            host.List(new MasterGame { Name = "Suite", Kind = MasterWire.CoopKind, Players = 1, Cap = 4, Status = MasterWire.Waiting });
+            var atHost = new Recorder();
+            host.Bind(atHost);
+            Pump(host, null, () => host.JoinCode != null);
+            if (host.JoinCode == null)
+            {
+                ctx.Check(false, $"the host is given a code once it lists ({host.ListingFault})");
+                return;
+            }
+
+            guest = WebRtcTransport.Join(master.Open(), host.JoinCode, NetBuildVersion.Unknown);
+            var atGuest = new Recorder();
+            guest.Bind(atGuest);
+            master.TellHostLeft(2);
+            Pump(host, guest, () => atHost.Connected.Count > 0 && atGuest.Connected.Count > 0);
+            ctx.Check(atHost.Connected.SequenceEqual(new[] { 2 }) && atGuest.Connected.SequenceEqual(new[] { 1 }),
+                $"a guest the host heard leave before the link still links ({string.Join(",", atHost.Connected)}; guest '{guest.Fault}')");
+            ctx.Check(guest.LinkState == EnetLinkState.Up, $"the guest's link reads up ({guest.LinkState}, '{guest.Fault}')");
+
+            silent = WebRtcTransport.Join(master.Open(), host.JoinCode, NetBuildVersion.Unknown);
+            host.Step(0.0);
+            ctx.Check(host.Negotiating == 1, $"the host negotiates with the next guest ({host.Negotiating})");
+            master.TellHostLeft(3);
+            host.Step(0.0);
+            host.Step(WebRtcTransport.LeftGraceSeconds - 1.0);
+            ctx.Check(host.Negotiating == 1, $"inside the grace the host still holds it ({host.Negotiating})");
+            host.Step(2.0);
+            ctx.Check(host.Negotiating == 0, $"past the grace a guest that never linked is dropped ({host.Negotiating})");
+            ctx.Check(host.Peers.SequenceEqual(new[] { 2 }), $"the linked guest is untouched ({string.Join(",", host.Peers)})");
+        }
+        finally
+        {
+            silent?.Dispose();
+            guest?.Dispose();
+            host?.Dispose();
+        }
+    }
+
     // Steps both ends on the wall clock until the condition holds or the wait runs out, and
     // answers how long it took.
     private static double Pump(INetTransport a, INetTransport? b, Func<bool> done, double wait = WaitSeconds)

@@ -466,6 +466,7 @@
     "wind-streaks": 0.14,
     "weather-cockpit-whiteout": 0.04,
     "webrtc-transport": 0.4,
+    "webrtc-left-before-link": 0.08,
     "wing-flare-pose": 1.0,
     "wingman-engage": 0.491,
     "wingman-lost-leader": 0.449,
