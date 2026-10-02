@@ -77,17 +77,23 @@ $Utf8 = New-Object System.Text.UTF8Encoding($false)
 # failed there too, so an entry here is never a Linux finding. They still run; a listed suite
 # that passes is reported so a stale entry is seen. This is the one place the list lives.
 $HeadlessOnly = [ordered]@{
+    "build-stamp-focus"         = "pushes a click at the logs icon's laid-out centre, which a headless window of no size places outside the viewport"
     "cloud-field-fade"          = "reads the cloud cards' normals back out of the built mesh, which the headless dummy renderer does not store"
+    "clutter-activation"        = "reads each stamp's drawn state back from the clutter MultiMesh's instance transforms, which the headless renderer keeps no instances for"
+    "clutter-cells"             = "reads every placement back through the clutter cells' MultiMesh instance transforms, which the headless renderer keeps no instances for"
     "clutter-card-depth"        = "counts rendered pixels in a viewport; headless renders none"
-    "crater-carve"              = "counts the clutter decorations the bowl destroys from the clutter MultiMesh, which the headless renderer keeps no instances for"
     "display-mode"              = "asserts on the window mode of a real window; the headless display server has none"
     "display-monitor"           = "enumerates screens; the headless display server reports none"
     "display-resolution"        = "reads the screen size; the headless display server reports 0x0"
     "display-vsync"             = "applies V-Sync to a real window's swap chain; headless has none"
+    "graphics-live-switch"      = "reads the drawn clutter buffers and every texture's image back after each switch, which the headless renderer keeps neither of"
     "menu-original-tracer"      = "reads the OS pointer's visibility and the monitor list from the display server, which headless does not provide"
     "menu-screenshot-key"       = "captures the viewport texture to a PNG; headless draws nothing, so every file is empty"
     "muzzle-flash-rides-muzzle" = "reads the flash quads' drawn instance transforms back, which the headless renderer does not keep"
+    "puffer-fire-glow"          = "reads each emitter column's MultiMesh instance custom data back, which the headless renderer does not keep"
+    "puffer-smoke-sun"          = "reads each emitter column's MultiMesh instance custom data back, which the headless renderer does not keep"
     "trail-world-anchor"        = "reads the first drawn puff's instance transform back, which the headless renderer does not keep"
+    "wing-flare-pose"           = "counts the flare's rendered pixels in a viewport; headless renders none"
 }
 # Engine error lines a headless process prints and a windowed one does not, on either platform:
 # the same run from the Windows export prints each of these, at the same counts. The harness's
@@ -96,6 +102,7 @@ $HeadlessOnly = [ordered]@{
 $HeadlessEngineErrors = [ordered]@{
     'texture_2d_get \(\./servers/rendering/dummy/'  = "the dummy renderer holds no texture data to read back"
     '(_shaped_text_add_string|_ensure_cache_for_size|_font_get_(ascent|descent)) \(modules/text_server_adv/' ="a headless font has no rasterised size cache, so shaping at a measured size of 0 fails"
+    'The new image dimensions must match the texture size\. at: update \(scene/resources/image_texture\.cpp' = "a graphics switch re-uploads an alpha-depth texture in place (TextureUpload.Replace), and a headless process reports a size mismatch the windowed battery does not"
 }
 
 function Write-Banner([string]$Text) {
@@ -146,7 +153,8 @@ if (-not $NoSuites -and -not (Test-Path $Weights)) {
 
 # packaging/MANIFEST.md's Linux table is the statement of what the tarball holds, so the
 # expected listing is read from it rather than restated here. Each backticked name in a row's
-# first cell is one entry; a name ending in / is a folder that must hold at least one file.
+# first cell is one entry; a name ending in / is a folder that must hold at least one file, and a
+# name with a * is a pattern that must match at least one file.
 $manifestText = [IO.File]::ReadAllText((Join-Path $RepoRoot "packaging\MANIFEST.md"), $Utf8)
 $linuxPart = $manifestText.Substring($manifestText.IndexOf("## Linux tarball"))
 $Expected = @()
@@ -316,13 +324,18 @@ if ((Read-Exit "listing") -ne 0) {
             if (-not ($files | Where-Object { $_.Name.StartsWith($prefix) })) {
                 $problems += "MANIFEST.md names the folder $name, and the archive holds no file under it"
             }
+        } elseif ($name.Contains('*')) {
+            if (-not ($files | Where-Object { $_.Name -like $name })) {
+                $problems += "MANIFEST.md names $name, and no file in the archive matches it"
+            }
         } elseif (-not ($files | Where-Object { $_.Name -eq $name })) {
             $problems += "MANIFEST.md names $name, and the archive does not carry it"
         }
     }
     foreach ($entry in $files) {
         $covered = $Expected | Where-Object {
-            ($_ -eq $entry.Name) -or ($_.EndsWith('/') -and $entry.Name.StartsWith($_))
+            ($_ -eq $entry.Name) -or ($_.EndsWith('/') -and $entry.Name.StartsWith($_)) -or
+                ($_.Contains('*') -and $entry.Name -like $_)
         }
         if (-not $covered) {
             $problems += "the archive carries $($entry.Name), which MANIFEST.md's Linux table does not name"
