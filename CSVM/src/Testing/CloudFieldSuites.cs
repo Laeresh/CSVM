@@ -22,14 +22,6 @@ internal static class CloudFieldSuites
     // are parallel, and a parallel face is still tested on its own distance.
     private const float SameNormal = 0.999f;
 
-    // ⚠ Metres, and an engine limit rather than a preference: a FogVolume box wider than this
-    // contributes nothing to the froxel pass on this build, silently, which is why the banks tile
-    // their authored bounds (Effects/FogVolumeBanks.cs). Pinned so a widened tile cannot ship mute.
-    private const float WidestRenderedBox = 2048f;
-
-    // How far a tiled bank's union may miss the authored bounds it was laid over, in metres.
-    private const float BoundsTolerance = 0.01f;
-
     // How far apart the two headings' away-side factors must land before the card counts as
     // directionally shaded. The authored bottom normals sit about 18 degrees off the card's own
     // +Z. A half-turn swings them right across the light, and the real gap is far wider.
@@ -76,9 +68,8 @@ internal static class CloudFieldSuites
     };
 
     // Per chapter: how many fvol volumes the gamez ships and whether its fogvol.zrd arms the
-    // in-volume whiteout. The arming decides whether the chapter builds an enhanced bank.
-    // The counts are docs/formats/fogvol.md's own census.
-    private static readonly (string Chapter, int Volumes, bool Armed)[] BankChapters =
+    // in-volume whiteout. The counts are docs/formats/fogvol.md's own census.
+    private static readonly (string Chapter, int Volumes, bool Armed)[] CensusChapters =
     {
         ("C1", 9, false),
         ("C5", 17, true),
@@ -207,16 +198,13 @@ internal static class CloudFieldSuites
         ctx.Check(!Utils.GraphicsMode.Enhanced, $"the graphics setting is back on the faithful presentation");
     }
 
-    [Suite("fogvol-banks",
-        "the enhanced volumetric bank under the cloud cards: one bank per authored fvol volume "
-        + "and none at all on the faithful presentation, where the Environment's froxel pass is "
-        + "left off; each bank tiles its own volume's bounds exactly, in boxes no wider than the "
-        + "engine still renders; the scattering colour follows the applied zone; and a chapter "
-        + "whose fogvol.zrd arms the in-volume whiteout builds no bank, since the lit city takes "
-        + "no froxel fog and a bank there would black out only the backdrop behind it")]
-    internal static void CloudBanks(TestContext ctx)
+    [Suite("fogvol-census",
+        "each deck chapter's gamez ships the fvol volume count docs/formats/fogvol.md records, "
+        + "and its fogvol.zrd arms the in-volume whiteout exactly where the census says: C5's "
+        + "street prisms and nowhere in C1")]
+    internal static void FogVolumeCensus(TestContext ctx)
     {
-        foreach (var (chapter, expectVolumes, armed) in BankChapters)
+        foreach (var (chapter, expectVolumes, armed) in CensusChapters)
         {
             string zrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter);
             ctx.RequireData(zrdr, $"{chapter} fogvol.zrd");
@@ -227,27 +215,8 @@ internal static class CloudFieldSuites
                 var whiteout = FogVolumeWhiteout.From(spec, volumes);
                 ctx.Same(expectVolumes, volumes.Count, $"{chapter} authored fvol volumes");
                 ctx.Check(whiteout.Armed == armed, $"{chapter} fogvol.zrd arms the in-volume whiteout: {whiteout.Armed}");
-                using var env = new Godot.Environment();
-                // The faithful presentation first, and with the same Environment: a session that
-                // builds no bank must actively clear the flag, since one Environment outlives it.
-                Utils.GraphicsMode.Resolve(Utils.GraphicsMode.Default);
-                ctx.Check(Effects.FogVolumeBanks.Create(volumes, spec) == null,
-                    $"{chapter} builds no volumetric bank on the faithful presentation");
-                Effects.FogVolumeBanks.ApplyFroxelFog(env, enabled: false);
-                ctx.Check(!env.VolumetricFogEnabled, $"{chapter} leaves the froxel pass off where there are no banks");
-
-                Utils.GraphicsMode.Resolve(Utils.GraphicsMode.EnhancedWord);
-                try
-                {
-                    CheckBanks(ctx, chapter, volumes, spec, whiteout, env);
-                }
-                finally
-                {
-                    Utils.GraphicsMode.Resolve(Utils.GraphicsMode.Default);
-                }
             });
         }
-        ctx.Check(!Utils.GraphicsMode.Enhanced, $"the graphics setting is back on the faithful presentation");
     }
 
     private static FogVolumeClutter? BuildField(GameZ gamez, TextureArchive textures, FogVolumeSpec? spec,
@@ -429,86 +398,6 @@ internal static class CloudFieldSuites
             }
         }
         return true;
-    }
-
-    // One chapter's enhanced banks: the count, the tiling, the froxel arm and the zone colour.
-    // Where the chapter arms the whiteout, no bank at all.
-    private static void CheckBanks(TestContext ctx, string chapter, IReadOnlyList<FogVolumeBox> volumes,
-        FogVolumeSpec? spec, FogVolumeWhiteout whiteout, Godot.Environment env)
-    {
-        var banks = Effects.FogVolumeBanks.Create(volumes, spec);
-        if (whiteout.Armed)
-        {
-            ctx.Check(banks == null, $"{chapter} builds no volumetric bank where the whiteout is armed");
-            banks?.Free();
-            return;
-        }
-        ctx.Check(banks != null, $"{chapter} builds volumetric banks under Enhanced Graphics");
-        if (banks == null)
-        {
-            return;
-        }
-        try
-        {
-            ctx.Same(volumes.Count, banks.BankCount, $"{chapter} one bank per authored volume");
-            ctx.Check(banks.TileCount >= banks.BankCount, $"{chapter} bank boxes {banks.TileCount} for {banks.BankCount} bank(s)");
-            Effects.FogVolumeBanks.ApplyFroxelFog(env, enabled: true);
-            ctx.Check(env.VolumetricFogEnabled && env.VolumetricFogDensity == 0f,
-                $"{chapter} arms the froxel pass with no global density, the banks carrying it all");
-            CheckBankBoxes(ctx, chapter, banks, volumes);
-            // The zone colour arrives from the rig's own apply.
-            var zone = new Color(0.25f, 0.5f, 0.75f);
-            banks.ApplyZone(zone);
-            var want = zone.SrgbToLinear();
-            ctx.Check(banks.Albedo.IsEqualApprox(want), $"{chapter} bank scatters in {want} (zone {zone})");
-            ctx.Check(banks.Density > 0f, $"{chapter} bank density {banks.Density:0.####} /m");
-        }
-        finally
-        {
-            banks.Free();
-        }
-    }
-
-    // The tiling: every box is a Box-shaped FogVolume no wider than this engine renders, and one
-    // volume's boxes union back to exactly the authored bounds they stand in, with no gap or
-    // overhang. A bank that missed its own volume would fog air the cards never cover.
-    private static void CheckBankBoxes(TestContext ctx, string chapter, Effects.FogVolumeBanks banks,
-        IReadOnlyList<FogVolumeBox> volumes)
-    {
-        int boxes = 0, tooWide = 0, wrongShape = 0, missed = 0;
-        foreach (var volume in volumes)
-        {
-            Aabb? union = null;
-            foreach (var child in banks.GetChildren())
-            {
-                if (child is not FogVolume fog || !fog.Name.ToString().StartsWith($"bank_{volume.Name}_", System.StringComparison.Ordinal))
-                {
-                    continue;
-                }
-                boxes++;
-                if (fog.Shape != RenderingServer.FogVolumeShape.Box)
-                {
-                    wrongShape++;
-                }
-                if (fog.Size.X > WidestRenderedBox + BoundsTolerance || fog.Size.Z > WidestRenderedBox + BoundsTolerance)
-                {
-                    tooWide++;
-                }
-                var box = new Aabb(fog.Position - (fog.Size * 0.5f), fog.Size);
-                union = union is { } grown ? grown.Merge(box) : box;
-            }
-            if (union is not { } laid
-                || !laid.Position.IsEqualApprox(volume.Box.Position)
-                || !laid.Size.IsEqualApprox(volume.Box.Size))
-            {
-                missed++;
-            }
-        }
-        ctx.Same(banks.TileCount, boxes, $"{chapter} bank boxes reached through their volumes' own names");
-        ctx.Same(0, wrongShape, $"{chapter} bank boxes that are not box-shaped");
-        ctx.Same(0, tooWide, $"{chapter} bank boxes wider than the {WidestRenderedBox:0} m this engine renders");
-        ctx.Same(0, missed, $"{chapter} volumes whose bank tiles do not union back to their own bounds");
-        ctx.Note($"{chapter} volumetric banks: {banks.BankCount} volume(s) over {boxes} box(es), density {banks.Density:0.####} /m");
     }
 
     // The per-instance half of the fade law. Each sprite's custom data must decode to a unit

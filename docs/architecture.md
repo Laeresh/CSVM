@@ -327,7 +327,6 @@ rows).
 - `src/Effects/PufferEmitterFactory.cs`, the animation runtime's `IEmitterFactory` seam implemented over `Puffer`, one per built world.
 - `src/Effects/EmitterRenderer.cs`, the `IEmitterRenderer` seam under `Puffer` and the `MultiMesh` billboard-shader renderer behind it.
 - `src/Effects/FogVolumeClutter.cs`, the authored ambient cloud field: `fogvol.zrd` clutter scattered through its `fvol*` volumes, one MultiMesh per kind.
-- `src/Effects/FogVolumeBanks.cs`, Enhanced Graphics only: the volumetric bank inside each authored `fvol*` volume, under the cards.
 - `src/Effects/Precipitation.cs`, weather.json rain/snow: one camera-following MultiMesh of flakes or streaks, self-animating on the GPU.
 - `src/Effects/ScorchField.cs`, the enhanced presentation's scorch marks: a capped pool of decals with one procedural burn texture, laid over the crater carve.
 - `src/Effects/WindStreaks.cs`, the enhanced presentation's camera-local wind streaks, keyed to airspeed and load factor, over the authored speed cue.

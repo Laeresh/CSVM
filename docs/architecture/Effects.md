@@ -52,16 +52,6 @@ and the one draw both `far_fade_range` pairs are interpolated with into a custom
 `csky_clutter_fade_alpha_angled` turns into the view-angle fade; that draw takes its own
 `Rng.CloudBands` stream. The shipped field is that decoded lattice plus a remake-only X/Z offset per card (`ShippedJitter`, 30 m, overridden by `--cloud-jitter=`), drawn off `Rng.CloudJitter` and reaching no other population. The quad is posed by `csky_facade_spherical` (`shaders/csky_facade.gdshaderinc`), a world-up look-at standing in for the original's SphericalY tracker, which reads the eye's position and not its basis, so neither the camera's roll nor a sideways move turns a card ([../org/cloudCards.md](../org/cloudCards.md)). A `lighting: true` card (C1C, C2B, C5) carries its three authored normals and takes the original's per-vertex `AMBIENT + DIFFUSE x max(N.L, 0)` through that same pose off `WeatherRig`'s uncollapsed globals, never `csky_world_light` ([../org/vertexLighting.md](../org/vertexLighting.md)). Under `GraphicsMode.Enhanced` alone, `ShaderCode` layers a grade by the global `csky_sun_dir` over either variant, leaving the faithful and lit text byte-identical, and draws both kinds from the deck pool of rendered puffs (`Mech3/CloudPuffs.cs`), tinted by the authored mask's colour, each card picking its puff, tilt, mirror and size off a hash of its own position. `FollowGraphicsMode` moves each kind onto the card shader for the standing mode, one compiled per text and kept, and writes its pool and cull margin again; `WarmOtherMode` compiles the other mode's ahead. Gating: `GameSession`/`WorldBuilder`/`WeatherRig`. Schema: [../formats/fogvol.md](../formats/fogvol.md).
 
-## src/Effects/FogVolumeBanks.cs
-Enhanced Graphics only: the soft volumetric bank standing inside each authored `fvol*` volume, under
-the cards `FogVolumeClutter` lays over the same geometry. `Create` builds one bank per volume, each
-laying its own bounds down as `FogVolume` boxes over one shared `FogMaterial`, and `ApplyFroxelFog`
-arms the Environment's froxel pass for a world that built some and clears it for one that did not,
-with zero global density so the banks carry it all and the authored `csky_fog_*` ramp is not hazed
-twice. `WeatherRig`'s zone apply calls `ApplyZone`, so the scattering colour is the zone's own, or
-the chapter's authored whiteout colour where `fogvol.zrd` arms one, which also sets the density.
-Every constant is TUNE, including the tile width, which is an engine limit. Volumes: [../formats/fogvol.md](../formats/fogvol.md).
-
 ## src/Effects/Precipitation.cs
 Rain and snow from `weather.json`'s precipitation block (`WeatherState.PrecipData`): ONE MultiMesh
 whose shader derives each quad's position from a per-instance seed, `csky_time` and
