@@ -290,11 +290,17 @@ internal sealed class SkyStage
     }
 
     // The Enhanced volumetric bank under the cloud cards, at the build and on a live switch.
-    // --no-fog covers it as it covers the zone fog. A world with none clears the froxel
-    // flag, since the pass costs its buffer wherever it is on.
+    // Both --no-fog and --no-fog-banks drop it, the first with the zone fog. A world with none
+    // clears the froxel flag, since the pass costs its buffer wherever it is on.
     private FogVolumeBanks? BuildCloudBanks()
     {
-        _cloudBanks = _spec.NoFog || _fogVolumes == null ? null : FogVolumeBanks.Create(_fogVolumes, _fogVolumeSpec);
+        bool doorClosed = (_spec.SkippedPasses & EnhancedPasses.FogBanks) != 0;
+        _cloudBanks = _spec.NoFog || doorClosed || _fogVolumes == null
+            ? null : FogVolumeBanks.Create(_fogVolumes, _fogVolumeSpec);
+        // Named, because a missing "fogvol banks:" line also means faithful or no volume. A bisect
+        // read off a log needs to know the door was what closed it.
+        if (doorClosed && GraphicsMode.Enhanced && _fogVolumes is { Count: > 0 })
+            Log.Info("world", $"fogvol banks: none, --no-fog-banks closed the door; the cards stay");
         if (_env != null)
             FogVolumeBanks.ApplyFroxelFog(_env, _cloudBanks != null);
         if (_cloudBanks != null)

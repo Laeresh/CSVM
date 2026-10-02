@@ -478,10 +478,19 @@ public class SessionSpecParserTests
         Assert.Equal(EnhancedPasses.Glow, SessionSpec.Parse(new[] { "--no-glow" }).SkippedPasses);
         Assert.Equal(
             EnhancedPasses.SoftShadows, SessionSpec.Parse(new[] { "--no-soft-shadows" }).SkippedPasses);
+        Assert.Equal(EnhancedPasses.FogBanks, SessionSpec.Parse(new[] { "--no-fog-banks" }).SkippedPasses);
 
-        var all = SessionSpec.Parse(new[] { "--no-ssao", "--no-ssr", "--no-glow", "--no-soft-shadows" });
+        // --no-fog is its own flag and closes no door, so the two must not be confused.
+        var noFog = SessionSpec.Parse(new[] { "--no-fog" });
+        Assert.True(noFog.NoFog);
+        Assert.Equal(EnhancedPasses.None, noFog.SkippedPasses);
+        Assert.False(SessionSpec.Parse(new[] { "--no-fog-banks" }).NoFog);
+
+        var all = SessionSpec.Parse(
+            new[] { "--no-ssao", "--no-ssr", "--no-glow", "--no-soft-shadows", "--no-fog-banks" });
         Assert.Equal(
-            EnhancedPasses.Ssao | EnhancedPasses.Ssr | EnhancedPasses.Glow | EnhancedPasses.SoftShadows,
+            EnhancedPasses.Ssao | EnhancedPasses.Ssr | EnhancedPasses.Glow | EnhancedPasses.SoftShadows
+                | EnhancedPasses.FogBanks,
             all.SkippedPasses);
     }
 }
