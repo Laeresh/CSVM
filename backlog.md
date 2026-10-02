@@ -530,12 +530,3 @@ usual.
   clear removes the entry. Shorten the lease if routers keep stale entries visibly long. *⚠ Traps:*
   never widen the stale clear past the exact remembered port; a range delete would take another
   program's mapping on the same router.
-
-- `BL-1044` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **A co-op guest
-  flies only its first local player; a second pad at the guest's machine gets no plane.**
-  *Evidence:* `CampaignFeature.BuildExit` gives a guest `Math.Min(1, pads)` seats, and
-  `NetSeats.CoopField` seats one plane per peer. *Fix shape:* a pick per local seat (airframe, fit,
-  name, Ready); `NetSeats.CoopField` seating several seats per peer; `NetSession.LocalSeat`, the
-  guest's `LocalOrdinal` and its menu seats handling several; `Admit` counting a guest's local
-  seats against the four-human co-op cap. *⚠ Traps:* the Ready gate must wait on every local seat,
-  not one per machine.

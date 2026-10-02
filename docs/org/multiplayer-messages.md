@@ -386,7 +386,9 @@ above. The host-owned world's four (AI state, AI fire, a guest's hit claim on an
 event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, the start barrier's word at `0x5B`, a match's death notice at `0x5C`, the lobby's plane build and plane rules at `0x5D` and `0x5E`, the lobby's co-op hangar plane at `0x5F`, the lobby's join password at `0x60`, and the lobby's team action and team list at `0x61` and `0x62`, Capture the Flag's ask and table at `0x63` and `0x64`, Zeppelin
 vs Zeppelin's placed return at `0x65`, and the in-flight chat at `0x66`, the original's `0x15` with
 the typist's seat added ("In-flight chat" below). The handshake carries the master seed, the host's clock and the seat the joining peer was
-given; the original needs none of the three, because it draws from no shared stream and hands
+given, in 24 bytes: the seed as two 32-bit words at 4, the clock's double as two at 12, the seat at
+20 and, at 21, how many seats after it the same machine flies (0 for one pilot, which is the byte a
+one-seat join always carried), then two reserved bytes. The original needs none of the three, because it draws from no shared stream and hands
 out no seat. The ask carries a seat and nothing else: the original's client takes its own
 respawn, while here the host owns every placement and answers the ask with a spawn event.
 
@@ -992,8 +994,8 @@ session.
 
 | Id | Message | Class | Carries |
 |---|---|---|---|
-| `0x50` | Co-op flow | reliable, host to each guest | screen at 4 (unknown 0, cabin 1, briefing 2, flight check 3, in mission 4, debrief 5), mission sequence at 5, round at 6, the guest's player number at 7, Ready mask by player number at 8, humans at 9, host's campaign progress at 10, flags at 11 (bit 0 won), hangar airframe mask at 12, the guest's local seats at 14, one reserved byte, objectives mask at 16, cash at 20 (24 bytes) |
-| `0x51` | Co-op pick | reliable, guest to host | round at 4, flags at 5 (bit 0 Ready, bit 1 left the flight, bits 2 to 4 the pilot voice's place in the Voice list plus one, 0 for none), airframe at 6, the picked plane at 7 (0 none, `0xFF` the stock Devastator, else its place in the host's hangar plus one), the fit at 8, the player name at 20 (16 bytes, zero-padded; 36 bytes) |
+| `0x50` | Co-op flow | reliable, host to each guest | screen at 4 (unknown 0, cabin 1, briefing 2, flight check 3, in mission 4, debrief 5), mission sequence at 5, round at 6, the guest's player number at 7, Ready mask by player number at 8, humans at 9, host's campaign progress at 10, flags at 11 (bit 0 won), hangar airframe mask at 12, the host's own seats at 14, how many seats after its player number the guest was given at 15 (0 for one), objectives mask at 16, cash at 20 (24 bytes) |
+| `0x51` | Co-op pick | reliable, guest to host | round at 4, flags at 5 (bit 0 Ready, bit 1 left the flight, bits 2 to 4 the pilot voice's place in the Voice list plus one, 0 for none, bits 5 and 6 the seat's place among its machine's own, bit 7 another seat's pick follows), airframe at 6, the picked plane at 7 (0 none, `0xFF` the stock Devastator, else its place in the host's hangar plus one), the fit at 8, the player name at 20 (16 bytes, zero-padded; 36 bytes) |
 | `0x52` | Co-op seat fit | reliable, host to each guest | seat at 4, three reserved bytes, the fit at 8 (20 bytes) |
 | `0x59` | Co-op wingman | reliable, host to each guest | wingman airframe at 4 (`0xFF` none), three reserved bytes, the fit at 8 (20 bytes) |
 | `0x5A` | Co-op film | reliable, host to each guest | ordinal at 4, playing at 5, film at 6 (chapter 1, closing 2), chapter at 7 (8 bytes) |
@@ -1048,9 +1050,20 @@ The host sends a flow to each guest whenever its boards change, since the player
 per guest. The round advances when the mission changes, and on any screen change other than
 between the briefing and the flight check, and it clears every Ready. A pick counts only under the
 host's current round, so a Ready given before the host backed out never launches the next mission.
-The host's launch waits until every guest's latest pick is Ready. While the host flies, the flow
+The host's launch waits until every guest seat's latest pick is Ready. While the host flies, the flow
 says in mission and the advert's status is in mission, so a guest joining then waits in the cabin.
 The debrief flow carries the host's result, which every guest's scrapbook shows.
+
+A guest with several players at its machine sends one pick per player, each with its place among
+the machine's own and the mark that another follows, so a one-seat guest's pick is the byte it
+always was. The host seats a machine's players side by side from its first seat, and each counts
+against the four humans: a guest is admitted on one seat while one is free, and its further players
+are given seats in arrival order only from what every seated guest's first seat leaves, so a pad
+plugged in late never unseats a player already flying. The flow's byte 15 tells the guest how many
+it got, and a player left out reads "The game is full" on its band until a seat frees. Ready is per
+player: the guest's check walks its players one at a time, its READY marking the one showing, and
+the host's launch waits on every mark. The handshake then names the guest's whole run, so every
+machine builds each of those seats as that guest's, and the guest flies one pane per seat.
 
 ### Dogfight lobby
 

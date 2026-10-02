@@ -404,14 +404,26 @@ public static class CoopDoorText
         string doing = flow.Screen switch
         {
             NetCoopScreen.Briefing => "The host is on the briefing",
-            NetCoopScreen.FlightCheck => net.CoopReady
+            NetCoopScreen.FlightCheck => net.CoopSeatsReady
                 ? "Ready, waiting for the host to launch"
                 : "Pick your plane and ammo, then press Ready",
             NetCoopScreen.InMission => "The host is in a mission; you fly from the next briefing",
             NetCoopScreen.Debrief => flow.Won ? "Mission won" : "Mission failed",
             _ => "The host is in the cabin",
         };
-        return $"CO-OP  {doing}";
+        string shortLine = net.CoopSeatsShort;
+        return shortLine.Length > 0 ? $"CO-OP  {doing}\n{shortLine}" : $"CO-OP  {doing}";
+    }
+
+    /// <summary>What a co-op guest is told when the host's cap gave its machine
+    /// <paramref name="given"/> seats for its <paramref name="players"/> players.</summary>
+    public static string SeatsShort(int given, int players)
+    {
+        string flies = given == 1 ? "P1 flies" : $"P1 to P{given.ToString(CultureInfo.InvariantCulture)} fly";
+        string waits = players - given == 1
+            ? $"P{players.ToString(CultureInfo.InvariantCulture)} sits out"
+            : $"P{(given + 1).ToString(CultureInfo.InvariantCulture)} to P{players.ToString(CultureInfo.InvariantCulture)} sit out";
+        return $"The game is full: {flies}, {waits}";
     }
 
     /// <summary>What every player is told when a guest's link drops mid-mission.</summary>

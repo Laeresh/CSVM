@@ -2802,8 +2802,9 @@ public sealed partial class LaunchMenu : CanvasLayer
         _screen == Screen.Campaign && _campaign != null
         && (_slots.Count + RemoteGuests() > 1 || NetBand().Length > 0);
 
-    // How many guests at other machines stand on the campaign's field: the open door's peers.
-    private int RemoteGuests() => _net is { IsCoopHost: true } net ? net.Peers : 0;
+    // How many guests at other machines stand on the campaign's field: the open door's peers. A
+    // machine flying several seats counts each.
+    private int RemoteGuests() => _net is { IsCoopHost: true } net ? Math.Max(net.Peers, net.CoopGuests.Count) : 0;
 
     // The campaign host's band, or "" while the door is shut.
     private string NetBand() => _net is { } net ? CoopDoorText.HostBand(net) : "";

@@ -139,8 +139,9 @@ public static class NetSeats
     }
 
     /// <summary>A co-op host's field: one seat per plane in <paramref name="localPlanes"/> flown
-    /// here, then one per guest flying the plane it picked, cut at <see cref="MaxPlayers"/>. A
-    /// guest is called by the player name its pick carried, and the first local seat by
+    /// here, then one per entry of <paramref name="guests"/> flying the plane it picked, cut at
+    /// <see cref="MaxPlayers"/>. A guest flying several seats has one entry per seat, side by side.
+    /// A guest's seat is called by its pick's player name, the first local seat by
     /// <paramref name="hostName"/>. A seat with no name is called by its player number.</summary>
     public static NetSeat[] CoopField(
         int localPeer, IReadOnlyList<string> localPlanes, IReadOnlyList<(int Peer, string Plane, string Name)> guests,
@@ -148,6 +149,7 @@ public static class NetSeats
     {
         ArgumentNullException.ThrowIfNull(localPlanes);
         ArgumentNullException.ThrowIfNull(guests);
+        RequireRuns(guests);
         var seats = new List<NetSeat>(localPlanes.Count + guests.Count);
         for (int i = 0; i < localPlanes.Count + guests.Count && seats.Count < MaxPlayers; i++)
         {
@@ -193,6 +195,26 @@ public static class NetSeats
         }
 
         return ordinal;
+    }
+
+    // ⚠ Do not let a guest's seats part. Its handshake names them as one run from its first seat,
+    // so a seat outside the run would be flown by nobody.
+    private static void RequireRuns(IReadOnlyList<(int Peer, string Plane, string Name)> guests)
+    {
+        var closed = new HashSet<int>();
+        for (int i = 0; i < guests.Count; i++)
+        {
+            int peer = guests[i].Peer;
+            if (closed.Contains(peer))
+            {
+                throw new ArgumentException($"peer {peer}'s seats are not side by side", nameof(guests));
+            }
+
+            if (i + 1 >= guests.Count || guests[i + 1].Peer != peer)
+            {
+                closed.Add(peer);
+            }
+        }
     }
 
     private static uint[] BuildTable()

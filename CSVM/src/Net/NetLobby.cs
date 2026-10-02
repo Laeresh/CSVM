@@ -37,6 +37,7 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     private readonly List<(int Peer, int Channel, byte[] Bytes)> _held = new();
     private readonly List<int> _bound = new();
     private readonly Dictionary<int, CoopPickMessage> _picks = new();
+    private readonly Dictionary<int, CoopPickMessage?[]> _seatPicks = new();
     private readonly Dictionary<int, CoopFit> _seatFits = new();
     private readonly Dictionary<int, NetPlaneBuild> _pickBuilds = new();
     private readonly Dictionary<int, NetPlaneBuild?> _seatBuilds = new();
@@ -114,7 +115,7 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     /// <summary>How many co-op flows have arrived, so a board can tell a repeat from news.</summary>
     public int Flows { get; private set; }
 
-    /// <summary>Each connected guest's latest co-op pick, by peer.</summary>
+    /// <summary>Each connected guest's latest co-op pick for its first seat, by peer.</summary>
     public IReadOnlyDictionary<int, CoopPickMessage> Picks => _picks;
 
     /// <summary>The co-op host's hangar as its latest words name it, in hangar order. Empty until
@@ -236,6 +237,29 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
     /// <summary>The version <paramref name="peer"/> named on connect. False while it has named
     /// none.</summary>
     public bool TryVersionOf(int peer, out NetBuildVersion version) => _heard.TryGetValue(peer, out version);
+
+    /// <summary>How many seats <paramref name="peer"/>'s latest picks ask for: its first, and one
+    /// more for each pick that says another follows. A peer that has picked nothing asks one.</summary>
+    public int SeatsWanted(int peer)
+    {
+        if (!_seatPicks.TryGetValue(peer, out var picks))
+        {
+            return 1;
+        }
+
+        int seats = 1;
+        while (seats <= CoopPickMessage.MaxLocal && picks[seats - 1] is { More: true })
+        {
+            seats++;
+        }
+
+        return seats;
+    }
+
+    /// <summary>The latest pick <paramref name="peer"/> sent for its seat <paramref name="local"/>,
+    /// counted from 0 among its own, or null while none has arrived.</summary>
+    public CoopPickMessage? PickAt(int peer, int local) =>
+        _seatPicks.TryGetValue(peer, out var picks) && local >= 0 && local < picks.Length ? picks[local] : null;
 
     /// <summary>Hands <paramref name="advert"/> to every peer now and to every peer that connects
     /// later. Sent only when it differs from the last one, so a board may call this every frame.
@@ -430,7 +454,7 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         _turnedAway.RemoveAll(away => away.Peer == peer);
         _answered.Remove(peer);
         _held.RemoveAll(held => held.Peer == peer);
-        _picks.Remove(peer);
+        ForgetPicks(peer);
         _pickBuilds.Remove(peer);
         _unpicked.Remove(peer);
         _teamActions.RemoveAll(asked => asked.Peer == peer);
@@ -550,7 +574,7 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
         if (CoopPickMessage.TryRead(payload, out var pick))
         {
             // A guest picks only on a board, so whatever it sent before is a flight's that ended.
-            _picks[peer] = pick;
+            TakePick(peer, pick);
             _held.RemoveAll(held => held.Peer == peer);
             _unpicked.Remove(peer);
             return true;
@@ -720,7 +744,7 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
 
         _turnedAway.Add((peer, why));
         _held.RemoveAll(held => held.Peer == peer);
-        _picks.Remove(peer);
+        ForgetPicks(peer);
         _pickBuilds.Remove(peer);
         Changes++;
         if (_listener != null && _bound.Remove(peer))
@@ -741,12 +765,36 @@ public sealed class NetLobby : INetTransport, INetTransportListener, IDisposable
 
         _clashing.Add(peer);
         _held.RemoveAll(held => held.Peer == peer);
-        _picks.Remove(peer);
+        ForgetPicks(peer);
         _pickBuilds.Remove(peer);
         if (_listener != null && _bound.Remove(peer))
         {
             _listener.OnPeerDisconnected(peer);
         }
+    }
+
+    // A pick is kept by peer and by its seat among that peer's own. The first seat's is also the
+    // peer's pick every one-seat reader takes.
+    private void TakePick(int peer, CoopPickMessage pick)
+    {
+        if (!_seatPicks.TryGetValue(peer, out var picks))
+        {
+            picks = new CoopPickMessage?[CoopPickMessage.MaxLocal + 1];
+            _seatPicks[peer] = picks;
+        }
+
+        int local = Math.Min((int)pick.Local, CoopPickMessage.MaxLocal);
+        picks[local] = pick;
+        if (local == 0)
+        {
+            _picks[peer] = pick;
+        }
+    }
+
+    private void ForgetPicks(int peer)
+    {
+        _picks.Remove(peer);
+        _seatPicks.Remove(peer);
     }
 
     // A guest's own build goes with its pick, by peer. A host's build names a seat of its launch.

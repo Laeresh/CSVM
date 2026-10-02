@@ -34,6 +34,7 @@ public sealed class NetSession : INetTransportListener
     private NetHandshake? _handshake;
     private bool _rosterArrived;
     private int _hostPeer = NoPeer;
+    private int _extraSeats;
 
     private NetSession(INetTransport transport, bool isHost, ulong seed, Func<double>? clock,
         IReadOnlyList<NetSeat>? roster, IReadOnlyList<string>? airframes)
@@ -78,9 +79,25 @@ public sealed class NetSession : INetTransportListener
     /// rule. A guest holds the mirror of what it is told.</summary>
     public bool IsHost { get; }
 
-    /// <summary>The seat this machine flies, or <see cref="NetMessage.NoSeat"/> before a guest has
-    /// been given one. A host reads it off its own roster at construction.</summary>
+    /// <summary>The first seat this machine flies, or <see cref="NetMessage.NoSeat"/> before a guest
+    /// has been given one. A host reads it off its own roster at construction.</summary>
     public int LocalSeat { get; private set; } = NetMessage.NoSeat;
+
+    /// <summary>How many seats this machine flies, counted from <see cref="LocalSeat"/> on a guest:
+    /// one per local player. 0 before a guest has been given a seat.</summary>
+    public int LocalSeatCount
+    {
+        get
+        {
+            int count = 0;
+            foreach (var seat in _seats)
+            {
+                count += seat.IsLocal ? 1 : 0;
+            }
+
+            return count;
+        }
+    }
 
     /// <summary>The whole match's roster in seat order: the host's own, or the guest's copy of it.
     /// Empty on a guest until the join lands.</summary>
@@ -421,13 +438,25 @@ public sealed class NetSession : INetTransportListener
         };
     }
 
-    // The host's answer to one joining peer, handshake first: it names the seat, and the roster
-    // that follows is read against it. Reliable, so the order the guest sees is this order.
+    // The host's answer to one joining peer, handshake first: it names the seats, and the roster
+    // that follows is read against them. Reliable, so the order the guest sees is this order.
     private void SendJoin(int peer)
     {
         int seat = SeatOf(peer);
-        Send(peer, new HandshakeMessage(_seed, _clock(), (byte)seat));
+        Send(peer, new HandshakeMessage(_seed, _clock(), (byte)seat, (byte)ExtraSeatsOf(peer, seat)));
         Send(peer, new SeatRosterMessage((uint)_seed, RosterEntries()));
+    }
+
+    // The seats a peer flies past its first, which NetSeats.CoopField seats in one unbroken run.
+    private int ExtraSeatsOf(int peer, int first)
+    {
+        int extra = 0;
+        while (first >= 0 && PeerOfSeat(first + extra + 1) == peer)
+        {
+            extra++;
+        }
+
+        return extra;
     }
 
     private NetSeatEntry[] RosterEntries()
@@ -461,7 +490,7 @@ public sealed class NetSession : INetTransportListener
     // Either would index every seat-wide table past its end once the guest builds its field.
     private void TakeHandshake(int peer, HandshakeMessage message)
     {
-        if (message.Seat != NetMessage.NoSeat && message.Seat >= NetSeats.SeatCapacity)
+        if (message.Seat != NetMessage.NoSeat && message.Seat + message.Extra >= NetSeats.SeatCapacity)
         {
             Malformed++;
             return;
@@ -469,6 +498,7 @@ public sealed class NetSession : INetTransportListener
 
         _handshake = new NetHandshake(message.Seed, message.HostClock);
         LocalSeat = message.Seat;
+        _extraSeats = message.Seat == NetMessage.NoSeat ? 0 : message.Extra;
         RebuildSeats(peer);
     }
 
@@ -486,8 +516,8 @@ public sealed class NetSession : INetTransportListener
         RebuildSeats(peer);
     }
 
-    // A guest's roster, rebuilt whenever either half of the join lands, because the seat the
-    // handshake names is what decides which entry this machine flies. Every other seat is reached
+    // A guest's roster, rebuilt whenever either half of the join lands, because the seats the
+    // handshake names are what decide which entries this machine flies. Every other seat is reached
     // through the peer that sent the roster, which in a listen server is the host for all of them.
     private void RebuildSeats(int from)
     {
@@ -500,7 +530,7 @@ public sealed class NetSession : INetTransportListener
         _seats.Clear();
         foreach (var entry in _received)
         {
-            bool local = entry.Seat == LocalSeat;
+            bool local = LocalSeat != NetMessage.NoSeat && entry.Seat >= LocalSeat && entry.Seat <= LocalSeat + _extraSeats;
             _seats.Add(new NetSeat
             {
                 PeerId = local ? _transport.LocalPeer : from,

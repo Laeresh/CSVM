@@ -98,31 +98,38 @@ public sealed class CoopHostFlow
         }
     }
 
-    // Each guest's flow differs only in its own player number; one goes out whenever it changed.
-    // The hangar words go first, so a guest opening its campaign on the flow already holds them.
-    internal void Send(NetLobby wire, IReadOnlyList<int> admitted, int localPlayers, byte round, Func<int, bool> readyNow)
+    // Each guest's flow differs only in its own player number and its seat count; one goes out
+    // whenever it changed. A guest's seats follow one another from its number. The hangar words go
+    // first, so a guest opening its campaign on the flow already holds them.
+    internal void Send(NetLobby wire, IReadOnlyList<(int Peer, int Seats)> seated, int localPlayers, byte round,
+        Func<int, int, bool> readyNow)
     {
-        foreach (int peer in admitted)
+        foreach (var (peer, _) in seated)
         {
             SendHangar(wire, peer);
         }
 
         byte mask = 0;
-        for (int i = 0; i < admitted.Count; i++)
+        int slot = localPlayers;
+        foreach (var (peer, seats) in seated)
         {
-            int slot = localPlayers + i;
-            if (slot < 8 && readyNow(admitted[i]))
+            for (int local = 0; local < seats; local++, slot++)
             {
-                mask |= (byte)(1 << slot);
+                if (slot < 8 && readyNow(peer, local))
+                {
+                    mask |= (byte)(1 << slot);
+                }
             }
         }
 
-        byte humans = (byte)Math.Min(localPlayers + admitted.Count, byte.MaxValue);
-        for (int i = 0; i < admitted.Count; i++)
+        byte humans = (byte)Math.Min(slot, byte.MaxValue);
+        slot = localPlayers;
+        foreach (var (peer, seats) in seated)
         {
-            int peer = admitted[i];
-            var flow = new CoopFlowMessage(Screen, _seq, round, (byte)(localPlayers + i), mask, humans,
-                _progress, _won, _airframes, _objectives, _cash, (byte)Math.Min(localPlayers, byte.MaxValue));
+            var flow = new CoopFlowMessage(Screen, _seq, round, (byte)Math.Min(slot, byte.MaxValue), mask, humans,
+                _progress, _won, _airframes, _objectives, _cash, (byte)Math.Min(localPlayers, byte.MaxValue),
+                (byte)Math.Clamp(seats - 1, 0, byte.MaxValue));
+            slot += seats;
             if (_sent.TryGetValue(peer, out var sent) && sent == flow)
             {
                 continue;
@@ -134,7 +141,7 @@ public sealed class CoopHostFlow
 
         foreach (int peer in new List<int>(_sent.Keys))
         {
-            if (!Contains(admitted, peer))
+            if (!Seated(seated, peer))
             {
                 _sent.Remove(peer);
                 _hangarSent.Remove(peer);
@@ -186,11 +193,11 @@ public sealed class CoopHostFlow
         FilmShown = null;
     }
 
-    private static bool Contains(IReadOnlyList<int> peers, int peer)
+    private static bool Seated(IReadOnlyList<(int Peer, int Seats)> seated, int peer)
     {
-        for (int i = 0; i < peers.Count; i++)
+        foreach (var (each, _) in seated)
         {
-            if (peers[i] == peer)
+            if (each == peer)
             {
                 return true;
             }

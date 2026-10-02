@@ -1259,8 +1259,9 @@ public partial class Launcher : Node3D
     }
 
     /// <summary>A co-op host's field and each seat's fit, by seat. Its own seats come first, with
-    /// the fits its launch carried, the first named by the door's callsign. Then comes every seated guest still on the wire, in the plane,
-    /// fit and name its pick carried.</summary>
+    /// the fits its launch carried, the first named by the door's callsign. Then comes every seat a
+    /// guest still on the wire was given, in the plane, fit and name its pick carried. A machine's
+    /// seats sit side by side.</summary>
     internal static (Net.NetSeat[] Roster, Net.CoopFit[] SeatFits) CoopLaunchField(
         UI.Menu.NetPlayFeature door, Net.INetTransport wire, IReadOnlyList<string> planes,
         IReadOnlyList<LoadoutChoice?> fits, StockLoadouts stock)
@@ -1398,7 +1399,8 @@ public partial class Launcher : Node3D
 
     /// <summary>A co-op host's custom planes, by seat, null for a stock one. Its own seats take
     /// <paramref name="customs"/> in menu order. Each guest's seat takes the build of the hangar
-    /// plane it flies, never one the guest brought.</summary>
+    /// plane it flies, never one the guest brought. A guest's seats are matched in order, so each
+    /// of a machine's players flies its own plane.</summary>
     internal static Net.NetPlaneBuild?[] CoopSeatBuilds(IReadOnlyList<Net.NetSeat> roster,
         IReadOnlyList<Flight.Hangar.CustomPlaneDef?> customs, UI.Menu.NetPlayFeature door, Net.INetTransport wire)
     {
@@ -1406,9 +1408,20 @@ public partial class Launcher : Node3D
         var guests = door.CoopGuests;
         for (int seat = 0; seat < roster.Count; seat++)
         {
+            if (roster[seat].IsLocal)
+            {
+                continue;
+            }
+
+            int local = 0;
+            for (int earlier = seat - 1; earlier >= 0 && roster[earlier].PeerId == roster[seat].PeerId; earlier--)
+            {
+                local++;
+            }
+
             foreach (var guest in guests)
             {
-                if (!roster[seat].IsLocal && guest.Peer == roster[seat].PeerId)
+                if (guest.Peer == roster[seat].PeerId && guest.Local == local)
                 {
                     builds[seat] = guest.Build;
                 }

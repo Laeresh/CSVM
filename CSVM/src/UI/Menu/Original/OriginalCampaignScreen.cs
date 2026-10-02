@@ -590,10 +590,17 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             return true;
         }
 
-        // A guest steps back only out of its own two screens. Anywhere else Back asks whether to
-        // leave the session, since the host's boards are not the guest's to walk.
+        // A guest steps back only out of its own two screens and from a further player's check to
+        // the one before. Anywhere else Back asks whether to leave the session, since the host's
+        // boards are not the guest's to walk.
         if (IsGuest && _host.Screen is not (OriginalScreen.CampaignAmmo or OriginalScreen.CampaignPlaneSelection))
         {
+            if (_host.Screen == OriginalScreen.CampaignFlightCheck && _campaign.Field.Retreat())
+            {
+                ShowCampaign(OriginalScreen.CampaignFlightCheck);
+                return true;
+            }
+
             AskLeaveSession();
             return true;
         }
@@ -763,10 +770,15 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         }
 
         _campaign!.SetMission(flow.MissionSeq);
-        var pads = new List<IReadOnlyList<int>>
+
+        // One pane per seat the host gave this machine, each on its own player's devices.
+        _campaign.Field.SetPlayers(net.CoopSeats);
+        var pads = new List<IReadOnlyList<int>>(net.CoopSeats);
+        for (int local = 0; local < net.CoopSeats; local++)
         {
-            _setup.Seats.Count > 0 ? _flightDevices(_setup.Seats[0]) : Array.Empty<int>(),
-        };
+            pads.Add(local < _setup.Seats.Count ? _flightDevices(_setup.Seats[local]) : Array.Empty<int>());
+        }
+
         var exit = _campaign.BuildExit(pads);
         if (exit == null)
         {
@@ -815,10 +827,10 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     /// setup's.</summary>
     internal void SyncField()
     {
-        // A co-op guest flies one aeroplane whatever its own seats, since the field is the host's.
+        // A co-op guest's players fly the seats its host gave them, which its cap may cut short.
         if (_host.Screen == OriginalScreen.CampaignFlightCheck && _campaign != null)
         {
-            _campaign.Field.SetPlayers(IsGuest ? 1 : _setup.Seats.Count);
+            _campaign.Field.SetPlayers(IsGuest ? _net()?.CoopSeats ?? 1 : _setup.Seats.Count);
         }
     }
 
@@ -1401,14 +1413,29 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     // the remake's own; the boot itself is the Dogfight lobby's.
     private void AskBoot(int from)
     {
-        if (_net() is not { IsCoopHost: true } net || from >= net.CoopGuests.Count)
+        if (_net() is not { IsCoopHost: true } net)
         {
             return;
         }
 
-        var guest = net.CoopGuests[from];
+        // One question per machine, named by its first seat, since a boot takes all of its seats.
+        var machines = new List<CoopGuest>();
+        foreach (var seat in net.CoopGuests)
+        {
+            if (seat.Local == 0)
+            {
+                machines.Add(seat);
+            }
+        }
+
+        if (from >= machines.Count)
+        {
+            return;
+        }
+
+        var guest = machines[from];
         var boot = Yes(() => net.Boot(guest.Peer));
-        if (from + 1 < net.CoopGuests.Count)
+        if (from + 1 < machines.Count)
         {
             _host.RaiseDialog(CoopDoorText.BootQuestion(guest.Name), DialogIcon.Query, boot, NoCentred(() => AskBoot(from + 1)), Cancel());
             return;
@@ -1449,16 +1476,26 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     private bool FollowHost(NetPlayFeature net, CoopFlowMessage flow)
     {
         var campaign = _campaign!;
+
+        // Every player at this machine asks for a seat, and flies the ones the host gave.
+        net.LocalSeats = Math.Max(1, _setup.Seats.Count);
+        campaign.Field.SetPlayers(net.CoopSeats);
         int lostTo = campaign.FollowHost(flow.Progress, net.CoopHangar);
-        net.Pick.Set(campaign.GuestAirframe, net.Pick.Ready, campaign.GuestCoopFit);
-        net.Pick.Choose(campaign.GuestPlane);
+        for (int local = 0; local < net.LocalSeats; local++)
+        {
+            var (airframe, fit, plane) = campaign.GuestPickOf(local);
+            var pick = net.PickOf(local);
+            pick.Set(airframe, pick.Ready, fit);
+            pick.Choose(plane);
+        }
+
         bool changed = lostTo >= 0;
         if (lostTo >= 0)
         {
             _host.RaiseDialog(campaign.SeatRefusal(lostTo), DialogIcon.Warning, Ok());
         }
 
-        bool ready = net.CoopReady;
+        bool ready = net.CoopReadyAt(campaign.Field.Current);
         changed |= campaign.GuestReady != ready || net.CoopFlows != _guestFlows;
         campaign.GuestReady = ready;
         if (flow.Screen == NetCoopScreen.Debrief && net.CoopFlows != _guestFlows)
@@ -1474,6 +1511,13 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
 
         _guestScreen = flow.Screen;
         _guestSeq = flow.MissionSeq;
+
+        // Off the check the walk over this machine's players starts again from the first.
+        if (flow.Screen != NetCoopScreen.FlightCheck)
+        {
+            campaign.Field.Rewind();
+        }
+
         switch (flow.Screen)
         {
             case NetCoopScreen.Briefing:
@@ -1516,6 +1560,8 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         return pageRow >= 0 && GuestRowLive(screen, _flow!.Page.Button(pageRow).Button);
     }
 
+    // READY marks the check showing and walks on to the next player's at this machine, so the host
+    // waits on every one of them. CANCEL READY takes back every player's mark and starts the walk again.
     private void ToggleGuestReady()
     {
         if (_net() is not { IsCoopGuest: true } net || _campaign == null)
@@ -1523,9 +1569,31 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             return;
         }
 
-        net.Pick.Set(_campaign.GuestAirframe, !net.Pick.Ready, _campaign.GuestCoopFit);
-        net.Pick.Choose(_campaign.GuestPlane);
-        _campaign.GuestReady = net.Pick.Ready;
+        var field = _campaign.Field;
+        int current = Math.Clamp(field.Current, 0, net.CoopSeats - 1);
+        bool ready = !net.PickOf(current).Ready;
+        for (int local = 0; local < net.LocalSeats; local++)
+        {
+            if (local == current || !ready)
+            {
+                var (airframe, fit, plane) = _campaign.GuestPickOf(local);
+                var pick = net.PickOf(local);
+                pick.Set(airframe, local == current && ready, fit);
+                pick.Choose(plane);
+            }
+        }
+
+        if (!ready)
+        {
+            field.Rewind();
+            ShowCampaign(OriginalScreen.CampaignFlightCheck);
+        }
+        else if (field.Advance())
+        {
+            ShowCampaign(OriginalScreen.CampaignFlightCheck);
+        }
+
+        _campaign.GuestReady = net.PickOf(Math.Clamp(field.Current, 0, net.CoopSeats - 1)).Ready;
     }
 
     // Leaving hangs up; the shell then takes the guest back to the Connection page.

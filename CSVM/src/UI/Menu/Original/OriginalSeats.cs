@@ -204,7 +204,13 @@ public sealed partial class OriginalShell
             return null;
         }
 
+        // A co-op guest's checks count its own players, and its chips the host's whole field.
         int current = StripFocus;
+        if (current >= 0 && Campaign.IsGuest && _net is { IsCoopGuest: true, CoopFlow: { } flow })
+        {
+            current += flow.Slot;
+        }
+
         int pitches = 0;
         foreach (var chip in chips)
         {
@@ -255,9 +261,10 @@ public sealed partial class OriginalShell
         {
             for (int slot = 0; slot < Math.Min((int)flow.Humans, NetSeats.MaxPlayers); slot++)
             {
-                bool own = slot == flow.Slot;
-                bool ready = own ? guest.CoopReady : flow.IsReady(slot);
-                chips.Add(Chip(slot, own, ready, own ? guest.PlayerName : ""));
+                int local = slot - flow.Slot;
+                bool own = local >= 0 && local < guest.CoopSeats;
+                bool ready = own ? guest.CoopReadyAt(local) : flow.IsReady(slot);
+                chips.Add(Chip(slot, own, ready, own && local == 0 ? guest.PlayerName : ""));
             }
 
             return chips;

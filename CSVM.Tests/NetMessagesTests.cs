@@ -350,6 +350,12 @@ public class NetMessagesTests
         Assert.True(NetMessage.TryReadHeader(buffer, out var type, out int length));
         Assert.Equal(NetMessageType.Handshake, type);
         Assert.Equal(HandshakeMessage.Size, length);
+
+        // A joiner flying two seats is named its first and the one after it, in the same 24 bytes.
+        var pair = sent with { Extra = 1 };
+        Assert.Equal(HandshakeMessage.Size, pair.Write(buffer));
+        Assert.True(HandshakeMessage.TryRead(buffer, out var gotPair));
+        Assert.Equal(pair, gotPair);
     }
 
     // A guest with no seat yet is a real state, not a malformed message. NoSeat has to survive
@@ -815,6 +821,46 @@ public class NetMessagesTests
         Assert.True(CoopPickMessage.TryRead(buffer, out var clipped));
         Assert.Equal(CoopPickMessage.NoVoice, clipped.Voice);
         Assert.False(clipped.Ready);
+    }
+
+    // A guest flying several seats sends a pick per seat, its place in bits 5 and 6 and "another
+    // follows" in bit 7. A one-seat guest's pick leaves all three clear, so its bytes are as before.
+    [Fact]
+    public void APicksSeatAndItsFollowingMarkRideTheFlagsByteAndAOneSeatPickIsUnchanged()
+    {
+        Span<byte> buffer = stackalloc byte[CoopPickMessage.Size];
+        var fit = CoopFit.Of(new[] { 1, 0, 0, 0 }, null);
+        for (byte local = 0; local <= CoopPickMessage.MaxLocal; local++)
+        {
+            var sent = new CoopPickMessage(6, true, 3, fit, "", Voice: 5, Local: local, More: local < CoopPickMessage.MaxLocal);
+            Assert.Equal(CoopPickMessage.Size, sent.Write(buffer));
+            Assert.True(CoopPickMessage.TryRead(buffer, out var got));
+            Assert.Equal(sent, got);
+        }
+
+        new CoopPickMessage(6, true, 3, Voice: 6, Local: 2, More: true).Write(buffer);
+        Assert.Equal(1 | (6 << 2) | (2 << 5) | 0x80, buffer[NetMessage.HeaderBytes + 1]);
+
+        // ABLE-TO-FAIL CONTROL: the one-seat pick writes the flags byte it always did.
+        new CoopPickMessage(6, true, 3, Voice: 6).Write(buffer);
+        Assert.Equal(1 | (6 << 2), buffer[NetMessage.HeaderBytes + 1]);
+    }
+
+    // The flow names how many seats after its player number the reading guest got. It rides the
+    // byte that was reserved, and a one-seat guest's stays zero.
+    [Fact]
+    public void ACoopFlowCarriesTheGuestsFurtherSeatsInItsReservedByte()
+    {
+        Span<byte> buffer = stackalloc byte[CoopFlowMessage.Size];
+        var sent = new CoopFlowMessage(NetCoopScreen.FlightCheck, 3, 2, 1, 0b0110, 4, 2, false, 0, 0, 0, Locals: 1, Extra: 2);
+        sent.Write(buffer);
+        Assert.Equal(2, buffer[15]);
+        Assert.True(CoopFlowMessage.TryRead(buffer, out var got));
+        Assert.Equal(sent, got);
+
+        // ABLE-TO-FAIL CONTROL: a one-seat guest's flow leaves the byte zero.
+        (sent with { Extra = 0 }).Write(buffer);
+        Assert.Equal(0, buffer[15]);
     }
 
     [Fact]

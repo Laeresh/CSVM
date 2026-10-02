@@ -5,8 +5,8 @@ using CSVM.Session.Campaign;
 namespace CSVM.UI.Menu;
 
 /// <summary>
-/// A co-op guest's own pick: the plane of its host's hangar, the airframe and the fit it flies
-/// with. It also says whether the guest means to be Ready and whether it walked out of the flight.
+/// One seat's pick at a co-op guest: the plane of its host's hangar, the airframe and the fit it
+/// flies with. It also says whether the seat means to be Ready and whether it walked out of the flight.
 /// It lasts the joined session across flights, and a new join starts with no plane picked and the
 /// stock fit. The door sends it under the host's round of picks, and again only when it changed.
 /// </summary>
@@ -54,7 +54,8 @@ public sealed class CoopGuestPick
 
     // A guest's Ready belongs to one round: a new round clears it, and the pick goes out again
     // under the new one. Null when the host already has this pick.
-    internal CoopPickMessage? Follow(byte round, string name, byte voice = CoopPickMessage.NoVoice)
+    internal CoopPickMessage? Follow(byte round, string name, byte voice = CoopPickMessage.NoVoice,
+        int local = 0, bool more = false)
     {
         if (_sent is { } last && last.Epoch != round)
         {
@@ -62,7 +63,8 @@ public sealed class CoopGuestPick
             _left = false;
         }
 
-        var pick = new CoopPickMessage(round, Ready, Airframe, Fit, name, _left, CoopPickMessage.PlaneByte(Plane), voice);
+        var pick = new CoopPickMessage(round, Ready, Airframe, Fit, name, _left, CoopPickMessage.PlaneByte(Plane), voice,
+            (byte)Math.Clamp(local, 0, CoopPickMessage.MaxLocal), more);
         return _sent == pick ? null : pick;
     }
 

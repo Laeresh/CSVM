@@ -199,6 +199,24 @@ public sealed class NetSeatTests
         Assert.Equal("player_bhawk", versus[1].PlaneNode);
     }
 
+    // A guest with two players at its machine takes two seats side by side, each in its own plane.
+    [Fact]
+    public void ACoopFieldSeatsAGuestsSeveralPlayersSideBySide()
+    {
+        var field = NetSeats.CoopField(1, new[] { "player_bhawk" },
+            new[] { (4, "player_fury", "Lucy"), (4, "player_warhawk", ""), (9, "player_bhawk", "Ann") });
+
+        Assert.Equal(new[] { 1, 4, 4, 9 }, field.Select(s => s.PeerId));
+        Assert.Equal(new[] { 0, 1, 2, 3 }, field.Select(s => s.SeatIndex));
+        Assert.Equal(new[] { "P1", "Lucy", "P3", "Ann" }, field.Select(s => s.Callsign));
+        Assert.Equal(new[] { "player_bhawk", "player_fury", "player_warhawk", "player_bhawk" }, field.Select(s => s.PlaneNode));
+
+        // ABLE-TO-FAIL CONTROL: a guest's seats parted by another's would leave one outside the run
+        // its handshake names, so the field refuses them.
+        Assert.Throws<ArgumentException>(() => NetSeats.CoopField(1, new[] { "player_bhawk" },
+            new[] { (4, "player_fury", ""), (9, "player_bhawk", ""), (4, "player_warhawk", "") }));
+    }
+
     [Fact]
     public void ALocalOrdinalCountsOnlyTheSeatsFlownHere()
     {

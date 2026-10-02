@@ -68,6 +68,55 @@ public sealed class NetSessionTests
         Assert.Equal(new[] { false, false, true }, third.Seats.Select(s => s.IsLocal));
     }
 
+    // A co-op guest with two players at its machine. The handshake names its first seat and the run
+    // after it, so both entries are its own. A one-seat guest's handshake stays as it was.
+    [Fact]
+    public void A_guest_flying_two_seats_holds_both_and_the_one_seat_guest_beside_it_one()
+    {
+        var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(19));
+        var seats = NetSeats.CoopField(mesh[0].LocalPeer, new[] { Airframes[0] },
+            new[] { (1, Airframes[1], "Lucy"), (1, Airframes[0], ""), (2, Airframes[1], "Ann") });
+        var host = NetSession.Host(mesh[0], seats, Seed, null, Airframes);
+        var pair = NetSession.Guest(mesh[1], Airframes);
+        var single = NetSession.Guest(mesh[2], Airframes);
+        var payload = new byte[HandshakeMessage.Size];
+        int length = new HandshakeMessage(Seed, 0.0, 3).Write(payload);
+
+        pair.Step(0.016);
+        single.Step(0.016);
+
+        Assert.True(pair.Joined);
+        Assert.Equal(1, pair.LocalSeat);
+        Assert.Equal(2, pair.LocalSeatCount);
+        Assert.Equal(new[] { false, true, true, false }, pair.Seats.Select(s => s.IsLocal));
+        Assert.Equal(new[] { "P1", "Lucy", "P3", "Ann" }, pair.Seats.Select(s => s.Callsign));
+        Assert.Equal(3, single.LocalSeat);
+        Assert.Equal(1, single.LocalSeatCount);
+        Assert.Equal(new[] { false, false, false, true }, single.Seats.Select(s => s.IsLocal));
+
+        // ABLE-TO-FAIL CONTROL: a one-seat handshake leaves its spare byte zero, as before.
+        Assert.Equal(HandshakeMessage.Size, length);
+        Assert.Equal(0, payload[21]);
+        Assert.True(HandshakeMessage.TryRead(payload, out var read));
+        Assert.Equal(0, read.Extra);
+        Assert.Equal(1, host.LocalSeatCount);
+    }
+
+    // A handshake whose run reaches past the seat tables is malformed, like a seat past them.
+    [Fact]
+    public void A_handshake_whose_seats_run_past_the_tables_is_malformed()
+    {
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(23));
+        var guest = NetSession.Guest(mesh[1], Airframes);
+        var payload = new byte[HandshakeMessage.Size];
+        new HandshakeMessage(Seed, 0.0, 14, 2).Write(payload);
+
+        guest.OnPayload(0, 0, payload);
+
+        Assert.Equal(1, guest.Malformed);
+        Assert.Equal(NetMessage.NoSeat, guest.LocalSeat);
+    }
+
     [Fact]
     public void A_registered_handler_takes_its_own_type_and_nothing_else()
     {

@@ -221,6 +221,19 @@ public sealed class CampaignFlightField
     /// a guest with somebody else's build.</summary>
     public bool IsStock(OwnedPlane plane) => _stock.Contains(plane) || _feature.IsSharedStock(plane);
 
+    // The host's settling of a same-moment clash, which no picker press can refuse. The guest moves
+    // to that hangar plane, else to the stock Devastator when another human flies it.
+    internal void Reseat(int player, int hangarPick)
+    {
+        if (GuestAt(player) is not { } guest)
+        {
+            return;
+        }
+
+        int pick = hangarPick >= 0 && hangarPick < guest.StockChoice ? hangarPick : guest.StockChoice;
+        guest.Choice = Taken(player, pick) ? guest.StockChoice : pick;
+    }
+
     // What a carried pick is named by: the stock Devastator, or the plane's own name for a profile
     // aircraft, the key the no-duplicate rule compares.
     private static string KeyOf(OwnedPlane plane, bool stock) => stock ? "stock" : $"owned:{plane.Name}";
@@ -341,9 +354,14 @@ public sealed class CampaignFlightField
         var choices = new List<OwnedPlane>((_rosterProfile?.Planes.Count ?? 0) + 1);
         if (_rosterProfile is { } profile)
         {
+            // A network guest's own list already ends on a stock Devastator, which this roster adds
+            // anyway. Skipping it keeps every entry before the stock one a plane of the host's hangar.
             foreach (var owned in profile.Planes)
             {
-                choices.Add(CopyOf(owned));
+                if (!_feature.IsSharedStock(owned))
+                {
+                    choices.Add(CopyOf(owned));
+                }
             }
         }
 

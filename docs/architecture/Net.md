@@ -42,7 +42,8 @@ These are the design rules every module below is shaped by, and every multiplaye
   maximum, [../org/multiplayer-spawn.md](../org/multiplayer-spawn.md)) and its lobby reads
   `Players (1 of 16)`. The authored colour table and the 45-degree respawn fan serve eight, so seats
   8 to 15 take the remake's own derived colours and the fan wraps. Co-op caps at four humans (`n/4`),
-  the campaign's P1 to P4 field.
+  the campaign's P1 to P4 field, counting every player at a guest's machine; a player past the cap
+  sits out with a line saying so, and never takes a seat already flying.
 - **The carrier is a flag.** ENet ships, by LAN search or direct IP with an IPv4 UPnP mapping or an
   IPv6 pinhole. With a master server set (`--master-server=`, `server/README.md`), a host also lists
   its game there and takes WebRTC guests, who join by code with STUN and a TURN fallback. A Steam carrier (Networking Sockets, relay, lobbies) is added behind `CsvmSteam`
@@ -275,7 +276,7 @@ a host opens and closes it on the way out. Read `RouterAccessTests.cs`.
 ## src/Net/NetLobby.cs
 A carrier's first listener and itself the `INetTransport` the session later binds. A host's
 `Advertise` reaches every peer on connect and on change; a guest keeps `Advert` and `Closed`. Lobby
-messages stay here (a host's `Picks`, `PickBuilds` and team actions, a guest's flow, fits, builds,
+messages stay here (a host's `Picks`, each seat's by `PickAt` with `SeatsWanted`, `PickBuilds` and team actions, a guest's flow, fits, builds,
 rules, teams, wingman and film); others are held up to `HeldPayloads` until a session binds. ⚠ A new round seen while bound
 marks `FlightOver` until the next bind, so the opener survives both unbinds a restart makes. It is
 the host's admission: a clashing build, a peer `AwaitingPassword`, and one `TurnedAway` (a banned
@@ -352,9 +353,9 @@ Ids and phase mapping: [../org/multiplayer-messages.md](../org/multiplayer-messa
 ## src/Net/NetCoopMessages.cs
 The campaign co-op boards' six messages, all reliable and all kept in `NetLobby`, not a session.
 `CoopFlowMessage` is the host's boards as one guest follows them: the screen, the mission, the
-round of picks (`Epoch`), the guest's player number, the Ready mask, the hangar and the debrief's
-result. `CoopPickMessage` is a guest's airframe, `CoopFit`, name, Ready, Left and hangar `Plane`
-under its round. `CoopHangarMessage` is one host hangar plane with its fit, build, name and holding
+round of picks (`Epoch`), the guest's player number and further seats (`Extra`), the Ready mask, the hangar and the debrief's
+result. `CoopPickMessage` is one seat's airframe, `CoopFit`, name, Ready, Left and hangar `Plane`
+under its round, with its `Local` place at the guest's machine and whether `More` follow. `CoopHangarMessage` is one host hangar plane with its fit, build, name and holding
 seat. Before the opener `CoopSeatFitMessage` gives a seat's fit and `CoopWingmanMessage` the
 wingman's; `CoopFilmMessage` names a film. [Layout](../org/multiplayer-messages.md).
 
@@ -449,7 +450,7 @@ without a pane.
 ## src/Net/NetSeats.cs
 The roster's rules: `MaxPlayers = 16` pilots admitted, the count the original's lobby shows and
 its data holds, every seat-indexed table built `SeatCapacity = 16` wide, each seat's identity
-colour, and `Validate`, which requires seats numbered from zero with no gap and at least one flown here. `Field` builds a host's roster from its local planes and the peers on its wire; `CoopField` does so for co-op, naming each guest by its own player name.
+colour, and `Validate`, which requires seats numbered from zero with no gap and at least one flown here. `Field` builds a host's roster from its local planes and the peers on its wire; `CoopField` does so for co-op, a guest's several seats side by side, each named by its pick.
 Seats 0 to 7 take the original's authored dwords at `00628eb4` in order, low byte red as the
 original's one reader takes them (the remake's index is 0-based where the original's was 1-based
 and its eighth pilot read past the table); seats 8 to 15 take the channel-wise complement of seat
@@ -495,7 +496,7 @@ falls back to `Events`, which costs ordering rather than delivery.
 ## src/Net/NetSession.cs
 The one object a session owns to talk to its peers: it holds the transport, sends a typed message
 under the class the type declares, and routes an arrival to the handler on its type word. The only meaning it knows is the join, a host answering each
-peer with the handshake (which names the seat) and then the roster; `On` refuses those two types,
+peer with the handshake (which names its first seat and the run after it, `LocalSeatCount`) and then the roster; `On` refuses those two types,
 and a guest refuses a join `NetSeats.Validate` would throw on. The star's relay: `SendToSeat`
 addresses a seat through whoever owns it, and a host's `RelayToOthers`, `RelayToSeatOwner` and
 `RelayToPeers` (each machine a predicate admits, once) forward an arrival's own bytes, never back to

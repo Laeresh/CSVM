@@ -1098,10 +1098,10 @@ public readonly record struct DirectorTransitionMessage(ushort Code, int Id, flo
 /// The host's answer to a join, sent to that one peer before the roster. It carries the master
 /// seed every peer's streams derive from, the host's session clock, and the joiner's seat.
 /// The seat is here rather than in the roster because the roster is the same bytes for everybody.
-/// Which of its entries is yours is the one fact that differs per guest. The seed and the clock
-/// are the two halves of <see cref="NetHandshake"/>. Each rides as two 32-bit fields, since the
-/// cursors carry no wider primitive.</summary>
-public readonly record struct HandshakeMessage(ulong Seed, double HostClock, byte Seat)
+/// Which of its entries is yours is the one fact that differs per guest. The joiner also flies the
+/// <see cref="Extra"/> seats after <see cref="Seat"/>, 0 for one pilot. The seed and
+/// the clock are the two halves of <see cref="NetHandshake"/>, each as two 32-bit fields.</summary>
+public readonly record struct HandshakeMessage(ulong Seed, double HostClock, byte Seat, byte Extra = 0)
     : INetMessage<HandshakeMessage>
 {
     /// <summary>The fixed width of the message, header included.</summary>
@@ -1124,7 +1124,8 @@ public readonly record struct HandshakeMessage(ulong Seed, double HostClock, byt
         ulong seed = reader.ReadUInt32() | ((ulong)reader.ReadUInt32() << 32);
         ulong clock = reader.ReadUInt32() | ((ulong)reader.ReadUInt32() << 32);
         byte seat = reader.ReadByte();
-        message = new HandshakeMessage(seed, BitConverter.UInt64BitsToDouble(clock), seat);
+        byte extra = reader.ReadByte();
+        message = new HandshakeMessage(seed, BitConverter.UInt64BitsToDouble(clock), seat, extra);
         return true;
     }
 
@@ -1138,7 +1139,7 @@ public readonly record struct HandshakeMessage(ulong Seed, double HostClock, byt
         writer.WriteUInt32((uint)clock);
         writer.WriteUInt32((uint)(clock >> 32));
         writer.WriteByte(Seat);
-        writer.WriteByte(0);
+        writer.WriteByte(Extra);
         writer.WriteUInt16(0);
         return writer.Close();
     }

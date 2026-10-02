@@ -70,6 +70,11 @@ internal static class NetCoopMissionSuites
     private const int TravelSteps = 120;
     private const float SeatTravelM = 50f;
 
+    // How far a host's copy of a guest's plane may sit from the guest's own: half a grid slot. A
+    // copy following the guest's other plane misses by more. The copy draws about 0.13 s behind
+    // (read-behind and link), some 12 m at cruise.
+    private const float SeatReplicaM = StartGrid.SlotSpacingDefault * 0.5f;
+
     // The wingman suite's host profile and its wingman pick, the Fury, which no profile-less director
     // binds. The armour-piercing ammunition rides the wire and outranks the Fury's AI def's guns.
     private const string WingHost = "WingHost";
@@ -181,6 +186,71 @@ internal static class NetCoopMissionSuites
             ctx.Check(guestEnd.Session.PauseRestart == null && !guestEnd.Session.RestartOffered,
                 $"a guest's pause sheet offers no Restart in a network session");
             (hostEnd, guestEnd) = Restart(ctx, mission, stock, hostEnd, guestEnd, host, guest);
+        }
+        finally
+        {
+            guestEnd?.Close();
+            hostEnd?.Close();
+            ambient.Restore();
+            guest.Discard();
+            host.Discard();
+        }
+    }
+
+    [Suite("net-coop-guest-seats",
+        "a co-op guest with two players at its machine, host and guest over a lossy loopback: the host "
+        + "seats the machine twice side by side, its launch waits on each player's Ready, the join names "
+        + "the guest both seats, the guest builds a pane per seat and flies both while the host builds "
+        + "both as remote aeroplanes, and each of the guest's planes flies on the host as it flies on "
+        + "the guest")]
+    internal static void DCoopGuestFliesTwoSeats(TestContext ctx)
+    {
+        var mission = Mission(ctx);
+        var stock = StockLoadouts.Load();
+        var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(0.03, 0.01, 0.25), new Random(2406));
+        var host = Door(mesh[0]);
+        var guest = Door(mesh[1]);
+        guest.PlayerName = GuestName;
+        guest.LocalSeats = 2;
+        var ambient = NetCombatSuites.Ambient.Save();
+        Ends? hostEnd = null;
+        Ends? guestEnd = null;
+        try
+        {
+            host.OpenCoopHost(NetPlayFeature.CoopHumans - 1);
+            host.Offer(mission.Seq, "Host", 1);
+            guest.OpenJoin();
+            Pump(SettleSteps, host, guest);
+            Select(host, mission);
+            Pump(SettleSteps, host, guest);
+            ctx.Check(guest.IsCoopGuest && guest.CoopSeats == 2 && host.CoopGuests.Select(g => g.Slot).SequenceEqual(new[] { 1, 2 }),
+                $"the host seats the guest's two players side by side ({guest.CoopSeats} seat(s), slots {string.Join(",", host.CoopGuests.Select(g => g.Slot))})");
+
+            guest.Pick.Set(CoopGuestPick.StarterAirframe, true);
+            Pump(SettleSteps, host, guest);
+            ctx.Check(!host.CoopAllReady && guest.CoopReadyAt(0),
+                $"ABLE-TO-FAIL CONTROL: the first player's Ready alone holds the launch ({string.Join(", ", host.CoopGuests.Select(g => g.Ready))})");
+            guest.PickOf(1).Set(CoopGuestPick.StarterAirframe, true);
+            Pump(SettleSteps, host, guest);
+            ctx.Check(host.CoopAllReady, $"both players Ready open the launch");
+            if (!host.CoopAllReady)
+            {
+                return;
+            }
+
+            hostEnd = Launch(ctx, mission, stock, host, HostAmmo, out _);
+            guestEnd = FollowSeats(ctx, mission, stock, guest, 2, hostEnd, host);
+            if (!hostEnd.Built || !guestEnd.Built)
+            {
+                ctx.Check(false, $"both sessions build (host {hostEnd.Built}, guest {guestEnd.Built})");
+                return;
+            }
+
+            var ends = new[] { hostEnd, guestEnd };
+            var doors = new[] { host, guest };
+            SkipAcross(ctx, "the host", hostEnd, ends, doors);
+            Fly(SettleSteps, ends, doors);
+            GuestSeatsFly(ctx, hostEnd, guestEnd, ends, doors);
         }
         finally
         {
@@ -1028,6 +1098,62 @@ internal static class NetCoopMissionSuites
         return NetCombatSuites.Ends.Open(ctx, Spec(mission, CampaignLoadout.For(fit, stock)), launch.Transport,
             isHost: false, HostSeed + 1, null, UI.Hangar.PlanePickerRoster.StockAirframes,
             seat => Launcher.CoopSeatFitFor(seat, null, door, stock), () => door.CoopWingman);
+    }
+
+    // A guest flying several seats launches as a guest with one: one pane per seat its host gave it.
+    private static Ends FollowSeats(TestContext ctx, CampaignMission mission, StockLoadouts stock,
+        NetPlayFeature door, int seats, NetCombatSuites.Ends host, NetPlayFeature hostDoor)
+    {
+        for (int i = 0; i < OpenerSteps && !door.CoopLaunchDue; i++)
+        {
+            host.Session._PhysicsProcess(GameClock.FixedDt);
+            hostDoor.Step(GameClock.FixedDt);
+            door.Step(GameClock.FixedDt);
+        }
+
+        ctx.Check(door.CoopLaunchDue, $"a guest's door hears the host's opener");
+        var launch = door.BuildLaunch()!;
+        string plane = UI.Hangar.PlanePickerRoster.AirframeNode(CoopGuestPick.StarterAirframe);
+        var spec = SessionSpec.FromCampaign(SessionSpec.Parse(new[] { "--mute", "--no-pads" }), "", mission.Seq,
+            Enumerable.Repeat(plane, seats).ToArray(), seats, Enumerable.Repeat<LoadoutChoice?>(null, seats).ToArray());
+        return NetCombatSuites.Ends.Open(ctx, spec, launch.Transport, isHost: false, HostSeed + 1, null,
+            UI.Hangar.PlanePickerRoster.StockAirframes, seat => Launcher.CoopSeatFitFor(seat, null, door, stock),
+            () => door.CoopWingman);
+    }
+
+    // The guest's two seats on both machines: flown by the guest, chased from samples on the host.
+    // The host's copy of each tracks where the guest flies it.
+    private static void GuestSeatsFly(TestContext ctx, Ends host, Ends guest, Ends[] ends, NetPlayFeature[] doors)
+    {
+        var hostSeats = host.Session.NetSeats;
+        var guestSeats = guest.Session.NetSeats;
+        ctx.Check(hostSeats.Count == 3 && guestSeats.Count == 3
+                  && hostSeats[1].PeerId == hostSeats[2].PeerId && !hostSeats[1].IsLocal && !hostSeats[2].IsLocal,
+            $"the host's field holds the guest's machine at seats 1 and 2 ({hostSeats.Count} seat(s))");
+        ctx.Check(guest.Session.NetLink is { LocalSeat: 1, LocalSeatCount: 2 } && guestSeats[1].IsLocal && guestSeats[2].IsLocal
+                  && !guestSeats[0].IsLocal,
+            $"the join names the guest both seats ({guest.Session.NetLink?.LocalSeat}, {guest.Session.NetLink?.LocalSeatCount})");
+        ctx.Check(guest.Session.SeatRigs[1].Controller is { RemotePoses: null, InPlay: true }
+                  && guest.Session.SeatRigs[2].Controller is { RemotePoses: null, InPlay: true },
+            $"the guest flies both its seats itself, each in play");
+        ctx.Check(host.Session.SeatRigs[1].Controller is { RemotePoses: not null, InPlay: true }
+                  && host.Session.SeatRigs[2].Controller is { RemotePoses: not null, InPlay: true },
+            $"the host builds both as remote aeroplanes, each in play");
+
+        var from = new[] { 1, 2 }.Select(s => host.Session.SeatRigs[s].Controller!.WorldPosition).ToArray();
+        Fly(TravelSteps, ends, doors);
+        var travel = new[] { 1, 2 }.Select((s, i) => host.Session.SeatRigs[s].Controller!.WorldPosition.DistanceTo(from[i])).ToArray();
+        var miss = new[] { 1, 2 }.Select(s => host.Session.SeatRigs[s].Controller!.WorldPosition
+            .DistanceTo(guest.Session.SeatRigs[s].Controller!.WorldPosition)).ToArray();
+        string reading = $"travel {travel[0]:0} m and {travel[1]:0} m, behind the guest's own by {miss[0]:0} m and {miss[1]:0} m";
+        ctx.Check(travel.All(t => t > SeatTravelM),
+            $"each of the guest's planes flies on over {TravelSteps} steps on the host ({reading})");
+        ctx.Check(miss.All(m => m < SeatReplicaM),
+            $"and the host's copy of each stays within {SeatReplicaM:0} m of where the guest flies it ({reading})");
+        float crossed = host.Session.SeatRigs[1].Controller!.WorldPosition.DistanceTo(guest.Session.SeatRigs[2].Controller!.WorldPosition);
+        ctx.Check(crossed > SeatReplicaM,
+            $"ABLE-TO-FAIL CONTROL: a copy read against the guest's other plane misses by more ({crossed:0} m)");
+        ctx.Note($"the guest's seats on the host: {reading}; crossed {crossed:0} m");
     }
 
     // A co-op launch with no profile behind it unless a suite's own store names one. Only a

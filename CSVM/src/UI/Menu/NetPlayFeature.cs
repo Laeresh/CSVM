@@ -23,13 +23,14 @@ public enum NetDoorStage
     Failed,
 }
 
-/// <summary>One guest a co-op host seated: its peer and its player number. It says whether the
-/// guest is Ready this round. It names the hangar plane the host settled for it, with that plane's
-/// airframe, fit and build. It carries the guest's callsign and its chosen voice's place, -1 for
-/// none. <see cref="Left"/> says it walked out of the flight under way.</summary>
+/// <summary>One seat a co-op host gave a guest: the guest's peer, the seat's player number, and
+/// <see cref="Local"/>, its place among that machine's own seats. It says whether the seat is Ready
+/// this round. It names the hangar plane the host settled for it, with that plane's airframe, fit
+/// and build. It carries the seat's callsign and voice's place, -1 for none. The Left flag says the
+/// guest walked out of the flight under way.</summary>
 public readonly record struct CoopGuest(
     int Peer, int Slot, bool Ready, byte Airframe, CoopFit Fit = default, string Name = "", bool Left = false,
-    int Plane = Session.Campaign.CoopPlanePool.Stock, NetPlaneBuild? Build = null, int Voice = -1);
+    int Plane = Session.Campaign.CoopPlanePool.Stock, NetPlaneBuild? Build = null, int Voice = -1, int Local = 0);
 
 /// <summary>
 /// The multiplayer door as a shared feature. It owns the port and the address a board edits, the
@@ -83,7 +84,9 @@ public sealed class NetPlayFeature : IMenuFeature
     private readonly Func<string, int, INetTransport> _openJoin;
     private readonly Func<string, int, ILanSocket>? _lan;
     private readonly List<int> _admitted = new();
+    private readonly Dictionary<int, int> _granted = new();
     private readonly List<(int Peer, double Waited)> _refused = new();
+    private readonly CoopGuestPick[] _picks = NewPicks();
 
     private NetLobby? _transport;
     private DogfightLobby? _dogfight;
@@ -114,6 +117,7 @@ public sealed class NetPlayFeature : IMenuFeature
     private byte _missionSeq = SessionAdvertMessage.NoMission;
     private string _hostName = "";
     private int _localPlayers = 1;
+    private int _localSeats = 1;
     private bool _released;
     private double _joining;
     private DoorReading _seen;
@@ -198,9 +202,21 @@ public sealed class NetPlayFeature : IMenuFeature
     /// <summary>What this co-op host names to its guests about its boards and its films.</summary>
     public CoopHostFlow HostFlow { get; } = new();
 
-    /// <summary>This co-op guest's pick from its host's hangar. It lasts the joined session across
-    /// flights, and a new join starts on the starter.</summary>
-    public CoopGuestPick Pick { get; } = new();
+    /// <summary>This co-op guest's pick from its host's hangar for its first seat. It lasts the
+    /// joined session across flights, and a new join starts on the starter.</summary>
+    public CoopGuestPick Pick => _picks[0];
+
+    /// <summary>How many seats this co-op guest's machine asks its host for, one per local player,
+    /// 1 to <see cref="CoopHumans"/>. Each sends its own pick (<see cref="PickOf"/>).</summary>
+    public int LocalSeats
+    {
+        get => _localSeats;
+        set => _localSeats = Math.Clamp(value, 1, _picks.Length);
+    }
+
+    /// <summary>How many seats the host gave this co-op guest's machine. That is its first, then as
+    /// many more as it asked (<see cref="LocalSeats"/>) and the cap had room for.</summary>
+    public int CoopSeats => CoopFlow is { } flow ? Math.Min(_localSeats, 1 + flow.Extra) : 1;
 
     /// <summary>Where a LAN search sends its query: the broadcast address by default. A suite sets
     /// the loopback, since a broadcast on the loopback proves nothing on Windows.</summary>
@@ -377,17 +393,21 @@ public sealed class NetPlayFeature : IMenuFeature
     /// </summary>
     public byte CoopEpoch => _epoch;
 
-    /// <summary>Whether every guest this co-op host seated is Ready under the current round. True
-    /// with no guest seated, since a host may fly its campaign alone.</summary>
+    /// <summary>Whether every seat this co-op host gave a guest is Ready under the current round,
+    /// each of a machine's seats on its own. True with no guest seated, since a host may fly its
+    /// campaign alone.</summary>
     public bool CoopAllReady
     {
         get
         {
             foreach (int peer in _admitted)
             {
-                if (!ReadyNow(peer))
+                for (int local = 0; local < GrantedTo(peer); local++)
                 {
-                    return false;
+                    if (!ReadyNow(peer, local))
+                    {
+                        return false;
+                    }
                 }
             }
 
@@ -395,49 +415,59 @@ public sealed class NetPlayFeature : IMenuFeature
         }
     }
 
-    /// <summary>The guests this co-op host seated, in player order: each one's player number, its
-    /// Ready mark under the current round, and the plane it flies. A guest flies its own fit on the
-    /// plane it picked, and the plane's stored fit on one the host's settling gave it instead.
-    /// </summary>
+    /// <summary>Every seat this co-op host gave its guests in player order, a guest's own side by
+    /// side. Each names its player number, its Ready mark under the current round, and the plane it
+    /// flies. A seat flies its own fit on the plane it picked, and the plane's stored fit on one the
+    /// host's settling gave it instead.</summary>
     public IReadOnlyList<CoopGuest> CoopGuests
     {
         get
         {
             var guests = new List<CoopGuest>(_admitted.Count);
-            for (int i = 0; i < _admitted.Count; i++)
+            int slot = _localPlayers;
+            foreach (int peer in _admitted)
             {
-                int peer = _admitted[i];
-                var pick = _transport!.Picks.TryGetValue(peer, out var sent) ? sent : default;
-                int plane = HostFlow.PlaneOf(_localPlayers + i);
-                var word = HostFlow.HangarAt(plane);
-                byte airframe = word?.Airframe ?? CoopGuestPick.StarterAirframe;
-                var fit = word is { } flown && pick.PlaneIndex != plane ? flown.Fit : pick.Fit;
-                guests.Add(new CoopGuest(peer, _localPlayers + i, ReadyNow(peer), airframe,
-                    fit, pick.Name ?? "", pick.Left && pick.Epoch == _epoch, plane, word?.Build, PilotVoices.FromWire(pick.Voice)));
+                for (int local = 0; local < GrantedTo(peer); local++, slot++)
+                {
+                    var pick = _transport!.PickAt(peer, local) ?? default;
+                    int plane = HostFlow.PlaneOf(slot);
+                    var word = HostFlow.HangarAt(plane);
+                    byte airframe = word?.Airframe ?? CoopGuestPick.StarterAirframe;
+                    var fit = word is { } flown && pick.PlaneIndex != plane ? flown.Fit : pick.Fit;
+                    guests.Add(new CoopGuest(peer, slot, ReadyNow(peer, local), airframe, fit, pick.Name ?? "",
+                        pick.Left && pick.Epoch == _epoch, plane, word?.Build, PilotVoices.FromWire(pick.Voice), local));
+                }
             }
 
             return guests;
         }
     }
 
-    /// <summary>The plane of the hangar each guest this co-op host seated picked, in player order,
-    /// as <see cref="CoopGuestPick.Plane"/> names one. What the host settles every seat's pick from.
-    /// </summary>
+    /// <summary>The plane of the hangar each seat this co-op host gave its guests picked, in player
+    /// order, as <see cref="CoopGuestPick.Plane"/> names one. What the host settles every seat's
+    /// pick from.</summary>
     public IReadOnlyList<int> CoopGuestPlanes
     {
         get
         {
-            var planes = new int[_admitted.Count];
-            for (int i = 0; i < planes.Length; i++)
+            var planes = new List<int>(_admitted.Count);
+            foreach (int peer in _admitted)
             {
-                planes[i] = _transport!.Picks.TryGetValue(_admitted[i], out var pick)
-                    ? pick.PlaneIndex
-                    : Session.Campaign.CoopPlanePool.Unpicked;
+                for (int local = 0; local < GrantedTo(peer); local++)
+                {
+                    planes.Add(_transport!.PickAt(peer, local) is { } pick
+                        ? pick.PlaneIndex
+                        : Session.Campaign.CoopPlanePool.Unpicked);
+                }
             }
 
             return planes;
         }
     }
+
+    /// <summary>The line this co-op guest's band shows when the host gave its machine fewer seats
+    /// than its players, or "" when every player has one.</summary>
+    public string CoopSeatsShort => IsCoopGuest && CoopSeats < _localSeats ? CoopDoorText.SeatsShort(CoopSeats, _localSeats) : "";
 
     /// <summary>The co-op host's hangar as this guest last heard it, each plane with the seat that
     /// holds it. Empty on a door that is not a co-op guest's, and until the host has named it.
@@ -497,8 +527,26 @@ public sealed class NetPlayFeature : IMenuFeature
     /// host has shared no film.</summary>
     public CoopFilmMessage? CoopFilm => IsCoopGuest ? _transport?.Film : null;
 
-    /// <summary>Whether this co-op guest is Ready under the host's current round.</summary>
-    public bool CoopReady => CoopFlow is { } flow && Pick.ReadyUnder(flow.Epoch);
+    /// <summary>Whether this co-op guest's first seat is Ready under the host's current round.</summary>
+    public bool CoopReady => CoopReadyAt(0);
+
+    /// <summary>Whether every seat the host gave this co-op guest's machine is Ready under the host's
+    /// current round.</summary>
+    public bool CoopSeatsReady
+    {
+        get
+        {
+            for (int local = 0; local < CoopSeats; local++)
+            {
+                if (!CoopReadyAt(local))
+                {
+                    return false;
+                }
+            }
+
+            return CoopFlow != null;
+        }
+    }
 
     /// <summary>Whether this co-op guest's host has launched the mission it is seated for: the host
     /// names the flight and its session's opener is waiting here. A guest that arrived mid-mission
@@ -531,6 +579,15 @@ public sealed class NetPlayFeature : IMenuFeature
         }
     }
 
+    /// <summary>This co-op guest's pick for its seat <paramref name="local"/>, counted from 0 among
+    /// its machine's own. Seat 0's is <see cref="Pick"/>.</summary>
+    public CoopGuestPick PickOf(int local) => _picks[Math.Clamp(local, 0, _picks.Length - 1)];
+
+    /// <summary>Whether this co-op guest's seat <paramref name="local"/> is Ready under the host's
+    /// current round. False for a seat the host did not give it.</summary>
+    public bool CoopReadyAt(int local) =>
+        CoopFlow is { } flow && local >= 0 && local < CoopSeats && PickOf(local).ReadyUnder(flow.Epoch);
+
     /// <summary>Removes the connected guest at <paramref name="peer"/> from this host's session, as
     /// the original's Boot does. The guest is told why and hung up on. Its address is banned until
     /// the session closes, and a Dogfight lobby posts the original's notice. False on a door that is
@@ -545,6 +602,7 @@ public sealed class NetPlayFeature : IMenuFeature
         string name = _transport.Picks.TryGetValue(peer, out var pick) && pick.Name is { Length: > 0 } named ? named : "";
         _transport.Boot(peer);
         _admitted.Remove(peer);
+        _granted.Remove(peer);
         RefuseTurnedAway();
         _dogfight?.Announce(CoopDoorText.BootedLine(name));
         return true;
@@ -598,7 +656,11 @@ public sealed class NetPlayFeature : IMenuFeature
 
         // The first follow settles the round, which would otherwise clear a mark set under it.
         FollowHost();
-        Pick.Leave();
+        foreach (var pick in _picks)
+        {
+            pick.Leave();
+        }
+
         FollowHost();
     }
 
@@ -1018,6 +1080,7 @@ public sealed class NetPlayFeature : IMenuFeature
         _byCode = false;
         _released = false;
         _admitted.Clear();
+        _granted.Clear();
         _refused.Clear();
         _dogfight = null;
         _flownEpoch = null;
@@ -1040,6 +1103,17 @@ public sealed class NetPlayFeature : IMenuFeature
         StopSearch();
         Fault = "";
         SearchFault = "";
+    }
+
+    private static CoopGuestPick[] NewPicks()
+    {
+        var picks = new CoopGuestPick[CoopHumans];
+        for (int i = 0; i < picks.Length; i++)
+        {
+            picks[i] = new CoopGuestPick();
+        }
+
+        return picks;
     }
 
     private static bool Contains(IReadOnlyList<int> peers, int peer)
@@ -1268,12 +1342,18 @@ public sealed class NetPlayFeature : IMenuFeature
         }
     }
 
-    // The player count is this machine's seats plus every guest on the wire. It moves as guests
-    // arrive, and the step re-sends it.
+    // The player count is this machine's seats plus every guest on the wire, and in co-op every
+    // further seat a guest was given. It moves as guests arrive, and the step re-sends it.
     private SessionAdvertMessage CurrentAdvert()
     {
-        int players = Math.Min(_localPlayers + Peers, byte.MaxValue);
         bool coop = _kind == NetSessionKind.CampaignCoop;
+        int extra = 0;
+        foreach (int peer in coop ? _admitted : (IReadOnlyList<int>)Array.Empty<int>())
+        {
+            extra += GrantedTo(peer) - 1;
+        }
+
+        int players = Math.Min(_localPlayers + Peers + extra, byte.MaxValue);
         // A Built-in host picks its map after the lobby opened, so its advert names none.
         byte seq = coop ? _missionSeq : _dogfight is { Shown: true } lobby ? lobby.Options.Environment : SessionAdvertMessage.NoMission;
         int cap = HostCap;
@@ -1307,13 +1387,21 @@ public sealed class NetPlayFeature : IMenuFeature
         }
     }
 
-    // A campaign host seats guests in arrival order up to the cap. One past it is told the game is
-    // full, and is hung up on if it has not left by the end of the grace.
+    // A campaign host seats guests in arrival order while the cap has a seat free, every seat a
+    // guest was given counting. One past it is told the game is full, and is hung up on if it has
+    // not left by the end of the grace.
     private void Admit()
     {
         var peers = _transport!.AllPeers;
         _admitted.RemoveAll(peer => !Contains(peers, peer));
         int seats = Math.Max(0, HostCap - _localPlayers);
+        Grant(seats);
+        int used = 0;
+        foreach (int peer in _admitted)
+        {
+            used += GrantedTo(peer);
+        }
+
         for (int i = 0; i < peers.Count; i++)
         {
             int peer = peers[i];
@@ -1322,16 +1410,45 @@ public sealed class NetPlayFeature : IMenuFeature
                 continue;
             }
 
-            if (_admitted.Count < seats)
+            if (used < seats)
             {
                 _admitted.Add(peer);
+                _granted[peer] = 1;
+                used++;
                 continue;
             }
 
             _transport.Farewell(peer, NetCloseReason.Full);
             _refused.Add((peer, 0.0));
         }
+
+        Grant(seats);
     }
+
+    // Each seated guest's seats: its first, then as many more as its picks ask, in arrival order out
+    // of what the first seats leave. ⚠ Never take a guest's first seat for another's further one; a
+    // machine's later pad must not unseat a player already flying. A guest cut short is told so.
+    private void Grant(int seats)
+    {
+        int free = seats - _admitted.Count;
+        foreach (int peer in _admitted)
+        {
+            int extra = Math.Clamp(_transport!.SeatsWanted(peer) - 1, 0, Math.Max(0, free));
+            _granted[peer] = 1 + extra;
+            free -= extra;
+        }
+
+        foreach (int peer in new List<int>(_granted.Keys))
+        {
+            if (!_admitted.Contains(peer))
+            {
+                _granted.Remove(peer);
+            }
+        }
+    }
+
+    // How many seats this host gave a seated guest, 1 until its picks ask for more.
+    private int GrantedTo(int peer) => _granted.TryGetValue(peer, out int seats) ? seats : 1;
 
     // Either kind of door tells a guest of another version so. It is hung up on after the grace a
     // guest refused as full gets. The lobby has already left it off every peer list.
@@ -1386,18 +1503,26 @@ public sealed class NetPlayFeature : IMenuFeature
         }
     }
 
-    private bool ReadyNow(int peer) =>
-        _transport != null && _transport.Picks.TryGetValue(peer, out var pick) && pick.Epoch == _epoch && pick.Ready;
+    private bool ReadyNow(int peer, int local) =>
+        _transport != null && _transport.PickAt(peer, local) is { } pick && pick.Epoch == _epoch && pick.Ready;
 
     // Zero is skipped, so a pick a guest never sent (epoch 0) is never counted as current.
     private void NextRound() => _epoch = (byte)(_epoch == byte.MaxValue ? 1 : _epoch + 1);
 
     private void SendFlows()
     {
-        if (_transport != null)
+        if (_transport == null)
         {
-            HostFlow.Send(_transport, _admitted, _localPlayers, _epoch, ReadyNow);
+            return;
         }
+
+        var seated = new List<(int Peer, int Seats)>(_admitted.Count);
+        foreach (int peer in _admitted)
+        {
+            seated.Add((peer, GrantedTo(peer)));
+        }
+
+        HostFlow.Send(_transport, seated, _localPlayers, _epoch, ReadyNow);
     }
 
     // At once rather than on the next step, so a film's end reaches a guest before the board after it.
@@ -1430,10 +1555,18 @@ public sealed class NetPlayFeature : IMenuFeature
             _transport.DropHeld();
         }
 
-        if (Pick.Follow(flow.Epoch, PlayerName, PilotVoices.Wire(Voice)) is { } pick && _hostPeer >= 0)
+        // One pick per local player. Only the first has a Player Information answer, so it alone
+        // carries a name and voice; the rest go by their player numbers.
+        for (int local = 0; local < _localSeats; local++)
         {
-            _transport.Tell(_hostPeer, pick);
-            Pick.MarkSent(pick);
+            var seat = _picks[local];
+            string name = local == 0 ? PlayerName : "";
+            byte voice = local == 0 ? PilotVoices.Wire(Voice) : CoopPickMessage.NoVoice;
+            if (seat.Follow(flow.Epoch, name, voice, local, local + 1 < _localSeats) is { } pick && _hostPeer >= 0)
+            {
+                _transport.Tell(_hostPeer, pick);
+                seat.MarkSent(pick);
+            }
         }
     }
 
@@ -1441,7 +1574,11 @@ public sealed class NetPlayFeature : IMenuFeature
     {
         HostFlow.Forget();
         NextRound();
-        Pick.Forget();
+        foreach (var pick in _picks)
+        {
+            pick.Forget();
+        }
+
         _flownFlow = false;
     }
 
@@ -1516,6 +1653,7 @@ public sealed class NetPlayFeature : IMenuFeature
         _byCode = false;
         _released = false;
         _admitted.Clear();
+        _granted.Clear();
         _refused.Clear();
         _dogfight = null;
         _flownEpoch = null;
