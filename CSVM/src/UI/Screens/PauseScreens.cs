@@ -80,19 +80,21 @@ public sealed record PauseSheet(
     }
 
     /// <summary>A Dogfight's briefing blackboard: <c>escape.zrd</c>'s <c>loading_m</c> dialog under
-    /// the key the load screen reads, with its texts and that file's strips. Where
-    /// <c>escape.zrd</c> carries no dialog of that name, <c>Loading.zrd</c>'s own stands in. Null
-    /// when neither file carries it, which leaves the Built-in board (docs/org/pause-screen.md).
-    /// </summary>
+    /// the key the load screen reads, with its texts. Where <c>escape.zrd</c> carries no dialog of
+    /// that name, <c>Loading.zrd</c>'s own stands in. Null when neither file carries it, which leaves
+    /// the Built-in board (docs/org/pause-screen.md). ⚠ The strips are <c>ia_escape.zrd</c>'s:
+    /// <c>escape.zrd</c>'s block lays the campaign's two columns under a blackboard.</summary>
     public static PauseSheet? LoadMultiplayer(string zrdrPath, string messagesPath, string dialogKey)
     {
         EscapeDialog escape;
         EscapeDialog loading;
+        EscapeDialog blackboard;
         Messages messages;
         try
         {
             escape = EscapeDialog.Load(zrdrPath, EscapeDialog.CampaignFile);
             loading = EscapeDialog.Load(zrdrPath, EscapeDialog.LoadingFile);
+            blackboard = EscapeDialog.Load(zrdrPath, EscapeDialog.InstantActionFile);
             messages = Messages.Load(messagesPath);
         }
         catch (Exception e) when (e is IOException or JsonException)
@@ -104,7 +106,7 @@ public sealed record PauseSheet(
         bool own = escape.States.ContainsKey(dialogKey);
         string file = own ? EscapeDialog.CampaignFile : EscapeDialog.LoadingFile;
         if (!(own ? escape : loading).States.TryGetValue(dialogKey, out var state)
-            || escape.Shared is not { } shared)
+            || blackboard.Shared is not { } shared)
         {
             return null;
         }

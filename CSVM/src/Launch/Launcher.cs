@@ -1878,6 +1878,34 @@ public partial class Launcher : Node3D
         Log.Info("ui", $"pause aid: {chapter} {missionType} draws {sheet.State.Key}");
     }
 
+    // A Dogfight's pause sheet with no match behind it: a Deathmatch on that chapter's environment
+    // with nobody on a team. docs/org/pause-screen.md.
+    private void ShowMultiplayerPauseSheet(string chapter)
+    {
+        if (UI.Screens.LoadScreens.MultiplayerKey(chapter, false, false, false) is not { } key)
+        {
+            Log.Warn("ui", $"pause aid: no lobby environment flies {chapter}");
+            return;
+        }
+
+        var sheet = UI.Screens.PauseSheet.LoadMultiplayer(_zrdrPath, _messagesPath, key);
+        if (sheet == null)
+        {
+            Log.Warn("ui", $"pause aid: no escape.zrd or Loading.zrd sheet for {chapter} ({key})");
+            return;
+        }
+
+        var pause = new Flight.Modes.PauseState();
+        var board = OriginalPauseBoard.Build(
+            pause, _ => new UI.Boards.MenuInput { Keyboard = true }, _dataRoot, sheet,
+            () => UI.Screens.PauseReadout.Empty);
+        var layer = new CanvasLayer { Name = "pause_board_aid", Layer = UI.Boards.HudLayers.Board };
+        layer.AddChild(board);
+        AddChild(layer);
+        pause.TryToggle(0);
+        Log.Info("ui", $"pause aid: {chapter} Dogfight draws {sheet.State.Key}");
+    }
+
     private UI.Screens.PauseReadout PauseAidReadout(UI.Screens.PauseSheet sheet, string missionZrdr, int completed)
     {
         var objectives = UI.Menu.BriefingObjectives.Load(
@@ -2266,6 +2294,11 @@ public partial class Launcher : Node3D
             ShowInstantActionPauseSheet(
                 parts.Length > 1 && parts[1].Length > 0 ? parts[1] : "C1",
                 parts.Length > 2 && parts[2].Length > 0 ? parts[2] : "stunt_flying");
+        }
+        else if (aid.StartsWith("pauseboard-mp", System.StringComparison.Ordinal))
+        {
+            var parts = aid.Split(':');
+            ShowMultiplayerPauseSheet(parts.Length > 1 && parts[1].Length > 0 ? parts[1] : "C1");
         }
         else if (aid.StartsWith("pauseboard", System.StringComparison.Ordinal))
         {
