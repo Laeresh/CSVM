@@ -178,7 +178,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Audio
 
-- `BL-281` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The user
+- `BL-281` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The user
   recalls no spark burst on the airframe when it is hit in the original, but the spark the item was
   written against is decoded as running in the original, and a different, invented spark is the one
   every airframe of ours shows on every hit.** *Evidence:* the user's verdict from the original:
@@ -200,7 +200,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Question for the user:* which spark did you mean? (a) the flash on every hit: remove the
   stand-in sprite on aircraft hits and keep the Devastator's decoded first-damage spark; (b) also
   remove the Devastator's spark and the ricochet sequence inside it, against the decode; or (c) only
-  the Devastator's spark. *Fix shape per answer:* (a) in `ImpactOutcome.StandInFor`, an aircraft hit
+  the Devastator's spark. *Decision:* (a), remove the invented per-hit flash and keep the
+  Devastator's decoded first-damage spark. *Fix shape per answer:* (a) in `ImpactOutcome.StandInFor`, an aircraft hit
   stands in nothing visible while the effects runtime still receives the row's name (the sink call
   in `Apply` is gated on the stand-in today, so the gate needs its own condition); (b) or (c) drop
   `PlaneDamageEffectAnims` from `DamageVisuals.RigAnimFor`, keeping the entry's crossing slot.
@@ -210,7 +211,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Cameras & views
 
-- `BL-266` `[Fidelity]` `[M]` `[Next: decide]` `[Impact: high]` `[Evidence: decoded]` **Plane wobble:
+- `BL-266` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **Plane wobble:
   port the original's rendered rotation, or keep the look judged at the controls?** The decode is
   complete ([`docs/org/shakes.md`](docs/org/shakes.md), "The rendered rotation"): the original sums
   the seven camera blocks' positions and writes them to the plane node as a rotation vector at
@@ -224,7 +225,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `Gun Wobble and animation.mp4`. *Question:* port the decoded rotation (roll on the `×2.5`
   component at twice its position, pitch and yaw on the pivot, the fire, impact and contact sources
   as blocks) and re-judge the knobs at the controls, or keep the judged look and record it in
-  `docs/org/shakes.md` as a chosen departure? ⚠ Traps: the knobs stay at 1 until that look; a port
+  `docs/org/shakes.md` as a chosen departure? *Decision:* port the decoded rotation, then
+  re-judge the knobs at the controls. ⚠ Traps: the knobs stay at 1 until that look; a port
   that only rescales the roll leaves the nose still, which the original never does; `SHAKES_CAMERA`
   is not the fire-path mechanism (it routes `wep_26`'s hits to the empty explosion source); wire
   nothing on one coincidence of a magnitude candidate with an authored constant.
