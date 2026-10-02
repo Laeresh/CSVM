@@ -114,13 +114,16 @@ internal static class NetCustomPlaneSuites
             }
 
             var build = CustomPlaneWire.Build(GuestPlane())!;
+            ctx.Check(guest.Rules.AllowCustom, $"[gates] a shown host's new lobby allows custom planes, as the original's opens ({guest.Rules})");
+            host.SetAllowCustomPlanes(false);
+            StepDoors(SettleSteps, hostDoor, guestDoor);
             guest.Pick(1, default);
             ctx.Check(guest.Refusal == PlaneRefusal.None && guest.SetReady(true),
-                $"ABLE-TO-FAIL CONTROL: [gates] a stock pick is Ready in a new lobby ({guest.Refusal})");
+                $"ABLE-TO-FAIL CONTROL: [gates] a stock pick is Ready with custom planes barred ({guest.Refusal})");
             guest.PickCustom(build, default);
             StepDoors(SettleSteps, hostDoor, guestDoor);
             ctx.Check(!guest.Rules.AllowCustom && guest.Refusal == PlaneRefusal.CustomBarred && !guest.SetReady(true),
-                $"[gates] a new lobby allows no custom planes, so the guest's custom pick is refused at Ready ({guest.Refusal})");
+                $"[gates] with Allow Custom Planes cleared the guest's custom pick is refused at Ready ({guest.Refusal})");
             StepDoors(SettleSteps, hostDoor, guestDoor);
             ctx.Check(host.Players.Count == 2 && !host.Players[1].Ready,
                 $"[gates] and the host's row for the guest is not Ready ({Rows(host)})");

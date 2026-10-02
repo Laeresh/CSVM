@@ -15,8 +15,8 @@ namespace CSVM.UI.Menu.Original;
 /// standalone module over <see cref="NetPlayFeature"/>. The multiplayer scripts place their
 /// widgets inline, so every corner here is the scripts' own, not the layout's
 /// (<c>docs/org/menu-inventory.md</c>). LAN TCP/IP searches, Internet joins the typed address, and
-/// Join by code, our own way, joins a host's code. The original's other three ways are left off.
-/// Build Custom Plane draws greyed, and Host and Create Game open the Multiplayer Lobby as a
+/// our own Join by code joins a host's code, the original's other three ways left off. Build
+/// Custom Plane opens the wallet-free hangar. Host and Create Game open the Multiplayer Lobby as a
 /// Dogfight's host once Game and Player Information are answered. Every join answers Player
 /// Information first and is followed on a messagebox over the page until it ends.
 /// </summary>
@@ -55,7 +55,8 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
     /// <summary>The most characters the Join code box holds: a code and its dash.</summary>
     public const int CodeBoxLimit = MasterWire.CodeLength + 1;
 
-    /// <summary>Build Custom Plane, greyed while guests fly stock planes.</summary>
+    /// <summary>Build Custom Plane, which opens the wallet-free hangar and comes back here. Its
+    /// builds are the lobby's Custom Planes. Greyed only on a shell with no hangar.</summary>
     public const string BuildKey = "MP_B_BUILD";
 
     /// <summary>Host, which opens the Multiplayer Lobby as a Dogfight's host.</summary>
@@ -314,6 +315,9 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
                 break;
             case ConnectKey:
                 Connect();
+                break;
+            case BuildKey:
+                _host.OpenHangar(null);
                 break;
             case ExitKey:
                 Leave();
@@ -598,7 +602,7 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
             }
         }
 
-        rows.Add(_text.Strip(BuildKey, BuildArt, 117f, 468f, false, 0, 200f, 32f));
+        rows.Add(_text.Strip(BuildKey, BuildArt, 117f, 468f, _host.CanBuildPlane, 0, 200f, 32f));
         rows.Add(_text.Strip(HostKey, SmallArt, 514f, 424f, _net() != null, 1, 74f, 37f));
         rows.Add(_text.Strip(ConnectKey, MediumArt, 610f, 424f, true, 1, 96f, 37f));
         rows.Add(_text.Strip(ExitKey, ExitArt, 514f, 559f, true, 1, 200f, 32f));

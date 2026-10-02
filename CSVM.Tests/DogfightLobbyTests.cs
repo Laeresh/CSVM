@@ -214,6 +214,23 @@ public sealed class DogfightLobbyTests
     }
 
     [Fact]
+    public void AShownHostOpensWithCustomPlanesAllowedAndAnUnshownOneDoesNot()
+    {
+        var (host, guests, _) = Lobbies(2);
+        Assert.False(host.Rules.AllowCustom);
+
+        host.Show();
+        Settle(host, guests);
+        Assert.True(host.Rules.AllowCustom);
+        Assert.True(guests[0].Rules.AllowCustom);
+
+        // ABLE-TO-FAIL CONTROL: a later showing does not tick the box the host cleared.
+        Assert.True(host.SetAllowCustomPlanes(false));
+        host.Show();
+        Assert.False(host.Rules.AllowCustom);
+    }
+
+    [Fact]
     public void ARulesChangeClearsEveryReadyAndAnOutlawedPartIsRefused()
     {
         var (host, guests, _) = Lobbies(2);

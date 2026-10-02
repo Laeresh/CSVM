@@ -642,8 +642,9 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             ? (_seatPage?.List is { Open: true } list ? list : null)
             : Campaign.OpenCombo;
 
-    /// <summary>Opens the hangar from the screen showing, wallet-free from Instant Action's Build
-    /// Custom Plane and over <paramref name="wallet"/> from the cabin's PLANE CONSTRUCTION. Nothing
+    /// <summary>Opens the hangar from the screen showing, wallet-free from Instant Action's and the
+    /// Connection page's Build Custom Plane and over <paramref name="wallet"/> from the cabin's
+    /// PLANE CONSTRUCTION. Nothing
     /// happens when the shell has no hangar feature or no store.</summary>
     public void OpenHangar(IHangarWallet? wallet = null) => Hangar?.OpenHangar(wallet, DoorAirframe());
 
@@ -825,13 +826,20 @@ public sealed partial class OriginalShell : IOriginalScreenHost
 
     // The airframe a default-configuration build opens on: the pilot's current plane on whichever
     // screen the hangar door stands on. Instant Action's door means its Pilot Plane pick, and the
-    // cabin's means the seated pilot's own aircraft. Any other door has no current plane to
-    // inherit (docs/org/hangar.md, "What Load Default Configuration loads").
+    // cabin's means the seated pilot's own aircraft. Any other door, the Connection page's
+    // included, has no current plane to inherit (docs/org/hangar.md, "What Load Default
+    // Configuration loads").
     private int DoorAirframe()
     {
         if (_screen == OriginalScreen.InstantAction && _instantAction != null)
         {
             return _instantAction.PlayerPlaneIndex;
+        }
+
+        // A campaign left open behind the Connection page names no pilot of this door.
+        if (_screen == OriginalScreen.Connection)
+        {
+            return HangarFeature.DefaultAirframe;
         }
 
         return Campaign.SeatedAirframe ?? HangarFeature.DefaultAirframe;

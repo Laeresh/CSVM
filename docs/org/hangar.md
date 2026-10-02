@@ -725,7 +725,9 @@ another on a Bloodhawk from the cabin. A fresh profile's record is zeroed, so it
 
 The remake carries the rule as `HangarFeature.StartDefaultPlane(int airframe)` over the airframe
 the door names: Instant Action's Pilot Plane pick on that door, the seated profile's own aircraft
-on the cabin's, and `HangarFeature.DefaultAirframe` where no plane is current.
+on the cabin's, and `HangarFeature.DefaultAirframe` where no plane is current, which is the
+Multiplayer Connection page's door. Which plane the original's own multiplayer door finds current
+is not decoded.
 
 ### When the airframe swap asks, and what its three answers do
 

@@ -315,7 +315,7 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
     }
 
     /// <summary>Opens the hangar from the screen showing, a build over the saved-plane store. It is
-    /// wallet-free from Instant Action's Build Custom Plane and over <paramref name="wallet"/> from
+    /// wallet-free from Instant Action's or the Connection page's Build Custom Plane and over <paramref name="wallet"/> from
     /// the cabin's PLANE CONSTRUCTION. Entry is through the name screen, as the original's own
     /// chain does. The screen the door was pressed on is where CANCEL and a commit return to. The
     /// parameter <paramref name="doorAirframe"/> is the door's own default-build airframe. Nothing

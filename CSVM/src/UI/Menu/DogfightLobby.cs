@@ -113,7 +113,7 @@ public sealed class DogfightLobby
         1, 0, (byte)DogfightMissionType.Deathmatch, DogfightVictory.Time, DefaultTimeMinutes, DefaultScore,
         false, DefaultLives, true);
 
-    // The original's settings block starts zeroed, so a new lobby allows no custom plane.
+    // Clear until a lobby screen first stands on a host, which ticks Allow Custom Planes (Show).
     private NetPlaneRules _rules;
     private byte _airframe = DefaultAirframe;
     private NetPlaneBuild? _build;
@@ -178,7 +178,7 @@ public sealed class DogfightLobby
     public NetPlaneBuild? Build => _build;
 
     /// <summary>The plane rules as this end stands on them: its own on the host, the host's word on
-    /// a guest. A guest that has heard nothing reads a new lobby's, which allow no custom plane.
+    /// a guest. A guest that has heard nothing reads cleared rules, which allow no custom plane.
     /// </summary>
     public NetPlaneRules Rules => IsHost ? _rules : _wire.PlaneRules?.Rules ?? default;
 
@@ -620,8 +620,17 @@ public sealed class DogfightLobby
     }
 
     /// <summary>A lobby screen now stands on this lobby, so a guest's pick and name go to the host.
-    /// </summary>
-    public void Show() => Shown = true;
+    /// A host's first showing ticks Allow Custom Planes, as the original's lobby opens
+    /// (<c>docs/org/multiplayer-messages.md</c>, "Custom planes"). An unshown Built-in host stays clear.</summary>
+    public void Show()
+    {
+        if (!Shown)
+        {
+            ChangeRules(_rules with { AllowCustom = true });
+        }
+
+        Shown = true;
+    }
 
     /// <summary>A Built-in host's launch against the guests that sent a pick, which only a lobby
     /// screen sends. It waits for their Ready and writes the map and rules into the options. Null

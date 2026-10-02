@@ -268,9 +268,20 @@ settings and nothing more.
 ## Custom planes
 
 [Evidence: decoded] Allow Custom Planes is the byte at `0x642fb1`, written by the lobby's check at
-`0x40dde5` and read at `0x40deeb`, `0x40f053` and `0x407f04`. The lobby globals are zero-initialised,
-so a new lobby allows no custom planes. At Ready (`0x407f02`) the program copies it to `0x61f2ec` and
-calls `FUN_00414580(1)`.
+`0x40dde5` and read at `0x40deeb`, `0x40f053` and `0x407f04`. At Ready (`0x407f02`) the program
+copies it to `0x61f2ec` and calls `FUN_00414580(1)`.
+
+[Evidence: decoded] **A host's lobby opens with Allow Custom Planes ticked.** The settings block
+starts zeroed (it is zero in the file image, and `0x407190` clears its ten dwords with `rep stosd`),
+and the host's open writes only the environment (`0x407d0f`). The block does not stay zero:
+`MULTIPLAYERLOBBY_MISSION.SCRIPT`'s `gui_create` mails 2013 to itself, and on a host (`$$OX$$`) case
+2013 mails 8 (live and ticked) to the Allow Custom Planes checkbox (`ZBA`, label 10112) and to Auto
+Respawn, 2 (live and clear) to Outlaw Components, Restrict Number of Teams and Limited Lives, then 2010.
+Case 2010 reads every widget and calls `$$E$$` 5007, which the jump table at `0x40f91c` sends to
+`0x40dce3`, the handler whose `0x40dde5` writes the tick into `0x642fb1`. Only the Zone way
+(`$$RY$$ == 0`) also runs case 2011, where a Zone-supplied setting (`$$A$$` 1035) may override it.
+The getter 5009 (`0x40de6c`) hands the byte back to the script's refresh 1015 on every peer. The
+remake ticks it on a host's first lobby screen; a Built-in host, which shows none, keeps it clear.
 
 The outlaw list is one object at `0x64e168`, built by `FUN_00410560`, of 34 byte flags:
 

@@ -35,6 +35,9 @@ internal static class MenuOriginalConnectionSuites
     // The password the boot suite's host asks.
     private const string LobbyPassword = "swordfish";
 
+    // The suite whose scratch store holds the plane the Connection page builds.
+    private const string BuildSuite = "menu-original-connection-build";
+
     [Suite("menu-original-connection",
         "The Original presentation's network doors over the loopback and an in-process LAN: the "
         + "cabin's HOST CO-OP asks GAME INFORMATION, which opens on Private, whose Cancel opens nothing and whose cap of "
@@ -755,6 +758,83 @@ internal static class MenuOriginalConnectionSuites
             echo.QueueFree();
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
             CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
+    [Suite("menu-original-connection-build",
+        "The Original Connection page's Build Custom Plane over a scratch plane store: it is live, the "
+        + "keyboard's walk reaches it under the IP Address box and Enter opens the wallet-free name "
+        + "screen, Back and the hub's CANCEL each land back on the Connection page on the button with "
+        + "nothing saved, and a purchase saves an exported build on the default airframe and lands back "
+        + "there too. Host then opens a lobby with Allow Custom Planes ticked, whose Custom Planes tab "
+        + "offers the plane and picks it, and the host's untick greys that tab again")]
+    internal static void BuildCustomPlaneFromTheConnectionPage(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var door = new NetPlayFeature(
+            (_, _, _) => LoopbackTransport.Mesh(1, LoopbackConditions.Perfect, new Random(115))[0],
+            (_, _) => throw new InvalidOperationException("the host does not join"));
+        door.BindAddress = Loopback;
+        door.SearchAddress = Loopback;
+        var ends = new List<End>();
+        var store = MenuSuiteHost.ScratchPlanes(ctx, BuildSuite);
+        string? options = MenuSuiteHost.ScratchOptions(ctx, BuildSuite);
+        try
+        {
+            var end = Open(ctx, layout, door, ends, planes: store);
+            if (end == null || !BuildFromTheConnectionPage(ctx, end, store, "Lobby Hornet"))
+            {
+                return;
+            }
+
+            ClickRow(ctx, end, OriginalConnectionScreen.HostKey);
+            Answer(ctx, end, "Zachary", LobbyGame);
+            Pump(end);
+            if (door.Dogfight is not { IsHost: true } lobby || end.Shell.Screen != OriginalScreen.Lobby)
+            {
+                ctx.Check(false, $"Host opens the lobby as a Dogfight's host ({end.Shell.Screen}, {door.Stage})");
+                return;
+            }
+
+            ctx.Check(lobby.Rules.AllowCustom, $"the new lobby opens with Allow Custom Planes ticked, as the original's host open ticks it ({lobby.Rules})");
+            ClickRow(ctx, end, OriginalLobbyScreen.PlaneTabKey);
+            ClickRow(ctx, end, OriginalLobbyScreen.CustomTabKey);
+            ClickRow(ctx, end, OriginalLobbyScreen.PlaneKey);
+            var offered = end.Shell.Rows.FirstOrDefault(row => row.Key.StartsWith(OriginalLobbyScreen.PlaneKey + ":", StringComparison.Ordinal)
+                                                               && row.Label == "Lobby Hornet");
+            ctx.Check(offered != null, $"the Custom Planes tab offers the plane built from the Connection page ({string.Join(", ", end.Shell.Rows.Select(r => r.Label))})");
+            if (offered != null)
+            {
+                ClickRow(ctx, end, offered.Key);
+                ctx.Check(lobby.Build?.Name == "Lobby Hornet" && lobby.Refusal == PlaneRefusal.None,
+                    $"and picks it, refused nothing ({lobby.Build?.Name ?? "stock"}, {lobby.Refusal})");
+            }
+
+            ClickRow(ctx, end, OriginalLobbyScreen.MissionTabKey);
+            ClickRow(ctx, end, OriginalLobbyScreen.CustomPlanesKey);
+            ClickRow(ctx, end, OriginalLobbyScreen.PlaneTabKey);
+            ctx.Check(!lobby.Rules.AllowCustom && Row(end.Shell, OriginalLobbyScreen.CustomTabKey) is { Enabled: false },
+                $"ABLE-TO-FAIL CONTROL: the host's untick of Allow Custom Planes greys the Custom Planes tab ({lobby.Rules})");
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            door.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+            MenuSuiteHost.DropScratchPlanes(ctx, BuildSuite);
         }
     }
 
@@ -1544,6 +1624,67 @@ internal static class MenuOriginalConnectionSuites
         ctx.Check(CSVM.Utils.OptionsStore.UserOptions().Load() is { NetCallsign: "Zachary", NetGameName: LobbyGame },
             $"the callsign and the game's name are remembered for the next session ({CSVM.Utils.OptionsStore.UserOptions().Load().NetCallsign})");
         return host.Shell.Screen == OriginalScreen.Lobby;
+    }
+
+    // Build Custom Plane from the Connection page: the keyboard walk and Enter, Back, the hub's
+    // CANCEL and a purchase, each landing back on the page. True once the plane is in the store.
+    private static bool BuildFromTheConnectionPage(TestContext ctx, End end, CustomPlaneStore store, string name)
+    {
+        var shell = end.Shell;
+        var hangar = end.Host.Features.Get<HangarFeature>();
+        ClickRow(ctx, end, OriginalShell.MultiplayerKey);
+        ctx.Check(shell.Screen == OriginalScreen.Connection && Row(shell, OriginalConnectionScreen.BuildKey) is { Enabled: true },
+            $"Build Custom Plane is live on the Connection page ({shell.Screen}, {Row(shell, OriginalConnectionScreen.BuildKey)?.Enabled})");
+        ClickRow(ctx, end, OriginalConnectionScreen.InternetKey);
+        var walked = new List<string>();
+        for (int step = 0; step < 4 && shell.FocusedKey != OriginalConnectionScreen.BuildKey; step++)
+        {
+            Press(end, new MenuCommands { MoveY = 1 });
+            walked.Add(shell.FocusedKey ?? "none");
+        }
+
+        ctx.Check(shell.FocusedKey == OriginalConnectionScreen.BuildKey && walked.Contains(OriginalConnectionScreen.AddressKey),
+            $"the keyboard's walk reaches it under the IP Address box ({string.Join(" > ", walked)})");
+        Press(end, new MenuCommands { Accept = true });
+        ctx.Check(shell.Screen == OriginalScreen.PlaneName && hangar.IsOpen && hangar.Wallet == null,
+            $"Enter on it opens the name screen over a wallet-free build ({shell.Screen}, {hangar.IsOpen})");
+        Press(end, new MenuCommands { Back = true });
+        ctx.Check(shell.Screen == OriginalScreen.Connection && !hangar.IsOpen && shell.FocusedKey == OriginalConnectionScreen.BuildKey,
+            $"Back drops the build and lands back on the Connection page on the button ({shell.Screen}, {shell.FocusedKey})");
+
+        if (!NameTheBuild(ctx, end, name))
+        {
+            return false;
+        }
+
+        ClickRow(ctx, end, OriginalHangarScreen.CancelBuildKey);
+        ctx.Check(shell.Screen == OriginalScreen.Connection && !hangar.IsOpen && store.List().Count == 0,
+            $"the hub's CANCEL lands back on the Connection page with nothing saved ({shell.Screen}, {store.List().Count})");
+
+        if (!NameTheBuild(ctx, end, name))
+        {
+            return false;
+        }
+
+        ClickRow(ctx, end, OriginalHangarScreen.ReadyKey);
+        ClickRow(ctx, end, OriginalHangarScreen.PurchaseNowKey);
+        var saved = store.Load(name);
+        ctx.Check(shell.Screen == OriginalScreen.Connection && !hangar.IsOpen && shell.FocusedKey == OriginalConnectionScreen.BuildKey,
+            $"a purchase lands back on the Connection page on the button ({shell.Screen}, {shell.FocusedKey})");
+        ctx.Check(saved is { AwaitingExport: false } && saved.Airframe == HangarFeature.DefaultAirframe,
+            $"and saves an exported build on the default airframe ({saved?.Airframe}, {saved?.AwaitingExport})");
+        return saved != null;
+    }
+
+    // The Connection page's Build Custom Plane, a typed name and OK, standing on the hub.
+    private static bool NameTheBuild(TestContext ctx, End end, string name)
+    {
+        ClickRow(ctx, end, OriginalConnectionScreen.BuildKey);
+        Press(end, new MenuCommands { Typed = name });
+        ClickRow(ctx, end, OriginalHangarScreen.NameOkKey);
+        bool hub = end.Shell.Screen == OriginalScreen.HangarAirframe && end.Shell.Hangar?.HangarName == name;
+        ctx.Check(hub, $"a click, a typed name and OK stand on the hub over that name ({end.Shell.Screen}, {end.Shell.Hangar?.HangarName})");
+        return hub;
     }
 
     // PLAYER INFORMATION's OK is greyed while the callsign is empty, and a callsign of spaces alone
@@ -2640,8 +2781,9 @@ internal static class MenuOriginalConnectionSuites
     }
 
     // One Original presentation over its own host, door and scripted seat, shown on the top level.
-    // A launch it hands out is added to exits when given.
-    private static End? Open(TestContext ctx, MenuLayout layout, NetPlayFeature door, List<End> ends, List<MenuExit>? exits = null)
+    // A launch it hands out is added to exits when given, and its saved planes are planes' when given.
+    private static End? Open(
+        TestContext ctx, MenuLayout layout, NetPlayFeature door, List<End> ends, List<MenuExit>? exits = null, CustomPlaneStore? planes = null)
     {
         var seat = new ScriptedSeat();
         var registry = new PresentationRegistry();
@@ -2651,6 +2793,7 @@ internal static class MenuOriginalConnectionSuites
             ctx.Host, ctx.DataRoot, layout, string.Empty, new MenuInput { Keyboard = true })
         {
             CampaignProfiles = CampaignAidProfiles.Store(seeded: true, progressed: true),
+            Planes = planes,
         });
         var host = new MenuHost(registry, new MenuSuiteHost.SilentMenuAudio(), exit => exits?.Add(exit));
         MenuSuiteHost.AddFeatures(host, ctx.DataRoot, netDoor: door);
@@ -2782,8 +2925,8 @@ internal static class MenuOriginalConnectionSuites
         ClickRow(ctx, guest, OriginalConnectionScreen.CodeKey);
         ClickRow(ctx, guest, OriginalConnectionScreen.AddressKey);
         TypeInto(guest, new MenuCommands { MoveY = 1 });
-        ctx.Check(shell.Connection.Way == OriginalConnectionScreen.LanKey && shell.FocusedKey == OriginalConnectionScreen.LanKey,
-            $"ABLE-TO-FAIL CONTROL: a click on its radio picks nothing, and the cursor steps from the IP Address box past it ({shell.Connection.Way}, {shell.FocusedKey})");
+        ctx.Check(shell.Connection.Way == OriginalConnectionScreen.LanKey && shell.FocusedKey == OriginalConnectionScreen.BuildKey,
+            $"ABLE-TO-FAIL CONTROL: a click on its radio picks nothing, and the cursor steps from the IP Address box past it to Build Custom Plane ({shell.Connection.Way}, {shell.FocusedKey})");
     }
 
     // Two plain doors take the last seat and knock past it: four humans fit, the fifth hears why.
