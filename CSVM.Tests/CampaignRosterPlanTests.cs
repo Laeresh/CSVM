@@ -34,7 +34,8 @@ public class CampaignRosterPlanTests
         "wingman", Props("kind_of", "devastator", "mode", "wingman", "nodename", "piratefighter"),
         "bswingman", Props("kind_of", "basic_airplane", "mode", "wingman", "nodename", "fury"),
         "blakepeace_2", Props("kind_of", "devastator"),
-        "patrolboat", Props("mode", "ship"),
+        "patrolboat", Props("mode", "ship", "title", "MSG_VEH_PATROLBOAT"),
+        "fastboat", Props("kind_of", "patrolboat"),
         "armytruck", Props("mode", "ground"),
     });
 
@@ -62,6 +63,16 @@ public class CampaignRosterPlanTests
         Assert.Equal("jet", defs.ModeOf("secfury"));
         Assert.Equal("ship", defs.ModeOf("patrolboat"));
         Assert.Null(defs.ModeOf("nothing"));
+    }
+
+    [Fact]
+    public void TheTitleIsTheNearestAuthoredOneUpTheChain()
+    {
+        var defs = Defs;
+        Assert.Equal("MSG_VEH_PATROLBOAT", defs.TitleOf("patrolboat"));
+        Assert.Equal("MSG_VEH_PATROLBOAT", defs.TitleOf("fastboat"));
+        Assert.Null(defs.TitleOf("armytruck"));
+        Assert.Null(defs.TitleOf("nothing"));
     }
 
     [Fact]

@@ -232,8 +232,7 @@ public sealed class TargetPool
         switch (kind)
         {
             case AimTargetKind.Vehicle when c.Source is SurfaceVehicle hull:
-                // ⚠ The hull's own block slot 20 alone, and an EMPTY one draws no name line: most
-                // ship blocks author none and the original then labels nothing there (docs/org/
+                // The hull's block slot 20, else its def's own title, resolved at spawn (docs/org/
                 // targeting.md). Never the airframe-style fallback the aeroplane arm takes below.
                 return TargetRef.ForHull(c, cls, name, hull.MarkerName, objective: objective);
             case AimTargetKind.Vehicle:

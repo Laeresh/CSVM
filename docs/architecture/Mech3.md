@@ -374,7 +374,7 @@ The `vehicle.json` def table as an index, next to `Flight/Airframe/PlaneStats.cs
 `AirframeFor` finds the player airframe node an AI def's model is built from (the `p`-prefixed twin
 of the nearest ancestor, else of the chain's `nodename`), `BaseDefForPlayerNode` is its inverse and
 `DerivesFrom` is the variant test `PlaneStats.LoadForAi` enforces. `StartAnimsOf`, `InjureAnimsOf`,
-`WeaponsOf` and `AttackOf` return the nearest authored value up that chain, the last two arming a hull with its def's own gun (an `AiWeaponSlot`, defined here) and giving it the radius its scorer admits candidates inside, `DefaultAttackRadiusM` the decoded 400 m both surface defs fall to for want of an authored `attack` ([../org/aiPilot.md](../org/aiPilot.md)).
+`TitleOf`, `WeaponsOf` and `AttackOf` return the nearest authored value up that chain, `TitleOf` naming a hull whose block authors no slot 20 and the last two arming a hull with its def's own gun (an `AiWeaponSlot`, defined here) and giving it the radius its scorer admits candidates inside, `DefaultAttackRadiusM` the decoded 400 m both surface defs fall to for want of an authored `attack` ([../org/aiPilot.md](../org/aiPilot.md)).
 Pure over `FromRoot`, pinned in `CampaignRosterPlanTests`.
 
 ## src/Mech3/FogVolumes.cs
