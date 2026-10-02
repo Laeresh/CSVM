@@ -380,7 +380,7 @@ its Instant Action twin and the load screen's `Loading.zrd`, and `UI/Overlays/Mi
 drawer this screen shares with the campaign briefing and the load screen, which is where the world
 window and the pin placement live.
 
-**An Instant Action sortie pauses on its own blackboard.** `Launch/GameSession.cs` keys the sheet on
+**An Instant Action sortie pauses on its own blackboard.** `Launch/SessionBoards.cs` keys the sheet on
 the sortie's chapter, through `Mech3/CampaignSequence.cs`'s `ChapterNumber`, and its mission type's
 own letter, reads it out of `ia_escape.zrd`, and hands `UI/Menu/Original/OriginalPauseBoard.cs` a board written
 in `UI/Boards/BoardPalette.cs`'s `EscapeBlackboard`, the load screen's chalk with the near-black label inks
@@ -394,7 +394,7 @@ describes, so it keeps the Built-in board, the same split the load screen makes.
 `--menu=pauseboard-ia` door composes one with no sortie behind it.
 
 **A Dogfight pauses on its mode's briefing, which the original never shows there.**
-`Launch/GameSession.cs` resolves the key the load screen reads (`UI/Screens/LoadScreens.cs`'s
+`Launch/SessionBoards.cs` resolves the key the load screen reads (`UI/Screens/LoadScreens.cs`'s
 `MultiplayerKey`, from the chapter, the type and whether any seat is on a lobby team) and
 `UI/Screens/PauseScreens.cs`'s `PauseSheet.LoadMultiplayer` reads that dialog out of `escape.zrd`,
 with that file's strips and the blackboard inks. The briefing is chosen over the original's bare

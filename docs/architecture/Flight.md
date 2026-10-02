@@ -831,7 +831,7 @@ spawn sets (one living seat per point) and picks a respawn among the roomiest en
 living field, weighing the killer at `KillerWeight` and drawing between everything within
 `RoomyShare` of the best, so the point rotates and no seat can be camped. `For` returns null when
 there is no list, `ForBlocks` keeps each seat of a team match inside its team's block of the whole table and measures room against the other teams alone, `Restart` reopens a round on the opening points, and the draw comes from a
-caller-supplied `Random` so a pinned run replays. `GameSession` feeds it the live field; offline it hands the pick to `FlightController.RespawnPlacement`, and in a match only the host holds a rotation at all, its pick crossing the wire as a table entry.
+caller-supplied `Random` so a pinned run replays. `Session/World/VersusDirector.cs` feeds it the live field; offline it hands the pick to `FlightController.RespawnPlacement`, and in a match only the host holds a rotation at all, its pick crossing the wire as a table entry.
 Off-engine coverage: `CSVM.Tests/VersusSpawnRotationTests.cs`; the suites are `versus-spawn-rotation` and `net-spawn-rotation`.
 
 ## src/Flight/Modes/VersusHud.cs

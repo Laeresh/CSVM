@@ -149,6 +149,10 @@ public sealed class CampaignDirector
     private Func<int, string?, string?, bool>? _callbackHost;
     private Func<int, string?, string?, bool>? _innerCallbackHost;
 
+    // TraceObjectives' own state: its step count and whether the reference lines went out.
+    private int _traceTick;
+    private bool _traceRefsDone;
+
     private CampaignDirector(
         ObjectiveScript script, CampaignMission mission,
         CampaignProfileDef profile, CampaignProfileStore? store, string missionZrdrPath,
@@ -798,6 +802,97 @@ public sealed class CampaignDirector
         }
         RegisterObjectiveMarker(launchName, template);
         Log.Info("core", $"campaign: launch '{launchName}' ({template.Name}) booked into the roster team={template.Team?.ToString() ?? "-"} group={template.Group}");
+    }
+
+    /// <summary><c>--wake-generators</c>: the script's whole <c>WAKEUP_GENERATOR</c> credit per
+    /// generator host, granted at build, the headless stand-in for playing up to each such
+    /// objective.</summary>
+    internal void WakeGenerators(AiGeneratorRuntime generators)
+    {
+        var wakeupCredits = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var objective in Script.Objectives)
+        {
+            if (objective.WakeupGenerator is { } wakeup)
+            {
+                wakeupCredits.TryGetValue(wakeup.Name, out int sum);
+                wakeupCredits[wakeup.Name] = sum + wakeup.Count;
+            }
+        }
+
+        foreach (var (host, credit) in wakeupCredits)
+        {
+            int fed = generators.GrantWaveCapacity(host, credit);
+            Log.Info("world", $"egen: '{host}' woken by --wake-generators: +{credit} credit (granted {fed}, stand-in for the script's WAKEUP_GENERATOR)");
+        }
+    }
+
+    /// <summary>The objective graph's trace on the parent-driven clock. Every TRAVELERS reference is
+    /// resolved once. Then each such objective's state and the player's distance to it go out once
+    /// every 60 steps. Quiet before <see cref="Attach"/>.</summary>
+    internal void TraceObjectives(FlightController? player)
+    {
+        if (Graph is not { } graph)
+        {
+            return;
+        }
+
+        var runtime = _world?.Runtime;
+        if (!_traceRefsDone)
+        {
+            _traceRefsDone = true;
+            foreach (var def in Script.Objectives)
+            {
+                if (def.Travelers is not { } spec)
+                {
+                    continue;
+                }
+
+                string where;
+                if (spec.WherePoint is { } pt)
+                {
+                    where = Log.Format($"POINT ({pt[0]:0},{pt[1]:0},{pt[2]:0})");
+                }
+                else
+                {
+                    var found = runtime?.FindNodes(spec.WhereNode ?? "");
+                    where = found is { Count: > 0 }
+                        ? Log.Format($"NODE '{spec.WhereNode}' x{found.Count} -> ({found[0].GlobalPosition.X:0},{found[0].GlobalPosition.Y:0},{found[0].GlobalPosition.Z:0}) inTree={found[0].IsInsideTree()} vis={found[0].Visible}")
+                        : $"NODE '{spec.WhereNode}' UNRESOLVED";
+                }
+
+                Log.Info("core", $"DIAGREF OBJ{def.Number} id={def.Identity?.Class.ToString() ?? "-"}/{def.Identity?.Priority.ToString() ?? "-"} dormant={def.BeginDormant}:{def.DormantUntil} who='{spec.Who}' r={spec.Radius:0} {where}");
+            }
+        }
+
+        if ((_traceTick++ % 60) != 0)
+        {
+            return;
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"DIAG t={_traceTick / 60}s ");
+        if (player != null)
+        {
+            sb.Append(Log.Format($"player=({player.WorldPosition.X:0},{player.WorldPosition.Y:0},{player.WorldPosition.Z:0}) "));
+        }
+
+        foreach (var def in Script.Objectives)
+        {
+            if (def.Travelers is not { } spec)
+            {
+                continue;
+            }
+
+            Vector3? refPos = spec.WherePoint is { } pt
+                ? new Vector3(pt[0], pt[1], pt[2])
+                : runtime?.FindNodes(spec.WhereNode ?? "") is { Count: > 0 } f
+                    ? f[0].GlobalPosition
+                    : null;
+            string d = refPos is { } r && player != null ? Log.Format($"{player.WorldPosition.DistanceTo(r):0}") : "?";
+            sb.Append(Log.Format($"| O{def.Number} {graph.StateOf(def.Number)}{(graph.CompletedOf(def.Number) ? "*" : "")} d={d}/r{spec.Radius:0} "));
+        }
+
+        Log.Info("core", $"{sb}");
     }
 
     /// <summary>Makes every later <c>WARP_VEHICLE</c> wait for the host's draw instead of drawing

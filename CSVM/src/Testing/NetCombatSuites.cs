@@ -747,33 +747,33 @@ internal static class NetCombatSuites
             }
         }
 
-        ctx.Check(peers.All(p => p.Versus!.Lives == MatchLives), $"both machines run {MatchLives} lives ({string.Join(", ", peers.Select(p => p.Versus!.Lives))})");
+        ctx.Check(peers.All(p => p.Dogfight!.Match.Lives == MatchLives), $"both machines run {MatchLives} lives ({string.Join(", ", peers.Select(p => p.Dogfight!.Match.Lives))})");
         var guest = peers[1];
         guest.SeatRigs[1].Controller!.DebugForceCrash(guest.SeatRigs[0].Controller!.PlayerIndex);
         Lockstep(GrantSteps, peers);
         ctx.Check(peers.All(p => p.SeatRigs[1].Controller is { Crashed: false, Spectating: false }),
             $"ABLE-TO-FAIL CONTROL: after one death of {MatchLives} the seat comes back on both machines ({Downs(peers)})");
-        ctx.Check(peers.All(p => !p.Versus!.Completed && p.MatchEnd == NetMatchEnd.Running)
+        ctx.Check(peers.All(p => !p.Dogfight!.Match.Completed && p.Dogfight!.End == NetMatchEnd.Running)
                   && guest.SeatRigs[1].Controller!.Watching == null,
-            $"ABLE-TO-FAIL CONTROL: with a life left the match runs and the seat watches nobody ({string.Join(", ", peers.Select(p => p.MatchEnd))})");
+            $"ABLE-TO-FAIL CONTROL: with a life left the match runs and the seat watches nobody ({string.Join(", ", peers.Select(p => p.Dogfight!.End))})");
         string first = PaneLines(guest.SeatRigs[1].Controller!);
         ctx.Check(first.StartsWith("guest1 / Destroyed by host / You Have ONE Life Left!", StringComparison.Ordinal),
             $"the guest's pane reads the kill lines over its lives line, the handler's order ({first})");
 
-        int grants = peers[0].SpawnsTaken;
+        int grants = peers[0].Dogfight!.SpawnsTaken;
         guest.SeatRigs[1].Controller!.DebugForceCrash(guest.SeatRigs[0].Controller!.PlayerIndex);
         Lockstep(GrantSteps, peers);
-        ctx.Check(peers.All(p => p.Versus!.OutOfLives(1)),
-            $"the second death spends the last life on both machines ({string.Join(", ", peers.Select(p => p.Versus!.DeathsOf(1)))} deaths)");
+        ctx.Check(peers.All(p => p.Dogfight!.Match.OutOfLives(1)),
+            $"the second death spends the last life on both machines ({string.Join(", ", peers.Select(p => p.Dogfight!.Match.DeathsOf(1)))} deaths)");
         ctx.Check(peers.All(p => p.SeatRigs[1].Controller is { Crashed: true, Spectating: true }),
             $"and the seat stays down, watching, on both machines ({Downs(peers)})");
-        ctx.Check(peers[0].SpawnsTaken == grants, $"the host granted it no return ({peers[0].SpawnsTaken - grants} grant(s))");
+        ctx.Check(peers[0].Dogfight!.SpawnsTaken == grants, $"the host granted it no return ({peers[0].Dogfight!.SpawnsTaken - grants} grant(s))");
         ctx.Check(peers.All(p => p.SeatRigs[0].Controller is { Crashed: false, Spectating: false }),
             $"while the host's own seat flies on ({Downs(peers)})");
         ctx.Check(ReferenceEquals(guest.SeatRigs[1].Controller!.Watching, guest.SeatRigs[0].Controller),
             $"and the spent seat watches the host's aircraft, the one still flying ({guest.SeatRigs[1].Controller!.Watching?.PlayerIndex})");
-        ctx.Check(peers.All(p => p.Versus!.Completed && p.MatchEnd == NetMatchEnd.NobodyLeft),
-            $"one pilot with lives left ends the match on reason 4 on both machines ({string.Join(", ", peers.Select(p => p.MatchEnd))})");
+        ctx.Check(peers.All(p => p.Dogfight!.Match.Completed && p.Dogfight!.End == NetMatchEnd.NobodyLeft),
+            $"one pilot with lives left ends the match on reason 4 on both machines ({string.Join(", ", peers.Select(p => p.Dogfight!.End))})");
         // Five lines into four slots: the ending and the kill lines push the lives line out.
         string lines = PaneLines(guest.SeatRigs[1].Controller!);
         ctx.Check(lines.StartsWith("Game Over: / No Enemies Left / guest1 / Destroyed by host", StringComparison.Ordinal),
@@ -816,12 +816,12 @@ internal static class NetCombatSuites
     private static void Limits(TestContext ctx, GameSession[] peers)
     {
         string reading = string.Join(" | ",
-            peers.Select(p => $"{p.Versus!.KillTarget} kills / {p.Versus!.TimeLimit:0} s"));
-        ctx.Check(peers.All(p => p.Versus!.KillTarget == HostKillTarget(ctx)
-                                 && Mathf.IsEqualApprox(p.Versus!.TimeLimit, HostTimeMinutes * 60f)),
+            peers.Select(p => $"{p.Dogfight!.Match.KillTarget} kills / {p.Dogfight!.Match.TimeLimit:0} s"));
+        ctx.Check(peers.All(p => p.Dogfight!.Match.KillTarget == HostKillTarget(ctx)
+                                 && Mathf.IsEqualApprox(p.Dogfight!.Match.TimeLimit, HostTimeMinutes * 60f)),
             $"every machine runs the host's two limits, not the {GuestKillTarget} kills / {GuestTimeMinutes * 60} s the guests were launched on ({reading})");
-        ctx.Check(!peers[0].Versus!.Replicated && peers[1].Versus!.Replicated && peers[2].Versus!.Replicated,
-            $"and the match is the host's to write on the host alone (replicated: {string.Join(", ", peers.Select(p => p.Versus!.Replicated))})");
+        ctx.Check(!peers[0].Dogfight!.Match.Replicated && peers[1].Dogfight!.Match.Replicated && peers[2].Dogfight!.Match.Replicated,
+            $"and the match is the host's to write on the host alone (replicated: {string.Join(", ", peers.Select(p => p.Dogfight!.Match.Replicated))})");
     }
 
     // ⚠ A guest may never advance the match clock itself. Stepped without the host it therefore
@@ -829,23 +829,23 @@ internal static class NetCombatSuites
     private static void ClockOwnership(TestContext ctx, GameSession[] peers)
     {
         var guests = new[] { peers[1], peers[2] };
-        float[] before = guests.Select(g => g.Versus!.Elapsed).ToArray();
+        float[] before = guests.Select(g => g.Dogfight!.Match.Elapsed).ToArray();
         Lockstep(TickSteps, guests);
-        float[] alone = guests.Select(g => g.Versus!.Elapsed).ToArray();
+        float[] alone = guests.Select(g => g.Dogfight!.Match.Elapsed).ToArray();
         ctx.Check(alone.SequenceEqual(before),
             $"a guest stepped without the host moves no match clock at all ({string.Join(", ", alone.Select(e => $"{e:0.000} s"))})");
 
         // ABLE-TO-FAIL CONTROL. The same steps through the same phase on the host, whose clock
         // does move. The stillness above is therefore the replication rule and not a dead path.
-        float hostWas = peers[0].Versus!.Elapsed;
+        float hostWas = peers[0].Dogfight!.Match.Elapsed;
         Lockstep(TickSteps, peers[0]);
-        float hostMoved = peers[0].Versus!.Elapsed - hostWas;
+        float hostMoved = peers[0].Dogfight!.Match.Elapsed - hostWas;
         ctx.Check(hostMoved > 0.5f,
             $"ABLE-TO-FAIL CONTROL: the host's own clock moves {hostMoved:0.000} s over those same {TickSteps} steps");
 
         Lockstep(TickSteps, peers);
-        float host = peers[0].Versus!.Elapsed;
-        float[] now = guests.Select(g => g.Versus!.Elapsed).ToArray();
+        float host = peers[0].Dogfight!.Match.Elapsed;
+        float[] now = guests.Select(g => g.Dogfight!.Match.Elapsed).ToArray();
         string reading = $"host {host:0.00} s, guests {string.Join(", ", now.Select(e => $"{e:0.00} s"))}";
         // Behind by at most one tick, which is the whole of the clock's replication error.
         ctx.Check(now.All(e => e > alone[0] && host - e >= 0f
@@ -885,13 +885,13 @@ internal static class NetCombatSuites
         var guest = peers[1];
         for (int i = 0; i < HostKillTarget(ctx) + 3; i++)
         {
-            guest.Versus!.RegisterKill(shooter: 1, victim: 0);
+            guest.Dogfight!.Match.RegisterKill(shooter: 1, victim: 0);
         }
 
         Lockstep(SettleSteps, peers);
-        ctx.Check(!guest.Versus!.Completed && guest.Pause is { Ended: false }
-                  && !peers[0].Versus!.Completed,
-            $"a guest that counts {HostKillTarget(ctx) + 3} kills of its own ends nothing and raises no board (completed {guest.Versus!.Completed}, held {guest.Pause!.Ended}, host completed {peers[0].Versus!.Completed})");
+        ctx.Check(!guest.Dogfight!.Match.Completed && guest.Pause is { Ended: false }
+                  && !peers[0].Dogfight!.Match.Completed,
+            $"a guest that counts {HostKillTarget(ctx) + 3} kills of its own ends nothing and raises no board (completed {guest.Dogfight!.Match.Completed}, held {guest.Pause!.Ended}, host completed {peers[0].Dogfight!.Match.Completed})");
 
         // ABLE-TO-FAIL CONTROL. The same calls into a match nobody replicates do end it. The
         // refusal above is therefore the rule, not a scorekeeping that counts nothing.
@@ -927,7 +927,7 @@ internal static class NetCombatSuites
         peers[0].SeatRigs[0].Controller!.DebugForceCrash(peers[0].SeatRigs[1].Controller!.PlayerIndex);
         Lockstep(SettleSteps, peers);
 
-        ctx.Check(peers[0].Versus!.ScoreOf(1) >= HostKillTarget(ctx),
+        ctx.Check(peers[0].Dogfight!.Match.ScoreOf(1) >= HostKillTarget(ctx),
             $"seat 1 reaches the host's kill target of {HostKillTarget(ctx)} ({Scoreboard(peers[0])})");
         Held(ctx, peers, "the kill limit", NetMatchEnd.ScoreTarget);
     }
@@ -938,27 +938,27 @@ internal static class NetCombatSuites
     {
         // The boards the ending raised. Neither guest's offers a Restart row that would do nothing;
         // each says whose call the rematch is. The host's keeps the row, the able-to-fail control.
-        var host = peers[0].DogfightBoard?.StandardMenu;
+        var host = peers[0].Boards?.DogfightBoard?.StandardMenu;
         ctx.Check(host != null && host.Items.Any(i => i.Item == BoardMenuItem.Restart)
-                  && peers[0].DogfightBoard!.WithheldLine == null,
+                  && peers[0].Boards!.DogfightBoard!.WithheldLine == null,
             $"ABLE-TO-FAIL CONTROL: the host's board offers Restart ({MenuRows(peers[0])})");
-        ctx.Check(peers.Skip(1).All(p => p.DogfightBoard?.StandardMenu is { } menu
+        ctx.Check(peers.Skip(1).All(p => p.Boards?.DogfightBoard?.StandardMenu is { } menu
                                         && menu.Items.All(i => i.Item != BoardMenuItem.Restart)
-                                        && p.DogfightBoard.WithheldLine == VersusBoard.HostCallsTheRematch),
+                                        && p.Boards!.DogfightBoard!.WithheldLine == VersusBoard.HostCallsTheRematch),
             $"each guest's board leaves Restart off and reads \"{VersusBoard.HostCallsTheRematch}\" ({string.Join(" | ", peers.Skip(1).Select(MenuRows))})");
 
         peers[1].SeatRigs[1].Controller!.RestartMatch!();
         Lockstep(SettleSteps, peers);
-        ctx.Check(peers.All(p => p.Versus!.Completed),
-            $"a guest's own rematch key restarts nothing, on its own machine or any other ({string.Join(", ", peers.Select(p => p.Versus!.Completed))})");
+        ctx.Check(peers.All(p => p.Dogfight!.Match.Completed),
+            $"a guest's own rematch key restarts nothing, on its own machine or any other ({string.Join(", ", peers.Select(p => p.Dogfight!.Match.Completed))})");
 
         peers[0].SeatRigs[0].Controller!.RestartMatch!();
         Lockstep(SettleSteps, peers);
         string scores = string.Join(" | ",
-            peers.Select(p => string.Join(",", Enumerable.Range(0, 3).Select(s => p.Versus!.ScoreOf(s)))));
-        ctx.Check(peers.All(p => !p.Versus!.Completed && p.MatchEnd == NetMatchEnd.Running),
-            $"the host's rematch runs the round again on every machine ({string.Join(", ", peers.Select(p => p.MatchEnd))})");
-        ctx.Check(peers.All(p => Enumerable.Range(0, 3).All(s => p.Versus!.ScoreOf(s) == 0)),
+            peers.Select(p => string.Join(",", Enumerable.Range(0, 3).Select(s => p.Dogfight!.Match.ScoreOf(s)))));
+        ctx.Check(peers.All(p => !p.Dogfight!.Match.Completed && p.Dogfight!.End == NetMatchEnd.Running),
+            $"the host's rematch runs the round again on every machine ({string.Join(", ", peers.Select(p => p.Dogfight!.End))})");
+        ctx.Check(peers.All(p => Enumerable.Range(0, 3).All(s => p.Dogfight!.Match.ScoreOf(s) == 0)),
             $"and every score is zero on every machine, the host's rewrite rather than each machine's own ({scores})");
     }
 
@@ -967,26 +967,26 @@ internal static class NetCombatSuites
     private static void EndsOnTheTimeLimit(TestContext ctx, GameSession[] peers)
     {
         float limit = HostTimeMinutes * 60f;
-        peers[0].Versus!.Advance(limit - peers[0].Versus!.Elapsed - 0.5f);
-        ctx.Check(!peers[0].Versus!.Completed,
-            $"the host's clock stands half a second short of its limit ({peers[0].Versus!.TimeRemaining:0.00} s left)");
+        peers[0].Dogfight!.Match.Advance(limit - peers[0].Dogfight!.Match.Elapsed - 0.5f);
+        ctx.Check(!peers[0].Dogfight!.Match.Completed,
+            $"the host's clock stands half a second short of its limit ({peers[0].Dogfight!.Match.TimeRemaining:0.00} s left)");
 
         Lockstep(TickSteps, peers);
         Held(ctx, peers, "the time limit", NetMatchEnd.TimeLimit);
-        ctx.Check(peers.All(p => p.Versus!.TimeRemaining <= 0f),
-            $"and no machine has time left on it ({string.Join(", ", peers.Select(p => $"{p.Versus!.TimeRemaining:0.00} s"))})");
+        ctx.Check(peers.All(p => p.Dogfight!.Match.TimeRemaining <= 0f),
+            $"and no machine has time left on it ({string.Join(", ", peers.Select(p => $"{p.Dogfight!.Match.TimeRemaining:0.00} s"))})");
     }
 
     // One ending, read on all three machines. The match over, the board holding the world, the
     // host's own reason, and one ranked scoreboard derived from the scores each was sent.
     private static void Held(TestContext ctx, GameSession[] peers, string what, NetMatchEnd reason)
     {
-        ctx.Check(peers.All(p => p.Versus!.Completed),
-            $"{what}: the match is over on all three machines ({string.Join(", ", peers.Select(p => p.Versus!.Completed))})");
+        ctx.Check(peers.All(p => p.Dogfight!.Match.Completed),
+            $"{what}: the match is over on all three machines ({string.Join(", ", peers.Select(p => p.Dogfight!.Match.Completed))})");
         ctx.Check(peers.All(p => p.Pause is { Ended: true }),
             $"and the wrap-up board holds every one of them ({string.Join(", ", peers.Select(p => p.Pause!.Ended))})");
-        ctx.Check(peers.All(p => p.MatchEnd == reason),
-            $"and each names the host's own reason, {reason} ({string.Join(", ", peers.Select(p => p.MatchEnd))})");
+        ctx.Check(peers.All(p => p.Dogfight!.End == reason),
+            $"and each names the host's own reason, {reason} ({string.Join(", ", peers.Select(p => p.Dogfight!.End))})");
 
         var boards = peers.Select(Scoreboard).ToArray();
         ctx.Check(boards.All(b => b == boards[0]),
@@ -995,13 +995,13 @@ internal static class NetCombatSuites
 
     // A dogfight board's menu rows and any line standing in for Restart, as one line.
     private static string MenuRows(GameSession session) =>
-        session.DogfightBoard?.StandardMenu is { } menu
-            ? $"{string.Join("/", menu.Items.Select(i => i.Item))} '{session.DogfightBoard.WithheldLine}'"
+        session.Boards?.DogfightBoard?.StandardMenu is { } menu
+            ? $"{string.Join("/", menu.Items.Select(i => i.Item))} '{session.Boards!.DogfightBoard!.WithheldLine}'"
             : "no menu";
 
     // The ranked board as one line, which is what a results screen draws from.
     private static string Scoreboard(GameSession session) =>
-        string.Join(" ", session.Versus!.Standings()
+        string.Join(" ", session.Dogfight!.Match.Standings()
             .Select(s => $"#{s.Rank}P{s.PlayerIndex + 1}:{s.Score}/{s.Kills}K/{s.Deaths}D"));
 
     // The opening placement, read before any session has stepped. Nothing has crossed the wire
@@ -1015,8 +1015,8 @@ internal static class NetCombatSuites
             $"every seat opens on the same table entry on all three peers ({reading})");
         ctx.Check(new HashSet<int>(entries[0]).Count == entries[0].Length,
             $"and no two seats share one ({string.Join(",", entries[0])})");
-        string grants = string.Join(",", peers.Select(p => p.SpawnsTaken));
-        ctx.Check(peers.All(p => p.SpawnsTaken == 0),
+        string grants = string.Join(",", peers.Select(p => p.Dogfight!.SpawnsTaken));
+        ctx.Check(peers.All(p => p.Dogfight!.SpawnsTaken == 0),
             $"with no spawn grant applied anywhere, so the opening is the seed's walk and not an event ({grants} grant(s))");
         ctx.Check(table.Count >= NetSeats.MaxPlayers,
             $"and the block holds a point for every seat the match admits, so no two of a full field open together ({table.Count} entries against {NetSeats.MaxPlayers} seats)");
@@ -1053,13 +1053,13 @@ internal static class NetCombatSuites
         int[] placed, int owner, int seat, int killer)
     {
         int was = placed[seat];
-        var before = peers.Select(p => (int?)p.SpawnsTaken).ToArray();
+        var before = peers.Select(p => (int?)p.Dogfight!.SpawnsTaken).ToArray();
         peers[owner].SeatRigs[seat].Controller!
             .DebugForceCrash(peers[owner].SeatRigs[killer].Controller!.PlayerIndex);
 
         int steps = StepUntilGranted(peers, before);
-        var now = peers.Select(p => p.SpawnEntries[seat]).ToArray();
-        var grants = peers.Select((p, i) => p.SpawnsTaken - before[i]!.Value).ToArray();
+        var now = peers.Select(p => p.Dogfight!.SpawnEntries[seat]).ToArray();
+        var grants = peers.Select((p, i) => p.Dogfight!.SpawnsTaken - before[i]!.Value).ToArray();
         int flown = EntryAt(table, peers[owner].SeatRigs[seat].Controller);
         string reading = $"seat {seat} downed by seat {killer} at entry {was}, back on {string.Join("/", now)} after {steps} step(s)";
         ctx.Check(now[0] >= 0 && now[0] < table.Count && now.All(e => e == now[0]),
@@ -1081,13 +1081,13 @@ internal static class NetCombatSuites
     {
         int seat = 2;
         int odd = placed[0];
-        var before = new int?[] { null, peers[1].SpawnsTaken, peers[2].SpawnsTaken };
+        var before = new int?[] { null, peers[1].Dogfight!.SpawnsTaken, peers[2].Dogfight!.SpawnsTaken };
         peers[0].NetLink!.Broadcast(
             new SpawnMessage((byte)seat, NetSpawnKind.Respawn, (ushort)odd), NetChannels.Events);
         StepUntilGranted(peers, before);
 
-        int owner = peers[2].SpawnEntries[seat];
-        int watcher = peers[1].SpawnEntries[seat];
+        int owner = peers[2].Dogfight!.SpawnEntries[seat];
+        int watcher = peers[1].Dogfight!.SpawnEntries[seat];
         int flown = EntryAt(table, peers[2].SeatRigs[seat].Controller);
         ctx.Check(owner == odd && watcher == odd && flown == odd,
             $"ABLE-TO-FAIL CONTROL: a grant naming entry {odd}, which the rotation refuses, is obeyed by the owner and by the other guest ({owner} and {watcher}, aeroplane on {flown})");
@@ -1105,7 +1105,7 @@ internal static class NetCombatSuites
             bool all = true;
             for (int i = 0; i < peers.Length; i++)
             {
-                all &= before[i] is not { } was || peers[i].SpawnsTaken > was;
+                all &= before[i] is not { } was || peers[i].Dogfight!.SpawnsTaken > was;
             }
 
             if (all)
@@ -1211,9 +1211,9 @@ internal static class NetCombatSuites
     {
         // Both machines score with the values player.zrd authors, which the shipped file sets apart
         // from the executable's fallbacks.
-        var scores = host.Versus!.Scores;
+        var scores = host.Dogfight!.Match.Scores;
         var authored = MatchScores.Load(ctx.ZrdrPath);
-        ctx.Check(scores == authored && guest.Versus!.Scores == authored,
+        ctx.Check(scores == authored && guest.Dogfight!.Match.Scores == authored,
             $"both sessions score with player.zrd's values ({scores})");
         ctx.Check(authored != MatchScores.Fallback,
             $"ABLE-TO-FAIL CONTROL: the shipped player.zrd authors values unlike the executable's fallbacks ({MatchScores.Fallback})");
@@ -1239,7 +1239,7 @@ internal static class NetCombatSuites
     // charged to a turret's owner. Both are put on the wire as the dying client's own report.
     private static void Causes(TestContext ctx, GameSession host, GameSession guest)
     {
-        var scores = host.Versus!.Scores;
+        var scores = host.Dogfight!.Match.Scores;
         var link = guest.NetLink!;
         link.Send(link.HostPeer, new DeathMessage(1, NetMessage.NoSeat, NetDeathCause.Suicide, 0u),
             NetChannels.Events);
@@ -1259,8 +1259,8 @@ internal static class NetCombatSuites
     private static void Board(TestContext ctx, GameSession host, GameSession guest, string what,
         (int Score, int Deaths, int Kills) seat0, (int Score, int Deaths, int Kills) seat1)
     {
-        var mine = host.Versus!;
-        var theirs = guest.Versus!;
+        var mine = host.Dogfight!.Match;
+        var theirs = guest.Dogfight!.Match;
         string reading = $"host {Line(mine, 0)} / {Line(mine, 1)}, guest {Line(theirs, 0)} / {Line(theirs, 1)}";
         bool right = Matches(mine, 0, seat0) && Matches(mine, 1, seat1);
         ctx.Check(right, $"{what}: the host scores it as the decode says ({reading})");

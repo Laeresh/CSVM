@@ -3007,7 +3007,7 @@ public partial class Launcher : Node3D
     {
         if (_menuDriven && _session is { InSession: true })
         {
-            var landing = LobbyLanding(_lobbyFlight, _netDoor?.Dogfight, _session.Versus);
+            var landing = LobbyLanding(_lobbyFlight, _netDoor?.Dogfight, _session.Dogfight?.Match);
             _keepLobby = landing != null;
             ReturnToMenu(landing ?? _exitDestination);
             return;

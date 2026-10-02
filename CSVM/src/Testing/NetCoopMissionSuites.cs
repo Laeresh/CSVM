@@ -181,9 +181,9 @@ internal static class NetCoopMissionSuites
                 return;
             }
 
-            ctx.Check(hostEnd.Session.PauseRestart != null && hostEnd.Session.RestartOffered,
+            ctx.Check(hostEnd.Session.Boards?.PauseRestart != null && hostEnd.Session.RestartOffered,
                 $"ABLE-TO-FAIL CONTROL: the host's pause sheet offers Restart");
-            ctx.Check(guestEnd.Session.PauseRestart == null && !guestEnd.Session.RestartOffered,
+            ctx.Check(guestEnd.Session.Boards?.PauseRestart == null && !guestEnd.Session.RestartOffered,
                 $"a guest's pause sheet offers no Restart in a network session");
             (hostEnd, guestEnd) = Restart(ctx, mission, stock, hostEnd, guestEnd, host, guest);
         }

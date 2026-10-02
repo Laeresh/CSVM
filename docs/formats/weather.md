@@ -258,7 +258,7 @@ the repro poses recorded in `analysis/`. Coverage: `CSVM.Tests/SkyZoneTests.cs` 
 and the real per-chapter census.
 
 ⚠ **A dome bigger than the far plane is clipped open.** The dome is camera-anchored, so its far
-wall sits at (its own radius × `GameSession.HorizonScale`) from the eye. Every chapter's dome is
+wall sits at (its own radius × `SkyStage.HorizonScale`) from the eye. Every chapter's dome is
 6.4–12.0 km and clears the 40 km far plane at the 2.5× anchor scale, except **C1B's zone1 at
 21.8 km**, where 2.5× reaches 54.5 km and the sky renders as a hole onto the engine clear colour
 (seen at the controls the moment this selection first chose that zone). `HorizonScaleFor` therefore
@@ -554,8 +554,8 @@ dome is centred on the camera and scaled uniformly about it, and it is unfogged,
 unobservable and the rim ELEVATION is the whole of what a frame shows. Measured on our own render
 (C1 river pose, camera pitched +30°, `f` = 599.1 px): the flat cap's edge appears at **48–52°**
 elevation against the authored 46.9–48.5° at the centre column, the spread being the 12-gon's own
-inradius/circumradius and the off-centre columns' geometry. See `docs/architecture.md`'s
-`GameSession.HorizonScaleFor` entry for why `B14` therefore keeps one uniform scale rather than
+inradius/circumradius and the off-centre columns' geometry. See `src/Launch/SkyStage.cs`'s
+`HorizonScaleFor` for why `B14` therefore keeps one uniform scale rather than
 pinning Y to metric.
 
 ### Zone keys

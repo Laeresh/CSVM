@@ -203,7 +203,7 @@ internal static class NetTeamSuites
             }
         }
 
-        var scores = peers[0].Versus!.Scores;
+        var scores = peers[0].Dogfight!.Match.Scores;
         int kill = scores.Kill, suicide = scores.Suicide, target = TeamTarget(scores);
         Down(peers, victim: 2, killer: 0);
         Board(ctx, peers, "seat 0 kills the other team's seat", (kill, 1, 0), (0, 0, 0), (0, 0, 1));
@@ -211,21 +211,21 @@ internal static class NetTeamSuites
 
         Down(peers, victim: 0, killer: 1);
         Board(ctx, peers, $"a teammate kill costs the killer {-suicide} and counts no kill", (kill, 1, 1), (suicide, 0, 0), (0, 0, 1));
-        ctx.Check(peers.All(p => p.Versus!.TeamScoreOf(1) == kill + suicide),
+        ctx.Check(peers.All(p => p.Dogfight!.Match.TeamScoreOf(1) == kill + suicide),
             $"and the team's total falls with it on every machine ({Totals(peers)})");
         Returned(ctx, peers, seat: 0);
 
         Down(peers, victim: 2, killer: 1);
         Down(peers, victim: 2, killer: 1);
-        ctx.Check(peers.All(p => p.Versus!.TeamScoreOf(1) == target - kill && !p.Versus!.Completed && p.MatchEnd == NetMatchEnd.Running),
+        ctx.Check(peers.All(p => p.Dogfight!.Match.TeamScoreOf(1) == target - kill && !p.Dogfight!.Match.Completed && p.Dogfight!.End == NetMatchEnd.Running),
             $"ABLE-TO-FAIL CONTROL: one kill short of the target the match runs on every machine ({Totals(peers)})");
 
         Down(peers, victim: 2, killer: 0);
-        ctx.Check(peers.All(p => p.Versus!.Completed && p.MatchEnd == NetMatchEnd.ScoreTarget && p.Pause is { Ended: true }),
-            $"team 1's total of {target} ends the match on the Score limit on every machine ({string.Join(", ", peers.Select(p => p.MatchEnd))})");
-        ctx.Check(peers.All(p => Enumerable.Range(0, 3).All(seat => p.Versus!.ScoreOf(seat) < target)),
+        ctx.Check(peers.All(p => p.Dogfight!.Match.Completed && p.Dogfight!.End == NetMatchEnd.ScoreTarget && p.Pause is { Ended: true }),
+            $"team 1's total of {target} ends the match on the Score limit on every machine ({string.Join(", ", peers.Select(p => p.Dogfight!.End))})");
+        ctx.Check(peers.All(p => Enumerable.Range(0, 3).All(seat => p.Dogfight!.Match.ScoreOf(seat) < target)),
             $"though no pilot reached it alone ({Totals(peers)})");
-        var titles = peers.Select(p => VersusBoard.Title(p.Versus!)).ToArray();
+        var titles = peers.Select(p => VersusBoard.Title(p.Dogfight!.Match)).ToArray();
         ctx.Check(titles.All(t => t == "RED SQUADRON WINS"),
             $"and every machine's board names the winning team by its lobby name ({string.Join(" | ", titles)})");
     }
@@ -235,8 +235,8 @@ internal static class NetTeamSuites
     {
         peers[0].SeatRigs[0].Controller!.RestartMatch!();
         Lockstep(GrantSteps, peers);
-        ctx.Check(peers.All(p => !p.Versus!.Completed && p.MatchEnd == NetMatchEnd.Running
-                                 && Enumerable.Range(0, 3).All(seat => p.Versus!.ScoreOf(seat) == 0)),
+        ctx.Check(peers.All(p => !p.Dogfight!.Match.Completed && p.Dogfight!.End == NetMatchEnd.Running
+                                 && Enumerable.Range(0, 3).All(seat => p.Dogfight!.Match.ScoreOf(seat) == 0)),
             $"the host's rematch runs the round again from zero on every machine ({Totals(peers)})");
     }
 
@@ -249,8 +249,8 @@ internal static class NetTeamSuites
         Lockstep(SettleSteps, staying);
         ctx.Check(staying.All(p => p.SeatRigs[0].Controller is { Crashed: false } && p.SeatRigs[1].Controller is { Crashed: false }),
             $"with both team 1 pilots still flying on both remaining machines");
-        ctx.Check(staying.All(p => p.Versus!.Completed && p.MatchEnd == NetMatchEnd.NobodyLeft),
-            $"the drop of team 2's only pilot ends the match on reason 4 on both remaining machines ({string.Join(", ", staying.Select(p => p.MatchEnd))})");
+        ctx.Check(staying.All(p => p.Dogfight!.Match.Completed && p.Dogfight!.End == NetMatchEnd.NobodyLeft),
+            $"the drop of team 2's only pilot ends the match on reason 4 on both remaining machines ({string.Join(", ", staying.Select(p => p.Dogfight!.End))})");
 
         var alone = new VersusMatch(3, TeamTarget(MatchScores.Fallback), 300f);
         alone.Leave(2);
@@ -273,8 +273,8 @@ internal static class NetTeamSuites
     {
         var want = new[] { seat0, seat1, seat2 };
         bool right = peers.All(p => Enumerable.Range(0, 3).All(seat =>
-            p.Versus!.ScoreOf(seat) == want[seat].Score && p.Versus!.KillsOf(seat) == want[seat].Kills
-            && p.Versus!.DeathsOf(seat) == want[seat].Deaths));
+            p.Dogfight!.Match.ScoreOf(seat) == want[seat].Score && p.Dogfight!.Match.KillsOf(seat) == want[seat].Kills
+            && p.Dogfight!.Match.DeathsOf(seat) == want[seat].Deaths));
         ctx.Check(right, $"{what}, on every machine ({Lines(peers)})");
     }
 
@@ -282,7 +282,7 @@ internal static class NetTeamSuites
     private static void Returned(TestContext ctx, GameSession[] peers, int seat)
     {
         int start = Teams[seat] * SpawnPoints.NetBlock;
-        var entries = peers.Select(p => p.SpawnEntries[seat]).ToArray();
+        var entries = peers.Select(p => p.Dogfight!.SpawnEntries[seat]).ToArray();
         ctx.Check(entries.All(e => e == entries[0]) && entries[0] >= start && entries[0] < start + SpawnPoints.NetBlock,
             $"seat {seat} comes back inside team {Teams[seat]}'s block [{start}, {start + SpawnPoints.NetBlock}) on every machine ({string.Join(",", entries)})");
     }
@@ -301,11 +301,11 @@ internal static class NetTeamSuites
 
     private static string Lines(GameSession[] peers) =>
         string.Join(" | ", peers.Select(p => string.Join(" ", Enumerable.Range(0, 3)
-            .Select(seat => $"P{seat + 1}:{p.Versus!.ScoreOf(seat)}/{p.Versus!.KillsOf(seat)}K/{p.Versus!.DeathsOf(seat)}D"))));
+            .Select(seat => $"P{seat + 1}:{p.Dogfight!.Match.ScoreOf(seat)}/{p.Dogfight!.Match.KillsOf(seat)}K/{p.Dogfight!.Match.DeathsOf(seat)}D"))));
 
     private static string Totals(GameSession[] peers) =>
-        string.Join(" | ", peers.Select(p => string.Join(" ", p.Versus!.TeamStandings().Select(t => $"{t.Name}:{t.Score}"))
-            + " / " + string.Join(",", Enumerable.Range(0, 3).Select(p.Versus!.ScoreOf))));
+        string.Join(" | ", peers.Select(p => string.Join(" ", p.Dogfight!.Match.TeamStandings().Select(t => $"{t.Name}:{t.Score}"))
+            + " / " + string.Join(",", Enumerable.Range(0, 3).Select(p.Dogfight!.Match.ScoreOf))));
 
     private static bool SameGround(SpawnPoint a, SpawnPoint b) =>
         Mathf.Abs(a.Position.X - b.Position.X) < EntryTolerance && Mathf.Abs(a.Position.Z - b.Position.Z) < EntryTolerance;

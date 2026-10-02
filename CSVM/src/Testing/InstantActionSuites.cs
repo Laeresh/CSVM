@@ -1855,7 +1855,7 @@ internal static class InstantActionSuites
                 Race = stuntRace,
                 InstantActionActive = instantAction,
             }, new SplitStuntStarts());
-        var board = GameSession.RaceBoardFor(stuntRace, instantAction, "C1   ·   test", exitsToMenu: true,
+        var board = SessionBoards.RaceBoardFor(stuntRace, instantAction, "C1   ·   test", exitsToMenu: true,
             pauseState, _ => new MenuInput());
         if (board != null)
         {

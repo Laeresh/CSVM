@@ -53,8 +53,8 @@ public sealed class InstantActionDirector
     // subscription the end-condition block wires is in place. Null outside dogfight_ace.
     private FlightController? _ace;
 
-    // --debug-scoreboard (IA): single-fire, same shape as GameSession's
-    // _crashFired/_versusDebugKillFired.
+    // --debug-scoreboard (IA): single-fire, same shape as GameSession's _crashFired and the
+    // Dogfight director's own force.
     private bool _debugForceFired;
 
     // The militia -> paint-pattern table, loaded once per mission for the wave liveries.
@@ -88,6 +88,15 @@ public sealed class InstantActionDirector
     /// <summary>The engine-free mission runtime: the loaded def, the objective bookkeeping and
     /// the decoded actor rules. Never null on a built director.</summary>
     public InstantActionRuntime Runtime { get; }
+
+    /// <summary>The scenario key the mission's spawn walk reads: its own mission_type, so an
+    /// <c>--ia=</c> launch needs no scenario flag.</summary>
+    internal string Scenario => Runtime.Def.MissionType;
+
+    /// <summary>Whether the mission type is a stunt run. That type asks for the Danger Zones itself,
+    /// so <c>--stunt</c> is not the tester's flag to remember on an <c>--ia=</c> launch.</summary>
+    internal bool IsStuntRun =>
+        string.Equals(Runtime.Def.MissionType, "stunt_flying", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Every built wave member, across all four waves. 0 until BuildActors has run.</summary>
     private int WaveEnemyCount => _waveRosters?.Sum(r => r.Count) ?? 0;
@@ -148,6 +157,22 @@ public sealed class InstantActionDirector
         {
             walk.Seat(rig.WorldPosition, rig.NoseDirection);
         }
+    }
+
+    /// <summary>The aircraft the mission forces on every human, or null to leave each pane the
+    /// aircraft its pilot selected. The def's player_plane overrides any <c>--plane=</c>; the
+    /// wizard's own def forces nothing, since its player_plane IS player 1's pick
+    /// (<see cref="HumanFieldPlanes.InstantActionOverride"/>).</summary>
+    internal string? PlayerPlaneOverride()
+    {
+        string? node = Mech3.InstantAction.PlaneNodeFor(Runtime.Def.PlayerPlane);
+        if (node == null)
+        {
+            GD.PushWarning($"ia: player plane '{Runtime.Def.PlayerPlane}' is not one of " +
+                            $"the eleven airframes, flying '{_spec.PlaneName}' instead");
+        }
+
+        return HumanFieldPlanes.InstantActionOverride(_spec, node);
     }
 
     /// <summary>The mission's actor build: the chapter's patrol net, the ace (dogfight_ace), the

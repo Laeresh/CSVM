@@ -395,6 +395,6 @@ public sealed class InstantActionDef
 
     /// <summary>INVENTED, no <c>ia.json</c> key carries this. Default 1 is the faithful
     /// one-life run; N gives N-1 respawns on
-    /// the existing 3s <c>VersusRespawnDelay</c> path; 0 is unlimited. Per pilot, not shared.</summary>
+    /// the existing 3s <c>VersusDirector.RespawnDelay</c> path; 0 is unlimited. Per pilot, not shared.</summary>
     public int Lives { get; init; } = 1;
 }

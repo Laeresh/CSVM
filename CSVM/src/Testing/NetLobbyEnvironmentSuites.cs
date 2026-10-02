@@ -81,10 +81,10 @@ internal static class NetLobbyEnvironmentSuites
                 }
             }
 
-            ctx.Check(peers.All(p => p.ZvzPlay is { } zvz && zvz.Rules.TeamOfHull(0) == 2 && zvz.Rules.TeamOfHull(1) == 1
+            ctx.Check(peers.All(p => p.Dogfight?.ZvzPlay is { } zvz && zvz.Rules.TeamOfHull(0) == 2 && zvz.Rules.TeamOfHull(1) == 1
                                      && p.ZeppelinHulls?.NodeAt(0) == "multiplayer1zep" && p.ZeppelinHulls.NodeAt(1) == "multiplayer2zep"),
-                $"every machine flies multiplayer1zep for team 2 and multiplayer2zep for team 1 ({string.Join(" | ", peers.Select(p => p.ZvzPlay == null ? "none" : $"{p.ZeppelinHulls?.NodeAt(0)} {p.ZeppelinHulls?.NodeAt(1)}"))})");
-            if (peers.Any(p => p.ZvzPlay == null || p.ZeppelinHulls == null))
+                $"every machine flies multiplayer1zep for team 2 and multiplayer2zep for team 1 ({string.Join(" | ", peers.Select(p => p.Dogfight?.ZvzPlay == null ? "none" : $"{p.ZeppelinHulls?.NodeAt(0)} {p.ZeppelinHulls?.NodeAt(1)}"))})");
+            if (peers.Any(p => p.Dogfight?.ZvzPlay == null || p.ZeppelinHulls == null))
             {
                 return;
             }
@@ -103,8 +103,8 @@ internal static class NetLobbyEnvironmentSuites
 
             ctx.Check(placed, $"each hull stands alive where C1C's zeppelins.zrd starts it ({string.Join(", ", drift)})");
 
-            ctx.Check(peers.All(p => p.RearmPlay is { BaseCount: 2 }),
-                $"both machines list zep_rearm_node_1 and _2 ({string.Join(" | ", peers.Select(p => p.RearmPlay?.BaseCount.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"))})");
+            ctx.Check(peers.All(p => p.Dogfight?.RearmPlay is { BaseCount: 2 }),
+                $"both machines list zep_rearm_node_1 and _2 ({string.Join(" | ", peers.Select(p => p.Dogfight?.RearmPlay?.BaseCount.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"))})");
 
             var near = new List<string>();
             bool beside = true;

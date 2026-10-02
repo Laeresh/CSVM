@@ -497,7 +497,7 @@ The race's shared ranked results overlay on `ResultsBoard`'s shell: one row per 
 `StuntRace.Standings()` with placing, tag, plane, zones, total and gap to the winner, and a DNF
 row for an unfinished run. Whole-window rather than per-pane, since a race ends for everybody at
 once. Wakes on `RaceCompleted` and retires once `AllFinished` clears, so the rematch is reachable
-without going through the menu. No Instant Action run builds one (`GameSession.RaceBoardFor`):
+without going through the menu. No Instant Action run builds one (`Launch/SessionBoards.cs`, `RaceBoardFor`):
 there the last finish is the mission's win, and the director's hold and wrap-up end the run.
 `StuntScoreboard` is the single-pilot form of the same table.
 
@@ -507,7 +507,7 @@ The whole-window Dogfight results overlay on `ResultsBoard`'s shell: the winner 
 then one ranked row per player with tag, score, kills and deaths from `VersusMatch.Standings()`.
 Score is the ranked column. Wakes on `MatchCompleted` and retires on the rematch, its rows drawn
 from that completion alone, so `Restart()` zeroing the live state never redraws them. Restart
-routes through `GameSession.RestartMatch`, which R and pad Y reach directly. A network guest's
+routes through `VersusDirector.Restart`, which R and pad Y reach directly. A network guest's
 board offers no Restart and reads `HostCallsTheRematch`, since that call refuses off the host;
 Zeppelin vs Zeppelin keeps the row, which leaves for the lobby. `StuntRaceBoard` is its twin.
 
@@ -522,7 +522,7 @@ and rebuilds the world, because a mission's waves, ace and zeppelin cannot be pu
 
 ## src/UI/Screens/PauseBoard.cs
 The shared pause overlay, whole-window because pausing stops the game for everybody at once. Built
-once by `GameSession` on the shared board layer and wired to `PauseState.Changed` rather than a
+once by `Launch/SessionBoards.cs` on the shared board layer and wired to `PauseState.Changed` rather than a
 completion event, it shows the pausing player's tag in their own colour and a Resume, Photo Mode,
 Preferences, Restart and Exit menu driven by that player alone, since `PauseState` lets only the
 owner resume; the Preferences row is built only where a `PausePreferences` leaf stands behind it. A fresh menu each pause, so the cursor starts on Resume and a stray confirm cannot destroy a run. Its
@@ -640,11 +640,11 @@ classification and co-location grouping, so its gizmos agree with the marker dum
 
 ## src/UI/Overlays/PhotoModeHud.cs
 Photo mode's only screen furniture and its way out: a hint line naming the bindings on a layer of
-its own, and the Escape or pad-B read that raises `Exit` for `GameSession.ExitPhotoMode` to act on.
+its own, and the Escape or pad-B read that raises `Exit` for `SessionBoards.ExitPhotoMode` to act on.
 It decides nothing about the mode itself. The hint fades rather than persisting, since the mode
 exists to compose a frame, and the fade runs on wall time because photo mode holds the clock. Pad
 reads go through the seat's own device filter, so in splitscreen another player's pad cannot close a
-mode that is not theirs. The mode itself is `Launch/GameSession.cs`'s.
+mode that is not theirs. The mode itself is `Launch/SessionBoards.cs`'s.
 
 ## src/UI/Overlays/PerfHud.cs
 The frame-cost readout (key F14, `--debug-fps` presets it): fps, the current frame's cost and the
@@ -1256,7 +1256,7 @@ reaching the shell only through `IOriginalScreenHost` (`OriginalScreenHost.cs`);
 [../formats/instant-action/wrap-up.md](../formats/instant-action/wrap-up.md).
 
 ## src/UI/Menu/Original/OriginalPauseBoard.cs
-The Original presentation's pause screen, on `PauseBoard`'s own seam: built once by `GameSession`
+The Original presentation's pause screen, on `PauseBoard`'s own seam: built once by `Launch/SessionBoards.cs`
 over a `PauseSheet` its mission resolves, following `PauseState.Changed`, driven by the pausing
 player's reader alone. What it draws is `PauseScreens`' composition through `ComposedBoardView`, so
 the screen tests off engine and this node owns the cursor, the pointer and the five actions. An Instant Action sortie's sheet is the blackboard, which it writes in `BoardPalette.EscapeBlackboard` rather than the campaign sheet's ink. That

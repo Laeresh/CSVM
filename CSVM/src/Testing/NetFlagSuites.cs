@@ -143,7 +143,7 @@ internal static class NetFlagSuites
     // Two flags on every machine, at the same homes, each at its base with its carried twin hidden.
     private static bool Built(TestContext ctx, GameSession[] peers)
     {
-        var rows = peers.Select(p => p.Flags?.Flags.Rows).ToArray();
+        var rows = peers.Select(p => p.Dogfight?.Flags?.Flags.Rows).ToArray();
         ctx.Check(rows.All(r => r is { Count: 2 } && r.All(f => f.State == FlagState.Home && f.Holder == FlagMatch.NoHolder)),
             $"every machine builds two flags at home from cs_flag_1 and cs_flag_2 ({string.Join(" | ", rows.Select(Describe))})");
         if (!rows.All(r => r is { Count: 2 }))
@@ -151,8 +151,8 @@ internal static class NetFlagSuites
             return false;
         }
 
-        var homes = peers.Select(p => p.Flags!.Flags.HomeOf(1)).ToArray();
-        ctx.Check(homes.All(h => h.DistanceTo(homes[0]) < 0.01f) && homes[0].DistanceTo(peers[0].Flags!.Flags.HomeOf(2)) > 2f * FlagMatch.Reach,
+        var homes = peers.Select(p => p.Dogfight!.Flags!.Flags.HomeOf(1)).ToArray();
+        ctx.Check(homes.All(h => h.DistanceTo(homes[0]) < 0.01f) && homes[0].DistanceTo(peers[0].Dogfight!.Flags!.Flags.HomeOf(2)) > 2f * FlagMatch.Reach,
             $"and every machine stands team 1's flag on the same home, out of reach of team 2's ({string.Join(" | ", homes)})");
         return true;
     }
@@ -160,30 +160,30 @@ internal static class NetFlagSuites
     // The guest on team 2 takes team 1's flag at its base, and brings it to its own.
     private static void Capture(TestContext ctx, GameSession[] peers)
     {
-        Put(peers, seat: 2, peers[2].Flags!.Flags.HomeOf(1));
+        Put(peers, seat: 2, peers[2].Dogfight!.Flags!.Flags.HomeOf(1));
         Lockstep(AskSteps, peers);
         Held(ctx, peers, "the team 2 guest takes team 1's flag at its base", team: 1, holder: 2);
         HeldMarkers(ctx, peers);
-        var spoken = peers.Select(p => string.Join(",", p.Flags!.Spoken)).ToArray();
-        ctx.Check(peers[0].Flags!.Spoken.Contains("snd_CTFlost") && peers[1].Flags!.Spoken.Contains("snd_CTFlost")
-                  && peers[2].Flags!.Spoken.Contains("snd_CTFstolen") && !peers[2].Flags!.Spoken.Contains("snd_CTFlost"),
+        var spoken = peers.Select(p => string.Join(",", p.Dogfight!.Flags!.Spoken)).ToArray();
+        ctx.Check(peers[0].Dogfight!.Flags!.Spoken.Contains("snd_CTFlost") && peers[1].Dogfight!.Flags!.Spoken.Contains("snd_CTFlost")
+                  && peers[2].Dogfight!.Flags!.Spoken.Contains("snd_CTFstolen") && !peers[2].Dogfight!.Flags!.Spoken.Contains("snd_CTFlost"),
             $"team 1's machines hear their flag lost and team 2's hears it stolen ({string.Join(" | ", spoken)})");
-        ctx.Check(peers.All(p => p.Flags!.LinesPosted > 0),
-            $"and every machine posts the flag line ({string.Join(",", peers.Select(p => p.Flags!.LinesPosted))})");
+        ctx.Check(peers.All(p => p.Dogfight!.Flags!.LinesPosted > 0),
+            $"and every machine posts the flag line ({string.Join(",", peers.Select(p => p.Dogfight!.Flags!.LinesPosted))})");
 
         // ABLE-TO-FAIL CONTROL: inside the take's cooldown the carrier at its own base asks nothing.
-        int before = peers[0].Versus!.ScoreOf(2);
-        Put(peers, seat: 2, peers[2].Flags!.Flags.HomeOf(2));
+        int before = peers[0].Dogfight!.Match.ScoreOf(2);
+        Put(peers, seat: 2, peers[2].Dogfight!.Flags!.Flags.HomeOf(2));
         Lockstep(AskSteps, peers);
         Held(ctx, peers, "ABLE-TO-FAIL CONTROL: at its own base inside the take's 5 s cooldown the flag stays held", team: 1, holder: 2);
         Park(peers, seat: 2);
         Lockstep(CooledSteps, peers);
-        Put(peers, seat: 2, peers[2].Flags!.Flags.HomeOf(2));
+        Put(peers, seat: 2, peers[2].Dogfight!.Flags!.Flags.HomeOf(2));
         Lockstep(AskSteps, peers);
         Home(ctx, peers, "carried to team 2's base it goes home on every machine", team: 1);
-        ctx.Check(peers.All(p => p.Versus!.ScoreOf(2) == before + p.Versus!.Scores.FlagCapture && p.Versus!.KillsOf(2) == 0),
-            $"and the capture scores its carrier {peers[0].Versus!.Scores.FlagCapture} on every machine ({Scores(peers)})");
-        ctx.Check(peers.All(p => !p.Versus!.Completed),
+        ctx.Check(peers.All(p => p.Dogfight!.Match.ScoreOf(2) == before + p.Dogfight!.Match.Scores.FlagCapture && p.Dogfight!.Match.KillsOf(2) == 0),
+            $"and the capture scores its carrier {peers[0].Dogfight!.Match.Scores.FlagCapture} on every machine ({Scores(peers)})");
+        ctx.Check(peers.All(p => !p.Dogfight!.Match.Completed),
             $"ABLE-TO-FAIL CONTROL: one capture is short of the {ScoreTarget(ctx)}-point target and the match runs ({Scores(peers)})");
         Park(peers, seat: 2);
     }
@@ -192,17 +192,17 @@ internal static class NetFlagSuites
     // catches it and returns it.
     private static void CatchAndReturn(TestContext ctx, GameSession[] peers)
     {
-        Put(peers, seat: 2, peers[2].Flags!.Flags.HomeOf(1));
+        Put(peers, seat: 2, peers[2].Dogfight!.Flags!.Flags.HomeOf(1));
         Lockstep(AskSteps, peers);
         Held(ctx, peers, "taken again", team: 1, holder: 2);
         Down(peers, victim: 2, killer: 0);
-        ctx.Check(peers.All(p => p.Flags!.Flags.RowOf(1) is { State: FlagState.Floating, Holder: FlagMatch.NoHolder }),
+        ctx.Check(peers.All(p => p.Dogfight!.Flags!.Flags.RowOf(1) is { State: FlagState.Floating, Holder: FlagMatch.NoHolder }),
             $"the carrier's death floats the flag on every machine ({Rows(peers)})");
         FloatingMarkers(ctx, peers);
 
         // Over the flag rather than on it: a flag at rest lies against a base's buildings.
-        int before = peers[0].Versus!.ScoreOf(0);
-        if (peers[0].Flags!.Flags.FloatingAt(1) is { } floating)
+        int before = peers[0].Dogfight!.Match.ScoreOf(0);
+        if (peers[0].Dogfight!.Flags!.Flags.FloatingAt(1) is { } floating)
         {
             var over = floating + (Vector3.Up * Over);
             peers[0].SeatRigs[0].Controller!.RespawnAt(over, over + (Vector3.Right * 100f));
@@ -212,14 +212,14 @@ internal static class NetFlagSuites
         Park(peers, seat: 0);
         Lockstep(AskSteps, peers);
         Held(ctx, peers, "the host's team 1 pilot catches its own floating flag", team: 1, holder: 0);
-        ctx.Check(peers[0].Flags!.Spoken.Contains("snd_CTFscoreCapt") && !peers[2].Flags!.Spoken.Contains("snd_CTFscoreCapt"),
-            $"and its own team hears it caught ({string.Join(" | ", peers.Select(p => string.Join(",", p.Flags!.Spoken)))})");
+        ctx.Check(peers[0].Dogfight!.Flags!.Spoken.Contains("snd_CTFscoreCapt") && !peers[2].Dogfight!.Flags!.Spoken.Contains("snd_CTFscoreCapt"),
+            $"and its own team hears it caught ({string.Join(" | ", peers.Select(p => string.Join(",", p.Dogfight!.Flags!.Spoken)))})");
         Lockstep(CooledSteps, peers);
-        Put(peers, seat: 0, peers[0].Flags!.Flags.HomeOf(1));
+        Put(peers, seat: 0, peers[0].Dogfight!.Flags!.Flags.HomeOf(1));
         Lockstep(AskSteps, peers);
         Home(ctx, peers, "returned to its own base", team: 1);
-        ctx.Check(peers.All(p => p.Versus!.ScoreOf(0) == before + p.Versus!.Scores.FlagReturn),
-            $"and the return scores its carrier {peers[0].Versus!.Scores.FlagReturn} on every machine ({Scores(peers)})");
+        ctx.Check(peers.All(p => p.Dogfight!.Match.ScoreOf(0) == before + p.Dogfight!.Match.Scores.FlagReturn),
+            $"and the return scores its carrier {peers[0].Dogfight!.Match.Scores.FlagReturn} on every machine ({Scores(peers)})");
         Park(peers, seat: 0);
     }
 
@@ -228,7 +228,7 @@ internal static class NetFlagSuites
     // home at the end of its throw, on the host's word.
     private static void ThrowRunsOut(TestContext ctx, GameSession[] peers)
     {
-        Put(peers, seat: 2, peers[2].Flags!.Flags.HomeOf(1));
+        Put(peers, seat: 2, peers[2].Dogfight!.Flags!.Flags.HomeOf(1));
         Lockstep(AskSteps, peers);
         Held(ctx, peers, "taken a third time", team: 1, holder: 2);
         var posted = peers.Select(p => p.NetChat!.Chat.Posted).ToArray();
@@ -242,36 +242,36 @@ internal static class NetFlagSuites
         Type(peers, seat: 2, NetChatLink.EjectFlagCommand);
         Lockstep(AskSteps, peers);
         Park(peers, seat: 2);
-        ctx.Check(peers.All(p => p.Flags!.Flags.RowOf(1) is { State: FlagState.Floating, Holder: FlagMatch.NoHolder }),
+        ctx.Check(peers.All(p => p.Dogfight!.Flags!.Flags.RowOf(1) is { State: FlagState.Floating, Holder: FlagMatch.NoHolder }),
             $"the carrier's ejectflag floats the flag on every machine ({Rows(peers)})");
         ctx.Check(peers[2].SeatRigs[2].Controller is { Crashed: false, Destroyed: false } && peers.All(p => p.SeatRigs[2].Controller!.MarkerName == null),
             $"and the carrier flies on untagged");
         ctx.Check(peers.Select((p, i) => p.NetChat!.Chat.Posted == posted[i] && p.NetChat!.LinesSent == sent[i]).All(same => same),
             $"and neither console line was posted or sent as chat ({string.Join(",", peers.Select(p => $"{p.NetChat!.Chat.Posted}/{p.NetChat!.LinesSent}"))})");
-        var scores = peers.Select(p => Enumerable.Range(0, 3).Select(p.Versus!.ScoreOf).ToArray()).ToArray();
+        var scores = peers.Select(p => Enumerable.Range(0, 3).Select(p.Dogfight!.Match.ScoreOf).ToArray()).ToArray();
         int flown = AskSteps;
         Lockstep((int)(FlagMatch.ThrowSeconds / GameClock.FixedDt) - flown - AskSteps, peers);
-        ctx.Check(peers.All(p => p.Flags!.Flags.RowOf(1) is { State: FlagState.Floating }),
+        ctx.Check(peers.All(p => p.Dogfight!.Flags!.Flags.RowOf(1) is { State: FlagState.Floating }),
             $"ABLE-TO-FAIL CONTROL: short of its 15 s throw the flag still floats on every machine ({Rows(peers)})");
         Lockstep(4 * AskSteps, peers);
         Home(ctx, peers, "once the throw runs out", team: 1);
-        ctx.Check(peers.Select((p, i) => Enumerable.Range(0, 3).Select(p.Versus!.ScoreOf).SequenceEqual(scores[i])).All(same => same),
+        ctx.Check(peers.Select((p, i) => Enumerable.Range(0, 3).Select(p.Dogfight!.Match.ScoreOf).SequenceEqual(scores[i])).All(same => same),
             $"and a floating flag's return scores nobody ({Scores(peers)})");
     }
 
     // The second capture reaches the target on team 2's total and ends the match everywhere.
     private static void SecondCapture(TestContext ctx, GameSession[] peers)
     {
-        Put(peers, seat: 2, peers[2].Flags!.Flags.HomeOf(1));
+        Put(peers, seat: 2, peers[2].Dogfight!.Flags!.Flags.HomeOf(1));
         Lockstep(AskSteps, peers);
         Held(ctx, peers, "taken for the second capture", team: 1, holder: 2);
         Park(peers, seat: 2);
         Lockstep(CooledSteps, peers);
-        Put(peers, seat: 2, peers[2].Flags!.Flags.HomeOf(2));
+        Put(peers, seat: 2, peers[2].Dogfight!.Flags!.Flags.HomeOf(2));
         Lockstep(AskSteps, peers);
-        ctx.Check(peers.All(p => p.Versus!.TeamScoreOf(2) == ScoreTarget(ctx) && p.Versus!.Completed && p.MatchEnd == NetMatchEnd.ScoreTarget),
-            $"the second capture ends the match on the Score limit by team on every machine ({Scores(peers)}; {string.Join(", ", peers.Select(p => p.MatchEnd))})");
-        var titles = peers.Select(p => VersusBoard.Title(p.Versus!)).ToArray();
+        ctx.Check(peers.All(p => p.Dogfight!.Match.TeamScoreOf(2) == ScoreTarget(ctx) && p.Dogfight!.Match.Completed && p.Dogfight!.End == NetMatchEnd.ScoreTarget),
+            $"the second capture ends the match on the Score limit by team on every machine ({Scores(peers)}; {string.Join(", ", peers.Select(p => p.Dogfight!.End))})");
+        var titles = peers.Select(p => VersusBoard.Title(p.Dogfight!.Match)).ToArray();
         ctx.Check(titles.All(t => t == "BLUE ANGELS WINS"),
             $"and every machine's board names the capturing team ({string.Join(" | ", titles)})");
     }
@@ -334,23 +334,23 @@ internal static class NetFlagSuites
 
     private static void Held(TestContext ctx, GameSession[] peers, string what, int team, int holder)
     {
-        ctx.Check(peers.All(p => p.Flags!.Flags.RowOf(team) is { State: FlagState.Held } row && row.Holder == holder),
+        ctx.Check(peers.All(p => p.Dogfight!.Flags!.Flags.RowOf(team) is { State: FlagState.Held } row && row.Holder == holder),
             $"{what}: seat {holder} holds team {team}'s flag on every machine ({Rows(peers)})");
-        ctx.Check(peers.All(p => p.SeatRigs[holder].Controller is { } pilot && p.Flags!.CarriedFlag(team) is { Visible: true } flag && pilot.IsAncestorOf(flag)),
+        ctx.Check(peers.All(p => p.SeatRigs[holder].Controller is { } pilot && p.Dogfight!.Flags!.CarriedFlag(team) is { Visible: true } flag && pilot.IsAncestorOf(flag)),
             $"and the flag hangs on seat {holder}'s aeroplane on every machine ({Hung(peers, team)})");
     }
 
     private static void Home(TestContext ctx, GameSession[] peers, string what, int team)
     {
-        ctx.Check(peers.All(p => p.Flags!.Flags.RowOf(team) is { State: FlagState.Home, Holder: FlagMatch.NoHolder }),
+        ctx.Check(peers.All(p => p.Dogfight!.Flags!.Flags.RowOf(team) is { State: FlagState.Home, Holder: FlagMatch.NoHolder }),
             $"{what}: team {team}'s flag stands at home on every machine ({Rows(peers)})");
-        ctx.Check(peers.All(p => p.Flags!.CarriedFlag(team) is not { Visible: true }),
+        ctx.Check(peers.All(p => p.Dogfight!.Flags!.CarriedFlag(team) is not { Visible: true }),
             $"and no machine still draws it away from its base ({Hung(peers, team)})");
     }
 
     // Where each machine's carried flag hangs and whether it draws, for a failure message.
     private static string Hung(GameSession[] peers, int team) =>
-        string.Join(" | ", peers.Select(p => p.Flags!.CarriedFlag(team) is { } flag
+        string.Join(" | ", peers.Select(p => p.Dogfight!.Flags!.CarriedFlag(team) is { } flag
             ? $"{flag.GetParent()?.Name ?? "-"}/{flag.GetParent()?.GetParent()?.Name ?? "-"} visible={flag.Visible}"
             : "no node"));
 
@@ -365,7 +365,7 @@ internal static class NetFlagSuites
     // out of every flag's reach and clear of the bases' buildings.
     private static void Park(GameSession[] peers, int seat)
     {
-        var home = peers[seat].Flags!.Flags.HomeOf(1);
+        var home = peers[seat].Dogfight!.Flags!.Flags.HomeOf(1);
         var high = home + (Vector3.Up * ParkHeight) + ((Vector3.Left + Vector3.Forward) * (ParkHeight * seat));
         peers[seat].SeatRigs[seat].Controller!.RespawnAt(high, high + (Vector3.Right * 100f));
     }
@@ -406,9 +406,9 @@ internal static class NetFlagSuites
         rows == null ? "none" : string.Join(" ", rows.Select(r => $"{r.Team}:{r.State}/{r.Holder}"));
 
     private static string Rows(GameSession[] peers) =>
-        string.Join(" | ", peers.Select(p => Describe(p.Flags?.Flags.Rows)));
+        string.Join(" | ", peers.Select(p => Describe(p.Dogfight?.Flags?.Flags.Rows)));
 
     private static string Scores(GameSession[] peers) =>
-        string.Join(" | ", peers.Select(p => string.Join(",", Enumerable.Range(0, 3).Select(p.Versus!.ScoreOf))
-            + $" teams {p.Versus!.TeamScoreOf(1)}/{p.Versus!.TeamScoreOf(2)}"));
+        string.Join(" | ", peers.Select(p => string.Join(",", Enumerable.Range(0, 3).Select(p.Dogfight!.Match.ScoreOf))
+            + $" teams {p.Dogfight!.Match.TeamScoreOf(1)}/{p.Dogfight!.Match.TeamScoreOf(2)}"));
 }

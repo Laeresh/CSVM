@@ -642,7 +642,12 @@ The `--dump-*` probes, the capture loop, the golden-image hash and the glTF expo
 The process and the per-launch session: the top family bar `Testing`, so nothing else names it.
 
 - `src/Launch/Launcher.cs`, Main.tscn's root: the once-per-process bootstrap, what outlives a session, the menu host, and every path a session starts or ends.
-- `src/Launch/GameSession.cs`, the per-launch session node: ordered build phases over one `SessionSpec`, owning the clock, world root, panes and runtimes.
+- `src/Launch/GameSession.cs`, the per-launch session node: ordered build steps over one `BuildState`, composing the step modules and mode directors and owning the clock, world root, panes and tick order.
+- `src/Launch/BuildState.cs`, the per-build state the session's ordered steps share: paths, archives, the world build's outputs and the running counts.
+- `src/Launch/SkyStage.cs`, the sky build step: the weather rig with each rig's domes and deck, the cloud field and banks, and the lens flare.
+- `src/Launch/SessionProbes.cs`, the build's scripted probes that report and quit, and the `--destroy=`/`--debug-objective=` build-time forces.
+- `src/Launch/InspectionLabs.cs`, the build's inspection steps: the parked-plane view and its labs, freecam, anim lab, selection labs, flight labs and debug overlays.
+- `src/Launch/SessionBoards.cs`, the whole-window boards over a flight: the pause board and options leaf, the results boards, the menu readers and photo mode.
 - `src/Launch/EnhancedLook.cs`, the enhanced mode's sun shadows, screen-space passes, tonemap and sky on a sun and an Environment, on or back to the faithful defaults.
 - `src/Launch/SwitchCover.cs`, a live graphics switch over a flying world: the flight held, a load board over the window, the switch run once it presents, both dropped when frames settle.
 - `src/Launch/TuningWarmup.cs`, the startup pass that registers every `Config` key before the orphan report and `--dump-config` read the registry.
@@ -712,6 +717,7 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 - `src/Session/World/SurfaceVehicleRuntime.cs`, builds and steps a mission's `mode ship` hulls: a library-root copy placed on the water, indexed on the runtime.
 - `src/Session/World/ZeppelinRuntime.cs`, runs a mission's zeppelins (`--zeppelins`): the placement, the net flight, the per-part damage and kill, the script's arms.
 - `src/Session/World/NetWorldLink.cs`, the host-owned world over the wire: AI aircraft as launch, pose, fire, hit, presence and death messages, zeppelin and surface-vehicle paths as periodic samples, destructible health, stage changes and deaths as events, and warp picks.
+- `src/Session/World/VersusDirector.cs`, the engine side of one Dogfight: the match and its scoring, the respawn rotation and grants, the host's match state, the rematch and the team modes.
 - `src/Session/World/FlagRuntime.cs`, Capture the Flag in a network match: the mission's flags moved, asked for, decided, scored, spoken and posted on every machine.
 - `src/Session/World/ZeppelinVersusRuntime.cs`, Zeppelin vs Zeppelin in a network match: the two hulls on their sides, the host scoring every dead part and ending on a lost hull.
 - `src/Session/World/RearmRuntime.cs`, the multiplayer rearm bases in a Dogfight: each machine's own seats restored in full on entering a base that serves them.

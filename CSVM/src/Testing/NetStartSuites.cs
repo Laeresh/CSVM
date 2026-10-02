@@ -74,7 +74,7 @@ internal static class NetStartSuites
         {
             host = NetCombatSuites.Ends.Open(ctx, spec, mesh[0], isHost: true, HostSeed, NetCombatSuites.Roster(2));
             ctx.Check(host.Built, $"[slow guest] the host builds ({host.Built})");
-            if (!host.Built || Own(host.Session) is not { } hostPlane || host.Session.Versus is not { } match)
+            if (!host.Built || Own(host.Session) is not { } hostPlane || host.Session.Dogfight?.Match is not { } match)
             {
                 return;
             }
@@ -130,7 +130,7 @@ internal static class NetStartSuites
             host = NetCombatSuites.Ends.Open(ctx, spec, mesh[0], isHost: true, HostSeed, NetCombatSuites.Roster(3));
             first = NetCombatSuites.Ends.Open(ctx, spec, mesh[1], isHost: false, HostSeed + 1, null);
             ctx.Check(host.Built && first.Built, $"[dropped] the host and the first guest build ({host.Built}, {first.Built})");
-            if (!host.Built || !first.Built || host.Session.Versus is not { } match
+            if (!host.Built || !first.Built || host.Session.Dogfight?.Match is not { } match
                 || Own(first.Session) is not { } firstPlane)
             {
                 return;
