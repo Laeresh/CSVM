@@ -251,7 +251,7 @@ rows).
 
 - `src/Flight/Hud/TargetHud.cs`, the per-pane targeting HUD: the selected target's bracket and label, the spyglass disc and its gates, the nearest-hostile fallback, the F16 / `--debug-markers` every-aircraft overlay.
 - `src/Flight/Hud/WeaponCursor.cs`, `FireControl`'s internal ammo-slot index math (`NextArmed`/`NextSelectable`); nothing else calls it.
-- `src/Flight/Hud/CockpitVisibility.cs`, the per-mode hiding of the pilot's OWN plane in first person; `Rules` is pure, `Bind`/`Apply` write it onto a built model.
+- `src/Flight/Hud/CockpitVisibility.cs`, the per-mode hiding of the pilot's OWN plane in first person, from that pilot's pane alone; `Rules` is pure, `Bind`/`Apply` write it onto a built model.
 - `src/Flight/Hud/CockpitOverlay.cs`, the shipped cockpit pass: the interior drawn in a `SubViewport` world of its own, composited under the HUD; one per player, `--no-cockpit-pass` opts out.
 - `src/Flight/Hud/CockpitGauges.cs`, the 3D instrument panel inside `cockpit1`: needles, horizon ball, belts and lamps, driven off `GaugeCluster`'s state.
 - `src/Flight/Hud/WarningShotCue.cs`, the decoded incoming-fire shield (player.json `warning_shot_*`): which gun rounds on the player are discarded, and which tell.

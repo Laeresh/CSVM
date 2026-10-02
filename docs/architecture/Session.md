@@ -519,7 +519,7 @@ title, stamps the block's objective marker, and owns the AI skills cache. The da
 ## src/Session/Roster/HumanFlightAdapter.cs
 `FlightRoster`'s private human-aircraft path: `Assemble` builds the painted model, `FlightController`, loadout and ordnance, carried turrets, HUD and
 instruments, damage visuals, audio, stunt and match bindings, target selection, the start placement, the Danger Zone eye, the crash runtime, and last
-the `UI.Boards.SplitScreen.OwnAirframeLayer` stamp that keeps the model out of this pilot's spyglass disc. A seat the bindings' `NetSeats` marks remote is
+the `UI.Boards.SplitScreen.SeatAirframe` stamp that keeps the model out of this pilot's spyglass disc and the cockpit-hidden body out of this pilot's pane alone. A seat the bindings' `NetSeats` marks remote is
 flown elsewhere: it takes the aeroplane, paint, loadout, spawn slot and score row, is built with the `RemotePoseBuffer` that IS its ownership, and
 skips every pane, HUD, camera, listener, pad and pause key, the roster's airframe pick and a co-op seat's `SeatFit` beating this machine's launch flags. It reads only the roster's
 copied policy plus the grouped aircraft, world and human-session contracts; player order decides the paint and spawn draws. An airframe swap lays its

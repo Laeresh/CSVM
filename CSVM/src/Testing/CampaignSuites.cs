@@ -1320,7 +1320,7 @@ internal static class CampaignSuites
         // The last flying frame, written by the arm the presentation is about to silence.
         cockpit.ApplyView();
         chase.ApplyView();
-        ctx.Check(cockpit.Interior is { Visible: true } && cockpit.Body is { Visible: false },
+        ctx.Check(cockpit.Interior is { Visible: true } && cockpit.BodyHidden,
             $"the cockpit seat enters the episode with the interior drawn and the airframe hidden, which is what that view leaves standing");
         ctx.Check(cockpit.Pilot.CockpitPass is { Visible: true },
             $"…and its interior pass drawing over the pane");
@@ -1329,11 +1329,11 @@ internal static class CampaignSuites
         host.Host(PresentationCode, IntroAnim);
         ctx.Check(host.Presenting && cockpit.Pilot.CameraOwned,
             $"the presentation code takes the view off the aircraft, which is what stops the arm re-asserting anything");
-        ctx.Check(cockpit.Body is { Visible: true },
+        ctx.Check(cockpit.BodyDrawn,
             $"so the code draws the airframe itself, and the episode's camera frames an aeroplane rather than nothing ({exit} leg)");
         ctx.Check(cockpit.Interior is { Visible: false } && cockpit.Pilot.CockpitPass is { Visible: false },
             $"…with the cockpit interior and its pass off the screen, so no panel hangs over the shot ({exit} leg)");
-        ctx.Check(chase.Body is { Visible: true } && chase.Interior is { Visible: false },
+        ctx.Check(chase.BodyDrawn && chase.Interior is { Visible: false },
             $"…and the chase seat, which was already drawing its airframe, is untouched");
 
         if (byDefinitionEnd)
@@ -1347,14 +1347,14 @@ internal static class CampaignSuites
 
         ctx.Check(!host.Playing && !host.Presenting && !cockpit.Pilot.CameraOwned,
             $"{exit} hands the view back");
-        ctx.Check(cockpit.Interior is { Visible: true } && cockpit.Body is { Visible: false },
+        ctx.Check(cockpit.Interior is { Visible: true } && cockpit.BodyHidden,
             $"…and puts the cockpit seat back in the cockpit it chose, rather than leaving it outside its own aeroplane");
         ctx.Check(cockpit.Pilot.CockpitPass is { Visible: true },
             $"…with its interior pass drawing again");
         ctx.Check(cockpit.Pilot.ViewMode == Flight.Camera.PilotViewMode.Cockpit
                   && chase.Pilot.ViewMode == Flight.Camera.PilotViewMode.Chase,
             $"…and neither seat's SELECTED view was moved to get there");
-        ctx.Check(chase.Body is { Visible: true } && chase.Interior is { Visible: false },
+        ctx.Check(chase.BodyDrawn && chase.Interior is { Visible: false },
             $"…while the chase seat still draws its airframe and no interior");
     }
 
@@ -2155,6 +2155,12 @@ internal static class CampaignSuites
 
         internal Node3D? Interior { get; }
 
+        // Whether this seat's own camera draws the whole body, read off the scene's layers.
+        internal bool BodyDrawn => Body != null && WorldAndToolSuites.DrawsAll(Body, Rig.Camera.CullMask);
+
+        // Whether this seat's own camera draws none of it.
+        internal bool BodyHidden => Body != null && WorldAndToolSuites.DrawsNone(Body, Rig.Camera.CullMask);
+
         private Flight.Camera.PilotViewMode View { get; }
 
         internal static Seat Build(TestContext ctx, GameZ planesGamez, TextureArchive textures,
@@ -2173,7 +2179,7 @@ internal static class CampaignSuites
                 PadDevices = System.Array.Empty<int>(),
                 AllowPause = false,
                 PinnedViewMode = view,
-                Cockpit = Flight.Hud.CockpitVisibility.Bind(model, builder.CockpitInterior),
+                Cockpit = Flight.Hud.CockpitVisibility.Bind(model, builder.CockpitInterior, index),
                 CockpitInterior = builder.CockpitInterior,
                 Name = $"CutsceneSeat{index}",
             };
@@ -2182,6 +2188,7 @@ internal static class CampaignSuites
             ctx.Host.AddChild(pilot);
             var camera = new Camera3D { Name = $"CutsceneSeatCamera{index}" };
             ctx.Host.AddChild(camera);
+            UI.Boards.SplitScreen.SeatAirframe(model, camera, index);
             // ⚠ After the visibility bind, and before Setup: the pass moves the interior out of the
             // plane model, which is why hiding the airframe cannot take the panel with it.
             if (builder.CockpitInterior is { } interior)

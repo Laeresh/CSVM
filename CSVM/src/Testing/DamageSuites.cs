@@ -416,7 +416,7 @@ internal static class DamageSuites
 
             // A view-mode switch only ever hides/shows the interior GROUP root; a child's own
             // Visible must ride through unchanged (B11's CockpitVisibility.Apply, four nodes only).
-            var pilotView = CockpitVisibility.Bind(model, interior);
+            var pilotView = CockpitVisibility.Bind(model, interior, 0);
             ctx.Check(pilotView != null, $"the visibility rig binds to the built model");
             if (pilotView == null)
                 return;

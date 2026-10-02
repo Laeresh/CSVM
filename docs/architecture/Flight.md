@@ -270,13 +270,13 @@ A snap frame with no direction and no held pan zeroes the targets, and it and a 
 `StickLookFilter` is this file's other type, the centre band and 40 ms lag the raw look stick passes through before it aims anything, one instance inside the head and one in `FlightController` for the chase swing, which eases its released pair home at the head's rates, or parks it in free-look as `HoldsStickAim` says; ask its `Active` whether the stick is claiming a view, never its filtered pair. Engine-free apart from `Mathf`; owned by `CameraController` as `Head`, stepped by `FlightController` on the sim clock.
 
 ## src/Flight/Hud/CockpitVisibility.cs
-The per-mode node hiding the original applies to the pilot's OWN aircraft while a first-person view
-is on the screen: Cockpit draws `cockpit1` and hides the `healthy` body, Nose hides the interior,
-the body and the `markers` and `dontmove` groups, and every external pose renders the plane as it was
-built. `Rules` is the pure decision over `(PilotViewMode, firstPerson)`; `Bind` finds the four
-groups and `Apply` writes one frame's answer, called by `FlightController._Process` keyed to the pose
-that frame took, so a held look-behind brings the body back. `ShowForPhotograph` shows the hidden
-airframe for the Danger Zone camera's frame on a layer no pane draws; `EndPhotograph` undoes it.
+The per-mode hiding the original applies to the pilot's OWN aircraft in a first-person view: Cockpit
+draws `cockpit1` and hides the `healthy` body, Nose hides the interior, the body, `markers` and
+`dontmove`, and every external pose renders the plane as built. `Rules` is the pure decision over
+`(PilotViewMode, firstPerson)`; `Apply` writes one frame's answer, keyed to the pose that frame took,
+so a held look-behind brings the body back. The interior takes node visibility. The airframe groups
+move from the seat's `UI.Boards.SplitScreen.OwnAirframeLayer` onto its `FirstPersonLayer`, which only
+that pilot's pane and disc leave out, so other panes and the Danger Zone photograph still draw them.
 Decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Flight/Hud/CockpitOverlay.cs
@@ -396,8 +396,8 @@ The Danger Zone camera's eye, one per human pilot, the `PaneRequest` `StuntCaptu
 `Session/CampaignSnapshot` are handed. `Pose` is the decoded pose, engine-free: 2.5 `camparam`
 `dist` ahead on the nose's level heading, a world-axis scatter of 0.15, 0.25 and 0.15 `dist`, and a
 roll-free look back at the aircraft. The node is a `SubViewport` on the pane's world that poses its
-camera in `_Process` after the controller's, at the external FOV with no HUD, shows a first-person
-pilot's airframe through `CockpitVisibility`, arms the fill light (`csky_photo_eye`) on its pilot's
+camera in `_Process` after the controller's, at the external FOV with no HUD, draws a first-person
+pilot's airframe through `UI.Boards.SplitScreen.OutsideCullMask`, arms the fill light (`csky_photo_eye`) on its pilot's
 instances, renders once, and disarms and reads back on the frame after that draw was issued. Decode:
 [../formats/campaign-screens.md](../formats/campaign-screens.md), "The danger-zone slot".
 

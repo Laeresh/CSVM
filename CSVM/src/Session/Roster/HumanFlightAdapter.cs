@@ -171,7 +171,7 @@ internal sealed class HumanFlightAdapter
             PinnedLook = _policy.PinnedLook,
             HudParent = remote ? null : rig.Viewport,
             // Null when the airframe ships no cockpit1, the rig then hides nothing, as before B11.
-            Cockpit = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior),
+            Cockpit = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior, pi),
             CockpitInterior = planeBuilder.CockpitInterior,
             CockpitPanel = CockpitGauges.Bind(planeBuilder),
             Scheme = scheme,
@@ -555,7 +555,7 @@ internal sealed class HumanFlightAdapter
         if (!remote)
         {
             var scatter = Rng.Stream(Rng.Photograph);
-            controller.Photograph = DangerZonePhotograph.Build(rig.Camera, controller.Cockpit,
+            controller.Photograph = DangerZonePhotograph.Build(rig.Camera,
                 () => controller.GlobalTransform, camParams.Dist, scatter.Randf, airframe: controller);
             controller.AddChild(controller.Photograph);
         }
@@ -620,13 +620,13 @@ internal sealed class HumanFlightAdapter
         }
 
         // This pilot's own airframe onto its own visual layer, LAST, so everything the lines above
-        // hung on the model travels with it. The only camera that drops the layer is this pane's
-        // spyglass, whose eye stands inside the aeroplane (docs/architecture/Session.md).
+        // hung on the model travels with it. This pane's spyglass drops that layer; the pane drops
+        // the one a first-person view moves the body onto (docs/architecture/Session.md).
         if (!remote)
         {
             // Never a remote seat: no camera here looks out of that aeroplane. The band is four
             // layers wide, so a seat past the fourth would wrap onto a pane's own.
-            SplitScreen.SetVisualLayer(planeModel, SplitScreen.OwnAirframeLayer(pi));
+            SplitScreen.SeatAirframe(planeModel, rig.Camera, pi);
         }
     }
 

@@ -346,30 +346,6 @@ usual.
   per-def volume terms feeding `Projectile.cs`'s `def.Volume * 0.2f * MixGain * distanceGain`
   (line ~2238), not the `1/sqrt(N)` splitscreen term itself, which is confirmed correct.
 
-- `BL-434` `[Bug]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Splitscreen cockpit view hides a pilot's aircraft body in every pane, and
-  the interior/audio behaviour is unprofiled past one pilot.** `PLAN-cockpit-view` (Decision 5) built cockpit rendering and the
-  `cockpit_engine_sound` swap verified single-player-only, no further. (a) **Per-viewport interior
-  draw cost is now profiled, not yet judged**: `analysis/campaign-coop-4p-perf/FINDINGS.md` (D33)
-  measured CM18 (C4/M03) at 1P/4P x external/cockpit: cockpit view adds ~5% more draws at both
-  player counts (697 to 733 at 1P, 3972 to 4169 at 4P) and ~0.4-2 ms of frame time, both within or
-  just past this machine's measured noise floor (`docs/verification.md` PERF-9…PERF-11); going 1P
-  to 4P moves draws 5.7x (697 to 3972, more than the 4x pane count) while `render_cpu_ms`/`gpu_ms`
-  stay flat, so the draw-count growth outpaces panes and has not yet been isolated to the cockpit
-  subtree specifically vs. the rest of the per-pane rig. (b) **The per-pilot `cockpit_engine_sound`
-  swap against splitscreen's `MixGain` term is unjudged at the controls**; the single-player
-  engine level is judged matching (`git log --grep=BL-391`), a listen that never isolated the
-  `_cp` def specifically. (c) **Today's hiding mechanism is node visibility on a shared plane node, not a
-  per-viewport render flag**: `CockpitVisibility` hides the OWN rig's `healthy` body node, so a
-  pilot sitting in the cockpit hides THAT AIRCRAFT'S body in every pane that can see it, not just
-  their own. Confirmed at the controls: with two cockpit-view pilots, each pane shows the other
-  aircraft without its body.
-  *Fix shape:* (c) first: hide the body per viewport instead of per node, a render layer on the
-  body that only its own pilot's camera culls, so every other pane still draws it. Then isolate the
-  draw-count growth's split between the cockpit subtree and the rest of a 4P rig, and a splitscreen
-  listen for the cockpit-swap/`MixGain` interaction.
-  *Cross-refs:* `PLAN-cockpit-view` B11 ("Splitscreen posture"), `BL-389` (splitscreen weapon
-  mix, same playtest family).
-
 ## Missions, modes & campaign
 
 - `BL-314` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A network stunt race: a timed, Trackmania-style run over the network,

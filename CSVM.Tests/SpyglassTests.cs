@@ -219,7 +219,9 @@ public class SpyglassTests
     {
         uint[] taken =
         {
-            1u, SplitScreen.PhotographLayer, ZoneGate.LayerBand,
+            1u, ZoneGate.LayerBand,
+            SplitScreen.FirstPersonLayer(0) | SplitScreen.FirstPersonLayer(1)
+                | SplitScreen.FirstPersonLayer(2) | SplitScreen.FirstPersonLayer(3),
             SplitScreen.OwnAirframeLayer(0) | SplitScreen.OwnAirframeLayer(1)
                 | SplitScreen.OwnAirframeLayer(2) | SplitScreen.OwnAirframeLayer(3),
             SplitScreen.PlayerVisualLayer(0) | SplitScreen.PlayerVisualLayer(1)

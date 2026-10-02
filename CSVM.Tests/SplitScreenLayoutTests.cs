@@ -1,3 +1,4 @@
+using CSVM.Mech3;
 using CSVM.UI.Boards;
 using Godot;
 using Xunit;
@@ -57,5 +58,38 @@ public class SplitScreenLayoutTests
         var picked = SplitScreen.PaneRect(1, 2, selectArea, SplitScreen.SideBySide(window));
         Assert.Equal(0f, picked.Position.X, 3);
         Assert.True(picked.Position.Y > 0f, "the second pane is the lower one, as it is in flight");
+    }
+
+    [Fact]
+    public void EachPaneLeavesOutItsOwnPilotsFirstPersonLayerAndNoOneElses()
+    {
+        uint band = 0;
+        for (int i = 0; i < SplitScreen.MaxPlayers; i++)
+        {
+            uint layer = SplitScreen.FirstPersonLayer(i);
+            Assert.Equal(1, System.Numerics.BitOperations.PopCount(layer));
+            Assert.Equal(0u, band & layer);
+            band |= layer;
+        }
+
+        // A band of its own: off the world's layer 1, the zone gate, both sun layers and every
+        // other per-seat band.
+        uint taken = 1u | ZoneGate.LayerBand | SplitScreen.SunLayer | SplitScreen.SpyglassSunLayer;
+        for (int i = 0; i < SplitScreen.MaxPlayers; i++)
+            taken |= SplitScreen.OwnAirframeLayer(i) | SplitScreen.PlayerVisualLayer(i);
+        Assert.Equal(0u, band & taken);
+
+        for (int i = 0; i < SplitScreen.MaxPlayers; i++)
+        {
+            // Every pane draws every pilot's first-person layer until that pilot's seat drops its own.
+            Assert.Equal(band, SplitScreen.PlayerCullMask(i) & band);
+            uint seated = SplitScreen.OwnViewCullMask(SplitScreen.PlayerCullMask(i), i);
+            Assert.Equal(band & ~SplitScreen.FirstPersonLayer(i), seated & band);
+            Assert.Equal(SplitScreen.PlayerCullMask(i) & ~band, seated & ~band);
+
+            // The photograph and a fresh session's main camera get every one back.
+            Assert.Equal(band, SplitScreen.OutsideCullMask(seated) & band);
+            Assert.Equal(band, SplitScreen.PaneCullMask(seated) & band);
+        }
     }
 }
