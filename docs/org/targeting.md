@@ -964,7 +964,7 @@ definition parser `FUN_00479240` fills with the def's `title` already resolved t
 reads `Patrol boat` (`MSG_VEH_PATROLBOAT`, the `patrolboat` def's own title), which the original
 shows at the controls.
 
-**Four authors write that string.**
+**Five authors write that string.**
 
 - **The vehicle definition**, in `FUN_00475820`, first on every `FUN_0047c210` spawn: the def's
   resolved `title` (`MSG_VEH_*`, `MSG_TRGT_*`) into entity `+0x10`.
@@ -979,9 +979,19 @@ shows at the controls.
   the `egen.zrd` record's `vehicle`/`title` value at `0x004520ee`. That path takes the value RAW,
   with no string-table lookup, so whatever the file authors is displayed literally. The two are
   complementary: an `egen` record that resolved a roster block runs the roster path above instead.
+- **A network peer's aircraft**, in `FUN_00497990`, which runs on every machine once for each peer
+  that arrives. It copies the lobby player's name (lobby record `+0x10`, the callsign) into the
+  remote record's CString at `+0x34`, spawns the aircraft through `FUN_0047b650`, keeps the entity at
+  record `+0x30`, then reads record `+0x34` at `0x00497f20` and assigns it into entity `+0x10` at
+  `0x00497f90`, over the def's title. So another player's aircraft, the host's included, reads by
+  callsign, and Line 1 is untouched. The Capture the Flag handler `FUN_0049a300` rewrites the string
+  with the carrier tag and assigns record `+0x34` back when the flag leaves (`0x0049a47b`,
+  `0x0049abc1`, [`multiplayer-ctf.md`](multiplayer-ctf.md), "Markers"). CSVM prints a human seat's
+  plane type instead (#116).
 
-⚠ "No fifth author exists" is NOT established: the sweep covered the entity constructor's site, all
-five of its callers and the def copy, not the whole image.
+⚠ "No sixth author exists" is NOT established: the sweep covered the entity constructor's site, all
+five of its callers and the def copy, not the whole image, and the network author was found from the
+flag handler's restore, not by that sweep.
 
 **A surface hull is named by the same two authors, its def's title then its block's slot 20.**
 `FUN_0047c210` is THE
