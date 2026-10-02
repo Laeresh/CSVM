@@ -244,6 +244,18 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// <summary>The Free Flight screen's launch button.</summary>
     public const string FlyKey = "FLY";
 
+    /// <summary>A one-answer dialog's OK (<see cref="OriginalShellDialog.OkKey"/>).</summary>
+    public const string DialogOkKey = OriginalShellDialog.OkKey;
+
+    /// <summary>A two-answer dialog's confirming answer.</summary>
+    public const string DialogYesKey = OriginalShellDialog.YesKey;
+
+    /// <summary>A two-answer dialog's declining answer.</summary>
+    public const string DialogNoKey = OriginalShellDialog.NoKey;
+
+    /// <summary>A three-answer dialog's third answer, which leaves the screen as it was.</summary>
+    public const string DialogCancelKey = OriginalShellDialog.CancelKey;
+
     /// <summary>The Options screen's section in the layout, whose chrome it is composed over.</summary>
     public const string PreferencesSection = "Preferences";
 
@@ -347,6 +359,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     private readonly IReadOnlyList<IOriginalScreenModule> _modules;
     private readonly SliderControl _slider = new();
     private readonly CinemaFilm _film = new();
+    // The standing messagebox, which any screen family raises and the shell alone answers.
+    private readonly OriginalShellDialog _box;
+    // The three typed cheats, whose screens belong to two different modules.
+    private readonly OriginalCheats _cheats;
     private readonly int[] _focus = new int[Enum.GetValues<OriginalScreen>().Length];
     private readonly Dictionary<string, (int Width, int Height)?> _sizes = new(StringComparer.OrdinalIgnoreCase);
     private readonly Func<CSVM.Utils.OptionsStore>? _netOptions;
@@ -426,6 +442,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         _netOptions = netOptions;
         _profiles = profiles;
         _campaignLayout = CampaignLayout.Over(layout);
+        _box = new OriginalShellDialog(_campaignLayout, Measure, () => MenuStrings, FocusBox);
         NetInfo = new OriginalNetInfoBox(this, dataRoot, RememberNetInfo);
         InstantAction = new OriginalInstantActionScreen(_instantAction, _setup, planes, layout, measure, this, _stock);
         Options = new OriginalOptionsScreen(layout, this, options, screenSizes, screens, controls);
@@ -444,6 +461,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         _modules = Hangar != null
             ? new IOriginalScreenModule[] { InstantAction, Options, Campaign, Hangar, Wrapup, JoinBoard, Connection, Lobby }
             : new IOriginalScreenModule[] { InstantAction, Options, Campaign, Wrapup, JoinBoard, Connection, Lobby };
+        _cheats = new OriginalCheats(Campaign, Hangar);
         var plaqueRow = layout.Screen("FlightCheck")?.Widget("FC_B_CHANGEPLANE");
         _plaque = plaqueRow is { Art.Count: > 0 } ? new BoardArt(BoardArtLibrary.Ui, plaqueRow.Art[0], plaqueRow.Frames) : null;
         Inks = ReadInks(layout, plaqueRow);
@@ -465,9 +483,16 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// <summary>The colours the Options screen and the Game Options page write in.</summary>
     public OriginalPreferencesInks PreferencesInks { get; }
 
+    /// <summary>The dialog standing over the screen, or null.</summary>
+    public OriginalDialog? Dialog => _box.Standing;
+
+    /// <summary>Whether a typed cheat holds the keyboard, which is what makes the seat's letters
+    /// text rather than menu commands while one is being typed.</summary>
+    public bool TypingCheat => _box.Standing == null && _cheats.Typing(_screen);
+
     /// <summary>The current screen's rows, in focus order: a standing dialog's answers alone,
     /// else the screen's own.</summary>
-    public IReadOnlyList<OriginalRow> Rows => _dialog != null ? DialogRows() : BuildRows();
+    public IReadOnlyList<OriginalRow> Rows => _box.Standing != null ? _box.Rows() : BuildRows();
 
     /// <summary>The focused row's index into <see cref="Rows"/>, or -1 when nothing can take focus.</summary>
     public int Focus => EnsureFocus(Rows);
@@ -503,7 +528,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         get
         {
             var lists = new List<OriginalList>();
-            if (_dialog != null || NetInfo.IsOpen)
+            if (_box.Standing != null || NetInfo.IsOpen)
             {
                 return lists;
             }
@@ -537,7 +562,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// latch is the shell's rather than any module's. None of them while a dialog stands over the
     /// screen.</summary>
     public bool CapturingText =>
-        _dialog == null
+        _box.Standing == null
         && (NetInfo.CapturingText || TypingCheat || _screen == OriginalScreen.CampaignRoster || (Hangar?.CapturingText ?? false)
             || Connection.CapturingText || Lobby.CapturingText);
 
@@ -656,7 +681,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         _drag = null;
         _slider.LetGo();
         ResetCreditsSecret();
-        ResetCheats();
+        _cheats.Reset();
         Options.ScreenOpened(screen);
     }
 
@@ -904,7 +929,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         Campaign.SyncField();
         // A typed cheat holding the keyboard swallows the frame's characters: the script's own
         // focus moved the caret off whatever edit box the screen carries.
-        bool changed = TypingCheat ? TypeCheat(commands) : TypeName(commands, cues);
+        bool changed = TypingCheat ? _cheats.Type(_screen, commands) : TypeName(commands, cues);
         if (OnSeatWalk && _pickingSeat is not { Joined: true })
         {
             // The seat this screen was picking for has gone. The walk moves on or ends, and a
@@ -931,7 +956,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
 
             // The three typed cheats read the primary button the same way, their regions holding
             // no row either.
-            changed |= ArmCheat(pointer);
+            changed |= _cheats.Arm(_screen, pointer);
 
             // The thumb, the slider and the wheel come before the rows. A held one owns the
             // pointer until it is let go, and a wheel step moves the rows the hit test then reads.
@@ -1046,7 +1071,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
                 rows = Rows;
                 focus = EnsureFocus(rows);
             }
-            else if (_dialog == null && NetInfo.IsOpen)
+            else if (_box.Standing == null && NetInfo.IsOpen)
             {
                 NetInfo.StepSideways(rows, focus, commands.MoveX);
             }
@@ -1064,7 +1089,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         }
 
         _focus[(int)_screen] = focus;
-        if (commands.Unbind && _screen == OriginalScreen.Keys && focus >= 0 && Options.ClearCell(rows[focus]))
+        if (commands.Unbind && _screen == OriginalScreen.Keys && focus >= 0 && Options.Keys.ClearCell(rows[focus]))
         {
             changed = true;
         }
@@ -1099,8 +1124,8 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         int focus = EnsureFocus(rows);
         // Under a dialog the screen is drawn from its own rows with nothing focused. The dialog's
         // answers are the rows the pointer and the cursor see.
-        var screenRows = _dialog == null && !NetInfo.IsOpen ? rows : ScreenRows();
-        int screenFocus = _dialog == null && !NetInfo.IsOpen ? focus : -1;
+        var screenRows = _box.Standing == null && !NetInfo.IsOpen ? rows : ScreenRows();
+        int screenFocus = _box.Standing == null && !NetInfo.IsOpen ? focus : -1;
         var layers = new BoardLayers();
         ComposeMovie(layers.Backdrop);
         var main = _layout.Screen(OriginalAvailability.MainMenuSection);
@@ -1145,13 +1170,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         // A network box stands over the page, and a messagebox over both.
         if (NetInfo.IsOpen)
         {
-            NetInfo.Compose(_dialog == null ? rows : BuildRows(), _dialog == null ? focus : -1, layers);
+            NetInfo.Compose(_box.Standing == null ? rows : BuildRows(), _box.Standing == null ? focus : -1, layers);
         }
 
-        if (_dialog != null)
-        {
-            ComposeDialog(rows, focus, layers.Overlays);
-        }
+        _box.Compose(rows, focus, _hover, _pressed, _pointer, layers.Overlays);
 
         if (_pointer is { } at)
         {
@@ -1553,7 +1575,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         }
 
         // A standing dialog takes the answer whatever screen it stands over.
-        if (_dialog != null)
+        if (_box.Standing != null)
         {
             AnswerDialog(row.Key);
             return null;
@@ -1618,16 +1640,16 @@ public sealed partial class OriginalShell : IOriginalScreenHost
                 switch (row.Key)
                 {
                     case OriginalOptionsScreen.GameOptionsDoorKey:
-                        Options.OpenGameOptions();
+                        Options.GameOptions.Open();
                         break;
                     case OriginalOptionsScreen.AudioDoorKey:
-                        Options.OpenAudio();
+                        Options.Audio.Open();
                         break;
                     case OriginalOptionsScreen.VideoDoorKey:
-                        Options.OpenVideo();
+                        Options.Video.Open();
                         break;
                     case OriginalOptionsScreen.ControlsDoorKey:
-                        Options.OpenControlsPrefs();
+                        Options.Controls.Open();
                         break;
                     case BackKey:
                     case OptionsBackKey:
@@ -1648,7 +1670,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     // back, and the top level quits as MAINMENU.SCRIPT's Quit does.
     private MenuExit? Back()
     {
-        if (_dialog is { } dialog)
+        if (_box.Standing is { } dialog)
         {
             AnswerDialog(dialog.Answers[dialog.Answers.Count - 1].Key);
             return null;
@@ -1914,13 +1936,45 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         return size;
     }
 
+    // A one-answer box's OK, the credits screen's About box being the shell's own one raise.
+    private OriginalDialogAnswer Ok() => _box.Ok();
+
+    private void RaiseDialog(string message, DialogIcon icon, params OriginalDialogAnswer[] answers) =>
+        RaiseDialog(null, message, icon, answers);
+
+    // A raise in another widget set, which the credits screen's About box is drawn from. A box opens
+    // on its first answer, the left button MESSAGEBOX.SCRIPT focuses for the plain 0x4 and 0x8
+    // masks. Back still takes the last one, the answer the script's own Escape posts for every mask.
+    private void RaiseDialog(
+        CampaignBoards.DialogChrome? chrome, string message, DialogIcon icon, params OriginalDialogAnswer[] answers)
+    {
+        _box.Raise(chrome, message, icon, _focus[(int)_screen], answers);
+        _hover = -1;
+        _pressed = -1;
+        _armed = null;
+        _focus[(int)_screen] = 0;
+    }
+
+    // The box taken down on one answer. The focus the raise took goes back before the answer runs,
+    // so an answer that raises another box remembers the screen's own focus.
+    private void AnswerDialog(string key)
+    {
+        if (!_box.Take(key, out var answer))
+        {
+            return;
+        }
+
+        _focus[(int)_screen] = _box.FocusBefore;
+        answer?.Run?.Invoke();
+    }
+
 #pragma warning disable SA1201 // Explicit, since the interface's own vocabulary (Screen,
     // FocusedRow, RaiseDialog, ...) is narrower and sometimes differently named than the shell's
     // public one. It is grouped here rather than beside each member it wraps, the seam being the
     // screen modules' alone to see.
     OriginalScreen IOriginalScreenHost.Screen => _screen;
 
-    bool IOriginalScreenHost.DialogOpen => _dialog != null;
+    bool IOriginalScreenHost.DialogOpen => _box.Standing != null;
 
     string IOriginalScreenHost.FocusedKey => FocusedKey;
 
@@ -1934,7 +1988,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
 
     int IOriginalScreenHost.HoveredRow => _hover;
 
-    int IOriginalScreenHost.FocusBeforeDialog => _focusBeforeDialog;
+    int IOriginalScreenHost.FocusBeforeDialog => _box.FocusBefore;
 
     (float X, float Y)? IOriginalScreenHost.Pointer => _pointer;
 
@@ -1952,7 +2006,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         RaiseDialog(message, icon, answers);
 #pragma warning restore SA1201
 
-    void IOriginalScreenHost.CloseDialog() => _dialog = null;
+    void IOriginalScreenHost.CloseDialog() => _box.Close();
 
     void IOriginalScreenHost.Frame(MenuCommands commands) => Step(commands);
 
@@ -1970,7 +2024,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
 
     MenuExit? IOriginalScreenHost.BeginSeatWalk() => BeginInstantActionSeatWalk();
 
-    int IOriginalScreenHost.CheatedMission(int ordinary) => CheatedMission(ordinary);
+    int IOriginalScreenHost.CheatedMission(int ordinary) => _cheats.Mission(ordinary);
 
     BoardPanel? IOriginalScreenHost.SeatPanel(bool onPaper) => CampaignSeatPanel(onPaper);
 

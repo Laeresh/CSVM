@@ -591,11 +591,11 @@ internal static class DisplaySettingsSuites
     {
         var shell = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(),
             _ => null, options: () => OptionsStore.UserOptions().Load(), screens: MonitorSetting.Screens);
-        shell.Options.OpenVideo();
-        ctx.Check(shell.Screen == OriginalScreen.Video && shell.Options.MonitorChoice == MonitorSetting.Word(standing),
-            $"the VIDEO page opens showing the saved screen ({shell.Screen}, {shell.Options.MonitorChoice ?? "unset"})");
-        ctx.Check(Label(shell, OriginalOptionsScreen.MonitorKey) == MonitorSetting.Screens().Labels[standing],
-            $"with the row drawing that screen's label ({Label(shell, OriginalOptionsScreen.MonitorKey)})");
+        shell.Options.Video.Open();
+        ctx.Check(shell.Screen == OriginalScreen.Video && shell.Options.Video.MonitorChoice == MonitorSetting.Word(standing),
+            $"the VIDEO page opens showing the saved screen ({shell.Screen}, {shell.Options.Video.MonitorChoice ?? "unset"})");
+        ctx.Check(Label(shell, OriginalVideoPage.MonitorKey) == MonitorSetting.Screens().Labels[standing],
+            $"with the row drawing that screen's label ({Label(shell, OriginalVideoPage.MonitorKey)})");
         var applied = Accept(shell);
         ctx.Check(applied?.MonitorIndex == MonitorSetting.Word(standing),
             $"ACCEPT CHANGES carries it on the apply exit ({applied?.MonitorIndex ?? "no exit"})");
@@ -612,11 +612,11 @@ internal static class DisplaySettingsSuites
     {
         var shell = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(),
             _ => null, options: () => OptionsStore.UserOptions().Load(), screenSizes: ResolutionSetting.ScreenSizes);
-        shell.Options.OpenVideo();
-        ctx.Check(shell.Screen == OriginalScreen.Video && shell.Options.ResolutionChoice == "1024x768",
-            $"the VIDEO page opens showing the saved size ({shell.Screen}, {shell.Options.ResolutionChoice ?? "unset"})");
-        ctx.Check(Label(shell, OriginalOptionsScreen.ResolutionKey) == "1024x768",
-            $"with the row drawing it, so the page and the apply name one size ({Label(shell, OriginalOptionsScreen.ResolutionKey)})");
+        shell.Options.Video.Open();
+        ctx.Check(shell.Screen == OriginalScreen.Video && shell.Options.Video.ResolutionChoice == "1024x768",
+            $"the VIDEO page opens showing the saved size ({shell.Screen}, {shell.Options.Video.ResolutionChoice ?? "unset"})");
+        ctx.Check(Label(shell, OriginalVideoPage.ResolutionKey) == "1024x768",
+            $"with the row drawing it, so the page and the apply name one size ({Label(shell, OriginalVideoPage.ResolutionKey)})");
         var applied = Accept(shell);
         ctx.Check(applied?.Resolution == "1024x768",
             $"ACCEPT CHANGES carries it on the apply exit ({applied?.Resolution ?? "no exit"})");
@@ -632,15 +632,15 @@ internal static class DisplaySettingsSuites
     {
         var shell = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(),
             _ => null, options: () => OptionsStore.UserOptions().Load(), screenSizes: ResolutionSetting.ScreenSizes);
-        shell.Options.OpenVideo();
+        shell.Options.Video.Open();
         var screen = ResolutionSetting.ScreenSizes();
-        ctx.Check(shell.Options.ResolutionPinned && Label(shell, OriginalOptionsScreen.ResolutionKey) == screen.Fallback,
-            $"the borderless page draws this screen's own size on the size row ({Label(shell, OriginalOptionsScreen.ResolutionKey)})");
-        ctx.Check(Row(shell, OriginalOptionsScreen.ResolutionKey) is { Enabled: false },
+        ctx.Check(shell.Options.Video.ResolutionPinned && Label(shell, OriginalVideoPage.ResolutionKey) == screen.Fallback,
+            $"the borderless page draws this screen's own size on the size row ({Label(shell, OriginalVideoPage.ResolutionKey)})");
+        ctx.Check(Row(shell, OriginalVideoPage.ResolutionKey) is { Enabled: false },
             $"with the row dead, so the cursor walks past it and no press reaches it");
         shell.Step(new MenuCommands { MoveX = 1 });
-        ctx.Check(Label(shell, OriginalOptionsScreen.ResolutionKey) == screen.Fallback && shell.Options.ResolutionChoice == "1024x768",
-            $"a sideways step changes nothing and leaves the saved size where it is ({shell.Options.ResolutionChoice ?? "unset"})");
+        ctx.Check(Label(shell, OriginalVideoPage.ResolutionKey) == screen.Fallback && shell.Options.Video.ResolutionChoice == "1024x768",
+            $"a sideways step changes nothing and leaves the saved size where it is ({shell.Options.Video.ResolutionChoice ?? "unset"})");
         var applied = Accept(shell);
         ctx.Check(applied?.Resolution == "1024x768" && applied?.DisplayMode == DisplayWords.Borderless,
             $"which rides out unchanged on the apply exit ({applied?.Resolution ?? "no exit"})");
@@ -657,12 +657,12 @@ internal static class DisplaySettingsSuites
     {
         var shell = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(),
             _ => null, options: () => OptionsStore.UserOptions().Load(), screenSizes: ResolutionSetting.ScreenSizes);
-        shell.Options.OpenVideo();
+        shell.Options.Video.Open();
         var screen = ResolutionSetting.ScreenSizes();
-        var words = shell.Options.ResolutionWords;
-        ctx.Check(shell.Options.ResolutionChoice == CustomSize
-            && Label(shell, OriginalOptionsScreen.ResolutionKey) == CustomSize,
-            $"the VIDEO page opens on a hand-written size and draws it ({Label(shell, OriginalOptionsScreen.ResolutionKey)})");
+        var words = shell.Options.Video.ResolutionWords;
+        ctx.Check(shell.Options.Video.ResolutionChoice == CustomSize
+            && Label(shell, OriginalVideoPage.ResolutionKey) == CustomSize,
+            $"the VIDEO page opens on a hand-written size and draws it ({Label(shell, OriginalVideoPage.ResolutionKey)})");
         ctx.Check(words.Count == screen.Words.Count + 1 && words[0] == CustomSize && words.Contains(screen.Fallback),
             $"which stands in the list where it sorts, beside every size the screen holds ({string.Join(" ", words)})");
         var applied = Accept(shell);
@@ -715,9 +715,9 @@ internal static class DisplaySettingsSuites
     {
         var shell = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(),
             _ => null, options: () => OptionsStore.UserOptions().Load());
-        shell.Options.OpenVideo();
-        ctx.Check(shell.Screen == OriginalScreen.Video && shell.Options.DisplayModeChoice == DisplayWords.Borderless,
-            $"the VIDEO page opens showing the saved mode ({shell.Screen}, {shell.Options.DisplayModeChoice ?? "unset"})");
+        shell.Options.Video.Open();
+        ctx.Check(shell.Screen == OriginalScreen.Video && shell.Options.Video.DisplayModeChoice == DisplayWords.Borderless,
+            $"the VIDEO page opens showing the saved mode ({shell.Screen}, {shell.Options.Video.DisplayModeChoice ?? "unset"})");
         var applied = Accept(shell);
         ctx.Check(applied?.DisplayMode == DisplayWords.Borderless,
             $"ACCEPT CHANGES carries it on the apply exit ({applied?.DisplayMode ?? "no exit"})");
@@ -733,9 +733,9 @@ internal static class DisplaySettingsSuites
     {
         var shell = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(),
             _ => null, options: () => OptionsStore.UserOptions().Load());
-        shell.Options.OpenVideo();
-        ctx.Check(shell.Screen == OriginalScreen.Video && shell.Options.VSyncChoice == "144",
-            $"the VIDEO page opens showing the saved cap ({shell.Screen}, {shell.Options.VSyncChoice ?? "unset"})");
+        shell.Options.Video.Open();
+        ctx.Check(shell.Screen == OriginalScreen.Video && shell.Options.Video.VSyncChoice == "144",
+            $"the VIDEO page opens showing the saved cap ({shell.Screen}, {shell.Options.Video.VSyncChoice ?? "unset"})");
         var applied = Accept(shell);
         ctx.Check(applied?.VSync == "144", $"ACCEPT CHANGES carries it on the apply exit ({applied?.VSync ?? "no exit"})");
 
@@ -765,11 +765,11 @@ internal static class DisplaySettingsSuites
     {
         var shell = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(),
             _ => null, options: () => OptionsStore.UserOptions().Load());
-        shell.Options.OpenVideo();
-        ctx.Check(shell.Screen == OriginalScreen.Video && shell.Options.RenderScaleChoice == "200",
-            $"the VIDEO page opens showing the saved scale ({shell.Screen}, {shell.Options.RenderScaleChoice ?? "unset"})");
-        ctx.Check(Label(shell, OriginalOptionsScreen.RenderScaleKey) == "200%",
-            $"with the row drawing it as a percentage of native ({Label(shell, OriginalOptionsScreen.RenderScaleKey)})");
+        shell.Options.Video.Open();
+        ctx.Check(shell.Screen == OriginalScreen.Video && shell.Options.Video.RenderScaleChoice == "200",
+            $"the VIDEO page opens showing the saved scale ({shell.Screen}, {shell.Options.Video.RenderScaleChoice ?? "unset"})");
+        ctx.Check(Label(shell, OriginalVideoPage.RenderScaleKey) == "200%",
+            $"with the row drawing it as a percentage of native ({Label(shell, OriginalVideoPage.RenderScaleKey)})");
         var applied = Accept(shell);
         ctx.Check(applied?.RenderScale == "200",
             $"ACCEPT CHANGES carries it on the apply exit ({applied?.RenderScale ?? "no exit"})");
@@ -939,19 +939,19 @@ internal static class DisplaySettingsSuites
     {
         var shell = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(),
             _ => null, options: () => OptionsStore.UserOptions().Load());
-        shell.Options.OpenVideo();
-        for (int guard = 0; guard < 32 && shell.FocusedKey != OriginalOptionsScreen.AntiAliasingKey; guard++)
+        shell.Options.Video.Open();
+        for (int guard = 0; guard < 32 && shell.FocusedKey != OriginalVideoPage.AntiAliasingKey; guard++)
         {
             shell.Step(new MenuCommands { MoveY = 1 });
         }
 
-        ctx.Check(Label(shell, OriginalOptionsScreen.AntiAliasingKey) == "Off",
-            $"the anti-aliasing row opens on the original mode's default ({Label(shell, OriginalOptionsScreen.AntiAliasingKey)})");
+        ctx.Check(Label(shell, OriginalVideoPage.AntiAliasingKey) == "Off",
+            $"the anti-aliasing row opens on the original mode's default ({Label(shell, OriginalVideoPage.AntiAliasingKey)})");
         shell.Step(new MenuCommands { MoveX = -1 });
-        ctx.Check(shell.Options.AntiAliasingChoice == DisplayWords.AntiAliasingFsr2 && shell.Options.RenderScaleChoice == "100",
-            $"a step back onto fsr2 moves the saved 200 to 100 ({shell.Options.AntiAliasingChoice ?? "unset"}, {shell.Options.RenderScaleChoice ?? "unset"})");
-        ctx.Check(Label(shell, OriginalOptionsScreen.RenderScaleKey) == "100%" && shell.Options.RenderScaleWords.Count == 4,
-            $"and the scale row redraws at once over the four scales fsr2 runs ({Label(shell, OriginalOptionsScreen.RenderScaleKey)}, {shell.Options.RenderScaleWords.Count})");
+        ctx.Check(shell.Options.Video.AntiAliasingChoice == DisplayWords.AntiAliasingFsr2 && shell.Options.Video.RenderScaleChoice == "100",
+            $"a step back onto fsr2 moves the saved 200 to 100 ({shell.Options.Video.AntiAliasingChoice ?? "unset"}, {shell.Options.Video.RenderScaleChoice ?? "unset"})");
+        ctx.Check(Label(shell, OriginalVideoPage.RenderScaleKey) == "100%" && shell.Options.Video.RenderScaleWords.Count == 4,
+            $"and the scale row redraws at once over the four scales fsr2 runs ({Label(shell, OriginalVideoPage.RenderScaleKey)}, {shell.Options.Video.RenderScaleWords.Count})");
         var applied = Accept(shell);
         ctx.Check(applied?.AntiAliasing == DisplayWords.AntiAliasingFsr2 && applied?.RenderScale == "100",
             $"ACCEPT CHANGES carries both ({applied?.AntiAliasing ?? "no exit"}, {applied?.RenderScale ?? "no exit"})");
@@ -960,7 +960,7 @@ internal static class DisplaySettingsSuites
     // Walks the page's focus onto ACCEPT CHANGES and presses it, the keyboard's own way out.
     private static OptionsApplyExit? Accept(OriginalShell shell)
     {
-        for (int guard = 0; guard < 32 && shell.FocusedKey != OriginalOptionsScreen.VideoAcceptKey; guard++)
+        for (int guard = 0; guard < 32 && shell.FocusedKey != OriginalVideoPage.AcceptKey; guard++)
         {
             shell.Step(new MenuCommands { MoveY = 1 });
         }

@@ -80,7 +80,7 @@ public sealed class OriginalPresentation : IMenuPresentation
     public const string KeysOtherAid = "other";
 
     /// <summary>The suffix after a KEYS aid's category, <c>keys:movement:sticks</c>. It poses long
-    /// and shared captions on the first rows (<see cref="OriginalOptionsScreen.PoseStickCaptions"/>),
+    /// and shared captions on the first rows (<see cref="OriginalKeysPage.PoseStickCaptions"/>),
     /// so the cells' marquee is shot with no stick connected.</summary>
     public const string KeysSticksAid = "sticks";
 
@@ -525,46 +525,46 @@ public sealed class OriginalPresentation : IMenuPresentation
                     OpenGameOptionsAid(aid);
                     break;
                 case AudioAid:
-                    _shell.Options.OpenAudio();
+                    _shell.Options.Audio.Open();
                     break;
                 case AudioAid + ":" + AudioMixedAid:
                     // The four rows open on two levels between them, so a shot of the shipped mix
                     // says nothing about where a thumb stands at a level it was moved to.
-                    _shell.Options.OpenAudio();
-                    _shell.Options.PoseAudioMix();
+                    _shell.Options.Audio.Open();
+                    _shell.Options.Audio.PoseMix();
                     break;
                 case VideoAid:
-                    _shell.Options.OpenVideo();
+                    _shell.Options.Video.Open();
                     break;
                 case VideoAid + ":" + VideoCheckedAid:
                     // Onto the checkbox by name: the page opens on its first row, which is a
                     // display setting rather than the graphics one this pose is about.
-                    _shell.Options.OpenVideoOn(OriginalOptionsScreen.GraphicsKey);
+                    _shell.Options.Video.OpenOn(OriginalVideoPage.GraphicsKey);
                     _shell.Step(new MenuCommands { Accept = true });
                     break;
                 case VideoAid + ":" + VideoOpenAid:
                     // Onto the Resolution row by name: the page opens on the monitor row above it,
                     // whose one screen on this machine says nothing about a windowed list.
-                    _shell.Options.OpenVideoOn(OriginalOptionsScreen.ResolutionKey);
+                    _shell.Options.Video.OpenOn(OriginalVideoPage.ResolutionKey);
                     _shell.Step(new MenuCommands { Accept = true });
                     break;
                 case ControlsAid:
                     SyncControlsSeats();
-                    _shell.Options.OpenControlsPrefs();
+                    _shell.Options.Controls.Open();
                     break;
                 case KeysAid:
                     SyncControlsSeats();
-                    _shell.Options.OpenKeys();
+                    _shell.Options.Keys.Open();
                     break;
                 case string keys when keys.StartsWith(KeysAid + ":", StringComparison.Ordinal):
                     SyncControlsSeats();
-                    _shell.Options.OpenKeys();
+                    _shell.Options.Keys.Open();
                     string tab = keys[(KeysAid.Length + 1)..];
                     bool posed = tab.EndsWith(":" + KeysSticksAid, StringComparison.Ordinal);
-                    _shell.Options.ShowKeysTab(KeysTabOf(posed ? tab[..^(KeysSticksAid.Length + 1)] : tab));
+                    _shell.Options.Keys.ShowTab(KeysTabOf(posed ? tab[..^(KeysSticksAid.Length + 1)] : tab));
                     if (posed)
                     {
-                        _shell.Options.PoseStickCaptions();
+                        _shell.Options.Keys.PoseStickCaptions();
                     }
 
                     break;
@@ -838,9 +838,9 @@ public sealed class OriginalPresentation : IMenuPresentation
         // The AUDIO page's levels are heard while it is open and the mix it opened over goes back the
         // moment it is left, by any door. Read off the shell rather than a seat's step: the page is
         // seat 0's, and a guest's own step carries no mix, so its poll would end the preview.
-        if (_shell.Options.AudioPreviewMix is { } mix)
+        if (_shell.Options.Audio.PreviewMix is { } mix)
         {
-            _host.Audio.PreviewMix(mix, _shell.Options.TakeAudioMoved());
+            _host.Audio.PreviewMix(mix, _shell.Options.Audio.TakeMoved());
         }
         else
         {
@@ -935,7 +935,7 @@ public sealed class OriginalPresentation : IMenuPresentation
     // leaves the page on its first category, which is where the bare aid opens it anyway.
     private static int KeysTabOf(string argument)
     {
-        var tabs = OriginalOptionsScreen.ControlTabs;
+        var tabs = OriginalKeysPage.ControlTabs;
         for (int i = 0; i < tabs.Count; i++)
         {
             if (string.Equals(tabs[i].Name.Replace(" ", string.Empty), argument, StringComparison.OrdinalIgnoreCase))
@@ -1083,7 +1083,7 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     private void OpenGameOptionsAid(string aid)
     {
-        _shell!.Options.OpenGameOptions();
+        _shell!.Options.GameOptions.Open();
         if (aid.IndexOf(':') >= 0)
         {
             _shell.Step(new MenuCommands { Accept = true });

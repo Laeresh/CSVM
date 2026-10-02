@@ -966,7 +966,7 @@ internal static class MenuOriginalSuites
         ctx.Check(shell.Screen == OriginalScreen.Options && shell.FocusedKey == OriginalOptionsScreen.GameOptionsDoorKey,
             $"PREFERENCES opens the Preferences page with its GAME OPTIONS door focused ({shell.Screen}, {shell.FocusedKey})");
         Press(host, seat, Accept);
-        ctx.Check(shell.Screen == OriginalScreen.GameOptions && shell.FocusedKey == OriginalOptionsScreen.DifficultyKey,
+        ctx.Check(shell.Screen == OriginalScreen.GameOptions && shell.FocusedKey == OriginalGameOptionsPage.DifficultyKey,
             $"GAME OPTIONS opens the decoded page on its Difficulty dropdown, the first row ({shell.Screen}, {shell.FocusedKey})");
         var board = shell.Compose();
         int titles = 0;
@@ -982,39 +982,39 @@ internal static class MenuOriginalSuites
             $"drawing the section's own tab title over the five row titles and no Menu row ({titles} of 6, {menuTitles} Menu)");
         OriginalGameOptionsPlate(ctx, shell, board);
         Press(host, seat, Accept);
-        ctx.Check(shell.Options.OpenGameOption == OriginalOptionsScreen.DifficultyKey && shell.Rows.Count == 3
-            && List(shell, OriginalOptionsScreen.DifficultyKey) == null,
-            $"Accept opens the dropdown over the three campaign tiers, inside its window and with no bar ({shell.Options.OpenGameOption}, {shell.Rows.Count})");
+        ctx.Check(shell.Options.GameOptions.OpenOption == OriginalGameOptionsPage.DifficultyKey && shell.Rows.Count == 3
+            && List(shell, OriginalGameOptionsPage.DifficultyKey) == null,
+            $"Accept opens the dropdown over the three campaign tiers, inside its window and with no bar ({shell.Options.GameOptions.OpenOption}, {shell.Rows.Count})");
         Press(host, seat, Down);
         Press(host, seat, Accept);
-        ctx.Check(shell.Options.DifficultyChoice == CSVM.Flight.Hangar.Difficulty.Hard && shell.FocusedKey == OriginalOptionsScreen.DifficultyKey,
-            $"and picking the second closes it on Hard ({shell.Options.DifficultyChoice}, {shell.FocusedKey})");
+        ctx.Check(shell.Options.GameOptions.DifficultyChoice == CSVM.Flight.Hangar.Difficulty.Hard && shell.FocusedKey == OriginalGameOptionsPage.DifficultyKey,
+            $"and picking the second closes it on Hard ({shell.Options.GameOptions.DifficultyChoice}, {shell.FocusedKey})");
         Press(host, seat, Down);
         Press(host, seat, Accept);
-        ctx.Check(shell.Options.OpenGameOption == OriginalOptionsScreen.DefaultViewKey && shell.Rows.Count == 3,
-            $"Accept on the Default View row under it opens the dropdown over the original's three views ({shell.Options.OpenGameOption}, {shell.Rows.Count})");
+        ctx.Check(shell.Options.GameOptions.OpenOption == OriginalGameOptionsPage.DefaultViewKey && shell.Rows.Count == 3,
+            $"Accept on the Default View row under it opens the dropdown over the original's three views ({shell.Options.GameOptions.OpenOption}, {shell.Rows.Count})");
         // The list opens on the item the row stands at, which with nothing saved is the last of the
         // three. One step down wraps onto the first.
         Press(host, seat, Down);
         Press(host, seat, Accept);
-        ctx.Check(shell.Options.DefaultViewChoice == CSVM.Flight.Camera.PilotView.Name(CSVM.Flight.Camera.PilotViewMode.Cockpit),
-            $"and a step down wraps onto the list's own first view and picks it ({shell.Options.DefaultViewChoice ?? "none"})");
+        ctx.Check(shell.Options.GameOptions.DefaultViewChoice == CSVM.Flight.Camera.PilotView.Name(CSVM.Flight.Camera.PilotViewMode.Cockpit),
+            $"and a step down wraps onto the list's own first view and picks it ({shell.Options.GameOptions.DefaultViewChoice ?? "none"})");
         Press(host, seat, Down);
         Press(host, seat, Accept);
-        ctx.Check(shell.Options.AutoHeadTurnChoice == true && shell.FocusedKey == OriginalOptionsScreen.AutoHeadTurnKey,
-            $"Accept on the Auto Head Turn checkbox under it turns the head turn on ({shell.Options.AutoHeadTurnChoice})");
+        ctx.Check(shell.Options.GameOptions.AutoHeadTurnChoice == true && shell.FocusedKey == OriginalGameOptionsPage.AutoHeadTurnKey,
+            $"Accept on the Auto Head Turn checkbox under it turns the head turn on ({shell.Options.GameOptions.AutoHeadTurnChoice})");
         Press(host, seat, Down);
-        ctx.Check(shell.FocusedKey == OriginalOptionsScreen.NearestAfterKillKey,
+        ctx.Check(shell.FocusedKey == OriginalGameOptionsPage.NearestAfterKillKey,
             $"the row straight under the head turn is Next Target, no presentation row standing between ({shell.FocusedKey})");
         Press(host, seat, Accept);
-        ctx.Check(shell.Options.NearestAfterKillChoice == true,
-            $"Accept on the Next Target checkbox turns the targeting setting on ({shell.Options.NearestAfterKillChoice})");
-        WalkTo(host, seat, shell, OriginalOptionsScreen.GameOptionsCancelKey);
+        ctx.Check(shell.Options.GameOptions.NearestAfterKillChoice == true,
+            $"Accept on the Next Target checkbox turns the targeting setting on ({shell.Options.GameOptions.NearestAfterKillChoice})");
+        WalkTo(host, seat, shell, OriginalGameOptionsPage.CancelKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.Options
-            && shell.Options.DifficultyChoice == CSVM.Flight.Hangar.Difficulty.Normal && shell.Options.NearestAfterKillChoice == null
-            && shell.Options.DefaultViewChoice == null && shell.Options.AutoHeadTurnChoice == null,
-            $"CANCEL CHANGES lands back on Preferences with every edit dropped ({shell.Screen}, {shell.Options.DifficultyChoice}, {shell.Options.NearestAfterKillChoice}, {shell.Options.DefaultViewChoice ?? "none"}, {shell.Options.AutoHeadTurnChoice})");
+            && shell.Options.GameOptions.DifficultyChoice == CSVM.Flight.Hangar.Difficulty.Normal && shell.Options.GameOptions.NearestAfterKillChoice == null
+            && shell.Options.GameOptions.DefaultViewChoice == null && shell.Options.GameOptions.AutoHeadTurnChoice == null,
+            $"CANCEL CHANGES lands back on Preferences with every edit dropped ({shell.Screen}, {shell.Options.GameOptions.DifficultyChoice}, {shell.Options.GameOptions.NearestAfterKillChoice}, {shell.Options.GameOptions.DefaultViewChoice ?? "none"}, {shell.Options.GameOptions.AutoHeadTurnChoice})");
         WalkTo(host, seat, shell, OriginalShell.OptionsBackKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.TopLevel && exits.Count == 1,
@@ -1053,8 +1053,8 @@ internal static class MenuOriginalSuites
         ctx.Check(Math.Abs(top - AuthoredPlateY) < 0.5f && Math.Abs(bottom - (AuthoredPlateY + AuthoredPlateHeight + AuthoredGameOptionPitch)) < 0.5f,
             $"standing at its authored corner and reaching one whole band further down ({top}, {bottom})");
 
-        float accept = RowY(shell, OriginalOptionsScreen.GameOptionsAcceptKey);
-        float cancel = RowY(shell, OriginalOptionsScreen.GameOptionsCancelKey);
+        float accept = RowY(shell, OriginalGameOptionsPage.AcceptKey);
+        float cancel = RowY(shell, OriginalGameOptionsPage.CancelKey);
         ctx.Check(Math.Abs(accept - (AuthoredPlaqueY + AuthoredGameOptionPitch)) < 0.5f && Math.Abs(cancel - accept) < 0.5f,
             $"with ACCEPT CHANGES and CANCEL CHANGES that same band below their authored line ({accept}, {cancel})");
 
@@ -1066,7 +1066,7 @@ internal static class MenuOriginalSuites
         float lowest = 0f;
         foreach (var row in shell.Rows)
         {
-            if (row.Key is OriginalOptionsScreen.GameOptionsAcceptKey or OriginalOptionsScreen.GameOptionsCancelKey)
+            if (row.Key is OriginalGameOptionsPage.AcceptKey or OriginalGameOptionsPage.CancelKey)
             {
                 continue;
             }
@@ -1168,7 +1168,7 @@ internal static class MenuOriginalSuites
         Press(host, seat, Accept);
         WalkTo(host, seat, shell, OriginalOptionsScreen.VideoDoorKey);
         Press(host, seat, Accept);
-        ctx.Check(shell.Screen == OriginalScreen.Video && shell.FocusedKey == OriginalOptionsScreen.MonitorKey,
+        ctx.Check(shell.Screen == OriginalScreen.Video && shell.FocusedKey == OriginalVideoPage.MonitorKey,
             $"VIDEO opens the decoded page on its Monitor row, the first of the authored rows it carries ({shell.Screen}, {shell.FocusedKey})");
         var board = shell.Compose();
         int titles = 0;
@@ -1188,80 +1188,80 @@ internal static class MenuOriginalSuites
         ctx.Check(box, $"with the checkbox drawn from its eight-state strip ({board.Plaques.Count} plaques)");
         // The monitor row's words are this machine's screens, so the claim is the count rather than
         // the labels: one per screen the engine reports, which is one on a single-screen machine.
-        ctx.Check(shell.Options.MonitorWords.Count == Godot.DisplayServer.GetScreenCount(),
-            $"the monitor row offers one label per screen ({string.Join(" ", shell.Options.MonitorWords)})");
+        ctx.Check(shell.Options.Video.MonitorWords.Count == Godot.DisplayServer.GetScreenCount(),
+            $"the monitor row offers one label per screen ({string.Join(" ", shell.Options.Video.MonitorWords)})");
         Press(host, seat, Right);
-        ctx.Check(shell.Options.MonitorChoice != null
-            && OptionsStore.TryParseMonitorIndex(shell.Options.MonitorChoice, out int picked) && picked < shell.Options.MonitorWords.Count,
-            $"and a sideways step on it takes a screen this machine has ({shell.Options.MonitorChoice ?? "unset"} of {shell.Options.MonitorWords.Count})");
+        ctx.Check(shell.Options.Video.MonitorChoice != null
+            && OptionsStore.TryParseMonitorIndex(shell.Options.Video.MonitorChoice, out int picked) && picked < shell.Options.Video.MonitorWords.Count,
+            $"and a sideways step on it takes a screen this machine has ({shell.Options.Video.MonitorChoice ?? "unset"} of {shell.Options.Video.MonitorWords.Count})");
         // The size row under the borderless default, which owns the size. It draws dead and the
         // walk cannot land on it, so the row the walk ends on is what the check names.
-        WalkTo(host, seat, shell, OriginalOptionsScreen.ResolutionKey);
-        ctx.Check(shell.Options.ResolutionPinned && Row(shell, OriginalOptionsScreen.ResolutionKey) is { Enabled: false }
-            && shell.FocusedKey != OriginalOptionsScreen.ResolutionKey && shell.Options.ResolutionChoice == null,
-            $"borderless leaves the size row dead, out of the walk's reach ({shell.FocusedKey}, {shell.Options.ResolutionChoice ?? "unset"})");
-        WalkTo(host, seat, shell, OriginalOptionsScreen.DisplayModeKey);
+        WalkTo(host, seat, shell, OriginalVideoPage.ResolutionKey);
+        ctx.Check(shell.Options.Video.ResolutionPinned && Row(shell, OriginalVideoPage.ResolutionKey) is { Enabled: false }
+            && shell.FocusedKey != OriginalVideoPage.ResolutionKey && shell.Options.Video.ResolutionChoice == null,
+            $"borderless leaves the size row dead, out of the walk's reach ({shell.FocusedKey}, {shell.Options.Video.ResolutionChoice ?? "unset"})");
+        WalkTo(host, seat, shell, OriginalVideoPage.DisplayModeKey);
         // A list inside the window its own row authors is exactly as tall as its items: no arrows,
         // no thumb and nothing for the pointer to scroll, which is the shape the film shows.
         Press(host, seat, Accept);
         ctx.Check(shell.Rows.Count == DisplayWords.DisplayModes.Count
-            && List(shell, OriginalOptionsScreen.DisplayModeKey) == null
-            && Row(shell, OriginalOptionsScreen.DisplayModeKey + ":down") == null,
+            && List(shell, OriginalVideoPage.DisplayModeKey) == null
+            && Row(shell, OriginalVideoPage.DisplayModeKey + ":down") == null,
             $"the Display Mode list fits its authored window and draws no bar ({shell.Rows.Count} rows)");
         Press(host, seat, Back);
         Press(host, seat, Right);
-        ctx.Check(shell.Options.DisplayModeChoice == DisplayWords.Fullscreen,
-            $"a sideways step on the focused row takes the display mode after the borderless default ({shell.Options.DisplayModeChoice ?? "unset"})");
+        ctx.Check(shell.Options.Video.DisplayModeChoice == DisplayWords.Fullscreen,
+            $"a sideways step on the focused row takes the display mode after the borderless default ({shell.Options.Video.DisplayModeChoice ?? "unset"})");
         // The row's own words are this machine's screen sizes, so what it steps to is read back off
         // the shell rather than named. The claim is that the step lands on a size the screen offers,
         // and not on the screen's own size the row opened at.
-        WalkTo(host, seat, shell, OriginalOptionsScreen.ResolutionKey);
+        WalkTo(host, seat, shell, OriginalVideoPage.ResolutionKey);
         Press(host, seat, Right);
-        ctx.Check(shell.FocusedKey == OriginalOptionsScreen.ResolutionKey && shell.Options.ResolutionChoice != null
-            && shell.Options.ResolutionChoice != ResolutionSetting.ScreenSizes().Fallback
-            && shell.Options.ResolutionWords.Contains(shell.Options.ResolutionChoice),
-            $"the size row is live again under fullscreen and steps to the next size this screen offers ({shell.Options.ResolutionChoice ?? "unset"} of {shell.Options.ResolutionWords.Count})");
-        WalkTo(host, seat, shell, OriginalOptionsScreen.VSyncKey);
+        ctx.Check(shell.FocusedKey == OriginalVideoPage.ResolutionKey && shell.Options.Video.ResolutionChoice != null
+            && shell.Options.Video.ResolutionChoice != ResolutionSetting.ScreenSizes().Fallback
+            && shell.Options.Video.ResolutionWords.Contains(shell.Options.Video.ResolutionChoice),
+            $"the size row is live again under fullscreen and steps to the next size this screen offers ({shell.Options.Video.ResolutionChoice ?? "unset"} of {shell.Options.Video.ResolutionWords.Count})");
+        WalkTo(host, seat, shell, OriginalVideoPage.VSyncKey);
         Press(host, seat, Accept);
         OpenVideoListWindow(ctx, host, seat, shell);
-        WalkTo(host, seat, shell, OriginalOptionsScreen.VSyncKey);
+        WalkTo(host, seat, shell, OriginalVideoPage.VSyncKey);
         Press(host, seat, Accept);
         Press(host, seat, Down);
         Press(host, seat, Down);
         Press(host, seat, Accept);
-        ctx.Check(shell.Options.VSyncChoice == "120" && shell.FocusedKey == OriginalOptionsScreen.VSyncKey,
-            $"and picking two below the off default closes it on the 120 fps cap ({shell.Options.VSyncChoice ?? "unset"}, {shell.FocusedKey})");
+        ctx.Check(shell.Options.Video.VSyncChoice == "120" && shell.FocusedKey == OriginalVideoPage.VSyncKey,
+            $"and picking two below the off default closes it on the 120 fps cap ({shell.Options.Video.VSyncChoice ?? "unset"}, {shell.FocusedKey})");
         // The shadow row under Original, whose world casts no sun shadow: dead and out of the walk.
-        WalkTo(host, seat, shell, OriginalOptionsScreen.ShadowQualityKey);
-        ctx.Check(Row(shell, OriginalOptionsScreen.ShadowQualityKey) is { Enabled: false }
-            && shell.FocusedKey != OriginalOptionsScreen.ShadowQualityKey && shell.Options.ShadowQualityChoice == null,
-            $"the Shadow Quality row stands dead under Original, out of the walk's reach ({shell.FocusedKey}, {shell.Options.ShadowQualityChoice ?? "unset"})");
-        WalkTo(host, seat, shell, OriginalOptionsScreen.GraphicsKey);
+        WalkTo(host, seat, shell, OriginalVideoPage.ShadowQualityKey);
+        ctx.Check(Row(shell, OriginalVideoPage.ShadowQualityKey) is { Enabled: false }
+            && shell.FocusedKey != OriginalVideoPage.ShadowQualityKey && shell.Options.Video.ShadowQualityChoice == null,
+            $"the Shadow Quality row stands dead under Original, out of the walk's reach ({shell.FocusedKey}, {shell.Options.Video.ShadowQualityChoice ?? "unset"})");
+        WalkTo(host, seat, shell, OriginalVideoPage.GraphicsKey);
         Press(host, seat, Accept);
-        ctx.Check(shell.Options.GraphicsChoice == GraphicsMode.EnhancedWord,
-            $"Accept on the checkbox under it flips the graphics word ({shell.Options.GraphicsChoice})");
-        WalkTo(host, seat, shell, OriginalOptionsScreen.ShadowQualityKey);
+        ctx.Check(shell.Options.Video.GraphicsChoice == GraphicsMode.EnhancedWord,
+            $"Accept on the checkbox under it flips the graphics word ({shell.Options.Video.GraphicsChoice})");
+        WalkTo(host, seat, shell, OriginalVideoPage.ShadowQualityKey);
         Press(host, seat, Left);
-        ctx.Check(shell.FocusedKey == OriginalOptionsScreen.ShadowQualityKey && shell.Options.ShadowQualityChoice == ShadowQualitySetting.High,
-            $"which brings the Shadow Quality row to life, a step left of the Ultra default taking High ({shell.FocusedKey}, {shell.Options.ShadowQualityChoice ?? "unset"})");
-        WalkTo(host, seat, shell, OriginalOptionsScreen.VideoCancelKey);
+        ctx.Check(shell.FocusedKey == OriginalVideoPage.ShadowQualityKey && shell.Options.Video.ShadowQualityChoice == ShadowQualitySetting.High,
+            $"which brings the Shadow Quality row to life, a step left of the Ultra default taking High ({shell.FocusedKey}, {shell.Options.Video.ShadowQualityChoice ?? "unset"})");
+        WalkTo(host, seat, shell, OriginalVideoPage.CancelKey);
         Press(host, seat, Accept);
-        ctx.Check(shell.Screen == OriginalScreen.Options && shell.Options.GraphicsChoice == GraphicsMode.Default
-            && shell.Options.VSyncChoice == null && shell.Options.DisplayModeChoice == null && shell.Options.ResolutionChoice == null
-            && shell.Options.MonitorChoice == null && shell.Options.ShadowQualityChoice == null && exits.Count == before,
-            $"CANCEL CHANGES lands back on Preferences with all six edits dropped and no exit ({shell.Screen}, {shell.Options.GraphicsChoice}, {shell.Options.VSyncChoice ?? "unset"}, {shell.Options.DisplayModeChoice ?? "unset"}, {shell.Options.ResolutionChoice ?? "unset"}, {shell.Options.MonitorChoice ?? "unset"})");
+        ctx.Check(shell.Screen == OriginalScreen.Options && shell.Options.Video.GraphicsChoice == GraphicsMode.Default
+            && shell.Options.Video.VSyncChoice == null && shell.Options.Video.DisplayModeChoice == null && shell.Options.Video.ResolutionChoice == null
+            && shell.Options.Video.MonitorChoice == null && shell.Options.Video.ShadowQualityChoice == null && exits.Count == before,
+            $"CANCEL CHANGES lands back on Preferences with all six edits dropped and no exit ({shell.Screen}, {shell.Options.Video.GraphicsChoice}, {shell.Options.Video.VSyncChoice ?? "unset"}, {shell.Options.Video.DisplayModeChoice ?? "unset"}, {shell.Options.Video.ResolutionChoice ?? "unset"}, {shell.Options.Video.MonitorChoice ?? "unset"})");
 
         WalkTo(host, seat, shell, OriginalOptionsScreen.VideoDoorKey);
         Press(host, seat, Accept);
-        WalkTo(host, seat, shell, OriginalOptionsScreen.DisplayModeKey);
+        WalkTo(host, seat, shell, OriginalVideoPage.DisplayModeKey);
         Press(host, seat, Right);
-        WalkTo(host, seat, shell, OriginalOptionsScreen.VSyncKey);
+        WalkTo(host, seat, shell, OriginalVideoPage.VSyncKey);
         Press(host, seat, Right);
-        WalkTo(host, seat, shell, OriginalOptionsScreen.GraphicsKey);
+        WalkTo(host, seat, shell, OriginalVideoPage.GraphicsKey);
         Press(host, seat, Accept);
-        WalkTo(host, seat, shell, OriginalOptionsScreen.ShadowQualityKey);
+        WalkTo(host, seat, shell, OriginalVideoPage.ShadowQualityKey);
         Press(host, seat, Right);
-        WalkTo(host, seat, shell, OriginalOptionsScreen.VideoAcceptKey);
+        WalkTo(host, seat, shell, OriginalVideoPage.AcceptKey);
         Press(host, seat, Accept);
         ctx.Check(exits.Count == before + 1 && exits[^1] is OptionsApplyExit
         {
@@ -1284,19 +1284,19 @@ internal static class MenuOriginalSuites
             drawn += row.Kind == OriginalRowKind.ListRow && row.Visible ? 1 : 0;
         }
 
-        ctx.Check(shell.Options.OpenVideoOption == OriginalOptionsScreen.VSyncKey
+        ctx.Check(shell.Options.Video.OpenOption == OriginalVideoPage.VSyncKey
             && shell.Rows.Count == DisplayWords.VSyncChoices.Count + 2 && drawn == 4,
             $"Accept on the V-Sync row opens its five choices in the authored four-row window ({shell.Rows.Count} rows, {drawn} drawn)");
-        var bar = List(shell, OriginalOptionsScreen.VSyncKey);
-        var arrow = Row(shell, OriginalOptionsScreen.VSyncKey + ":down");
+        var bar = List(shell, OriginalVideoPage.VSyncKey);
+        var arrow = Row(shell, OriginalVideoPage.VSyncKey + ":down");
         float edge = (bar?.Window.X ?? 0f) + (bar?.Window.Width ?? 0f);
         ctx.Check(bar is { Window.Scrolls: true } && arrow != null
             && bar.Window.ThumbX + bar.Window.ThumbWidth <= edge && arrow.X + arrow.Width <= edge,
             $"with its thumb and its arrows inside the box's own right edge (thumb {bar?.Window.ThumbX ?? -1}, arrow {arrow?.X ?? -1}, edge {edge})");
         var size = ctx.Host.GetViewport().GetVisibleRect().Size;
         var fit = BoardFit.For(size.X, size.Y);
-        WheelAndDrag(ctx, host, seat, shell, fit, OriginalOptionsScreen.VSyncKey, "the V-Sync page's open list");
-        var offscreen = Row(shell, OriginalOptionsScreen.VSyncKey + ":4");
+        WheelAndDrag(ctx, host, seat, shell, fit, OriginalVideoPage.VSyncKey, "the V-Sync page's open list");
+        var offscreen = Row(shell, OriginalVideoPage.VSyncKey + ":4");
         ctx.Check(offscreen is { Visible: false },
             $"the word outside the window keeps its place for the walk, unseen ({offscreen?.Visible.ToString() ?? "missing"})");
         if (offscreen == null)
@@ -1305,8 +1305,8 @@ internal static class MenuOriginalSuites
         }
 
         Click(host, seat, Pointer(fit, offscreen.X + 2f, offscreen.Y + 2f, pressed: true, clicked: true));
-        ctx.Check(shell.Options.VSyncChoice == null && shell.Options.OpenVideoOption == null,
-            $"and a press on it picks nothing, the pointer reaching no row it cannot see ({shell.Options.VSyncChoice ?? "unset"})");
+        ctx.Check(shell.Options.Video.VSyncChoice == null && shell.Options.Video.OpenOption == null,
+            $"and a press on it picks nothing, the pointer reaching no row it cannot see ({shell.Options.Video.VSyncChoice ?? "unset"})");
     }
 
     // Original's AUDIO route over the install's decoded sections: the Preferences page's second door
@@ -1327,7 +1327,7 @@ internal static class MenuOriginalSuites
         Press(host, seat, Accept);
         WalkTo(host, seat, shell, OriginalOptionsScreen.AudioDoorKey);
         Press(host, seat, Accept);
-        ctx.Check(shell.Screen == OriginalScreen.Audio && shell.FocusedKey == OriginalOptionsScreen.AudioMasterKey,
+        ctx.Check(shell.Screen == OriginalScreen.Audio && shell.FocusedKey == OriginalAudioPage.MasterKey,
             $"AUDIO opens the decoded page on its Master row, the first of the authored rows it carries ({shell.Screen}, {shell.FocusedKey})");
         var board = shell.Compose();
         int titles = 0;
@@ -1346,33 +1346,33 @@ internal static class MenuOriginalSuites
         ctx.Check(thumbs == 4, $"with the authored thumb drawn once per row ({thumbs} of 4)");
         // The store is a scratch one under --run-tests, so the page opens on the shipped mix: every
         // level never set, each row standing at its own default.
-        ctx.Check(shell.Options.AudioMasterChoice == null && shell.Options.AudioMusicChoice == null
-            && shell.Options.AudioEffectsChoice == null && shell.Options.AudioVoiceChoice == null,
-            $"on a mix nothing has saved, every level reading as never set ({shell.Options.AudioMasterChoice?.ToString() ?? "unset"})");
+        ctx.Check(shell.Options.Audio.MasterChoice == null && shell.Options.Audio.MusicChoice == null
+            && shell.Options.Audio.EffectsChoice == null && shell.Options.Audio.VoiceChoice == null,
+            $"on a mix nothing has saved, every level reading as never set ({shell.Options.Audio.MasterChoice?.ToString() ?? "unset"})");
         audio.Mixes.Clear();
         Press(host, seat, Right);
-        ctx.Check(shell.Options.AudioMasterChoice == null,
-            $"a step off the top of the Master row moves nothing, so it writes nothing ({shell.Options.AudioMasterChoice?.ToString() ?? "unset"})");
+        ctx.Check(shell.Options.Audio.MasterChoice == null,
+            $"a step off the top of the Master row moves nothing, so it writes nothing ({shell.Options.Audio.MasterChoice?.ToString() ?? "unset"})");
         // A step at an end moves no level, so the frame states the mix and names no moved level:
         // this is what keeps a host from sounding a category once per pointer frame of a drag.
         ctx.Check(audio.Mixes.Count == 1 && audio.Mixes[0].Moved == MenuMixLevel.None
             && audio.Mixes[0].Levels == new AudioLevels(
                 AudioMix.DefaultMaster, AudioMix.DefaultMusic, AudioMix.DefaultEffects, AudioMix.DefaultVoice),
             $"the open page states the shipped mix to the host and names no moved level on a frame that moved none ({audio.Mixes.Count}, {(audio.Mixes.Count > 0 ? audio.Mixes[0].Moved : MenuMixLevel.None)})");
-        WalkTo(host, seat, shell, OriginalOptionsScreen.AudioMusicKey);
+        WalkTo(host, seat, shell, OriginalAudioPage.MusicKey);
         audio.Mixes.Clear();
         Press(host, seat, Left);
-        ctx.Check(shell.Options.AudioMusicChoice == AudioMix.DefaultMusic - SliderControl.KeyStep,
-            $"a sideways step on the focused row moves that level by the control's own step ({shell.Options.AudioMusicChoice?.ToString() ?? "unset"})");
+        ctx.Check(shell.Options.Audio.MusicChoice == AudioMix.DefaultMusic - SliderControl.KeyStep,
+            $"a sideways step on the focused row moves that level by the control's own step ({shell.Options.Audio.MusicChoice?.ToString() ?? "unset"})");
         ctx.Check(audio.Mixes.Count == 1 && audio.Mixes[0].Moved == MenuMixLevel.Music
             && audio.Mixes[0].Levels.Music == AudioMix.DefaultMusic - SliderControl.KeyStep,
             $"and names Music as the level that moved, carrying the level it moved to ({(audio.Mixes.Count > 0 ? audio.Mixes[0].Moved : MenuMixLevel.None)})");
         int endsBefore = audio.MixEnds;
-        WalkTo(host, seat, shell, OriginalOptionsScreen.AudioCancelKey);
+        WalkTo(host, seat, shell, OriginalAudioPage.CancelKey);
         audio.Mixes.Clear();
         Press(host, seat, Accept);
-        ctx.Check(shell.Screen == OriginalScreen.Options && shell.Options.AudioMusicChoice == null && exits.Count == before,
-            $"CANCEL CHANGES lands back on Preferences with the edit dropped and no exit ({shell.Screen}, {shell.Options.AudioMusicChoice?.ToString() ?? "unset"})");
+        ctx.Check(shell.Screen == OriginalScreen.Options && shell.Options.Audio.MusicChoice == null && exits.Count == before,
+            $"CANCEL CHANGES lands back on Preferences with the edit dropped and no exit ({shell.Screen}, {shell.Options.Audio.MusicChoice?.ToString() ?? "unset"})");
         // Off the page there is no mix to state, and the host is told to put back the one the page
         // opened over, which is the half a player notices when it is wrong.
         ctx.Check(audio.Mixes.Count == 0 && audio.MixEnds > endsBefore,
@@ -1380,15 +1380,15 @@ internal static class MenuOriginalSuites
 
         WalkTo(host, seat, shell, OriginalOptionsScreen.AudioDoorKey);
         Press(host, seat, Accept);
-        WalkTo(host, seat, shell, OriginalOptionsScreen.AudioVoiceKey);
+        WalkTo(host, seat, shell, OriginalAudioPage.VoiceKey);
         for (int step = 0; step < 12; step++)
         {
             Press(host, seat, Left);
         }
 
-        ctx.Check(shell.Options.AudioVoiceChoice == AudioMix.MinLevel,
-            $"and stepping the Voice row past its floor clamps at silence rather than wrapping to full ({shell.Options.AudioVoiceChoice?.ToString() ?? "unset"})");
-        WalkTo(host, seat, shell, OriginalOptionsScreen.AudioAcceptKey);
+        ctx.Check(shell.Options.Audio.VoiceChoice == AudioMix.MinLevel,
+            $"and stepping the Voice row past its floor clamps at silence rather than wrapping to full ({shell.Options.Audio.VoiceChoice?.ToString() ?? "unset"})");
+        WalkTo(host, seat, shell, OriginalAudioPage.AcceptKey);
         Press(host, seat, Accept);
         ctx.Check(exits.Count == before + 1 && exits[^1] is OptionsApplyExit { AudioVoice: AudioMix.MinLevel, AudioMaster: null },
             $"and ACCEPT CHANGES leaves through the host as one OptionsApplyExit carrying the levels ({exits.Count - before}, {exits[^1].GetType().Name})");

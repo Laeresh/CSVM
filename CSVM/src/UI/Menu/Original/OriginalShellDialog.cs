@@ -18,94 +18,136 @@ public sealed record OriginalDialog(
     CampaignBoards.DialogChrome? Chrome = null);
 
 /// <summary>
-/// The standing dialog, the shell's own partial rather than any screen family's: the original's
-/// <c>messagebox.script</c> over whatever screen is showing. The campaign and hangar modules raise
-/// it through <see cref="IOriginalScreenHost.RaiseDialog"/>; the credits screen's About box uses
-/// its own widget set. The shell owns it because the shell answers for it: while a box stands its
-/// answers are the only rows. <c>Compose</c> draws it over the screen's own picture, an Activate on
-/// one of its rows is the answer, and Back takes the declining one. The answers' words come from
-/// the string table whichever feature carries one (langui 100 to 103). The focus the raise took is
-/// put back when the box is answered.
+/// The shell's standing messagebox, the original's <c>messagebox.script</c> over whatever screen is
+/// showing. It holds the box standing, the focus its raise took and the answers' rows at their
+/// slots, and draws the box over the screen's picture. The shell owns the one instance and
+/// answers for it. While a box stands its answers are the only rows, and Back takes the declining
+/// one. The screen modules only raise, through <see cref="IOriginalScreenHost.RaiseDialog"/>. The
+/// answers' words come from the string table (langui 100 to 103).
 /// </summary>
-public sealed partial class OriginalShell
+public sealed class OriginalShellDialog
 {
     /// <summary>A one-answer dialog's OK.</summary>
-    public const string DialogOkKey = "DIALOG:OK";
+    public const string OkKey = "DIALOG:OK";
 
     /// <summary>A two-answer dialog's confirming answer.</summary>
-    public const string DialogYesKey = "DIALOG:YES";
+    public const string YesKey = "DIALOG:YES";
 
     /// <summary>A two-answer dialog's declining answer.</summary>
-    public const string DialogNoKey = "DIALOG:NO";
+    public const string NoKey = "DIALOG:NO";
 
     /// <summary>A three-answer dialog's third answer, which leaves the screen as it was.</summary>
-    public const string DialogCancelKey = "DIALOG:CANCEL";
+    public const string CancelKey = "DIALOG:CANCEL";
 
     // How far outside an answer's own rectangle its focus mark stands. The strip fills its frame
     // corner to corner but for the pill's rounded ends. A mark on the rectangle itself would be
     // drawn under the art and lost. Three pixels clear puts it on the box's black ground.
-    private const float DialogMarkOutset = 3f;
+    private const float MarkOutset = 3f;
 
-    private OriginalDialog? _dialog;
-    private int _focusBeforeDialog = -1;
+    private readonly CampaignLayout _layout;
+    private readonly Func<string, (int Width, int Height)?> _measure;
+    private readonly Func<CSVM.Mech3.UiStrings> _strings;
+    private readonly Func<OriginalRow, float, BoardFill> _mark;
 
-    /// <summary>The dialog standing over the screen, or null.</summary>
-    public OriginalDialog? Dialog => _dialog;
-
-    // The messagebox script's own answer words, read through whichever feature carries the string
-    // table. The one-button box takes langui 100 (OK), the two-button pair 102 and 103 (Yes, No).
-    // The 0x8 box takes 102, 103 and 101 across all three slots.
-    private OriginalDialogAnswer Ok(Action? run = null) =>
-        new(DialogOkKey, CampaignBoards.DialogCenterKey, DialogWord(100, "OK"), run);
-
-    private OriginalDialogAnswer Yes(Action run) =>
-        new(DialogYesKey, CampaignBoards.DialogLeftKey, DialogWord(102, "Yes"), run);
-
-    private OriginalDialogAnswer No() =>
-        new(DialogNoKey, CampaignBoards.DialogRightKey, DialogWord(103, "No"), null);
-
-    // The 0x8 box's own two extra answers. Its No moves onto the centre slot the two-button box
-    // leaves empty, and Cancel takes the right one (MESSAGEBOX.SCRIPT's gui_init).
-    private OriginalDialogAnswer NoCentred(Action run) =>
-        new(DialogNoKey, CampaignBoards.DialogCenterKey, DialogWord(103, "No"), run);
-
-    private OriginalDialogAnswer Cancel(Action run) =>
-        new(DialogCancelKey, CampaignBoards.DialogRightKey, DialogWord(101, "Cancel"), run);
-
-    private string DialogWord(int id, string fallback)
+    /// <summary>The box over <paramref name="layout"/>'s messagebox chrome. Its answer plaques are
+    /// sized through <paramref name="measure"/>, its words read off <paramref name="strings"/>, and
+    /// the cursor's answer outlined by <paramref name="mark"/> that many pixels clear of it.</summary>
+    public OriginalShellDialog(
+        CampaignLayout layout,
+        Func<string, (int Width, int Height)?> measure,
+        Func<CSVM.Mech3.UiStrings> strings,
+        Func<OriginalRow, float, BoardFill> mark)
     {
-        string word = MenuStrings.Text(id, fallback);
-        return word.Length > 0 ? word : fallback;
+        _layout = layout ?? throw new ArgumentNullException(nameof(layout));
+        _measure = measure ?? throw new ArgumentNullException(nameof(measure));
+        _strings = strings ?? throw new ArgumentNullException(nameof(strings));
+        _mark = mark ?? throw new ArgumentNullException(nameof(mark));
     }
 
-    // A standing dialog's answers, at the messagebox rows they draw on, whatever screen it stands over.
-    private List<OriginalRow> DialogRows()
+    /// <summary>The dialog standing over the screen, or null.</summary>
+    public OriginalDialog? Standing { get; private set; }
+
+    /// <summary>The focus the last raise took, or -1 before any raise. The screen under the box
+    /// still draws itself from it, and an answer puts it back.</summary>
+    public int FocusBefore { get; private set; } = -1;
+
+    /// <summary>A one-answer box's OK, in the messagebox script's own word (langui 100).</summary>
+    public OriginalDialogAnswer Ok(Action? run = null) =>
+        new(OkKey, CampaignBoards.DialogCenterKey, Word(100, "OK"), run);
+
+    /// <summary>Stands a box over the screen, remembering <paramref name="focus"/> as the focus the
+    /// raise took. Every raise names its icon, because <c>MESSAGEBOX.SCRIPT</c> reads the frame off
+    /// the raising screen's button mask rather than off anything the box itself can see.</summary>
+    public void Raise(
+        CampaignBoards.DialogChrome? chrome, string message, DialogIcon icon, int focus,
+        IReadOnlyList<OriginalDialogAnswer> answers)
+    {
+        FocusBefore = focus;
+        Standing = new OriginalDialog(message, icon, answers, chrome);
+    }
+
+    /// <summary>Takes the box down on the answer keyed <paramref name="key"/>, which is null where
+    /// the box carries none. False when no box stood.</summary>
+    public bool Take(string key, out OriginalDialogAnswer? answer)
+    {
+        answer = null;
+        if (Standing is not { } dialog)
+        {
+            return false;
+        }
+
+        Standing = null;
+        foreach (var candidate in dialog.Answers)
+        {
+            if (candidate.Key == key)
+            {
+                answer = candidate;
+                break;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Drops the standing box unanswered, which a door onto a new screen does.</summary>
+    public void Close() => Standing = null;
+
+    /// <summary>The standing box's answers, at the messagebox rows they draw on, whatever screen it
+    /// stands over; none while no box stands.</summary>
+    public List<OriginalRow> Rows()
     {
         var rows = new List<OriginalRow>();
-        if (_dialog is not { } dialog)
+        if (Standing is not { } dialog)
         {
             return rows;
         }
 
         foreach (var answer in dialog.Answers)
         {
-            var (art, x, y) = CampaignBoards.DialogSlot(answer.LayoutKey, _campaignLayout, dialog.Chrome);
-            var size = OriginalWidgets.PlaqueSizeOf(art, Measure);
+            var (art, x, y) = CampaignBoards.DialogSlot(answer.LayoutKey, _layout, dialog.Chrome);
+            var size = OriginalWidgets.PlaqueSizeOf(art, _measure);
             rows.Add(new OriginalRow(answer.Key, answer.Label, OriginalRowKind.Button, x, y, size.Width, size.Height, true, 0, art));
         }
 
         return rows;
     }
 
-    // The standing dialog as the shared board component's messagebox panel.
-    // ⚠ Do not take the strip frame off the focus. Every raise focuses an answer, so a frame read
-    // from it would stand on the default answer for the life of the box. That is not what the
-    // original draws. The pointer owns the rollover frame and the cursor gets the focus mark
-    // instead (docs/org/campaign-board.md). The ink is the box's own rather than the screen's,
-    // which on a paper screen would hide the label on the dark strip.
-    private void ComposeDialog(IReadOnlyList<OriginalRow> rows, int focus, List<BoardPanel> overlays)
+    /// <summary>The standing box as the shared board component's messagebox panel, over
+    /// <paramref name="rows"/> (its answers) with the cursor on <paramref name="focus"/>, the
+    /// pointer's <paramref name="hover"/> and <paramref name="pressed"/> rows and its position.
+    /// ⚠ Do not take the strip frame off the focus. Every raise focuses an answer, so the frame would
+    /// stand on the default answer for the life of the box (docs/org/campaign-board.md).</summary>
+    public void Compose(
+        IReadOnlyList<OriginalRow> rows, int focus, int hover, int pressed, (float X, float Y)? pointer,
+        List<BoardPanel> overlays)
     {
-        var dialog = _dialog!;
+        ArgumentNullException.ThrowIfNull(rows);
+        ArgumentNullException.ThrowIfNull(overlays);
+        if (Standing is not { } dialog)
+        {
+            return;
+        }
+
         var buttons = new List<CampaignBoards.DialogButton>(dialog.Answers.Count);
         var marks = new List<BoardFill>();
         for (int i = 0; i < dialog.Answers.Count; i++)
@@ -113,19 +155,21 @@ public sealed partial class OriginalShell
             // The hit is re-checked rather than trusted. The hover index outlives the frame that
             // set it, and the answers are not the rows it was measured against.
             var row = i < rows.Count ? rows[i] : null;
-            bool lit = i == _hover && row != null && _pointer is { } at && row.Contains(at.X, at.Y);
-            bool held = i == _pressed;
+            bool lit = i == hover && row != null && pointer is { } at && row.Contains(at.X, at.Y);
+            bool held = i == pressed;
             if (i == focus && !lit && row != null)
             {
-                marks.Add(FocusBox(row, DialogMarkOutset));
+                marks.Add(_mark(row, MarkOutset));
             }
 
+            // The ink is the box's own rather than the screen's, which on a paper screen would hide
+            // the label on the dark strip.
             buttons.Add(new CampaignBoards.DialogButton(
                 dialog.Answers[i].LayoutKey, dialog.Answers[i].Label,
                 ComposedBoard.PlaqueFrame(4, lit, held), ComposedBoard.DialogInk(held)));
         }
 
-        overlays.Add(CampaignBoards.Dialog(dialog.Message, buttons, dialog.Icon, _campaignLayout, dialog.Chrome));
+        overlays.Add(CampaignBoards.Dialog(dialog.Message, buttons, dialog.Icon, _layout, dialog.Chrome));
         if (marks.Count > 0)
         {
             // The mark rides its own panel over the box rather than the box's fill layer. A panel
@@ -135,43 +179,11 @@ public sealed partial class OriginalShell
         }
     }
 
-    // Every raise names its icon, because MESSAGEBOX.SCRIPT reads the frame off the raising
-    // screen's button mask rather than off anything the box itself can see. A default here would
-    // be a rule of "one button means the warning", which the original's 0x2 boxes break.
-    private void RaiseDialog(string message, DialogIcon icon, params OriginalDialogAnswer[] answers) =>
-        RaiseDialog(null, message, icon, answers);
-
-    // The same raise in another widget set, which the credits screen's About box is drawn from.
-    private void RaiseDialog(
-        CampaignBoards.DialogChrome? chrome, string message, DialogIcon icon, params OriginalDialogAnswer[] answers)
+    // The messagebox script's own answer words, read through whichever feature carries the string
+    // table. The one-button box takes langui 100 (OK), the two-button pair 102 and 103.
+    private string Word(int id, string fallback)
     {
-        _focusBeforeDialog = _focus[(int)_screen];
-        _dialog = new OriginalDialog(message, icon, answers, chrome);
-        _hover = -1;
-        _pressed = -1;
-        _armed = null;
-        // A box opens on its first answer, the left button MESSAGEBOX.SCRIPT focuses for the plain
-        // 0x4 and 0x8 masks. Back still takes the last one, which is the answer the script's own
-        // Escape posts for every mask, so a mistake has a way out.
-        _focus[(int)_screen] = 0;
-    }
-
-    private void AnswerDialog(string key)
-    {
-        if (_dialog is not { } dialog)
-        {
-            return;
-        }
-
-        _dialog = null;
-        _focus[(int)_screen] = _focusBeforeDialog;
-        foreach (var answer in dialog.Answers)
-        {
-            if (answer.Key == key)
-            {
-                answer.Run?.Invoke();
-                return;
-            }
-        }
+        string word = _strings().Text(id, fallback);
+        return word.Length > 0 ? word : fallback;
     }
 }

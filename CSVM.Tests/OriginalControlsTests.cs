@@ -37,9 +37,9 @@ public class OriginalControlsTests
     public void AnArmedCellTakesEscapeAsTheAbandonAndABoundKeyAsTheAnswer()
     {
         var shell = Shell(out var controls, out var devices, out var written);
-        shell.Options.OpenKeys();
-        var action = OriginalOptionsScreen.ControlTabs[0].Rows[0].Action;
-        Click(shell, Row(shell, OriginalOptionsScreen.KeysCellKey(0, second: false))!);
+        shell.Options.Keys.Open();
+        var action = OriginalKeysPage.ControlTabs[0].Rows[0].Action;
+        Click(shell, Row(shell, OriginalKeysPage.CellKey(0, second: false))!);
         Assert.True(controls.Capturing);
 
         devices.Flight.Keys.Add((int)Godot.Key.Escape);
@@ -50,7 +50,7 @@ public class OriginalControlsTests
             b => b.Control.Kind == ControlKind.Key && b.Control.Index == (int)Godot.Key.M);
 
         devices.Flight.Keys.Clear();
-        Click(shell, Row(shell, OriginalOptionsScreen.KeysCellKey(0, second: false))!);
+        Click(shell, Row(shell, OriginalKeysPage.CellKey(0, second: false))!);
         devices.Flight.Keys.Add((int)Godot.Key.M);
         shell.Step(None);
         Assert.False(controls.Capturing);
@@ -58,7 +58,7 @@ public class OriginalControlsTests
             b => b.Control.Kind == ControlKind.Key && b.Control.Index == (int)Godot.Key.M);
         Assert.Empty(written);
 
-        Click(shell, Row(shell, OriginalOptionsScreen.KeysAcceptKey)!);
+        Click(shell, Row(shell, OriginalKeysPage.AcceptKey)!);
         Assert.Equal(OriginalScreen.ControlsPrefs, shell.Screen);
         Assert.Equal(new[] { 1 }, written.ToArray());
     }
@@ -67,14 +67,14 @@ public class OriginalControlsTests
     public void CancelChangesDropsTheWholeVisitAndLeavesTheLiveKeymapAlone()
     {
         var shell = Shell(out var controls, out var devices, out var written);
-        shell.Options.OpenKeys();
-        var action = OriginalOptionsScreen.ControlTabs[0].Rows[0].Action;
-        Click(shell, Row(shell, OriginalOptionsScreen.KeysCellKey(0, second: false))!);
+        shell.Options.Keys.Open();
+        var action = OriginalKeysPage.ControlTabs[0].Rows[0].Action;
+        Click(shell, Row(shell, OriginalKeysPage.CellKey(0, second: false))!);
         devices.Flight.Keys.Add((int)Godot.Key.M);
         shell.Step(None);
         Assert.True(controls.Dirty);
 
-        Click(shell, Row(shell, OriginalOptionsScreen.KeysCancelKey)!);
+        Click(shell, Row(shell, OriginalKeysPage.CancelKey)!);
         Assert.Equal(OriginalScreen.ControlsPrefs, shell.Screen);
         Assert.False(controls.Dirty);
         Assert.DoesNotContain(controls.Bindings(InputContext.Flight, action),
@@ -86,27 +86,27 @@ public class OriginalControlsTests
     public void ATabPressStandsItsCategoryAndTheListWindowHoldsTheCursor()
     {
         var shell = Shell(out _, out _);
-        shell.Options.OpenKeys();
-        Assert.Equal(0, shell.Options.KeysTab);
-        int last = OriginalOptionsScreen.ControlTabs.Count - 1;
-        Click(shell, Row(shell, OriginalOptionsScreen.KeysTabKey(last))!);
-        Assert.Equal(last, shell.Options.KeysTab);
-        Assert.Equal(0, shell.Options.KeysTop);
+        shell.Options.Keys.Open();
+        Assert.Equal(0, shell.Options.Keys.Tab);
+        int last = OriginalKeysPage.ControlTabs.Count - 1;
+        Click(shell, Row(shell, OriginalKeysPage.TabKey(last))!);
+        Assert.Equal(last, shell.Options.Keys.Tab);
+        Assert.Equal(0, shell.Options.Keys.Top);
 
         // The Other tab outruns the list's window, so a cell past its foot is off screen until the
         // cursor walks onto it and the window follows.
-        int rows = OriginalOptionsScreen.ControlTabs[last].Rows.Count;
+        int rows = OriginalKeysPage.ControlTabs[last].Rows.Count;
         Assert.True(rows > 11, $"the Other tab outruns the authored window ({rows} rows)");
-        Assert.False(Row(shell, OriginalOptionsScreen.KeysCellKey(rows - 1, second: false))!.Visible);
+        Assert.False(Row(shell, OriginalKeysPage.CellKey(rows - 1, second: false))!.Visible);
         shell.Step(new MenuCommands { MoveX = 1 });
-        for (int i = 0; i < rows + 4 && shell.FocusedKey != OriginalOptionsScreen.KeysCellKey(rows - 1, second: false); i++)
+        for (int i = 0; i < rows + 4 && shell.FocusedKey != OriginalKeysPage.CellKey(rows - 1, second: false); i++)
         {
             shell.Step(new MenuCommands { MoveY = 1 });
         }
 
-        Assert.Equal(OriginalOptionsScreen.KeysCellKey(rows - 1, second: false), shell.FocusedKey);
-        Assert.True(Row(shell, OriginalOptionsScreen.KeysCellKey(rows - 1, second: false))!.Visible);
-        Assert.True(shell.Options.KeysTop > 0, $"the window followed the cursor down ({shell.Options.KeysTop})");
+        Assert.Equal(OriginalKeysPage.CellKey(rows - 1, second: false), shell.FocusedKey);
+        Assert.True(Row(shell, OriginalKeysPage.CellKey(rows - 1, second: false))!.Visible);
+        Assert.True(shell.Options.Keys.Top > 0, $"the window followed the cursor down ({shell.Options.Keys.Top})");
     }
 
     // The shipped keymaps as one seat's profile, shared with OriginalOptionsTests, whose rebinding

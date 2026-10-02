@@ -152,8 +152,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   after. *Decision:* do the split. *⚠ Traps:* a new `partial` file is not a split; the repo's standing rule is that a partial
   is not a deepening, and the existing three are accepted, not a pattern to extend. Do not move the
   flight tick's own steps (forces, contact, damage) out; they share the accumulator and belong
-  together. *Cross-refs:* `BL-1015`, `BL-1016` (the same shape in `GameSession.cs` and
-  `OriginalOptionsScreen.cs`), `docs/architecture/Flight.md`.
+  together. *Cross-refs:* `BL-1015` (the same shape in `GameSession.cs`); the options form
+  (`OriginalOptionsScreen.cs`) is a landed split of the same shape, five page modules behind a
+  narrow form seam; `docs/architecture/Flight.md`.
 
 ## Environment & world
 
@@ -296,23 +297,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   third set of sizes for the HUD. *Cross-refs:* `BL-449`, whose landing prompted this wording,
   `git log --grep=BL-951`.
 
-- `BL-1016` `[Cleanup]` `[L]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`OriginalOptionsScreen.cs`
-  is 2535 lines and 326 members after absorbing four screens; each page becomes its own module
-  behind the one form, and the two new `OriginalShell` partials fold into real types.** *Evidence:*
-  the Audio, Video, Game Options and Controls screens were deleted into this one class. Its own
-  summary argues it is one form, and the per-page `switch` arms near the row composer and the
-  accept handler are the counter-evidence: every page-specific rule goes through the same two
-  switches. The same review range added `OriginalCheats.cs` (140 lines) and
-  `OriginalShellDialog.cs` (149 lines) as `partial class OriginalShell`, while halving the shell's
-  other partials into the `IOriginalScreenModule` seam. *Fix shape:* one page module per former
-  screen behind `IOriginalScreenModule` or a page-sized sibling of it, the form keeping only the
-  frame, the ACCEPT/CANCEL plaques and the page switch; the cheats and the dialog become the
-  types their file names already suggest, owned by the shell rather than spliced into it.
-  *Decision:* do the split. *⚠ Traps:* the pages share the plaque-row pair and the section pitch table, so extract those first or the
-  four modules duplicate them; a page module that reaches back into the form's fields for its
-  layout is the form in another file. *Cross-refs:* `BL-1014`, `BL-1015`,
-  `docs/menu-presentations.md`, `docs/architecture/UI.md`.
-
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
@@ -451,7 +435,8 @@ usual.
   *⚠ Traps:* a `partial` file is
   not a split. The per-frame tick order across the runtimes is the one thing the session must
   keep in one place; do not scatter it into the extracted modules. *Cross-refs:* `BL-1014`,
-  `BL-1016`, `docs/architecture/Session.md`.
+  the options form's landed split into page modules (`OriginalOptionsScreen.cs`),
+  `docs/architecture/Session.md`.
 
 ## Tooling, platform & docs
 

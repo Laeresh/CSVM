@@ -358,17 +358,17 @@ internal static class AudioBusSuites
             leaf.Drive(new MenuCommands { Accept = true });
             ctx.Check(leaf.Shell.Screen == OriginalScreen.Audio,
                 $"the AUDIO door behind the Options screen opens over the pause ({leaf.Shell.Screen})");
-            WalkTo(leaf, OriginalOptionsScreen.AudioEffectsKey);
+            WalkTo(leaf, OriginalAudioPage.EffectsKey);
             for (int press = 0; press < ToSilence; press++)
             {
                 leaf.Drive(new MenuCommands { MoveX = -1 });
             }
 
-            ctx.Check(leaf.Shell.Options.AudioEffectsChoice == AudioMix.MinLevel,
-                $"the Effects row walks to silence ({leaf.Shell.Options.AudioEffectsChoice?.ToString() ?? "unset"})");
+            ctx.Check(leaf.Shell.Options.Audio.EffectsChoice == AudioMix.MinLevel,
+                $"the Effects row walks to silence ({leaf.Shell.Options.Audio.EffectsChoice?.ToString() ?? "unset"})");
             float moving = BusVolume(AudioBuses.Effects);
             report.AppendLine($"pause AUDIO page: Effects at {AudioMix.MinLevel} previews db={moving:0.###}");
-            WalkTo(leaf, OriginalOptionsScreen.AudioAcceptKey);
+            WalkTo(leaf, OriginalAudioPage.AcceptKey);
             leaf.Drive(new MenuCommands { Accept = true });
             ctx.Check(applied != null && applied.AudioEffects == AudioMix.MinLevel,
                 $"ACCEPT CHANGES hands the walked level to the apply ({applied?.AudioEffects?.ToString() ?? "no exit"})");

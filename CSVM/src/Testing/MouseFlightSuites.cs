@@ -206,7 +206,7 @@ internal static class MouseFlightSuites
         leaf.Drive(new UI.Menu.MenuCommands { Accept = true });
         ctx.Check(leaf.Shell.Screen == UI.Menu.Original.OriginalScreen.ControlsPrefs,
             $"the CONTROLS door opens over the pause ({leaf.Shell.Screen})");
-        WalkTo(leaf, UI.Menu.Original.OriginalOptionsScreen.ControlsMouseKey);
+        WalkTo(leaf, UI.Menu.Original.OriginalControlsPage.MouseKey);
         leaf.Drive(new UI.Menu.MenuCommands { Accept = true });
         controls.Context = InputContext.Flight;
         controls.Focus(IndexOf(controls.Actions, InputAction.AutoLand));
@@ -217,13 +217,13 @@ internal static class MouseFlightSuites
             $"a staged flip and rebind reach no seat before the accept (page {controls.MouseFlying}, seat {one.MouseFlying})");
 
         // Five sideways steps on the slider, a quarter of its scale up: twice the sensitivity.
-        WalkTo(leaf, UI.Menu.Original.OriginalOptionsScreen.ControlsSensitivityKey);
+        WalkTo(leaf, UI.Menu.Original.OriginalControlsPage.SensitivityKey);
         for (int i = 0; i < 5; i++)
             leaf.Drive(new UI.Menu.MenuCommands { MoveX = 1 });
         ctx.Check(controls.MouseSensitivity == 2f && one.MouseSensitivity == SensitivityScale.Default,
             $"the slider stages twice the sensitivity and the seat keeps its own until the accept (page {controls.MouseSensitivity}, seat {one.MouseSensitivity})");
 
-        WalkTo(leaf, UI.Menu.Original.OriginalOptionsScreen.ControlsAcceptKey);
+        WalkTo(leaf, UI.Menu.Original.OriginalControlsPage.AcceptKey);
         leaf.Drive(new UI.Menu.MenuCommands { Accept = true });
         var flown = one.ReadKeyboard(Dt);
         ctx.Check(one.MouseFlying && flown.Roll < -0.7f,
