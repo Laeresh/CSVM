@@ -560,8 +560,8 @@ observed without data says nothing about the floor.
 rather than inside a sandbox: it drives WSL Debian over the tarball `ExportRelease.ps1 -Linux`
 built (`-Tarball` names another) and the author's install (`CrimsonSkiesGame\` under this tree or
 the one `CSVM_DATA_ROOT` names; `-Install` names another). It fails on any failure and prints
-RunTests.ps1-style stage lines and one verdict; a full run takes about 4.5 min (extraction 40 s,
-the suites 210 s at six shards). Three stages, each run even when an earlier one failed, where it still
+RunTests.ps1-style stage lines and one verdict; a full run takes about 2 min (extraction 25 s,
+the suites 95 s at six shards). Three stages, each run even when an earlier one failed, where it still
 can:
 
 - **payload**: the archive's listing against `packaging/MANIFEST.md`'s Linux table, read from that
@@ -602,6 +602,16 @@ What the check had to learn:
   suites and the same error counts come out of the Windows export run headless, which is how an
   entry is admitted: a suite that fails on Linux alone is a Linux bug and never goes on the list.
   Listed suites still run, and one that passes is reported so a stale entry is seen.
+- ⚠ **The shards run on the safe render thread (`--render-thread safe`).** Godot 4.7's headless
+  dummy renderer keeps its mesh, material and texture RIDs in tables that are not thread-safe, and
+  the project's separate render thread allocates them on the calling thread while the render
+  thread initialises, reads and frees them. On the separate thread every full run logs null mesh
+  and material errors (`mesh_get_surface_count`, `material_set_shader`, `update_end`), wrong or
+  uninitialised RIDs, intermittent network-suite failures and a crash at exit in some shards; on
+  the safe thread it logs none, and the Windows export run headless behaves the same. The fix is
+  upstream in godotengine/godot#121958 (milestone 4.8, not in 4.7.2), so the flag goes on that
+  upgrade. The render thread's hand-offs stay covered by the windowed battery, which uses the real
+  renderer's thread-safe tables.
 - **The suites read the player's zips-only tree, where the Windows battery reads unpacked
   folders.** A texture archive refuses a read after `Dispose` in both shapes alike, so a read of a
   closed archive fails the battery as it would fail here, rather than passing on the folders alone.
