@@ -282,26 +282,32 @@ The theme's first batch (`BL-126`, `BL-365`–`BL-376`) landed via
 complete, the chrome playtest F52/`BL-126` closed it out). New splitscreen findings mint here as
 usual.
 
-- `BL-380` `[Bug]` `[Blocked: per-instance fog shader uniforms]` `[L]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Fog-zone selection stays
+- `BL-380` `[Bug]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Fog-zone selection stays
   player-1-only in splitscreen: `csky_fog_color`/`_range`/`_alt`/`csky_world_light` are one GLOBAL
-  shader uniform set, written from rig 0's camera weather state alone
-  (`Session/World/WeatherRig.cs:459-466`), so a pane on the other side of a fog-zone boundary from P1
-  renders P1's fog, not its own.** Split out of the `BL-338` residual sweep 2026-08-15 (plan B14):
-  the whiteout overlay and the deck regime are already per-rig (the same `WeatherRig.Tick` loop),
-  only the fog GLOBALS lag behind, because `ApplyFogGlobals` writes session-wide shader uniforms,
-  never per-instance ones.
-  *Evidence:* `WeatherRig.cs:459`'s own comment: "Driven by rig 0, because the fog parameters this
-  writes are GLOBAL shader uniforms, one set for the whole session ... In splitscreen with one
-  player under the deck and one over it, both panes therefore wear player 1's fog." Pre-existing
-  (`SetupWeather` always wrote one global set before splitscreen existed), not introduced by it.
-  *Fix shape:* per-instance fog uniforms on every fogged mesh instance, selected by whichever
-  pane's camera the instance should answer to, a shader-architecture change (per-instance state
-  keyed off the viewer set), not a wiring change.
-  *⚠ Traps:* a second `RenderingServer.GlobalShaderParameterSet` call does not fix this, that is
-  still one value for the whole process, not one per viewport. Any new `instance uniform` this adds
-  to `shaders/csky_instance_uniforms.gdshaderinc` must be APPENDED, never inserted, Godot assigns
-  instance-uniform slots by declaration order per shader, and the file's own header names the
-  2026-07-17 `csky_fog_on` index-collision bug this ordering contract exists to prevent.
+  shader uniform set, written from rig 0's camera weather state alone, so a pane on the other side
+  of a fog-zone boundary from P1 renders P1's fog, not its own.** The whiteout overlay and the deck
+  regime are already per-rig (the same `WeatherRig.Tick` loop), and so is the state itself:
+  `Tick` resolves `CameraWeatherState` for every rig's camera. Only the fog writes lag behind:
+  `FogStateTrigger.Next` is fed `rigs[0].CameraWeatherState` and `ApplyZone` writes session-wide
+  shader globals.
+  *Evidence:* the comment above that call in `WeatherRig.Tick`: "Driven by rig 0 because these are
+  global shader uniforms, so splitscreen wears rig 0's zone". Pre-existing (`SetupWeather` always
+  wrote one global set before splitscreen existed), not introduced by it.
+  *Fix shape:* let the shader pick the zone per view. Every view already carries its own
+  `CAMERA_POSITION_WORLD`, which `csky_atmosphere.gdshaderinc` receives. Publish as globals a small
+  table of each live camera's position (the pane cameras and the spyglass disc cameras) with that
+  camera's zone index, and the fog parameters of every zone the mission authors; the fragment
+  matches its `CAMERA_POSITION_WORLD` to a table entry and reads that zone's colour, range and
+  altitude. The zone choice stays where it is, per rig and edge-triggered on the CPU, so the deck
+  rim keeps its no-shimmer rule. The sun and ambient energy `ApplyZone` writes into the shared
+  `Environment` are a second half: `Camera3D.Environment` gives each pane its own, unexamined.
+  *⚠ Traps:* neither a second `RenderingServer.GlobalShaderParameterSet` call nor an
+  `instance uniform` fixes this. A global is one value for the process, and an instance uniform
+  is one value per mesh instance, read alike by every pane that draws it. A spyglass disc camera
+  sits away from its pane's camera, so the table needs its own entry or the disc reads the wrong
+  zone. Any new `instance uniform` in `shaders/csky_instance_uniforms.gdshaderinc` is APPENDED,
+  never inserted: Godot assigns instance-uniform slots by declaration order per shader (the file's
+  header names the `csky_fog_on` collision this prevents).
 
 - `BL-389` `[Tuning]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **Splitscreen weapon mix needs a retune: rockets too quiet, guns too loud,
   especially four guns firing at once.** Found at the `BL-126` chrome playtest (F52,
