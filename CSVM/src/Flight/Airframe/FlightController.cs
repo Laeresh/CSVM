@@ -316,31 +316,10 @@ public partial class FlightController : Node3D
 
     /// <summary>This pilot's target selection, or null for a seat that
     /// does no targeting (every AI rig, and the suites' bare rigs). Set by
-    /// <c>HumanFlightAdapter</c> on each human pane; <see cref="StepTargeting"/> feeds it every
+    /// <c>HumanFlightAdapter</c> on each human pane; <see cref="TargetInput"/> feeds it every
     /// frame. Read <c>Targeting.Current</c> for the selected target, that is the property the
     /// marker, Track Target's camera and any later AI-order consumer are meant to read.</summary>
     public TargetSelection? Targeting;
-
-    /// <summary>Appends the zeppelin sub-parts to the targeting pool each frame,
-    /// <c>ZeppelinRuntime.CollectTargetParts</c>, bound by <c>GameSession</c> once the zeppelins
-    /// exist. Null in a session with none, and the pool takes them only under the torpedo gate
-    /// (<see cref="TargetPool.Rebuild"/>). A delegate because the zeppelins are BUILT AFTER the
-    /// rigs; the same sink shape <see cref="CollideDamageSink"/> already uses.</summary>
-    public System.Action<List<AimCandidate>>? TargetSubParts;
-
-    /// <summary>Appends this pilot's live objective sites to the targeting pool each frame: the
-    /// campaign mission's (<c>ObjectiveSites.Collect</c>, bound by <c>GameSession</c>) or a stunt
-    /// run's unflown Danger Zones (<see cref="StuntMission.CollectTargets"/>, bound per pane). Null
-    /// in a session with neither. A channel of its own rather than <see cref="TargetSubParts"/>:
-    /// a site carries the mission's own flag, onto the Enemy cycle or the Non-Aircraft one, where a
-    /// sub-part is offered under a flag nothing authors for it.</summary>
-    public System.Action<List<AimCandidate>>? TargetObjectives;
-
-    /// <summary><c>--target=</c>'s spec, or null for an unscripted session. Applied ONCE, on
-    /// the first frame <see cref="Targeting"/>'s pool has anything in it, and never consulted again,
-    /// it sets the initial selection, it does not hold it, so an interactive session started with the
-    /// flag still cycles normally.</summary>
-    public string? InitialTarget;
 
     /// <summary>Whether a person is flying this plane. Gates the gun aim assist
     /// (B6): true runs <see cref="AimAssist"/> as normal, false takes the muzzle axis
@@ -506,7 +485,6 @@ public partial class FlightController : Node3D
                                                       // the touchdown defs stop their own puffer at
                                                       // ANIMATION_OFFSET 1.5, so this is one whole authored
                                                       // reaction per scrape rather than a restart per frame
-    private const int InitialTargetGrace = 300;    // frames --target= waits for the pool to fill
     private const float PropIdleSpin = 0.4f;    // blur discs still turn at zero throttle (windmilling)
 
     // Everything this pane draws for its pilot. Always present, so no site has to ask whether
@@ -517,24 +495,8 @@ public partial class FlightController : Node3D
     private readonly AircraftLifecycle _lifecycle = new();
     private readonly SweepCadence _sweep = new();    // the original's alternate-step sweep and its carried motion
     private readonly AimCandidateSet _aimCandidates = new(); // rebuilt once per fire call (B4/B5)
-    private readonly AimCandidateSet _gunnerScan = new();    // the AI gunner's acquisition scan (D14)
-    private readonly AimCandidateSet _rescoreScan = new();   // the aircraft-only walk the re-score's withdrawal reads
     private readonly List<RocketPylonView> _pylonViews = new();          // the AI rocketeer's pylon walk
-    private readonly List<RankedTargetCandidate> _rankCandidates = new(); // the D12/D36 ranking snapshots
-    // …and their sources, by index: a FlightController, a TurretController or a
-    // DestructibleRegistry.Instance (the D36 widening, BL-363's decoded turret/structure pools).
-    private readonly List<object?> _rankSources = new();
-    // The names one non-aircraft candidate also answers to, refilled per candidate by
-    // TargetPool.CollectOwners. A field, not a fresh list: the acquisition walks every pool.
-    private readonly List<string> _biasOwners = new();
     private readonly RandomNumberGenerator _aimRng = Rng.Stream(Rng.Weapons); // the assist's 1° launch scatter
-    private readonly AimCandidateSet _targetScan = new();   // the targeting pass's own scan, rebuilt per frame
-    private readonly List<AimCandidate> _targetParts = new(); // this frame's selectable sub-parts
-    private readonly List<AimCandidate> _targetSites = new(); // this frame's objective sites
-    private readonly bool[] _targetKeyPrev = new bool[13];  // the eleven targeting keys, spyglass pair last
-    // Decision 7: D-pad Up down longer than the shared threshold is a HOLD, not a tap. The two
-    // weapon selectors' pad buttons split on the same number, inside FireControl.
-    private readonly TapHoldButton _targetHold = new(TapHoldButton.PadHoldSeconds);
     // Swallows a discrete flight command's next read when a cutscene skip or a pause-sheet dismiss
     // hands input back while the control that confirmed it is still down.
     private readonly FlightReentryLatch _reentryLatch = new();
@@ -574,8 +536,6 @@ public partial class FlightController : Node3D
 
     private ulong _inputFrame = ulong.MaxValue;  // the rendered frame the three readers above hold
     private int _stickRevision = -1;             // the StickProfiles revision last merged into _bindings
-    private bool _initialTargetDone;             // --target= has had its one chance
-    private int _initialTargetWaits;             // …frames it has waited for a non-empty pool
     private FlightModel _model = null!;
     private CameraController? _cam;              // null on an AI rig, no view rides this plane
     private bool _deathCamera;                   // the pilot's own destruction holds the view; the
@@ -650,8 +610,6 @@ public partial class FlightController : Node3D
     private bool _aimLoggedFirst;                // verification breadcrumb: the assist's first snap logs once
     private bool _aimListsLogged;                // verification breadcrumb: the candidate list sizes log once
     private bool _groundBlowLoggedFirst;         // verification breadcrumb: ground blow's first repelling hit
-    private bool _gunnerLoggedTarget;            // verification breadcrumb: the AI gunner's first acquisition
-    private int _gunnerRetargetsLogged;          // capped per shooter: every re-score switch would flood the log
     private bool _gunnerLoggedFire;              // verification breadcrumb: the AI gunner's first open fire
     private bool _rocketeerLoggedFire;           // verification breadcrumb: the AI's first ordnance launch
     private string _rocketeerLastVerdict = "";   // the last rocketeer verdict KEY logged, so a repeat is silent
@@ -715,6 +673,19 @@ public partial class FlightController : Node3D
             return _actions.Held(InputAction.Pause);
         });
         Dressing = new FirstPersonDressing(_pilotHud);
+        TargetInput = new SeatTargeting(this, _actions, _keyActions, _padActions);
+        Acquisition = new GunnerAcquisition(this, () => new AcquiringShooter(
+            ShooterId: PlayerIndex,
+            Team: Team,
+            Position: WorldPosition,
+            Forward: NoseDirection,
+            AttackRange: Pilot?.Machine?.AttackRange ?? 2000f,   // a machine's own unset default
+            StructBias: Stats?.AiStructBias ?? 0f,
+            Pools: Projectiles,
+            Structures: Destructibles,
+            Loadout: Loadout,
+            Rocketeer: Pilot?.Rocketeer,
+            InfiniteAmmo: InfiniteAmmo));
     }
 
     /// <summary>Raised once per crash, at <see cref="Crash"/>: (victim <see cref="PlayerIndex"/>,
@@ -858,6 +829,16 @@ public partial class FlightController : Node3D
     /// <summary>What this pilot's own aircraft wears in a first-person view: the body hide, the
     /// interior pass and the panel's needles. Every part is null on a rig built no interior.</summary>
     public FirstPersonDressing Dressing { get; }
+
+    /// <summary>This seat's targeting input: the per-frame scan into <see cref="Targeting"/>, the
+    /// targeting keys, the spyglass toggle and <c>--target=</c>. It holds the sub-part and objective
+    /// feeds a session binds. Stepped on the rendered frame of a human seat with a selection.</summary>
+    public SeatTargeting TargetInput { get; }
+
+    /// <summary>The AI gunner's target acquisition: the decoded hold and the four-pool sweep behind
+    /// it. Stepped from the sim step before the guns, which fire on the target it leaves on
+    /// <see cref="AiGunner.Target"/>.</summary>
+    public GunnerAcquisition Acquisition { get; }
 
     /// <summary>The view this pilot has selected, live. Falls back to <see cref="PinnedViewMode"/>
     /// before <see cref="Setup"/> has built a camera, and reads Chase on an AI rig, which has
@@ -2450,7 +2431,11 @@ public partial class FlightController : Node3D
         // Player target selection: rebuild-then-input, the original's own order, the
         // per-frame candidate pass runs first and a handler then steps the list it just built.
         if (Targeting != null && IsHumanPiloted)
-            StepTargeting(simDt);
+        {
+            TargetInput.Step(Targeting, new TargetingFrame(Projectiles, SurfaceVehicles, Team,
+                _model.Position, _model.Attitude, SelectedOrdnance(), InPlay, PlayerIndex,
+                _pilotHud.TargetHud), simDt);
+        }
         // Dogfight opponent / AI hostile markers: this pane's own pose, so each HUD can compute
         // its own target's clock bearing off it (the same feed the pilot HUD's markers get).
         if (VersusHud != null)
@@ -2537,8 +2522,8 @@ public partial class FlightController : Node3D
         Race = null;
         SmokeScreens = null;
         PauseState = null;
-        TargetSubParts = null;
-        TargetObjectives = null;
+        TargetInput.SubParts = null;
+        TargetInput.Objectives = null;
 
         static void Discard(Node node, bool freeNow)
         {
@@ -2882,12 +2867,8 @@ public partial class FlightController : Node3D
     // rather than hoisted for SA1202's sake, the same trade made elsewhere here.
     internal FireInputs SelectorInputsForTest() => ReadSelectorInputs();
 
-    // The other discrete buttons' readings, for the suite that holds a stick button on each row. They
-    // are the targeting row's own read, the tap/hold splitter's, the flyby view's and the throttle's.
-    internal bool TargetControlDownForTest(InputAction action) => TargetControlDown(action);
-
-    internal bool TargetSplitterDownForTest() => TargetSplitterDown();
-
+    // The other discrete buttons' readings, for the suite that holds a stick button on each row: the
+    // flyby view's and the throttle's. The targeting rows answer on TargetInput itself.
     internal bool FlybyDownForTest() => FlybyDown();
 
     internal float? RequestedThrottleForTest() => RequestedThrottle();
@@ -3765,196 +3746,9 @@ public partial class FlightController : Node3D
     internal bool PollPauseForTest(GameClock? clock) => PollPauseAndHalt(clock);
 #pragma warning restore SA1202
 
-    /// <summary>One frame of player targeting: rebuild the pool and re-resolve, prune the
-    /// attacker queue, then dispatch this frame's input. That order is the original's, its
-    /// per-frame candidate pass runs in the sim step and a handler steps the list it just built,
-    /// which is why a class change reads one frame late and self-heals.</summary>
-    private void StepTargeting(float dt)
-    {
-        var sel = Targeting!;
-        if (Projectiles != null && sel.ActiveClass != null)
-        {
-            // Skipped entirely with the selection cleared: `Target Nothing` zeroes the class flags
-            // and the original then skips its whole collection pass, which is the mechanism that
-            // keeps the clear cleared rather than an optimisation.
-            _targetScan.Clear();
-            Projectiles.CollectAircraft(_targetScan);
-            SurfaceVehicles?.CollectVehicles(_targetScan);
-            // No turret pass. A gun reaches the pilot's cycle only where a targets.zrd record
-            // names its node. It then arrives on the site feed below as any structure does.
-            // No shipped table names one, so collecting them would be unread work.
-
-            // The fourth pool (E19): a TARGETABLE round in flight is selectable, which is why a
-            // torpedo can be locked and shot at. The pool itself reads the admission byte.
-            Projectiles.CollectFusedOrdnance(_targetScan);
-            _targetParts.Clear();
-            TargetSubParts?.Invoke(_targetParts);
-            // The mission's objective sites, rebuilt from their live sources every frame, so a
-            // site under a moving node is marked where it now is rather than where it was.
-            _targetSites.Clear();
-            TargetObjectives?.Invoke(_targetSites);
-        }
-        // The team is read off the FIELD. Deriving it from PlayerIndex is right for P1 by
-        // coincidence and wrong for every other pane the moment a mission sets teams, the
-        // wingman-in-the-marker bug (see TargetHud.OwnTeam).
-        sel.Rebuild(_targetScan, _targetParts, Team, this, _model.Position, _model.Attitude,
-            _targetSites, SelectedOrdnance());
-
-        // The death prune (FUN_004a64e0). There is no session-wide Downed broadcast outside --vs,
-        // so this pane prunes its own queue: a shot-down attacker must not be offered again.
-        for (int i = sel.Attackers.Count - 1; i >= 0; i--)
-        {
-            if (sel.Attackers[i] is FlightController { InPlay: false } dead)
-                sel.ForgetTarget(dead);
-        }
-
-        // --target=, before the input dispatch and before the InPlay gate: a --det run pins its
-        // selection without a pilot who can press anything, and a real keypress on the same frame
-        // should win over the scripted one rather than be overwritten by it.
-        if (InitialTarget != null && !_initialTargetDone)
-        {
-            ApplyInitialTarget(sel);
-        }
-
-        // ⚠ Gate the INPUT on InPlay, not the rebuild. The freecam a downed pilot watches from binds
-        // `U` among its own keys, so reading targeting from a spectator both re-targets a plane that
-        // is not there and fights the camera. The selection keeps re-resolving regardless.
-        if (!InPlay)
-        {
-            _targetHold.Step(false, dt);   // let a button held through the crash resolve as nothing
-            return;
-        }
-
-        // D-pad Up, the pad's one targeting button (decision 6/7): tap steps the enemy cycle, hold
-        // selects the target nearest the crosshair. TapHoldButton owns the timing and the
-        // resolve-on-release rule; this reads the pad and acts on the verdict.
-        switch (_targetHold.Step(TargetSplitterDown(), dt))
-        {
-            case TapHold.Hold:
-                sel.NearestCrosshairs(_model.Position, _model.Attitude);
-                break;
-            case TapHold.Tap:
-                sel.NextEnemy();
-                break;
-        }
-
-        // The keyboard set: every one of the original's eleven targeting keys collides with our
-        // flight scheme, so the shipped keys are this port's own. All eleven actions are here, one
-        // per class per direction plus the two class-less ones, and each is rebindable.
-        DispatchTargetKey(0, InputAction.TargetNextEnemy, () => sel.NextEnemy());
-        DispatchTargetKey(1, InputAction.TargetNextAlly, () => sel.Next(TargetClass.Ally));
-        DispatchTargetKey(2, InputAction.TargetNextNonAircraft, () => sel.Next(TargetClass.NonAircraft));
-        DispatchTargetKey(3, InputAction.TargetNearest, () => sel.NearestCrosshairs(_model.Position, _model.Attitude));
-        DispatchTargetKey(4, InputAction.TargetClear, () => sel.Clear());
-        DispatchTargetKey(5, InputAction.TargetPreviousEnemy, () => sel.Previous(TargetClass.Enemy));
-        DispatchTargetKey(6, InputAction.TargetPreviousAlly, () => sel.Previous(TargetClass.Ally));
-        DispatchTargetKey(7, InputAction.TargetPreviousNonAircraft, () => sel.Previous(TargetClass.NonAircraft));
-        DispatchTargetKey(8, InputAction.TargetNearestEnemy, () => sel.Nearest(TargetClass.Enemy));
-        DispatchTargetKey(9, InputAction.TargetNearestAlly, () => sel.Nearest(TargetClass.Ally));
-        DispatchTargetKey(10, InputAction.TargetNearestNonAircraft, () => sel.Nearest(TargetClass.NonAircraft));
-
-        // The spyglass toggle, both halves on their own slots: unlike the keys above, the pad
-        // control here is a button of its own rather than the tap/hold splitter, so a pad-only
-        // pilot reaches it without dispatching the action twice.
-        DispatchEdge(11, _keyActions.Held(InputAction.ToggleSpyglass), ToggleSpyglass);
-        DispatchEdge(12, _padActions.Held(InputAction.ToggleSpyglass), ToggleSpyglass);
-    }
-
-    // The pilot's spyglass arm/disarm. Every other gate (off screen, the range band) is re-answered
-    // every frame regardless, so this flips one flag and logs the transition.
-    private void ToggleSpyglass()
-    {
-        if (_pilotHud.TargetHud is not { } hud)
-        {
-            return;
-        }
-
-        hud.SpyglassOn = !hud.SpyglassOn;
-        Log.Info("flight",
-            $"targeting hud: P{PlayerIndex + 1} spyglass {(hud.SpyglassOn ? "on" : "off")}");
-    }
-
-    // DispatchTargetKey's edge rule for a control the CALLER reads, so one action can take a slot
-    // per device half rather than the keyboard alone.
-    private void DispatchEdge(int slot, bool down, System.Action act)
-    {
-        if (down && !_targetKeyPrev[slot])
-        {
-            act();
-        }
-
-        _targetKeyPrev[slot] = down;
-    }
-
-    /// <summary>Spends <c>--target=</c>'s one application. Waits for a non-empty pool first:
-    /// the things it can name (AI spawns, the zeppelins, a generator's first drop) are all built
-    /// after the rigs are, so applying on frame one would match nothing in every session.
-    /// <c>none</c> needs no pool and does not wait.</summary>
-    private void ApplyInitialTarget(TargetSelection sel)
-    {
-        bool needsPool = !string.Equals(InitialTarget, "none", System.StringComparison.OrdinalIgnoreCase);
-        if (needsPool && sel.Pool.Count == 0 && ++_initialTargetWaits < InitialTargetGrace)
-        {
-            return;
-        }
-
-        _initialTargetDone = true;      // spent whether or not it matched: one chance, then hands off
-        if (sel.ApplyInitial(InitialTarget!, _model.Position, _model.Attitude))
-        {
-            string picked = sel.Current is { } t && t.Name.Length > 0 ? t.Name : "nothing";
-            Log.Info("flight", $"--target={InitialTarget}: {picked} (class={sel.ActiveClass?.ToString() ?? "cleared"})");
-            return;
-        }
-
-        // Naming what IS selectable is the whole diagnosis for a mistyped node name, and it is why
-        // the flag needs no separate listing mode.
-        var names = new List<string>();
-        foreach (var cls in new[] { TargetClass.Enemy, TargetClass.Ally, TargetClass.NonAircraft })
-        {
-            foreach (var t in sel.Pool.Of(cls))
-            {
-                if (t.Name.Length > 0 && !names.Contains(t.Name))
-                {
-                    names.Add(t.Name);
-                }
-            }
-        }
-
-        names.Sort(System.StringComparer.OrdinalIgnoreCase);
-        const int MaxNamed = 24;    // a C1 session offers ~100; enough to recognise a typo, not a wall
-        int extra = names.Count - MaxNamed;
-        if (extra > 0)
-        {
-            names.RemoveRange(MaxNamed, extra);
-        }
-
-        string listed = names.Count == 0 ? "(nothing)"
-            : string.Join(", ", names) + (extra > 0 ? $", +{extra} more" : "");
-        Log.Warn("core", $"--target={InitialTarget}: no match, selectable now: {listed}");
-    }
-
     // The whole seat, since nothing ships on the pad for it: a pad or stick control here is one the
     // player bound themselves.
     private bool FlybyDown() => _actions.Held(InputAction.FlybyView);
-
-    /// <summary>Edge-detects one targeting key against its own slot and runs its action once per
-    /// press.</summary>
-    private void DispatchTargetKey(int slot, InputAction action, System.Action act)
-    {
-        bool down = TargetControlDown(action);
-        if (down && !_targetKeyPrev[slot])
-            act();
-        _targetKeyPrev[slot] = down;
-    }
-
-    // ⚠ The next-enemy row reads the keyboard half alone, since its pad and stick controls reach the
-    // tap/hold splitter, which would otherwise dispatch it twice. Every other row reads the whole
-    // seat, or a stick button bound to it would do nothing.
-    private bool TargetControlDown(InputAction action) =>
-        action == InputAction.TargetNextEnemy ? _keyActions.Held(action) : _actions.Held(action);
-
-    // The next-enemy row's pad and stick half, which the tap/hold splitter reads.
-    private bool TargetSplitterDown() => _padActions.Held(InputAction.TargetNextEnemy);
 
     // Internal rather than private: IFlightInputSource.cs's PilotInputSource calls this to keep
     // the body where it always lived, rather than hoisting it for SA1202's sake. The scripted hold
@@ -3984,9 +3778,8 @@ public partial class FlightController : Node3D
     }
 #pragma warning restore SA1202
 
-    // Four small static helpers for the D36 gunner-target widening (BL-363), kept beside the
-    // instance methods that are their only real callers rather than hoisted for SA1204's sake,
-    // the same trade the SA1202 blocks elsewhere in this file already make.
+    // The static target-source helpers, kept beside the gunner and rocketeer drives that call them.
+    // They are not hoisted for SA1204's sake, the trade the SA1202 blocks here already make.
 #pragma warning disable SA1204
     // A standing gunner target's current geometry and liveness, read off whichever source type it
     // actually is: a FlightController, a SurfaceVehicle, a TurretController or a
@@ -4070,136 +3863,18 @@ public partial class FlightController : Node3D
     // The gunner's one standing target of any class, which AiPilot reads as its pursuit quarry.
     private static object? StandingTarget(AiGunner gunner) => gunner.Target;
 
-    // The name a rating_biases entry is matched against, read only when there is a list to match.
-    // The ranking asks it per candidate per tick, and a Godot name read allocates (PERF-20).
-    private static string BiasNameOf(object? source, AiGunner gunner) =>
-        gunner.RatingBiases is { Count: > 0 } ? TargetPool.NameOf(source) : string.Empty;
-
-    // Whether this pilot may be offered a gasbag at all: the decoded admission gate walks the
-    // weapon list for a DAMAGES_ZEPPELIN slot with ammo whose two launch timers have run out
-    // (FUN_00420070, docs/org/aiPilot.md). A pilot that launches nothing has no such slot.
-    private bool HasGasbagOrdnanceReady() => GasbagOrdnanceState() == "ready";
-
-    // The gate's verdict as a word, for the acquisition breadcrumb: which of its four conditions
-    // withheld the gasbags is what a flight log has to say when the torpedoes never come.
-    private string GasbagOrdnanceState()
-    {
-        if (Loadout is not { Hardpoints.Count: > 0 })
-            return "no pylons";
-        if (Pilot?.Rocketeer is not { } rocketeer)
-            return "no rocketeer";
-        string state = "no gasbag pylon";
-        for (int i = 0; i < Loadout.Hardpoints.Count; i++)
-        {
-            var hp = Loadout.Hardpoints[i];
-            if (!hp.Weapon.DamagesZeppelin)
-                continue;
-            if (!hp.Armed(InfiniteAmmo))
-                state = "gasbag pylon empty";
-            else if (!rocketeer.SlotReady(i))
-                state = "gasbag pylon locked";
-            else
-                return "ready";
-        }
-        return state;
-    }
 #pragma warning restore SA1204
 
-    // Whether this tick keeps the standing target. The decoded hold: a picked target is re-scored
-    // every tick and kept while it scores valid. Once the hold runs out the pool is swept whole
-    // (docs/org/aiPilot.md). A target written straight onto AiGunner.Target, a mission order or an
-    // airframe swap's replacement, carries no rank snapshot. It keeps to the simpler rule that
-    // alive is enough. An assigned primary_target is kept while it is inside the attack radius.
-    private bool HoldsStandingTarget(AiGunner gunner, out Vector3 pos, out Vector3 vel, out Vector3 fwd)
-    {
-        if (!TryTargetGeometry(StandingTarget(gunner), out pos, out vel, out fwd, out bool live)
-            || !live)
-            return false;
-        float attack = Pilot?.Machine?.AttackRange ?? 2000f;
-        // The assigned target is re-scored every tick in the original (FUN_0041fe10's primary arm),
-        // so it stays only inside the attack volume. This is the range the promotion does not read.
-        if (gunner.AutoTarget && gunner.IsPrimaryTarget(gunner.Target))
-            return WorldPosition.DistanceSquaredTo(pos) <= attack * attack;
-        if (!gunner.AutoTarget || !ReferenceEquals(gunner.TargetRankFor, gunner.Target))
-            return true;
-        if ((GameClock.Current?.Time ?? 0.0) >= gunner.TargetHoldUntil)
-            return false;
-        var rank = gunner.TargetRank;
-        rank.Position = pos;   // the re-score runs on the live geometry; the bias terms stand
-        rank.Velocity = vel;
-        // ⚠ The withdrawal argument is CSVM's layer, not the decode. Evaluated last, and only for a
-        // structure target, so the aircraft walk costs nothing on the ordinary aeroplane duel.
-        return AiTargetRanking.KeepsStandingTarget(WorldPosition, NoseDirection,
-            attack, AiScorer.Jet,
-            AiTargetRanking.AircraftFirst && rank.IsStructureClass && EnemyAircraftRanks(gunner),
-            rank);
-    }
-
-    // Whether one live enemy aeroplane is in reach, the withdrawal's test, over the aircraft roster
-    // alone: a hull is neither class the preference suppresses. Ranking is the reach test in
-    // AiTargetRanking.SelectBest. This asks the same two things it does, the attack radius and an
-    // authored hard exclusion, rather than a second reading of "in reach".
-    private bool EnemyAircraftRanks(AiGunner gunner)
-    {
-        if (Projectiles == null)
-            return false;
-        float attack = Pilot?.Machine?.AttackRange ?? 2000f;
-        var ownPos = WorldPosition;
-        _rescoreScan.Clear();
-        Projectiles.CollectAircraft(_rescoreScan);
-        foreach (var c in _rescoreScan.Vehicles)
-        {
-            if (!c.Live || c.Source is not FlightController fc || ReferenceEquals(fc, this))
-                continue;
-            if (!AimAssist.Hostile(Team, c.Team)
-                || ownPos.DistanceSquaredTo(c.Position) > attack * attack)
-                continue;
-            float bias = AiTargetRanking.ObjectiveBiasFor(
-                fc.IsHumanPiloted ? AiTargetRanking.PlayerRole : BiasNameOf(c.Source, gunner),
-                gunner.RatingBiases);
-            if (bias < AiTargetRanking.NotRanked)
-                return true;
-        }
-
-        return false;
-    }
-
-    // One AI-gunner tick: keep the standing target while the hold above holds it (re-acquiring
-    // through the D12/D36 ranking when it is gone and AiGunner.AutoTarget allows), then
-    // hand the gunner this tick's fire geometry, the SELECTED gun group's weapon and muzzle
-    // midpoint, the sim pose (never the render pose), and the target's state, so
-    // AiGunner.WantsFire is current when the fire step reads it.
+    // One AI-gunner tick: the acquisition keeps or re-acquires the standing target. The gunner then
+    // gets the SELECTED gun group's weapon and muzzle midpoint, the sim pose (never the render
+    // pose) and the target's state. AiGunner.WantsFire is then current when the fire step reads it.
     private void DriveAiGunner(AiGunner gunner)
     {
         gunner.HoldFire();
         if (_fire == null || Projectiles == null)
             return;
-        if (!HoldsStandingTarget(gunner, out var targetPos, out var targetVel, out var targetFwd))
-        {
-            object? left = StandingTarget(gunner);
-            TargetScore score = default;
-            string how = "ranked";
-            gunner.Target = gunner.AutoTarget
-                ? SelectRankedTarget(gunner, out score, out how)
-                : null;
-            if (!TryTargetGeometry(StandingTarget(gunner), out targetPos, out targetVel, out targetFwd,
-                    out bool targetLive) || !targetLive)
-                return;
-            if (!_gunnerLoggedTarget)
-            {
-                _gunnerLoggedTarget = true; // verification breadcrumb: who the gunner went after
-                Log.Info("flight",
-                    $"ai gunner: shooter {PlayerIndex} targets {TargetLabel(StandingTarget(gunner))} at {score.Distance:0} m ({how}: weight {score.Weight:0.0#} bias {score.Bias:0} rank {score.Rank:0}; gasbag ordnance {GasbagOrdnanceState()}, {_gunnerScan.Structures.Count} structure(s) in the scan)");
-            }
-            else if (_gunnerRetargetsLogged < 8 && !ReferenceEquals(left, StandingTarget(gunner)))
-            {
-                // Capped per shooter: the switch is the thing the re-score exists for, and a
-                // flight of twelve re-scoring all mission must not flood the log.
-                _gunnerRetargetsLogged++;
-                Log.Info("flight",
-                    $"ai gunner: shooter {PlayerIndex} leaves {TargetLabel(left)} for {TargetLabel(StandingTarget(gunner))} at {score.Distance:0} m ({how}: rank {score.Rank:0}; {_gunnerScan.Structures.Count} structure(s) in the scan)");
-            }
-        }
+        if (!Acquisition.Step(gunner, out var targetPos, out var targetVel, out var targetFwd))
+            return;
         // ⚠ Only Pursue shoots. Lay off holds fire deliberately (the rubber-band assist) even
         // though the target stays acquired in every mode.
         if (Pilot?.Machine is { } modes && modes.Mode != AiMode.Pursue)
@@ -4294,208 +3969,7 @@ public partial class FlightController : Node3D
         }
     }
 
-    // The acquisition: the decoded ranking formula over the whole VehicleList, the turrets and the
-    // structures (TargetVehicle/TargetTurret/TargetStruct), swept for one global minimum, same
-    // roster and team gate as the aim assist. A live PrimaryTargetName is picked outright; its
-    // "player" token resolves to the nearest human (C22), which only an aeroplane can be.
-    // Decode: docs/org/aiPilot.md.
-    // ⚠ Deconfliction (AiTargetRanking) stays zero outside a mission.
-    private object? SelectRankedTarget(AiGunner gunner, out TargetScore score, out string how)
-    {
-        score = default;
-        how = "ranked";
-        if (Projectiles == null)
-            return null;
-        _gunnerScan.Clear();
-        // ⚠ The whole VehicleList, not its aircraft half: the decoded sweep walks the one list that
-        // holds the AI ground and sea vehicles beside the aircraft, so a boat or a turret truck is a
-        // candidate as the vessel it is (docs/org/targeting.md). Never by being registered aircraft.
-        Projectiles.CollectVehicleList(_gunnerScan);
-        Projectiles.CollectTurrets(_gunnerScan);
-        if (Destructibles != null)
-        {
-            _gunnerScan.AddMissionStructures(Destructibles);
-        }
-        int ownTeam = Team;
-        // ⚠ The attack volume, not the activation one. Both decoded scorers admit on the attack
-        // cylinder, and the activation volume is the original's awake test alone. A DEDG widening
-        // therefore never reaches acquisition (docs/org/aiPilot.md).
-        float attack = Pilot?.Machine?.AttackRange ?? 2000f;
-        var ownPos = WorldPosition;
-        var ownFwd = NoseDirection;
-        _rankCandidates.Clear();
-        _rankSources.Clear();
-        object? primary = null;
-        FlightController? nearestHuman = null;
-        float nearestHumanDistSq = float.MaxValue;
-        foreach (var c in _gunnerScan.Vehicles)
-        {
-            if (!c.Live || c.Source == null || ReferenceEquals(c.Source, this))
-                continue;
-            if (c.Team == AimAssist.NeutralTeam || ownTeam == AimAssist.NeutralTeam || c.Team == ownTeam)
-                continue;
-            // ⚠ Read the source's TYPE, never gate on it: a hull is on this list and carries no
-            // FlightController, so every term below has a source-typed reading and the ones that
-            // are properties of an aeroplane simply do not apply to it.
-            var fc = c.Source as FlightController;
-            if (gunner.PrimaryTargetName is { Length: > 0 } wanted
-                && ownPos.DistanceSquaredTo(c.Position) <= attack * attack)
-            {
-                if (primary == null
-                    && string.Equals(TargetPool.NameOf(c.Source), wanted, StringComparison.OrdinalIgnoreCase))
-                {
-                    primary = c.Source; // a by-NAME assignment names one entry: first match is it
-                }
-                else if (fc is { IsHumanPiloted: true }
-                    && wanted.Equals(AiTargetRanking.PlayerRole, StringComparison.OrdinalIgnoreCase))
-                {
-                    // "player" is a role, not a name (C22); resolved ONCE per acquisition.
-                    float d = ownPos.DistanceSquaredTo(c.Position);
-                    if (d < nearestHumanDistSq)
-                    {
-                        nearestHumanDistSq = d;
-                        nearestHuman = fc;
-                    }
-                }
-            }
-
-            // Allied gunners already on this candidate (the deconfliction input).
-            int attackers = 0;
-            foreach (var a in _gunnerScan.Vehicles)
-            {
-                if (a.Team == ownTeam && a.Source is FlightController ally
-                    && !ReferenceEquals(ally, this)
-                    && ReferenceEquals(ally.Pilot?.Gunner?.Target, c.Source))
-                    attackers++;
-            }
-
-            // Wingman mode is the netless escort: a net demotes the mode to jet at spawn, and
-            // CSVM's session build makes the same fork (docs/org/aiPilot.md "Net assignment"). A
-            // hull flies neither, so both flags read false for it off the null cast.
-            bool human = fc is { IsHumanPiloted: true };
-            _rankCandidates.Add(new RankedTargetCandidate
-            {
-                Position = c.Position,
-                Velocity = c.Velocity,
-                IsPlayer = human,
-                IsAircraft = fc != null,
-                IsWingman = fc?.Pilot?.Escort != null,
-                // target_bias is the CANDIDATE's own field on the vehicle arm. A hull carries no def
-                // of its own here and spends nothing, as the shipped hull defs do.
-                ClassBias = fc?.Stats?.AiTargetBias ?? 0f,
-                ObjectiveBias = AiTargetRanking.ObjectiveBiasFor(
-                    human ? AiTargetRanking.PlayerRole : BiasNameOf(c.Source, gunner),
-                    gunner.RatingBiases),
-                AlliedAttackers = attackers,
-            });
-            _rankSources.Add(c.Source);
-        }
-
-        // Turrets and structures: the other two pools, neither with a primary_target term. A
-        // structure reaches the gate on its pool's authored team, so an unauthored one is neutral
-        // and never ranked; a gasbag reaches it only past the ordnance gate (docs/org/aiPilot.md).
-        bool gasbagsAdmitted = HasGasbagOrdnanceReady();
-        AddRankedNonAircraft(_gunnerScan.Turrets, isTurret: true, ownTeam, gunner, gasbagsAdmitted);
-        AddRankedNonAircraft(_gunnerScan.Structures, isTurret: false, ownTeam, gunner, gasbagsAdmitted);
-
-        bool byRole = primary == null && nearestHuman != null;
-        primary ??= nearestHuman;
-        if (primary != null)
-        {
-            // Log the assigned pick with its own rank inputs (informational, rank not consulted).
-            int idx = _rankSources.IndexOf(primary);
-            if (idx >= 0)
-                score = AiTargetRanking.Score(ownPos, ownFwd, attack, AiScorer.Jet,
-                    _rankCandidates[idx]);
-            how = byRole ? "primary target: nearest human" : "primary target";
-            return primary;
-        }
-
-        // ⚠ Jet is asserted, not derived: the engine picks the scorer off the SHOOTER's own mode,
-        // so a mode plane or heli aeroplane should take Other. Deriving it here would change what
-        // those aircraft target, which is a behaviour claim wanting its own evidence.
-        int best = AiTargetRanking.SelectBest(ownPos, ownFwd, attack, AiScorer.Jet,
-            AiTargetRanking.AircraftFirst, _rankCandidates, out score);
-        if (best < 0)
-            return null;
-        // The take stamps the hold and the rank the re-score re-runs. Only the ranked arm does:
-        // an assigned primary_target wins outright at every acquisition in the original, so it
-        // never reaches the hold at all.
-        gunner.TakeTarget(_rankSources[best], _rankCandidates[best], GameClock.Current?.Time ?? 0.0);
-        return _rankSources[best];
-    }
-
-    // Files one turret or structure candidate into the shared rank pool, mirroring the vehicle
-    // loop's team gate and allied-attacker count above (TargetTurret/TargetStruct). A gasbag is
-    // dropped at admission unless the pilot's gasbag ordnance is live, the original's
-    // FUN_0041f9c0 third argument.
-    private void AddRankedNonAircraft(List<AimCandidate> pool, bool isTurret, int ownTeam,
-        AiGunner gunner, bool gasbagsAdmitted)
-    {
-        foreach (var c in pool)
-        {
-            if (!c.Live || c.Source == null || ReferenceEquals(c.Source, this))
-                continue;
-            if (c.Team == AimAssist.NeutralTeam || ownTeam == AimAssist.NeutralTeam
-                || c.Team == ownTeam)
-                continue;
-            // A carried turret's host is already ranked as a vehicle above; offering it again
-            // here would put two entries on one silhouette. Mirrors TargetPool.Offer's guard.
-            if (isTurret && !TargetPool.IsEmplacement(c.Source))
-                continue;
-            bool gasbag = c.Source is DestructibleRegistry.Instance { Gasbag: true };
-            if (gasbag && !gasbagsAdmitted)
-                continue;
-            // A part answers to every name above it, which is what carries a roster's exclusion
-            // naming a mission structure down onto the structure's own engines and guns. Skipped
-            // outright with no list to match against, since the walk is then unread work.
-            _biasOwners.Clear();
-            if (gunner.RatingBiases is { Count: > 0 })
-                TargetPool.CollectOwners(c.Source, _biasOwners);
-
-            int attackers = 0;
-            foreach (var a in _gunnerScan.Vehicles)
-            {
-                if (a.Team == ownTeam && a.Source is FlightController ally
-                    && !ReferenceEquals(ally, this)
-                    && ReferenceEquals(ally.Pilot?.Gunner?.Target, c.Source))
-                    attackers++;
-            }
-
-            _rankCandidates.Add(new RankedTargetCandidate
-            {
-                Position = c.Position,
-                Velocity = c.Velocity,
-                IsPlayer = false,
-                IsStructureClass = true,
-                IsGasbag = gasbag,
-                // struct_bias is the SCORER's own field, spent on every turret and structure
-                // candidate alike. It is read off this aeroplane and never off the candidate.
-                ClassBias = Stats?.AiStructBias ?? 0f,
-                ObjectiveBias = AiTargetRanking.ObjectiveBiasFor(
-                    BiasNameOf(c.Source, gunner), _biasOwners,
-                    gunner.RatingBiases, isTurret),
-                AlliedAttackers = attackers,
-            });
-            _rankSources.Add(c.Source);
-        }
-    }
-
 #pragma warning disable SA1202
-    // Internal rather than private: the carried-turret dedup suite asserts on the ranked pool's
-    // shape directly (one entry per silhouette) rather than inferring it from which one thing
-    // ranking picks, which a same-position duplicate could still pass by accident.
-    internal IReadOnlyList<object?> RankedPoolSourcesForTest(AiGunner gunner)
-    {
-        SelectRankedTarget(gunner, out _, out _);
-        return _rankSources;
-    }
-
-    // Internal rather than private: the admission suite asserts on the scan's own membership. A
-    // pool the team gate would drop downstream is indistinguishable from one never admitted. The
-    // decoded list is the narrower one, so only the scan itself can show which happened.
-    internal int ScannedStructureCountForTest() => _gunnerScan.Structures.Count;
-
     // Internal rather than private: PilotInputSource/KeyboardInputSource (IFlightInputSource.cs)
     // call this and its sibling above to keep each body exactly where it always lived among the
     // other sim-step helpers, rather than hoisting it for SA1202's sake.

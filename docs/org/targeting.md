@@ -431,7 +431,7 @@ hull to an aircraft or reads an airframe field off one, so a port that reaches t
 by registering a ship as an aircraft has ported the wrong mechanism. An AI pilot's own acquisition
 (`FUN_0041fe10`, [`aiPilot.md`](aiPilot.md) "Target acquisition") delegates to this same
 `FUN_0041f9c0`, so an aeroplane ranks a hull on the same terms; CSVM's
-`FlightController.SelectRankedTarget` reads each candidate's name and flags off its own source
+`GunnerAcquisition` reads each candidate's name and flags off its own source
 type for that reason.
 
 A turret's `SetTeam` override (`FUN_004acb70`) clears its current target pointer `+0x210` whenever
@@ -1051,7 +1051,7 @@ there.
 
 | | Original | CSVM today |
 |---|---|---|
-| Who picks the target | the player, from eleven bound actions | the pilot, from the same eleven, each a named action the Controls door rebinds (`Bindings/DefaultBindings.cs`, dispatched in `FlightController.StepTargeting`). The keys differ: the original's three class letters and their Shift and Ctrl forms are all spent on flight here, and a binding is one control, so the five class and class-less actions ship on `T`/`Y`/`U`/`I`/`O` and the six per-class Previous and Nearest on the digit row above them (`../controls.md`) |
+| Who picks the target | the player, from eleven bound actions | the pilot, from the same eleven, each a named action the Controls door rebinds (`Bindings/DefaultBindings.cs`, dispatched in `SeatTargeting.Step`). The keys differ: the original's three class letters and their Shift and Ctrl forms are all spent on flight here, and a binding is one control, so the five class and class-less actions ship on `T`/`Y`/`U`/`I`/`O` and the six per-class Previous and Nearest on the digit row above them (`../controls.md`) |
 | Selection state | sticky in plane `+0x948`, survives everything except death and an explicit clear | the same, in `TargetSelection`, one instance per pane and owned by that pane's `FlightController` |
 | Candidate pool | four typed pools, rebuilt and re-sorted every frame | `TargetPool`, rebuilt every frame off `AimCandidateSet`'s aeroplanes and live ordnance plus two curated feeds, the mission's flagged sites and the zeppelin sub-parts (those only while the pilot's selected ordnance carries `LOCK_ON`). The structure and turret lists are never walked, since a mission's table is what decides |
 | Classes | Enemy / Ally / Non-Aircraft, plus an Objective companion flag | the same three, `TargetClass`, with the objective flag on the ref (`TargetRef.Classify`) |

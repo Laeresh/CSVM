@@ -63,9 +63,9 @@ public sealed class AiGunner
     public object? TargetRankFor;
 
     /// <summary>The roster's assigned target (slot 6, <c>primary_target</c>), by node name,
-    /// mutable, the mission-script seam. While it resolves to a live hostile inside the
-    /// activation radius it is picked outright; ranking takes over when it dies or leaves
-    /// (the reading is assumed, see <c>FlightController.SelectRankedTarget</c>).
+    /// mutable, the mission-script seam. A live hostile inside the activation radius is picked
+    /// outright. Ranking takes over when it dies or leaves, an assumed reading
+    /// (<c>GunnerAcquisition</c>).
     /// <c>"player"</c> resolves to any human-piloted aircraft. Null/empty = none.</summary>
     public string? PrimaryTargetName;
 

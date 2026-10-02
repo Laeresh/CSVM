@@ -214,7 +214,7 @@ internal static class TargetClassCycleSuites
     }
 
     // One key per class, each walking the whole of its own cycle and wrapping. This is what the
-    // shipped keymap's E, W and R do, dispatched in FlightController.StepTargeting.
+    // shipped keymap's E, W and R do, dispatched in SeatTargeting.Step.
     private static void CheckEachKeyWalksItsClass(TestContext ctx, Pane pane)
     {
         foreach (var cls in new[] { TargetClass.Enemy, TargetClass.Ally, TargetClass.NonAircraft })

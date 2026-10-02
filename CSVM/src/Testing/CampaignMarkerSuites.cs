@@ -1051,8 +1051,8 @@ internal static class CampaignMarkerSuites
         return null;
     }
 
-    // A pilot's targeting frame with no aircraft: the same pool feed and the same per-frame
-    // rebuild FlightController.StepTargeting runs, driven a frame at a time by the suite.
+    // A pilot's targeting frame with no aircraft: the pool feed and per-frame rebuild that
+    // SeatTargeting.Step runs, driven a frame at a time by the suite.
     private sealed class Pilot
     {
         private readonly ObjectiveSites _sites;

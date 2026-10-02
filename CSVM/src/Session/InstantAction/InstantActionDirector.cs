@@ -292,8 +292,8 @@ public sealed class InstantActionDirector
                         continue;
                     SeatWalk(wingman);
                     // primary_target: 0, 1 and 3 escort the player; 2 and 4 escort
-                    // wingmen 1 and 3, FlightController.SelectRankedTarget's own by-name/"player"
-                    // match, the same seam the D12 ranking already reads.
+                    // wingmen 1 and 3. GunnerAcquisition.Select matches it by name or
+                    // "player", the same seam the D12 ranking already reads.
                     if (pilot.Gunner != null)
                     {
                         pilot.Gunner.PrimaryTargetName = slot.PrimaryTargetIsWingman is { } escortIdx

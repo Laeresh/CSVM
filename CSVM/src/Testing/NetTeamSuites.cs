@@ -106,7 +106,7 @@ internal static class NetTeamSuites
         var scan = new AimCandidateSet();
         own.Projectiles?.CollectAircraft(scan);
         var sites = new List<AimCandidate>();
-        own.TargetObjectives?.Invoke(sites);
+        own.TargetInput.Objectives?.Invoke(sites);
         var pool = new TargetPool();
         pool.Rebuild(scan, null, own.Team, own, sites);
         return pool;

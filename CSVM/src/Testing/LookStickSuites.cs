@@ -409,7 +409,7 @@ internal static class LookStickSuites
         // Offered fresh every frame off the plane's CURRENT pose, so the bearing under test stays
         // put while the aeroplane flies: abeam to port and below, 500 m out.
         var offset = new Vector3(-500f, -250f, 0f);
-        plane.TargetObjectives = list => list.Add(new AimCandidate
+        plane.TargetInput.Objectives = list => list.Add(new AimCandidate
         {
             Position = plane.WorldPosition + (plane.GlobalBasis * offset),
             Team = InstantActionRuntime.EnemyTeam,
@@ -451,7 +451,7 @@ internal static class LookStickSuites
         report.AppendLine($"padlock: bearing {Mathf.RadToDeg(azimuth):0.##}°/{Mathf.RadToDeg(elevation):0.##}° " +
             $"off by {azDeg:0.##}°/{elDeg:0.##}°, camera dir {Fmt(held)}");
 
-        plane.TargetObjectives = null;
+        plane.TargetInput.Objectives = null;
         plane.Targeting = null;
     }
 

@@ -17,11 +17,10 @@ namespace CSVM.Testing;
 /// against a zeppelin part and actually engage it. Inventory: docs/architecture.md.</summary>
 internal static class TargetingCandidateSuites
 {
-    // A stock-armed AI-piloted rig HELD dead-on at a registered destructible (a zeppelin engine's
-    // own shape: DestructibleRegistry.Instance, the TargetStruct pool) with no aircraft in the
-    // scan at all. Proves SelectRankedTarget makes a non-aircraft winner the gunner's one
-    // standing target and that the gunner then fires real rounds at it; and that a same-team
-    // structure is refused.
+    // A stock-armed AI-piloted rig HELD dead-on at a registered destructible, a zeppelin engine's
+    // own shape (DestructibleRegistry.Instance, the TargetStruct pool). No aircraft is in the scan.
+    // Proves GunnerAcquisition makes a non-aircraft winner the gunner's one standing target. The
+    // gunner then fires real rounds at it, and a same-team structure is refused.
     [Suite("targeting-candidates",
         "the widened AI acquisition (BL-363): a registered structure whose pool authors no " +
         "team is nobody's target and a same-team one is refused, while " +
@@ -737,8 +736,8 @@ internal static class TargetingCandidateSuites
             allyPilot.Gunner = new AiGunner(new RandomNumberGenerator { Seed = 20260913 });
             ally = Rig(allyStats, allyPos, allyTeam, FlightRoster.ShooterIdBase, allyPilot);
 
-            ally.RankedPoolSourcesForTest(allyPilot.Gunner);
-            ctx.Same(1, ally.ScannedStructureCountForTest(),
+            ally.Acquisition.Select(allyPilot.Gunner, out _, out _);
+            ctx.Same(1, ally.Acquisition.ScannedStructureCount,
                 $"only the owned camp reaches the pilot's structure scan of {registry.Count} registered pool(s)");
 
             object? Acquire(bool aircraftFirst)
@@ -815,10 +814,9 @@ internal static class TargetingCandidateSuites
         }
     }
 
-    // AddRankedNonAircraft walked every turret with no discriminator on TurretController.Site, so
-    // a carried gunner rode the ranked pool as a second entry beside its own aircraft's Vehicle
-    // entry, one silhouette read as two candidates. Mirrors the guard TargetPool.Offer already
-    // applies for the player (TargetPool.IsEmplacement), now shared by both pools.
+    // The ranked pool's non-aircraft pass must not offer a carried gunner beside its own aircraft's
+    // Vehicle entry, which reads one silhouette as two candidates. TurretController.Site tells them
+    // apart, the guard TargetPool.Offer applies for the player (TargetPool.IsEmplacement).
     [Suite("ranked-pool-carried-turret-dedup",
         "the AI ranked pool's carried-turret guard (BL-507): a hostile aircraft with a crewed " +
         "rear mount rides the pool as one Vehicle entry, never a second entry for its own " +
@@ -923,7 +921,8 @@ internal static class TargetingCandidateSuites
             ai.Team = AimAssist.PlayerTeam;
             var gunner = new AiGunner(new RandomNumberGenerator { Seed = 20260826 });
 
-            var sources = ai.RankedPoolSourcesForTest(gunner);
+            ai.Acquisition.Select(gunner, out _, out _);
+            var sources = ai.Acquisition.RankedSources;
             int carrierEntries = sources.Count(s => ReferenceEquals(s, carrier));
             int carriedTurretEntries = sources.Count(s => ReferenceEquals(s, carriedTurret));
             int emplacementEntries = sources.Count(s => ReferenceEquals(s, emplacementTurret));

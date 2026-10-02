@@ -72,10 +72,10 @@ internal static class StickButtonSuites
         int idle = 0;
         foreach (var target in TargetRows)
         {
-            idle += rig.TargetControlDownForTest(target) ? 1 : 0;
+            idle += rig.TargetInput.RowDown(target) ? 1 : 0;
         }
 
-        ctx.Check(idle == 0 && !rig.TargetControlDownForTest(InputAction.TargetNextEnemy) && !rig.TargetSplitterDownForTest(),
+        ctx.Check(idle == 0 && !rig.TargetInput.RowDown(InputAction.TargetNextEnemy) && !rig.TargetInput.SplitterDown,
             $"ABLE-TO-FAIL CONTROL: a tick with nothing down reads every targeting row released ({idle} read down)");
 
         for (int i = 0; i < TargetRows.Length; i++)
@@ -84,25 +84,25 @@ internal static class StickButtonSuites
             int others = 0;
             foreach (var other in TargetRows)
             {
-                if (other != TargetRows[i] && rig.TargetControlDownForTest(other))
+                if (other != TargetRows[i] && rig.TargetInput.RowDown(other))
                 {
                     others++;
                 }
             }
 
-            ctx.Check(rig.TargetControlDownForTest(TargetRows[i]) && others == 0,
+            ctx.Check(rig.TargetInput.RowDown(TargetRows[i]) && others == 0,
                 $"stick button {i + 1} reads {TargetRows[i]} down and no other targeting row ({others} did)");
         }
 
         Observe(rig, null, 20);
-        bool splitter = rig.TargetSplitterDownForTest();
-        bool row = rig.TargetControlDownForTest(InputAction.TargetNextEnemy);
+        bool splitter = rig.TargetInput.SplitterDown;
+        bool row = rig.TargetInput.RowDown(InputAction.TargetNextEnemy);
         ctx.Check(splitter && !row,
             $"next-enemy's stick button reaches the tap/hold splitter alone, so it dispatches once (splitter {splitter}, row {row})");
 
         Observe(rig, Key.E, null);
-        splitter = rig.TargetSplitterDownForTest();
-        row = rig.TargetControlDownForTest(InputAction.TargetNextEnemy);
+        splitter = rig.TargetInput.SplitterDown;
+        row = rig.TargetInput.RowDown(InputAction.TargetNextEnemy);
         ctx.Check(row && !splitter, $"and its key reaches the row alone (row {row}, splitter {splitter})");
     }
 

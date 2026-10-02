@@ -133,7 +133,7 @@ internal static class AiSuites
                       && rigs[1].Controller?.PlayerIndex == 1,
                 $"successful human batch preserves player identity and order");
             ctx.Check(rigs.All(rig => rig.Controller?.PauseState == pauseState
-                                      && rig.Controller.TargetSubParts == targetSource
+                                      && rig.Controller.TargetInput.SubParts == targetSource
                                       && rig.Controller.SmokeScreens == null),
                 $"finished humans publish pause and target bindings while optional smoke stays absent");
             var humanControllers = rigs.Select(rig => rig.Controller!).ToArray();
