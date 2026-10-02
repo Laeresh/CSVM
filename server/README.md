@@ -155,19 +155,21 @@ credential, and coturn's quota of four answers `486 Allocation Quota Reached`.
 
 ## 7. Point the game at it
 
-The setting is off by default, and with it off nothing changes: LAN search and direct IP work as
-before. Two ways to turn it on:
+The game uses the project's own server, `https://csvm.gunmuessig.de` (`MasterAddress.Default` in
+`CSVM/src/Utils/MasterAddress.cs`), unless told otherwise. A server of your own replaces it in
+two ways:
 
 - For one launch: `.\RunGame.ps1 --master-server=https://csvm.example.org` (or pass the same flag
   to the exported `CSVM.exe`).
 - For good: add `"netMasterServer": "https://csvm.example.org"` to `options.json`, which on Windows
   is `%APPDATA%\Godot\app_userdata\CSVM\options.json` (on Linux
   `~/.local/share/godot/app_userdata/CSVM/options.json`). The flag beats the file;
-  `--master-server=` with nothing after it turns it off for that launch.
+  `--master-server=` with nothing after it turns the master server off for that launch, and LAN
+  search and direct IP work as before.
 
-Each player also needs the WebRTC library, which is not in the repository: run
-`.\InstallWebRtc.ps1` once in the checkout the game runs from (an exported build carries the
-library if it was installed when the build was exported). Without it the games list still shows
+A release build carries the WebRTC library, so a player only unpacks it and starts the game. A
+checkout does not, since the library is not in the repository: run `.\InstallWebRtc.ps1` once in
+the checkout the game runs from. Without it the games list still shows
 the master server's games, but hosting for internet guests and joining by code are refused with a
 message saying so. The game's log (`.scratch/logs/`, or `logs/` beside an exported build) says at
 startup whether the master server is set and the library loaded.

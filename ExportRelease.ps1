@@ -103,6 +103,11 @@ $ThirdPartyNotices = Join-Path $RepoRoot "packaging\LICENSE-thirdparty.txt"
 $LinuxThirdPartyNotices = Join-Path $RepoRoot "packaging\LICENSE-thirdparty-linux.txt"
 $BuildInfo    = Join-Path $ExportDir "BUILD-INFO.txt"
 $Sdl2Dir      = Join-Path $ToolsRoot "tools\sdl2"
+# webrtc-native sits inside the project, not in tools\, because Godot only exports an extension the
+# project it opens contains. Its licences ship from the release's own files, in one folder.
+$WebRtcDir      = Join-Path $ProjectDir "addons\webrtc_native"
+$WebRtcLicences = @("libdatachannel", "libjuice", "libsrtp", "mbedtls", "plog", "usrsctp", "webrtc-native") |
+    ForEach-Object { @{ Source = Join-Path $WebRtcDir "LICENSE.$_"; Dest = "LICENSE-webrtc\LICENSE.$_" } }
 
 $LinuxExportDir = Join-Path $RepoRoot ".scratch\export-linux"
 $LinuxExportExe = Join-Path $LinuxExportDir "CSVM.x86_64"
@@ -127,7 +132,7 @@ $ReleaseFiles = @(
     @{ Source = Join-Path $Sdl2Dir "SDL2.dll";                  Dest = "SDL2.dll" },
     @{ Source = Join-Path $Sdl2Dir "README-SDL.txt";            Dest = "README-SDL.txt" },
     @{ Source = Join-Path $Sdl2Dir "LICENSE.txt";               Dest = "LICENSE-SDL2.txt" }
-)
+) + $WebRtcLicences
 
 # The tarball payload, packaging/MANIFEST.md's Linux table: the zip's list with the Linux README,
 # the Linux notices and the Linux unzbd. Both platforms extract from inside the game, so neither ships a script.
@@ -140,7 +145,7 @@ $LinuxReleaseFiles = @(
     @{ Source = Join-Path $RepoRoot "packaging\LICENSE-unzbd";  Dest = "LICENSE-unzbd"; Lf = $true },
     @{ Source = $LinuxThirdPartyNotices;                        Dest = "LICENSE-thirdparty.txt"; Lf = $true },
     @{ Source = $LinuxUnzbd;                                  Dest = "tools\unzbd" }
-)
+) + $WebRtcLicences
 
 if (-not (Test-Path $Sln)) {
     throw "Solution not found at $Sln"
@@ -172,6 +177,13 @@ if (-not (Test-Path $UnzbdExe)) {
 # without it only loses sticks, but a release without it ships a build that cannot see them, so
 # the export requires the pinned files. InstallSdl2.ps1 holds the pins and throws naming itself.
 $Sdl2 = & (Join-Path $RepoRoot "InstallSdl2.ps1") -Root $ToolsRoot -Verify
+
+# webrtc-native carries internet play (docs/tooling.md, "The WebRTC library and the master
+# server"). A build exported without it lists the master server's games but can neither host nor
+# join one, and nothing at export time would say so, so the export installs the pinned release into
+# this tree itself rather than only checking for it. InstallWebRtc.ps1 holds the pin and the hash.
+& (Join-Path $RepoRoot "InstallWebRtc.ps1") -Root $RepoRoot
+$WebRtc = & (Join-Path $RepoRoot "InstallWebRtc.ps1") -Root $RepoRoot -Verify
 
 foreach ($file in $ReleaseFiles) {
     if (-not (Test-Path $file.Source)) {
@@ -495,6 +507,28 @@ function Assert-ExportRuntime([string] $DataDir, $Notice) {
     }
 }
 
+# Godot exports an extension's library beside the executable only when the project's
+# .godot\extension_list.cfg names it, and an export that left it out still exits 0. So the library
+# is looked for rather than assumed, and its hash goes into BUILD-INFO.txt. $Sep is the archive's
+# own path separator, so the block reads as the recipient's system names the files.
+function Get-WebRtcInfo([string] $Dir, [string] $Library, [string] $Sep) {
+    $path = Join-Path $Dir $Library
+    if (-not (Test-Path $path)) {
+        throw "Export produced no $Library beside the executable -- check that " +
+            "CSVM\.godot\extension_list.cfg names res://addons/webrtc_native/webrtc_native.gdextension " +
+            "(InstallWebRtc.ps1 writes that line)."
+    }
+    $sha = (Get-FileHash $path -Algorithm SHA256).Hash.ToLower()
+    $info = "`n$Library`n" +
+        "  version:  webrtc-native $($script:WebRtc.Version), the godotengine release as published`n" +
+        "  source:   https://github.com/godotengine/webrtc-native  (tag $($script:WebRtc.Version), its`n" +
+        "            libdatachannel, libjuice and other submodules at the commits that tag pins)`n" +
+        "  sha256:   $sha`n"
+    $licence = " The WebRTC library's licences`nare in LICENSE-webrtc$Sep; libdatachannel and libjuice are under the MPL-2.0," +
+        "`nwhose source is the tag above."
+    return @{ Info = $info; Licence = $licence }
+}
+
 function Copy-ReleaseFiles($Files, [string] $Dir) {
     Write-Host "Staging release files..." -ForegroundColor Cyan
     foreach ($file in $Files) {
@@ -588,8 +622,9 @@ $sdl2Info = "`nSDL2.dll`n" +
     "  source:   https://github.com/libsdl-org/SDL  (tag release-$($Sdl2.Version))`n" +
     "  commit:   $($Sdl2.Commit)`n" +
     "  sha256:   $($Sdl2.DllSha256)`n"
+$winWebRtc = Get-WebRtcInfo $ExportDir "libwebrtc_native.windows.template_release.x86_64.dll" "\"
 Write-BuildInfo $BuildInfo "CSVM.exe, and data_CSVM_windows_x86_64\ beside it" "tools\unzbd.exe" "`r`n" `
-    $sdl2Info " SDL2.dll is`nunder the zlib licence in LICENSE-SDL2.txt."
+    ($sdl2Info + $winWebRtc.Info) (" SDL2.dll is`nunder the zlib licence in LICENSE-SDL2.txt." + $winWebRtc.Licence)
 Remove-ExportJunk $ExportDir
 
 # The zip lands beside the staging folder, not inside it: an archiver walking a directory it is
@@ -627,8 +662,10 @@ if (-not $Linux) {
 Invoke-PresetExport "Linux/X11" $LinuxExportExe
 Assert-ExportRuntime (Join-Path $LinuxExportDir "data_CSVM_linuxbsd_x86_64") $linuxNotice
 Copy-ReleaseFiles $LinuxReleaseFiles $LinuxExportDir
+$linuxWebRtc = Get-WebRtcInfo $LinuxExportDir "libwebrtc_native.linux.template_release.x86_64.so" "/"
 Write-BuildInfo (Join-Path $LinuxExportDir "BUILD-INFO.txt") `
-    "CSVM.x86_64, and data_CSVM_linuxbsd_x86_64/ beside it" "tools/unzbd" "`n"
+    "CSVM.x86_64, and data_CSVM_linuxbsd_x86_64/ beside it" "tools/unzbd" "`n" `
+    $linuxWebRtc.Info $linuxWebRtc.Licence
 Remove-ExportJunk $LinuxExportDir
 
 # Files on a Windows drive have no Unix mode of their own (WSL reports every one as 0777), so the

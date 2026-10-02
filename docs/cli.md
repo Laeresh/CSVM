@@ -210,8 +210,9 @@ lines**.
   stays inside the 100 ports from N up (`Testing/SuitePorts.cs`). A player never needs it)
 - `--master-server=url` (the master server the menu's multiplayer door lists games on and joins by code
   through, `https://host[/path]` or a bare host name, which takes https. It beats the hand-set
-  `netMasterServer` key in `options.json`; an empty value turns it off, and an unreadable one turns it
-  off with a warning. Off, nothing changes for LAN and direct play. A `--det` run reads no saved key.
+  `netMasterServer` key in `options.json`, which beats `MasterAddress.Default`; an empty value turns
+  it off, an unreadable one with a warning. Off, LAN and direct play are unchanged. `--det` takes
+  neither key nor default.
   Hosting for and joining internet guests also needs the WebRTC library (`InstallWebRtc.ps1`);
   `server/README.md` sets up the server. `--net-host`/`--net-join` never use it)
 - `--coop` (plain splitscreen free flight defaults to **FFA**, every

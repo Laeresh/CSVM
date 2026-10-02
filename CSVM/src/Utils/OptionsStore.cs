@@ -242,7 +242,7 @@ public sealed class OptionsDef
 
     /// <summary>The master server the multiplayer door lists games on and joins by code through,
     /// as <see cref="MasterAddress.Parse"/> reads it. ⚠ No screen offers this; the key is set by
-    /// hand and <c>--master-server=</c> beats it. Null leaves the door to LAN and direct play.
+    /// hand and <c>--master-server=</c> beats it. Null takes <see cref="MasterAddress.Default"/>.
     /// </summary>
     public string? NetMasterServer { get; set; }
 }

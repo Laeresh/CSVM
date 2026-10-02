@@ -151,6 +151,8 @@ CSVM has written; your Crimson Skies install is never modified.
   runtime, and the Rust libraries inside `tools\unzbd.exe`. It also carries the notice for
   `pl_mpeg`, the MIT-licensed library CSVM's video decoder is ported from, and the SIL Open
   Font License for PromptFont, the font the controller button pictures are drawn from.
+- `libwebrtc_native.windows.template_release.x86_64.dll` is the WebRTC library internet games run
+  over, and `LICENSE-webrtc\` holds its licences.
 - `BUILD-INFO.txt` records which commit each of the two shipped binaries was built from.
   Quote it in a bug report when you are not sure which build you have.
 

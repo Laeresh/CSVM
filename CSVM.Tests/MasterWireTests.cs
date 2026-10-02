@@ -111,6 +111,16 @@ public class MasterWireTests
         Assert.Null(MasterAddress.Parse(text));
     }
 
+    [Theory]
+    [InlineData(null, null, MasterAddress.Default)]
+    [InlineData(null, "saved.example.org", "https://saved.example.org")]
+    [InlineData("flag.example.org", "saved.example.org", "https://flag.example.org")]
+    [InlineData("", "saved.example.org", null)]
+    public void TheFlagBeatsTheSavedOptionWhichBeatsTheDefault(string? flag, string? saved, string? chosen)
+    {
+        Assert.Equal(MasterAddress.Parse(chosen), MasterAddress.Choose(flag, saved));
+    }
+
     [Fact]
     public void ThePathsHangUnderTheAddressAndTheSocketTakesItsScheme()
     {

@@ -718,10 +718,12 @@ internet runs it once. `-Verify` checks without installing.
 
 The game needs it only for internet play through a master server (`--master-server=`,
 `docs/cli.md`): `Net/WebRtcTransport.cs` reports `Available` false without it, the launcher logs that
-at startup, and LAN and direct play are unchanged. `ExportRelease.ps1` does not require it; Godot's
-export carries the platform's library when the extension is installed, and a build exported without
-it lists master-server games but cannot host or join them. The `webrtc-transport` suite skips
-without it.
+at startup, and LAN and direct play are unchanged. `ExportRelease.ps1` runs it into the exported
+tree before every export, because Godot's export carries the platform's library only when the
+extension is installed, and a build without it would list master-server games but never host or join
+one. The export then throws unless the library sits beside the executable, ships the release's
+licence files as `LICENSE-webrtc/`, and records the release and the library's SHA-256 in
+`BUILD-INFO.txt`. The `webrtc-transport` suite skips without it.
 
 **`server/`** is the master server itself, a .NET 8 minimal API (`server/MasterServer/`) with its
 xUnit project (`server/MasterServer.Tests/`), both in `CSVM.sln`, so `dotnet build` and the units

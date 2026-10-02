@@ -9,6 +9,17 @@ namespace CSVM.Utils;
 /// </summary>
 public static class MasterAddress
 {
+    /// <summary>The project's own master server, which a player who set none lists games on, so an
+    /// unpacked release reaches internet games without editing a file.</summary>
+    public const string Default = "https://csvm.gunmuessig.de";
+
+    /// <summary>The address a run uses: the flag's when given, else the saved option's, else
+    /// <see cref="Default"/>. An empty or unreadable flag is <c>""</c> and means off.</summary>
+    public static Uri? Choose(string? flag, string? saved)
+    {
+        return Parse(flag ?? saved ?? Default);
+    }
+
     /// <summary>Reads an address: an <c>http</c> or <c>https</c> URL, or a bare host name, which
     /// takes <c>https</c>. The address may carry a path, which every request is made under. Null for
     /// anything else, and for an empty text.</summary>

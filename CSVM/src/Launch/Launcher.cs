@@ -2405,12 +2405,14 @@ public partial class Launcher : Node3D
         return reason;
     }
 
-    // The master server the door lists on. --master-server= beats the saved option. A pinned run
-    // reads no saved one, so no suite or golden ever asks a server anything.
+    // The master server the door lists on. --master-server= beats the saved option, which beats the
+    // project's default. A pinned run takes neither of the last two, so no suite or golden ever asks
+    // a server anything.
     private System.Uri? MasterServer()
     {
-        string? saved = _spec.Det ? null : OptionsStore.UserOptions().Load().NetMasterServer;
-        var master = MasterAddress.Parse(_spec.MasterServer ?? saved);
+        var master = _spec.Det
+            ? MasterAddress.Parse(_spec.MasterServer)
+            : MasterAddress.Choose(_spec.MasterServer, OptionsStore.UserOptions().Load().NetMasterServer);
         if (master != null)
         {
             string webRtc = Net.WebRtcTransport.Available ? "loaded" : "not installed, so no internet host or join";
