@@ -594,6 +594,8 @@ internal sealed class HumanFlightAdapter
         }
 
         controller.Name = $"player{pi + 1}";
+        // The original names a peer's aircraft by its callsign (FUN_00497990), and co-op follows it.
+        controller.PilotName = seat is { Callsign.Length: > 0 } ? seat.Callsign : null;
         rig.Controller = controller;
         _worldRoot.AddChild(controller);
         // ⚠ Hide a remote seat's pilot HUD the frame it enters the tree. A human-piloted rig

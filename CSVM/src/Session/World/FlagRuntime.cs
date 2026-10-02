@@ -566,8 +566,8 @@ internal sealed class FlagRuntime
         flag.Visible = true;
     }
 
-    // The carrier's name tag, row 198 by the reading pane's side. Team 0 puts the airframe's own
-    // name back once the flag leaves it, as FUN_0049a300 and FUN_0049ab50 restore the pilot's.
+    // The carrier's name tag, row 198 by the reading pane's side. Team 0 clears it once the flag
+    // leaves, and the marker falls back to the callsign, as FUN_0049a300 and FUN_0049ab50 restore it.
     private void Tag(int seat, int team)
     {
         if (seat < 0 || seat >= _in.SeatRigs.Count || _in.SeatRigs[seat].Controller is not { } pilot)
