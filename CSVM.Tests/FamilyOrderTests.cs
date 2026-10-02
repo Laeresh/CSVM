@@ -45,23 +45,7 @@ public sealed class FamilyOrderTests
         ("CSVM.Tooling", "CSVM.Testing"),
     };
 
-    private static readonly string[] Allowed =
-    {
-        "CSVM.Session.Campaign.CampaignDirector -> CSVM.UI.Hangar.PlanePickerRoster",
-        "CSVM.Session.Campaign.ChapterCinema -> CSVM.UI.Screens.CinemaHandoff",
-        "CSVM.Session.Campaign.ChapterCinema -> CSVM.UI.Screens.CinemaPlay",
-        "CSVM.Session.Campaign.ClosingCinema -> CSVM.UI.Screens.CinemaHandoff",
-        "CSVM.Session.Campaign.ClosingCinema -> CSVM.UI.Screens.CinemaPlay",
-        "CSVM.Session.InstantAction.InstantActionDirector -> CSVM.UI.Menu.IaWrapupSnapshot",
-        "CSVM.Session.InstantAction.InstantActionDirector -> CSVM.UI.Screens.IaWrapupBoard",
-        "CSVM.Session.InstantAction.InstantActionDirector -> CSVM.UI.Screens.ResultsBoard",
-        "CSVM.Session.InstantAction.InstantActionDirector -> CSVM.UI.Screens.StuntSplits",
-        "CSVM.Session.InstantAction.InstantActionDirector -> CSVM.UI.Screens.StuntSummary",
-        "CSVM.Session.Roster.HumanFlightAdapter -> CSVM.Tooling.ProbeRunner",
-        "CSVM.Session.Roster.HumanFlightAdapter -> CSVM.UI.Hangar.HangarPaintPage",
-        "CSVM.Session.Roster.HumanFlightAdapter -> CSVM.UI.Screens.ResultsBoard",
-        "CSVM.Session.Roster.HumanFlightAdapter -> CSVM.UI.Screens.StuntScoreboard",
-    };
+    private static readonly string[] Allowed = Array.Empty<string>();
 
     [Fact]
     public void NoFamilyNamesAFamilyAboveIt()

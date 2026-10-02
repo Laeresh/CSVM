@@ -1183,7 +1183,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     // The same roster as the shared setup's rows, so both presentations pick from one list.
     private static IReadOnlyList<MenuAircraft> MenuRoster(IReadOnlyList<CustomPlaneDef> customs) =>
-        PlayerSetupFeature.BuildRoster(Planes, customs, PlanePickerRoster.AirframeNode);
+        PlayerSetupFeature.BuildRoster(Planes, customs, StockAirframes.Node);
 
     private static MenuInput InputBehind(IMenuInputSource source) =>
         source is BuiltInSeat seat ? seat.Input : new MenuInput();

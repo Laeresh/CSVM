@@ -1138,7 +1138,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     {
         var options = lobby.Options;
         var seat = new MenuSeatChoice(
-            PlanePickerRoster.AirframeNode(lobby.Airframe), _pads(), CampaignLoadout.For(lobby.LaunchFit, _stock()),
+            StockAirframes.Node(lobby.Airframe), _pads(), CampaignLoadout.For(lobby.LaunchFit, _stock()),
             CSVM.Flight.Hangar.CustomPlaneWire.Def(lobby.Build));
         return new LaunchExit(
             DogfightLobby.ChapterOf(options.Environment), new[] { seat }, MenuMode.Versus,
@@ -1314,7 +1314,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     // The fit the Select Ammo tab edits over: a custom plane's own guns and pylons, or the stock ones.
     private LoadoutDef? StockDef(int airframe)
     {
-        var stock = _stock()?.ForModel(PlanePickerRoster.AirframeNode(airframe));
+        var stock = _stock()?.ForModel(StockAirframes.Node(airframe));
         return stock != null && CSVM.Flight.Hangar.CustomPlaneWire.Def(Lobby?.Build) is { } custom
             ? CustomPlaneBuild.LoadoutFor(custom, stock)
             : stock;

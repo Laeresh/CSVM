@@ -8,7 +8,7 @@ using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
-using CSVM.UI.Screens;
+using CSVM.Video;
 using Xunit;
 
 namespace CSVM.Tests;

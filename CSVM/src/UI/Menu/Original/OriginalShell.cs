@@ -5,6 +5,7 @@ using CSVM.Net;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
 using CSVM.UI.Screens;
+using CSVM.Video;
 
 namespace CSVM.UI.Menu.Original;
 

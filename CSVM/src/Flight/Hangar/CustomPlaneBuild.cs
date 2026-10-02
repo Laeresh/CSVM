@@ -35,6 +35,19 @@ public static class CustomPlaneBuild
     /// spell them.</summary>
     private static readonly string[] ArmourZones = { "nose", "tail", "leftwing", "rightwing" };
 
+    // Pattern index 0-13 (record +0x40) is a row of the engine's 14-entry pattern-name table at
+    // 0x0060301c, which is also the archive folder name. Read out of crimson.exe; the four
+    // indices seven genuine saves pin (blckswan 1, fortune 4, hughes 6, studio 11) all match.
+    private static readonly string[] PatternNames =
+    {
+        "blackhat", "blckswan", "blake", "british", "fortune", "hollywd", "hughes",
+        "medusas", "cccp", "sactrust", "german", "studio", "broadway", "itstaxi",
+    };
+
+    /// <summary>The archive folder / table name for a pattern index, or "" outside 0-13.</summary>
+    public static string PatternName(int pattern) =>
+        pattern >= 0 && pattern < PatternNames.Length ? PatternNames[pattern] : string.Empty;
+
     /// <summary>The loadout a custom plane flies: <paramref name="stockBase"/> (its airframe's
     /// stock fit, which names the model and the mounts) with the record's own gun picks written
     /// over it and its own pylons hung from the two hardpoint counts. The base is never
@@ -64,9 +77,9 @@ public static class CustomPlaneBuild
     }
 
     /// <summary>The livery a custom plane wears: the record's three resolved paint colours and its
-    /// three decals under <paramref name="patternName"/> (the caller resolves the record's 0-13
-    /// index through the engine's pattern-name table). The decal indices are the same 0-49 space
-    /// <c>vehicle.json</c>'s <c>paint_decalN</c> uses, so they carry straight over; a slot the
+    /// three decals under <paramref name="patternName"/>. The caller resolves the record's 0-13
+    /// index through <see cref="PatternName"/>. The decal indices are the 0-49 space
+    /// <c>vehicle.json</c>'s <c>paint_decalN</c> uses, so they carry straight over. A slot the
     /// record leaves unchosen keeps the scheme's leave-the-placeholder sentinel.</summary>
     public static PaintScheme PaintFor(CustomPlaneDef def, string patternName)
     {

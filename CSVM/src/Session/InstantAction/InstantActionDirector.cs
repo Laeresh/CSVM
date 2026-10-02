@@ -11,8 +11,6 @@ using CSVM.Session.Objectives;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
 using CSVM.Spec;
-using CSVM.UI.Boards;
-using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
 
@@ -653,35 +651,22 @@ public sealed class InstantActionDirector
         string context = $"{_spec.Chapter}   ·   {Mech3.InstantAction.MissionTypeLabel(iaEnd.Def.MissionType)}";
         // The Original presentation takes the ending onto its own menu page instead, so the board is
         // not built at all there: one wrap-up shows, never two.
-        IaWrapupBoard? wrapupBoard = null;
-        if (inputs.WrapupToMenu == null)
-        {
-            wrapupBoard = IaWrapupBoard.Build(
-                context, exitsToMenu: inputs.ExitsToMenu, inputs.PauseState, inputs.MenuInputFor);
-            wrapupBoard.Restart = inputs.RestartSession;
-            wrapupBoard.Exit = inputs.ExitSession;
-            // Player 1, for the same reason the race and dogfight boards are.
-            wrapupBoard.PhotoMode = () => inputs.EnterPhotoMode(0);
-            inputs.RegisterBoard(wrapupBoard);
-            var wrapupLayer = new CanvasLayer { Name = "ia_wrapup_board", Layer = UI.Boards.HudLayers.Board };
-            wrapupLayer.AddChild(wrapupBoard);
-            inputs.WorldRoot.AddChild(wrapupLayer);
-        }
+        IIaWrapupBoard? wrapupBoard = inputs.WrapupToMenu == null ? inputs.BuildWrapupBoard(context) : null;
 
         // The four counters are read at the ENDING, not when the board appears: what the world does
         // through the hold is no longer this mission's score. The splits are flattened to text here
         // too, the menu page outliving the zones they are read off.
-        (UI.Menu.IaWrapupSnapshot Snapshot, StuntSummary? Stunt)? ended = null;
+        (IaWrapupSnapshot Snapshot, StuntSummary? Stunt)? ended = null;
         iaEnd.MissionEnded += outcome =>
         {
             var stunt = StuntSummary();
             ended = (
-                new UI.Menu.IaWrapupSnapshot(
+                new IaWrapupSnapshot(
                     outcome == InstantActionOutcome.Won, context, iaEnd.Elapsed, enemiesShotDown,
                     _rigs!.Sum(r => r.Controller?.Stunt?.CompletedCount ?? 0),
                     InstantActionRuntime.ShotPercent(
                         inputs.Projectiles?.CannonHits ?? 0, inputs.Projectiles?.CannonRoundsFired ?? 0),
-                    stunt is { } run ? StuntSplits.Lines(run) : null),
+                    stunt is { } run ? run.Lines() : null),
                 stunt);
             // A win is flown out: the original leaves the stick live for the whole hold, so only
             // the discrete commands go. A loss holds the seat whole, standing in for the crash
@@ -712,9 +697,7 @@ public sealed class InstantActionDirector
                 return;
             }
 
-            var shown = final.Snapshot;
-            wrapupBoard!.Present(shown.Won, shown.Elapsed, shown.EnemiesShotDown, shown.ZonesCompleted,
-                shown.ShotPercent, final.Stunt, camera);
+            wrapupBoard!.Present(final.Snapshot, final.Stunt, camera);
         };
     }
 
@@ -910,8 +893,8 @@ public sealed class InstantActionDirector
         public RegisterAiVoice RegisterVoice = null!;
     }
 
-    /// <summary>What the end-condition wiring, the spectate hand-off and the wrap-up board read
-    /// from the session: the shared runtimes' references, the board plumbing, and the tree root
+    /// <summary>What the end-condition wiring, the spectate hand-off and the wrap-up read from the
+    /// session. That is the shared runtimes' references, where the ending goes, and the tree root
     /// every node this mission builds parents under (the session's no-Teardown rule).</summary>
     internal sealed class EndConditionInputs
     {
@@ -922,15 +905,13 @@ public sealed class InstantActionDirector
         public List<SpectatorCamera> SpectatorCameras = null!;
         public Func<IReadOnlyList<Node3D>> LockCandidates = null!;
         public float RespawnDelay;
-        public bool ExitsToMenu;
-        public Action RestartSession = null!;
-        public Action ExitSession = null!;
-        public PauseState PauseState = null!;
-        public Func<int, UI.Boards.MenuInput> MenuInputFor = null!;
-        public Action<int> EnterPhotoMode = null!;
-        public Action<Control> RegisterBoard = null!;
+
+        // Builds the hidden in-flight board over the context line, parented and registered by the
+        // caller. Called once while the ending is wired, and only when WrapupToMenu is null.
+        public Func<string, IIaWrapupBoard> BuildWrapupBoard = null!;
+
         // Where the ending goes on a presentation with a wrap-up page of its own. The final numbers
         // leave for the menu and no board is built. Null keeps the in-flight board.
-        public Action<UI.Menu.IaWrapupSnapshot>? WrapupToMenu;
+        public Action<IaWrapupSnapshot>? WrapupToMenu;
     }
 }

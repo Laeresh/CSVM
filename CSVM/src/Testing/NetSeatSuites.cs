@@ -321,8 +321,6 @@ internal static class NetSeatSuites
                 VersusMatch = match,
                 PadAssignment = padAssignment,
                 PauseState = new PauseState(),
-                MenuInputFor = _ => new UI.Boards.MenuInput(),
-                ExitSession = () => { },
             }, field.Picker);
 
     // One stored keymap with a single action moved onto Z, through the real serializer.

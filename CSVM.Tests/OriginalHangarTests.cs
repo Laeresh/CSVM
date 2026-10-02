@@ -8,7 +8,6 @@ using CSVM.Flight.Hangar;
 using CSVM.Mech3;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
-using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
 using Xunit;
@@ -937,7 +936,7 @@ public class OriginalHangarTests : IDisposable
     // on the Instant Action screen, which is the wallet-free door's own.
     private HangarHost Host(out HangarFeature hangar, UiStrings? strings = null)
     {
-        hangar = new HangarFeature(strings ?? UiStrings.Empty, PlanePickerRoster.AirframeNode);
+        hangar = new HangarFeature(strings ?? UiStrings.Empty, StockAirframes.Node);
         var host = new HangarHost();
         host.Module = new OriginalHangarScreen(hangar, _store, MenuLayoutReaderTests.OriginalLayout(), Measure, host);
         return host;

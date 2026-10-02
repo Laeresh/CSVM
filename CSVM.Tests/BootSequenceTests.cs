@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using CSVM.UI.Boards;
 using CSVM.UI.Screens;
+using CSVM.Video;
 using Xunit;
 
 namespace CSVM.Tests;

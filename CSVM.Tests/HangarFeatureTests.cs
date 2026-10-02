@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using CSVM.Flight.Hangar;
 using CSVM.Mech3;
-using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
 using Xunit;
 
@@ -333,7 +332,7 @@ public class HangarFeatureTests : IDisposable
     }
 
     private static HangarFeature Feature() =>
-        new(UiStrings.Empty, PlanePickerRoster.AirframeNode);
+        new(UiStrings.Empty, StockAirframes.Node);
 
     private sealed class FakeWallet : IHangarWallet
     {

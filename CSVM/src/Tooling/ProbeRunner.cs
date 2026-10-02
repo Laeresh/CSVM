@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CSVM.Extraction;
-using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Spec;
 using CSVM.Utils;
@@ -38,31 +37,6 @@ public sealed class ProbeRunner
         _interpPath = interpPath;
         _messagesPath = messagesPath;
         _planesGamezPath = planesGamezPath;
-    }
-
-    /// <summary>Applies the <c>--rocket=&lt;wep_id&gt;</c> testing override: replaces every hardpoint's
-    /// ordnance with the named weapon, resetting each pylon's capacity/ammo to that weapon's
-    /// <c>CLUSTER_SIZE</c>. A no-op (with a warning) if the id is unknown. Must run before the pylon
-    /// models are mounted and the controller's ordnance-type list is built. All 11 stock loadouts
-    /// carry HE (wep_06), so this is the only way to exercise a different pylon model.</summary>
-    public static void ApplyRocketOverride(Loadout loadout, WeaponDefs weapons, string wepId, bool verbose)
-    {
-        if (weapons.Get(wepId) is not { } weapon)
-        {
-            GD.PushWarning($"--rocket='{wepId}' is not a known weapon id, hardpoints keep their stock ordnance");
-            return;
-        }
-        int per = weapon.ClusterSize ?? 0;
-        foreach (var hp in loadout.Hardpoints)
-        {
-            hp.Weapon = weapon;
-            hp.Capacity = per;
-            hp.Ammo = per;
-        }
-        if (verbose)
-        {
-            Log.Info("core", $"--rocket: hardpoints -> {weapon.Id} ({weapon.Name}), flyout model '{weapon.Flyout?.Model ?? "-"}', {per}/pylon");
-        }
     }
 
     /// <summary>--destroy=&lt;name&gt; (F42, docs/cli.md): kill every destructible whose def name, anim

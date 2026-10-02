@@ -179,7 +179,7 @@ public partial class GameSession : Node3D
     private readonly Action<string, CampaignMissionResult>? _campaignMissionEnded;
     // Where an ended Instant Action mission's final numbers go on a presentation with a wrap-up
     // page of its own, routed by the Launcher. Null leaves the ending to the in-flight board.
-    private readonly Action<UI.Menu.IaWrapupSnapshot>? _instantActionWrapup;
+    private readonly Action<IaWrapupSnapshot>? _instantActionWrapup;
     // The process's music channel, owned by the Launcher so one channel outlives every session.
     // Handed to CampaignDirector, which is what routes the mission's own music cues into it.
     private readonly MusicPlayer? _music;
@@ -2940,9 +2940,7 @@ public partial class GameSession : Node3D
             MixGain = mixGain,
             PadAssignment = padAssignment,
             PauseState = _pauseState!,
-            MenuInputFor = MenuInputFor,
-            ExitsToMenu = _menuDriven,
-            ExitSession = _exitSession,
+            StuntBoard = BuildSoloStuntBoard,
             ToggleGraphicsMode = _toggleGraphicsMode,
             SpawnList = spawnList,
             SpawnBase = spawnBase,
@@ -3710,13 +3708,7 @@ public partial class GameSession : Node3D
             SpectatorCameras = _spectatorCameras,
             LockCandidates = LockCandidateAircraft,
             RespawnDelay = VersusRespawnDelay,
-            ExitsToMenu = _menuDriven,
-            RestartSession = _restartSession,
-            ExitSession = _exitSession,
-            PauseState = _pauseState!,
-            MenuInputFor = MenuInputFor,
-            EnterPhotoMode = EnterPhotoMode,
-            RegisterBoard = _boards.Add,
+            BuildWrapupBoard = BuildIaWrapupBoard,
             // Only the Original presentation has a wrap-up page to go to. Everywhere else, and on a
             // command-line launch with no menu behind it, the in-flight board takes the ending.
             WrapupToMenu = _menuDriven && _presentation == UI.Menu.PresentationId.Original
@@ -6312,6 +6304,35 @@ public partial class GameSession : Node3D
             if (rig.Controller is { InPlay: true } pilot)
                 _lockCandidates.Add(pilot);
         return _lockCandidates;
+    }
+
+    // Instant Action's in-flight wrap-up board, hidden until the director presents it. It covers
+    // the whole window on its own layer, since the mission ends for every human at once.
+    private IIaWrapupBoard BuildIaWrapupBoard(string context)
+    {
+        var board = IaWrapupBoard.Build(context, exitsToMenu: _menuDriven, _pauseState!, MenuInputFor);
+        board.Restart = _restartSession;
+        board.Exit = _exitSession;
+        // Player 1, for the same reason the race and dogfight boards are.
+        board.PhotoMode = () => EnterPhotoMode(0);
+        _boards.Add(board);
+        var layer = new CanvasLayer { Name = "ia_wrapup_board", Layer = HudLayers.Board };
+        layer.AddChild(board);
+        _worldRoot!.AddChild(layer);
+        return board;
+    }
+
+    // A solo stunt run's end-of-run board, drawn in that pilot's own pane. It records the best
+    // time itself, under the key the roster hands over.
+    private Control BuildSoloStuntBoard(StuntMission run, string planeDisplay, string context,
+        string scoreKey, Action rerun, StuntCapture shots)
+    {
+        var board = StuntScoreboard.Build(run, planeDisplay, context, ScoreStore.Load(), scoreKey,
+            _menuDriven, _pauseState!, MenuInputFor);
+        board.Restart = rerun;
+        board.Exit = _exitSession;
+        board.Shots = shots;
+        return board;
     }
 
     /// <summary>Take <paramref name="playerIndex"/>'s pane to photo mode, chosen from whichever

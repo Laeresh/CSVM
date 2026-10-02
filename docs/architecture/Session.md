@@ -67,7 +67,7 @@ field: a plain sealed class that builds no node of its own, so every actor it ma
 the handed world root. `TryCreate` takes the wizard's def or `--ia=<path>`; `BuildActors` is the
 contiguous actor phase (the chapter's first patrol net, the ace, the wingman fan and its escort
 chain, every configured wave built inert at the world origin, each actor's walk seated where it spawns and kept on activation, each actor named on its `AiSpawn.PilotName`: the ace's `ace_name`, a wave's `enemy_name`, a wingman slot's fixed pilot); `Step` ticks the sequencer and activates what it returns; `WireEndConditions` routes each mode's own win signal, the lives
-ledger and the whole-window wrap-up board, snapshotting the four counters at the ending and holding the pilots' seats (not the world, not the cameras) until the hold runs out and the board is due: a win keeps the stick and loses the commands, a loss loses both, and a hull lost inside the hold spends no life and takes no pane. The decoded rules stay engine-free in
+ledger and the wrap-up, which it reaches only through `IaWrapupSnapshot.cs`'s seam (the board `GameSession` builds, or the menu page), snapshotting the four counters at the ending and holding the pilots' seats (not the world, not the cameras) until the hold runs out and the board is due: a win keeps the stick and loses the commands, a loss loses both, and a hull lost inside the hold spends no life and takes no pane. The decoded rules stay engine-free in
 `InstantActionRuntime.cs` and `InstantActionWaves.cs`; this class owns every `ia:` log line.
 
 ## src/Session/Roster/SpectateHandoff.cs
@@ -77,6 +77,14 @@ releases the pane camera through `CameraOwned`, and creates a `SpectatorCamera` 
 last pose. It follows the first other rig still `InPlay`, or starts free when none exists, and uses
 the downed pilot's own device filter. A false result means that pane already has a spectator.
 Candidate and tracking lists are optional for callers without a roster or rerun path.
+
+## src/Session/InstantAction/IaWrapupSnapshot.cs
+What one ended Instant Action mission hands its wrap-up. `IaWrapupSnapshot` is the final numbers,
+read once at the ending and flattened to strings and photograph records so it outlives the session;
+it travels to the Original presentation's page inside `UI/Menu/MenuReturnDestination.cs`.
+`IIaWrapupBoard` is the in-flight board as `InstantActionDirector` drives it: the launch builds a
+`UI/Screens/IaWrapupBoard.cs` behind it, so the director never names a screen. Read
+`InstantActionDirector.cs` next.
 
 ## src/Session/InstantAction/InstantActionRuntime.cs
 Owns one Instant Action mission's actor set: the loaded `InstantActionDef`, the ace's spawn draw and
@@ -293,7 +301,7 @@ Which film plays before a campaign chapter, and the one handoff to the passenger
 follows it. The chapter is `seq / 5 + 1` over the profile's own position, so no screen passes a
 chapter number in, and chapter N plays `chapN.mpg`. `CampaignCabinPage.MapPinCount` reads the same
 story chapter for the cabin map's pins; `CampaignSequence.Chapter` is a different number, the world
-folder. Playing is a `UI/Screens/CinemaHandoff.cs` `CinemaPlay` the caller supplies, `Launcher.PlayCinema`
+folder. Its skip set is its own `Keys`. Playing is a `Video/CinemaHandoff.cs` `CinemaPlay` the caller supplies, `Launcher.PlayCinema`
 being what it is handed, which leaves the film to `UI/Screens/CinemaScreen.cs` and keeps every decision here
 testable with no engine present; the cabin opens through that file's `Once`. `Launcher` holds the process's one instance and hands it to `Menu/CampaignFeature.cs`, which is how both presentations' cabin doors reach it (`UI/Campaign/CampaignFlow.cs`, `UI/Menu/Original/OriginalCampaignScreen.cs`). A co-op guest's `Play` plays the chapter its host named and leaves the latch alone, and `Stop` (`Launcher.StopCinema`) ends it when the host's film ends. Films: [../formats/cinemas.md](../formats/cinemas.md).
 
@@ -304,8 +312,8 @@ on the campaign's last mission plays the film, first flight and replay alike, an
 reaches the book with no film, which is what the original's own script does when its gate callback
 answers false. Nothing is latched and completion state decides nothing, so the flown result travels
 with the menu return (`Menu/MenuReturnDestination.cs`). The film is the `FinalCinema` layout row's
-name and the skip set is Escape and the left mouse alone, narrower than `ChapterCinema.cs`'s on
-purpose; playing is a `UI/Screens/CinemaHandoff.cs` `CinemaPlay` (`Launcher.PlayCinema`) whose `Once` opens the book, and `Launcher` holds the one instance and hands it to `Menu/CampaignFeature.cs`. A co-op guest's `Play` has no gate, since the film is its host's, and `Stop` ends it with the host's. Films: [../formats/cinemas.md](../formats/cinemas.md).
+name and its `Keys` are Escape and the left mouse alone, narrower than `ChapterCinema.cs`'s on
+purpose; playing is a `Video/CinemaHandoff.cs` `CinemaPlay` (`Launcher.PlayCinema`) whose `Once` opens the book, and `Launcher` holds the one instance and hands it to `Menu/CampaignFeature.cs`. A co-op guest's `Play` has no gate, since the film is its host's, and `Stop` ends it with the host's. Films: [../formats/cinemas.md](../formats/cinemas.md).
 
 ## src/Session/Campaign/CampaignPersistLog.cs
 The cross-mission state log: what a campaign mission left destroyed, carried into later missions
@@ -485,7 +493,8 @@ aircraft and archive resources, the live world services, and the human-session b
 contracts keep the roster from taking all of `SessionSpec` or exposing either assembler, while
 leaving its required dependencies explicit at the production seam. `HumanRosterBindings.RigCount`
 counts SEATS, guests on other machines included, and `NetSeats` is that roster indexed by seat,
-empty outside a network match, and `SeatFit` is a co-op seat's loadout. Read `FlightRoster.cs` next.
+empty outside a network match, and `SeatFit` is a co-op seat's loadout. `SoloStuntBoard` is how a
+solo stunt run gets its results board without the roster naming a screen. Read `FlightRoster.cs` next.
 
 ## src/Session/Roster/CrashRigQueue.cs
 The session's queue of crash rigs whose aeroplane is already flying. A mid-flight AI introduction is

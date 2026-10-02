@@ -24,39 +24,6 @@ public sealed record PickerPlane(string Name, string Node, string? CustomName = 
 /// </summary>
 public static class PlanePickerRoster
 {
-    // Airframe id 0-10 (the stat table's row order: Hoplite, Hellhound, Balmoral, Bloodhawk,
-    // Brigand, Devastator, Firebrand, Fury, Kestrel, Peacemaker, Warhawk) to the planes.zbd
-    // node, the same id order HangarPaintPage.SkinPrefixes is keyed by. The Hoplite is
-    // player_autogyro: the shipped data names that aircraft both ways.
-    private static readonly string[] AirframeNodes =
-    {
-        "player_autogyro", "player_avenger", "player_balmoral", "player_bhawk", "player_brigand",
-        "player_pfighter", "player_fbrand", "player_fury", "player_kestrel", "player_peacemaker",
-        "player_warhawk",
-    };
-
-    /// <summary>The eleven stock nodes in airframe-id order. A network roster carries an airframe
-    /// as its index into this list, so both peers have to read the one order.</summary>
-    public static IReadOnlyList<string> StockAirframes => AirframeNodes;
-
-    /// <summary>The stock node an airframe id flies as, clamped like the def's own fields.</summary>
-    public static string AirframeNode(int airframe) =>
-        AirframeNodes[Math.Clamp(airframe, 0, AirframeNodes.Length - 1)];
-
-    /// <summary>The inverse of <see cref="AirframeNode"/>: the airframe id a stock player node
-    /// flies as, or null when the node names none of the eleven (a surface hull's own
-    /// library-root model has no airframe).</summary>
-    public static int? AirframeOf(string node)
-    {
-        for (int i = 0; i < AirframeNodes.Length; i++)
-        {
-            if (string.Equals(AirframeNodes[i], node, StringComparison.OrdinalIgnoreCase))
-                return i;
-        }
-
-        return null;
-    }
-
     /// <summary>Builds the picker roster: every stock row in its given order, then one row per
     /// saved custom in the store's own (name-sorted) order. A campaign aeroplane nobody has
     /// exported yet is not offered (<see cref="CustomPlaneDef.AwaitingExport"/>).</summary>
@@ -73,7 +40,7 @@ public static class PlanePickerRoster
         {
             if (!def.AwaitingExport)
             {
-                rows.Add(new PickerPlane(def.Name, AirframeNode(def.Airframe), def.Name));
+                rows.Add(new PickerPlane(def.Name, StockAirframes.Node(def.Airframe), def.Name));
             }
         }
 

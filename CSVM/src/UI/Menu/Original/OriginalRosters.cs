@@ -1,6 +1,6 @@
 using System.Collections.Generic;
+using CSVM.Flight.Hangar;
 using CSVM.Mech3;
-using CSVM.UI.Hangar;
 
 namespace CSVM.UI.Menu.Original;
 
@@ -42,7 +42,7 @@ public static class OriginalRosters
             stock.Add((airframe.Name, airframe.Node));
         }
 
-        return PlayerSetupFeature.BuildRoster(stock, customs, PlanePickerRoster.AirframeNode);
+        return PlayerSetupFeature.BuildRoster(stock, customs, StockAirframes.Node);
     }
 
     private static IReadOnlyList<OriginalChapter> BuildChapters()

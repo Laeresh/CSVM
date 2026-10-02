@@ -282,6 +282,7 @@ rows).
 - `src/Flight/Modes/DangerZoneRibbons.cs`, a mission's ribbon set off the chapter gamez with its inactive list; one per session, lanes being occupancy-counted.
 - `src/Flight/Modes/SpawnPoints.cs`, flight spawn from the mission's own zrdr: ia.json `spawn_points`, a multiplayer `net.zrd` table by block, or objectives.json PLAYER_INIT as fallback.
 - `src/Flight/Modes/StuntMission.cs`, Stunt Flying state: ia.json `dzones` → a danger-zone run with completion, clock and splits, one per pilot.
+- `src/Flight/Modes/StuntSummary.cs`, one finished stunt run against its stored best, and its split table as flat text.
 - `src/Flight/Modes/StuntRunHud.cs`, the stunt run's readouts: clock and zones cleared, intro banner, cleared flash, completion or race placing; one per player.
 - `src/Flight/Modes/StuntCapture.cs`, the Danger Zone camera: one latched photograph per marker per run, written beside the saves with its sting.
 - `src/Flight/Modes/DangerZonePhotograph.cs`, the Danger Zone camera's own eye: the decoded pose ahead of the aircraft looking back, on a viewport sharing the pane's world.
@@ -301,6 +302,7 @@ rows).
 
 - `src/Flight/Hangar/Difficulty.cs`, the difficulty setting as the engine's 0/1/2, its two naming vocabularies, and the enemy armour/health multiplier at spawn.
 - `src/Flight/Hangar/CustomPlaneDef.cs`, a custom-built plane as a pure model: the saved record's chosen fields only, with the campaign loadout export alongside.
+- `src/Flight/Hangar/StockAirframes.cs`, the airframe id to stock `planes.zbd` node table and its inverse.
 - `src/Flight/Hangar/CustomPlaneStore.cs`, JSON persistence for a built plane, one file per name under `user://Planes/`, over a plain directory so it unit-tests.
 - `src/Flight/Hangar/CustomPlaneRecord.cs`, import-only reader for the original's 204-byte saved-plane files, one record or a whole install directory to defs.
 - `src/Flight/Hangar/CustomPlaneBuild.cs`, the join from a saved plane onto what a spawn consumes: the loadout over the stock fit, the paint, the armoured zones.
@@ -408,7 +410,6 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Screens/InstantActionWrapupPage.cs`, the wrap-up page's content over the decoded section: the heading, the four rows off one frozen snapshot, the further lines on post-its, a stunt run's photographs, the outcome's tick box, the plaque.
 - `src/UI/Screens/CinemaScreen.cs`, one cinema over the whole window: the picture in the board's own rectangle, the sound pushed to a generator on the Voice bus, and the skip.
 - `src/UI/Screens/CinemaSkips.cs`, the one member that decides what skips what, and the reading of a device event that feeds it: the three authored sets against a press, a pad button among them.
-- `src/UI/Screens/CinemaHandoff.cs`, what every cinema flow shares: the shape of the call that puts a film on screen, and the latch that opens the next screen once however many times the film says it stopped.
 - `src/UI/Screens/BootSequence.cs`, `fmv.zrd`'s boot block engine-free: the copyright card's composition, the block's eight actions in the reader's own order over three injected calls, and how much of a hold reaches the screen.
 - `src/UI/Screens/BootCard.cs`, the boot sequence's engine half: the black the block runs on, the node the copyright card draws on, and the clock its holds run down.
 - `src/UI/Screens/LoadBoard.cs`, the node that hangs the load screen over a build, tracking the window until the world appears.
@@ -652,6 +653,7 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 **`Session.InstantAction`**, one Instant Action mission.
 
 - `src/Session/InstantAction/InstantActionDirector.cs`, the engine side of one Instant Action mission: the actor phases, the sequencer tick and the end-condition wiring.
+- `src/Session/InstantAction/IaWrapupSnapshot.cs`, the final numbers an ended Instant Action mission hands its wrap-up, and the in-flight board seam the director drives.
 - `src/Session/InstantAction/InstantActionRuntime.cs`, one Instant Action mission's actor set and its end, engine-free: the ace, wingmen, wave draws and objective zeppelin.
 - `src/Session/InstantAction/InstantActionWaves.cs`, the decoded wave sequencer, engine-free: the wave counter, the spawn draw against live humans, the fan geometry.
 
@@ -804,6 +806,7 @@ It holds no engine type, so it runs in a plain unit test; formats and evidence a
 - `src/Video/AudioFrame.cs`, one decoded sound frame: 1152 interleaved samples per channel as floats, and the moment the first of them is heard.
 - `src/Video/MoviePlayback.cs`, a movie on a clock: the picture due now as RGBA, timed by the frames' own timestamps, looping endlessly on a play count of zero.
 - `src/Video/CinemaPlayback.cs`, a cinema playing with its sound: clamped PCM out, the picture clocked by what the device has played, the two streams' start times taken against each other.
+- `src/Video/CinemaHandoff.cs`, what every cinema flow shares: the shape of the call that puts a film on screen, the skip-press set, and the latch that opens the next screen once however many times the film says it stopped.
 
 ### `src/Extraction/`, turning the player's install into `extracted/`
 

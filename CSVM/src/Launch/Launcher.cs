@@ -10,11 +10,11 @@ using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
 using CSVM.Session.Campaign;
+using CSVM.Session.InstantAction;
 using CSVM.Session.Objectives;
 using CSVM.Session.World;
 using CSVM.Spec;
 using CSVM.UI.Boards;
-using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
@@ -1166,7 +1166,7 @@ public partial class Launcher : Node3D
     /// file runs the continuation straight away, so a flow costs a screen rather than stalling on
     /// a cinema this install does not carry. This is the seam every movie sequence goes
     /// through.</summary>
-    public void PlayCinema(string name, System.Action then, UI.Screens.CinemaSkip skip = UI.Screens.CinemaScreen.BootKeys)
+    public void PlayCinema(string name, System.Action then, Video.CinemaSkip skip = UI.Screens.CinemaScreen.BootKeys)
     {
         if (UI.Screens.CinemaScreen.Open(_dataRoot, name, skip) is not { } cinema)
         {
@@ -1278,7 +1278,7 @@ public partial class Launcher : Node3D
         {
             if (System.Linq.Enumerable.Contains(wire.Peers, guest.Peer))
             {
-                guests.Add((guest.Peer, UI.Hangar.PlanePickerRoster.AirframeNode(guest.Airframe), guest.Name));
+                guests.Add((guest.Peer, Flight.Hangar.StockAirframes.Node(guest.Airframe), guest.Name));
                 voices.Add(UI.Menu.PilotVoices.Wire(guest.Voice));
                 seatFits.Add(guest.Fit);
             }
@@ -1348,7 +1348,7 @@ public partial class Launcher : Node3D
                 SeatIndex = seats.Count,
                 TeamId = teamOf(peer),
                 Callsign = name.Length > 0 ? name : $"guest {peer.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
-                PlaneNode = picked ? UI.Hangar.PlanePickerRoster.AirframeNode(chosen.Airframe) : planes[0],
+                PlaneNode = picked ? Flight.Hangar.StockAirframes.Node(chosen.Airframe) : planes[0],
                 Voice = picked ? chosen.Voice : (byte)0,
             });
             // The guest's own lobby flies its pick through the same rules, so both ends agree.
@@ -1997,7 +1997,7 @@ public partial class Launcher : Node3D
             NetTransport = _netWire,
             NetHost = _netIsHost,
             NetSeats = _netRoster,
-            NetAirframes = _netWire == null ? null : UI.Hangar.PlanePickerRoster.StockAirframes,
+            NetAirframes = _netWire == null ? null : Flight.Hangar.StockAirframes.Nodes,
             NetSeatFit = _coopFlight || _lobbyFlight ? CoopSeatFit : null,
             NetSeatBuild = _coopFlight || _lobbyFlight ? NetSeatBuild : null,
             NetCoopWingman = _coopFlight && !_netIsHost && _netDoor is { } coopDoor
@@ -2332,13 +2332,13 @@ public partial class Launcher : Node3D
         // so seat 0 has to be joined through it.
         host.Features.Add(new PlayerSetupFeature());
         var strings = UiStrings.TryLoad(_dataRoot) ?? UiStrings.Empty;
-        host.Features.Add(new HangarFeature(strings, PlanePickerRoster.AirframeNode, () => StockLoadouts.Load(), _zrdrPath));
+        host.Features.Add(new HangarFeature(strings, StockAirframes.Node, () => StockLoadouts.Load(), _zrdrPath));
         // The campaign feature carries both cinemas because both presentations already read that
         // one feature, and neither of them can reach a Launcher to play a film through.
         _chapterCinema ??= new ChapterCinema(PlayCinema, StopCinema);
         _closingCinema ??= new ClosingCinema(PlayCinema, StopCinema);
         host.Features.Add(new CampaignFeature(
-            strings, PlanePickerRoster.AirframeNode, _chapterCinema, _closingCinema));
+            strings, StockAirframes.Node, _chapterCinema, _closingCinema));
         // The keymap editor writes through C21's per-player store, with player 1's stick rows split
         // off to the profile files. A reset takes them from the stick defaults. Injected so the
         // feature stays engine-free for a suite.

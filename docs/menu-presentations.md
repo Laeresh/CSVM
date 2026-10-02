@@ -136,7 +136,7 @@ and `MoveX` with auto-repeat applied, the edges `Accept`, `Back`, `Join`, `Loado
 on the press edge, `Wheel` as the steps turned since the last poll and positive toward a list's
 foot; null when the seat's devices have none). A presentation reads meaning and never a key, button
 or axis. A presentation that polls its seats also reads the campaign flow's `Film`
-(`CSVM/src/UI/Screens/CinemaHandoff.cs`) before it applies a frame: a cinema stops and hands off inside the
+(`CSVM/src/Video/CinemaHandoff.cs`) before it applies a frame: a cinema stops and hands off inside the
 input flush, ahead of that poll, so the press that skipped the film would otherwise land as an edge
 on the screen the film just opened.
 

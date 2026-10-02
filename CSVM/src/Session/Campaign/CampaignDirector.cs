@@ -326,7 +326,7 @@ public sealed class CampaignDirector
 
         int at = Math.Clamp(profile.SelectedPlane, 0, profile.Planes.Count - 1);
         var plane = profile.Planes[at];
-        string node = UI.Hangar.PlanePickerRoster.AirframeNode(plane.Airframe);
+        string node = Flight.Hangar.StockAirframes.Node(plane.Airframe);
         // A named entry 0 wins whether it came from --plane= or from the launchscreen's own seat,
         // which is already this node. Comparing the node rather than tracking where the name came
         // from is what keeps a cabin launch silent: it seated the same aeroplane.
@@ -1102,7 +1102,7 @@ public sealed class CampaignDirector
         }
 
         var plane = _profile.Planes[at];
-        WingmanNode = UI.Hangar.PlanePickerRoster.AirframeNode(plane.Airframe);
+        WingmanNode = Flight.Hangar.StockAirframes.Node(plane.Airframe);
         WingmanFit = CampaignLoadout.For(plane, StockLoadouts.Load());
         Log.Info("core", $"campaign: {WingmanName} flies '{plane.Name}' as {WingmanNode}, bound for the roster spawn");
     }
@@ -1131,7 +1131,7 @@ public sealed class CampaignDirector
             return;
         }
 
-        WingmanNode = UI.Hangar.PlanePickerRoster.AirframeNode(wingman.Airframe);
+        WingmanNode = Flight.Hangar.StockAirframes.Node(wingman.Airframe);
         // A stock fit reads back as null from the wire, and as an empty choice from a profile.
         // The empty choice keeps the two machines' spawns identical.
         WingmanFit = CampaignLoadout.For(wingman.Fit, StockLoadouts.Load()) ?? new LoadoutChoice();
@@ -1228,7 +1228,7 @@ public sealed class CampaignDirector
             return;
         }
 
-        if (UI.Hangar.PlanePickerRoster.AirframeOf(victim.PlaneNode) is not { } airframe)
+        if (Flight.Hangar.StockAirframes.IdOf(victim.PlaneNode) is not { } airframe)
         {
             return;
         }

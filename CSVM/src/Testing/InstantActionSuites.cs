@@ -1851,8 +1851,6 @@ internal static class InstantActionSuites
                 RigCount = rigs.Length,
                 Rigs = rigs,
                 PauseState = pauseState,
-                MenuInputFor = _ => new MenuInput(),
-                ExitSession = () => { },
                 StuntZones = zones,
                 Race = stuntRace,
                 InstantActionActive = instantAction,

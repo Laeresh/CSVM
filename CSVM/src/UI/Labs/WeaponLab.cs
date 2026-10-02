@@ -830,7 +830,7 @@ public sealed partial class WeaponLab : Node3D
             {
                 return;
             }
-            Tooling.ProbeRunner.ApplyRocketOverride(_loadout, _weapons, w.Id, verbose: false);
+            _loadout.ApplyRocketOverride(_weapons, w.Id, verbose: false);
             RebuildOrdnance(w);
         }
     }
@@ -916,7 +916,7 @@ public sealed partial class WeaponLab : Node3D
         }
         if (_launchOrdnance is { } ord && _loadout.Hardpoints.Count > 0)
         {
-            Tooling.ProbeRunner.ApplyRocketOverride(_loadout, _weapons, ord.Id, verbose: false);
+            _loadout.ApplyRocketOverride(_weapons, ord.Id, verbose: false);
             RebuildOrdnance(ord);
         }
         SyncWeaponIndexToMount();

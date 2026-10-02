@@ -12,7 +12,6 @@ using CSVM.Mech3;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
 using CSVM.Spec;
-using CSVM.UI.Boards;
 using CSVM.Utils;
 using Godot;
 
@@ -487,8 +486,6 @@ internal static class CutsceneSkipSuites
                 RigCount = rigs.Count,
                 Rigs = rigs,
                 PauseState = new PauseState(),
-                MenuInputFor = _ => new MenuInput(),
-                ExitSession = () => { },
             }, new SkipFlightStarts());
     }
 

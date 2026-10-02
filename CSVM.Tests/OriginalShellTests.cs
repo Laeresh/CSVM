@@ -1,10 +1,10 @@
 using System.Linq;
+using CSVM.Flight.Hangar;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.UI.Campaign;
-using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
 using CSVM.Utils;
@@ -921,7 +921,7 @@ public class OriginalShellTests
             """);
         var shell = new OriginalShell(
             MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), setup, Measure,
-            hangar: new HangarFeature(strings, PlanePickerRoster.AirframeNode));
+            hangar: new HangarFeature(strings, StockAirframes.Node));
         shell.Open(OriginalScreen.Credits);
         return shell;
     }
@@ -938,7 +938,7 @@ public class OriginalShellTests
             var setup = new PlayerSetupFeature();
             setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.Hangar.CustomPlaneDef>()));
             setup.Join(new ScriptedMenuSeat());
-            var hangar = new HangarFeature(UiStrings.Empty, PlanePickerRoster.AirframeNode);
+            var hangar = new HangarFeature(UiStrings.Empty, StockAirframes.Node);
             var instantAction = new InstantActionFeature(_ => InstantAction.Defaults());
             instantAction.SelectPlayerPlane(HangarFeature.DefaultAirframe);
             var shell = new OriginalShell(
@@ -970,7 +970,7 @@ public class OriginalShellTests
             var setup = new PlayerSetupFeature();
             setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.Hangar.CustomPlaneDef>()));
             setup.Join(new ScriptedMenuSeat());
-            var hangar = new HangarFeature(UiStrings.Empty, PlanePickerRoster.AirframeNode);
+            var hangar = new HangarFeature(UiStrings.Empty, StockAirframes.Node);
             var campaign = new CampaignFeature(UiStrings.Empty, airframe => $"node{airframe}");
             var shell = new OriginalShell(
                 MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), setup, Measure,

@@ -11,7 +11,7 @@ using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
-using CSVM.UI.Screens;
+using CSVM.Video;
 
 namespace CSVM.Testing;
 
@@ -130,7 +130,7 @@ internal static class MenuOriginalCoopFilmSuites
         Pump(host, guest, frames: 4);
         ctx.Check(guest.Chapter is { Plays: 1, Running: true, Name: "chap2" },
             $"the guest plays the same film while the host's plays ({guest.Chapter.Plays}, {guest.Chapter.Name})");
-        ctx.Check(guest.Chapter.Skip == CinemaScreen.ChapterKeys,
+        ctx.Check(guest.Chapter.Skip == ChapterCinema.Keys,
             $"under the chapter film's own skip presses ({guest.Chapter.Skip})");
         host.Chapter.End();
         Pump(host, guest, frames: 4);
@@ -156,7 +156,7 @@ internal static class MenuOriginalCoopFilmSuites
         Pump(host, guest, frames: 4);
         ctx.Check(guest.Closing is { Plays: 1, Running: true, Name: ClosingCinema.Name },
             $"the guest plays it too ({guest.Closing.Plays}, {guest.Closing.Name})");
-        ctx.Check(guest.Closing.Skip == CinemaScreen.ClosingKeys,
+        ctx.Check(guest.Closing.Skip == ClosingCinema.Keys,
             $"under the closing film's own skip presses ({guest.Closing.Skip})");
         ctx.Check(guest.Shell.Screen == OriginalScreen.CampaignScrapbook,
             $"with the host's debrief behind it ({guest.Shell.Screen})");
@@ -202,7 +202,7 @@ internal static class MenuOriginalCoopFilmSuites
             return;
         }
 
-        var own = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(CoopGuestPick.StarterAirframe) };
+        var own = new[] { Flight.Hangar.StockAirframes.Node(CoopGuestPick.StarterAirframe) };
         var (roster, _) = CSVM.Launch.Launcher.CoopLaunchField(
             host.Door, wire.Transport, own, Array.Empty<Flight.Weapons.LoadoutChoice?>(), Flight.Weapons.StockLoadouts.Load());
         _ = NetSession.Host((NetLobby)wire.Transport, roster, 7UL);

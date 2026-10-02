@@ -185,7 +185,7 @@ internal static class MenuOriginalCoopFlowSuites
                 return;
             }
 
-            var own = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(CoopGuestPick.StarterAirframe) };
+            var own = new[] { Flight.Hangar.StockAirframes.Node(CoopGuestPick.StarterAirframe) };
             var (roster, _) = CSVM.Launch.Launcher.CoopLaunchField(
                 host.Door, wire.Transport, own, Array.Empty<Flight.Weapons.LoadoutChoice?>(), Flight.Weapons.StockLoadouts.Load());
             ctx.Check(roster.Length == 3 && roster[1].PeerId == roster[2].PeerId && roster[1].PeerId != roster[0].PeerId,
@@ -548,10 +548,10 @@ internal static class MenuOriginalCoopFlowSuites
     // The host's launch field for the guest's seat, over the host's wire.
     private static void GuestFliesItsPick(TestContext ctx, End host, MenuNetLaunch launch, (byte Airframe, CoopFit Fit) pick, string what)
     {
-        var own = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(CoopGuestPick.StarterAirframe) };
+        var own = new[] { Flight.Hangar.StockAirframes.Node(CoopGuestPick.StarterAirframe) };
         var (roster, seatFits) = CSVM.Launch.Launcher.CoopLaunchField(
             host.Door, launch.Transport, own, Array.Empty<Flight.Weapons.LoadoutChoice?>(), Flight.Weapons.StockLoadouts.Load());
-        ctx.Check(roster.Length == 2 && roster[1].PlaneNode == UI.Hangar.PlanePickerRoster.AirframeNode(pick.Airframe) && seatFits[1] == pick.Fit,
+        ctx.Check(roster.Length == 2 && roster[1].PlaneNode == Flight.Hangar.StockAirframes.Node(pick.Airframe) && seatFits[1] == pick.Fit,
             $"{what} ({(roster.Length == 2 ? roster[1].PlaneNode : "-")}, ammo {(seatFits.Length == 2 ? seatFits[1].AmmoAt(0) : -9)})");
     }
 

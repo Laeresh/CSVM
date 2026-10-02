@@ -6,7 +6,6 @@ using System.Linq;
 using CSVM.Flight.Hangar;
 using CSVM.Session.Campaign;
 using CSVM.UI.Boards;
-using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
@@ -402,7 +401,7 @@ internal static class MenuOriginalCampaignSuites
         {
             ctx.Check(exit.Profile == Pilot && exit.MissionSeq == 0 && exit.Seats.Count == 3,
                 $"for the seated profile at seq 0 with three seats ({exit.Profile}, {exit.MissionSeq}, {exit.Seats.Count})");
-            ctx.Check(exit.Seats[0].PlaneNode == PlanePickerRoster.AirframeNode(profile.Planes[0].Airframe) && exit.Seats[0].Fit != null,
+            ctx.Check(exit.Seats[0].PlaneNode == StockAirframes.Node(profile.Planes[0].Airframe) && exit.Seats[0].Fit != null,
                 $"seat 0 flies the profile's plane with its campaign fit ({exit.Seats[0].PlaneNode})");
             ctx.Check(exit.Seats[1].Pads.Count == 0 && exit.Seats[2].Pads.Count == 0, $"the pad-less guests carry no pads");
         }

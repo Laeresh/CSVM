@@ -6,7 +6,6 @@ using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Spec;
 using CSVM.UI.Boards;
-using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
@@ -1004,7 +1003,7 @@ internal static class MenuInstantActionSuites
         ctx.Check(shell.Screen == OriginalScreen.InstantAction && !hangar.IsOpen && store.Load(built) != null,
             $"Purchase Now saves the plane and returns to the screen ({shell.Screen})");
         ctx.Check(row >= 11 && store.Load(built) is { } saved && saved.Airframe == door
-            && shell.InstantAction.PilotRoster[row].Node == PlanePickerRoster.AirframeNode(door),
+            && shell.InstantAction.PilotRoster[row].Node == StockAirframes.Node(door),
             $"whose Pilot Plane list offers the build after the stock rows on the door's airframe node (row {row}, airframe {door})");
         var drop = Row(shell, OriginalInstantActionScreen.PlayerPlaneKey);
         if (drop != null && row >= 0)

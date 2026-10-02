@@ -7,7 +7,6 @@ using CSVM.Flight.Hangar;
 using CSVM.Mech3;
 using CSVM.Session.Campaign;
 using CSVM.UI.Boards;
-using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
 using CSVM.UI.Screens;
@@ -753,8 +752,8 @@ public class OriginalCoverageTests : IDisposable
         setup.SetRoster(OriginalPresentation.Roster(planes.List()));
         setup.Join(new ScriptedMenuSeat());
         _setup = setup;
-        hangar = new HangarFeature(strings, PlanePickerRoster.AirframeNode);
-        campaign = new CampaignFeature(strings, PlanePickerRoster.AirframeNode);
+        hangar = new HangarFeature(strings, StockAirframes.Node);
+        campaign = new CampaignFeature(strings, StockAirframes.Node);
         var store = profiles;
         // The rebinding feature with one seat on the shipped keymaps and no save, so the CONTROLS
         // door is live and the walk edits a copy nothing writes back.

@@ -86,13 +86,13 @@ internal static class NetPlayerVoiceSuites
                 return;
             }
 
-            var planes = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(UI.Menu.CoopGuestPick.StarterAirframe) };
+            var planes = new[] { CSVM.Flight.Hangar.StockAirframes.Node(UI.Menu.CoopGuestPick.StarterAirframe) };
             var (roster, _) = Launcher.VersusLaunchField(hostLaunch.Transport, planes, new LoadoutChoice?[] { null }, StockLoadouts.Load());
             ctx.Check(roster.Length == 2 && roster[0].Voice == UI.Menu.PilotVoices.Wire(HostVoice)
                       && roster[1].Voice == UI.Menu.PilotVoices.Wire(GuestVoice),
                 $"the host's field names its own seat's voice and the voice the guest's pick carried ({string.Join(", ", roster.Select(s => s.Voice))})");
             host = NetCombatSuites.Ends.Open(ctx, spec, hostLaunch.Transport, isHost: true, HostSeed, roster,
-                UI.Hangar.PlanePickerRoster.StockAirframes);
+                CSVM.Flight.Hangar.StockAirframes.Nodes);
             for (int i = 0; i < GrantSteps && !guestDoor.DogfightLaunchDue; i++)
             {
                 host.Session._PhysicsProcess(GameClock.FixedDt);
@@ -107,7 +107,7 @@ internal static class NetPlayerVoiceSuites
             }
 
             guest = NetCombatSuites.Ends.Open(ctx, spec, guestLaunch.Transport, isHost: false, HostSeed + 1, null,
-                UI.Hangar.PlanePickerRoster.StockAirframes);
+                CSVM.Flight.Hangar.StockAirframes.Nodes);
             ctx.Check(host.Built && guest.Built, $"both sessions build ({host.Built}, {guest.Built})");
             if (!host.Built || !guest.Built)
             {

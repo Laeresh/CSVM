@@ -22,7 +22,7 @@ Two layers over `CSVM/data/stock_loadouts.json`. `StockLoadouts.Load` parses the
 muzzle `Node3D`s and its caliber plus ammo to a `WeaponDef`, and each hardpoint to its `pylon`,
 yielding `GunGroup`s with their own ammo counters and `Hardpoint`s. Turret slots bind but stay inert.
 `Loadout.ForRig` synthesizes a lab loadout covering the airframe's whole rig rather than only what
-stock names, and runs it through the same `Bind`, so there is exactly one bind path; `BindAi` (an AI def's `weapons`) and `BindWingman` (a wingman's pick, [../org/aiPilot/aiWeapons.md](../org/aiPilot/aiWeapons.md)) end in it too. `Hangs`, `WingPylons`, `WingCounts` and `PylonForCell` read a fit the other way, which pylons it carries, how many each wing hangs and which one a saved ordnance cell names, off the rig's odd-to-port split rather than a count heuristic, so the flight check, the ammo screen and a fresh hangar build all bound their cells alike. Inspect with
+stock names, and runs it through the same `Bind`, so there is exactly one bind path; `BindAi` (an AI def's `weapons`) and `BindWingman` (a wingman's pick, [../org/aiPilot/aiWeapons.md](../org/aiPilot/aiWeapons.md)) end in it too. `Hangs`, `WingPylons`, `WingCounts` and `PylonForCell` read a fit the other way, which pylons it carries, how many each wing hangs and which one a saved ordnance cell names, off the rig's odd-to-port split rather than a count heuristic, so the flight check, the ammo screen and a fresh hangar build all bound their cells alike. `ApplyRocketOverride` is the `--rocket=` hook, every pylon re-armed with one named weapon, which the human assembly and the weapon lab both call. Inspect with
 `--dump-loadout`. Slot-to-firepoint binding: [../formats/markers.md](../formats/markers.md); schema:
 [../formats/loadouts.md](../formats/loadouts.md). Read `LoadoutChoice.cs` next.
 
@@ -643,6 +643,13 @@ null where a mission authors none), `Update` requires both polygon-plane crossin
 `ForAnotherPlayer()` clones an independent run so the archives parse once per session. Engine-free
 apart from its logging. Read `TargetSelection` for how a pilot picks a zone, `StuntRunHud` for the
 rest of what a run draws, and `StuntScoreboard` for what it scores.
+
+## src/Flight/Modes/StuntSummary.cs
+One finished stunt run's numbers for a split table: the run, its total, the stored best it is
+compared against and whether it set a new one. `Lines` flattens the table to text, one line per
+zone in the order flown, then the total (opening with `TotalLabel`) and the best comparison, so the
+Instant Action wrap-up can carry it past the session. The boards draw the same table through
+`UI/Screens/StuntSplits.cs`.
 
 ## src/Flight/Hud/HudMetrics.cs
 The one place the flight HUD decides how big it draws: `Scale(control, reference = 1440)` is
@@ -1313,6 +1320,12 @@ screens edit it, `HangarEconomy` prices it and `CustomPlaneStore` persists it wi
 only by `SetLoadout` and left alone by `Clamp`; `AwaitingExport` is the export gate the plane
 pickers read. Record layout: [../formats/paint.md](../formats/paint.md).
 
+## src/Flight/Hangar/StockAirframes.cs
+The airframe id 0-10 to `planes.zbd` node table and its inverse: `Node` clamps like the def's own
+fields, `IdOf` answers null for a node none of the eleven fly as, and `Nodes` is the list a network
+roster indexes. One table for the plane pickers, the campaign director's own and wingman planes,
+and the wire. Coverage: `CSVM.Tests/PlanePickerRosterTests.cs`.
+
 ## src/Flight/Hangar/CustomPlaneRecord.cs
 Import-only reader for the original's 204-byte saved-plane files: one record, or a whole install's
 `Planes` directory, into `CustomPlaneDef`s. Every paint field is read as the index it is, the
@@ -1337,7 +1350,7 @@ because every input is handed in. `LoadoutFor` builds over the airframe's unmuta
 turning a calibre row into a weapon the loadout bind resolves and a twin pick into one gun over a
 marker pair, and hanging each wing's own pylons outboard-first from that wing's bought count alone,
 every one carrying high explosive for the Ammo Selection layer to overwrite. `PaintFor` resolves the
-record's three colours and decals under a caller-named pattern; `ArmouredParts` and `DamageFor` put
+record's three colours and decals under the pattern `PatternName` reads off the engine's table; `ArmouredParts` and `DamageFor` put
 the bought armour on the damage zones by copy, leaving structure and unnamed zones alone. The decode
 is [../org/hangar.md](../org/hangar.md), "Into the mission".
 

@@ -1,6 +1,6 @@
 using System;
 using CSVM.Mech3;
-using CSVM.UI.Screens;
+using CSVM.Video;
 
 namespace CSVM.Session.Campaign;
 
@@ -20,6 +20,12 @@ public sealed class ChapterCinema
     /// sequence reader; the last chapter is four missions long and the division still lands on it
     /// (docs/formats/campaign-sequence.md).</summary>
     public const int MissionsPerChapter = 5;
+
+    /// <summary>Escape, Space, Return or a left mouse press, the chapter cinema's set, and a pad
+    /// button with them. ⚠ Do not unify it with <see cref="ClosingCinema.Keys"/>; the two scripts
+    /// author their presses separately.</summary>
+    public const CinemaSkip Keys = CinemaSkip.Escape | CinemaSkip.Space | CinemaSkip.Return
+        | CinemaSkip.LeftMouse | CinemaSkip.PadButton;
 
     private readonly CinemaPlay _play;
     private readonly Action? _stop;
@@ -69,10 +75,7 @@ public sealed class ChapterCinema
         }
 
         _played = chapter;
-
-        // ⚠ Do not unify these presses with the closing cinema's. Space and Return skip a chapter
-        // cinema and do nothing on the closing one, which the two scripts author separately.
-        _play(NameOf(chapter), CinemaHandoff.Once(showCabin), CinemaScreen.ChapterKeys);
+        _play(NameOf(chapter), CinemaHandoff.Once(showCabin), Keys);
         return true;
     }
 
@@ -89,7 +92,7 @@ public sealed class ChapterCinema
             return false;
         }
 
-        _play(NameOf(chapter), CinemaHandoff.Once(then), CinemaScreen.ChapterKeys);
+        _play(NameOf(chapter), CinemaHandoff.Once(then), Keys);
         return true;
     }
 

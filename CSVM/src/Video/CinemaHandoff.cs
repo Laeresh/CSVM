@@ -1,6 +1,6 @@
 using System;
 
-namespace CSVM.UI.Screens;
+namespace CSVM.Video;
 
 /// <summary>How a cinema reaches the screen. It takes the film's name, the continuation to run on
 /// the frame it stops (played out or skipped), and the presses that end it early.
@@ -9,6 +9,39 @@ namespace CSVM.UI.Screens;
 /// takes this one type, so a caller writes the call once and a suite's recorder fits all of
 /// them.</summary>
 public delegate void CinemaPlay(string name, Action then, CinemaSkip skip);
+
+/// <summary>Which presses end a cinema before it has played out. The sets differ per cinema, and
+/// the difference is the original's own. <c>CAMPAIGNINTRO.SCRIPT</c> takes Escape, Space, Return
+/// and a left mouse press, where <c>FINALCINEMA.SCRIPT</c> takes Escape and the mouse alone.
+/// ⚠ Do not unify them: Space and Return doing nothing on the closing cinema is authored.
+/// A pad button is in every set (a pad player has no other press), and a stick's skip counts as
+/// one. A set meets a press in <c>UI/Screens/CinemaSkips.cs</c>.</summary>
+[Flags]
+public enum CinemaSkip
+{
+    /// <summary>Nothing skips: the cinema plays to its last frame.</summary>
+    None = 0,
+
+    /// <summary>Escape alone.</summary>
+    Escape = 1,
+
+    /// <summary>Space, which the chapter cinema takes and the closing one does not.</summary>
+    Space = 2,
+
+    /// <summary>Return, on the same footing as <see cref="Space"/>.</summary>
+    Return = 4,
+
+    /// <summary>A left mouse press, which both cinema scripts take.</summary>
+    LeftMouse = 8,
+
+    /// <summary>Any press at all, key, mouse or pad button alike. It is what the boot sequence
+    /// offers a player who has not been taught a key yet.</summary>
+    AnyPress = 16,
+
+    /// <summary>A gamepad button, any of them. Read only where pad input counts at all, since a
+    /// pad reports its first button pressed as it arrives.</summary>
+    PadButton = 32,
+}
 
 /// <summary>What a cinema flow does with the continuation it was handed. The chapter films and the
 /// closing film each open one screen when a film stops, and both open it through the same latch.

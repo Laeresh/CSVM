@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using CSVM.Mech3;
 using CSVM.UI.Boards;
+using CSVM.Video;
 
 namespace CSVM.UI.Screens;
 

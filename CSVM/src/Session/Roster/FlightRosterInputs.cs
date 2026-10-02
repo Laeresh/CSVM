@@ -11,10 +11,16 @@ using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.World;
 using CSVM.Spec;
-using CSVM.UI.Boards;
 using Godot;
 
 namespace CSVM.Session.Roster;
+
+/// <summary>Builds the hidden results board a solo stunt run wakes when its last zone is cleared.
+/// It takes the run, the plane and context lines that head the board, and the key the best time is
+/// stored under. The rerun is what its Restart row calls, and the camera fills its photograph
+/// strip.</summary>
+internal delegate Control SoloStuntBoard(StuntMission run, string planeDisplay, string context,
+    string scoreKey, Action rerun, StuntCapture shots);
 
 internal sealed class FlightRosterPolicy
 {
@@ -185,11 +191,9 @@ internal sealed class HumanRosterBindings
     public int[][]? PadAssignment { get; init; }
     public PauseState PauseState { get; init; } = null!;
 
-    /// <summary>The board reader for a roster seat. It maps the seat to the local player that sits
-    /// in it, so a guest's own seat drives its own cursor.</summary>
-    public Func<int, MenuInput> MenuInputFor { get; init; } = null!;
-    public bool ExitsToMenu { get; init; }
-    public Action ExitSession { get; init; } = null!;
+    /// <summary>Builds a solo stunt run's results board, the screen being the caller's to make. Null
+    /// builds none, so a seat flying a solo run has no board to hold it.</summary>
+    public SoloStuntBoard? StuntBoard { get; init; }
 
     /// <summary>The graphics-mode action a local seat fires, the Launcher's live switch; null
     /// leaves it inert.</summary>

@@ -528,7 +528,7 @@ internal static class NetCombatSuites
                 return;
             }
 
-            var planes = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(UI.Menu.CoopGuestPick.StarterAirframe) };
+            var planes = new[] { Flight.Hangar.StockAirframes.Node(UI.Menu.CoopGuestPick.StarterAirframe) };
             var (roster, _) = Launcher.VersusLaunchField(hostLaunch.Transport, planes, new LoadoutChoice?[] { null }, StockLoadouts.Load());
             string named = SeatRosterMessage.Carried(HostName).Trim();
             ctx.Check(roster[0].Callsign == named && named.Length > 0 && named != HostName && HostName.StartsWith(named, StringComparison.Ordinal),
@@ -536,7 +536,7 @@ internal static class NetCombatSuites
             ctx.Check(roster.Length == 2 && roster[1].Callsign == GuestName,
                 $"[named host] and the guest's seat the callsign its pick carried ({(roster.Length > 1 ? roster[1].Callsign : "-")})");
             host = Ends.Open(ctx, spec, hostLaunch.Transport, isHost: true, HostSeed, roster,
-                UI.Hangar.PlanePickerRoster.StockAirframes);
+                Flight.Hangar.StockAirframes.Nodes);
             for (int i = 0; i < GrantSteps && !guestDoor.DogfightLaunchDue; i++)
             {
                 host.Session._PhysicsProcess(GameClock.FixedDt);
@@ -551,7 +551,7 @@ internal static class NetCombatSuites
             }
 
             guest = Ends.Open(ctx, spec, guestLaunch.Transport, isHost: false, HostSeed + 1, null,
-                UI.Hangar.PlanePickerRoster.StockAirframes);
+                Flight.Hangar.StockAirframes.Nodes);
             ctx.Check(host.Built && guest.Built, $"[named host] both sessions build ({host.Built}, {guest.Built})");
             if (!host.Built || !guest.Built)
             {
@@ -610,10 +610,10 @@ internal static class NetCombatSuites
                 return;
             }
 
-            var planes = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(UI.Menu.CoopGuestPick.StarterAirframe) };
+            var planes = new[] { Flight.Hangar.StockAirframes.Node(UI.Menu.CoopGuestPick.StarterAirframe) };
             var (roster, _) = Launcher.VersusLaunchField(hostLaunch.Transport, planes, new LoadoutChoice?[] { null }, StockLoadouts.Load());
             host = Ends.Open(ctx, spec, hostLaunch.Transport, isHost: true, HostSeed, roster,
-                UI.Hangar.PlanePickerRoster.StockAirframes);
+                Flight.Hangar.StockAirframes.Nodes);
             for (int i = 0; i < GrantSteps && !guestDoor.DogfightLaunchDue; i++)
             {
                 host.Session._PhysicsProcess(GameClock.FixedDt);
@@ -628,7 +628,7 @@ internal static class NetCombatSuites
             }
 
             guest = Ends.Open(ctx, spec, guestLaunch.Transport, isHost: false, HostSeed + 1, null,
-                UI.Hangar.PlanePickerRoster.StockAirframes);
+                Flight.Hangar.StockAirframes.Nodes);
             ctx.Check(host.Built && guest.Built, $"[{how}] both sessions build ({host.Built}, {guest.Built})");
             if (!host.Built || !guest.Built)
             {

@@ -12,7 +12,6 @@ using CSVM.Mech3;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
 using CSVM.Spec;
-using CSVM.UI.Boards;
 using Godot;
 
 namespace CSVM.Testing;
@@ -254,8 +253,6 @@ internal static class SpawnPropsSuites
                         RigCount = 1,
                         Rigs = new[] { seat },
                         PauseState = new PauseState(),
-                        MenuInputFor = _ => new MenuInput(),
-                        ExitSession = () => { },
                     }, new HighStarts());
                 roster.BuildPlayers(new[] { seat });
                 if (seat.Controller is not { } player)

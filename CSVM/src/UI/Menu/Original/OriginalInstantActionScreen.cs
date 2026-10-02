@@ -5,7 +5,6 @@ using CSVM.Flight.Hangar;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.UI.Boards;
-using CSVM.UI.Hangar;
 
 namespace CSVM.UI.Menu.Original;
 
@@ -1633,7 +1632,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         }
 
         AddPane(screen, layers.Backdrop, "OL_BACKGROUND");
-        int airframe = _loadoutNode != null ? PlanePickerRoster.AirframeOf(_loadoutNode) ?? 0 : 0;
+        int airframe = _loadoutNode != null ? StockAirframes.IdOf(_loadoutNode) ?? 0 : 0;
         foreach (string key in new[] { "OL_P_PLANETOPICON", "OL_P_PLANEFRTICON" })
         {
             if (screen.Widget(key) is { Art.Count: > 0 } diagram)

@@ -704,7 +704,7 @@ public sealed class CampaignAmmoPage : CampaignPage
             return new SlotBuild(present, calibre, built.LeftHardpoints, built.RightHardpoints);
         }
 
-        var stock = Stock?.ForModel(PlanePickerRoster.AirframeNode(plane.Airframe));
+        var stock = Stock?.ForModel(StockAirframes.Node(plane.Airframe));
         return StockBuild(stock);
     }
 

@@ -647,7 +647,7 @@ internal static class NetCoopMissionSuites
     // parts and one fit. The host's own copy is the able-to-fail control that the profile was read.
     private static void WingmanMatches(TestContext ctx, Ends host, Ends guest)
     {
-        string want = UI.Hangar.PlanePickerRoster.AirframeNode(WingAirframe);
+        string want = Flight.Hangar.StockAirframes.Node(WingAirframe);
         var hostWing = host.Session.Campaign?.Roster.GetValueOrDefault(CampaignDirector.WingmanName);
         var guestWing = guest.Session.Campaign?.Roster.GetValueOrDefault(CampaignDirector.WingmanName);
         ctx.Check(host.Session.Campaign?.WingmanNode == want && hostWing != null,
@@ -1067,13 +1067,13 @@ internal static class NetCoopMissionSuites
         string profile = "", string? profilesDir = null)
     {
         var own = CampaignLoadout.For(CoopFit.Of(ammo, null), stock);
-        var planes = new[] { UI.Hangar.PlanePickerRoster.AirframeNode(CoopGuestPick.StarterAirframe) };
+        var planes = new[] { Flight.Hangar.StockAirframes.Node(CoopGuestPick.StarterAirframe) };
         (var roster, seatFits) = Launcher.CoopLaunchField(door, launch.Transport, planes, new[] { own }, stock);
         door.TellSeatFits(seatFits);
         door.TellCoopWingman(Launcher.CoopWingmanFor(profile, profilesDir));
         var fits = seatFits;
         return NetCombatSuites.Ends.Open(ctx, Spec(mission, own, profile, profilesDir), launch.Transport,
-            isHost: true, HostSeed, roster, UI.Hangar.PlanePickerRoster.StockAirframes,
+            isHost: true, HostSeed, roster, Flight.Hangar.StockAirframes.Nodes,
             seat => Launcher.CoopSeatFitFor(seat, fits, null, stock));
     }
 
@@ -1096,7 +1096,7 @@ internal static class NetCoopMissionSuites
         ctx.Check(door.CoopLaunchDue, $"a guest's door hears the host's opener");
         var launch = door.BuildLaunch()!;
         return NetCombatSuites.Ends.Open(ctx, Spec(mission, CampaignLoadout.For(fit, stock)), launch.Transport,
-            isHost: false, HostSeed + 1, null, UI.Hangar.PlanePickerRoster.StockAirframes,
+            isHost: false, HostSeed + 1, null, Flight.Hangar.StockAirframes.Nodes,
             seat => Launcher.CoopSeatFitFor(seat, null, door, stock), () => door.CoopWingman);
     }
 
@@ -1113,11 +1113,11 @@ internal static class NetCoopMissionSuites
 
         ctx.Check(door.CoopLaunchDue, $"a guest's door hears the host's opener");
         var launch = door.BuildLaunch()!;
-        string plane = UI.Hangar.PlanePickerRoster.AirframeNode(CoopGuestPick.StarterAirframe);
+        string plane = Flight.Hangar.StockAirframes.Node(CoopGuestPick.StarterAirframe);
         var spec = SessionSpec.FromCampaign(SessionSpec.Parse(new[] { "--mute", "--no-pads" }), "", mission.Seq,
             Enumerable.Repeat(plane, seats).ToArray(), seats, Enumerable.Repeat<LoadoutChoice?>(null, seats).ToArray());
         return NetCombatSuites.Ends.Open(ctx, spec, launch.Transport, isHost: false, HostSeed + 1, null,
-            UI.Hangar.PlanePickerRoster.StockAirframes, seat => Launcher.CoopSeatFitFor(seat, null, door, stock),
+            Flight.Hangar.StockAirframes.Nodes, seat => Launcher.CoopSeatFitFor(seat, null, door, stock),
             () => door.CoopWingman);
     }
 
@@ -1165,7 +1165,7 @@ internal static class NetCoopMissionSuites
                 ? new[] { "--mute", "--no-pads" }
                 : new[] { "--mute", "--no-pads", $"--profiles={profilesDir}" }),
             profile, mission.Seq,
-            new[] { UI.Hangar.PlanePickerRoster.AirframeNode(CoopGuestPick.StarterAirframe) }, 1, new[] { fit });
+            new[] { Flight.Hangar.StockAirframes.Node(CoopGuestPick.StarterAirframe) }, 1, new[] { fit });
 
     // The host's boards on the flight check of the suite's mission, with the starter offered.
     private static void Select(NetPlayFeature host, CampaignMission mission) =>

@@ -10,7 +10,6 @@ using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.World;
 using CSVM.UI.Boards;
-using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
 
@@ -151,7 +150,7 @@ internal sealed class HumanFlightAdapter
             ? capturedSwap.Scheme
             : swap?.Scheme
                 ?? (custom != null && !_liveries.PaintRequested
-                    ? Flight.Hangar.CustomPlaneBuild.PaintFor(custom, UI.Hangar.HangarPaintPage.PatternName(custom.PaintPattern))
+                    ? Flight.Hangar.CustomPlaneBuild.PaintFor(custom, Flight.Hangar.CustomPlaneBuild.PatternName(custom.PaintPattern))
                     : _liveries.SchemeFor(pi, _aircraft.ZrdrPath, _aircraft.PaintRng,
                         _liveries.PatternsForPlane(_aircraft.PlanesGamez, planeName)));
         _flying[pi] = new FlyingAirframe(planeName, scheme);
@@ -281,7 +280,7 @@ internal sealed class HumanFlightAdapter
                 // prove the mounted model varies by rocket type.
                 if (_policy.RocketOverride != null)
                 {
-                    Tooling.ProbeRunner.ApplyRocketOverride(controller.Loadout, _aircraft.WeaponDefs, _policy.RocketOverride, verbose);
+                    controller.Loadout.ApplyRocketOverride(_aircraft.WeaponDefs, _policy.RocketOverride, verbose);
                 }
                 // Hang the FLYOUT-model ordnance under the pylons, one body per pylon,
                 // hidden as its ammo depletes. Uses the same gamez prototype the round flies.
@@ -475,19 +474,15 @@ internal sealed class HumanFlightAdapter
                 // Instant Action carries the splits on its own wrap-up board instead, so the two
                 // results boards cannot wake on the same event and stack (BL-358).
             }
-            else
+            else if (_human.StuntBoard is { } stuntBoard)
             {
                 // Solo: the end-of-run scoreboard, per-zone splits + total +
                 // persisted best time, keyed chapter/mission/plane in
                 // user://stunt_scores.json (race totals are deliberately not recorded).
                 var scoreKey = $"{_policy.Chapter}/{_policy.Mission}/{custom?.Name ?? planeName}";
-                var scoreboard = StuntScoreboard.Build(controller.Stunt,
-                    planeDisplay, $"{_policy.Chapter}   ·   {PlaneRoster.Humanize(_policy.Scenario)}",
-                    ScoreStore.Load(), scoreKey, _human.ExitsToMenu, _human.PauseState, _human.MenuInputFor);
-                scoreboard.Restart = controller.Rerun;
-                scoreboard.Exit = _human.ExitSession;
-                scoreboard.Shots = capture;
-                controller.Scoreboard = scoreboard;
+                controller.Scoreboard = stuntBoard(controller.Stunt, planeDisplay,
+                    $"{_policy.Chapter}   ·   {PlaneRoster.Humanize(_policy.Scenario)}",
+                    scoreKey, controller.Rerun, capture);
                 Log.Info("flight", $"stunt scoreboard: splits + best time (key '{scoreKey}')");
             }
             if (verbose)

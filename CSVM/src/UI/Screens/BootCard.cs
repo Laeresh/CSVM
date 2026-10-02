@@ -4,6 +4,7 @@ using CSVM.Bindings;
 using CSVM.Sticks;
 using CSVM.UI.Boards;
 using CSVM.Utils;
+using CSVM.Video;
 using Godot;
 
 namespace CSVM.UI.Screens;

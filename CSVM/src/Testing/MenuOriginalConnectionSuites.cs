@@ -2,13 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight;
+using CSVM.Flight.Hangar;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
 using CSVM.Net;
 using CSVM.Spec;
 using CSVM.UI;
 using CSVM.UI.Boards;
-using CSVM.UI.Hangar;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
@@ -1584,7 +1584,7 @@ internal static class MenuOriginalConnectionSuites
         var fits = launch.Seats.Select(s => s.Fit).ToList();
         var stock = StockLoadouts.Load();
         var (roster, seatFits) = CSVM.Launch.Launcher.VersusLaunchField(wire.Transport, planes, fits, stock);
-        ctx.Check(roster.Length == 2 && roster[1].PlaneNode == PlanePickerRoster.AirframeNode(1)
+        ctx.Check(roster.Length == 2 && roster[1].PlaneNode == StockAirframes.Node(1)
                   && slot >= 0 && seatFits[1].AmmoAt(slot) == 2,
             $"the host's roster builds the guest's seat on its pick and fit ({string.Join(", ", roster.Select(s => s.PlaneNode))})");
         var bare = ((NetLobby)wire.Transport).Inner;
@@ -1608,7 +1608,7 @@ internal static class MenuOriginalConnectionSuites
         var launch = exits.Skip(before).OfType<LaunchExit>().FirstOrDefault();
         ctx.Check(launch is { Mode: MenuMode.Versus, Net.IsHost: false, Match: { TimeLimitMinutes: 5, Lives: DogfightLobby.DefaultLives } }
                   && launch.Chapter == DogfightLobby.ChapterOf(3) && launch.Seats.Count == 1
-                  && launch.Seats[0].PlaneNode == PlanePickerRoster.AirframeNode(1),
+                  && launch.Seats[0].PlaneNode == StockAirframes.Node(1),
             $"the guest launches behind the host on the same chapter and rules in its own pick ({launch?.Chapter}, {launch?.Match}, {launch?.Seats.FirstOrDefault()?.PlaneNode})");
     }
 
@@ -2009,10 +2009,10 @@ internal static class MenuOriginalConnectionSuites
             return;
         }
 
-        var planes = new[] { PlanePickerRoster.AirframeNode(0) };
+        var planes = new[] { StockAirframes.Node(0) };
         var fits = new LoadoutChoice?[] { null };
         var (roster, _) = CSVM.Launch.Launcher.VersusLaunchField(wire.Transport, planes, fits, StockLoadouts.Load());
-        ctx.Check(roster.Length == 2 && roster[1].PlaneNode == PlanePickerRoster.AirframeNode(2),
+        ctx.Check(roster.Length == 2 && roster[1].PlaneNode == StockAirframes.Node(2),
             $"the host's roster builds the guest's seat on its pick ({string.Join(", ", roster.Select(s => s.PlaneNode))})");
         ctx.Check(roster.Length == 2 && roster[0].Callsign == SplitScreen.PlayerTag(0),
             $"a host whose advert names nobody is seated under its player tag ({roster.FirstOrDefault()?.Callsign})");
@@ -2026,7 +2026,7 @@ internal static class MenuOriginalConnectionSuites
         var launch = guestExits.Skip(before).OfType<LaunchExit>().FirstOrDefault();
         ctx.Check(launch is { Mode: MenuMode.Versus, Net.IsHost: false, Match.TimeLimitMinutes: 5 }
                   && launch.Chapter == chapter && launch.Seats.Count == 1
-                  && launch.Seats[0].PlaneNode == PlanePickerRoster.AirframeNode(2),
+                  && launch.Seats[0].PlaneNode == StockAirframes.Node(2),
             $"the guest launches behind the Built-in host on its map and time in its own pick ({launch?.Chapter}, {launch?.Match}, {launch?.Seats.FirstOrDefault()?.PlaneNode})");
     }
 

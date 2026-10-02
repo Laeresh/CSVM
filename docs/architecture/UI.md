@@ -35,9 +35,8 @@ offsets, the sentinel substitution for an unused wave slot and each preset's con
 The picker roster rule behind every human plane pick, engine-free so it tests without a menu
 instance: `Build(stock, customs)` lists the stock rows in their given order, then one row per saved
 `CustomPlaneDef` in the store's name-sorted order, each carrying its store name and its airframe's
-stock node, skipping a campaign plane nobody has exported. `AirframeNode` and `AirframeOf` are the
-airframe-id to `player_*` node table and its inverse, `IndexOf` the after-build auto-select's
-case-blind lookup. Deliberately not `Session.Roster.HumanFieldPlanes`, which answers "which plane does player N
+stock node off `Flight/Hangar/StockAirframes.cs`, skipping a campaign plane nobody has exported.
+`IndexOf` is the after-build auto-select's case-blind lookup. Deliberately not `Session.Roster.HumanFieldPlanes`, which answers "which plane does player N
 fly" off a `SessionSpec`: this is the menu-side list, that one the session-side read. Tests:
 `CSVM.Tests/PlanePickerRosterTests.cs`.
 
@@ -96,7 +95,7 @@ navigation; the launchscreen owns every Godot control. Screens are a stack rathe
 order, since the campaign's navigation is a graph, and `Registry` maps a `CampaignScreen` to its
 page factory. A page contributes pictures, strokes and captions and names which authored button
 each row presses; `CampaignBoards` supplies the geometry through `Layout`, which is Built-in's
-alone. `Modal` and `Message` are the dialog and the refusal band every screen shares; `OpenCabin` is every door onto the cabin, RETURN TO CABIN and the back press included, and `OpenScrapbookAfterMission` the mission end's door onto the book, each playing one of the feature's two cinemas through `Film`, the span (`CinemaHandoff.cs`) a polling presentation reads before it applies a frame. The cursor walks past a row its page refuses (`Focusable`), which is how ammo selection's fieldless slots are skipped, and every cursor move closes each open drop-down but the focused row's, so a pointer that moves the focus leaves no list standing.
+alone. `Modal` and `Message` are the dialog and the refusal band every screen shares; `OpenCabin` is every door onto the cabin, RETURN TO CABIN and the back press included, and `OpenScrapbookAfterMission` the mission end's door onto the book, each playing one of the feature's two cinemas through `Film`, the span (`Video/CinemaHandoff.cs`) a polling presentation reads before it applies a frame. The cursor walks past a row its page refuses (`Focusable`), which is how ammo selection's fieldless slots are skipped, and every cursor move closes each open drop-down but the focused row's, so a pointer that moves the focus leaves no list standing.
 
 ## src/UI/Menu/CampaignFlightField.cs
 Owns a campaign sortie's humans as part of the shared `CampaignFeature` (`Feature.Field`, in
@@ -254,10 +253,9 @@ One cinema on screen: a `CinemaPlayback`, the `ImageTexture` its pictures upload
 `AudioStreamGenerator` its samples are pushed to on the Voice bus, a cinema being a narrated film
 rather than score or world sound. The picture fills the same 800x600 rectangle `BoardFit` maps a
 board into, so a cinema and the screen it hands off to own one area of the window. `Open` answers
-null for a file that will not read, `Ended` is how a flow learns it stopped, and `CinemaSkip` is
-which presses end it early, the per-cinema differences there being the original's own. It mounts
-itself on `HudLayers.Cinema` and frees itself; `Launch/Launcher.cs`'s `PlayCinema` is the seam.
-The three authored sets live here as constants and `CinemaSkips` answers them.
+null for a file that will not read, `Ended` is how a flow learns it stopped, and a `CinemaSkip`
+set (`Video/CinemaHandoff.cs`) is which presses end it early: `BootKeys` here, the campaign films'
+own `Keys` there. It mounts itself on `HudLayers.Cinema` and frees itself; `PlayCinema` is the seam.
 
 ## src/UI/Screens/CinemaSkips.cs
 Which press ends a cinema, for every screen that offers a skip. `Skips` is the one member that
@@ -268,16 +266,6 @@ of its own. A pad button is in every set, because a player holding one has no ot
 and would otherwise sit through a 145-second film; it counts only where pad input does at all
 (`--no-pads`, an unfocused window), since a pad reports its first button as it connects. What each
 cinema's set is, and why they differ, is [../formats/cinemas.md](../formats/cinemas.md).
-
-## src/UI/Screens/CinemaHandoff.cs
-What every cinema flow shares. `CinemaPlay` is the shape of the call that puts a film on screen, which
-`Launch/Launcher.cs` satisfies by handing over `PlayCinema` itself. `Once` wraps the continuation a film hands off to: a
-skip can land on the frame the film plays out and both paths end it, so the next screen opens once however many times the
-cinema reports it stopped; the boot block, whose continuations start the next film, chains unwrapped. `CinemaFilm` is for
-the screen a film stands in front of rather than a flow that chains them: `Play` spans one film, `Up` says the film owns
-the frame, and `Swallows` says this frame is the tail of the press that ended it, the pointer's lasting until the button
-comes up and every other press spent where it lands. A screen without it reads the release of a press it never saw go
-down as a gesture of its own. Which presses end a film is `CinemaSkips.cs`'s, not this file's.
 
 ## src/UI/Screens/BootSequence.cs
 `fmv.zrd`'s boot block with no engine in it: `Card` composes the copyright card in the authored
@@ -485,11 +473,10 @@ Hidden while there is no shot.
 ## src/UI/Screens/StuntSplits.cs
 The stunt run's split section, shared by `StuntScoreboard` and `IaWrapupBoard`: the per-zone rows
 in the order flown with split and cumulative times, placeholder rows for zones never reached, the
-total, and the new-best or stored-best comparison line. `StuntSummary` is the value a board hands
-it, one run with its total and the stored best. A single flag keeps the two boards' shipped
-layouts apart, since the scoreboard rules off its total and the wrap-up board runs the table
-straight into it. `Lines` is the same table as flat text for the Original wrap-up page, whose
-total line opens with `TotalLabel` so the page can leave it out.
+total, and the new-best or stored-best comparison line. `Flight/Modes/StuntSummary.cs` is the value
+a board hands it, one run with its total and the stored best, and its `Lines` is the same table as
+flat text for the Original wrap-up page. A single flag keeps the two boards' shipped layouts apart,
+since the scoreboard rules off its total and the wrap-up board runs the table straight into it.
 
 ## src/UI/Screens/StuntRaceBoard.cs
 The race's shared ranked results overlay on `ResultsBoard`'s shell: one row per player from
@@ -513,9 +500,8 @@ Zeppelin vs Zeppelin keeps the row, which leaves for the lobby. `StuntRaceBoard`
 ## src/UI/Screens/IaWrapupBoard.cs
 Instant Action's wrap-up board on `ResultsBoard`'s shell, whole-window since the mission ends for
 every human at once: four label and value rows for time to complete, enemies shot down, danger
-zones completed and shot percentage. It takes no live match object at all, only the caller's own
-snapshot handed in once by `InstantActionRuntime`, so `InstantActionDirector` owns every source
-and this class draws what it is given. Its static `FormatElapsed` is the decoded time row, which
+zones completed and shot percentage. `GameSession` builds it and `InstantActionDirector` holds it as
+an `IIaWrapupBoard`, handing in one `IaWrapupSnapshot`, so this class draws what it is given. Its static `FormatElapsed` is the decoded time row, which
 the Original presentation's wrap-up page prints too. On a stunt mission it also grows a `StuntSplits` section and player 1's `StuntShotStrip` (the one live source, handed over at the wrap-up rather than the
 ending so a marker latched after the run completed is on it), and no per-pane scoreboard is built. Its Restart reaches the Launcher's session restart
 and rebuilds the world, because a mission's waves, ace and zeppelin cannot be put back in place.
@@ -1382,7 +1368,7 @@ Where the menu stands when it comes back, said semantically: `TopLevel`, `Instan
 active presentation maps it into its own graph at `Activate`, so no presentation-specific screen id crosses the seam. `ForLaunch(exit)` reads off a launch's own exit the screen it came from, which is
 where a flight left early lands; the exit and not the session's spec, since a spec inherits the command line's `--campaign=` and would call a Free Flight launched afterwards a campaign mission. A
 destination names where the player stands and never a store: the two campaign returns name a profile, the store it is re-read from is the presentation's own, and an Instant Action return names
-nothing, the sortie's setup being the feature's. The one exception is the wrap-up return, which carries `IaWrapupSnapshot` (declared here, so nothing outside the shared namespace crosses the seam but the stunt camera's own `StuntShot` records):
+nothing, the sortie's setup being the feature's. The one exception is the wrap-up return, which carries `IaWrapupSnapshot` (declared by the session in `Session/InstantAction/IaWrapupSnapshot.cs`, so no other presentation type crosses the seam):
 the session that counted an ended Instant Action mission's numbers is freed before any page can draw them. The `--menu=` aid is not a destination either, reaching the cold start alone, so a return is
 always one of these. The namespace seam this whole
 folder is held to, and the two scans that enforce it, are in [../menu-presentations.md](../menu-presentations.md).

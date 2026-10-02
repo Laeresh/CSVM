@@ -456,8 +456,6 @@ internal static class StaticCameraSuites
                 RigCount = rigs.Count,
                 Rigs = rigs,
                 PauseState = new PauseState(),
-                MenuInputFor = _ => new UI.Boards.MenuInput(),
-                ExitSession = () => { },
             }, starts);
     }
 

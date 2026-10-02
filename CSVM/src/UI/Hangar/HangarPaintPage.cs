@@ -28,15 +28,6 @@ public sealed class HangarPaintPage : HangarPage
     // The pattern dropdown's labels are langui 3425 + pattern index (callback 2235).
     private const int PatternStringBase = 3425;
 
-    // Pattern index 0-13 (record +0x40) is a row of the engine's 14-entry pattern-name table at
-    // 0x0060301c, which is also the archive folder name. Read out of crimson.exe; the four
-    // indices seven genuine saves pin (blckswan 1, fortune 4, hughes 6, studio 11) all match.
-    private static readonly string[] PatternNames =
-    {
-        "blackhat", "blckswan", "blake", "british", "fortune", "hollywd", "hughes",
-        "medusas", "cccp", "sactrust", "german", "studio", "broadway", "itstaxi",
-    };
-
     // Airframe id 0-10 to the skin-texture prefix its masks are named after. Confirmed against
     // the shipped icon sets: each PX_ICON_<af>_<pattern>_* set is exactly the pattern list
     // PatternsFor gives that prefix (itstaxi aside, which ships no icons at all).
@@ -87,10 +78,6 @@ public sealed class HangarPaintPage : HangarPage
 
     /// <summary>The swatch, pattern and decal tables every row on this screen reads.</summary>
     private static HangarPaintTables Tables => HangarPaintTables.Default;
-
-    /// <summary>The archive folder / table name for a pattern index, or "" outside 0-13.</summary>
-    public static string PatternName(int pattern) =>
-        pattern >= 0 && pattern < PatternNames.Length ? PatternNames[pattern] : string.Empty;
 
     /// <summary>The skin-texture prefix an airframe's masks are named after.</summary>
     public static string SkinPrefix(int airframe) =>
@@ -285,7 +272,7 @@ public sealed class HangarPaintPage : HangarPage
     // pattern's archive folder, stands in when the string table is missing.
     private string PatternLabel(int pattern)
     {
-        string name = PatternName(pattern);
+        string name = CustomPlaneBuild.PatternName(pattern);
         return Flow.Strings.Text(
             PatternStringBase + pattern,
             name.Length == 0 ? $"pattern {pattern}" : name.ToUpperInvariant());

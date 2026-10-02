@@ -1,6 +1,6 @@
 using System;
 using CSVM.Mech3;
-using CSVM.UI.Screens;
+using CSVM.Video;
 
 namespace CSVM.Session.Campaign;
 
@@ -22,6 +22,11 @@ public sealed class ClosingCinema
     /// rather than read back, since the row lives in Original's decoded layout and this film plays
     /// under both presentations; the lookup is case-blind either way.</summary>
     public const string Name = "Final.MPG";
+
+    /// <summary>Escape or a left mouse press, the closing cinema's set and no more, and a pad
+    /// button with them. ⚠ Do not unify it with <see cref="ChapterCinema.Keys"/>: Space and Return
+    /// skip a chapter cinema and do nothing here, which the two scripts author separately.</summary>
+    public const CinemaSkip Keys = CinemaSkip.Escape | CinemaSkip.LeftMouse | CinemaSkip.PadButton;
 
     private readonly CinemaPlay _play;
     private readonly Action? _stop;
@@ -52,9 +57,7 @@ public sealed class ClosingCinema
             return false;
         }
 
-        // ⚠ Do not unify these presses with the chapter cinema's. Space and Return skip a chapter
-        // cinema and do nothing here, which the two scripts author separately.
-        _play(Name, CinemaHandoff.Once(showScrapbook), CinemaScreen.ClosingKeys);
+        _play(Name, CinemaHandoff.Once(showScrapbook), Keys);
         return true;
     }
 
@@ -63,7 +66,7 @@ public sealed class ClosingCinema
     public void Play(Action then)
     {
         ArgumentNullException.ThrowIfNull(then);
-        _play(Name, CinemaHandoff.Once(then), CinemaScreen.ClosingKeys);
+        _play(Name, CinemaHandoff.Once(then), Keys);
     }
 
     /// <summary>Ends the film showing now, as a skip does. Nothing happens without a stop call.

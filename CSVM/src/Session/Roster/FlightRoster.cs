@@ -101,8 +101,6 @@ public sealed class FlightRoster
             ArgumentNullException.ThrowIfNull(aircraft.CamParamsFor);
             ArgumentNullException.ThrowIfNull(aircraft.WeaponMessages);
             ArgumentNullException.ThrowIfNull(human.PauseState);
-            ArgumentNullException.ThrowIfNull(human.MenuInputFor);
-            ArgumentNullException.ThrowIfNull(human.ExitSession);
         }
         _world = world;
         _human = human;
