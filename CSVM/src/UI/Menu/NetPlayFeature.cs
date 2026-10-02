@@ -112,7 +112,7 @@ public sealed class NetPlayFeature : IMenuFeature
     private INetLink? _link;
     private INetListing? _listing;
     private bool _byCode;
-    private string? _codeNoted;
+    private bool? _private;
     private NetSessionKind _kind = NetSessionKind.Dogfight;
     private byte _missionSeq = SessionAdvertMessage.NoMission;
     private string _hostName = "";
@@ -191,6 +191,26 @@ public sealed class NetPlayFeature : IMenuFeature
     /// master server is set.</summary>
     public string ListingFault => IsHost ? _listing?.ListingFault ?? "" : "";
 
+    /// <summary>Why internet guests cannot reach this host by code. It is "" while they can, while
+    /// the code is on its way, and with no master server set. A host with a master server but no
+    /// listing carrier is one whose WebRTC library is missing or would not start.</summary>
+    public string InternetFault =>
+        !IsHost || JoinCode != null ? "" : _listing == null ? Master != null ? CoopDoorText.NoWebRtc : "" : ListingFault;
+
+    /// <summary>Whether this host is listing on the master server and has no code or fault yet.
+    /// </summary>
+    public bool AwaitingCode => IsHost && _listing != null && JoinCode == null && ListingFault.Length == 0;
+
+    /// <summary>Whether this host's game stays off the master server's games list, so internet guests
+    /// reach it by its join code alone. LAN searches and typed addresses reach it either way. Until a
+    /// Game Information answer or a board sets it, it is the hosted kind's
+    /// <see cref="NetPlayerInfo.DefaultPrivate"/>.</summary>
+    public bool Private
+    {
+        get => _private ?? NetPlayerInfo.DefaultPrivate(_kind);
+        set => _private = value;
+    }
+
     /// <summary>Why the last open failed, or "" when none has. Shown on the board rather than
     /// thrown: a taken port and a refused join are both things a player fixes and retries.</summary>
     public string Fault { get; private set; } = "";
@@ -248,8 +268,12 @@ public sealed class NetPlayFeature : IMenuFeature
     /// </summary>
     public bool NamesHostAddress => StableIpv6 != null;
 
-    /// <summary>How many times this host's address was copied since it opened.</summary>
+    /// <summary>How many times this host's address or code was copied since it opened.</summary>
     public int Copies { get; private set; }
+
+    /// <summary>The text this host last put on the clipboard since it opened, or "". A board marks
+    /// a code or an address copied only while it is the one shown.</summary>
+    public string Copied { get; private set; } = "";
 
     /// <summary>What a guest types to reach this host: the stable IPv6 address, else the router's
     /// mapped IPv4 address, else the LAN address. The port is written when it is not
@@ -564,8 +588,9 @@ public sealed class NetPlayFeature : IMenuFeature
 
     /// <summary>Takes what the Game and Player Information boxes answered. The callsign, the voice
     /// and the password are always taken: a host's from Game Information, a joining player's from
-    /// Player Information. The game's name and cap are taken when <paramref name="game"/> says the
-    /// host's box was shown.</summary>
+    /// Player Information. The game's name, cap and Public or Private choice are taken when
+    /// <paramref name="game"/> says the host's box was shown. The password and the choice last
+    /// until the session they open ends.</summary>
     public void Take(NetPlayerInfo info, bool game)
     {
         ArgumentNullException.ThrowIfNull(info);
@@ -576,7 +601,19 @@ public sealed class NetPlayFeature : IMenuFeature
         {
             GameName = info.GameName.Trim();
             MaxPlayers = info.MaxPlayers;
+            _private = info.Private;
         }
+    }
+
+    /// <summary>Drops the password and the Public or Private choice, so the next open asks no
+    /// password and takes its kind's default listing. A session's end calls it, and so does a door
+    /// that opens with no box to confirm them. ⚠ Do not keep either past its session. Nothing on
+    /// screen shows a leftover, which would gate a later host or join the player never gated.
+    /// </summary>
+    public void ForgetAnswers()
+    {
+        Password = "";
+        _private = null;
     }
 
     /// <summary>This co-op guest's pick for its seat <paramref name="local"/>, counted from 0 among
@@ -619,18 +656,12 @@ public sealed class NetPlayFeature : IMenuFeature
 
     /// <summary>Copies <see cref="GuestAddress"/> to the clipboard. False, and nothing copied,
     /// while there is no address to give or no clipboard to put it on.</summary>
-    public bool CopyGuestAddress()
-    {
-        string address = GuestAddress;
-        if (address.Length == 0 || CopyText == null)
-        {
-            return false;
-        }
+    public bool CopyGuestAddress() => Copy(GuestAddress);
 
-        CopyText(address);
-        Copies++;
-        return true;
-    }
+    /// <summary>Copies what a guest outside this network needs: the join code once the master server
+    /// gave one, else <see cref="GuestAddress"/>. The copy key's action, so one key serves a host
+    /// with a code and one without.</summary>
+    public bool CopyForGuests() => JoinCode is { } code ? Copy(code) : CopyGuestAddress();
 
     /// <summary>What this co-op host's boards show, named to every guest on the next step. A new
     /// mission starts a new round of picks, as does a move onto a board other than the briefing
@@ -1060,6 +1091,13 @@ public sealed class NetPlayFeature : IMenuFeature
     /// </summary>
     public void Close()
     {
+        // An open session takes its password and listing with it. A shut or failed door keeps them,
+        // since the boards close one between the box's OK and the open it confirmed.
+        if (Stage is NetDoorStage.Hosting or NetDoorStage.Joining or NetDoorStage.Joined)
+        {
+            ForgetAnswers();
+        }
+
         _responder?.Dispose();
         _responder = null;
         if (_transport != null && !_released)
@@ -1099,6 +1137,7 @@ public sealed class NetPlayFeature : IMenuFeature
     public void Discard()
     {
         Close();
+        ForgetAnswers();
         EndLinger();
         StopSearch();
         Fault = "";
@@ -1155,7 +1194,7 @@ public sealed class NetPlayFeature : IMenuFeature
 
             var flying = CurrentAdvert();
             _responder?.Poll(flying, Port);
-            _listing?.List(MasterDirectory.ListingOf(flying, Version));
+            _listing?.List(MasterDirectory.ListingOf(flying, Version, Private));
             return;
         }
 
@@ -1184,8 +1223,7 @@ public sealed class NetPlayFeature : IMenuFeature
             var advert = CurrentAdvert();
             _transport.Advertise(advert);
             _responder?.Poll(advert, Port);
-            _listing?.List(MasterDirectory.ListingOf(advert, Version));
-            NoteJoinCode();
+            _listing?.List(MasterDirectory.ListingOf(advert, Version, Private));
             return;
         }
 
@@ -1270,17 +1308,6 @@ public sealed class NetPlayFeature : IMenuFeature
         return OpenCode != null && Address.Contains('-', StringComparison.Ordinal) && MasterWire.TryCode(Address, out code);
     }
 
-    // The Multiplayer Lobby's chat names the join code once the master server gives one, and again
-    // if a reopened listing gives another.
-    private void NoteJoinCode()
-    {
-        if (JoinCode is { } code && code != _codeNoted && _dogfight is { Shown: true } lobby)
-        {
-            lobby.Note(CoopDoorText.NoteName, CoopDoorText.JoinCodeNote(code));
-            _codeNoted = code;
-        }
-    }
-
     // Both host doors open the same socket; only the advert's kind tells them apart.
     private void OpenHost(int maxGuests, NetSessionKind kind)
     {
@@ -1303,7 +1330,6 @@ public sealed class NetPlayFeature : IMenuFeature
 
         _link = _transport.Inner as INetLink;
         _listing = _transport.Inner as INetListing;
-        _codeNoted = null;
         _kind = kind;
         Fault = "";
         Stage = NetDoorStage.Hosting;
@@ -1662,6 +1688,7 @@ public sealed class NetPlayFeature : IMenuFeature
         Fault = why;
         Stage = NetDoorStage.Failed;
         ForgetHostAddress();
+        ForgetAnswers();
     }
 
     private void ForgetHostAddress()
@@ -1669,6 +1696,20 @@ public sealed class NetPlayFeature : IMenuFeature
         HostIpv6 = null;
         HostLanIpv4 = null;
         Copies = 0;
+        Copied = "";
+    }
+
+    private bool Copy(string text)
+    {
+        if (!IsHost || text.Length == 0 || CopyText == null)
+        {
+            return false;
+        }
+
+        CopyText(text);
+        Copies++;
+        Copied = text;
+        return true;
     }
 
     private DoorReading Read() => new(

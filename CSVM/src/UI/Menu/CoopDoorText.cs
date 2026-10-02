@@ -7,9 +7,9 @@ namespace CSVM.UI.Menu;
 
 /// <summary>
 /// The words the campaign's network door is shown in, on both of its ends. A host's campaign
-/// boards carry a one-line band naming the open port and the address guests reach it at. A
-/// guest's join board names the session a host advertised, and its waiting board says what it is
-/// waiting for. Engine-free and built off the door alone, so a presentation draws the same words
+/// boards carry a band naming its join code, or without one the port and the address guests reach
+/// it at. A guest's join board names the session a host advertised, and its waiting board says
+/// what it is waiting for. Engine-free and built off the door alone, so a presentation draws the same words
 /// a unit test reads. The mission's long name is the caller's, since only it holds the langui
 /// table.
 /// </summary>
@@ -73,6 +73,22 @@ public static class CoopDoorText
 
     /// <summary>The name a Dogfight host's own address notes stand under in its lobby chat.</summary>
     public const string NoteName = "Network";
+
+    /// <summary>Why a host with a master server set has no join code when its build cannot open
+    /// the WebRTC carrier the code is reached over.</summary>
+    public const string NoWebRtc = "WebRTC is missing or failed to start";
+
+    /// <summary>A host's word while the master server has not answered with a code yet.</summary>
+    public const string AwaitingCode = "Asking the master server for a join code ...";
+
+    /// <summary>Game Information's Public choice, which lists the game.</summary>
+    public const string PublicWord = "Public";
+
+    /// <summary>Game Information's Private choice, which keeps the game off the games list.</summary>
+    public const string PrivateWord = "Private";
+
+    // The longest line a host is told why it has no code in, so a long fault fits the band.
+    private const int InternetLineLimit = 76;
 
     /// <summary>The games list's Game Name: the name the host's Game Information box gave it, or
     /// what it holds open when the advert names none.</summary>
@@ -222,16 +238,25 @@ public static class CoopDoorText
         return $"{SessionName(advert, missionName)}. {Capital(GameCalled(advert))}{Players(advert.Players)} at {net.Address}. {state}";
     }
 
-    /// <summary>A campaign host's band: the port, the router's address, the guests on the wire,
-    /// and the master server's join code once it gives one. The second line is
-    /// <see cref="HostAddressLine"/> when it has one. Empty while the door is not a campaign host,
-    /// so a board with the door shut draws nothing extra.</summary>
+    /// <summary>A campaign host's band. With a join code it names the guests, the code and the copy
+    /// key, and on a second line whether the game is listed. Without one it names the port, the
+    /// router's address and the guests, then <see cref="HostAddressLine"/>, then why there is no
+    /// code. Empty while the door is not a campaign host.</summary>
     public static string HostBand(NetPlayFeature net)
     {
         ArgumentNullException.ThrowIfNull(net);
         if (!net.IsCoopHost)
         {
             return "";
+        }
+
+        int guests = net.Peers;
+        string joined = guests == 1 ? "1 guest" : $"{guests.ToString(CultureInfo.InvariantCulture)} guests";
+
+        // A code reaches this host from anywhere, so the address a guest would type is not shown.
+        if (net.JoinCode is { } code)
+        {
+            return $"NETWORK OPEN  {joined}  CODE {code}{CopyMark(net, code)}\n{Listing(net.Private)}";
         }
 
         string port = net.Port.ToString(CultureInfo.InvariantCulture);
@@ -242,16 +267,53 @@ public static class CoopDoorText
             not null => $"port {port}, this network only",
             null => $"port {port}",
         };
-        int guests = net.Peers;
-        string joined = guests == 1 ? "1 guest" : $"{guests.ToString(CultureInfo.InvariantCulture)} guests";
-        string code = net.JoinCode is { } listed ? $"  CODE {listed}" : "";
-        string address = HostAddressLine(net);
-        return address.Length > 0 ? $"NETWORK OPEN  {where}  {joined}{code}\n{address}" : $"NETWORK OPEN  {where}  {joined}{code}";
+        var lines = new List<string> { $"NETWORK OPEN  {where}  {joined}", HostAddressLine(net), InternetLine(net) };
+        lines.RemoveAll(line => line.Length == 0);
+        return string.Join("\n", lines);
     }
 
-    /// <summary>The lobby chat's note naming the code internet guests join this host by, which the
-    /// master server gave it.</summary>
-    public static string JoinCodeNote(string code) => $"Internet guests join with code {code}.";
+    /// <summary>A Dogfight host's standing line about internet guests: its code, whether it is
+    /// listed and the copy key, or why there is no code. Empty while the door is not hosting or no
+    /// master server is set.</summary>
+    public static string HostCodeLine(NetPlayFeature net)
+    {
+        ArgumentNullException.ThrowIfNull(net);
+        if (!net.IsHost)
+        {
+            return "";
+        }
+
+        if (net.JoinCode is not { } code)
+        {
+            return InternetLine(net);
+        }
+
+        string copy = net.Copied == code ? "It is copied." : $"{CopyPress} copies it.";
+        string listed = net.Private ? "private, not on the games list" : "public, on the games list";
+        return $"Internet code {code}, {listed}. {copy}";
+    }
+
+    /// <summary>Why a host has no join code yet: still asking, or the fault, cut to one band line.
+    /// Empty with a code, while not hosting, and when no master server is set.</summary>
+    public static string InternetLine(NetPlayFeature net)
+    {
+        ArgumentNullException.ThrowIfNull(net);
+        if (net.AwaitingCode)
+        {
+            return AwaitingCode;
+        }
+
+        if (net.InternetFault is not { Length: > 0 } why)
+        {
+            return "";
+        }
+
+        string line = $"No internet code: {why}";
+        return line.Length <= InternetLineLimit ? line : $"{line[..(InternetLineLimit - 3)].TrimEnd()}...";
+    }
+
+    /// <summary>Game Information's Public/Private row as it reads.</summary>
+    public static string ListingWord(bool isPrivate) => isPrivate ? PrivateWord : PublicWord;
 
     /// <summary>A host band's second line: the IPv6 address a guest outside this network types,
     /// and the copy key. Without one it says so and names the LAN address. Empty while the door is
@@ -264,7 +326,7 @@ public static class CoopDoorText
             return "";
         }
 
-        string copy = net.GuestAddress.Length == 0 ? "" : net.Copies > 0 ? "  copied" : $"  {CopyPress}";
+        string copy = net.GuestAddress.Length == 0 ? "" : CopyMark(net, net.GuestAddress);
         if (net.HostIpv6 is { } v6)
         {
             return $"IPv6  {net.Dial(v6)}{copy}";
@@ -287,7 +349,7 @@ public static class CoopDoorText
 
         string lan = net.HostLanIpv4 is { } v4 ? net.Dial(v4) : "";
         string copy = net.GuestAddress.Length == 0 ? ""
-            : net.Copies > 0 ? $" {net.GuestAddress} is copied."
+            : net.Copied == net.GuestAddress ? $" {net.GuestAddress} is copied."
             : $" {CopyPress} copies {net.GuestAddress}.";
         if (net.HostIpv6 is { } v6)
         {
@@ -435,6 +497,11 @@ public static class CoopDoorText
 
     /// <summary>The co-op host's question before its cabin's BOOT removes a guest.</summary>
     public static string BootQuestion(string name) => $"Boot {(name.Length > 0 ? name : "this guest")} from the game?";
+
+    private static string CopyMark(NetPlayFeature net, string shown) => net.Copied == shown ? "  copied" : $"  {CopyPress}";
+
+    private static string Listing(bool isPrivate) =>
+        isPrivate ? "PRIVATE  internet guests need the code" : "PUBLIC  on the games list";
 
     private static string GameCalled(SessionAdvertMessage advert) =>
         advert.Host.Length > 0 ? $"game {advert.Host}, " : "";

@@ -90,6 +90,33 @@ public class MasterWireTests
         Assert.Null(MasterWire.TryReadList("{\"games\":"));
     }
 
+    [Fact]
+    public void TheUnlistedMarkIsWrittenOnlyWhenSetAndSurvivesTheClean()
+    {
+        var listed = new MasterGame { Name = "Open", Kind = MasterWire.DogfightKind };
+        var hidden = new MasterGame { Name = "Hidden", Kind = MasterWire.CoopKind, Unlisted = true };
+
+        string open = MasterWire.Write(new MasterMessage { T = MasterWire.Host, Game = listed });
+        string secret = MasterWire.Write(new MasterMessage { T = MasterWire.Host, Game = hidden });
+
+        Assert.DoesNotContain("unlisted", open, StringComparison.Ordinal);
+        Assert.Contains("\"unlisted\":true", secret, StringComparison.Ordinal);
+        Assert.True(MasterWire.TryRead(secret, out var read));
+        Assert.True(read.Game!.Unlisted);
+        Assert.True(MasterWire.Clean(read.Game).Unlisted);
+        Assert.False(MasterWire.Clean(listed).Unlisted);
+    }
+
+    [Fact]
+    public void AnOlderBuildsListingWithNoMarkIsListed()
+    {
+        const string older = "{\"t\":\"host\",\"game\":{\"name\":\"Old\",\"kind\":\"dogfight\",\"players\":1,\"cap\":8,"
+            + "\"status\":\"waiting\",\"version\":\"0.1\"}}";
+
+        Assert.True(MasterWire.TryRead(older, out var read));
+        Assert.False(read.Game!.Unlisted);
+    }
+
     [Theory]
     [InlineData("master.example.org", "https://master.example.org/")]
     [InlineData("https://master.example.org", "https://master.example.org/")]

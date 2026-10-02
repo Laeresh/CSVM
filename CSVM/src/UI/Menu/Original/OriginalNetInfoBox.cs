@@ -11,7 +11,8 @@ namespace CSVM.UI.Menu.Original;
 /// <summary>Which of the original's two network boxes stands.</summary>
 public enum NetInfoPage
 {
-    /// <summary>GAME INFORMATION, a host's: the game's name, its password and its seat cap.</summary>
+    /// <summary>GAME INFORMATION, a host's: the game's name, its password, its seat cap and its
+    /// listing.</summary>
     Game,
 
     /// <summary>PLAYER INFORMATION, every player's: the callsign and the voice.</summary>
@@ -26,7 +27,8 @@ public enum NetInfoPage
 /// the name box is empty, and a name of spaces alone raises the original's refusal. The Player
 /// Information Password takes the join's password when the game asks one, and is greyed
 /// otherwise, as the script's callback 5003 opens it. The decode is in
-/// <c>docs/org/multiplayer-messages.md</c>, "Game and Player Information".
+/// <c>docs/org/multiplayer-messages.md</c>, "Game and Player Information"; the Listing chooser,
+/// opening on the hosted kind's default every time, is the remake's own.
 /// </summary>
 public sealed class OriginalNetInfoBox
 {
@@ -44,6 +46,16 @@ public sealed class OriginalNetInfoBox
 
     /// <summary>The spinner's down arrow.</summary>
     public const string FewerKey = "MPI_B_FEWER";
+
+    /// <summary>The remake's Listing chooser, Public or Private, drawn in the spinner's idiom
+    /// beside it. Private keeps the game off the master server's games list.</summary>
+    public const string ListingKey = "MPI_S_LISTING";
+
+    /// <summary>The Listing chooser's up arrow, onto Public.</summary>
+    public const string PublicKey = "MPI_B_PUBLIC";
+
+    /// <summary>The Listing chooser's down arrow, onto Private.</summary>
+    public const string PrivateKey = "MPI_B_PRIVATE";
 
     /// <summary>The Callsign box.</summary>
     public const string CallsignKey = "MPI_E_CALLSIGN";
@@ -85,6 +97,9 @@ public sealed class OriginalNetInfoBox
     private const float SpinnerHeight = 25f;
     private const float SpinnerArrowWidth = 16f;
     private const float SpinnerArrowHeight = 11f;
+    // The Listing chooser stands right of the spinner, past the end of its label, on its line.
+    private const float ListingX = 440f;
+    private const float ListingWidth = 74f;
     private const float ButtonY = 372f;
     private const float OkX = 360f;
     private const float CancelX = 452f;
@@ -108,6 +123,9 @@ public sealed class OriginalNetInfoBox
     private int _focusBefore = -1;
     private bool _voiceOpen;
     private bool _asksPassword;
+
+    // Whether a master server is set, without which the Listing choice changes nothing.
+    private bool _listable;
 
     /// <summary>A box drawn for <paramref name="host"/> in the words of the string table under
     /// <paramref name="dataRoot"/>. The last OK hands the answers to <paramref name="remember"/>,
@@ -135,6 +153,10 @@ public sealed class OriginalNetInfoBox
     /// asked one, never on a host's own box.</summary>
     public bool JoinPasswordLive => Page == NetInfoPage.Player && _hosting == null && _asksPassword;
 
+    /// <summary>Whether Game Information's Listing chooser takes input: only with a master server
+    /// set, since without one no games list exists to keep the game off.</summary>
+    public bool ListingLive => Page == NetInfoPage.Game && _listable;
+
     /// <summary>Whether seat 0's typed characters feed one of the boxes. They do while an edit box
     /// has the focus and no list or messagebox stands over it.</summary>
     internal bool CapturingText =>
@@ -148,13 +170,15 @@ public sealed class OriginalNetInfoBox
     /// host's <paramref name="hosting"/> names the kind of game, whose cap the spinner keeps. It
     /// opens on Game Information, and null opens Player Information alone. A join that
     /// <paramref name="asksPassword"/> may be asked one leaves Player Information's Password box
-    /// live. <paramref name="done"/> takes the answers once the last OK stands.</summary>
-    public void Open(NetSessionKind? hosting, NetPlayerInfo start, Action<NetPlayerInfo> done, bool asksPassword = false)
+    /// live. <paramref name="done"/> takes the answers once the last OK stands. The Listing chooser
+    /// is greyed unless <paramref name="listable"/> says a master server is set.</summary>
+    public void Open(NetSessionKind? hosting, NetPlayerInfo start, Action<NetPlayerInfo> done, bool asksPassword = false, bool listable = false)
     {
         ArgumentNullException.ThrowIfNull(start);
         _draft = start.Copy();
         _hosting = hosting;
         _asksPassword = asksPassword;
+        _listable = listable;
         if (hosting == null)
         {
             _draft.Password = string.Empty;
@@ -164,6 +188,7 @@ public sealed class OriginalNetInfoBox
         if (hosting is { } kind)
         {
             _draft.MaxPlayers = NetPlayerInfo.ClampPlayers(kind, _draft.MaxPlayers);
+            _draft.Private = NetPlayerInfo.DefaultPrivate(kind);
         }
 
         _focusBefore = Page == null ? _host.FocusedRow : _focusBefore;
@@ -209,6 +234,13 @@ public sealed class OriginalNetInfoBox
                 _draft.MaxPlayers < MaxPlayers(), 0, new BoardArt(BoardArtLibrary.Ui, UpArt, 4)));
             rows.Add(new OriginalRow(FewerKey, string.Empty, OriginalRowKind.Button, 313f, 324f, SpinnerArrowWidth, SpinnerArrowHeight,
                 _draft.MaxPlayers > NetPlayerInfo.MinPlayers, 0, new BoardArt(BoardArtLibrary.Ui, DownArt, 4)));
+            bool isPrivate = _draft.Private ?? false;
+            rows.Add(new OriginalRow(ListingKey, CoopDoorText.ListingWord(isPrivate), OriginalRowKind.Dropdown, ListingX, 312f, ListingWidth,
+                SpinnerHeight, ListingLive, 0, null));
+            rows.Add(new OriginalRow(PublicKey, string.Empty, OriginalRowKind.Button, ListingX + ListingWidth + 1f, 313f, SpinnerArrowWidth,
+                SpinnerArrowHeight, ListingLive && isPrivate, 0, new BoardArt(BoardArtLibrary.Ui, UpArt, 4)));
+            rows.Add(new OriginalRow(PrivateKey, string.Empty, OriginalRowKind.Button, ListingX + ListingWidth + 1f, 324f, SpinnerArrowWidth,
+                SpinnerArrowHeight, ListingLive && !isPrivate, 0, new BoardArt(BoardArtLibrary.Ui, DownArt, 4)));
             rows.Add(_text.Strip(OkKey, SmallArt, OkX, ButtonY, _draft.GameName.Length > 0, 0, 74f, 37f));
             rows.Add(_text.Strip(CancelKey, MediumArt, CancelX, ButtonY, true, 0, 96f, 37f));
             return;
@@ -261,6 +293,15 @@ public sealed class OriginalNetInfoBox
             case FewerKey:
                 Spin(-1);
                 break;
+            case ListingKey when ListingLive:
+                _draft.Private = !(_draft.Private ?? false);
+                break;
+            case PublicKey when ListingLive:
+                _draft.Private = false;
+                break;
+            case PrivateKey when ListingLive:
+                _draft.Private = true;
+                break;
             case VoiceKey:
                 _voiceOpen = true;
                 _host.FocusedRow = PilotVoices.Clamp(_draft.Voice);
@@ -287,8 +328,8 @@ public sealed class OriginalNetInfoBox
         }
     }
 
-    /// <summary>A sideways step on the spinner moves the cap, and on the Voice box picks the next
-    /// voice. False on any other row.</summary>
+    /// <summary>A sideways step on the spinner moves the cap, and on the Listing chooser flips it.
+    /// On the Voice box it picks the next voice. False on any other row.</summary>
     public bool StepSideways(IReadOnlyList<OriginalRow> rows, int focus, int direction)
     {
         ArgumentNullException.ThrowIfNull(rows);
@@ -301,6 +342,9 @@ public sealed class OriginalNetInfoBox
         {
             case PlayersKey:
                 Spin(Math.Sign(direction));
+                return true;
+            case ListingKey when ListingLive:
+                _draft.Private = !(_draft.Private ?? false);
                 return true;
             case VoiceKey:
                 int count = PilotVoices.All.Count;
@@ -522,8 +566,19 @@ public sealed class OriginalNetInfoBox
                 lines.Add(_text.Line(10530, string.Empty, row.X, row.Y + 5f, row.Width, Black, BoardJustify.Center, row.Label));
                 lines.Add(_text.Line(10029, "Maximum # of Players", row.X + LabelDx, row.Y + LabelDy, 0f, Black));
                 break;
+            case ListingKey:
+                // The remake's own row, in the cap row's box, faces and label place. Greyed, its
+                // word takes the plaques' greyed ink and its arrows their dead frame.
+                fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, DisabledFill.R, DisabledFill.G, DisabledFill.B));
+                fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 0, 0, 0, Border: true));
+                lines.Add(_text.Line(10530, string.Empty, row.X, row.Y + 5f, row.Width,
+                    row.Enabled ? Black : MultiplayerBoardText.LabelDisabled, BoardJustify.Center, row.Label));
+                lines.Add(_text.Line(10029, string.Empty, row.X + LabelDx, row.Y + LabelDy, 0f, Black, text: "Listing"));
+                break;
             case MoreKey:
             case FewerKey:
+            case PublicKey:
+            case PrivateKey:
                 pictures.Add(new BoardPicture(row.Art!, row.X, row.Y, !row.Enabled ? 0 : pressed ? 3 : focused ? 2 : 1));
                 break;
             case VoiceKey:

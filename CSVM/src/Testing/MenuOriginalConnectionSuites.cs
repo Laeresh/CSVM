@@ -37,8 +37,9 @@ internal static class MenuOriginalConnectionSuites
 
     [Suite("menu-original-connection",
         "The Original presentation's network doors over the loopback and an in-process LAN: the "
-        + "cabin's HOST CO-OP asks GAME INFORMATION, whose Cancel opens nothing and whose cap of "
-        + "sixteen is held to four, and then opens the carrier, the router mapping and the LAN answer, and CLOSE "
+        + "cabin's HOST CO-OP asks GAME INFORMATION, which opens on Private, whose Cancel opens nothing and whose cap of "
+        + "sixteen is held to four, and then opens the carrier, the router mapping and the LAN answer a "
+        + "Private host still gives, and CLOSE "
         + "NETWORK gives all three back, the Multiplayer plaque opens the Connection page, its "
         + "Connect over LAN TCP/IP lists the host as one row of five columns, Join Game lands the "
         + "guest on the host's cabin after PLAYER INFORMATION, a second guest joins, the host's chips "
@@ -742,8 +743,10 @@ internal static class MenuOriginalConnectionSuites
     }
 
     [Suite("menu-original-boot",
-        "The Multiplayer Lobby's password and Boot over the loopback: a host types a password into "
-        + "GAME INFORMATION and its own PLAYER INFORMATION keeps the join's Password greyed. The games "
+        "The Multiplayer Lobby's password and Boot over the loopback: a host's GAME INFORMATION with no "
+        + "master server greys its Listing chooser on Public, which neither a click nor a sideways step "
+        + "flips; the host types a password into it and its "
+        + "own PLAYER INFORMATION keeps the join's Password greyed. The games "
         + "list reads Need Password, and Join Game leaves PLAYER INFORMATION's Password live. A wrong "
         + "password is refused with Invalid Password on the Connection page before the host lists the "
         + "guest, and the right one lands it in the lobby. Boot is greyed until the host picks the "
@@ -951,7 +954,9 @@ internal static class MenuOriginalConnectionSuites
         "The games list with a master server set and no LAN socket: Connect over LAN TCP/IP opens the "
         + "list on the master server's one Dogfight, its row reads the listing's five columns, and "
         + "Join Game after PLAYER INFORMATION opens the join through the code opener with that game's "
-        + "code rather than an address, landing the guest on the host's Dogfight. The server is a "
+        + "code rather than an address, landing the guest on the host's Dogfight. The host's GAME "
+        + "INFORMATION Listing chooser is live and flips both ways, its lobby "
+        + "pins the code its listed carrier was given, and the copy key copies the code. The server is a "
         + "canned list and the wire the loopback")]
     internal static void TheMasterServersGames(TestContext ctx)
     {
@@ -967,9 +972,12 @@ internal static class MenuOriginalConnectionSuites
         const string listed = "{\"games\":[{\"code\":\"K7Q-X3M\",\"name\":\"Pirates\",\"kind\":\"dogfight\",\"players\":1,"
             + "\"cap\":8,\"status\":\"waiting\",\"version\":\"unknown\"}]}";
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(17));
-        var hostDoor = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => throw new InvalidOperationException("the host does not join"))
+        var copied = new List<string>();
+        var hostDoor = new NetPlayFeature(
+            (_, _, _) => NetDoorAid.Listed(mesh[0]), (_, _) => throw new InvalidOperationException("the host does not join"))
         {
-            PlayerName = "Zachary",
+            CopyText = copied.Add,
+            Master = new MasterDirectory(_ => System.Threading.Tasks.Task.FromResult(listed)),
         };
         var opened = new List<string>();
         var guestDoor = new NetPlayFeature(
@@ -987,12 +995,14 @@ internal static class MenuOriginalConnectionSuites
         string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-master-list");
         try
         {
-            hostDoor.OpenDogfightHost(NetSeats.MaxPlayers - 1);
+            var host = Open(ctx, layout, hostDoor, ends);
             var guest = Open(ctx, layout, guestDoor, ends);
-            if (guest == null)
+            if (host == null || guest == null)
             {
                 return;
             }
+
+            ShowTheCode(ctx, host, copied);
 
             var shell = guest.Shell;
             ClickRow(ctx, guest, OriginalShell.MultiplayerKey);
@@ -1042,6 +1052,32 @@ internal static class MenuOriginalConnectionSuites
         }
     }
 
+    // The Connection page's Host on a carrier the master server listed. The lobby pins the code over
+    // its chat, and the copy key copies the code rather than an address.
+    private static void ShowTheCode(TestContext ctx, End host, List<string> copied)
+    {
+        ClickRow(ctx, host, OriginalShell.MultiplayerKey);
+        ClickRow(ctx, host, OriginalConnectionScreen.HostKey);
+        var box = host.Shell.NetInfo;
+        ctx.Check(Row(host.Shell, OriginalNetInfoBox.ListingKey) is { Enabled: true, Label: CoopDoorText.PublicWord },
+            $"with a master server set the Listing chooser is live, on Public ({Row(host.Shell, OriginalNetInfoBox.ListingKey)?.Enabled})");
+        ClickRow(ctx, host, OriginalNetInfoBox.ListingKey);
+        bool flipped = box.Draft.Private == true && Row(host.Shell, OriginalNetInfoBox.PrivateKey) is { Enabled: false };
+        ClickRow(ctx, host, OriginalNetInfoBox.PublicKey);
+        ctx.Check(flipped && box.Draft.Private == false && Row(host.Shell, OriginalNetInfoBox.ListingKey)?.Label == CoopDoorText.PublicWord,
+            $"it flips to Private and its up arrow back to Public ({flipped}, {box.Draft.Private})");
+        Answer(ctx, host, "Zachary", "Pirates");
+        Pump(host);
+        var door = host.Door;
+        string pinned = $"Internet code {NetDoorAid.SampleCode}, public, on the games list. {CoopDoorText.CopyPress} copies it.";
+        ctx.Check(host.Shell.Screen == OriginalScreen.Lobby && Draws(host.Shell.Compose(), pinned),
+            $"the host's lobby pins its code over the chat ({host.Shell.Screen}, {CoopDoorText.HostCodeLine(door)})");
+        bool took = door.CopyForGuests();
+        Pump(host);
+        ctx.Check(took && copied.SequenceEqual(new[] { NetDoorAid.SampleCode }) && Draws(host.Shell.Compose(), "It is copied."),
+            $"the copy key copies the code and the line says so ({string.Join(", ", copied)})");
+    }
+
     // The Connection page's Host with a password typed into GAME INFORMATION. The host's own PLAYER
     // INFORMATION keeps the join's Password greyed. True when the lobby opened.
     private static bool HostWithAPassword(TestContext ctx, End host)
@@ -1050,6 +1086,16 @@ internal static class MenuOriginalConnectionSuites
         ClickRow(ctx, host, OriginalConnectionScreen.HostKey);
         var box = host.Shell.NetInfo;
         box.Draft.GameName = LobbyGame;
+        // No master server is set on this door, so the chooser stands greyed and takes nothing.
+        var listing = Row(host.Shell, OriginalNetInfoBox.ListingKey);
+        ctx.Check(listing is { Enabled: false, Label: CoopDoorText.PublicWord } && Row(host.Shell, OriginalNetInfoBox.PrivateKey) is { Enabled: false },
+            $"a Dogfight's GAME INFORMATION with no master server greys its Listing chooser on Public ({listing?.Enabled}, {listing?.Label})");
+        ClickRow(ctx, host, OriginalNetInfoBox.ListingKey);
+        var rows = new List<OriginalRow>();
+        box.Rows(rows);
+        bool stepped = box.StepSideways(rows, rows.FindIndex(row => row.Key == OriginalNetInfoBox.ListingKey), 1);
+        ctx.Check(box.Draft.Private == false && !stepped,
+            $"and neither a click nor a sideways step flips it ({box.Draft.Private}, {stepped})");
         ClickRow(ctx, host, OriginalNetInfoBox.PasswordKey);
         TypeInto(host, new MenuCommands { Typed = LobbyPassword });
         ctx.Check(box.Draft.Password == LobbyPassword && Row(host.Shell, OriginalNetInfoBox.PasswordKey)?.Label == new string('*', LobbyPassword.Length),
@@ -1061,8 +1107,9 @@ internal static class MenuOriginalConnectionSuites
         ClickRow(ctx, host, OriginalNetInfoBox.OkKey);
         Pump(host);
         var door = host.Door;
-        ctx.Check(host.Shell.Screen == OriginalScreen.Lobby && door.Advertising is { Password: true } && door.Password == LobbyPassword,
-            $"Host opens the lobby and its advert says it asks a password ({host.Shell.Screen}, {door.Advertising?.Password})");
+        ctx.Check(host.Shell.Screen == OriginalScreen.Lobby && door.Advertising is { Password: true } && door.Password == LobbyPassword
+                  && !door.Private,
+            $"Host opens the lobby Public and its advert says it asks a password ({host.Shell.Screen}, {door.Advertising?.Password}, {door.Private})");
         return host.Shell.Screen == OriginalScreen.Lobby && door.Dogfight != null;
     }
 
@@ -2374,13 +2421,16 @@ internal static class MenuOriginalConnectionSuites
         ClickRow(ctx, host, OriginalCampaignScreen.CoopDoorKey);
         ctx.Check(host.Shell.NetInfo.Page == NetInfoPage.Game && door.Stage == NetDoorStage.Shut,
             $"HOST CO-OP asks Game Information over the cabin before the door opens ({host.Shell.NetInfo.Page}, {door.Stage})");
+        ctx.Check(Row(host.Shell, OriginalNetInfoBox.ListingKey)?.Label == CoopDoorText.PrivateWord,
+            $"and its Listing chooser opens on Private, a campaign's default ({Row(host.Shell, OriginalNetInfoBox.ListingKey)?.Label})");
         ClickRow(ctx, host, OriginalNetInfoBox.CancelKey);
         ctx.Check(!host.Shell.NetInfo.IsOpen && door.Stage == NetDoorStage.Shut && host.Shell.Screen == OriginalScreen.CampaignCabin,
             $"ABLE-TO-FAIL CONTROL: its Cancel leaves the cabin with the door shut ({door.Stage}, {host.Shell.Screen})");
         ClickRow(ctx, host, OriginalCampaignScreen.CoopDoorKey);
         host.Shell.NetInfo.Draft.MaxPlayers = NetSeats.MaxPlayers;
         Answer(ctx, host, "Zachary", CampaignAidProfiles.Pilot);
-        ctx.Check(door.IsCoopHost && door.Answering, $"HOST CO-OP opens the carrier as a campaign host answering the LAN ({door.Stage}, {door.Answering})");
+        ctx.Check(door.IsCoopHost && door.Answering && door.Private,
+            $"HOST CO-OP opens the carrier as a Private campaign host still answering the LAN ({door.Stage}, {door.Answering}, {door.Private})");
         ctx.Check(door.Advertising?.Cap == NetPlayFeature.CoopHumans,
             $"a cap of sixteen asked for a campaign is held to four humans ({door.Advertising?.Cap})");
         AwaitMapping(door);

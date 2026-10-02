@@ -55,7 +55,7 @@ public sealed class MasterHub
         _pick = pick ?? RandomNumberGenerator.GetInt32;
     }
 
-    /// <summary>How many games are listed.</summary>
+    /// <summary>How many games are hosted, unlisted ones included.</summary>
     public int Count
     {
         get
@@ -67,12 +67,14 @@ public sealed class MasterHub
         }
     }
 
-    /// <summary>Every listed game, by name, each with its code.</summary>
+    /// <summary>Every listed game, by name, each with its code. An unlisted game is left out; a
+    /// join names its code without the list.</summary>
     public MasterGameList List()
     {
         lock (_gate)
         {
             var games = _games.Values
+                .Where(game => !game.Listing.Unlisted)
                 .OrderBy(game => game.Listing.Name, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(game => game.Code, StringComparer.Ordinal)
                 .Select(game =>

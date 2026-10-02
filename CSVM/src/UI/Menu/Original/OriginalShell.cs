@@ -742,7 +742,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         {
             net.Take(info, hosting != null);
             then();
-        }, asksPassword);
+        }, asksPassword, listable: net.Master != null);
     }
 
     /// <summary>Stands <paramref name="door"/> in for the network door, the screenshot aids' and

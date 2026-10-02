@@ -27,7 +27,8 @@ internal static class MenuOriginalCoopFlowSuites
     private const int SpareAirframe = 7;
 
     [Suite("menu-original-coop-flow",
-        "The Original co-op session flow over the loopback: a joined guest lands on the host's cabin "
+        "The Original co-op session flow over the loopback: a listed host's band names its code, "
+        + "Private, and no address, a joined guest lands on the host's cabin "
         + "with every navigation button greyed and dead and is seated under its own last pilot's name, "
         + "follows the host into the briefing and the flight check, where its hangar is the host's, "
         + "the host's own plane is refused to it, and its pick of the host's free spare carries that "
@@ -51,9 +52,11 @@ internal static class MenuOriginalCoopFlowSuites
             return;
         }
 
+        // The host's carrier is listed under the aids' code, so its band shows the code; the guest
+        // still joins over the loopback end beneath it.
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(11));
         var hostDoor = new NetPlayFeature(
-            (_, _, _) => mesh[0],
+            (_, _, _) => NetDoorAid.Listed(mesh[0]),
             (_, _) => throw new InvalidOperationException("the host does not join"),
             new RouterAccess(
                 port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
@@ -99,6 +102,7 @@ internal static class MenuOriginalCoopFlowSuites
             ClickRow(ctx, host, OriginalCampaignScreen.CoopDoorKey);
             MenuSuiteHost.AnswerNetInfo(host.Shell, key => ClickRow(ctx, host, key), "Zachary", CampaignAidProfiles.Pilot);
             AwaitMapping(hostDoor);
+            BandShowsTheCode(ctx, host, hostDoor);
             Join(ctx, host, guest);
             FollowTheBoards(ctx, host, guest);
             ReadyGatesTheLaunch(ctx, host, guest);
@@ -591,6 +595,19 @@ internal static class MenuOriginalCoopFlowSuites
         }
 
         return files;
+    }
+
+    // A listed co-op host's band names its code and that it is Private, and shows no address. The
+    // router's mapped address is a guest's way in only when there is no code.
+    private static void BandShowsTheCode(TestContext ctx, End host, NetPlayFeature door)
+    {
+        host.Host.Tick(Dt);
+        var lines = host.Shell.Compose().Lines.Select(line => line.Text).ToList();
+        ctx.Check(door.Private && lines.Any(text => text.Contains($"CODE {NetDoorAid.SampleCode}", StringComparison.Ordinal))
+                  && lines.Any(text => text.StartsWith("PRIVATE", StringComparison.Ordinal)),
+            $"the host's band names its code and that the game is Private ({door.Private}, {CoopDoorText.HostBand(door)})");
+        ctx.Check(!lines.Any(text => text.Contains(NetDoorAid.ExternalAddress, StringComparison.Ordinal)),
+            $"and leaves out the router's address, which it shows without a code ({door.Router.PortMap?.ExternalAddress})");
     }
 
     // The mapping lands on a worker thread, so the wait is on the wall clock rather than a count.

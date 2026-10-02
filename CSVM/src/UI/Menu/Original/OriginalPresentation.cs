@@ -168,8 +168,14 @@ public sealed class OriginalPresentation : IMenuPresentation
     public const string CampaignDeleteAid = "campaign-delete";
 
     /// <summary>The aid value that opens the cabin with its network door open over the aids'
-    /// loopback door. Its colon argument is how many guests are on the wire.</summary>
+    /// loopback door. Its first colon argument is how many guests are on the wire. A second,
+    /// <c>code</c> or <c>offline</c>, poses a master server that listed it or one it cannot reach.
+    /// </summary>
     public const string CampaignCoopAid = "campaign-coop";
+
+    /// <summary>The aid value that stands HOST CO-OP's GAME INFORMATION over the cabin, posed with
+    /// the aids' sample game.</summary>
+    public const string CampaignCoopAskAid = "campaign-coop-ask";
 
     /// <summary>The aid value that shows a joined co-op guest following the aids' loopback host.
     /// Its colon argument names the host's board: cabin (the default), briefing, flightcheck,
@@ -203,7 +209,8 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// guests on it. Its first colon argument names the view: host (the default), guest (Ready) or
     /// waiting (a guest not yet Ready). The second names the tab: mission (the default), plane,
     /// ammo, rockets or scores, which lands a finished match first. Outlaw and outlaw-rockets open
-    /// the outlaw list on Airframes or Rockets, with two airframes and All Rockets outlawed.</summary>
+    /// the outlaw list on Airframes or Rockets, with two airframes and All Rockets outlawed. A third,
+    /// <c>code</c> or <c>offline</c>, says what the host's master server does.</summary>
     public const string LobbyAid = "lobby";
 
     /// <summary>The campaign aid values Original shares with Built-in, each over the scratch
@@ -215,7 +222,7 @@ public sealed class OriginalPresentation : IMenuPresentation
     {
         "campaign-empty", "campaign-roster", "campaign-cabin", "campaign-previous", "campaign-scrapbook",
         "campaign-briefing", "campaign-flightcheck", "campaign-ammo", "campaign-planeselection", "campaign-hangar",
-        CampaignDeleteAid, CampaignCoopAid, CampaignCoopGuestAid, CampaignCoopReadyAid,
+        CampaignDeleteAid, CampaignCoopAid, CampaignCoopAskAid, CampaignCoopGuestAid, CampaignCoopReadyAid,
     };
 
     /// <summary>The cabin's palette: the shared cabin board's, with the mission pull-down's words
@@ -1016,7 +1023,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         bool waiting = parts[0] == "waiting";
         bool guestView = parts[0] == "guest" || waiting;
         string tab = parts.Length > 1 ? parts[1] : parts[0] is "host" or "guest" or "waiting" ? string.Empty : parts[0];
-        var (host, guests) = NetDoorAid.DogfightDoors();
+        var (host, guests) = NetDoorAid.DogfightDoors(NetDoorAid.InternetOf(parts.Length > 2 ? parts[2] : string.Empty));
         var shown = guestView ? guests[waiting ? 1 : 0] : host;
         _shell!.StandInNetDoor(shown);
         if (guestView)
@@ -1167,15 +1174,24 @@ public sealed class OriginalPresentation : IMenuPresentation
                 break;
             case CampaignCoopAid:
                 // The cabin with its network door open over the aids' loopback door, the same pose
-                // as Built-in's aid of this name. The colon argument is the guests on its wire.
+                // as Built-in's aid of this name. The colon arguments are the guests on its wire and
+                // what its master server does.
                 _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
-                int.TryParse(argument, System.Globalization.NumberStyles.None,
+                string[] coop = argument.Split(':');
+                int.TryParse(coop[0], System.Globalization.NumberStyles.None,
                     System.Globalization.CultureInfo.InvariantCulture, out int guests);
-                var door = NetDoorAid.Host(guests, out _);
+                var door = NetDoorAid.Host(guests, out _, out _, NetDoorAid.InternetOf(coop.Length > 1 ? coop[1] : string.Empty));
                 _shell.StandInNetDoor(door);
                 NetDoorAid.OpenCoopHost(door, CampaignAidProfiles.MissionsFlown, localPlayers: 1);
                 _shell.StepNet(0.0);
                 argument = string.Empty;
+                break;
+            case CampaignCoopAskAid:
+                // HOST CO-OP's Game Information over the cabin. The aids' own answer and door stand
+                // in, so the pose never reads or writes the player's options.
+                _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
+                _shell.StandInNetDoor(NetDoorAid.Host(0, out _));
+                _shell.AskNetInfo(NetSessionKind.CampaignCoop, () => { }, NetDoorAid.SamplePlayer());
                 break;
             case CampaignCoopGuestAid:
                 PoseCoopGuest(argument);

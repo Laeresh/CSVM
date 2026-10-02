@@ -6,6 +6,20 @@ using CSVM.Session.Campaign;
 
 namespace CSVM.UI.Menu;
 
+/// <summary>What an aid host's master server does. None is set, or it lists the host under
+/// <see cref="NetDoorAid.SampleCode"/>, or it is set and the host has no WebRTC carrier.</summary>
+public enum AidInternet
+{
+    /// <summary>No master server.</summary>
+    None,
+
+    /// <summary>Listed under the sample code.</summary>
+    Code,
+
+    /// <summary>A master server with no WebRTC carrier, so no code.</summary>
+    Offline,
+}
+
 /// <summary>
 /// The multiplayer doors a screenshot aid stands on in place of the launcher's own. Both run over
 /// the in-process loopback, so an aid opens no socket, raises no firewall dialog and asks no
@@ -21,6 +35,9 @@ public static class NetDoorAid
 
     /// <summary>The name the aid's campaign host advertises under.</summary>
     public const string HostName = "Zachary";
+
+    /// <summary>The join code a <see cref="AidInternet.Code"/> host is listed under.</summary>
+    public const string SampleCode = "K7Q-X3M";
 
     // The mapping lands on a worker thread, so the aid waits a bounded while for it. A shot of
     // a band still asking the router would show a state no player sees for long.
@@ -65,8 +82,10 @@ public static class NetDoorAid
     public static NetPlayFeature Host(int guests, out Func<int> unmapped) => Host(guests, out unmapped, out _);
 
     /// <summary>A door as <see cref="Host(int, out Func{int})"/>, with <paramref name="guestEnds"/>
-    /// the guests' own ends of its wire so an aid can answer for them.</summary>
-    public static NetPlayFeature Host(int guests, out Func<int> unmapped, out IReadOnlyList<INetTransport> guestEnds)
+    /// the guests' own ends of its wire so an aid can answer for them. <paramref name="internet"/>
+    /// says what its master server does.</summary>
+    public static NetPlayFeature Host(
+        int guests, out Func<int> unmapped, out IReadOnlyList<INetTransport> guestEnds, AidInternet internet = AidInternet.None)
     {
         var mesh = LoopbackTransport.Mesh(1 + Math.Max(0, guests), LoopbackConditions.Perfect, new Random(1));
         int given = 0;
@@ -74,12 +93,16 @@ public static class NetDoorAid
         var ends = new List<INetTransport>(mesh);
         ends.RemoveAt(0);
         guestEnds = ends;
+        var carrier = Carrier(mesh[0], internet);
         return new NetPlayFeature(
-            (port, maxGuests, bind) => mesh[0],
+            (port, maxGuests, bind) => carrier,
             (address, port) => throw new InvalidOperationException("the aid's host door joins nothing"),
             new RouterAccess(
                 port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, ExternalAddress, "aid"),
-                port => given = port));
+                port => given = port))
+        {
+            Master = MasterOf(internet),
+        };
     }
 
     /// <summary>Opens <paramref name="door"/> as a campaign host and waits for its mapping, so the
@@ -112,16 +135,17 @@ public static class NetDoorAid
     /// <summary>A shut Dogfight host door and two shut guest doors, all on one loopback wire. The
     /// guests go by Nathan and Sheila, and the host by <see cref="HostName"/> until a lobby names it.
     /// </summary>
-    public static (NetPlayFeature Host, IReadOnlyList<NetPlayFeature> Guests) DogfightDoors()
+    public static (NetPlayFeature Host, IReadOnlyList<NetPlayFeature> Guests) DogfightDoors(AidInternet internet = AidInternet.None)
     {
         var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(1));
+        var carrier = Carrier(mesh[0], internet);
         var host = new NetPlayFeature(
-            (port, maxGuests, bind) => mesh[0],
+            (port, maxGuests, bind) => carrier,
             (address, port) => throw new InvalidOperationException("the aid's host door joins nothing"),
             new RouterAccess(
                 port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, ExternalAddress, "aid"),
                 port => { }))
-        { PlayerName = HostName };
+        { PlayerName = HostName, Master = MasterOf(internet) };
         string[] names = { "Nathan", "Sheila" };
         var guests = new List<NetPlayFeature>();
         for (int i = 0; i < names.Length; i++)
@@ -278,6 +302,19 @@ public static class NetDoorAid
         return words;
     }
 
+    /// <summary><paramref name="end"/> as a host carrier the master server listed under
+    /// <see cref="SampleCode"/>, so a pose or a suite shows a code with no server.</summary>
+    public static INetTransport Listed(INetTransport end) => new ListedEnd(end ?? throw new ArgumentNullException(nameof(end)));
+
+    /// <summary>The words an aid's internet argument is written with: <c>code</c> and
+    /// <c>offline</c>, anything else none.</summary>
+    public static AidInternet InternetOf(string word) => word switch
+    {
+        "code" => AidInternet.Code,
+        "offline" => AidInternet.Offline,
+        _ => AidInternet.None,
+    };
+
     private static NetPlayFeature Joined(int missionSeq, int players, out INetTransport host)
     {
         var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(1));
@@ -291,6 +328,44 @@ public static class NetDoorAid
         door.Step(0.0);
         host = mesh[0];
         return door;
+    }
+
+    private static INetTransport Carrier(INetTransport end, AidInternet internet) =>
+        internet == AidInternet.Code ? Listed(end) : end;
+
+    // The master server's list is never asked for by a host pose, so an empty one stands in.
+    private static MasterDirectory? MasterOf(AidInternet internet) =>
+        internet == AidInternet.None ? null : new MasterDirectory(_ => System.Threading.Tasks.Task.FromResult("{\"games\":[]}"));
+
+    // A loopback end listed under SampleCode at once, as a WebRTC host is once the server answers.
+    private sealed class ListedEnd : INetTransport, INetListing, IDisposable
+    {
+        private readonly INetTransport _inner;
+
+        public ListedEnd(INetTransport inner) => _inner = inner;
+
+        public string? JoinCode => SampleCode;
+
+        public string ListingFault => "";
+
+        public int LocalPeer => _inner.LocalPeer;
+
+        public IReadOnlyList<int> Peers => _inner.Peers;
+
+        public void List(MasterGame listing)
+        {
+        }
+
+        public void Bind(INetTransportListener listener) => _inner.Bind(listener);
+
+        public void Send(int peer, ReadOnlySpan<byte> payload, NetReliability reliability, int channel = 0) =>
+            _inner.Send(peer, payload, reliability, channel);
+
+        public void Disconnect(int peer) => _inner.Disconnect(peer);
+
+        public void Step(double dt) => _inner.Step(dt);
+
+        public void Dispose() => (_inner as IDisposable)?.Dispose();
     }
 
     // The aid's LAN: every query is answered by each sample game at once, from its own address.

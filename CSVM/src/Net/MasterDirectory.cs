@@ -66,9 +66,11 @@ public sealed class MasterDirectory
     }
 
     /// <summary>The listing a host carries for <paramref name="advert"/>, the word its LAN answer
-    /// gives too, under <paramref name="version"/>.</summary>
-    public static MasterGame ListingOf(SessionAdvertMessage advert, NetBuildVersion version) => new()
+    /// gives too, under <paramref name="version"/>. An <paramref name="unlisted"/> game stays off
+    /// the games list; the LAN answer has no such mark.</summary>
+    public static MasterGame ListingOf(SessionAdvertMessage advert, NetBuildVersion version, bool unlisted = false) => new()
     {
+        Unlisted = unlisted,
         Name = advert.Host ?? "",
         Kind = advert.Kind switch
         {

@@ -129,6 +129,33 @@ public class MasterHubTests
     }
 
     [Fact]
+    public void AnUnlistedGameStaysOffTheListAndIsStillJoinedByItsCode()
+    {
+        var hub = new MasterHub(new MasterOptions(), new ManualClock());
+        var open = new FakeClient();
+        var hidden = new FakeClient("203.0.113.6");
+        var guest = new FakeClient("198.51.100.7");
+        hub.Receive(open, new MasterMessage { T = MasterWire.Host, Game = Listing("Open") });
+        var secret = Listing("Hidden");
+        secret.Unlisted = true;
+        hub.Receive(hidden, new MasterMessage { T = MasterWire.Host, Game = secret });
+        string code = hidden.Last.Code!;
+
+        Assert.Equal("Open", Assert.Single(hub.List().Games).Name);
+        Assert.Equal(2, hub.Count);
+
+        hub.Receive(guest, new MasterMessage { T = MasterWire.Join, Code = code });
+        Assert.Equal(MasterWire.Joined, guest.Last.T);
+        Assert.Equal(MasterWire.Incoming, hidden.Last.T);
+
+        // An update can list it, or take it off the list again.
+        hub.Receive(hidden, new MasterMessage { T = MasterWire.Update, Game = Listing("Hidden") });
+        Assert.Equal(2, hub.List().Games.Count);
+        hub.Receive(hidden, new MasterMessage { T = MasterWire.Update, Game = secret });
+        Assert.Single(hub.List().Games);
+    }
+
+    [Fact]
     public void AJoinToNoListedGameIsRefused()
     {
         var hub = new MasterHub(new MasterOptions(), new ManualClock());

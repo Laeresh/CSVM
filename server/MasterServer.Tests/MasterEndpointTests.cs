@@ -123,6 +123,29 @@ public sealed class MasterEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AnUnlistedGameIsLeftOutOfTheListAndJoinedByItsCode()
+    {
+        using var host = await Open();
+        await Send(host, new MasterMessage
+        {
+            T = MasterWire.Host,
+            Game = new MasterGame { Name = "Hidden", Kind = MasterWire.CoopKind, Players = 1, Cap = 4, Status = MasterWire.Waiting, Version = "0.2", Unlisted = true },
+        });
+        var hosted = await Next(host);
+        Assert.Equal(MasterWire.Hosted, hosted.T);
+
+        using var http = _server.CreateClient();
+        string list = await http.GetStringAsync(MasterWire.GamesPath);
+        Assert.Empty(MasterWire.TryReadList(list)!);
+        Assert.DoesNotContain("Hidden", list, StringComparison.Ordinal);
+
+        using var guest = await Open();
+        await Send(guest, new MasterMessage { T = MasterWire.Join, Code = hosted.Code });
+        Assert.Equal(MasterWire.Joined, (await Next(guest)).T);
+        Assert.Equal(MasterWire.Incoming, (await Next(host)).T);
+    }
+
+    [Fact]
     public async Task AMessagePastTheCapClosesTheSocket()
     {
         using var socket = await Open();

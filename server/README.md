@@ -4,11 +4,12 @@ The master server lets two players meet over the internet without touching a rou
 things, and nothing else:
 
 - **The games list.** A host that has a master server set lists its game (name, mode, players, cap,
-  whether it asks a password, its build version). The list shows up in the game's games list
-  beside the LAN search's answers. A game that stops repeating itself for 45 seconds, or whose host
-  disconnects, leaves the list.
-- **Join by code.** Every listed game gets a six-character code such as `K7Q-X3M`. A guest picks
-  the game from the list, or types the code into the Internet address box.
+  whether it asks a password, its build version), unless the host chose Private. The list shows up
+  in the game's games list beside the LAN search's answers. A game that stops repeating itself for
+  45 seconds, or whose host disconnects, leaves the server.
+- **Join by code.** Every hosted game, Public or Private, gets a six-character code such as
+  `K7Q-X3M`. A guest picks a Public game from the list, or types the code into the Internet address
+  box, which is the only way in to a Private game from the internet.
 - **Signalling.** While a guest connects, the server relays the WebRTC offer, answer and ICE
   candidates between the guest and the host. Once the link stands, the guest's connection to the
   server closes; game traffic never passes through the master server.
@@ -169,14 +170,31 @@ Each player also needs the WebRTC library, which is not in the repository: run
 `.\InstallWebRtc.ps1` once in the checkout the game runs from (an exported build carries the
 library if it was installed when the build was exported). Without it the games list still shows
 the master server's games, but hosting for internet guests and joining by code are refused with a
-message saying so. The game's log (`.scratch/logs/`, or `logs/` beside an exported build) says at
+message saying so: a host reads `No internet code: WebRTC is missing or failed to start` where its
+code would stand. The game's log (`.scratch/logs/`, or `logs/` beside an exported build) says at
 startup whether the master server is set and the library loaded.
 
-Then: the host opens Multiplayer, Host, and its lobby chat shows `Internet guests join with code
-ABC-DEF.` once the server listed it. A guest opens Multiplayer, LAN TCP/IP, Connect: the game
-appears in the list beside any LAN games. Pick it and Join Game, or type the code (with its dash)
-into the Internet IP address box and Connect. A campaign co-op host shows the code in its NETWORK
-OPEN band.
+Then: the host opens Multiplayer, Host, and answers GAME INFORMATION. Its Listing chooser picks
+**Public** (the default for a Dogfight: the game is in the games list) or **Private** (the default
+for campaign co-op, which the cabin's HOST CO-OP asks through the same box: the game stays off the
+list, and internet guests need its code). A Private game still answers LAN searches, and a guest
+who types the host's address still joins; only the internet list leaves it out. The password is a
+separate, optional extra on either.
+
+Where the host finds its code: a Dogfight host's lobby pins `Internet code ABC-DEF, public, on the
+games list. Ctrl+C copies it.` (or `private, not on the games list`) as the top line of its chat,
+and a co-op host's NETWORK OPEN band reads `CODE ABC-DEF  Ctrl+C` with PUBLIC or PRIVATE under it.
+Ctrl+C on any menu copies the code to the clipboard to paste into a message; without a code it
+copies the host's address instead. While the server has not answered the host reads `Asking the
+master server for a join code ...`, and when it refused or cannot be reached the line says why
+and the band shows the address guests can type instead.
+
+A guest opens Multiplayer, LAN TCP/IP, Connect: a Public game appears in the list beside any LAN
+games. Pick it and Join Game, or, for either kind, type the code (with its dash) into the Internet
+IP address box and Connect.
+
+A server older than this listing mark ignores it and lists a Private game anyway, so update the
+server before relying on Private. An older game build sends no mark, and its games stay listed.
 
 ## Settings
 
@@ -190,7 +208,7 @@ first four from `.env`). Defaults suit one small VPS.
 | `Master__TurnSecret` | none | coturn's `static-auth-secret`; empty hands out no TURN entry |
 | `Master__TrustProxy` | `false` | take the client address from `X-Forwarded-For`; only behind a proxy, with 8080 closed |
 | `Master__TurnCredentialMinutes` | `720` | how long a TURN credential lasts; bounds the longest relayed match |
-| `Master__MaxGames` | `500` | games listed at once |
+| `Master__MaxGames` | `500` | games hosted at once, Private ones included |
 | `Master__MaxGamesPerAddress` | `4` | games one address may host at once |
 | `Master__MaxSocketsPerAddress` | `16` | open sockets per address |
 | `Master__MaxPendingGuests` | `16` | guests negotiating with one game at once |
