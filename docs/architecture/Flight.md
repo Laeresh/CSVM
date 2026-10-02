@@ -1212,14 +1212,14 @@ source or term reads as null and `PlaneShake` no-ops it. Schema: [../formats/sha
 [../org/shakes.md](../org/shakes.md).
 
 ## src/Flight/Camera/PlaneShake.cs
-A human pilot's plane-wobble oscillators, summed each sim tick into `Roll`, the radians the
-controller writes to `ShakePivot`; engine-free, so the pivot write is the controller's one line. An
-AI never kicks it: `FlightController` plays an `*_aishake` def instead. The gunfire buzz, the
-being-hit rocks (a cannon round by caliber, any other by its larger damage figure, the explosion
-source empty as in the original) and `ContactHit` are decaying envelopes. The overspeed rattle and
-the nitro engage run the original's own component block, a velocity kick into a two-branch
-integrator whose position renders; `DiveRattleKickScale`/`NitroWobbleKickScale` are their only
-knobs. [../org/shakes.md](../org/shakes.md).
+A human pilot's plane wobble: the original's seven component blocks (gunfire buzz, the three
+being-hit sources, overspeed rattle, contact, nitro engage), each a random velocity kick into a
+two-branch integrator. Their summed position renders as `Rotation`, a rotation vector at twice its
+length read back as YXZ Euler angles, which the controller writes to `ShakePivot`; engine-free, so
+the pivot write is the controller's one line. An AI never kicks it: `FlightController` plays an
+`*_aishake` def instead. `GunBuzzKickScale`, `DiveRattleKickScale` and `NitroWobbleKickScale` are
+the only knobs. `CockpitOverlay.WobbledMount` carries the rotation into the cockpit pass.
+[../org/shakes.md](../org/shakes.md).
 
 ## src/Flight/Airframe/FlightControllerBuild.cs
 The internal construction handoff from `FlightRoster` to `FlightController`: one resolved

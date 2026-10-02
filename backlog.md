@@ -180,22 +180,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Cameras & views
 
-- `BL-266` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **Plane wobble:
-  port the original's rendered rotation, or keep the look judged at the controls?** The decode is
-  complete ([`docs/org/shakes.md`](docs/org/shakes.md), "The rendered rotation"): the original sums
-  the seven camera blocks' positions and writes them to the plane node as a rotation vector at
-  twice its length, the three components being pitch, yaw and roll. Roll is the `×2.5` component,
-  so for the two block sources (the dive rattle and the nitro wobble) the original's roll is about
-  4.2 times `PlaneShake`'s for the same draw, and every source, the nitro engage included, also
-  pitches and yaws the nose by about twice the port's roll. The port rolls by the `×1.2` component
-  once, and runs the gun buzz, the being-hit rocks and the contact kick as its own envelopes;
-  `GunBuzzKickScale`, `DiveRattleKickScale` and `NitroWobbleKickScale` read right at 1 on that
-  reading against `OriginalScreenshots/Videos/Dive Wobble.mkv`, `Nitro Wobble.mkv` and
-  `Gun Wobble and animation.mp4`. *Question:* port the decoded rotation (roll on the `×2.5`
-  component at twice its position, pitch and yaw on the pivot, the fire, impact and contact sources
-  as blocks) and re-judge the knobs at the controls, or keep the judged look and record it in
-  `docs/org/shakes.md` as a chosen departure? *Decision:* port the decoded rotation, then
-  re-judge the knobs at the controls. ⚠ Traps: the knobs stay at 1 until that look; a port
+- `BL-266` `[Fidelity]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` **Plane wobble:
+  re-judge the three kick knobs on the ported rendered rotation.** `PlaneShake` now runs the
+  original's seven component blocks as decoded ([`docs/org/shakes.md`](docs/org/shakes.md), "The
+  rendered rotation"): every source (gun buzz, the three being-hit sources, dive rattle, contact,
+  nitro) is a random velocity kick into its block, and the summed position turns `ShakePivot` as a
+  rotation vector at twice its length, roll on the `×2.5` component, pitch and yaw on the other two.
+  So the dive and the nitro engage roll about four times what was judged before and move the nose,
+  while a gun burst rolls less than the former displacement walk (about 2.7e-3 rad RMS for wep40 at
+  8/s, against 6.1e-3; `analysis/gun-wobble-shake/FINDINGS.md`, "The port"). `GunBuzzKickScale`,
+  `DiveRattleKickScale` and `NitroWobbleKickScale` are all at 1, the original's own kick.
+  *Sortie:* fly a gun plane (`--plane=player_bhawk`) in the chase view over C1 and, side by side
+  with `Z:\CSVM\OriginalScreenshots\Videos\Dive Wobble.mkv`, `Nitro Wobble.mkv` and
+  `Gun Wobble and animation.mp4`: dive until the speed passes the plane's rated maximum and hold it
+  there a few seconds; with a nitrous engine fitted, press `N` at a full tank; hold `Space` for a
+  3 s burst in level flight; take gun rounds with `--incoming` and an HE rocket with
+  `--incoming=120,wep_06`; scrape the ground or a building once. Then the cockpit view for one
+  burst, where the interior turns and the view does not. *Question:* does each knob read right at
+  1, and if not, which way and by how much? ⚠ Traps: dial only the three knobs, never
+  `magnitude_factor`, `magnitude_quotient` or the nitro `magnitude`, which are decode; a port
   that only rescales the roll leaves the nose still, which the original never does; `SHAKES_CAMERA`
   is not the fire-path mechanism (it routes `wep_26`'s hits to the empty explosion source); wire
   nothing on one coincidence of a magnitude candidate with an authored constant.

@@ -13,11 +13,10 @@ rocks the plane, the camera attachment, and the port's fidelity gap.
 
 ## Two oscillators, one mechanism
 
-In 3rd-person views of the original the **plane itself** wobbles against the world; cockpit/nose
-views read as camera shake. One mechanism explains both, rock the plane node, and any
-plane-mounted camera inherits the motion, mirroring how the `damage_shakes` defs rock the plane's
+In 3rd-person views of the original the **plane itself** wobbles against the world. One mechanism
+does it: the shake turns the plane node, mirroring how the `damage_shakes` defs rock the plane's
 `healthy` node (there the camera gets its own authored half because the chase camera is not
-rigidly attached). The engine implements exactly this: `PlaneShake` rolls a pivot the plane model
+rigidly attached). The engine implements exactly this: `PlaneShake` turns a pivot the plane model
 hangs under; physics and the camera never see it.
 
 **Every shake source is the same 3-axis random-walk accumulator.** `fire_bullet` (per shot),
@@ -64,7 +63,7 @@ strides `0xb` dwords), transforms the total through the quaternion helpers
 unconditionally, every frame, with no branch on the live mode byte `camera+0x14c`**. The mode
 byte is used elsewhere only for FOV (mode 6→80°, `FUN_0042b660`), head-lock (mode 7), cockpit-
 interior draw, and hiding scene nodes, **never to scale the wobble**. So **there is no per-view
-dampening**: cockpit(6)/nose(7) inherit the full undampened wobble 1:1 from the plane node.
+dampening**: in cockpit(6)/nose(7) the plane node turns by the full wobble, as it does outside.
 
   *The "dampening" is per-**source**, not per-**view**: `FUN_0042bec0` integrates each block on
   its own authored law, at a fixed `1/150` s substep (`0x3bda740e` at `0042beda`) with the last
@@ -96,14 +95,15 @@ dampening**: cockpit(6)/nose(7) inherit the full undampened wobble 1:1 from the 
 
   *The reversal makes a block's whole decay a per-reversal factor: nothing else bleeds the velocity,
   so between reversals a sawtooth block coasts undamped. For `fire_bullet` the factor is
-  `e^(−12.5/30)` ≈ 0.66 per reversal. The port's fire walk instead decays a displacement as
-  `e^(−damp·t)` (τ = 80 ms); that envelope is the port's own, read right at the controls, and the
-  decoded block is the alternative ("The rendered rotation", the port's departures).*
+  `e^(−12.5/30)` ≈ 0.66 per reversal. The decay test is `FUN_00460410`, the Taylor series
+  `1 − x + x²/2 − x³/6` of `e^(−x)` below `0.1`.*
 
-Because the first-person placement `FUN_0042d980` (modes 6/7, [`cameraViews.md`](cameraViews.md)) reads
-the plane's basis directly and adds **no** wobble of its own at attachment, a plane-mounted camera
-inherits the rocked rotation automatically, that is why cockpit/nose read as camera shake and the
-two cockpit views need no separate handling.
+The first-person placement `FUN_0042d980` (modes 6/7, reached only from the mode switch
+`FUN_0042c5c0`, [`cameraViews.md`](cameraViews.md)) builds the camera's position and orientation
+from the 3×4 matrix at the watched vehicle's `+0x180`, a field of the vehicle object, and adds no
+wobble of its own. The shake is written to the node `DAT_0071c304` instead, so on this reading the
+view does not turn with the wobble; what turns is the plane model under that node, the cockpit
+interior with it. The two cockpit views need no separate handling ("Camera attachment" below).
 
 ## The rendered rotation
 
@@ -137,16 +137,27 @@ roll. So:
   dive rattle and the gun buzz each pitch and yaw the aeroplane as well as roll it.
 - **Every rendered angle is twice its block position.**
 
-**The port's departures, which its scale knobs were judged under.** `PlaneShake` rolls the pivot by
-one component's position and nothing else. For the two block sources (`high_speed`, `nitro`) it
-kicks with the `×1.2` weight and renders the position once, so the original's roll is
-`2 × 2.5/1.2` ≈ 4.2 times the port's for the same draw (the block law is linear in its kick), and
-the original adds pitch and yaw each about twice the port's roll. The reversal test also couples
-the original's three components through the triple's dot product and lengths, where the port runs
-one. The fire buzz, the being-hit rocks and the contact kick are the port's own envelopes rather
-than blocks. At the controls, against the original's dive, nitro and firing clips, all three knobs
-read right at 1 on the port's reading, so whether to port the decoded rotation is a decision on the
-look rather than a decode.
+**The kicker's draws.** `FUN_0042be10` calls `rand` (the pointer at `0x00a20350`) three times per
+kick, in the order pitch, yaw, roll, each scaled to `[0, 1]` by `0x00603598` (≈ 1/32767) less the
+double `0.5` at `0x00603458`, so every component is uniform and independent.
+
+**The port.** `PlaneShake` runs all seven blocks as above: the kick of `FUN_0042be10` (three
+draws, `×1.2`, `×1.2`, `×2.5`), the integrator of `FUN_0042bec0` over the whole triple at the
+`1/150` substep, the sum of `FUN_0042c0e0`, and `PlaneShake.NodeRotation`, the quaternion,
+matrix and YXZ readback of steps 2 to 4, written to `ShakePivot.Rotation`, whose own order is the
+engine's YXZ. Three differences remain, none of them a rescaling:
+
+- **The integrator runs per sim tick, not per rendered frame.** The original passes its frame time
+  `0x009ad744` to every block; the port passes the sim `dt`. The substep law is the same.
+- **A round taken kicks once.** `FUN_004b9b30` re-runs the take-hit body per leftover pass and each
+  pass kicks again; the port kicks once per round, because its damage spend
+  (`PlaneDamage.Apply`) runs that leftover loop inside itself. A second pass happens only when a
+  round overflows the zone it struck.
+- **A block below `1e-6` rad with a matching velocity is set to rest.** Neither law reaches zero on
+  its own, and the original never stops integrating.
+
+`GunBuzzKickScale`, `DiveRattleKickScale` and `NitroWobbleKickScale` stay at `1`, the original's
+own kick; whether the result reads right against the original's clips is a look at the controls.
 
 ## The seven component blocks and every kicker
 
@@ -235,9 +246,8 @@ Two consequences of where the kick sits:
 
 - **It runs once per pass, and the wrapper loops.** `FUN_004b9b30` calls the body again with the
   unabsorbed leftover while both figures stay positive and health remains, so a round that
-  overflows its zone kicks again with the smaller leftover (or the same caliber). `PlaneShake`'s
-  impact envelopes keep the larger of an old and a new kick, so those repeat kicks change nothing
-  there and the port kicks once.
+  overflows its zone kicks again with the smaller leftover (or the same caliber), adding another
+  random velocity to the block. The port kicks once per round ("The rendered rotation", the port).
 - **It runs before every early return of the body** except the dead, destructing and network
   guards at its top: an absorbed round, a no-damage victim, a `SONIC`, `FLASH`, `BEEPER` or
   `TANGLER` round and a round whose shooter is its victim all kick first. CSVM's disabling types
@@ -307,9 +317,9 @@ every human pilot rather than a single player pointer, the same widening the bou
 ⚠ **The magnitude is a velocity, not a displacement.** `FUN_0042be10` adds it to the block's
 `[3]/[4]/[5]` accumulators, which the integrator `FUN_0042bec0` turns into the `[6]/[7]/[8]`
 positions the consumer sums, so the original's rendered rotation from a saturated kick is set by
-the damped spring and "The rendered rotation" rather than being `0.15` rad. `PlaneShake` models
-this block as an envelope in radians of roll directly, one of the port's departures that section
-lists.
+the damped spring and "The rendered rotation" rather than being `0.15` rad. `PlaneShake` runs it
+as that block: a saturated kick's step is `0.15 × 2 × 2π` ≈ 1.88, a roll velocity uniform in
+±2.36 rad/s, which the spring swings out to about 0.79 of `v/ω` with `ω = 4π`.
 
 ## `fire_bullet`, per-shot roll, `magnitude_factor × CALIBER`
 
@@ -325,10 +335,12 @@ Candidates: caliber 40 × 7e-5 = 2.8e-3 rad (match); damage 4.5 → 3.15e-4 (~9�
 velocity 900 → 6.3e-2 (~16× over), an order-of-magnitude discrimination, not a one-coincidence
 match.
 
-⚠ **Amplitude-call caution:** the 2.8e-3 rad is the clip's *rendered* RMS, not the oscillator's
-*kick* amplitude, a kick of envelope `E` renders only ~0.28·E as RMS at the real 8/s fire rate
-(sawtooth duty × damp envelope decay), so the engine renders ~0.28× the law's literal number
-regardless of the clip (decoded: ~8e-4 rad RMS / ~0.20 px/frame at the ±205 px lever).
+⚠ **Amplitude-call caution:** the 2.8e-3 rad is the clip's *rendered* RMS, not a kick. The law's
+product `7e-5 × 40` is a velocity magnitude fed through block 0, and what renders is set by the
+integrator and the doubling ("The rendered rotation"). Run through the decoded chain, a 3 s burst
+of wep40 at 8/s renders a roll of about 2.7e-3 rad RMS and 8e-3 rad mean peak, with pitch and yaw
+each about half that (`analysis/gun-wobble-shake/FINDINGS.md`, "The port"). That lands near the
+clip's figure, which is consistency rather than a second derivation.
 
 ⚠ **The ×CALIBER multiplicand is confirmed; the downstream step is the block's own authored law.**
 `FUN_0042be10` builds the step from the *parsed* block, and `shakes.zrd` authors `fire_bullet`
@@ -338,9 +350,8 @@ with `sawtooth 1` and `frequency 15.0`, so the waveform selector takes the **`4.
 pitch and yaw (`× 1.2` into `camera+0x24`/`+0x28`). For wep40 the roll kick is ±0.21 rad/s, and
 what renders is twice the position the sawtooth integrator builds out of it, not the kick.
 A reading of this line that takes `camera+0x1c`'s `2.0` for a gain and the `6.2832` branch for
-the waveform describes the constructor's uninitialised block rather than the parsed one. The port's
-`_fire` source is a displacement walk of ±7.54 per shot, a different mechanism from the velocity
-kick above, kept because it reads right at the controls ("The rendered rotation").
+the waveform describes the constructor's uninitialised block rather than the parsed one.
+`PlaneShake.FireBullet` kicks block 0 with exactly this law.
 
 ⚠ **That consumer is shared**, `high_speed` drives the IDENTICAL `FUN_0042be10` random-walk
 accumulator (a second component, block index 4, at `camera+0xd4/+0xd8/+0xdc`) through the same
@@ -379,22 +390,14 @@ differ only in block (0 vs 4), magnitude law (per-shot `magnitude_factor×CALIBE
 `(speedRatio−min_speed)/magnitude_quotient`), and cadence (fire once per shot @8/s; `high_speed`
 every frame while over the gate). Full trace: `analysis/gun-wobble-shake/FINDINGS.md`.
 
-**Ported as the original's own component block.** `PlaneShake` runs `high_speed` and `nitro`
-through a private `Block` that carries the decoded pair, the velocity kick of `FUN_0042be10` and
-the two-branch integrator of `FUN_0042bec0` at the same `1/150` substep, and renders the block's
-roll *position*. The deterministic damped sawtooth these two sources used before was a different
-mechanism, and the reason a dive read as a muted buzz instead of a rattle. Three readings this
-port takes and their grounds:
+**Ported as the original's own component block.** `PlaneShake` runs `high_speed` as block 4, like
+every other source ("The rendered rotation", the port). Two readings this port takes and their
+grounds:
 
-- **The port rolls by a `×1.2` component, once.** The original's roll is the `×2.5` component at
-  twice its position ("The rendered rotation"), about 4.2 times the port's for the same draw, and
-  the original pitches and yaws the aeroplane as well. The port's reading is what the knobs were
-  judged under.
 - **The kick is per frame, as the original's is.** The original's frame rate therefore sets the
   drive, and so does ours, which is a rate dependence the original has too rather than one the
-  port introduces. `PlaneShake.DiveRattleKickScale` and `NitroWobbleKickScale` both default to
-  `1`, which reads right at the controls, and are the only knobs to dial. `magnitude_quotient` and the authored
-  `magnitude` are decode, not tuning.
+  port introduces. `PlaneShake.DiveRattleKickScale` defaults to `1`, the original's own kick, and
+  is the knob to dial. `magnitude_quotient` and the authored `magnitude` are decode, not tuning.
 - **Nothing scales the decoded magnitude.** The engine wires `(speedRatio − min_speed)/quotient`
   and the authored `0.05` exactly as parsed; the amount of roll that reaches the screen is
   whatever the integrator makes of them.
@@ -462,16 +465,17 @@ size differs from engage to engage because the kick is a single random draw. **T
 nose as well as the roll**: the same kick lands on the pitch and yaw components, and the plane node
 renders all three at twice their positions ("The rendered rotation"). `PlaneShake.NitroEngaged`
 wires it on every human pilot rather than a single player pointer, the same widening the contact
-kick takes, as roll alone from the `×1.2` component (±0.48 rad/s).
+kick takes. The first swing of one engage peaks at about `2 × |v_roll|/16` rad of roll, up to
+0.12 rad.
 
-## Camera-attachment rule for our port
+## Camera attachment
 
-Mount the cockpit (mode 6) and nose (mode 7) cameras as children of the **plane model** (below
-`ShakePivot`) so they inherit the wobble for free, the original's 6/7 pair are the *same*
-`cockpit_camera` point and both ride the rocking plane, so the two first-person views are not
-handled differently from each other. The chase/fixed/external cameras stay **top-level**, steered
-from the controller's pose (`_renderPose` = controller attitude), *above* the pivot, they must
-never read `ShakePivot`, or the `damage_shakes`-style rock would rattle the 3rd-person view too.
-When the first-person views land, they go **below** the pivot (inherit); every current camera sits
-**above** it (opt out), the same split `damage_shakes` carves between the plane-rocking `aishake`
-and the camera's own half.
+Every camera sits **above** `ShakePivot`, steered from the controller's pose (`_renderPose`, the
+controller's attitude), and must never read the pivot. The chase, fixed and external cameras need
+that or the wobble would rattle the 3rd-person view; the cockpit (mode 6) and nose (mode 7) views
+take it from `FUN_0042d980`, which places the original's first-person camera from the vehicle's
+own matrix rather than from the node the shake turns ("Where the wobble STATE lives" above). What
+turns is the plane model, and the cockpit interior with it: CSVM's `--cockpit-pass` draws the
+interior outside the pivot's subtree, so `CockpitOverlay.WobbledMount` applies the pivot's
+rotation to it. The same split `damage_shakes` carves between the plane-rocking `aishake` and the
+camera's own half.

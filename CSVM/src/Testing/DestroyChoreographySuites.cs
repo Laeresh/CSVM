@@ -1722,7 +1722,7 @@ internal static class DestroyChoreographySuites
     // the aishake def the original picks, one def at a time per aircraft. Nothing reaches the shake
     // pivot, which a person's camera blocks alone drive.
     [Suite("ai-shake-twins",
-        "an AI on a session-built rig rocks to the aishake def the original picks: small for a gun round taken, large for an HIGH_EXPLOSIVE rocket bursting on it, medium past 1.2x rated max, none while another of the three still runs, and its shake pivot never moves")]
+        "an AI on a session-built rig rocks to the aishake def the original picks: small for a gun round taken, large for an HIGH_EXPLOSIVE rocket bursting on it, medium past 1.2x rated max, none while another of the three still runs, and its shake pivot never moves, where the same rig flown by a person pitches, yaws and rolls it")]
     internal static void AiShakeTwins(TestContext ctx)
     {
         const string model = "player_warhawk";
@@ -1801,7 +1801,7 @@ internal static class DestroyChoreographySuites
                         ai.WarpTo(spawn, 0f, rated * 0.8f);
                         ai.SimStep(Dt);
                         rig.Advance(Dt);
-                        pivotPeak = Mathf.Max(pivotPeak, Mathf.Abs(pivot.Rotation.Z));
+                        pivotPeak = Mathf.Max(pivotPeak, pivot.Rotation.Length());
                         ticks++;
                     }
                     return ticks;
@@ -1829,7 +1829,7 @@ internal static class DestroyChoreographySuites
                     ai.WarpTo(spawn, 0f, rated * 1.3f);
                     ai.SimStep(Dt);
                     rig.Advance(Dt);
-                    pivotPeak = Mathf.Max(pivotPeak, Mathf.Abs(pivot.Rotation.Z));
+                    pivotPeak = Mathf.Max(pivotPeak, pivot.Rotation.Length());
                     onDive = Running();
                 }
                 ctx.Check(onDive == EffectCatalogue.AiShakeAnim,
@@ -1837,6 +1837,20 @@ internal static class DestroyChoreographySuites
                 Settle();
                 ctx.Check(pivotPeak == 0f,
                     $"{model}: the camera blocks stay a person's: the shake pivot never moved (peak {pivotPeak:E2} rad)");
+
+                // The control: with a person flying, the same round kicks block 1. A pivot read
+                // that could not see motion fails here instead of passing above.
+                ai.IsHumanPiloted = true;
+                ai.TakeProjectileHit(gun, ai.WorldPosition + new Vector3(2f, 0f, 0f), "fuselage", 0);
+                var humanPeak = Vector3.Zero;
+                for (int i = 0; i < 30; i++)
+                {
+                    ai.WarpTo(spawn, 0f, rated * 0.8f);
+                    ai.SimStep(Dt);
+                    humanPeak = humanPeak.Max(pivot.Rotation.Abs());
+                }
+                ctx.Check(humanPeak.X > 0f && humanPeak.Y > 0f && humanPeak.Z > 0f,
+                    $"{model}: …while the same round taken with a person flying pitches, yaws and rolls the pivot (peak {humanPeak.X:E2}, {humanPeak.Y:E2}, {humanPeak.Z:E2} rad)");
             }
             finally
             {

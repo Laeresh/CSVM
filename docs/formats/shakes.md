@@ -1,9 +1,10 @@
 # Screen-shake readers - `shakes.json` and `damage_shakes.json`
 
 Part of the [format documentation](README.md). These shared zrdr readers define aircraft wobble
-and camera-shake laws. `ShakeDefs` reads `shakes.json`; `PlaneShake` applies its sources as
-visual-only roll. `damage_shakes.json`'s `ON_CALL` defs are played by the exe's own
-shake player on AI aircraft (below).
+and camera-shake laws. `ShakeDefs` reads `shakes.json`; `PlaneShake` runs its sources as the
+original's component blocks and turns the plane model by their rendered rotation, visual only.
+`damage_shakes.json`'s `ON_CALL` defs are played by the exe's own shake player on AI aircraft
+(below).
 
 ⚠ Where the original **consumes** these laws, the per-shot/per-frame shake magnitudes, the
 random-walk accumulator they feed, the camera-attachment rule, and the engine's fidelity gap, is

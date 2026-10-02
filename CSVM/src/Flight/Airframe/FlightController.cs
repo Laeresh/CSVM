@@ -75,7 +75,7 @@ public partial class FlightController : Node3D
     /// <summary>The visible aircraft model (a child of this node); hidden while crashed.</summary>
     public Node3D? PlaneModel;
 
-    /// <summary>The wobble oscillators and the pivot they roll, the node the assembler hung
+    /// <summary>The wobble oscillators and the pivot they turn, the node the assembler hung
     /// <see cref="PlaneModel"/> under. Null when no rig assembly ran (parked lab planes).</summary>
     public PlaneShake? Shake;
     public Node3D? ShakePivot;
@@ -1694,7 +1694,7 @@ public partial class FlightController : Node3D
 
         // The selection, not a frame's pose: a held numpad key or a look-behind is not something a
         // hand-back can read, and the pilot's own view is what the episode owes them back.
-        Dressing.Show(_cam.ViewMode, _cam.FirstPerson, _renderPose.Basis, _cam, Shake?.Roll ?? 0f, Projectiles);
+        Dressing.Show(_cam.ViewMode, _cam.FirstPerson, _renderPose.Basis, _cam, Shake?.Rotation ?? Vector3.Zero, Projectiles);
     }
 
     /// <summary>Weapon lab: point the gun selector at a firable gun group (0-based, clamped),
@@ -2186,8 +2186,8 @@ public partial class FlightController : Node3D
                 _rumble.Play(RumbleEvent.TurretFire);
         }
 
-        // The plane wobble: overspeed drive plus this tick's fire/hit kicks, written as
-        // visual-only roll to the pivot the model hangs under. Physics, aim and the camera
+        // The plane wobble: overspeed drive plus this tick's fire/hit kicks, written as a
+        // visual-only rotation to the pivot the model hangs under. Physics, aim and the camera
         // read this node's transform, which the pivot sits below, never the wobble.
         float speedRatio = _model.Speed / Mathf.Max(1f, _model.Stats.FdSpeed);
         // The original's per-frame update drives the camera block for the player alone. Anyone
@@ -2199,7 +2199,7 @@ public partial class FlightController : Node3D
             Shake.SetSpeedRatio(IsHumanPiloted ? speedRatio : 0f);
             Shake.Advance(dt);
             if (ShakePivot != null)
-                ShakePivot.Rotation = new Vector3(0f, 0f, Shake.Roll);
+                ShakePivot.Rotation = Shake.Rotation;
         }
 
         // The pad's overspeed rattle rides the same gate the wobble's authored min_speed puts on
@@ -2419,7 +2419,7 @@ public partial class FlightController : Node3D
                 Look.CutAway();
             // Keyed to the pose this frame actually took, not to the selection, a look-behind
             // puts the camera outside the aircraft and must bring its body back while held.
-            Dressing.Show(_cam.ViewMode, firstPersonPose, _renderPose.Basis, _cam, Shake?.Roll ?? 0f, Projectiles);
+            Dressing.Show(_cam.ViewMode, firstPersonPose, _renderPose.Basis, _cam, Shake?.Rotation ?? Vector3.Zero, Projectiles);
             _cam.LogView(logged, _model.Position, _model.Attitude);
         }
 

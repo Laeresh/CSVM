@@ -46,13 +46,13 @@ public sealed class FirstPersonDressing
     /// brings the body back. The pass follows the drawn attitude and the airframe's wobble, and
     /// mirrors <paramref name="pool"/>'s live muzzle flashes.</summary>
     public void Show(PilotViewMode selected, bool firstPersonPose, Basis drawn, CameraController camera,
-        float shakeRoll, ProjectilePool? pool)
+        Vector3 shakeRotation, ProjectilePool? pool)
     {
         Visibility?.Apply(selected, firstPersonPose);
         // Same rule, so the panel is driven exactly on the frames it is on the screen.
         SetPanel(CockpitVisibility.Rules(selected, firstPersonPose).Interior);
         // After the hide, so the pass shows exactly the frames the interior itself does.
-        Pass?.Sync(drawn, camera, shakeRoll, pool?.ActiveMuzzleLights());
+        Pass?.Sync(drawn, camera, shakeRotation, pool?.ActiveMuzzleLights());
     }
 
     /// <summary>Takes every first-person part off for an outside vantage. That is a static camera

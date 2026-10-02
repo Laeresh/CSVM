@@ -84,11 +84,12 @@ public sealed partial class CockpitOverlay : CanvasLayer
         return overlay;
     }
 
-    /// <summary>The interior's basis for one frame: the wobble pivot's roll, about the plane's Z,
-    /// applied over the mount basis exactly as the plane model's pivot applies it over the model.
-    /// Public so the suite can assert the roll reaches the panel without a rig.</summary>
-    public static Basis WobbledMount(Basis mount, float shakeRoll) =>
-        new Basis(Vector3.Back, shakeRoll) * mount;
+    /// <summary>The interior's basis for one frame: the wobble pivot's rotation over the mount
+    /// basis, exactly as the pivot applies it over the model. The rotation is YXZ Euler radians,
+    /// as <see cref="Camera.PlaneShake.Rotation"/> gives it. Public so the suite can assert the
+    /// wobble reaches the panel without a rig.</summary>
+    public static Basis WobbledMount(Basis mount, Vector3 shakeRotation) =>
+        Basis.FromEuler(shakeRotation) * mount;
 
     /// <summary>A main-world point in the pass's frame: the pass keeps the world's orientation and
     /// puts the eye at its origin, so a light at <paramref name="world"/> lands at its offset from
@@ -96,12 +97,12 @@ public sealed partial class CockpitOverlay : CanvasLayer
     public static Vector3 ToOverlay(Vector3 world, Vector3 eye) => world - eye;
 
     /// <summary>Point the overlay camera where the pilot's head points and re-light the panel for
-    /// this frame's attitude, then show or hide the pass to match the interior's own visibility so
+    /// this frame's attitude. The pass shows or hides with the interior's own visibility, so
     /// <see cref="CockpitVisibility"/> keeps deciding which views draw a cockpit. Called every
-    /// frame the rig owns its camera; <paramref name="attitude"/> is the DRAWN plane basis and
-    /// <paramref name="shakeRoll"/> the wobble pivot's roll, which the interior inherited below
-    /// that pivot in the main world and takes here through <see cref="WobbledMount"/>.</summary>
-    public void Sync(Basis attitude, CameraController camera, float shakeRoll,
+    /// frame the rig owns its camera. <paramref name="attitude"/> is the DRAWN plane basis.
+    /// <paramref name="shakeRotation"/> is the wobble pivot's rotation, which the interior takes
+    /// here through <see cref="WobbledMount"/>.</summary>
+    public void Sync(Basis attitude, CameraController camera, Vector3 shakeRotation,
         IEnumerable<(Vector3 Position, float Range, Color Color, float Energy)>? flashes = null)
     {
         MirrorFlashes(flashes, camera.EyePosition);
@@ -113,7 +114,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
         // below a pixel, and keeping it means the sun, the sky radiance and the flashes all sit
         // where the main world has them, with nothing re-aimed.
         var attitudeOnly = attitude.Orthonormalized();
-        _interior.Transform = new Transform3D(attitudeOnly * WobbledMount(_mount, shakeRoll), Vector3.Zero);
+        _interior.Transform = new Transform3D(attitudeOnly * WobbledMount(_mount, shakeRotation), Vector3.Zero);
         var (_, basis) = CameraController.FirstPersonPose(Vector3.Zero, attitudeOnly, Vector3.Zero,
             camera.Head.Elevation, camera.Head.Azimuth);
         _camera.Transform = new Transform3D(basis, Vector3.Zero);

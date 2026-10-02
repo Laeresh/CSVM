@@ -248,7 +248,7 @@ rows).
 - `src/Flight/Camera/SpyglassSun.cs`, the spyglass discs' shadowless copy of the sun under Enhanced, on a layer only the disc cameras draw.
 - `src/Flight/Camera/SpectatorCamera.cs`, the `--freecam`/`--anim-lab` observation camera: RMB-look plus WASD/QE, no roll; `Frame`/`FollowNode` track an object.
 - `src/Flight/Camera/OrbitLock.cs`, the re-lock rule behind that key: nearest first, then outward, engine-free.
-- `src/Flight/Camera/PlaneShake.cs`, the plane-wobble oscillators (gunfire buzz, overspeed rattle, hit rocks, nitro engage) summed to roll on `ShakePivot`.
+- `src/Flight/Camera/PlaneShake.cs`, the plane wobble: the seven component blocks (gunfire buzz, hit rocks, overspeed rattle, contact, nitro engage) summed and rendered as a rotation of `ShakePivot`.
 - `src/Flight/Camera/PlayerRig.cs`, one rendered view's state: camera, SubViewport, HUD parent, visual layer, controller, own sky/deck/puffs.
 - `src/Flight/Camera/OrbitCamera.cs`, the static inspection view's orbit camera: orbit, zoom and AABB framing over a camera it does not own.
 

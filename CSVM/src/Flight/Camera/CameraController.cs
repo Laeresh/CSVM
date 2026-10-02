@@ -420,9 +420,9 @@ public sealed class CameraController
 
     /// <summary>First-person placement (Cockpit mode 6 / Nose mode 7): rigidly mounted at the
     /// plane's <c>cockpit_camera</c> marker via <see cref="FirstPersonPose"/>. No smoothing and no
-    /// camera-side shake: riding the DRAWN pose one-to-one is what lets the camera inherit the
-    /// plane node's wobble for free (docs/org/shakes.md, "two cockpit views need no separate
-    /// handling"). The aim is <see cref="Head"/>'s current angles, so a head panned away from the
+    /// camera-side shake. The original places this camera from the vehicle's own matrix, so the
+    /// wobble turns the interior and never the view (docs/org/shakes.md, "Camera attachment").
+    /// The aim is <see cref="Head"/>'s current angles, so a head panned away from the
     /// nose keeps its bearing while the aircraft manoeuvres under it.</summary>
     public void FirstPersonView(in Transform3D renderPose)
     {

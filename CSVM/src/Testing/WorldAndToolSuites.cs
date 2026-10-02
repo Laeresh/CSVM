@@ -644,13 +644,17 @@ internal static class WorldAndToolSuites
             new CameraController(probeCam, new CamParams(), _ => false, -1).RestoreExternalFov();
             ctx.Check(Mathf.Abs(probeCam.Fov - CameraController.ExternalFovDeg) < 0.001f,
                 $"an external pose takes the decoded base fov={probeCam.Fov:0.##}");
-            // The wobble the interior inherited below the shake pivot has to reach the pass. The
-            // mount's tilt is about X, so its Right axis is the witness: a Z roll of r turns it by
-            // exactly r, and a pass that forgot the wobble leaves it at 0.
-            float rolled = CockpitOverlay.WobbledMount(mountBasis, 0.3f).X.AngleTo(mountBasis.X);
-            ctx.Check(Mathf.Abs(rolled - 0.3f) < 0.001f,
-                $"the shake pivot's roll reaches the panel in the pass angle={rolled:0.###} rad");
-            ctx.Check(CockpitOverlay.WobbledMount(mountBasis, 0f).IsEqualApprox(mountBasis),
+            // The pivot's wobble has to reach the pass on every axis it turns. The pass's basis is
+            // the pivot's own basis over the mount; a pass that forgot it leaves the mount alone.
+            var wobble = new Vector3(0.05f, -0.04f, 0.3f);
+            var wobbled = CockpitOverlay.WobbledMount(mountBasis, wobble);
+            float rolled = wobbled.X.AngleTo(mountBasis.X);
+            var pivotProbe = new Node3D { Rotation = wobble };
+            var pivotBasis = pivotProbe.Basis;
+            pivotProbe.Free();
+            ctx.Check(wobbled.IsEqualApprox(pivotBasis * mountBasis) && rolled > 0.29f,
+                $"the shake pivot's pitch, yaw and roll reach the panel in the pass (right axis turned {rolled:0.###} rad)");
+            ctx.Check(CockpitOverlay.WobbledMount(mountBasis, Vector3.Zero).IsEqualApprox(mountBasis),
                 $"no wobble leaves the mount basis untouched");
             // The pass keeps the world's orientation, so a muzzle flash 11 m right of a yawed plane's
             // eye at (1000, 50, -2000) lands at that same world offset from the pass's origin; a
@@ -1844,7 +1848,7 @@ internal static class WorldAndToolSuites
             var cam = new CameraController(camera, new CamParams(), _ => false, -1,
                 PilotViewMode.Cockpit);
 
-            pass.Sync(Basis.Identity, cam, 0f);
+            pass.Sync(Basis.Identity, cam, Vector3.Zero);
             var world = -sun.GlobalBasis.Z;
             var beam = -clone.GlobalBasis.Z;
             // C1's ZONE1 authors -25° pitch / 90° yaw, and the expected beam is the binary's own
@@ -1859,7 +1863,7 @@ internal static class WorldAndToolSuites
                 $"and is not left at Godot's default -Z off={beam.AngleTo(Vector3.Forward):0.000} rad");
             // The pass keeps the world's orientation, so a banked plane must not carry the sun
             // round with it: a mirror re-based into the interior's frame would swing by the yaw.
-            pass.Sync(new Basis(Vector3.Up, Mathf.Pi / 2f), cam, 0f);
+            pass.Sync(new Basis(Vector3.Up, Mathf.Pi / 2f), cam, Vector3.Zero);
             ctx.Check((-clone.GlobalBasis.Z).AngleTo(world) < 0.001f,
                 $"a yawed airframe leaves the interior's sun where the world has it");
 
@@ -1979,7 +1983,7 @@ internal static class WorldAndToolSuites
             }
             var cam = new CameraController(camera0, new CamParams(), _ => false, -1,
                 PilotViewMode.Cockpit);
-            pass.Sync(Basis.Identity, cam, 0f);
+            pass.Sync(Basis.Identity, cam, Vector3.Zero);
             int whiteoutLayer = (rigs[0].Whiteout?.GetParent() as CanvasLayer)?.Layer ?? 0;
             ctx.Check(pass.Visible && pass.Layer > whiteoutLayer,
                 $"in cockpit view the interior draws over the full whiteout pass={pass.Layer} whiteout={whiteoutLayer}");
@@ -3111,7 +3115,7 @@ internal static class WorldAndToolSuites
     {
         rigs[0].Camera.Position = at;
         rig.Tick(rigs);
-        pass.Sync(Basis.Identity, cam, 0f);
+        pass.Sync(Basis.Identity, cam, Vector3.Zero);
         var beam = -clone.GlobalBasis.Z;
         return (beam, beam.AngleTo(-sun.GlobalBasis.Z), rigs[0].CameraWeatherState);
     }
