@@ -349,7 +349,7 @@ sheet and the face mapping: [../org/loading-screen.md](../org/loading-screen.md)
 ## src/UI/Screens/PauseScreens.cs
 What the Original presentation's pause screen is made of, engine-free: the frame behind it, the
 mission's chart at its authored source crop, the pins and icons its dialog's script places, the
-objectives parchment, the memento, and the labelled button strips, the block's four plus the remake's own PHOTO MODE at the place that block leaves free. An Instant Action sortie's dialog carries none of that and draws the load screen's blackboard instead, its four texts composed through `LoadScreens` and its parchment left off by the dialog's own script; a Dogfight's `LoadMultiplayer` sheet is its mode's `escape.zrd` briefing, or `Loading.zrd`'s where that file numbers the row differently, with no propeller.
+objectives parchment, the memento, and the labelled button strips, the block's four plus the remake's own PHOTO MODE at the place that block leaves free. An Instant Action sortie's dialog carries none of that and draws the load screen's blackboard instead, its four texts composed through `LoadScreens` and its parchment left off by the dialog's own script; a Dogfight's `LoadMultiplayer` sheet is its mode's `escape.zrd` briefing, or `Loading.zrd`'s where that file numbers the row differently, with no propeller and `ia_escape.zrd`'s strips.
 `PauseSheet` is the authored half, read once per sortie, and `PauseReadout` the live half, read afresh on every
 pause: its memento is the seated profile's own picture, `Rows` marks a note line by the runtime's answer for that line's own objective number, and
 `Icon` turns one world pose into the chart icon a session and a suite place alike, through the

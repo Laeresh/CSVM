@@ -396,11 +396,14 @@ describes, so it keeps the Built-in board, the same split the load screen makes.
 **A Dogfight pauses on its mode's briefing, which the original never shows there.**
 `Launch/SessionBoards.cs` resolves the key the load screen reads (`UI/Screens/LoadScreens.cs`'s
 `MultiplayerKey`, from the chapter, the type and whether any seat is on a lobby team) and
-`UI/Screens/PauseScreens.cs`'s `PauseSheet.LoadMultiplayer` reads that dialog out of `escape.zrd`,
-with that file's strips and the blackboard inks. The briefing is chosen over the original's bare
-frame because `escape.zrd` authors it. Above the Clouds is keyed 3, which `escape.zrd` numbers 5,
-so that row takes `Loading.zrd`'s own dialog instead; the composition leaves out any cycling
-element, since a halted mission has no load for the propeller to turn for.
+`UI/Screens/PauseScreens.cs`'s `PauseSheet.LoadMultiplayer` reads that dialog out of `escape.zrd`
+with the blackboard inks. The briefing is chosen over the original's bare frame because
+`escape.zrd` authors it. Above the Clouds is keyed 3, which `escape.zrd` numbers 5, so that row
+takes `Loading.zrd`'s own dialog instead; the composition leaves out any cycling element, since a
+halted mission has no load for the propeller to turn for. The strips and their labels are
+`ia_escape.zrd`'s, not `escape.zrd`'s: the sheet is a blackboard, and a Dogfight pause stands its
+buttons where an Instant Action pause does rather than in the campaign's two columns. The
+`--menu=pauseboard-mp` door composes one with no match behind it.
 
 **The three authored faces meet one of ours.** The extraction ships no menu typeface, so
 `BtnEscapeNormal`, `BtnEscapeRollover` and `BtnEscapeActivate` become one face in three palette
