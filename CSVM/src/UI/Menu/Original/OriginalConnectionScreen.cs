@@ -14,11 +14,11 @@ namespace CSVM.UI.Menu.Original;
 /// The original's Multiplayer Connection screen and the LAN games list behind its Connect, a
 /// standalone module over <see cref="NetPlayFeature"/>. The multiplayer scripts place their
 /// widgets inline, so every corner here is the scripts' own, not the layout's
-/// (<c>docs/org/menu-inventory.md</c>). Only LAN TCP/IP, which searches, and Internet, which joins
-/// the typed address, are offered; the original's other three ways are left off the page. Build
-/// Custom Plane draws greyed, and Host and Create Game open the Multiplayer Lobby as a Dogfight's
-/// host once Game and Player Information are answered. Every join answers Player Information
-/// first. A join started here is followed on a messagebox over the page until it ends.
+/// (<c>docs/org/menu-inventory.md</c>). LAN TCP/IP searches, Internet joins the typed address, and
+/// Join by code, our own way, joins a host's code. The original's other three ways are left off.
+/// Build Custom Plane draws greyed, and Host and Create Game open the Multiplayer Lobby as a
+/// Dogfight's host once Game and Player Information are answered. Every join answers Player
+/// Information first and is followed on a messagebox over the page until it ends.
 /// </summary>
 public sealed class OriginalConnectionScreen : IOriginalScreenModule
 {
@@ -30,6 +30,30 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
 
     /// <summary>The IP Address edit box.</summary>
     public const string AddressKey = "MP_E_IP";
+
+    /// <summary>The Join by code radio, whose Connect joins the typed code through the master
+    /// server. The original has no such way.</summary>
+    public const string CodeKey = "MP_R_CODE";
+
+    /// <summary>The Join code edit box under the Join by code radio.</summary>
+    public const string CodeBoxKey = "MP_E_CODE";
+
+    /// <summary>The Join by code radio's label. The string table has no text for this way.</summary>
+    public const string CodeWayName = "Join by code";
+
+    /// <summary>The Join code box's label.</summary>
+    public const string CodeBoxLabel = "Join code:";
+
+    /// <summary>The Join by code way's description while it is live.</summary>
+    public const string CodeWayDescription =
+        "Join an internet game with the code its host shares, such as K7Q-X3M. No router setup needed.";
+
+    /// <summary>The box raised when Connect finds no code in the Join code box, worded as the
+    /// original's own unrecognized address (langui 10025).</summary>
+    public const string CodeNotRecognized = "The join code is not recognized. A code has six letters and digits, such as K7Q-X3M.";
+
+    /// <summary>The most characters the Join code box holds: a code and its dash.</summary>
+    public const int CodeBoxLimit = MasterWire.CodeLength + 1;
 
     /// <summary>Build Custom Plane, greyed while guests fly stock planes.</summary>
     public const string BuildKey = "MP_B_BUILD";
@@ -119,14 +143,16 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
     private const float SortHighlightAlpha = 80f / 255f;
     private const float PickedAlpha = 0x80 / 255f;
 
-    // The two ways stand at the script's first two radio places and keep its pitch. They also keep
-    // the box's drop under the Internet radio and the ways' own string ids.
-    private static readonly string[] WayKeys = { LanKey, InternetKey };
-    private static readonly string[] WayNames = { "LAN TCP/IP", "Internet" };
-    private static readonly int[] WayLabelIds = { 10003, 10004 };
-    private static readonly int[] WayDescriptionIds = { 10010, 10011 };
-    private static readonly float[] WayY = { 98f, 134f };
-    private static readonly float[] DescriptionY = { 117f, 177f };
+    // The original two ways stand at the script's first two radio places with its pitch and string
+    // ids, the IP Address box dropped under Internet. Join by code steps 61 px past Internet, the
+    // script's own step from Internet over its box to Modem-to-Modem, and draws in Internet's faces.
+    private static readonly string[] WayKeys = { LanKey, InternetKey, CodeKey };
+    private static readonly string?[] WayBoxes = { null, AddressKey, CodeBoxKey };
+    private static readonly string[] WayNames = { "LAN TCP/IP", "Internet", CodeWayName };
+    private static readonly int[] WayLabelIds = { 10003, 10004, 10004 };
+    private static readonly int[] WayDescriptionIds = { 10010, 10011, 10011 };
+    private static readonly float[] WayY = { 98f, 134f, 195f };
+    private static readonly float[] DescriptionY = { 117f, 177f, 238f };
     private static readonly float[] ColumnWidths = { 145f, 100f, 166f, 145f, 115f };
     private static readonly float[] HighlightOffsets = { 0f, 147f, 249f, 414f, 557f };
     private static readonly string[] Headers = { "Game Name", "# of Players", "Mission Type", "Mission Environment", "Status" };
@@ -183,10 +209,17 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
     /// <summary>The games the list shows, sorted and cut to <see cref="VisibleGames"/>.</summary>
     public IReadOnlyList<LanGame> Listed => Sorted();
 
-    /// <summary>Whether seat 0's typed characters feed the IP Address box: the page is showing,
-    /// no box stands over it and the box has the focus.</summary>
+    /// <summary>The Join code box's text as typed, in capitals.</summary>
+    public string TypedCode { get; private set; } = string.Empty;
+
+    /// <summary>Why the Join by code way is shut, or "" while it is live. A shell with no network
+    /// door names no master server.</summary>
+    public string CodeFault => _net()?.CodeFault ?? CoopDoorText.NoMasterServer;
+
+    /// <summary>Whether seat 0's typed characters feed an edit box. The page is showing, no box
+    /// stands over it, and the IP Address or Join code box has the focus.</summary>
     internal bool CapturingText =>
-        _host.Screen == OriginalScreen.Connection && !_host.DialogOpen && _host.FocusedKey == AddressKey;
+        _host.Screen == OriginalScreen.Connection && !_host.DialogOpen && _host.FocusedKey is AddressKey or CodeBoxKey;
 
     /// <summary>A game row's key by its place in <see cref="Listed"/>.</summary>
     public static string GameKey(int index) => GameKeyPrefix + index.ToString(CultureInfo.InvariantCulture);
@@ -227,9 +260,9 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
         };
     }
 
-    /// <summary>The showing page's rows. The Connection page is its radios, its two boxes and its
-    /// plaques. The games list is only the Searching box's Cancel while it has heard nothing.
-    /// </summary>
+    /// <summary>The showing page's rows. The Connection page is its radios, its edit boxes and its
+    /// plaques, the Join by code radio and box greyed while <see cref="CodeFault"/> names a reason.
+    /// The games list is only the Searching box's Cancel while it has heard nothing.</summary>
     public void BuildRows(List<OriginalRow> rows)
     {
         ArgumentNullException.ThrowIfNull(rows);
@@ -267,11 +300,16 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
         {
             case LanKey:
             case InternetKey:
+            case CodeKey:
                 Way = row.Key;
                 break;
             case AddressKey:
                 // Enter in the box is the box's own Connect over the Internet.
                 Way = InternetKey;
+                Connect();
+                break;
+            case CodeBoxKey:
+                Way = CodeKey;
                 Connect();
                 break;
             case ConnectKey:
@@ -382,17 +420,22 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
         return FollowJoin(net) || changed;
     }
 
-    /// <summary>Typed characters and Backspace into the IP Address box, which picks the Internet
+    /// <summary>Typed characters and Backspace into the focused edit box, which picks that box's
     /// way as the original's box does when typed into. Each character cues the edit box's
     /// keystroke or reject sound. A paste inserts the clipboard and cues once, the reject when any
     /// of it was left out.</summary>
-    internal bool TypeAddress(MenuCommands commands, List<string> cues)
+    internal bool TypeText(MenuCommands commands, List<string> cues)
     {
         ArgumentNullException.ThrowIfNull(commands);
         ArgumentNullException.ThrowIfNull(cues);
         if (!CapturingText || _net() is not { } net || (commands.Typed.Length == 0 && !commands.Erase && !commands.Paste))
         {
             return false;
+        }
+
+        if (_host.FocusedKey == CodeBoxKey)
+        {
+            return TypeIntoCode(commands, cues);
         }
 
         string before = net.Address;
@@ -419,6 +462,39 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
         }
 
         return false;
+    }
+
+    /// <summary>Appends <paramref name="typed"/> to the Join code box in capitals, answering how
+    /// many characters it took. It takes only the code alphabet and the dash, up to
+    /// <see cref="CodeBoxLimit"/>, and leaves the reading of a code to Connect.</summary>
+    internal int TypeCode(string typed)
+    {
+        int taken = 0;
+        foreach (char c in typed ?? string.Empty)
+        {
+            char upper = char.ToUpperInvariant(c);
+            bool allowed = char.IsAscii(c) && (upper == '-' || MasterWire.CodeAlphabet.Contains(upper, StringComparison.Ordinal));
+            if (allowed && TypedCode.Length < CodeBoxLimit)
+            {
+                TypedCode += upper;
+                taken++;
+            }
+        }
+
+        return taken;
+    }
+
+    /// <summary>Empties the Join code box.</summary>
+    internal void ClearCode() => TypedCode = string.Empty;
+
+    /// <summary>Poses the Join by code way picked with <paramref name="typed"/> in its box and the
+    /// cursor on the box, for a screenshot aid.</summary>
+    internal void PoseCode(string typed)
+    {
+        ClearCode();
+        TypeCode(typed);
+        Way = CodeKey;
+        _host.FocusKey(CodeBoxKey);
     }
 
     /// <summary>Lets go of the join this page followed, its guest having gone on to its host's
@@ -477,15 +553,48 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
     private OriginalRow Radio(string key, float x, float y, bool enabled, float hitWidth) =>
         new(key, string.Empty, OriginalRowKind.Radio, x, y, hitWidth, RadioSize, enabled, 0, new BoardArt(BoardArtLibrary.Ui, RadioArt, 4));
 
+    // The Join code box takes keystrokes and a paste as the IP Address box does, and picks its way
+    // when they change it.
+    private bool TypeIntoCode(MenuCommands commands, List<string> cues)
+    {
+        string before = TypedCode;
+        foreach (char c in commands.Typed)
+        {
+            cues.Add(TypeCode(c.ToString()) > 0 ? OriginalCues.Text : OriginalCues.TextError);
+        }
+
+        if (commands.Paste)
+        {
+            string text = (MenuInput.Clipboard() ?? string.Empty).Trim();
+            int taken = TypeCode(text);
+            cues.Add(taken == 0 || taken < text.Length ? OriginalCues.TextError : OriginalCues.Text);
+        }
+
+        if (commands.Erase && TypedCode.Length > 0)
+        {
+            TypedCode = TypedCode[..^1];
+        }
+
+        if (TypedCode != before)
+        {
+            Way = CodeKey;
+            return true;
+        }
+
+        return false;
+    }
+
     private void ConnectionRows(List<OriginalRow> rows)
     {
+        bool byCode = CodeFault.Length == 0;
         for (int i = 0; i < WayKeys.Length; i++)
         {
-            rows.Add(Radio(WayKeys[i], RadioX, WayY[i], true, RadioHitWidth));
-            if (WayKeys[i] == InternetKey)
+            bool live = WayKeys[i] != CodeKey || byCode;
+            rows.Add(Radio(WayKeys[i], RadioX, WayY[i], live, RadioHitWidth));
+            if (WayBoxes[i] is { } box)
             {
-                rows.Add(new OriginalRow(AddressKey, _net()?.Address ?? string.Empty, OriginalRowKind.TextField,
-                    FieldX, WayY[i] + AddressDrop, FieldWidth, FieldHeight, true, 0, null));
+                string text = box == CodeBoxKey ? TypedCode : _net()?.Address ?? string.Empty;
+                rows.Add(new OriginalRow(box, text, OriginalRowKind.TextField, FieldX, WayY[i] + AddressDrop, FieldWidth, FieldHeight, live, 0, null));
             }
         }
 
@@ -546,11 +655,18 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
         return null;
     }
 
-    // LAN TCP/IP opens the games list on a fresh search; Internet joins the typed address.
+    // LAN TCP/IP opens the games list on a fresh search, Internet joins the typed address, and Join
+    // by code the typed code.
     private void Connect()
     {
         if (_net() is not { } net)
         {
+            return;
+        }
+
+        if (Way == CodeKey)
+        {
+            ConnectByCode(net);
             return;
         }
 
@@ -588,6 +704,34 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
             }
 
             net.OpenJoin();
+            _following = true;
+        }, true);
+    }
+
+    // A shut way says why rather than failing on the wire. A code names no advert, so the Password
+    // box stays live in case the host asks one.
+    private void ConnectByCode(NetPlayFeature net)
+    {
+        if (net.CodeFault is { Length: > 0 } why)
+        {
+            _host.RaiseDialog(CoopDoorText.CodeJoinUnavailable(why), DialogIcon.Warning, Ok(null));
+            return;
+        }
+
+        if (!MasterWire.TryCode(TypedCode, out string code))
+        {
+            _host.RaiseDialog(CodeNotRecognized, DialogIcon.Warning, Ok(null));
+            return;
+        }
+
+        _ask(null, () =>
+        {
+            if (net.Stage is NetDoorStage.Failed)
+            {
+                net.Close();
+            }
+
+            net.JoinByCode(code);
             _following = true;
         }, true);
     }
@@ -723,9 +867,13 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
             int way = Array.IndexOf(WayKeys, row.Key);
             if (way >= 0)
             {
+                // Our own way's words have no string id, so they borrow the Internet way's faces.
+                bool ours = row.Key == CodeKey;
                 ComposeRadio(row, row.Key == Way, isFocused, layers);
-                layers.Lines.Add(_text.Line(WayLabelIds[way], WayNames[way], row.X + RadioLabelOffset, row.Y, 0f, Ink));
-                layers.Lines.Add(_text.Line(WayDescriptionIds[way], string.Empty, DescriptionX, DescriptionY[way], 0f, Ink));
+                layers.Lines.Add(_text.Line(WayLabelIds[way], WayNames[way], row.X + RadioLabelOffset, row.Y, 0f, Ink,
+                    text: ours ? WayNames[way] : null));
+                layers.Lines.Add(_text.Line(WayDescriptionIds[way], string.Empty, DescriptionX, DescriptionY[way], 0f, Ink,
+                    text: ours ? CodeDescription() : null));
             }
             else if (row.Kind == OriginalRowKind.TextField)
             {
@@ -838,14 +986,19 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
         layers.Pictures.Add(new BoardPicture(row.Art!, row.X, row.Y, frame));
     }
 
+    private string CodeDescription() => CodeFault is { Length: > 0 } why ? CoopDoorText.CodeJoinUnavailable(why) : CodeWayDescription;
+
     private void ComposeField(OriginalRow row, bool focused, BoardLayers layers)
     {
-        // The live box is only its black outline over the page.
-        layers.Fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 0, 0, 0, Border: true));
-        layers.Lines.Add(_text.Line(10006, "IP Address:", row.X - FieldLabelOffsetX, row.Y + FieldLabelOffsetY - 8f, 0f, Ink));
+        // The live box is only its black outline over the page. A shut one is outlined in the
+        // greyed label colour, and its label stays black as every way's label does.
+        var outline = row.Enabled ? Black : MultiplayerBoardText.LabelDisabled;
+        layers.Fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, outline.R, outline.G, outline.B, Border: true));
+        string? label = row.Key == CodeBoxKey ? CodeBoxLabel : null;
+        layers.Lines.Add(_text.Line(10006, "IP Address:", row.X - FieldLabelOffsetX, row.Y + FieldLabelOffsetY - 8f, 0f, Ink, text: label));
         var face = _text.Regular(10006);
         float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
-        var caret = focused && !_host.DialogOpen ? new BoardCaret(0, 0, 0, 1f, row.Height - 4f) : (BoardCaret?)null;
+        var caret = focused && row.Enabled && !_host.DialogOpen ? new BoardCaret(0, 0, 0, 1f, row.Height - 4f) : (BoardCaret?)null;
         // The box keeps the script's own 150 pixels, which an IPv6 address overflows. It scrolls to
         // the end being typed, as a Windows edit box does, rather than shrink the face.
         layers.Lines.Add(new BoardLine(row.Label, row.X + 3f, row.Y + ((row.Height - size) / 2f) - 1f, row.Width - 6f, size,

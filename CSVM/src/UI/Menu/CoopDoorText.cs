@@ -78,6 +78,10 @@ public static class CoopDoorText
     /// the WebRTC carrier the code is reached over.</summary>
     public const string NoWebRtc = "WebRTC is missing or failed to start";
 
+    /// <summary>Why a guest cannot join by code when no master server is set to look the code up.
+    /// </summary>
+    public const string NoMasterServer = "No master server is set";
+
     /// <summary>A host's word while the master server has not answered with a code yet.</summary>
     public const string AwaitingCode = "Asking the master server for a join code ...";
 
@@ -206,7 +210,7 @@ public static class CoopDoorText
     public static string JoinedStatus(NetPlayFeature net, string link, Func<int, string> missionName)
     {
         ArgumentNullException.ThrowIfNull(net);
-        string linked = $"Linked to {net.Address}{link}";
+        string linked = $"Linked to {net.LinkedTo}{link}";
         if (net.Advert is not { } advert)
         {
             return net.HostStarted
@@ -229,13 +233,13 @@ public static class CoopDoorText
         ArgumentNullException.ThrowIfNull(net);
         if (net.Advert is not { } advert)
         {
-            return $"Linked to {net.Address}. Waiting for the host to name its session.";
+            return $"Linked to {net.LinkedTo}. Waiting for the host to name its session.";
         }
 
         string state = net.HostStarted
             ? "The host has launched the mission."
             : "Waiting for the host to launch the mission.";
-        return $"{SessionName(advert, missionName)}. {Capital(GameCalled(advert))}{Players(advert.Players)} at {net.Address}. {state}";
+        return $"{SessionName(advert, missionName)}. {Capital(GameCalled(advert))}{Players(advert.Players)} at {net.LinkedTo}. {state}";
     }
 
     /// <summary>A campaign host's band. With a join code it names the guests, the code and the copy
@@ -311,6 +315,11 @@ public static class CoopDoorText
         string line = $"No internet code: {why}";
         return line.Length <= InternetLineLimit ? line : $"{line[..(InternetLineLimit - 3)].TrimEnd()}...";
     }
+
+    /// <summary>What a guest's way in by code says in place of its description while
+    /// <paramref name="why"/> keeps it shut. One reads "No master server is set, so joining by code
+    /// is unavailable."</summary>
+    public static string CodeJoinUnavailable(string why) => $"{why}, so joining by code is unavailable.";
 
     /// <summary>Game Information's Public/Private row as it reads.</summary>
     public static string ListingWord(bool isPrivate) => isPrivate ? PrivateWord : PublicWord;

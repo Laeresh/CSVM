@@ -2405,6 +2405,7 @@ public partial class Launcher : Node3D
             CopyText = DisplayServer.ClipboardSet,
             Master = master == null ? null : new Net.MasterDirectory(cancel => MasterServerLink.FetchGames(master, cancel)),
             OpenCode = master == null ? null : code => Net.NetCarrier.JoinCode(() => MasterServerLink.Open(master), code, version),
+            WebRtcReady = Net.WebRtcTransport.Available,
         };
         host.Features.Add(_netDoor);
         host.AddSeat(seat);

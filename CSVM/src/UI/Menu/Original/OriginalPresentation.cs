@@ -205,6 +205,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// page, posed with the aids' sample callsign and voice.</summary>
     public const string PlayerInfoAid = "playerinfo";
 
+    /// <summary>The <see cref="ConnectionAid"/> argument that poses the page over a door with a
+    /// master server, Join by code picked with the sample code in its box.</summary>
+    public const string JoinCodeAid = "code";
+
     /// <summary>The aid value that opens the Multiplayer Lobby over the aids' loopback wire with two
     /// guests on it. Its first colon argument names the view: host (the default), guest (Ready) or
     /// waiting (a guest not yet Ready). The second names the tab: mission (the default), plane,
@@ -589,6 +593,11 @@ public sealed class OriginalPresentation : IMenuPresentation
                     _shell.Connection.OpenConnection();
                     _shell.AskNetInfo(aid.EndsWith(GameInfoAid, StringComparison.Ordinal) ? NetSessionKind.Dogfight : null,
                         () => { }, NetDoorAid.SamplePlayer());
+                    break;
+                case ConnectionAid + ":" + JoinCodeAid:
+                    _shell.StandInNetDoor(NetDoorAid.CodeGuest());
+                    _shell.Connection.OpenConnection();
+                    _shell.Connection.PoseCode(NetDoorAid.SampleCode);
                     break;
                 case ConnectionGamesAid:
                 case ConnectionGamesAid + ":" + ConnectionSearchingAid:

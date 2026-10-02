@@ -1284,13 +1284,11 @@ their strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 The words, faces, label tints and plaques the Multiplayer Connection and Lobby pages share, one instance per page over its `IOriginalScreenHost` and data root. It loads the original's string table once, drops the leading `]` several lobby strings carry, draws every multiplayer face in regular weight as the original's capture does, and sizes a plaque strip by its art.
 
 ## src/UI/Menu/Original/OriginalConnectionScreen.cs
-The original's Multiplayer Connection page and the LAN games list behind its Connect, one
-`IOriginalScreenModule` over `NetPlayFeature`. The multiplayer scripts place their widgets inline,
-so every corner is the scripts' own rather than the layout's. Only LAN TCP/IP, which searches the
-network, and Internet, which joins the typed address, are offered; Build Custom Plane draws greyed,
-and Host and Create Game open `OriginalLobbyScreen` as a Dogfight's host once the shell's `OriginalNetInfoBox` is answered, as every join is first. A join started here is followed on the shared messagebox over the page until it lands or
-fails. A game of another build version lists in grey with its version as its status, and Join
-Game refuses it in a box before any socket opens. A game that asks a password reads Need Password, and its Player Information takes one. Plaques draw as pictures, over a script's labels. The IP Address box cues each typed character and each paste with the edit box's keystroke or reject sound, and keeps the script's 150 pixels as a `KeepEnd` line that scrolls to the end of an IPv6 address.
+The original's Multiplayer Connection page and the LAN games list behind its Connect, one `IOriginalScreenModule` over `NetPlayFeature`. The multiplayer scripts place their widgets inline, so every corner is the scripts' own rather than the layout's.
+Of the original's ways only LAN TCP/IP, which searches the network, and Internet, which joins the typed address, are offered. A third way of our own, Join by code, has its own box: it takes the code alphabet and the dash in capitals, Connect reads it through `MasterWire.TryCode` and joins by `NetPlayFeature.JoinByCode`, and while the door's `CodeFault` names a reason the radio and box stand greyed with that reason as its description.
+Build Custom Plane draws greyed, and Host and Create Game open `OriginalLobbyScreen` as a Dogfight's host once the shell's `OriginalNetInfoBox` is answered, as every join is first. A join started here is followed on the shared messagebox over the page until it lands or fails.
+A game of another build version lists in grey with its version as its status, and Join Game refuses it in a box before any socket opens. A game that asks a password reads Need Password, and its Player Information takes one. Plaques draw as pictures, over a script's labels.
+Each edit box cues each typed character and each paste with the edit box's keystroke or reject sound, and keeps the script's 150 pixels as a `KeepEnd` line that scrolls to the end of an IPv6 address.
 The geometry and strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalLobbyScreen.cs
@@ -1433,7 +1431,7 @@ Carriers and the LAN socket arrive as delegates (the launcher's `Net/NetCarrier.
 In co-op the door seats guests and keeps the round of picks. A guest asks a seat per player at its machine (`LocalSeats`); every seat counts against the cap, a further one is granted only from room the first seats leave, and `CoopSeats` is what the guest got. `ShowCoop` names the host's boards through `HostFlow` (`CoopHostFlow.cs`), `CoopAllReady` holds FLY MISSION until every guest seat is Ready, `CoopLaunchDue` tells a guest to follow, and `TellSeatFits`, `TellSeatBuilds` and `TellCoopWingman` go out before the opener.
 `ShowCoopFilm` and `EndCoopFilm` share the host's campaign films (`CoopFilm` is a guest's latest word). `OfferCoopHangar` hands `HostFlow` the hangar with each plane's holder and the plane each seat flies, `CoopGuests` and `CoopGuestPlanes` list every guest seat side by side, and `CoopHangar` is a guest's latest hangar words. A guest's picks are `Pick` and `PickOf` (`CoopGuestPick.cs`), one per seat, and `LeaveCoopMission` tells the host at once that it walked out.
 `Dogfight` is the `DogfightLobby` either end stands in, unshown behind a Built-in host; `DogfightLaunchDue` tells a guest its host has launched, and a guest back from a match waits for the next round. `Version` is `Net/NetBuildVersion.cs`: either end refuses the other's version, with both on `Fault`.
-A host reads `StableIpv6` and `LanIpv4` as it opens; `GuestAddress` is what a guest types, and `CopyForGuests` hands `CopyText` (the launcher's clipboard, on Ctrl+C) the join code, else that address. Boards: `LaunchMenu.cs`. With a master server set, `Master` (`Net/MasterDirectory.cs`) adds its games to `Games`, a listed game or a typed code with its dash joins through `OpenCode`, and a host hands its carrier the listing (`INetListing`), unlisted while `Private`, whose `JoinCode` the boards show; `AwaitingCode` and `InternetFault` say why there is none yet.
+A host reads `StableIpv6` and `LanIpv4` as it opens; `GuestAddress` is what a guest types, and `CopyForGuests` hands `CopyText` (the launcher's clipboard, on Ctrl+C) the join code, else that address. Boards: `LaunchMenu.cs`. With a master server set, `Master` (`Net/MasterDirectory.cs`) adds its games to `Games`, a listed game or a typed code with its dash joins through `OpenCode`, as does `JoinByCode` with the Original Join code box's text, which leaves `Address` alone (`LinkedTo` names the code); `CodeFault` says why a guest cannot join by code (no master server, or `WebRtcReady` false). A host hands its carrier the listing (`INetListing`), unlisted while `Private`, whose `JoinCode` the boards show; `AwaitingCode` and `InternetFault` say why there is none yet.
 `Take` holds what the Game and Player Information boxes answered (`NetPlayerInfo.cs`): `PlayerName` is the callsign every pick carries and a host's first seat takes, `Voice` rides every pick, and a host's `GameName`, `MaxPlayers` and `Private` are its advert's name, cap and listing. `Password` is the one a host asks before admitting a guest, or a guest's answer; it and `Private` end with the session that used them (`ForgetAnswers`). `Boot` removes a seated guest and bans its address until the door closes.
 
 ## src/UI/Menu/NetPlayerInfo.cs
@@ -1466,7 +1464,7 @@ count, `HostAddressLine` and `InternetLine`'s reason), a Dogfight host's `HostCo
 (`RouterStatus`, `PinholeStatus`; `HostPinholeStatus` omits an address already named), what a
 guest types (`HostAddressStatus` on the board, `HostAddressNotes` in a Dogfight host's lobby), an
 advert's session (`SessionName`), the join and waiting boards' status (`JoinedStatus`,
-`WaitingStatus`), the games list's cells with a version and a Need Password mark (`Status`), a guest's band and its line for players the cap left out (`GuestBand`, `SeatsShort`), the booted and wrong-password refusals, the refusal naming both
+`WaitingStatus`, naming a join by code by its code), why a guest cannot join by code (`NoMasterServer`, `NoWebRtc`, `CodeJoinUnavailable`), the games list's cells with a version and a Need Password mark (`Status`), a guest's band and its line for players the cap left out (`GuestBand`, `SeatsShort`), the booted and wrong-password refusals, the refusal naming both
 versions (`VersionMismatch`), and those boards' rows and presses. The mission's long name comes in as a delegate, since only the caller holds the langui table.
 
 ## src/UI/Menu/NetDoorAid.cs
@@ -1477,7 +1475,7 @@ host flow and hangar words (`HangarWords`, a host profile's planes held as its s
 guests on one wire, `PoseDogfight` sets the lobby the `lobby` aid shows, and `PlayedScores` is the
 finished match its Game Scores page lands. The games list's sample LAN holds one game of
 `OtherVersion`, which the list marks. `AidInternet` poses a host's master server: `Listed` gives a
-carrier `SampleCode`, or the server is set with no carrier. No aid opens a socket or asks a router.
+carrier `SampleCode`, or the server is set with no carrier. `CodeGuest` is a shut guest door with a master server, so the Connection page's Join by code way stands live. No aid opens a socket or asks a router.
 
 ## src/UI/Screens/MenuSeatDevices.cs
 The pad side of the shared player setup, for any presentation, over seat 0's `MenuInput` and the

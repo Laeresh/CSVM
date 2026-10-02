@@ -863,7 +863,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         NetInfo.IsOpen ? NetInfo.TypeText(commands, cues) : _screen switch
         {
             OriginalScreen.CampaignRoster => Campaign.TypeName(commands, cues),
-            OriginalScreen.Connection => Connection.TypeAddress(commands, cues),
+            OriginalScreen.Connection => Connection.TypeText(commands, cues),
             OriginalScreen.Lobby => Lobby.TypeText(commands, cues),
             _ => Hangar?.TypeName(commands, cues) ?? false,
         };

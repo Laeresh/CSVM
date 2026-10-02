@@ -240,6 +240,17 @@ public static class NetDoorAid
         Version = SampleVersion,
     };
 
+    /// <summary>A shut guest door with a master server set and a code opener, so the Connection
+    /// page's Join by code way stands live. Its opener joins nothing.</summary>
+    public static NetPlayFeature CodeGuest() => new(
+        (port, maxGuests, bind) => throw new InvalidOperationException("the aid's code door hosts nothing"),
+        (address, port) => throw new InvalidOperationException("the aid's code door joins nothing"))
+    {
+        Version = SampleVersion,
+        Master = MasterOf(AidInternet.Code),
+        OpenCode = code => throw new InvalidOperationException("the aid's code door joins nothing"),
+    };
+
     /// <summary>A door joined over the loopback to a host advertising a campaign mission at
     /// <paramref name="missionSeq"/> with <paramref name="players"/> players in it. The advert
     /// has already landed when this returns.</summary>

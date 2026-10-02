@@ -111,7 +111,9 @@ public sealed class NetPlayFeature : IMenuFeature
     private int _hostPeer = -1;
     private INetLink? _link;
     private INetListing? _listing;
-    private bool _byCode;
+
+    // The code a join under way was opened by, or null for a join by address.
+    private string? _joinCode;
     private bool? _private;
     private NetSessionKind _kind = NetSessionKind.Dogfight;
     private byte _missionSeq = SessionAdvertMessage.NoMission;
@@ -174,7 +176,11 @@ public sealed class NetPlayFeature : IMenuFeature
 
     /// <summary>What a board names the join by: the join code for a join by code, else
     /// <see cref="JoinTarget"/> as a player writes it.</summary>
-    public string JoinName => JoinsByCode(out string code) ? code : JoinTarget.ToString();
+    public string JoinName => _joinCode ?? (JoinsByCode(out string code) ? code : JoinTarget.ToString());
+
+    /// <summary>What a guest's status names its host by: the join code for a join by code, else
+    /// <see cref="Address"/> as typed.</summary>
+    public string LinkedTo => _joinCode ?? Address;
 
     /// <summary>The master server's half of the games list, or null when no master server is set,
     /// which leaves the list to the LAN search alone.</summary>
@@ -183,6 +189,14 @@ public sealed class NetPlayFeature : IMenuFeature
     /// <summary>Opens a join to the game the master server lists under a code, or null when no
     /// master server is set. A typed address in a code's form joins through this.</summary>
     public Func<string, INetTransport>? OpenCode { get; init; }
+
+    /// <summary>Whether this build can open the WebRTC carrier a join by code rides. The launcher
+    /// reads the library's presence; a suite's loopback code opener needs none.</summary>
+    public bool WebRtcReady { get; init; } = true;
+
+    /// <summary>Why a guest cannot join by code here, no master server set or no WebRTC carrier,
+    /// or "" while it can.</summary>
+    public string CodeFault => OpenCode == null ? CoopDoorText.NoMasterServer : !WebRtcReady ? CoopDoorText.NoWebRtc : "";
 
     /// <summary>The code the master server listed this host's game under, or null.</summary>
     public string? JoinCode => IsHost ? _listing?.JoinCode : null;
@@ -916,33 +930,21 @@ public sealed class NetPlayFeature : IMenuFeature
     /// <summary>Starts a join to the typed address. The join lands on a later
     /// <see cref="Step"/>; until then the door stands at <see cref="NetDoorStage.Joining"/>.
     /// </summary>
-    public void OpenJoin()
+    public void OpenJoin() => OpenJoin(JoinsByCode(out string code) ? code : null);
+
+    /// <summary>Starts a join to the game the master server lists under <paramref name="typed"/>,
+    /// read as <see cref="MasterWire.TryCode"/> reads it, and leaves <see cref="Address"/> as typed.
+    /// False, with nothing opened, for text that is not a code or a door with no code opener.
+    /// </summary>
+    public bool JoinByCode(string typed)
     {
-        if (_transport != null)
+        if (OpenCode == null || !MasterWire.TryCode(typed, out string code))
         {
-            return;
+            return false;
         }
 
-        EndLinger();
-        bool byCode = JoinsByCode(out string code);
-        try
-        {
-            var (host, port) = JoinTarget;
-            var carrier = byCode ? OpenCode!(code) : _openJoin(host, port);
-            _transport = new NetLobby(carrier, Version, joinPassword: Password);
-        }
-        catch (Exception e) when (e is InvalidOperationException or ArgumentException)
-        {
-            Fail(e.Message);
-            return;
-        }
-
-        _byCode = byCode;
-        _link = _transport.Inner as INetLink;
-        _hostPeer = -1;
-        Fault = "";
-        Stage = NetDoorStage.Joining;
-        _joining = 0.0;
+        OpenJoin(code);
+        return true;
     }
 
     /// <summary>Whether a game the LAN search heard runs a build this one plays with.</summary>
@@ -1115,7 +1117,7 @@ public sealed class NetPlayFeature : IMenuFeature
         _transport = null;
         _link = null;
         _listing = null;
-        _byCode = false;
+        _joinCode = null;
         _released = false;
         _admitted.Clear();
         _granted.Clear();
@@ -1284,7 +1286,7 @@ public sealed class NetPlayFeature : IMenuFeature
         }
 
         _joining += dt;
-        double timeout = _byCode ? CodeJoinTimeoutSeconds : JoinTimeoutSeconds;
+        double timeout = _joinCode != null ? CodeJoinTimeoutSeconds : JoinTimeoutSeconds;
         if (_link?.LinkState == EnetLinkState.Up || (_link == null && _transport.AllPeers.Count > 0))
         {
             Stage = NetDoorStage.Joined;
@@ -1306,6 +1308,35 @@ public sealed class NetPlayFeature : IMenuFeature
     {
         code = "";
         return OpenCode != null && Address.Contains('-', StringComparison.Ordinal) && MasterWire.TryCode(Address, out code);
+    }
+
+    // A join by code when one is given, else to the typed address.
+    private void OpenJoin(string? code)
+    {
+        if (_transport != null)
+        {
+            return;
+        }
+
+        EndLinger();
+        try
+        {
+            var (host, port) = JoinTarget;
+            var carrier = code != null ? OpenCode!(code) : _openJoin(host, port);
+            _transport = new NetLobby(carrier, Version, joinPassword: Password);
+        }
+        catch (Exception e) when (e is InvalidOperationException or ArgumentException)
+        {
+            Fail(e.Message);
+            return;
+        }
+
+        _joinCode = code;
+        _link = _transport.Inner as INetLink;
+        _hostPeer = -1;
+        Fault = "";
+        Stage = NetDoorStage.Joining;
+        _joining = 0.0;
     }
 
     // Both host doors open the same socket; only the advert's kind tells them apart.
@@ -1676,7 +1707,7 @@ public sealed class NetPlayFeature : IMenuFeature
         _transport = null;
         _link = null;
         _listing = null;
-        _byCode = false;
+        _joinCode = null;
         _released = false;
         _admitted.Clear();
         _granted.Clear();

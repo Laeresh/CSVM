@@ -303,6 +303,7 @@ named in it; `WaveEdit` is the twelfth and has no aid, which is the warning unde
 | `campaign-coop-ready` | Original only: a co-op host's flight check with two guests, the first Ready and the second not, so FLY MISSION is greyed and the strip's chips say Ready | `Campaign` |
 | `connection` | Original only: the Multiplayer Connection page | out of scope |
 | `connection:gameinfo`, `connection:playerinfo` | Original only: the Connection page with GAME INFORMATION or PLAYER INFORMATION standing over it on the aids' sample answer (game and callsign Zachary, eight players, Gruff Male), over an in-process door | out of scope |
+| `connection:code` | Original only: the Connection page over an in-process door with a master server set, Join by code picked with `K7Q-X3M` in its box and the cursor there | out of scope |
 | `connection-games[:searching]` | Original only: the LAN games list over an in-process LAN answering with five sample games, one of another build version, or with none so the Searching box stands | out of scope |
 | `lobby[:host\|guest[:mission\|plane\|ammo\|rockets\|scores\|outlaw\|outlaw-rockets[:code\|offline]]]` | Original only: the Multiplayer Lobby as its host or first guest, over an in-process wire with two guests, Time 5 and Limited Lives set, the first guest Ready and one chat line from each, on the named tab; `outlaw` and `outlaw-rockets` open the outlaw list on Airframes or Rockets with two airframes and All Rockets outlawed; a third argument, `code` or `offline`, poses the host's master server as `campaign-coop`'s does, which the host's pinned chat line shows | out of scope |
 | `network-coopjoin` | the Network board of a guest joined over the loopback to a campaign host, the session named in its status | `Network` |
@@ -513,10 +514,22 @@ constants rather than reading a layout.
   only while Auto refresh is checked. A game that asks a password reads Need Password (10141) in its
   Status column unless it is full ([multiplayer-messages.md](multiplayer-messages.md), "Boot and the
   password").
-- **What is ours.** Only LAN TCP/IP, which searches, and Internet, which joins the typed address,
-  are on the page, at the script's first two radio places (y 98 and 134) with its pitch, the IP
-  Address box at (184, 151) and the Internet description at y 177. MSN Gaming Zone, LAN IPX and
-  Modem-to-Modem, with the phone box, are left off since the remake has no carrier for them. Host
+- **What is ours.** Of the original's ways only LAN TCP/IP, which searches, and Internet, which
+  joins the typed address, are on the page, at the script's first two radio places (y 98 and 134)
+  with its pitch, the IP Address box at (184, 151) and the Internet description at y 177. MSN Gaming
+  Zone, LAN IPX and Modem-to-Modem, with the phone box, are left off since the remake has no carrier
+  for them. A third way of our own, Join by code (`MP_R_CODE`), joins the code a host shares through
+  the master server. It stands 61 px under Internet at y 195, the script's own step from Internet
+  over its box to Modem-to-Modem, with its Join code box (`MP_E_CODE`, 150 x 18) at (184, 212), the
+  box label 101 px left of it and its description at y 238, all in the Internet way's faces. The
+  string table has no text for it, so its words are ours: "Join by code", "Join code:", and "Join an
+  internet game with the code its host shares, such as K7Q-X3M. No router setup needed." The box
+  takes the code alphabet and the dash in capitals, up to seven characters, and Ctrl+V pastes into
+  it; Connect reads the code with or without its dash, and a box holding none raises "The join code
+  is not recognized." in the shared box. With no master server set, or no WebRTC library, its radio
+  draws greyed, its box outline grey, and its description names the reason ("No master server is
+  set, so joining by code is unavailable."). The cursor's walk runs LAN TCP/IP, Internet, the IP
+  Address box, Join by code and the Join code box; Enter in either box is that way's Connect. Host
   and Create Game open the Multiplayer Lobby as a Dogfight's host, skipping the original's host
   box (game name and player cap); Build Custom Plane draws greyed. The Mission Environment column
   names a co-op game's mission, or its shortcode when the name passes 24 characters, and a

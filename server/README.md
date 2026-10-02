@@ -8,8 +8,8 @@ things, and nothing else:
   in the game's games list beside the LAN search's answers. A game that stops repeating itself for
   45 seconds, or whose host disconnects, leaves the server.
 - **Join by code.** Every hosted game, Public or Private, gets a six-character code such as
-  `K7Q-X3M`. A guest picks a Public game from the list, or types the code into the Internet address
-  box, which is the only way in to a Private game from the internet.
+  `K7Q-X3M`. A guest picks a Public game from the list, or types the code into the Connection
+  page's Join by code box, which is the only way in to a Private game from the internet.
 - **Signalling.** While a guest connects, the server relays the WebRTC offer, answer and ICE
   candidates between the guest and the host. Once the link stands, the guest's connection to the
   server closes; game traffic never passes through the master server.
@@ -192,8 +192,10 @@ master server for a join code ...`, and when it refused or cannot be reached the
 and the band shows the address guests can type instead.
 
 A guest opens Multiplayer, LAN TCP/IP, Connect: a Public game appears in the list beside any LAN
-games. Pick it and Join Game, or, for either kind, type the code (with its dash) into the Internet
-IP address box and Connect.
+games. Pick it and Join Game, or, for either kind, pick **Join by code**, type or paste (Ctrl+V) the
+code into its Join code box, with or without its dash and in either case, and Connect. With no
+master server set, or without the WebRTC library, that way stands greyed and says which. The
+Internet IP address box is for addresses, though it still joins a code typed with its dash.
 
 A server older than this listing mark ignores it and lists a Private game anyway, so update the
 server before relying on Private. An older game build sends no mark, and its games stay listed.

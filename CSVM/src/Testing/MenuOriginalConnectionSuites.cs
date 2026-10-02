@@ -40,8 +40,8 @@ internal static class MenuOriginalConnectionSuites
         + "cabin's HOST CO-OP asks GAME INFORMATION, which opens on Private, whose Cancel opens nothing and whose cap of "
         + "sixteen is held to four, and then opens the carrier, the router mapping and the LAN answer a "
         + "Private host still gives, and CLOSE "
-        + "NETWORK gives all three back, the Multiplayer plaque opens the Connection page, its "
-        + "Connect over LAN TCP/IP lists the host as one row of five columns, Join Game lands the "
+        + "NETWORK gives all three back, the Multiplayer plaque opens the Connection page, which with no "
+        + "master server greys its Join by code way and says why, its Connect over LAN TCP/IP lists the host as one row of five columns, Join Game lands the "
         + "guest on the host's cabin after PLAYER INFORMATION, a second guest joins, the host's chips "
         + "name both guests by their callsigns, a fourth human is seated and a fifth is "
         + "refused as full, a silent drop tells a guest the host left, and CLOSE NETWORK tells the "
@@ -956,8 +956,12 @@ internal static class MenuOriginalConnectionSuites
         + "Join Game after PLAYER INFORMATION opens the join through the code opener with that game's "
         + "code rather than an address, landing the guest on the host's Dogfight. The host's GAME "
         + "INFORMATION Listing chooser is live and flips both ways, its lobby "
-        + "pins the code its listed carrier was given, and the copy key copies the code. The server is a "
-        + "canned list and the wire the loopback")]
+        + "pins the code its listed carrier was given, and the copy key copies the code. A second guest's "
+        + "Connection page stands Join by code live as its third way, in the cursor's walk after the IP "
+        + "Address box; Ctrl+V pastes the code into its box in small letters with no dash, and Enter there "
+        + "asks PLAYER INFORMATION with its Password live and joins the code's written form through the "
+        + "code opener, landing that guest on the Dogfight too. The server is a canned list and the wire "
+        + "the loopback")]
     internal static void TheMasterServersGames(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -971,33 +975,28 @@ internal static class MenuOriginalConnectionSuites
 
         const string listed = "{\"games\":[{\"code\":\"K7Q-X3M\",\"name\":\"Pirates\",\"kind\":\"dogfight\",\"players\":1,"
             + "\"cap\":8,\"status\":\"waiting\",\"version\":\"unknown\"}]}";
-        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(17));
+        // The host's end is gated, so each guest reaches it only when that guest joins.
+        var mesh = LoopbackTransport.Mesh(3, LoopbackConditions.Perfect, new Random(17));
+        var gate = new ArrivalGate(mesh[0]);
         var copied = new List<string>();
         var hostDoor = new NetPlayFeature(
-            (_, _, _) => NetDoorAid.Listed(mesh[0]), (_, _) => throw new InvalidOperationException("the host does not join"))
+            (_, _, _) => NetDoorAid.Listed(gate), (_, _) => throw new InvalidOperationException("the host does not join"))
         {
             CopyText = copied.Add,
             Master = new MasterDirectory(_ => System.Threading.Tasks.Task.FromResult(listed)),
         };
         var opened = new List<string>();
-        var guestDoor = new NetPlayFeature(
-            (_, _, _) => throw new InvalidOperationException("a guest does not host"),
-            (_, _) => throw new InvalidOperationException("a listed game joins by its code"))
-        {
-            Master = new MasterDirectory(_ => System.Threading.Tasks.Task.FromResult(listed)),
-            OpenCode = code =>
-            {
-                opened.Add(code);
-                return mesh[1];
-            },
-        };
+        var guestDoor = CodeGuest(listed, opened, gate, mesh[1]);
+        var typedOpened = new List<string>();
+        var coderDoor = CodeGuest(listed, typedOpened, gate, mesh[2]);
         var ends = new List<End>();
         string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-master-list");
         try
         {
             var host = Open(ctx, layout, hostDoor, ends);
             var guest = Open(ctx, layout, guestDoor, ends);
-            if (host == null || guest == null)
+            var coder = Open(ctx, layout, coderDoor, ends);
+            if (host == null || guest == null || coder == null)
             {
                 return;
             }
@@ -1037,6 +1036,7 @@ internal static class MenuOriginalConnectionSuites
             ctx.Check(opened.SequenceEqual(new[] { "K7Q-X3M" }), $"Join Game opens the join by the game's code ({string.Join(", ", opened)})");
             ctx.Check(guestDoor.IsDogfightGuest && guestDoor.JoinName == "K7Q-X3M",
                 $"and lands the guest on the host's Dogfight ({guestDoor.Stage}, {guestDoor.JoinName}, {guestDoor.Fault})");
+            JoinByTheTypedCode(ctx, coder, ends, hostDoor, typedOpened);
         }
         finally
         {
@@ -1046,6 +1046,7 @@ internal static class MenuOriginalConnectionSuites
             }
 
             guestDoor.Discard();
+            coderDoor.Discard();
             hostDoor.Discard();
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
             CSVM.Utils.OptionsStore.DirectoryOverride = options;
@@ -1076,6 +1077,78 @@ internal static class MenuOriginalConnectionSuites
         Pump(host);
         ctx.Check(took && copied.SequenceEqual(new[] { NetDoorAid.SampleCode }) && Draws(host.Shell.Compose(), "It is copied."),
             $"the copy key copies the code and the line says so ({string.Join(", ", copied)})");
+    }
+
+    // A guest door over the canned master server whose code opener records the code and lets its
+    // own end through the host's gate.
+    private static NetPlayFeature CodeGuest(string listed, List<string> opened, ArrivalGate gate, INetTransport end) => new(
+        (_, _, _) => throw new InvalidOperationException("a guest does not host"),
+        (_, _) => throw new InvalidOperationException("a guest with a master server joins by code"))
+    {
+        Master = new MasterDirectory(_ => System.Threading.Tasks.Task.FromResult(listed)),
+        OpenCode = code =>
+        {
+            opened.Add(code);
+            gate.Arrive(end.LocalPeer);
+            return end;
+        },
+    };
+
+    // The third way, end to end. The cursor reaches it after the IP Address box. Ctrl+V pastes the
+    // code without its dash, and Enter in the box joins the code's written form.
+    private static void JoinByTheTypedCode(TestContext ctx, End guest, List<End> ends, NetPlayFeature hostDoor, List<string> opened)
+    {
+        var shell = guest.Shell;
+        ClickRow(ctx, guest, OriginalShell.MultiplayerKey);
+        ctx.Check(Row(shell, OriginalConnectionScreen.CodeKey) is { Enabled: true } && Row(shell, OriginalConnectionScreen.CodeBoxKey) is { Enabled: true }
+                  && Draws(shell.Compose(), OriginalConnectionScreen.CodeWayDescription) && Draws(shell.Compose(), OriginalConnectionScreen.CodeWayName),
+            $"with a master server set the Connection page stands Join by code live under its description ({shell.Screen}, {shell.Connection.CodeFault})");
+        ClickRow(ctx, guest, OriginalConnectionScreen.LanKey);
+        var walked = new List<string> { shell.FocusedKey };
+        for (int step = 0; step < 4; step++)
+        {
+            TypeInto(guest, new MenuCommands { MoveY = 1 });
+            walked.Add(shell.FocusedKey);
+        }
+
+        string[] order =
+        {
+            OriginalConnectionScreen.LanKey, OriginalConnectionScreen.InternetKey, OriginalConnectionScreen.AddressKey,
+            OriginalConnectionScreen.CodeKey, OriginalConnectionScreen.CodeBoxKey,
+        };
+        ctx.Check(walked.SequenceEqual(order) && shell.Connection.CapturingText,
+            $"the cursor walks LAN TCP/IP, Internet, its box, Join by code and into the code box, which takes the keyboard ({string.Join(", ", walked)})");
+
+        var pilots = MenuInput.Clipboard;
+        var cues = new List<string>();
+        try
+        {
+            MenuInput.Clipboard = () => " k7qx3m\r\n";
+            shell.Connection.TypeText(new MenuCommands { Paste = true }, cues);
+        }
+        finally
+        {
+            MenuInput.Clipboard = pilots;
+        }
+
+        ctx.Check(shell.Connection.TypedCode == "K7QX3M" && shell.Connection.Way == OriginalConnectionScreen.CodeKey
+                  && cues.SequenceEqual(new[] { OriginalCues.Text }),
+            $"Ctrl+V pastes the clipboard's code into the box, trimmed and in capitals, and picks the way ('{shell.Connection.TypedCode}', {shell.Connection.Way}, {string.Join(" ", cues)})");
+        TypeInto(guest, new MenuCommands { Accept = true });
+        ctx.Check(shell.NetInfo.Page == NetInfoPage.Player && Row(shell, OriginalNetInfoBox.PlayerPasswordKey) is { Enabled: true } && opened.Count == 0,
+            $"Enter in the code box asks PLAYER INFORMATION first, its Password live, before anything opens ({shell.NetInfo.Page}, {opened.Count})");
+        Answer(ctx, guest, "Sheila");
+        for (int frame = 0; frame < 6; frame++)
+        {
+            hostDoor.Step(Dt);
+            Pump(ends.ToArray());
+        }
+
+        var door = guest.Door;
+        ctx.Check(opened.SequenceEqual(new[] { NetDoorAid.SampleCode }) && door.Address == NetPlayFeature.DefaultAddress,
+            $"the join opens through the code opener under the code's written form, the IP Address box left as it was ({string.Join(", ", opened)}, '{door.Address}')");
+        ctx.Check(door.IsDogfightGuest && door.JoinName == NetDoorAid.SampleCode && hostDoor.Peers == 2,
+            $"and lands that guest on the host's Dogfight beside the first ({door.Stage}, {door.JoinName}, {door.Fault}, {hostDoor.Peers} guests)");
     }
 
     // The Connection page's Host with a password typed into GAME INFORMATION. The host's own PLAYER
@@ -2201,7 +2274,7 @@ internal static class MenuOriginalConnectionSuites
             viewport.PushInput(new Godot.InputEventKey { Keycode = Godot.Key.V, PhysicalKeycode = Godot.Key.V, CtrlPressed = true, Pressed = false });
             var frame = reader.Poll(Dt);
             var cues = new List<string>();
-            guest.Shell.Connection.TypeAddress(frame, cues);
+            guest.Shell.Connection.TypeText(frame, cues);
             ctx.Check(frame.Paste && frame.Typed.Length == 0 && door.Address == Reported && cues.SequenceEqual(new[] { OriginalCues.Text }),
                 $"ABLE-TO-FAIL CONTROL: Ctrl+V pastes the clipboard's address into the box, trimmed, with one keystroke cue ({frame.Paste}, '{frame.Typed}', '{door.Address}', {string.Join(" ", cues)})");
 
@@ -2211,7 +2284,7 @@ internal static class MenuOriginalConnectionSuites
             viewport.PushInput(new Godot.InputEventKey { Keycode = Godot.Key.Insert, PhysicalKeycode = Godot.Key.Insert, Pressed = false });
             frame = reader.Poll(Dt);
             cues.Clear();
-            guest.Shell.Connection.TypeAddress(frame, cues);
+            guest.Shell.Connection.TypeText(frame, cues);
             ctx.Check(frame.Paste && door.Address == "::1128" && cues.SequenceEqual(new[] { OriginalCues.TextError }),
                 $"Shift+Insert pastes too, the '/' an address is never written with left out under the reject cue ('{door.Address}', {string.Join(" ", cues)})");
         }
@@ -2466,6 +2539,11 @@ internal static class MenuOriginalConnectionSuites
         ClickRow(ctx, guest, OriginalShell.MultiplayerKey);
         ctx.Check(shell.Screen == OriginalScreen.Connection && shell.Connection.Way == OriginalConnectionScreen.LanKey,
             $"a click on it opens the Connection page on LAN TCP/IP ({shell.Screen}, {shell.Connection.Way})");
+        if (players == 1)
+        {
+            CodeWayShut(ctx, guest);
+        }
+
         ClickRow(ctx, guest, OriginalConnectionScreen.ConnectKey);
         ctx.Check(shell.Screen == OriginalScreen.ConnectionGames && Row(shell, OriginalConnectionScreen.CancelKey) != null,
             $"Connect opens the games list behind the Searching box ({shell.Screen})");
@@ -2502,6 +2580,22 @@ internal static class MenuOriginalConnectionSuites
             $"Join Game lands {who} on the host's campaign ({door.Stage}, {door.Advert?.Host})");
         ctx.Check(shell.Dialog == null && shell.Screen == OriginalScreen.CampaignCabin && shell.Campaign.IsGuest,
             $"and stands it on the host's cabin as a guest ({shell.Screen}, {shell.Dialog?.Message})");
+    }
+
+    // A door with no master server greys Join by code and says why in its description line. The
+    // cursor passes over it, and a click on its radio picks nothing.
+    private static void CodeWayShut(TestContext ctx, End guest)
+    {
+        var shell = guest.Shell;
+        string why = CoopDoorText.CodeJoinUnavailable(CoopDoorText.NoMasterServer);
+        ctx.Check(Row(shell, OriginalConnectionScreen.CodeKey) is { Enabled: false } && Row(shell, OriginalConnectionScreen.CodeBoxKey) is { Enabled: false }
+                  && Draws(shell.Compose(), why) && !Draws(shell.Compose(), OriginalConnectionScreen.CodeWayDescription),
+            $"with no master server Join by code stands greyed and its description says why ({shell.Connection.CodeFault})");
+        ClickRow(ctx, guest, OriginalConnectionScreen.CodeKey);
+        ClickRow(ctx, guest, OriginalConnectionScreen.AddressKey);
+        TypeInto(guest, new MenuCommands { MoveY = 1 });
+        ctx.Check(shell.Connection.Way == OriginalConnectionScreen.LanKey && shell.FocusedKey == OriginalConnectionScreen.LanKey,
+            $"ABLE-TO-FAIL CONTROL: a click on its radio picks nothing, and the cursor steps from the IP Address box past it ({shell.Connection.Way}, {shell.FocusedKey})");
     }
 
     // Two plain doors take the last seat and knock past it: four humans fit, the fifth hears why.
