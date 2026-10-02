@@ -14,10 +14,9 @@ namespace CSVM.Launch;
 
 /// <summary>The sky over a flown or weathered world, one step of the session build kept for the
 /// session. It holds the mission's weather rig and each rig's skydomes and cloud deck. It also
-/// holds the ambient cloud field, the Enhanced volumetric banks and the sun's lens flare.
+/// holds the ambient cloud field and the sun's lens flare.
 /// <see cref="Build"/> reads the <see cref="BuildState"/> and the world builder once. The session
-/// ticks <see cref="Weather"/> and <see cref="Flare"/> in its own frame order. A live graphics
-/// switch asks for <see cref="FollowCloudBanks"/>.
+/// ticks <see cref="Weather"/> and <see cref="Flare"/> in its own frame order.
 /// Module entry: docs/architecture/Launch.md on src/Launch/SkyStage.cs.</summary>
 internal sealed class SkyStage
 {
@@ -44,9 +43,6 @@ internal sealed class SkyStage
     // A FOG_STATE raised during the world bootstrap, before the weather rig exists. It is applied
     // once the rig has written its zone, the original's order: the zone first, the event over it.
     private AnimRuntime.FogStateChange? _fogStateBeforeWeather;
-    private FogVolumeBanks? _cloudBanks;
-    private IReadOnlyList<FogVolumeBox>? _fogVolumes;
-    private FogVolumeSpec? _fogVolumeSpec;
 
     /// <summary>The stage over one session's world. The rigs are the session's pane list, read at
     /// each build call. The gated objects are what the cloud band's per-object gate moves between
@@ -76,10 +72,6 @@ internal sealed class SkyStage
     /// <summary>The fogvol.zrd clutter field, null where the world has none.</summary>
     public FogVolumeClutter? CloudField { get; private set; }
 
-    /// <summary>Whether an Enhanced volumetric bank stands, which a cockpit pass's Environment
-    /// follows.</summary>
-    public bool HasCloudBanks => _cloudBanks != null;
-
     /// <summary>The world bootstrap's FOG_STATE sink: applied at once over a built rig, held until
     /// the rig has applied its zone otherwise.</summary>
     public void TakeFogState(AnimRuntime.FogStateChange fog)
@@ -91,7 +83,7 @@ internal sealed class SkyStage
     }
 
     /// <summary>The weather step of a chapter world's build, in the modes that draw a sky. It
-    /// builds the cloud field, the banks, the weather rig with one dome set per rig, then the held
+    /// builds the cloud field, the weather rig with one dome set per rig, then the held
     /// fog. The lens flare follows in every mode, after the domes it anchors to.</summary>
     public void Build(BuildState state, WorldBuilder builder)
     {
@@ -119,21 +111,6 @@ internal sealed class SkyStage
         AssignCloudDecks(state.CloudDeck);
     }
 
-    /// <summary>The bank follows a live graphics switch. It is freed, then built again where the
-    /// mode builds one, and handed to the weather rig that colours it.</summary>
-    public void FollowCloudBanks()
-    {
-        if (_fogVolumes == null)
-            return;
-        if (_cloudBanks != null)
-        {
-            _cloudBanks.GetParent()?.RemoveChild(_cloudBanks);
-            _cloudBanks.QueueFree();
-        }
-        _cloudBanks = null;
-        Weather?.SetFogBanks(BuildCloudBanks());
-    }
-
     private static void CopyInstanceShaderParams(Node source, Node copy)
     {
         if (source is GeometryInstance3D from && copy is GeometryInstance3D to)
@@ -156,8 +133,6 @@ internal sealed class SkyStage
         // rig, and needs no per-frame driving unlike the dome/deck/whiteout below.
         var fogVolumes = FogVolumeSpec.VolumesOf(state.Gamez);
         var fogVolumeSpec = FogVolumeSpec.Load(SessionPaths.ChapterZrdr(state.DataRoot, _spec.Chapter));
-        _fogVolumes = fogVolumes;
-        _fogVolumeSpec = fogVolumeSpec;
         var cloudField = FogVolumeClutter.Create(state.Gamez, state.Textures,
             fogVolumeSpec, fogVolumes, _spec.CloudJitter);
         CloudField = cloudField;
@@ -179,10 +154,6 @@ internal sealed class SkyStage
             SplitScreen.SetVisualLayer(cloudField, fvolLayer);
         }
 
-        // Enhanced Graphics only: the volumetric bank under those cards, which --no-fog covers.
-        // A world with none clears the Environment flag, since the froxel pass costs its buffer.
-        var cloudBanks = BuildCloudBanks();
-
         // The sun goes in with the weather: its bearing is the zone's own SUNLIGHT_ORIENTATION,
         // applied by the same zone-apply that writes the fog. The ambience is the wind seam and
         // the viewer set carries each pane's camera pose for the puffer distance fade.
@@ -198,9 +169,6 @@ internal sealed class SkyStage
         // second consumer rather than re-loaded. Tick resolves each camera's weather state from
         // it, and its in-volume whiteout where fog_zone is armed.
         weather.SetFogVolumes(fogVolumes, fogVolumeSpec);
-        // The banks' scattering colour is the applied zone's. The rig that owns the zone apply
-        // writes it, at build and on every later zone change.
-        weather.SetFogBanks(cloudBanks);
         // The flown objects the band's per-object gate moves between layers (ObjectZoneGate).
         // A plane or a zeppelin on the far side of the overcast stops drawing.
         weather.SetGatedObjects(_gatedObjects);
@@ -287,28 +255,6 @@ internal sealed class SkyStage
         if (fitted < HorizonScale)
             Log.Info("world", $"horizon: dome radius {radius:0} m x {HorizonScale:0.##} would reach past the {_camera.Far:0} m far plane, scaled {fitted:0.##}x instead");
         return fitted;
-    }
-
-    // The Enhanced volumetric bank under the cloud cards, at the build and on a live switch.
-    // Both --no-fog and --no-fog-banks drop it, the first with the zone fog. A world with none
-    // clears the froxel flag, since the pass costs its buffer wherever it is on.
-    private FogVolumeBanks? BuildCloudBanks()
-    {
-        bool doorClosed = (_spec.SkippedPasses & EnhancedPasses.FogBanks) != 0;
-        _cloudBanks = _spec.NoFog || doorClosed || _fogVolumes == null
-            ? null : FogVolumeBanks.Create(_fogVolumes, _fogVolumeSpec);
-        // Named, because a missing "fogvol banks:" line also means faithful or no volume. A bisect
-        // read off a log needs to know the door was what closed it.
-        if (doorClosed && GraphicsMode.Enhanced && _fogVolumes is { Count: > 0 })
-            Log.Info("world", $"fogvol banks: none, --no-fog-banks closed the door; the cards stay");
-        if (_env != null)
-            FogVolumeBanks.ApplyFroxelFog(_env, _cloudBanks != null);
-        if (_cloudBanks != null)
-        {
-            _worldRoot.AddChild(_cloudBanks);
-            Log.Info("world", $"fogvol banks: {_cloudBanks.BankCount} volumetric bank(s) under the cards over {_cloudBanks.TileCount} fog box(es), density {_cloudBanks.Density:0.####} per metre");
-        }
-        return _cloudBanks;
     }
 
     // Gives every rig a cloudlayer deck to anchor under its own camera. Rig 0 takes the world's

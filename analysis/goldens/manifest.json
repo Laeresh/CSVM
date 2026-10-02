@@ -156,27 +156,27 @@
       "name": "c5-city-night-enhanced",
       "frame": 120,
       "hash": "7fe15f15527dc356857add7c0d5876c2",
-      "exercises": "Enhanced graphics over the night city from 178 m: authored lights on the pooled omni lights, lit facades under the enhanced sun and ambient, no volumetric bank, TAA, well outside the whiteout; frame-sensitive 24.69 %.",
+      "exercises": "Enhanced graphics over the night city from 178 m: authored lights on the pooled omni lights, lit facades under the enhanced sun and ambient, TAA, well outside the whiteout; frame-sensitive 24.69 %.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute", "--graphics=enhanced"]
     },
     {
       "name": "c1-cloud-deck-enhanced",
       "frame": 120,
-      "hash": "a3639a47f1d8c50c87fcb876d37790ab",
-      "exercises": "Enhanced graphics along C1's 1,208 m deck: the rendered puff sprites on the fvol lattice with sun tint, rim and shadowed cores, the volumetric banks under the cards, TAA; frame-sensitive 5.77 %.",
+      "hash": "7bb034290bb5625a6ca3cffee7995d73",
+      "exercises": "Enhanced graphics along C1's 1,208 m deck: the rendered puff sprites on the fvol lattice with sun tint, rim and shadowed cores over the deck sheet in the zone fog, TAA; frame-sensitive 5.77 %.",
       "args": ["--freecam", "--chapter=C1", "--pos=-6144,1208,-6144", "--direction=0,0,-1", "--det", "--mute", "--graphics=enhanced"]
     },
     {
       "name": "c1-rocket-hit-enhanced",
       "frame": 90,
-      "hash": "05acd6d817e878fdd4029e47777ac7b9",
+      "hash": "0a9f167607bcaaddb41225f528f6a693",
       "exercises": "Enhanced chase flight after two HE rockets hit the dirt by C1's airfield: the burst omni light on the ground, blooming fire frames, sun-shaded smoke, heat shimmer and scorch pools live, wind streaks, TAA; frame-sensitive 94.08 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6104,300,-4420", "--direction=0,-0.33,0.94", "--fire-rockets", "--hold=0,0,0,0.3", "--det", "--mute", "--graphics=enhanced"]
     },
     {
       "name": "c1-cockpit-enhanced",
       "frame": 120,
-      "hash": "e67ed2aff1760e922bac6ae0a02fafb9",
+      "hash": "366314f638592ae6b7c42f3a97ed10bd",
       "exercises": "Enhanced graphics from the pilot's seat in held pitch-and-roll flight: the shaded cockpit1 interior in its transparent pass with MSAA and no TAA, over the enhanced C1 world with TAA; frame-sensitive 41.10 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--view=cockpit", "--hold=0.2,0.1,0,1", "--det", "--mute", "--graphics=enhanced"]
     }

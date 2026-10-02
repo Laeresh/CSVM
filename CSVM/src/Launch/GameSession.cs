@@ -803,15 +803,10 @@ public partial class GameSession : Node3D
         SwitchProfile.Mark("lights");
         _worldEffectsFactory?.FollowGraphicsMode();
         SwitchProfile.Mark("effects");
-        _sky?.FollowCloudBanks();
-        SwitchProfile.Mark("banks");
         foreach (var rig in _rigs)
         {
             if (rig.Controller?.Dressing.Pass?.Env is { } env)
-            {
                 EnhancedLook.ApplyEnvironment(env, enhanced, _spec.SkippedPasses);
-                Effects.FogVolumeBanks.ApplyFroxelFog(env, _sky?.HasCloudBanks == true);
-            }
         }
         SwitchProfile.Mark("cockpit");
         FollowWindStreaks();

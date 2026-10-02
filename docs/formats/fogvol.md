@@ -471,7 +471,6 @@ template, no `clutter` key, degenerate ranges).
 | the gamez `fvol*` shapes | `FogVolumeSpec.VolumesOf` → the scatter, `MapEdgeExtender`, the camera-state test | `A1`/`A2` |
 | **`fog_zone`** | `FogVolumeSpec.FogZoneArmed` → `WeatherState.CameraWeatherState`'s state-3 gate | |
 | **`fog_fade_dist`, `interior_fog_fade_dist`, `fog_color`** | `Mech3.FogVolumeWhiteout` → `Session/WeatherRig.Tick`'s whiteout overlay | |
-| the gamez `fvol*` bounds, `interior_fog_fade_dist`, `fog_color` | `Effects/FogVolumeBanks`, the Enhanced-only volumetric bank under the cards | `C22` |
 
 **`C21` landed the in-volume whiteout exactly as the section above decodes it.** Per
 frame, per rig, when the chapter arms `fog_zone` (C5 alone), every volume's own density is taken
@@ -518,17 +517,12 @@ hash-identical, including `c5-city-night`, whose camera stands **1,797.7 m** fro
 volume, 112× the 16 m ramp (predicted before the run, pinned in
 `CSVM.Tests/FogVolumeWhiteoutTests.cs`).
 
-⚠ **The volumetric banks are a remake-only Enhanced layer, not a decode.** The original renders no
-volumetric fog at all; `C22` adds, under Enhanced Graphics alone, one soft bank standing inside each
-authored volume and UNDER the cards the scatter lays over the same geometry
-([`../architecture/Effects.md`](../architecture/Effects.md), `Effects/FogVolumeBanks.cs`). What the
-data gives it is the volumes' own bounds, the applied zone's fog colour, and, where `fog_zone` is
-armed, the density: the bank reaches its optical depth over the same `interior_fog_fade_dist` metres
-the curtain above hands off in, so the two agree instead of carrying two unrelated numbers. Every
-other constant is TUNE, and the faithful path builds no bank and leaves the froxel pass off, so no
-pinned shot can move. ⚠ A Godot `FogVolume` box much wider than 2,048 m contributes nothing to the
-froxel pass on this engine, silently, so a volume's bounds go down as a grid of tiles: C1's nine
-slab pieces become 36 boxes, C5's seventeen street prisms 57.
+⚠ **No presentation fills the volumes with Godot's volumetric fog.** The original renders none, and
+Godot's froxel fog cannot draw a thin bank in the right colour: a `FogVolume` stores its colour
+times its density per cell in fixed point (steps of 1/511 for emission, 1/2047 for scattering), so
+at a deck's density of a few thousandths per metre the colour truncates to nothing and the bank only
+darkens what is behind it. A bank in the zone's fog colour needs a slab term in the remake's own fog
+shaders instead (`git log --grep='#110'`).
 
 ## Visible consequences to know about
 

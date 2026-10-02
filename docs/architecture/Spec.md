@@ -71,11 +71,11 @@ What follows the switch, and how:
   margin, and the placed clouds' billboards (`SceneBuilder`'s pooled swap). The first switch to
   Enhanced reads each mask's tint and loads the pools, which a faithful session never touches.
 - Re-dressed: the sun (shadows at the `ShadowQualitySetting` level, the atlas and filter, its
-  specular and colour), the Environment's SSAO, SSR, glow, tonemap, sky and froxel fog, each cockpit
+  specular and colour), the Environment's SSAO, SSR, glow, tonemap and sky, each cockpit
   pass's copy of both, and the weather zone, written again last (fog push, energies, shadow distance).
 - Re-resolved: the clutter fade scale, the anti-aliasing method whose default follows the mode, and
   the render scale, on every live 3D viewport (`ViewportQuality.ReapplyAll`).
-- Built or freed: the ground shadow, the scorch field, the volumetric banks, the heat shimmer pool,
+- Built or freed: the ground shadow, the scorch field, the heat shimmer pool,
   the world lights' omni pool and burst lights, and the clutter's cells (`ClutterInstances.Recut`).
   A seat's wind streak field leaves the tree and comes back, still stepped, so its drift carries over.
 - Uploaded again, first of all: a texture's alpha depth. The faithful path uploads an alpha-plane

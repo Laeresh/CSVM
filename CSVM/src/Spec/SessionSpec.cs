@@ -49,8 +49,8 @@ public enum MenuMode
     Versus,
 }
 
-/// <summary>The enhanced presentation's screen-space passes and its volumetric fog banks, as doors
-/// a run can close one at a time. Each can lay a pattern of its own over the frame. Bisecting a full-screen artefact means
+/// <summary>The enhanced presentation's screen-space passes, as doors a run can close one at a
+/// time. Each can lay a pattern of its own over the frame. Bisecting a full-screen artefact means
 /// rendering one pose per closed door until the pattern goes. Reaches
 /// <c>--graphics=enhanced</c> alone, the faithful path running none of them.</summary>
 [Flags]
@@ -70,10 +70,6 @@ public enum EnhancedPasses
     /// <summary><c>--no-soft-shadows</c>: the sun's penumbra, angular distance and blur both 0,
     /// leaving a hard shadow edge rather than no shadow.</summary>
     SoftShadows = 8,
-
-    /// <summary><c>--no-fog-banks</c>: the volumetric banks under the cloud cards and the froxel
-    /// pass that draws them. The cards themselves stay.</summary>
-    FogBanks = 16,
 }
 
 /// <summary>One <c>--ai=</c> entry: the airframe, plus the optional tokens that follow it.
@@ -1578,7 +1574,6 @@ public sealed record SessionSpec
             else if (arg == "--no-ssr") { s.SkippedPasses |= EnhancedPasses.Ssr; }
             else if (arg == "--no-glow") { s.SkippedPasses |= EnhancedPasses.Glow; }
             else if (arg == "--no-soft-shadows") { s.SkippedPasses |= EnhancedPasses.SoftShadows; }
-            else if (arg == "--no-fog-banks") { s.SkippedPasses |= EnhancedPasses.FogBanks; }
             else if (arg.StartsWith("--mips=")) { s.SetMips(arg["--mips=".Length..]); }
             else if (arg.StartsWith("--graphics="))
             {
