@@ -21,7 +21,7 @@
                    every player's install reads, in -Shards processes,
                    split by the harness's own shard:<i>/<n> term over
                    analysis/engine-suite-weights.json, so the suite list is the registry's and
-                   never a copy of it
+                   never a copy of it; on the safe render thread (see the shard launch)
 
     A stage that fails does not stop the ones after it that can still run: a tarball whose unzbd
     lost its bit fails the payload stage AND shows what the extraction does with it.
@@ -251,7 +251,12 @@ while [ "$k" -le "$shards" ]; do
     # No --log-file: an exported build cannot see Godot's own flags from managed code, so the
     # harness screens the engine log at user://logs/godot.log, which this process owns alone.
     # Each shard's own port block, below Linux's ephemeral range, as RunTests.ps1 hands them.
-    timeout -k 10 "$timeout_s" ./CSVM.x86_64 --headless -- --run-tests="shard:$k/$shards" --data-root="$data" \
+    # --render-thread safe: Godot 4.7's headless dummy renderer keeps its mesh, material and
+    # texture RIDs in tables that are not thread-safe, and the separate render thread allocates
+    # them on the calling thread. The tables corrupt (null mesh/material errors, wrong or
+    # uninitialized RIDs, a crash at exit). Fixed upstream in godotengine/godot#121958 (4.8);
+    # drop the flag on that upgrade. The render thread's hand-offs are the windowed battery's.
+    timeout -k 10 "$timeout_s" ./CSVM.x86_64 --headless --render-thread safe -- --run-tests="shard:$k/$shards" --data-root="$data" \
       --net-port-base=$((30000 + (k - 1) * 100)) > "$out/shard$k.out" 2>&1
     echo $? > "$out/shard$k.exit"
   ) &
