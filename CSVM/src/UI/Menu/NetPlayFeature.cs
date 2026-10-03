@@ -713,8 +713,9 @@ public sealed class NetPlayFeature : IMenuFeature
 
     /// <summary>Copies what a guest outside this network needs: the join code once the master server
     /// gave one, else <see cref="GuestAddress"/>. The copy key's action, so one key serves a host
-    /// with a code and one without.</summary>
-    public bool CopyForGuests() => JoinCode is { } code ? Copy(code) : CopyGuestAddress();
+    /// with a code and one without. Nothing while <see cref="AwaitingCode"/>, when no line names the
+    /// address.</summary>
+    public bool CopyForGuests() => JoinCode is { } code ? Copy(code) : !AwaitingCode && CopyGuestAddress();
 
     /// <summary>What this co-op host's boards show, named to every guest on the next step. A new
     /// mission starts a new round of picks, as does a move onto a board other than the briefing

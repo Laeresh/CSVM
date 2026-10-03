@@ -332,11 +332,12 @@ public static class CoopDoorText
 
     /// <summary>What a host's COPY control copies, the text <see cref="NetPlayFeature.CopyForGuests"/>
     /// puts on the clipboard: the join code, else the address <see cref="HostAddressLine"/> names.
-    /// Empty where no line of the host's carries a copy mark, and while not hosting.</summary>
+    /// Empty where no line of the host's carries a copy mark, while the master server is answering,
+    /// and while not hosting.</summary>
     public static string CopyTarget(NetPlayFeature net)
     {
         ArgumentNullException.ThrowIfNull(net);
-        if (!net.IsHost)
+        if (!net.IsHost || net.AwaitingCode)
         {
             return "";
         }
