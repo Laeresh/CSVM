@@ -142,6 +142,13 @@ public sealed class OptionsDef
     /// default rather than reading as off.</summary>
     public bool? CockpitEnginePitch { get; set; }
 
+    /// <summary>Whether a pilot pane draws the flight text block, the remake's own speed,
+    /// altitude, throttle and damage readout (<c>FlightHud.TextBlockEnabled</c>). ⚠ No screen
+    /// offers this. This key, hand-set in the file, is one of its two doors and <c>--hud-text</c>
+    /// the other. Nullable because null is "never set", which reads as OFF, the original drawing
+    /// no such readout.</summary>
+    public bool? FlightTextBlock { get; set; }
+
     /// <summary>The difficulty word (<see cref="DifficultyWords"/>): the campaign
     /// selector's tier the launch reads when no flag names one.</summary>
     public string? Difficulty { get; set; }
@@ -368,6 +375,7 @@ public sealed class OptionsStore
             Write(w, "viewDistance", def.ViewDistance);
             WriteFlag(w, "rocketCraters", def.RocketCraters);
             WriteFlag(w, "cockpitEnginePitch", def.CockpitEnginePitch);
+            WriteFlag(w, "flightTextBlock", def.FlightTextBlock);
             Write(w, "difficulty", def.Difficulty);
             WriteFlag(w, "nearestAfterKill", def.NearestAfterKill);
             WriteFlag(w, "rumble", def.Rumble);
@@ -431,6 +439,7 @@ public sealed class OptionsStore
                 ViewDistance = Read(root, "viewDistance", ValidViewDistances),
                 RocketCraters = ReadFlag(root, "rocketCraters"),
                 CockpitEnginePitch = ReadFlag(root, "cockpitEnginePitch"),
+                FlightTextBlock = ReadFlag(root, "flightTextBlock"),
                 Difficulty = Read(root, "difficulty", ValidDifficulties),
                 NearestAfterKill = ReadFlag(root, "nearestAfterKill"),
                 Rumble = ReadFlag(root, "rumble"),

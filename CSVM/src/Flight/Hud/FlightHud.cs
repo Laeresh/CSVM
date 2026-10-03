@@ -204,7 +204,7 @@ public sealed class FlightHud
     private readonly List<float> _missileGaugeSlots = new();
     private readonly List<string> _textLines = new(); // reused across frames; ComposeTextLines' return
 
-    private Label? _text;                        // the flight text block; never built on an AI rig
+    private Label? _text;                        // the flight text block; never on an AI rig, nor while TextBlockEnabled is off
     private bool _shown = true;                  // SetVisible: off in a cutscene and in photo mode
     private bool _instrumentsShown = true;       // SetInstrumentsVisible: off under --debug-spectate
     private bool _cockpitView;                   // the cockpit interior is on the screen this frame
@@ -220,6 +220,14 @@ public sealed class FlightHud
     // Null until Bind runs, and only for a system the plane actually carries.
     private GaugeCluster.WeaponGauge? _gunGauge;
     private GaugeCluster.WeaponGauge? _missileGauge;
+
+    /// <summary>Whether a pilot pane builds the flight text block at all, read by every
+    /// <see cref="Attach"/>, so it reaches each splitscreen pane alike. Off in a shipped default,
+    /// since the original draws no such readout, and off under <c>--det</c>, which reads no saved
+    /// option. ⚠ No screen writes this. The options file's <c>flightTextBlock</c> key and
+    /// <c>--hud-text</c> are its two sources, both read once at boot. Off means no label is built,
+    /// so <see cref="DrawsTextBlock"/> also spares the caller the lines it would have gathered.</summary>
+    public static bool TextBlockEnabled { get; set; }
 
     /// <summary>Whether the caller should compute a pipper feed at all. Resolving the selected
     /// group's muzzle midpoint reads a world transform per barrel, which an aircraft drawing no
@@ -394,13 +402,16 @@ public sealed class FlightHud
     /// crash camera hides the HUD layer, and the stack is up over that cut in the original.</summary>
     public void Attach(CanvasLayer canvas, CanvasLayer messages, Node? versusHud, Node? scoreboard)
     {
-        // Sized with its first line of text by UpdateTextBlock, which reads the window it is drawn in.
-        var text = new Label { Position = TextMargin };
-        text.AddThemeColorOverride("font_color", new Color(1f, 0.85f, 0.4f));
-        text.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.7f));
-        text.AddThemeConstantOverride("shadow_offset_y", 2);
-        _text = text;
-        canvas.AddChild(text);
+        if (TextBlockEnabled)
+        {
+            // Sized with its first line of text by UpdateTextBlock, which reads the window it is drawn in.
+            var text = new Label { Position = TextMargin };
+            text.AddThemeColorOverride("font_color", new Color(1f, 0.85f, 0.4f));
+            text.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.7f));
+            text.AddThemeConstantOverride("shadow_offset_y", 2);
+            _text = text;
+            canvas.AddChild(text);
+        }
         if (Compass != null)
             canvas.AddChild(Compass);
         if (Gauges != null)

@@ -582,6 +582,13 @@ public sealed record SessionSpec
     /// without any pinned golden ever seeing one.</summary>
     public bool Craters { get; private set; }
 
+    /// <summary><c>--hud-text</c>: draw the flight text block, the remake's own speed, altitude,
+    /// throttle and damage readout in each pilot pane's upper left. Off by default and saved
+    /// nowhere. No screen offers the block, so this flag and the options file's own
+    /// <c>flightTextBlock</c> key are its two doors. This one survives <c>--det</c>, which reads
+    /// no saved option, so a probe can read the block without any pinned golden carrying it.</summary>
+    public bool HudText { get; private set; }
+
     /// <summary><c>--generators[=plane]</c>: run the mission's egen enemy generators;
     /// each surviving generator spawns AI aircraft on its decoded wave/period cycle through the
     /// same runtime spawn seam <c>--ai=</c> uses. The optional value picks the airframe of a
@@ -1448,6 +1455,7 @@ public sealed record SessionSpec
             }
             else if (arg == "--no-assist") { s.NoAssist = true; }
             else if (arg == "--craters") { s.Craters = true; }
+            else if (arg == "--hud-text") { s.HudText = true; }
             else if (arg == "--generators") { s.Generators = true; }
             else if (arg.StartsWith("--generators=")) { s.Generators = true; s.GeneratorsPlane = arg["--generators=".Length..]; }
             else if (arg == "--zeppelins") { s.Zeppelins = true; }

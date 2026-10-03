@@ -79,7 +79,9 @@ internal static class PromptDeviceSuites
         + "offer holds and leaves it the frame the offer drops, the readout block never carries "
         + "it, the crashed, halted and held gates still keep it off, a handover to the pad moves "
         + "the wording with the seat's device, and the anchor is half the pane's width and three "
-        + "tenths of its height in a full pane, a splitscreen pane and a wide one")]
+        + "tenths of its height in a full pane, a splitscreen pane and a wide one; with the readout "
+        + "block off, the shipped default, a pane builds no block and draws no text while both "
+        + "prompts still stand")]
     internal static void HudAutoDockLine(TestContext ctx)
     {
         ctx.RequireData(ctx.MessagesPath, $"the install's message table");
@@ -94,12 +96,16 @@ internal static class PromptDeviceSuites
             UseKeyboard = true,
             PadDevices = Array.Empty<int>(),
         };
+        bool textBlock = FlightHud.TextBlockEnabled;
         try
         {
             ctx.Host.AddChild(canvas);
+            TextBlockOff(ctx, canvas);
             rig.UseMessages(strings);
-            // The shipping attach path, off the tree the pane's canvas would give it.
+            // The shipping attach path, off the tree the pane's canvas would give it. The readout
+            // block is opt-in, and the legs below assert the prompt never lands in it.
             var hud = rig.PilotHud;
+            FlightHud.TextBlockEnabled = true;
             hud.Attach(canvas, canvas, null, null);
             ctx.Check(hud.AutoDock != null, $"the pane's HUD carries a prompt control of its own");
             if (hud.AutoDock is { } prompt)
@@ -110,6 +116,7 @@ internal static class PromptDeviceSuites
         }
         finally
         {
+            FlightHud.TextBlockEnabled = textBlock;
             rig.Free();
             canvas.Free();
         }
@@ -132,12 +139,15 @@ internal static class PromptDeviceSuites
             UseKeyboard = true,
             PadDevices = Array.Empty<int>(),
         };
+        bool textBlock = FlightHud.TextBlockEnabled;
         try
         {
             ctx.Host.AddChild(canvas);
             ctx.Host.AddChild(messages);
             rig.UseMessages(null);
             var hud = rig.PilotHud;
+            // Opt-in, and the crashed leg asserts the respawn line never lands in it.
+            FlightHud.TextBlockEnabled = true;
             hud.Attach(canvas, messages, null, null);
             ctx.Check(hud.CrashPrompt != null && hud.CrashPrompt.GetParent() == messages,
                 $"the prompt hangs from the layer the crash cut leaves up: '{hud.CrashPrompt?.GetParent()?.Name}'");
@@ -152,6 +162,7 @@ internal static class PromptDeviceSuites
         }
         finally
         {
+            FlightHud.TextBlockEnabled = textBlock;
             rig.Free();
             canvas.Free();
             messages.Free();
@@ -264,6 +275,25 @@ internal static class PromptDeviceSuites
         ctx.Check(!prompt.Visible, $"a cutscene's hide takes the prompt with the rest");
         hud.SetVisible(true);
         ctx.Check(prompt.Visible, $"…and gives it back");
+    }
+
+    // The shipped default: no readout block in the upper left, the original having none. The two
+    // prompts are their own controls, so they stand without it.
+    private static void TextBlockOff(TestContext ctx, CanvasLayer canvas)
+    {
+        var hud = new FlightHud();
+        FlightHud.TextBlockEnabled = false;
+        int before = canvas.GetChildCount();
+        hud.Attach(canvas, canvas, null, null);
+        hud.Draw(new FlightHudState { SpeedMps = 50f, Throttle = 0.5f, Halted = true });
+        ctx.Check(!hud.DrawsTextBlock && hud.DrawnText == null && !hud.NeedsStuntStatusLine,
+            $"with the readout block off a pane builds none and draws no text: '{hud.DrawnText ?? "<none>"}'");
+        ctx.Check(hud.AutoDock?.GetParent() == canvas && hud.CrashPrompt?.GetParent() == canvas,
+            $"…while both prompts still stand on their own controls");
+        for (int i = canvas.GetChildCount() - 1; i >= before; i--)
+        {
+            canvas.GetChild(i).Free();
+        }
     }
 
     // The wording still follows the seat's device once the line has its own control to sit on.
