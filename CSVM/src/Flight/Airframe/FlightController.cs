@@ -1902,6 +1902,36 @@ public partial class FlightController : Node3D
     public void TakeRemoteDeath(int? killer) =>
         Destroy(_model.Position, "a remote kill", "center", killer);
 
+    /// <summary>Plays the damage stages off this copy's ledger once its owner's numbers have been
+    /// mirrored into it, as a local intake does after its spend. A copy out of play shows nothing,
+    /// since its wreck is already playing and its respawn resets it. A ledger full again after
+    /// <paramref name="wasFull"/> false is a restore, which takes the stages off. With
+    /// <paramref name="zonesMirrored"/> false, the zones' stages stand where they are. Answers
+    /// whether this was a restore.</summary>
+    public bool ShowRemoteDamage(bool wasFull, bool zonesMirrored)
+    {
+        if (Damage is not { } damage || !InPlay)
+            return false;
+        // A stage crossed while the rig is still pending is marked done with nothing played.
+        EnsureCrashRig();
+        if (damage.IsFull)
+        {
+            if (wasFull)
+                return false;
+            Visuals?.Reset();
+            return true;
+        }
+
+        if (zonesMirrored)
+        {
+            foreach (var zone in damage.Zones)
+                Visuals?.OnPartDamage(zone.Def.Name, zone.HealthFraction);
+        }
+
+        Visuals?.OnHullDamage(damage.SummaryHealthFraction);
+        return false;
+    }
+
     /// <summary>Reports one round fired by something this aircraft carries, a turret's gun, whose
     /// spawn this node does not perform. The turret spawns as it always did; this is only how the
     /// round reaches <see cref="WeaponFired"/> so a networked session can send it.</summary>

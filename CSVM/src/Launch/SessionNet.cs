@@ -72,6 +72,8 @@ internal sealed class SessionNet
     private AiVoiceRuntime? _voice;
     // Whether this machine's world is built, so a guest answers the host's hold word only then.
     private bool _startBuilt;
+    // Whether a ledger whose zone count differs from its copy's has been logged, once a session.
+    private bool _zoneMismatchLogged;
 
     /// <summary>Opens the wire the launch context names, or none. It opens at construction rather
     /// than at the build. A host must answer a join before its own world stands. <paramref name="clockTime"/> reads the session clock, zero before it exists.
@@ -151,9 +153,13 @@ internal sealed class SessionNet
     /// <summary>The chat panel each local pane draws, in pane order.</summary>
     public IReadOnlyList<ChatPanel> ChatPanels => _chatPanels;
 
-    /// <summary>How many full-hull reports this machine applied to a seat flown elsewhere, each a
-    /// rearm on the seat's own machine. For a suite to read.</summary>
+    /// <summary>How many times a seat flown elsewhere read full again after being hurt, each a
+    /// restore on the seat's own machine. For a suite to read.</summary>
     public int RepairsTaken { get; private set; }
+
+    /// <summary>How many damage ledgers this machine mirrored into a seat flown elsewhere. For a
+    /// suite to read.</summary>
+    public int DamageTaken { get; private set; }
 
     /// <summary>Whether <see cref="TraceStep"/> writes, set by <c>--debug-net-trace</c>.</summary>
     public bool TraceSteps { get; init; }
@@ -219,6 +225,7 @@ internal sealed class SessionNet
     /// each simulation step, so a payload is applied on the step after it arrived.</summary>
     public void Step(double delta)
     {
+        SendChangedDamage();
         Link?.Step(delta);
         Ping?.Step();
     }
@@ -622,20 +629,6 @@ internal sealed class SessionNet
         _dogfight?.ScoreDeath(death);
     }
 
-    /// <summary>The victim's own hull number, sent after it has applied a hit. The ledger itself
-    /// is never replicated: only the fraction the damage stages and the HUD read.</summary>
-    public void SendDamage(int seat, FlightController hurt)
-    {
-        if (Link is not { } net || hurt.Damage is not { } damage)
-        {
-            return;
-        }
-
-        net.Broadcast(
-            new Net.DamageMessage((byte)seat, 0, 0, damage.SummaryHealthFraction),
-            Net.NetChannels.Events);
-    }
-
     /// <summary>A shooter id back to the seat that fired it, or -1 for a round no seat owns. Read
     /// off the rigs rather than assumed equal to the seat index, since only the roster decides
     /// that.</summary>
@@ -656,6 +649,25 @@ internal sealed class SessionNet
 
         return -1;
     }
+
+    // A ledger as the fractions the damage report carries. A pool with no maximum reads as full.
+    private static Net.DamagePools PoolsOf(PlaneDamage damage)
+    {
+        var pools = new Net.DamagePools(
+            (byte)Math.Min(damage.Zones.Count, byte.MaxValue),
+            Net.DamagePools.Word(Share(damage.WholeArmor, damage.WholeArmorMax)),
+            Net.DamagePools.Word(Share(damage.WholeHealth, damage.WholeHealthMax)),
+            0UL, 0UL);
+        for (int i = 0; i < damage.Zones.Count; i++)
+        {
+            var zone = damage.Zones[i];
+            pools = pools.WithZone(i, Share(zone.Armor, zone.Def.MaxArmor), Share(zone.Hp, zone.Def.MaxHp));
+        }
+
+        return pools;
+    }
+
+    private static float Share(float current, float max) => max > 0f ? current / max : 1f;
 
     // The seat list the roster, the spawn walk and the versus board are sized by. A pane-less rig
     // carries no camera and parents nothing into a pane, which is what makes HumanFlightAdapter
@@ -722,7 +734,6 @@ internal sealed class SessionNet
         }
 
         rig.WeaponFired += (weapon, origin, direction) => SendFire(seat, weapon, origin, direction);
-        rig.DamageApplied += (hurt, _) => SendDamage(seat, hurt);
         // A match reports from its own Downed handler, which also keeps the last killer. Any
         // other mission reports here. A campaign's human field on the host counts a guest
         // down only when this report plays the wreck there.
@@ -850,29 +861,69 @@ internal sealed class SessionNet
             victim.Body?.PartName(hit.Part) ?? "center", shooter, hit.Damage);
     }
 
-    // The stage and flag words are sent zero and read as nothing. The damage stages this drives
-    // are the hull's, and a part-by-part ledger is not on the wire. A full hull is a rearm on the
-    // owner's machine, which takes the stages off again, as its own Rearm did.
+    // Every seat flown here whose ledger moved since the last step, sent whole. Read off the seat's
+    // current controller, so an airframe swap's replacement is covered with no rewiring.
+    private void SendChangedDamage()
+    {
+        if (Link is not { } net)
+        {
+            return;
+        }
+
+        for (int seat = 0; seat < _seatRigs.Count && seat < Seats.Count; seat++)
+        {
+            if (Seats[seat].IsLocal && _seatRigs[seat].Controller is { Damage: { } damage } && damage.TakeChanged())
+            {
+                net.Broadcast(new Net.DamageMessage((byte)seat, PoolsOf(damage)), Net.NetChannels.Events);
+            }
+        }
+    }
+
+    // The owner's ledger, mirrored into this machine's copy, which then plays its stages off it as
+    // the owner's intake did. The copy's own before-state decides a restore, so a respawn's full
+    // ledger, which the copy's own respawn already matched, counts as nothing.
     private void TakeDamage(in Net.DamageMessage damage)
     {
-        if (damage.Seat < _seatRigs.Count
-            && _seatRigs[damage.Seat].Controller is { RemoteOwned: true } rig)
+        if (damage.Seat >= _seatRigs.Count
+            || _seatRigs[damage.Seat].Controller is not { RemoteOwned: true, Damage: { } ledger } rig)
         {
-            // The stages play through the crash rig's runtime. A stage crossed while the rig is
-            // still pending is marked done with nothing played, and never retried.
-            rig.EnsureCrashRig();
-            if (damage.Hull >= 1f)
+            return;
+        }
+
+        bool wasFull = ledger.IsFull;
+        bool zones = Mirror(ledger, damage.Pools, rig.Name);
+        DamageTaken++;
+        if (rig.ShowRemoteDamage(wasFull, zones))
+        {
+            RepairsTaken++;
+        }
+
+        _voice?.TakeRemotePlayerHull(rig, ledger.SummaryHealthFraction);
+    }
+
+    // Writes the pools into the copy's ledger and answers whether its zones were written. A count
+    // unlike the copy's means the two machines briefly fly different airframes around a swap. Only
+    // the whole pair is taken then, and the next ledger after the copy's own swap corrects it.
+    private bool Mirror(PlaneDamage ledger, in Net.DamagePools pools, string name)
+    {
+        ledger.MirrorWhole(Net.DamagePools.Fraction(pools.WholeArmor), Net.DamagePools.Fraction(pools.WholeHealth));
+        if (pools.Zones != ledger.Zones.Count || pools.Zones > Net.DamagePools.MaxZones)
+        {
+            if (!_zoneMismatchLogged)
             {
-                rig.Visuals?.Reset();
-                RepairsTaken++;
-            }
-            else
-            {
-                rig.Visuals?.OnHullDamage(damage.Hull);
+                _zoneMismatchLogged = true;
+                Log.Info("flight", $"net damage: {name}'s owner counts {pools.Zones} zone(s) and this copy {ledger.Zones.Count}; the whole pair alone is mirrored");
             }
 
-            _voice?.TakeRemotePlayerHull(rig, damage.Hull);
+            return false;
         }
+
+        for (int i = 0; i < pools.Zones; i++)
+        {
+            ledger.MirrorZone(i, Net.DamagePools.Fraction(pools.ArmorAt(i)), Net.DamagePools.Fraction(pools.HealthAt(i)));
+        }
+
+        return true;
     }
 
     // A death somebody else's machine reported: the wreck plays out here as it does there, and

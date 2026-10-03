@@ -335,8 +335,7 @@ public sealed class VersusDirector
     /// <summary>The rearm bases of any Dogfight, over the wire or split screen. Zeppelin vs Zeppelin
     /// rearms only at its hulls' own nodes, so a match that could not seat both hulls has no base
     /// at all.</summary>
-    internal void WireRearmBases(AnimRuntime? world, string zrdrPath, ZeppelinRuntime? hulls,
-        Action<int> rearmed)
+    internal void WireRearmBases(AnimRuntime? world, string zrdrPath, ZeppelinRuntime? hulls)
     {
         if (world == null || (_spec.ZeppelinVsZeppelin && ZvzPlay == null))
         {
@@ -354,7 +353,6 @@ public sealed class VersusDirector
             Hulls = hulls,
             RadiusSquared = RearmBases.LoadRadiusSquared(zrdrPath, why => Log.Warn("flight", $"rearm: player.zrd unreadable, the radius keeps its initialised value: {why}")),
             Strings = _field.Strings,
-            Rearmed = rearmed,
         });
     }
 

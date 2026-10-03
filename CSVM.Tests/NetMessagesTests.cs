@@ -125,9 +125,14 @@ public class NetMessagesTests
     }
 
     [Fact]
-    public void DamageRoundTripsTheVictimsHullState()
+    public void DamageRoundTripsTheOwnersWholeLedger()
     {
-        var sent = new DamageMessage(Seat: 4, Stage: 2, Flags: 0x0003, Hull: 37.25f);
+        var pools = new DamagePools(4, DamagePools.Word(0.25f), DamagePools.Word(0.6f), 0UL, 0UL)
+            .WithZone(0, 0f, 0.4f)
+            .WithZone(1, 1f, 1f)
+            .WithZone(2, 0.5f, 0.851f)
+            .WithZone(3, 0f, 0f);
+        var sent = new DamageMessage(Seat: 4, pools);
 
         Span<byte> buffer = stackalloc byte[DamageMessage.Size];
         int written = sent.Write(buffer);
@@ -135,6 +140,37 @@ public class NetMessagesTests
         Assert.Equal(DamageMessage.Size, written);
         Assert.True(DamageMessage.TryRead(buffer, out var got));
         Assert.Equal(sent, got);
+        Assert.Equal(DamagePools.Full, got.Pools.ArmorAt(1));
+        Assert.Equal(0, got.Pools.HealthAt(3));
+        Assert.InRange(DamagePools.Fraction(got.Pools.HealthAt(0)), 0.4f - 1e-4f, 0.4f + 1e-4f);
+    }
+
+    // The 16-bit step is what keeps a stage's threshold honest on the reader. A zone just above
+    // the 0.85 fuel-leak entry must still read above it, and a full pool must read exactly 1.
+    [Fact]
+    public void ADamageWordKeepsAThresholdsSideAndAFullPoolExact()
+    {
+        Assert.True(DamagePools.Fraction(DamagePools.Word(0.8501f)) > 0.85f);
+        Assert.True(DamagePools.Fraction(DamagePools.Word(0.8499f)) <= 0.85f);
+        Assert.Equal(1f, DamagePools.Fraction(DamagePools.Word(1f)));
+        Assert.Equal(0f, DamagePools.Fraction(DamagePools.Word(-0.2f)));
+        Assert.Equal(DamagePools.Full, DamagePools.Word(1.3f));
+    }
+
+    // Only four zones ride. A zone past them is neither written nor read as damaged, and setting
+    // one leaves its neighbours' words alone.
+    [Fact]
+    public void DamagePoolsCarryFourZonesEachInItsOwnWord()
+    {
+        var pools = new DamagePools(6, DamagePools.Full, DamagePools.Full, 0UL, 0UL)
+            .WithZone(2, 0.5f, 0.5f)
+            .WithZone(5, 0f, 0f);
+
+        Assert.Equal(DamagePools.Word(0.5f), pools.HealthAt(2));
+        Assert.Equal(0, pools.HealthAt(1));
+        Assert.Equal(0, pools.HealthAt(3));
+        Assert.Equal(DamagePools.Full, pools.HealthAt(5));
+        Assert.Equal(new DamagePools(6, DamagePools.Full, DamagePools.Full, 0UL, 0UL).WithZone(2, 0.5f, 0.5f), pools);
     }
 
     // The original's 0x12 shape: a killer beside the victim and a cause word. The no-killer case
@@ -410,7 +446,7 @@ public class NetMessagesTests
     public void ADeserialiserRefusesAnotherTypesBuffer()
     {
         Span<byte> buffer = stackalloc byte[DamageMessage.Size];
-        new DamageMessage(1, 1, 0, 50f).Write(buffer);
+        new DamageMessage(1, new DamagePools(4, DamagePools.Full, DamagePools.Word(0.5f), 0UL, 0UL)).Write(buffer);
 
         Assert.False(HitMessage.TryRead(buffer, out _));
         Assert.True(DamageMessage.TryRead(buffer, out _));

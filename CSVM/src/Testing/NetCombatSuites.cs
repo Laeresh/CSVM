@@ -88,7 +88,10 @@ internal static class NetCombatSuites
         "a host session and a guest session in one process: the rounds one owner fires are spawned "
         + "on the other from its fire events and nowhere else, a hit on an aeroplane flown "
         + "elsewhere spends nothing locally and lands as damage on the machine that owns it, whose "
-        + "hull report builds the copy's pending crash rig, a "
+        + "hull report builds the copy's pending crash rig; the owner's whole ledger, a ram's spend "
+        + "included, is mirrored into the other machine's copy, which plays the same damage stages "
+        + "off it, takes the whole pair alone from a ledger counting other zones, and shows nothing "
+        + "once out of play; a "
         + "guest kills the host and the host kills the guest with the score agreeing on both "
         + "peers, and the suicide and turret-kill causes score as the decode says")]
     internal static void CombatEventsCrossTheWire(TestContext ctx)
@@ -122,7 +125,9 @@ internal static class NetCombatSuites
             Lockstep(SettleSteps, host.Session, guest.Session);
             FireEvents(ctx, host.Session, guest.Session);
             HitRouting(ctx, host.Session, guest.Session, gun);
+            LedgerMirror(ctx, host.Session, guest.Session);
             Kills(ctx, host.Session, guest.Session);
+            MirrorAfterDeath(ctx, host.Session, guest.Session);
             Causes(ctx, host.Session, guest.Session);
         }
         finally
@@ -1216,6 +1221,107 @@ internal static class NetCombatSuites
         ctx.Check(Ledger(mine) < waiting,
             $"ABLE-TO-FAIL CONTROL: a round this machine owns spends at once on the same aeroplane ({waiting:0.0} to {Ledger(mine):0.0})");
     }
+
+    // The owner's ledger on the copy, and the copy's damage stages off it. A ram is the intake,
+    // which raises no DamageApplied, so the ledger's own flag is what sends it. The tail is
+    // stripped and then taken to a tenth of its health, past every zone stage but the last.
+    private static void LedgerMirror(TestContext ctx, GameSession host, GameSession guest)
+    {
+        var shown = host.SeatRigs[1].Controller!;
+        var owned = guest.SeatRigs[1].Controller!;
+        // Both aeroplanes lifted clear first, or the steps below glide them into the ground and
+        // the kills that follow find one already down. The lift's reset reaches the copy too.
+        Lift(host.SeatRigs[0].Controller!);
+        Lift(owned);
+        Lockstep(SettleSteps, host, guest);
+        var ownStages = Stages(owned);
+        var shownStages = Stages(shown);
+        var tail = owned.Damage!.Parts["tail"].Def;
+        int taken = host.Wire.DamageTaken;
+
+        owned.TakeCollisionHit(tail.MaxArmor, 0f, owned.WorldPosition, 0);
+        owned.TakeCollisionHit(0f, tail.MaxHp * 0.9f, owned.WorldPosition, 0);
+        Lockstep(SettleSteps, host, guest);
+
+        bool mirrors = Mirrors(shown.Damage!, owned.Damage!, out string off);
+        ctx.Check(host.Wire.DamageTaken > taken && mirrors,
+            $"a ram on the guest's own aeroplane reaches the host's copy as its whole ledger, every pool within a 16-bit step ({host.Wire.DamageTaken - taken} report(s), {off}; {Pools(owned.Damage!)})");
+        ctx.Check(ownStages.Count > 0 && shownStages.SequenceEqual(ownStages),
+            $"and the copy plays the stages the owner played, in order (owner [{string.Join(", ", ownStages)}], copy [{string.Join(", ", shownStages)}])");
+
+        // A ledger counting other zones, as around an airframe swap: the whole pair is taken and
+        // every zone stays as it stood.
+        float tailBefore = shown.Damage!.Parts["tail"].Hp;
+        var link = guest.Wire.Link!;
+        link.Send(link.HostPeer, new DamageMessage(1, new DamagePools(3, DamagePools.Word(0.5f), DamagePools.Word(0.4f), 0UL, 0UL)),
+            NetChannels.Events);
+        Lockstep(SettleSteps, host, guest);
+        var mirrored = shown.Damage;
+        ctx.Check(Mathf.IsEqualApprox(mirrored.WholeHealth / mirrored.WholeHealthMax, 0.4f, 1e-4f)
+                  && Mathf.IsEqualApprox(mirrored.Parts["tail"].Hp, tailBefore),
+            $"a ledger counting 3 zones against the copy's {mirrored.Zones.Count} writes the whole pair alone (hull {mirrored.SummaryHealthFraction:0.000}, tail {mirrored.Parts["tail"].Hp:0.0} of {tailBefore:0.0})");
+    }
+
+    // A copy out of play mirrors the numbers and shows nothing: its wreck is already playing.
+    private static void MirrorAfterDeath(TestContext ctx, GameSession host, GameSession guest)
+    {
+        var shown = host.SeatRigs[1].Controller!;
+        var owned = guest.SeatRigs[1].Controller!;
+        var shownStages = Stages(shown);
+        int repairs = host.Wire.RepairsTaken;
+        owned.Damage!.ScalePools(0.05f, 0.05f);
+        Lockstep(SettleSteps, host, guest);
+        bool mirrors = Mirrors(shown.Damage!, owned.Damage, out string off);
+        ctx.Check(!shown.InPlay && mirrors && shownStages.Count == 0 && host.Wire.RepairsTaken == repairs,
+            $"a ledger reaching a copy out of play is mirrored and plays nothing (in play {shown.InPlay}, {off}, stages [{string.Join(", ", shownStages)}])");
+    }
+
+    // Put 500 m above where it flies, with a fresh collision window, by its owner's own respawn.
+    private static void Lift(FlightController pilot)
+    {
+        var at = pilot.WorldPosition + (Vector3.Up * 500f);
+        pilot.RespawnAt(at, at + (Vector3.Right * 100f));
+        pilot.ArmSpawnTimers();
+    }
+
+    // Every damage stage the rig's sink plays from here on, the sink itself still played.
+    private static List<string> Stages(FlightController rig)
+    {
+        var stages = new List<string>();
+        var visuals = rig.Visuals!;
+        var sink = visuals.DamageEffectSink;
+        visuals.DamageEffectSink = anim =>
+        {
+            stages.Add(anim);
+            sink?.Invoke(anim);
+        };
+        return stages;
+    }
+
+    // Whether every pool of the copy stands within one 16-bit step of the owner's, as fractions,
+    // since the two maxima need not match. The worst gap is named either way.
+    private static bool Mirrors(PlaneDamage copy, PlaneDamage owner, out string off)
+    {
+        const float Step = 1.5f / DamagePools.Full;
+        float worst = Mathf.Max(
+            Mathf.Abs(Share(copy.WholeArmor, copy.WholeArmorMax) - Share(owner.WholeArmor, owner.WholeArmorMax)),
+            Mathf.Abs(Share(copy.WholeHealth, copy.WholeHealthMax) - Share(owner.WholeHealth, owner.WholeHealthMax)));
+        bool zones = copy.Zones.Count == owner.Zones.Count;
+        for (int i = 0; zones && i < copy.Zones.Count; i++)
+        {
+            worst = Mathf.Max(worst, Mathf.Abs(copy.Zones[i].ArmorFraction - owner.Zones[i].ArmorFraction));
+            worst = Mathf.Max(worst, Mathf.Abs(copy.Zones[i].HealthFraction - owner.Zones[i].HealthFraction));
+        }
+
+        off = $"worst gap {worst:0.000000}, zones {copy.Zones.Count}/{owner.Zones.Count}";
+        return zones && worst <= Step;
+    }
+
+    private static float Share(float current, float max) => max > 0f ? current / max : 1f;
+
+    private static string Pools(PlaneDamage damage) =>
+        $"hull a{Share(damage.WholeArmor, damage.WholeArmorMax):0.000} h{damage.SummaryHealthFraction:0.000}, "
+        + string.Join(", ", damage.Zones.Select(z => $"{z.Def.Name} a{z.ArmorFraction:0.000} h{z.HealthFraction:0.000}"));
 
     // Both directions of a kill, each reported by the machine that owns the dying pilot and scored
     // by the host alone. The board is read on both peers after each one.
