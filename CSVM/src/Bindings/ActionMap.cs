@@ -66,7 +66,7 @@ public sealed class ActionMap
     /// <summary>Gives a control to an action, taking it off every action that held it. Returns those
     /// in enum order, so a screen can name each loss. A full axis goes onto both actions of the pair,
     /// the partner is not reported, and an action that takes no full axis throws. ⚠ Every owner, not
-    /// the first: <see cref="Add"/> puts one control on two actions (a numpad snap-look diagonal).
+    /// the first: <see cref="Add"/> can put one control on two actions (a hand-edited keymap).
     /// Stopping at the first leaves it on the other, which the original forbids (`FUN_005371d0`).
     /// </summary>
     public IReadOnlyList<InputAction> Assign(InputAction action, Binding binding)
@@ -96,7 +96,7 @@ public sealed class ActionMap
     }
 
     /// <summary>Gives a control to an action without taking it off anyone. The shipped defaults and
-    /// a loaded file need this, since a numpad snap-look diagonal is deliberately on two actions. A
+    /// a loaded file go in this way, since a file may name one control on two actions. A
     /// full axis goes onto both actions of the pair, replacing a copy with another invert or
     /// deadzone. On the lever row it goes onto that row alone, and on any other it is refused.
     /// ⚠ Not for a rebinding screen; <see cref="Assign"/> is the only path that keeps the steal rule.</summary>

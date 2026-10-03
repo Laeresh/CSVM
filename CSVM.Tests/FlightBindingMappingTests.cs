@@ -239,9 +239,8 @@ public class FlightBindingMappingTests
         Assert.Equal(travel, actions.Axis(InputAction.LookAimDown, InputAction.LookAimUp), 5);
     }
 
-    /// <summary>The snap-look cluster, which the old site composed by ORing three keys per
-    /// direction. The corners drive two directions at once, which is why they are on two actions.
-    /// </summary>
+    /// <summary>The snap-look cluster, the original's nine Views 2 rows with one key each, composed
+    /// into the direction the head reads. A negative y is the rear row (Kp2 is Look Back).</summary>
     [Theory]
     [InlineData(Key.Kp9, 1f, 1f)]
     [InlineData(Key.Kp6, 1f, 0f)]
@@ -257,8 +256,23 @@ public class FlightBindingMappingTests
         state.Keys.Add((int)key);
         actions.Poll(state);
 
-        Assert.Equal(x, actions.Axis(InputAction.LookRight, InputAction.LookLeft));
-        Assert.Equal(y, actions.Axis(InputAction.LookUp, InputAction.LookDown));
+        Assert.Equal((x, y), SnapLookRows.Compose(actions.Value));
+    }
+
+    /// <summary>A diagonal held with one of its own flanks still reads as the diagonal. Two opposite
+    /// rows cancel. Both match the earlier OR of three keys per direction.</summary>
+    [Theory]
+    [InlineData(Key.Kp7, Key.Kp4, -1f, 1f)]
+    [InlineData(Key.Kp7, Key.Kp9, 0f, 1f)]
+    [InlineData(Key.Kp1, Key.Kp9, 0f, 0f)]
+    public void TwoSnapKeysHeld_ComposeAsOneDirection(Key first, Key second, float x, float y)
+    {
+        var (state, actions) = Seat();
+        state.Keys.Add((int)first);
+        state.Keys.Add((int)second);
+        actions.Poll(state);
+
+        Assert.Equal((x, y), SnapLookRows.Compose(actions.Value));
     }
 
     /// <summary>Every flight key pair really is the subtract-both form <see cref="ActionSnapshot.Axis"/>
@@ -269,7 +283,7 @@ public class FlightBindingMappingTests
     [InlineData(Key.Left, Key.Right, InputAction.RollLeft, InputAction.RollRight)]
     [InlineData(Key.Comma, Key.Period, InputAction.YawLeft, InputAction.YawRight)]
     [InlineData(Key.Equal, Key.Minus, InputAction.ThrottleUp, InputAction.ThrottleDown)]
-    [InlineData(Key.Kp8, Key.Kp2, InputAction.LookUp, InputAction.LookDown)]
+    [InlineData(Key.Kp8, Key.Kp2, InputAction.LookUp, InputAction.LookRear)]
     [InlineData(Key.Kp6, Key.Kp4, InputAction.LookRight, InputAction.LookLeft)]
     public void BothEndsOfAKeyPairHeld_ReadsZeroRatherThanFavouringOneEnd(
         Key positive, Key negative, InputAction up, InputAction down)

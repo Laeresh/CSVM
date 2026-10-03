@@ -779,6 +779,7 @@ both sit on top of these types.
 - `src/Bindings/BindingProfile.cs`, one seat's whole input: a map and a `PlayerActions` per context, plus the keyboard gate that applies to all of them.
 - `src/Bindings/ActiveDevice.cs`, which side of a seat's hardware produced its last real input, and which of an action's bindings a prompt on that side names.
 - `src/Bindings/BindingStore.cs`, the versioned JSON keymap file, one per player under `user://`, falling back per action to the shipped default.
+- `src/Bindings/SnapLookRows.cs`, the original's eight snap-look direction rows, composed into one head direction, and the move of an old four-row keymap onto them.
 - `src/Bindings/LaunchBindings.cs`, where a seat's keymap comes from when the seat is built: the player's saved file, or the shipped defaults, plus seat 1's stick rows.
 - `src/Bindings/IStickRows.cs`, the seam seat 1's keymap is completed through from the stick profiles, so this namespace never names the stick library.
 - `src/Bindings/PadRumble.cs`, one seat's controller rumble on the original's own effect table, routed to the pads that seat's bindings read.

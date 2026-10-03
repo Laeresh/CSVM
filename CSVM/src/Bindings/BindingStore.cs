@@ -281,7 +281,7 @@ public sealed class BindingStore
         var saved = new List<(InputAction Action, List<Binding> Bindings)>();
         foreach (var entry in element.EnumerateObject())
         {
-            if (!Enum.TryParse(entry.Name, ignoreCase: true, out InputAction action)
+            if (!TryAction(entry.Name, out var action)
                 || DefaultBindings.ContextOf(action) != context
                 || entry.Value.ValueKind != JsonValueKind.Array
                 || !TryRow(entry.Value, action, pad, out var bindings))
@@ -292,6 +292,7 @@ public sealed class BindingStore
             saved.Add((action, bindings));
         }
 
+        SnapLookRows.MigrateSaved(saved);
         foreach (var (action, _) in saved)
         {
             map.Clear(action);
@@ -314,11 +315,23 @@ public sealed class BindingStore
         TakeControlsTheFileClaims(map, saved);
     }
 
+    // An action's row name, including the one token a renamed action was saved under.
+    private static bool TryAction(string name, out InputAction action)
+    {
+        if (string.Equals(name, SnapLookRows.LegacyRearToken, StringComparison.OrdinalIgnoreCase))
+        {
+            action = InputAction.LookRear;
+            return true;
+        }
+
+        return Enum.TryParse(name, ignoreCase: true, out action);
+    }
+
     // A control the file names belongs to the action the file gives it, so a default row left over
     // on that control loses it. Otherwise a shipped table that moves a control between actions puts
     // it on two at once, which the map's steal rule forbids. Rows the file names keep sharing a
-    // control, since a saved snap-look diagonal is deliberately two actions. A full axis's partner
-    // row holds the same binding, so it is not a loser either.
+    // control, since a hand-edited file may put one on two actions as the defaults may. A full
+    // axis's partner row holds the same binding, so it is not a loser either.
     private static void TakeControlsTheFileClaims(
         ActionMap map, List<(InputAction Action, List<Binding> Bindings)> saved)
     {

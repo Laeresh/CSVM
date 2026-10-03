@@ -92,8 +92,7 @@ public static class DefaultBindings
 
     // Flight, the original's own shipped table (docs/org/input.md's 64 rows, docs/controls.md's
     // flight table). The attitude signs follow FlightController's key pairs: Down pitches up, Left
-    // rolls left, the comma and the left shoulder yaw left. The numpad snap-look diagonals each
-    // drive two actions at once, which the OR rule expresses and four typed slots cannot.
+    // rolls left, the comma and the left shoulder yaw left.
     private static ContextBuilder BuildFlight()
     {
         var b = new ContextBuilder();
@@ -169,11 +168,16 @@ public static class DefaultBindings
         // is the pad's one free control, and the original spends a joystick button on this too.
         b.Mod(InputAction.ToggleSpyglass, KeyModifiers.Shift, Key.S)
             .Buttons(InputAction.ToggleSpyglass, JoyButton.Misc1);
-        b.Keys(InputAction.LookUp, Key.Kp7, Key.Kp8, Key.Kp9);
-        b.Keys(InputAction.LookDown, Key.Kp1, Key.Kp2, Key.Kp3);
-        b.Keys(InputAction.LookLeft, Key.Kp7, Key.Kp4, Key.Kp1);
-        b.Keys(InputAction.LookRight, Key.Kp9, Key.Kp6, Key.Kp3);
+        // The original's Views 2 page, one numpad key per row; the bottom row looks rearward.
+        b.Keys(InputAction.LookUpLeftRear, Key.Kp1);
+        b.Keys(InputAction.LookRear, Key.Kp2);
+        b.Keys(InputAction.LookUpRightRear, Key.Kp3);
+        b.Keys(InputAction.LookLeft, Key.Kp4);
         b.Keys(InputAction.LookCenter, Key.Kp5);
+        b.Keys(InputAction.LookRight, Key.Kp6);
+        b.Keys(InputAction.LookUpLeft, Key.Kp7);
+        b.Keys(InputAction.LookUp, Key.Kp8);
+        b.Keys(InputAction.LookUpRight, Key.Kp9);
         b.Keys(InputAction.LookBack, Key.Kp0).Buttons(InputAction.LookBack, JoyButton.RightStick);
         b.Keys(InputAction.ZoomIn, Key.KpAdd);
         b.Keys(InputAction.ZoomOut, Key.KpSubtract);
@@ -274,9 +278,8 @@ public static class DefaultBindings
     }
 
     // One context's shipped set while it is being written: the map, and the actions it owns in the
-    // order they were first named. Bindings go in through ActionMap.Add rather than Assign because
-    // some controls are deliberately on two actions (a snap-look diagonal, d-pad up in flight),
-    // which the steal rule would undo.
+    // order they were first named. Bindings go in through ActionMap.Add, the path for a whole table,
+    // rather than Assign, the rebinding screen's.
     private sealed class ContextBuilder
     {
         private readonly List<InputAction> _actions = new();

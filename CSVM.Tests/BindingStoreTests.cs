@@ -120,18 +120,60 @@ public class BindingStoreTests
         }
     }
 
-    /// <summary>The snap-look diagonals are one key on two actions, so the file has to carry a
-    /// control twice inside one context and read it back that way.</summary>
+    /// <summary>A control put on two actions by <see cref="ActionMap.Add"/> comes back on both. The
+    /// file carries it twice inside one context and reads it back that way.</summary>
     [Fact]
     public void RoundTrip_KeepsAControlThatDrivesTwoActions()
     {
         var profile = BindingProfile.Defaults(Pad, readsKeyboard: true);
+        var z = new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.Z));
+        profile.Map(InputContext.Flight).Add(InputAction.FireGuns, z);
+        profile.Map(InputContext.Flight).Add(InputAction.FireRockets, z);
+
         var loaded = BindingStore.Deserialize(BindingStore.Serialize(1, profile), Pad, readsKeyboard: true)
             .Map(InputContext.Flight);
-        var kp7 = new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.Kp7));
 
-        Assert.Contains(kp7, loaded.Bindings(InputAction.LookUp));
-        Assert.Contains(kp7, loaded.Bindings(InputAction.LookLeft));
+        Assert.Equal(new[] { InputAction.FireGuns, InputAction.FireRockets }, loaded.OwnersOf(z));
+    }
+
+    /// <summary>A keymap saved under the four direction rows loads as the original's nine rows, one
+    /// key each. There a snap-look diagonal was one key on two rows, and the rear row was stored as
+    /// "LookDown".</summary>
+    [Fact]
+    public void Load_TheFourOldLookRows_MoveEachSharedKeyToItsDiagonal()
+    {
+        var json = Row("flight", """
+            "LookUp": ["keyboard/key:Kp7", "keyboard/key:Kp8", "keyboard/key:Kp9"],
+            "LookDown": ["keyboard/key:Kp1", "keyboard/key:Kp2", "keyboard/key:Kp3"],
+            "LookLeft": ["keyboard/key:Kp7", "keyboard/key:Kp4", "keyboard/key:Kp1"],
+            "LookRight": ["keyboard/key:Kp9", "keyboard/key:Kp6", "keyboard/key:Kp3"]
+            """);
+        var loaded = BindingStore.Deserialize(json, Pad, readsKeyboard: true).Map(InputContext.Flight);
+        var shipped = DefaultBindings.MapFor(InputContext.Flight, Pad);
+
+        foreach (var (action, _, _) in SnapLookRows.Directions)
+        {
+            Assert.Equal(shipped.Bindings(action), loaded.Bindings(action));
+        }
+    }
+
+    /// <summary>An old keymap whose player took a diagonal key off both its rows bound nothing there.
+    /// So the new diagonal row loads empty, not at its shipped key.</summary>
+    [Fact]
+    public void Load_AnOldKeymapWithoutADiagonalKey_LeavesThatDiagonalUnbound()
+    {
+        var json = Row("flight", """
+            "LookUp": ["keyboard/key:Kp8", "keyboard/key:Kp9"],
+            "LookDown": ["keyboard/key:Kp1", "keyboard/key:Kp2", "keyboard/key:Kp3"],
+            "LookLeft": ["keyboard/key:Kp4", "keyboard/key:Kp1"],
+            "LookRight": ["keyboard/key:Kp9", "keyboard/key:Kp6", "keyboard/key:Kp3"]
+            """);
+        var loaded = BindingStore.Deserialize(json, Pad, readsKeyboard: true).Map(InputContext.Flight);
+
+        Assert.Empty(loaded.Bindings(InputAction.LookUpLeft));
+        Assert.Equal(new[] { new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.Kp8)) }, loaded.Bindings(InputAction.LookUp));
+        Assert.Equal(new[] { new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.Kp2)) }, loaded.Bindings(InputAction.LookRear));
+        Assert.Equal(new[] { new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.Kp9)) }, loaded.Bindings(InputAction.LookUpRight));
     }
 
     /// <summary>A mouse binding round-trips through the file like any other control: the token names
@@ -211,18 +253,16 @@ public class BindingStoreTests
             loaded.Bindings(InputAction.FireGuns));
     }
 
-    /// <summary>The claim is one action's over a default's, not over another saved row's: the four
-    /// snap-look diagonals are one key the file names on two actions, and both keep it.</summary>
+    /// <summary>The claim is one action's over a default's, not over another saved row's: a key the
+    /// file names on two actions stays on both.</summary>
     [Fact]
     public void ASavedRow_TakesNothingOffAnotherRowTheSameFileNames()
     {
-        var loaded = BindingStore.Deserialize(
-            BindingStore.Serialize(1, BindingProfile.Defaults(Pad, readsKeyboard: true)),
-            Pad,
-            readsKeyboard: true).Map(InputContext.Flight);
-        var kp7 = new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.Kp7));
+        var json = Row("flight", "\"FireGuns\": [\"keyboard/key:Z\"], \"FireRockets\": [\"keyboard/key:Z\"]");
+        var loaded = BindingStore.Deserialize(json, Pad, readsKeyboard: true).Map(InputContext.Flight);
+        var z = new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.Z));
 
-        Assert.Equal(new[] { InputAction.LookUp, InputAction.LookLeft }, loaded.OwnersOf(kp7));
+        Assert.Equal(new[] { InputAction.FireGuns, InputAction.FireRockets }, loaded.OwnersOf(z));
     }
 
     /// <summary>A hand-written file from a bumped version: the version says how the tokens are

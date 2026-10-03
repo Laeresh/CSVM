@@ -227,7 +227,15 @@ reinterprets an old save. `Encode` and `Decode` are the token grammar (version 3
 stick hat tokens, the lever row reusing the full-axis token); an older file loads whole, so the
 reader checks no version. `StoredRow` writes a full axis once, under its pair's positive row. A named control leaves any default still holding it.
 Shape, tokens and unreadable rows: [../org/input.md](../org/input.md). `DirectoryOverride` keeps a
-suite off this machine's own keymap.
+suite off this machine's own keymap. Old look rows go through `SnapLookRows.MigrateSaved`.
+
+## src/Bindings/SnapLookRows.cs
+The original's Views 2 snap-look rows: eight directions round Look Forward, one numpad key each, the
+bottom row looking rearward (`Directions`, X right and Y up or rear). `Compose` folds the held rows
+into the one direction `Flight/Camera/SeatLook.cs` hands the head, each side taking its strongest
+row. `MigrateSaved` rewrites a keymap saved under the earlier four direction rows, where a diagonal
+was one key on two of them: such a key moves to its diagonal row, and a diagonal it leaves empty is
+saved empty rather than given its default.
 
 ## src/Bindings/LaunchBindings.cs
 Where a seat's keymap comes from when the seat is built: the player's saved file, or the shipped

@@ -121,12 +121,14 @@ public sealed class OriginalKeysPage : IOriginalOptionsPage
             InputAction.ToggleSpyglass, InputAction.CycleCockpitViews, InputAction.FlybyView,
             InputAction.SnapLookMode, InputAction.TrackTarget, InputAction.SmoothLookMode,
             InputAction.SelectChaseView,
-            InputAction.LookBack, InputAction.LookCenter, InputAction.FreeLook,
+            InputAction.LookBack, InputAction.FreeLook,
             InputAction.ZoomIn, InputAction.ZoomOut,
         },
         new[]
         {
-            InputAction.LookUp, InputAction.LookDown, InputAction.LookLeft, InputAction.LookRight,
+            InputAction.LookUpLeftRear, InputAction.LookRear, InputAction.LookUpRightRear,
+            InputAction.LookLeft, InputAction.LookCenter, InputAction.LookRight,
+            InputAction.LookUpLeft, InputAction.LookUp, InputAction.LookUpRight,
             InputAction.LookAimUp, InputAction.LookAimDown, InputAction.LookAimLeft, InputAction.LookAimRight,
         },
     };

@@ -126,12 +126,11 @@ public sealed class SeatLook
         return x != 0f || y != 0f ? (x, y) : (PinnedLook.X, -PinnedLook.Y);
     }
 
-    // The snap cluster as a composed direction, the original's own numpad bindings. Kp8 is Look
-    // Up, Kp4 and Kp6 the flanks, Kp2 Look Back, and the corners the four diagonals.
+    // The snap cluster as a composed direction, the original's own Views 2 rows. Kp8 is Look Up,
+    // Kp4 and Kp6 the flanks, Kp2 Look Back, and the corners the four diagonals.
     private (float X, float Y) SnapDirection()
     {
-        float x = _seat.Axis(InputAction.LookRight, InputAction.LookLeft);
-        float y = _seat.Axis(InputAction.LookUp, InputAction.LookDown);
+        var (x, y) = SnapLookRows.Compose(_seat.Value);
         if (x != 0f || y != 0f || PinnedView < 1 || PinnedView > 9)
             return (x, y);
         // A pinned digit's column is the left/right component and its row the up/down one. Live

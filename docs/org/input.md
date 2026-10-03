@@ -163,7 +163,15 @@ message table. Control codes are the raw stored values.
 | | `0x37` | Access Snap Look Mode | `0x025` K | | | |
 | | `0x38` | Track Target | `0x026` L | | | |
 | | `0x39` | Access Smooth Look Mode | `0x024` J | | | |
-| Views 2 | `0x3a`-`0x42` | Look Up/Left, Left, Rear, through Look Up/Right | Numpad 1-9 (`0x04f`, `0x050`, `0x051`, `0x04b`, `0x04c`, `0x04d`, `0x047`, `0x048`, `0x049`) | | | |
+| Views 2 | `0x3a` | Look Up/Left/Rear | `0x04f` Numpad1 | | | |
+| | `0x3b` | Look Back | `0x050` Numpad2 | | | |
+| | `0x3c` | Look Up/Right/Rear | `0x051` Numpad3 | | | |
+| | `0x3d` | Look Left | `0x04b` Numpad4 | | | |
+| | `0x3e` | Look Forward | `0x04c` Numpad5 | | | |
+| | `0x3f` | Look Right | `0x04d` Numpad6 | | | |
+| | `0x40` | Look Up/Left | `0x047` Numpad7 | | | |
+| | `0x41` | Look Up | `0x048` Numpad8 | | | |
+| | `0x42` | Look Up/Right | `0x049` Numpad9 | | | |
 | | `0x43` | External Camera Zoom In | `0x04e` NumpadPlus | | | |
 | | `0x44` | External Camera Zoom Out | `0x04a` NumpadMinus | | | |
 | Other | `0x12` | Use Nitro-Booster | `0x031` N | | | |
