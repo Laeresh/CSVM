@@ -31,6 +31,11 @@ public sealed class VersusMatch
     private readonly Dictionary<int, string> _teamNames = new();
     private readonly Dictionary<int, int> _teamBonus = new();
 
+    // The clock, summed in double. A float sum of the fixed step falls 0.05 s behind in six
+    // minutes. That walks a guest's once-a-second readings across a whole second, and its HUD
+    // clock then holds one number for two seconds.
+    private double _elapsed;
+
     /// <summary>A match of <paramref name="playerCount"/> seats scored by <paramref name="scores"/>,
     /// <see cref="MatchScores.Fallback"/> when none is given.</summary>
     public VersusMatch(int playerCount, int killTarget = 5, float timeLimit = 300f, int lives = 0,
@@ -77,7 +82,7 @@ public sealed class VersusMatch
 
     /// <summary>Seconds of match clock consumed so far via <see cref="Advance"/>. Stops moving once
     /// <see cref="Completed"/>, a completed match's clock is frozen for display.</summary>
-    public float Elapsed { get; private set; }
+    public float Elapsed => (float)_elapsed;
 
     /// <summary>Seconds left before a time-limited match times out, 0 once reached or when
     /// <see cref="TimeLimit"/> is disabled.</summary>
@@ -363,8 +368,8 @@ public sealed class VersusMatch
     {
         if (Completed || Replicated || TimeLimit <= 0f)
             return;
-        Elapsed += dt;
-        if (Elapsed >= TimeLimit)
+        _elapsed += dt;
+        if (_elapsed >= TimeLimit)
             Complete();
     }
 
@@ -386,7 +391,7 @@ public sealed class VersusMatch
         KillTarget = Math.Max(0, killTarget);
         TimeLimit = Math.Max(0f, timeLimit);
         if (TimeLimit > 0f)
-            Elapsed = Math.Clamp(TimeLimit - remainingSeconds, 0f, TimeLimit);
+            _elapsed = Math.Clamp(TimeLimit - remainingSeconds, 0f, TimeLimit);
         if (ended)
         {
             Complete();
@@ -411,7 +416,7 @@ public sealed class VersusMatch
             s.Deaths = 0;
             s.Score = 0;
         }
-        Elapsed = 0f;
+        _elapsed = 0.0;
         Completed = false;
         AllAlone = false;
         ObjectiveWinner = 0;

@@ -340,7 +340,10 @@ public partial class GameSession : Node3D
         _masterSeed = ctx.NetHandshake?.Seed ?? ctx.MasterSeed;
         // The wire, opened here rather than at the build. A host must be able to answer a join
         // before its own world stands, and a guest has nothing to build from until it has.
-        _wire = new SessionNet(ctx, _masterSeed, _rigs, _seatRigs, () => _clock?.Time ?? 0.0);
+        _wire = new SessionNet(ctx, _masterSeed, _rigs, _seatRigs, () => _clock?.Time ?? 0.0)
+        {
+            TraceSteps = _spec.DebugNetTrace,
+        };
         _camera = ctx.Camera;
         _orbit = ctx.Orbit;
         _sun = ctx.Sun;
@@ -3039,6 +3042,7 @@ public partial class GameSession : Node3D
             foreach (var rig in session._seatRigs)
                 rig.Controller?.SimStep(dt);
             session._wire.BroadcastAircraftState();
+            session._wire.TraceStep();
         }
 
         public void StepZeppelins(float dt) => session._zeppelins?.SimStep(dt);

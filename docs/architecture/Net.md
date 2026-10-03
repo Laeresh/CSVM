@@ -405,20 +405,20 @@ payload byte is touched. A text field decodes on the stack, so a read allocates 
 `NetMessageFuzzTests.cs` feeds every reader random, truncated and mislabelled bytes.
 
 ## src/Net/NetClockSlew.cs
-How a guest holds its session clock against the host's, as one offset that is walked rather than
-written: `HostTime(guest) = guest + Offset`, and a fresh `Observe` sets a target the offset
-converges on over `ConvergeSeconds`, bounded by `MaxRateOffset` of real time, never overshooting.
-A reading further out than `SnapSeconds` is applied at once and counted in `Snaps`, which is the
-signal that the window is wrong rather than the link. `ObserveRoundTrip` keeps the newest
-`RoundTrip`, and every one-way reading is read forward by half of it; the first round trip is
-applied at once, as the end of the opening alignment. Engine-free and clock-free, so a unit
-suite drives it whole. The three constants are TUNE (`BL-1018`).
+A guest's session clock against the host's, as one offset walked rather than written:
+`HostTime(guest) = guest + Offset`. `Observe` sets a target the offset converges on over
+`ConvergeSeconds`, at most `MaxRateOffset` of real time, never overshooting; a reading past
+`SnapSeconds` is applied at once and counted in `Snaps`, the signal that the window is wrong.
+`ObserveRoundTrip` keeps `RoundTrip`, half of which every one-way reading is read forward by; the
+first is applied at once. The constants are accepted as measured on a real link (corrections of
+tens of milliseconds, no snap, the rate bound unreached, `analysis/net-real-link/`). The pose
+buffers keep their own timeline; co-op's director catch-up is `HostTime`'s one reader.
 
 ## src/Net/NetClockPing.cs
 The round trip a guest's `NetClockSlew` takes the link latency from, modelled on the original's
 `0x23` ping. `Follow` makes a guest ask the host's clock from its first `Step`, again every
-`IntervalSteps` (the original's ten seconds) after an answer and every `RetrySteps` (TUNE,
-`BL-1018`) without one;
+`IntervalSteps` (the original's ten seconds) after an answer and every `RetrySteps` (the
+remake's own second) without one;
 `Answer` makes the host reply at once with its clock. An answer overtaken by a newer one, or
 stamped later than the guest's clock reads, is dropped. `Asked` and `Answered` are the counters a
 suite reads, the host's `Answered` being the arrivals its relay leaves alone.
@@ -482,8 +482,8 @@ When a host repeats the match state, counted in simulation steps. It exists only
 every change that matters (the limits at the build, the rematch, the ending) is sent where it
 happens, and the tick is what refreshes the remaining time and gives `NetClockSlew` the one
 reading a running match repeats. `TickStepInterval` is 60, a second at the fixed step, which is
-the rate the versus HUD's whole-second readout can show a difference at. TUNE (`BL-1025`). The
-first step ticks, so a guest holds the host's limits inside one step of its build. What the
+the rate the versus HUD's whole-second readout can show a difference at: a guest's readout moves
+one second per tick, and a slower tick would make it skip. The first step ticks, so a guest holds the host's limits inside one step of its build. What the
 message carries is `GameSession`'s to fill. Read `docs/architecture/Session.md`'s entry for it.
 
 ## src/Net/NetChannels.cs
@@ -509,8 +509,8 @@ its sender; `FliesOnTeam` answers a team line's addressing. A suite reads the co
 One machine's desync counters over its own traffic, engine-free, read by `net-soak` and the
 `--debug-net` readout. Rules: a seat's first state or fire sample sets its ladder, and each later
 gap counts as dropped; an arrival at or below the newest is stale, except a burst filling a fire
-gap inside the last 64, which rides unsequenced and is counted reordered; a hit or a burst for a seat
-reported dead and not placed again is late; a score line adding deaths nobody reported, or a
-respawn for a known seat nobody reported dead, is out of order. A seat's first score line and a
-line whose deaths fall (a rematch) only set the baseline. Position error needs the owner's path
-and is the soak's to measure. `Describe` writes the one readout line.
+gap inside the last 64, which rides unsequenced and is counted reordered; a hit or a burst for a
+seat reported dead and not placed again is late; a score line adding deaths nobody reported, or a
+respawn for a known seat nobody reported dead, is out of order, and a seat's first score line or a
+falling one (a rematch) sets the baseline. Position error needs the owner's path (the soak's, or two
+machines' `--debug-net-trace` logs). `Describe` writes the readout line, plus a guest's clock.

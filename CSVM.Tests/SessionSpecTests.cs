@@ -1191,6 +1191,19 @@ public class SessionSpecTests
         var s = S("--debug-net");
         Assert.True(s.DebugNet);
         Assert.False(s.DebugAnim);
+        Assert.False(s.DebugNetTrace);
+        Assert.Empty(s.LogSpecs);
+    }
+
+    /// <summary>`--debug-net-trace` brings the readout with it, and the readout alone does not
+    /// bring the trace.</summary>
+    [Fact]
+    public void DebugNetTraceImpliesTheReadout()
+    {
+        Assert.False(S().DebugNetTrace);
+        var s = S("--debug-net-trace");
+        Assert.True(s.DebugNetTrace);
+        Assert.True(s.DebugNet);
         Assert.Empty(s.LogSpecs);
     }
 

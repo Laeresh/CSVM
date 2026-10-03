@@ -3111,7 +3111,7 @@ public partial class Launcher : Node3D
             }
         }
 
-        string line = Net.NetInstruments.Describe(net, poses);
+        string line = Net.NetInstruments.Describe(net, poses, _session.Wire.Clock, _session.Wire.Ping);
         Log.Info("core", $"{line}");
         readout.Show(line);
     }

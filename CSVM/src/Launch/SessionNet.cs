@@ -33,15 +33,22 @@ internal sealed class SessionNet
 
     // How many transport steps a guest gives the host's answer before it gives up and fails the
     // build. Ten seconds of simulated link at the fixed step. ⚠ This advances the transport's own
-    // clock, not the wall clock. It bounds simulated delivery time and is not a timeout, so a
-    // carrier that needs real seconds to receive needs a real wait here instead.
+    // clock, not the wall clock. It bounds simulated delivery time and is not a timeout; a socket
+    // carrier gets the wall-clock wait below as well.
     private const int NetJoinSteps = 600;
+
+    // The real wait a socket carrier is given, in wall seconds. A command-line guest links the
+    // moment the host does, before the host's session exists to send the handshake. The steps
+    // above then pass in microseconds with nothing on the wire yet.
+    private const double NetJoinWallSeconds = 10.0;
 
     // The panes, and one rig per seat (the panes first, then one pane-less rig per guest). Both
     // are the session's lists, filled by its rig build and by BuildSeatRigs.
     private readonly List<PlayerRig> _rigs;
     private readonly List<PlayerRig> _seatRigs;
     private readonly Func<double> _clockTime;
+    // Whether the wire delivers on real seconds (a socket) rather than when it is stepped.
+    private readonly bool _realCarrier;
     // When the seats flown here go on the wire, and what sequence each sample carries.
     private readonly Net.AircraftStateCadence _stateCadence = new();
     // The wire index of every weapon by its id, and the per-seat counter the fire events carry.
@@ -50,6 +57,10 @@ internal sealed class SessionNet
     // The seats whose guest left the session mid-mission, each out of play for the rest of it.
     private readonly HashSet<int> _seatsLeft = new();
     private readonly List<ChatPanel> _chatPanels = new();
+
+    // Simulation steps traced so far, the trace's own clock, since a step is a fixed slice of
+    // time. The wall stamp of a step run in a catch-up burst says when it ran, not what it covers.
+    private long _tracedSteps;
 
     // The weapon catalogue a received fire or hit event is read against. Its file order IS the
     // wire index, so both ends resolve the same round from one byte and no name crosses.
@@ -69,6 +80,7 @@ internal sealed class SessionNet
         _rigs = rigs;
         _seatRigs = seatRigs;
         _clockTime = clockTime;
+        _realCarrier = ctx.NetTransport is Net.INetLink;
         // Sorted once here, so a seat's position in this list IS its seat index. Everything
         // downstream then reads the roster with the index it reads the rigs with.
         Seats = ctx.NetSeats is { Count: > 0 } seats
@@ -140,6 +152,9 @@ internal sealed class SessionNet
     /// rearm on the seat's own machine. For a suite to read.</summary>
     public int RepairsTaken { get; private set; }
 
+    /// <summary>Whether <see cref="TraceStep"/> writes, set by <c>--debug-net-trace</c>.</summary>
+    public bool TraceSteps { get; init; }
+
     /// <summary>Whether a guest's seat left the mission and is out of play.</summary>
     public bool HasLeft(int seat) => _seatsLeft.Contains(seat);
 
@@ -156,9 +171,15 @@ internal sealed class SessionNet
         // A host built first sends its hold at once, so it can land inside this pump.
         // ⚠ Claim the start words before pumping, or that hold is dropped as unknown.
         net.On<Net.StartGateMessage>(TakeStartWord);
-        for (int i = 0; i < NetJoinSteps && !net.Joined; i++)
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+        for (int i = 0; !net.Joined && (i < NetJoinSteps
+                 || (_realCarrier && waited.Elapsed.TotalSeconds < NetJoinWallSeconds)); i++)
         {
             net.Step(GameClock.FixedDt);
+            if (_realCarrier && !net.Joined)
+            {
+                System.Threading.Thread.Sleep(1);
+            }
         }
 
         if (!net.Joined)
@@ -511,6 +532,39 @@ internal sealed class SessionNet
                     stick.Roll, stick.Pitch, stick.Yaw, flown.Nitro.Boosting),
                 Net.NetChannels.ForSeat(seat));
         }
+    }
+
+    /// <summary>One <c>--debug-net-trace</c> line per simulation step. It holds the step count,
+    /// the wall, session and match clocks, a guest's offset and every seat's position. The wall
+    /// clock is the one axis two machines' traces share. Laid over each other, two logs give the
+    /// error between an owner's path and another machine's copy.</summary>
+    public void TraceStep()
+    {
+        if (!TraceSteps || Link is not { } net || Seats.Count == 0)
+        {
+            return;
+        }
+
+        var line = new System.Text.StringBuilder(160);
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        double wall = (DateTime.UtcNow - DateTime.UnixEpoch).TotalSeconds;
+        double remain = _dogfight?.Match is { } match ? match.TimeRemaining : -1.0;
+        line.Append(inv, $"net trace {(net.IsHost ? "host" : "guest")} step {_tracedSteps++} wall {wall:0.000000} sim {_clockTime():0.0000} remain {remain:0.000}");
+        if (Clock is { } clock)
+        {
+            line.Append(inv, $" offset {clock.Offset:0.000000} target {clock.Target:0.000000} snaps {clock.Snaps} rtt {clock.RoundTrip:0.0000} trips {clock.RoundTrips} asked {Ping?.Asked ?? 0}");
+        }
+
+        for (int i = 0; i < Seats.Count && i < _seatRigs.Count; i++)
+        {
+            if (_seatRigs[i].Controller is { } plane)
+            {
+                var p = plane.WorldPosition;
+                line.Append(inv, $" | seat {i} {(Seats[i].IsLocal ? "own" : "copy")} {p.X:0.000} {p.Y:0.000} {p.Z:0.000}");
+            }
+        }
+
+        Log.Debug("core", $"{line}");
     }
 
     /// <summary>A guest this host flies with walked out of the mission while its link stays up,

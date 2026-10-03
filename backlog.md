@@ -291,47 +291,29 @@ usual.
 
 ## Misc
 
-- `BL-1018` `[Tuning]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **The guest clock
-  slew's window, rate bound and snap threshold are all invented.** *Evidence:* `Net/NetClockSlew.cs`
-  walks a guest's offset onto host time over `ConvergeSeconds = 2.0` at no more than
-  `MaxRateOffset = 0.10` of real time, and applies a reading more than `SnapSeconds = 5.0` out at
-  once. Nothing in the original's networking was decoded for any of the three; they are chosen so a
-  correction is invisible over a couple of seconds and a lost link does not leave the guest walking
-  for a minute. *Fix shape:* judge them against a real link once a match runs: the window and the
-  bound against how a corrected timestamp reads at the controls (an aeroplane's interpolation is
-  what shows a clock walking), the threshold against the observed `Snaps` count, which is exposed
-  for that reason. A rising `Snaps` says the window or the threshold is wrong, not that the link
-  is. *⚠ Traps:* do not raise the rate bound to make convergence quicker; host time running well
-  off real time is the thing the walk exists to avoid. *Cross-refs:* `Net/AircraftStateCadence.cs` and
-  `Net/RemotePoseBuffer.cs` (send rate and interpolation buffer, judged in the same sitting). The feed now has a live
-  reading: `net-match-state` measures a target of 6.000 s and one snap on both guests off the
-  ordinary match-state tick, so the threshold can be judged against a real link rather than
-  against nothing. `Net/NetClockPing.cs`'s `RetrySteps = 60`, how long an unanswered clock
-  question waits before it is asked again, is invented the same way and is judged in the same
-  sitting against how often a lossy link leaves the round trip unmeasured.
-
-- `BL-1025` `[Tuning]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: trace]` **The host's
-  match-state tick rate is a guess at what the clock readout needs.** *Evidence:*
-  `Net/MatchStateCadence.cs` repeats the match state every `TickStepInterval = 60` simulation
-  steps, one second at the fixed step, chosen because the versus HUD prints whole seconds and a
-  faster tick spends the wire on digits nobody sees. Nothing in the original was decoded for it:
-  the original's client runs its own countdown and is told only the end. *Fix shape:* judge it on
-  a real link with the HUD clock in view. A guest's clock lags the host by up to one tick, so the
-  reading is whether the count-down ever visibly jumps or stalls; the same tick is what feeds
-  `NetClockSlew`, so `BL-1018`'s window and this rate are judged in one sitting. *⚠ Traps:* the
-  ending never waits for this tick (it is sent where it happens), so slowing the rate delays only
-  the clock, and the reading must not be taken from a match that ended.
-
 - `BL-1041` `[Tuning]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: trace]` **The soak's
   position-error bars are regression tripwires, not what a player accepts.** *Evidence:*
   `Testing/NetSoakSuites.cs` flies a scripted Dogfight through four loopback cells and fails a
   cell whose worse direction exceeds its bar (mean/worst metres): clean 0.25/0.5, 50 ms and 5 per
   cent loss 1.5/3, 100 ms and 10 per cent 2/6, 200 ms and 20 per cent 3.5/10. The seeded run
-  measures 0.01/0.01, 0.57/0.89, 0.81/3.03 and 1.43/4.67, so each bar is the measurement with two
-  to three times headroom. Nothing says a player notices 3 m of worst error at 200 ms, or that
-  1.5 m at 50 ms is fine. *Fix shape:* fly a two-machine match over a shaped link with
-  `--debug-net` up, note at which cell a remote aeroplane first reads as wrong (a jump, a lag
-  behind its own tracers), and set the bars from that instead. *⚠ Traps:* the error is read after
-  the fitted lag is removed, so a large render delay does not show here at all; judge the delay
-  (`RemotePoseBuffer.BufferDelaySeconds`) separately. *Cross-refs:* `BL-1018` (the same sitting).
+  measures 0.01/0.01, 0.45/1.05, 0.71/1.80 and 1.27/2.45, so each bar is the measurement with two
+  to four times headroom. A real link is read the same way through `--debug-net-trace` and
+  `analysis/net-real-link/`: a Steam Deck hosting on the house Wi-Fi (17 ms round trip, almost no
+  loss) with a PC joining reads, over 240-step windows each with its own fitted lag, 0.28 to
+  0.41 m mean and 0.75 to 1.12 m worst at the median window, and 1.8 m mean and 3.3 m worst at
+  the worst of about 370 windows. Two processes on one PC read the same, so that is the floor the
+  machines' step timing sets: above the clean bar, which reads a lockstep pair, and inside the
+  50 ms one. Nothing says a player notices 3 m of worst error at 200 ms, or that 1.5 m at 50 ms is
+  fine. *Fix shape:* the sortie that sets the bars, at the controls. The Deck hosts headless with
+  `analysis/net-real-link/run-pair.ps1`'s host line (a scripted turn,
+  `--hold=0,0.6,0,1@0.5;0.5,0,0,1`, `--vs --vs-kills=0 --debug-net-trace`); the PC joins with
+  `--net-join=<deck address> --vs --debug-net-trace` and is flown by hand, chasing that aeroplane
+  with guns on it for several minutes. Note the HUD match clock at every moment the chased
+  aeroplane reads as wrong (a jump, a stutter, its tracers leaving from beside it); the trace logs
+  that clock each step, so `analyze.py` gives the error at each noted moment, and the bars go
+  where the first one sits. Then repeat from a worse Wi-Fi spot, since the game has no shaping on a
+  real socket. *⚠ Traps:* the error is read after the fitted lag is removed, so a large render delay
+  does not show here at all; judge the delay (`RemotePoseBuffer.BufferDelaySeconds`) separately. A
+  bar under about 0.4 m mean cannot pass on two real machines whatever the link, since that is the
+  step-timing floor. The PC never hosts: its wildcard bind raises a firewall prompt.
 

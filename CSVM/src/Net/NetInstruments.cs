@@ -90,14 +90,20 @@ public sealed class NetInstruments
         new(StateGaps, FireGaps, StaleArrivals, LateHits, LateFire, OrderViolations, ReorderedFire);
 
     /// <summary>The one line the <c>--debug-net</c> readout shows and logs: the session's own
-    /// counters, these, and the tally of every remote aeroplane's buffer on this machine.
+    /// counters, these, and the tally of every remote aeroplane's buffer on this machine. With a
+    /// <paramref name="clock"/>, a guest adds its offset, snaps, round trip and answered questions.
     /// </summary>
-    public static string Describe(NetSession net, RemotePoseTally poses)
+    public static string Describe(NetSession net, RemotePoseTally poses, NetClockSlew? clock = null,
+        NetClockPing? ping = null)
     {
         ArgumentNullException.ThrowIfNull(net);
         var r = net.Instruments.Reading;
-        return string.Create(CultureInfo.InvariantCulture,
+        string line = string.Create(CultureInfo.InvariantCulture,
             $"net {(net.IsHost ? "host" : "guest")} seat {net.LocalSeat} peers {net.Peers.Count}: sent {net.Sent} recv {net.Received} relayed {net.Relayed} unknown {net.DroppedUnknown} malformed {net.Malformed} | dropped state {r.StateGaps} fire {r.FireGaps} | reordered fire {r.ReorderedFire} | late stale {r.StaleArrivals} hits {r.LateHits} fire {r.LateFire} | order {r.OrderViolations} | poses interp {poses.Interpolating} extrap {poses.Extrapolating} starved {poses.Starved} jumps {poses.Jumps} | extrap err {poses.MeanExtrapolationError:0.00} m mean {poses.WorstExtrapolationError:0.00} m worst");
+        return clock is null
+            ? line
+            : string.Create(CultureInfo.InvariantCulture,
+                $"{line} | clock offset {clock.Offset:0.000} s target {clock.Target:0.000} s snaps {clock.Snaps} rtt {clock.RoundTrip * 1000.0:0} ms answered {ping?.Answered ?? 0} of {ping?.Asked ?? 0}");
     }
 
     /// <summary>One payload the transport delivered here, read before any handler runs so an

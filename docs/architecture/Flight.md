@@ -821,7 +821,7 @@ and `FlagMatch.Points` and `ZeppelinVersus.Points` read it. Read `MatchScoresTes
 ## src/Flight/Modes/VersusMatch.cs
 Dogfight deathmatch bookkeeping, engine-free: every pilot carries one signed score, the `Scores` kill value per kill to the shooter
 and its suicide value per death with no killer to the pilot who died (`MatchScores`, read from `player.zrd`). `RegisterKill`/`RegisterDeath`
-report those facts, `Advance(dt)` is the host-fed match clock, `MatchCompleted` fires once on a score reaching the target or
+report those facts, `Advance(dt)` is the host-fed match clock (summed in double, so a guest reading it once a second sees whole seconds fall evenly), `MatchCompleted` fires once on a score reaching the target or
 on the time-out (leader wins, equal top scores draw), `Standings()` ranks by score with ties sharing a rank and carries kills
 and deaths for display, and `Restart()` zeroes everything and re-arms completion. `ApplyScore` writes a seat's row as the host reports it,
 so a guest mirrors the host's board. `Replicate()` hands the clock, both limits and the ending to that host too: `Advance` then moves

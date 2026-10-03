@@ -18,7 +18,7 @@ public sealed class NetClockPing
     public const int IntervalSteps = 600;
 
     /// <summary>Simulation steps a question waits for its answer before it is asked again. A
-    /// question is unreliable, so a lost one would otherwise cost a whole interval. TUNE.</summary>
+    /// question is unreliable, so a lost one would otherwise cost a whole interval.</summary>
     public const int RetrySteps = 60;
 
     private readonly NetSession _net;

@@ -14,15 +14,18 @@ namespace CSVM.Net;
 /// </summary>
 public sealed class NetClockSlew
 {
-    /// <summary>Seconds a fresh reading's whole error is walked off over. TUNE.</summary>
+    /// <summary>Seconds a fresh reading's whole error is walked off over. Readings arrive a
+    /// second apart, so the offset follows them as a smoothing rather than reaching each one.
+    /// </summary>
     public const double ConvergeSeconds = 2.0;
 
     /// <summary>The fastest the offset may move, as a fraction of real time. It is also how far
-    /// off real speed host time runs while it converges. TUNE.</summary>
+    /// off real speed host time runs while it converges, so it is never raised to converge faster.
+    /// </summary>
     public const double MaxRateOffset = 0.10;
 
     /// <summary>A reading further from the offset in use than this is not walked to at all. The
-    /// link lost or gained too much to hide, so it is applied outright. TUNE.</summary>
+    /// link lost or gained too much to hide, so it is applied outright.</summary>
     public const double SnapSeconds = 5.0;
 
     /// <summary>Below this the offset counts as arrived and is set exactly, so a settled guest
