@@ -443,4 +443,23 @@ public class StickRosterTests
         Assert.Equal(new[] { VkbR }, roster.Sticks.Select(s => s.Model));
         Assert.Equal(new HashSet<int> { 3 }, native.Opened);
     }
+
+    /// <summary>Issue #130's log: Godot's SDL3 on Linux lists a flight stick and a throttle as pads,
+    /// and SDL2 maps neither as a gamepad. They are sticks, so the bridge opens both.</summary>
+    [Fact]
+    public void OnLinuxAStickGodotAlsoListsIsStillOpened()
+    {
+        var t16000 = new StickModel(0x044F, 0xB10A);
+        var twcs = new StickModel(0x044F, 0xB687);
+        var native = new FakeStickNative();
+        native.Plug(1, "Thrustmaster T.16000M", t16000, axes: 4, buttons: 16);
+        native.Plug(2, "Thrustmaster TWCS Throttle", twcs, axes: 6, buttons: 14);
+        native.Plug(3, "Generic X-Box pad", XboxPad, axes: 6, buttons: 11, gamepad: true);
+        using var roster = new StickRoster(native, () => new[] { t16000, twcs, XboxPad }, () => false, godotReadsGamepads: true);
+
+        Assert.True(roster.Update());
+
+        Assert.Equal(new[] { t16000, twcs }, roster.Sticks.Select(s => s.Model));
+        Assert.DoesNotContain(3, native.Opened);
+    }
 }

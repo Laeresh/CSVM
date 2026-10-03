@@ -21,6 +21,10 @@ public readonly record struct StickModel(ushort Vendor, ushort Product)
     /// splits a token at its last slash, and no control token holds one.</summary>
     public DeviceId Device => DeviceId.Joypad(DevicePrefix + ToString());
 
+    /// <summary>The model in the form a Godot pad reports it, decimal <c>8989/512</c>: the inverse
+    /// of <see cref="TryFromDecimal"/>, and the key <see cref="Pads.ClaimForSticks"/> takes.</summary>
+    public string Decimal => string.Create(CultureInfo.InvariantCulture, $"{Vendor}/{Product}");
+
     /// <summary>Reads the <c>231D/0201</c> form <see cref="ToString"/> prints; false for anything
     /// else, so a hand-edited profile naming a malformed model is refused, not guessed at.</summary>
     public static bool TryParse(string? text, out StickModel model)
