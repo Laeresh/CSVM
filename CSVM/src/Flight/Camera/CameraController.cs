@@ -65,13 +65,20 @@ public sealed class CameraController
     /// every respawn, the scripted twin of pressing the flyby key.</summary>
     public const int PinnedFlybyView = 11;
 
+    // The enhanced chase trail's rate, TUNE (docs/org/cameraViews.md): 1/s on the exponential shape
+    // dist_catch_up uses, a 0.25 s time constant. The trail stands in for the decoded catch-up
+    // rather than stacking on it. Internal so the chase-trail suite predicts it from this figure.
+    internal const float TrailRate = 4f;
+
     // The authored rig's literal scale on its plane-frame vector, 1.0145 (0x3f81db23), so the
     // settled camera sits about 2.4% beyond the radius (docs/org/cameraViews.md, "The chase rig").
     private const float AuthoredRigScale = 1.0145f;
 
-    private const float CamSmooth = 8f;         // 1/s, position catch-up
-    private const float CamRotSmooth = 7f;      // 1/s, orientation (basis) catch-up; a touch of
-                                                // lag on fast rolls so they read dynamic (TUNE)
+    // The literal 1.977872 (0x3ffd2ae9): both catch-up rates gain this per metre the rig's offset
+    // sits off the flight path. A flank view therefore eases about three times as fast as the
+    // settled one (docs/org/cameraViews.md, "The chase rig").
+    private const float SwungCatchUpGain = 1.977872f;
+
     private const float OrbitRateDeg = 70f;     // paused orbit-camera slew (deg/s)
     private const float OrbitZoomRate = 1.6f;   // paused orbit-camera dolly (1/s, exponential)
     private const float OrbitMinDist = 4f, OrbitMaxDist = 150f;
@@ -86,12 +93,8 @@ public sealed class CameraController
 
     private const float ChaseLogInterval = 0.25f; // sim-s between chase-distance breadcrumb lines
 
-    // The enhanced presentation's own chase cues, all three TUNE: the decoded camera lags no
-    // orientation and moves no FOV with speed (docs/org/cameraViews.md). TrailRate is 1/s on the
-    // exponential shape dist_catch_up uses, a 0.25 s time constant, so a roll trails and settles
-    // inside half a second. The widening opens the external view by 6° at rated max, and nothing
-    // at or below 0.6 of it. Ordinary cruise then reads as it does on the faithful path.
-    private const float TrailRate = 4f;
+    // The enhanced FOV widening, TUNE: 6° wider at rated max, nothing at or below 0.6 of it. Ordinary
+    // cruise then reads as it does on the faithful path.
     private const float SpeedFovWidenMaxDeg = 6f;
     private const float SpeedFovCruiseFrac = 0.6f;
 
@@ -147,11 +150,12 @@ public sealed class CameraController
     // Kept apart from _radius above; EffectiveRadius is where the two combine.
     private float _zoomTarget, _zoomShown;
 
-    // The smoothed plane→camera offset, world space. The offset eases, never the world position:
-    // the original's footage shows its apparent size at 300 mph within 0.5% of its 118 mph value
-    // once dist_factor is accounted for, which a first-order WORLD-position follower cannot do,
-    // it would trail by V/rate, several chase radii at speed.
-    private Vector3 _offset;
+    // The two eased aircraft frames the external rig is built on: the offset turns by _posFrame,
+    // the aim by _lookFrame. ⚠ Do not ease the camera's WORLD position instead. That trails by
+    // V/rate, several chase radii at speed. A chase or look-behind frame seeds them off the live
+    // attitude, as the original's mode change does, and every other pose unseeds them.
+    private Quaternion _posFrame = Quaternion.Identity, _lookFrame = Quaternion.Identity;
+    private bool _framesSeeded;
 
     // The enhanced chase cues' state: the lagged attitude the chase pose is built from, whether it
     // has been seeded off a live one yet, and this frame's FOV widening in degrees. Only
@@ -160,11 +164,6 @@ public sealed class CameraController
     private Basis _trailAttitude = Basis.Identity;
     private bool _trailSeeded;
     private float _fovWidenDeg;
-
-    // The chase aim before the look stick's swing, and the swung basis Chase last wrote, null when
-    // unswung. The lag continues from the first only while the camera still holds the second.
-    private Basis _chaseAim = Basis.Identity;
-    private Basis? _swungWrite;
 
     private float _orbitYaw, _orbitPitch, _orbitDist; // free orbit-camera state while paused
     private CameraView _viewPrev = CameraView.Chase; // the view the last logged frame was drawn from
@@ -322,14 +321,16 @@ public sealed class CameraController
     /// <summary>The look-behind view (numpad 0, or <c>--view=back</c>): ahead of the nose looking
     /// back at the plane. Distance is the speed-driven radius clamped into the authored
     /// <c>[back_dist_min, back_dist_max]</c>, its own pair. ⚠ The zoom axis is deliberately absent
-    /// here; the original applies it only to the forward-facing camera. Rigid and instant, so a
-    /// scripted capture never depends on catch-up frames.</summary>
-    public void BackView(in Transform3D renderPose)
+    /// here; the original applies it only to the forward-facing camera. It rides the chase
+    /// camera's eased frames at the unscaled catch-up rates. Switching between the two therefore
+    /// never re-seeds the lag (docs/org/cameraViews.md, "The chase rig").</summary>
+    public void BackView(float dt, in Transform3D renderPose)
     {
+        StepFrames(dt, renderPose.Basis, 1f);
         float r = Mathf.Clamp(_radius, _camParams.BackDistMin, _camParams.BackDistMax);
         var dir = new Vector3(0f, 0f, -1f);     // ahead of the nose, plane frame
-        _camera.Position = renderPose.Origin + (renderPose.Basis * (dir * r));
-        _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, Vector3.Up);
+        _camera.Position = renderPose.Origin + (new Basis(_posFrame) * (dir * r));
+        _camera.Basis = new Basis(_lookFrame) * Basis.LookingAt(-dir, Vector3.Up);
     }
 
     // Kept beside the methods that swing by it rather than up with the constructor, the same
@@ -366,6 +367,27 @@ public sealed class CameraController
         var raw = new Vector3(0f, thirdpHeight * w * w * AuthoredRigScale, AuthoredRigScale);
         return (swing * raw, swing);
     }
+
+    /// <summary>The factor on both chase catch-up rates: <c>1 + 1.977872·√(x² + y²)</c>. The root
+    /// is how far one <see cref="AuthoredRig"/> offset per metre sits off the flight path. About
+    /// 1.27 settled on the default block, 3 on a flank, 1 dead ahead
+    /// (docs/org/cameraViews.md, "The chase rig"). Pure, so it unit-tests.</summary>
+    public static float CatchUpScale(Vector3 rigOffset) =>
+        1f + (SwungCatchUpGain * Mathf.Sqrt((rigOffset.X * rigOffset.X) + (rigOffset.Y * rigOffset.Y)));
+
+    /// <summary>One step of an eased aircraft frame: <c>rate·dt</c> of the way to the live attitude
+    /// by the shorter arc. It lands outright once that reaches 1. ⚠ The fraction is linear in
+    /// dt, not <c>1 − e^(−rate·dt)</c>. The original's quaternion ease is first-order, unlike its
+    /// scalar one. The rate is per real second. Pure, so it unit-tests.</summary>
+    public static Quaternion EaseFrame(Quaternion frame, Quaternion live, float rate, float dt)
+    {
+        float t = rate * dt;
+        if (t >= 1f)
+        {
+            return live;
+        }
+        return t <= 0f ? frame : frame.Slerp(live, t).Normalized();
+    }
 #pragma warning restore SA1204
 
     // Kept beside the instance method that calls it, ahead of the property it's declared after
@@ -394,6 +416,7 @@ public sealed class CameraController
     {
         var (position, basis) = FirstPersonPose(renderPose.Origin, renderPose.Basis, _cockpitCameraOffset,
             Head.Elevation, Head.Azimuth);
+        _framesSeeded = false;
         _camera.Position = position;
         _camera.Basis = basis;
     }
@@ -610,36 +633,26 @@ public sealed class CameraController
         }
     }
 
-    /// <summary>Chase camera: ride the plane exactly, easing only the plane-frame OFFSET toward the
-    /// dynamic radius, then slerp toward the rig's aim along the swung nose. The head swings offset
-    /// and aim together. The look stick's <see cref="PadSwing"/> then turns the finished pose about
-    /// the plane.
-    /// ⚠ Takes SIM dt but the DRAWN pose; a sim/render pose gap then shows as plane jitter, which a
-    /// world-position lerp would mask.</summary>
+    /// <summary>Chase camera: the authored rig at the dynamic radius on two eased aircraft frames.
+    /// The offset's eases at <c>pos_catch_up</c>, the aim's at <c>look_catch_up</c>, both times
+    /// <see cref="CatchUpScale"/>. Only the attitude eases, never the head's swing. The look stick's
+    /// <see cref="PadSwing"/> then turns the finished pose about those frames. ⚠ Takes SIM dt but
+    /// the DRAWN pose; a sim/render gap then shows as plane jitter, which a world lerp would mask.</summary>
     public void Chase(float dt, Vector3 planePos, Basis attitude, float stickX = 0f, float stickY = 0f)
     {
-        // The enhanced presentation builds the whole rig off the lagged attitude, so the camera
-        // hangs behind a roll or a yaw at its own radius and springs back; the faithful path takes
-        // the live attitude and every term below is the one it always was.
-        var chaseAttitude = GraphicsMode.Enhanced && _trailSeeded ? _trailAttitude : attitude;
-        float tPos = 1f - Mathf.Exp(-CamSmooth * dt);
-        var (offset, desired) = AuthoredPose(chaseAttitude);
-        _offset = _offset.Lerp(offset, tPos);
-        // ⚠ Do not fold the stick into _offset or the aim. The lag would trail it, and the offset
-        // lerp would cut a chord inward. A centred stick skips the turn entirely. It turns in the
-        // same frame as the rest of the rig, so under Enhanced it swings about the lagged attitude.
-        bool swung = stickX != 0f || stickY != 0f;
-        var stick = swung ? chaseAttitude * PadSwing(stickX, stickY) * chaseAttitude.Inverse() : Basis.Identity;
-        _camera.Position = planePos + (swung ? stick * _offset : _offset);
-
-        float tRot = 1f - Mathf.Exp(-CamRotSmooth * dt);
-        // GetRotationQuaternion re-orthonormalizes each side; Basis.Slerp's raw feed lets
-        // orthonormality drift compound frame over frame until it trips the "not normalized" assert.
-        // A swung camera eases on from the unswung aim, but only while it still holds that write.
-        var from = _swungWrite is { } written && _camera.Basis == written ? _chaseAim : _camera.Basis;
-        _chaseAim = new Basis(from.GetRotationQuaternion().Slerp(desired.GetRotationQuaternion(), tRot));
-        _camera.Basis = swung ? stick * _chaseAim : _chaseAim;
-        _swungWrite = swung ? _camera.Basis : null;
+        var (offset, aim) = AuthoredRig(Head.Elevation, Head.Azimuth, _camParams.ThirdpHeight,
+            _camParams.ThirdpPitchRad);
+        StepFrames(dt, attitude, CatchUpScale(offset));
+        // ⚠ Do not fold the stick into the eased frames: they would trail it. A centred stick
+        // skips the turn entirely.
+        if (stickX != 0f || stickY != 0f)
+        {
+            var stick = PadSwing(stickX, stickY);
+            offset = stick * offset;
+            aim = stick * aim;
+        }
+        _camera.Position = planePos + (new Basis(_posFrame) * offset * EffectiveRadius);
+        _camera.Basis = new Basis(_lookFrame) * aim;
     }
 
     /// <summary>The chase view of another aircraft, the out-of-lives pilot's spectating camera. A
@@ -651,10 +664,11 @@ public sealed class CameraController
         {
             Head.Reset();
             RestoreExternalFov();
+            // The enhanced trail follows the pilot's own wreck, which nothing steps any more.
+            _framesSeeded = false;
+            _trailSeeded = false;
         }
-
-        // A step long enough that both smoothings land in one go is the settled pose.
-        Chase(fresh ? 10f : dt, pose.Origin, pose.Basis);
+        Chase(dt, pose.Origin, pose.Basis);
     }
 
     /// <summary>Place the camera at its settled pose immediately, spawn, respawn and the weapon
@@ -669,6 +683,8 @@ public sealed class CameraController
         // attitude, and the widening off its speed, so a respawn opens on the settled pose.
         _trailSeeded = false;
         _fovWidenDeg = 0f;
+        _posFrame = _lookFrame = attitude.GetRotationQuaternion();
+        _framesSeeded = true;
         // A settle-immediately pose starts the pilot looking where the aircraft is going; a head
         // left panned across a respawn would frame the spawn from over the pilot's shoulder.
         Head.Reset();
@@ -695,14 +711,11 @@ public sealed class CameraController
         }
         if (BackActive())
         {
-            BackView(renderPose);
+            BackView(0f, renderPose);
             return;
         }
-        // The head was just reset, so this is the settled pose.
-        var (offset, aim) = AuthoredPose(attitude);
-        _offset = offset;
-        _camera.Position = planePos + _offset;
-        _camera.Basis = aim;
+        // The head was just reset and the frames seeded, so a zero step is the settled pose.
+        Chase(0f, planePos, attitude);
     }
 
     /// <summary>On entering the paused screenshot freeze, initialise the orbit angles
@@ -732,6 +745,7 @@ public sealed class CameraController
 
         float cp = Mathf.Cos(_orbitPitch);
         var dir = new Vector3(cp * Mathf.Sin(_orbitYaw), Mathf.Sin(_orbitPitch), cp * Mathf.Cos(_orbitYaw));
+        _framesSeeded = false;
         _camera.Position = focus + (dir * _orbitDist);
         _camera.LookAt(focus, Vector3.Up);
     }
@@ -781,6 +795,7 @@ public sealed class CameraController
     // straight overhead reaches, so the up axis swings to world back there rather than throwing.
     private void AimStatic(Vector3 eye, Vector3 target)
     {
+        _framesSeeded = false;
         _camera.Position = eye;
         var toTarget = target - eye;
         if (toTarget.LengthSquared() < 1e-6f)
@@ -791,14 +806,27 @@ public sealed class CameraController
         _camera.LookAt(target, up);
     }
 
-    // The authored rig's world offset at the dynamic radius, and the camera basis it aims with.
-    // Both are turned by the attitude the chase pose is built from. The camera therefore rolls
-    // fully with the plane, and inverted flight shows the world upside down.
-    private (Vector3 Offset, Basis Aim) AuthoredPose(Basis attitude)
+    // One frame of the two eased aircraft frames the external rig turns by, seeding both off the
+    // live attitude when nothing has held them. They roll fully with the plane, so inverted flight
+    // shows the world upside down. ⚠ Under Enhanced the trail replaces the ease; stacking both
+    // would lag the camera twice.
+    private void StepFrames(float dt, Basis attitude, float scale)
     {
-        var (offset, aim) = AuthoredRig(Head.Elevation, Head.Azimuth, _camParams.ThirdpHeight,
-            _camParams.ThirdpPitchRad);
-        return (attitude * offset * EffectiveRadius, attitude * aim);
+        if (GraphicsMode.Enhanced && _trailSeeded)
+        {
+            _posFrame = _lookFrame = _trailAttitude.GetRotationQuaternion();
+        }
+        else if (!_framesSeeded)
+        {
+            _posFrame = _lookFrame = attitude.GetRotationQuaternion();
+        }
+        else
+        {
+            var live = attitude.GetRotationQuaternion();
+            _posFrame = EaseFrame(_posFrame, live, _camParams.PosCatchUp * scale, dt);
+            _lookFrame = EaseFrame(_lookFrame, live, _camParams.LookCatchUp * scale, dt);
+        }
+        _framesSeeded = true;
     }
 
     // One view-selection control's press edge against its own slot, so each press acts once.

@@ -2398,7 +2398,7 @@ public partial class FlightController : Node3D
             }
             else if (!Pause.SheetOverFlight && _cam.BackActive())
             {
-                _cam.BackView(_renderPose);
+                _cam.BackView(simDt, _renderPose);
                 logged = CameraView.Back;
             }
             else

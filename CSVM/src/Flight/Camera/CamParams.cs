@@ -30,9 +30,9 @@ public sealed class CamParams
     public float DistMin = 15.7f;
     public float DistMax = 25f;
 
-    // Catch-up rates, per frame-second, in the same exponential (docs/formats/camparam.md).
-    // ⚠ Per REAL second: the original eases these on its per-frame wall dt, so no measured-to-sim
-    // conversion belongs on them.
+    // Catch-up rates (docs/formats/camparam.md): the lagged speed's, then the two eased aircraft
+    // frames' the chase rig turns by. ⚠ Per REAL second: the original eases all three on its
+    // per-frame wall dt, so no measured-to-sim conversion belongs on them.
     public float DistCatchUp = 1f;
     public float PosCatchUp = 2f;
     public float LookCatchUp = 3f;
