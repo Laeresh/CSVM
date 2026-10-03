@@ -425,10 +425,6 @@ public partial class FlightController : Node3D
     /// cycle key changes it; this field only seeds it.</summary>
     public PilotViewMode PinnedViewMode = PilotViewMode.Chase;
 
-    /// <summary>Which settled chase pose this pilot's camera rests at (<c>--chase-rig=</c>), read
-    /// once by <see cref="Setup"/>. Picked, the default, is exactly today's behaviour.</summary>
-    public ChaseRig ChaseRig = ChaseRig.Picked;
-
     /// <summary>Out of lives: this pilot stays crashed for the rest of
     /// the mission, neither R nor <see cref="AutoRespawnAfter"/>'s timer brings it back, while
     /// the session hands its pane to a <see cref="SpectatorCamera"/> and the others fly on. Set by
@@ -1133,8 +1129,7 @@ public partial class FlightController : Node3D
         Propellers.Bind(model.Stats);
         _viewCamera = camera;
         _cam = camera != null
-            ? new CameraController(camera, camParams, _actions.Held, Look.PinnedView, PinnedViewMode, cockpitCameraOffset,
-                rig: ChaseRig)
+            ? new CameraController(camera, camParams, _actions.Held, Look.PinnedView, PinnedViewMode, cockpitCameraOffset)
             : null;
         // C22: the idle branch of the shared head-look law, set once here, since Head lives for
         // the controller's whole life and _model (captured by the closure) is reassigned by every

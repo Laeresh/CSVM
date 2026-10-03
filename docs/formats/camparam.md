@@ -187,12 +187,11 @@ aircraft sits at `dist_max + 10` with the axis fully out.
 
 ## Known limits
 
-⚠ **The default chase camera does not read `thirdp_height` or `thirdp_pitch`.** The two fields
-together place the original's chase camera 7.57° above the tail and aim it along the nose
-(`../org/cameraViews.md`, "The chase rig"). Neither alone is the elevation: the pitch is a
-third-of-a-degree tilt and the height is the lift. CSVM's default rig is a hand-picked 15.7° aimed
-ahead of the nose, and the decoded rig runs only under `--chase-rig=authored` until the two are
-judged side by side at the controls, since the switch moves every chase shot.
+⚠ **The chase camera does not read `pos_catch_up` or `look_catch_up`.** The original builds its
+chase rig on an aircraft frame eased at those two rates (`../org/cameraViews.md`, "The chase
+rig"). CSVM takes the rig's direction and aim from `thirdp_height` and `thirdp_pitch` as authored,
+but eases the plane-frame offset and the aim at its own hand-picked rates, so a hard roll trails
+by CSVM's figures rather than the authored ones.
 
 ## Throttle transient
 
@@ -241,8 +240,7 @@ direction factor, which the look-behind arm hard-codes to `−1`, so a slam push
   both per real second.
 - `dist_min` / `dist_max`, the bounds that radius is held inside for every forward-facing pose,
   and so the pose the view rests at (`ExternalRadius`).
-- `thirdp_height` / `thirdp_pitch`, the authored chase rig (`AuthoredRig`), read only under
-  `--chase-rig=authored`.
+- `thirdp_height` / `thirdp_pitch`, the chase rig's direction and aim (`AuthoredRig`).
 - `crash_horiz` / `crash_y`, the crash camera's hard-cut pose (`CrashView`).
 - `back_dist_min` / `back_dist_max`, the look-behind view's distance bounds (`BackView`,
   numpad 0 / `--view=back`), which take no zoom.

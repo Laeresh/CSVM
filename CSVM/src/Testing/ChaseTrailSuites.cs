@@ -40,9 +40,9 @@ internal static class ChaseTrailSuites
 
     // How much further the enhanced camera must trail than the faithful one at the end of the
     // roll. A roll about the nose swings the chase offset by the roll rate times the sine of its
-    // own elevation, so the two read about 2.8° and 8.3°; half that gap is a floor no rounding
+    // own elevation. The two read about 1.4° and 4.0°. Half that gap is a floor no rounding
     // reaches and no disabled lag passes.
-    private const float TrailMarginDeg = 3f;
+    private const float TrailMarginDeg = 1.3f;
 
     /// <summary>Flies one scripted roll per presentation and reads the camera it left.</summary>
     [Suite("chase-trail",

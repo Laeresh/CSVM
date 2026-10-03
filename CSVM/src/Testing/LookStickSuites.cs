@@ -385,8 +385,15 @@ internal static class LookStickSuites
         var held = OffsetDir(ctx.Camera, plane);
         ctx.Check(held.X > 0.9f && Mathf.Abs(held.Z) < 0.05f,
             $"and settles the camera on the aircraft's starboard flank, the table's entry for that key (dir {Fmt(held)})");
-        ctx.Check(Mathf.Abs(held.Y - settled.Y) < 0.02f,
-            $"at the chase rig's own elevation, a swing about the up axis lifting nothing (held y={held.Y:0.###}, settled y={settled.Y:0.###})");
+        // The authored rig's lift fades by the swing's squared quaternion scalar. So the flank sits
+        // lower than the settled pose, at the height the law gives for the head it holds.
+        var rig = new CamParams();
+        float lawY = plane.Head is { } swungHead
+            ? CameraController.AuthoredRig(swungHead.Elevation, swungHead.Azimuth, rig.ThirdpHeight,
+                rig.ThirdpPitchRad).Offset.Normalized().Y
+            : float.NaN;
+        ctx.Check(Mathf.Abs(held.Y - lawY) < 0.02f && held.Y < settled.Y,
+            $"at the authored rig's flank elevation, its lift faded by the swing (held y={held.Y:0.###}, law y={lawY:0.###}, settled y={settled.Y:0.###})");
 
         plane.Look.PinnedView = 0;
         Step(clock, plane, SettleFrames);

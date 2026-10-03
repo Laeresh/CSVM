@@ -164,7 +164,6 @@ internal sealed class HumanFlightAdapter
         {
             DebugCollision = _world.DebugCollision,
             PinnedViewMode = _policy.ViewMode,
-            ChaseRig = _policy.ChaseRig,
             Look =
             {
                 PinnedView = _policy.View,

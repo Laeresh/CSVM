@@ -376,14 +376,10 @@ aircraft sits `atan(thirdp_height)` = **7.86°** below the image centre whatever
 pitch tilts the whole rig, offset and aim together, by a third of a degree. The level numpad keys
 follow from `w²`: the flanks sit at about **3.7°** and the nose-on view 0.29° below level.
 
-CSVM carries both rigs as `ChaseRig`, chosen per launch by `--chase-rig=`. `Picked`, the default,
-is the hand-picked direction `atan2(4.5, 16)` = **15.7°** above the tail aimed at a point 40 m
-ahead of the nose, at the distance itself; every pinned golden is taken with it. `Authored` is the
-law above, through `CameraController.AuthoredRig`, at the same distance law. ⚠ **Which one ships is
-a judgement at the controls against the original's footage**, since the picked rig was chosen to
-look right and nobody has compared the two side by side. The eased frame in step 4 is the
-original's own `pos_catch_up`/`look_catch_up` lag; both rigs ease on CSVM's own position and aim
-rates instead.
+CSVM's chase camera is this law, through `CameraController.AuthoredRig`, at the distance law
+above; the authored rig is the one that reads as the original's chase camera at the controls. ⚠ **The
+eased frame in step 4 is not ported.** It is the original's own `pos_catch_up`/`look_catch_up`
+lag, and CSVM eases the rig's offset and aim on its own position and aim rates instead.
 
 ## Head-look controller
 
@@ -524,7 +520,7 @@ law. The look-behind arm never calls `FUN_0042d010` at all and writes a fixed ri
 | Camera position | per-plane authored `cockpit_camera` offset, read from the model (`player_pfighter` `(0,0.75,−0.2)`) | landed: `MarkerRig.FindNamedMarker` / `PlaneBuilder.CockpitCameraOffset` (A2) |
 | Head-look controller | snap, free-look, padlock, center key, autohead, one shared state machine, three callers (first person + chase) | landed as `HeadLook`, one head for every view: the snap cluster, the centre key and the mouse aim the cockpit and swing the chase camera alike, each frame floored by the view that places it, and `K`/`L`/`J` state the mode the original's three selectors state, which the numpad and the mouse both obey |
 | Padlock (Track Target) | state `2`: the head snaps onto the selection's bearing every frame, floored by the caller and unlimited in azimuth, any look direction returning it to snap | landed as `LookMode.Padlock`, reading `TargetSelection.Current` through `HeadLook.TargetOffset` and following the same tail-crossing wrap |
-| Chase rig | `thirdp_height` lifts the camera `7.57°` above the tail with the head settled, `thirdp_pitch` tilts the rig, and the camera aims along the swung nose | `ChaseRig.Picked` by default, a hand-picked `15.7°` aimed ahead of the nose; the decoded rig is `--chase-rig=authored`, owed a judgement at the controls |
+| Chase rig | `thirdp_height` lifts the camera `7.57°` above the tail with the head settled, `thirdp_pitch` tilts the rig, and the camera aims along the swung nose | matched: `CameraController.AuthoredRig` places and aims the chase camera off the same two fields; the `pos_catch_up`/`look_catch_up` easing of the frame it is built on is not ported |
 
 The camera is placed faithfully today: the plane's `cockpit_camera` offset read from the model (no
 hardcoded 0.75), both first-person views sitting at it, the interior drawn + head-look + 80° for
@@ -562,8 +558,7 @@ cues that the original has no counterpart for, both TUNE and both living in
 
 - **The chase pose trails the nose.** A lagged copy of the aircraft's attitude eases toward the
   live one at 4/s (a 0.25 s time constant) through the same exponential shape `dist_catch_up`
-  uses, and the chase rig, its offset direction, its image up and its look-ahead point, is built
-  from that lagged attitude, so a roll or a yaw leaves the camera behind and it springs back. The
+  uses, and the chase rig, its offset direction and its aim, is built from that lagged attitude, so a roll or a yaw leaves the camera behind and it springs back. The
   distance law keeps reading the live speed, so the radius is unchanged; the look-behind view,
   which hard-codes its own direction, stays out of the lag entirely.
 - **The external FOV widens with speed.** `RestoreExternalFov` adds up to 6° to the external

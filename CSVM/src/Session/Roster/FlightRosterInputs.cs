@@ -41,7 +41,6 @@ internal sealed class FlightRosterPolicy
     public int GunSelect { get; init; }
     public int View { get; init; }
     public PilotViewMode ViewMode { get; init; }
-    public ChaseRig ChaseRig { get; init; }
     public Vector2 PinnedLook { get; init; }
     public int? AmmoCap { get; init; }
     public int? AiAttackSkill { get; init; }
@@ -92,7 +91,6 @@ internal sealed class FlightRosterPolicy
         GunSelect = spec.GunSelect,
         View = spec.View,
         ViewMode = spec.ViewMode,
-        ChaseRig = spec.ChaseRig,
         PinnedLook = spec.PinnedLook,
         AmmoCap = spec.AmmoCap,
         AiAttackSkill = spec.AiAttackSkill,

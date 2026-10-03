@@ -37,8 +37,8 @@ public sealed class CamParams
     public float PosCatchUp = 2f;
     public float LookCatchUp = 3f;
 
-    /// <summary>The authored chase rig's shape, read only by <see cref="ChaseRig.Authored"/>. The
-    /// height is the rise per metre astern, a ratio of the chase radius. The pitch is DEGREES in
+    /// <summary>The authored chase rig's shape, read by <see cref="CameraController.AuthoredRig"/>.
+    /// The height is the rise per metre astern, a ratio of the chase radius. The pitch is DEGREES in
     /// the file and tilts the whole rig. The Balmoral alone overrides both (0.2/0.2 against
     /// 0.138/0.29). The decoded law: docs/org/cameraViews.md, "The chase rig".</summary>
     public float ThirdpHeight = 0.138f;

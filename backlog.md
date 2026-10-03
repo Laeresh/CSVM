@@ -160,30 +160,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Cameras & views
 
-- `BL-885` `[Fidelity]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **Make the
-  authored chase rig (`thirdp_height` + `thirdp_pitch`, 7.57° above the tail and aimed along the
-  nose) the default, in place of the hand-picked 15.7° aimed ahead of the nose.** *Decision:* the
-  user compared both rigs at the controls and chose the authored one as the original's chase
-  camera: "the authored one, make it default". The decoded rig is built and runs under
-  `--chase-rig=authored`; `picked` is still the default until this lands.
-  The decode (`docs/org/cameraViews.md`, "The chase rig"): `FUN_0042c7f0` swings the plane-frame
-  vector `(0, thirdp_height·w²·1.0145, 1.0145)` by the head's elevation PLUS `thirdp_pitch`
-  (`0042c88d`) and its azimuth (`FUN_0053f550`), and aims the camera along the same swing.
-  `thirdp_height` 0.138 is the lift (`atan(0.138)` ≈ 7.9°) and the 0.29° pitch only tilts the rig,
-  so the settled camera is 7.57° above the tail (Balmoral 11.11°), not "dead astern at 0.29°".
-  `w²` fades the lift as the head swings: the level numpad keys sit at about 3.7° on the flanks and
-  0.29° below level nose-on, where the picked rig holds all three at 15.7°.
-  *Fix shape:* `authored` becomes the default; keep `--chase-rig=picked` as the A/B door (or retire
-  it and the 15.7° constant if nothing else reads them). Re-pin every chase golden in that commit,
-  with crops showing the move is the camera alone (every flight shot moves); update `docs/cli.md`,
-  `docs/formats/camparam.md`'s Known limits and the chase-rig suite's default case.
-  ⚠ Traps: the authored rig ports the direction and aim only; the original's
-  `pos_catch_up`/`look_catch_up` easing of the aircraft frame is not ported by either rig, so a
-  hard roll still trails on CSVM's own rates. That is a separate gap and not part of this change.
-  *Cross-refs:* the numpad views' three level keys (`git log --grep=BL-150`),
-  `docs/formats/camparam.md` (`thirdp_height`, `thirdp_pitch`, Known limits), `docs/cli.md`
-  (`--chase-rig`).
-
 ## HUD & UI
 
 

@@ -34,7 +34,7 @@ exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One 
 `--net-host` · `--net-join` · `--net-port-base` · `--master-server`
 
 **Placement, where the subject starts and which way it faces**
-`--pos` · `--direction` · `--lookat` · `--fov` · `--view` · `--chase-rig` · `--spawn` · `--campos` · `--spawn-at` · `--spawn-dir`
+`--pos` · `--direction` · `--lookat` · `--fov` · `--view` · `--spawn` · `--campos` · `--spawn-at` · `--spawn-dir`
 
 **Capture, screenshots and the scripted-run workhorses**
 `--screenshot` · `--export-gltf` · `--frames` · `--shots` · `--jitter` · `--no-focus` · `--no-vsync`
@@ -95,7 +95,7 @@ the shared selection (`--debug-select`), the node lab (`--debug-nodelab`), the w
 **Written exceptions to "one flag, one bullet":** `--spawn-dir` shares `--spawn-at`'s bullet, since
 the pair is one mechanism, so `Grep` the partner's name to find it; `--debug-nodelab` and
 `--debug-damage` each carry a short opener bullet plus the full behaviour under their lab's own
-section further down. The counts reconcile as **158 index entries, 158 parser flags and 159 bullet
+section further down. The counts reconcile as **157 index entries, 157 parser flags and 158 bullet
 lines**.
 
 ## Flags
@@ -397,7 +397,6 @@ lines**.
 - `--fov=<degrees>` (the vertical field of view of the `--freecam`/`--anim-lab` camera, 1 to 179, instead of the decoded external base every world camera outside the cockpit interior draws at. F11 appends it when a cockpit view drew the frame, so the printed line frames what was on screen. Any other mode warns and ignores it; flight's views set their own angles)
 - `--lookat=x,y,z` (**the point form of `--direction`**. It stays a point, which matters in `--viewer`: the orbit camera **pivots** on it and takes its radius from eye to pivot, so a bare direction would spin the wheel and the drag about the eye. Elsewhere it converts to a direction losslessly, against `--pos` in flight. A `--viewer --direction` therefore synthesizes a pivot, the point on the aim ray nearest the subject's centre (min radius 1 m), announced on a `[core] orbit pivot from --direction` line; with no `--pos` the centre stays the pivot and the eye swings instead)
 - `--view=<1-9|back|flyby|chase|cockpit|nose>` (pin a flight camera, `--fly`/`--stunt` only, else it warns and leaves chase. A digit holds a numpad snap, swung to, not cut to, aiming the head in first person: `2` dead ahead, `4`/`6` the flanks, `8` the belly, `1`/`3`/`7`/`9` the corners below (`5` and out of range fall back). `back` is the look-behind, `flyby` the **F7** camera, re-entered on respawn, `chase`/`cockpit`/`nose` an **F8** view mode. Precedence: `flyby`, `back` (in first person a head snap astern, not a cut outside), a live numpad key, a pinned digit, then the saved Default View)
-- `--chase-rig=picked|authored` (**which settled pose the chase camera rests at**, for an A/B at the controls. Default `picked`: the hand-picked rig 15.7° above the tail, aimed ahead of the nose, which every pinned golden is taken with. `authored` is the original's own rig off camparam's `thirdp_height`/`thirdp_pitch`, 7.6° above the tail on the shipped block and aimed along the nose ([`org/cameraViews.md`](org/cameraViews.md), "The chase rig"). The head swings both alike. An unknown word keeps `picked` with a note)
 - `--look=x,y` (**hold a right-stick look deflection for the whole run**, the scripted twin of pushing the look stick and the only way a headless run aims it. Both components are clamped to `[−1, 1]`, `+x` right and `+y` up; a malformed pair warns and leaves the stick centred. It drives **both** halves of the look-around from one value: outside first person it swings the camera around the plane, and in `--view=cockpit`/`=nose` it aims the head, over one shared envelope (±150° round, ±60° up and down, see [`controls.md`](controls.md)). A live stick beats it while deflected)
 - `--campos=x,y,z` (**deprecated**, the pre-A5 camera-only spelling of `--pos`; logs `WARN [core] deprecated flag=--campos use=--pos` once per run, then behaves identically. It never placed the plane and still does not, so it is not simply a rename of `--pos` in `--fly`. Where both reach the same camera (`--freecam`, `--anim-lab`), `--pos` wins)
 - `--screenshot=<path>` (render a few frames, save a PNG, quit. Implies `--no-focus` and `--det`, so a bare `--screenshot` is reproducible with no other flags; `--no-det` opts out. The hidden window still renders, a minimized one does not (SHOT-16). Every capture prints `[core] shot pixmd5=<md5> size=<WxH> gpu=<adapter / api>`, the md5 of the raw pixel buffer rather than of the PNG (SHOT-6), which is what the golden tripwire compares; copying it into `analysis/goldens/manifest.json` turns the shot into a golden, see `analysis/goldens/README.md`)
