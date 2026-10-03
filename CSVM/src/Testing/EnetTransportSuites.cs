@@ -47,6 +47,10 @@ internal static class EnetTransportSuites
     // The service thread's ceiling in the hung-game check, well inside its stall.
     private const double HungCeilingSeconds = 1.0;
 
+    // The shaped-link suite's added latency each way. Far above a loopback socket's own delay, so
+    // an arrival before it can only mean the shaping was skipped.
+    private const double ShapedLatency = 0.1;
+
     // What this run cannot show, said where the report carries it. A loopback socket delivers in
     // send order, so no sequenced payload here is stale on arrival.
     private const string StaleNote =
@@ -100,7 +104,7 @@ internal static class EnetTransportSuites
                 $"and the guest is told it reached the host ({Ids(atGuest.Connected)})");
             ctx.Check(host.Peers.SequenceEqual(new[] { guestPeer }) && guest.Peers.SequenceEqual(new[] { 1 }),
                 $"both rosters hold the other end ({Ids(host.Peers)} and {Ids(guest.Peers)})");
-            ctx.Check(host.LinkState == EnetLinkState.Up && guest.LinkState == EnetLinkState.Up,
+            ctx.Check(host.LinkState == NetLinkState.Up && guest.LinkState == NetLinkState.Up,
                 $"and both links read up ({host.LinkState} and {guest.LinkState})");
 
             ReliableRoundTrip(ctx, host, guest, atHost, atGuest, guestPeer);
@@ -110,6 +114,54 @@ internal static class EnetTransportSuites
 
             ctx.Note($"hosted on {Loopback}:{port}, connected in {connectSeconds:0.000}s, guest peer {guestPeer}");
             ctx.Note($"{StaleNote}");
+        }
+        finally
+        {
+            guest?.Dispose();
+            host?.Dispose();
+        }
+    }
+
+    [Suite("enet-shaped-link",
+        "a guest shaped as --net-shape shapes it, over the shipped ENet carrier, still links to a "
+        + "plain host on 127.0.0.1 and delivers: a reliable payload each way lands whole and no "
+        + "sooner than the added latency, and with loss at certainty both unreliable classes are lost "
+        + "each way while the reliable one carries, which needs the socket to name each arrival's class")]
+    internal static void ShapedGuestLinksAndDelivers(TestContext ctx)
+    {
+        EnetTransport? host = null;
+        ShapedTransport? guest = null;
+        try
+        {
+            host = OpenHost(out int port, out string why, offset: SuitePorts.Shaped);
+            if (host == null)
+            {
+                ctx.Check(false, $"ENet cannot host on {Loopback} in this process: {why}");
+                return;
+            }
+
+            guest = ShapedTransport.OnWallClock(EnetTransport.Join(Loopback, port), new LoopbackConditions(ShapedLatency, 0.0, 1.0));
+            var atHost = new Recorder();
+            var atGuest = new Recorder();
+            host.Bind(atHost);
+            guest.Bind(atGuest);
+            Pump(host, guest, () => atHost.Connected.Count > 0 && atGuest.Connected.Count > 0);
+            int guestPeer = guest.LocalPeer;
+            ctx.Check(guest.Peers.SequenceEqual(new[] { 1 }) && host.Peers.SequenceEqual(new[] { guestPeer })
+                      && guest.LinkState == NetLinkState.Up,
+                $"the shaped guest links to the host and reads its link up ({Ids(guest.Peers)}, {Ids(host.Peers)}, {guest.LinkState})");
+
+            double outbound = ShapedSends(guest, host, atHost, 1, 0x30);
+            ctx.Check(outbound >= ShapedLatency && atHost.Payloads.Count == 1 && atHost.Payloads[0].Bytes[0] == 0x30 + 3
+                      && atHost.Payloads[0].Peer == guestPeer,
+                $"the guest's sends wait {ShapedLatency:0.000} s before leaving (the reliable one landed after {outbound:0.000} s) and only the reliable one of three reaches the host ({atHost.Payloads.Count} landed)");
+
+            double inbound = ShapedSends(host, guest, atGuest, guestPeer, 0x40);
+            ctx.Check(inbound >= ShapedLatency && atGuest.Payloads.Count == 1 && atGuest.Payloads[0].Bytes[0] == 0x40 + 3
+                      && atGuest.Payloads[0].Channel == NetChannels.Events,
+                $"the host's sends wait as long after reaching the guest's socket (landed after {inbound:0.000} s) and only the reliable one of three is handed on ({atGuest.Payloads.Count} landed)");
+            ctx.Check(guest.Lost == 4,
+                $"the guest's shaping lost the four unreliable payloads, two each way ({guest.Lost})");
         }
         finally
         {
@@ -208,7 +260,7 @@ internal static class EnetTransportSuites
             int id6 = v6.LocalPeer;
             ctx.Check(host.Peers.OrderBy(p => p).SequenceEqual(new[] { id4, id6 }.OrderBy(p => p)) && id4 != id6,
                 $"both guests join the one roster under distinct ids ({Ids(host.Peers)} against {id4} and {id6})");
-            ctx.Check(v4.LinkState == EnetLinkState.Up && v6.LinkState == EnetLinkState.Up,
+            ctx.Check(v4.LinkState == NetLinkState.Up && v6.LinkState == NetLinkState.Up,
                 $"and both guests' links read up ({v4.LinkState} and {v6.LinkState})");
 
             host.Send(id4, Payload(0x44, 12), NetReliability.Reliable);
@@ -223,7 +275,7 @@ internal static class EnetTransportSuites
 
             v4.Disconnect(1);
             PumpAll(new[] { host, v4, v6 }, () => atHost.Disconnected.Count > 0);
-            ctx.Check(host.Peers.SequenceEqual(new[] { id6 }) && v6.LinkState == EnetLinkState.Up,
+            ctx.Check(host.Peers.SequenceEqual(new[] { id6 }) && v6.LinkState == NetLinkState.Up,
                 $"the IPv4 guest's hang-up leaves the IPv6 guest linked alone ({Ids(host.Peers)}, {v6.LinkState})");
         }
         finally
@@ -242,8 +294,8 @@ internal static class EnetTransportSuites
         }
 
         using var stray = EnetTransport.Join(LoopbackV6, alonePort);
-        PumpAll(new EnetTransport[] { alone, stray }, () => stray.LinkState != EnetLinkState.Connecting, QuietSeconds * 5.0);
-        ctx.Check(stray.LinkState != EnetLinkState.Up && alone.Peers.Count == 0,
+        PumpAll(new EnetTransport[] { alone, stray }, () => stray.LinkState != NetLinkState.Connecting, QuietSeconds * 5.0);
+        ctx.Check(stray.LinkState != NetLinkState.Up && alone.Peers.Count == 0,
             $"ABLE-TO-FAIL CONTROL: a host with the IPv4 socket alone does not admit the IPv6 guest ({stray.LinkState}, roster {Ids(alone.Peers)})");
     }
 
@@ -280,9 +332,9 @@ internal static class EnetTransportSuites
             using var v4 = EnetTransport.Join(Loopback, port);
             PumpAll(new[] { host, guest, v4 }, () => host.Peers.Count >= 2);
             ctx.Check(host.Sockets == shipped.Count, $"the host opened every shipped socket ({host.Sockets} of {shipped.Count})");
-            ctx.Check(guest.LinkState == EnetLinkState.Up && host.Peers.Contains(guest.LocalPeer),
+            ctx.Check(guest.LinkState == NetLinkState.Up && host.Peers.Contains(guest.LocalPeer),
                 $"a guest sending from [{temporary}] joins [{stable}]:{port} ({guest.LinkState}, roster {Ids(host.Peers)})");
-            ctx.Check(v4.LinkState == EnetLinkState.Up && host.Peers.Contains(v4.LocalPeer),
+            ctx.Check(v4.LinkState == NetLinkState.Up && host.Peers.Contains(v4.LocalPeer),
                 $"and an IPv4 guest joins the same port on {Loopback} ({v4.LinkState})");
         }
 
@@ -295,8 +347,8 @@ internal static class EnetTransportSuites
         }
 
         using var dropped = EnetTransport.Join(stable, wildPort, null, temporary, wildPort + GuestPortOffset);
-        PumpAll(new EnetTransport[] { wild, dropped }, () => dropped.LinkState == EnetLinkState.Up, WaitSeconds);
-        ctx.Check(dropped.LinkState != EnetLinkState.Up,
+        PumpAll(new EnetTransport[] { wild, dropped }, () => dropped.LinkState == NetLinkState.Up, WaitSeconds);
+        ctx.Check(dropped.LinkState != NetLinkState.Up,
             $"ABLE-TO-FAIL CONTROL: a host on the dual-stack wildcard does not admit the same guest ({dropped.LinkState}, roster {Ids(wild.Peers)})");
     }
 
@@ -358,7 +410,7 @@ internal static class EnetTransportSuites
 
         ctx.Check(stepped.Peers.Contains(toStalled) && stalled.Peers.Contains(toStepped),
             $"a {who} that stopped stepping for {StallSeconds:0.0}s is still on both rosters ({Ids(pair.Host.Peers)} and {Ids(pair.Guest.Peers)})");
-        ctx.Check(stepped.LinkState == EnetLinkState.Up && stalled.LinkState == EnetLinkState.Up,
+        ctx.Check(stepped.LinkState == NetLinkState.Up && stalled.LinkState == NetLinkState.Up,
             $"and both links still read up ({stepped.LinkState} and {stalled.LinkState})");
         var tags = atStalled.Payloads.Select(p => BitConverter.ToInt32(p.Bytes, 0)).ToList();
         ctx.Check(sent > 0 && tags.SequenceEqual(Enumerable.Range(0, sent)),
@@ -448,7 +500,7 @@ internal static class EnetTransportSuites
 
     // Steps both ends until the condition holds or the give-up passes, and answers how long that
     // took. The sleep is what lets the loopback socket actually carry between two polls.
-    private static double Pump(EnetTransport host, EnetTransport guest, Func<bool> until)
+    private static double Pump(INetTransport host, INetTransport guest, Func<bool> until)
     {
         var watch = Stopwatch.StartNew();
         while (true)
@@ -466,7 +518,7 @@ internal static class EnetTransportSuites
 
     // Steps both ends for a fixed short while with nothing to wait for. That is how a check for
     // nothing arriving is given every chance to fail.
-    private static void PumpQuiet(EnetTransport host, EnetTransport guest)
+    private static void PumpQuiet(INetTransport host, INetTransport guest)
     {
         var watch = Stopwatch.StartNew();
         while (watch.Elapsed.TotalSeconds < QuietSeconds)
@@ -577,6 +629,20 @@ internal static class EnetTransportSuites
         PumpQuiet(host, guest);
         ctx.Check(atHost.Payloads.Count == 0 && atGuest.Payloads.Count == 0,
             $"and a send to a peer that has left is discarded rather than thrown or carried ({atHost.Payloads.Count} and {atGuest.Payloads.Count} landed)");
+    }
+
+    // One payload of each class from one end to the other, tagged tagBase plus 1 to 3 with the
+    // reliable one last. Answers how long the first arrival took, then watches for stragglers.
+    private static double ShapedSends(INetTransport from, INetTransport to, Recorder atTo, int peer, int tagBase)
+    {
+        var watch = Stopwatch.StartNew();
+        from.Send(peer, Payload((byte)(tagBase + 1), 8), NetReliability.Unreliable, NetChannels.ForFire(0));
+        from.Send(peer, Payload((byte)(tagBase + 2), 8), NetReliability.UnreliableSequenced, NetChannels.ForSeat(0));
+        from.Send(peer, Payload((byte)(tagBase + 3), 8), NetReliability.Reliable, NetChannels.Events);
+        Pump(from, to, () => atTo.Payloads.Count > 0);
+        double landed = watch.Elapsed.TotalSeconds;
+        PumpQuiet(from, to);
+        return landed;
     }
 
     // One payload as the listener saw it. The bytes are copied out of the transport's own buffer,

@@ -219,7 +219,7 @@ internal sealed class SessionBoards
             // ⚠ The arm cannot cover this edge. Photo mode returns to the halted world the board
             // froze, and halted is its own no-write branch, so the rules would stay off.
             pilot.SetViewedFromOutside(false);
-            pilot.Pause.EndPhotoMode();   // seeds the pause edge, or the held Escape unpauses too
+            pilot.EndPhotoMode();   // seeds the pause edge, or the held Escape unpauses too
         }
         _photoPilot = null;
         RestoreBoards();
@@ -437,7 +437,7 @@ internal sealed class SessionBoards
         if (found is not { Controller: { } pilot } rig)
             return;
         SuspendBoards();
-        pilot.Pause.BeginPhotoMode();
+        pilot.BeginPhotoMode();
         pilot.CameraOwned = true;   // The controller writes this pane's camera no more.
         pilot.SetViewedFromOutside(true);
         pilot.SetPilotHudVisible(false);
@@ -481,7 +481,7 @@ internal sealed class SessionBoards
         {
             if (rig.Controller is { } controller)
             {
-                controller.Pause.BeginPauseLeaf();
+                controller.BeginPauseLeaf();
                 flying.Add(controller);
             }
 
@@ -515,7 +515,7 @@ internal sealed class SessionBoards
         // the mission behind it.
         foreach (var rig in _in.Rigs)
         {
-            rig.Controller?.Pause.EndPauseLeaf();
+            rig.Controller?.EndPauseLeaf();
             InputFor(rig.Index).Prime();
         }
     }

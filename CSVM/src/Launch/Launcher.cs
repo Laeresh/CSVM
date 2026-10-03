@@ -2776,6 +2776,12 @@ public partial class Launcher : Node3D
             return;
         }
 
+        if (_spec.NetShape is { } shape)
+        {
+            _netWire = Net.ShapedTransport.OnWallClock(_netWire, shape);
+            Log.Info("core", $"net: shaping this end's link both ways, {Net.ShapedTransport.Describe(shape)}, on top of the real link's own delay and loss");
+        }
+
         AwaitCliNetLink();
     }
 
@@ -2796,7 +2802,7 @@ public partial class Launcher : Node3D
         while (waited.Elapsed.TotalSeconds < NetLinkWaitSeconds)
         {
             wire.Step(0.001);
-            if (wire.Peers.Count > 0 && (link == null || link.LinkState == Net.EnetLinkState.Up))
+            if (wire.Peers.Count > 0 && (link == null || link.LinkState == Net.NetLinkState.Up))
             {
                 Log.Info("core", $"net: linked as {(_netIsHost ? "host" : "guest")} after {waited.Elapsed.TotalSeconds.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} s, {wire.Peers.Count} peer(s)");
                 BuildCliNetRoster();

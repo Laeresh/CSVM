@@ -221,7 +221,7 @@ public sealed class FlightRoster
         _targetSubParts = source;
         foreach (var rig in _humans)
             if (rig.Controller is { } controller)
-                controller.TargetInput.SubParts = source;
+                controller.TargetSubParts = source;
     }
 
     /// <summary>Binds the campaign mission's flagged-site feed. Its own channel rather than a
@@ -234,7 +234,7 @@ public sealed class FlightRoster
         _targetObjectives = source;
         foreach (var rig in _humans)
             if (rig.Controller is { } controller)
-                controller.TargetInput.Objectives = source;
+                controller.TargetObjectives = source;
     }
 
     /// <summary>Introduces one fully configured AI aircraft into the running session. It can
@@ -253,7 +253,7 @@ public sealed class FlightRoster
             var controller = _aiAssembler.Assemble(spawn, index, created => attempted = created);
             _aiAssemblyFault?.Invoke();
             controller.SmokeScreens = _human.SmokeScreens;
-            controller.TargetInput.SubParts = _targetSubParts;
+            controller.TargetSubParts = _targetSubParts;
             Action<AiMode, AiMode, string>? modeChanged = null;
             Action<string>? rollLogged = null;
             if (spawn.Pilot.Machine is { } modes)
@@ -505,11 +505,11 @@ public sealed class FlightRoster
     {
         controller.SmokeScreens = _human.SmokeScreens;
         controller.PauseState = _human.PauseState;
-        controller.TargetInput.SubParts = _targetSubParts;
+        controller.TargetSubParts = _targetSubParts;
         // ⚠ Never overwrite a feed the assembler already bound. A stunt pane gets its OWN run's
         // unflown zones there, and the session-wide campaign feed (null in that session) would
         // silently take the pilot's Danger Zone markers away.
-        controller.TargetInput.Objectives ??= _targetObjectives;
+        controller.TargetObjectives ??= _targetObjectives;
     }
 
     // Step 5: the aeroplane the player just left is given to wingman_4, placed off the nose with

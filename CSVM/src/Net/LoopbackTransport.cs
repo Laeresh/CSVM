@@ -283,7 +283,10 @@ public sealed class LoopbackTransport : INetTransport, INetPeerAddress
                 _newest[key] = pending.Sequence;
             }
 
-            _listener?.OnPayload(pending.From, pending.Channel, pending.Payload);
+            if (_listener != null)
+            {
+                INetClassedListener.Deliver(_listener, pending.From, pending.Channel, pending.Reliability, pending.Payload);
+            }
         }
     }
 

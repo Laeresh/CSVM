@@ -300,9 +300,10 @@ public static class CoopDoorText
         return string.Join("\n", lines);
     }
 
-    /// <summary>What a host without a join code shows in its place. That is the address guests type
-    /// (<see cref="HostAddressLine"/>), then why there is no code (<see cref="InternetLine"/>), each
-    /// left out when empty. Empty with a code and while not hosting.</summary>
+    /// <summary>What a host without a join code shows in its place. While the master server is still
+    /// answering it is <see cref="AwaitingCode"/> alone. After that it is the address guests type
+    /// (<see cref="HostAddressLine"/>), then why there is no code (<see cref="InternetLine"/>). Each
+    /// is left out when empty. Empty with a code and while not hosting.</summary>
     public static IReadOnlyList<string> HostFallbackLines(NetPlayFeature net, CopyWay way = CopyWay.Keys)
     {
         ArgumentNullException.ThrowIfNull(net);
@@ -311,35 +312,36 @@ public static class CoopDoorText
             return Array.Empty<string>();
         }
 
+        // ⚠ Do not name the address while the master server is answering. A code may still come,
+        // and a host shows the address only when none will.
+        if (net.AwaitingCode)
+        {
+            return new[] { AwaitingCode };
+        }
+
         var lines = new List<string> { HostAddressLine(net, way), InternetLine(net) };
         lines.RemoveAll(line => line.Length == 0);
         return lines;
     }
 
-    /// <summary>A Dogfight host's lines pinned over its lobby chat under <see cref="NoteName"/>. They
-    /// wait for the master server's outcome. With a join code they are <see cref="HostCodeLine"/>
-    /// alone, and while it is still answering <see cref="AwaitingCode"/> alone. After a fault or with
-    /// no master server set they are <see cref="HostFallbackLines"/>. Empty while not hosting.</summary>
+    /// <summary>A Dogfight host's lines pinned over its lobby chat under <see cref="NoteName"/>. With
+    /// a join code they are <see cref="HostCodeLine"/> alone, and without one
+    /// <see cref="HostFallbackLines"/>, which wait for the master server's outcome. Empty while not
+    /// hosting.</summary>
     public static IReadOnlyList<string> HostLobbyLines(NetPlayFeature net, CopyWay way = CopyWay.Keys)
     {
         ArgumentNullException.ThrowIfNull(net);
-        if (net.JoinCode != null)
-        {
-            return new[] { HostCodeLine(net, way) };
-        }
-
-        // ⚠ Do not name the address while the master server is answering. A code may still come,
-        // and the lobby shows the address only when none will.
-        return net.AwaitingCode ? new[] { AwaitingCode } : HostFallbackLines(net, way);
+        return net.JoinCode != null ? new[] { HostCodeLine(net, way) } : HostFallbackLines(net, way);
     }
 
     /// <summary>What a host's COPY control copies, the text <see cref="NetPlayFeature.CopyForGuests"/>
     /// puts on the clipboard: the join code, else the address <see cref="HostAddressLine"/> names.
-    /// Empty where no line of the host's carries a copy mark, and while not hosting.</summary>
+    /// Empty where no line of the host's carries a copy mark, while the master server is answering,
+    /// and while not hosting.</summary>
     public static string CopyTarget(NetPlayFeature net)
     {
         ArgumentNullException.ThrowIfNull(net);
-        if (!net.IsHost)
+        if (!net.IsHost || net.AwaitingCode)
         {
             return "";
         }

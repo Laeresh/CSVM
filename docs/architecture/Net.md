@@ -82,21 +82,29 @@ These are the design rules every module below is shaped by, and every multiplaye
   the load screen (`NetStartGate`). A drop or a timeout releases the wait.
 
 ## src/Net/INetTransport.cs
-The seam itself, and the two types it is spoken in. `NetReliability` is the three classes a
-payload can be sent under, `INetTransportListener` is what a transport tells its owner (a peer
-joined, a peer left, a payload landed), and `INetTransport` is the carrier: the peer roster,
-`Send` of a byte span with its class and channel, `Bind` of the one listener, `Disconnect`, and
-`Step`, which is the only place a payload is ever delivered. `INetPeerAddress` is the optional
-address a carrier names a peer by, the key a boot bans; `INetListing` a host carrier's master-server
-listing and its join code. A session holds the interface and constructs
-neither implementation itself. Read `LoopbackTransport.cs` for the carrier the suites use.
+The seam itself, and the types it is spoken in. `NetReliability` is the three classes a payload
+can be sent under, `INetTransportListener` what a transport tells its owner (a peer joined, a peer
+left, a payload landed), and `INetTransport` the carrier: the peer roster, `Send` of a byte span
+with its class and channel, `Bind` of the one listener, `Disconnect`, and `Step`, the only place a
+payload is delivered. `INetClassedListener` hears each arrival's class too, which ENet and the
+loopback name and `ShapedTransport` needs; `INetPeerAddress` is the address a boot bans by,
+`INetListing` a host's master-server listing and join code. A session holds the interface and
+constructs neither implementation. Read `LoopbackTransport.cs` for the carrier the suites use.
 
 ## src/Net/LoopbackConditions.cs
-One direction's wire conditions as a value: a latency, a symmetric jitter half-width about it, and
-a loss probability, all in seconds and all validated at construction. `Delay` and `Drops` are the
-two draws, taken from a caller-supplied `Random` rather than an ambient one, so a seeded suite
-replays the same network exactly and a reliable stream costs no loss draw. Which classes loss may
-touch is the transport's rule, not this value's.
+One direction's wire conditions as a value, for the loopback and `ShapedTransport` alike: a
+latency, a symmetric jitter half-width about it, and a loss probability, the times in seconds and
+all validated at construction. `Delay` and `Drops` are the two draws, taken from a caller-supplied
+`Random` rather than an ambient one, so a seeded suite replays the same network exactly and a
+reliable stream costs no loss draw. Which classes loss may touch is the transport's rule, not
+this value's. The soak's three cells are `SoakCells.cs`.
+
+## src/Net/SoakCells.cs
+The soak's three shaped link cells as values: 50 ms with 10 ms of jitter and 5 per cent loss,
+100/20/10 and 200/40/20, the same both ways. `NetSoakSuites`, the surface-vehicle and zeppelin
+suites fly their matrices through them, keeping their own bars, and `--net-shape` takes them by
+the names in `Named` through `ShapedTransport.TryParse`, so a real link flown under a cell meets
+the bar its loopback twin set.
 
 ## src/Net/LoopbackTransport.cs
 Transports wired to each other in one process through delivery queues, one `LoopbackConditions`
@@ -116,7 +124,14 @@ address a guest dialled; a guest drops a reply from a temporary one. `Join` repo
 joining. Every roster change and payload comes out of `Step`. A service thread polls ENet when the
 main thread has not stepped for `ServiceGapSeconds`, up to `Keepalive.CeilingSeconds`, so a
 blocking mission load keeps acknowledging. `INetLink` is where a board reads the socket, and a
-socket with no listener holds what lands and replays it on `Bind`.
+socket with no listener holds what lands and replays it on `Bind`. Read `NetLink.cs` next.
+
+## src/Net/NetLink.cs
+`NetLinkState`, where one end's link stands (connecting, up, down) in words a board can show
+without learning which carrier holds it, and `INetLink`, the optional face a real socket (ENet,
+WebRTC, a merged host) shows a board: its state, the payloads held while no listener is bound, and
+a fault as a player reads it. `HeldPayloads` is the one depth every carrier holds to before
+`Bind`. A carrier without it, the loopback, is read through its peer roster instead.
 
 ## src/Net/SteamTransport.cs
 The Steam carrier's place in the seam with nothing behind it: the Steamworks SDK cannot be
@@ -158,6 +173,16 @@ Several host carriers as one `INetTransport`, which is how a host with a master 
 guests (LAN, direct IP) and WebRTC guests in one session. Each carrier numbers its own guests, so
 this gives every guest an id from 2 up and maps both ways; the host stays peer 1. The link answers
 from the first carrier, the addresses and the listing from whichever carrier has them.
+
+## src/Net/ShapedTransport.cs
+A real carrier with `LoopbackConditions` laid over both its directions at one end, which is what
+`--net-shape` puts on the command line's socket so a two-machine match flies a soak cell. A send
+waits before it reaches the carrier and an arrival before the session sees it, each drawing its own
+loss from the wrapper's own generator, on the wall clock. The loopback's rules hold: loss only on
+the unreliable classes, reliable order per peer, an overtaken sequenced payload discarded, and an
+arrival whose carrier names no class is carried as reliable. A departure waits behind the reliable
+arrivals still owed, and a hang-up or close hands the waiting reliable sends on unshaped.
+`TryParse` reads the flag's value and `SoakCells`' names, `Describe` writes the launch log line.
 
 ## src/Net/MasterProtocol.cs
 The master server's wire, one file compiled by the game and by `server/MasterServer` alike, so it

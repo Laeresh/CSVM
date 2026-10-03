@@ -8,8 +8,10 @@ only for the guest-clock truth check; the position fit absorbs any constant offs
 --skip drops that many seconds after the match start (the guest's opening alignment).
 
 Rig: run-pair.ps1 (a Linux host headless on its LAN address through deck-host.sh, this PC joining
-on the hidden desktop), clock-offset.ps1 before and after for --wall-offset. The game has no delay
-or loss shaping on a real socket, so a run measures the link as it is.
+on the hidden desktop), clock-offset.ps1 before and after for --wall-offset. A run measures the link
+as it is unless an end was launched with --net-shape=, which its trace names in a shape line and
+this prints first. The shaping adds to the link's own delay and loss, so a shaped cell flown over
+Wi-Fi is slightly worse than its loopback twin in the soak.
 
 Method and floor: each machine's steps are placed on its own wall clock by the lower envelope of
 (wall - step/60) over a 4 s window, since steps run late in catch-up bursts and never early. What
@@ -27,14 +29,28 @@ DT = 1.0 / 60.0
 TRACE = re.compile(r"net trace (host|guest) step (\d+) wall ([\d.]+) sim ([\d.]+) remain (-?[\d.]+)(.*)$")
 CLOCK = re.compile(r"offset (-?[\d.]+) target (-?[\d.]+) snaps (\d+) rtt ([\d.]+) trips (\d+) asked (\d+)")
 SEAT = re.compile(r"seat (\d+) (own|copy) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)")
+SHAPE = re.compile(r"net trace (host|guest) shape (none|latency ([\d.]+) jitter ([\d.]+) loss ([\d.]+))")
 READOUT = re.compile(r"net (host|guest) seat \d+ peers \d+: sent (\d+) recv (\d+).*?dropped state (\d+) fire (\d+).*?poses interp (\d+) extrap (\d+) starved (\d+) jumps (\d+)")
+
+
+def shape_text(m):
+    """The shape line's conditions in the units --net-shape takes them in."""
+    if m.group(2) == "none":
+        return "none"
+    latency, jitter, loss = (float(x) for x in m.group(3, 4, 5))
+    return f"latency {round(latency*1000, 1):g} ms, jitter {round(jitter*1000, 1):g} ms, loss {round(loss*100, 1):g} %"
 
 
 def load(path):
     rows = []
     readouts = []
+    shape = "no shape line in this trace"
     with open(path, encoding="utf-8", errors="replace") as f:
         for line in f:
+            s = SHAPE.search(line)
+            if s:
+                shape = shape_text(s)
+                continue
             m = TRACE.search(line)
             if m:
                 rest = m.group(6)
@@ -47,7 +63,7 @@ def load(path):
             r = READOUT.search(line)
             if r:
                 readouts.append(tuple(int(x) for x in r.groups()[1:]))
-    return rows, readouts
+    return rows, readouts, shape
 
 
 def ideal_times(rows, window=120):
@@ -101,8 +117,9 @@ def main():
     opts = dict(a[2:].split("=", 1) for a in sys.argv[1:] if a.startswith("--"))
     wall_offset = float(opts.get("wall-offset", "0"))
     skip = float(opts.get("skip", "5"))
-    host, host_ro = load(args[0])
-    guest, guest_ro = load(args[1])
+    host, host_ro, host_shape = load(args[0])
+    guest, guest_ro, guest_shape = load(args[1])
+    print(f"link shaping: host {host_shape}; guest {guest_shape}")
     hs, hw, ht, hlate = ideal_times(host)
     gs, gw, gt, glate = ideal_times(guest)
     gt_host = gt - wall_offset  # guest ideal times on the host's wall axis

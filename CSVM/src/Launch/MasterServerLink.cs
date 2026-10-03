@@ -140,29 +140,20 @@ public static class MasterServerLink
             var buffer = new byte[MasterWire.MaxMessageBytes];
             while (socket.State == WebSocketState.Open && !_cancel.IsCancellationRequested)
             {
-                int length = 0;
-                WebSocketReceiveResult result;
-                do
+                var frame = await MasterFrames.ReceiveAsync(socket, buffer, _cancel.Token).ConfigureAwait(false);
+                if (frame.End == MasterFrameEnd.TooBig)
                 {
-                    if (length == buffer.Length)
-                    {
-                        _fault = "the master server sent a message past the size limit";
-                        return;
-                    }
-
-                    result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer, length, buffer.Length - length), _cancel.Token)
-                        .ConfigureAwait(false);
-                    length += result.Count;
+                    _fault = "the master server sent a message past the size limit";
+                    return;
                 }
-                while (!result.EndOfMessage && result.MessageType != WebSocketMessageType.Close);
 
-                if (result.MessageType == WebSocketMessageType.Close)
+                if (frame.End == MasterFrameEnd.Closed)
                 {
                     _fault = "the master server closed the connection";
                     return;
                 }
 
-                if (MasterWire.TryRead(Encoding.UTF8.GetString(buffer, 0, length), out var message))
+                if (frame.Message is { } message)
                 {
                     _inbox.Enqueue(message);
                 }

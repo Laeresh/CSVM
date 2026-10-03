@@ -35,9 +35,6 @@ public sealed class WebRtcTransport : INetTransport, INetLink, INetPeerAddress, 
     /// </summary>
     public const double ReopenSeconds = 10.0;
 
-    /// <summary>How many payloads are held for a listener that has not bound yet, as on ENet.</summary>
-    public const int HeldPayloads = EnetTransport.HeldPayloads;
-
     private readonly bool _host;
     private readonly int _maxPeers;
     private readonly Func<IMasterSocket>? _reopen;
@@ -78,12 +75,12 @@ public sealed class WebRtcTransport : INetTransport, INetLink, INetPeerAddress, 
     public IReadOnlyList<int> Peers => _peers;
 
     /// <inheritdoc/>
-    /// <remarks>A guest stands at <see cref="EnetLinkState.Connecting"/> until the host's data
-    /// channels open, and at <see cref="EnetLinkState.Down"/> for good once the join failed or the
+    /// <remarks>A guest stands at <see cref="NetLinkState.Connecting"/> until the host's data
+    /// channels open, and at <see cref="NetLinkState.Down"/> for good once the join failed or the
     /// link dropped. A host is up until it closes.</remarks>
-    public EnetLinkState LinkState => _closed || Fault.Length > 0
-        ? EnetLinkState.Down
-        : _host || _linked ? EnetLinkState.Up : EnetLinkState.Connecting;
+    public NetLinkState LinkState => _closed || Fault.Length > 0
+        ? NetLinkState.Down
+        : _host || _linked ? NetLinkState.Up : NetLinkState.Connecting;
 
     /// <inheritdoc/>
     public int PendingPayloads => _held.Count;
@@ -142,7 +139,7 @@ public sealed class WebRtcTransport : INetTransport, INetLink, INetPeerAddress, 
     /// <summary>Starts a join to the game the master server lists under <paramref name="code"/>
     /// over <paramref name="socket"/>, naming this build's <paramref name="version"/>. The host
     /// arrives as peer 1 on a later <see cref="Step"/>, or the link ends at
-    /// <see cref="EnetLinkState.Down"/> with <see cref="Fault"/> saying why.</summary>
+    /// <see cref="NetLinkState.Down"/> with <see cref="Fault"/> saying why.</summary>
     public static WebRtcTransport Join(IMasterSocket socket, string code, NetBuildVersion version)
     {
         ArgumentNullException.ThrowIfNull(socket);
@@ -573,7 +570,7 @@ public sealed class WebRtcTransport : INetTransport, INetLink, INetPeerAddress, 
             }
             else
             {
-                if (_held.Count >= HeldPayloads)
+                if (_held.Count >= INetLink.HeldPayloads)
                 {
                     _held.RemoveAt(0);
                 }

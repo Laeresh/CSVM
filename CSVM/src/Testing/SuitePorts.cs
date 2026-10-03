@@ -41,6 +41,9 @@ internal static class SuitePorts
     /// </summary>
     internal const int StableReply = 60;
 
+    /// <summary>enet-shaped-link's host.</summary>
+    internal const int Shaped = 70;
+
     /// <summary>How far above its host's port a guest that names its own source port sends from.
     /// Lands the stable-reply guests on offsets 80 to 89.</summary>
     internal const int GuestSource = 20;

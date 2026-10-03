@@ -3,8 +3,9 @@ using System;
 namespace CSVM.Net;
 
 /// <summary>
-/// One direction's wire conditions for a <see cref="LoopbackTransport"/> link: a fixed latency, a
-/// symmetric jitter about it, and a loss probability. Every draw comes from a caller-supplied
+/// One direction's wire conditions on a <see cref="LoopbackTransport"/> link or a
+/// <see cref="ShapedTransport"/>: a fixed latency, a symmetric jitter about it, and a loss
+/// probability. Every draw comes from a caller-supplied
 /// <see cref="Random"/> rather than an ambient one, so a suite that seeds the generator replays
 /// the same network exactly. Loss is offered here for all three reliability classes; which ones
 /// it may actually touch is the transport's rule, not this value's.

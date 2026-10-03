@@ -42,9 +42,9 @@ internal static class NetZeppelinSuites
     private static readonly (string Name, LoopbackConditions Link)[] Matrix =
     {
         ("clean", LoopbackConditions.Perfect),
-        ("50ms/5%", new LoopbackConditions(0.05, 0.01, 0.05)),
-        ("100ms/10%", new LoopbackConditions(0.10, 0.02, 0.10)),
-        ("200ms/20%", new LoopbackConditions(0.20, 0.04, 0.20)),
+        ("50ms/5%", SoakCells.Broadband),
+        ("100ms/10%", SoakCells.Congested),
+        ("200ms/20%", SoakCells.PoorWireless),
     };
 
     [Suite("net-zeppelin-path",

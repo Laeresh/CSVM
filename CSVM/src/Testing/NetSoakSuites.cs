@@ -68,9 +68,9 @@ internal static class NetSoakSuites
     private static readonly Cell[] Matrix =
     {
         new("clean", LoopbackConditions.Perfect, 0.25f, 0.5f),
-        new("50ms/5%", new LoopbackConditions(0.05, 0.01, 0.05), 1.5f, 3f),
-        new("100ms/10%", new LoopbackConditions(0.10, 0.02, 0.10), 2f, 6f),
-        new("200ms/20%", new LoopbackConditions(0.20, 0.04, 0.20), 3.5f, 10f),
+        new("50ms/5%", SoakCells.Broadband, 1.5f, 3f),
+        new("100ms/10%", SoakCells.Congested, 2f, 6f),
+        new("200ms/20%", SoakCells.PoorWireless, 3.5f, 10f),
     };
 
     [Suite("net-soak",

@@ -36,49 +36,42 @@ public static class OutlawRows
     /// <summary>How many rows a scrolled page shows at once.</summary>
     public const int Window = 4;
 
-    /// <summary>How many rows a page carries.</summary>
-    public static int Count(OutlawPage page) => page switch
+    // Indexed by OutlawPage, in its order. Airframes and Rockets scroll; the Guns page shows all
+    // five of its own rows, packed tighter.
+    private static readonly OutlawPageRows[] Pages =
     {
-        OutlawPage.Airframes => 11,
-        OutlawPage.Engines => 1,
-        OutlawPage.Guns => 5,
-        OutlawPage.Ammo => 4,
-        _ => 11,
+        new(NetPlaneRules.AirframeFlag, -1, 3000, true, 85f, 120f, 36f, new[]
+        {
+            "Ford Hoplite", "Focke-Wulf Fw 193 Hellhound", "Bristol Type 140 Balmoral", "Hughes Bloodhawk",
+            "Fairchild F6II Brigand", "Hughes P21-J MKIII Devastator", "Hughes-Lockheed Firebrand", "Curtiss-Wright J2 Fury",
+            "McDonnell S2B Kestrel", "William & Colt Peacemaker 370", "Curtiss-Wright P2 Warhawk",
+        }),
+        new(NetPlaneRules.NitroFlag, -1, 10135, false, 100f, 150f, 0f, new[] { "Outlaw Nitro-Boosted Engines" }),
+        new(NetPlaneRules.GunFlag, -1, 3320, false, 85f, 110f, 32f, new[] { ".30-cal.", ".40-cal.", ".50-cal.", ".60-cal.", ".70-cal." }),
+        new(NetPlaneRules.AmmoFlag, NetPlaneRules.AllAmmoFlag, 3350, false, 85f, 120f, 36f,
+            new[] { "Slugs", "Dum-Dum Bullets", "Armor-Piercing Bullets", "Explosive Bullets" }),
+        new(NetPlaneRules.RocketFlag, NetPlaneRules.AllRocketsFlag, 3380, true, 85f, 120f, 36f, new[]
+        {
+            "Armor-Piercing Rockets", "High-Explosive Rockets", "Flak Rockets", "Sonic Rockets", "Flash Rockets",
+            "Rear Flash Rockets", "Smoke Screen", "Choker Rockets", "Beeper Rockets", "Seeker Rockets", "Aerial Torpedoes",
+        }),
     };
+
+    /// <summary>How many rows a page carries.</summary>
+    public static int Count(OutlawPage page) => Of(page).Names.Length;
 
     /// <summary>The flag row <paramref name="row"/> of a page writes, or -1 past its rows.</summary>
-    public static int Flag(OutlawPage page, int row) => row < 0 || row >= Count(page)
-        ? -1
-        : page switch
-        {
-            OutlawPage.Airframes => NetPlaneRules.AirframeFlag + row,
-            OutlawPage.Engines => NetPlaneRules.NitroFlag,
-            OutlawPage.Guns => NetPlaneRules.GunFlag + row,
-            OutlawPage.Ammo => NetPlaneRules.AmmoFlag + row,
-            _ => NetPlaneRules.RocketFlag + row,
-        };
+    public static int Flag(OutlawPage page, int row) => row < 0 || row >= Count(page) ? -1 : Of(page).FirstFlag + row;
 
     /// <summary>The page's Outlaw All flag, or -1 on a page without that box.</summary>
-    public static int AllFlag(OutlawPage page) => page switch
-    {
-        OutlawPage.Ammo => NetPlaneRules.AllAmmoFlag,
-        OutlawPage.Rockets => NetPlaneRules.AllRocketsFlag,
-        _ => -1,
-    };
+    public static int AllFlag(OutlawPage page) => Of(page).AllFlag;
 
     /// <summary>The string that names row <paramref name="row"/> of a page.</summary>
-    public static int NameId(OutlawPage page, int row) => page switch
-    {
-        OutlawPage.Airframes => 3000 + row,
-        OutlawPage.Engines => 10135,
-        OutlawPage.Guns => 3320 + row,
-        OutlawPage.Ammo => 3350 + row,
-        _ => 3380 + row,
-    };
+    public static int NameId(OutlawPage page, int row) => Of(page).FirstName + row;
 
     /// <summary>Whether a page scrolls: Airframes and Rockets show four rows under a scroll bar,
     /// and the Guns page all five of its own.</summary>
-    public static bool Scrolls(OutlawPage page) => page is OutlawPage.Airframes or OutlawPage.Rockets;
+    public static bool Scrolls(OutlawPage page) => Of(page).Scrolls;
 
     /// <summary>How many rows a page shows at once.</summary>
     public static int Shown(OutlawPage page) => Scrolls(page) ? Window : Count(page);
@@ -91,6 +84,23 @@ public static class OutlawRows
     /// set, as the original's callbacks 5018 and 5064 read.</summary>
     public static bool Takes(NetPlaneRules rules, OutlawPage page, int row) =>
         Flag(page, row) >= 0 && !rules.Has(AllFlag(page));
+
+    // The words row `row` of a page writes when the strings carry no entry for it.
+    internal static string Fallback(OutlawPage page, int row) => Of(page).Names[row];
+
+    // Where the shown-th box of a page stands, from the pane's corner.
+    internal static (float X, float Y) RowAt(OutlawPage page, int shown)
+    {
+        var rows = Of(page);
+        return (rows.X, rows.Y + (rows.Pitch * shown));
+    }
+
+    private static OutlawPageRows Of(OutlawPage page) => Pages[(int)page];
+
+    // One page: its first row's flag and string, and its Outlaw All flag (-1 for none). Then whether
+    // it scrolls, where its first box stands, the step to the next, and each row's fallback words.
+    private readonly record struct OutlawPageRows(
+        int FirstFlag, int AllFlag, int FirstName, bool Scrolls, float X, float Y, float Pitch, string[] Names);
 }
 
 /// <summary>
@@ -144,19 +154,6 @@ internal sealed class OriginalOutlawList
     private static readonly float[] TabX = { 46f, 127f, 200f, 268f, 336f };
     private static readonly float[] TabWidth = { 80f, 69f, 69f, 69f, 69f };
     private static readonly string[] TabNames = { "Airframes", "Engines", "Guns", "Ammo", "Rockets" };
-    private static readonly string[] Airframes =
-    {
-        "Ford Hoplite", "Focke-Wulf Fw 193 Hellhound", "Bristol Type 140 Balmoral", "Hughes Bloodhawk",
-        "Fairchild F6II Brigand", "Hughes P21-J MKIII Devastator", "Hughes-Lockheed Firebrand", "Curtiss-Wright J2 Fury",
-        "McDonnell S2B Kestrel", "William & Colt Peacemaker 370", "Curtiss-Wright P2 Warhawk",
-    };
-
-    private static readonly string[] Ammunitions = { "Slugs", "Dum-Dum Bullets", "Armor-Piercing Bullets", "Explosive Bullets" };
-    private static readonly string[] Rockets =
-    {
-        "Armor-Piercing Rockets", "High-Explosive Rockets", "Flak Rockets", "Sonic Rockets", "Flash Rockets",
-        "Rear Flash Rockets", "Smoke Screen", "Choker Rockets", "Beeper Rockets", "Seeker Rockets", "Aerial Torpedoes",
-    };
 
     // The pane scripts' colours: black labels, the picked sub-tab's red and the plaques' rollover blue.
     private static readonly BoardTint Black = new(0, 0, 0);
@@ -234,8 +231,8 @@ internal sealed class OriginalOutlawList
         _top = Math.Clamp(_top, 0, Math.Max(0, count - OutlawRows.Shown(Page)));
         for (int row = _top; row < count && row < _top + OutlawRows.Shown(Page); row++)
         {
-            var (x, y) = RowAt(Page, row - _top);
-            rows.Add(new OriginalRow(RowKey(row), string.Empty, OriginalRowKind.Radio, x, y, 290f, 26f, live, 1, box));
+            var (x, y) = OutlawRows.RowAt(Page, row - _top);
+            rows.Add(new OriginalRow(RowKey(row), string.Empty, OriginalRowKind.Radio, PaneX + x, PaneY + y, 290f, 26f, live, 1, box));
         }
 
         if (OutlawRows.Scrolls(Page))
@@ -356,23 +353,6 @@ internal sealed class OriginalOutlawList
     // Live only on the host while it is not Ready, which is the scripts' ($$OX$$) and (!GDA).
     private static bool Live(DogfightLobby lobby) => lobby.IsHost && !lobby.Ready;
 
-    // Where the shown-th box of a page stands: the Guns page packs its five rows tighter.
-    private static (float X, float Y) RowAt(OutlawPage page, int shown) => page switch
-    {
-        OutlawPage.Engines => (PaneX + 100f, PaneY + 150f),
-        OutlawPage.Guns => (PaneX + 85f, PaneY + 110f + (32f * shown)),
-        _ => (PaneX + 85f, PaneY + 120f + (36f * shown)),
-    };
-
-    private static string Fallback(OutlawPage page, int row) => page switch
-    {
-        OutlawPage.Airframes => Airframes[row],
-        OutlawPage.Engines => "Outlaw Nitro-Boosted Engines",
-        OutlawPage.Guns => $".{30 + (10 * row)}-cal.",
-        OutlawPage.Ammo => Ammunitions[row],
-        _ => Rockets[row],
-    };
-
     private void Cancel(DogfightLobby? lobby)
     {
         // Callback 5051 puts the kept list back, only on a host that is not Ready.
@@ -425,7 +405,7 @@ internal sealed class OriginalOutlawList
         int index = OriginalWidgets.Indexed(row.Key, RowPrefix) ?? 0;
         bool ticked = OutlawRows.Ticked(rules, Page, index);
         layers.Pictures.Add(new BoardPicture(row.Art!, row.X, row.Y, (ticked ? 4 : 0) + state));
-        layers.Lines.Add(_text.Line(OutlawRows.NameId(Page, index), Fallback(Page, index), row.X + 60f, row.Y + 4f, 0f, Black));
+        layers.Lines.Add(_text.Line(OutlawRows.NameId(Page, index), OutlawRows.Fallback(Page, index), row.X + 60f, row.Y + 4f, 0f, Black));
     }
 
     private void Label(OriginalRow row, int id, string word, BoardTint tint, BoardLayers layers)

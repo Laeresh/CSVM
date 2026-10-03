@@ -1467,7 +1467,7 @@ Wire: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Coverage
 ## src/UI/Menu/CoopDoorText.cs
 The words the network door is drawn in, engine-free and built off the door alone: the host's band
 (`HostBand`: the join code and Public or Private when there is one, else port, router address, guest
-count, then `HostFallbackLines`: `HostAddressLine` and `InternetLine`'s reason), a Dogfight host's `HostCodeLine` and its lobby's pinned rows, which wait for the master server's outcome before naming the address (`HostLobbyLines`), each naming Ctrl+C only for `CopyWay.Keys`, and what a COPY control copies (`CopyTarget`), the router's answers
+count, then `HostFallbackLines`, which waits for the master server's outcome: the wait alone while it answers, else `HostAddressLine` and `InternetLine`'s reason), a Dogfight host's `HostCodeLine` and its lobby's pinned rows, the code alone or `HostFallbackLines` (`HostLobbyLines`), each naming Ctrl+C only for `CopyWay.Keys`, and what a COPY control copies (`CopyTarget`), the router's answers
 (`RouterStatus`, `PinholeStatus`; `HostPinholeStatus` omits an address already named), what a
 guest types (`HostAddressStatus` on the board), an advert's session (`SessionName`), the join and waiting boards' status (`JoinedStatus`,
 `WaitingStatus`, naming a join by code by its code), why a guest cannot join by code (`NoMasterServer`, `NoWebRtc`, `CodeJoinUnavailable`), the games list's cells with a version and a Need Password mark (`Status`), a guest's band and its line for players the cap left out (`GuestBand`, `SeatsShort`), the booted and wrong-password refusals, the refusal naming both

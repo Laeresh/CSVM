@@ -598,9 +598,12 @@ constants rather than reading a layout.
   seven lobby environments.
 - **The cabin's network door.** Remake-only: a paper plaque in the `FC_B_CHANGEPLANE` convention at
   (14, 40) reading HOST CO-OP or CLOSE NETWORK, with the host's band over a dark ground at y 14.
-  The band line naming the code (else the address) carries a COPY control, a 44-wide box at the
-  band's right end whose row spans the line, a stop just before the door in the cursor's walk; the
-  line names Ctrl+C only after a key last moved the cursor. The original has no co-op campaign, so
+  The band waits for the master server's outcome: while it is answering, the second line is
+  "Asking the master server for a join code ..." alone, with no address; then the code, or the
+  address on a fault or with no master server set. The band line naming the code (else the address)
+  carries a COPY control, a 44-wide box at the band's right end whose row spans the line, a stop
+  just before the door in the cursor's walk, and absent during the wait; the line names Ctrl+C only
+  after a key last moved the cursor. The original has no co-op campaign, so
   no script describes it. On every machine the seat strip calls each seat by the callsign its
   player gave Player Information, a seat with none by its player tag, and the band counts the
   guests, as the lobby's player count (10048) stands over its named list. BOOT asks about a guest

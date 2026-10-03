@@ -195,6 +195,7 @@
     "empty-stage-net": 0.384,
     "enet-dual-stack": 1.03,
     "enet-load-stall": 7.5,
+    "enet-shaped-link": 0.64,
     "enet-stable-ipv6-reply": 3.08,
     "enet-transport": 0.23,
     "engine-cockpit-pitch": 0.05,

@@ -283,9 +283,16 @@ usual.
   with guns on it for several minutes. Note the HUD match clock at every moment the chased
   aeroplane reads as wrong (a jump, a stutter, its tracers leaving from beside it); the trace logs
   that clock each step, so `analyze.py` gives the error at each noted moment, and the bars go
-  where the first one sits. Then repeat from a worse Wi-Fi spot, since the game has no shaping on a
-  real socket. *⚠ Traps:* the error is read after the fitted lag is removed, so a large render delay
-  does not show here at all; judge the delay (`RemotePoseBuffer.BufferDelaySeconds`) separately. A
-  bar under about 0.4 m mean cannot pass on two real machines whatever the link, since that is the
-  step-timing floor. The PC never hosts: its wildcard bind raises a firewall prompt.
+  where the first one sits. Then fly the soak's three shaped cells the same way from the same spot,
+  one sortie each, adding `--net-shape=soak50`, `--net-shape=soak100` and `--net-shape=soak200` to
+  the PC's line (`run-pair.ps1 -Shape` for the scripted pair): the PC shapes its link both ways,
+  so the Deck stays a stock build, and each trace names its cell, which `analyze.py` prints first.
+  *⚠ Traps:* the shaping adds to the house Wi-Fi's own delay and loss (about 17 ms round trip),
+  and a shaped payload moves only on a step, up to a frame more each way, so a shaped cell flies
+  slightly worse than its loopback twin in the soak; set its bar from that sortie with the margin
+  in mind rather than subtracting the link. The error is read after the fitted lag is removed, so a
+  large render delay does not show here at all; judge the delay
+  (`RemotePoseBuffer.BufferDelaySeconds`) separately. A bar under about 0.4 m mean cannot pass on
+  two real machines whatever the link, since that is the step-timing floor. The PC never hosts:
+  its wildcard bind raises a firewall prompt.
 
