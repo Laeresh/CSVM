@@ -134,8 +134,8 @@ def main():
             print(f"{name} readout (last): sent {last[0]} recv {last[1]} dropped state {last[2]} fire {last[3]} "
                   f"interp {last[4]} extrap {last[5]} starved {last[6]} jumps {last[7]}")
 
-    # ---- BL-1018: the guest clock slew -------------------------------------------------------
-    print("\n== BL-1018 guest clock slew")
+    # ---- the guest clock slew ----------------------------------------------------------------
+    print("\n== guest clock slew")
     clk = np.array([r["clock"] for r in guest])
     off, tgt, snaps, rtt, trips, asked = clk.T
     t0 = gw[0]
@@ -182,8 +182,8 @@ def main():
               f"phase and the system clock offset {wall_offset*1000:.1f} ms): median {np.median(err[ok])*1000:.1f} "
               f"p5..p95 {np.percentile(err[ok],5)*1000:.1f}..{np.percentile(err[ok],95)*1000:.1f}")
 
-    # ---- BL-1025: the match-state tick at the guest -------------------------------------------
-    print("\n== BL-1025 match-state ticks at the guest")
+    # ---- the match-state tick at the guest ----------------------------------------------------
+    print("\n== match-state ticks at the guest")
     remain = np.array([r["remain"] for r in guest])
     arr = [i for i in range(1, len(remain)) if remain[i] != remain[i - 1] and gw[i] - t0 >= skip]
     aw = gw[arr]
@@ -201,8 +201,8 @@ def main():
         print(f"readout held over 1.5 s: {(sp > 1.5).sum()}, two changes within 0.5 s: {(sp < 0.5).sum()}; longest hold {sp.max():.3f} s")
     hremain = np.array([r["remain"] for r in host])
 
-    # ---- BL-1041: position error, the soak's way ---------------------------------------------
-    print("\n== BL-1041 position error (lag fitted, error after it)")
+    # ---- position error, the soak's way ---------------------------------------------------------
+    print("\n== position error (lag fitted, error after it)")
     lags = np.arange(-0.5, 1.0, DT / 20)
     host_own_seat = next(s for s, v in host[0]["seats"].items() if v[0] == "own")
     guest_own_seat = next(s for s, v in guest[0]["seats"].items() if v[0] == "own")

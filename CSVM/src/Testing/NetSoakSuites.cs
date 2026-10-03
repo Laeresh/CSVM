@@ -356,7 +356,8 @@ internal static class NetSoakSuites
         session.SeatRigs[seat].Controller?.WorldPosition ?? Vector3.Zero;
 
     // One matrix cell: its link both ways, and the tracking bars read off this suite's own runs
-    // with headroom. What a player accepts is unmeasured, so a bar is a regression tripwire.
+    // with headroom. Each cell flown by hand on a real link played without a noticed fault. A bar
+    // is therefore both what a player accepts and a regression tripwire.
     private sealed record Cell(string Name, LoopbackConditions Conditions, float MeanBar, float WorstBar);
 
     // The two sessions and their carriers, stepped together, host first, as a listen server runs.

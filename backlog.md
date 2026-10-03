@@ -261,38 +261,3 @@ usual.
   position; `Pads.LogPads` records the roster so the next one reads off the log rather than being
   inferred. Dropping the var also closes that divergence.
 
-## Misc
-
-- `BL-1041` `[Tuning]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: trace]` **The soak's
-  position-error bars are regression tripwires, not what a player accepts.** *Evidence:*
-  `Testing/NetSoakSuites.cs` flies a scripted Dogfight through four loopback cells and fails a
-  cell whose worse direction exceeds its bar (mean/worst metres): clean 0.25/0.5, 50 ms and 5 per
-  cent loss 1.5/3, 100 ms and 10 per cent 2/6, 200 ms and 20 per cent 3.5/10. The seeded run
-  measures 0.01/0.01, 0.45/1.05, 0.71/1.80 and 1.27/2.45, so each bar is the measurement with two
-  to four times headroom. A real link is read the same way through `--debug-net-trace` and
-  `analysis/net-real-link/`: a Steam Deck hosting on the house Wi-Fi (17 ms round trip, almost no
-  loss) with a PC joining reads, over 240-step windows each with its own fitted lag, 0.28 to
-  0.41 m mean and 0.75 to 1.12 m worst at the median window, and 1.8 m mean and 3.3 m worst at
-  the worst of about 370 windows. Two processes on one PC read the same, so that is the floor the
-  machines' step timing sets: above the clean bar, which reads a lockstep pair, and inside the
-  50 ms one. Nothing says a player notices 3 m of worst error at 200 ms, or that 1.5 m at 50 ms is
-  fine. *Fix shape:* the sortie that sets the bars, at the controls. The Deck hosts headless with
-  `analysis/net-real-link/run-pair.ps1`'s host line (a scripted turn,
-  `--hold=0,0.6,0,1@0.5;0.5,0,0,1`, `--vs --vs-kills=0 --debug-net-trace`); the PC joins with
-  `--net-join=<deck address> --vs --debug-net-trace` and is flown by hand, chasing that aeroplane
-  with guns on it for several minutes. Note the HUD match clock at every moment the chased
-  aeroplane reads as wrong (a jump, a stutter, its tracers leaving from beside it); the trace logs
-  that clock each step, so `analyze.py` gives the error at each noted moment, and the bars go
-  where the first one sits. Then fly the soak's three shaped cells the same way from the same spot,
-  one sortie each, adding `--net-shape=soak50`, `--net-shape=soak100` and `--net-shape=soak200` to
-  the PC's line (`run-pair.ps1 -Shape` for the scripted pair): the PC shapes its link both ways,
-  so the Deck stays a stock build, and each trace names its cell, which `analyze.py` prints first.
-  *⚠ Traps:* the shaping adds to the house Wi-Fi's own delay and loss (about 17 ms round trip),
-  and a shaped payload moves only on a step, up to a frame more each way, so a shaped cell flies
-  slightly worse than its loopback twin in the soak; set its bar from that sortie with the margin
-  in mind rather than subtracting the link. The error is read after the fitted lag is removed, so a
-  large render delay does not show here at all; judge the delay
-  (`RemotePoseBuffer.BufferDelaySeconds`) separately. A bar under about 0.4 m mean cannot pass on
-  two real machines whatever the link, since that is the step-timing floor. The PC never hosts:
-  its wildcard bind raises a firewall prompt.
-
