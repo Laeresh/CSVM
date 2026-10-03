@@ -609,6 +609,10 @@ public partial class Launcher : Node3D
         // run drops the key, keeping every golden clear of a bowl; the flag survives it, for a probe.
         CraterGate.Enabled = _spec.Craters
             || (!_spec.Det && OptionsStore.UserOptions().Load().RocketCraters == true);
+        // The flight text block, defaulting OFF: the original draws no such readout. ⚠ No screen
+        // offers it. The saved key and --hud-text are its only doors, the same pair the carve has.
+        Flight.Hud.FlightHud.TextBlockEnabled = _spec.HudText
+            || (!_spec.Det && OptionsStore.UserOptions().Load().FlightTextBlock == true);
         // The cockpit loop's throttle pitch, a remake-only rule. ⚠ No screen offers it; the saved key
         // is its one door. A --det run drops the key, so a suite states the rule it tests.
         bool? savedCockpitPitch = _spec.Det ? null : OptionsStore.UserOptions().Load().CockpitEnginePitch;

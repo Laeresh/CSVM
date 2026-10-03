@@ -1243,8 +1243,8 @@ Ground-blow probing and the AI ground-blow write stay on `FlightController`, whi
 ## src/Flight/Hud/FlightHud.cs
 Everything one pane draws for its pilot, none of it written from outside: the heading tape, the cockpit
 dials and their two weapon gauges, the gun pipper, the stunt marker, the targeting HUD, `HudMessages`'
-message stack, the two `PromptLine` prompts, the `--hud-font-test` overlay and the flight text block. With
-the cockpit interior on screen the dials, tape and text block come off (`SetCockpitView`), its panel
+message stack, the two `PromptLine` prompts, the `--hud-font-test` overlay and the flight text block.
+The text block is remake-only telemetry the original has no counterpart for, built only while `TextBlockEnabled` is on (the `flightTextBlock` options key, never under `--det`, or `--hud-text`). With the cockpit interior on screen the dials, tape and text block come off (`SetCockpitView`), its panel
 carrying them; the pipper, marker, message and prompt HUDs stay, the respawn prompt on the message layer the
 crash camera leaves up. `Draw(in FlightHudState)`, the per-frame entry, takes a struct of aircraft STATE, so
 text, dials and gates compose and assert here with no `Control` (`ComputeStallWarning`, `ComputeAgl`,
