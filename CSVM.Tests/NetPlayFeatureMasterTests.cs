@@ -183,7 +183,7 @@ public class NetPlayFeatureMasterTests
     }
 
     [Fact]
-    public void TheCopyKeyCopiesTheCodeOnceThereIsOneAndTheAddressBefore()
+    public void TheCopyKeyCopiesNothingWhileTheMasterAnswersThenTheCodeAndTheAddressAfterAFault()
     {
         var mesh = LoopbackTransport.Mesh(1, Clean, new Random(8));
         var listed = new ListedCarrier(mesh[0]);
@@ -195,15 +195,26 @@ public class NetPlayFeatureMasterTests
         };
         door.OpenCoopHost(NetPlayFeature.CoopHumans - 1);
 
-        Assert.True(door.CopyForGuests());
+        // While the master server answers no line names the address, so the key copies nothing.
+        Assert.True(door.AwaitingCode);
+        Assert.False(door.CopyForGuests());
+        Assert.Equal("", CoopDoorText.CopyTarget(door));
+        Assert.Empty(copied);
+
         listed.JoinCode = "K7Q-X3M";
         Assert.Contains("Ctrl+C", CoopDoorText.HostBand(door), StringComparison.Ordinal);
         Assert.True(door.CopyForGuests());
-
-        Assert.Equal(new[] { "2001:db8::7", "K7Q-X3M" }, copied);
+        Assert.Equal(new[] { "K7Q-X3M" }, copied);
         Assert.StartsWith("NETWORK OPEN  0 guests  CODE K7Q-X3M  copied", CoopDoorText.HostBand(door), StringComparison.Ordinal);
 
-        // ABLE-TO-FAIL CONTROL: a shut door copies nothing.
+        // ABLE-TO-FAIL CONTROL: after a fault the address is named again, and the key copies it.
+        listed.JoinCode = null;
+        listed.Fault = "the master server refused the listing";
+        Assert.False(door.AwaitingCode);
+        Assert.True(door.CopyForGuests());
+        Assert.Equal(new[] { "K7Q-X3M", "2001:db8::7" }, copied);
+
+        // A shut door copies nothing.
         door.Close();
         Assert.False(door.CopyForGuests());
         Assert.Equal(2, copied.Count);
@@ -223,12 +234,17 @@ public class NetPlayFeatureMasterTests
         Assert.Equal("", CoopDoorText.CopyTarget(door));
         door.OpenDogfightHost(NetSeats.MaxPlayers - 1);
 
-        // Without a code the address line carries the mark, and the control copies that address.
+        // While the master server answers no line carries the mark.
+        Assert.Equal("", CoopDoorText.CopyTarget(door));
+
+        // After a fault the address line carries the mark, and the control copies that address.
+        listed.Fault = "the master server refused the listing";
         Assert.Equal(stable, CoopDoorText.CopyTarget(door));
         Assert.Equal($"IPv6  {stable}  {CoopDoorText.CopyPress}", CoopDoorText.HostAddressLine(door, CopyWay.Keys));
         Assert.Equal($"IPv6  {stable}", CoopDoorText.HostAddressLine(door, CopyWay.Pad));
         Assert.Equal($"IPv6  {stable}", CoopDoorText.HostAddressLine(door, CopyWay.Pointer));
 
+        listed.Fault = "";
         listed.JoinCode = "K7Q-X3M";
         Assert.Equal("K7Q-X3M", CoopDoorText.CopyTarget(door));
         const string line = "Internet code K7Q-X3M, public, on the games list.";

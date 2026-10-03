@@ -57,6 +57,8 @@ internal sealed class SessionNet
     // The seats whose guest left the session mid-mission, each out of play for the rest of it.
     private readonly HashSet<int> _seatsLeft = new();
     private readonly List<ChatPanel> _chatPanels = new();
+    // The shaping this end's link runs under, as the trace's first line names it, or null unshaped.
+    private readonly Net.LoopbackConditions? _shape;
 
     // Simulation steps traced so far, the trace's own clock, since a step is a fixed slice of
     // time. The wall stamp of a step run in a catch-up burst says when it ran, not what it covers.
@@ -81,6 +83,7 @@ internal sealed class SessionNet
         _seatRigs = seatRigs;
         _clockTime = clockTime;
         _realCarrier = ctx.NetTransport is Net.INetLink;
+        _shape = (ctx.NetTransport as Net.ShapedTransport)?.Conditions;
         // Sorted once here, so a seat's position in this list IS its seat index. Everything
         // downstream then reads the roster with the index it reads the rigs with.
         Seats = ctx.NetSeats is { Count: > 0 } seats
@@ -537,7 +540,8 @@ internal sealed class SessionNet
     /// <summary>One <c>--debug-net-trace</c> line per simulation step. It holds the step count,
     /// the wall, session and match clocks, a guest's offset and every seat's position. The wall
     /// clock is the one axis two machines' traces share. Laid over each other, two logs give the
-    /// error between an owner's path and another machine's copy.</summary>
+    /// error between an owner's path and another machine's copy. A line naming this end's link
+    /// shaping, or none, comes first.</summary>
     public void TraceStep()
     {
         if (!TraceSteps || Link is not { } net || Seats.Count == 0)
@@ -547,6 +551,15 @@ internal sealed class SessionNet
 
         var line = new System.Text.StringBuilder(160);
         var inv = System.Globalization.CultureInfo.InvariantCulture;
+        // Once, ahead of the steps, so a reader of the log knows which link cell it was flown in.
+        if (_tracedSteps == 0)
+        {
+            string shape = _shape is { } c
+                ? string.Create(inv, $"latency {c.Latency:0.0000} jitter {c.Jitter:0.0000} loss {c.Loss:0.0000}")
+                : "none";
+            Log.Debug("core", $"net trace {(net.IsHost ? "host" : "guest")} shape {shape}");
+        }
+
         double wall = (DateTime.UtcNow - DateTime.UnixEpoch).TotalSeconds;
         double remain = _dogfight?.Match is { } match ? match.TimeRemaining : -1.0;
         line.Append(inv, $"net trace {(net.IsHost ? "host" : "guest")} step {_tracedSteps++} wall {wall:0.000000} sim {_clockTime():0.0000} remain {remain:0.000}");

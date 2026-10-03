@@ -55,7 +55,7 @@ public sealed class EnetTransport : INetTransport, INetLink, INetPeerAddress, ID
     private readonly Dictionary<int, Listener> _owner = new();
     private readonly List<int> _peers = new();
     private readonly List<(int Peer, bool Joined, Listener From)> _roster = new();
-    private readonly List<(int Peer, int Channel, byte[] Bytes)> _held = new();
+    private readonly List<(int Peer, int Channel, NetReliability Reliability, byte[] Bytes)> _held = new();
     private readonly Stopwatch _wall = Stopwatch.StartNew();
     private readonly Keepalive _keepalive;
     private readonly int _local;
@@ -226,9 +226,9 @@ public sealed class EnetTransport : INetTransport, INetLink, INetPeerAddress, ID
 
         var held = _held.ToArray();
         _held.Clear();
-        foreach (var (peer, channel, bytes) in held)
+        foreach (var (peer, channel, reliability, bytes) in held)
         {
-            listener.OnPayload(peer, channel, bytes);
+            INetClassedListener.Deliver(listener, peer, channel, reliability, bytes);
         }
     }
 
@@ -413,10 +413,18 @@ public sealed class EnetTransport : INetTransport, INetLink, INetPeerAddress, ID
         }
     }
 
+    // The inverse of ModeFor, for a packet that arrived.
+    private static NetReliability ClassOf(MultiplayerPeer.TransferModeEnum mode) => mode switch
+    {
+        MultiplayerPeer.TransferModeEnum.Reliable => NetReliability.Reliable,
+        MultiplayerPeer.TransferModeEnum.UnreliableOrdered => NetReliability.UnreliableSequenced,
+        _ => NetReliability.Unreliable,
+    };
+
     // A payload nobody is bound to take yet, kept for the listener that binds next. The oldest
     // goes first at the cap: a held payload is a join answer, and the newest is the one still
     // worth having.
-    private void Hold(int peer, int channel, byte[] payload)
+    private void Hold(int peer, int channel, NetReliability reliability, byte[] payload)
     {
         if (_held.Count >= INetLink.HeldPayloads)
         {
@@ -424,7 +432,7 @@ public sealed class EnetTransport : INetTransport, INetLink, INetPeerAddress, ID
             _held.RemoveAt(0);
         }
 
-        _held.Add((peer, channel, payload));
+        _held.Add((peer, channel, reliability, payload));
     }
 
     // Raised inside a poll, on whichever thread polled, so it only queues. The main thread's step
@@ -491,10 +499,11 @@ public sealed class EnetTransport : INetTransport, INetLink, INetPeerAddress, ID
         while (!_closed && enet.GetConnectionStatus() != MultiplayerPeer.ConnectionStatus.Disconnected
                && enet.GetAvailablePacketCount() > 0)
         {
-            // ⚠ Read the source and the channel before taking the packet. Both answer about
-            // the one still at the head of the queue, which taking it pops.
+            // ⚠ Read the source, the channel and the mode before taking the packet. All three
+            // answer about the one still at the head of the queue, which taking it pops.
             int from = enet.GetPacketPeer();
             int channel = enet.GetPacketChannel();
+            var reliability = ClassOf(enet.GetPacketMode());
             byte[] payload = enet.GetPacket();
             if (!_owner.TryGetValue(from, out var owner) || owner != socket)
             {
@@ -503,11 +512,11 @@ public sealed class EnetTransport : INetTransport, INetLink, INetPeerAddress, ID
 
             if (_listener is { } listener)
             {
-                listener.OnPayload(from, channel, payload);
+                INetClassedListener.Deliver(listener, from, channel, reliability, payload);
             }
             else
             {
-                Hold(from, channel, payload);
+                Hold(from, channel, reliability, payload);
             }
         }
     }

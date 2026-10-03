@@ -2776,6 +2776,12 @@ public partial class Launcher : Node3D
             return;
         }
 
+        if (_spec.NetShape is { } shape)
+        {
+            _netWire = Net.ShapedTransport.OnWallClock(_netWire, shape);
+            Log.Info("core", $"net: shaping this end's link both ways, {Net.ShapedTransport.Describe(shape)}, on top of the real link's own delay and loss");
+        }
+
         AwaitCliNetLink();
     }
 

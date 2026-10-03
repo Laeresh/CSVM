@@ -453,6 +453,43 @@ public class SessionSpecParserTests
         Assert.Contains(s.Warnings, w => w.Category == "core" && w.Message.StartsWith("--net-port-base:", System.StringComparison.Ordinal));
     }
 
+    /// <summary>A join shaped by numbers or by a soak cell's name carries the conditions, with no
+    /// warning. Without the flag nothing is shaped.</summary>
+    [Fact]
+    public void AShapedJoinCarriesItsConditions()
+    {
+        var numbers = SessionSpec.Parse(new[] { "--vs", "--net-join=192.168.1.5", "--net-shape=100,20,10" });
+        var cell = SessionSpec.Parse(new[] { "--net-shape=soak200", "--vs", "--net-host=127.0.0.1" });
+        var plain = SessionSpec.Parse(new[] { "--vs", "--net-join=192.168.1.5" });
+
+        Assert.Equal(0.10, numbers.NetShape!.Value.Latency, 9);
+        Assert.Equal(0.02, numbers.NetShape!.Value.Jitter, 9);
+        Assert.Equal(0.10, numbers.NetShape!.Value.Loss, 9);
+        Assert.Equal(0.20, cell.NetShape!.Value.Latency, 9);
+        Assert.Null(plain.NetShape);
+        Assert.DoesNotContain(System.Linq.Enumerable.Concat(numbers.Warnings, cell.Warnings), w => w.Message.Contains("--net-shape", System.StringComparison.Ordinal));
+    }
+
+    /// <summary>An unreadable shape is refused with a warning and the link is not shaped.</summary>
+    [Theory]
+    [InlineData("50,10")]
+    [InlineData("50,10,500")]
+    [InlineData("fast")]
+    public void AnUnreadableShapeIsRefused(string value)
+    {
+        var s = SessionSpec.Parse(new[] { "--net-join=192.168.1.5", $"--net-shape={value}" });
+        Assert.Null(s.NetShape);
+        Assert.Contains(s.Warnings, w => w.Category == "core" && w.Message.StartsWith("--net-shape:", System.StringComparison.Ordinal));
+    }
+
+    /// <summary>A shape with no command-line socket to shape is named as doing nothing.</summary>
+    [Fact]
+    public void AShapeWithNoSocketIsNamed()
+    {
+        var alone = SessionSpec.Parse(new[] { "--net-shape=soak50" });
+        Assert.Contains(alone.Warnings, w => w.Category == "core" && w.Message.StartsWith("--net-shape does nothing", System.StringComparison.Ordinal));
+    }
+
     /// <summary>The shipped pair the base replaces: the game port the door and a bare address
     /// fill in, and the discovery port one above it. A base's whole block fits the port range.
     /// </summary>

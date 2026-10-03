@@ -869,6 +869,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 
 - `src/Net/INetTransport.cs`, the carrier a session sends bytes over: the peer roster, one send per payload with its reliability class and channel, and the listener arrivals are reported to.
 - `src/Net/LoopbackConditions.cs`, one direction's wire conditions as a value: a latency, a symmetric jitter about it and a loss probability, every draw from a caller-supplied `Random`.
+- `src/Net/SoakCells.cs`, the soak's three shaped link cells, which the loopback suites fly and `--net-shape` takes by name.
 - `src/Net/LoopbackTransport.cs`, transports wired to each other in one process through delivery queues: nothing arrives until a step, so a suite owns delivery time and makes its own reorders.
 - `src/Net/EnetTransport.cs`, the shipped carrier: the seam over Godot's ENet peer, hosting on a port or joining by address, with every roster change and payload reported out of one poll.
 - `src/Net/NetLink.cs`, where a real socket's link stands (`NetLinkState`) as a board reads it through `INetLink`, and how many payloads a link holds before a listener binds.
@@ -877,6 +878,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/WebRtcTransport.cs`, the WebRTC carrier: a host listed on the master server and a guest joining by code, negotiated through its socket with STUN and a TURN fallback, the third type allowed to name a Godot networking type.
 - `src/Net/WebRtcFraming.cs`, the frame a WebRTC payload rides in: the session channel and a per-channel sequence, with the sequenced discard a WebRTC data channel lacks.
 - `src/Net/MergedTransport.cs`, several host carriers as one roster, so a host takes ENet and WebRTC guests in one session, each guest renumbered from 2.
+- `src/Net/ShapedTransport.cs`, a real carrier shaped both ways at one end under the loopback's latency, jitter and loss model, what `--net-shape` puts on the command line's socket.
 - `src/Net/NetEndpoint.cs`, a host and port parsed from a typed or command-line address, a bare IPv6 address all host, and written back with the host bracketed.
 - `src/Net/NetPorts.cs`, the game and LAN discovery ports this process opens by default: the shipped pair, or the pair `--net-port-base` moves for a test process.
 - `src/Net/UpnpPortMap.cs`, a best-effort port mapping through Godot's UPnP client: five outcomes a host can show, never a throw, and never required for a match to be joinable.

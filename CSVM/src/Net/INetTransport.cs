@@ -41,6 +41,35 @@ public interface INetTransportListener
 }
 
 /// <summary>
+/// A listener that also hears which class carried each payload. A carrier that knows the class
+/// reports an arrival here in place of the plain <see cref="INetTransportListener.OnPayload"/>. Only
+/// a wrapper below the session needs it, since <see cref="ShapedTransport"/> treats the classes
+/// apart as the loopback does.
+/// </summary>
+public interface INetClassedListener : INetTransportListener
+{
+    /// <summary>Hands <paramref name="listener"/> one arrival, with its class when it asks for one
+    /// and through the plain call otherwise. The session's own listener does not ask, so it hears
+    /// an unshaped link unchanged.</summary>
+    public static void Deliver(INetTransportListener listener, int peer, int channel, NetReliability reliability, ReadOnlySpan<byte> payload)
+    {
+        if (listener is INetClassedListener classed)
+        {
+            classed.OnPayload(peer, channel, reliability, payload);
+        }
+        else
+        {
+            listener.OnPayload(peer, channel, payload);
+        }
+    }
+
+    /// <summary>One payload that arrived from <paramref name="peer"/> on <paramref name="channel"/>
+    /// under <paramref name="reliability"/>, with the carrier's own guarantees already applied.
+    /// </summary>
+    void OnPayload(int peer, int channel, NetReliability reliability, ReadOnlySpan<byte> payload);
+}
+
+/// <summary>
 /// A carrier that can name the network address a peer reached it from, the key a host's ban list
 /// holds a booted guest by. A carrier without addresses leaves a boot unable to refuse a return.
 /// </summary>
