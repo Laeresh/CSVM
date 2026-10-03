@@ -98,8 +98,9 @@ public static class NetSeats
 
     /// <summary>A host's field: one seat per plane in <paramref name="localPlanes"/> flown here,
     /// then one per peer in <paramref name="peers"/> flying <paramref name="remotePlane"/>, cut at
-    /// <see cref="MaxPlayers"/>. Local seats are called P1 upward and a remote one after its peer.
-    /// A remote guest holds a seat and nothing else here: no pane, no pad, no input.</summary>
+    /// <see cref="MaxPlayers"/>. Local seats are called P1 upward and a remote one after its peer,
+    /// the first local seat and every remote one <see cref="NetSeat.Unnamed"/>. A remote guest holds
+    /// a seat and nothing else here: no pane, no pad, no input.</summary>
     public static NetSeat[] Field(
         int localPeer, IReadOnlyList<string> localPlanes, IReadOnlyList<int> peers, string remotePlane)
     {
@@ -114,6 +115,7 @@ public static class NetSeats
                 SeatIndex = seats.Count,
                 IsLocal = true,
                 Callsign = $"P{(i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                Unnamed = i == 0,
                 PlaneNode = localPlanes[i],
             });
         }
@@ -130,6 +132,7 @@ public static class NetSeats
                 PeerId = peer,
                 SeatIndex = seats.Count,
                 Callsign = $"guest {peer.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                Unnamed = true,
                 PlaneNode = remotePlane,
             });
         }
@@ -142,7 +145,8 @@ public static class NetSeats
     /// here, then one per entry of <paramref name="guests"/> flying the plane it picked, cut at
     /// <see cref="MaxPlayers"/>. A guest flying several seats has one entry per seat, side by side.
     /// A guest's seat is called by its pick's player name, the first local seat by
-    /// <paramref name="hostName"/>. A seat with no name is called by its player number.</summary>
+    /// <paramref name="hostName"/>. A seat with no name is called by its player number, and is
+    /// <see cref="NetSeat.Unnamed"/> when it is its machine's first.</summary>
     public static NetSeat[] CoopField(
         int localPeer, IReadOnlyList<string> localPlanes, IReadOnlyList<(int Peer, string Plane, string Name)> guests,
         string hostName = "")
@@ -155,14 +159,17 @@ public static class NetSeats
         {
             bool local = i < localPlanes.Count;
             string name = local ? (i == 0 ? (hostName ?? "").Trim() : "") : (guests[i - localPlanes.Count].Name ?? "").Trim();
+            int guest = i - localPlanes.Count;
+            bool first = local ? i == 0 : guest == 0 || guests[guest - 1].Peer != guests[guest].Peer;
             seats.Add(new NetSeat
             {
-                PeerId = local ? localPeer : guests[i - localPlanes.Count].Peer,
+                PeerId = local ? localPeer : guests[guest].Peer,
                 SeatIndex = seats.Count,
                 IsLocal = local,
                 Callsign = name.Length > 0
                     ? name
                     : $"P{(i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                Unnamed = name.Length == 0 && first,
                 PlaneNode = local ? localPlanes[i] : guests[i - localPlanes.Count].Plane,
             });
         }

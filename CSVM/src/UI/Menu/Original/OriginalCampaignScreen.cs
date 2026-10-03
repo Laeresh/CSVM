@@ -455,7 +455,8 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             {
                 var door = _net()!;
                 bool open = door.IsCoopHost;
-                if (open && CoopDoorText.CopyTarget(door).Length > 0)
+                // The wait for a code names nothing to copy, so it carries no control.
+                if (open && !door.AwaitingCode && CoopDoorText.CopyTarget(door).Length > 0)
                 {
                     // Over the band's first line with a code, else its second, the address line.
                     float y = CoopBandY - 2f + (door.JoinCode != null ? 0f : CoopBandSize + 4f);

@@ -107,8 +107,8 @@ public sealed partial class ScorchField : Node3D
 
     public override void _Process(double delta)
     {
-        // A mark is sim state: it freezes with a halted clock and scales with a scaled one, the
-        // same reading the puffer particles take.
+        // A mark is sim state: it does not age under a halted clock and scales with a scaled one.
+        // The puffer particles take the same reading.
         Tick(GameClock.Current?.FrameDt ?? (float)delta);
     }
 

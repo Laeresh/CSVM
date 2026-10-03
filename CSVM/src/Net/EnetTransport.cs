@@ -7,37 +7,6 @@ using Godot;
 
 namespace CSVM.Net;
 
-/// <summary>Where one end's link stands. Named here rather than taken from the engine, so a
-/// board can show it without learning what carries it.</summary>
-public enum EnetLinkState
-{
-    /// <summary>A join whose handshake has not finished. Nothing can be sent yet.</summary>
-    Connecting,
-
-    /// <summary>Open, and sending works.</summary>
-    Up,
-
-    /// <summary>Closed, refused, or given up on. Nothing will arrive again.</summary>
-    Down,
-}
-
-/// <summary>A carrier that can say where its link stands. The seam itself has no word for that,
-/// and a join board shows it. Only a real socket implements this; a board asks for it and falls
-/// back to the peer roster when a carrier has none.</summary>
-public interface INetLink
-{
-    /// <summary>Where this end's link stands right now.</summary>
-    EnetLinkState LinkState { get; }
-
-    /// <summary>Payloads taken off the socket while no listener was bound; see
-    /// <see cref="INetTransport.Bind"/>, which replays them.</summary>
-    int PendingPayloads { get; }
-
-    /// <summary>Why the link went down, as a player reads it, or "" when the carrier has no word
-    /// for it. A board shows it in place of a bare refusal.</summary>
-    string LinkFault => "";
-}
-
 /// <summary>
 /// The shipped carrier: <see cref="INetTransport"/> over Godot's ENet peer, which is UDP with
 /// ENet's own three delivery classes. Every roster change and every payload is reported from
@@ -59,11 +28,6 @@ public sealed class EnetTransport : INetTransport, INetLink, INetPeerAddress, ID
 
     /// <summary>The bind address that means every interface.</summary>
     public const string Wildcard = "*";
-
-    /// <summary>How many payloads are held for a listener that has not bound yet. Deep enough for
-    /// a join answer and the openers behind it, shallow enough that a carrier nobody ever binds
-    /// cannot grow without bound. Past it the oldest held payload is dropped and logged.</summary>
-    public const int HeldPayloads = 64;
 
     /// <summary>How long the main thread may go without a step before the service thread polls in
     /// its place. Several frames at any playable rate, so a stepping end is never polled twice.
@@ -129,22 +93,22 @@ public sealed class EnetTransport : INetTransport, INetLink, INetPeerAddress, ID
     public IReadOnlyList<int> Peers => _peers;
 
     /// <inheritdoc/>
-    /// <remarks>A guest opens on <see cref="EnetLinkState.Connecting"/> and reaches
-    /// <see cref="EnetLinkState.Up"/> on the step that announces the host. A link that fails or is
-    /// hung up on reads <see cref="EnetLinkState.Down"/> and stays there.</remarks>
-    public EnetLinkState LinkState
+    /// <remarks>A guest opens on <see cref="NetLinkState.Connecting"/> and reaches
+    /// <see cref="NetLinkState.Up"/> on the step that announces the host. A link that fails or is
+    /// hung up on reads <see cref="NetLinkState.Down"/> and stays there.</remarks>
+    public NetLinkState LinkState
     {
         get
         {
             lock (_gate)
             {
                 return _closed
-                    ? EnetLinkState.Down
+                    ? NetLinkState.Down
                     : _sockets[0].Peer.GetConnectionStatus() switch
                     {
-                        MultiplayerPeer.ConnectionStatus.Connected => EnetLinkState.Up,
-                        MultiplayerPeer.ConnectionStatus.Connecting => EnetLinkState.Connecting,
-                        _ => EnetLinkState.Down,
+                        MultiplayerPeer.ConnectionStatus.Connected => NetLinkState.Up,
+                        MultiplayerPeer.ConnectionStatus.Connecting => NetLinkState.Connecting,
+                        _ => NetLinkState.Down,
                     };
             }
         }
@@ -238,7 +202,7 @@ public sealed class EnetTransport : INetTransport, INetLink, INetPeerAddress, ID
     /// <summary>Starts a join to <paramref name="address"/> on <paramref name="port"/>. The
     /// returned transport is usable at once but not yet connected. The host arrives as an
     /// <see cref="INetTransportListener.OnPeerConnected"/> for peer 1 on a later
-    /// <see cref="Step"/>, and a join that fails ends at <see cref="EnetLinkState.Down"/>.</summary>
+    /// <see cref="Step"/>, and a join that fails ends at <see cref="NetLinkState.Down"/>.</summary>
     public static EnetTransport Join(string address, int port, Keepalive? keepalive = null) =>
         Join(address, port, keepalive, null, 0);
 
@@ -279,7 +243,7 @@ public sealed class EnetTransport : INetTransport, INetLink, INetPeerAddress, ID
         Error error;
         lock (_gate)
         {
-            if (LinkState != EnetLinkState.Up || !_peers.Contains(peer) || !_owner.TryGetValue(peer, out var socket))
+            if (LinkState != NetLinkState.Up || !_peers.Contains(peer) || !_owner.TryGetValue(peer, out var socket))
             {
                 return;
             }
@@ -304,7 +268,7 @@ public sealed class EnetTransport : INetTransport, INetLink, INetPeerAddress, ID
     {
         lock (_gate)
         {
-            if (LinkState == EnetLinkState.Down || !_peers.Contains(peer) || !_owner.TryGetValue(peer, out var socket))
+            if (LinkState == NetLinkState.Down || !_peers.Contains(peer) || !_owner.TryGetValue(peer, out var socket))
             {
                 return;
             }
@@ -462,9 +426,9 @@ public sealed class EnetTransport : INetTransport, INetLink, INetPeerAddress, ID
     // worth having.
     private void Hold(int peer, int channel, NetReliability reliability, byte[] payload)
     {
-        if (_held.Count >= HeldPayloads)
+        if (_held.Count >= INetLink.HeldPayloads)
         {
-            Log.Warn("core", $"net: {HeldPayloads} payloads held with no listener bound, dropping the oldest");
+            Log.Warn("core", $"net: {INetLink.HeldPayloads} payloads held with no listener bound, dropping the oldest");
             _held.RemoveAt(0);
         }
 

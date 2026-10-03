@@ -18,6 +18,10 @@ public readonly record struct CoopFlowMessage(
     /// <summary>The fixed width of the message, header included.</summary>
     public const int Size = 24;
 
+    /// <summary>How many player numbers <see cref="ReadyMask"/> holds, one bit each; a human past
+    /// them is never shown Ready.</summary>
+    public const int ReadySlots = 8;
+
     /// <inheritdoc/>
     public static NetMessageType Type => NetMessageType.CoopFlow;
 
@@ -25,7 +29,7 @@ public readonly record struct CoopFlowMessage(
     public static NetReliability Reliability => NetReliability.Reliable;
 
     /// <summary>Whether the human at player number <paramref name="slot"/> is Ready.</summary>
-    public bool IsReady(int slot) => slot is >= 0 and < 8 && (ReadyMask & (1 << slot)) != 0;
+    public bool IsReady(int slot) => slot is >= 0 and < ReadySlots && (ReadyMask & (1 << slot)) != 0;
 
     /// <summary>Whether the host's hangar holds airframe <paramref name="airframe"/>.</summary>
     public bool Offers(int airframe) => airframe is >= 0 and < 16 && (Airframes & (1 << airframe)) != 0;

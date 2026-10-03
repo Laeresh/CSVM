@@ -48,7 +48,7 @@ public enum CameraView
 /// <summary>
 /// Drives the flown aircraft's camera: the roll-following chase camera and the head that swings
 /// it. It also holds the pilot's SELECTED view mode (<see cref="ViewMode"/>: Chase, Cockpit or
-/// Nose) and the free orbit the debug freeze uses. Steers a <see cref="Camera3D"/> it does not
+/// Nose) and the free orbit the debug halt uses. Steers a <see cref="Camera3D"/> it does not
 /// own, like <see cref="OrbitCamera"/> does for the static viewer.
 /// Deliberately passive: no clock and no input devices of its own, see <see cref="Chase"/> and
 /// <see cref="Orbit"/> for which clock each uses. The chase RADIUS is dynamic per plane, and its
@@ -603,9 +603,10 @@ public sealed class CameraController
 
     /// <summary>Chase camera: the authored rig at the dynamic radius on two eased aircraft frames.
     /// The offset's eases at <c>pos_catch_up</c>, the aim's at <c>look_catch_up</c>, both times
-    /// <see cref="CatchUpScale"/>. Only the attitude eases, never the head's swing. The look stick's
-    /// <see cref="PadSwing"/> then turns the finished pose about those frames. ⚠ Takes SIM dt but
-    /// the DRAWN pose; a sim/render gap then shows as plane jitter, which a world lerp would mask.</summary>
+    /// <see cref="CatchUpScale"/>. That scale is taken from the head's swing only, deliberately not the
+    /// look stick's <see cref="PadSwing"/>, a held glance and not a rig change. Only the attitude eases,
+    /// never the head's swing; the stick's swing then turns the finished pose about those frames.
+    /// ⚠ Takes SIM dt but the DRAWN pose; a sim/render gap then shows as plane jitter, which a world lerp would mask.</summary>
     public void Chase(float dt, Vector3 planePos, Basis attitude, float stickX = 0f, float stickY = 0f)
     {
         var (offset, aim) = AuthoredRig(Head.Elevation, Head.Azimuth, _camParams.ThirdpHeight,

@@ -372,7 +372,7 @@ public sealed class NetPlayFeature : IMenuFeature
 
     /// <summary>The link as the carrier reports it, or null for a carrier with no word for it.
     /// </summary>
-    public EnetLinkState? Link => _link?.LinkState;
+    public NetLinkState? Link => _link?.LinkState;
 
     /// <summary>Whether the host has answered this guest already. A guest's own launch waits on
     /// this, rather than timing out against a host that has not flown yet. The answer is held
@@ -1287,7 +1287,7 @@ public sealed class NetPlayFeature : IMenuFeature
         if (Stage == NetDoorStage.Joined)
         {
             bool hostGone = _hostPeer >= 0 && !Contains(_transport.AllPeers, _hostPeer);
-            if (_link?.LinkState == EnetLinkState.Down || hostGone)
+            if (_link?.LinkState == NetLinkState.Down || hostGone)
             {
                 Fail(CoopDoorText.HostLeft);
                 return;
@@ -1321,12 +1321,12 @@ public sealed class NetPlayFeature : IMenuFeature
 
         _joining += dt;
         double timeout = _joinCode != null ? CodeJoinTimeoutSeconds : JoinTimeoutSeconds;
-        if (_link?.LinkState == EnetLinkState.Up || (_link == null && _transport.AllPeers.Count > 0))
+        if (_link?.LinkState == NetLinkState.Up || (_link == null && _transport.AllPeers.Count > 0))
         {
             Stage = NetDoorStage.Joined;
             _hostPeer = _transport.AllPeers.Count > 0 ? _transport.AllPeers[0] : -1;
         }
-        else if (_link?.LinkState == EnetLinkState.Down)
+        else if (_link?.LinkState == NetLinkState.Down)
         {
             Fail(_link.LinkFault is { Length: > 0 } why ? $"{JoinName}: {why}" : $"{JoinName} refused the join");
         }
@@ -1682,7 +1682,7 @@ public sealed class NetPlayFeature : IMenuFeature
     }
 
     private bool HostGone() =>
-        _transport!.Closed != null || _link?.LinkState == EnetLinkState.Down
+        _transport!.Closed != null || _link?.LinkState == NetLinkState.Down
         || (_hostPeer >= 0 && !Contains(_transport.AllPeers, _hostPeer));
 
     private bool Refused(int peer)
@@ -1794,7 +1794,7 @@ public sealed class NetPlayFeature : IMenuFeature
     // and the search's own counters stand for what arrived through them.
     private readonly record struct DoorReading(
         NetLobby? Wire, int WireChanges, int Held, NetDoorStage Stage, string Fault, UpnpPortMapResult? PortMap,
-        UpnpPinholeResult? Pinhole, LanSearch? Search, int SearchChanges, string SearchFault, EnetLinkState? Link,
+        UpnpPinholeResult? Pinhole, LanSearch? Search, int SearchChanges, string SearchFault, NetLinkState? Link,
         int Admitted, DogfightLobby? Dogfight, int Copies, int MasterAnswers, string MasterFault, string? JoinCode,
         string ListingFault);
 }

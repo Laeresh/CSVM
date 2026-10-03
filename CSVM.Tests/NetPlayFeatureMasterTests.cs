@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using CSVM.Net;
 using CSVM.UI.Menu;
@@ -242,7 +243,7 @@ public class NetPlayFeatureMasterTests
     }
 
     [Fact]
-    public void ACoopBandShowsTheCodeInPlaceOfTheAddressAndTheAddressWithItsReasonWithoutOne()
+    public void ACoopBandWaitsForTheCodeThenShowsItInPlaceOfTheAddressAndTheAddressWithItsReasonWithout()
     {
         const string stable = "2001:db8::7";
         var mesh = LoopbackTransport.Mesh(1, Clean, new Random(10));
@@ -266,6 +267,28 @@ public class NetPlayFeatureMasterTests
         Assert.DoesNotContain(stable, band, StringComparison.Ordinal);
         Assert.DoesNotContain("203.0.113.9", band, StringComparison.Ordinal);
 
+        // The address waits for the master server's outcome: while it is answering, the wait alone.
+        var awaited = new ListedCarrier(End(16));
+        var asking = new NetPlayFeature((_, _, _) => awaited, (_, _) => End(16)) { StableIpv6 = () => stable };
+        asking.OpenCoopHost(NetPlayFeature.CoopHumans - 1);
+        Assert.True(asking.AwaitingCode);
+        string[] waiting = CoopDoorText.HostBand(asking).Split('\n');
+        Assert.Equal(2, waiting.Length);
+        Assert.StartsWith("NETWORK OPEN  port", waiting[0], StringComparison.Ordinal);
+        Assert.Equal(CoopDoorText.AwaitingCode, waiting[1]);
+        Assert.DoesNotContain(stable, CoopDoorText.HostBand(asking), StringComparison.Ordinal);
+        Assert.DoesNotContain(CoopDoorText.CopyPress, CoopDoorText.HostBand(asking), StringComparison.Ordinal);
+
+        // ABLE-TO-FAIL CONTROL: the outcome lands, a code and then a fault, and each replaces the wait.
+        awaited.JoinCode = "K7Q-X3M";
+        Assert.StartsWith("NETWORK OPEN  0 guests  CODE K7Q-X3M", CoopDoorText.HostBand(asking), StringComparison.Ordinal);
+        awaited.JoinCode = null;
+        awaited.Fault = "the server refused the listing";
+        Assert.Equal(
+            new[] { CoopDoorText.HostAddressLine(asking), "No internet code: the server refused the listing" },
+            CoopDoorText.HostBand(asking).Split('\n').Skip(1));
+        Assert.Contains(stable, CoopDoorText.HostBand(asking), StringComparison.Ordinal);
+
         var offline = new NetPlayFeature((_, _, _) => End(11), (_, _) => End(11))
         {
             StableIpv6 = () => stable,
@@ -281,7 +304,7 @@ public class NetPlayFeatureMasterTests
     }
 
     [Fact]
-    public void ADogfightLobbyPinsTheCodeAloneOnceThereIsOneAndTheAddressWithItsReasonWithout()
+    public void ADogfightLobbyWaitsForTheCodeThenPinsItAloneAndTheAddressWithItsReasonWithout()
     {
         const string stable = "2001:db8::7";
         string address = $"IPv6  {stable}  {CoopDoorText.CopyPress}";
@@ -290,7 +313,11 @@ public class NetPlayFeatureMasterTests
         var door = new NetPlayFeature((_, _, _) => listed, (_, _) => mesh[0]) { StableIpv6 = () => stable };
         door.OpenDogfightHost(NetSeats.MaxPlayers - 1);
         door.Step(0.016);
-        Assert.Equal(new[] { address, CoopDoorText.AwaitingCode }, CoopDoorText.HostLobbyLines(door));
+
+        // The address waits for the master server's outcome: none while it is still answering.
+        Assert.True(door.AwaitingCode);
+        Assert.Equal(new[] { CoopDoorText.AwaitingCode }, CoopDoorText.HostLobbyLines(door));
+        Assert.DoesNotContain(CoopDoorText.HostLobbyLines(door), line => line.Contains(stable, StringComparison.Ordinal));
 
         listed.JoinCode = "K7Q-X3M";
         Assert.Equal(new[] { CoopDoorText.HostCodeLine(door) }, CoopDoorText.HostLobbyLines(door));
@@ -347,7 +374,7 @@ public class NetPlayFeatureMasterTests
     public void ACarriersOwnReasonNamesAFailedJoin()
     {
         var mesh = LoopbackTransport.Mesh(1, Clean, new Random(6));
-        var down = new ListedCarrier(mesh[0]) { State = EnetLinkState.Down, Why = "no game is listed under that code" };
+        var down = new ListedCarrier(mesh[0]) { State = NetLinkState.Down, Why = "no game is listed under that code" };
         var door = new NetPlayFeature((_, _, _) => mesh[0], (_, _) => mesh[0]) { OpenCode = _ => down };
 
         Retype(door, "ABC-DEF");
@@ -385,11 +412,11 @@ public class NetPlayFeatureMasterTests
 
         public string ListingFault => Fault;
 
-        public EnetLinkState State { get; set; } = EnetLinkState.Up;
+        public NetLinkState State { get; set; } = NetLinkState.Up;
 
         public string Why { get; set; } = "";
 
-        public EnetLinkState LinkState => State;
+        public NetLinkState LinkState => State;
 
         public int PendingPayloads => 0;
 

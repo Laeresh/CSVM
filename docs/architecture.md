@@ -584,7 +584,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/ProcessPassCost.cs`, the wall cost of one whole `_Process` pass and how many passes a window held, measured by a bracket pair spanning the pass.
 - `src/Utils/EngineGapCost.cs`, the frame time outside every scene-tree callback, split into the engine step after a tick, the end-of-frame flush, the draw and the idle rest.
 - `src/Utils/RenderPoses.cs`, the render half of the fixed-tick simulation: the pose a realtime session draws between two simulation steps.
-- `src/Utils/RenderScaleSetting.cs`, the render scale: the saved/config ladder over 50 to 200 percent of native, capped at native under FSR 2.2, resolved once at launch for the four 3D viewports.
+- `src/Utils/RenderScaleSetting.cs`, the render scale: the saved/config `WordSetting` lookup over 50 to 200 percent of native, capped at native under FSR 2.2, resolved once at launch for the four 3D viewports.
 - `src/Utils/ResolutionSetting.cs`, the window size: the sizes a screen can hold, the saved one against the screen's own size, and the one place the window size is set.
 - `src/Utils/Rng.cs`, the session's one master seed and the named subsystem generators every random draw derives from.
 - `src/Utils/SceneCopy.cs`, a node subtree's copy in place of `Duplicate()`, which under the separate render thread corrupts memory on any geometry node.
@@ -596,10 +596,11 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/TextureUpload.cs`, every Image handed to a texture, at creation or repaint, held until the render thread lets go so a queued upload never reads a refilled one or swaps a handle off the main thread.
 - `src/Utils/SwitchProfile.cs`, the live graphics-mode switch's per-step stopwatch, written on the switch's log line.
 - `src/Utils/TapHoldButton.cs`, one button carrying two actions split by how long it is held; the caller feeds it the button level and switches on the answer.
-- `src/Utils/AntiAliasingSetting.cs`, the anti-aliasing method (off, FXAA, SMAA, TAA, FSR 2.2): the saved/config ladder over the graphics mode's own default, resolved once at launch.
-- `src/Utils/ShadowQualitySetting.cs`, the Enhanced sun's shadow quality (off, low, medium, high, ultra): the flag/saved/config ladder over ultra (high on an integrated GPU, off there at three or four panes), and what each level writes on the sun and the renderer.
+- `src/Utils/AntiAliasingSetting.cs`, the anti-aliasing method (off, FXAA, SMAA, TAA, FSR 2.2): the saved/config `WordSetting` lookup over the graphics mode's own default, resolved once at launch.
+- `src/Utils/ShadowQualitySetting.cs`, the Enhanced sun's shadow quality (off, low, medium, high, ultra): the flag/saved/config `WordSetting` lookup over ultra (high on an integrated GPU, off there at three or four panes), and what each level writes on the sun and the renderer.
 - `src/Utils/WallCostBank.cs`, one `--perf` cost meter (bracket, banked milliseconds, worst span, count, tally) and the bracket node; the three cost facades are instances of it.
 - `src/Utils/ViewDistance.cs`, enhanced mode's view distance: how much further clutter draws before its fade, the fog untouched, switched live on an apply.
+- `src/Utils/WordSetting.cs`, the flag/saved/config/fallback lookup the four word-valued graphics settings share, its invalid-config warning and the `SettingSource` a log line names.
 - `src/Utils/SunShadow.cs`, the shadow settings one directional light hands another, which the cockpit pass and the enhanced look share.
 - `src/Utils/ViewportQuality.cs`, what the anti-aliasing method and the render scale write on a 3D viewport, in one call the four viewport construction sites share.
 - `src/Utils/VSyncSetting.cs`, the frame pacing: the flag/saved/config ladder, and the one place the vsync mode and the frame cap are applied to the engine.
@@ -663,6 +664,7 @@ The process and the per-launch session: the top family bar `Testing`, so nothing
 - `src/Launch/MenuAudioService.cs`, the menus' audio host: the music channel, the briefing narration player, the cue player behind `MenuCueTable`, and the AUDIO page's live mix preview.
 - `src/Launch/MenuCueTable.cs`, the menu cue table: cue name to wav under the rof tree's `ASSETS/SOUNDS`, the four the globals script binds.
 - `src/Launch/MasterServerLink.cs`, the shipped way to the master server over .NET's HTTP and WebSocket clients: the games list fetch and the socket with its two loops.
+- `src/Launch/MasterFrames.cs`, the master server socket's read of one whole message, shared by the game and the server.
 
 ### `src/Session/`, the session-build layer
 
@@ -870,6 +872,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/SoakCells.cs`, the soak's three shaped link cells, which the loopback suites fly and `--net-shape` takes by name.
 - `src/Net/LoopbackTransport.cs`, transports wired to each other in one process through delivery queues: nothing arrives until a step, so a suite owns delivery time and makes its own reorders.
 - `src/Net/EnetTransport.cs`, the shipped carrier: the seam over Godot's ENet peer, hosting on a port or joining by address, with every roster change and payload reported out of one poll.
+- `src/Net/NetLink.cs`, where a real socket's link stands (`NetLinkState`) as a board reads it through `INetLink`, and how many payloads a link holds before a listener binds.
 - `src/Net/SteamTransport.cs`, the Steam carrier's place in the seam with no SDK behind it: every way in throws "not built with the Steamworks SDK", and `SteamBuild` is the `CSVM_STEAM` define.
 - `src/Net/NetCarrier.cs`, which carrier a match runs over, chosen once: the door's registration and the command line both open through it, and a build define is the whole of the choice.
 - `src/Net/WebRtcTransport.cs`, the WebRTC carrier: a host listed on the master server and a guest joining by code, negotiated through its socket with STUN and a TURN fallback, the third type allowed to name a Godot networking type.

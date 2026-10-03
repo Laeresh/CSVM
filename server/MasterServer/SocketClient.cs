@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using CSVM.Launch;
 using CSVM.Net;
 
 namespace CSVM.Master;
@@ -125,34 +126,25 @@ public sealed class SocketClient : IMasterClient
         var buffer = new byte[MasterWire.MaxMessageBytes];
         while (!token.IsCancellationRequested && _socket.State == WebSocketState.Open)
         {
-            int length = 0;
-            WebSocketReceiveResult result;
             using var idle = CancellationTokenSource.CreateLinkedTokenSource(token);
             idle.CancelAfter(TimeSpan.FromSeconds(IdleSeconds));
-            do
+            var frame = await MasterFrames.ReceiveAsync(_socket, buffer, idle.Token).ConfigureAwait(false);
+            if (frame.End == MasterFrameEnd.TooBig)
             {
-                if (length == buffer.Length)
-                {
-                    return (WebSocketCloseStatus.MessageTooBig, "too big");
-                }
-
-                result = await _socket.ReceiveAsync(new ArraySegment<byte>(buffer, length, buffer.Length - length), idle.Token)
-                    .ConfigureAwait(false);
-                length += result.Count;
+                return (WebSocketCloseStatus.MessageTooBig, "too big");
             }
-            while (!result.EndOfMessage && result.MessageType != WebSocketMessageType.Close);
 
-            if (result.MessageType == WebSocketMessageType.Close)
+            if (frame.End == MasterFrameEnd.Closed)
             {
                 return (WebSocketCloseStatus.NormalClosure, "bye");
             }
 
-            if (result.MessageType != WebSocketMessageType.Text || !Spend())
+            if (frame.Type != WebSocketMessageType.Text || !Spend())
             {
                 return (WebSocketCloseStatus.PolicyViolation, "refused");
             }
 
-            if (MasterWire.TryRead(Encoding.UTF8.GetString(buffer, 0, length), out var message))
+            if (frame.Message is { } message)
             {
                 _hub.Receive(this, message);
             }

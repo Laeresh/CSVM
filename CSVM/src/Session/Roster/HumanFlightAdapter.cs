@@ -436,7 +436,7 @@ internal sealed class HumanFlightAdapter
             // This pilot's own unflown zones, on their own target cycle. Bound per controller
             // rather than through FlightRoster's roster-wide channel: each pane races its own copy
             // of the run, and a shared feed would put one pilot's cleared zones on another's HUD.
-            controller.TargetInput.Objectives = into => run.CollectTargets(into);
+            controller.TargetObjectives = into => run.CollectTargets(into);
             // This pane's Danger Zone camera, photographing through the pilot's posed eye. A run
             // with no window to draw it in reads this seat's own pane instead, so in splitscreen
             // that shot is the SubViewport that crossed the marker, never the window.
@@ -522,7 +522,7 @@ internal sealed class HumanFlightAdapter
             // cycles are sorted against THIS plane's pose, so they cannot be shared. GameSession
             // binds the sub-part feed later, once the zeppelins exist.
             controller.Targeting = new TargetSelection { NearestAfterKill = _policy.NearestAfterKill };
-            controller.TargetInput.InitialTarget = _policy.TargetSelect;   // --target=, the scripted twin
+            controller.InitialTarget = _policy.TargetSelect;   // --target=, the scripted twin
 
             // ⚠ Bind on EVERY pane, not only under --debug-markers. It is what TargetHud.OwnTeam
             // reads this pane's side off, and the pilot-index derivation it falls back to is the
@@ -597,7 +597,10 @@ internal sealed class HumanFlightAdapter
 
         controller.Name = $"player{pi + 1}";
         // The original names a peer's aircraft by its callsign (FUN_00497990), and co-op follows it.
-        controller.PilotName = seat is { Callsign.Length: > 0 } ? seat.Callsign : null;
+        // A nameless player reads the record's starting "Unknown", not the roster's stand-in.
+        controller.PilotName = seat is not { Callsign.Length: > 0 } ? null
+            : seat.Unnamed ? _aircraft.WeaponMessages?.Get(HudMessages.UnknownKey) ?? HudMessages.UnknownKey
+            : seat.Callsign;
         rig.Controller = controller;
         _worldRoot.AddChild(controller);
         // ⚠ Hide a remote seat's pilot HUD the frame it enters the tree. A human-piloted rig

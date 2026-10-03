@@ -103,7 +103,7 @@ public static class AudioMix
     public static AudioBusGains Capture() =>
         new(BusDb(AudioBuses.Music), BusDb(AudioBuses.Effects), BusDb(AudioBuses.Voice));
 
-    /// <summary>The linear gain the Effects bus stands at, the counterpart of the retail
+    /// <summary>The linear gain the Effects bus stands at, the counterpart of the original's
     /// <c>SfxVolume</c> option that the engine voice duck compares against
     /// (docs/formats/vehicle.md). A missing bus reads as its resting gain of 1.</summary>
     public static float EffectsGain() => Mathf.DbToLinear(BusDb(AudioBuses.Effects));

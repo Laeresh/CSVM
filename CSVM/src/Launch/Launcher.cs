@@ -705,7 +705,7 @@ public partial class Launcher : Node3D
             Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
         string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
         string clamped = renderScale.Clamped ? " clamped_by=fsr2" : string.Empty;
-        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={renderScale.Source}{clamped} anti_aliasing={antiAliasing.Word} aa_source={antiAliasing.Source} shadow_quality={shadowQuality.Word} shadow_source={shadowQuality.Source} view_distance={viewDistance.Word} view_source={viewDistance.Source}");
+        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={Utils.RenderScaleSetting.Lookup.SourceName(renderScale.Source)}{clamped} anti_aliasing={antiAliasing.Word} aa_source={Utils.AntiAliasingSetting.Lookup.SourceName(antiAliasing.Source)} shadow_quality={shadowQuality.Word} shadow_source={Utils.ShadowQualitySetting.Lookup.SourceName(shadowQuality.Source)} view_distance={viewDistance.Word} view_source={Utils.ViewDistance.Lookup.SourceName(viewDistance.Source)}");
         // The window's own viewport takes the render flags here, before any scene builds. The
         // three SubViewports take them at construction.
         Utils.ViewportQuality.Apply(GetViewport());
@@ -1339,6 +1339,7 @@ public partial class Launcher : Node3D
                 TeamId = teamOf(wire.LocalPeer),
                 IsLocal = true,
                 Callsign = i == 0 && hostName.Length > 0 ? hostName : UI.Boards.SplitScreen.PlayerTag(i),
+                Unnamed = i == 0 && hostName.Length == 0,
                 PlaneNode = planes[i],
                 // Only the first seat has a Player Information answer; a splitscreen seat has none.
                 Voice = i == 0 && lobby != null ? lobby.LocalVoice : (byte)0,
@@ -1363,6 +1364,7 @@ public partial class Launcher : Node3D
                 SeatIndex = seats.Count,
                 TeamId = teamOf(peer),
                 Callsign = name.Length > 0 ? name : $"guest {peer.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                Unnamed = name.Length == 0,
                 PlaneNode = picked ? Flight.Hangar.StockAirframes.Node(chosen.Airframe) : planes[0],
                 Voice = picked ? chosen.Voice : (byte)0,
             });
@@ -2572,7 +2574,7 @@ public partial class Launcher : Node3D
         string shadowFallback = Utils.ShadowQualitySetting.DefaultFor(_spec.Det);
         var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality, applied.ShadowQuality,
             Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
-        Log.Info("world", $"shadow quality applied: {shadowQuality.Word} source={shadowQuality.Source}");
+        Log.Info("world", $"shadow quality applied: {shadowQuality.Word} source={Utils.ShadowQualitySetting.Lookup.SourceName(shadowQuality.Source)}");
         // A mode switch dresses the sun at the new level itself; otherwise the level alone moves.
         if (GraphicsMode.TryParse(applied.Graphics, out bool enhanced) && enhanced != GraphicsMode.Enhanced)
         {
@@ -2597,7 +2599,7 @@ public partial class Launcher : Node3D
 
     // A switch over a flying world runs under a SwitchCover: the flight held, a load board over it.
     // With no world up it runs at once. ⚠ Refuse it in a network session. Its shared world has no
-    // pause to hold it in, and the stall would freeze one seat in a live match.
+    // pause to hold it in, and the stall would halt one seat in a live match.
     private void RequestGraphicsSwitch(bool enhanced, string why, bool save)
     {
         if (_session is { InSession: true, Wire.Link: not null })
@@ -2800,7 +2802,7 @@ public partial class Launcher : Node3D
         while (waited.Elapsed.TotalSeconds < NetLinkWaitSeconds)
         {
             wire.Step(0.001);
-            if (wire.Peers.Count > 0 && (link == null || link.LinkState == Net.EnetLinkState.Up))
+            if (wire.Peers.Count > 0 && (link == null || link.LinkState == Net.NetLinkState.Up))
             {
                 Log.Info("core", $"net: linked as {(_netIsHost ? "host" : "guest")} after {waited.Elapsed.TotalSeconds.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} s, {wire.Peers.Count} peer(s)");
                 BuildCliNetRoster();
@@ -2834,6 +2836,7 @@ public partial class Launcher : Node3D
                 SeatIndex = seats.Count,
                 IsLocal = true,
                 Callsign = UI.Boards.SplitScreen.PlayerTag(i),
+                Unnamed = i == 0,
                 PlaneNode = i < _spec.PlaneNames.Count ? _spec.PlaneNames[i] : _spec.PlaneName,
             });
         }
@@ -2850,6 +2853,7 @@ public partial class Launcher : Node3D
                 PeerId = peer,
                 SeatIndex = seats.Count,
                 Callsign = $"guest {peer.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                Unnamed = true,
                 PlaneNode = _spec.PlaneName,
             });
         }

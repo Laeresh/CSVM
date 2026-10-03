@@ -90,6 +90,13 @@ queues to the frame. The send loop repeats a host's listing through a stalled fr
 `KeepListedSeconds`. Here rather than in `Net/` because the seam names no socket API; the launcher
 hands it to the door and `NetCarrier`. Read `MasterServerLinkTests.cs`, which runs it against the server.
 
+## src/Launch/MasterFrames.cs
+The master server socket's framed read, one file compiled by the game and by `server/MasterServer`
+alike: `ReceiveAsync` takes one whole message into a buffer of `MasterWire.MaxMessageBytes`, stops
+at the size limit, and hands back how it ended (`MasterFrameEnd`), its WebSocket type and the
+message it read as. Each end keeps its own answer to an oversize, closed or binary message. Here
+rather than in `Net/` for the reason `MasterServerLink.cs` is. Read `server/MasterServer/SocketClient.cs`.
+
 ## src/Launch/EnhancedLook.cs
 The enhanced graphics mode on a running process, on one sun and one Environment and both ways:
 PSSM sun shadows, SSAO, SSR, glow, the AgX tonemap and the mission sky, with the `EnhancedPasses`

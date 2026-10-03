@@ -768,8 +768,9 @@ public partial class FlightController : Node3D
     /// carrier is the one tag (docs/org/multiplayer-ctf.md "Markers").</summary>
     public Func<int, string>? MarkerName { get; set; }
 
-    /// <summary>A network seat's callsign, the marker's name line for a human pilot in a network
-    /// session, co-op included (docs/org/targeting.md, the network author). Null everywhere else,
+    /// <summary>The marker's name line for a human pilot in a network session, co-op included. It is
+    /// the seat's callsign, or "Unknown" for a nameless player (docs/org/targeting.md). Null
+    /// everywhere else,
     /// which keeps the airframe's own name.</summary>
     public string? PilotName { get; set; }
 
@@ -840,6 +841,42 @@ public partial class FlightController : Node3D
     /// it. Stepped from the sim step before the guns, which fire on the target it leaves on
     /// <see cref="AiGunner.Target"/>.</summary>
     public GunnerAcquisition Acquisition { get; }
+
+    /// <summary>The Auto Head Turn option this seat flies under, or null for the scripted default;
+    /// the pause's preferences write it live (<see cref="SeatLook.AutoHeadTurn"/>).</summary>
+    public bool? AutoHeadTurn
+    {
+        get => Look.AutoHeadTurn;
+        set => Look.AutoHeadTurn = value;
+    }
+
+    /// <summary>The session's feed of zeppelin sub-parts this seat's target cycle offers
+    /// (<see cref="SeatTargeting.SubParts"/>).</summary>
+    public Action<List<AimCandidate>>? TargetSubParts
+    {
+        get => TargetInput.SubParts;
+        set => TargetInput.SubParts = value;
+    }
+
+    /// <summary>The session's feed of objectives this seat's target cycle offers
+    /// (<see cref="SeatTargeting.Objectives"/>).</summary>
+    public Action<List<AimCandidate>>? TargetObjectives
+    {
+        get => TargetInput.Objectives;
+        set => TargetInput.Objectives = value;
+    }
+
+    /// <summary>The target <c>--target=</c> names for this seat's first selection
+    /// (<see cref="SeatTargeting.InitialTarget"/>).</summary>
+    public string? InitialTarget
+    {
+        get => TargetInput.InitialTarget;
+        set => TargetInput.InitialTarget = value;
+    }
+
+    /// <summary>The two propeller defs this airframe names, spin then stop, which its crash rig binds
+    /// beside the death defs (<see cref="PropellerSlot.SpinAnim"/>).</summary>
+    public string[] PropellerAnims => new[] { Propellers.SpinAnim, Propellers.StopAnim };
 
     /// <summary>The view this pilot has selected, live. Falls back to <see cref="PinnedViewMode"/>
     /// before <see cref="Setup"/> has built a camera, and reads Chase on an AI rig, which has
@@ -1712,6 +1749,22 @@ public partial class FlightController : Node3D
     /// <summary>Photo mode's forward onto <see cref="FlightHud.SetVisible"/>: the session drives it
     /// per rig and holds no HUD of its own.</summary>
     public void SetPilotHudVisible(bool visible) => _pilotHud.SetVisible(visible);
+
+    /// <summary>Photo mode takes this pane: the pause key goes silent until
+    /// <see cref="EndPhotoMode"/> (<see cref="SeatPause.BeginPhotoMode"/>).</summary>
+    public void BeginPhotoMode() => Pause.BeginPhotoMode();
+
+    /// <summary>Photo mode hands this pane back, seeding the pause key's edge so the Escape that
+    /// left it does not also unpause (<see cref="SeatPause.EndPhotoMode"/>).</summary>
+    public void EndPhotoMode() => Pause.EndPhotoMode();
+
+    /// <summary>The pause's options leaf stands over this flight: the pause key goes silent until
+    /// <see cref="EndPauseLeaf"/> (<see cref="SeatPause.BeginPauseLeaf"/>).</summary>
+    public void BeginPauseLeaf() => Pause.BeginPauseLeaf();
+
+    /// <summary>The options leaf is gone, seeding the pause key's edge so the Escape that left it
+    /// does not also resume the mission (<see cref="SeatPause.EndPauseLeaf"/>).</summary>
+    public void EndPauseLeaf() => Pause.EndPauseLeaf();
 
     /// <summary>The decoded bracket gate for the targeting marker (<c>FUN_004574d0</c>): whether the
     /// SELECTED gun group could reach an intercept inside the weapon's authored <c>RANGE</c>. That,

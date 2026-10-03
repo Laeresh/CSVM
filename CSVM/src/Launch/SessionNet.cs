@@ -271,7 +271,7 @@ internal sealed class SessionNet
         net.PeerLeft += peer => StartGate?.TakeLeft(peer);
     }
 
-    /// <summary>The last act of the build. Holding here, rather than in the launcher, freezes the
+    /// <summary>The last act of the build. Holding here, rather than in the launcher, halts the
     /// mission clock, the AI and the world events along with the aeroplanes.</summary>
     public void HoldStart(GameClock? clock)
     {

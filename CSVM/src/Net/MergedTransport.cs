@@ -40,7 +40,7 @@ public sealed class MergedTransport : INetTransport, INetLink, INetPeerAddress, 
     public IReadOnlyList<int> Peers => _peers;
 
     /// <inheritdoc/>
-    public EnetLinkState LinkState => _carriers[0] is INetLink link ? link.LinkState : EnetLinkState.Up;
+    public NetLinkState LinkState => _carriers[0] is INetLink link ? link.LinkState : NetLinkState.Up;
 
     /// <inheritdoc/>
     public int PendingPayloads

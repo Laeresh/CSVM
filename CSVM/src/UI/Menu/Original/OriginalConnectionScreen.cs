@@ -15,7 +15,7 @@ namespace CSVM.UI.Menu.Original;
 /// standalone module over <see cref="NetPlayFeature"/>. The multiplayer scripts place their
 /// widgets inline, so every corner here is the scripts' own, not the layout's
 /// (<c>docs/org/menu-inventory.md</c>). LAN TCP/IP searches, Internet joins the typed address, and
-/// our own Join by code joins a host's code, the original's other three ways left off. Build
+/// the remake-only Join by code joins a host's code, the original's other three ways left off. Build
 /// Custom Plane opens the wallet-free hangar. Host and Create Game open the Multiplayer Lobby as a
 /// Dogfight's host once Game and Player Information are answered. Every join answers Player
 /// Information first and is followed on a messagebox over the page until it ends.
@@ -871,13 +871,13 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
             int way = Array.IndexOf(WayKeys, row.Key);
             if (way >= 0)
             {
-                // Our own way's words have no string id, so they borrow the Internet way's faces.
-                bool ours = row.Key == CodeKey;
+                // The remake-only way's words have no string id, so they borrow the Internet way's faces.
+                bool remakeOnly = row.Key == CodeKey;
                 ComposeRadio(row, row.Key == Way, isFocused, layers);
                 layers.Lines.Add(_text.Line(WayLabelIds[way], WayNames[way], row.X + RadioLabelOffset, row.Y, 0f, Ink,
-                    text: ours ? WayNames[way] : null));
+                    text: remakeOnly ? WayNames[way] : null));
                 layers.Lines.Add(_text.Line(WayDescriptionIds[way], string.Empty, DescriptionX, DescriptionY[way], 0f, Ink,
-                    text: ours ? CodeDescription() : null));
+                    text: remakeOnly ? CodeDescription() : null));
             }
             else if (row.Kind == OriginalRowKind.TextField)
             {

@@ -66,7 +66,7 @@ internal static class NetCoopMissionSuites
     private const float PropFlownM = 1000f;
 
     // How long each seat is watched after the film, and how far it has to fly in that time. A seat
-    // cruises near 90 m/s, so a frozen or pinned aeroplane is the only way to fall short.
+    // cruises near 90 m/s, so a halted or pinned aeroplane is the only way to fall short.
     private const int TravelSteps = 120;
     private const float SeatTravelM = 50f;
 
@@ -89,7 +89,8 @@ internal static class NetCoopMissionSuites
     [Suite("net-coop-mission",
         "a co-op campaign mission flown by a host and two guests, one process, lossy loopback: each "
         + "guest is seated under its player name or its player number and in its chosen voice, the "
-        + "host's seat in Nathan Zachary's, each pane marks its partners' aeroplanes by those names, "
+        + "host's seat in Nathan Zachary's, each pane marks its partners' aeroplanes by those names "
+        + "and the nameless guest's as Unknown, "
         + "every machine builds each "
         + "seat with its own pilot's ammunition, a guest's director has no profile store and the "
         + "user's profiles are untouched, a guest walking out through its pause sheet leaves at "
@@ -938,8 +939,18 @@ internal static class NetCoopMissionSuites
                                 && e.Session.NetSeats[2].Callsign == "P3"),
             $"each machine seats the named guest as {GuestName} and the unnamed one as P3 ({string.Join(" | ", names)})");
         // Each machine flies the seat of its own place in the field, which PilotNames reads by.
-        NetTeamSuites.PilotNames(ctx, ends.Select(e => e.Session).ToArray(),
-            "each machine's pane reads its co-op partners' aeroplanes by their callsigns");
+        var peers = ends.Select(e => e.Session).ToArray();
+        NetTeamSuites.PilotNames(ctx, peers,
+            "each machine's pane reads its co-op partners' aeroplanes by their callsigns, the nameless one as Unknown");
+        // The host here answers no Player Information either. The roster carries both namelessnesses
+        // to every machine, and the other panes read the third guest as "Unknown" rather than P3.
+        var unnamed = ends.Select(e => string.Join(",", e.Session.NetSeats.Select(s => s.Unnamed))).ToArray();
+        ctx.Check(ends.All(e => e.Session.NetSeats.Select(s => s.Unnamed).SequenceEqual(new[] { true, false, true })),
+            $"every machine's roster marks the host and the third guest as nameless and {GuestName} as named ({string.Join(" | ", unnamed)})");
+        var third = new[] { 0, 1 }.Select(m => NetTeamSuites.RefOf(NetTeamSuites.Cycles(peers[m], m),
+            s => ReferenceEquals(s, peers[m].SeatRigs[2].Controller))?.DisplayName ?? "missing").ToArray();
+        ctx.Check(third.All(n => n == "Unknown"),
+            $"the host's and {GuestName}'s panes read the nameless guest's aeroplane as Unknown, not P3 ({string.Join(" | ", third)})");
         // The host's seat is the scripted player and speaks as Nathan Zachary. Lucy speaks in the
         // voice she chose, and the third guest chose none.
         var voices = ends.Select(e => string.Join(",", e.Session.NetSeats.Select(s => s.Voice))).ToArray();

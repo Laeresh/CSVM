@@ -296,9 +296,10 @@ public static class CoopDoorText
         return string.Join("\n", lines);
     }
 
-    /// <summary>What a host without a join code shows in its place. That is the address guests type
-    /// (<see cref="HostAddressLine"/>), then why there is no code (<see cref="InternetLine"/>), each
-    /// left out when empty. Empty with a code and while not hosting.</summary>
+    /// <summary>What a host without a join code shows in its place. While the master server is still
+    /// answering it is <see cref="AwaitingCode"/> alone. After that it is the address guests type
+    /// (<see cref="HostAddressLine"/>), then why there is no code (<see cref="InternetLine"/>). Each
+    /// is left out when empty. Empty with a code and while not hosting.</summary>
     public static IReadOnlyList<string> HostFallbackLines(NetPlayFeature net, CopyWay way = CopyWay.Keys)
     {
         ArgumentNullException.ThrowIfNull(net);
@@ -307,14 +308,22 @@ public static class CoopDoorText
             return Array.Empty<string>();
         }
 
+        // ⚠ Do not name the address while the master server is answering. A code may still come,
+        // and a host shows the address only when none will.
+        if (net.AwaitingCode)
+        {
+            return new[] { AwaitingCode };
+        }
+
         var lines = new List<string> { HostAddressLine(net, way), InternetLine(net) };
         lines.RemoveAll(line => line.Length == 0);
         return lines;
     }
 
-    /// <summary>A Dogfight host's lines pinned over its lobby chat under <see cref="NoteName"/>,
-    /// by the co-op band's rule: <see cref="HostCodeLine"/> alone with a join code, else
-    /// <see cref="HostFallbackLines"/>. Empty while not hosting.</summary>
+    /// <summary>A Dogfight host's lines pinned over its lobby chat under <see cref="NoteName"/>. With
+    /// a join code they are <see cref="HostCodeLine"/> alone, and without one
+    /// <see cref="HostFallbackLines"/>, which wait for the master server's outcome. Empty while not
+    /// hosting.</summary>
     public static IReadOnlyList<string> HostLobbyLines(NetPlayFeature net, CopyWay way = CopyWay.Keys)
     {
         ArgumentNullException.ThrowIfNull(net);

@@ -931,7 +931,9 @@ host does. The callsign names this machine's player in every roster, list and li
 rides the pick's flags byte, so the pick keeps its 36 bytes and a build a patch older reads the
 same pick without it. At launch the host writes each seat's voice into bits 1 to 3 of that seat's
 flags byte in the seat roster `0x27`, beside the host bit, so every machine speaks every seat in its
-chosen voice; the entry keeps its 20 bytes, and a build a patch older reads the host bit alone. A
+chosen voice; the entry keeps its 20 bytes, and a build a patch older reads the host bit alone.
+Bit 4 marks a machine's own player who gave no name, whose callsign field holds only a stand-in, so
+every machine's marker reads that seat as "Unknown" ([`targeting.md`](targeting.md)). A
 co-op host's first seat carries Nathan Zachary's, the scripted player's, and a splitscreen seat
 carries none. The callsign, the voice and the game name are remembered in `options.json`
 for the next session; a password never is. Game Information's password is the one the host asks,

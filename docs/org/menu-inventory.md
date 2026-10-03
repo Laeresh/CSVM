@@ -586,8 +586,10 @@ constants rather than reading a layout.
   a changed pick clears that guest's own Ready. The Lives box is greyed until Limited Lives is
   ticked, then reads 3 (the remake's own default) and takes 1..99. A host's chat pane carries
   remake-only rows pinned at its top under the name Network, in the picked sub-tab's red: the
-  internet join code alone while the master server has listed the game, else the address guests
-  type and, under it, why there is no code, as the co-op band reads. The first pinned row, the one
+  internet join code alone while the master server has listed the game, the wait alone while it is
+  still answering (no address and no COPY yet, since a code may still come), else the address
+  guests type and, under it, why there is no code. With no master server set the address stands
+  alone. The first pinned row, the one
   naming the code or the address, is a remake-only COPY control: a 48-wide box at the row's right
   end, the row spanning the line so a click or a tap on the code copies it as the box does, and a
   stop in the cursor's left column between Ready and the chat box. The line names Ctrl+C only after
@@ -596,9 +598,12 @@ constants rather than reading a layout.
   seven lobby environments.
 - **The cabin's network door.** Remake-only: a paper plaque in the `FC_B_CHANGEPLANE` convention at
   (14, 40) reading HOST CO-OP or CLOSE NETWORK, with the host's band over a dark ground at y 14.
-  The band line naming the code (else the address) carries a COPY control, a 44-wide box at the
-  band's right end whose row spans the line, a stop just before the door in the cursor's walk; the
-  line names Ctrl+C only after a key last moved the cursor. The original has no co-op campaign, so
+  The band waits for the master server's outcome: while it is answering, the second line is
+  "Asking the master server for a join code ..." alone, with no address; then the code, or the
+  address on a fault or with no master server set. The band line naming the code (else the address)
+  carries a COPY control, a 44-wide box at the band's right end whose row spans the line, a stop
+  just before the door in the cursor's walk, and absent during the wait; the line names Ctrl+C only
+  after a key last moved the cursor. The original has no co-op campaign, so
   no script describes it. On every machine the seat strip calls each seat by the callsign its
   player gave Player Information, a seat with none by its player tag, and the band counts the
   guests, as the lobby's player count (10048) stands over its named list. BOOT asks about a guest

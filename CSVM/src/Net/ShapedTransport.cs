@@ -57,7 +57,7 @@ public sealed class ShapedTransport : INetTransport, INetLink, INetPeerAddress, 
     public IReadOnlyList<int> Peers => _inner.Peers;
 
     /// <inheritdoc/>
-    public EnetLinkState LinkState => (_inner as INetLink)?.LinkState ?? EnetLinkState.Up;
+    public NetLinkState LinkState => (_inner as INetLink)?.LinkState ?? NetLinkState.Up;
 
     /// <inheritdoc/>
     public int PendingPayloads => (_inner as INetLink)?.PendingPayloads ?? 0;
