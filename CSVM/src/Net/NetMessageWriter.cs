@@ -75,6 +75,13 @@ public ref struct NetMessageWriter
         _at += 4;
     }
 
+    /// <summary>Appends one unsigned 64-bit field.</summary>
+    public void WriteUInt64(ulong value)
+    {
+        BinaryPrimitives.WriteUInt64LittleEndian(_buffer[_at..], value);
+        _at += 8;
+    }
+
     /// <summary>Appends one 32-bit float.</summary>
     public void WriteSingle(float value)
     {
@@ -178,6 +185,14 @@ public ref struct NetMessageReader
     {
         int value = BinaryPrimitives.ReadInt32LittleEndian(_buffer[_at..]);
         _at += 4;
+        return value;
+    }
+
+    /// <summary>Reads one unsigned 64-bit field.</summary>
+    public ulong ReadUInt64()
+    {
+        ulong value = BinaryPrimitives.ReadUInt64LittleEndian(_buffer[_at..]);
+        _at += 8;
         return value;
     }
 

@@ -100,9 +100,10 @@ the rearm in the code.
 `Flight/Modes/RearmBases.cs` holds the rule, the radius and each seat's latch engine-free, and
 `Session/World/RearmRuntime.cs` lists the bases and runs them in any Dogfight, split screen or on
 the wire. Each machine checks only the seats it flies, and `FlightController.Rearm` restores parts,
-damage stages and every slot, keeping the selected pylon. The restored seat's owner sends its full
-hull in the existing `0x40` damage report, and every other machine takes a full hull as the stages
-coming off again ([`multiplayer-messages.md`](multiplayer-messages.md)). Zeppelin vs Zeppelin reads
+damage stages and every slot, keeping the selected pylon. The restore moves the seat's ledger, so
+its owner sends it in the next `0x40` damage report like any other change, and every other machine
+takes a hurt copy reading full again as the stages coming off
+([`multiplayer-messages.md`](multiplayer-messages.md)). Zeppelin vs Zeppelin reads
 the hull's side from `ZeppelinVersus` and offers a base only while its hull lives, and each base's
 marker reads its team's name over "Rearm". A base the mission switched off offers nothing, which is
 why every menu Deathmatch flies the chapter's `MP1` (`SessionSpec.DeathmatchMission`), as the

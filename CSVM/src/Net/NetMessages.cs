@@ -298,8 +298,10 @@ public enum NetWorldEvent : ushort
     /// seat or -1 when no seat is credited.</summary>
     AiDowned = 1,
 
-    /// <summary>An AI aircraft's hull after damage. The subject is its admission ordinal and the
-    /// value its summary health fraction.</summary>
+    /// <summary>An AI aircraft's hull, sent in the step after either of its pools moved. The
+    /// subject is its admission ordinal, the argument its whole armour as a
+    /// <see cref="DamagePools.Word"/>, and the value its summary health fraction. An AI airframe
+    /// has no zones, so the pair is its whole ledger.</summary>
     AiHull = 2,
 
     /// <summary>A destructible pool's health after a stage change or a kill. The subject is its
@@ -646,15 +648,76 @@ public readonly record struct HitMessage(
 }
 
 /// <summary>
-/// The victim's own hull state once it has applied whatever hit it. Reliable, and the reason a
-/// lost or reordered hit cannot leave two peers disagreeing about how hurt an aircraft is.
-/// The owner's number is the number, and this is the owner saying it. A full hull is a rearm base's
-/// restore (docs/org/multiplayer-rearm.md).</summary>
-public readonly record struct DamageMessage(
-    byte Seat, byte Stage, ushort Flags, float Hull) : INetMessage<DamageMessage>
+/// An aircraft's whole damage ledger as fractions of its maxima, one 16-bit word per pool. The
+/// whole armour and health pair travels on its own, since a zone-less spend dents it alone. <see cref="Zones"/> is the owner's zone count in
+/// def order. Only the first <see cref="MaxZones"/> ride, packed four words to a field, so a reader
+/// whose ledger counts differently takes the whole pair alone.</summary>
+public readonly record struct DamagePools(
+    byte Zones, ushort WholeArmor, ushort WholeHealth, ulong ZoneArmor, ulong ZoneHealth)
+{
+    /// <summary>The zones that ride, a player airframe's nose, tail and two wings.</summary>
+    public const int MaxZones = 4;
+
+    /// <summary>The bytes the pools take on the wire.</summary>
+    public const int Bytes = 1 + 2 + 2 + 8 + 8;
+
+    /// <summary>The word of a full pool. A 16-bit step keeps a value just above a damage stage's
+    /// threshold from rounding below it on the reader.</summary>
+    public const ushort Full = ushort.MaxValue;
+
+    /// <summary>A fraction of a pool's maximum as its word, clamped to [0, 1].</summary>
+    public static ushort Word(float fraction) => (ushort)Math.Round(Math.Clamp(fraction, 0f, 1f) * Full);
+
+    /// <summary>A word back to its fraction.</summary>
+    public static float Fraction(ushort word) => word / (float)Full;
+
+    /// <summary>Zone <paramref name="zone"/>'s armour word, a full pool past <see cref="MaxZones"/>.</summary>
+    public ushort ArmorAt(int zone) => WordAt(ZoneArmor, zone);
+
+    /// <summary>Zone <paramref name="zone"/>'s health word, a full pool past <see cref="MaxZones"/>.</summary>
+    public ushort HealthAt(int zone) => WordAt(ZoneHealth, zone);
+
+    /// <summary>These pools with zone <paramref name="zone"/> set to the two fractions. A zone past
+    /// <see cref="MaxZones"/> is not carried and leaves them as they are.</summary>
+    public DamagePools WithZone(int zone, float armorFraction, float healthFraction) =>
+        zone is < 0 or >= MaxZones
+            ? this
+            : this with
+            {
+                ZoneArmor = SetWord(ZoneArmor, zone, Word(armorFraction)),
+                ZoneHealth = SetWord(ZoneHealth, zone, Word(healthFraction)),
+            };
+
+    internal static DamagePools Read(ref NetMessageReader reader) =>
+        new(reader.ReadByte(), reader.ReadUInt16(), reader.ReadUInt16(), reader.ReadUInt64(), reader.ReadUInt64());
+
+    internal void Write(ref NetMessageWriter writer)
+    {
+        writer.WriteByte(Zones);
+        writer.WriteUInt16(WholeArmor);
+        writer.WriteUInt16(WholeHealth);
+        writer.WriteUInt64(ZoneArmor);
+        writer.WriteUInt64(ZoneHealth);
+    }
+
+    private static ushort WordAt(ulong packed, int zone) =>
+        zone is < 0 or >= MaxZones ? Full : (ushort)(packed >> (16 * zone));
+
+    private static ulong SetWord(ulong packed, int zone, ushort word) =>
+        (packed & ~(0xFFFFUL << (16 * zone))) | ((ulong)word << (16 * zone));
+}
+
+/// <summary>
+/// The owner's damage ledger, sent in the step after any pool moved: a shot, a ram, a graze, a rearm
+/// or an airframe swap. Reliable, and the reason a lost or reordered hit cannot leave two peers
+/// disagreeing about how hurt an aircraft is. The owner's numbers are the numbers, and this is the
+/// owner saying them. A reader mirrors them into its copy and plays the damage stages off that.
+/// A copy that was hurt and reads full again was restored, a rearm base's restore among them
+/// (docs/org/multiplayer-rearm.md).</summary>
+public readonly record struct DamageMessage(byte Seat, DamagePools Pools) : INetMessage<DamageMessage>
 {
     /// <summary>The fixed width of the message, header included.</summary>
-    public const int Size = 12;
+    public const int Size = NetMessage.HeaderBytes + 1 + DamagePools.Bytes;
 
     /// <inheritdoc/>
     public static NetMessageType Type => NetMessageType.Damage;
@@ -670,8 +733,8 @@ public readonly record struct DamageMessage(
         if (!reader.Is(Size) || reader.Type != Type)
             return false;
 
-        message = new DamageMessage(
-            reader.ReadByte(), reader.ReadByte(), reader.ReadUInt16(), reader.ReadSingle());
+        byte seat = reader.ReadByte();
+        message = new DamageMessage(seat, DamagePools.Read(ref reader));
         return true;
     }
 
@@ -680,9 +743,7 @@ public readonly record struct DamageMessage(
     {
         var writer = new NetMessageWriter(into, Type);
         writer.WriteByte(Seat);
-        writer.WriteByte(Stage);
-        writer.WriteUInt16(Flags);
-        writer.WriteSingle(Hull);
+        Pools.Write(ref writer);
         return writer.Close();
     }
 }

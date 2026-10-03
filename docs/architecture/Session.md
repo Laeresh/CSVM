@@ -232,9 +232,9 @@ base's. Decode: [../org/multiplayer-zvz.md](../org/multiplayer-zvz.md).
 The multiplayer rearm bases in any Dogfight, built by `VersusDirector.WireRearmBases`: the world's
 `rearm_node_n` serving lobby team `n`, or in Zeppelin vs Zeppelin each hull's `zep_rearm_node_n`
 serving its side while the hull lives. Each machine steps only the seats it flies through
-`RearmBases`, and on entry calls `FlightController.Rearm`, posts "Rearmed!" in the seat's own pane
-and sends the full hull in the `0x40` damage report, which every other machine takes as the damage
-stages coming off. Decode: [../org/multiplayer-rearm.md](../org/multiplayer-rearm.md).
+`RearmBases`, and on entry calls `FlightController.Rearm` and posts "Rearmed!" in the seat's own
+pane. The restored ledger reaches every other machine in the next `0x40` damage report, where a
+hurt copy reading full again takes its stages off. Decode: [../org/multiplayer-rearm.md](../org/multiplayer-rearm.md).
 
 ## src/Session/World/NetCutsceneLink.cs
 The cutscene skip over the wire, one per network session with a cutscene host. On the host it

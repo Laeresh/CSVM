@@ -35,10 +35,6 @@ internal sealed class RearmRuntimeInputs
     public float RadiusSquared { get; init; } = RearmBases.InitialRadiusSquared;
 
     public Messages? Strings { get; init; }
-
-    /// <summary>Told each seat this machine rearmed, after the restore, so its copies elsewhere
-    /// can hear of it.</summary>
-    public Action<int>? Rearmed { get; init; }
 }
 
 /// <summary>
@@ -136,7 +132,6 @@ internal sealed class RearmRuntime
                 HudMessages.PostRearmed(stack, _in.Strings);
             }
 
-            _in.Rearmed?.Invoke(seat);
             Log.Info("flight", $"rearm: seat {seat} (team {team}) rearmed");
         }
     }

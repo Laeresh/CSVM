@@ -435,10 +435,18 @@ which the original has no need of because it never draws from a shared stream. T
 and motion dwords are not taken either; the remake spends 8 bytes on a quantised quaternion and
 12 on a float velocity, which is the trade `Net/NetMessages.cs`'s width budget exists to hold.
 
-The damage report `0x40` carries the victim's own hull fraction after it applied a hit, and every
-other machine stages that seat's damage from it. A fraction of 1 is a rearm on the owner's machine
-([`multiplayer-rearm.md`](multiplayer-rearm.md)), and every other machine takes the stages off its
-copy. The original's `FUN_0049b970` sends nothing for a rearm.
+The damage report `0x40` carries the owner's whole damage ledger, sent in the step after any of
+its pools moved, whatever moved it: a shot, a ram, a graze, a rearm or an airframe swap. Each pool
+rides as a 16-bit fraction of its maximum: the whole armour and health pair, then each zone's pair
+in def order, up to the four zones a player airframe has. Every other machine mirrors those into
+its copy's ledger and plays the zones' and the hull's damage stages off it, so a remote aeroplane's
+panels tear and burn where its owner's do. A reader whose copy counts different zones (the two
+machines briefly flying different airframes around a swap) takes the whole pair alone. A copy out
+of play mirrors the numbers and shows nothing, since its wreck is already playing. A copy that was
+hurt and reads full again was restored, a rearm on the owner's machine
+([`multiplayer-rearm.md`](multiplayer-rearm.md)), and takes its stages off; a respawn's full
+ledger, which the copy's own respawn already matched, changes nothing. The original's `FUN_0049b970`
+sends nothing for a rearm.
 
 ## The mission director
 
@@ -570,7 +578,9 @@ four.
 AI state is plain unreliable rather than sequenced because every AI shares one channel, and a
 transport sequence would drop one AI's sample against another's; each AI's own pose buffer drops a
 stale one by the per-AI sequence. It rides the seat stream's cadence. The world event codes are
-`NetWorldEvent`: 1 an AI downed (the argument is the killer's seat or -1), 2 an AI's hull fraction,
+`NetWorldEvent`: 1 an AI downed (the argument is the killer's seat or -1), 2 an AI's hull (the
+value its health fraction, the argument its whole armour as a 16-bit fraction, sent in the step
+after either moved and mirrored into the guest's copy; an AI airframe has no zones),
 3 a destructible pool's health (the subject is its registration
 index, the argument a hash of its definition and anchor names, which the guest checks before
 applying and searches by when the index has shifted), 4 a `WARP_VEHICLE` pick (the subject is the

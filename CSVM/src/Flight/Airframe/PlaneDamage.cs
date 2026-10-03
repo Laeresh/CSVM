@@ -43,6 +43,31 @@ public sealed class PlaneDamage
 
     public IReadOnlyDictionary<string, PartState> Parts => _parts;
 
+    /// <summary>The zones in def order, the order a mirror of this ledger names them by.</summary>
+    public IReadOnlyList<PartState> Zones => _order;
+
+    /// <summary>Whether a pool has moved since <see cref="TakeChanged"/> last answered. Every
+    /// writer but the two mirror calls raises it. The owner's network send reads it, so no intake
+    /// has to report itself.</summary>
+    public bool Changed { get; private set; }
+
+    /// <summary>Every pool at its maximum, the whole pair and each zone's.</summary>
+    public bool IsFull
+    {
+        get
+        {
+            if (_wholeArmor < WholeArmorMax || _wholeHealth < WholeHealthMax)
+                return false;
+            foreach (var p in _order)
+            {
+                if (p.Hp < p.Def.MaxHp || p.Armor < p.Def.MaxArmor)
+                    return false;
+            }
+
+            return true;
+        }
+    }
+
     /// <summary>The whole-vehicle maxima: the def's authored pair, or the sum over parts.</summary>
     public float WholeArmorMax { get; }
 
@@ -108,6 +133,33 @@ public sealed class PlaneDamage
         _wholeArmor = WholeArmorMax;
         _wholeHealth = WholeHealthMax;
         _rng = RngSeed; // a respawned plane redirects identically, suite determinism
+        Changed = true;
+    }
+
+    /// <summary>Answers <see cref="Changed"/> and lowers it, the owner's once-a-step send.</summary>
+    public bool TakeChanged()
+    {
+        bool changed = Changed;
+        Changed = false;
+        return changed;
+    }
+
+    /// <summary>Writes the whole pair from another machine's fractions of its maxima, leaving the
+    /// zones alone. A mirror runs no death test and raises no <see cref="Changed"/>: the owner
+    /// decides both.</summary>
+    public void MirrorWhole(float armorFraction, float healthFraction)
+    {
+        _wholeArmor = Mathf.Clamp(armorFraction, 0f, 1f) * WholeArmorMax;
+        _wholeHealth = Mathf.Clamp(healthFraction, 0f, 1f) * WholeHealthMax;
+    }
+
+    /// <summary>Writes zone <paramref name="zone"/> of <see cref="Zones"/> from another machine's
+    /// fractions, with no recompute of the whole pair, which <see cref="MirrorWhole"/> writes.</summary>
+    public void MirrorZone(int zone, float armorFraction, float healthFraction)
+    {
+        var p = _order[zone];
+        p.Armor = Mathf.Clamp(armorFraction, 0f, 1f) * p.Def.MaxArmor;
+        p.Hp = Mathf.Clamp(healthFraction, 0f, 1f) * p.Def.MaxHp;
     }
 
     /// <summary>Spends one hit's <c>HEALTH_DAMAGE</c>/<c>ARMOR_DAMAGE</c> through the decoded
@@ -121,6 +173,7 @@ public sealed class PlaneDamage
         if (healthDamage <= 0f && armorDamage <= 0f)
             return _parts.TryGetValue(partName, out var known) ? known : null;
 
+        Changed = true;
         float dmgA = armorDamage;
         float dmgH = healthDamage;
         var struck = ResolveStruckPart(partName);
@@ -152,6 +205,7 @@ public sealed class PlaneDamage
     /// airframe keeps its own and only what is left of them moves.</summary>
     public void ScalePools(float armorFraction, float healthFraction)
     {
+        Changed = true;
         if (_order.Count == 0)
         {
             _wholeArmor = Mathf.Clamp(_wholeArmor * armorFraction, 0f, WholeArmorMax);
@@ -173,6 +227,7 @@ public sealed class PlaneDamage
     /// two sums it measured off the hull the player is leaving.</summary>
     public void SetWholePools(float armor, float health)
     {
+        Changed = true;
         _wholeArmor = Mathf.Clamp(armor, 0f, WholeArmorMax);
         _wholeHealth = Mathf.Clamp(health, 0f, WholeHealthMax);
     }

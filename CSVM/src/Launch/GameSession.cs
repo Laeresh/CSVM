@@ -2334,13 +2334,7 @@ public partial class GameSession : Node3D
             Radio = voices.Radio,
             GroundAt = GroundSampler(),
         });
-        _dogfight?.WireRearmBases(state.WorldRuntime, state.ZrdrPath, _zeppelins, seat =>
-        {
-            if (seat < _seatRigs.Count && _seatRigs[seat].Controller is { } restored)
-            {
-                _wire.SendDamage(seat, restored);
-            }
-        });
+        _dogfight?.WireRearmBases(state.WorldRuntime, state.ZrdrPath, _zeppelins);
 
         _wire.WirePositionalStarts(_landings, _ladder, state.WorldRuntime);
         _wire.WireCutscenes(_cutscene);

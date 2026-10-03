@@ -56,7 +56,8 @@ internal static class NetAiSpawnSuites
         + "the host's ordinals, each first seen "
         + "at the host's launch point and named as the host named it, then tracking the host's "
         + "path; a sample for an unadmitted ordinal admits nothing, and the host's deactivation of "
-        + "an AI reaches the guest while a cutscene park does not")]
+        + "an AI reaches the guest while a cutscene park does not, and an armour spend on the host's "
+        + "AI reaches its copy as the whole pair, building the copy's pending crash rig first")]
     internal static void GuestsBuildTheHostsLaunches(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -125,6 +126,7 @@ internal static class NetAiSpawnSuites
             Tracking(ctx, host.Session, guest.Session, first);
             Unknown(ctx, host.Session, guest.Session);
             Presence(ctx, host.Session, guest.Session, first);
+            Hull(ctx, host.Session, guest.Session, first);
         }
         finally
         {
@@ -282,6 +284,36 @@ internal static class NetAiSpawnSuites
         Lockstep(SettleSteps, host, guest);
         ctx.Check(stayed && !copy.Inert,
             $"ABLE-TO-FAIL CONTROL: a cutscene park of ordinal {first} on the host leaves the guest's copy in play ({(stayed ? "in play" : "inert")})");
+    }
+
+    // A hull report builds a copy's pending crash rig first. A stage crossed with no rig plays
+    // nothing and is never retried. The pending build is a stand-in: this
+    // harness never pumps a frame, so the roster never defers and the real rig is already bound.
+    private static void Hull(TestContext ctx, GameSession host, GameSession guest, int first)
+    {
+        var owned = host.Wire.World!.AiAt(first)!;
+        var copy = guest.Wire.World!.AiAt(first)!;
+        bool built = false;
+        copy.ArmPendingCrashRig(() => built = true);
+
+        // ABLE-TO-FAIL CONTROL. Stepping alone builds nothing, so the build below is the report's.
+        Lockstep(SettleSteps, host, guest);
+        ctx.Check(copy.CrashRigPending && !built,
+            $"ABLE-TO-FAIL CONTROL: ordinal {first}'s pending crash rig stays pending while nothing reports its hull ({(built ? "built" : "pending")})");
+
+        // Half the armour off, health untouched: a spend no hull stage reads, which only the
+        // mirrored pair can show.
+        var damage = owned.Damage!;
+        damage.Apply("hull", 0f, damage.WholeArmorMax * 0.5f);
+        Lockstep(SettleSteps, host, guest);
+        ctx.Check(built && !copy.CrashRigPending,
+            $"the host's hull report for ordinal {first} builds the guest copy's pending crash rig ({(built ? "built" : "pending")})");
+        var mirrored = copy.Damage!;
+        float hostArmor = damage.WholeArmor / damage.WholeArmorMax;
+        float guestArmor = mirrored.WholeArmor / mirrored.WholeArmorMax;
+        ctx.Check(Mathf.Abs(guestArmor - hostArmor) <= 1.5f / DamagePools.Full && hostArmor < 1f
+                  && Mathf.IsEqualApprox(mirrored.SummaryHealthFraction, damage.SummaryHealthFraction),
+            $"and mirrors its whole pair into the copy: armour {guestArmor:0.0000} against the host's {hostArmor:0.0000}, health {mirrored.SummaryHealthFraction:0.000} against {damage.SummaryHealthFraction:0.000}");
     }
 
     // Mean distance between the guest's shown path and the host's own, at the best whole-step lag.
