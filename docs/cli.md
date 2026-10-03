@@ -31,7 +31,7 @@ exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One 
 `--viewer` · `--fly` · `--stunt` · `--vs` · `--vs-kills` · `--vs-time` · `--vs-lives` · `--vs-no-respawn` · `--ctf` · `--zvz` · `--coop` · `--freecam` · `--anim-lab` · `--menu` · `--skip-intro` · `--intro` · `--chapter` · `--stage` · `--node` · `--plane` · `--players` · `--mission` · `--scenario` · `--ia` · `--campaign` · `--profiles` · `--scores` · `--play-anim` · `--movie` · `--presentation` · `--force-builtin`
 
 **Multiplayer, the wire a match flies over**
-`--net-host` · `--net-join` · `--net-port-base` · `--master-server`
+`--net-host` · `--net-join` · `--net-shape` · `--net-port-base` · `--master-server`
 
 **Placement, where the subject starts and which way it faces**
 `--pos` · `--direction` · `--lookat` · `--fov` · `--view` · `--spawn` · `--campos` · `--spawn-at` · `--spawn-dir`
@@ -95,7 +95,7 @@ the shared selection (`--debug-select`), the node lab (`--debug-nodelab`), the w
 **Written exceptions to "one flag, one bullet":** `--spawn-dir` shares `--spawn-at`'s bullet, since
 the pair is one mechanism, so `Grep` the partner's name to find it; `--debug-nodelab` and
 `--debug-damage` each carry a short opener bullet plus the full behaviour under their lab's own
-section further down. The counts reconcile as **158 index entries, 158 parser flags and 159 bullet
+section further down. The counts reconcile as **159 index entries, 159 parser flags and 160 bullet
 lines**.
 
 ## Flags
@@ -203,6 +203,12 @@ lines**.
   launch holds at the load screen until the link stands or 30 seconds pass, because a guest with no
   host has no seats to fly. The roster it flies is the host's, so the plane this end picked is a
   request, not a promise)
+- `--net-shape=latency,jitter,loss`, `--net-shape=soak50|soak100|soak200` (shape this end's
+  `--net-join` or `--net-host` socket both ways under the loopback's model, in milliseconds,
+  milliseconds and per cent, or the soak's three cells by name. Only unreliable payloads are lost.
+  The shaping adds to the real link's own delay, plus up to a frame each way, since a payload moves
+  on a step. The other end needs nothing; the menu door and WebRTC are never shaped. Logged at
+  launch and named in `--debug-net-trace`. A bad value is refused with a warning)
 - `--net-port-base=N` (this process's game port N and LAN discovery port N+1, in place of the
   shipped 47500 and 47501: the door's port row starts on N, the LAN search asks and answers on N+1,
   and a bare `--net-host` or `--net-join` takes N. N lies in [1024, 65436], else a warning keeps the

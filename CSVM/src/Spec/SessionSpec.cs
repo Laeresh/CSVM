@@ -222,6 +222,10 @@ public sealed record SessionSpec
     /// and fly this session as a guest. Null when the flag is absent. Split with
     /// <see cref="ParseJoin"/>.</summary>
     public string? NetJoin { get; private set; }
+    /// <summary><c>--net-shape=latency ms,jitter ms,loss %</c> or a soak cell's name: the command
+    /// line's socket is shaped both ways at this end under these conditions
+    /// (<see cref="Net.ShapedTransport"/>). Null when absent or unreadable.</summary>
+    public Net.LoopbackConditions? NetShape { get; private set; }
     /// <summary><c>--net-port-base=N</c>: this process's game port, with the LAN discovery port one
     /// above it, in place of the shipped pair (<see cref="Net.NetPorts"/>). A bare
     /// <c>--net-host</c> or <c>--net-join</c> takes it too. Null when absent or out of range. The
@@ -1150,6 +1154,19 @@ public sealed record SessionSpec
             else if (arg == "--net-host") { netHost = ""; }
             else if (arg.StartsWith("--net-host=")) { netHost = arg["--net-host=".Length..]; }
             else if (arg.StartsWith("--net-join=")) { s.NetJoin = arg["--net-join=".Length..]; }
+            else if (arg.StartsWith("--net-shape="))
+            {
+                string value = arg["--net-shape=".Length..];
+                if (Net.ShapedTransport.TryParse(value, out var shape))
+                {
+                    s.NetShape = shape;
+                }
+                else
+                {
+                    s.NetShape = null;
+                    notes.Add(new Note("core", $"--net-shape: '{value}' is not latency ms,jitter ms,loss % or a soak cell ({string.Join(", ", Net.ShapedTransport.CellNames)}), the link is not shaped"));
+                }
+            }
             else if (arg.StartsWith("--master-server="))
             {
                 string value = arg["--master-server=".Length..];
@@ -1756,6 +1773,11 @@ public sealed record SessionSpec
             var h = ParseHost(netHost, s.NetPortBase ?? UI.Menu.NetPlayFeature.DefaultPort);
             s.NetHostBind = h.Bind;
             s.NetHostPort = h.Port;
+        }
+
+        if (s.NetShape != null && netHost == null && s.NetJoin == null)
+        {
+            notes.Add(new Note("core", "--net-shape does nothing without --net-join or --net-host, ignoring it"));
         }
 
         s._notes = notes;
