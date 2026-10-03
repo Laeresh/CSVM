@@ -1300,8 +1300,9 @@ internal static class MenuOriginalConnectionSuites
         + "cabin band. The code's line carries a COPY control at its end. A click on the code copies it, a "
         + "tap with no hover before it copies it, and a pad's cursor walk reaches COPY, whose Accept copies "
         + "it. Each goes through the door's own copy and draws the line's copied state. The hint names "
-        + "Ctrl+C after a key moved the cursor and no key after a pointer or a pad did. The listed carrier "
-        + "stands for the master server and the wire is the loopback")]
+        + "Ctrl+C after a key moved the cursor and no key after a pointer or a pad did. A cabin whose master "
+        + "server has not answered names the wait alone, with no address and no COPY, until the code lands. "
+        + "The listed carrier stands for the master server and the wire is the loopback")]
     internal static void TheCopyControl(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -1331,6 +1332,19 @@ internal static class MenuOriginalConnectionSuites
         {
             CopyText = copied.Add,
         };
+        const string stable = "2001:db8::7";
+        AwaitedListing? pending = null;
+        var askingEnd = LoopbackTransport.Mesh(1, LoopbackConditions.Perfect, new Random(43))[0];
+        var asking = new NetPlayFeature(
+            (_, _, _) => pending = new AwaitedListing(askingEnd),
+            (_, _) => throw new InvalidOperationException("the host does not join"),
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }))
+        {
+            CopyText = copied.Add,
+            StableIpv6 = () => stable,
+        };
         var ends = new List<End>();
         string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-copy-code");
         try
@@ -1358,6 +1372,30 @@ internal static class MenuOriginalConnectionSuites
             string band = $"NETWORK OPEN  0 guests  CODE {NetDoorAid.SampleCode}";
             CopyEveryWay(ctx, cabin, copied, OriginalCampaignScreen.CoopCopyKey, "the cabin's band",
                 $"{band}  {CoopDoorText.CopyPress}", band, $"{band}  copied");
+
+            var waiting = Open(ctx, layout, asking, ends);
+            if (waiting == null)
+            {
+                return;
+            }
+
+            waiting.Shell.Campaign.OpenCampaignOver(CampaignAidProfiles.Store(seeded: true, progressed: true), CampaignAidProfiles.Planes());
+            waiting.Shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
+            OpenForTheMatch(ctx, waiting, asking);
+            var asked = waiting.Shell.Compose();
+            ctx.Check(asking.AwaitingCode && DrawsExactly(asked, CoopDoorText.AwaitingCode) && !Draws(asked, stable),
+                $"while the master server is still answering the cabin's band names the wait alone, no address ({asking.AwaitingCode}, {Lines(waiting, "NETWORK")})");
+            ctx.Check(Row(waiting.Shell, OriginalCampaignScreen.CoopCopyKey) == null,
+                $"and offers no {CoopDoorText.CopyButton}, since that line names nothing to copy");
+            if (pending != null)
+            {
+                pending.JoinCode = NetDoorAid.SampleCode;
+                Pump(waiting);
+                var answered = waiting.Shell.Compose();
+                ctx.Check(Draws(answered, $"NETWORK OPEN  0 guests  CODE {NetDoorAid.SampleCode}") && !Draws(answered, CoopDoorText.AwaitingCode)
+                          && Row(waiting.Shell, OriginalCampaignScreen.CoopCopyKey) != null,
+                    $"ABLE-TO-FAIL CONTROL: the code replaces the wait once it lands, its {CoopDoorText.CopyButton} with it ({Lines(waiting, "NETWORK")})");
+            }
         }
         finally
         {
@@ -1368,6 +1406,7 @@ internal static class MenuOriginalConnectionSuites
 
             dogfight.Discard();
             coop.Discard();
+            asking.Discard();
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
             CSVM.Utils.OptionsStore.DirectoryOverride = options;
         }

@@ -100,7 +100,7 @@ internal static class EnetTransportSuites
                 $"and the guest is told it reached the host ({Ids(atGuest.Connected)})");
             ctx.Check(host.Peers.SequenceEqual(new[] { guestPeer }) && guest.Peers.SequenceEqual(new[] { 1 }),
                 $"both rosters hold the other end ({Ids(host.Peers)} and {Ids(guest.Peers)})");
-            ctx.Check(host.LinkState == EnetLinkState.Up && guest.LinkState == EnetLinkState.Up,
+            ctx.Check(host.LinkState == NetLinkState.Up && guest.LinkState == NetLinkState.Up,
                 $"and both links read up ({host.LinkState} and {guest.LinkState})");
 
             ReliableRoundTrip(ctx, host, guest, atHost, atGuest, guestPeer);
@@ -208,7 +208,7 @@ internal static class EnetTransportSuites
             int id6 = v6.LocalPeer;
             ctx.Check(host.Peers.OrderBy(p => p).SequenceEqual(new[] { id4, id6 }.OrderBy(p => p)) && id4 != id6,
                 $"both guests join the one roster under distinct ids ({Ids(host.Peers)} against {id4} and {id6})");
-            ctx.Check(v4.LinkState == EnetLinkState.Up && v6.LinkState == EnetLinkState.Up,
+            ctx.Check(v4.LinkState == NetLinkState.Up && v6.LinkState == NetLinkState.Up,
                 $"and both guests' links read up ({v4.LinkState} and {v6.LinkState})");
 
             host.Send(id4, Payload(0x44, 12), NetReliability.Reliable);
@@ -223,7 +223,7 @@ internal static class EnetTransportSuites
 
             v4.Disconnect(1);
             PumpAll(new[] { host, v4, v6 }, () => atHost.Disconnected.Count > 0);
-            ctx.Check(host.Peers.SequenceEqual(new[] { id6 }) && v6.LinkState == EnetLinkState.Up,
+            ctx.Check(host.Peers.SequenceEqual(new[] { id6 }) && v6.LinkState == NetLinkState.Up,
                 $"the IPv4 guest's hang-up leaves the IPv6 guest linked alone ({Ids(host.Peers)}, {v6.LinkState})");
         }
         finally
@@ -242,8 +242,8 @@ internal static class EnetTransportSuites
         }
 
         using var stray = EnetTransport.Join(LoopbackV6, alonePort);
-        PumpAll(new EnetTransport[] { alone, stray }, () => stray.LinkState != EnetLinkState.Connecting, QuietSeconds * 5.0);
-        ctx.Check(stray.LinkState != EnetLinkState.Up && alone.Peers.Count == 0,
+        PumpAll(new EnetTransport[] { alone, stray }, () => stray.LinkState != NetLinkState.Connecting, QuietSeconds * 5.0);
+        ctx.Check(stray.LinkState != NetLinkState.Up && alone.Peers.Count == 0,
             $"ABLE-TO-FAIL CONTROL: a host with the IPv4 socket alone does not admit the IPv6 guest ({stray.LinkState}, roster {Ids(alone.Peers)})");
     }
 
@@ -280,9 +280,9 @@ internal static class EnetTransportSuites
             using var v4 = EnetTransport.Join(Loopback, port);
             PumpAll(new[] { host, guest, v4 }, () => host.Peers.Count >= 2);
             ctx.Check(host.Sockets == shipped.Count, $"the host opened every shipped socket ({host.Sockets} of {shipped.Count})");
-            ctx.Check(guest.LinkState == EnetLinkState.Up && host.Peers.Contains(guest.LocalPeer),
+            ctx.Check(guest.LinkState == NetLinkState.Up && host.Peers.Contains(guest.LocalPeer),
                 $"a guest sending from [{temporary}] joins [{stable}]:{port} ({guest.LinkState}, roster {Ids(host.Peers)})");
-            ctx.Check(v4.LinkState == EnetLinkState.Up && host.Peers.Contains(v4.LocalPeer),
+            ctx.Check(v4.LinkState == NetLinkState.Up && host.Peers.Contains(v4.LocalPeer),
                 $"and an IPv4 guest joins the same port on {Loopback} ({v4.LinkState})");
         }
 
@@ -295,8 +295,8 @@ internal static class EnetTransportSuites
         }
 
         using var dropped = EnetTransport.Join(stable, wildPort, null, temporary, wildPort + GuestPortOffset);
-        PumpAll(new EnetTransport[] { wild, dropped }, () => dropped.LinkState == EnetLinkState.Up, WaitSeconds);
-        ctx.Check(dropped.LinkState != EnetLinkState.Up,
+        PumpAll(new EnetTransport[] { wild, dropped }, () => dropped.LinkState == NetLinkState.Up, WaitSeconds);
+        ctx.Check(dropped.LinkState != NetLinkState.Up,
             $"ABLE-TO-FAIL CONTROL: a host on the dual-stack wildcard does not admit the same guest ({dropped.LinkState}, roster {Ids(wild.Peers)})");
     }
 
@@ -358,7 +358,7 @@ internal static class EnetTransportSuites
 
         ctx.Check(stepped.Peers.Contains(toStalled) && stalled.Peers.Contains(toStepped),
             $"a {who} that stopped stepping for {StallSeconds:0.0}s is still on both rosters ({Ids(pair.Host.Peers)} and {Ids(pair.Guest.Peers)})");
-        ctx.Check(stepped.LinkState == EnetLinkState.Up && stalled.LinkState == EnetLinkState.Up,
+        ctx.Check(stepped.LinkState == NetLinkState.Up && stalled.LinkState == NetLinkState.Up,
             $"and both links still read up ({stepped.LinkState} and {stalled.LinkState})");
         var tags = atStalled.Payloads.Select(p => BitConverter.ToInt32(p.Bytes, 0)).ToList();
         ctx.Check(sent > 0 && tags.SequenceEqual(Enumerable.Range(0, sent)),

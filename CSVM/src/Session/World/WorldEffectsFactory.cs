@@ -910,7 +910,7 @@ public sealed class WorldEffectsFactory
             }
             // The def's own propeller pair. Its anchors are airframe names, so the stage closure above
             // needs no template for it.
-            var propAnims = new[] { _controller.Propellers.SpinAnim, _controller.Propellers.StopAnim };
+            var propAnims = _controller.PropellerAnims;
             // Bind only the closure of names that play ON this aircraft (CrashRigAnimNames), never the
             // full ~800-def world program, its ~150 generic-named defs would mis-anchor onto this
             // plane's parts and run their reset states on it.

@@ -116,7 +116,14 @@ address a guest dialled; a guest drops a reply from a temporary one. `Join` repo
 joining. Every roster change and payload comes out of `Step`. A service thread polls ENet when the
 main thread has not stepped for `ServiceGapSeconds`, up to `Keepalive.CeilingSeconds`, so a
 blocking mission load keeps acknowledging. `INetLink` is where a board reads the socket, and a
-socket with no listener holds what lands and replays it on `Bind`.
+socket with no listener holds what lands and replays it on `Bind`. Read `NetLink.cs` next.
+
+## src/Net/NetLink.cs
+`NetLinkState`, where one end's link stands (connecting, up, down) in words a board can show
+without learning which carrier holds it, and `INetLink`, the optional face a real socket (ENet,
+WebRTC, a merged host) shows a board: its state, the payloads held while no listener is bound, and
+a fault as a player reads it. `HeldPayloads` is the one depth every carrier holds to before
+`Bind`. A carrier without it, the loopback, is read through its peer roster instead.
 
 ## src/Net/SteamTransport.cs
 The Steam carrier's place in the seam with nothing behind it: the Steamworks SDK cannot be

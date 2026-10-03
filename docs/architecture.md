@@ -663,6 +663,7 @@ The process and the per-launch session: the top family bar `Testing`, so nothing
 - `src/Launch/MenuAudioService.cs`, the menus' audio host: the music channel, the briefing narration player, the cue player behind `MenuCueTable`, and the AUDIO page's live mix preview.
 - `src/Launch/MenuCueTable.cs`, the menu cue table: cue name to wav under the rof tree's `ASSETS/SOUNDS`, the four the globals script binds.
 - `src/Launch/MasterServerLink.cs`, the shipped way to the master server over .NET's HTTP and WebSocket clients: the games list fetch and the socket with its two loops.
+- `src/Launch/MasterFrames.cs`, the master server socket's read of one whole message, shared by the game and the server.
 
 ### `src/Session/`, the session-build layer
 
@@ -869,6 +870,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/LoopbackConditions.cs`, one direction's wire conditions as a value: a latency, a symmetric jitter about it and a loss probability, every draw from a caller-supplied `Random`.
 - `src/Net/LoopbackTransport.cs`, transports wired to each other in one process through delivery queues: nothing arrives until a step, so a suite owns delivery time and makes its own reorders.
 - `src/Net/EnetTransport.cs`, the shipped carrier: the seam over Godot's ENet peer, hosting on a port or joining by address, with every roster change and payload reported out of one poll.
+- `src/Net/NetLink.cs`, where a real socket's link stands (`NetLinkState`) as a board reads it through `INetLink`, and how many payloads a link holds before a listener binds.
 - `src/Net/SteamTransport.cs`, the Steam carrier's place in the seam with no SDK behind it: every way in throws "not built with the Steamworks SDK", and `SteamBuild` is the `CSVM_STEAM` define.
 - `src/Net/NetCarrier.cs`, which carrier a match runs over, chosen once: the door's registration and the command line both open through it, and a build define is the whole of the choice.
 - `src/Net/WebRtcTransport.cs`, the WebRTC carrier: a host listed on the master server and a guest joining by code, negotiated through its socket with STUN and a TURN fallback, the third type allowed to name a Godot networking type.

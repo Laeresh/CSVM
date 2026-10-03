@@ -51,12 +51,12 @@ internal static class WebRtcTransportSuites
             guest = WebRtcTransport.Join(master.Open(), host.JoinCode, NetBuildVersion.Unknown);
             var atGuest = new Recorder();
             guest.Bind(atGuest);
-            ctx.Check(guest.LinkState == EnetLinkState.Connecting, $"a join opens connecting ({guest.LinkState})");
+            ctx.Check(guest.LinkState == NetLinkState.Connecting, $"a join opens connecting ({guest.LinkState})");
             double linked = Pump(host, guest, () => atHost.Connected.Count > 0 && atGuest.Connected.Count > 0);
             ctx.Check(atHost.Connected.SequenceEqual(new[] { 2 }) && guest.LocalPeer == 2,
                 $"the host is told guest 2 joined, the id the guest goes by ({string.Join(",", atHost.Connected)}, guest {guest.LocalPeer}, {guest.Fault})");
             ctx.Check(atGuest.Connected.SequenceEqual(new[] { 1 }), $"the guest is told it reached the host ({string.Join(",", atGuest.Connected)})");
-            ctx.Check(host.LinkState == EnetLinkState.Up && guest.LinkState == EnetLinkState.Up,
+            ctx.Check(host.LinkState == NetLinkState.Up && guest.LinkState == NetLinkState.Up,
                 $"both links read up ({host.LinkState}, {guest.LinkState})");
             ctx.Check(host.AddressOf(2) == "127.0.0.1", $"the host names the guest by the address the master gave ({host.AddressOf(2)})");
             if (atGuest.Connected.Count == 0)
@@ -91,9 +91,9 @@ internal static class WebRtcTransportSuites
                 $"a plain unreliable payload carries on its channel");
 
             host.Disconnect(2);
-            Pump(host, guest, () => guest.LinkState == EnetLinkState.Down && atHost.Disconnected.Count > 0);
+            Pump(host, guest, () => guest.LinkState == NetLinkState.Down && atHost.Disconnected.Count > 0);
             ctx.Check(atHost.Disconnected.SequenceEqual(new[] { 2 }), $"the host reports the guest it hung up on as gone ({string.Join(",", atHost.Disconnected)})");
-            ctx.Check(guest.LinkState == EnetLinkState.Down && guest.Fault.Length > 0,
+            ctx.Check(guest.LinkState == NetLinkState.Down && guest.Fault.Length > 0,
                 $"the guest's link goes down with a reason ({guest.LinkState}, '{guest.Fault}')");
             ctx.Note($"linked in {linked:0.000} s over host candidates, {master.Carried} master messages");
         }
@@ -104,8 +104,8 @@ internal static class WebRtcTransportSuites
         }
 
         using var lost = WebRtcTransport.Join(master.Open(), "ZZZ-ZZZ", NetBuildVersion.Unknown);
-        Pump(lost, null, () => lost.LinkState == EnetLinkState.Down);
-        ctx.Check(lost.LinkState == EnetLinkState.Down && lost.Fault.Contains("no game", StringComparison.Ordinal),
+        Pump(lost, null, () => lost.LinkState == NetLinkState.Down);
+        ctx.Check(lost.LinkState == NetLinkState.Down && lost.Fault.Contains("no game", StringComparison.Ordinal),
             $"a code nobody listed fails the join with the master's reason ('{lost.Fault}')");
     }
 
@@ -145,7 +145,7 @@ internal static class WebRtcTransportSuites
             Pump(host, guest, () => atHost.Connected.Count > 0 && atGuest.Connected.Count > 0);
             ctx.Check(atHost.Connected.SequenceEqual(new[] { 2 }) && atGuest.Connected.SequenceEqual(new[] { 1 }),
                 $"a guest the host heard leave before the link still links ({string.Join(",", atHost.Connected)}; guest '{guest.Fault}')");
-            ctx.Check(guest.LinkState == EnetLinkState.Up, $"the guest's link reads up ({guest.LinkState}, '{guest.Fault}')");
+            ctx.Check(guest.LinkState == NetLinkState.Up, $"the guest's link reads up ({guest.LinkState}, '{guest.Fault}')");
 
             silent = WebRtcTransport.Join(master.Open(), host.JoinCode, NetBuildVersion.Unknown);
             host.Step(0.0);

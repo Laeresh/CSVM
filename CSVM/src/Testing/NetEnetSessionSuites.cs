@@ -89,8 +89,8 @@ internal static class NetEnetSessionSuites
         {
             guestWire = EnetTransport.Join(Loopback, port);
             double linked = Pump(hostWire, guestWire,
-                () => hostWire.Peers.Count == 1 && guestWire.LinkState == EnetLinkState.Up);
-            ctx.Check(hostWire.Peers.Count == 1 && guestWire.LinkState == EnetLinkState.Up,
+                () => hostWire.Peers.Count == 1 && guestWire.LinkState == NetLinkState.Up);
+            ctx.Check(hostWire.Peers.Count == 1 && guestWire.LinkState == NetLinkState.Up,
                 $"two sockets link over {Loopback}:{port} in {linked:0.000} s (host peers {hostWire.Peers.Count}, guest link {guestWire.LinkState})");
             if (hostWire.Peers.Count != 1)
             {
@@ -133,7 +133,7 @@ internal static class NetEnetSessionSuites
             Lockstep(host.Session, guest.Session);
             ctx.Check(link.Sent > sentAtJoin && far.Received > receivedAtJoin && far.Malformed == 0,
                 $"and once both fly, the owners' aircraft state keeps crossing the same socket (sent {sentAtJoin} then {link.Sent}, received {receivedAtJoin} then {far.Received}, malformed {far.Malformed})");
-            ctx.Check(hostWire.LinkState == EnetLinkState.Up && guestWire.LinkState == EnetLinkState.Up,
+            ctx.Check(hostWire.LinkState == NetLinkState.Up && guestWire.LinkState == NetLinkState.Up,
                 $"and both links stand after {LockstepSteps} lockstepped frames ({hostWire.LinkState} and {guestWire.LinkState})");
         }
         finally
