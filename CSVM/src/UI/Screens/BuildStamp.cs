@@ -11,8 +11,8 @@ namespace CSVM.UI.Screens;
 /// screenshot a stranger sends then carries its build, and the number is not taken for the
 /// original game's own. Two mouse-only icons left of it open the logs folder and the user folder,
 /// so a player filing a bug report can find the log. Built once by
-/// <see cref="CSVM.Launch.Launcher"/>, which shows it over every menu presentation and the
-/// extraction screen and hides it in flight. The number's home: <see cref="BuildVersion"/>.
+/// <see cref="CSVM.Launch.Launcher"/>, which shows it over every presentation's main menu and the
+/// extraction screen. It is hidden on every other screen and in flight. The number's home: <see cref="BuildVersion"/>.
 /// </summary>
 public sealed partial class BuildStamp : Node
 {
@@ -89,7 +89,7 @@ public sealed partial class BuildStamp : Node
     public static string LogsFolderFor(string? sinkPath, string root, bool exported) =>
         sinkPath != null && Path.GetDirectoryName(sinkPath) is { Length: > 0 } dir ? dir : Log.DirectoryFor(root, exported);
 
-    /// <summary>Shows the stamp while the menu or the extraction screen is up and keeps it sized to
+    /// <summary>Shows the stamp while the main menu or the extraction screen is up and keeps it sized to
     /// the window. Called once a frame by the launcher, which owns both.</summary>
     public void Tick(bool shown)
     {

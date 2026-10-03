@@ -309,6 +309,8 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     public PresentationId Id => PresentationId.Original;
 
+    public bool OnMainMenu => _shell?.Screen == OriginalScreen.TopLevel;
+
     /// <summary>The shell while built, for the suites that read the screen back.</summary>
     public OriginalShell? Shell => _shell;
 

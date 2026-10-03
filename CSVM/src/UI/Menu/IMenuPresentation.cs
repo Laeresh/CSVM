@@ -13,6 +13,9 @@ public interface IMenuPresentation
     /// <summary>The identity this presentation registered under.</summary>
     PresentationId Id { get; }
 
+    /// <summary>Whether the presentation stands on its main menu, the top of its screen graph.</summary>
+    bool OnMainMenu { get; }
+
     /// <summary>Shows the presentation, standing on whatever screen of its own graph it maps
     /// <paramref name="destination"/> to. Called once on a cold start and again after every
     /// <see cref="Hide"/>; a switch always arrives with
