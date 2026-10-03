@@ -84,7 +84,7 @@ What follows the switch, and how:
   bakes the puffer atlases and paints the plane skins and decals made from them again. Decoding
   again costs 60 to 110 ms a switch; keeping the 8-bit chains instead would hold 7 to 8 MB for the
   whole session. ⚠ Never cut the depth in a shader: cutting after filtering changes the pixels.
-- Read per use already: the chase camera's trail and speed widening, the rocket ring's orientation,
+- Read per use already: the chase camera's speed widening, the rocket ring's orientation,
   the muzzle flash's point term and the spyglass picture's minimum size.
 
 Nothing waits for the next mission load.

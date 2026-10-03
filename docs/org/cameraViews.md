@@ -600,18 +600,15 @@ which is why a single-pass renderer says the same thing by mounting the subtree 
 head-pitch tilt: that tilt is what puts the gunsight on the guns, and head-look is deliberately not
 applied to the mount.
 
-## The enhanced presentation's own chase cues (remake-only)
+## The enhanced presentation's own chase cue (remake-only)
 
-The distance law, its transient, the FOV constants and the head-look rates are the decoded ones
-under `--graphics=enhanced` too, and the faithful path writes the same camera pose and the same FOV
-to the bit whether or not the cues are stepped. The enhanced presentation adds two cues that the
-original has no counterpart for, both TUNE and both living in `CameraController.StepEnhancedCues`:
+The distance law, its transient, the chase rig, its two eased frames, the FOV constants and the
+head-look rates are the decoded ones under `--graphics=enhanced` too, so a roll trails by the same
+`pos_catch_up`/`look_catch_up` ease in both presentations. The faithful path writes the same camera
+pose and the same FOV to the bit whether or not the cue is stepped. The enhanced presentation adds
+one cue that the original has no counterpart for, TUNE and living in
+`CameraController.StepEnhancedCues`:
 
-- **The chase pose trails the nose on a trail of its own.** A lagged copy of the aircraft's
-  attitude eases toward the live one at 4/s (a 0.25 s time constant) through the same exponential
-  shape `dist_catch_up` uses, and both of the rig's frames, offset and aim, are that lagged
-  attitude. ⚠ The trail stands in for the decoded catch-up rather than stacking on it, so the
-  camera lags once. The distance law keeps reading the live speed, so the radius is unchanged.
 - **The external FOV widens with speed.** `RestoreExternalFov` adds up to 6° to the external
   angle, zero at and below 0.6 of the airframe's rated max speed (`fd_speed`, `PlaneStats`),
   rising linearly to the full 6° at rated max and held there in a dive past it. The first-person
@@ -619,9 +616,9 @@ original has no counterpart for, both TUNE and both living in `CameraController.
   built-in angle through `ApplyDecodedExternalFov`, because a cut holds a framing rather than
   riding the aeroplane.
 
-Both rates are per real second, the rule the rest of this page states for the decoded easings: the
-camera is stepped on the sim clock, which runs one step per rendered frame at the wall delta in
-play and a fixed step per frame only under `--det`, where a capture must be reproducible.
+⚠ Enhanced has no attitude lag of its own. The decoded ease already trails a roll (about 4.1° on
+the offset and 21.7° on the aim after a one-second 90°/s roll), and a faster lag in its place reads
+stiffer than the faithful camera, while one stacked on it lags the camera twice.
 
 ## Not resolved
 

@@ -53,7 +53,8 @@ public enum CameraView
 /// Deliberately passive: no clock and no input devices of its own, see <see cref="Chase"/> and
 /// <see cref="Orbit"/> for which clock each uses. The chase RADIUS is dynamic per plane, and its
 /// DIRECTION and aim are camparam's authored rig, <see cref="AuthoredRig"/>. The
-/// enhanced presentation's own chase cues enter through <see cref="StepEnhancedCues"/> alone.
+/// enhanced presentation's one chase cue, its speed widening of the external FOV, enters through
+/// <see cref="StepEnhancedCues"/> alone.
 /// </summary>
 public sealed class CameraController
 {
@@ -64,11 +65,6 @@ public sealed class CameraController
     /// <summary>The <c>--view=flyby</c> sentinel: start in the flyby camera and re-enter it after
     /// every respawn, the scripted twin of pressing the flyby key.</summary>
     public const int PinnedFlybyView = 11;
-
-    // The enhanced chase trail's rate, TUNE (docs/org/cameraViews.md): 1/s on the exponential shape
-    // dist_catch_up uses, a 0.25 s time constant. The trail stands in for the decoded catch-up
-    // rather than stacking on it. Internal so the chase-trail suite predicts it from this figure.
-    internal const float TrailRate = 4f;
 
     // The authored rig's literal scale on its plane-frame vector, 1.0145 (0x3f81db23), so the
     // settled camera sits about 2.4% beyond the radius (docs/org/cameraViews.md, "The chase rig").
@@ -157,12 +153,10 @@ public sealed class CameraController
     private Quaternion _posFrame = Quaternion.Identity, _lookFrame = Quaternion.Identity;
     private bool _framesSeeded;
 
-    // The enhanced chase cues' state: the lagged attitude the chase pose is built from, whether it
-    // has been seeded off a live one yet, and this frame's FOV widening in degrees. Only
-    // StepEnhancedCues writes them, and only under the enhanced presentation, so on the faithful
-    // path the widening stays 0 and the lag is never read.
-    private Basis _trailAttitude = Basis.Identity;
-    private bool _trailSeeded;
+    // The enhanced cue's state, this frame's FOV widening in degrees. Only StepEnhancedCues writes
+    // it, and only under the enhanced presentation, so on the faithful path it stays 0. ⚠ Enhanced
+    // has no attitude lag of its own. It rides the decoded catch-up, which already trails a roll.
+    // A second lag in its place or on top would part the two presentations in every roll.
     private float _fovWidenDeg;
 
     private float _orbitYaw, _orbitPitch, _orbitDist; // free orbit-camera state while paused
@@ -465,19 +459,8 @@ public sealed class CameraController
     /// path and on every static cut, which take <see cref="ApplyDecodedExternalFov"/>.</summary>
     public void RestoreExternalFov() => _camera.Fov = ExternalFovDeg + _fovWidenDeg;
 
-    // Beside the two laws its one caller drives them with, the same SA1204 trade FirstPersonPose
-    // above makes.
+    // Beside the law its one caller drives, the same SA1204 trade FirstPersonPose above makes.
 #pragma warning disable SA1204
-    /// <summary>The enhanced chase pose's lagged attitude one step on: the previous lag eased
-    /// toward the live attitude, <c>1 − e^(−rate·dt)</c> of the way there as a quaternion slerp,
-    /// the shape <see cref="HeadLook.Approach"/> names. ⚠ The rate is per real second, as every
-    /// easing rate on this camera is, so hand it the clock the frame ran on
-    /// (docs/org/cameraViews.md, "The easing dt is WALL time"). Pure, so the shape unit-tests
-    /// without a camera.</summary>
-    public static Basis TrailAttitude(Basis lagged, Basis live, float rate, float dt) =>
-        new Basis(lagged.GetRotationQuaternion()
-            .Slerp(live.GetRotationQuaternion(), 1f - Mathf.Exp(-rate * dt)));
-
     /// <summary>The enhanced widening of the external FOV, in degrees: 0 at and below
     /// <see cref="SpeedFovCruiseFrac"/> of the airframe's rated max speed, rising linearly to
     /// <see cref="SpeedFovWidenMaxDeg"/> at rated max and held there above it, so a dive past the
@@ -488,27 +471,12 @@ public sealed class CameraController
             (speedFraction - SpeedFovCruiseFrac) / (1f - SpeedFovCruiseFrac), 0f, 1f);
 #pragma warning restore SA1204
 
-    /// <summary>Advance the enhanced presentation's chase cues one frame: the lagged attitude
-    /// <see cref="Chase"/> builds its pose from, and the widening <see cref="RestoreExternalFov"/>
-    /// adds. ⚠ Call it on every flown frame, whichever view draws. Otherwise a view change springs a
-    /// lag left behind by the frames the chase camera did not hold. On the faithful path it holds
-    /// both cues at rest, which keeps that presentation's pose and FOV bit-identical.</summary>
-    public void StepEnhancedCues(float dt, Basis attitude, float speedFraction)
-    {
-        if (!GraphicsMode.Enhanced)
-        {
-            // A live switch away from Enhanced leaves both cues as a faithful flight holds them. No
-            // widening, and a trail that seeds afresh on the way back.
-            _trailSeeded = false;
-            _fovWidenDeg = 0f;
-            return;
-        }
-        _trailAttitude = _trailSeeded
-            ? TrailAttitude(_trailAttitude, attitude, TrailRate, dt)
-            : attitude;
-        _trailSeeded = true;
-        _fovWidenDeg = SpeedFovWiden(speedFraction);
-    }
+    /// <summary>Advance the enhanced presentation's chase cue one frame: the widening
+    /// <see cref="RestoreExternalFov"/> adds to the external FOV. The pose is the decoded one in
+    /// both presentations. Off Enhanced, a live switch away included, it holds the widening at 0.
+    /// That keeps the faithful pose and FOV bit-identical.</summary>
+    public void StepEnhancedCues(float speedFraction) =>
+        _fovWidenDeg = GraphicsMode.Enhanced ? SpeedFovWiden(speedFraction) : 0f;
 
     /// <summary>The death camera: a spot chosen once from the <c>death_*</c> fields on the frame
     /// the pilot's aircraft is destroyed, held for the whole fall while the view re-aims at the
@@ -664,9 +632,9 @@ public sealed class CameraController
         {
             Head.Reset();
             RestoreExternalFov();
-            // The enhanced trail follows the pilot's own wreck, which nothing steps any more.
+            // The eased frames still follow the pilot's own wreck; seeding them takes the new
+            // target's settled pose.
             _framesSeeded = false;
-            _trailSeeded = false;
         }
         Chase(dt, pose.Origin, pose.Basis);
     }
@@ -679,9 +647,8 @@ public sealed class CameraController
         _laggedSpeed = speed;
         _distExcess = 0f;
         _radius = _camParams.Dist + (_camParams.DistFactor * speed);
-        // A teleport is not a roll either: the enhanced lag re-seeds off the next stepped frame's
-        // attitude, and the widening off its speed, so a respawn opens on the settled pose.
-        _trailSeeded = false;
+        // The enhanced widening re-reads the next stepped frame's speed, so a respawn opens on the
+        // decoded angle.
         _fovWidenDeg = 0f;
         _posFrame = _lookFrame = attitude.GetRotationQuaternion();
         _framesSeeded = true;
@@ -808,15 +775,10 @@ public sealed class CameraController
 
     // One frame of the two eased aircraft frames the external rig turns by, seeding both off the
     // live attitude when nothing has held them. They roll fully with the plane, so inverted flight
-    // shows the world upside down. ⚠ Under Enhanced the trail replaces the ease; stacking both
-    // would lag the camera twice.
+    // shows the world upside down. Both presentations take this one ease.
     private void StepFrames(float dt, Basis attitude, float scale)
     {
-        if (GraphicsMode.Enhanced && _trailSeeded)
-        {
-            _posFrame = _lookFrame = _trailAttitude.GetRotationQuaternion();
-        }
-        else if (!_framesSeeded)
+        if (!_framesSeeded)
         {
             _posFrame = _lookFrame = attitude.GetRotationQuaternion();
         }
