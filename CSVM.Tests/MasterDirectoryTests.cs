@@ -122,7 +122,7 @@ public class MasterDirectoryTests
 
         Assert.True(directory.Outdated);
         Assert.Empty(directory.Games);
-        Assert.Contains("newer build", directory.Fault, StringComparison.Ordinal);
+        Assert.Contains("too old", directory.Fault, StringComparison.Ordinal);
         directory.Forget();
         Assert.False(directory.Outdated);
     }

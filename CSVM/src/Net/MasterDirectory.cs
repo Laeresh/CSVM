@@ -139,14 +139,14 @@ public sealed class MasterDirectory
         if (done.IsCompletedSuccessfully && MasterWire.TryReadList(done.Result, out int oldest) is { } listed)
         {
             _games.Clear();
-            Outdated = !MasterWire.Serves(oldest);
+            Outdated = !MasterWire.IsServedBy(oldest);
             foreach (var game in Outdated ? Array.Empty<MasterGame>() : listed)
             {
                 _games.Add(ToGame(game));
             }
 
             Fault = Outdated
-                ? $"the master server needs a newer build: it serves protocol {oldest} and later, this build speaks {MasterWire.ProtocolVersion}"
+                ? $"this build is too old for the master server: it serves protocol {oldest} and later, this build speaks {MasterWire.ProtocolVersion}"
                 : "";
             Answers++;
             return true;

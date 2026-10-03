@@ -166,7 +166,7 @@ names no other engine file. `MasterWire` holds the paths, the type words, the li
 JSON; `MasterGame` is one listing (`Unlisted` keeps it off the games list, reached by its code
 alone), `MasterMessage` one socket message either way, `MasterIceServer` one STUN or TURN entry.
 `ProtocolVersion` is the wire's own version, sent on host, update and join; the games list answers
-the oldest the server serves (`Serves`). Add a word or field, never rename one. Read
+the oldest the server serves (`IsServedBy`). Add a word or field, never rename one. Read
 `MasterWireTests.cs` and `server/MasterServer.Tests/`.
 
 ## src/Net/MasterSocket.cs

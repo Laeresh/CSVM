@@ -61,6 +61,12 @@ public sealed class MasterOptions
     /// a guest closes its socket once its link stands.</summary>
     public int GuestSocketSeconds { get; set; } = 120;
 
+    /// <summary>The oldest <c>MasterWire.ProtocolVersion</c> the server serves. A host or join below it
+    /// is refused with a request to update, and the games list names it so an older build says so.
+    /// ⚠ Raise it only after a game release speaking the new version is out, or every current
+    /// player is locked out; a build naming no version speaks 1.</summary>
+    public int OldestProtocol { get; set; } = 1;
+
     /// <summary>The STUN URLs as a list.</summary>
     public IReadOnlyList<string> StunUrls => Split(Stun);
 

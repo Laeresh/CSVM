@@ -123,7 +123,7 @@ public class MasterWireTests
         string text = MasterWire.Write(new MasterMessage { T = MasterWire.Join, Code = "ABC-DEF", Protocol = MasterWire.ProtocolVersion });
         const string older = "{\"t\":\"join\",\"code\":\"ABC-DEF\",\"version\":\"0.3\"}";
 
-        Assert.Contains("\"protocol\":1", text, StringComparison.Ordinal);
+        Assert.Contains($"\"protocol\":{MasterWire.ProtocolVersion}", text, StringComparison.Ordinal);
         Assert.True(MasterWire.TryRead(text, out var read));
         Assert.Equal(MasterWire.ProtocolVersion, read.Protocol);
         Assert.True(MasterWire.TryRead(older, out var old));
@@ -138,7 +138,7 @@ public class MasterWireTests
     {
         Assert.NotNull(MasterWire.TryReadList(text, out int read));
         Assert.Equal(oldest, read);
-        Assert.Equal(served, MasterWire.Serves(read));
+        Assert.Equal(served, MasterWire.IsServedBy(read));
     }
 
     [Theory]

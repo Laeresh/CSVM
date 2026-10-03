@@ -177,7 +177,7 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
     private double _sinceAsk;
     private int _heard;
 
-    // Whether this visit to the games list has said the master server needs a newer build. The
+    // Whether this visit to the games list has said this build is too old for the master server. The
     // list asks every second while empty, so without it the box would rise again on each answer.
     private bool _toldOutdated;
 
@@ -424,7 +424,8 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
                 }
             }
 
-            if (net.MasterOutdated && !_toldOutdated)
+            // A box already up, or a join's, keeps the screen; the word waits until it is clear.
+            if (net.MasterOutdated && !_toldOutdated && !_following && !_host.DialogOpen)
             {
                 _toldOutdated = true;
                 _host.RaiseDialog(CoopDoorText.MasterOutdated, DialogIcon.Warning, Ok(null));

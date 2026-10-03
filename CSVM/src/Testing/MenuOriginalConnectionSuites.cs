@@ -1376,7 +1376,7 @@ internal static class MenuOriginalConnectionSuites
     [Suite("menu-original-master-outdated",
         "The games list with a master server set and no LAN socket, against a server whose list says it "
         + "no longer serves this build's protocol version: the list stays empty of its one game, a box says "
-        + "the master server needs a newer version of CSVM, and after OK the next answer raises it no "
+        + "this version of CSVM is too old for the master server, and after OK the next answer raises it no "
         + "more. A server serving this build's version lists the same game. The server is a canned list")]
     internal static void TheOutdatedMasterServer(TestContext ctx)
     {

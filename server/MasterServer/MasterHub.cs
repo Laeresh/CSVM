@@ -36,14 +36,18 @@ public sealed class MasterHub
     /// <summary>The first peer id a game hands a guest.</summary>
     public const int FirstGuestPeer = 2;
 
-    /// <summary>The oldest <see cref="MasterWire.ProtocolVersion"/> this server serves, answered on
-    /// the games list so an older build tells its player to update. ⚠ Raise it only after a game
-    /// release that speaks the new version is out, or every current player is locked out.</summary>
-    public const int OldestProtocol = 1;
+    /// <summary>What a build below <see cref="Oldest"/> is told on every message it sends.</summary>
+    public const string OutdatedWhy = "This version of CSVM is too old for the master server. Update CSVM to host or join internet games.";
 
     private readonly object _gate = new();
     private readonly Dictionary<string, Game> _games = new(StringComparer.Ordinal);
     private readonly Dictionary<IMasterClient, Role> _roles = new(ReferenceEqualityComparer.Instance);
+
+    // A refused host keeps its socket and heartbeat, and would reopen a closed one every few
+    // seconds. So the socket stays open and every later message gets the same words, which keeps
+    // its lobby on the update request rather than on "only a host updates its game".
+    private readonly HashSet<IMasterClient> _outdated = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<int, int> _seen = new();
     private readonly MasterOptions _options;
     private readonly TimeProvider _time;
     private readonly TurnCredentials _ice;
@@ -60,6 +64,10 @@ public sealed class MasterHub
         _pick = pick ?? RandomNumberGenerator.GetInt32;
     }
 
+    /// <summary>The oldest <see cref="MasterWire.ProtocolVersion"/> this server serves, from
+    /// <see cref="MasterOptions.OldestProtocol"/> and never below 1.</summary>
+    public int Oldest => Math.Max(1, _options.OldestProtocol);
+
     /// <summary>How many games are hosted, unlisted ones included.</summary>
     public int Count
     {
@@ -69,6 +77,17 @@ public sealed class MasterHub
             {
                 return _games.Count;
             }
+        }
+    }
+
+    /// <summary>How many sockets named each protocol version on their first host or join since the
+    /// server started; a reopened socket counts again. A sender naming none counts as 1, and every
+    /// version past this server's as one past it. It says when the old versions are gone.</summary>
+    public IReadOnlyDictionary<int, int> Seen()
+    {
+        lock (_gate)
+        {
+            return new SortedDictionary<int, int>(_seen);
         }
     }
 
@@ -89,7 +108,7 @@ public sealed class MasterHub
                     return listed;
                 })
                 .ToList();
-            return new MasterGameList { Games = games, Protocol = MasterWire.ProtocolVersion, Oldest = OldestProtocol };
+            return new MasterGameList { Games = games, Protocol = MasterWire.ProtocolVersion, Oldest = Oldest };
         }
     }
 
@@ -101,6 +120,27 @@ public sealed class MasterHub
         ArgumentNullException.ThrowIfNull(message);
         lock (_gate)
         {
+            // Only a socket's first host or join names the build. A socket holding a role is
+            // refused that message anyway, and must not be marked outdated by a stray one.
+            if ((message.T is MasterWire.Host or MasterWire.Join) && !_roles.ContainsKey(from) && !_outdated.Contains(from))
+            {
+                // The count's key is the sender's word, so it is held to a few buckets: one past
+                // this server's own version stands for every newer one.
+                int protocol = message.Protocol ?? 1;
+                int bucket = Math.Clamp(protocol, 0, MasterWire.ProtocolVersion + 1);
+                _seen[bucket] = _seen.GetValueOrDefault(bucket) + 1;
+                if (protocol < Oldest)
+                {
+                    _outdated.Add(from);
+                }
+            }
+
+            if (_outdated.Contains(from))
+            {
+                Refuse(from, OutdatedWhy);
+                return;
+            }
+
             switch (message.T)
             {
                 case MasterWire.Host:
@@ -129,6 +169,7 @@ public sealed class MasterHub
         ArgumentNullException.ThrowIfNull(client);
         lock (_gate)
         {
+            _outdated.Remove(client);
             if (!_roles.Remove(client, out var role) || !_games.TryGetValue(role.Code, out var game))
             {
                 return;

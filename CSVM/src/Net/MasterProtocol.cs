@@ -157,7 +157,7 @@ public static class MasterWire
 
     /// <summary>Whether a server whose oldest served version is <paramref name="oldest"/> serves this
     /// build. A server that names none (0) serves version 1.</summary>
-    public static bool Serves(int oldest) => oldest <= ProtocolVersion;
+    public static bool IsServedBy(int oldest) => oldest <= ProtocolVersion;
 
     /// <summary>Reads a games list, every game passed through <see cref="Clean"/> and one without a
     /// well-formed code left out. Null for text that is not a list.</summary>
