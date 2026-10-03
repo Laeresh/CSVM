@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace CSVM.Bindings;
@@ -39,6 +40,17 @@ public sealed class BindingSet
     }
 
     public bool Contains(Binding binding) => _bindings.Contains(binding);
+
+    /// <summary>Moves a held binding to <paramref name="index"/>, clamped to the list, so a screen's
+    /// replace keeps the column it was made in. A binding the set lacks is ignored.</summary>
+    public void MoveTo(Binding binding, int index)
+    {
+        int from = _bindings.IndexOf(binding);
+        if (from < 0)
+            return;
+        _bindings.RemoveAt(from);
+        _bindings.Insert(Math.Clamp(index, 0, _bindings.Count), binding);
+    }
 
     /// <summary>Drops one binding. This is the half of the steal rule that runs on the action
     /// losing the control; putting it on the new owner is the map's job.</summary>

@@ -71,7 +71,7 @@ public class OriginalKeysStickColumnTests
         Assert.DoesNotContain(r1, after);
         Assert.Contains(l1, after);
         Assert.Equal(others, after.Where(b => !KeysStickColumn.IsStick(b)));
-        Assert.Equal("231D/0201 Button 2 / 231D/0200 Button 8", rig.Shell.Options.Keys.CellText(0).Stick);
+        Assert.Equal("231D/0200 Button 8 / 231D/0201 Button 2", rig.Shell.Options.Keys.CellText(0).Stick);
     }
 
     /// <summary>A full axis counts once for its pair. R's new axis replaces R's old one on both

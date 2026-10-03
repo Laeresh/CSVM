@@ -34,6 +34,39 @@ public class ControlsFeatureTests
         Assert.Equal("Use Nitro-Booster is now M.", feature.Status);
     }
 
+    /// <summary>A capture on a held slot replaces that binding where it stands. So a capture on
+    /// Control A leaves Control B as it was.</summary>
+    [Fact]
+    public void ACaptureOnTheFirstSlotReplacesItInPlace()
+    {
+        var (feature, _) = Flight();
+        feature.Focus(IndexOf(feature, InputAction.Nitro));
+        var second = feature.Bindings(InputAction.Nitro)[1];
+
+        Assert.True(feature.Offer(Key(Godot.Key.M)));
+
+        Assert.Equal(new[] { Key(Godot.Key.M), second }, feature.Bindings(InputAction.Nitro));
+        Assert.Equal(0, feature.Slot);
+    }
+
+    [Fact]
+    public void ACaptureOnAMiddleSlotKeepsTheBindingsAroundIt()
+    {
+        var (feature, _) = Flight();
+        feature.Focus(IndexOf(feature, InputAction.Nitro));
+        feature.MoveSlot(9);
+        feature.Offer(Key(Godot.Key.M));
+        var before = feature.Bindings(InputAction.Nitro).ToArray();
+        feature.Focus(IndexOf(feature, InputAction.Nitro));
+        feature.MoveSlot(1);
+
+        feature.Offer(Key(Godot.Key.Y));
+
+        Assert.Null(feature.Pending);
+        Assert.Equal(new[] { before[0], Key(Godot.Key.Y), before[2] }, feature.Bindings(InputAction.Nitro));
+        Assert.Equal(1, feature.Slot);
+    }
+
     [Fact]
     public void AcceptWritesTheStagedEditIntoTheMapThePollingSiteHolds()
     {

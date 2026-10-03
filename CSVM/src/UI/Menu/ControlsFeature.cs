@@ -512,6 +512,17 @@ public sealed class ControlsFeature : IMenuFeature
         return $"Press a control for {name}.";
     }
 
+    private static int IndexOf(IReadOnlyList<Binding> bindings, Binding binding)
+    {
+        for (int i = 0; i < bindings.Count; i++)
+        {
+            if (bindings[i] == binding)
+                return i;
+        }
+
+        return -1;
+    }
+
     private static string ContextName(InputContext context) => context switch
     {
         InputContext.Flight => "Flying",
@@ -521,12 +532,14 @@ public sealed class ControlsFeature : IMenuFeature
 
     private void Commit(Binding binding)
     {
+        // In place: a capture on Control A must leave Control B where it is.
         var bindings = FocusedBindings;
+        int at = _slot;
         if (_slot < bindings.Count)
             Map.Unassign(Focused, bindings[_slot]);
 
-        var stolen = Map.Assign(Focused, binding);
-        _slot = Math.Max(0, Map.Bindings(Focused).Count - 1);
+        var stolen = Map.Assign(Focused, binding, at);
+        _slot = Math.Max(0, IndexOf(Map.Bindings(Focused), binding));
         MarkDirty();
         Status = stolen.Count == 0
             ? $"{BindingLabels.Name(Focused)} is now {BindingLabels.Describe(binding)}."
