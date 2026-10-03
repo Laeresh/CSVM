@@ -295,6 +295,10 @@ public sealed record BoardLine(
     /// so no authored string carries one.</summary>
     public const string GlyphSlot = "\u0001";
 
+    /// <summary>How far above a line's baseline the middle of its capitals stands, as a share of
+    /// its size. A plaque's label is centred in its frame by it.</summary>
+    public const float CapsMiddle = 0.38f;
+
     /// <summary>The authored box height a wrapped block is asked to fit inside, 0 for a line
     /// drawn at its own size whatever it comes to. A block taller than this is stepped down a
     /// point at a time by the renderer, which is the only half that can measure it.</summary>
@@ -315,6 +319,12 @@ public sealed record BoardLine(
     /// the picture. A composer that spaces the words itself breaks the line on another face. A line
     /// carrying one is drawn unwrapped and unjustified for the same reason.</summary>
     public GlyphKey? Glyph { get; init; }
+
+    /// <summary>The top of a box <paramref name="height"/> tall round a word in capitals drawn on
+    /// a line at <paramref name="lineY"/> of <paramref name="size"/>. The word keeps that line's
+    /// baseline, its top plus its size, and stands in the middle of the box.</summary>
+    public static float CapsBoxTop(float lineY, float size, float height) =>
+        lineY + size - (size * CapsMiddle) - (height / 2f);
 }
 
 /// <summary>

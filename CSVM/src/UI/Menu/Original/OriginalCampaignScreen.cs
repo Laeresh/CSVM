@@ -458,10 +458,10 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
                 // The wait for a code names nothing to copy, so it carries no control.
                 if (open && !door.AwaitingCode && CoopDoorText.CopyTarget(door).Length > 0)
                 {
-                    // Over the band's first line with a code, else its second, the address line.
-                    float y = CoopBandY - 2f + (door.JoinCode != null ? 0f : CoopBandSize + 4f);
+                    float height = CoopBandSize + 4f;
                     rows.Add(new OriginalRow(CoopCopyKey, CoopDoorText.CopyButton, OriginalRowKind.TextButton,
-                        CoopDoorX, y, CoopBandWidth - 8f, CoopBandSize + 4f, true, 0, null));
+                        CoopDoorX, BoardLine.CapsBoxTop(CopyLineY(door), CoopBandSize, height), CoopBandWidth - 8f, height,
+                        true, 0, null));
                 }
 
                 var row = _host.PlaqueRow(
@@ -902,6 +902,10 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     };
 
     // The network state's lines over one dark ground, in the painting's empty top-left corner.
+    // The band line the COPY row spans: its first with a code, else its second, the address line.
+    private static float CopyLineY(NetPlayFeature door) =>
+        CoopBandY + (door.JoinCode != null ? 0f : CoopBandSize + 4f);
+
     private static void ComposeBand(string band, BoardLayers layers)
     {
         if (band.Length == 0)
@@ -1668,8 +1672,9 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         }
     }
 
-    // The COPY box at the right end of the band line its row spans. The focus outlines the box,
-    // which is what a pad presses.
+    // The COPY box at the right end of the band line its row spans. The word is drawn on that line
+    // and the box stands round it, so the two share a baseline. The focus outlines the box, which
+    // is what a pad presses.
     private void ComposeCopy(OriginalRow row, bool focused, bool pressed, BoardLayers layers)
     {
         var box = row with { X = row.X + row.Width - CoopCopyWidth, Width = CoopCopyWidth };
@@ -1681,7 +1686,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             layers.Fills.Add(_host.FocusMark(box));
         }
 
-        layers.Lines.Add(new BoardLine(CoopDoorText.CopyButton, box.X, box.Y + 2f, box.Width, CoopBandSize,
+        layers.Lines.Add(new BoardLine(CoopDoorText.CopyButton, box.X, CopyLineY(_net()!), box.Width, CoopBandSize,
             BoardInk.Row, -1, Justify: BoardJustify.Center, Colour: new BoardTint(226, 224, 206)));
     }
 

@@ -193,6 +193,10 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private const float ChatWidth = 735f;
     private const float ChatHeight = 165f;
     private const float ChatNameColumn = 100f;
+
+    // The lines' column in the chat pane, ending clear of the scroll bar the background paints at
+    // its right. That bar's border starts 6 px inside the pane's right edge.
+    private const float ChatTextWidth = ChatWidth - ChatNameColumn - 10f;
     private const float CopyWidth = 48f;
     private const float DisabledArrow = 0.45f;
     private const int IconFrames = 11;
@@ -1185,8 +1189,9 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         }
 
         float size = _text.Regular(10575)?.Pixels ?? MultiplayerBoardText.TextFallback;
-        return new OriginalRow(CopyKey, CoopDoorText.CopyButton, OriginalRowKind.TextButton, ChatX + ChatNameColumn, ChatY - 1f,
-            ChatWidth - ChatNameColumn - 4f, size + 2f, true, 0, null);
+        float height = size + 2f;
+        return new OriginalRow(CopyKey, CoopDoorText.CopyButton, OriginalRowKind.TextButton, ChatX + ChatNameColumn,
+            BoardLine.CapsBoxTop(ChatY, size, height), ChatTextWidth, height, true, 0, null);
     }
 
     // Every widget of the showing tab and its frame, in focus order. The tabs and the page come
@@ -1558,7 +1563,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                     Face: face, Colour: Black));
             }
 
-            layers.Lines.Add(new BoardLine(pinned[i], ChatX + ChatNameColumn, y, ChatWidth - ChatNameColumn - 4f - (i == 0 ? copy : 0f), size,
+            layers.Lines.Add(new BoardLine(pinned[i], ChatX + ChatNameColumn, y, ChatTextWidth - (i == 0 ? copy : 0f), size,
                 BoardInk.Row, -1, Face: face, Colour: Pinned));
         }
 
@@ -1568,7 +1573,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             float y = ChatY + ((i - first + top) * pitch);
             layers.Lines.Add(new BoardLine(chat[i].Name, ChatX + 4f, y, ChatNameColumn - 8f, size, BoardInk.Row, -1,
                 Face: face, Colour: chat[i].Name == own ? OwnName : Black));
-            layers.Lines.Add(new BoardLine(chat[i].Text, ChatX + ChatNameColumn, y, ChatWidth - ChatNameColumn - 4f, size,
+            layers.Lines.Add(new BoardLine(chat[i].Text, ChatX + ChatNameColumn, y, ChatTextWidth, size,
                 BoardInk.Row, -1, Face: face, Colour: Black));
         }
     }
@@ -1636,7 +1641,8 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     }
 
     // The COPY box at the right end of the line its row spans, the line itself being the pinned
-    // row's words. The focus outlines the box, which is what a pad presses.
+    // row's words. The word is drawn on that line and the box stands round it, so the two share a
+    // baseline. The focus outlines the box, which is what a pad presses.
     private void ComposeCopy(OriginalRow row, bool focused, bool pressed, BoardLayers layers)
     {
         var box = row with { X = row.X + row.Width - CopyWidth, Width = CopyWidth };
@@ -1650,7 +1656,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
         var face = _text.Regular(10575);
         float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
-        layers.Lines.Add(new BoardLine(CoopDoorText.CopyButton, box.X, box.Y + 1f, box.Width, size, BoardInk.Row, -1,
+        layers.Lines.Add(new BoardLine(CoopDoorText.CopyButton, box.X, ChatY, box.Width, size, BoardInk.Row, -1,
             Justify: BoardJustify.Center, Face: face, Colour: Pinned));
     }
 

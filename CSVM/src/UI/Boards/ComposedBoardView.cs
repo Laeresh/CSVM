@@ -818,7 +818,7 @@ public sealed partial class ComposedBoardView : Control
         int points = Mathf.Max(1, Mathf.RoundToInt(fit.Length(13f)));
         float baseline = plaque.LabelBaseline > 0f
             ? at.Y + fit.Length(plaque.LabelBaseline)
-            : at.Y + (span.Y / 2f) + (points * 0.38f);
+            : at.Y + (span.Y / 2f) + (points * BoardLine.CapsMiddle);
         DrawString(font, new Vector2(at.X + 1f, baseline + 1f), plaque.Label,
             HorizontalAlignment.Center, span.X, points, Colors.Black);
         DrawString(font, new Vector2(at.X, baseline), plaque.Label,
