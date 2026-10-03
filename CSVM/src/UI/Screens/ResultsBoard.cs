@@ -29,6 +29,9 @@ public abstract partial class ResultsBoard : Control
     internal static readonly Color HeaderColor = new(0.50f, 0.62f, 0.80f);
     internal static readonly Color RowColor = new(0.86f, 0.89f, 0.94f);
 
+    // The line a withheld Restart row leaves, on the context line's rung.
+    private static readonly float WithheldFont = ChromeType.InReference(ChromeSize.Caption, ReferenceHeight);
+
     private PauseState _state = null!;
     private string _exitLabel = "";
     private System.Func<int, MenuInput> _inputFor = null!;
@@ -306,12 +309,10 @@ public abstract partial class ResultsBoard : Control
     /// over the remaining two.</summary>
     protected void AddStandardMenu(VBoxContainer body, float s)
     {
-        // The line's size at 720p, the one the boards' context line is drawn at. TUNE.
-        const int withheldFont = 15;
         BoardMenu menu;
         if (RestartWithheld is { } line)
         {
-            _withheld = Label(line, (int)(withheldFont * s), ContextColor);
+            _withheld = Label(line, (int)(WithheldFont * s), ContextColor);
             body.AddChild(Centered(_withheld));
             menu = new BoardMenu(
                 dismissable: false,

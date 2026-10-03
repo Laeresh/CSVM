@@ -6,28 +6,31 @@ namespace CSVM.UI.Boards;
 /// </summary>
 public enum ChromeSize
 {
-    /// <summary>26: a board's page heading.</summary>
+    /// <summary>26: a board's page heading, and the dogfight, wrap-up and pause boards' headline.</summary>
     Heading,
 
-    /// <summary>22: a second heading beside it, and a results board's title.</summary>
+    /// <summary>22: a second heading beside it, and the stunt results boards' title.</summary>
     Title,
 
     /// <summary>19: the one figure a results board leads with, its total.</summary>
     Lead,
 
-    /// <summary>17: an entry's own words, a device name on the join board.</summary>
+    /// <summary>17: an entry's own words: a device name on the join board, a dogfight or wrap-up
+    /// board's row, a board menu's row.</summary>
     Body,
 
-    /// <summary>15: running text, a rule line, a results table's rows.</summary>
+    /// <summary>15: running text, a rule line, a stunt results table's rows, the pause board's
+    /// owner line.</summary>
     Text,
 
-    /// <summary>13: small print, a status under an entry, a subtitle, a context line.</summary>
+    /// <summary>13: small print, a status under an entry, a subtitle, a context line, a board
+    /// menu's legend, the launchscreen's join strip.</summary>
     Caption,
 
     /// <summary>11: an in-flight banner, and a results table's column heads.</summary>
     Note,
 
-    /// <summary>8: an in-flight status readout.</summary>
+    /// <summary>8: an in-flight status readout, and the flight text block (speed, altitude, throttle).</summary>
     Readout,
 
     /// <summary>6: an in-flight marker's label.</summary>

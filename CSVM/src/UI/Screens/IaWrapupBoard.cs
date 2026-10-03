@@ -19,12 +19,6 @@ namespace CSVM.UI.Screens;
 /// </summary>
 public sealed partial class IaWrapupBoard : ResultsBoard, IIaWrapupBoard
 {
-    // Base metrics at 720p (scaled by window height). All TUNE, mirrors VersusBoard/StuntRaceBoard
-    // so every shared results board reads as the same screen.
-    private const int TitleFont = 30;
-    private const int ContextFont = 15;
-    private const int RowFont = 20;
-
     // The shipped row titles, langui ids 1134-1137 (docs/formats/instant-action.md "The wrap-up
     // screen"), literal text, not read off ui_strings.json at runtime: that table is a build-time
     // extraction artifact of the .rof archive, not one of the five archives a session build opens
@@ -34,6 +28,12 @@ public sealed partial class IaWrapupBoard : ResultsBoard, IIaWrapupBoard
     private const string DestroyedTitle = "Enemies Shot Down";
     private const string ZonesTitle = "Danger Zones Completed";
     private const string ShotsTitle = "Shot %";
+
+    // The board's own sizes, chrome type scale rungs at the boards' 720p reference, scaled by
+    // window height. They are VersusBoard's, so the two shared boards read as one screen.
+    private static readonly float TitleFont = ChromeType.InReference(ChromeSize.Heading, ReferenceHeight);
+    private static readonly float ContextFont = ChromeType.InReference(ChromeSize.Caption, ReferenceHeight);
+    private static readonly float RowFont = ChromeType.InReference(ChromeSize.Body, ReferenceHeight);
 
     private static readonly Color WonColor = new(0.55f, 0.92f, 0.62f);
     private static readonly Color LostColor = new(0.92f, 0.45f, 0.45f);

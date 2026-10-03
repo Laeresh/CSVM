@@ -21,12 +21,12 @@ public sealed partial class VersusBoard : ResultsBoard
     /// (<see cref="ResultsBoard.RestartWithheld"/>): the host restarts the round for every machine.</summary>
     public const string HostCallsTheRematch = "The host calls the rematch";
 
-    // Base metrics at 720p (scaled by window height). All TUNE, mirrors StuntRaceBoard so the
-    // two shared boards read as the same screen.
-    private const int TitleFont = 30;
-    private const int ContextFont = 15;
-    private const int HeaderFont = 14;
-    private const int RowFont = 20;
+    // The board's sizes, chrome type scale rungs at the boards' 720p reference, scaled by
+    // window height.
+    private static readonly float TitleFont = ChromeType.InReference(ChromeSize.Heading, ReferenceHeight);
+    private static readonly float ContextFont = ChromeType.InReference(ChromeSize.Caption, ReferenceHeight);
+    private static readonly float HeaderFont = ChromeType.InReference(ChromeSize.Note, ReferenceHeight);
+    private static readonly float RowFont = ChromeType.InReference(ChromeSize.Body, ReferenceHeight);
 
     private VersusMatch _match = null!;
     private string _context = "";

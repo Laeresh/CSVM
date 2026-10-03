@@ -106,6 +106,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     private const int FooterFont = 15;
     private const int ErrorFont = 15;
 
+    // The window height the join strip's chrome type scale rung converts into, the menu's own 720p.
+    private const float ReferenceHeight = 720f;
+
     // The centred layout's content column at 720p: the width every band's text is centred in and
     // the description wraps at, and the vertical padding the header keeps above the title and the
     // footer below the controls line.
@@ -218,6 +221,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     // stages of the pick are the one thing on this screen a pilot must be able to tell apart at
     // a glance, and "the cursor is here" and "this is chosen" would otherwise look identical.
     private static readonly Color RowLockedColor = new(0.55f, 0.95f, 0.62f);
+
+    // The join strip's size, the chrome type scale's caption rung in the menu's 720p reference.
+    private static readonly float JoinFont = ChromeType.InReference(ChromeSize.Caption, ReferenceHeight);
 
     private readonly Dictionary<string, PlaneStats?> _stats = new();
     // This screen's view of the shared setup's seats, player 1 first, one wrapper per seat with
@@ -4080,7 +4086,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                 12 - rowsH)
             : 0f;
         float header = ZonePad + font.GetHeight(TitleFont) + font.GetHeight(CrumbFont) +
-            font.GetHeight(FooterFont) + (3 * ZoneSeparation);
+            font.GetHeight((int)JoinFont) + (3 * ZoneSeparation);
         float middle = ZonePad + font.GetHeight(HeadingFont) + (3 * font.GetHeight(DetailFont)) +
             rowsH + artH + (5 * ZoneSeparation);
         float footer = (DetailReserveLines * font.GetHeight(DetailFont)) +
@@ -4558,11 +4564,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         for (int i = 0; i < _slots.Count; i++)
         {
             var label = Label($"{SplitScreen.PlayerTag(i)}  {_slots[i].Input.DeviceLabel}",
-                (int)(FooterFont * s), SplitScreen.PlayerColor(i), HorizontalAlignment.Center);
+                (int)(JoinFont * s), SplitScreen.PlayerColor(i), HorizontalAlignment.Center);
             label.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter;
             row.AddChild(label);
         }
-        var hint = Label(JoinHint(), (int)(FooterFont * s), FooterColor, HorizontalAlignment.Center);
+        var hint = Label(JoinHint(), (int)(JoinFont * s), FooterColor, HorizontalAlignment.Center);
         hint.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter;
         row.AddChild(hint);
         return row;

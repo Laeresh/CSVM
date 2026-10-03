@@ -17,12 +17,12 @@ namespace CSVM.UI.Screens;
 /// only): race totals aren't comparable across player counts.</summary>
 public sealed partial class StuntRaceBoard : ResultsBoard
 {
-    // Base metrics at 720p (scaled by window height). All TUNE, mirrors StuntScoreboard so the
-    // solo and race boards read as the same screen.
-    private const int TitleFont = 26;
-    private const int ContextFont = 15;
-    private const int HeaderFont = 14;
-    private const int RowFont = 18;
+    // The board's sizes, chrome type scale rungs at the boards' 720p reference, scaled by
+    // window height. The heading's are StuntScoreboard's, so the solo and race boards match.
+    private static readonly float TitleFont = ChromeType.InReference(ChromeSize.Title, ReferenceHeight);
+    private static readonly float ContextFont = ChromeType.InReference(ChromeSize.Caption, ReferenceHeight);
+    private static readonly float HeaderFont = ChromeType.InReference(ChromeSize.Note, ReferenceHeight);
+    private static readonly float RowFont = ChromeType.InReference(ChromeSize.Text, ReferenceHeight);
 
     private StuntRace _race = null!;
     private string _context = "";

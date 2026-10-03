@@ -193,10 +193,12 @@ public sealed class FlightHud
     private const string RespawnPressTemplate = "Press %1 to respawn";
     private const string RespawnClickTemplate = "Click %1 to respawn";
     private const float DamageFlashTime = 2.5f;        // s the text block shows the impact line
-    private const int TextFontSize = 22;               // text block, full-screen (shrunk per pane)
     private const float AglRayLength = 1000f;          // m the altimeter's down ray reaches
 
     private static readonly Vector2 TextMargin = new(16, 10);
+
+    // The text block's size, the chrome type scale's status readout rung in the HUD's 1440p reference.
+    private static readonly float RefTextFont = ChromeType.InReference(ChromeSize.Readout, HudMetrics.ReferenceHeight);
 
     private readonly List<float> _gunGaugeSlots = new();
     private readonly List<float> _missileGaugeSlots = new();
@@ -206,7 +208,7 @@ public sealed class FlightHud
     private bool _shown = true;                  // SetVisible: off in a cutscene and in photo mode
     private bool _instrumentsShown = true;       // SetInstrumentsVisible: off under --debug-spectate
     private bool _cockpitView;                   // the cockpit interior is on the screen this frame
-    private float _paneFactor = 1f;              // last applied splitscreen shrink (1 = single player)
+    private float _textScale = -1f;              // last applied HudMetrics scale (window and pane)
     private float _textLeft = -1f;               // last applied reading-box left edge (0 at 16:9)
     private float _damageFlash;                  // s left on the impact line
     private string _damageFlashText = "";
@@ -392,8 +394,8 @@ public sealed class FlightHud
     /// crash camera hides the HUD layer, and the stack is up over that cut in the original.</summary>
     public void Attach(CanvasLayer canvas, CanvasLayer messages, Node? versusHud, Node? scoreboard)
     {
+        // Sized with its first line of text by UpdateTextBlock, which reads the window it is drawn in.
         var text = new Label { Position = TextMargin };
-        text.AddThemeFontSizeOverride("font_size", TextFontSize);
         text.AddThemeColorOverride("font_color", new Color(1f, 0.85f, 0.4f));
         text.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.7f));
         text.AddThemeConstantOverride("shadow_offset_y", 2);
@@ -757,19 +759,19 @@ public sealed class FlightHud
         {
             return;
         }
-        // Splitscreen: the text block shrinks with the pane, like every other HUD element
-        // (HudMetrics). PaneFactor is exactly 1 in single player, so the original 22 px at
-        // (16,10) is untouched there; re-applied only when the factor actually changes.
+        // The text grows with the window and shrinks with a splitscreen pane, like every other HUD
+        // element (HudMetrics); its margin follows the pane alone. Re-applied only on a change.
+        float scale = HudMetrics.Scale(_text);
         float paneFactor = HudMetrics.PaneFactor(_text);
         // ⚠ x measures from the reading box, not the pane. On a wide full-screen view this block
         // would otherwise stand a screen away from its dials. The box's left edge is 0 at 16:9
         // and under, and in any split pane.
         float left = HudMetrics.ReadingBox(_text).Position.X;
-        if (!Mathf.IsEqualApprox(paneFactor, _paneFactor) || !Mathf.IsEqualApprox(left, _textLeft))
+        if (!Mathf.IsEqualApprox(scale, _textScale) || !Mathf.IsEqualApprox(left, _textLeft))
         {
-            _paneFactor = paneFactor;
+            _textScale = scale;
             _textLeft = left;
-            _text.AddThemeFontSizeOverride("font_size", Mathf.Max(8, Mathf.RoundToInt(TextFontSize * paneFactor)));
+            _text.AddThemeFontSizeOverride("font_size", Mathf.Max(8, Mathf.RoundToInt(RefTextFont * scale)));
             _text.Position = new Vector2(left + (TextMargin.X * paneFactor), TextMargin.Y * paneFactor);
         }
         // A splitscreen pane is WIDER than tall, so a height-scaled line would run into the
