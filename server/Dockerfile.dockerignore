@@ -4,6 +4,7 @@
 !Directory.Build.props
 !.editorconfig
 !CSVM/src/Net/MasterProtocol.cs
+!CSVM/src/Launch/MasterFrames.cs
 !server/MasterServer/
 server/MasterServer/bin/
 server/MasterServer/obj/
