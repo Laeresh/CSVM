@@ -300,20 +300,29 @@ and falls back. `--det` drops both machine-state layers and keeps only an explic
 which is how a golden or a deterministic capture pins the mode on purpose. The mode itself is
 written up as a divergence in `docs/architecture/Spec.md`.
 
+## src/Utils/WordSetting.cs
+The source order the four word-valued graphics settings share (`AntiAliasingSetting`, `RenderScaleSetting`,
+`ShadowQualitySetting`, `ViewDistance`), each holding one instance as its `Lookup` over its words, key and flag. `Resolve`
+takes the flag where the setting has one, then the saved word, then the config key, then the fallback the setting hands
+it; a word outside the list falls through, a key spelling the fallback reads as it, and an unknown config word the lookup
+reaches warns. The result is a `ResolvedWord` carrying a `SettingSource`, and `SourceName` spells that source for a log
+line (`options.json`, the key, the flag, `default` or shadow quality's GPU rules). `ReadSaved` is the `--det` guard each
+setting's `SavedWord` goes through. `Spec/SessionSpec.cs` parses a setting's flag through its `Lookup`.
+
 ## src/Utils/AntiAliasingSetting.cs
 The anti-aliasing method, a VIDEO page display setting over `DisplayWords.AntiAliasingChoices`: `off`, `fxaa`, `smaa`,
-`taa` or `fsr2`. `Resolve` layers the saved `antiAliasing` word, then the `graphics.antiAliasing` config key, then
-`DefaultFor` the graphics mode, which is `off` under Original and `taa` under Enhanced; an unknown config word warns and
-falls back. A chosen method is written whichever mode won, since only the default follows the mode. `SavedWord` holds the
+`taa` or `fsr2`. `Resolve` runs `WordSetting` over the saved `antiAliasing` word, then the `graphics.antiAliasing` config
+key, then `DefaultFor` the graphics mode, which is `off` under Original and `taa` under Enhanced. A chosen method is
+written whichever mode won, since only the default follows the mode. `SavedWord` holds the
 `--det` guard. The resolve runs at launch after `GraphicsMode.Resolve`, and again on a live mode switch or an Options apply, landing in the static `Method`, whose one
 reader is `ViewportQuality.Apply`; `Launcher`'s `[world] graphics mode:` line announces the word and its source. FSR 2.2
 refuses a render scale above native, which `RenderScaleSetting.ClampFor` applies.
 
 ## src/Utils/ShadowQualitySetting.cs
-The Enhanced sun's shadow quality, a VIDEO page row over `Words` (`off` to `ultra`). `Resolve` layers `--shadow-quality=`,
+The Enhanced sun's shadow quality, a VIDEO page row over `Words` (`off` to `ultra`). `Resolve` runs `WordSetting` over `--shadow-quality=`,
 the saved `shadowQuality` word, the `graphics.shadowQuality` key, then `DefaultFor(det)`: `ultra` under `--det`, otherwise
 `FallbackFor(integrated, panes)`, which is `ultra` on a discrete GPU, `high` on an integrated one (the Steam Deck) and `off`
-there at three or four panes (source `default_integrated_gpu_panes`). `Pick` is the ladder without the store; `SavedWord`
+there at three or four panes (source `default_integrated_gpu_panes`). `Pick` is the same lookup without the store; `SavedWord`
 holds the `--det` guard. `Launch/GameSession.cs` calls `ResolveForPanes` as its rigs are built and at its exit. Each word maps to a `SunShadowPlan`: whether the sun
 casts, its angular distance and blur, and the renderer's soft filter and atlas edge. `ApplyTo` is the one writer, called by
 `Launcher.ApplyShadowQuality` at the sun's build and on every Options apply; it writes nothing on the faithful path and bumps
@@ -334,8 +343,8 @@ label table beside them, resolving to how much further the clutter draws than th
 mode already gives it: 1x, 2x, 4x or no fade. The fog never moves with it, the early chapters'
 haze being part of their scenery; C5's city blocks fade well inside theirs. The faithful path keeps
 the decoded fade. The Built-in Options screen offers it under the graphics row, dead until Enhanced
-is chosen. `Resolve` layers `--view-distance`, the saved word (never under `--det`), the
-`graphics.viewDistance` key and the default Far, the largest step four C5 panes run at Normal's
+is chosen. `Resolve` runs `WordSetting` over `--view-distance`, the saved word (never under `--det`),
+the `graphics.viewDistance` key and the default Far, the largest step four C5 panes run at Normal's
 cost. `Launcher` folds `ClutterReach` into the clutter fade global at startup and on every apply.
 
 ## src/Utils/SunShadow.cs
@@ -387,9 +396,8 @@ the one place `DisplayServer.WindowSetCurrentScreen` is called and skips a windo
 ## src/Utils/RenderScaleSetting.cs
 The render scale, a VIDEO page display setting: the multiple of its own size a 3D viewport renders at. Above native the
 image is resampled down, spending GPU headroom on edges; below native it is upscaled, buying frame rate on a machine
-without it. The words are `DisplayWords.RenderScaleChoices`, percentages of native from 50 to 200. `Resolve` layers the
-saved `renderScale` word, then the `graphics.renderScale` config key, then native; an unknown word reads as never set and
-a key spelling native reads as the default. The winner is then clamped under the anti-aliasing word: `fsr2` pulls a scale
+without it. The words are `DisplayWords.RenderScaleChoices`, percentages of native from 50 to 200. `Resolve` runs
+`WordSetting` over the saved `renderScale` word, then the `graphics.renderScale` config key, then native. The winner is then clamped under the anti-aliasing word: `fsr2` pulls a scale
 above native to 100 (`ClampFor`, which the VIDEO page applies when FSR 2.2 is picked) and `ChoicesFor` offers it only 50
 to 100. `SavedWord` holds the `--det` guard. The resolve runs at launch and on a live apply, landing in the static `Scale`, whose one
 reader is `ViewportQuality.Apply`; `Launcher`'s `[world] graphics mode:` line announces it and any clamp.

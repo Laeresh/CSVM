@@ -705,7 +705,7 @@ public partial class Launcher : Node3D
             Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
         string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
         string clamped = renderScale.Clamped ? " clamped_by=fsr2" : string.Empty;
-        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={renderScale.Source}{clamped} anti_aliasing={antiAliasing.Word} aa_source={antiAliasing.Source} shadow_quality={shadowQuality.Word} shadow_source={shadowQuality.Source} view_distance={viewDistance.Word} view_source={viewDistance.Source}");
+        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={Utils.RenderScaleSetting.Lookup.SourceName(renderScale.Source)}{clamped} anti_aliasing={antiAliasing.Word} aa_source={Utils.AntiAliasingSetting.Lookup.SourceName(antiAliasing.Source)} shadow_quality={shadowQuality.Word} shadow_source={Utils.ShadowQualitySetting.Lookup.SourceName(shadowQuality.Source)} view_distance={viewDistance.Word} view_source={Utils.ViewDistance.Lookup.SourceName(viewDistance.Source)}");
         // The window's own viewport takes the render flags here, before any scene builds. The
         // three SubViewports take them at construction.
         Utils.ViewportQuality.Apply(GetViewport());
@@ -2574,7 +2574,7 @@ public partial class Launcher : Node3D
         string shadowFallback = Utils.ShadowQualitySetting.DefaultFor(_spec.Det);
         var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality, applied.ShadowQuality,
             Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
-        Log.Info("world", $"shadow quality applied: {shadowQuality.Word} source={shadowQuality.Source}");
+        Log.Info("world", $"shadow quality applied: {shadowQuality.Word} source={Utils.ShadowQualitySetting.Lookup.SourceName(shadowQuality.Source)}");
         // A mode switch dresses the sun at the new level itself; otherwise the level alone moves.
         if (GraphicsMode.TryParse(applied.Graphics, out bool enhanced) && enhanced != GraphicsMode.Enhanced)
         {

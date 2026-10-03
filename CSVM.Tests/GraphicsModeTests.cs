@@ -97,12 +97,13 @@ public class GraphicsModeTests
     {
         try
         {
-            Assert.Equal(new ViewDistancePlan("far", "--view-distance"), ViewDistance.Resolve("far", "unlimited", "veryfar"));
-            Assert.Equal(new ViewDistancePlan("unlimited", "options.json"), ViewDistance.Resolve(null, "unlimited", "veryfar"));
-            Assert.Equal(new ViewDistancePlan("veryfar", ViewDistance.Key), ViewDistance.Resolve(null, null, "veryfar"));
-            Assert.Equal(new ViewDistancePlan(ViewDistance.Default, "default"), ViewDistance.Resolve(null, null, null));
-            Assert.Equal(new ViewDistancePlan("far", "options.json"), ViewDistance.Resolve("farther", "far", null));
-            Assert.Equal("default", ViewDistance.Resolve(null, "farthest", ViewDistance.Default).Source);
+            Assert.Equal(new ResolvedWord("far", SettingSource.Flag), ViewDistance.Resolve("far", "unlimited", "veryfar"));
+            Assert.Equal(new ResolvedWord("unlimited", SettingSource.Saved), ViewDistance.Resolve(null, "unlimited", "veryfar"));
+            Assert.Equal(new ResolvedWord("veryfar", SettingSource.Config), ViewDistance.Resolve(null, null, "veryfar"));
+            Assert.Equal(new ResolvedWord(ViewDistance.Default, SettingSource.Default), ViewDistance.Resolve(null, null, null));
+            Assert.Equal(new ResolvedWord("far", SettingSource.Saved), ViewDistance.Resolve("farther", "far", null));
+            Assert.Equal(SettingSource.Default, ViewDistance.Resolve(null, "farthest", ViewDistance.Default).Source);
+            Assert.Equal("--view-distance", ViewDistance.Lookup.SourceName(SettingSource.Flag));
             Assert.Null(ViewDistance.SavedWord(det: true));
         }
         finally

@@ -158,13 +158,13 @@ internal static class DisplaySettingsSuites
         {
             AntiAliasingSetting.Resolve(DisplayWords.AntiAliasingOff, null, enhanced: false);
             var saved = RenderScaleSetting.Resolve("150", "200");
-            ctx.Check(saved.Scale == 1.5f && saved.Word == "150" && saved.Source == "options.json",
+            ctx.Check(saved.Scale == 1.5f && saved.Word == "150" && saved.Source == SettingSource.Saved,
                 $"the saved word beats the config key ({Describe(saved)})");
             var key = RenderScaleSetting.Resolve(null, "125");
-            ctx.Check(key.Scale == 1.25f && key.Word == "125" && key.Source == RenderScaleSetting.Key,
+            ctx.Check(key.Scale == 1.25f && key.Word == "125" && key.Source == SettingSource.Config,
                 $"with nothing saved the config key decides ({Describe(key)})");
             var fallback = RenderScaleSetting.Resolve(null, RenderScaleSetting.Default);
-            ctx.Check(fallback.Scale == RenderScaleSetting.Native && fallback.Source == "default",
+            ctx.Check(fallback.Scale == RenderScaleSetting.Native && fallback.Source == SettingSource.Default,
                 $"and a key spelling native reads as the default, which is what an absent key means ({Describe(fallback)})");
             var unknown = RenderScaleSetting.Resolve("400", "high");
             ctx.Check(unknown.Scale == RenderScaleSetting.Native && unknown.Source == fallback.Source,
@@ -809,18 +809,18 @@ internal static class DisplaySettingsSuites
     private static void AntiAliasingPrecedence(TestContext ctx)
     {
         var saved = AntiAliasingSetting.Resolve(DisplayWords.AntiAliasingSmaa, DisplayWords.AntiAliasingFxaa, enhanced: true);
-        ctx.Check(saved.Method == AntiAliasingMethod.Smaa && saved.Source == "options.json",
+        ctx.Check(saved.Method == AntiAliasingMethod.Smaa && saved.Source == SettingSource.Saved,
             $"the saved anti-aliasing word beats the config key ({Describe(saved)})");
         var key = AntiAliasingSetting.Resolve(null, DisplayWords.AntiAliasingFxaa, enhanced: true);
-        ctx.Check(key.Method == AntiAliasingMethod.Fxaa && key.Source == AntiAliasingSetting.Key,
+        ctx.Check(key.Method == AntiAliasingMethod.Fxaa && key.Source == SettingSource.Config,
             $"with nothing saved the {AntiAliasingSetting.Key} key decides ({Describe(key)})");
         var original = AntiAliasingSetting.Resolve(null, AntiAliasingSetting.DefaultFor(false), enhanced: false);
         var enhanced = AntiAliasingSetting.Resolve(null, AntiAliasingSetting.DefaultFor(true), enhanced: true);
-        ctx.Check(original.Method == AntiAliasingMethod.Off && original.Source == "default"
-            && enhanced.Method == AntiAliasingMethod.Taa && enhanced.Source == "default",
+        ctx.Check(original.Method == AntiAliasingMethod.Off && original.Source == SettingSource.Default
+            && enhanced.Method == AntiAliasingMethod.Taa && enhanced.Source == SettingSource.Default,
             $"and with neither the mode decides: off under original, taa under enhanced ({Describe(original)}; {Describe(enhanced)})");
         var unknown = AntiAliasingSetting.Resolve("msaa8", "sharp", enhanced: false);
-        ctx.Check(unknown.Method == AntiAliasingMethod.Off && unknown.Source == "default",
+        ctx.Check(unknown.Method == AntiAliasingMethod.Off && unknown.Source == SettingSource.Default,
             $"a word the vocabulary does not know reads as never set ({Describe(unknown)})");
 
         var clamped = RenderScaleSetting.Resolve("200", RenderScaleSetting.Default, DisplayWords.AntiAliasingFsr2);
@@ -993,13 +993,13 @@ internal static class DisplaySettingsSuites
         $"{plan.Width}x{plan.Height} word={plan.Word} source={plan.Source}";
 
     private static string Describe(RenderScalePlan plan) =>
-        $"scale {plan.Scale} word={plan.Word} source={plan.Source}";
+        $"scale {plan.Scale} word={plan.Word} source={RenderScaleSetting.Lookup.SourceName(plan.Source)}";
 
     private static string Describe(VSyncPlan plan) =>
         $"vsync {(plan.Enabled ? "on" : "off")} max_fps={plan.MaxFps} source={plan.Source}";
 
     private static string Describe(AntiAliasingPlan plan) =>
-        $"{plan.Method} word={plan.Word} source={plan.Source}";
+        $"{plan.Method} word={plan.Word} source={AntiAliasingSetting.Lookup.SourceName(plan.Source)}";
 
     // One viewport's anti-aliasing and scaling fields, compared whole so a stray write shows.
     private readonly record struct ViewportRead(

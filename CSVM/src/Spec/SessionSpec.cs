@@ -1588,29 +1588,13 @@ public sealed record SessionSpec
                     notes.Add(new Note("world", $"--graphics={want} is not original/enhanced, keeping the config key's value"));
                 }
             }
-            else if (arg.StartsWith("--shadow-quality="))
+            else if (TryWordFlag(arg, Utils.ShadowQualitySetting.Lookup, notes, out string? shadowWord))
             {
-                string want = arg["--shadow-quality=".Length..];
-                if (Utils.ShadowQualitySetting.IsWord(want))
-                {
-                    s.ShadowQuality = want;
-                }
-                else
-                {
-                    notes.Add(new Note("world", $"--shadow-quality={want} is not one of {string.Join("/", Utils.ShadowQualitySetting.Words)}, keeping the saved option's value"));
-                }
+                s.ShadowQuality = shadowWord ?? s.ShadowQuality;
             }
-            else if (arg.StartsWith("--view-distance="))
+            else if (TryWordFlag(arg, Utils.ViewDistance.Lookup, notes, out string? viewWord))
             {
-                string want = arg["--view-distance=".Length..];
-                if (Utils.ViewDistance.IsWord(want))
-                {
-                    s.ViewDistance = want;
-                }
-                else
-                {
-                    notes.Add(new Note("world", $"--view-distance={want} is not one of {string.Join("/", Utils.ViewDistance.Words)}, keeping the saved option's value"));
-                }
+                s.ViewDistance = viewWord ?? s.ViewDistance;
             }
             else if (arg == "--dump-mips") { s.DumpMips = true; }
             else if (arg.StartsWith("--dump-mips=")) { s.DumpMips = true; s.DumpMipsFilter = arg["--dump-mips=".Length..]; }
@@ -2209,6 +2193,30 @@ public sealed record SessionSpec
         };
 
     private static float Flt(string s) => float.Parse(s, CultureInfo.InvariantCulture);
+
+    // Whether arg is the setting's own flag. A word the setting does not know comes back null with a
+    // note, so the earlier value stands and the saved option still decides.
+    private static bool TryWordFlag(string arg, Utils.WordSetting setting, List<Note> notes, out string? word)
+    {
+        word = null;
+        string prefix = setting.Flag + "=";
+        if (setting.Flag == null || !arg.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string want = arg[prefix.Length..];
+        if (setting.IsWord(want))
+        {
+            word = want;
+        }
+        else
+        {
+            notes.Add(new Note("world", $"{prefix}{want} is not one of {string.Join("/", setting.Words)}, keeping the saved option's value"));
+        }
+
+        return true;
+    }
 
     // Turns the parsed votes into the one answer each: the mode, its modifiers, the world
     // selection, the player count, the `--det` bundle and the placement routing. Runs once.

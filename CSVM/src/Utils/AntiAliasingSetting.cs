@@ -1,5 +1,3 @@
-using System.Linq;
-
 namespace CSVM.Utils;
 
 /// <summary>The anti-aliasing methods <see cref="ViewportQuality"/> knows how to write, one per
@@ -23,15 +21,16 @@ public enum AntiAliasingMethod
 }
 
 /// <summary>One resolved anti-aliasing method, the word it was spelled as, and the source that won.
-/// The source is named so a log line can say which of the three layers the run is obeying.</summary>
-public readonly record struct AntiAliasingPlan(AntiAliasingMethod Method, string Word, string Source);
+/// A log line names that source.</summary>
+public readonly record struct AntiAliasingPlan(AntiAliasingMethod Method, string Word, SettingSource Source);
 
 /// <summary>
 /// The anti-aliasing method the 3D viewports run, one of
-/// <see cref="DisplayWords.AntiAliasingChoices"/>. The sources layer the saved <c>antiAliasing</c>
-/// option, then the <see cref="Key"/> config key, then <see cref="DefaultFor"/> the graphics mode.
-/// It is a display setting, so a chosen method is written whichever mode won. Only the default
-/// follows the mode. <see cref="ViewportQuality"/> is the one reader of <see cref="Method"/>. It
+/// <see cref="DisplayWords.AntiAliasingChoices"/>. <see cref="Lookup"/> reads the saved
+/// <c>antiAliasing</c> option, then the <see cref="Key"/> config key, then
+/// <see cref="DefaultFor"/> the graphics mode. It is a display setting, so a chosen method is
+/// written whichever mode won. Only the default follows the mode.
+/// <see cref="ViewportQuality"/> is the one reader of <see cref="Method"/>. It
 /// writes nothing for <see cref="AntiAliasingMethod.Off"/>, which keeps a faithful run on Godot's
 /// own defaults. FSR 2.2 caps the render scale at native, which
 /// <see cref="RenderScaleSetting.ClampFor"/> applies.
@@ -40,6 +39,9 @@ public static class AntiAliasingSetting
 {
     /// <summary>The config key under the saved option, one of the five words.</summary>
     public const string Key = "graphics.antiAliasing";
+
+    /// <summary>The source order over the five words. Anti-aliasing has no command-line flag.</summary>
+    public static readonly WordSetting Lookup = new(Key, DisplayWords.AntiAliasingChoices);
 
     /// <summary>Resolved once at launch by <see cref="Resolve"/>, before any 3D viewport is
     /// built, so every viewport in a run takes the same method.</summary>
@@ -50,43 +52,27 @@ public static class AntiAliasingSetting
     public static string DefaultFor(bool enhanced) =>
         enhanced ? DisplayWords.AntiAliasingTaa : DisplayWords.AntiAliasingOff;
 
-    /// <summary>The method the sources resolve to, highest first: <paramref name="savedWord"/>, then
-    /// <paramref name="configWord"/>, then <see cref="DefaultFor"/> the mode. A word this vocabulary
-    /// does not know reads as never set and falls through. A config key spelling the mode's default
-    /// is reported as the default, since that is what the absent key already means.</summary>
+    /// <summary>The method <see cref="Lookup"/> resolves <paramref name="savedWord"/> and
+    /// <paramref name="configWord"/> to over <see cref="DefaultFor"/> the mode, stored as
+    /// <see cref="Method"/>.</summary>
     public static AntiAliasingPlan Resolve(string? savedWord, string? configWord, bool enhanced)
     {
-        if (TryParse(savedWord, out var saved))
-        {
-            return Store(new AntiAliasingPlan(saved, savedWord!, "options.json"));
-        }
-
-        string fallback = DefaultFor(enhanced);
-        if (configWord != fallback && TryParse(configWord, out var configured))
-        {
-            return Store(new AntiAliasingPlan(configured, configWord!, Key));
-        }
-
-        if (configWord != null && configWord != fallback)
-        {
-            Log.Warn("world", $"config {Key}={configWord} is not one of {string.Join("/", DisplayWords.AntiAliasingChoices)}; using {fallback}");
-        }
-
-        TryParse(fallback, out var method);
-        return Store(new AntiAliasingPlan(method, fallback, "default"));
+        var resolved = Lookup.Resolve(null, savedWord, configWord, DefaultFor(enhanced));
+        TryParse(resolved.Word, out var method);
+        Method = method;
+        return new AntiAliasingPlan(method, resolved.Word, resolved.Source);
     }
 
-    /// <summary>The saved word a launch reads, or null under <paramref name="det"/>.
-    /// ⚠ A deterministic run reads no saved display setting. The options file is one machine's
-    /// state, and a golden shot is a <c>--det</c> run against the player's own directory.</summary>
-    public static string? SavedWord(bool det) => det ? null : OptionsStore.UserOptions().Load().AntiAliasing;
+    /// <summary>The saved word a launch reads, or null under <paramref name="det"/>
+    /// (<see cref="WordSetting.ReadSaved"/>).</summary>
+    public static string? SavedWord(bool det) => WordSetting.ReadSaved(det, static o => o.AntiAliasing);
 
     /// <summary>Whether <paramref name="word"/> is one of
     /// <see cref="DisplayWords.AntiAliasingChoices"/>, and the method it spells.</summary>
     public static bool TryParse(string? word, out AntiAliasingMethod method)
     {
         method = AntiAliasingMethod.Off;
-        if (word == null || !DisplayWords.AntiAliasingChoices.Contains(word))
+        if (!Lookup.IsWord(word))
         {
             return false;
         }
@@ -100,11 +86,5 @@ public static class AntiAliasingSetting
             _ => AntiAliasingMethod.Off,
         };
         return true;
-    }
-
-    private static AntiAliasingPlan Store(AntiAliasingPlan plan)
-    {
-        Method = plan.Method;
-        return plan;
     }
 }

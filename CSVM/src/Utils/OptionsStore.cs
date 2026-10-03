@@ -282,7 +282,10 @@ public sealed class OptionsStore
     /// <summary>The last place in the Voice list's seven voices.</summary>
     public const int MaxVoice = 6;
 
-    private const string FileName = "options.json";
+    /// <summary>The file's name in its directory, which a setting's log line also names as the saved
+    /// source.</summary>
+    public const string FileName = "options.json";
+
     private const string TempFileName = "options.json.tmp";
 
     // The only presentation names this option currently accepts. Kept as strings, not an enum: the
