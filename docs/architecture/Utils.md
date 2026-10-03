@@ -310,14 +310,14 @@ reader is `ViewportQuality.Apply`; `Launcher`'s `[world] graphics mode:` line an
 refuses a render scale above native, which `RenderScaleSetting.ClampFor` applies.
 
 ## src/Utils/ShadowQualitySetting.cs
-The Enhanced sun's shadow quality, a VIDEO page row over `Words`: `off`, `low`, `medium`, `high` or `ultra`.
-`Resolve` layers `--shadow-quality=`, the saved `shadowQuality` word, the `graphics.shadowQuality` config key, then
-`DefaultFor(det)`: `ultra`, or `high` where the GPU reports integrated (the Steam Deck), and `ultra` under `--det` everywhere;
-`SavedWord` holds the `--det` guard. Each word maps to a `SunShadowPlan`:
-whether the sun casts, its angular distance and blur, and the renderer-wide soft filter and atlas edge. `ApplyTo` is the one
-writer, re-runnable, called by `Launcher.ApplyShadowQuality` at the sun's build and on every Options apply; it writes nothing
-on the faithful path and bumps `Revision`, which the cockpit pass (`Flight/Hud/CockpitOverlay.cs`) re-copies the sun on. The
-split-screen panes share the world's one sun. Why each level stands where it does: `analysis/screen-dither/FINDINGS.md`.
+The Enhanced sun's shadow quality, a VIDEO page row over `Words` (`off` to `ultra`). `Resolve` layers `--shadow-quality=`,
+the saved `shadowQuality` word, the `graphics.shadowQuality` key, then `DefaultFor(det)`: `ultra` under `--det`, otherwise
+`FallbackFor(integrated, panes)`, which is `ultra` on a discrete GPU, `high` on an integrated one (the Steam Deck) and `off`
+there at three or four panes (source `default_integrated_gpu_panes`). `Pick` is the ladder without the store; `SavedWord`
+holds the `--det` guard. `Launch/GameSession.cs` calls `ResolveForPanes` as its rigs are built and at its exit. Each word maps to a `SunShadowPlan`: whether the sun
+casts, its angular distance and blur, and the renderer's soft filter and atlas edge. `ApplyTo` is the one writer, called by
+`Launcher.ApplyShadowQuality` at the sun's build and on every Options apply; it writes nothing on the faithful path and bumps
+`Revision`, which the cockpit pass re-copies the sun on. Why each level stands where it does: `analysis/screen-dither/FINDINGS.md`.
 
 ## src/Utils/ViewportQuality.cs
 What `AntiAliasingSetting` and `RenderScaleSetting` write on a 3D viewport, gathered here because

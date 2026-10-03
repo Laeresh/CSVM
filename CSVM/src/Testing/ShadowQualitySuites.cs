@@ -29,7 +29,7 @@ internal static class ShadowQualitySuites
     [Suite("display-shadow-quality",
         "The Enhanced sun's shadow quality: --shadow-quality beats the saved word, which beats the "
         + "graphics.shadowQuality config key, which beats the default Ultra (High on an integrated "
-        + "GPU, Ultra under --det everywhere), a key spelling the fallback reads as the default "
+        + "GPU, Off there at three or four panes under its own source, Ultra under --det everywhere), a key spelling the fallback reads as the default "
         + "and an unknown word at any layer falls through; each of Off, Low, "
         + "Medium, High and Ultra writes its pinned cast switch, angular distance and blur on the sun "
         + "and hands the renderer its pinned soft filter and atlas (4096 below Ultra, 8192 at Ultra), "
@@ -94,6 +94,9 @@ internal static class ShadowQualitySuites
         var integrated = ShadowQualitySetting.Resolve(null, null, ShadowQualitySetting.IntegratedDefault, ShadowQualitySetting.IntegratedDefault);
         ctx.Check(integrated.Word == ShadowQualitySetting.High && integrated.Source == "default_integrated_gpu",
             $"an integrated GPU with nothing set runs High ({Describe(integrated)})");
+        var panes = ShadowQualitySetting.Resolve(null, null, ShadowQualitySetting.IntegratedSplitDefault, ShadowQualitySetting.IntegratedSplitDefault);
+        ctx.Check(panes.Word == ShadowQualitySetting.Off && panes.Source == "default_integrated_gpu_panes",
+            $"an integrated GPU's three- or four-pane session with nothing set runs Off under its own source ({Describe(panes)})");
         var keyUltra = ShadowQualitySetting.Resolve(null, null, ShadowQualitySetting.Ultra, ShadowQualitySetting.IntegratedDefault);
         ctx.Check(keyUltra.Word == ShadowQualitySetting.Ultra && keyUltra.Source == ShadowQualitySetting.Key,
             $"and a key spelling ultra still wins there, since ultra is not that machine's fallback ({Describe(keyUltra)})");

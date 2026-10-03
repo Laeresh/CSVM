@@ -19,8 +19,9 @@ public readonly record struct ShadowQualityPlan(string Word, SunShadowPlan Sun, 
 /// <summary>
 /// The sun's shadow quality under Enhanced Graphics, one of <see cref="Words"/>. The sources layer
 /// as <see cref="GraphicsMode"/>'s do. <c>--shadow-quality=</c> beats the saved
-/// <c>shadowQuality</c> option, which beats the <see cref="Key"/> config key, then
-/// <see cref="Default"/>. The faithful path casts no sun shadow, and nothing is written there.
+/// <c>shadowQuality</c> option, which beats the <see cref="Key"/> config key, then the fallback.
+/// That follows the GPU and the pane count (<see cref="FallbackFor"/>). The faithful path casts
+/// no sun shadow, and nothing is written there.
 /// The writer, <see cref="ApplyTo"/>, can run again at any time, which is how an Options apply
 /// reaches a flight in progress. Why each level stands where it does:
 /// analysis/screen-dither/FINDINGS.md.
@@ -53,6 +54,14 @@ public static class ShadowQualitySetting
     /// Deck, C5 at 67% with TAA ran 56 fps at Ultra and over 60 at High.</summary>
     public const string IntegratedDefault = High;
 
+    /// <summary>The word an integrated GPU runs when nothing is set and the session draws
+    /// <see cref="SplitPanes"/> or more panes. On the Deck the four-pane C3 AI fight at 67% with
+    /// TAA spent 2.05 of its 16.13 ms frame on the High sun's shadow pass.</summary>
+    public const string IntegratedSplitDefault = Off;
+
+    /// <summary>The fewest panes that take <see cref="IntegratedSplitDefault"/>.</summary>
+    public const int SplitPanes = 3;
+
     /// <summary>Every word, lowest first, the order both Options screens offer them.</summary>
     public static readonly IReadOnlyList<string> Words = new[] { Off, Low, Medium, High, Ultra };
 
@@ -70,7 +79,7 @@ public static class ShadowQualitySetting
         new(true, 1f, 1f, RenderingServer.ShadowQuality.SoftUltra, 8192),
     };
 
-    private static string? _machineDefault;
+    private static bool? _integrated;
 
     /// <summary>The word the run resolved, <see cref="Default"/> until <see cref="Resolve"/> runs. The
     /// Options rows show it when nothing is saved.
@@ -84,35 +93,58 @@ public static class ShadowQualitySetting
     /// cockpit pass's interior light, re-reads the sun's shadow fields when this moves.</summary>
     public static int Revision { get; private set; }
 
-    /// <summary>The fallback word for this machine: <see cref="IntegratedDefault"/> on an integrated
-    /// GPU, else <see cref="Default"/>. Read once, since the device cannot change under a run.</summary>
-    public static string MachineDefault => _machineDefault ??= IsIntegratedGpu() ? IntegratedDefault : Default;
+    /// <summary>The panes the running session draws, which the fallback reads. 1 until
+    /// <see cref="ResolveForPanes"/> names a splitscreen session's count.</summary>
+    public static int Panes { get; private set; } = 1;
+
+    /// <summary>The fallback word for this machine at the running session's <see cref="Panes"/>.
+    /// The GPU is read once, since the device cannot change under a run.</summary>
+    public static string MachineDefault => FallbackFor(_integrated ??= IsIntegratedGpu(), Panes);
 
     /// <summary>The fallback a launch resolves against. ⚠ <see cref="Default"/> under
     /// <paramref name="det"/>, so a scripted capture does not depend on the machine it runs on.</summary>
     public static string DefaultFor(bool det) => det ? Default : MachineDefault;
 
+    /// <summary>The fallback on a GPU that is or is not <paramref name="integrated"/>, for a session
+    /// drawing <paramref name="panes"/>. A discrete GPU runs <see cref="Default"/> at any count. An
+    /// integrated one runs <see cref="IntegratedDefault"/>, or <see cref="IntegratedSplitDefault"/>
+    /// from <see cref="SplitPanes"/> panes up.</summary>
+    public static string FallbackFor(bool integrated, int panes) =>
+        !integrated ? Default : panes >= SplitPanes ? IntegratedSplitDefault : IntegratedDefault;
+
     /// <summary>The level the sources resolve to, highest first: <paramref name="flagWord"/>, then
     /// <paramref name="savedWord"/>, then <paramref name="configWord"/>, then
     /// <paramref name="fallback"/>. A word this vocabulary does not know reads as never set and
     /// falls through. A config key spelling the fallback reads as the fallback. The absent key reads
-    /// the same, so a caller hands the config read that fallback too.</summary>
+    /// the same, so a caller hands the config read that fallback too. Stores the word as
+    /// <see cref="Word"/>; <see cref="Pick"/> is the same ladder without the store.</summary>
     public static ShadowQualityPlan Resolve(string? flagWord, string? savedWord, string? configWord,
+        string fallback = Default)
+    {
+        var plan = Pick(flagWord, savedWord, configWord, fallback);
+        Word = plan.Word;
+        return plan;
+    }
+
+    /// <summary><see cref="Resolve"/>'s ladder, leaving <see cref="Word"/> alone. The fallback's
+    /// source names which rule chose it: <c>default</c>, <c>default_integrated_gpu</c>, or
+    /// <c>default_integrated_gpu_panes</c> for the splitscreen rule.</summary>
+    public static ShadowQualityPlan Pick(string? flagWord, string? savedWord, string? configWord,
         string fallback = Default)
     {
         if (IsWord(flagWord))
         {
-            return Store(flagWord!, "--shadow-quality");
+            return Plan(flagWord!, "--shadow-quality");
         }
 
         if (IsWord(savedWord))
         {
-            return Store(savedWord!, "options.json");
+            return Plan(savedWord!, "options.json");
         }
 
         if (configWord != fallback && IsWord(configWord))
         {
-            return Store(configWord!, Key);
+            return Plan(configWord!, Key);
         }
 
         if (configWord != null && configWord != fallback)
@@ -120,7 +152,23 @@ public static class ShadowQualitySetting
             Log.Warn("world", $"config {Key}={configWord} is not one of {string.Join("/", Words)}; using {fallback}");
         }
 
-        return Store(fallback, fallback == Default ? "default" : "default_integrated_gpu");
+        string source = fallback switch
+        {
+            IntegratedDefault => "default_integrated_gpu",
+            IntegratedSplitDefault => "default_integrated_gpu_panes",
+            _ => "default",
+        };
+        return Plan(fallback, source);
+    }
+
+    /// <summary>The launch's ladder again for a session drawing <paramref name="panes"/>, which
+    /// becomes <see cref="Panes"/>. Only the fallback follows the count. The flag, the saved word
+    /// and the config key win at every count, so a chosen level is never overruled.</summary>
+    public static ShadowQualityPlan ResolveForPanes(int panes, string? flagWord, bool det)
+    {
+        Panes = Math.Max(1, panes);
+        string fallback = DefaultFor(det);
+        return Resolve(flagWord, SavedWord(det), Config.GetString(Key, fallback), fallback);
     }
 
     /// <summary>The saved word a launch reads, or null under <paramref name="det"/>.
@@ -189,9 +237,5 @@ public static class ShadowQualitySetting
         return -1;
     }
 
-    private static ShadowQualityPlan Store(string word, string source)
-    {
-        Word = word;
-        return new ShadowQualityPlan(word, PlanFor(word), source);
-    }
+    private static ShadowQualityPlan Plan(string word, string source) => new(word, PlanFor(word), source);
 }
