@@ -77,28 +77,28 @@ internal static class ShadowQualitySuites
     private static void Precedence(TestContext ctx)
     {
         var flag = ShadowQualitySetting.Resolve(ShadowQualitySetting.Low, ShadowQualitySetting.High, ShadowQualitySetting.Medium);
-        ctx.Check(flag.Word == ShadowQualitySetting.Low && flag.Source == "--shadow-quality",
+        ctx.Check(flag.Word == ShadowQualitySetting.Low && flag.Source == SettingSource.Flag,
             $"the flag beats a saved word and the config key ({Describe(flag)})");
         var saved = ShadowQualitySetting.Resolve(null, ShadowQualitySetting.High, ShadowQualitySetting.Medium);
-        ctx.Check(saved.Word == ShadowQualitySetting.High && saved.Source == "options.json",
+        ctx.Check(saved.Word == ShadowQualitySetting.High && saved.Source == SettingSource.Saved,
             $"the saved word beats the config key ({Describe(saved)})");
         var key = ShadowQualitySetting.Resolve(null, null, ShadowQualitySetting.Medium);
-        ctx.Check(key.Word == ShadowQualitySetting.Medium && key.Source == ShadowQualitySetting.Key,
+        ctx.Check(key.Word == ShadowQualitySetting.Medium && key.Source == SettingSource.Config,
             $"with nothing saved the {ShadowQualitySetting.Key} key decides ({Describe(key)})");
         var fallback = ShadowQualitySetting.Resolve(null, null, ShadowQualitySetting.Default);
-        ctx.Check(fallback.Word == ShadowQualitySetting.Ultra && fallback.Source == "default",
+        ctx.Check(fallback.Word == ShadowQualitySetting.Ultra && fallback.Source == SettingSource.Default,
             $"and a key spelling ultra reads as the default, the look Enhanced shipped with ({Describe(fallback)})");
         var unknown = ShadowQualitySetting.Resolve("epic", "cinematic", "potato");
-        ctx.Check(unknown.Word == ShadowQualitySetting.Default && unknown.Source == "default",
+        ctx.Check(unknown.Word == ShadowQualitySetting.Default && unknown.Source == SettingSource.Default,
             $"an unknown word at every layer falls through to the default ({Describe(unknown)})");
         var integrated = ShadowQualitySetting.Resolve(null, null, ShadowQualitySetting.IntegratedDefault, ShadowQualitySetting.IntegratedDefault);
-        ctx.Check(integrated.Word == ShadowQualitySetting.High && integrated.Source == "default_integrated_gpu",
+        ctx.Check(integrated.Word == ShadowQualitySetting.High && integrated.Source == SettingSource.IntegratedGpuDefault,
             $"an integrated GPU with nothing set runs High ({Describe(integrated)})");
         var panes = ShadowQualitySetting.Resolve(null, null, ShadowQualitySetting.IntegratedSplitDefault, ShadowQualitySetting.IntegratedSplitDefault);
-        ctx.Check(panes.Word == ShadowQualitySetting.Off && panes.Source == "default_integrated_gpu_panes",
+        ctx.Check(panes.Word == ShadowQualitySetting.Off && panes.Source == SettingSource.IntegratedGpuPanesDefault,
             $"an integrated GPU's three- or four-pane session with nothing set runs Off under its own source ({Describe(panes)})");
         var keyUltra = ShadowQualitySetting.Resolve(null, null, ShadowQualitySetting.Ultra, ShadowQualitySetting.IntegratedDefault);
-        ctx.Check(keyUltra.Word == ShadowQualitySetting.Ultra && keyUltra.Source == ShadowQualitySetting.Key,
+        ctx.Check(keyUltra.Word == ShadowQualitySetting.Ultra && keyUltra.Source == SettingSource.Config,
             $"and a key spelling ultra still wins there, since ultra is not that machine's fallback ({Describe(keyUltra)})");
         ctx.Check(ShadowQualitySetting.DefaultFor(det: true) == ShadowQualitySetting.Default,
             $"a --det run falls back to Ultra whatever the GPU, so a capture does not depend on the machine");
@@ -249,7 +249,8 @@ internal static class ShadowQualitySuites
         }
     }
 
-    private static string Describe(ShadowQualityPlan plan) => $"{plan.Word} source={plan.Source}";
+    private static string Describe(ShadowQualityPlan plan) =>
+        $"{plan.Word} source={ShadowQualitySetting.Lookup.SourceName(plan.Source)}";
 
     private static string Describe(SunShadowPlan plan) => string.Format(CultureInfo.InvariantCulture,
         "cast={0} angle={1} blur={2} filter={3} atlas={4}", plan.Cast, plan.AngularDistance, plan.Blur, plan.Filter, plan.AtlasSize);

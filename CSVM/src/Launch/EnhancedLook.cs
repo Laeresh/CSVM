@@ -232,7 +232,7 @@ public static class EnhancedLook
         var renderScale = RenderScaleSetting.Resolve(RenderScaleSetting.SavedWord(det),
             Config.GetString(RenderScaleSetting.Key, RenderScaleSetting.Default), antiAliasing.Word);
         ViewportQuality.ReapplyAll();
-        Log.Info("world", $"display quality: render_scale={renderScale.Word}% source={renderScale.Source} anti_aliasing={antiAliasing.Word} aa_source={antiAliasing.Source} (applied live by {why})");
+        Log.Info("world", $"display quality: render_scale={renderScale.Word}% source={RenderScaleSetting.Lookup.SourceName(renderScale.Source)} anti_aliasing={antiAliasing.Word} aa_source={AntiAliasingSetting.Lookup.SourceName(antiAliasing.Source)} (applied live by {why})");
     }
 
     /// <summary>The session sun's shadow maps and visual layer, on at the resolved shadow quality or

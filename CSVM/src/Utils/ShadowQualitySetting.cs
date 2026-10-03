@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Godot;
 
 namespace CSVM.Utils;
@@ -12,16 +11,16 @@ namespace CSVM.Utils;
 public readonly record struct SunShadowPlan(
     bool Cast, float AngularDistance, float Blur, RenderingServer.ShadowQuality Filter, int AtlasSize);
 
-/// <summary>One resolved shadow quality: the word, what it writes, and the source that won. The
-/// source is named so a log line can say which layer the run is obeying.</summary>
-public readonly record struct ShadowQualityPlan(string Word, SunShadowPlan Sun, string Source);
+/// <summary>One resolved shadow quality: the word, what it writes, and the source that won. A log
+/// line names that source.</summary>
+public readonly record struct ShadowQualityPlan(string Word, SunShadowPlan Sun, SettingSource Source);
 
 /// <summary>
-/// The sun's shadow quality under Enhanced Graphics, one of <see cref="Words"/>. The sources layer
-/// as <see cref="GraphicsMode"/>'s do. <c>--shadow-quality=</c> beats the saved
-/// <c>shadowQuality</c> option, which beats the <see cref="Key"/> config key, then the fallback.
-/// That follows the GPU and the pane count (<see cref="FallbackFor"/>). The faithful path casts
-/// no sun shadow, and nothing is written there.
+/// The sun's shadow quality under Enhanced Graphics, one of <see cref="Words"/>. In
+/// <see cref="Lookup"/>, <c>--shadow-quality=</c> beats the saved <c>shadowQuality</c> option,
+/// which beats the <see cref="Key"/> config key, then the fallback. That follows the GPU and the
+/// pane count (<see cref="FallbackFor"/>). The faithful path casts no sun shadow, and nothing is
+/// written there.
 /// The writer, <see cref="ApplyTo"/>, can run again at any time, which is how an Options apply
 /// reaches a flight in progress. Why each level stands where it does:
 /// analysis/screen-dither/FINDINGS.md.
@@ -64,6 +63,9 @@ public static class ShadowQualitySetting
 
     /// <summary>Every word, lowest first, the order both Options screens offer them.</summary>
     public static readonly IReadOnlyList<string> Words = new[] { Off, Low, Medium, High, Ultra };
+
+    /// <summary>The source order over <see cref="Words"/>, beaten by <c>--shadow-quality=</c>.</summary>
+    public static readonly WordSetting Lookup = new(Key, Words, "--shadow-quality");
 
     // ⚠ Do not lower a filter rung without narrowing the sun with it. The penumbra is sampled
     // through a disc rotated per screen pixel, and too few samples weave that rotation over every
@@ -112,12 +114,8 @@ public static class ShadowQualitySetting
     public static string FallbackFor(bool integrated, int panes) =>
         !integrated ? Default : panes >= SplitPanes ? IntegratedSplitDefault : IntegratedDefault;
 
-    /// <summary>The level the sources resolve to, highest first: <paramref name="flagWord"/>, then
-    /// <paramref name="savedWord"/>, then <paramref name="configWord"/>, then
-    /// <paramref name="fallback"/>. A word this vocabulary does not know reads as never set and
-    /// falls through. A config key spelling the fallback reads as the fallback. The absent key reads
-    /// the same, so a caller hands the config read that fallback too. Stores the word as
-    /// <see cref="Word"/>; <see cref="Pick"/> is the same ladder without the store.</summary>
+    /// <summary>The level <see cref="Pick"/> resolves the sources to, stored as
+    /// <see cref="Word"/>.</summary>
     public static ShadowQualityPlan Resolve(string? flagWord, string? savedWord, string? configWord,
         string fallback = Default)
     {
@@ -126,39 +124,15 @@ public static class ShadowQualitySetting
         return plan;
     }
 
-    /// <summary><see cref="Resolve"/>'s ladder, leaving <see cref="Word"/> alone. The fallback's
-    /// source names which rule chose it: <c>default</c>, <c>default_integrated_gpu</c>, or
-    /// <c>default_integrated_gpu_panes</c> for the splitscreen rule.</summary>
+    /// <summary>The level <see cref="Lookup"/> resolves <paramref name="flagWord"/>,
+    /// <paramref name="savedWord"/> and <paramref name="configWord"/> to over
+    /// <paramref name="fallback"/>, leaving <see cref="Word"/> alone. The fallback's source names
+    /// which rule chose it, the integrated GPU's or its splitscreen rule.</summary>
     public static ShadowQualityPlan Pick(string? flagWord, string? savedWord, string? configWord,
         string fallback = Default)
     {
-        if (IsWord(flagWord))
-        {
-            return Plan(flagWord!, "--shadow-quality");
-        }
-
-        if (IsWord(savedWord))
-        {
-            return Plan(savedWord!, "options.json");
-        }
-
-        if (configWord != fallback && IsWord(configWord))
-        {
-            return Plan(configWord!, Key);
-        }
-
-        if (configWord != null && configWord != fallback)
-        {
-            Log.Warn("world", $"config {Key}={configWord} is not one of {string.Join("/", Words)}; using {fallback}");
-        }
-
-        string source = fallback switch
-        {
-            IntegratedDefault => "default_integrated_gpu",
-            IntegratedSplitDefault => "default_integrated_gpu_panes",
-            _ => "default",
-        };
-        return Plan(fallback, source);
+        var resolved = Lookup.Resolve(flagWord, savedWord, configWord, fallback, FallbackSource(fallback));
+        return new ShadowQualityPlan(resolved.Word, PlanFor(resolved.Word), resolved.Source);
     }
 
     /// <summary>The launch's ladder again for a session drawing <paramref name="panes"/>, which
@@ -171,20 +145,16 @@ public static class ShadowQualitySetting
         return Resolve(flagWord, SavedWord(det), Config.GetString(Key, fallback), fallback);
     }
 
-    /// <summary>The saved word a launch reads, or null under <paramref name="det"/>.
-    /// ⚠ A deterministic run reads no saved setting. The options file is one machine's state, and a
-    /// golden shot is a <c>--det</c> run against the player's own directory.</summary>
-    public static string? SavedWord(bool det) => det ? null : OptionsStore.UserOptions().Load().ShadowQuality;
-
-    /// <summary>Whether <paramref name="word"/> is one of <see cref="Words"/>.</summary>
-    public static bool IsWord(string? word) => word != null && Words.Contains(word);
+    /// <summary>The saved word a launch reads, or null under <paramref name="det"/>
+    /// (<see cref="WordSetting.ReadSaved"/>).</summary>
+    public static string? SavedWord(bool det) => WordSetting.ReadSaved(det, static o => o.ShadowQuality);
 
     /// <summary>What <paramref name="word"/> writes, or <see cref="Default"/>'s for a word the
     /// vocabulary does not know.</summary>
     public static SunShadowPlan PlanFor(string? word)
     {
-        int at = word == null ? -1 : IndexOf(word);
-        return Plans[at >= 0 ? at : IndexOf(Default)];
+        int at = Lookup.IndexOf(word);
+        return Plans[at >= 0 ? at : Lookup.IndexOf(Default)];
     }
 
     /// <summary>Put <paramref name="sun"/> and the renderer on <paramref name="plan"/>, now or again.
@@ -224,18 +194,11 @@ public static class ShadowQualitySetting
     private static bool IsIntegratedGpu() =>
         RenderingServer.GetVideoAdapterType() == RenderingDevice.DeviceType.IntegratedGpu;
 
-    private static int IndexOf(string word)
+    // The fallback word names the rule that chose it, since FallbackFor gives each rule its own word.
+    private static SettingSource FallbackSource(string fallback) => fallback switch
     {
-        for (int i = 0; i < Words.Count; i++)
-        {
-            if (Words[i] == word)
-            {
-                return i;
-            }
-        }
-
-        return -1;
-    }
-
-    private static ShadowQualityPlan Plan(string word, string source) => new(word, PlanFor(word), source);
+        IntegratedDefault => SettingSource.IntegratedGpuDefault,
+        IntegratedSplitDefault => SettingSource.IntegratedGpuPanesDefault,
+        _ => SettingSource.Default,
+    };
 }
