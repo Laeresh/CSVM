@@ -162,7 +162,7 @@ public sealed class WeatherRig
     // nothing: Density short-circuits on the flag before touching a volume.
     private FogVolumeWhiteout _fogWhiteout = FogVolumeWhiteout.Disarmed;
     // The first rig in the list Tick is handed. Its zone drives everything there is one of per
-    // session (the sun, its bearing, the ambient) and the plain fog globals.
+    // session (the scene sun, its bearing, the ambient) and the plain fog and vertex-light globals.
     private int _primary;
     // Where each rig's spyglass picture stands while it renders, null otherwise. Never set leaves
     // the table at the pane cameras alone, which is what a suite's bare rig gets.
@@ -489,6 +489,11 @@ public sealed class WeatherRig
     /// A rig no Tick has seen yet reports the build's.</summary>
     public FogWritten FogOf(int rigIndex) => _views.TryGetValue(rigIndex, out var view) ? view.Fog : _baseFog.Fog;
 
+    /// <summary>The vertex light one rig's view wears, by <see cref="PlayerRig.Index"/>: its own
+    /// camera state's zone, as <see cref="FogOf"/>. The faithful aircraft and the lit cloud cards
+    /// read it; the scene sun stays the first rig's.</summary>
+    public SunWritten SunOf(int rigIndex) => _views.TryGetValue(rigIndex, out var view) ? view.Sun : _baseFog.Sun;
+
     /// <summary>The deck tiles' own authored altitude (<c>WorldBuilder.CloudDeckAltitude</c>),
     /// read off the built data. Set from the same place as <see cref="SetDeckCenter"/>, for the
     /// same reason: the deck is world geometry built with the chapter, not mission weather.
@@ -644,8 +649,13 @@ public sealed class WeatherRig
                 foreach (var rig in rigs)
                     ApplyZoneEdge(rig, _weather);
             }
-            if (primaryMoved && PrimaryView().Zone != null)
+            if (primaryMoved && PrimaryView().Zone is { } zone)
+            {
+                // The light follows the fog onto the new first rig's zone, the pairing ApplyZone needs.
+                if (zone != _appliedZone)
+                    ApplyZone(zone);
                 WriteGlobals(PrimaryView().Fog, FogField.All);
+            }
         }
         PublishViews(rigs);
     }
@@ -731,8 +741,8 @@ public sealed class WeatherRig
     }
 
     // One rig's camera zone, re-applied only at its state edge, never per frame, since the deck rim
-    // annulus reads the same fog. The fog is the rig's own; the light is one set for the world, so
-    // only the first rig's edge moves it (docs/org/weather.md).
+    // annulus reads the same fog. The fog and vertex light are the rig's own. The scene sun and
+    // ambient are one set for the world, moved by the first rig's edge alone (docs/org/weather.md).
     private void ApplyZoneEdge(PlayerRig rig, WeatherState weather)
     {
         var view = ViewOf(rig.Index);
@@ -750,9 +760,10 @@ public sealed class WeatherRig
         view.Zone = fog;
         view.Over = null;
         view.Fog = ZoneFog(fog);
+        view.Sun = ZoneSun(fog);
         if (!primary)
         {
-            Log.Info("world", $"weather: player {rig.Index + 1} camera state {change.State} -> fog zone '{change.Zone}', fog {fog.FogNear:0}-{fog.FogFar:0} m, altitude {fog.FogLow:0}-{fog.FogHigh:0} m, world light {fog.WorldLight:0.00}; the light stays player {_primary + 1}'s");
+            Log.Info("world", $"weather: player {rig.Index + 1} camera state {change.State} -> fog zone '{change.Zone}', fog {fog.FogNear:0}-{fog.FogFar:0} m, altitude {fog.FogLow:0}-{fog.FogHigh:0} m, world light {fog.WorldLight:0.00}, vertex light {fog.SunAmbient:0.##}/{fog.SunDiffuse:0.##} at {Mathf.RadToDeg(fog.SunOrientation.X):0.#}° pitch; the scene sun stays player {_primary + 1}'s");
             return;
         }
         ApplyZone(fog);
@@ -760,18 +771,19 @@ public sealed class WeatherRig
         Log.Info("world", $"weather: camera state {change.State} -> fog zone '{change.Zone}', fog {fog.FogNear:0}-{fog.FogFar:0} m, altitude {fog.FogLow:0}-{fog.FogHigh:0} m, world light {fog.WorldLight:0.00}, sun {Mathf.RadToDeg(fog.SunOrientation.X):0.#}°/{Mathf.RadToDeg(fog.SunOrientation.Y):0.#}° (dome built for '{_activeZone}'){LightSuffix(fog)}");
     }
 
-    // Hands the shaders' table every view drawing the world this frame, with its rig's fog. A view
-    // is a pane camera or a live spyglass picture.
+    // Hands the shaders' table every view drawing the world this frame, with its rig's fog and
+    // vertex light. A view is a pane camera or a live spyglass picture.
     private void PublishViews(IReadOnlyList<PlayerRig> rigs)
     {
         _tableViews.Clear();
         foreach (var rig in rigs)
         {
             var fog = FogOf(rig.Index);
+            var sun = SunOf(rig.Index);
             var camera = rig.Camera;
-            _tableViews.Add(new FogViewTable.View(camera.IsInsideTree() ? camera.GlobalPosition : camera.Position, fog));
+            _tableViews.Add(new FogViewTable.View(camera.IsInsideTree() ? camera.GlobalPosition : camera.Position, fog, sun));
             if (_spyglassEye?.Invoke(rig) is { } eye)
-                _tableViews.Add(new FogViewTable.View(eye, fog));
+                _tableViews.Add(new FogViewTable.View(eye, fog, sun));
         }
         FogViewTable.Publish(_tableViews);
     }
@@ -946,6 +958,7 @@ public sealed class WeatherRig
         _baseFog.Zone = fog;
         _baseFog.Over = null;
         _baseFog.Fog = ZoneFog(fog);
+        _baseFog.Sun = ZoneSun(fog);
         WriteGlobals(_baseFog.Fog, FogField.All);
         var fogRange = _baseFog.Fog.Range;
         Log.Info("world", $"weather [{_activeZone}]{(_spec.NoFog ? " --no-fog: fog + whiteout OFF, world light unchanged;" : ":")} fog {fog.FogColor.R:0.00} gray {fogRange.X:0}–{fogRange.Y:0} m (authored {fog.FogNear:0}–{fog.FogFar:0}), altitude {fog.FogLow:0}–{fog.FogHigh:0} m; world light {fog.WorldLight:0.00}; sun {Mathf.RadToDeg(fog.SunOrientation.X):0.#}° pitch / {Mathf.RadToDeg(fog.SunOrientation.Y):0.#}° yaw; cloud band {_weather.CloudBottom:0}–{_weather.CloudTop:0} m (±{_weather.CloudThickness:0}){LightSuffix(fog)}");
@@ -1032,33 +1045,54 @@ public sealed class WeatherRig
                 Zone = _baseFog.Zone,
                 Over = _baseFog.Over,
                 Fog = _baseFog.Fog,
+                Sun = _baseFog.Sun,
             };
             _views[rigIndex] = view;
         }
         return view;
     }
 
-    // The half of a zone apply there is one of per session: the sun, its bearing, the vertex-light
-    // globals, the ambient. Called with the primary view's zone only.
-    // ⚠ Pair every call with that view's fog write (SetupWeather, ApplyZoneEdge, ReapplyZone), so
-    // the light and the primary fog never drift onto different zones.
+    // The vertex light one zone gives a view (docs/org/vertexLighting.md). The bearing and the
+    // uncollapsed pair serve the lit cloud cards. The coloured triples and the photograph's fill
+    // serve the faithful aircraft.
+    private SunWritten ZoneSun(WeatherState.ZoneWeather fog)
+    {
+        (Vector3 ambientRgb, Vector3 diffuseRgb) = SunVertexLight(fog);
+        return new SunWritten(SunDirectionFor(fog.SunOrientation), new Vector2(fog.SunAmbient, fog.SunDiffuse),
+            ambientRgb, diffuseRgb, PhotographFill(fog));
+    }
+
+    // The direction toward the sun one zone's bearing gives, composed by the session light itself
+    // and handed back to the bearing it wore.
+    // ⚠ Do not compose it here instead: a view's row must carry the bits the plain global would.
+    private Vector3 SunDirectionFor(Vector3 orientation)
+    {
+        var worn = _sun.Rotation;
+        _sun.Rotation = orientation;
+        var basis = _sun.IsInsideTree() ? _sun.GlobalBasis : _sun.Basis;
+        _sun.Rotation = worn;
+        return basis.Z.Normalized();
+    }
+
+    // The half of a zone apply there is one of per session: the scene sun, its bearing, the
+    // plain vertex-light globals, the ambient. Called with the primary view's zone only.
+    // ⚠ Pair every call with that view's fog write, so the light and the primary fog never drift
+    // onto different zones. SetupWeather, ApplyZoneEdge, ReapplyZone and a moved first rig do.
     private void ApplyZone(WeatherState.ZoneWeather fog)
     {
         _appliedZone = fog;
         // The zone's authored SUNLIGHT_ORIENTATION, adopted unconditionally, no tune, no clamp.
         // It shades aircraft only; the world is fullbright and casts no shadow from it.
-        // ⚠ One light for the whole session: in splitscreen every pane wears the first rig's.
+        // ⚠ One scene light for the whole session: a light selects objects, not cameras.
         _sun.Rotation = fog.SunOrientation;
-        // The bearing and the uncollapsed pair, in both modes, for the lit cloud cards and the
-        // enhanced billboard grades (docs/org/vertexLighting.md). It points toward the light.
+        // The plain globals, in both modes. Each view's own copy rides FogViewTable whenever the
+        // views disagree. The direction points toward the light.
         WriteSunDirection(_sun);
-        RenderingServer.GlobalShaderParameterSet("csky_sun_light",
-            new Vector2(fog.SunAmbient, fog.SunDiffuse));
-        // The same term with its colours, for the faithful aircraft, which carries no collapse.
-        (Vector3 ambientRgb, Vector3 diffuseRgb) = SunVertexLight(fog);
-        RenderingServer.GlobalShaderParameterSet("csky_sun_ambient_rgb", ambientRgb);
-        RenderingServer.GlobalShaderParameterSet("csky_sun_diffuse_rgb", diffuseRgb);
-        RenderingServer.GlobalShaderParameterSet("csky_sun_fill_rgb", PhotographFill(fog));
+        var sun = ZoneSun(fog);
+        RenderingServer.GlobalShaderParameterSet("csky_sun_light", sun.Light);
+        RenderingServer.GlobalShaderParameterSet("csky_sun_ambient_rgb", sun.AmbientRgb);
+        RenderingServer.GlobalShaderParameterSet("csky_sun_diffuse_rgb", sun.DiffuseRgb);
+        RenderingServer.GlobalShaderParameterSet("csky_sun_fill_rgb", sun.FillRgb);
         // The authored pair itself, published for the ground shadow, which derives its darkness
         // from the light rather than from either mode's energies.
         SunlightRgb = (Scaled(fog.SunDiffuse, fog.SunColorDiffuse),
@@ -1152,6 +1186,12 @@ public sealed class WeatherRig
     /// <see cref="FogOf"/>): colour in linear, range and altitude in metres, and the SUNLIGHT world
     /// dimming.</summary>
     public readonly record struct FogWritten(Vector3 ColorLinear, Vector2 Range, Vector2 Altitude, float WorldLight);
+
+    /// <summary>One view's vertex light as the shaders read it (<see cref="SunOf"/>). It holds the
+    /// unit direction toward the sun and the authored <c>SUNLIGHT_AMBIENT</c>/<c>SUNLIGHT_DIFFUSE</c>
+    /// pair. Beside them sit the triples of <see cref="SunVertexLight"/> and
+    /// <see cref="PhotographFill"/>.</summary>
+    public readonly record struct SunWritten(Vector3 Direction, Vector2 Light, Vector3 AmbientRgb, Vector3 DiffuseRgb, Vector3 FillRgb);
 
     /// <summary>What one camera-state change asks the fog chain to do: which state it is, the zone
     /// that state resolved to, whether the globals need re-writing at all
@@ -1315,7 +1355,8 @@ public sealed class WeatherRig
     }
 
     // One view's fog: the zone its own camera-state edge last applied, null with no weather.json.
-    // Beside it, the FOG_STATE written over it since and the record both resolve to.
+    // Beside it, the FOG_STATE written over it since, the record both resolve to, and the zone's
+    // vertex light, which no FOG_STATE touches.
     private sealed class ViewFog
     {
         public ViewFog(FogStateTrigger trigger) => Trigger = trigger;
@@ -1327,5 +1368,7 @@ public sealed class WeatherRig
         public AnimRuntime.FogStateChange? Over { get; set; }
 
         public FogWritten Fog { get; set; }
+
+        public SunWritten Sun { get; set; }
     }
 }

@@ -679,7 +679,8 @@ the terrain's washed-yellow → saturated-green hue independent of brightness.
 
 Read per zone into `ZoneWeather.SunOrientation` and written to the world's one
 `DirectionalLight3D` by the first rig's zone apply, beside that rig's fog, so it follows a zone
-change (`WeatherRig.ApplyZone`). It varies by chapter and is adopted with **no TUNE**:
+change (`WeatherRig.ApplyZone`); each splitscreen view's per-vertex sun takes its own zone's
+bearing (`FogViewTable`). It varies by chapter and is adopted with **no TUNE**:
 
 | Chapter | `[pitch, yaw]°` |
 |---|---|

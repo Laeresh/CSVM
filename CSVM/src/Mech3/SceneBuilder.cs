@@ -364,11 +364,6 @@ void fragment() {
     // picked by eye against the original's screenshots, at the controls and not by a luminance
     // distance. Sunlight reads as a sheen, not as gloss.
     private const float AircraftSpecular = 0.25f;
-    // The per-vertex sun term's colour triples (WeatherRig.SunVertexLight), declared by the one
-    // builder whose arms read them.
-    private const string SunVertexLightDecl =
-        "global uniform vec3 csky_sun_ambient_rgb;\nglobal uniform vec3 csky_sun_diffuse_rgb;\n"
-        + "global uniform vec3 csky_sun_fill_rgb;";
     // ⚠ Format every scale invariantly; a comma decimal separator emits shader text that will not
     // compile. Godot discards EMISSION on an `unshaded` material and the glow pass reads the HDR
     // colour buffer, so these arms reach it by scaling the colour rather than by writing EMISSION.
@@ -1978,7 +1973,6 @@ void fragment() {
             sb.AppendLine(SrgbInclude);
         if (sunLit)
         {
-            sb.AppendLine(SunVertexLightDecl);
             sb.AppendLine("varying vec3 v_sun_lit;");
             // Where this frame's origin sits in the world, for a model drawn in a frame of its own
             // (the cockpit pass, CockpitOverlay). Zero for anything drawn in the world itself.
@@ -1997,15 +1991,17 @@ void fragment() {
             ? "    v_clutter_alpha = csky_clutter_fade_alpha(MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);\n"
               + "    VERTEX *= step(0.004, v_clutter_alpha);\n"
             : "";
-        // Per vertex in world space: the sun and the point lights, summed into one factor on the
-        // authored colour and clamped at white. The sun's ambient half is the photograph's fill at
-        // an armed eye (PhotoEyeParam); `lighting: false` takes the authored colour unchanged.
+        // Per vertex in world space: the drawing view's sun and the point lights, summed into one
+        // factor on the authored colour, clamped at white. At an armed eye (PhotoEyeParam) the
+        // ambient half is the photograph's fill; `lighting: false` keeps the authored colour.
         string sunVertex = !sunLit ? ""
-            : lit ? "    vec3 sun_ambient = csky_photo_eye.w > 0.5 && distance(CAMERA_POSITION_WORLD, csky_photo_eye.xyz) < "
+            : lit ? "    vec3 sun_dir;\n    vec3 sun_ambient_rgb;\n    vec3 sun_diffuse_rgb;\n    vec3 sun_fill_rgb;\n"
+                    + "    csky_sun_rgb_at(CAMERA_POSITION_WORLD + light_origin, sun_dir, sun_ambient_rgb, sun_diffuse_rgb, sun_fill_rgb);\n"
+                    + "    vec3 sun_ambient = csky_photo_eye.w > 0.5 && distance(CAMERA_POSITION_WORLD, csky_photo_eye.xyz) < "
                     + PhotoEyeReach.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture) + "\n"
-                    + "        ? csky_sun_fill_rgb : csky_sun_ambient_rgb;\n"
-                    + "    v_sun_lit = clamp(COLOR.rgb * (sun_ambient + csky_sun_diffuse_rgb\n"
-                    + "        * max(dot(normalize(MODEL_NORMAL_MATRIX * NORMAL), csky_sun_dir), 0.0)\n"
+                    + "        ? sun_fill_rgb : sun_ambient_rgb;\n"
+                    + "    v_sun_lit = clamp(COLOR.rgb * (sun_ambient + sun_diffuse_rgb\n"
+                    + "        * max(dot(normalize(MODEL_NORMAL_MATRIX * NORMAL), sun_dir), 0.0)\n"
                     + "        + csky_point_light((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz + light_origin)), 0.0, 1.0);\n"
             : "    v_sun_lit = COLOR.rgb;\n";
         // The fullbright world keeps its collapsed sun, csky_world_light. It takes the point lights

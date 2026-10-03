@@ -492,8 +492,9 @@ its texture times a Lambert term, and nothing else.
 In original mode the in-flight aircraft carries no specular term, like the original. `PlaneBuilder`
 and the shared planes builder pass `sunVertexLit`, and `SceneBuilder.GetBiasShader`'s shaded arm then
 draws `unshaded`: the vertex stage evaluates `clamp(COLOR × (ambient + diffuse × max(N·L, 0)), 0,
-1)` on the world normal against the zone's `csky_sun_dir`, `csky_sun_ambient_rgb` and
-`csky_sun_diffuse_rgb` (`WeatherRig.SunVertexLight`, which applies the bicolored rule), and the
+1)` on the world normal against the drawing view's zone's `csky_sun_dir`, `csky_sun_ambient_rgb`
+and `csky_sun_diffuse_rgb` (`WeatherRig.SunVertexLight`, which applies the bicolored rule; a
+splitscreen pane reads its own zone's through `csky_sun_rgb_at`), and the
 fragment multiplies the texel by it in gamma space. Neither the scene sun, the Environment ambient
 nor any sheen reaches it. An unlit model keeps its authored colour. The cockpit overlay pass keeps
 the world orientation, so the same world-space term serves the interior.

@@ -4,11 +4,12 @@ using Godot;
 
 namespace CSVM.Session.World;
 
-/// <summary>The per-view fog table: every live camera drawing the shared world, each with the fog
-/// and world light of its own zone. It is published as the <c>csky_view_count</c> and
-/// <c>csky_view_0</c>..<c>_7</c> globals that <c>shaders/csky_atmosphere.gdshaderinc</c> searches. A
-/// fragment reads the entry whose eye stands nearest its own <c>CAMERA_POSITION_WORLD</c>. While
-/// every view agrees the count is 0 and the shaders read the plain <c>csky_fog_*</c> globals.
+/// <summary>The per-view atmosphere table: every live camera drawing the shared world, each with the
+/// fog, world light and vertex light of its own zone. It is published as the
+/// <c>csky_view_count</c>, <c>csky_view_0</c>..<c>_7</c> and <c>csky_view_sun_0</c>..<c>_7</c>
+/// globals that <c>shaders/csky_atmosphere.gdshaderinc</c> searches. A fragment or vertex reads the
+/// entry whose eye stands nearest its own <c>CAMERA_POSITION_WORLD</c>. While every view agrees
+/// the count is 0 and the shaders read the plain <c>csky_fog_*</c> and <c>csky_sun_*</c> globals.
 /// Static, because its globals are one set for the process; <see cref="WeatherRig"/> fills it each
 /// frame.</summary>
 public static class FogViewTable
@@ -18,14 +19,19 @@ public static class FogViewTable
 
     private const string CountParam = "csky_view_count";
 
-    // One mat4 global per view, by column: the eye with the world light, the fog colour, then the
-    // range and altitude pairs. The shader include reads the same layout.
-    private static readonly StringName[] ViewParams = Names();
+    // Two mat4 globals per view. The fog one by column: the eye with the world light, the fog
+    // colour, then the range and altitude pairs. The sun one by column: the direction toward the
+    // sun with the ambient scalar, then the ambient triple with the diffuse scalar. Its last two
+    // columns are the diffuse and photograph-fill triples.
+    // ⚠ Change a layout here and in csky_atmosphere.gdshaderinc together: a mismatch reads the
+    // wrong column silently.
+    private static readonly StringName[] ViewParams = Names("csky_view_");
+    private static readonly StringName[] SunParams = Names("csky_view_sun_");
     private static readonly List<View> Published = new();
     private static int _lastCount;
 
     /// <summary>The views the shaders search this frame, empty while every view agrees. Read by
-    /// the suite.</summary>
+    /// the suites.</summary>
     public static IReadOnlyList<View> Views => Published;
 
     /// <summary>Registers the globals the atmosphere include declares. Called once per process,
@@ -36,6 +42,11 @@ public static class FogViewTable
         RenderingServer.GlobalShaderParameterAdd(CountParam,
             RenderingServer.GlobalShaderParameterType.Int, 0);
         foreach (var name in ViewParams)
+        {
+            RenderingServer.GlobalShaderParameterAdd(name,
+                RenderingServer.GlobalShaderParameterType.Mat4, Projection.Zero);
+        }
+        foreach (var name in SunParams)
         {
             RenderingServer.GlobalShaderParameterAdd(name,
                 RenderingServer.GlobalShaderParameterType.Mat4, Projection.Zero);
@@ -61,8 +72,9 @@ public static class FogViewTable
         return best;
     }
 
-    /// <summary>Publishes this frame's views. Views that all carry one record publish nothing, so
-    /// a single pane, and every pane in the same zone, render through the plain globals.</summary>
+    /// <summary>Publishes this frame's views. Views that agree on fog and vertex light publish
+    /// nothing, so a single pane, and every pane in one zone, render through the plain
+    /// globals.</summary>
     public static void Publish(IReadOnlyList<View> views)
     {
         int n = Math.Min(views.Count, MaxViews);
@@ -83,6 +95,12 @@ public static class FogViewTable
                 new Vector4(fog.ColorLinear.X, fog.ColorLinear.Y, fog.ColorLinear.Z, 0f),
                 new Vector4(fog.Range.X, fog.Range.Y, fog.Altitude.X, fog.Altitude.Y),
                 Vector4.Zero));
+            var sun = view.Sun;
+            RenderingServer.GlobalShaderParameterSet(SunParams[i], new Projection(
+                new Vector4(sun.Direction.X, sun.Direction.Y, sun.Direction.Z, sun.Light.X),
+                new Vector4(sun.AmbientRgb.X, sun.AmbientRgb.Y, sun.AmbientRgb.Z, sun.Light.Y),
+                new Vector4(sun.DiffuseRgb.X, sun.DiffuseRgb.Y, sun.DiffuseRgb.Z, 0f),
+                new Vector4(sun.FillRgb.X, sun.FillRgb.Y, sun.FillRgb.Z, 0f)));
         }
         WriteCount(n);
     }
@@ -101,7 +119,7 @@ public static class FogViewTable
     {
         for (int i = 1; i < n; i++)
         {
-            if (views[i].Fog != views[0].Fog)
+            if (views[i].Fog != views[0].Fog || views[i].Sun != views[0].Sun)
             {
                 return false;
             }
@@ -109,12 +127,12 @@ public static class FogViewTable
         return true;
     }
 
-    private static StringName[] Names()
+    private static StringName[] Names(string prefix)
     {
         var names = new StringName[MaxViews];
         for (int i = 0; i < MaxViews; i++)
         {
-            names[i] = "csky_view_" + i.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            names[i] = prefix + i.ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
         return names;
     }
@@ -128,7 +146,7 @@ public static class FogViewTable
         _lastCount = n;
     }
 
-    /// <summary>One camera drawing the world: where it stands and the fog record its zone resolves
-    /// to.</summary>
-    public readonly record struct View(Vector3 Eye, WeatherRig.FogWritten Fog);
+    /// <summary>One camera drawing the world: where it stands, and the fog record and vertex light
+    /// its zone resolves to.</summary>
+    public readonly record struct View(Vector3 Eye, WeatherRig.FogWritten Fog, WeatherRig.SunWritten Sun);
 }

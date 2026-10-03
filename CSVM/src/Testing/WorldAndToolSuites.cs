@@ -542,7 +542,7 @@ internal static class WorldAndToolSuites
             ctx.Host.AddChild(paneView);
 
             var shaders = ShadersUnder(controller);
-            int gated = shaders.Count(s => s.Code.Contains("csky_sun_fill_rgb : csky_sun_ambient_rgb", System.StringComparison.Ordinal)
+            int gated = shaders.Count(s => s.Code.Contains("sun_fill_rgb : sun_ambient_rgb", System.StringComparison.Ordinal)
                 && s.Code.Contains("distance(CAMERA_POSITION_WORLD, csky_photo_eye.xyz)", System.StringComparison.Ordinal));
             ctx.Check(gated > 0, $"the aircraft's faithful shaders swap the ambient half at an armed eye gated={gated} of {shaders.Count}");
 

@@ -181,34 +181,6 @@ The theme's first batch (`BL-126`, `BL-365`–`BL-376`) landed via
 complete, the chrome playtest F52/`BL-126` closed it out). New splitscreen findings mint here as
 usual.
 
-- `BL-380` `[Bug]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Zone lighting stays
-  player-1-only in splitscreen: a pane on the other side of a zone boundary from P1 wears its own
-  zone's fog but P1's `SUNLIGHT`, because `WeatherRig.ApplyZone` writes the sun, its bearing, the
-  `Environment` ambient and the `csky_sun_*` vertex-light globals from the first rig's zone
-  alone.** The fog half is per view: each rig keeps its own fog record and
-  `Session/World/FogViewTable.cs` publishes every pane and spyglass eye with it, which the
-  atmosphere include searches by `CAMERA_POSITION_WORLD`.
-  *Evidence:* a census of every install `weather.zrd` finds zones within one mission authoring
-  different `SUNLIGHT` in C1/M02, C1/M05, C1B/M03, C1C/M01, MP1 and MP3, every C2 mission, and
-  C2B/M04; the bearing itself differs only in C2/MP2 and MP3 (-65 against -25 degrees
-  pitch).
-  *Fix shape:* on the faithful presentation nearly everything visible reads globals, so it can
-  ride the fog table: give each row the view's `csky_sun_dir`, `csky_sun_light`,
-  `csky_sun_ambient_rgb`, `csky_sun_diffuse_rgb` and `csky_sun_fill_rgb`, and read them through
-  `_at(CAMERA_POSITION_WORLD)` accessors as the fog is read. The `Environment` ambient and the
-  enhanced sky colour can follow per pane through `Camera3D.Environment`, one duplicate per pane
-  kept in step by `RegisterExtraLighting`.
-  *⚠ Traps:* the `DirectionalLight3D` cannot follow per pane. Every pane renders the one `World3D`,
-  a light's cull mask selects objects rather than cameras, so a second sun lights both panes; under
-  Enhanced Graphics the direct sun stays the first rig's unless panes get worlds of their own. A
-  per-pane `Environment` alone would light a pane by its own ambient under P1's sun, so judge that
-  mix before landing it. Each view is one mat4 global with one free column, and the five
-  vertex-light globals need 14 floats, so they need a second mat4 per view, laid out in
-  `FogViewTable.cs` and the include together; a mismatched layout reads the wrong column silently.
-  Editing the include's compiled code hangs some golden shots at exit (`docs/verification.md`
-  SHELL-21). Any new `instance uniform` in
-  `shaders/csky_instance_uniforms.gdshaderinc` is APPENDED, never inserted.
-
 - `BL-389` `[Tuning]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **Splitscreen weapon mix needs a retune: rockets too quiet, guns too loud,
   especially four guns firing at once.** Found at the `BL-126` chrome playtest (F52,
   2026-08-15), `FlightAudio.MixGain`/`Projectile.cs`'s pool `MixGain` (the `1/sqrt(N)` equal-power

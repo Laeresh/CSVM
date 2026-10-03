@@ -464,7 +464,7 @@ public sealed partial class FogVolumeClutter : Node3D
         // (docs/org/vertexLighting.md). C1 and C4 author false and take nothing.
         string varying = lit ? "\nvarying float v_light;" : string.Empty;
         string vertexLight = lit
-            ? "\n    v_light = csky_sun_vertex_light(face * NORMAL);"
+            ? "\n    v_light = csky_sun_vertex_light_at(face * NORMAL, CAMERA_POSITION_WORLD);"
             : string.Empty;
         // The product is clamped, not the factor. The original clamps after multiplying the
         // authored colour, and it clamps in the framebuffer's own gamma space. COLOR is still in

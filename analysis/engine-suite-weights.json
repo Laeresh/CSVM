@@ -435,6 +435,7 @@
     "structure-part-bias": 1.06,
     "sun-energy": 0.059,
     "sun-orientation": 0.021,
+    "sun-per-view": 1.94,
     "surface-vehicle-guns": 1.21,
     "target-flag": 0.029,
     "targeting-candidates": 0.289,
