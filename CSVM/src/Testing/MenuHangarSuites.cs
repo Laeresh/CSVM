@@ -188,7 +188,7 @@ internal static class MenuHangarSuites
     {
         menu.ShowMenu();
         WalkTo(menu, LaunchMenu.HangarRow);
-        Is(ctx, "the Mode screen's fifth row is the hangar door", LaunchMenu.HangarRow, menu.ShownRowText);
+        Is(ctx, "the Mode screen's sixth row is the hangar door", LaunchMenu.HangarRow, menu.ShownRowText);
         Is(ctx, "its description", "Build a plane in the hangar and fly it.", menu.ShownDetail);
         menu.Drive(Accept);
         Is(ctx, "Accept on the door opens the Hangar screen", "Hangar", menu.ShownScreen);

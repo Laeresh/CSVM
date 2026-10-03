@@ -12,11 +12,12 @@ public enum ChromeSize
     /// <summary>22: a second heading beside it, and the stunt results boards' title.</summary>
     Title,
 
-    /// <summary>19: the one figure a results board leads with, its total.</summary>
+    /// <summary>19: the one figure a results board leads with, its total, and Built-in's join board
+    /// rows.</summary>
     Lead,
 
-    /// <summary>17: an entry's own words: a device name on the join board, a dogfight or wrap-up
-    /// board's row, a board menu's row.</summary>
+    /// <summary>17: an entry's own words: a seat on either join board, Built-in's board heading, a
+    /// dogfight or wrap-up board's row, a board menu's row.</summary>
     Body,
 
     /// <summary>15: running text, a rule line, a stunt results table's rows, the pause board's

@@ -125,7 +125,7 @@ internal static class MenuCampaignSuites
     {
         menu.ShowMenu();
         WalkTo(menu, LaunchMenu.CampaignRow);
-        Is(ctx, "the Mode screen's fourth row is the campaign door", LaunchMenu.CampaignRow, menu.ShownRowText);
+        Is(ctx, "the Mode screen's fifth row is the campaign door", LaunchMenu.CampaignRow, menu.ShownRowText);
         menu.Drive(Accept);
         Is(ctx, "Accept on the door opens the Campaign screen", "Campaign", menu.ShownScreen);
         Is(ctx, "on the roster", "SELECT PLAYER", menu.ShownHeading);

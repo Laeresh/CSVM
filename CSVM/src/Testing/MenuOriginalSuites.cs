@@ -72,9 +72,7 @@ internal static class MenuOriginalSuites
         + "drops them, a wheel step over the "
         + "aircraft column and over Instant Action's contents window moves each one row and clamps "
         + "at the head, a drag down each thumb's track lands the window on its last row without "
-        + "activating what the click stood over, and the contents arrows still step it, steering the "
-        + "menu with a pad claims nothing, a pad a guest already joined on is "
-        + "not claimable and a rebind of seat 0's set drops the stale last-active reading with it, "
+        + "activating what the click stood over, and the contents arrows still step it, "
         + "a seat whose pad drops off the roster holds it through the grace and leaves once the "
         + "device stays gone past it, the Instant Action screen reads the roster without opening "
         + "joining and a seat signed on at the board stays seated, the campaign flight check carries the "
@@ -529,13 +527,6 @@ internal static class MenuOriginalSuites
             return;
         }
 
-        player1.LastActivePad = 2;
-        host.Tick(Dt);
-        ctx.Check(devices.P1Pad < 0 && !devices.IsClaimed(2),
-            $"steering the menu with a pad claims nothing, a seat being taken on the join board alone ({devices.P1Pad}, claimed={devices.IsClaimed(2)})");
-        player1.LastActivePad = -1;
-        host.Tick(Dt);
-        GuestPadClaim(ctx, host, setup, devices, player1);
         PadBlipGrace(ctx, host, setup, devices, player1);
 
         WalkTo(host, seat, shell, "MM_B_INSTANTACTION");
@@ -564,33 +555,6 @@ internal static class MenuOriginalSuites
         host.Show(MenuReturnDestination.TopLevel);
         ctx.Check(shell.Screen == OriginalScreen.TopLevel && !host.Features.Get<CampaignFeature>().IsOpen,
             $"a top-level show closes the scratch campaign again ({shell.Screen})");
-    }
-
-    // Seat 0 borrows every unclaimed pad, so a guest steering the menu before they press Start
-    // leaves their own pad in its last-active reading. Both halves of what keeps a later claim off
-    // that pad. The claim skips a pad another seat holds, and a rebind of seat 0's set drops the
-    // reading it was taken from.
-    private static void GuestPadClaim(
-        TestContext ctx, MenuHost host, PlayerSetupFeature setup, MenuSeatDevices devices, MenuInput player1)
-    {
-        var guest = new MenuInput { Pads = new[] { 2 } };
-        var seat = setup.Join(new BuiltInSeat(guest));
-        player1.LastActivePad = 2;
-        ctx.Check(seat != null && !devices.ClaimP1Pad() && devices.P1Pad < 0,
-            $"a guest's joined pad is not claimable by seat 0, so neither seat flies the other's ({devices.P1Pad})");
-
-        player1.Pads = new[] { 2 };
-        devices.Sync(0f);
-        ctx.Check(player1.LastActivePad < 0,
-            $"and rebinding seat 0's pads drops the stale reading with them ({player1.LastActivePad})");
-        ctx.Check(!devices.ClaimP1Pad() && devices.P1Pad < 0,
-            $"leaving the claim nothing to take from a set seat 0 no longer reads ({devices.P1Pad})");
-        if (seat != null)
-        {
-            setup.Unjoin(seat);
-        }
-
-        host.Tick(Dt);
     }
 
     // Steam Input re-enumerates its virtual pads mid-menu, and a seat that leaves on every blip is
@@ -686,7 +650,7 @@ internal static class MenuOriginalSuites
             $"a Built-in request re-selects it and Show stands the launchscreen up ({host.Selected})");
         ctx.Check(menu?.ShownScreen == "Mode" && menu.ShownRowText == "Free Flight",
             $"at its own top level, the Mode screen ({menu?.ShownScreen}, {menu?.ShownRowText})");
-        ctx.Check(menu?.ShownRowCount == 7, $"whose last two rows are the Options and multiplayer doors ({menu?.ShownRowCount})");
+        ctx.Check(menu?.ShownRowCount == 8, $"whose eight rows end on the Options and multiplayer doors ({menu?.ShownRowCount})");
     }
 
     // Built-in's Options route: the last Mode row opens Options, and Right steps the difficulty to

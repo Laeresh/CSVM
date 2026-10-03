@@ -9,18 +9,23 @@ using CSVM.UI.Screens;
 namespace CSVM.Testing;
 
 /// <summary>
-/// The shared player setup in both presentations. The first suite characterizes Built-in: a real
-/// <see cref="LaunchMenu"/> is driven through the aircraft screen with one to four seats (the
-/// extra ones through <see cref="LaunchMenu.DebugJoin"/>, which adds device-less seats), and the
-/// read-outs pin the two-stage pick, Back at every stage, the launch gate under Free Flight and
-/// Dogfight, the join hint at each seat count, and what a return from flight keeps. The second
-/// joins scripted seats through the feature and drives them in Built-in and in Original. The third
-/// takes the same join to the rebinding screen, where it is the only door to another player's
-/// keymap, and pins which seats that screen will and will not offer a row to.
+/// The shared player setup in both presentations. The first suite drives Built-in's aircraft screen
+/// with one to four seats, the extra ones device-less through <see cref="LaunchMenu.DebugJoin"/>.
+/// It pins the two-stage pick, Back at every stage, both launch gates, the join hint and a return.
+/// The second joins scripted seats through the feature and drives them in Built-in and in Original.
+/// The third pins which seats the rebinding screen will and will not offer a row to. The fourth
+/// walks Built-in's join board, where every pad seat is signed on.
 /// </summary>
 internal static class MenuPlayerSetupSuites
 {
     private const float Dt = 1f / 60f;
+
+    // Pad indices no real device holds, so a machine with pads plugged in walks the board the same.
+    private const int FirstPad = 96;
+    private const int SecondPad = 97;
+
+    // A frame a board gesture landed in and moved the manifest, the join board's own scan answer.
+    private static readonly BoardScan Signing = new(Moved: true, Cast: false, Pressed: true);
 
     private static readonly MenuCommands Accept = new() { Accept = true };
     private static readonly MenuCommands Back = new() { Back = true };
@@ -86,10 +91,10 @@ internal static class MenuPlayerSetupSuites
     }
 
     [Suite("menu-controls-seats",
-        "The rebinding screen's own join, which is the only door to a second player's keymap: "
-        + "Options reaches the screen on player 1 alone with a hint inviting a free pad, the clear "
+        "The rebinding screen's seats, a second player's keymap coming from a pad signed on at the join board: "
+        + "Options reaches the screen on player 1 alone with a hint naming the join board, the clear "
         + "gesture drops an action row's highlighted control where the loadout gesture alone does not, a pad seat "
-        + "joining there becomes player 2 on the Player stepper, an accepted rebind on that seat "
+        + "joined becomes player 2 on the Player stepper, an accepted rebind on that seat "
         + "writes player 2's keymap file and nobody else's, a device-less seat gets no player row "
         + "at all because it would have nothing to capture with, and a seat that leaves takes its "
         + "row and its staged edits with it")]
@@ -122,9 +127,180 @@ internal static class MenuPlayerSetupSuites
         }
     }
 
+    [Suite("menu-builtin-join-board",
+        "Built-in's join board, the one screen a pad signs onto a seat from, on the real "
+        + "launchscreen: the Mode screen's door beside the splitscreen modes opens four open seats, "
+        + "A on a first pad takes P1's seat and A on a second signs onto P2 without either press "
+        + "arming the row under the cursor, B gives P2 up without reading as Back, the captain's "
+        + "Start continues to Mode with both seats kept, the Dogfight then splits for the two seats "
+        + "and launches each on its own pad, Esc leaves the board dropping every sign-on, the "
+        + "keyboard alone walks Continue and reaches a Free Flight launch, and --debug-join's "
+        + "device-less seats stand on the board as taken")]
+    internal static void MenuBuiltInJoinBoard(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var exits = new List<MenuExit>();
+        var host = MenuSuiteHost.Bare(exits, ctx.DataRoot, out var seat);
+        var setup = host.Features.Get<PlayerSetupFeature>();
+        var menu = MenuSuiteHost.Build(ctx, host, seat, "menu-builtin-join-board");
+        ctx.Host.AddChild(menu);
+        var launches = new Exits<LaunchExit>(exits);
+        try
+        {
+            menu.ShowMenu();
+            SignOnAtTheBoard(ctx, menu, setup);
+            FlyTheCrew(ctx, menu, setup, launches);
+            LeaveTheBoard(ctx, menu, setup, launches);
+            DeviceLessSeats(ctx, menu);
+        }
+        finally
+        {
+            ctx.Host.RemoveChild(menu);
+            menu.QueueFree();
+        }
+    }
+
+    // The board's gestures for two pads. They are raw device reads, and a scripted run has no pad.
+    // The walk presses through the device bookkeeping and hands the screen its scan's answer.
+    // The pad indices are ones no real device holds.
+    private static void SignOnAtTheBoard(TestContext ctx, LaunchMenu menu, PlayerSetupFeature setup)
+    {
+        var devices = menu.Devices;
+        for (int i = 0; i < 3; i++)
+            menu.Drive(Down);
+        Is(ctx, "the first door past the three modes", LaunchMenu.JoinBoardRow, menu.ShownRowText);
+        menu.Drive(Accept);
+        Is(ctx, "it opens the join board", "Join", menu.ShownScreen);
+        Is(ctx, "under its own heading", "JOIN BOARD", menu.ShownHeading);
+        Is(ctx, "on Continue", "Continue", menu.ShownRowText);
+        ctx.Check(Entries(menu, "open seat") == 4, $"with four open seats ({string.Join(" / ", menu.ShownManifest)})");
+        Is(ctx, "the board needs no strip hint", "", menu.ShownJoinHint);
+        Has(ctx, "and its footer names the pad's gestures", "A sign on, B sign off, Start continue", menu.ShownFooter);
+
+        ctx.Check(devices.SignOn(FirstPad) && devices.P1Pad == FirstPad && setup.Seats.Count == 1,
+            $"A on a first pad takes the captain's chair, P1 beside the keyboard ({devices.P1Pad}, {setup.Seats.Count} seats)");
+        menu.Drive(Accept, Signing);
+        Is(ctx, "and the same A is not seat 0's Accept on Continue", "Join", menu.ShownScreen);
+        ctx.Check(menu.ShownManifest.Count == 4 && menu.ShownManifest[0].EndsWith("signed on", System.StringComparison.Ordinal),
+            $"P1's entry reads signed on ({string.Join(" / ", menu.ShownManifest)})");
+
+        ctx.Check(devices.SignOn(SecondPad) && setup.Seats.Count == 2,
+            $"A on a second pad signs it onto a seat of its own ({setup.Seats.Count} seats)");
+        menu.Drive(MenuCommands.None, Signing);
+        ctx.Check(Entries(menu, "signed on") == 2 && Entries(menu, "open seat") == 2,
+            $"two entries taken and two open ({string.Join(" / ", menu.ShownManifest)})");
+
+        ctx.Check(devices.SignOff(SecondPad) && setup.Seats.Count == 1 && devices.P1Pad == FirstPad,
+            $"B on the second pad gives P2 up and leaves P1 where it is ({setup.Seats.Count} seats, {devices.P1Pad})");
+        menu.Drive(Back, Signing);
+        ctx.Check(menu.ShownScreen == "Join" && devices.P1Pad == FirstPad,
+            $"and the same B is not seat 0's Back off the board ({menu.ShownScreen}, {devices.P1Pad})");
+
+        ctx.Check(devices.SignOn(SecondPad) && setup.Seats.Count == 2, $"the second pad signs on again ({setup.Seats.Count} seats)");
+        menu.Drive(MenuCommands.None, Signing);
+        menu.Drive(MenuCommands.None, new BoardScan(Moved: false, Cast: true, Pressed: true));
+        ctx.Check(menu.ShownScreen == "Mode" && menu.ShownRowText == LaunchMenu.JoinBoardRow,
+            $"the captain's Start continues to Mode, the cursor on the board's door ({menu.ShownScreen}, {menu.ShownRowText})");
+        ctx.Check(setup.Seats.Count == 2 && devices.P1Pad == FirstPad,
+            $"with both seats as they were signed on ({setup.Seats.Count} seats, {devices.P1Pad})");
+    }
+
+    // The seats the board wrote are the ones a sortie flies. A Dogfight splits for them, and each
+    // launches on the pad it signed on with.
+    private static void FlyTheCrew(TestContext ctx, LaunchMenu menu, PlayerSetupFeature setup, Exits<LaunchExit> launches)
+    {
+        menu.Drive(Up);
+        Is(ctx, "over the board's door is Dogfight", "Dogfight", menu.ShownRowText);
+        menu.Drive(Accept);
+        menu.Drive(Accept);
+        Is(ctx, "the two seats split its aircraft screen", "SELECT AIRCRAFT: ALL PLAYERS", menu.ShownHeading);
+        Is(ctx, "and the strip points back at the board", "(other players sign on at the Join Board)", menu.ShownJoinHint);
+        setup.Select(setup.Seats[1]);
+        setup.Confirm(setup.Seats[1]);
+        menu.Drive(Accept);
+        menu.Drive(Accept);
+        ctx.Check(launches.Count == 1 && launches[0].Mode == MenuMode.Versus && launches[0].Seats.Count == 2,
+            $"both confirmed, one Dogfight launches for the two seats ({launches.Count})");
+        if (launches.Count == 1 && launches[0].Seats.Count == 2)
+        {
+            var pads = launches[0].Seats[1].Pads;
+            ctx.Check(pads.Count == 1 && pads[0] == SecondPad,
+                $"P2 flying on the pad it signed on with ([{string.Join(", ", pads)}])");
+        }
+
+        menu.HideMenu();
+        menu.ShowMenu();
+    }
+
+    // Esc on the board keeps nobody, and the keyboard alone still walks off it and into a flight,
+    // the startup escape hatch's promise.
+    private static void LeaveTheBoard(TestContext ctx, LaunchMenu menu, PlayerSetupFeature setup, Exits<LaunchExit> launches)
+    {
+        // Signed on afresh: the return's own device sync finds no pad behind either index, under
+        // --no-pads at once, and gives both seats up.
+        WalkTo(menu, LaunchMenu.JoinBoardRow);
+        menu.Drive(Accept);
+        menu.Devices.SignOn(FirstPad);
+        menu.Devices.SignOn(SecondPad);
+        menu.Drive(MenuCommands.None, Signing);
+        ctx.Check(menu.ShownScreen == "Join" && Entries(menu, "signed on") == 2 && setup.Seats.Count == 2,
+            $"the board stands with two pads signed on ({string.Join(" / ", menu.ShownManifest)})");
+        menu.Drive(Back);
+        ctx.Check(menu.ShownScreen == "Mode" && setup.Seats.Count == 1 && menu.Devices.P1Pad < 0,
+            $"Esc leaves the board and drops every sign-on ({menu.ShownScreen}, {setup.Seats.Count} seats, {menu.Devices.P1Pad})");
+
+        menu.Drive(Accept);
+        menu.Drive(Down);
+        Is(ctx, "the keyboard steps onto Back", "Back", menu.ShownRowText);
+        Has(ctx, "which says what it drops", "Give every pad's seat back", menu.ShownDetail);
+        menu.Drive(Down);
+        menu.Drive(Accept);
+        Is(ctx, "and Continue under Enter leaves the board too", "Mode", menu.ShownScreen);
+        WalkTo(menu, "Free Flight");
+        menu.Drive(Accept);
+        menu.Drive(Accept);
+        menu.Drive(Accept);
+        menu.Drive(Accept);
+        ctx.Check(launches.Count == 2 && launches[1].Mode == MenuMode.Free && launches[1].Seats.Count == 1,
+            $"from where the keyboard alone flies Free Flight ({launches.Count})");
+        menu.HideMenu();
+    }
+
+    // The screenshot twin: --menu=join-board with --debug-join's device-less seats. They stand on the
+    // board as taken, since a pad's A would sign onto the seat after them.
+    private static void DeviceLessSeats(TestContext ctx, LaunchMenu menu)
+    {
+        menu.ShowMenu(LaunchMenu.JoinBoardAid);
+        Is(ctx, "--menu=join-board opens on the board", "Join", menu.ShownScreen);
+        menu.DebugJoin(2);
+        ctx.Check(menu.ShownManifest.Count == 4 && menu.ShownManifest[1] == "P2  no device  signed on"
+                  && menu.ShownManifest[2] == "P3  no device  signed on" && menu.ShownManifest[3] == "P4  open seat  A to sign on",
+            $"--debug-join's seats stand as taken and the rest open ({string.Join(" / ", menu.ShownManifest)})");
+    }
+
+    // How many of the board's entries carry a piece of text.
+    private static int Entries(LaunchMenu menu, string text)
+    {
+        int count = 0;
+        foreach (string entry in menu.ShownManifest)
+        {
+            if (entry.Contains(text, System.StringComparison.Ordinal))
+                count++;
+        }
+
+        return count;
+    }
+
+    // Steps player 1's Mode cursor onto the row reading <paramref name="row"/>, one lap at most.
+    private static void WalkTo(LaunchMenu menu, string row)
+    {
+        for (int i = 0; i <= menu.ShownRowCount && menu.ShownRowText != row; i++)
+            menu.Drive(Down);
+    }
+
     // The rebinding screen's seats: who it offers, whose file an accepted rebind reaches, and which
-    // seat it refuses a row to. The Start press itself is a raw device read, so the join is made the
-    // way ScanJoins makes it, by seating a poller bound to one pad.
+    // seat it refuses a row to. The sign-on is a raw device read, so the seat is made the board's
+    // way, a poller bound to one pad.
     private static void ControlsJoin(
         TestContext ctx, LaunchMenu menu, MenuHost host, string dir, List<int> written)
     {
@@ -134,8 +310,8 @@ internal static class MenuPlayerSetupSuites
         Is(ctx, "Options reaches the rebinding screen", "Controls", menu.ShownScreen);
         Has(ctx, "on player 1", "Player 1", menu.ShownBreadcrumb);
         ctx.Check(controls.Players.Count == 1, $"with one seat registered ({controls.Players.Count})");
-        Has(ctx, "joining is open here", "START", menu.ShownJoinHint);
-        Has(ctx, "and the hint says what the press is for", "keymap", menu.ShownJoinHint);
+        Has(ctx, "the hint names the board a second keymap comes from", "Join Board", menu.ShownJoinHint);
+        Has(ctx, "and what signing a pad on there is for", "keymap", menu.ShownJoinHint);
         menu.Drive(Right);
         Has(ctx, "the stepper has nobody else to offer", "Player 1", menu.ShownBreadcrumb);
 
@@ -229,7 +405,7 @@ internal static class MenuPlayerSetupSuites
         menu.Drive(Accept);
         Is(ctx, "Free Flight, first chapter, lands on the aircraft screen", "Plane", menu.ShownScreen);
         Is(ctx, "a lone seat's heading", "SELECT AIRCRAFT", menu.ShownHeading);
-        Has(ctx, "joining is open on this screen", "START", menu.ShownJoinHint);
+        Has(ctx, "the strip points at the board rather than inviting a press", "Join Board", menu.ShownJoinHint);
         Has(ctx, "the footer offers the first Select", "Enter / A  Select", menu.ShownFooter);
 
         menu.Drive(Down);
@@ -274,7 +450,7 @@ internal static class MenuPlayerSetupSuites
         menu.DebugJoin(1);
         Is(ctx, "a second seat splits the aircraft screen", "SELECT AIRCRAFT: ALL PLAYERS", menu.ShownHeading);
         Has(ctx, "the footer says who steers the shared screens", "(P1 chooses)", menu.ShownFooter);
-        Has(ctx, "joining stays open below four seats", "START", menu.ShownJoinHint);
+        Has(ctx, "below four seats the strip still points at the board", "Join Board", menu.ShownJoinHint);
         menu.Drive(Accept);
         menu.Drive(Accept);
         ctx.Check(launches.Count == 1,
@@ -309,7 +485,7 @@ internal static class MenuPlayerSetupSuites
         menu.Drive(Accept);
         Is(ctx, "Dogfight reaches the aircraft screen", "Plane", menu.ShownScreen);
         Is(ctx, "the second seat survived the trip to Mode and back", "SELECT AIRCRAFT: ALL PLAYERS", menu.ShownHeading);
-        ctx.Check(menu.ShownJoinHint != "(Dogfight needs a fight, P2: press START to join)",
+        ctx.Check(menu.ShownJoinHint != "(Dogfight needs a fight, P2: sign on at the Join Board)",
             $"two seats satisfy Dogfight's count, so the hint is the ordinary one ({menu.ShownJoinHint})");
         menu.Drive(Accept);
         menu.Drive(Accept);
@@ -329,7 +505,7 @@ internal static class MenuPlayerSetupSuites
             lone.Drive(Accept);
             lone.Drive(Accept);
             Is(ctx, "a lone Dogfight seat waits with the hint naming the missing seat",
-                "(Dogfight needs a fight, P2: press START to join)", lone.ShownJoinHint);
+                "(Dogfight needs a fight, P2: sign on at the Join Board)", lone.ShownJoinHint);
             Is(ctx, "on the lone-seat layout", "SELECT AIRCRAFT", lone.ShownHeading);
             lone.Drive(Accept);
             Is(ctx, "it can still select", "AIRCRAFT SELECTED", lone.ShownHeading);

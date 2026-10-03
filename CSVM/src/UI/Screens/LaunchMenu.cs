@@ -41,6 +41,14 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// text uses (langui 10524).</summary>
     public const string HangarRow = "Build Custom Plane";
 
+    /// <summary>The row that opens the join board, the one screen a pad signs onto a seat from. It
+    /// stands first among the doors, beside the splitscreen modes, where Original's own door stands.
+    /// </summary>
+    public const string JoinBoardRow = "Join Board";
+
+    /// <summary>The <c>--menu=</c> aid that opens on the join board, Original's own aid word.</summary>
+    public const string JoinBoardAid = "join-board";
+
     /// <summary>The row that opens the campaign, past the three modes and before the hangar's own
     /// door. The campaign is not a <see cref="MenuMode"/>: it owns its screens through
     /// <see cref="CampaignFlow"/> and only launches a mission from inside them.</summary>
@@ -96,6 +104,19 @@ public sealed partial class LaunchMenu : CanvasLayer
     private const int NetVoiceRow = 9;
     private const int NetListingRow = 10;
     private const int NetworkRows = 11;
+
+    // The Mode screen's doors past the three modes, as offsets from the last mode, in drawn order.
+    private const int JoinDoor = 0;
+    private const int CampaignDoor = 1;
+    private const int HangarDoor = 2;
+    private const int OptionsDoor = 3;
+    private const int NetworkDoor = 4;
+    private const int ModeDoors = 5;
+
+    // The join board's two rows: the way on keeping the seats, then the way out dropping them.
+    private const int JoinContinueRow = 0;
+    private const int JoinBackRow = 1;
+    private const int JoinRows = 2;
 
     // Base metrics at 720p, scaled up on taller viewports (like StuntScoreboard). All TUNE.
     private const int TitleFont = 40;
@@ -222,8 +243,24 @@ public sealed partial class LaunchMenu : CanvasLayer
     // a glance, and "the cursor is here" and "this is chosen" would otherwise look identical.
     private static readonly Color RowLockedColor = new(0.55f, 0.95f, 0.62f);
 
-    // The join strip's size, the chrome type scale's caption rung in the menu's 720p reference.
+    // The join strip's size, the chrome type scale's caption rung in the menu's 720p reference. The
+    // join board's status words share it.
     private static readonly float JoinFont = ChromeType.InReference(ChromeSize.Caption, ReferenceHeight);
+
+    // The join board's other sizes, rungs of the same scale: the heading and a seat's tag and
+    // device, the rules, then the rows.
+    private static readonly float BoardEntryFont = ChromeType.InReference(ChromeSize.Body, ReferenceHeight);
+    private static readonly float BoardRuleFont = ChromeType.InReference(ChromeSize.Text, ReferenceHeight);
+    private static readonly float BoardRowFont = ChromeType.InReference(ChromeSize.Lead, ReferenceHeight);
+
+    // The join board's rules, in the order a crew forms. The Original board says the same in its own
+    // voice; these name the pad buttons the way every Built-in footer does.
+    private static readonly string[] BoardRules =
+    {
+        "The first pad to press A takes P1's seat beside the keyboard.",
+        "A on any other pad signs it onto the next open seat, B gives that seat up.",
+        "Start on P1's pad continues with the seats as they stand.",
+    };
 
     private readonly Dictionary<string, PlaneStats?> _stats = new();
     // This screen's view of the shared setup's seats, player 1 first, one wrapper per seat with
@@ -252,6 +289,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     // the input.
     private int _netIndex;
     private string _netStatus = "";
+    // The join board's cursor. The seats it draws are the device bookkeeping's.
+    private int _joinIndex;
     // Whether the board is standing as a guest's waiting board for a campaign host's launch. It
     // is the Network screen with other rows rather than a screen of its own, since the door and
     // its readout are the same ones.
@@ -414,7 +453,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     private int? _pressRow;
     private bool _pressInside;
 
-    private enum Screen { Mode, Chapter, Presets, Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, WingmanLoadout, Hangar, Campaign, Options, Controls, Network }
+    private enum Screen { Mode, Chapter, Presets, Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, WingmanLoadout, Hangar, Campaign, Options, Controls, Network, Join }
 
     // What a fit row edits. The reset row carries no slot of its own and is the only one Accept
     // does anything on, since every other row is a live stepper.
@@ -498,6 +537,31 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <summary>The hint beside the join strip, which names where joining opens.</summary>
     public string ShownJoinHint => JoinHint();
 
+    /// <summary>The join board's four seat entries as drawn, the tag, the device or the open seat,
+    /// and the status, or none off the board.</summary>
+    public IReadOnlyList<string> ShownManifest
+    {
+        get
+        {
+            if (_screen != Screen.Join)
+            {
+                return Array.Empty<string>();
+            }
+
+            var entries = new string[PlayerSetupFeature.MaxSeats];
+            for (int i = 0; i < entries.Length; i++)
+            {
+                entries[i] = $"{SplitScreen.PlayerTag(i)}  {EntryDevice(i)}  {EntryStatus(i)}";
+            }
+
+            return entries;
+        }
+    }
+
+    /// <summary>The pad bookkeeping behind the seats: the claims, hotplug, and the join board's
+    /// gestures and roster. A driven suite signs pads on through it, a raw button being out of reach.</summary>
+    public MenuSeatDevices Devices => _devices;
+
     /// <summary>Player 1's cursor row on the screen showing.</summary>
     public int ShownRow => CurrentIndex;
 
@@ -542,6 +606,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Options => _optionsIndex,
         Screen.Controls => _controlsIndex,
         Screen.Network => _netIndex,
+        Screen.Join => _joinIndex,
         _ => _slots.Count == 1 && _slots[0].InLoadout ? _slots[0].FitRow : _slots[0].PlaneIndex,
     };
 
@@ -765,8 +830,11 @@ public sealed partial class LaunchMenu : CanvasLayer
             "options" => Screen.Options,
             "controls" => Screen.Controls,
             "network" or "network-coopjoin" or "network-coopwait" => Screen.Network,
+            // Original's count suffix poses its entries; Built-in's seats come from --debug-join.
+            _ when startScreen.Split(':')[0] == JoinBoardAid => Screen.Join,
             _ => Screen.Mode,
         };
+        _joinIndex = JoinContinueRow;
         if (_screen == Screen.Options)
         {
             OpenOptions();
@@ -863,7 +931,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                 _setup.OpenLoadout(_slots[0].Seat);
         }
         _devices.Sync(0f);
-        _devices.PrimeJoins();
+        _devices.PrimeBoard();
         Rebuild();
     }
 
@@ -883,17 +951,22 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// redraws if anything changed. The scripted journey suites drive the real screens through
     /// this, and the frame shape is the one a menu input source hands a presentation. Needs
     /// <see cref="ShowMenu"/> to have run, so there is a player 1 to drive.</summary>
-    public bool Drive(MenuCommands frame)
+    public bool Drive(MenuCommands frame) => Drive(frame, default);
+
+    /// <summary>As <see cref="Drive(MenuCommands)"/>, with <paramref name="gestures"/> standing in
+    /// for the join board's raw scan that frame: what <see cref="MenuSeatDevices.ScanBoard"/> would
+    /// have answered after the presses a suite made through <see cref="Devices"/>.</summary>
+    public bool Drive(MenuCommands frame, BoardScan gestures)
     {
         SyncSlots();
         // Player 1's frame alone: the other seats read idle, not whatever their last poll held.
         for (int i = 1; i < _slots.Count; i++)
             _slots[i].Frame = MenuCommands.None;
-        Apply(WithPointer(frame));
-        bool dirty;
+        Apply(WithPointer(Gestured(gestures, frame)));
+        bool dirty = gestures.Moved || gestures.Cast;
         try
         {
-            dirty = HandleInput();
+            dirty |= HandleInput();
             FollowKeyboard();
         }
         finally
@@ -1057,10 +1130,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         if (!Visible)
             return;
 
-        // Device bookkeeping first: a pad that vanished must not still be driving a cursor, and a
-        // pad that appeared should be joinable (or become P1's, if P1 has none).
+        // Device bookkeeping first: a pad that vanished must not still be driving a cursor. The
+        // board's gestures land before any seat is polled, so a pad signed on this frame has its seat.
         bool dirty = _devices.Sync((float)delta);
-        dirty |= ScanJoins();
+        var gestures = _screen == Screen.Join ? _devices.ScanBoard() : default;
+        dirty |= gestures.Moved || gestures.Cast;
         SyncSlots();
 
         // Every metric on every one of the three layouts is a function of the window, and a resize
@@ -1072,7 +1146,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         // poll: the PLANENAME screen's letter aliases must be dead for the frame that reads them.
         var seat = _host.Seats[0];
         seat.CapturingText = NamePage() != null || AddressField() != null || NetNameRow() >= 0;
-        Apply(WithPointer(seat.Poll((float)delta)));
+        Apply(WithPointer(Gestured(gestures, seat.Poll((float)delta))));
         for (int i = 1; i < _slots.Count; i++)
             _slots[i].Frame = _slots[i].Seat.Source.Poll((float)delta);
         dirty |= HandleInput();
@@ -1293,7 +1367,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     // Player 1's frame of semantic commands onto the poller HandleInput reads, and onto its slot.
-    // Join is not applied: joining is a per-pad scan (ScanJoins), not a seat's command.
+    // Join is not applied: joining is the join board's per-pad scan, not a seat's command.
     private void Apply(MenuCommands frame)
     {
         var p1 = _slots[0].Input;
@@ -1388,27 +1462,37 @@ public sealed partial class LaunchMenu : CanvasLayer
         _pointer = _pointer with { MoveY = delta, Accept = true };
     }
 
-    // Start on an unclaimed pad joins a new player on the Plane, Campaign or Controls screen; the
-    // scan itself is the device bookkeeping's. A campaign join closes at the seated player's FLY
-    // MISSION. Controls takes the gesture because Options is reached with seat 0 alone, so this is
-    // the only door to another player's keymap, and the pad that presses it is what that player
-    // then captures with.
-    private bool ScanJoins()
+    // One frame of the join board's gestures, applied ahead of seat 0's own frame: the captain's
+    // Start continues off the board with the seats standing. ⚠ Do not let seat 0 read a frame a
+    // gesture landed in. It borrows every pad nobody holds, so the same A would arm its row too.
+    private MenuCommands Gestured(BoardScan gestures, MenuCommands frame)
     {
-        if (_screen != Screen.Plane && _screen != Screen.Campaign && _screen != Screen.Controls)
-            return false;
-        // The seated player's FLY MISSION opens the first guest's check instead of leaving, so
-        // the field's own lock closes joining.
-        if (_campaign is { Field.Locked: true })
-            return false;
-        // Local and remote players share one seat ceiling, so a full wire closes local joining.
-        if (_slots.Count + RemoteGuests() >= NetSeats.MaxPlayers)
-            return false;
-        return _devices.ScanJoins();
+        if (gestures.Cast && _screen == Screen.Join)
+        {
+            Log.Info("ui", $"launchscreen: the captain continues off the join board, {_setup.Seats.Count} seat(s)");
+            _screen = Screen.Mode;
+        }
+
+        return gestures.Pressed ? frame with { Accept = false, KeylessAccept = false, Back = false } : frame;
     }
 
-    // Joining opens on the screen being entered, so a Start held on the way in must not fire.
-    private void PrimeJoins() => _devices.PrimeJoins();
+    // The Mode screen's door onto the join board. A button still held from the press that opened
+    // it fires nothing there.
+    private void OpenJoinBoard()
+    {
+        _screen = Screen.Join;
+        _joinIndex = JoinContinueRow;
+        _devices.PrimeBoard();
+    }
+
+    // The board's way out that keeps nobody. Every pad gives its seat back, the captain's claim
+    // included, and seat 0 reads the keyboard and every pad again.
+    private void LeaveJoinBoard()
+    {
+        _devices.DropSignOns();
+        SyncSlots();
+        _screen = Screen.Mode;
+    }
 
     // Keeps the slot wrappers in step with the feature's seats: one per seat, seat 0 over player
     // 1's poller, a pad seat over the poller behind its source, a device-less seat over an idle one.
@@ -1483,7 +1567,6 @@ public sealed partial class LaunchMenu : CanvasLayer
         if (_screen != Screen.Plane)
         {
             var p1 = _slots[0].Input;
-            dirty |= _devices.ClaimP1Pad();
             if (_screen == Screen.Hangar)
             {
                 return HandleHangarInput(p1) || dirty;
@@ -1521,6 +1604,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                         ScrollOptionsToCursor();
                         break;
                     case Screen.Network: _netIndex = Wrap(_netIndex + p1.Move, n); break;
+                    case Screen.Join: _joinIndex = Wrap(_joinIndex + p1.Move, n); break;
                 }
                 dirty = true;
             }
@@ -1557,6 +1641,8 @@ public sealed partial class LaunchMenu : CanvasLayer
             {
                 if (_screen == Screen.Mode)
                     _host.Exit(new QuitExit());
+                else if (_screen == Screen.Join)
+                    LeaveJoinBoard();
                 else if (_coopWait)
                 {
                     // The waiting board backs onto the board it was continued from, link and all,
@@ -1935,33 +2021,27 @@ public sealed partial class LaunchMenu : CanvasLayer
 
                 break;
             case Screen.Mode:
-                // The four trailing rows are the campaign's, the hangar's, Options' and the
-                // multiplayer door's top-level doors, past the three modes.
-                if (_modeIndex == Modes.Length)
+                // The trailing rows are the top-level doors past the three modes.
+                switch (_modeIndex - Modes.Length)
                 {
-                    OpenCampaign();
-                    break;
-                }
-
-                if (_modeIndex == Modes.Length + 2)
-                {
-                    _screen = Screen.Options;
-                    OpenOptions();
-                    break;
-                }
-
-                if (_modeIndex == Modes.Length + 3)
-                {
-                    SeedNetInfo();
-                    _screen = Screen.Network;
-                    _netIndex = _net is { Stage: NetDoorStage.Shut } or null ? NetHostRow : NetContinueRow;
-                    break;
-                }
-
-                if (_modeIndex > Modes.Length)
-                {
-                    OpenHangar(Screen.Mode);
-                    break;
+                    case JoinDoor:
+                        OpenJoinBoard();
+                        return;
+                    case CampaignDoor:
+                        OpenCampaign();
+                        return;
+                    case HangarDoor:
+                        OpenHangar(Screen.Mode);
+                        return;
+                    case OptionsDoor:
+                        _screen = Screen.Options;
+                        OpenOptions();
+                        return;
+                    case NetworkDoor:
+                        SeedNetInfo();
+                        _screen = Screen.Network;
+                        _netIndex = _net is { Stage: NetDoorStage.Shut } or null ? NetHostRow : NetContinueRow;
+                        return;
                 }
 
                 _mode = (MenuMode)_modeIndex; // the row order IS the enum order
@@ -1979,6 +2059,13 @@ public sealed partial class LaunchMenu : CanvasLayer
                 break;
             case Screen.Network:
                 HandleNetworkAccept();
+                break;
+            case Screen.Join:
+                // The keyboard's and the mouse's way off the board, which a pad reaches with Start.
+                if (_joinIndex == JoinBackRow)
+                    LeaveJoinBoard();
+                else
+                    _screen = Screen.Mode;
                 break;
             case Screen.Presets:
                 ApplyPreset(_presetCursor);
@@ -2000,7 +2087,6 @@ public sealed partial class LaunchMenu : CanvasLayer
                     // Dogfighting an Ace takes no wave or wingman configuration, the decoded
                     // setup screen's own behaviour (mission type 0 hides every enemy control).
                     _screen = Screen.Plane;
-                    PrimeJoins();
                 }
                 else
                 {
@@ -2027,7 +2113,6 @@ public sealed partial class LaunchMenu : CanvasLayer
                 }
 
                 _screen = Screen.Plane;
-                PrimeJoins(); // joining opens here, a Start held on the way in must not fire
                 break;
             case Screen.Waves:
                 if (_waveListIndex < InstantActionFeature.WaveSlots)
@@ -2047,7 +2132,6 @@ public sealed partial class LaunchMenu : CanvasLayer
                 break;
             case Screen.Wingmen:
                 _screen = Screen.Plane;
-                PrimeJoins();
                 break;
         }
     }
@@ -2448,7 +2532,6 @@ public sealed partial class LaunchMenu : CanvasLayer
         _campaign = NewCampaignFlow(CampaignProfiles ?? CampaignProfileStore.UserProfiles());
         _screen = Screen.Campaign;
         _error = "";
-        PrimeJoins(); // joining opens here too, so a held Start must not fire on entry
     }
 
     // A campaign flow over the shared feature opened on one store, with the two stores its later
@@ -2502,7 +2585,6 @@ public sealed partial class LaunchMenu : CanvasLayer
         _campaign = NewCampaignFlow(AidProfileStore(seeded, progressed: value != "campaign-roster"), CampaignAidProfiles.Planes());
         _screen = Screen.Campaign;
         _error = "";
-        PrimeJoins(); // this entry point needs the same held-Start guard as OpenCampaign
         if (_campaign is not { } flow)
         {
             return;
@@ -3078,7 +3160,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // Whether the Plane screen's launch gesture is live right now. The gate reads CONFIRMED, the
     // second stage, which leaves a window between selecting an airframe and flying it for the
     // loadout to be opened in. A lone Dogfight pilot stays on this screen with JoinHint naming
-    // what it is waiting for. Free Flight's gate adds its chapter to the setup's seat rule.
+    // the seat it is waiting for and the board that signs it on. Free Flight's gate adds its chapter to the setup's seat rule.
     private bool CanLaunch() => _mode == MenuMode.Free
         ? _free.CanLaunch(_setup.Seats.Count, _setup.ConfirmedCount)
         : _setup.CanLaunch(_mode, Networked());
@@ -3203,6 +3285,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     // the art column beside them, and the two status slots the aircraft screen writes into.
     private Control MiddleColumn(float s)
     {
+        if (_screen == Screen.Join)
+        {
+            return JoinBoardColumn(s);
+        }
+
         // The hangar's art sits in a column of its own to the LEFT of the rows (E47b, the layout
         // the original's paint screen uses), so the band is that much wider when it shows.
         var hangarArt = PageArt();
@@ -3270,6 +3357,67 @@ public sealed partial class LaunchMenu : CanvasLayer
         return column;
     }
 
+    // The join board's middle band: its heading, one line per seat, the rules, then the two rows.
+    // ⚠ Size nothing here off the launchscreen's own metrics. This is chrome the original never
+    // painted, so every size is a chrome type scale rung (ChromeType).
+    private Control JoinBoardColumn(float s)
+    {
+        var column = Column(ContentWidth * s, s);
+        column.AddChild(Spacer((int)(ZonePad * s)));
+        column.AddChild(Label(Heading(), (int)(BoardEntryFont * s), HeadingColor, HorizontalAlignment.Center));
+        var manifest = new GridContainer { Columns = 3, MouseFilter = Control.MouseFilterEnum.Ignore };
+        manifest.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter;
+        manifest.AddThemeConstantOverride("h_separation", (int)(14 * s));
+        manifest.AddThemeConstantOverride("v_separation", (int)(ZoneSeparation * s));
+        for (int i = 0; i < PlayerSetupFeature.MaxSeats; i++)
+        {
+            // An open seat's tag is faint in its seat's colour, the way the Original board's chip is.
+            bool taken = _devices.SignedOn(i);
+            var tag = SplitScreen.PlayerColor(i);
+            manifest.AddChild(Label(SplitScreen.PlayerTag(i), (int)(BoardEntryFont * s),
+                taken ? tag : new Color(tag, 0.4f), HorizontalAlignment.Center));
+            manifest.AddChild(Label(EntryDevice(i), (int)(BoardEntryFont * s),
+                taken ? DetailColor : FooterColor, HorizontalAlignment.Left));
+            manifest.AddChild(Label(EntryStatus(i), (int)(JoinFont * s), FooterColor, HorizontalAlignment.Left));
+        }
+
+        column.AddChild(manifest);
+        foreach (string rule in BoardRules)
+        {
+            column.AddChild(Label(rule, (int)(BoardRuleFont * s), DetailColor, HorizontalAlignment.Center));
+        }
+
+        var rows = new VBoxContainer();
+        rows.AddThemeConstantOverride("separation", (int)(ZoneSeparation * s));
+        for (int i = 0; i < JoinRows; i++)
+        {
+            bool focused = i == _joinIndex;
+            var row = CursorRow.Build(RowText(i), (int)(BoardRowFont * s), focused ? RowFocusColor : RowColor, focused);
+            Pointable(row, i);
+            rows.AddChild(row);
+        }
+
+        rows.GuiInput += ev => PointerEvent(null, ev);
+        column.AddChild(rows);
+        return column;
+    }
+
+    // The join board's middle band at the 720p metrics, the sum of what JoinBoardColumn stacks.
+    private float JoinBoardHeight(Font font)
+    {
+        float entry = font.GetHeight((int)BoardEntryFont);
+        float seats = (PlayerSetupFeature.MaxSeats * entry) + ((PlayerSetupFeature.MaxSeats - 1) * ZoneSeparation);
+        float rules = BoardRules.Length * font.GetHeight((int)BoardRuleFont);
+        float rows = JoinRows * (font.GetHeight((int)BoardRowFont) + ZoneSeparation);
+        return ZonePad + entry + seats + rules + rows + ((BoardRules.Length + 3) * ZoneSeparation);
+    }
+
+    // A seat entry's device: the pad that signed on, a device-less seat's own label, or the open seat.
+    private string EntryDevice(int entry) => _devices.SignedOn(entry) ? _devices.Device(entry) : "open seat";
+
+    // A seat entry's status, which for an open seat is the press that takes it.
+    private string EntryStatus(int entry) => _devices.SignedOn(entry) ? "signed on" : "A to sign on";
+
     // The footer band: what the focused row is (or why the last press did nothing) and the presses
     // that do something here. Its height is fixed, so the controls line stays on the same pixel.
     private Control FooterColumn(float s)
@@ -3318,16 +3466,14 @@ public sealed partial class LaunchMenu : CanvasLayer
         _audioVoiceChoice = saved.AudioVoice;
     }
 
-    // Opens the rebinding screen on the joined seats' live keymaps. Joining is open here (ScanJoins)
-    // because Options is reached with seat 0 alone, so a pad pressing Start is the only way another
-    // player's keymap is ever on screen.
+    // Opens the rebinding screen on the joined seats' live keymaps, one per pad seat the join board
+    // signed on.
     private void OpenControls()
     {
         // Before the sync, not after: the aid path opens this screen out of ShowMenu, before any
         // frame has run, and a screen with no registered seat has no keymap to draw.
         SyncSlots();
         SyncControlsSeats();
-        PrimeJoins(); // joining opens here, a Start held on the way in must not fire
         _controlsIndex = 0;
         _controlsTop = 0;
         // Cancel first, so the screen opens on what the game is actually playing rather than on a
@@ -3353,8 +3499,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // cursor and confirm a row under them.
     private bool HandleControlsInput(MenuInput p1)
     {
-        // First, so a pad that joined this frame already has its row before anything is drawn or
-        // stepped onto, and a seat whose pad left has lost one.
+        // First, so a seat whose pad left has lost its row before anything is drawn or stepped onto.
         SyncControlsSeats();
         if (_controls.Capturing)
         {
@@ -3839,6 +3984,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.Options => $"OPTIONS  ({_optionsIndex + 1}/{CurrentCount()})",
             Screen.Controls => $"CONTROLS  ({_controlsIndex + 1}/{CurrentCount()})",
             Screen.Network => _coopWait ? CoopDoorText.WaitingHeading : "MULTIPLAYER",
+            Screen.Join => "JOIN BOARD",
             _ when _slots.Count == 1 && _slots[0].InLoadout =>
                 $"AMMO SELECTION  ({_roster[_slots[0].PlaneIndex].Name})",
             _ when _slots.Count == 1 && _slots[0].Locked => "AIRCRAFT SELECTED",
@@ -4087,8 +4233,9 @@ public sealed partial class LaunchMenu : CanvasLayer
             : 0f;
         float header = ZonePad + font.GetHeight(TitleFont) + font.GetHeight(CrumbFont) +
             font.GetHeight((int)JoinFont) + (3 * ZoneSeparation);
-        float middle = ZonePad + font.GetHeight(HeadingFont) + (3 * font.GetHeight(DetailFont)) +
-            rowsH + artH + (5 * ZoneSeparation);
+        float middle = _screen == Screen.Join
+            ? JoinBoardHeight(font)
+            : ZonePad + font.GetHeight(HeadingFont) + (3 * font.GetHeight(DetailFont)) + rowsH + artH + (5 * ZoneSeparation);
         float footer = (DetailReserveLines * font.GetHeight(DetailFont)) +
             font.GetHeight(FooterFont) + ZonePad + (2 * ZoneSeparation);
         return MenuZones.For(viewH, header, middle, footer);
@@ -4265,8 +4412,9 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private int CurrentCount() => _screen switch
     {
-        Screen.Mode => Modes.Length + 4, // + the campaign, hangar, options and multiplayer rows
+        Screen.Mode => Modes.Length + ModeDoors,
         Screen.Network => _coopWait ? 1 : NetworkRows,
+        Screen.Join => JoinRows,
         Screen.Hangar => _hangar?.Page.RowCount ?? 1,
         Screen.Campaign => _campaign?.Page.RowCount ?? 1,
         Screen.Options => OptionsStepperRows + 2, // + the controls door and the apply row
@@ -4320,11 +4468,16 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         return _screen switch
         {
-            Screen.Mode => index < Modes.Length ? Modes[index].Label
-                : index == Modes.Length ? CampaignRow
-                : index == Modes.Length + 1 ? HangarRow
-                : index == Modes.Length + 2 ? OptionsRow : NetworkRow,
+            Screen.Mode => index < Modes.Length ? Modes[index].Label : (index - Modes.Length) switch
+            {
+                JoinDoor => JoinBoardRow,
+                CampaignDoor => CampaignRow,
+                HangarDoor => HangarRow,
+                OptionsDoor => OptionsRow,
+                _ => NetworkRow,
+            },
             Screen.Network => NetworkRowText(index),
+            Screen.Join => index == JoinBackRow ? "Back" : "Continue",
             Screen.Hangar => _hangar?.RowText(index) ?? "",
             Screen.Campaign => _campaign?.Page.RowText(index) ?? "",
             Screen.Options => index switch
@@ -4554,8 +4707,8 @@ public sealed partial class LaunchMenu : CanvasLayer
         box.AddChild(caption);
     }
 
-    // The join strip shown under the breadcrumb on every screen: who is in, on what
-    // device, plus the hint that free pads can join with Start.
+    // The join strip under the breadcrumb on every screen: who is in, on what device, and the hint
+    // naming the board that seats the rest.
     private Control JoinStrip(float s)
     {
         _stripText = JoinStripText();
@@ -4585,29 +4738,24 @@ public sealed partial class LaunchMenu : CanvasLayer
         return string.Join(" | ", parts);
     }
 
-    // The hint beside the join strip. Joining happens on the aircraft screen and on the rebinding
-    // screen, so the other screens say where it will be rather than inviting a press that does
-    // nothing. The rebinding screen names what the press is for there, since a pad joins to be
-    // rebound rather than to fly. Dogfight below 2 players gets its own line, CanLaunch is
-    // withholding the launch gesture, so the generic "you may join" hint would undersell what is
-    // actually blocking it.
+    // The hint beside the join strip. The join board is the one place a pad joins. Every other
+    // screen names it rather than invite a press that does nothing there; the board needs none.
+    // The rebinding screen says a pad's own keymap comes the same way. Dogfight
+    // below 2 players gets its own line: CanLaunch is withholding the launch, and the ordinary
+    // hint would undersell what is blocking it.
     private string JoinHint()
     {
         if (_slots.Count >= SplitScreen.MaxPlayers)
             return $"({SplitScreen.MaxPlayers}-player maximum)";
+        if (_screen == Screen.Join)
+            return "";
         if (_screen == Screen.Controls)
-            return Pads.Connected().Count > 0
-                ? "(press START on a free pad to edit its own keymap)"
-                : "(connect a pad and press START to edit its own keymap)";
-        if (_screen != Screen.Plane)
-            return "(other players join at aircraft select)";
+            return $"(sign a pad on at the {JoinBoardRow} to edit its own keymap)";
         // A networked Dogfight is already a fight, so it asks for nobody: the opponent is at
         // another machine and no press here would seat them.
-        if (_mode == MenuMode.Versus && _slots.Count < 2 && !Networked())
-            return $"(Dogfight needs a fight, {SplitScreen.PlayerTag(_slots.Count)}: press START to join)";
-        return Pads.Connected().Count > 0
-            ? "(press START on a free pad to join)"
-            : "(connect a pad and press START to join)";
+        if (_screen == Screen.Plane && _mode == MenuMode.Versus && _slots.Count < 2 && !Networked())
+            return $"(Dogfight needs a fight, {SplitScreen.PlayerTag(_slots.Count)}: sign on at the {JoinBoardRow})";
+        return $"(other players sign on at the {JoinBoardRow})";
     }
 
     private string Footer()
@@ -4655,6 +4803,12 @@ public sealed partial class LaunchMenu : CanvasLayer
             return ControlsFooter();
         }
 
+        // A pad's A and B sign it on and off here, so the rows answer the keyboard and the mouse.
+        if (_screen == Screen.Join)
+        {
+            return "↑↓  Choose       Enter  Select       Esc  Back       Pad  A sign on, B sign off, Start continue";
+        }
+
         string back = _screen == Screen.Mode ? "Esc / B  Quit" : "Esc / B  Back";
         string who = _slots.Count > 1 ? "       (P1 chooses)" : "";
         string nav = _screen switch
@@ -4700,6 +4854,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.Controls => $"{OptionsRow}  ›  Controls  ›  Player {_controls.Player}",
             Screen.Network when _coopWait => $"{NetworkRow}  ›  Campaign co-op  ›  Waiting for the host",
             Screen.Network => $"{NetworkRow}  ›  Map  ›  Aircraft",
+            Screen.Join => $"Mode  ›  {JoinBoardRow}",
             Screen.Chapter => $"{mode}  ›  Map  ›  Aircraft",
             Screen.Presets => $"{mode}  ›  Table of Contents",
             Screen.Environment => $"{mode}{PresetCrumb()}  ›  Environment  ›  Mission  ›  Aircraft",
@@ -4722,13 +4877,18 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private string Detail(int focus) => _screen switch
     {
-        Screen.Mode => focus < Modes.Length ? Modes[focus].Detail
-            : focus == Modes.Length ? "Fly the story: pick a player, then the cabin."
-            : focus == Modes.Length + 1 ? "Build a plane in the hangar and fly it."
-            : focus == Modes.Length + 2
-                ? "Choose the difficulty, the graphics mode, the display settings and the volume levels."
-                : "Host a Dogfight over the network, or join a Dogfight or a campaign by address.",
+        Screen.Mode => focus < Modes.Length ? Modes[focus].Detail : (focus - Modes.Length) switch
+        {
+            JoinDoor => "Sign each player's pad onto a seat for splitscreen.",
+            CampaignDoor => "Fly the story: pick a player, then the cabin.",
+            HangarDoor => "Build a plane in the hangar and fly it.",
+            OptionsDoor => "Choose the difficulty, the graphics mode, the display settings and the volume levels.",
+            _ => "Host a Dogfight over the network, or join a Dogfight or a campaign by address.",
+        },
         Screen.Network => NetworkStatus(),
+        Screen.Join => focus == JoinBackRow
+            ? "Give every pad's seat back and return to the Mode screen."
+            : "Keep the seats as signed on and return to the Mode screen.",
         Screen.Hangar => _hangar?.Page.Detail(focus) ?? "",
         Screen.Campaign => _campaign?.Page.Detail(focus) ?? "",
         // One arm per row of the Options screen, in the order RowText writes them. A row that lost

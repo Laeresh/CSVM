@@ -522,16 +522,16 @@ against `BL-389` rather than against the wash routing.
 ./RunGame.ps1
 ```
 
-Menu path: Mode → Campaign → create or select a profile → join two to four humans → the seated
-pilot's own briefing and flight check, then `FLIGHT CHECK P2`/`P3`/`P4` in the same window → FLY
-MISSION. A fresh profile's first entry is CM01, so this is also where the sortie itself is flown.
+Menu path: the top level → Join Board (A on each of two to four pads, then Start on the first) → Campaign →
+create or select a profile → the seated pilot's own briefing and flight check, then
+`FLIGHT CHECK P2`/`P3`/`P4` in the same window → FLY MISSION. A fresh profile's first entry is CM01, so this is also where the sortie itself is flown.
 Splitscreen co-op is our own invention (no networked original to A/B against), so every call here
 is a judgement on our own remake.
 
-- `PT-90` `[Own]` **Joining from the roster screen and the sequential flight check.**
+- `PT-90` `[Own]` **The join board's pilots on the campaign and the sequential flight check.**
   *Look for:*
-  - (a) Start on an unclaimed pad joins a guest from the roster, the briefing and the flight check
-    alike, with the player chip strip naming everyone who has joined;
+  - (a) the pads signed on at the Join Board stand as guests on the roster, the briefing and the
+    flight check alike, with the player chip strip naming every one, and no press there seats more;
   - (b) FLY MISSION on the seated pilot's own check opens `FLIGHT CHECK P2` rather than launching,
     and does the same for P3 and P4 as each joins, one window, one player at a time;
   - (c) FLY MISSION on the LAST joined player's check is what actually launches the mission;

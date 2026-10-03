@@ -149,17 +149,17 @@ plugs in as another `IMenuInputSource` with no change to any presentation.
 The seats themselves are the `PlayerSetupFeature`'s. Once that feature is registered,
 `MenuHost.Seats` is its live source list, `MenuHost.AddSeat` joins through it, and a join made
 anywhere shows up in every presentation's `Seats` read. The pad side (`MenuSeatDevices`,
-`CSVM/src/UI/Screens/MenuSeatDevices.cs`) is presentation-side and shared by both: seat 0's claimed pad,
-hotplug reconciliation, the gesture scans (each presentation decides on which screens they are
-open), and `FlightPads`, the binding a launch carries per seat. Built-in keeps the Start-to-join
-scan (`PrimeJoins`/`ScanJoins`) on the screens that launch a flight and calls `ClaimP1Pad` every
-frame off its Plane screen, so the pad seat 0 steers with is seat 0's for good and can never join
-as a further seat. Original signs pads on at one screen only, the join board (`OriginalJoinBoard`,
-behind the top level's JOIN BOARD door), through `PrimeBoard` and `ScanBoard`: A signs a pad onto
-the next open seat, B on a seated pad gives that seat back, and the captain's Start casts off.
-`OriginalShell.JoiningOpen` is true on the board alone, so the screens that launch a flight (Free
-Flight, Dogfight, Instant Action and the campaign flight check) only read the roster the board
-wrote. Once a second seat has signed on, Original draws a seat strip over every campaign board and
+`CSVM/src/UI/Screens/MenuSeatDevices.cs`) is presentation-side and shared by both: the captain's
+pad, hotplug reconciliation, the join board's gesture scan, and `FlightPads`, the binding a launch
+carries per seat. Each presentation signs pads on at one screen only, its join board, through
+`PrimeBoard` and `ScanBoard`: the first A takes the captain's chair beside the keyboard, A on any
+other pad signs it onto the next open seat, B on a seated pad gives that seat back, and the
+captain's Start casts off. Steering a screen with a pad claims nothing. Original's board is
+`OriginalJoinBoard`, behind the top level's JOIN BOARD door, and `OriginalShell.JoiningOpen` is true
+on it alone. Built-in's is the launchscreen's Join Board screen, behind the Mode screen's door of
+the same name, where a frame a gesture landed in reads no Accept or Back from seat 0. On either,
+the screens that launch a flight (Free Flight, Dogfight, Instant Action, the campaign) and the
+rebinding screen only read the roster the board wrote. Once a second seat has signed on, Original draws a seat strip over every campaign board and
 over the Instant Action screen as an overlay; a solo campaign shows the authored board alone. That strip is Built-in's own chip row, the
 player tags alone in the top-right corner each in its seat's identity colour over a dark ground
 (`CSVM/src/UI/Boards/SeatStrip.cs` holds the shape the two share, and the Instant Action screen asks for

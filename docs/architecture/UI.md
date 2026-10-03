@@ -9,8 +9,8 @@ Traps do not live here; the rule is in `docs/architecture.md`.
 ## src/UI/Screens/LaunchMenu.cs
 The Built-in presentation's launchscreen: one CanvasLayer holding the whole screen graph and every
 Godot control behind it. Mode leads to Chapter and Plane for Free Flight and Dogfight (whose Chapter screen also steps Dogfight's two match rules as rows below the maps), and to
-Instant Action's own wizard; the Options, Controls, hangar and campaign doors hang off the same
-graph. It owns the drawing, the per-seat `MenuInput` polling, the join scan, the screenshot key and
+Instant Action's own wizard; the join board, Options, Controls, hangar and campaign doors hang off the same
+graph. The join board is the one screen a pad signs onto a seat from, through `MenuSeatDevices`' board gestures. It owns the drawing, the per-seat `MenuInput` polling, the board scan, the screenshot key and
 the mouse (player 1's rows take Godot's hit test through `gui_input`, folded into the next frame's
 step, Accept and Back), and nothing else: rosters, seats, picks, gates and the typed exit are
 the host's features (`Menu/MenuHost.cs`), the layout is `MenuZones`, and the hangar and campaign
@@ -298,7 +298,7 @@ escape strips' light plates need, which an Instant Action pause is the only scre
 ## src/UI/Boards/ChromeType.cs
 The type scale for chrome the original never painted, read by the join board, the in-flight
 overlays and `FlightHud`'s text block, every results board, the pause board, the board menu and
-Built-in's join strip. It owns the face (the theme's default font, varied for italic and bold), one
+Built-in's join strip and join board. It owns the face (the theme's default font, varied for italic and bold), one
 size ladder (`ChromeSize`) in frame units, and metres for a printed distance. A frame unit is the
 board's own authored pixel, 1/600 of the frame's height, so a composed board takes a rung as
 authored and a surface stated at another reference (1440 for the HUD through `HudMetrics`, 720 for
@@ -1485,10 +1485,10 @@ carrier `SampleCode`, or the server is set with no carrier. `CodeGuest` is a shu
 
 ## src/UI/Screens/MenuSeatDevices.cs
 The pad side of the shared player setup, for any presentation, over seat 0's `MenuInput` and the
-feature. `P1Pad` is the pad seat 0 claimed by steering a screen with it. `Sync` reconciles the
-seats with the connected pads: a seat whose pad vanished is unjoined, a vanished claimed pad frees
-seat 0, and seat 0's poller is bound to its claimed pad or to every unclaimed one. `PrimeJoins`
-and `ScanJoins` are Built-in's join gesture, Start on an unclaimed pad while a seat is free, the caller deciding on which screens joining is open; `PrimeBoard`, `ScanBoard` and the `BoardScan` it answers with are Original's join board, A signing a pad on, B signing it off and Start on the captain's pad casting off, over `SignOn`, `SignOff`, `IsCaptain` and the `IJoinRoster` the board draws its manifest from. A first sign-on takes `P1Pad` rather than a seat of its own, since the keyboard holds seat 1 whatever the manifest says, and `DropSignOns` is BACK giving every one of them back.
+feature. `P1Pad` is the captain's pad, the first to sign on. `Sync` reconciles the
+seats with the connected pads: a seat whose pad vanished is unjoined, a vanished captain's pad frees
+seat 0, and seat 0's poller is bound to the captain's pad or to every unclaimed one.
+`PrimeBoard`, `ScanBoard` and the `BoardScan` it answers with are both presentations' join board and the only way a pad takes a seat, A signing a pad on, B signing it off and Start on the captain's pad casting off, over `SignOn`, `SignOff`, `IsCaptain` and the `IJoinRoster` each board draws its manifest from. A first sign-on takes `P1Pad` rather than a seat of its own, since the keyboard holds seat 1 whatever the manifest says, and `DropSignOns` is BACK giving every one of them back.
 `PadOf` reads a joined seat's pad back off its
 `BuiltInSeat`, and `FlightPads` is the binding a launch carries, the answer both presentations
 hand the feature's `Choices`. Read `src/UI/Menu/PlayerSetupFeature.cs` for the seats themselves.

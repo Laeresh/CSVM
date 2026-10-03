@@ -10,14 +10,11 @@ namespace CSVM.UI.Boards;
 
 /// <summary>
 /// One launchscreen player's input source: the keyboard (player 1 only) and that player's own
-/// gamepads, resolved through the named-action seam every frame with edge detection and
-/// auto-repeat. Per-player rather than an any-pad OR across the roster, which is what makes the
-/// join flow possible at all.
-/// ⚠ <see cref="JoinPressed"/> and <see cref="LastActivePad"/> keep polling raw device state and
-/// must stay that way: both answer "which pad did that", which an OR across a seat's bindings
-/// cannot express. Do not move any of this to Godot's input map or focus system.
-/// <see cref="Prime"/> seeds the edge flags from the current state, so a button still held from
-/// whatever brought us here is not read as a fresh press on the next frame.
+/// gamepads. Each resolves through the named-action seam per player, with edge detection and auto-repeat.
+/// ⚠ Do not move <see cref="SignOnPressed"/>, <see cref="SignOffPressed"/> or
+/// <see cref="JoinPressed"/> off raw device state, to Godot's input map or its focus system.
+/// Each answers "which pad did that", which no OR across a seat's bindings can.
+/// The <see cref="Prime"/> call seeds the edge flags from the current state, so a held button is no fresh press.
 /// </summary>
 public sealed class MenuInput
 {
@@ -37,11 +34,10 @@ public sealed class MenuInput
     public bool TextEntry;
 
     /// <summary>The gamepad devices this player reads, or null for every connected pad, the same
-    /// binding <see cref="CSVM.Flight.Airframe.FlightController"/> takes. A joined player has exactly one
-    /// (the pad they pressed Start on); <b>player 1 holds every pad nobody has claimed</b>, which
-    /// preserves the any-pad fix: phantom joypad devices can occupy the early slots, so binding
-    /// player 1 to <c>pads[0]</c> would leave a real controller dead. Idle devices read as zero,
-    /// so reading several is safe.</summary>
+    /// binding <see cref="CSVM.Flight.Airframe.FlightController"/> takes. A joined player has exactly
+    /// one, the pad they signed on with. Player 1 holds every pad nobody has claimed, since phantom
+    /// joypads can occupy the early slots and <c>pads[0]</c> would leave a real controller dead.
+    /// Idle devices read as zero, so reading several is safe.</summary>
     public int[]? Pads = Array.Empty<int>();
 
     // Results of the last Poll, valid until the next one.
@@ -104,20 +100,10 @@ public sealed class MenuInput
     /// decoded button here. X is the last free face button in menu context.</summary>
     public bool Presets;
 
-    /// <summary>The last of this player's pads seen actually doing something (a menu button or the
-    /// stick past the deadzone), −1 until one does. The launchscreen uses it to <i>claim</i> the
-    /// pad player 1 drives the Mode/Chapter screens with, so that pad is player 1's for good and
-    /// only the remaining ones can join. Start is excluded on purpose: it is the join gesture, not
-    /// evidence that this player owns the pad.</summary>
-    public int LastActivePad = -1;
-
     // Auto-repeat while a direction is held (carried over from the original LaunchMenu). Confirmed
     // at the controls: join/lock feel reads right at 2P and 4P, no retune owed.
     private const float RepeatInitial = 0.42f;   // s before the first repeat
     private const float RepeatInterval = 0.12f;  // s between repeats after that
-    // What ScanActivePad counts as somebody actually steering with a stick. The cursor axes take
-    // the same number from their own bindings (DefaultBindings), which is where it is tunable.
-    private const float StickDeadzone = 0.5f;
 
     // The keys that type a character on a US layout, which text entry takes off the cursor
     // bindings. The characters themselves come from TypedText, not from these keys.
@@ -294,10 +280,10 @@ public sealed class MenuInput
         return input;
     }
 
-    /// <summary>Whether an unbound pad is pressing Start, the join gesture. Static because the
-    /// pad has no player (and therefore no <see cref="MenuInput"/>) until it joins; the caller
-    /// edge-detects per device. Gated like every other pad read, so nobody joins while the
-    /// window is in the background.</summary>
+    /// <summary>Whether a pad is pressing Start, the join board's cast-off gesture on the captain's
+    /// pad. Static because a pad has no player (and therefore no <see cref="MenuInput"/>) until it
+    /// signs on; the caller edge-detects per device. Gated like every other pad read, so nothing
+    /// fires while the window is in the background.</summary>
     public static bool JoinPressed(int pad) =>
         !CSVM.Bindings.Pads.InputBlocked && Input.IsJoyButtonPressed(pad, JoyButton.Start);
 
@@ -433,10 +419,6 @@ public sealed class MenuInput
         bool unbind = RawUnbind();
         Unbind = unbind && !_unbindPrev;
         _unbindPrev = unbind;
-
-        int active = ScanActivePad();
-        if (active >= 0)
-            LastActivePad = active;
     }
 
     /// <summary>Seeds the edge flags from the current state (no press is reported for anything
@@ -530,23 +512,6 @@ public sealed class MenuInput
         bool erase = KeyDown(Key.Backspace);
         Erase = erase && !_erasePrev;
         _erasePrev = erase;
-    }
-
-    // The first of this player's pads currently producing menu input (excluding Start).
-    // Phantom devices never register, they read idle, so a pad found here is demonstrably a
-    // real one somebody is holding.
-    private int ScanActivePad()
-    {
-        foreach (int pad in CSVM.Bindings.Pads.For(Pads))
-        {
-            if (Input.IsJoyButtonPressed(pad, JoyButton.A) ||
-                Input.IsJoyButtonPressed(pad, JoyButton.B) ||
-                Input.IsJoyButtonPressed(pad, JoyButton.DpadUp) ||
-                Input.IsJoyButtonPressed(pad, JoyButton.DpadDown) ||
-                Mathf.Abs(Input.GetJoyAxis(pad, JoyAxis.LeftY)) > StickDeadzone)
-                return pad;
-        }
-        return -1;
     }
 
     private bool KeyDown(Key key) => Keyboard && Input.IsKeyPressed(key);

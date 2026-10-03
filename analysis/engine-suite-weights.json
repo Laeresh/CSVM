@@ -276,6 +276,7 @@
     "look-stick": 0.815,
     "look-stick-edge": 1.38,
     "menu-backdrop": 0.18,
+    "menu-builtin-join-board": 0.24,
     "menu-campaign-journey": 0.251,
     "menu-controls-seats": 0.031,
     "menu-free-flight-journey": 0.19,
