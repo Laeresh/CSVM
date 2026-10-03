@@ -299,8 +299,12 @@ C1B, C4 (`DogfightLobby.cs:41, 88-96`); `DogfightOptionsMessage` carries the mis
 returns null there (`StuntMission.cs:126-133`, `GameSession.cs:1865-1871`); C1C and C2B have no
 course (`UI/Menu/MenuChapters.cs:22-30`).
 
-**Approach.** <TODO: a new `DogfightMissionType` value and its wire encoding (a wire-version
-consideration); how a network session loads `<chapter>/IA1` with its `dzones` and what of the IA1
+**Approach.** First, make the mission type one field: `SessionSpec` carries it as the two bools
+`CaptureTheFlag` and `ZeppelinVsZeppelin`, checked across 14 files, while `DogfightMissionType`
+lives in `UI/Menu/DogfightLobby.cs` and the lobby compares raw bytes against it. Move the enum
+beside `SessionSpec`, make it the spec's one mission field and remove the bools, so Stunt Race
+lands as an enum value rather than a third bool. <TODO: the new `DogfightMissionType` value and
+its wire encoding (a wire-version consideration); how a network session loads `<chapter>/IA1` with its `dzones` and what of the IA1
 mission's own content (opposition, objectives) it suppresses; the lobby text strings (remake-only,
 no langui id)>.
 
