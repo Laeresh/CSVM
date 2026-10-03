@@ -196,8 +196,8 @@ lines**.
   host, the scripted twin of the menu's multiplayer door over the same socket. A bare flag takes
   port 47500 (or `--net-port-base`) on IPv4's wildcard, the stable global IPv6 address and `::1`, a number sets the port,
   and `address:port` binds that one address, IPv6 in brackets. ⚠ A scripted run names `127.0.0.1`: a wildcard
-  bind is what puts a Windows firewall dialog on somebody's screen. A host waits for nobody and
-  flies alone until a guest arrives)
+  bind is what puts a Windows firewall dialog on somebody's screen. A host waits 30 s for its
+  first guest, then closes its socket and flies alone)
 - `--net-join=address[:port]` (join the match at that address and fly this session as a guest,
   the port defaulting to 47500 (or `--net-port-base`) and an IPv6 address written in brackets. The
   launch holds at the load screen until the link stands or 30 seconds pass, because a guest with no
