@@ -25,7 +25,7 @@ terminal in the folder holding it and run this, with the name replaced by the ar
 actually have:
 
 ```
-sha256sum CSVM-v0.2.0-linux-x64.tar.gz
+sha256sum CSVM-v0.3.0-linux-x64.tar.gz
 ```
 
 The printed hash must match the one on the release page (upper and lower case do not
@@ -48,7 +48,8 @@ project published, rather than something a third party rebuilt or altered.
   most desktop distributions install it already; elsewhere it is the `SDL2` or
   `libsdl2-2.0-0` package. Without it CSVM runs as usual and reads no flight stick, and the
   log says so on its `sticks: off` line. Gamepads, the keyboard and the mouse do not need it.
-  Flight sticks on Linux are untested, so a report from anyone who flies with one is welcome.
+  Flight sticks on Linux have been tried on few models, so a report from anyone who flies with
+  one is welcome.
 - Nothing else. The .NET runtime this engine needs is inside the download and does not use
   the system's ICU library, so there is no runtime or framework to install.
 
@@ -59,7 +60,7 @@ CSVM first and unpack into it. From a terminal:
 
 ```
 mkdir CSVM
-tar -xzf CSVM-v0.2.0-linux-x64.tar.gz -C CSVM
+tar -xzf CSVM-v0.3.0-linux-x64.tar.gz -C CSVM
 ```
 
 `tar` keeps the executable permission that `CSVM.x86_64` and `tools/unzbd` carry in the
