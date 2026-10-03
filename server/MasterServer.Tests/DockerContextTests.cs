@@ -24,7 +24,7 @@ public class DockerContextTests
             .Descendants("Compile")
             .Select(item => (string?)item.Attribute("Include"))
             .Where(include => include != null)
-            .Select(include => Path.GetRelativePath(root, Path.GetFullPath(Path.Combine(project, include!))).Replace('\\', '/'))
+            .Select(include => Path.GetRelativePath(root, Path.GetFullPath(Path.Combine(project, include!.Replace('\\', '/')))).Replace('\\', '/'))
             .Where(path => !path.StartsWith("server/", StringComparison.Ordinal))
             .ToList();
 
