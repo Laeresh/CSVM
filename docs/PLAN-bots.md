@@ -26,7 +26,8 @@ found no bot, skirmish or computer-player entry.
 - The local Dogfight join board offers the same bot rows, so one human can play against bots.
 - Bots score, die, respawn, rearm and win under the same Deathmatch rules as humans, and the board
   shows them with a bot tag.
-- A human who joins a full field takes a bot's seat, in the lobby or in a running match.
+- A human who joins a full field takes a bot's seat in the lobby. A human who joins while a match
+  runs waits in the lobby and takes the seat when the match is back in the lobby.
 
 **Bots fly Deathmatch only, and are silent.** Objective modes need AI behaviour this plan does not
 build, and fifteen chattering hostiles is a separate look-and-sound decision.
@@ -41,7 +42,7 @@ build, and fifteen chattering hostiles is a separate look-and-sound decision.
 | 4 | Ceiling? | **16 pilots total**, humans and bots, `NetSeats.MaxPlayers`. Seats 8 to 15 take the derived colours and the respawn fan wraps, as for humans. |
 | 5 | How does the host add bots? | **Both**: an Add button per bot, and a Fill-to-N shortcut that creates editable, removable bot rows. |
 | 6 | A human joins a full lobby, or leaves mid-match? | **The most recently added bot yields on join.** A guest who leaves mid-match is not replaced by a bot. |
-| 7 | A human joins a running match whose field is full? | **The newest bot leaves as a guest leaves (SeatLeft), its row stays on the board marked as left**, and its seat goes to the human. |
+| 7 | A human joins a running match whose field is full? | **The human lands in the lobby, never in the running match, and takes the newest bot's seat when the match is back in the lobby** (as Decision 6). A host Restart keeps the match out of the lobby, so it changes no seat: the restarted match flies the same field and the human waits on. No seat changes hands mid-match. |
 | 8 | What does skill mean? | **Novice / veteran / ace** (`IDS_IA_DIFFICULTY`, langui 3695): the -2/0/+2 offset on the pilot's nine ratings, each bot rolling one of Instant Action's four authored personalities or the flat average. **No armour/health scaling**, so a bot's hull equals a human's in the same plane. |
 | 9 | Plane and loadout? | **A stock plane per bot, Random by default** (Fill-to-N uses Random), stock loadout, stock livery. No hangar builds. |
 | 10 | Who does a bot prefer to attack? | **Every pilot equal in a Dogfight**: the campaign's human preference (`AiTargetRanking.PlayerWeight`) does not apply. |
@@ -107,7 +108,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C, lobby and local setup
 
 21. ☐ Multiplayer Lobby: Add bot, Fill-to-N, per-row plane/skill/team/callsign, Remove
-22. ☐ A joining human takes the newest bot's seat, in the lobby and in a running match
+22. ☐ A joining human takes the newest bot's seat in the lobby, a late joiner once the match is back there
 23. ☐ Local join board: bot rows, and the two-pilot minimum counts bots
 
 ### Wave D, presentation and measurement
@@ -122,7 +123,7 @@ A1 blocks everything. A2 and A3 both need A1 and can run in parallel (A2 owns `V
 `VersusDirector` scoring and `VersusBoard`; A3 owns `SessionNet`, `FlightRoster`/`AiFlightAssembler`
 and the bot rig). A4 needs A3, and every later item's tests lean on A4. Wave B needs A3 and A4; B11,
 B12 and B13 touch different files and can run in parallel, B14 after B12 (a rearm trip and a respawn
-share the bot's standing-order state). Wave C needs A1 and A2 (C22's kept row is A2's pilot key);
+share the bot's standing-order state). Wave C needs A1 (and A2 only if A2 survives its re-check, see A2);
 C21 and C23 both edit `DogfightLobby.cs`, so they run in sequence, C21 first, and C22 follows C21.
 D31 needs A2 and C21. D32 and D33 run last, on the merged tree.
 
@@ -165,7 +166,11 @@ input. The `NetNamespaceDependency` test confines engine types to the carriers
 ## A2 ☐ `VersusMatch` keys its scores by pilot, so a row survives its seat being reused
 
 **Goal.** The match keeps one score row per pilot who has flown in it. When a bot leaves and a
-human takes its seat (Decision 7), the bot's row stays, marked as left, and the human gets a new row.
+human takes its seat, the bot's row stays, marked as left, and the human gets a new row.
+`<TODO: re-check whether this item is still needed. It was written for a seat changing hands
+mid-match, which Decision 7 no longer allows: a seat now changes hands only in the lobby, between
+matches. Name any reader left that needs a pilot key (the lobby's Game Scores tab for the match
+just finished, D31's bot tag), or close this item as not needed>`
 
 **Evidence (confidence: lead-only).** `VersusMatch` (`CSVM/src/Flight/Modes/VersusMatch.cs:36,53`)
 sizes its score array by seat count (`PlayerCount`). `VersusDirector.ScoreDeath`
@@ -182,7 +187,7 @@ team standings, "nobody left to fight" and Limited Lives read pilots, not seats.
 **Model recommendation.** `<TODO: not settled in the session>`
 
 **Verify.** `net-match-state`, `net-versus-lives`, `net-versus-host-left`, `net-team-deathmatch` stay
-green; `<TODO: a unit test where a seat's pilot changes mid-match and both rows survive>`.
+green; `<TODO: a unit test where a seat's pilot changes between matches and the finished match's rows survive, if the re-check keeps this item>`.
 
 **⚠ Traps.** This is the data change most likely to cause trouble: every seat-indexed score reader
 must move, and a guest's mirror must agree with the host's after a seat changes hands.
@@ -365,28 +370,34 @@ remake addition with no original layout to follow>`.
 
 **⚠ Traps.** The screen layout is a look judgement; bring a capture to the user before settling it.
 
-## C22 ☐ A joining human takes the newest bot's seat, in the lobby and in a running match
+## C22 ☐ A joining human takes the newest bot's seat in the lobby, a late joiner once the match is back there
 
-**Goal.** A guest who joins a full lobby takes the most recently added bot's seat (Decision 6). In
-a running match the bot leaves as a guest leaves and its row stays, marked as left (Decision 7). A
-guest who leaves is not replaced.
+**Goal.** A guest who joins a full lobby takes the most recently added bot's seat (Decision 6). A
+guest who joins while a match runs lands in the lobby, not the match, and takes the newest bot's
+seat when the match is back in the lobby (Decision 7); a host Restart keeps the match running and
+changes no seat. A guest who leaves is not replaced.
 
-**Evidence (confidence: lead-only).** A CLI host flies alone until a guest arrives (`docs/cli.md:199-200`),
-so a join into a running match exists. `WorldEventMessage` code 6 is `SeatLeft`. ENet host peers
-are `MaxPlayers - 1` (`Launcher.cs:2758`), so a full field of bots must not block the ENet accept.
+**Evidence (confidence: lead-only).** A late joiner lands in the lobby, never in a running match
+(the user's correction to Decision 7). `WorldEventMessage` code 6 is `SeatLeft`. ENet host peers are
+`MaxPlayers - 1` (`Launcher.cs:2758`), so a full field of bots must not block the ENet accept, and a
+waiting late joiner holds a peer while every seat is still flown.
 
-**Approach.** On join, when the field is full, retire the newest bot seat through the SeatLeft path
-and seat the guest in it; A2's pilot key keeps the bot's row. `<TODO: read the late-join seat
-assignment path>`.
+**Approach.** On a join into a full lobby, retire the newest bot seat and seat the guest in it. On a
+join while a match runs, hold the guest in the lobby as a waiting pilot; when the match returns to
+the lobby, retire the newest bot seat and seat the waiting guest, one bot per waiting guest, in join
+order. `<TODO: read how a late joiner is held in the lobby today and where "the match is back in
+the lobby" is signalled; and what a waiting guest sees in the roster>`.
 
 **Model recommendation.** `<TODO: not settled in the session>`
 
-**Verify.** A loopback suite: host with 15 bots, a guest joins mid-match, the newest bot vanishes on
-both ends, its row stays, and the guest flies the seat.
+**Verify.** A loopback suite: host with 15 bots, a guest joins mid-match and stays in the lobby
+while the match runs; a host Restart leaves the field unchanged; when the match returns to the
+lobby, the newest bot's row leaves the roster and the guest holds its seat on both ends.
 
-**⚠ Traps.** The seat's channels and sequence counters (`AircraftStateCadence._sequence`,
-`SessionNet._fireSequence`, `NetInstruments`) must reset when the seat changes hands, or the guest's
-first samples read as stale.
+**⚠ Traps.** No seat changes hands mid-match, so a swap must never be triggered by Restart. The
+seat's channels and sequence counters (`AircraftStateCadence._sequence`, `SessionNet._fireSequence`,
+`NetInstruments`) must reset when the seat changes hands, or the guest's first samples in the next
+match read as stale.
 
 ## C23 ☐ Local join board: bot rows, and the two-pilot minimum counts bots
 
