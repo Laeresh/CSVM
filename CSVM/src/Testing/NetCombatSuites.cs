@@ -87,7 +87,8 @@ internal static class NetCombatSuites
     [Suite("net-combat-events",
         "a host session and a guest session in one process: the rounds one owner fires are spawned "
         + "on the other from its fire events and nowhere else, a hit on an aeroplane flown "
-        + "elsewhere spends nothing locally and lands as damage on the machine that owns it, a "
+        + "elsewhere spends nothing locally and lands as damage on the machine that owns it, whose "
+        + "hull report builds the copy's pending crash rig, a "
         + "guest kills the host and the host kills the guest with the score agreeing on both "
         + "peers, and the suicide and turret-kill causes score as the decode says")]
     internal static void CombatEventsCrossTheWire(TestContext ctx)
@@ -1181,6 +1182,15 @@ internal static class NetCombatSuites
         float shownBefore = Ledger(shown);
         float ownedBefore = Ledger(owned);
 
+        // The owner's hull report builds the copy's crash rig before its stages, since a stage crossed
+        // with no rig plays nothing and is never retried. A seat's rig is built in place, so the
+        // pending build is a stand-in, and stepping alone must not consume it.
+        bool built = false;
+        shown.ArmPendingCrashRig(() => built = true);
+        Lockstep(SettleSteps, host, guest);
+        ctx.Check(shown.CrashRigPending && !built,
+            $"ABLE-TO-FAIL CONTROL: a pending crash rig on the host's copy stays pending while nothing reports its hull ({(built ? "built" : "pending")})");
+
         shown.Body!.TakeProjectileHit(gun, shown.WorldPosition, 0, host.SeatRigs[0].Controller!.PlayerIndex);
         ctx.Check(Mathf.IsEqualApprox(Ledger(shown), shownBefore),
             $"the shooter spends nothing on its own copy of the aeroplane it hit (pools {Ledger(shown):0.0} of {shownBefore:0.0})");
@@ -1188,6 +1198,8 @@ internal static class NetCombatSuites
         Lockstep(SettleSteps, host, guest);
         ctx.Check(Ledger(owned) < ownedBefore,
             $"and the machine that owns that aeroplane applied the claim ({ownedBefore:0.0} to {Ledger(owned):0.0} armour plus health)");
+        ctx.Check(built && !shown.CrashRigPending,
+            $"and its hull report builds the host copy's pending crash rig ({(built ? "built" : "pending")})");
 
         // The other side of the same fork. A round fired by a seat flown elsewhere is that
         // machine's to decide. This machine's copy of it spends nothing on its own aeroplane

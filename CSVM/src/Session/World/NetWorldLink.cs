@@ -737,6 +737,8 @@ internal sealed class NetWorldLink
             case NetWorldEvent.AiHull:
                 if (AiAt(e.Subject) is { } hurt && GodotObject.IsInstanceValid(hurt))
                 {
+                    // As the player hull's receiver: no stage may cross before its rig exists.
+                    hurt.EnsureCrashRig();
                     hurt.Visuals?.OnHullDamage(e.Value);
                     _voice?.TakeHull(hurt, e.Value);
                     WorldEventsApplied++;

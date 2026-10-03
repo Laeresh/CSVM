@@ -858,6 +858,9 @@ internal sealed class SessionNet
         if (damage.Seat < _seatRigs.Count
             && _seatRigs[damage.Seat].Controller is { RemoteOwned: true } rig)
         {
+            // The stages play through the crash rig's runtime. A stage crossed while the rig is
+            // still pending is marked done with nothing played, and never retried.
+            rig.EnsureCrashRig();
             if (damage.Hull >= 1f)
             {
                 rig.Visuals?.Reset();
