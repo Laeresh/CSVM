@@ -889,7 +889,7 @@ internal static class DestroyChoreographySuites
     // ⚠ Respawn at two moments, mid-eject and past the whole death. A fix covering only the
     // completed choreography passes the second and leaves the network case standing.
     [Suite("death-respawn-rest-pose",
-        "after a shot-down player's death and a respawn, mid-eject (a Versus respawn's 3 s) and after the whole choreography, every airframe, wreck and bailing-pilot node the death defs touched is back on its built parent, transform and visibility, on a fixed-wing airframe and on the autogyro")]
+        "after a shot-down player's death and a respawn, mid-eject (a Versus respawn's 3 s) and after the whole choreography, every airframe, wreck and bailing-pilot node the death defs touched is back on its built parent, transform and visibility, on a fixed-wing airframe and on the autogyro, and the cockpit interior stays in its own pass")]
     internal static void DeathRespawnRestPose(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2999,12 +2999,13 @@ internal static class DestroyChoreographySuites
         var factory = new Session.World.WorldEffectsFactory(
             SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
         FlightController? player = null;
+        Flight.Hud.CockpitOverlay? pass = null;
         string label = $"{planeName} respawned at {respawnAt:0} s";
         try
         {
             var spawn = new Vector3(0f, 500f, 0f);
             var stats = PlaneStats.Load(ctx.ZrdrPath, planeName);
-            var builder = new PlaneBuilder(planesGamez, textures);
+            var builder = new PlaneBuilder(planesGamez, textures, cockpitInterior: true);
             var planeModel = builder.Build(planeName);
             player = new FlightController
             {
@@ -3015,6 +3016,7 @@ internal static class DestroyChoreographySuites
                 PadDevices = System.Array.Empty<int>(),
                 AllowPause = false,
                 Damage = PlaneDamage.For(stats),
+                Dressing = { Interior = builder.CockpitInterior },
             };
             player.AddChild(planeModel);
             player.Setup(new FlightModel(stats), null, new CamParams(), spawn, spawn + Vector3.Forward);
@@ -3026,6 +3028,13 @@ internal static class DestroyChoreographySuites
             {
                 ctx.Check(false, $"{label}: the human rig built a crash runtime");
                 return;
+            }
+
+            // The session's order: the rig binds over the airframe with the interior still in it,
+            // and the cockpit pass takes the interior out afterwards (GameSession.BuildCockpitPasses).
+            if (builder.CockpitInterior is { } interior)
+            {
+                pass = Flight.Hud.CockpitOverlay.Build(ctx.Host, interior, null, null);
             }
 
             rig.ManualAdvance = true;
@@ -3082,9 +3091,20 @@ internal static class DestroyChoreographySuites
                 $"{label}: every node the death touched is back on its built state ({touched.Count - stuck.Count}/{touched.Count}){(stuck.Count == 0 ? "" : ": " + string.Join("; ", stuck.Take(8)))}");
             ctx.Check(!cpilot.IsVisibleInTree() && Find(planeModel, "pilot") is { Visible: true },
                 $"{label}: the seated pilot is back and the bailing one is gone");
+            if (pass == null)
+            {
+                ctx.Check(false, $"{label}: the human rig built a cockpit interior and its pass");
+                return;
+            }
+
+            // Re-homed to the airframe, the panel would be drawn at the aircraft's origin under the
+            // pass's origin-relative pose, below and ahead of the eye.
+            ctx.Check(pass.IsAncestorOf(pass.Interior) && !planeModel.IsAncestorOf(pass.Interior),
+                $"{label}: the cockpit interior is still in its own pass, not back in the airframe");
         }
         finally
         {
+            pass?.Free();
             player?.Free();
         }
     }
