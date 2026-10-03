@@ -35,6 +35,10 @@ public sealed class MasterDirectory
     /// <summary>Why the last fetch failed, or "" when it did not.</summary>
     public string Fault { get; private set; } = "";
 
+    /// <summary>Whether the last answer said the server no longer serves this build's
+    /// <see cref="MasterWire.ProtocolVersion"/>. Its games are then left off the list.</summary>
+    public bool Outdated { get; private set; }
+
     /// <summary>Whether the directory has been asked since it was last told to forget.</summary>
     public bool Asking { get; private set; }
 
@@ -132,15 +136,18 @@ public sealed class MasterDirectory
             return false;
         }
 
-        if (done.IsCompletedSuccessfully && MasterWire.TryReadList(done.Result) is { } listed)
+        if (done.IsCompletedSuccessfully && MasterWire.TryReadList(done.Result, out int oldest) is { } listed)
         {
             _games.Clear();
-            foreach (var game in listed)
+            Outdated = !MasterWire.IsServedBy(oldest);
+            foreach (var game in Outdated ? Array.Empty<MasterGame>() : listed)
             {
                 _games.Add(ToGame(game));
             }
 
-            Fault = "";
+            Fault = Outdated
+                ? $"this build is too old for the master server: it serves protocol {oldest} and later, this build speaks {MasterWire.ProtocolVersion}"
+                : "";
             Answers++;
             return true;
         }
@@ -160,6 +167,7 @@ public sealed class MasterDirectory
         _pending = null;
         _games.Clear();
         Fault = "";
+        Outdated = false;
         Asking = false;
         _sinceAsked = double.PositiveInfinity;
     }

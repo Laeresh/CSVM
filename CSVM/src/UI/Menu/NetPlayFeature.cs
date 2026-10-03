@@ -364,6 +364,10 @@ public sealed class NetPlayFeature : IMenuFeature
         }
     }
 
+    /// <summary>Whether the open master server list says the server no longer serves this build. Its
+    /// games stay off the list until the game is updated.</summary>
+    public bool MasterOutdated => Master is { Asking: true, Outdated: true };
+
     /// <summary>Why the LAN search would not open, or "" when it did.</summary>
     public string SearchFault { get; private set; } = "";
 

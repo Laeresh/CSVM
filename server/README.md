@@ -114,8 +114,8 @@ To update later: `git pull`, then `docker compose up -d --build` again.
 **The games list.** From your own machine:
 
 ```sh
-curl https://csvm.example.org/api/health     # {"ok":true,"games":0}
-curl https://csvm.example.org/api/games      # {"games":[]}
+curl https://csvm.example.org/api/health     # {"ok":true,"games":0,"protocol":1,"oldest":1,"seen":{}}
+curl https://csvm.example.org/api/games      # {"games":[],"protocol":1,"oldest":1}
 ```
 
 A certificate error here means DNS or ports 80/443 are not right yet (step 1 and 2).
@@ -221,6 +221,7 @@ first four from `.env`). Defaults suit one small VPS.
 | `Master__ListPerMinute` | `60` | games list and health requests per address per minute |
 | `Master__SocketsPerMinute` | `30` | sockets opened per address per minute |
 | `Master__GuestSocketSeconds` | `120` | the longest a guest's negotiating socket may stay open |
+| `Master__OldestProtocol` | `1` | the oldest wire protocol served; a host or join below it is told to update CSVM. Raise it only once a game release speaking the newer protocol is out; `seen` in `/api/health` counts the versions still in use since the server started |
 
 A message over 16 KiB closes its socket; so does a socket silent for 90 seconds.
 

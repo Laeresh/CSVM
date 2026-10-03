@@ -197,7 +197,7 @@ public static class MasterServerLink
                         continue;
                     }
 
-                    message = new MasterMessage { T = MasterWire.Update, Game = listing.Game };
+                    message = new MasterMessage { T = MasterWire.Update, Game = listing.Game, Protocol = listing.Protocol };
                 }
 
                 byte[] text = Encoding.UTF8.GetBytes(MasterWire.Write(message));

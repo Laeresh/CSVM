@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.RateLimiting;
@@ -72,7 +73,8 @@ public static class MasterApp
         app.MapGet(MasterWire.GamesPath, (MasterHub hub) =>
             Results.Content(MasterWire.Write(hub.List()), "application/json"))
             .RequireRateLimiting(ListPolicy);
-        app.MapGet(MasterWire.HealthPath, (MasterHub hub) => Results.Json(new { ok = true, games = hub.Count }))
+        app.MapGet(MasterWire.HealthPath, (MasterHub hub) => Results.Json(
+                new { ok = true, games = hub.Count, protocol = MasterWire.ProtocolVersion, oldest = hub.Oldest, seen = hub.Seen() }))
             .RequireRateLimiting(ListPolicy);
         app.Map(MasterWire.SocketPath, async (HttpContext context, MasterHub hub, MasterOptions settings, TimeProvider time) =>
         {
@@ -143,12 +145,21 @@ public static class MasterApp
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             using var timer = new PeriodicTimer(TimeSpan.FromSeconds(SweepSeconds));
+            string seen = "";
             while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
             {
                 int dropped = _hub.Sweep();
                 if (dropped > 0)
                 {
                     _log.LogInformation("csvm-master: dropped {Dropped} silent game(s), {Hosted} hosted", dropped, _hub.Count);
+                }
+
+                // The log keeps the protocol counts across a restart, which the health check does not.
+                string now = string.Join(", ", _hub.Seen().Select(pair => $"{pair.Key}: {pair.Value}"));
+                if (now != seen)
+                {
+                    seen = now;
+                    _log.LogInformation("csvm-master: sockets by protocol since start {Seen}, oldest served {Oldest}", now, _hub.Oldest);
                 }
             }
         }

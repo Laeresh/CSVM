@@ -117,6 +117,30 @@ public class MasterWireTests
         Assert.False(read.Game!.Unlisted);
     }
 
+    [Fact]
+    public void TheProtocolVersionRoundTripsAndAnOlderSenderNamesNone()
+    {
+        string text = MasterWire.Write(new MasterMessage { T = MasterWire.Join, Code = "ABC-DEF", Protocol = MasterWire.ProtocolVersion });
+        const string older = "{\"t\":\"join\",\"code\":\"ABC-DEF\",\"version\":\"0.3\"}";
+
+        Assert.Contains($"\"protocol\":{MasterWire.ProtocolVersion}", text, StringComparison.Ordinal);
+        Assert.True(MasterWire.TryRead(text, out var read));
+        Assert.Equal(MasterWire.ProtocolVersion, read.Protocol);
+        Assert.True(MasterWire.TryRead(older, out var old));
+        Assert.Null(old.Protocol);
+    }
+
+    [Theory]
+    [InlineData("{\"games\":[]}", 0, true)]
+    [InlineData("{\"games\":[],\"protocol\":1,\"oldest\":1}", 1, true)]
+    [InlineData("{\"games\":[],\"protocol\":3,\"oldest\":2}", 2, false)]
+    public void AListNamesTheOldestProtocolItsServerServes(string text, int oldest, bool served)
+    {
+        Assert.NotNull(MasterWire.TryReadList(text, out int read));
+        Assert.Equal(oldest, read);
+        Assert.Equal(served, MasterWire.IsServedBy(read));
+    }
+
     [Theory]
     [InlineData("master.example.org", "https://master.example.org/")]
     [InlineData("https://master.example.org", "https://master.example.org/")]

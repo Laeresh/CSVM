@@ -98,6 +98,10 @@ public static class CoopDoorText
     /// the WebRTC carrier the code is reached over.</summary>
     public const string NoWebRtc = "WebRTC is missing or failed to start";
 
+    /// <summary>What the games list says when the master server no longer serves this build's
+    /// protocol version.</summary>
+    public const string MasterOutdated = "This version of CSVM is too old for the master server. Update CSVM to find internet games.";
+
     /// <summary>Why a guest cannot join by code when no master server is set to look the code up.
     /// </summary>
     public const string NoMasterServer = "No master server is set";

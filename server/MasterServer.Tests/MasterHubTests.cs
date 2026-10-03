@@ -300,6 +300,84 @@ public class MasterHubTests
         Assert.Equal(2, hub.Count);
     }
 
+    [Fact]
+    public void ABuildNamingNoProtocolIsServedAtTheDefaultMinimum()
+    {
+        var hub = new MasterHub(new MasterOptions(), new ManualClock());
+        var host = new FakeClient();
+        var guest = new FakeClient("198.51.100.7");
+
+        hub.Receive(host, new MasterMessage { T = MasterWire.Host, Game = Listing() });
+        hub.Receive(guest, new MasterMessage { T = MasterWire.Join, Code = host.Last.Code });
+
+        Assert.Equal(1, hub.Oldest);
+        Assert.Equal(MasterWire.Hosted, host.Of(MasterWire.Hosted).Single().T);
+        Assert.Equal(MasterWire.Joined, guest.Last.T);
+    }
+
+    [Fact]
+    public void ABuildBelowARaisedMinimumIsRefusedOnHostAndJoinAndStaysRefused()
+    {
+        var hub = new MasterHub(new MasterOptions { OldestProtocol = 2 }, new ManualClock());
+        var current = new FakeClient("203.0.113.6");
+        var oldHost = new FakeClient();
+        var oldGuest = new FakeClient("198.51.100.7");
+        var newGuest = new FakeClient("198.51.100.8");
+        hub.Receive(current, new MasterMessage { T = MasterWire.Host, Game = Listing("Current"), Protocol = 2 });
+        string code = current.Last.Code!;
+
+        hub.Receive(oldHost, new MasterMessage { T = MasterWire.Host, Game = Listing("Old") });
+        string refusal = oldHost.Last.Why!;
+        hub.Receive(oldHost, new MasterMessage { T = MasterWire.Update, Game = Listing("Old") });
+        hub.Receive(oldGuest, new MasterMessage { T = MasterWire.Join, Code = code, Protocol = 1 });
+        hub.Receive(newGuest, new MasterMessage { T = MasterWire.Join, Code = code, Protocol = 2 });
+
+        Assert.Contains("Update CSVM", refusal, System.StringComparison.Ordinal);
+        Assert.All(oldHost.Inbox, message => Assert.Equal((MasterWire.Error, refusal), (message.T, message.Why)));
+        Assert.Equal(2, oldHost.Inbox.Count);
+        Assert.Null(oldHost.ClosedWhy);
+        Assert.Equal((MasterWire.Error, refusal), (oldGuest.Last.T, oldGuest.Last.Why));
+        Assert.Equal(MasterWire.Joined, newGuest.Last.T);
+        Assert.Equal("Current", Assert.Single(hub.List().Games).Name);
+        Assert.Equal(2, hub.List().Oldest);
+    }
+
+    [Fact]
+    public void AStrayJoinFromAListedHostIsNotReadAsAnOutdatedBuild()
+    {
+        var clock = new ManualClock();
+        var hub = new MasterHub(new MasterOptions { OldestProtocol = 2 }, clock);
+        var host = new FakeClient();
+        hub.Receive(host, new MasterMessage { T = MasterWire.Host, Game = Listing(), Protocol = 2 });
+        string code = host.Last.Code!;
+
+        hub.Receive(host, new MasterMessage { T = MasterWire.Join, Code = code });
+        hub.Receive(host, new MasterMessage { T = MasterWire.Update, Game = Listing(players: 2) });
+
+        Assert.NotEqual(MasterHub.OutdatedWhy, host.Last.Why);
+        Assert.Equal(2, Assert.Single(hub.List().Games).Players);
+        Assert.Equal(1, hub.Seen().Values.Sum());
+    }
+
+    [Fact]
+    public void TheServerCountsTheProtocolsItIsAskedInWithEveryNewerOneInOneBucket()
+    {
+        var hub = new MasterHub(new MasterOptions(), new ManualClock());
+        var host = new FakeClient();
+        int newer = MasterWire.ProtocolVersion + 1;
+        hub.Receive(host, new MasterMessage { T = MasterWire.Host, Game = Listing() });
+        hub.Receive(new FakeClient("198.51.100.7"), new MasterMessage { T = MasterWire.Join, Code = host.Last.Code, Protocol = 1 });
+        hub.Receive(new FakeClient("198.51.100.8"), new MasterMessage { T = MasterWire.Join, Code = host.Last.Code, Protocol = newer });
+        hub.Receive(new FakeClient("198.51.100.9"), new MasterMessage { T = MasterWire.Join, Code = host.Last.Code, Protocol = int.MaxValue });
+        hub.Receive(host, new MasterMessage { T = MasterWire.Update, Protocol = newer });
+
+        var seen = hub.Seen();
+
+        Assert.Equal(2, seen[1]);
+        Assert.Equal(2, seen[newer]);
+        Assert.Equal(2, seen.Count);
+    }
+
     private static MasterGame Listing(string name = "Skies", int players = 1) => new()
     {
         Name = name, Kind = MasterWire.DogfightKind, Players = players, Cap = 8, Status = MasterWire.Waiting, Version = "0.2",

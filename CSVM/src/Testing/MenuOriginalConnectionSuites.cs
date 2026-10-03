@@ -1412,6 +1412,96 @@ internal static class MenuOriginalConnectionSuites
         }
     }
 
+    [Suite("menu-original-master-outdated",
+        "The games list with a master server set and no LAN socket, against a server whose list says it "
+        + "no longer serves this build's protocol version: the list stays empty of its one game, a box says "
+        + "this version of CSVM is too old for the master server, and after OK the next answer raises it no "
+        + "more. A server serving this build's version lists the same game. The server is a canned list")]
+    internal static void TheOutdatedMasterServer(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        const string game = "{\"code\":\"K7Q-X3M\",\"name\":\"Pirates\",\"kind\":\"dogfight\",\"players\":1,"
+            + "\"cap\":8,\"status\":\"waiting\",\"version\":\"unknown\"}";
+        int asked = 0;
+        int past = MasterWire.ProtocolVersion + 1;
+        var outdated = Lister(() => asked++, $"{{\"games\":[{game}],\"protocol\":{past},\"oldest\":{past}}}");
+        var served = Lister(() => { }, $"{{\"games\":[{game}],\"protocol\":{MasterWire.ProtocolVersion},\"oldest\":{MasterWire.ProtocolVersion}}}");
+        var ends = new List<End>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-master-outdated");
+        try
+        {
+            var guest = Open(ctx, layout, outdated, ends);
+            var control = Open(ctx, layout, served, ends);
+            if (guest == null || control == null)
+            {
+                return;
+            }
+
+            var shell = guest.Shell;
+            ClickRow(ctx, guest, OriginalShell.MultiplayerKey);
+            ClickRow(ctx, guest, OriginalConnectionScreen.ConnectKey);
+            for (int frame = 0; frame < 6 && shell.Dialog == null; frame++)
+            {
+                Pump(guest);
+            }
+
+            ctx.Check(shell.Dialog?.Message == CoopDoorText.MasterOutdated && shell.Screen == OriginalScreen.ConnectionGames,
+                $"the games list raises the update box ({shell.Dialog?.Message}, {shell.Screen})");
+            ctx.Check(shell.Connection.Listed.Count == 0, $"and lists none of the server's games ({shell.Connection.Listed.Count})");
+            ClickRow(ctx, guest, OriginalShell.DialogOkKey);
+            int before = asked;
+            for (int frame = 0; frame < (int)((MasterDirectory.RefreshSeconds + 1.0) / Dt); frame++)
+            {
+                Pump(guest);
+            }
+
+            ctx.Check(asked > before && shell.Dialog == null,
+                $"after OK a later answer raises no second box ({asked - before} more asked, {shell.Dialog?.Message})");
+
+            ClickRow(ctx, control, OriginalShell.MultiplayerKey);
+            ClickRow(ctx, control, OriginalConnectionScreen.ConnectKey);
+            for (int frame = 0; frame < 6 && control.Shell.Connection.Listed.Count == 0; frame++)
+            {
+                Pump(control);
+            }
+
+            ctx.Check(control.Shell.Connection.Listed.Count == 1 && control.Shell.Dialog == null,
+                $"ABLE-TO-FAIL CONTROL: a server serving this build lists its game with no box ({control.Shell.Connection.Listed.Count}, {control.Shell.Dialog?.Message})");
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            outdated.Discard();
+            served.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
+    // A guest door whose only search is a canned master server list, counting each fetch.
+    private static NetPlayFeature Lister(Action fetched, string listed) => new(
+        (_, _, _) => throw new InvalidOperationException("a guest does not host"),
+        (_, _) => throw new InvalidOperationException("this guest joins nothing"))
+    {
+        Master = new MasterDirectory(_ =>
+        {
+            fetched();
+            return System.Threading.Tasks.Task.FromResult(listed);
+        }),
+    };
+
     // One host's code line through every way. A key's step names Ctrl+C and a pointer's or a pad's
     // names none. The pad walks to COPY and accepts, then a click and a tap on the code's words each
     // copy again. Every copy is the door's, so the clipboard seam gains the code each time.
