@@ -3,8 +3,10 @@
 You are one subagent of an orchestration run. You land ONE backlog item (or the small bundle named
 in your prompt) completely, in your own git worktree, and you NEVER commit. The item is a `BL-NNN`
 entry in `backlog.md` or a `#N` GitHub issue (read it with `gh issue view N --comments`; in a path
-it is `issue-N`). The orchestrator reviews your tree, commits it, squashes it onto the
-orchestration branch and runs the full battery on the merged tree. The user is away: nothing you
+it is `issue-N`). The orchestrator commits your tree, runs a two-axis code review on it (the
+repo's documented standards, and the item's entry or issue as the spec), may send you the findings
+to fix, then squashes it onto the orchestration branch and runs the full battery on the merged
+tree. Do what the item asks and no more; unrequested changes come back as scope creep. The user is away: nothing you
 do may wait on them.
 
 ## Ground rules
