@@ -420,7 +420,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Screens/PausePreferences.cs`, the Preferences leaf over a paused mission: the Original Options screen hosted on the pause, its exit returning to the sheet with the settings applied.
 - `src/UI/Screens/MissionEndFade.cs`, the mission-end black-out, painting `CampaignDirector.LeavingFade` onto a full-screen rect every frame, one instance per rig.
 - `src/UI/Screens/SessionStartFade.cs`, the cover a session starts under, painting `StartCover`'s ramp over the HUD and the world until the session's first real frame, then up from dark.
-- `src/UI/Screens/BuildStamp.cs`, the build's version as `CSVM v<version>` in the menu's bottom-right corner, with mouse-only icons that open the logs and user folders, over every presentation and the extraction screen; hidden in flight.
+- `src/UI/Screens/BuildStamp.cs`, the build's version as `CSVM v<version>` in the menu's bottom-right corner, with mouse-only icons that open the logs and user folders, over every presentation's main menu and the extraction screen; hidden elsewhere.
 - `src/UI/Screens/ScreenKeyboardEcho.cs`, the strip across the top repeating the field Steam's on-screen keyboard types into, above everything while it is up.
 - `src/UI/Screens/NoGameDataScreen.cs`, the extraction screen shown instead of the menu when the data root holds no extraction, an unfinished one, or one stamped under another schema: the install folder, Extract, progress, failures.
 - `src/UI/Screens/ExtractionFlow.cs`, the extraction screen's engine-free state: the stale decision, the pre-fill, and a run on a worker marshalled to the main thread by a per-frame tick.

@@ -97,6 +97,33 @@ public class MenuHostTests
         Assert.Equal("wizard-debrief", first.Screen);
     }
 
+    /// <summary>The build stamp's gate: the main menu of a shown presentation. A deeper screen does
+    /// not count, nor does a hidden presentation still standing on its top level.</summary>
+    [Fact]
+    public void OnMainMenuHoldsOnlyOnTheShownTopLevel()
+    {
+        var host = Host(out var seat, out _);
+        host.Select(forceBuiltIn: false, cliOverride: "fake-wizard");
+        Assert.False(host.OnMainMenu);
+
+        host.Show(MenuReturnDestination.TopLevel);
+        Assert.True(host.OnMainMenu);
+
+        seat.Enqueue(new MenuCommands { Accept = true });
+        host.Tick(1f / 60f);
+        Assert.Equal("wizard-plane", ((FakeWizardPresentation)host.Active!).Screen);
+        Assert.False(host.OnMainMenu);
+
+        seat.Enqueue(new MenuCommands { Back = true });
+        host.Tick(1f / 60f);
+        Assert.True(host.OnMainMenu);
+
+        seat.Enqueue(new MenuCommands { Back = true });
+        host.Tick(1f / 60f);
+        Assert.Equal("wizard-chapter", ((FakeWizardPresentation)host.Active!).Screen);
+        Assert.False(host.OnMainMenu);
+    }
+
     [Fact]
     public void DeactivateEndsThePresentationAndDiscardsTransientFeatureState()
     {

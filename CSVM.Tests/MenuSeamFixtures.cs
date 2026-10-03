@@ -107,6 +107,8 @@ internal sealed class FakeWizardPresentation : IMenuPresentation
 
     public PresentationId Id => new("fake-wizard");
 
+    public bool OnMainMenu => Screen == "wizard-chapter";
+
     public string Screen { get; private set; } = string.Empty;
 
     public int Hides { get; private set; }
@@ -187,6 +189,8 @@ internal sealed class FakePointerPresentation : IMenuPresentation
     private FakeSortieFeature? _feature;
 
     public PresentationId Id => new("fake-pointer");
+
+    public bool OnMainMenu => Screen == "page";
 
     public string Screen { get; private set; } = string.Empty;
 

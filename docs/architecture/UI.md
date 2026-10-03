@@ -662,9 +662,9 @@ stranger sends carries the build it was taken on and the number is not read as t
 game's own. Two PromptFont icons left of it open the logs folder (the open log file's directory)
 and Godot's user folder through `Utils/FolderOpener.cs`. They are mouse-only, never focusable,
 and `Launcher` keeps their clicks from Original's polled pointer. Built once by `Launcher` beside
-`PerfHud` and shown while the menu host or `NoGameDataScreen.cs` is up, so it covers every
-presentation at once. It draws on `HudLayers.PerfReadout`, above the boards, and is hidden in
-flight. Pinned by `build-stamp-icons` and `build-stamp-focus`; the number is `Utils/BuildVersion.cs`.
+`PerfHud`, shown only while `MenuHost.OnMainMenu` holds or `NoGameDataScreen.cs` is up: deeper
+screens have bottom-edge plaques it overlaps at a Steam Deck's aspect. It draws on
+`HudLayers.PerfReadout`, above the boards. Pinned by `build-stamp-icons` and `build-stamp-focus`; the number is `Utils/BuildVersion.cs`.
 
 ## src/UI/Screens/ScreenKeyboardEcho.cs
 A strip across the top of the screen repeating the field Steam's on-screen keyboard types into, its

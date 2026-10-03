@@ -257,8 +257,8 @@ public partial class Launcher : Node3D
     // The F14 / --debug-fps frame-cost readout, ticked every frame like
     // the instrument above it, but drawing (if switched on) is its own concern, not this class's.
     private UI.Overlays.PerfHud _perfHud = null!;
-    // The version stamp and its folder icons in the menu's corner. They show while the menu or the
-    // extraction screen is up. No presentation carries them, and no flight capture sees them.
+    // The version stamp and its folder icons in the menu's corner. They show while the main menu or
+    // the extraction screen is up. No presentation carries them, and no flight capture sees them.
     private UI.Screens.BuildStamp _buildStamp = null!;
     // The --debug-net readout, null without the flag, and the wall time since it last refreshed.
     private UI.Overlays.NetReadout? _netReadout;
@@ -1080,8 +1080,10 @@ public partial class Launcher : Node3D
         ReportRate(frameMs);
         // Early-quit probes do not construct the readout, but Godot may process one shutdown frame.
         _perfHud?.Tick(frameMs, counters);
-        // The extraction screen too: a player whose extraction failed needs the logs icon most.
-        _buildStamp?.Tick(_menuHost is { Shown: true } || _extractionScreen != null);
+        // The main menu only: deeper screens have plaques along the bottom edge that the stamp
+        // overlaps at a Steam Deck's aspect. The
+        // extraction screen too, since a player whose extraction failed needs the logs icon most.
+        _buildStamp?.Tick(_menuHost is { OnMainMenu: true } || _extractionScreen != null);
         TickNetReadout(delta);
         if (_spec.Perf)
         {

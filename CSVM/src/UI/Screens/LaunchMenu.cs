@@ -562,6 +562,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// gestures and roster. A driven suite signs pads on through it, a raw button being out of reach.</summary>
     public MenuSeatDevices Devices => _devices;
 
+    /// <summary>Whether the mode list, the launchscreen's top level, is showing.</summary>
+    public bool OnMainMenu => _screen == Screen.Mode;
+
     /// <summary>Player 1's cursor row on the screen showing.</summary>
     public int ShownRow => CurrentIndex;
 
