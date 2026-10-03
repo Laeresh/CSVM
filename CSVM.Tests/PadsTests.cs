@@ -1,6 +1,8 @@
 using System.Collections.Generic;
+using System.Linq;
 using CSVM;
 using CSVM.Bindings;
+using CSVM.Sticks;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -114,4 +116,25 @@ public class PadsTests
 
     [Fact]
     public void AnEmptyRosterStaysEmpty() => Assert.Empty(Pads.KeepXInputView(new (int, bool, string)[0]));
+
+    /// <summary>Issue #130: on Linux Godot lists a flight stick and a throttle as pads beside the
+    /// stick roster that opened them. A claimed model leaves the pad roster, so it is read once.</summary>
+    [Fact]
+    public void AModelTheStickRosterClaimsLeavesThePadRoster()
+    {
+        var t16000 = new StickModel(0x044F, 0xB10A);
+        var twcs = new StickModel(0x044F, 0xB687);
+        Assert.Equal("1103/45322", t16000.Decimal);
+        Assert.True(StickModel.TryFromDecimal("1103", "46727", out var parsed) && parsed == twcs);
+
+        var kept = Pads.WithoutSticks(
+            new[] { (0, false, "1103/45322"), (1, false, "1103/46727"), (2, false, "1118/2834") },
+            new HashSet<string> { t16000.Decimal, twcs.Decimal });
+
+        Assert.Equal(new[] { 2 }, kept.Select(v => v.Pad));
+    }
+
+    [Fact]
+    public void WithNothingClaimedEveryViewStays() =>
+        Assert.Equal(2, Pads.WithoutSticks(new[] { (0, false, "1103/45322"), (1, true, "1118/2834") }, new HashSet<string>()).Count);
 }

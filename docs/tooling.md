@@ -697,18 +697,19 @@ profiles, bindings, capture, prompts and glyphs never see the library. What diff
   backends, and their hints do nothing elsewhere. `SDL_NO_SIGNAL_HANDLERS=1` keeps SDL2's SIGINT
   and SIGTERM handlers out of Godot's process. On Linux SDL2 reads evdev, where a second reader
   shares a device rather than taking it.
-- **The gap-filler's Linux rules.** Godot's joypad layer on Linux has no DirectInput-style gap for
-  gamepads, so a gamepad is Godot's there, and the model match is not left as the only guard: a
-  pad Godot reports no `vendor_id`/`product_id` for would otherwise be read twice. `StickRoster` is built with
-  `godotReadsGamepads` off Windows and then also skips a listing SDL2 maps as a gamepad
-  (`SDL_IsGameController`) and any device of Valve's vendor id `28DE`: the Deck's built-in
-  controls, a Steam Controller and Steam Input's virtual pad. Each skip logs its reason on a
+- **The gap-filler's Linux rules.** Godot's SDL3 on Linux lists every joystick, flight sticks and
+  throttles included, so the model match would hand every stick to Godot as a raw pad, its axes
+  and buttons named as a gamepad's and every unit merged onto the one pad placeholder (issue #130).
+  `StickRoster` is built with `godotReadsGamepads` off Windows and decides by kind instead: it
+  skips a listing SDL2 maps as a gamepad (`SDL_IsGameController`) and any device of Valve's vendor
+  id `28DE` (the Deck's built-in controls, a Steam Controller and Steam Input's virtual pad), and
+  opens every other device whether or not Godot lists it. Each skip logs its reason on a
   `stick skipped:` line. Windows keeps the model match alone.
-- **Whether the bridge is needed at all.** The bridge exists because Godot's SDL3 enumerates no
-  DirectInput-only stick on Windows. If Godot's SDL3 on Linux lists a stick, `StickRoster` skips it
-  by model, and the stick reaches the game as an ordinary Godot joypad, without its stick profile,
-  stick glyphs or stick column. Which roster holds a real stick on Linux is not yet seen: run
-  `--dump-sticks` with it connected, whose first line lists Godot's pad models.
+- **Godot's view of an opened stick.** `StickPump` hands the opened models to
+  `Pads.ClaimForSticks`, and `Pads.Connected` leaves every Godot pad of a claimed model out of the
+  pad roster, so the stick is read once, through its stick profile. A raw `InputEventJoypadButton`
+  handler that does not ask `Pads` still sees its presses: the cutscene and cinema skips, and the
+  extraction screen's install picker.
 - **Device GUIDs** are SDL's 16 bytes printed in memory order on both platforms. Their content
   differs (a Linux GUID carries the bus type, vendor, product and version), and only the log
   prints them; bindings and profiles key on the model.

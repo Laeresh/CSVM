@@ -37,6 +37,9 @@ public static class Pads
     private static Godot.Collections.Array<int>? _deduped;
     private static int[] _rawSeen = Array.Empty<int>();
 
+    // The models the stick roster has opened, in ModelOf's form; see ClaimForSticks.
+    private static HashSet<string> _sticks = new();
+
     /// <summary>Whether pad <i>input</i> is currently suppressed, the gate <see cref="For"/>
     /// applies. Not a statement about which devices exist; see <see cref="Connected"/>.</summary>
     public static bool InputBlocked => Disabled || !Focused;
@@ -71,12 +74,47 @@ public static class Pads
         }
 
         _deduped = new Godot.Collections.Array<int>();
-        foreach (int pad in KeepXInputView(views))
+        foreach (int pad in KeepXInputView(WithoutSticks(views, _sticks)))
         {
             _deduped.Add(pad);
         }
 
         return _deduped;
+    }
+
+    /// <summary>Takes the models the stick roster has opened, as decimal <c>vendor/product</c>.
+    /// The roster then leaves Godot's view of each out. A stick Godot also lists is thus read once,
+    /// as a stick. Godot lists every joystick on Linux (issue #130). An unchanged set keeps the
+    /// cached roster.</summary>
+    public static void ClaimForSticks(IEnumerable<string> models)
+    {
+        var claimed = new HashSet<string>(models);
+        if (claimed.SetEquals(_sticks))
+        {
+            return;
+        }
+
+        _sticks = claimed;
+        _deduped = null;
+    }
+
+    /// <summary>The views whose model the stick roster has not claimed (<see cref="ClaimForSticks"/>).
+    /// Pure, so the rule is testable without a joypad.</summary>
+    public static IReadOnlyList<(int Pad, bool XInput, string Model)> WithoutSticks(
+        IReadOnlyList<(int Pad, bool XInput, string Model)> views, IReadOnlySet<string> sticks)
+    {
+        ArgumentNullException.ThrowIfNull(views);
+        ArgumentNullException.ThrowIfNull(sticks);
+        var kept = new List<(int Pad, bool XInput, string Model)>(views.Count);
+        foreach (var view in views)
+        {
+            if (!sticks.Contains(view.Model))
+            {
+                kept.Add(view);
+            }
+        }
+
+        return kept;
     }
 
     /// <summary>The roster with each controller's duplicate views dropped. A pad the platform

@@ -33,8 +33,8 @@ that reports hot-plug. Exports are bound by name from the loaded handle, so a wr
 as one log line, not as a crash.
 
 ## src/Sticks/StickRoster.cs
-The gap-filling roster: every listed device whose model Godot's pad roster lacks (and, off Windows,
-that SDL does not map as a gamepad and Valve did not make), opened, kept
+The gap-filling roster: on Windows every listed device whose model Godot's pad roster lacks, off
+Windows every one SDL does not map as a gamepad and Valve did not make, opened, kept
 current across plugs and across changes in Godot's roster, and logged on every change. Reads
 (axes -1..1, buttons up to 128, hats as `Bindings.HatDirection`) answer neutral while the gate
 holds, the same `Pads.InputBlocked` pads obey. `ModelAxis`/`ModelButton`/`ModelHat` merge the
