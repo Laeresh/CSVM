@@ -150,7 +150,13 @@ that one-frame step exactly.
 Class is decided per candidate in `FUN_004b5cd0`, in this order:
 
 1. The candidate's `Target` virtual at vtable `+0x14` (the aim assist's "dead / not yet live"
-   predicate) rejects it outright.
+   predicate) rejects it outright. For a `TargetStruct` (vtable `0x0060364c`, slot `0x00603660`)
+   that is `FUN_004a5ad0`, which returns true when the structure's `+0x8c` is 0, the scene node's
+   active bit walked up the parent chain ("The two targetable bytes" below). So a mission site whose
+   node or any ancestor is switched off is on no cycle at all, flagged or not: C1/M05's `.gw`
+   switches the nine `lifesaverNM` groups off, and `attack_wave1` calls a wave's second and third
+   entrances 7 and 12.5 s after the wake that flags all three, so neither is markable at its rest
+   pose on the water in between. Its entrance switches the group on and poses it in one tick walk.
 2. Entity `+0x4d` set → **Objective** class. This overrides everything, including aircraft.
 3. Entity `+0x4c` set → **Non-Aircraft** class. Also overrides the aircraft split.
 4. Otherwise, the candidate must be a `TargetVehicle` or a `TargetProjectile`; a `TargetTurret` or
@@ -1081,6 +1087,7 @@ there.
 | Splitscreen pilots | no per-pilot ladder exists | a remake-only rule: pilot 0 is the player's side, further pilots land in `AimAssist.VersusTeamBand` so a `--vs` player cannot inherit the id the no-`TEAM` emplacements default to |
 | World objects | neutral until a scene node authors two-bit ownership, and untargetable while neutral | the same: `AimCandidateSet.AddStructures` falls a pool with no authored team through to `AimAssist.NeutralTeam`. Two sources author one, a zeppelin record and the flagged node a pool stands on |
 | Turrets and structures | selectable **only** when the mission flags them `otherTarget` / `objectiveTarget` | the same in every flown mission: `ObjectiveSites.CollectFlagged` reads that mission's own `targets.zrd` and puts each `other_target` entry on the Non-Aircraft cycle. A gun emplacement reaches no cycle at all, alive and hostile or not, because no shipped table names one; a loose destructible never reaches one either. The zeppelin sub-parts are the one stand-in for a flag nothing authors, a deliberate divergence narrowed to the capability it exists for: `TargetPool.Rebuild` offers them only while the pilot's selected ordnance carries `LOCK_ON`, so off the torpedo the cycle is the flagged list alone and a selected part is dropped rather than held. Instant Action and the multiplayer modes take the same feed with no director behind it |
+| A switched-off site | on no cycle while its node or any ancestor is inactive (`FUN_004a5ad0` reads `+0x8c`), flagged or not | the same: `ObjectiveSites.SwitchedOn` makes such a site not `Live`, except where a team mode places the site itself |
 | Cycle order | objectives first, then ahead / behind / left / right, nearest inside each sector | the same, `TargetSelection.SectorKey` and its sort |
 | "Nearest" | head of that order, not a global nearest | `TargetSelection.Nearest`, on one key per class (`TargetNearestEnemy`, `TargetNearestAlly`, `TargetNearestNonAircraft`) and reachable through `--target=nearest` |
 | Nearest-crosshairs | 15° nose cone, nearest inside it, 2000 m cap, friend or foe | the same, `TargetSelection.NearestCrosshairs`, on `TargetNearest` |

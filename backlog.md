@@ -153,33 +153,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Effects & animation runtime
 
-- `BL-674` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` `[CM10]` **CM10's
-  attack-balloon target marker sits on the water until the balloon has loaded in, then jumps up to
-  the balloon; the original's marker never does.** *Verdict at the controls:* the balloon itself
-  does not jump. Its "(Destroy) Attack Balloon" marker label is drawn at the water beside the
-  patrol boat while the balloon is not yet posed, and moves to the balloon's real position once
-  it is (`Z:\CSVM\Screenshots\crimsonskies_2026-10-02_22-22-57-643.png`, marker on the water;
-  `crimsonskies_2026-10-02_22-22-59-782.png`, two seconds later, marker up in the sky with its
-  lead line). So the fault is in what the marker reads before the target's first pose, not in the
-  entrance motion. *Where to look:* the marker's anchor for a target whose node has not been
-  booked by `RenderPoses` yet (it booked on its first motion tick); the structure's authored
-  placement at the water is the likely value the marker reads in that window. The original shows
-  no marker for the wave until it is posed, or shows it at the posed balloon. *What is settled:*
-  the dip to the water is the
-  original's authored entrance, not a runtime fault. The SI-script handler `FUN_004ea7d0` poses
-  absolutely and holds its sequence until the script's last frame, so `rise` starts from the
-  script's end at the water; the definition's own splash events at 55 to 57 s and the patrol boat
-  that wakes at the hand-off agree (`docs/org/sequences.md`, "An SI script holds its sequence and
-  poses absolutely"). The wave opens at 978 m inside the 970 to 1124 m cloud layer, so it may be
-  first seen at its touchdown. `campaign-balloon-marker` pins that profile, and removing
-  `ScriptPlayback`'s opening seek reproduces the reported jump exactly, so the suite would catch
-  that cause of a balloon jump; it does not cover the marker. *⚠ Traps:* do not add an altitude
-  floor to the assembly or offset the marker upward; the decode makes the dive faithful, and the
-  fix is to anchor the marker to the posed balloon (or hide it until there is one), not to move
-  it. A headless drive has not reproduced this, so the suite that pins the fix needs the marker's
-  screen anchor sampled on the frames before the first pose. *Cross-refs:*
-  `BL-656`'s closing commit, `docs/org/targeting.md` "Where a mission structure is".
-
 - `BL-537` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **Effect pools at four players, judged in play.** The pool sizes in `CSVM/data/effect_pools.json` were re-judged on a build with no first-use construction cost: rockets and the sonic burst never wrap, a four-object simultaneous death wraps `flame_ball_01` at 4 and 6 slots and is quiet at 8 (now shipped), and seven or more identical deaths in one frame wrap at the 16 ceiling and cannot be sized away. At the controls the single-player half reads right: four fireballs burn out in place, and the seven-death wrap is not visible under the debris. Still owed: a 4-player splitscreen session with everyone firing, judged for anything that reads as shared between panes, and the ceiling for many-player builds (at 16 players the default root wants 19 and gets 16). The instrument is `AnimRuntime.PoolRecycles` and the `anim: effect pool for '<name>' recycled slot` DEBUG line in the log file sink; the sizes staged print on the world-effects build line. ⚠ Raise only a root that logs a recycle, never the default; the three gun roots stay at 1; a root sized 0 clamps to 1. Each slot copies the root's subtree (155 templates at 1 player, 263 at 4).
   *Cross-refs:* `PT-129` (the four-player flight that judges it), `BL-296` (the other splitscreen-scoped item).
 

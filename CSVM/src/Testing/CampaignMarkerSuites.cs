@@ -234,12 +234,11 @@ internal static class CampaignMarkerSuites
         ctx.Note($"{chapter}/{folder}: the three objective markers read the original's verb and proper name");
     }
 
-    /// <summary>CM10 (C1/M05)'s attack-balloon markers over its BUILT world. Each
-    /// <c>lifesaverNM</c> site is a group node standing on the water with the balloon hung above it
-    /// and the lifeboat at its own origin, so the marker belongs on the group's geometry rather
-    /// than on the node. Asserted over the shipped table and script, then flown at two balloon
-    /// altitudes and retired by the balloon; then, over a second BUILT world, driven through the
-    /// shipped OBJECTIVE10 wake trigger, sampled across the wave's own SiScript entrance.</summary>
+    /// <summary>CM10 (C1/M05)'s attack-balloon markers over its BUILT world. A
+    /// <c>lifesaverNM</c> site is a group on the water, balloon above and lifeboat at its origin.
+    /// So the marker belongs on the group's geometry, not on the node. One world flies it at two
+    /// altitudes and retires it with the balloon. A second drives the shipped OBJECTIVE10 wake
+    /// through the entrance and the switched-off window before the later balloons enter.</summary>
     [Suite("campaign-balloon-marker",
         "CM10's attack-balloon markers over C1/M05's BUILT world: its nine lifesaver sites are "
         + "group nodes standing on the water with the balloon hung above and the lifeboat at "
@@ -248,7 +247,9 @@ internal static class CampaignMarkerSuites
         + "when the balloon its objective watches goes inactive while the boat is still afloat; "
         + "driven through the shipped OBJECTIVE10 wake trigger, the marker is offered from the "
         + "tick the wave wakes and tracks the live assembly through its whole SiScript entrance, "
-        + "never a stale reading that predates the balloon; the assembly is first drawn at its "
+        + "never a stale reading that predates the balloon; the wave's later balloons are never offered "
+        + "while switched off at rest on the water, and first offered on the tick their entrance poses "
+        + "them; the assembly is first drawn at its "
         + "entrance's opening frame, comes down without a jump to the water inside its authored "
         + "splash window, and climbs at the rise sequence's rate")]
     internal static void CampaignBalloonMarker(TestContext ctx)
@@ -360,6 +361,9 @@ internal static class CampaignMarkerSuites
             return;
         }
 
+        // The mission setup switches every wave off, and a switched-off site is offered nowhere.
+        // This drive poses the group by hand, so it switches it on as the wave's entrance does.
+        group.Visible = true;
         float boatTop = WorldBox(boat)?.End.Y ?? group.GlobalPosition.Y;
         report.AppendLine($"'{BalloonSite}' node at {group.GlobalPosition}, balloon at {balloon.GlobalPosition}, "
             + $"lifeboat top y {boatTop:0.0}, anchor {ObjectiveSites.SiteAnchor(group)}");
@@ -484,6 +488,7 @@ internal static class CampaignMarkerSuites
 
         var assembly = group.GetChild<Node3D>(0);
         bool hiddenBeforeWake = !assembly.IsVisibleInTree();
+        var late = LateBalloons(world, director);
 
         // OBJECTIVE10 itself gates on nothing once awake, so its ADD_OBJECTIVE_TARGET fires on
         // completion the very next Step after Wake rather than inside Wake itself; a real session
@@ -514,6 +519,11 @@ internal static class CampaignMarkerSuites
                 }
             }
 
+            foreach (var balloon in late)
+            {
+                balloon.Sample(i, pilot);
+            }
+
             world.Runtime.Advance(WakeStepDt);
             graph.Step(WakeStepDt);
         }
@@ -524,7 +534,52 @@ internal static class CampaignMarkerSuites
             $"'{BalloonSite}' is offered from the tick its wave wakes through the whole sampled entrance");
         ctx.Same(offered, tracked,
             $"and the marker never reads outside the group's own live geometry, so it is never a stale reading that predates the balloon");
+        CheckLateBalloons(ctx, late, report);
         CheckEntranceProfile(ctx, world, hiddenBeforeWake, firstShown, altitude, report);
+    }
+
+    // The wake's other sites. The wake adds them at once, but attack_wave1 calls their entrances
+    // seconds later. Each stands switched off at its rest pose on the water in between.
+    private static List<LateBalloon> LateBalloons(TestWorld world, CampaignDirector director)
+    {
+        var late = new List<LateBalloon>();
+        foreach (var def in director.Script.Objectives)
+        {
+            if (def.Number != WakeObjective)
+            {
+                continue;
+            }
+
+            foreach (var target in def.AddObjectiveTarget)
+            {
+                if (!target.Is(BalloonSite) && ObjectiveSites.ResolveTarget(world.Runtime, target) is { } group
+                    && WorldBox(group) is { } rest)
+                {
+                    late.Add(new LateBalloon(target.Key, group, rest));
+                }
+            }
+        }
+
+        return late;
+    }
+
+    // The original offers a structure only while its node is switched on (docs/org/targeting.md,
+    // "The class model"). No frame before a balloon's entrance may mark it at rest on the water.
+    private static void CheckLateBalloons(TestContext ctx, List<LateBalloon> late, StringBuilder report)
+    {
+        ctx.Check(late.Count > 0, $"the wake adds sites whose entrances its wave calls later ({late.Count})");
+        foreach (var b in late)
+        {
+            report.AppendLine($"'{b.Key}': rest top y {b.Rest.End.Y:0.0}, switched on at t={b.FirstShown * WakeStepDt:0.0}s, "
+                + $"first offered at t={b.FirstOffered * WakeStepDt:0.0}s at {b.FirstAt}, offered {b.OfferedOff} tick(s) "
+                + $"while switched off (last at {b.OffAt})");
+            ctx.Check(b.FirstShown > 0,
+                $"'{b.Key}' stays switched off after the wake until its entrance, t={b.FirstShown * WakeStepDt:0.0}s, so the window is real");
+            ctx.Same(0, b.OfferedOff,
+                $"and '{b.Key}' is never offered before then, where its marker would stand at rest on the water ({b.OffAt})");
+            ctx.Check(b.FirstOffered == b.FirstShown && b.FirstClear,
+                $"it is first offered on the tick its entrance poses it, at {b.FirstAt}, wholly above its rest pose and on its live geometry");
+        }
     }
 
     // The wave's altitude against the entrance's own data (docs/org/sequences.md, "An SI script
@@ -1072,6 +1127,61 @@ internal static class CampaignMarkerSuites
             _sites.Collect(_offered);
             Selection.Rebuild(_scan, null, AimAssist.PlayerTeam, null, position, Basis.Identity,
                 _offered);
+        }
+    }
+
+    // One balloon the wake adds before its entrance runs, sampled a tick at a time. It records
+    // whether its group is switched on, and whether and where its marker is offered.
+    private sealed class LateBalloon
+    {
+        internal LateBalloon(string key, Node3D group, Aabb rest) => (Key, Group, Rest) = (key, group, rest);
+
+        internal string Key { get; }
+
+        internal Node3D Group { get; }
+
+        internal Aabb Rest { get; }
+
+        internal int FirstShown { get; private set; } = -1;
+
+        internal int FirstOffered { get; private set; } = -1;
+
+        internal bool FirstClear { get; private set; }
+
+        internal Vector3? FirstAt { get; private set; }
+
+        internal int OfferedOff { get; private set; }
+
+        internal Vector3? OffAt { get; private set; }
+
+        internal void Sample(int tick, Pilot pilot)
+        {
+            bool on = Group.IsVisibleInTree();
+            if (on && FirstShown < 0)
+            {
+                FirstShown = tick;
+            }
+
+            if (Find(pilot.Selection.Pool.Enemy, Key) is not { } marked)
+            {
+                return;
+            }
+
+            if (!on)
+            {
+                OfferedOff++;
+                OffAt = marked.Position;
+                return;
+            }
+
+            if (FirstOffered < 0 && WorldBox(Group) is { } built)
+            {
+                FirstOffered = tick;
+                FirstAt = marked.Position;
+                FirstClear = built.Position.Y > Rest.End.Y
+                    && marked.Position.Y >= built.Position.Y - AltitudeTolerance
+                    && marked.Position.Y <= built.End.Y + AltitudeTolerance;
+            }
         }
     }
 }

@@ -122,7 +122,7 @@ their own record authors: `CollectFlagged` runs once per `TargetFlag`, over `tar
 curated list admitting a mission's chosen structures and no other destructible. A campaign director's script edits both with
 `ADD_`/`REMOVE_`; the director-free constructor is what Instant Action and the multiplayer modes
 take, their table unedited. World SITES only, one `Flight/Weapons/ObjectiveSite.cs` per `ObjectiveTarget.Key`, re-read every frame so
-a site tracks a moving node and reads `Live` off its `DestructibleRegistry` state; a roster block that flags itself
+a site tracks a moving node and reads `Live` off its `DestructibleRegistry` state and whether its node is switched on; a roster block that flags itself
 rides its own aeroplane. `Sides` lets a team mode label, place or hide a key. Bound by `GameSession`; [../org/targeting.md](../org/targeting.md).
 
 ## src/Session/Campaign/CampaignHumanField.cs
