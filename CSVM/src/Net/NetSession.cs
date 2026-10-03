@@ -467,7 +467,7 @@ public sealed class NetSession : INetTransportListener
             var seat = _seats[i];
             entries[i] = new NetSeatEntry(
                 (byte)seat.SeatIndex, (byte)seat.TeamId, AirframeIndex(seat.PlaneNode),
-                seat.PeerId == _transport.LocalPeer, seat.Callsign, seat.Voice);
+                seat.PeerId == _transport.LocalPeer, seat.Callsign, seat.Voice, seat.Unnamed);
         }
 
         return entries;
@@ -538,6 +538,7 @@ public sealed class NetSession : INetTransportListener
                 TeamId = entry.Team,
                 IsLocal = local,
                 Callsign = entry.Callsign,
+                Unnamed = entry.Unnamed,
                 PlaneNode = AirframeName(entry.Plane),
                 Voice = entry.Voice,
             });

@@ -36,10 +36,9 @@ public static class RenderScaleSetting
     private static readonly string[] AtOrBelowNative =
         DisplayWords.RenderScaleChoices.Where(w => TryParseWord(w, out float s) && s <= Native).ToArray();
 
-    /// <summary><b>Resolved once at launch</b> by <see cref="Resolve"/>, before any 3D viewport is
-    /// built. A viewport takes the scale as it is constructed, so a choice made on the Options page
-    /// is saved and reaches the image on the next start, which is what the row's description
-    /// says.</summary>
+    /// <summary>Resolved once at launch by <see cref="Resolve"/>, before any 3D viewport is
+    /// built. A viewport takes the scale as it is constructed. So a choice made on the Options page
+    /// is saved and reaches the image on the next start, as the row's description says.</summary>
     public static float Scale { get; private set; } = Native;
 
     /// <summary>The scale the sources resolve to, highest first: <paramref name="savedWord"/>, then

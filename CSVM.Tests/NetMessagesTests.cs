@@ -287,6 +287,28 @@ public class NetMessagesTests
         Assert.Equal(CoopPickMessage.NoVoice, clipped.Seats[0].Voice);
     }
 
+    // A nameless player rides bit 4 of the flags byte. Every machine's marker then reads it as
+    // "Unknown" rather than the roster's stand-in callsign.
+    [Fact]
+    public void SeatRosterCarriesANamelessPlayerBesideTheVoice()
+    {
+        var seats = new List<NetSeatEntry>
+        {
+            new(0, 0, 0, true, "P1", Voice: CoopPickMessage.MaxVoice, Unnamed: true),
+            new(1, 0, 1, false, "Lucy", Voice: 2),
+            new(2, 0, 2, false, "guest 7", Unnamed: true),
+        };
+        var buffer = new byte[SeatRosterMessage.SizeFor(seats.Count)];
+        new SeatRosterMessage(5u, seats).Write(buffer);
+
+        Assert.True(SeatRosterMessage.TryRead(buffer, out var got));
+        Assert.Equal(new[] { true, false, true }, got.Seats.Select(s => s.Unnamed).ToArray());
+
+        // ABLE-TO-FAIL CONTROL: the bit leaves the host bit and a full voice where they were.
+        Assert.Equal(seats, got.Seats.ToList());
+        Assert.Equal(1 | (CoopPickMessage.MaxVoice << 1) | (1 << 4), buffer[SeatRosterMessage.PrefixSize + 2]);
+    }
+
     // The callsign field is fixed width, so a long name has to lose its tail rather than the
     // roster losing its alignment.
     [Fact]

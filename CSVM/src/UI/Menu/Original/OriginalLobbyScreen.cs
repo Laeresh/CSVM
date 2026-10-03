@@ -313,9 +313,10 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>The chat box's line as typed so far.</summary>
     public string ChatDraft => _chat;
 
-    /// <summary>The rows pinned over the chat under <see cref="CoopDoorText.NoteName"/>: a host's
-    /// join code, else its address and why there is no code (<see cref="CoopDoorText.HostLobbyLines"/>).
-    /// The copy hint follows the seat's device. Empty on a guest.</summary>
+    /// <summary>The rows pinned over the chat under <see cref="CoopDoorText.NoteName"/>
+    /// (<see cref="CoopDoorText.HostLobbyLines"/>). They hold a host's join code or its wait for one,
+    /// else its address and why there is no code. The copy hint follows the seat's device. Empty on
+    /// a guest.</summary>
     public IReadOnlyList<string> NetworkRows =>
         _net() is { } net ? CoopDoorText.HostLobbyLines(net, _host.CopyWay) : Array.Empty<string>();
 
@@ -1174,10 +1175,11 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
 
     // The COPY control over the first pinned Network row, where the code or the address with the
-    // copy mark always stands. Null while the host shows nothing to copy, and on a guest.
+    // copy mark stands. Null while the host shows nothing to copy, while the master server is still
+    // answering (the row names neither yet), and on a guest.
     private OriginalRow? CopyRow()
     {
-        if (_net() is not { } net || CoopDoorText.CopyTarget(net).Length == 0)
+        if (_net() is not { } net || net.AwaitingCode || CoopDoorText.CopyTarget(net).Length == 0)
         {
             return null;
         }

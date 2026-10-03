@@ -312,13 +312,21 @@ public static class CoopDoorText
         return lines;
     }
 
-    /// <summary>A Dogfight host's lines pinned over its lobby chat under <see cref="NoteName"/>,
-    /// by the co-op band's rule: <see cref="HostCodeLine"/> alone with a join code, else
-    /// <see cref="HostFallbackLines"/>. Empty while not hosting.</summary>
+    /// <summary>A Dogfight host's lines pinned over its lobby chat under <see cref="NoteName"/>. They
+    /// wait for the master server's outcome. With a join code they are <see cref="HostCodeLine"/>
+    /// alone, and while it is still answering <see cref="AwaitingCode"/> alone. After a fault or with
+    /// no master server set they are <see cref="HostFallbackLines"/>. Empty while not hosting.</summary>
     public static IReadOnlyList<string> HostLobbyLines(NetPlayFeature net, CopyWay way = CopyWay.Keys)
     {
         ArgumentNullException.ThrowIfNull(net);
-        return net.JoinCode != null ? new[] { HostCodeLine(net, way) } : HostFallbackLines(net, way);
+        if (net.JoinCode != null)
+        {
+            return new[] { HostCodeLine(net, way) };
+        }
+
+        // ⚠ Do not name the address while the master server is answering. A code may still come,
+        // and the lobby shows the address only when none will.
+        return net.AwaitingCode ? new[] { AwaitingCode } : HostFallbackLines(net, way);
     }
 
     /// <summary>What a host's COPY control copies, the text <see cref="NetPlayFeature.CopyForGuests"/>

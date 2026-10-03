@@ -32,6 +32,12 @@ public sealed record NetSeat
     /// <summary>What the scoreboard and the kill line call this pilot.</summary>
     public string Callsign { get; init; } = "";
 
+    /// <summary>Whether this seat is a machine's own player who gave no name, so
+    /// <see cref="Callsign"/> is a stand-in. Its marker reads row 6007 "Unknown", the original's
+    /// label for a nameless peer (docs/org/targeting.md, the network author). A machine's further
+    /// splitscreen seats are not peers and keep their player number.</summary>
+    public bool Unnamed { get; init; }
+
     /// <summary>The airframe node this seat flies, the same name a <c>--plane=</c> entry carries.
     /// </summary>
     public string PlaneNode { get; init; } = "";

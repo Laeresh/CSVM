@@ -1093,10 +1093,10 @@ internal static class DestroyChoreographySuites
     }
 
     // nitro_boost/nitro_decay anchor as NAME "warhawk" (plane_props.zrd), which never resolves in
-    // a per-plane crash rig's own index, the shape spinprops/stopprops share, fixed by Play's
-    // PlaneModel fallback. ⚠ No flyable player_* model carries nitropropN, whose disc geometry
-    // ships only on the separate bare-named library root. The fix restores what the flown plane's
-    // own nodes CAN show: the nitropuffN exhaust puffers at exhaust1..4.
+    // a per-plane crash rig's own index, the shape spinprops/stopprops share; Play's PlaneModel
+    // fallback resolves it. ⚠ No flyable player_* model carries nitropropN, whose disc geometry
+    // ships only on the separate bare-named library root. The fallback shows what the flown
+    // plane's own nodes can: the nitropuffN exhaust puffers at exhaust1..4.
     [Suite("nitro-boost-anchors",
         "nitro_boost/nitro_decay author NAME \"warhawk\" as their anchor, which never resolves inside a per-plane crash rig; Play's PlaneModel fallback (the same shape spinprops/stopprops already use) starts both defs on the flown Warhawk and sustains its nitropuff1 exhaust puffer, though no flyable model carries the nitropropN disc geometry itself")]
     internal static void NitroBoostAnchors(TestContext ctx)

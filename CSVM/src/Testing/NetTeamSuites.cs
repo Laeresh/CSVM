@@ -120,13 +120,14 @@ internal static class NetTeamSuites
             .Select(t => (TargetRef?)t).FirstOrDefault();
 
     /// <summary>Checks that machine <c>m</c>'s pane, seat <c>m</c>, reads each other seat's aeroplane
-    /// by that seat's callsign (<c>FUN_00497990</c>). Any cycle may file it.</summary>
+    /// by that seat's callsign (<c>FUN_00497990</c>). A nameless player's reads row 6007 "Unknown".
+    /// Any cycle may file it.</summary>
     internal static void PilotNames(TestContext ctx, GameSession[] peers, string what)
     {
         var got = peers.SelectMany((p, m) => Enumerable.Range(0, p.SeatRigs.Count).Where(s => s != m)
             .Select(s => (Machine: m, Seat: s, Name: RefOf(Cycles(p, m),
                 src => ReferenceEquals(src, p.SeatRigs[s].Controller))?.DisplayName ?? "missing"))).ToArray();
-        ctx.Check(got.All(g => g.Name == peers[g.Machine].NetSeats[g.Seat].Callsign),
+        ctx.Check(got.All(g => g.Name == MarkerNameOf(ctx, peers[g.Machine].NetSeats[g.Seat])),
             $"{what} ({string.Join(" | ", got.Select(g => $"m{g.Machine}:s{g.Seat} {g.Name}"))})");
         // ABLE-TO-FAIL CONTROL. A callsign equal to its airframe's name would pass the line above
         // with the plane type still printed.
@@ -134,6 +135,11 @@ internal static class NetTeamSuites
         ctx.Check(peers[0].NetSeats.Select((seat, s) => seat.Callsign != planes[s]).All(apart => apart),
             $"ABLE-TO-FAIL CONTROL: no seat's callsign is its airframe's name ({string.Join(",", planes)})");
     }
+
+    /// <summary>The name line <paramref name="seat"/>'s aeroplane should read on another pane: its
+    /// callsign, or the messages table's "Unknown" for a nameless player.</summary>
+    internal static string MarkerNameOf(TestContext ctx, NetSeat seat) =>
+        seat.Unnamed ? Mech3.Messages.Load(ctx.MessagesPath).Get(HudMessages.UnknownKey) : seat.Callsign;
 
     // The opening placement, read before any step. Each seat stands on its team's block, walked by
     // its place in the team, on the same entry on every machine.

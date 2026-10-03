@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using CSVM.Mech3;
 using CSVM.Utils;
@@ -64,7 +65,7 @@ internal static class ShaderDiagnostics
         }
         if (_framesSinceSwitch >= 0)
         {
-            AfterSwitch.Add($"{ms:0.0}");
+            AfterSwitch.Add(ms.ToString("0.0", CultureInfo.InvariantCulture));
             if (++_framesSinceSwitch >= FramesAfterSwitch)
             {
                 var delta = pipelines.Zip(_switchMark, (a, b) => a - b).ToArray();

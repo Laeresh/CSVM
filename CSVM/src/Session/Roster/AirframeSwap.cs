@@ -146,8 +146,7 @@ public static class AirframeHandover
     }
 
     /// <summary>Whether this code paints the new hull in the captured aircraft's livery (966 and
-    /// 967). Neither is in the executable: both are the user's own reading of the original at the
-    /// controls (docs/formats/anim-definitions/cutscenes.md).</summary>
+    /// 967). The rule is in docs/formats/anim-definitions/cutscenes.md.</summary>
     public static bool CarriesCapturedPaint(AirframeSwapCode airframe) =>
         airframe.Code is CaptureCode or WarhawkCode;
 

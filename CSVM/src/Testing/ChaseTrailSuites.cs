@@ -54,8 +54,8 @@ internal static class ChaseTrailSuites
             var unstepped = Fly(ctx, GraphicsMode.Default, stepCues: false, report);
             var enhanced = Fly(ctx, GraphicsMode.EnhancedWord, stepCues: true, report);
 
-            // The faithful path: the cue step is the only new call on it, so the pose it leaves
-            // must be the pose the pre-change order left, frame for frame and bit for bit.
+            // The faithful path: the cue step is its only extra call. So the stepped pose must equal
+            // the unstepped pose, frame for frame and bit for bit.
             int moved = 0;
             for (int i = 0; i < stepped.Poses.Count; i++)
             {

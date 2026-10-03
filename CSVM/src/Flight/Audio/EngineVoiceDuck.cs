@@ -23,7 +23,7 @@ public sealed class EngineVoiceDuck
     private bool _wasOnAir;
 
     /// <summary><paramref name="voiceOnAir"/> answers whether the radio has a line on air.
-    /// <paramref name="sfxLevel"/> is the effects option's linear level, the retail
+    /// <paramref name="sfxLevel"/> is the effects option's linear level, the original's
     /// <c>SfxVolume</c>'s counterpart, which the fall's compare carries.</summary>
     public EngineVoiceDuck(Func<bool> voiceOnAir, Func<float> sfxLevel)
     {

@@ -446,8 +446,8 @@ public sealed class FlightRoster
         return captured;
     }
 
-    // The captured aircraft's livery (966 and 967), the user's own controls reading and undecoded in
-    // the executable. A live rig answers with its ShippedSkins reading: a real enemy spawn can resolve
+    // The captured aircraft's livery (966 and 967; docs/formats/anim-definitions/cutscenes.md).
+    // A live rig answers with its ShippedSkins reading: a real enemy spawn can resolve
     // to no scheme, and that null must beat the pilot's default. With no live rig, 966 reads its
     // militia def; --paint= is about this run and keeps the pilot's paint.
     private (PaintScheme? Scheme, bool ShippedSkins) CapturedPaint(AirframeSwapCode airframe,

@@ -193,10 +193,30 @@ public sealed class NetSeatTests
         Assert.Equal(new[] { "P1", "Lucy", "P3" }, field.Select(s => s.Callsign));
         Assert.Equal(new[] { "player_bhawk", "player_fury", "player_warhawk" }, field.Select(s => s.PlaneNode));
 
+        // A player number stands in for a missing name, and the seat says so.
+        Assert.Equal(new[] { true, false, true }, field.Select(s => s.Unnamed));
+
         // ABLE-TO-FAIL CONTROL: the versus field flies every guest in one plane and names it by peer.
         var versus = NetSeats.Field(1, new[] { "player_bhawk" }, new[] { 4 }, "player_bhawk");
         Assert.Equal("guest 4", versus[1].Callsign);
         Assert.Equal("player_bhawk", versus[1].PlaneNode);
+        Assert.True(versus[1].Unnamed);
+    }
+
+    // A machine's further splitscreen seats are not peers of their own, so a nameless one keeps its
+    // player number on the marker. Only a machine's first seat stands for a nameless peer.
+    [Fact]
+    public void OnlyAMachinesFirstSeatIsANamelessPeer()
+    {
+        var field = NetSeats.CoopField(1, new[] { "player_bhawk", "player_fury" },
+            new[] { (4, "player_fury", "Lucy"), (4, "player_warhawk", ""), (9, "player_bhawk", ""), (9, "player_fury", "") },
+            hostName: "Nathan");
+
+        Assert.Equal(new[] { "Nathan", "P2", "Lucy", "P4", "P5", "P6" }, field.Select(s => s.Callsign));
+        Assert.Equal(new[] { false, false, false, false, true, false }, field.Select(s => s.Unnamed));
+
+        var versus = NetSeats.Field(1, new[] { "player_bhawk", "player_fury" }, new[] { 4 }, "player_bhawk");
+        Assert.Equal(new[] { true, false, true }, versus.Select(s => s.Unnamed));
     }
 
     // A guest with two players at its machine takes two seats side by side, each in its own plane.

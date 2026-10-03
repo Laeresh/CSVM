@@ -768,8 +768,9 @@ public partial class FlightController : Node3D
     /// carrier is the one tag (docs/org/multiplayer-ctf.md "Markers").</summary>
     public Func<int, string>? MarkerName { get; set; }
 
-    /// <summary>A network seat's callsign, the marker's name line for a human pilot in a network
-    /// session, co-op included (docs/org/targeting.md, the network author). Null everywhere else,
+    /// <summary>The marker's name line for a human pilot in a network session, co-op included. It is
+    /// the seat's callsign, or "Unknown" for a nameless player (docs/org/targeting.md). Null
+    /// everywhere else,
     /// which keeps the airframe's own name.</summary>
     public string? PilotName { get; set; }
 

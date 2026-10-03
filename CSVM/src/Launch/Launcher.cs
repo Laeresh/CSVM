@@ -1337,6 +1337,7 @@ public partial class Launcher : Node3D
                 TeamId = teamOf(wire.LocalPeer),
                 IsLocal = true,
                 Callsign = i == 0 && hostName.Length > 0 ? hostName : UI.Boards.SplitScreen.PlayerTag(i),
+                Unnamed = i == 0 && hostName.Length == 0,
                 PlaneNode = planes[i],
                 // Only the first seat has a Player Information answer; a splitscreen seat has none.
                 Voice = i == 0 && lobby != null ? lobby.LocalVoice : (byte)0,
@@ -1361,6 +1362,7 @@ public partial class Launcher : Node3D
                 SeatIndex = seats.Count,
                 TeamId = teamOf(peer),
                 Callsign = name.Length > 0 ? name : $"guest {peer.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                Unnamed = name.Length == 0,
                 PlaneNode = picked ? Flight.Hangar.StockAirframes.Node(chosen.Airframe) : planes[0],
                 Voice = picked ? chosen.Voice : (byte)0,
             });
@@ -2595,7 +2597,7 @@ public partial class Launcher : Node3D
 
     // A switch over a flying world runs under a SwitchCover: the flight held, a load board over it.
     // With no world up it runs at once. ⚠ Refuse it in a network session. Its shared world has no
-    // pause to hold it in, and the stall would freeze one seat in a live match.
+    // pause to hold it in, and the stall would halt one seat in a live match.
     private void RequestGraphicsSwitch(bool enhanced, string why, bool save)
     {
         if (_session is { InSession: true, Wire.Link: not null })
@@ -2826,6 +2828,7 @@ public partial class Launcher : Node3D
                 SeatIndex = seats.Count,
                 IsLocal = true,
                 Callsign = UI.Boards.SplitScreen.PlayerTag(i),
+                Unnamed = i == 0,
                 PlaneNode = i < _spec.PlaneNames.Count ? _spec.PlaneNames[i] : _spec.PlaneName,
             });
         }
@@ -2842,6 +2845,7 @@ public partial class Launcher : Node3D
                 PeerId = peer,
                 SeatIndex = seats.Count,
                 Callsign = $"guest {peer.ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+                Unnamed = true,
                 PlaneNode = _spec.PlaneName,
             });
         }

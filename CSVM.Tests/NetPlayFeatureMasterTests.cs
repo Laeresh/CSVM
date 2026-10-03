@@ -281,7 +281,7 @@ public class NetPlayFeatureMasterTests
     }
 
     [Fact]
-    public void ADogfightLobbyPinsTheCodeAloneOnceThereIsOneAndTheAddressWithItsReasonWithout()
+    public void ADogfightLobbyWaitsForTheCodeThenPinsItAloneAndTheAddressWithItsReasonWithout()
     {
         const string stable = "2001:db8::7";
         string address = $"IPv6  {stable}  {CoopDoorText.CopyPress}";
@@ -290,7 +290,11 @@ public class NetPlayFeatureMasterTests
         var door = new NetPlayFeature((_, _, _) => listed, (_, _) => mesh[0]) { StableIpv6 = () => stable };
         door.OpenDogfightHost(NetSeats.MaxPlayers - 1);
         door.Step(0.016);
-        Assert.Equal(new[] { address, CoopDoorText.AwaitingCode }, CoopDoorText.HostLobbyLines(door));
+
+        // The address waits for the master server's outcome: none while it is still answering.
+        Assert.True(door.AwaitingCode);
+        Assert.Equal(new[] { CoopDoorText.AwaitingCode }, CoopDoorText.HostLobbyLines(door));
+        Assert.DoesNotContain(CoopDoorText.HostLobbyLines(door), line => line.Contains(stable, StringComparison.Ordinal));
 
         listed.JoinCode = "K7Q-X3M";
         Assert.Equal(new[] { CoopDoorText.HostCodeLine(door) }, CoopDoorText.HostLobbyLines(door));

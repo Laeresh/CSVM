@@ -1219,12 +1219,13 @@ internal static class MenuOriginalConnectionSuites
     }
 
     [Suite("menu-original-lobby-network",
-        "A Dogfight host's lobby names its address only when it has no internet code. Three hosts open "
-        + "through the Connection page's Host, each with a stable IPv6 address to name: one the master "
-        + "server listed under a code, one with a master server set but no WebRTC carrier, and one with "
-        + "no master server. The listed host's Network rows pin the code alone; the other two pin the "
-        + "address, the WebRTC one with its reason under it. None of the three posts a chat note. The "
-        + "server is a canned list and the wire the loopback")]
+        "A Dogfight host's lobby names its address only once it is known no internet code will come. Four "
+        + "hosts open through the Connection page's Host, each with a stable IPv6 address to name: one the "
+        + "master server listed under a code, one with a master server set but no WebRTC carrier, one with "
+        + "no master server, and one whose master server has not answered yet. The listed host's Network "
+        + "rows pin the code alone; the next two pin the address, the WebRTC one with its reason under it; "
+        + "the unanswered one pins only the wait, with no address and no COPY, and the code alone once it "
+        + "lands. None posts a chat note. The server is a canned list and the wire the loopback")]
     internal static void TheLobbysNetworkRows(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -1240,6 +1241,8 @@ internal static class MenuOriginalConnectionSuites
         var coded = NamedHost(NetDoorAid.Listed, true, stable, 21);
         var offline = NamedHost(end => end, true, stable, 22);
         var lan = NamedHost(end => end, false, stable, 23);
+        AwaitedListing? pending = null;
+        var asking = NamedHost(end => pending = new AwaitedListing(end), true, stable, 24);
         var ends = new List<End>();
         string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-lobby-network");
         try
@@ -1261,6 +1264,20 @@ internal static class MenuOriginalConnectionSuites
             string[]? lanRows = HostTheLobby(ctx, layout, lan, ends);
             ctx.Check(lanRows != null && lanRows.SequenceEqual(new[] { address }),
                 $"with no master server they pin the address ({Joined(lanRows)})");
+
+            string[]? askingRows = HostTheLobby(ctx, layout, asking, ends);
+            ctx.Check(askingRows != null && askingRows.SequenceEqual(new[] { CoopDoorText.AwaitingCode }),
+                $"while the master server is still answering they pin only the wait, no address ({Joined(askingRows)})");
+            ctx.Check(askingRows != null && Row(ends[^1].Shell, OriginalLobbyScreen.CopyKey) == null,
+                $"and offer no {CoopDoorText.CopyButton}, since the row names nothing to copy");
+            if (askingRows != null && pending != null)
+            {
+                pending.JoinCode = NetDoorAid.SampleCode;
+                Pump(ends[^1]);
+                string[] answered = ends[^1].Shell.Lobby.NetworkRows.ToArray();
+                ctx.Check(answered.SequenceEqual(new[] { code }),
+                    $"and the code replaces the wait once it lands, still with no address ({Joined(answered)})");
+            }
         }
         finally
         {
@@ -1272,6 +1289,7 @@ internal static class MenuOriginalConnectionSuites
             coded.Discard();
             offline.Discard();
             lan.Discard();
+            asking.Discard();
             Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
             CSVM.Utils.OptionsStore.DirectoryOverride = options;
         }
@@ -3214,6 +3232,38 @@ internal static class MenuOriginalConnectionSuites
     // A line in one of the panels standing over the page, where the seat strip is drawn.
     private static bool DrawsOver(ComposedBoard board, string text) =>
         board.Overlays.SelectMany(panel => panel.Lines).Any(line => line.Text == text);
+
+    // A host carrier whose master server has not answered: no code and no fault until the suite
+    // hands it a code. A WebRTC host stands so between its listing and the server's reply.
+    private sealed class AwaitedListing : INetTransport, INetListing, IDisposable
+    {
+        private readonly INetTransport _inner;
+
+        public AwaitedListing(INetTransport inner) => _inner = inner;
+
+        public string? JoinCode { get; set; }
+
+        public string ListingFault => "";
+
+        public int LocalPeer => _inner.LocalPeer;
+
+        public IReadOnlyList<int> Peers => _inner.Peers;
+
+        public void List(MasterGame listing)
+        {
+        }
+
+        public void Bind(INetTransportListener listener) => _inner.Bind(listener);
+
+        public void Send(int peer, ReadOnlySpan<byte> payload, NetReliability reliability, int channel = 0) =>
+            _inner.Send(peer, payload, reliability, channel);
+
+        public void Disconnect(int peer) => _inner.Disconnect(peer);
+
+        public void Step(double dt) => _inner.Step(dt);
+
+        public void Dispose() => (_inner as IDisposable)?.Dispose();
+    }
 
     // One end of the wire: its menu host, the seat the suite drives, and the shell it shows.
     private sealed record End(MenuHost Host, ScriptedSeat Seat, OriginalShell Shell)

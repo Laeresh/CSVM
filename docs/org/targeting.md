@@ -994,7 +994,12 @@ shows at the controls.
   with the carrier tag and assigns record `+0x34` back when the flag leaves (`0x0049a47b`,
   `0x0049abc1`, [`multiplayer-ctf.md`](multiplayer-ctf.md), "Markers"). CSVM stamps a network seat's
   callsign on its aircraft as `FlightController.PilotName`, the mode tag's fallback, and co-op
-  seats take it the same way.
+  seats take it the same way. `FUN_00499c90` starts a record's name as row 6007 `MSG_UNKNOWN`
+  ("Unknown"), so a peer with no name reads "Unknown". CSVM's roster calls such a seat by a stand-in
+  ("guest N", or a co-op player number) for its own lines, and marks it `NetSeat.Unnamed`, which the
+  roster carries to every machine; the marker reads "Unknown" for it. A machine's further
+  splitscreen seats are not peers of their own, have no counterpart in the original, and keep their
+  player number on the marker.
 
 ⚠ "No sixth author exists" is NOT established: the sweep covered the entity constructor's site, all
 five of its callers and the def copy, not the whole image, and the network author was found from the

@@ -48,7 +48,7 @@ public enum CameraView
 /// <summary>
 /// Drives the flown aircraft's camera: the roll-following chase camera and the head that swings
 /// it. It also holds the pilot's SELECTED view mode (<see cref="ViewMode"/>: Chase, Cockpit or
-/// Nose) and the free orbit the debug freeze uses. Steers a <see cref="Camera3D"/> it does not
+/// Nose) and the free orbit the debug halt uses. Steers a <see cref="Camera3D"/> it does not
 /// own, like <see cref="OrbitCamera"/> does for the static viewer.
 /// Deliberately passive: no clock and no input devices of its own, see <see cref="Chase"/> and
 /// <see cref="Orbit"/> for which clock each uses. The chase RADIUS is dynamic per plane, and its
