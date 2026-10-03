@@ -63,11 +63,15 @@ internal static class LookStickSuites
     // head's decoded 5/s undoes about 8% a frame.
     private const float ReleaseFirstFrameShare = 0.25f;
 
-    // Smooth mode's park: a second of release, against which a return at the decoded 5/s would
-    // undo over 99% of the swing. The bounds are a small fraction of that.
-    private const int ParkFrames = 60;
+    // Smooth mode's rate sortie: each push is held half a second. Each release is read over a second
+    // once the head's easing has arrived, where a return at the decoded 5/s would undo the swing.
+    private const int RatePushFrames = 30, RestFrames = 60;
 
-    private const float ParkDriftDeg = 0.5f, ParkDriftMove = 0.25f;
+    private const float RestDriftDeg = 0.5f, RestDriftMove = 0.25f;
+
+    // A rate read off the head may miss the decoded rate times the deflection by this share. A
+    // frame's swing may fall back this far during a push.
+    private const float RateShare = 0.03f, PushFallDeg = 0.1f;
 
     // The padlock sortie's target, a bare identity in the pool so the acquisition can be asserted
     // by reference rather than by name.
@@ -126,7 +130,7 @@ internal static class LookStickSuites
     /// <summary>Eases the look stick slowly off centre and back, then lets go of a held deflection
     /// at once. Both views are read every frame in the aircraft's own frame.</summary>
     [Suite("look-stick-edge",
-        "the look stick's activation edge flown in both views: easing the stick off centre and back, the camera's per-frame displacement and turn across the frames the look takes and releases the view stay within what the stick's own motion accounts for, letting go of a held deflection in snap mode eases the view home over many frames rather than cutting to the chase pose, and in smooth mode (J) the let-go view stays on the aim it was released at for a second of release until the centre key or K returns it")]
+        "the look stick's activation edge flown in both views: easing the stick off centre and back, the camera's per-frame displacement and turn across the frames the look takes and releases the view stay within what the stick's own motion accounts for, letting go of a held deflection in snap mode eases the view home over many frames rather than cutting to the chase pose, and in smooth mode (J) the stick turns the view at the decoded pan rate times its deflection, steadily while held, not at all once let go, with pushes adding up and a push the other way turning it back, until the centre key or K returns it")]
     internal static void LookStickEdge(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -144,8 +148,8 @@ internal static class LookStickSuites
             {
                 EdgeSortie(ctx, view, clock, plane, report);
                 ReleaseSortie(ctx, view, clock, plane, report);
-                ParkSortie(ctx, view, clock, plane, InputAction.LookCenter, report);
-                ParkSortie(ctx, view, clock, plane, InputAction.SnapLookMode, report);
+                RateSortie(ctx, mode, clock, plane, InputAction.LookCenter, report);
+                RateSortie(ctx, mode, clock, plane, InputAction.SnapLookMode, report);
             });
             ctx.Check(flown, $"{view}: the view builds an aircraft to fly");
         }
@@ -239,35 +243,85 @@ internal static class LookStickSuites
             $"{view}: and the view arrives back on its settled pose ({homeDeg:0.##}° off)");
     }
 
-    // Smooth mode's release: a held stick let go at once leaves the view on its aim for a second.
-    // Then `release`, the centre key or K, returns it to the settled pose.
-    private static void ParkSortie(TestContext ctx, string view, GameClock clock, FlightController plane,
+    // Smooth mode's rate: J, then two half-stick pushes, a full one and a full one back, each let
+    // go and left to rest. Then `release`, the centre key or K, returns the view to the settled pose.
+    private static void RateSortie(TestContext ctx, PilotViewMode mode, GameClock clock, FlightController plane,
         InputAction release, StringBuilder report)
     {
+        string view = PilotView.Name(mode);
+        string by = release == InputAction.LookCenter ? "the centre key" : "K";
         var settled = PlaneFramePose(ctx.Camera, plane);
         Press(clock, plane, InputAction.SmoothLookMode);
-        plane.Look.PinnedLook = new Vector2(StickX, 0f);
-        Step(clock, plane, SettleFrames);
-        var held = PlaneFramePose(ctx.Camera, plane);
-        plane.Look.PinnedLook = Vector2.Zero;
-        Step(clock, plane, ParkFrames);
-        var parked = PlaneFramePose(ctx.Camera, plane);
+
+        var a = Push(ctx, mode, clock, plane, 0.5f);
+        SwingDegOf(mode, ctx.Camera, plane, out float sideX);
+        var b = Push(ctx, mode, clock, plane, 0.5f);
+        var c = Push(ctx, mode, clock, plane, 1f);
+        var d = Push(ctx, mode, clock, plane, -1f);
         Press(clock, plane, release);
         Step(clock, plane, SettleFrames);
-        var home = PlaneFramePose(ctx.Camera, plane);
+        float homeDeg = TurnDeg(PlaneFramePose(ctx.Camera, plane).Basis, settled.Basis);
 
-        float span = TurnDeg(held.Basis, settled.Basis);
-        float driftDeg = TurnDeg(held.Basis, parked.Basis);
-        float driftMove = (parked.Origin - held.Origin).Length();
-        float homeDeg = TurnDeg(home.Basis, settled.Basis);
-        string by = release == InputAction.LookCenter ? "the centre key" : "K";
-        report.AppendLine($"{view} park ({by}): held {span:0.##} deg off, after {ParkFrames} frames of release drifted {driftDeg:0.###} deg and {driftMove:0.###} m, {Mode(plane)} after the press, home {homeDeg:0.###} deg off");
-        ctx.Check(span > 30f,
-            $"{view} ({by}): in smooth mode the held stick swings the view ({span:0.#}° off the settled pose)");
-        ctx.Check(driftDeg < ParkDriftDeg && driftMove < ParkDriftMove,
-            $"{view} ({by}): and letting go leaves it on that aim, {driftDeg:0.###}° and {driftMove:0.###} m off it after {ParkFrames} frames of release (under {ParkDriftDeg:0.##}° and {ParkDriftMove:0.##} m)");
+        foreach (var (name, push) in new[] { ("half", a), ("half again", b), ("full", c), ("full back", d) })
+        {
+            report.AppendLine($"{view} rate ({by}) {name}: {push.RateRadS:0.0000} rad/s against {push.ExpectedRadS:0.0000}, worst fall {push.WorstFallDeg:0.###} deg, released at {push.ReleasedDeg:0.##} deg, rests at {push.RestDeg:0.##} deg, drift {push.DriftDeg:0.###} deg {push.DriftMove:0.###} m, target held {push.TargetHeld}");
+            ctx.Check(Mathf.Abs(push.RateRadS - push.ExpectedRadS) <= RateShare * push.ExpectedRadS,
+                $"{view} ({by}): in smooth mode a {name} push turns the head at the decoded pan rate times its deflection ({push.RateRadS:0.###} rad/s against {push.ExpectedRadS:0.###})");
+            ctx.Check(push.WorstFallDeg < PushFallDeg,
+                $"{view} ({by}): steadily, the view's swing never falling back more than {PushFallDeg:0.##}° a frame while held (worst {push.WorstFallDeg:0.###}°)");
+            ctx.Check(push.TargetHeld && push.DriftDeg < RestDriftDeg && push.DriftMove < RestDriftMove,
+                $"{view} ({by}): and letting go adds nothing from the first frame, the view resting {push.DriftDeg:0.###}° and {push.DriftMove:0.###} m off over {RestFrames} frames (under {RestDriftDeg:0.##}° and {RestDriftMove:0.##} m)");
+        }
+
+        ctx.Check(sideX > 0f,
+            $"{view} ({by}): pushing the stick right puts the view on the aircraft's right, as in snap mode (x={sideX:0.###})");
+        ctx.Check(a.RestDeg >= a.ReleasedDeg - PushFallDeg && a.RestDeg > 10f,
+            $"{view} ({by}): a released stick leaves the view where it turned rather than returning it ({a.ReleasedDeg:0.#}° at release, {a.RestDeg:0.#}° at rest)");
+        ctx.Check(b.RestDeg > 1.6f * a.RestDeg,
+            $"{view} ({by}): a second push the same way turns it further from where it stopped ({a.RestDeg:0.#}° then {b.RestDeg:0.#}°)");
+        ctx.Check(c.RateRadS > 1.9f * a.RateRadS,
+            $"{view} ({by}): a full stick turns about twice as fast as half of one ({c.RateRadS:0.###} against {a.RateRadS:0.###} rad/s)");
+        ctx.Check(d.RestDeg < c.RestDeg - 30f,
+            $"{view} ({by}): and a push the other way turns it back ({c.RestDeg:0.#}° then {d.RestDeg:0.#}°)");
         ctx.Check(homeDeg < ToleranceDeg,
-            $"{view} ({by}): which returns the parked view to its settled pose ({homeDeg:0.##}° off, mode {Mode(plane)})");
+            $"{view} ({by}): which returns the turned view to its settled pose ({homeDeg:0.##}° off, mode {Mode(plane)})");
+    }
+
+    // One push of the stick `stick` right for RatePushFrames, then let go and rested. The rate is
+    // the head's target turn over the push's second half, where the stick's lag has arrived.
+    private static RatePush Push(TestContext ctx, PilotViewMode mode, GameClock clock, FlightController plane,
+        float stick)
+    {
+        plane.Look.PinnedLook = new Vector2(stick, 0f);
+        float prev = SwingDegOf(mode, ctx.Camera, plane, out _);
+        float worstFall = 0f, mid = 0f;
+        for (int i = 1; i <= RatePushFrames; i++)
+        {
+            Step(clock, plane, 1);
+            if (i == RatePushFrames / 2)
+            {
+                mid = plane.Head?.TargetAzimuth ?? 0f;
+            }
+
+            float swing = SwingDegOf(mode, ctx.Camera, plane, out _);
+            worstFall = Mathf.Max(worstFall, (prev - swing) * Mathf.Sign(stick));
+            prev = swing;
+        }
+
+        float end = plane.Head?.TargetAzimuth ?? 0f, endElevation = plane.Head?.TargetElevation ?? 0f;
+        float rate = Mathf.Abs(end - mid) / ((RatePushFrames - (RatePushFrames / 2)) * StepDt);
+        float deflection = (Mathf.Abs(stick) - HeadLook.PadAimCentreBand) / (1f - HeadLook.PadAimCentreBand);
+        plane.Look.PinnedLook = Vector2.Zero;
+        Step(clock, plane, 1);
+        bool held = plane.Head?.TargetAzimuth == end && plane.Head?.TargetElevation == endElevation;
+        Step(clock, plane, SettleFrames);
+        var rest = PlaneFramePose(ctx.Camera, plane);
+        Step(clock, plane, RestFrames);
+        var later = PlaneFramePose(ctx.Camera, plane);
+        held &= plane.Head?.TargetAzimuth == end && plane.Head?.TargetElevation == endElevation;
+        return new RatePush(rate, HeadLook.FreeLookRate * deflection, worstFall, prev,
+            SwingDegOf(mode, ctx.Camera, plane, out _), TurnDeg(rest.Basis, later.Basis),
+            (later.Origin - rest.Origin).Length(), held);
     }
 
     private static string Mode(FlightController plane) => plane.Head?.Mode.ToString() ?? "none";
@@ -554,6 +608,12 @@ internal static class LookStickSuites
     // What one flight reports: how far the view swung off the settled pose while the stick was
     // held, which side of the aircraft it swung to, and how much of the swing survived release.
     private readonly record struct Swing(float SwingDeg, float SideX, float ReleasedDeg);
+
+    // What one smooth-mode push reports. The head's rate against the decoded one, and the worst
+    // frame-on-frame fall of the view's swing while held. The swing at release and at rest, the
+    // view's drift across the rest, and whether the head's targets stayed put once let go.
+    private readonly record struct RatePush(float RateRadS, float ExpectedRadS, float WorstFallDeg,
+        float ReleasedDeg, float RestDeg, float DriftDeg, float DriftMove, bool TargetHeld);
 
     // One aeroplane, airborne and level, with no world to fly into: the readings below are all
     // taken in the aircraft's own frame, so where it is does not matter, only that it flies.

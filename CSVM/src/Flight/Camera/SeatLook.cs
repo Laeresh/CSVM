@@ -19,8 +19,8 @@ public sealed class SeatLook
     private readonly SeatMouse _mouse;
 
     // The look stick as the CHASE swing reads it. It has its own filter because that swing has no
-    // return of its own. A released stick eases home at the head's decoded rates, or stays put in
-    // free-look, as the head does (HeadLook.HoldsStickAim).
+    // return of its own: a released stick eases home at the head's decoded rates. In free-look the
+    // stick turns the head instead (HeadLook.PadRates), so this swing reads it as released.
     private readonly StickLookFilter _chase = new(HeadLook.AzimuthSmoothRate, HeadLook.ElevationSmoothRate);
 
     // Set by any frame another camera placed, so the chase comes back unswung rather than easing.
@@ -59,38 +59,40 @@ public sealed class SeatLook
     /// schemes; a toggle would leave the mouse on the head for the rest of the sortie.</summary>
     public bool FreeLookHeld => _seat.Held(InputAction.FreeLook);
 
-    /// <summary>One frame of head-look input. The chase view clears <paramref name="includePad"/>,
-    /// since the stick swings that view itself (<see cref="StepChase"/>). Muted, it reads as no
-    /// input at all and the mouse's pan is not consumed.</summary>
-    public HeadLookInput Read(bool muted, bool includePad = true)
+    /// <summary>One frame of head-look input. The chase view sets <paramref name="chase"/>: its
+    /// stick reaches the head only as free-look's rate, since outside free-look it swings that view
+    /// itself (<see cref="StepChase"/>). Muted, it reads as no input at all and the mouse's pan is
+    /// not consumed.</summary>
+    public HeadLookInput Read(bool muted, bool chase = false)
     {
         if (muted)
             return default;
         var (snapX, snapY) = SnapDirection();
         var pan = _mouse.LookTravel(FreeLookHeld);
-        var (lookX, lookY) = includePad ? Stick(muted) : (0f, 0f);
-        // The pad aims absolutely in first person, as the chase view's stick does. The mouse stays
-        // on the decoded relative path. lookY is the stick's +down and HeadLook wants +up.
+        var (lookX, lookY) = Stick(muted);
+        // lookY is the stick's +down and HeadLook wants +up. A chase head looking left carries the
+        // camera right, so x is mirrored there and stick right puts the view right in both modes.
         return new HeadLookInput(snapX, snapY, pan.X, -pan.Y, _seat.Held(InputAction.LookCenter),
-            lookX, -lookY, FreeLookHeld,
+            chase ? -lookX : lookX, -lookY, FreeLookHeld,
             _seat.Held(InputAction.SnapLookMode), _seat.Held(InputAction.SmoothLookMode),
-            _seat.Held(InputAction.TrackTarget));
+            _seat.Held(InputAction.TrackTarget), PadRatesOnly: chase);
     }
 
-    /// <summary>One frame of the chase view's swing: the look stick through its own filter. A
-    /// let-go stick eases home, or parks where <paramref name="holdsStickAim"/> says. It starts
-    /// from centre after any frame another view placed (<see cref="CutAway"/>). Returns the swing
-    /// and whether it is off centre.</summary>
-    public (float X, float Y, bool Swinging) StepChase(float dt, bool muted, bool holdsStickAim)
+    /// <summary>One frame of the chase view's absolute swing: the look stick through its own
+    /// filter, eased home once let go. While <paramref name="aims"/> is false, in free-look where
+    /// the stick turns the head instead, it reads as let go. It starts from centre after any frame
+    /// another view placed (<see cref="CutAway"/>). Returns the swing and whether it is off
+    /// centre.</summary>
+    public (float X, float Y, bool Swinging) StepChase(float dt, bool muted, bool aims)
     {
-        var (x, y) = Stick(muted);
+        var (x, y) = aims ? Stick(muted) : (0f, 0f);
         if (_chaseStale)
         {
             _chase.Reset();
             _chaseStale = false;
         }
 
-        _chase.Step(dt, x, y, holdsStickAim);
+        _chase.Step(dt, x, y);
         return (_chase.X, _chase.Y, _chase.Swinging);
     }
 

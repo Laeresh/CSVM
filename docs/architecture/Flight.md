@@ -255,7 +255,7 @@ cameras through `Statics`, and the pilot's selected view mode (`PilotViewMode` d
 holds the state and the camera, `StepViewKeys` takes the selection controls' press edges, and `ResetToChase` is the player's own destroy callback). The chase
 radius is per plane and dynamic, `Dist + DistFactor` times speed plus `DistTransient`'s authored
 throttle term; `ExternalRadius` bounds it and carries the numpad zoom outward from the near bound.
-The settled chase pose is `AuthoredRig`, the decoded rig off camparam's `thirdp_*` pair; `ChaseSwing` turns its offset and aim together by `Head`'s angles, so the snap cluster and the mouse orbit the camera; `PadSwing` then turns the finished chase pose rigidly about the aircraft for the look stick, and `StepHead` is where the placing view hands the head its elevation floor. Cockpit and Nose mount rigidly at the
+The settled chase pose is `AuthoredRig`, the decoded rig off camparam's `thirdp_*` pair; `ChaseSwing` turns its offset and aim together by `Head`'s angles, so the snap cluster and the mouse orbit the camera while a settled head returns the exact identity; `PadSwing` then turns the finished chase pose rigidly about the aircraft for the look stick's absolute aim outside free-look, and `StepHead` is where the placing view hands the head its elevation floor. Cockpit and Nose mount rigidly at the
 authored `cockpit_camera` marker with `Head`'s angles and their own FOV; every other pose restores `ExternalFovDeg`, the decoded 60 degree horizontal base the whole port draws the world at, which `GameSession` and `Launcher` also read when they build a camera, and the three static cuts take that angle undecorated. `StepEnhancedCues` is the enhanced presentation's whole arm, a lagged attitude the chase pose is built from and a speed widening of that external FOV, inert on the faithful path. Steers a `Camera3D` it does not own, `FlightController` its only host. Decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Flight/Camera/StaticCameras.cs
@@ -276,15 +276,15 @@ the snap, free-look, padlock, the centre key and autohead all reach the eye thro
 `LookMode` is the original's own mode byte (0 snap, 1 free-look, 2 padlock) and `SelectMode` writes it exactly once a frame: the `K`, `L` and `J` selectors on their press edge, then `HeadLookInput.ForceSnap` (the cockpit look-back); no device writes it, so both the numpad and the mouse obey the mode the keys chose, and padlock is left only by its own exit scan, which `Step` runs after the frame's bearing so the frame a direction arrives on still aims at the target and the snap state owns the next one.
 A snap frame with no direction and no held pan zeroes the targets, and it and a padlock frame with nothing offered are the only kinds that consult `IdleAim`, the no-input hook `AutoheadTarget` fills; a free-look frame holds the pose the pan reached until a selector, a further pan or the centre key moves it.
 `HeadLookInput.Looking` claims the pan with no motion on it, in either mode, so a held control over a still mouse holds the pose. `Nearest` wraps the padlock target onto the near side of the shown angle, the original's own crossing of the tail, and is scoped to that arm alone so the clamped relative paths still swing back through the front.
-`StickLookFilter` is this file's other type, the centre band and 40 ms lag the raw look stick passes through before it aims anything, one instance inside the head and one in `SeatLook` for the chase swing, which eases its released pair home at the head's rates, or parks it in free-look as `HoldsStickAim` says; ask its `Active` whether the stick is claiming a view, never its filtered pair. Engine-free apart from `Mathf`; owned by `CameraController` as `Head`, stepped by `FlightController` on the sim clock.
+`StickLookFilter` is this file's other type, the centre band and 40 ms lag the raw look stick passes through before it aims anything, one instance inside the head, where snap aims by it and free-look turns at the 2 rad/s pan rate times it while `Active` (`PadRates`), and one in `SeatLook` for the chase swing, which eases its released pair home at the head's rates; ask its `Active` whether the stick is claiming a view, never its filtered pair. Engine-free apart from `Mathf`; owned by `CameraController` as `Head`, stepped by `FlightController` on the sim clock.
 
 ## src/Flight/Camera/SeatLook.cs
 One flight seat's look controls, read once a frame into `HeadLookInput`: the snap cluster, the mouse
 pan under the held free-look control (`SeatMouse.LookTravel`), the look stick through the pad curve,
 the centre key and the three mode selectors, with `PinnedView` (`--view=` digits) and `PinnedLook`
-(`--look=`) behind the live controls. `StepChase` is the chase view's own swing of the stick through
-a `StickLookFilter` that eases home or parks as `HeadLook.HoldsStickAim` says, cut back to centre by
-`CutAway`. `Autohead` answers the head's idle aim under `AutoHeadTurn`. Every read takes `muted`
+(`--look=`) behind the live controls. `StepChase` is the chase view's own absolute swing of the stick
+through a `StickLookFilter` that eases home, released while `HeadLook.PadRates` hands the stick to the
+head, and cut back to centre by `CutAway`. `Autohead` answers the head's idle aim under `AutoHeadTurn`. Every read takes `muted`
 while a network pause's sheet is up. `FlightController` owns one as `Look`; read `HeadLook.cs` next.
 
 ## src/Flight/Hud/CockpitVisibility.cs

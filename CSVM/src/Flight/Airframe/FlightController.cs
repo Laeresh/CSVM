@@ -2403,12 +2403,11 @@ public partial class FlightController : Node3D
             }
             else
             {
-                // The one head on the chase camera's own floor: the snap cluster, centre key and
-                // mouse swing this view as they aim the cockpit. The pad is left out: it
-                // swings the finished chase pose absolutely (CameraController.PadSwing).
-                _cam.StepHead(simDt, Look.Read(Pause.SheetOverFlight, includePad: false), HeadLook.ChaseElevationFloor);
-                // The head's own release rule, so a let-go stick parks this view in free-look too.
-                var swing = Look.StepChase(simDt, Pause.SheetOverFlight, _cam.Head.HoldsStickAim);
+                // The one head on the chase floor: the numpad, centre key and mouse swing this view,
+                // and so does the stick in free-look. Otherwise the stick swings the finished chase
+                // pose absolutely (CameraController.PadSwing).
+                _cam.StepHead(simDt, Look.Read(Pause.SheetOverFlight, chase: true), HeadLook.ChaseElevationFloor);
+                var swing = Look.StepChase(simDt, Pause.SheetOverFlight, !_cam.Head.PadRates);
                 // Fed simDt, not wall time, so a scripted flight capture stays frame-rate
                 // independent; fed the DRAWN pose, same rule as the rigid views above.
                 _cam.Chase(simDt, _renderPose.Origin, _renderPose.Basis, swing.X, swing.Y);

@@ -338,8 +338,9 @@ public sealed class CameraController
     /// <summary>The analog look-around's swing, in the PLANE's frame: the filtered right stick over
     /// the shared <see cref="HeadLook.PadLookYawMaxDeg"/>/<see cref="HeadLook.PadLookPitchMaxDeg"/>
     /// envelope, through <see cref="ChaseSwing"/>. Stick right carries the camera to starboard and
-    /// stick up looks up. A centred stick returns the exact identity. ⚠ The stick aims ABSOLUTELY,
-    /// never through the head (docs/controls.md).</summary>
+    /// stick up looks up. A centred stick returns the exact identity. ⚠ Outside free-look the stick
+    /// aims ABSOLUTELY here, never through the head; free-look turns the head with it instead
+    /// (docs/controls.md).</summary>
     public static Basis PadSwing(float stickX, float stickY) =>
         ChaseSwing(Mathf.DegToRad(-stickY * HeadLook.PadLookPitchMaxDeg),
             Mathf.DegToRad(stickX * HeadLook.PadLookYawMaxDeg));
