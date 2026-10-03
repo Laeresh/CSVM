@@ -36,6 +36,11 @@ public sealed class MasterHub
     /// <summary>The first peer id a game hands a guest.</summary>
     public const int FirstGuestPeer = 2;
 
+    /// <summary>The oldest <see cref="MasterWire.ProtocolVersion"/> this server serves, answered on
+    /// the games list so an older build tells its player to update. ⚠ Raise it only after a game
+    /// release that speaks the new version is out, or every current player is locked out.</summary>
+    public const int OldestProtocol = 1;
+
     private readonly object _gate = new();
     private readonly Dictionary<string, Game> _games = new(StringComparer.Ordinal);
     private readonly Dictionary<IMasterClient, Role> _roles = new(ReferenceEqualityComparer.Instance);
@@ -84,7 +89,7 @@ public sealed class MasterHub
                     return listed;
                 })
                 .ToList();
-            return new MasterGameList { Games = games };
+            return new MasterGameList { Games = games, Protocol = MasterWire.ProtocolVersion, Oldest = OldestProtocol };
         }
     }
 

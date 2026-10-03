@@ -112,6 +112,22 @@ public class MasterDirectoryTests
     }
 
     [Fact]
+    public void AServerPastThisBuildsProtocolListsNoGamesAndSaysWhy()
+    {
+        string newer = OneGame.Insert(OneGame.Length - 1, ",\"protocol\":2,\"oldest\":2");
+        var directory = new MasterDirectory(_ => Task.FromResult(newer));
+
+        directory.Ask();
+        Assert.True(directory.Poll(0.0));
+
+        Assert.True(directory.Outdated);
+        Assert.Empty(directory.Games);
+        Assert.Contains("newer build", directory.Fault, StringComparison.Ordinal);
+        directory.Forget();
+        Assert.False(directory.Outdated);
+    }
+
+    [Fact]
     public void ForgettingCancelsTheFetchAndDropsItsAnswer()
     {
         var answer = new TaskCompletionSource<string>();
@@ -150,6 +166,7 @@ public class MasterDirectoryTests
         var host = Assert.Single(socket.Sent);
         Assert.Equal(MasterWire.Host, host.T);
         Assert.Equal("Pirates", host.Game!.Name);
+        Assert.Equal(MasterWire.ProtocolVersion, host.Protocol);
     }
 
     [Fact]

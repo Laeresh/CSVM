@@ -72,7 +72,8 @@ public static class MasterApp
         app.MapGet(MasterWire.GamesPath, (MasterHub hub) =>
             Results.Content(MasterWire.Write(hub.List()), "application/json"))
             .RequireRateLimiting(ListPolicy);
-        app.MapGet(MasterWire.HealthPath, (MasterHub hub) => Results.Json(new { ok = true, games = hub.Count }))
+        app.MapGet(MasterWire.HealthPath, (MasterHub hub) => Results.Json(
+                new { ok = true, games = hub.Count, protocol = MasterWire.ProtocolVersion, oldest = MasterHub.OldestProtocol }))
             .RequireRateLimiting(ListPolicy);
         app.Map(MasterWire.SocketPath, async (HttpContext context, MasterHub hub, MasterOptions settings, TimeProvider time) =>
         {

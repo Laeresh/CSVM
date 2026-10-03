@@ -23,6 +23,12 @@ public static class MasterWire
     /// <summary>The socket a host registers on and a join negotiates over.</summary>
     public const string SocketPath = "/ws";
 
+    /// <summary>The version of this wire. A client sends it on <see cref="Host"/>, <see cref="Update"/>
+    /// and <see cref="Join"/>, and a server answers it on its games list. Raise it only for a change a
+    /// released build cannot read, never for an added field. A sender that names none speaks 1.
+    /// </summary>
+    public const int ProtocolVersion = 1;
+
     /// <summary>The longest message either end accepts, in UTF-8 bytes. An SDP offer with a few
     /// candidates is under 4 KiB, so this leaves room without letting a sender grow a buffer.</summary>
     public const int MaxMessageBytes = 16 * 1024;
@@ -149,10 +155,19 @@ public static class MasterWire
         }
     }
 
+    /// <summary>Whether a server whose oldest served version is <paramref name="oldest"/> serves this
+    /// build. A server that names none (0) serves version 1.</summary>
+    public static bool Serves(int oldest) => oldest <= ProtocolVersion;
+
     /// <summary>Reads a games list, every game passed through <see cref="Clean"/> and one without a
     /// well-formed code left out. Null for text that is not a list.</summary>
-    public static IReadOnlyList<MasterGame>? TryReadList(string? text)
+    public static IReadOnlyList<MasterGame>? TryReadList(string? text) => TryReadList(text, out _);
+
+    /// <summary>Reads a games list as <see cref="TryReadList(string?)"/> does, with the
+    /// <see cref="MasterGameList.Oldest"/> it names.</summary>
+    public static IReadOnlyList<MasterGame>? TryReadList(string? text, out int oldest)
     {
+        oldest = 0;
         if (string.IsNullOrEmpty(text))
         {
             return null;
@@ -165,6 +180,7 @@ public static class MasterWire
                 return null;
             }
 
+            oldest = list.Oldest;
             var games = new List<MasterGame>(list.Games?.Count ?? 0);
             foreach (var game in list.Games ?? new List<MasterGame>())
             {
@@ -324,6 +340,14 @@ public sealed class MasterGameList
 {
     /// <summary>Every game listed when the answer was written.</summary>
     public List<MasterGame> Games { get; set; } = new();
+
+    /// <summary>The <see cref="MasterWire.ProtocolVersion"/> the server speaks, 0 from a server
+    /// that names none.</summary>
+    public int Protocol { get; set; }
+
+    /// <summary>The oldest protocol version the server still serves, 0 from a server that names
+    /// none. An older build shows none of the games and tells its player to update.</summary>
+    public int Oldest { get; set; }
 }
 
 /// <summary>One message over the master server's socket, either way. <see cref="T"/> names it by
@@ -372,6 +396,10 @@ public sealed class MasterMessage
 
     /// <summary>The asking build's MAJOR.MINOR on <c>join</c>.</summary>
     public string? Version { get; set; }
+
+    /// <summary>The sender's <see cref="MasterWire.ProtocolVersion"/> on <c>host</c>, <c>update</c>
+    /// and <c>join</c>. Null from a build that names none, which speaks version 1.</summary>
+    public int? Protocol { get; set; }
 
     /// <summary>The STUN and TURN servers for the link about to be negotiated.</summary>
     public List<MasterIceServer>? Ice { get; set; }

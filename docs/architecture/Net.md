@@ -164,9 +164,10 @@ The master server's wire, one file compiled by the game and by `server/MasterSer
 names no other engine file. `MasterWire` holds the paths, the type words, the limits both ends keep
 (16 KiB a message, the 15 s heartbeat, the 45 s expiry), the join code's form (`TryCode`) and the
 JSON; `MasterGame` is one listing (`Unlisted` keeps it off the games list, reached by its code
-alone), `MasterMessage` one socket message either way, `MasterIceServer`
-one STUN or TURN entry. Add a word or field, never rename one. Read `MasterWireTests.cs` and
-`server/MasterServer.Tests/`.
+alone), `MasterMessage` one socket message either way, `MasterIceServer` one STUN or TURN entry.
+`ProtocolVersion` is the wire's own version, sent on host, update and join; the games list answers
+the oldest the server serves (`Serves`). Add a word or field, never rename one. Read
+`MasterWireTests.cs` and `server/MasterServer.Tests/`.
 
 ## src/Net/MasterSocket.cs
 `IMasterSocket`, the master server's socket as the WebRTC carrier speaks it: whole messages queued
@@ -181,7 +182,8 @@ opens, a changed one goes at once as `update`, an unchanged one every `MasterWir
 ## src/Net/MasterDirectory.cs
 The games list's master-server half, engine-free: `Ask` fetches the list through a delegate at most
 every `RefreshSeconds`, `Poll` takes a finished answer, and every listed game becomes a `LanGame`
-row carrying its code in place of an address. `ListingOf` turns a host's advert into the listing
+row carrying its code in place of an address, unless the list says the server no longer serves
+this build's protocol (`Outdated`), when it lists none. `ListingOf` turns a host's advert into the listing
 it carries, unlisted for a Private host. The door, `UI/Menu/NetPlayFeature.cs`, holds one when a
 master server is set.
 ## src/Net/NetEndpoint.cs

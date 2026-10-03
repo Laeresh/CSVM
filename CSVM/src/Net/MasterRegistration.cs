@@ -75,7 +75,12 @@ public sealed class MasterRegistration
             return;
         }
 
-        _socket.Send(new MasterMessage { T = _registered ? MasterWire.Update : MasterWire.Host, Game = _listing });
+        _socket.Send(new MasterMessage
+        {
+            T = _registered ? MasterWire.Update : MasterWire.Host,
+            Game = _listing,
+            Protocol = MasterWire.ProtocolVersion,
+        });
         _registered = true;
         _sent = text;
         _sinceSent = 0.0;

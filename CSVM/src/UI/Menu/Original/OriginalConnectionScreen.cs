@@ -177,6 +177,10 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
     private double _sinceAsk;
     private int _heard;
 
+    // Whether this visit to the games list has said the master server needs a newer build. The
+    // list asks every second while empty, so without it the box would rise again on each answer.
+    private bool _toldOutdated;
+
     // A join this page started, followed until it ends, and the words of the box standing for it.
     private bool _following;
     private string? _shown;
@@ -418,6 +422,13 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
                 {
                     _host.FocusKey(GameKey(0));
                 }
+            }
+
+            if (net.MasterOutdated && !_toldOutdated)
+            {
+                _toldOutdated = true;
+                _host.RaiseDialog(CoopDoorText.MasterOutdated, DialogIcon.Warning, Ok(null));
+                changed = true;
             }
         }
 
@@ -687,6 +698,7 @@ public sealed class OriginalConnectionScreen : IOriginalScreenModule
             _picked = null;
             _sinceAsk = 0.0;
             _heard = 0;
+            _toldOutdated = false;
             _host.CloseDialog();
             _host.Open(OriginalScreen.ConnectionGames);
             return;

@@ -59,8 +59,12 @@ public sealed class MasterEndpointTests : IAsyncLifetime
         string list = await http.GetStringAsync(MasterWire.GamesPath);
         string health = await http.GetStringAsync(MasterWire.HealthPath);
 
-        Assert.Empty(MasterWire.TryReadList(list)!);
+        Assert.Empty(MasterWire.TryReadList(list, out int oldest)!);
+        Assert.Equal(MasterHub.OldestProtocol, oldest);
+        Assert.Contains($"\"protocol\":{MasterWire.ProtocolVersion}", list, StringComparison.Ordinal);
         Assert.Contains("\"ok\":true", health, StringComparison.Ordinal);
+        Assert.Contains($"\"protocol\":{MasterWire.ProtocolVersion}", health, StringComparison.Ordinal);
+        Assert.Contains($"\"oldest\":{MasterHub.OldestProtocol}", health, StringComparison.Ordinal);
     }
 
     [Fact]

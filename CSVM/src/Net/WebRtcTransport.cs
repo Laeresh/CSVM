@@ -153,7 +153,7 @@ public sealed class WebRtcTransport : INetTransport, INetLink, INetPeerAddress, 
             throw new ArgumentException($"'{code}' is not a join code", nameof(code));
         }
 
-        socket.Send(new MasterMessage { T = MasterWire.Join, Code = written, Version = version.ToString() });
+        socket.Send(new MasterMessage { T = MasterWire.Join, Code = written, Version = version.ToString(), Protocol = MasterWire.ProtocolVersion });
         return new WebRtcTransport(false, socket, 1, null);
     }
 
