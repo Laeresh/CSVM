@@ -1146,10 +1146,10 @@ internal static class NetCoopMissionSuites
         var hostSeats = host.Session.NetSeats;
         var guestSeats = guest.Session.NetSeats;
         ctx.Check(hostSeats.Count == 3 && guestSeats.Count == 3
-                  && hostSeats[1].PeerId == hostSeats[2].PeerId && !hostSeats[1].IsLocal && !hostSeats[2].IsLocal,
+                  && hostSeats[1].PeerId == hostSeats[2].PeerId && !hostSeats[1].FlownHere && !hostSeats[2].FlownHere,
             $"the host's field holds the guest's machine at seats 1 and 2 ({hostSeats.Count} seat(s))");
-        ctx.Check(guest.Session.Wire.Link is { LocalSeat: 1, LocalSeatCount: 2 } && guestSeats[1].IsLocal && guestSeats[2].IsLocal
-                  && !guestSeats[0].IsLocal,
+        ctx.Check(guest.Session.Wire.Link is { LocalSeat: 1, LocalSeatCount: 2 } && guestSeats[1].FlownHere && guestSeats[2].FlownHere
+                  && !guestSeats[0].FlownHere,
             $"the join names the guest both seats ({guest.Session.Wire.Link?.LocalSeat}, {guest.Session.Wire.Link?.LocalSeatCount})");
         ctx.Check(guest.Session.SeatRigs[1].Controller is { RemotePoses: null, InPlay: true }
                   && guest.Session.SeatRigs[2].Controller is { RemotePoses: null, InPlay: true },

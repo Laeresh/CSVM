@@ -107,11 +107,12 @@ internal sealed class HumanFlightAdapter
     {
         bool verbose = pi == 0; // the per-plane detail lines are identical for every player
         string tag = _human.RigCount > 1 ? $"P{pi + 1} " : "";
-        // A seat flown on another machine. No pane exists for it, so everything hung on a camera,
-        // a pad or this window is skipped. The aeroplane, its paint, its loadout, its damage and
-        // its spawn are built exactly as a local seat's.
+        // A seat with no pane here: one flown on another machine, or a bot this host flies.
+        // Everything hung on a camera, a pad or this window is skipped. The aeroplane, its paint,
+        // its loadout, its damage and its spawn are built exactly as a local seat's.
         var seat = pi < _human.NetSeats.Count ? _human.NetSeats[pi] : null;
-        bool remote = seat is { IsLocal: false };
+        bool paneless = seat is { HasPane: false };
+        bool flownElsewhere = seat is { FlownHere: false };
         // Each player flies their own pick; an Instant Action mission overrides it for every human
         // alike (HumanFieldPlanes.InstantActionOverride settles which do). A mission's own swap outranks
         // both. In a network match the roster's pick comes first: every peer builds the same field.
@@ -170,7 +171,7 @@ internal sealed class HumanFlightAdapter
                 AutoHeadTurn = _policy.AutoHeadTurn,
                 PinnedLook = _policy.PinnedLook,
             },
-            HudParent = remote ? null : rig.Viewport,
+            HudParent = paneless ? null : rig.Viewport,
             // Each part is null when the airframe ships no cockpit1, and the rig then dresses nothing.
             Dressing =
             {
@@ -187,7 +188,7 @@ internal sealed class HumanFlightAdapter
         // The engine pick's nitrous bit (ids 3-5) installs the injector, the original's veh+0x946.
         controller.Nitro.Installed = custom != null && Flight.Hangar.CustomPlaneBuild.HasNitrous(custom);
         // The graphics-mode action, for a seat somebody sits at here, like the pause key below.
-        controller.ToggleGraphicsMode = remote ? null : _human.ToggleGraphicsMode;
+        controller.ToggleGraphicsMode = paneless ? null : _human.ToggleGraphicsMode;
         // Every human joins team 1 in an Instant Action mission, splitscreen included, the
         // per-pilot team fallback would otherwise collide with an enemy's. --coop asks the same
         // in plain flight; SessionSpec.Resolve already drops Coop when --vs is set.
@@ -200,7 +201,7 @@ internal sealed class HumanFlightAdapter
             // A seat flown elsewhere takes its pose out of this history, not a flight model.
             // The buffer's presence IS that ownership, so it is built here and nowhere else.
             // The session fills it from the samples that seat's owner sends.
-            RemotePoses = remote ? new Net.RemotePoseBuffer() : null,
+            RemotePoses = flownElsewhere ? new Net.RemotePoseBuffer() : null,
             // one scripted sequence per player ('|'-separated); the last covers the rest
             HoldSegments = _policy.HoldSets == null ? null
                 : _policy.HoldSets[Math.Min(pi, _policy.HoldSets.Length - 1)],
@@ -224,16 +225,16 @@ internal sealed class HumanFlightAdapter
             // ⚠ Pass the null through. Null and empty are DIFFERENT bindings to Pads.For: null
             // reads every connected pad (what AssignPads returns for one player), empty reads none.
             // Coalescing flew a single player pad-dead; a remote seat takes empty, it reads none.
-            PadDevices = remote ? Array.Empty<int>() : PadsOf(MenuSeatOf(pi)),
+            PadDevices = paneless ? Array.Empty<int>() : PadsOf(MenuSeatOf(pi)),
             // The keyboard is this machine's first seat's, which on a guest is not seat 0.
-            UseKeyboard = !remote && MenuSeatOf(pi) == 0,
-            MouseCaptureAllowed = !remote && _policy.MouseCaptureAllowed,
+            UseKeyboard = !paneless && MenuSeatOf(pi) == 0,
+            MouseCaptureAllowed = !paneless && _policy.MouseCaptureAllowed,
             // The whole messages.json table, not just the weapon rows: the pilot HUD words its
             // auto-land prompt out of the same file.
             Strings = _aircraft.WeaponMessages,
             // A pause key belongs to a seat somebody is sitting at. A remote pilot's pause is
             // their own machine's business, and must not halt this one's simulation.
-            AllowPause = !remote,
+            AllowPause = !paneless,
             // A team Dogfight's seat flies its lobby team, banded clear of every authored id.
             Team = _human.InstantActionActive || _human.Coop ? AimAssist.PlayerTeam
                 : AimAssist.LobbyTeam(seat?.TeamId ?? 0),
@@ -355,7 +356,7 @@ internal sealed class HumanFlightAdapter
         // which owns the per-frame feed; nothing here writes one after assembly. None of it is
         // built for a remote seat: there is no pane to draw it in and no camera to aim it by.
         var pilotHud = controller.PilotHud;
-        if (!remote)
+        if (!paneless)
         {
             // The original's heading tape, rebuilt from the chapter's own HUD
             // textures (compassticks2/compasstxt ship in every chapter's archive).
@@ -415,7 +416,7 @@ internal sealed class HumanFlightAdapter
 
         // Never on a remote seat. This stack is the sound of the aeroplane you are sitting in, and
         // that pilot is sitting in theirs, on their own machine.
-        if (!remote && _world.Sounds != null && _world.SoundDefs != null)
+        if (!paneless && _world.Sounds != null && _world.SoundDefs != null)
         {
             var audio = new FlightAudio { MixGain = _human.MixGain, VoiceDuck = _world.VoiceDuck };
             audio.Setup(_world.Sounds, _world.SoundDefs, stats, _aircraft.WeaponDefs, _world.SoundGroups);
@@ -427,7 +428,7 @@ internal sealed class HumanFlightAdapter
         // This player's stunt run: player 1 flies the loaded instance, everyone else an
         // independent copy of the same zones, own progress, own clock. Never on a swap, which
         // would restart the clock and stack a second run HUD (see AirframeSwapRequest).
-        if (swap == null && !remote && _human.StuntZones != null)
+        if (swap == null && !paneless && _human.StuntZones != null)
         {
             var run = pi == 0 ? _human.StuntZones : _human.StuntZones.ForAnotherPlayer();
             controller.Stunt = run;
@@ -493,7 +494,7 @@ internal sealed class HumanFlightAdapter
 
         // Dogfight (--vs): the per-pane match timer/K-D/leader line + kill banner, bound to the
         // match GameSession built before this loop ran; kill facts arrive later via Downed.
-        if (!remote && _human.VersusMatch is { } versus)
+        if (!paneless && _human.VersusMatch is { } versus)
         {
             // Rigs is the SAME list GameSession keeps live for the whole session, every seat
             // already exists (BuildRigs ran before this loop), only .Controller fills in as each
@@ -507,7 +508,7 @@ internal sealed class HumanFlightAdapter
         // One per human pane, in EVERY flight session unlike VersusHud: built unconditionally
         // because generators spawn hostiles mid-session, and it draws nothing with an empty pool.
         // A remote seat picks its own targets on its own machine, so it takes neither.
-        if (!remote)
+        if (!paneless)
         {
             var targetHud = TargetHud.Build(pi, rig.Camera, _world.Projectiles);
             pilotHud.TargetHud = targetHud;
@@ -551,11 +552,11 @@ internal sealed class HumanFlightAdapter
         // A remote seat passes no camera, the same null an AI rig passes. The chase rig, the head
         // look and every camera write inside Setup are then not built at all.
         controller.Setup(new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),
-            remote ? null : rig.Camera, camParams, start.Pos, start.LookAt,
+            paneless ? null : rig.Camera, camParams, start.Pos, start.LookAt,
             start.ThrottleFrac, start.SpeedMps, cockpitCameraOffset: planeBuilder.CockpitCameraOffset);
         // The Danger Zone eye, framed off the airframe's own chase distance and aimed at the pose
         // the controller draws, which is the controller node's own transform.
-        if (!remote)
+        if (!paneless)
         {
             var scatter = Rng.Stream(Rng.Photograph);
             controller.Photograph = DangerZonePhotograph.Build(rig.Camera,
@@ -577,7 +578,7 @@ internal sealed class HumanFlightAdapter
         // The ambient speed cue is chapter data, not an aircraft-model effect. One private copy
         // per player, so splitscreen panes do not see another pilot's ahead-of-plane wisps. It is
         // drawn ahead of a camera, so a remote seat, which has none, takes no copy.
-        if (!remote && !_policy.EmptyStage)
+        if (!paneless && !_policy.EmptyStage)
         {
             controller.SpeedCue = SpeedCue.Build(_world.ChapterZrdrPath, _aircraft.Textures, _worldRoot,
                 _world.Ambience,
@@ -606,7 +607,7 @@ internal sealed class HumanFlightAdapter
         // ⚠ Hide a remote seat's pilot HUD the frame it enters the tree. A human-piloted rig
         // builds its own canvases in _Ready, and an empty one still carries the telemetry line
         // and the message stack. A seat with no pane would paint those over the local view.
-        if (remote)
+        if (paneless)
         {
             controller.SetPilotHudVisible(false);
         }
@@ -630,7 +631,7 @@ internal sealed class HumanFlightAdapter
         // This pilot's own airframe onto its own visual layer, LAST, so everything the lines above
         // hung on the model travels with it. This pane's spyglass drops that layer; the pane drops
         // the one a first-person view moves the body onto (docs/architecture/Session.md).
-        if (!remote)
+        if (!paneless)
         {
             // Never a remote seat: no camera here looks out of that aeroplane. The band is four
             // layers wide, so a seat past the fourth would wrap onto a pane's own.

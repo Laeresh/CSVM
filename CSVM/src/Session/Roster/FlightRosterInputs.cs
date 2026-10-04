@@ -170,16 +170,17 @@ internal sealed class HumanRosterBindings
     public int RigCount { get; init; }
 
     /// <summary>The network match's seat roster, indexed by seat, empty outside one (which reads
-    /// as every seat local). A seat that is not <see cref="Net.NetSeat.IsLocal"/> is assembled
-    /// with an aircraft, a spawn slot, a score row and a marker colour. It gets no pane, HUD,
-    /// camera, listener or input device. Where a seat names an airframe, the roster's pick beats
-    /// this machine's launch flags: every peer has to build the same field.</summary>
+    /// as every seat local). A seat without <see cref="Net.NetSeat.HasPane"/> is assembled with an
+    /// aircraft, a spawn slot, a score row and a marker colour. It gets no pane, HUD, camera,
+    /// listener or input device. Where a seat names an airframe, the roster's pick beats this
+    /// machine's launch flags: every peer has to build the same field.</summary>
     public IReadOnlyList<Net.NetSeat> NetSeats { get; init; } = Array.Empty<Net.NetSeat>();
 
-    /// <summary>The fit a seat flown elsewhere carries, by seat, or null for its stock fit.</summary>
+    /// <summary>The fit a seat with no pane here carries, by seat, or null for its stock fit.
+    /// </summary>
     public Func<int, LoadoutChoice?>? SeatFit { get; init; }
 
-    /// <summary>The custom plane a seat flown elsewhere carries, by seat, or null for its stock
+    /// <summary>The custom plane a seat with no pane here carries, by seat, or null for its stock
     /// airframe. Its hit volumes and damage parts must match the owner's, since the shooter decides
     /// hits.</summary>
     public Func<int, CustomPlaneDef?>? SeatBuild { get; init; }

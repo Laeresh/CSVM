@@ -943,7 +943,11 @@ same pick without it. At launch the host writes each seat's voice into bits 1 to
 flags byte in the seat roster `0x27`, beside the host bit, so every machine speaks every seat in its
 chosen voice; the entry keeps its 20 bytes, and a build a patch older reads the host bit alone.
 Bit 4 marks a machine's own player who gave no name, whose callsign field holds only a stand-in, so
-every machine's marker reads that seat as "Unknown" ([`targeting.md`](targeting.md)). A
+every machine's marker reads that seat as "Unknown" ([`targeting.md`](targeting.md)). Bit 5 marks a
+bot, a remake-only computer pilot the host flies, and bits 6 and 7 carry its skill tier (0 novice, 1
+veteran, 2 ace). A bot entry carries the host bit, is never at seat 0, and is flown by no guest; a
+reader refuses a roster with tier 3 or with skill bits on a person's entry. The entry keeps its 20
+bytes, so a build a patch older reads a bot as a seat the host owns. A
 co-op host's first seat carries Nathan Zachary's, the scripted player's, and a splitscreen seat
 carries none. The callsign, the voice and the game name are remembered in `options.json`
 for the next session; a password never is. Game Information's password is the one the host asks,

@@ -92,7 +92,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A, seat model and match bookkeeping
 
-1. ☐ A seat knows whether a human or a bot flies it, and the roster carries that across the wire
+1. ☑ A seat knows whether a human or a bot flies it, and the roster carries that across the wire
 2. ❌ `VersusMatch` keys its scores by pilot, so a row survives its seat being reused
 3. ☐ The host flies a bot seat with an `AiPilot`; guests see it as a remote seat
 4. ☐ CLI twin: `--vs-bots=` / `--vs-bot=` build bot seats in a scripted host
@@ -129,37 +129,59 @@ D31 needs A1, A3 and C21. D32 and D33 run last, on the merged tree.
 
 # Wave A, seat model and match bookkeeping
 
-## A1 ☐ A seat knows whether a human or a bot flies it, and the roster carries that across the wire
+## A1 ☑ A seat knows whether a human or a bot flies it, and the roster carries that across the wire
 
 **Goal.** A `NetSeat` can be a bot seat owned by the host's peer, with a skill; the seat roster a
 guest receives says which seats are bots; and "this machine flies the seat" is no longer the same
 claim as "this seat has a pane".
 
-**Evidence (confidence: lead-only).** `NetSeat` (`CSVM/src/Net/NetSeat.cs`) holds `PeerId,
-SeatIndex, TeamId, IsLocal, Callsign, PlaneNode, Livery, Voice, Score` and has no bot flag.
-`IsLocal` creates a pane in `SessionNet.FillSeatRigs` (`CSVM/src/Launch/SessionNet.cs:612-614`), and
-`HumanFlightAdapter` assumes a local seat is human-flown. `NetSeats.Validate` and
-`NetSession.WellFormed` (`NetSession.cs:390-409`) reject more than 16 seats or gaps and require seat
-0 to be the host peer. `SeatRosterMessage.MaxSeats = 16`, entry 20 bytes (seat, team, plane,
-IsHost, callsign 16 bytes, voice). Seat-wide tables are 16 wide already (`NetChannels.Count`,
-`AircraftStateCadence._sequence`, `SessionNet._fireSequence`, `NetInstruments`, `NetTeams.MaxTeams`,
-`NetDogfightMessages.MaxRows`).
+**Evidence (confidence: traced-to-code).** `NetSeat` (`CSVM/src/Net/NetSeat.cs`) held `PeerId,
+SeatIndex, TeamId, IsLocal, Callsign, Unnamed, PlaneNode, Livery, Voice, Score` and had no bot flag.
+`IsLocal` picked a pane in `SessionNet.FillSeatRigs` (the cited `:612-614` had drifted to the
+method's rig line), and `HumanFlightAdapter` read one `remote` flag for both "no pane" and "pose
+from the wire". `NetSeats.Validate` and `NetSession.WellFormed` reject more than 16 seats or gaps
+and require seat 0 to be the host peer. The roster entry is 20 bytes (seat, team, flags, plane,
+callsign 16 bytes); its flags byte held the host bit, the voice in bits 1 to 3 and the nameless bit
+4, leaving bits 5 to 7 free. The repo has no protocol version: peers compare the build's
+MAJOR.MINOR (`NetBuildVersion`), and the voice and nameless bits were added the same way, inside
+the byte. Two peer-to-seat derivations beyond the plan's list assumed one person per peer:
+`NetSession.FliesOnTeam` (a host's bot on team 2 would have shown the host team 2's chat) and
+`SessionNet.OnPeerLeft`/`TakeSeatLeft`.
 
-**Approach.** Add a pilot kind (human, bot) and a skill tier to `NetSeat`. Split `IsLocal` into
-"flown here" and "has a pane" at every consumer; a bot seat is flown on the host and has no pane.
-Carry kind and skill in the seat roster entry; whether that fits the 20-byte entry or needs a wider
-one is `<TODO: decide after reading SeatRosterMessage's layout and its version handling>`. Keep
-`MaxPlayers = 16` as the shared ceiling (Decision 4). Use "team id", never "faction" or "side"
-(`CONTEXT.md`).
+**Approach.** `NetSeat` gains `Pilot` (`NetPilot.Human`/`Bot`), `Skill` (`NetBotSkill`
+Novice/Veteran/Ace, values 0/1/2), `IsBot`, and `IsLocal` is renamed `FlownHere` with a derived
+`HasPane => FlownHere && Pilot == Human`. The rename made the compiler list every reader, each of
+which now names the claim it means. `NetSeats.Bot(hostPeer, seat, callsign, plane, skill, team)`
+makes a bot seat (flown here, no pane, callsign cut by `SeatRosterMessage.Carried`). The roster
+keeps its 20-byte entry: bit 5 is the bot, bits 6 and 7 the tier; a reader refuses tier 3 or skill
+bits on a person, and a patch-older build reads a bot as a host-owned seat. No version bump, since
+the wire stays readable by the old layout. `Validate` now requires at least one seat with a pane
+(was: flown here), a person at seat 0, and every bot owned and flown where seat 0 is (the host on
+every copy); `WellFormed` refuses a bot at seat 0 or a bot entry without the host bit; a guest
+never flies a bot entry whatever its handshake run says. `LocalOrdinal` and `LocalSeatCount`
+count panes, `FliesOnTeam` counts persons only, and `NetSeats.LeavingWith`/`LeavesWithPeer` (a
+person flown elsewhere) decide a guest's leave, so no bot seat ever leaves with a peer. Bots are
+skipped by `SessionVoices` (Decision 15). `MaxPlayers = 16` unchanged.
 
-**Model recommendation.** `<TODO: not settled in the session>`
+**Model recommendation.** Opus: a wide consumer audit across `Net`, `Launch` and `Session` where a
+missed reader fails silently rather than at the compiler.
 
-**Verify.** A unit round-trip of the roster message with mixed human and bot seats; `net-seats`
-still green; `<TODO: the engine suite that proves a bot seat builds no pane on host or guest>`.
+**Verify.** `NetMessagesTests.SeatRosterCarriesBotsAndTheirSkillBesideTheOtherFlags` (mixed round
+trip, flag bits, refusals); `NetSeatTests` (bot seat claims, host roster and guest copy with bots,
+bot at 0 or off the host refused, pane ordinal skips a bot, a guest's leave never takes a bot);
+`NetSessionTests` (a guest reads the host's bots as host seats it does not fly, a bot does not put
+its host on its team's chat, a bot at seat 0 or off the host is malformed). `net-seats` now seats a
+host bot beside the pane and two guests and checks it is built paneless with no menu pick and no
+pose buffer. The guest side needs no suite of its own: its copy reads the bot as a seat flown
+elsewhere (unit), which is the remote-seat path `net-seats` already covers. `FillSeatRigs` itself
+is reached only through a session build; its pane test is `HasPane`, the rule `LocalOrdinal`'s
+unit covers, and A3's first bot rig is where a live session shows it.
 
 **⚠ Traps.** `IsLocal` has many readers; a missed one silently gives a bot a pane or a human no
 input. The `NetNamespaceDependency` test confines engine types to the carriers
 (`docs/architecture/Net.md:261-264`), so the pilot kind stays engine-free in `Net/`.
+
+**Verified.** <pending orchestrator run>
 
 ## A2 ❌ `VersusMatch` keys its scores by pilot, so a row survives its seat being reused
 

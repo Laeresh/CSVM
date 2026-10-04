@@ -271,7 +271,7 @@ internal sealed class SessionNet
 
         var linked = net.Peers;
         StartGate = net.IsHost
-            ? Net.NetStartGate.Host(Seats.Where(s => !s.IsLocal && linked.Contains(s.PeerId))
+            ? Net.NetStartGate.Host(Seats.Where(s => !s.FlownHere && linked.Contains(s.PeerId))
                 .Select(s => s.PeerId).Distinct())
             : StartGate ?? Net.NetStartGate.Guest(net.HostPeer);
         net.On<Net.StartGateMessage>(TakeStartWord);
@@ -454,7 +454,7 @@ internal sealed class SessionNet
         World = new NetWorldLink(net, new NetWorldSeats
         {
             SeatOfShooter = SeatOfShooter,
-            IsLocal = seat => seat >= 0 && seat < Seats.Count && Seats[seat].IsLocal,
+            IsLocal = seat => seat >= 0 && seat < Seats.Count && Seats[seat].FlownHere,
             ShooterOfSeat = seat => seat >= 0 && seat < _seatRigs.Count ? _seatRigs[seat].Controller?.PlayerIndex : null,
             WeaponIndex = weapon => _weaponWire.TryGetValue(weapon.Id, out int index) ? index : -1,
             WeaponAt = index => _weaponDefs is { } defs && index >= 0 && index < defs.All.Count ? defs.All[index] : null,
@@ -526,7 +526,7 @@ internal sealed class SessionNet
 
         for (int i = 0; i < Seats.Count && i < _seatRigs.Count; i++)
         {
-            if (!Seats[i].IsLocal || _seatRigs[i].Controller is not { } flown)
+            if (!Seats[i].FlownHere || _seatRigs[i].Controller is not { } flown)
             {
                 continue;
             }
@@ -580,7 +580,7 @@ internal sealed class SessionNet
             if (_seatRigs[i].Controller is { } plane)
             {
                 var p = plane.WorldPosition;
-                line.Append(inv, $" | seat {i} {(Seats[i].IsLocal ? "own" : "copy")} {p.X:0.000} {p.Y:0.000} {p.Z:0.000}");
+                line.Append(inv, $" | seat {i} {(Seats[i].FlownHere ? "own" : "copy")} {p.X:0.000} {p.Y:0.000} {p.Z:0.000}");
             }
         }
 
@@ -603,7 +603,7 @@ internal sealed class SessionNet
     /// reaches this through its wreck playing out locally, and reports nothing.</summary>
     public void ReportDeath(int seat, int? killer)
     {
-        if (Link is not { } net || seat < 0 || seat >= Seats.Count || !Seats[seat].IsLocal)
+        if (Link is not { } net || seat < 0 || seat >= Seats.Count || !Seats[seat].FlownHere)
         {
             return;
         }
@@ -671,7 +671,7 @@ internal sealed class SessionNet
 
     // The seat list the roster, the spawn walk and the versus board are sized by. A pane-less rig
     // carries no camera and parents nothing into a pane, which is what makes HumanFlightAdapter
-    // skip every view, device and listener for it.
+    // skip every view, device and listener for it. A bot seat flown here takes one too.
     private void FillSeatRigs(Node3D worldRoot)
     {
         _seatRigs.Clear();
@@ -688,7 +688,7 @@ internal sealed class SessionNet
             // ⚠ A pane takes its SEAT's index, not its pane position. Seat index is the identity
             // the whole field agrees on, and a guest's own pane is rarely seat 0. Leaving the pane
             // number here would mark the wrong opponent and key the wrong score row.
-            var rig = seat.IsLocal && locals < _rigs.Count
+            var rig = seat.HasPane && locals < _rigs.Count
                 ? _rigs[locals++]
                 : new PlayerRig { Camera = null!, HudParent = worldRoot, VisualLayer = 0 };
             rig.Index = seat.SeatIndex;
@@ -728,7 +728,7 @@ internal sealed class SessionNet
         }
 
         rig.HitRouter = hit => RouteHit(seat, hit);
-        if (!Seats[seat].IsLocal)
+        if (!Seats[seat].FlownHere)
         {
             return;
         }
@@ -813,14 +813,14 @@ internal sealed class SessionNet
         // Whoever owns the shooter decides, and the host stands in for every round no seat
         // fired (an AI, a world emplacement). Exactly one machine ever claims a hit.
         bool decidesHere = shooterSeat >= 0 && shooterSeat < Seats.Count
-            ? Seats[shooterSeat].IsLocal
+            ? Seats[shooterSeat].FlownHere
             : net.IsHost;
         if (!decidesHere)
         {
             return true;
         }
 
-        if (Seats[victimSeat].IsLocal)
+        if (Seats[victimSeat].FlownHere)
         {
             return false;
         }
@@ -846,7 +846,7 @@ internal sealed class SessionNet
     private void TakeHit(in Net.HitMessage hit)
     {
         if (_weaponDefs is not { } defs || hit.VictimSeat >= _seatRigs.Count
-            || hit.Weapon >= defs.All.Count || !Seats[hit.VictimSeat].IsLocal
+            || hit.Weapon >= defs.All.Count || !Seats[hit.VictimSeat].FlownHere
             || _seatRigs[hit.VictimSeat].Controller is not { } victim)
         {
             return;
@@ -872,7 +872,7 @@ internal sealed class SessionNet
 
         for (int seat = 0; seat < _seatRigs.Count && seat < Seats.Count; seat++)
         {
-            if (Seats[seat].IsLocal && _seatRigs[seat].Controller is { Damage: { } damage } && damage.TakeChanged())
+            if (Seats[seat].FlownHere && _seatRigs[seat].Controller is { Damage: { } damage } && damage.TakeChanged())
             {
                 net.Broadcast(new Net.DamageMessage((byte)seat, PoolsOf(damage)), Net.NetChannels.Events);
             }
@@ -1005,12 +1005,12 @@ internal sealed class SessionNet
     }
 
     // A guest's link dropped on the host. Each seat it flew leaves the mission, here and on every
-    // other guest, and the mission goes on without it.
+    // other guest, and the mission goes on without it. A bot seat never leaves with a guest.
     private void OnPeerLeft(int peer)
     {
-        for (int seat = 0; seat < Seats.Count; seat++)
+        foreach (int seat in Net.NetSeats.LeavingWith(Seats, peer))
         {
-            if (!Seats[seat].IsLocal && Seats[seat].PeerId == peer && TakeSeatLeft(seat))
+            if (TakeSeatLeft(seat))
             {
                 World?.SendSeatLeft(seat);
             }
@@ -1020,7 +1020,7 @@ internal sealed class SessionNet
     // Takes one departed guest's seat out of play and names it in every pane's message stack.
     private bool TakeSeatLeft(int seat)
     {
-        if (seat < 0 || seat >= Seats.Count || Seats[seat].IsLocal || !_seatsLeft.Add(seat))
+        if (seat < 0 || seat >= Seats.Count || !Net.NetSeats.LeavesWithPeer(Seats[seat]) || !_seatsLeft.Add(seat))
         {
             return false;
         }

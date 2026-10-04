@@ -463,7 +463,7 @@ internal static class NetCombatSuites
             {
                 PeerId = i,
                 SeatIndex = i,
-                IsLocal = i == 0,
+                FlownHere = i == 0,
                 Callsign = i == 0 ? "host" : $"guest{i}",
                 PlaneNode = Airframes[i % Airframes.Length],
             };

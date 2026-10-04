@@ -1,9 +1,34 @@
 namespace CSVM.Net;
 
+/// <summary>Who flies a seat: a person at some machine, or a computer pilot its host flies. The
+/// original has no computer player, so a bot seat is a remake-only rule.</summary>
+public enum NetPilot : byte
+{
+    /// <summary>A person, at the machine that owns the seat.</summary>
+    Human = 0,
+
+    /// <summary>A computer pilot, always flown on the host and never given a pane.</summary>
+    Bot = 1,
+}
+
+/// <summary>A bot's skill tier, the Instant Action difficulty's three words (<c>IDS_IA_DIFFICULTY</c>,
+/// docs/formats/instant-action.md). The numeric values are the roster's two wire bits.</summary>
+public enum NetBotSkill : byte
+{
+    /// <summary>Two points off every rating.</summary>
+    Novice = 0,
+
+    /// <summary>The ratings as rolled.</summary>
+    Veteran = 1,
+
+    /// <summary>Two points on every rating.</summary>
+    Ace = 2,
+}
+
 /// <summary>
 /// One pilot's place in a network match, shaped like the record the original allocates per player.
-/// The peer it is addressed by, its team, whether this machine flies it, and its callsign. Then
-/// the airframe and paint it chose, its seat index and its signed score. That index is the identity
+/// The peer it is addressed by, its team, who flies it and where, and its callsign. Then the
+/// airframe and paint it chose, its seat index and its signed score. That index is the identity
 /// every seat-indexed system already keys on. A remote pilot therefore indexes spawns, scores,
 /// markers and colours exactly as a splitscreen pane does.
 /// The record is what a session hands to and takes from the wire; the bytes are the vocabulary's.
@@ -11,7 +36,8 @@ namespace CSVM.Net;
 public sealed record NetSeat
 {
     /// <summary>The transport peer this seat is reached through, the match key. A seat on this
-    /// machine carries the local peer's own id.</summary>
+    /// machine carries the local peer's own id, and a bot seat its host's, so one peer can own
+    /// several seats.</summary>
     public int PeerId { get; init; }
 
     /// <summary>0-based seat number, below <see cref="NetSeats.SeatCapacity"/>. The original's own
@@ -24,10 +50,24 @@ public sealed record NetSeat
     /// not a team id, so no hostility test reads it as one.</summary>
     public int TeamId { get; init; }
 
-    /// <summary>Whether this machine simulates the seat. A local seat gets a pane, a camera, a
-    /// HUD, a listener and an input device. A remote one gets none of those, and everything
-    /// else.</summary>
-    public bool IsLocal { get; init; }
+    /// <summary>Whether this machine simulates the seat: it sends the seat's state, fire, damage
+    /// and death, and applies the hits on it. A bot seat is flown on its host. Whether the seat
+    /// also gets a pane is <see cref="HasPane"/>, a separate claim.</summary>
+    public bool FlownHere { get; init; }
+
+    /// <summary>Who flies the seat. A bot seat belongs to the host's peer.</summary>
+    public NetPilot Pilot { get; init; }
+
+    /// <summary>A bot's skill tier. A human seat carries the default and nothing reads it.</summary>
+    public NetBotSkill Skill { get; init; } = NetBotSkill.Veteran;
+
+    /// <summary>Whether a computer pilot flies the seat.</summary>
+    public bool IsBot => Pilot == NetPilot.Bot;
+
+    /// <summary>Whether a person sits at this seat on this machine. Such a seat gets a pane, a
+    /// camera, a HUD, a listener, an input device and a place in the menu's local picks. A seat
+    /// flown here by a bot gets none of those.</summary>
+    public bool HasPane => FlownHere && Pilot == NetPilot.Human;
 
     /// <summary>What the scoreboard and the kill line call this pilot.</summary>
     public string Callsign { get; init; } = "";

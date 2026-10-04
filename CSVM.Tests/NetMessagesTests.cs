@@ -345,6 +345,40 @@ public class NetMessagesTests
         Assert.Equal(1 | (CoopPickMessage.MaxVoice << 1) | (1 << 4), buffer[SeatRosterMessage.PrefixSize + 2]);
     }
 
+    // A bot rides bit 5 of the flags byte and its skill tier bits 6 and 7. The entry keeps its 20
+    // bytes, and a build that reads the host bit alone still finds the host.
+    [Fact]
+    public void SeatRosterCarriesBotsAndTheirSkillBesideTheOtherFlags()
+    {
+        var seats = new List<NetSeatEntry>
+        {
+            new(0, 1, 3, true, "host", Voice: 2, Unnamed: true),
+            new(1, 2, 0, false, "guest"),
+            new(2, 1, 7, true, "Novice", Pilot: NetPilot.Bot, Skill: NetBotSkill.Novice),
+            new(3, 2, 1, true, "Veteran", Pilot: NetPilot.Bot, Skill: NetBotSkill.Veteran),
+            new(4, 0, 2, true, "Ace", Voice: 1, Pilot: NetPilot.Bot, Skill: NetBotSkill.Ace),
+        };
+        var buffer = new byte[SeatRosterMessage.SizeFor(seats.Count)];
+
+        Assert.Equal(SeatRosterMessage.PrefixSize + (20 * seats.Count), new SeatRosterMessage(5u, seats).Write(buffer));
+        Assert.True(SeatRosterMessage.TryRead(buffer, out var got));
+        Assert.Equal(seats, got.Seats.ToList());
+
+        int Flags(int entry) => buffer[SeatRosterMessage.PrefixSize + (entry * SeatRosterMessage.EntrySize) + 2];
+        Assert.Equal(1 | (2 << 1) | (1 << 4), Flags(0));
+        Assert.Equal(0, Flags(1));
+        Assert.Equal(1 | (1 << 5), Flags(2));
+        Assert.Equal(1 | (1 << 5) | (1 << 6), Flags(3));
+        Assert.Equal(1 | (1 << 1) | (1 << 5) | (2 << 6), Flags(4));
+
+        // ABLE-TO-FAIL CONTROL: a tier past Ace, or skill bits on a person, is no roster this writes.
+        buffer[SeatRosterMessage.PrefixSize + (4 * SeatRosterMessage.EntrySize) + 2] = (byte)(1 | (1 << 5) | (3 << 6));
+        Assert.False(SeatRosterMessage.TryRead(buffer, out _));
+        new SeatRosterMessage(5u, seats).Write(buffer);
+        buffer[SeatRosterMessage.PrefixSize + SeatRosterMessage.EntrySize + 2] = 1 << 6;
+        Assert.False(SeatRosterMessage.TryRead(buffer, out _));
+    }
+
     // The callsign field is fixed width, so a long name has to lose its tail rather than the
     // roster losing its alignment.
     [Fact]

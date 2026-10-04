@@ -1341,7 +1341,7 @@ public partial class Launcher : Node3D
                 PeerId = wire.LocalPeer,
                 SeatIndex = seats.Count,
                 TeamId = teamOf(wire.LocalPeer),
-                IsLocal = true,
+                FlownHere = true,
                 Callsign = i == 0 && hostName.Length > 0 ? hostName : UI.Boards.SplitScreen.PlayerTag(i),
                 Unnamed = i == 0 && hostName.Length == 0,
                 PlaneNode = planes[i],
@@ -1392,14 +1392,15 @@ public partial class Launcher : Node3D
         var picks = (wire as Net.NetLobby)?.PickBuilds;
         for (int seat = 0; seat < roster.Count; seat++)
         {
-            if (roster[seat].IsLocal)
+            if (roster[seat].HasPane)
             {
                 int menu = Net.NetSeats.LocalOrdinal(roster, seat);
                 builds[seat] = menu >= 0 && menu < customs.Count ? CustomPlaneWire.Build(customs[menu]) : null;
                 continue;
             }
 
-            if (rules is not { } admitting || picks == null || !picks.TryGetValue(roster[seat].PeerId, out var build))
+            // A bot flies a stock plane, and its peer is the host's, whose picks name no bot.
+            if (roster[seat].IsBot || rules is not { } admitting || picks == null || !picks.TryGetValue(roster[seat].PeerId, out var build))
             {
                 continue;
             }
@@ -1429,7 +1430,7 @@ public partial class Launcher : Node3D
         var guests = door.CoopGuests;
         for (int seat = 0; seat < roster.Count; seat++)
         {
-            if (roster[seat].IsLocal)
+            if (roster[seat].FlownHere)
             {
                 continue;
             }
@@ -2838,7 +2839,7 @@ public partial class Launcher : Node3D
             {
                 PeerId = _netWire.LocalPeer,
                 SeatIndex = seats.Count,
-                IsLocal = true,
+                FlownHere = true,
                 Callsign = UI.Boards.SplitScreen.PlayerTag(i),
                 Unnamed = i == 0,
                 PlaneNode = i < _spec.PlaneNames.Count ? _spec.PlaneNames[i] : _spec.PlaneName,
@@ -3507,8 +3508,8 @@ public sealed class LauncherContext
     public required int[][]? MenuPads { get; init; }
 
     /// <summary>The whole network match's seat roster, local panes and remote guests alike, or
-    /// null outside a network match. A seat here that is not <see cref="Net.NetSeat.IsLocal"/>
-    /// gets an aircraft, a spawn slot, a score row and a marker colour, and no pane.</summary>
+    /// null outside a network match. A seat here without <see cref="Net.NetSeat.HasPane"/> gets an
+    /// aircraft, a spawn slot, a score row and a marker colour, and no pane.</summary>
     public IReadOnlyList<Net.NetSeat>? NetSeats { get; init; }
 
     /// <summary>What the host handed this guest at join, or null on a host and outside a match.

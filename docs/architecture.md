@@ -913,8 +913,8 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/NetClockSlew.cs`, a guest's offset onto host time, walked to each fresh reading over a bounded window rather than written, with one-way readings read forward by half the measured round trip.
 - `src/Net/NetClockPing.cs`, the guest's question and the host's answer that measure the round trip, asked every ten seconds as the original's ping is.
 - `src/Net/NetHandshake.cs`, what a host hands a joining guest before either flies: the master seed every stream derives from, and the host's session clock at send.
-- `src/Net/NetSeat.cs`, one pilot's place in a match: peer, team, local flag, callsign, airframe, paint, seat index and signed score, with the seat index as the whole identity.
-- `src/Net/NetSeats.cs`, the roster's rules: eight pilots admitted behind sixteen-wide tables, the original's authored seat colours, and what makes a roster well formed.
+- `src/Net/NetSeat.cs`, one pilot's place in a match: peer, team, person or bot with a bot's skill, flown here and has a pane as two claims, callsign, airframe, paint, seat index and signed score, with the seat index as the whole identity.
+- `src/Net/NetSeats.cs`, the roster's rules: sixteen pilots admitted behind sixteen-wide tables, the original's authored seat colours, a host's bot seats, and what makes a roster well formed.
 - `src/Net/RemotePoseBuffer.cs`, one remote aircraft's received samples and the pose to draw it at now: placed by sequence on the sender's timeline, played out a fixed delay behind at the fitted sender clock rate, extrapolated along the newest velocity up to a cap, then held, with a tally of its reads and misses.
 - `src/Net/AircraftStateCadence.cs`, when an owner puts its own aeroplane on the wire, in simulation steps, and the per-seat sequence each sample carries.
 - `src/Net/MatchStateCadence.cs`, when a host repeats the match clock, in simulation steps: a second between ticks, and every change sent where it happens instead.

@@ -48,7 +48,9 @@ internal static class NetSeatSuites
         + "keeps a score row for a seat flown elsewhere and the rotation holds its opening entry, "
         + "the roster's own airframe pick beats this machine's launch flags, and every remote seat "
         + "is built with no HUD in a pane, no pad, no keyboard, no pause key, no target selection "
-        + "and no camera-anchored cue, while the local seat in the same build has all of them")]
+        + "and no camera-anchored cue, while the local seat in the same build has all of them; a "
+        + "bot seat this host flies is built paneless the same way, with no menu pick, and keeps "
+        + "no pose buffer because its pose is simulated here")]
     internal static void RemoteSeatsWithoutPanes(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -66,20 +68,21 @@ internal static class NetSeatSuites
         });
         var picker = new SpawnPicker(spec);
         var table = picker.LoadSpawnList(missionZrdr, spec.Scenario);
-        if (table is not { Count: >= 3 })
+        if (table is not { Count: >= 4 })
         {
             throw new SuiteSkippedException($"{ctx.Chapter}/{MpMission} authors no usable net.zrd table");
         }
 
         // Seat 0 is this machine's pane; seats 1 and 2 are flown elsewhere. Seat 1 names its own
-        // airframe, which is how a peer's pick reaches this build.
+        // airframe, which is how a peer's pick reaches this build. Seat 3 is a bot this host flies.
         var roster = new NetSeat[]
         {
-            new() { PeerId = 1, SeatIndex = 0, IsLocal = true, Callsign = "host" },
+            new() { PeerId = 1, SeatIndex = 0, FlownHere = true, Callsign = "host" },
             new() { PeerId = 2, SeatIndex = 1, Callsign = "guest1", PlaneNode = RemotePlane },
             new() { PeerId = 3, SeatIndex = 2, Callsign = "guest2" },
+            NetSeats.Bot(1, 3, "bot", RemotePlane),
         };
-        NetSeats.Validate(roster);
+        NetSeats.Validate(roster, hostPeer: 1);
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var textures = new TextureArchive(texturesPath);
@@ -92,6 +95,7 @@ internal static class NetSeatSuites
             new() { Index = 0, Camera = ctx.Camera, HudParent = pane, Viewport = pane },
             new() { Index = 1, Camera = null!, HudParent = ctx.Host },
             new() { Index = 2, Camera = null!, HudParent = ctx.Host },
+            new() { Index = 3, Camera = null!, HudParent = ctx.Host },
         };
         FlightRoster? flightRoster = null;
         try
@@ -142,6 +146,16 @@ internal static class NetSeatSuites
                 $"and nothing that needs a camera or a pane is built for it");
             ctx.Check(remotes.All(p => p.IsHumanPiloted),
                 $"while it stays a person's aeroplane, not an AI one (the flight model's own force path)");
+            ctx.Check(remotes.All(p => p.RemoteOwned),
+                $"and it takes its pose from the samples its owner sends");
+
+            // A bot this host flies: flown here, so no pose buffer, and paneless, so none of the above.
+            var bot = pilots[3];
+            ctx.Check(!bot.RemoteOwned && bot.HudParent == null && bot.LocalPlayer == -1,
+                $"the bot seat is simulated here with no pane and no menu pick (remote-owned {bot.RemoteOwned}, local player {bot.LocalPlayer})");
+            ctx.Check(!bot.UseKeyboard && bot.PadDevices is { Length: 0 } && !bot.AllowPause
+                      && bot.Targeting == null && bot.VersusHud == null && bot.Photograph == null && bot.SpeedCue == null,
+                $"and reads no keyboard, pad or pause key, with nothing built that needs a camera or a pane");
 
             // ABLE-TO-FAIL CONTROL: the local seat in this same build takes every one of those.
             // The assertions above cannot be passing because the roster built nothing at all.
@@ -199,8 +213,8 @@ internal static class NetSeatSuites
         var roster = new NetSeat[]
         {
             new() { PeerId = 1, SeatIndex = 0, Callsign = "host" },
-            new() { PeerId = 2, SeatIndex = 1, IsLocal = true, Callsign = "P1" },
-            new() { PeerId = 2, SeatIndex = 2, IsLocal = true, Callsign = "P2" },
+            new() { PeerId = 2, SeatIndex = 1, FlownHere = true, Callsign = "P1" },
+            new() { PeerId = 2, SeatIndex = 2, FlownHere = true, Callsign = "P2" },
         };
         NetSeats.Validate(roster);
 

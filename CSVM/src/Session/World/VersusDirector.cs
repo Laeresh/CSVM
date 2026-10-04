@@ -579,7 +579,10 @@ public sealed class VersusDirector
     }
 
     private bool IsLocal(int seat) =>
-        seat >= 0 && seat < _field.NetSeats.Count && _field.NetSeats[seat].IsLocal;
+        seat >= 0 && seat < _field.NetSeats.Count && _field.NetSeats[seat].FlownHere;
+
+    private bool HasPane(int seat) =>
+        seat >= 0 && seat < _field.NetSeats.Count && _field.NetSeats[seat].HasPane;
 
     // A splitscreen match's death in every pane, the seats named by their player tags. The match
     // handler subscribed first, so the death is already counted for the lives line.
@@ -777,7 +780,7 @@ public sealed class VersusDirector
         int deaths = match.DeathsOf(seat);
         bool died = deaths > _livesSeen[seat];
         _livesSeen[seat] = deaths;
-        bool local = _field.NetSeats.Count == 0 || IsLocal(seat);
+        bool local = _field.NetSeats.Count == 0 || HasPane(seat);
         if (died && local && pilot.MessageStack is { } stack)
         {
             HudMessages.PostLivesLeft(stack, _field.Strings, match.Lives - deaths);

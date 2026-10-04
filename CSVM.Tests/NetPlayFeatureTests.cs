@@ -1040,7 +1040,7 @@ public class NetPlayFeatureTests
         joined.Step(0.016);
         Assert.True(joined.Joined);
         Assert.Equal(2, joined.LocalSeatCount);
-        Assert.Equal(new[] { false, true, true }, joined.Seats.Select(s => s.IsLocal));
+        Assert.Equal(new[] { false, true, true }, joined.Seats.Select(s => s.FlownHere));
     }
 
     // Every seat a guest flies counts against the four humans. Seats a guest asked for before the
