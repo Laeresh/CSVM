@@ -1,11 +1,8 @@
 # Stunt race: a time-attack Danger Zone race, solo, split screen and network
 
-**QUEUED PLAN** (written 2026-10-03). Work starts in the release after 0.3.0, alongside
-`PLAN-bots.md`; until then PROJECT_CONTEXT.md's "Current status" does not name it, and the session
-that starts Wave A flips this banner to ACTIVE PLAN and points "Current status" at it. When every
-item lands, the closing commit deletes this file, records the completion in its message, and clears
-the "Current status" pointer; any live prose linking this file by path is unlinked in the same
-commit.
+**ACTIVE PLAN** (written 2026-10-03), worked alongside `PLAN-bots.md`. When every item lands, the
+closing commit deletes this file, records the completion in its message, and clears the "Current
+status" pointer; any live prose linking this file by path is unlinked in the same commit.
 
 This plan turns the stunt run into a Trackmania-style time attack and runs it in three places: a
 solo Instant Action stunt run, the split screen stunt race, and a new network Stunt Race. A race is
@@ -19,9 +16,8 @@ player has no respawn either, so the respawn and restart rules below are this po
 
 The plan is drawn from `BL-314` (backlog.md), whose countdown shape (a rolling start on rails, GO
 equal to today's spawn state, `--det` untouched) and its four traps are carried into A2 unchanged.
-`BL-314` was read in this session but not re-verified against `git log --grep=BL-314` and the code;
-<TODO: re-verify still-open against git log --grep=BL-314 + the code before Wave A starts>. When
-this plan goes ACTIVE, `BL-314`'s entry shrinks to a pointer at it.
+`BL-314` is still open (no landing under its id, no countdown in `StuntMission.cs` or
+`StuntRace.cs`), and its entry is a pointer at this plan.
 
 Out of scope: bots in a race (a follow-up to `PLAN-bots.md` once it lands, Decision 14), joining a
 race in progress (Decision 13), race ghosts or replays of a best run, and any race mode in the
