@@ -72,7 +72,7 @@ The engine side of one Instant Action mission, behind `GameSession`'s one nullab
 field: a plain sealed class that builds no node of its own, so every actor it makes parents under
 the handed world root. `TryCreate` takes the wizard's def or `--ia=<path>`; `BuildActors` is the
 contiguous actor phase (the chapter's first patrol net, the ace, the wingman fan and its escort
-chain, every configured wave built inert at the world origin, each actor's walk seated where it spawns and kept on activation, each actor named on its `AiSpawn.PilotName`: the ace's `ace_name`, a wave's `enemy_name`, a wingman slot's fixed pilot); `Step` ticks the sequencer and activates what it returns; `WireEndConditions` routes each mode's own win signal (none for a multi-seat stunt run, whose race window ends it and whose pilots may restart in flight), the lives
+chain, every configured wave built inert at the world origin, each actor's walk seated where it spawns and kept on activation, each actor named on its `AiSpawn.PilotName`: the ace's `ace_name`, a wave's `enemy_name`, a wingman slot's fixed pilot); `Step` ticks the sequencer and activates what it returns; `WireEndConditions` routes each mode's own win signal (none for a multi-seat stunt run, whose race window ends it, whose pilots may restart in flight and whose lives are waived, so it cannot be lost), the lives
 ledger and the wrap-up, which it reaches only through `IaWrapupSnapshot.cs`'s seam (the board `Launch/SessionBoards.cs` builds, or the menu page), snapshotting the four counters at the ending and holding the pilots' seats (not the world, not the cameras) until the hold runs out and the board is due: a win keeps the stick and loses the commands, a loss loses both, and a hull lost inside the hold spends no life and takes no pane. The decoded rules stay engine-free in
 `InstantActionRuntime.cs` and `InstantActionWaves.cs`; this class owns every `ia:` log line, and `Scenario`, `IsStuntRun` and `PlayerPlaneOverride` settle the mission's spawn table, its stunt objective and the aircraft it forces on the humans.
 
@@ -96,7 +96,7 @@ it travels to the Original presentation's page inside `UI/Menu/MenuReturnDestina
 Owns one Instant Action mission's actor set: the loaded `InstantActionDef`, the ace's spawn draw and
 rating, the wingmen's fan placement, each wave's per-member draws, the objective-zeppelin selection,
 and the mission's end with the decoded `WrapupHoldS` that `Advance` spends before the `WrapupDue`
-cue for the board. The static, engine-free helpers `InstantActionDirector` calls are here
+cue for the board; a race's `WaiveLives` makes every death free and leaves the def's count. The static, engine-free helpers `InstantActionDirector` calls are here
 (`ChooseAceSpawn`, `RepresentativeRating`, `WingmanSlotFor`/`FlownWingmen`, `RandomPilotStats`/
 `ResolveWaveAccentId`, `VoiceAccentIds` (voice prewarm), the zeppelin lookups, `ShotPercent`).
 The end half holds no engine type and calls no `GD.*`, like `VersusMatch`, and the director owns

@@ -547,6 +547,10 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     // leaving and a mission type change both reach it on the next frame.
     private bool RaceTimeShown => _instantAction.OffersRaceWindow(_setup.Seats.Count);
 
+    // The remake-only box the page hides right now, exactly one of the two. A race spends no
+    // lives, so the lives box gives way while the race time box shows.
+    private string HiddenRemakeKey => RaceTimeShown ? LivesKey : RaceTimeKey;
+
     private int SeatIndex(PlayerSeat seat)
     {
         var seats = _setup.Seats;
@@ -667,7 +671,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     }
 
     // The rows: an open list's items alone while one is open, else the screen's widgets. A seat
-    // leaving under the open race time list takes the list with it.
+    // joining or leaving under the open list of the box it hides takes the list with it.
     private void BuildInstantActionRows(List<OriginalRow> rows)
     {
         var screen = _layout.Screen(InstantActionSection);
@@ -676,7 +680,8 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             return;
         }
 
-        bool orphaned = _iaOpen == RaceTimeKey && !RaceTimeShown;
+        string hidden = HiddenRemakeKey;
+        bool orphaned = _iaOpen == hidden;
         if (orphaned)
         {
             _iaOpen = null;
@@ -685,21 +690,21 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         if (!AddOpenListRows(screen, rows))
         {
             BuildInstantActionWidgets(screen, rows);
-            LiftFocusOffHiddenRaceTime(rows, orphaned);
+            LiftFocusOffHiddenBox(rows, hidden, orphaned);
         }
     }
 
-    // A focus left on the hidden race time row moves to the nearest live box above it. So does one
-    // left in its list as the list closed. The shell's own fallback is the first live row on the
-    // page, which is the contents window on the far page.
-    private void LiftFocusOffHiddenRaceTime(List<OriginalRow> rows, bool orphaned)
+    // A focus left on the hidden remake-only row moves to the nearest live box above it. So does
+    // one left in its list as the list closed. The shell's own fallback is the first live row on
+    // the page, which is the contents window on the far page.
+    private void LiftFocusOffHiddenBox(List<OriginalRow> rows, string hidden, bool orphaned)
     {
-        if (RaceTimeShown || _host.DialogOpen)
+        if (_host.DialogOpen)
         {
             return;
         }
 
-        int at = rows.FindIndex(r => r.Key == RaceTimeKey);
+        int at = rows.FindIndex(r => r.Key == hidden);
         if (at < 0 || (!orphaned && _host.FocusedRow != at))
         {
             return;
@@ -829,13 +834,16 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
 
     // The lives box, this port's own control in the screen's dropdown idiom. It is no enemy
     // control, so the ace duel leaves it live where it blanks the wave boxes. No preset carries a
-    // lives value, so a contents row leaves it alone.
+    // lives value, so a contents row leaves it alone. A race spends no lives, so this box hides
+    // while the race time box shows. It hides the race time box's way, its count kept.
     private void AddLives(MenuLayoutScreen screen, List<OriginalRow> rows)
     {
         var list = LivesDropdown();
         var box = LivesBox(screen);
-        rows.Add(new OriginalRow(LivesKey, list.Items[Math.Clamp(list.Current, 0, list.Items.Count - 1)],
-            OriginalRowKind.Dropdown, box.X, box.Y, box.Width, box.Height, true, 1, LivesArrow(screen)));
+        bool shown = HiddenRemakeKey != LivesKey;
+        string value = shown ? list.Items[Math.Clamp(list.Current, 0, list.Items.Count - 1)] : string.Empty;
+        rows.Add(new OriginalRow(LivesKey, value, OriginalRowKind.Dropdown, box.X, box.Y, box.Width, box.Height,
+            shown, shown ? 1 : -1, LivesArrow(screen), shown));
     }
 
     // The race time box, this port's own control for the race window in the lives box's idiom. Its
@@ -1075,11 +1083,10 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                     }
                 });
             case LivesKey:
-                return LivesDropdown();
             case RaceTimeKey:
-                // Hidden, the box is no dropdown at all, so no scripted open or sideways step can
+                // Hidden, a box is no dropdown at all, so no scripted open or sideways step can
                 // reach a list the page does not show.
-                return RaceTimeShown ? RaceTimeDropdown() : null;
+                return key == HiddenRemakeKey ? null : key == LivesKey ? LivesDropdown() : RaceTimeDropdown();
             case EnvironmentKey:
                 return new DropdownList(Names(InstantActionFeature.Environments, e => e.Name), ia.EnvironmentIndex,
                     i => InstantActionFeature.EnvironmentAllowed(i, ia.MissionType.Key), i =>
@@ -1311,8 +1318,13 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             AddText(screen, lines, "IA_T_PILOTPLANETITLE", LabelFont);
             AddText(screen, lines, "IA_T_WINGMANTITLE", LabelFont);
             // The lives box's own title, written here rather than through a layout row because the
-            // section authors none. It stands in the column and the ink every authored title takes.
-            lines.Add(new BoardLine(LivesLabelText, LivesTitleX(screen), LivesBox(screen).Y, 0f, LabelFont, BoardInk.Heading));
+            // section authors none. It stands in the column and the ink every authored title takes,
+            // and goes with its box in a race.
+            if (HiddenRemakeKey != LivesKey)
+            {
+                lines.Add(new BoardLine(LivesLabelText, LivesTitleX(screen), LivesBox(screen).Y, 0f, LabelFont, BoardInk.Heading));
+            }
+
             AddText(screen, lines, "IA_T_MISSIONTITLE", LabelFont);
             AddText(screen, lines, "IA_T_ENVIRONMENTTITLE", LabelFont);
             if (RaceTimeShown)

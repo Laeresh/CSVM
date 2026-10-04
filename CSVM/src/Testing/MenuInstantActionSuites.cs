@@ -36,7 +36,9 @@ internal static class MenuInstantActionSuites
 
     [Suite("menu-instant-action-journey",
         "Built-in's Instant Action journey pinned end to end: a real LaunchMenu is driven Mode to "
-        + "Environment, the Table of Contents applies a preset, Mission type steps the lives, the "
+        + "Environment, the Table of Contents applies a preset, Mission type steps the lives, a second "
+        + "seat on Stunt Flying hides the stepper, which a race does not spend, and another type or a "
+        + "solo run brings it back with its count, the "
         + "ace duel skips Waves and Wingmen both ways, the wave editor edits a slot live and a new "
         + "militia resets its aircraft, Wingmen hides its aircraft row at zero and opens the "
         + "wingman loadout, the launch leaves as a LaunchExit carrying the built InstantActionDef, "
@@ -55,6 +57,7 @@ internal static class MenuInstantActionSuites
             EnvironmentScreen(ctx, menu);
             TableOfContents(ctx, menu);
             MissionTypeScreen(ctx, menu);
+            RaceSpendsNoLives(ctx, menu, host.Features.Get<PlayerSetupFeature>());
             AceSkip(ctx, menu);
             WavesScreen(ctx, menu);
             WingmenScreen(ctx, menu);
@@ -93,7 +96,9 @@ internal static class MenuInstantActionSuites
         + "aircraft screen by Fly Mission before the launch carries both seats, the remake-only race time box hidden "
         + "on a solo stunt run showing once that pilot joins on the clear line over the enemy block, taking the walk "
         + "between the environment and the enemy count and a sideways step, hiding under another mission type, "
-        + "and its pick riding the def into the session spec")]
+        + "and its pick riding the def into the session spec, while the lives box, which a race does not spend, "
+        + "hides with its title as the pilot joins, the cursor left on it lifting to the box above, and returns "
+        + "with its count under another type")]
     internal static void MenuOriginalInstantAction(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -247,6 +252,34 @@ internal static class MenuInstantActionSuites
         ctx.Check(menu.ShownScreen == "Environment", $"Back returns to Environment ({menu.ShownScreen})");
         menu.Drive(Accept);
         Is(ctx, "and the mission cursor survives it", "Dogfighting a Squadron", menu.ShownRowText);
+    }
+
+    // A multi-seat stunt run is a race, which spends no lives. With a second seat joined the
+    // stepper leaves the Mission screen on Stunt Flying alone. It returns with its count on
+    // another type and once the run is solo again.
+    private static void RaceSpendsNoLives(TestContext ctx, LaunchMenu menu, PlayerSetupFeature setup)
+    {
+        menu.Drive(Down);
+        Is(ctx, "the row under the squadron is the stunt run", "Stunt Flying", menu.ShownRowText);
+        Is(ctx, "a solo stunt run keeps the lives stepper", "Lives   1        ◀ ▶  change", menu.ShownDetail);
+        var guest = setup.Join(new ScriptedSeat());
+        ctx.Check(guest != null && setup.Seats.Count == 2, $"a second pilot joins ({setup.Seats.Count})");
+        Is(ctx, "two seats on a stunt run show no lives", "", menu.ShownDetail);
+        ctx.Check(!menu.ShownFooter.Contains("Lives", StringComparison.Ordinal),
+            $"and the footer no longer names the stepper ({menu.ShownFooter})");
+        menu.Drive(Right);
+        Is(ctx, "a sideways press leaves the hidden count alone", "Stunt Flying", menu.ShownRowText);
+        menu.Drive(Down);
+        Is(ctx, "two seats on another type keep the stepper and its count", "Lives   1        ◀ ▶  change", menu.ShownDetail);
+        menu.Drive(Up);
+        if (guest != null)
+        {
+            setup.Unjoin(guest);
+        }
+
+        Is(ctx, "the stunt run alone again shows the stepper", "Lives   1        ◀ ▶  change", menu.ShownDetail);
+        menu.Drive(Up);
+        Is(ctx, "back on the squadron", "Dogfighting a Squadron", menu.ShownRowText);
     }
 
     private static void AceSkip(TestContext ctx, LaunchMenu menu)
@@ -1054,10 +1087,20 @@ internal static class MenuInstantActionSuites
             && Row(shell, OriginalInstantActionScreen.RaceTimeKey) is { Visible: false, Enabled: false } && !HasLine(shell, "Race Time:"),
             $"a solo stunt run shows no race time box ({ia.MissionType.Key}, {Row(shell, OriginalInstantActionScreen.RaceTimeKey)?.Visible})");
         ctx.Check(StripLines(shell) == 0, $"one seat draws no seat strip over the screen ({StripLines(shell)})");
+        string livesLabel = InstantActionFeature.LivesLabel(ia.Lives);
+        ctx.Check(Row(shell, OriginalInstantActionScreen.LivesKey) is { Visible: true, Enabled: true, Column: 1 } solo && solo.Label == livesLabel
+            && HasLine(shell, "Lives:"),
+            $"a solo stunt run keeps its lives box ({Row(shell, OriginalInstantActionScreen.LivesKey)?.Label})");
+        ctx.Check(shell.InstantAction.PoseLives(ia.Lives) && shell.FocusedKey == OriginalInstantActionScreen.LivesKey,
+            $"the cursor stands on the lives box before the second pilot joins ({shell.FocusedKey})");
         var guest = new ScriptedSeat();
         ctx.Check(setup.Join(guest) != null && host.Seats.Count == 2, $"a second pilot joins on the screen ({host.Seats.Count})");
         ctx.Check(StripLines(shell) == 2, $"and the strip names both seats ({StripLines(shell)})");
-        OriginalRaceTime(ctx, host, seat, shell, ia);
+        ctx.Check(Row(shell, OriginalInstantActionScreen.LivesKey) is { Visible: false, Enabled: false, Column: -1, Label: "" } && !HasLine(shell, "Lives:"),
+            $"a race spends no lives, so the lives box and its title go ({Row(shell, OriginalInstantActionScreen.LivesKey)?.Visible})");
+        ctx.Check(shell.FocusedKey is OriginalInstantActionScreen.WingmenKey or OriginalInstantActionScreen.WingmanPlaneKey,
+            $"and the cursor left on it lifts to the live box above it, not the far page ({shell.FocusedKey})");
+        OriginalRaceTime(ctx, host, seat, shell, ia, livesLabel);
 
         var fly = Row(shell, OriginalInstantActionScreen.FlyMissionKey);
         ctx.Check(fly != null, $"Fly Mission is on screen");
@@ -1091,8 +1134,9 @@ internal static class MenuInstantActionSuites
     // The race time box over the install's layout with a second seat joined on a stunt run. It
     // stands on the clear line above the enemy block, the one the lives box leaves free. The
     // keyboard walk reaches it between the environment and the enemy count, where its line falls.
-    // A sideways step picks the next window, and another mission type hides it with the pick kept.
-    private static void OriginalRaceTime(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, InstantActionFeature ia)
+    // A sideways step picks the next window. Another mission type hides it with the pick kept and
+    // brings the lives box back with its count.
+    private static void OriginalRaceTime(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, InstantActionFeature ia, string livesLabel)
     {
         var rows = shell.Rows;
         int at = -1;
@@ -1139,9 +1183,13 @@ internal static class MenuInstantActionSuites
         ctx.Check(ia.MissionType.Key == "zeppelin_run" && Row(shell, OriginalInstantActionScreen.RaceTimeKey) is { Visible: false, Enabled: false }
             && !HasLine(shell, "Race Time:"),
             $"another mission type hides it ({ia.MissionType.Key}, focus {shell.FocusedKey})");
+        ctx.Check(Row(shell, OriginalInstantActionScreen.LivesKey) is { Visible: true, Enabled: true, Column: 1 } lives && lives.Label == livesLabel
+            && HasLine(shell, "Lives:"),
+            $"and brings the lives box back with its count, two seats on another type spending lives ({Row(shell, OriginalInstantActionScreen.LivesKey)?.Label})");
         Press(host, seat, Left);
-        ctx.Check(ia.MissionType.Key == InstantActionFeature.StuntKey && Row(shell, OriginalInstantActionScreen.RaceTimeKey) is { Visible: true, Label: "10 minutes" },
-            $"and stunt flying brings it back with the pick kept ({Row(shell, OriginalInstantActionScreen.RaceTimeKey)?.Label})");
+        ctx.Check(ia.MissionType.Key == InstantActionFeature.StuntKey && Row(shell, OriginalInstantActionScreen.RaceTimeKey) is { Visible: true, Label: "10 minutes" }
+            && Row(shell, OriginalInstantActionScreen.LivesKey) is { Visible: false },
+            $"and stunt flying brings it back with the pick kept and the lives box gone again ({Row(shell, OriginalInstantActionScreen.RaceTimeKey)?.Label})");
     }
 
     // Whether the composed screen writes a line, at a place when one is given.

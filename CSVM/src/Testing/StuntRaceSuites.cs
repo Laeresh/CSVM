@@ -9,6 +9,7 @@ using CSVM.Flight.Camera;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
 using CSVM.Mech3;
+using CSVM.Session.InstantAction;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
 using CSVM.Spec;
@@ -267,6 +268,195 @@ internal static class StuntRaceSuites
         }
 
         ctx.Note($"a two-seat window ranked by best run, with a restart each and a final run");
+    }
+
+    [Suite("stunt-race-no-lives",
+        "an Instant Action stunt race on two seats built through the session's roster over C1/IA1, "
+        + "its end wired by the director over a two-life def: P1 crashes three times and both crash "
+        + "together, and every crash returns its pilot after the crash camera with no life spent, "
+        + "nobody spectating, the mission never lost and no wrap-up due; the control, the same "
+        + "director wiring with no race over P1 alone on one life, loses on its first crash into "
+        + "spectate and hands the wrap-up to the menu once after the hold")]
+    internal static void StuntRaceSpendsNoLives(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, "C1");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ctx.RequireData(gamezPath, $"C1 gamez");
+        ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
+        ctx.RequireData(ctx.MessagesPath, $"messages.json");
+        var zones = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, Messages.Load(ctx.MessagesPath));
+        if (zones is not { TotalCount: >= 1 })
+        {
+            throw new SuiteSkippedException($"C1/IA1 loads no danger zone");
+        }
+
+        const float RespawnDelay = 0.5f;
+        int respawnFrames = Mathf.CeilToInt(RespawnDelay / Dt) + 30;
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var textures = new TextureArchive(texturesPath);
+        var pool = new ProjectilePool(textures, null, null);
+        ctx.Host.AddChild(pool);
+        var world = new Node3D();
+        ctx.Host.AddChild(world);
+        var pane = new SubViewport();
+        ctx.Host.AddChild(pane);
+        var rigs = new List<PlayerRig>
+        {
+            new PlayerRig { Index = 0, Camera = ctx.Camera, HudParent = pane, Viewport = pane },
+            new PlayerRig { Index = 1, Camera = ctx.Camera, HudParent = pane, Viewport = pane },
+        };
+        var race = new StuntRace(600f, zones.TotalCount);
+        var pause = new PauseState();
+        var spec = SessionSpec.Parse(new[] { "--no-pads" });
+        var roster = new FlightRoster(FlightRosterPolicy.From(spec),
+            new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+            new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
+            SuiteConstants.AircraftResources(ctx, planesGamez, textures, Messages.Load(ctx.MessagesPath), _ => new CamParams()),
+            new FlightWorldBindings
+            {
+                Projectiles = pool,
+                Gamez = planesGamez,
+                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, "C1"),
+            },
+            new HumanRosterBindings
+            {
+                RigCount = rigs.Count,
+                Rigs = rigs,
+                PauseState = pause,
+                StuntZones = zones,
+                Race = race,
+            }, new ApartStarts());
+
+        // The director as the session builds it over an --ia= def, its end wired as GameSession
+        // wires it. The Original ending's menu hand-off stands in for the board.
+        InstantActionDirector? Director(string tag, int? lives, List<PlayerRig> seats, StuntRace? withRace, List<IaWrapupSnapshot> wrapups)
+        {
+            InstantActionSuites.EndDef(ctx, tag, "stunt_flying", lives);
+            var iaSpec = SessionSpec.Parse(new[] { "--no-pads", $"--ia={Path.Combine(ctx.ScratchDir, $"ia-end-{tag}.json")}" });
+            var director = InstantActionDirector.TryCreate(iaSpec);
+            if (director == null)
+            {
+                return null;
+            }
+
+            director.SeatRigsForTest(seats);
+            director.WireEndConditions(new InstantActionDirector.EndConditionInputs
+            {
+                StuntZones = zones,
+                Race = withRace,
+                Projectiles = pool,
+                WorldRoot = world,
+                SpectatorCameras = new List<SpectatorCamera>(),
+                LockCandidates = () => Array.Empty<Node3D>(),
+                RespawnDelay = RespawnDelay,
+                WrapupToMenu = wrapups.Add,
+            });
+            return director;
+        }
+
+        try
+        {
+            roster.BuildPlayers(rigs);
+            if (rigs[0].Controller is not { Stunt: not null } p1 || rigs[1].Controller is not { Stunt: not null } p2)
+            {
+                ctx.Check(false, $"both seats were built with a stunt run");
+                return;
+            }
+
+            foreach (var seat in new[] { p1, p2 })
+            {
+                seat.UseKeyboard = false;
+                seat.PadDevices = Array.Empty<int>();
+                seat.HoldActionForTest(InputAction.Respawn, false);
+            }
+
+            var raceWrapups = new List<IaWrapupSnapshot>();
+            var raceDirector = Director("race-lives", 2, rigs, race, raceWrapups);
+            ctx.Check(raceDirector != null, $"the director builds over the race's two-life def");
+            if (raceDirector == null)
+            {
+                return;
+            }
+
+            var mission = raceDirector.Runtime;
+            race.BeginOpening(0f);
+
+            void Frames(int n, InstantActionDirector director)
+            {
+                for (int i = 0; i < n; i++)
+                {
+                    p1.SimStep(Dt);
+                    p2.SimStep(Dt);
+                    race.Advance(Dt);
+                    director.Step(Dt);
+                }
+            }
+
+            ctx.Check(mission.Def.Lives == 2 && mission.LivesWaived && mission.PilotCount == 2,
+                $"the race waives the def's {mission.Def.Lives} lives over both seats: waived={mission.LivesWaived}, {mission.PilotCount} seat(s)");
+
+            // P1 crashes more times than it has lives, each time back after the crash camera.
+            bool allBack = true;
+            for (int crash = 1; crash <= 3; crash++)
+            {
+                p1.DebugForceCrash();
+                bool down = p1.Crashed;
+                Frames(respawnFrames, raceDirector);
+                allBack &= down && !p1.Crashed && !p1.Spectating;
+            }
+
+            ctx.Check(allBack && mission.LivesLeft(0) == 2 && !mission.IsSpectating(0) && !mission.Ended,
+                $"three crashes on two lives each return P1 with none spent: back={allBack}, lives {mission.LivesLeft(0)}, spectating={mission.IsSpectating(0)}, {mission.Outcome}");
+
+            // Both down at once, the case that loses a mission spending lives.
+            p1.DebugForceCrash();
+            p2.DebugForceCrash();
+            bool bothDown = p1.Crashed && p2.Crashed;
+            Frames(respawnFrames, raceDirector);
+            Frames(Mathf.CeilToInt(InstantActionRuntime.WrapupHoldS / Dt) + 10, raceDirector);
+            ctx.Check(bothDown && !p1.Crashed && !p2.Crashed && !p1.Spectating && !p2.Spectating
+                    && mission.Outcome == InstantActionOutcome.Running && raceWrapups.Count == 0,
+                $"both crashing together lose nothing and end nothing: back={!p1.Crashed}/{!p2.Crashed}, {mission.Outcome}, {raceWrapups.Count} wrap-up(s), lives {mission.LivesLeft(0)}/{mission.LivesLeft(1)}");
+
+            // The control: the same wiring with no race, P1 alone on the default one life.
+            p1.Race = null;
+            var soloWrapups = new List<IaWrapupSnapshot>();
+            var soloDirector = Director("solo-lives", null, new List<PlayerRig> { rigs[0] }, null, soloWrapups);
+            ctx.Check(soloDirector != null, $"the director builds over the solo run's one-life def");
+            if (soloDirector == null)
+            {
+                return;
+            }
+
+            var solo = soloDirector.Runtime;
+            p1.DebugForceCrash();
+            Frames(respawnFrames, soloDirector);
+            ctx.Check(!solo.LivesWaived && solo.Outcome == InstantActionOutcome.Lost && p1.Spectating && p1.Crashed,
+                $"the control's solo run on one life loses on its first crash into spectate: waived={solo.LivesWaived}, {solo.Outcome}, spectating={p1.Spectating}");
+            Frames(Mathf.CeilToInt(InstantActionRuntime.WrapupHoldS / Dt) + 10, soloDirector);
+            ctx.Check(soloWrapups.Count == 1 && soloWrapups[0] is { Won: false },
+                $"and hands its wrap-up to the menu once after the hold: {soloWrapups.Count} wrap-up(s)");
+        }
+        finally
+        {
+            var built = rigs.Select(rig => rig.Controller).Where(c => c != null).ToArray();
+            roster.ClearMembership();
+            foreach (var controller in built)
+            {
+                controller!.Free();
+            }
+
+            world.Free();
+            pane.Free();
+            pool.Free();
+            textures.Dispose();
+        }
+
+        ctx.Note($"a race's crashes cost time alone; the solo control still loses on its last life");
     }
 
     // Both gates of a zone crossed green to red on the run itself, each along its own axis, the

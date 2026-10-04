@@ -175,6 +175,10 @@ public sealed class InstantActionDirector
         return HumanFieldPlanes.InstantActionOverride(_spec, node);
     }
 
+    /// <summary>Hands a suite's seats to the director as <see cref="BuildActors"/> would, without
+    /// building the mission's actors, so <see cref="WireEndConditions"/> can run over real seats.</summary>
+    internal void SeatRigsForTest(List<PlayerRig> rigs) => _rigs = rigs;
+
     /// <summary>The mission's actor build: the chapter's patrol net, the ace (dogfight_ace), the
     /// wingmen, and every wave's inert roster, one contiguous phase of GameSession's
     /// BuildFlightRigs, called at the same point in its build order. Returns the build-summary
@@ -591,8 +595,8 @@ public sealed class InstantActionDirector
         }
         else if (objective == InstantActionObjective.ZonesFlown && inputs.Race != null)
         {
-            // A multi-seat run is a time attack: the race's window ends it on the race's own board,
-            // so no zone set wins the mission. It can still be lost.
+            // A multi-seat run is a time attack, ended by the window on the race's own board. No
+            // zone set wins it, and with no life spent it cannot be lost.
             Log.Info("core", $"ia: stunt_flying with {inputs.Race.Racers.Count} pilots is a time attack, the race's window ends it");
         }
         else if (objective == InstantActionObjective.ZonesFlown && inputs.StuntZones != null)
@@ -640,6 +644,13 @@ public sealed class InstantActionDirector
                 _ => "no zeppelin runtime was built",
             }) + " (it can still be lost)");
         }
+        // ⚠ A race waives the lives whatever the def holds. A crash there costs time alone, and
+        // only the race's own board may end it.
+        if (inputs.Race != null)
+        {
+            iaEnd.WaiveLives();
+        }
+
         // Lives are a remake-only rule; no ia.json key carries one. Every human seat joins the
         // ledger, and NotifyPilotDown decides whether the crash cam ends in a respawn.
         foreach (var rig in _rigs!)
@@ -667,14 +678,17 @@ public sealed class InstantActionDirector
                 }
                 if (iaEnd.NotifyPilotDown(victim))
                 {
-                    Log.Info("core", $"ia: P{victim + 1} down, {(iaEnd.Def.Lives == 0 ? "unlimited lives" : Log.Format($"{iaEnd.LivesLeft(victim)} life/lives left"))}, respawning in {inputs.RespawnDelay:0.#} s");
+                    Log.Info("core", $"ia: P{victim + 1} down, {(iaEnd.UnlimitedLives ? "unlimited lives" : Log.Format($"{iaEnd.LivesLeft(victim)} life/lives left"))}, respawning in {inputs.RespawnDelay:0.#} s");
                     return;
                 }
                 BeginSpectate(rig);
             };
         }
         iaEnd.MissionEnded += outcome => Log.Info("core", $"ia: mission {(outcome == InstantActionOutcome.Won ? "COMPLETE" : "FAILED")}, {iaEnd.Def.MissionType} after {iaEnd.Elapsed:0.0} s; holding the world {InstantActionRuntime.WrapupHoldS:0.#} s before the wrap-up board");
-        Log.Info("core", $"ia: {iaEnd.Def.MissionType}, win: {(iaEnd.ObjectiveEnabled ? objective!.Value.ToString() : "none")}, loss: every human out of lives ({(iaEnd.Def.Lives == 0 ? "unlimited" : Log.Format($"{iaEnd.Def.Lives}"))} per pilot), {iaEnd.PilotCount} human seat(s)");
+        string loss = iaEnd.LivesWaived
+            ? "none, a race spends no lives"
+            : $"every human out of lives ({(iaEnd.UnlimitedLives ? "unlimited" : Log.Format($"{iaEnd.Def.Lives}"))} per pilot)";
+        Log.Info("core", $"ia: {iaEnd.Def.MissionType}, win: {(iaEnd.ObjectiveEnabled ? objective!.Value.ToString() : "none")}, loss: {loss}, {iaEnd.PilotCount} human seat(s)");
 
         // The wrap-up board, shared over the WHOLE window like the race and dogfight boards,
         // never per pane: the mission ends for every human at once. ⚠ Danger Zones Completed

@@ -148,6 +148,14 @@ public sealed class InstantActionRuntime
     /// (<see cref="RegisterPilot"/>).</summary>
     public int PilotCount => _lives.Count;
 
+    /// <summary>True once <see cref="WaiveLives"/> has made every death free for this mission,
+    /// whatever <see cref="InstantActionDef.Lives"/> holds.</summary>
+    public bool LivesWaived { get; private set; }
+
+    /// <summary>Whether a death never spends a life here: the def's <c>lives 0</c>, the shape
+    /// <see cref="Flight.Modes.VersusMatch"/>'s 0 kill target has, or a waiver.</summary>
+    public bool UnlimitedLives => Def.Lives == 0 || LivesWaived;
+
     /// <summary>Whether this mission is the zeppelin run (F12). The mode is exclusive in the
     /// decode rather than additive: its waves take the generator arm and the teleport arm never
     /// runs (<see cref="InstantActionWaves"/>), and its objective zeppelin is the one world node
@@ -393,6 +401,11 @@ public sealed class InstantActionRuntime
     /// <see cref="ObjectiveEnabled"/>.</summary>
     public void DisableObjective() => ObjectiveEnabled = false;
 
+    /// <summary>Makes every death free, so no pilot runs out and the mission cannot be lost on
+    /// lives. A multi-seat stunt race takes this: a crash there costs only time. The def's own
+    /// count is left as it is, so the menu keeps the player's pick for the next solo run.</summary>
+    public void WaiveLives() => LivesWaived = true;
+
     /// <summary>A signal source reporting what it has just satisfied. The mission is WON only if
     /// this is the objective its own type runs on, every other report is dropped, so one
     /// subscription per source is safe on every mission type.</summary>
@@ -410,10 +423,9 @@ public sealed class InstantActionRuntime
     public void RegisterPilot(int playerIndex) => _lives[playerIndex] = Def.Lives;
 
     /// <summary>One human death: spends a life and answers whether that pilot flies again. False
-    /// means it is out, and the mission is lost once every registered pilot is out. <c>lives 0</c>
-    /// is unlimited and always answers true, the disabled-end-condition shape
-    /// <see cref="Flight.Modes.VersusMatch"/>'s 0 kill target has; an unregistered pilot answers true too.
-    /// ⚠ A death after the mission has ENDED spends nothing and answers false: the result was
+    /// means it is out; the mission is lost once every registered pilot is out. Unlimited lives
+    /// (<see cref="UnlimitedLives"/>) and an unregistered pilot always answer true.
+    /// ⚠ A death after the mission has ENDED spends nothing and answers false. The result was
     /// settled at the ending, and the hold before the board is not the sortie.</summary>
     public bool NotifyPilotDown(int playerIndex)
     {
@@ -421,7 +433,7 @@ public sealed class InstantActionRuntime
         {
             return false;
         }
-        if (Def.Lives == 0 || !_lives.TryGetValue(playerIndex, out int left))
+        if (UnlimitedLives || !_lives.TryGetValue(playerIndex, out int left))
         {
             return true;
         }

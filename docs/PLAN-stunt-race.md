@@ -118,7 +118,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 13. ☑ The Instant Action time row for a multi-seat Stunt Flying run
 14. ☐ A held Display Scores key on Tab, drawn in the original's look
 15. ☐ The race board's Back row, and an Original-looking race board
-16. ☐ No lives in a race
+16. ☑ No lives in a race
 
 ### Wave C, the network race
 
@@ -422,8 +422,7 @@ read "Back" is a look call.
 the Instant Action screen is this race (B13's row sets its window). `EndConditionInputs.Race`
 makes the director wire no zone-set win (`InstantActionDirector.cs:592`, `:827`), so the race's
 board ends the run, and it leaves a race seat's live respawn on (`:658`): Decision 1's restart at
-will. Lives still count a crash, and a race whose every pilot runs out of lives still loses the
-mission onto the wrap-up.
+will. A race spends no lives (B16).
 *The start (traced-to-code).* `Session/Roster/SharedSpawnStarts.cs` puts every pilot on player 1's
 spawn and start state (`GameSession.cs:1927`); co-op keeps `StartGrid`. It relies on B12's
 no-collision rule.
@@ -708,7 +707,7 @@ build it from that decode with the race's rows and best-run splits. Built-in kee
 **⚠ Traps.** Never invent the original's look; a race board the original never had borrows the
 nearest decoded screen's art and layout, flagged as such.
 
-## B16 ☐ No lives in a race
+## B16 ☑ No lives in a race
 
 **Goal.** A multi-seat stunt race spends no lives: a crash costs only time, the mission cannot be
 lost by running out, and the Instant Action Lives row is hidden while the Race Time row shows.
@@ -717,7 +716,80 @@ lost by running out, and the Instant Action Lives row is hidden while the Race T
 counting crashes in a race, and a race where every pilot runs out is lost onto the wrap-up board
 (`InstantActionDirector`). The user's ruling: no lives in a race.
 
-**⚠ Traps.** A solo stunt run and every other mission type keep their lives exactly as today.
+**Approach.** *The ledger (traced-to-code).* The only way an Instant Action mission is lost is
+`InstantActionRuntime.NotifyPilotDown` returning false for the last registered pilot
+(`Session/InstantAction/InstantActionRuntime.cs:418-447`), which also sends that pilot to
+spectate through `InstantActionDirector.BeginSpectate`. `InstantActionRuntime.WaiveLives` sets
+`LivesWaived`, and `UnlimitedLives` (`Def.Lives == 0 || LivesWaived`) is what `NotifyPilotDown`
+now reads, so a waived mission answers every death with "fly again" and never ends on lives.
+`WireEndConditions` waives exactly when `inputs.Race != null` (`InstantActionDirector.cs`, ahead
+of the ledger registration), the same test that already drops the zone-set win for a race, so no
+`MissionEnded`, `WrapupDue` or wrap-up hand-off can fire in a race and the race's own board is its
+only ending. The crash then follows A1's rules unchanged: the director's `AutoRespawnAfter` and the
+seat's tap/hold split. Every seat still registers, so the setup log keeps the seat count; its loss
+reads "none, a race spends no lives".
+*The hidden value (decision, traced-to-code).* A race ignores the stored lives value whatever it
+is: the def keeps `Lives` as picked (`InstantActionDef.Lives`, still on the launch's def), the
+runtime simply does not spend it, and the menu shows the same count again when the row returns.
+The alternative, writing 0 into the def for a race, would lose the player's pick on the way back
+to the menu, and a forced value in the menu would move under a seat joining or leaving.
+*The Original screen (traced-to-code, B13's pattern).* Exactly one of the two remake-only boxes is
+hidden at a time (`OriginalInstantActionScreen.HiddenRemakeKey`): Race Time solo or off stunt
+flying, Lives in a race. Hidden, the Lives row keeps its index between the wingman plane and the
+mission dropdown with `Visible` and `Enabled` false, `Column` -1 and no label, its "Lives:" title is
+not drawn, `DropdownFor` answers null for it, an open Lives list closes when a seat joining makes
+the run a race, and a focus left on it lifts to the nearest live box above
+(`LiftFocusOffHiddenBox`, generalised from B13's race-time lift). Column -1 keeps the race
+screen's column-1 count equal to the solo screen's, since Race Time enters column 1 as Lives
+leaves it. The Race Time box stays on its own second clear line; it does not move up into the
+Lives line.
+*The Built-in screen (traced-to-code).* Built-in has no Race Time row, but its Mission screen
+carries a Lives stepper in the description slot (`UI/Screens/LaunchMenu.cs`, `LivesDetail`). With
+the cursor on Stunt Flying and a second seat joined (`InstantActionFeature.OffersRaceWindow`, the
+Original's test), the detail is blank, the footer drops "←→  Lives" and a sideways press steps
+nothing; another type or a solo run shows the stepper and its count again.
+*The wrap-up (traced-to-code).* A solo stunt run and every other type keep the ledger, the
+spectate hand-off, the loss and the wrap-up exactly as before: nothing changes unless a
+`StuntRace` is handed in, which `GameSession` builds only for a stunt mission with more than one
+rig.
+
+**Model recommendation.** A mid-tier model suffices: one runtime flag, one line in the director
+and B13's hidden-row pattern applied to the Lives box. The suite through the director needs care
+with the Downed subscription order when two directors share a seat.
+
+**Verify.** Units: `InstantActionEndTests.AWaiverMakesEveryDeathFreeWhateverTheDefHolds` (two pilots
+on one life crash five times each with no life spent, nobody spectating, the def's count kept; the
+unwaived control loses on the second death);
+`OriginalInstantActionTests.TheLivesBoxGivesWayToTheRaceTimeBoxAndComesBackWithItsCount` (solo stunt
+shows Lives; a joining seat hides it at the same index with no column, label or title, the focus
+lifting to the live box above, no dropdown; another type and the guest leaving bring it back with
+the count) and `ASeatJoiningUnderTheOpenLivesListOfAStuntRunClosesIt`. Engine: `stunt-race-no-lives`
+(`Testing/StuntRaceSuites.cs`, weighted): two seats built through the roster over C1/IA1 with the
+director's own `WireEndConditions` over a two-life def; P1 crashes three times and both crash
+together, every crash returns its pilot after the crash camera, no life spent, nobody spectating,
+the mission running and no wrap-up after the hold; the control, the same director wiring with no
+race over P1 alone on one life, loses on its first crash into spectate and hands the wrap-up to
+the menu once after the hold. `menu-original-instant-action` (Lives shown solo, hidden with its
+title on the join, the focus left on it lifted to the box above, back with its count under
+Zeppelin Run, gone again on Stunt Flying) and `menu-instant-action-journey` (the Built-in stepper
+hidden for two seats on Stunt Flying, a sideways press leaving the count alone, back on Zeppelin
+Run and solo). Mutation-checked, each red then restored (METHOD-9, METHOD-17): the director never
+waiving (suite), the runtime ignoring the waiver (unit and suite), the director waiving solo too
+(suite control), the Lives row always shown (unit and both menu suites' Original half), the hidden
+Lives row left in column 1 (unit), the focus lift skipped for Lives (two units and the menu suite,
+which fell back to the contents window), Built-in never hiding the stepper (journey).
+Hand-flown: a two-seat Instant Action stunt race crashed into the ground on one life, the pilot
+coming back each time and no wrap-up appearing; the Lives row's absence on both screens.
+
+**⚠ Traps.** A solo stunt run and every other mission type keep their lives exactly as today; the
+waiver keys on the race object, never on the pane count or the mission type alone. Do not write a
+lives value into the def for a race: the menu would show the forced value when the row returns.
+Do not drop the hidden Lives row from the list or leave it in column 1, for B13's reasons. The
+waiver lives in the Instant Action director alone: a network race (C21) built outside it must keep
+the lobby's Limited Lives (`VersusDirector`) off for Stunt Race, as Decision 4's time-limit-only
+Mission Options imply, and nothing here enforces that.
+
+**Verified.** <pending orchestrator run>
 
 # Wave C, the network race
 

@@ -495,6 +495,77 @@ public class OriginalInstantActionTests
     }
 
     [Fact]
+    public void TheLivesBoxGivesWayToTheRaceTimeBoxAndComesBackWithItsCount()
+    {
+        var host = OpenSeated(out var ia, out var setup);
+        Click(host, 1);
+        Assert.Equal("stunt_flying", ia.MissionType.Key);
+        Hover(host, OriginalInstantActionScreen.LivesKey);
+        Step(host, 1);
+        Assert.Equal(2, ia.Lives);
+
+        // Solo, a stunt run spends lives, so the box shows with its title.
+        int index = host.Rows.ToList().FindIndex(r => r.Key == OriginalInstantActionScreen.LivesKey);
+        Assert.True(host.Rows[index].Visible);
+        Assert.Equal(1, host.Rows[index].Column);
+        Assert.Contains(Compose(host).Lines, l => l.Text == "Lives:");
+
+        // A second seat makes the run a race, which spends none. The box keeps its index unseen,
+        // unhit and in no column, with no title, and the cursor on it lifts to the live box above.
+        var guest = setup.Join(new ScriptedMenuSeat())!;
+        Assert.Equal(index, host.Rows.ToList().FindIndex(r => r.Key == OriginalInstantActionScreen.LivesKey));
+        var hidden = host.Rows[index];
+        Assert.False(hidden.Visible);
+        Assert.False(hidden.Enabled);
+        Assert.Equal(-1, hidden.Column);
+        Assert.Equal(string.Empty, hidden.Label);
+        var race = Compose(host);
+        Assert.DoesNotContain(race.Lines, l => l.Text == "Lives:");
+        Assert.Contains(race.Lines, l => l.Text == "Race Time:");
+        Assert.DoesNotContain(race.Fills, f => f.X == hidden.X && f.Y == hidden.Y);
+        int above = host.Rows.ToList().FindLastIndex(index - 1, r => r.Enabled && r.Column == 1);
+        Assert.Equal(host.Rows[above].Key, host.FocusedKey);
+        Assert.NotEqual(OriginalInstantActionScreen.LivesKey, host.FocusedKey);
+        Assert.False(host.Module.OpenDropdownOn(OriginalInstantActionScreen.LivesKey));
+        Assert.Equal(2, ia.Lives);
+        Assert.Equal(2, ia.BuildDef().Lives);
+
+        // Another mission type spends lives again, so the box returns with the count it hid.
+        Hover(host, OriginalInstantActionScreen.MissionKey);
+        Step(host, 1);
+        Assert.Equal("zeppelin_run", ia.MissionType.Key);
+        Assert.True(Row(host, OriginalInstantActionScreen.LivesKey).Visible);
+        Assert.Equal("2", Row(host, OriginalInstantActionScreen.LivesKey).Label);
+        Assert.Contains(Compose(host).Lines, l => l.Text == "Lives:");
+        Step(host, -1);
+        Assert.False(Row(host, OriginalInstantActionScreen.LivesKey).Visible);
+
+        // The guest leaving makes the stunt run solo again, and the box is back.
+        Assert.True(setup.Unjoin(guest));
+        Assert.True(Row(host, OriginalInstantActionScreen.LivesKey).Enabled);
+        Assert.Equal("2", Row(host, OriginalInstantActionScreen.LivesKey).Label);
+    }
+
+    [Fact]
+    public void ASeatJoiningUnderTheOpenLivesListOfAStuntRunClosesIt()
+    {
+        var host = OpenSeated(out _, out var setup);
+        Click(host, 1);
+        Click(host, OriginalInstantActionScreen.LivesKey);
+        Assert.Equal(OriginalInstantActionScreen.LivesKey, host.Module.OpenDropdown);
+
+        // The next build after the join closes the list, and the shell makes one every frame. The
+        // cursor lands on the live box above the hidden one.
+        setup.Join(new ScriptedMenuSeat());
+        Assert.Contains(host.Rows, r => r.Key == OriginalInstantActionScreen.PlayerPlaneKey);
+        Assert.Null(host.Module.OpenDropdown);
+        int index = host.Rows.ToList().FindIndex(r => r.Key == OriginalInstantActionScreen.LivesKey);
+        int above = host.Rows.ToList().FindLastIndex(index - 1, r => r.Enabled && r.Column == 1);
+        Assert.Equal(host.Rows[above].Key, host.FocusedKey);
+        Assert.DoesNotContain(host.Rows, r => r.Key.StartsWith(OriginalInstantActionScreen.LivesKey + ":", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void AnOpenListBandsThePickedRowAndTheRowUnderThePointerAndAClosedBoxLightensUnderIt()
     {
         var host = Open(out _);
