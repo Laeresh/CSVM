@@ -63,18 +63,20 @@ public sealed class MouseCapture
     public static float DeflectionCounts(float sensitivity) =>
         FullDeflectionCounts / SensitivityScale.Clamp(sensitivity);
 
-    /// <summary>Takes the mouse, seeding the virtual cursor where the real one stood, so the capture
-    /// starts from the stick position the pointer held rather than jumping to the middle.</summary>
-    public void Take(Vector2 cursor)
+    /// <summary>Takes the mouse with the virtual cursor at the middle of <paramref name="pane"/>, so
+    /// the stick starts centred. ⚠ Never seed it from the OS pointer. A take follows the launch or a
+    /// halt, when the pointer stands on the menu button last clicked. A seed there flies that
+    /// button's offset with nothing touched.</summary>
+    public void Take(Vector2 pane)
     {
-        Cursor = cursor;
+        Cursor = new Vector2(Mathf.Max(pane.X, 0f), Mathf.Max(pane.Y, 0f)) * 0.5f;
         _pendingCursor = Vector2.Zero;
         _pendingLook = Vector2.Zero;
         Holding = true;
     }
 
     /// <summary>Gives the mouse back. The pending travel goes with it, so a later capture starts
-    /// from where the real cursor then is rather than replaying a release's last motion.</summary>
+    /// centred rather than replaying a release's last motion.</summary>
     public void Release()
     {
         Holding = false;

@@ -160,7 +160,8 @@ the same offset, the same gate and the same hold-to-look as the visible cursor
 did. Every board that draws its own pointer gets it back, since each of
 them halts the session: the pause sheet, the preferences page behind its
 PREFERENCES row, photo mode's free camera and the wrap-up boards. The resume
-takes it again, from where it stood. A pilot out of lives keeps the pointer, its
+takes it again with the stick centred, never from where the OS pointer stands,
+which after a board or the launch is the menu button last clicked. A pilot out of lives keeps the pointer, its
 pane being the spectator camera's. Nothing is taken on a headless host, in a
 `--det` run or in a scripted one, so the test desktop and the pinned shots read
 the mouse mode their launch set.

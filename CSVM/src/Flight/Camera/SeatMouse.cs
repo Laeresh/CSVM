@@ -43,7 +43,7 @@ public sealed class SeatMouse
     {
         if (wanted && !_capture.Holding)
         {
-            _capture.Take(PaneOf(seat)?.GetMousePosition() ?? Vector2.Zero);
+            _capture.Take(PaneOf(seat)?.GetVisibleRect().Size ?? Vector2.Zero);
             Input.MouseMode = Input.MouseModeEnum.Captured;
         }
         else if (!wanted)
