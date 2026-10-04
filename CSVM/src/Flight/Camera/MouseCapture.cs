@@ -28,6 +28,13 @@ public sealed class MouseCapture
     private Vector2 _pendingCursor;
     private Vector2 _pendingLook;
 
+    /// <summary>Whether this process's own command line is <c>--det</c> or scripted, set once by the
+    /// launcher and read as <see cref="Allowed"/>'s scripted arm beside the session's spec. ⚠ A
+    /// suite assembles sessions from command lines it writes itself (<c>--fly</c> among them), and
+    /// those specs say nobody is scripted. A seat built from one captured the mouse on the hidden
+    /// test desktop, whose <c>ClipCursor</c> still reaches the user's pointer.</summary>
+    public static bool ScriptedLaunch { get; set; }
+
     /// <summary>Whether the mouse is held right now.</summary>
     public bool Holding { get; private set; }
 
