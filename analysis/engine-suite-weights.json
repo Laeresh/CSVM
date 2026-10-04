@@ -407,6 +407,8 @@
     "puffer-modes": 0.019,
     "puffer-priority-size": 0.001,
     "puffer-wind": 0.007,
+    "race-ghost-fade": 0.001,
+    "race-presence": 1.9,
     "ranked-pool-carried-turret-dedup": 0.291,
     "remote-airframe": 1.09,
     "render-poses": 0.003,

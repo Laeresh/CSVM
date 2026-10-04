@@ -468,7 +468,7 @@ world, registered with the shared projectile pool so every player's aim assist s
 stepped by `SessionSimulation` after the zeppelin runtime so a slung mount reads its ride's moved
 pose. Built unconditionally with a chapter flight, as the original's own placement pass is.
 `SetActivatedUnder` is the Instant Action builder's subtree write, `SetTeamUnder` the same walk for
-the team a zeppelin record fans across its airship, and `WakeAll` the `--wake-turrets` stand-in.
+the team a zeppelin record fans across its airship, `WakeAll` the `--wake-turrets` stand-in, and `SleepAll` a race session's whole-session sleep.
 Format and decode, including the wake ordering and the awake-by-data census:
 [../formats/turrets.md](../formats/turrets.md).
 
@@ -499,7 +499,7 @@ contracts keep the roster from taking all of `SessionSpec` or exposing either as
 leaving its required dependencies explicit at the production seam. `HumanRosterBindings.RigCount`
 counts SEATS, guests on other machines included, and `NetSeats` is that roster indexed by seat,
 empty outside a network match, and `SeatFit` is a co-op seat's loadout. `SoloStuntBoard` is how a
-solo stunt run gets its results board without the roster naming a screen. Read `FlightRoster.cs` next.
+solo stunt run gets its results board without the roster naming a screen. `FlightWorldBindings.Racing` is the session's race flag, which both assemblers read. Read `FlightRoster.cs` next.
 
 ## src/Session/Roster/CrashRigQueue.cs
 The session's queue of crash rigs whose aeroplane is already flying. A mid-flight AI introduction is
@@ -528,7 +528,7 @@ from `AiAirframePool.cs` where one is ready and built in place otherwise, over o
 `PlanePainter` per airframe and livery (PERF-22). That runtime is OPENED rather than built wherever the caller supplied a queue, so the
 launch frame carries no rig and the prop choreography plays from the queue's completion hook. It chains the durability override ahead of
 the enemy scale and the spawn jitter, the engine's own order ([../org/vehicleDamage.md](../org/vehicleDamage.md)), resolves the readout's
-title, stamps the block's objective marker, and owns the AI skills cache. The danger-zone look's daredevil chance is drawn from that cache here and zeroed for anything but a `jet`, the original's own class gate on the arm that rolls it. Read `FlightRoster.cs` next.
+title, stamps the block's objective marker and the session's race flag, and owns the AI skills cache. The danger-zone look's daredevil chance is drawn from that cache here and zeroed for anything but a `jet`, the original's own class gate on the arm that rolls it. Read `FlightRoster.cs` next.
 
 ## src/Session/Roster/HumanFlightAdapter.cs
 `FlightRoster`'s private human-aircraft path: `Assemble` builds the painted model, `FlightController`, loadout and ordnance, carried turrets, HUD and
@@ -538,7 +538,7 @@ flown elsewhere: it takes the aeroplane, paint, loadout, spawn slot and score ro
 skips every pane, HUD, camera, listener, pad and pause key, the roster's airframe pick and a co-op seat's `SeatFit` beating this machine's launch flags. It reads only the roster's
 copied policy plus the grouped aircraft, world and human-session contracts; player order decides the paint and spawn draws. An airframe swap lays its
 captured scheme and own build over that assembly, the one path a bought plane takes. An Instant Action racer takes no `Race`, so it flies on through
-the ending's hold, and `BuildDamageVisuals` opens AI damage too. Read `FlightRoster.cs` next.
+the ending's hold, and `BuildDamageVisuals` opens AI damage too. Under the race flag a seat is built with no loadout, ordnance or carried turret, a ghost-keyed airframe stamped by `RaceGhost`, and `TargetHud.RaceMarks` on. Read `FlightRoster.cs` next.
 
 ## src/Session/World/WorldEffectsFactory.cs
 Builds the two effect stages a session needs and the runtimes bound to them: the world-effects

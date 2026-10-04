@@ -145,6 +145,11 @@ public partial class FlightController : Node3D
     /// makes every collision solid and harmless.</summary>
     public System.Func<Node?, float, bool>? CollideDamageSink;
 
+    /// <summary>The session's race flag, stamped on every aircraft a race session builds. Its body
+    /// then never sits on the aircraft layer, so no sweep, ray or round finds it and no two
+    /// aircraft ram. A human pilot carrying it is also off every target cycle. Set before the
+    /// node enters the tree; docs/architecture/Flight.md has the rest of race presence.</summary>
+    public bool Racing;
 
     /// <summary>Plays a named effect def at a world point through the session's world-effects
     /// runtime, the survivable graze's authored <c>touchdown_*</c> reaction. Same sink shape
@@ -3112,7 +3117,9 @@ public partial class FlightController : Node3D
         // coming back into play is what undoes it.
         if (PlaneModel != null && InPlay)
             PlaneModel.Visible = true;
-        Body?.SetHittable(InPlay);
+        // A race keeps every body off the layer for the whole session. That one rule stops a ram from
+        // either side of the pair, and the contact resolver never learns of it.
+        Body?.SetHittable(InPlay && !Racing);
     }
 
     /// <summary>The selected firable gun group, the one the trigger fires, or null when there is

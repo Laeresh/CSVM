@@ -155,8 +155,13 @@ internal sealed class HumanFlightAdapter
                         _liveries.PatternsForPlane(_aircraft.PlanesGamez, planeName)));
         _flying[pi] = new FlyingAirframe(planeName, scheme);
         var planeBuilder = new PlaneBuilder(_aircraft.PlanesGamez, _aircraft.Textures, spinningProps: true,
-            scheme: scheme, patterns: _liveries.Patterns, cockpitInterior: true, dockingHook: true);
+            scheme: scheme, patterns: _liveries.Patterns, cockpitInterior: true, dockingHook: true,
+            raceGhost: _world.Racing);
         var planeModel = planeBuilder.Build(planeName);
+        // A race pilot draws as a ghost to every camera but its own pilot's, the cameras that drop
+        // its first-person layer. The stamp is static; the fade is the shader's, per drawing camera.
+        if (_world.Racing)
+            RaceGhost.Stamp(planeModel, SplitScreen.FirstPersonLayer(pi));
         StartupProfile.Record("plane", mark);
         MeshInstances += planeBuilder.MeshInstanceCount;
 
@@ -181,6 +186,7 @@ internal sealed class HumanFlightAdapter
             Scheme = scheme,
             Painter = planeBuilder.Painter,
             ShippedSkins = swap is { ShippedSkins: true },
+            Racing = _world.Racing,
         };
         if (verbose && controller.Dressing.Visibility != null)
             Log.Info("flight", $"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");
@@ -245,7 +251,14 @@ internal sealed class HumanFlightAdapter
         // its built model, resolves markers to muzzle nodes + weapons to WeaponDefs.
         // Set before the controller enters the tree (its _Ready builds the fire state).
         var loadoutDefName = _policy.LoadoutOverride ?? stats.DefName;
-        if (_aircraft.StockLoadouts.For(loadoutDefName) is { } stockDef)
+        if (_world.Racing)
+        {
+            // A race pilot carries no weapons. With no loadout there is no fire control, so a held
+            // trigger does nothing. No gun gauge, missile gauge, pipper or pylon rocket is built.
+            if (verbose)
+                Log.Info("flight", $"weapons: none, a race pilot flies unarmed");
+        }
+        else if (_aircraft.StockLoadouts.For(loadoutDefName) is { } stockDef)
         {
             // A custom plane's guns and hardpoints replace the stock ones and the Ammo Selection
             // layer composes over THAT (the built def leaves WeaponId null so a picked ammo still
@@ -308,7 +321,7 @@ internal sealed class HumanFlightAdapter
         // The carried turret gunners: the vehicle def's thirdp turrets block resolved
         // by TITLE against ai.zrd and by node against this built model. Independent of the
         // stock loadout, the gunner's weapon comes from its ai.zrd row, not from a gun slot.
-        if (_aircraft.TurretDefs is { } turretDefs && stats.TurretMounts.Count > 0)
+        if (!_world.Racing && _aircraft.TurretDefs is { } turretDefs && stats.TurretMounts.Count > 0)
         {
             // ⚠ A human's carried gunner IS positional, unlike the pilot's own forward guns: the
             // original's turret path hands its sound slot a world position whoever owns the mount.
@@ -536,6 +549,8 @@ internal sealed class HumanFlightAdapter
             // reads this pane's side off, and the pilot-index derivation it falls back to is the
             // wingman-in-the-marker bug.
             targetHud.Own = controller;
+            // A race labels every other pilot with the marker's name line, none of them a target.
+            targetHud.RaceMarks = _world.Racing;
 
             // --debug-markers: the same HUD marks every live aircraft instead of one hostile. Own also
             // keeps it from marking the aircraft the camera is sitting on.

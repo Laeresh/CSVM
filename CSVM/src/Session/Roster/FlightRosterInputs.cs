@@ -161,6 +161,12 @@ internal sealed class FlightWorldBindings
     /// pair itself: the zone apply rewrites it mid-mission, and the weather rig is built after
     /// these bindings are.</summary>
     public Func<int, Vector2>? FogRange { get; init; }
+
+    /// <summary>The session's race flag: true wherever the session runs a race, whatever carries
+    /// it. Both assemblers stamp it on every aircraft (<c>FlightController.Racing</c>), and the human
+    /// one also builds the pilot unarmed, ghosted and labelled. False leaves every build as it was.
+    /// </summary>
+    public bool Racing { get; init; }
 }
 
 internal sealed class HumanRosterBindings

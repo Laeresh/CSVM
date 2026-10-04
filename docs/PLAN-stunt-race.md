@@ -114,7 +114,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B, the split screen race
 
 11. ☐ The split screen race becomes a time attack: window, opening count, best-run ranking, FINAL RUN, boards
-12. ☐ Race presence: no collisions, weapons off, ghosts when near
+12. ☑ Race presence: no collisions, weapons off, ghosts when near
 13. ☑ The Instant Action time row for a multi-seat Stunt Flying run
 
 ### Wave C, the network race
@@ -388,29 +388,108 @@ and the restarts.
 
 **⚠ Traps.** <TODO>
 
-## B12 ☐ Race presence: no collisions, weapons off, ghosts when near
+## B12 ☑ Race presence: no collisions, weapons off, ghosts when near
 
 **Goal.** In any race, aircraft never collide with each other, fire controls do nothing and the
 weapon readouts leave the HUD, ground targets on the course world stay inert, and another pilot
 fades from solid beyond 80 m to a ghost inside 40 m, keeps its callsign label and is never a target.
 
-**Evidence (confidence: lead-only; traced for the collision path).** Aircraft collide today through
-`FlightController`'s plane-versus-plane ram with a collision-grace window
-(`FlightController.cs:1892-1926, 4148-4149, 4250`). The callsign label is #116's marker.
+**Evidence (confidence: traced-to-code for today's paths, TUNE for the numbers and the look).**
+Aircraft collide through the airframe sweep (`FlightController.cs:2214`, `SweepAirframe` at 4406,
+mask `CollisionLayers.WorldAndAircraft`), which strikes another aircraft's `AircraftBody` on the
+aircraft layer; `PerformContact` (4293) then damages both and arms both grace windows (4300). A
+body leaves that layer only through `SetHittable`, written by `ApplyPresence` (3080) and the two
+death paths. A plane with no loadout builds no `FireControl` and binds no weapon gauge
+(`FlightController._Ready`), and the assembler builds the pipper only over a loadout. The C1, C1B,
+C2, C4 and C5 IA1 stunt worlds hold no AI aircraft, vessel or generator in a `--stunt --players=2`
+run; their only hostile content is the world AA emplacements, of which C4 has 11 and C5 5 awake
+and alive at load (the `turrets:` census line); a dormant emplacement takes no tick
+(`TurretController.cs:514`). The pilots are hostile to those guns' default team in a plain
+splitscreen race. The callsign label is #116's marker name line.
 
-**Approach.** <TODO: how the race suppresses the ram (a mode flag on the session, not a per-rig
-special case); how weapons are disabled (the loadout, the input or the fire path) without changing
-a non-race session; the ghost's material path under both presentations and its distance fade; how
-the target cycle and the spyglass skip a race pilot>.
+**Approach.** *The session flag (traced-to-code).* `FlightWorldBindings.Racing`
+(`Session/Roster/FlightRosterInputs.cs:169`) is the one session-level race flag: `GameSession` sets
+it from `race != null` (`Launch/GameSession.cs:1983`, the `StuntRace` built at 1875), never from the
+pane count, so C21's network race takes every rule below the moment its session builds a
+`StuntRace`. B11 reads nothing new; C21 needs only to build the race. Both assemblers stamp it on
+every aircraft as `FlightController.Racing` (`FlightController.cs:152`; `HumanFlightAdapter.cs:189`,
+`AiFlightAssembler.cs:159`), AI wingmen included.
+*No ram (traced-to-code).* `ApplyPresence` writes `SetHittable(InPlay && !Racing)`
+(`FlightController.cs:3080`): in a race no body sits on the aircraft layer for the whole session, so
+no sweep, centre ray, AI probe or round finds another aircraft, and the resolver, the grace window
+and the damage pair are never reached. One rule covers both sides of a pair; the contact code is
+untouched, so a non-race session is unchanged.
+*Weapons off (traced-to-code).* `HumanFlightAdapter` binds no loadout, no pylon ordnance and no
+carried turret under the flag (`HumanFlightAdapter.cs:254, 324`). With no loadout there is no fire
+control, so a held trigger does nothing, and the gun gauge, the missile gauge and the pipper are
+never built; the pylon rockets leave the model too. The ground stays inert: `GameSession` puts every
+world emplacement to sleep for the session (`TurretEmplacementRuntime.SleepAll`, 97; called at
+`GameSession.cs:2270`, logged with the count that was awake). A pilot's collision with a
+`WeaponOrCollideHit` destructible still shatters it, as solo does, because a course may thread one.
+*Target cycle and spyglass (traced-to-code).* `TargetPool.Offer` drops a human aircraft carrying the
+flag (`TargetPool.cs:300`), so no cycle, `--target=` or nearest pick reaches another race pilot, and
+the spyglass, which shows only the selection, never does. An AI aircraft in a race session stays
+selectable.
+*The label (traced-to-code for the name, lead-only for the drawing).* `TargetHud.RaceMarks`
+(`TargetHud.cs:61`, drawn at 595), on for a race pane, labels every other live race pilot with
+`TargetPool.AircraftDisplayName`, the #116 name line (mode tag, then callsign, then plane type),
+through the same on-screen tag and edge arrow the hostile marker uses, in the friendly green.
+*The ghost (traced-to-code for the path, TUNE for the numbers).* Aircraft surfaces are the
+`SceneBuilder` bias shader's shaded arms in both presentations (Original's per-vertex sun arm and
+Enhanced's lit arm). `SceneBuilder.RaceGhostShader` (260, key bit 262144 at 1883) adds one vertex
+line and one fragment discard (2047) under a key bit of its own, set only on a race session's human
+airframe builder (`PlaneBuilder` `raceGhost`, the interior builder never), so every other build keeps
+its exact shader text. `Mech3/RaceGhost.cs` holds the law: alpha `GhostAlpha` 0.35 within
+`GhostWithinM` 40 m, 1 beyond `SolidBeyondM` 80 m, linear between; the shader
+(`shaders/csky_race_ghost.gdshaderinc`) evaluates it per mesh instance from `CAMERA_POSITION_WORLD`,
+the drawing camera, and dithers through the clutter fade's ordered 4x4 keep in the opaque pass. A
+per-pane fade is therefore possible in one shared scene: each pane camera draws with its own
+position. The per-instance `csky_ghost` (appended last to the ordered instance-uniform block) is
+written once at assembly (`HumanFlightAdapter.cs:164`) and names the owner's first-person layer;
+the owner's pane and spyglass drop that layer (`SplitScreen.OwnViewCullMask`, 168, read in the
+shader as `CAMERA_VISIBLE_LAYERS`), so the owner always sees its own aircraft solid, and its Danger
+Zone photograph, whose mask adds the layer back (`DangerZonePhotograph.cs:183`), is exempted by the
+armed `csky_photo_eye`. Batching holds (one material per surface, the value per instance) and no
+per-frame write exists. These are the viewer seams' kind of rule: a draw rule that says "the
+camera", answered by the camera drawing.
 
-**Model recommendation.** <TODO>
+**Model recommendation.** Opus for the design read (the layer and photograph rules and the shader
+key took the whole render path traced), Sonnet for a TUNE change of the three constants.
 
-**Verify.** <TODO: an engine suite flying two seats through each other (no damage, no ram event);
-fire held in a race (no projectile spawned); the fade's alpha at 30, 60 and 100 m; the target cycle
-skipping the other pilot>. Every pinned golden unchanged (no golden flies a race).
+**Verify.** Built: engine suite `race-presence` (`Testing/RacePresenceSuites.cs`, weighted in
+`analysis/engine-suite-weights.json`) on two seats built through `FlightRoster` with the flag set
+and, as the control, without it: a seat flown nose on through a parked one passes 0.23 m from its
+origin with no health lost, no crash and both bodies off the aircraft layer, while the control rams
+(both ledgers lose health, stopped short); a race seat holding both triggers is unarmed (no
+loadout, no weapon gauge) and puts 0 rounds in the pool while the control fires; the other race
+pilot is on no cycle yet labelled, while the control offers it on the Enemy cycle; the race build
+stamps 105 instances and compiles the ghost into 75 shaders (the shader's uniform list parses),
+the control stamps none and carries the ghost in none. Engine suite `race-ghost-fade`: alpha 0.35
+at 30 m, 0.675 at 60 m, 1 at 100 m, and the shader line carries the same constants.
+Mutation-checked, each red then restored: bodies left on the layer (race rams, 20+20 health lost),
+the race loadout bound (9 rounds), the cycle skip removed (enemy 1), the labels off, the stamp
+removed (0 instances), the law's denominator wrong (0.513 at 60 m), the shader's floor literal
+typed apart from the law, and a shader compile error (no uniform list, 16 engine errors). The
+session wiring was read from a live `--chapter=C1 --stunt --players=2` probe log: `weapons: none, a
+race pilot flies unarmed` and `turrets: all 74 emplacement(s) dormant for the stunt race (15 were
+awake)`. Captures of the ghost at about 30, 60 and 100 m in both presentations are owed to the
+user's eye. No pinned golden flies a race, and the ghost reaches no shader outside a race.
+Hand-flown: the 80/40 m band and the ghost's look in both presentations, at a two-seat sitting.
 
-**⚠ Traps.** The 80 m and 40 m are TUNE, judged at the controls. Ghosting must not change a
-non-race session's rendering.
+**⚠ Traps.** The 80 m, 40 m and 0.35 floor are TUNE, judged at the controls; change them in
+`RaceGhost` alone, never as literals in the shader. Ghosting must not change a non-race session's
+rendering, which is why it is a shader key bit and not a uniform branch in every aircraft shader.
+The owner test is a first-person layer bit, and that band is four layers wide
+(`SplitScreen.FirstPersonLayer` wraps), so a network race past four seats would show a seat that
+shares a bit as solid; C21 must widen the band or cap the field before then. Under Enhanced the sun's
+shadow pass draws from the light's own camera, so the ghost's shadow follows that camera's
+distance, solid in practice; Original's ground-shadow quad stays solid under a ghost, and a crash's
+wreck pieces are not stamped. The plain splitscreen race has no callsign, so the label reads the
+plane type; whether a local seat reads `P2` instead is #116's separate decision. Do not move the ram
+rule into the contact resolver: the body off the layer is what keeps every query, the AI probe and
+the AGL ray included, from finding a ghost.
+
+**Verified.** <pending orchestrator run>
 
 ## B13 ☑ The Instant Action time row for a multi-seat Stunt Flying run
 

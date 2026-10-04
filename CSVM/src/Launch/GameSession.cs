@@ -1981,6 +1981,9 @@ public partial class GameSession : Node3D
             // Read through the field rather than captured by value: the rig is built after these
             // bindings, and a zone apply rewrites the band while the mission runs.
             FogRange = rigIndex => _sky?.Weather?.FogOf(rigIndex).Range ?? Vector2.Zero,
+            // The session's race flag, keyed off the race itself and not off the pane count. A
+            // network race that builds a StuntRace takes the same presence rules.
+            Racing = race != null,
         };
         var humanBindings = new HumanRosterBindings
         {
@@ -2267,6 +2270,9 @@ public partial class GameSession : Node3D
         // World AA emplacements, after the zeppelins and the Instant Action turret arm above.
         _turretEmplacements = opposition.PlaceEmplacements(state, turretDefs, weaponDefs, projectiles,
             _zeppelins, iaZepTurretSwitch);
+        // A race's ground stays inert: the pilots carry nothing to answer a gun with.
+        if (worldBindings.Racing)
+            _turretEmplacements?.SleepAll("the stunt race");
 
         // The campaign objectives graph (D31): armed once every runtime a directive can touch is
         // up, which is why it sits after the emplacement block rather than with the other
