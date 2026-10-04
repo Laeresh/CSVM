@@ -116,6 +116,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ The split screen race becomes a time attack: window, opening count, best-run ranking, FINAL RUN, boards
 12. ☑ Race presence: no collisions, weapons off, ghosts when near
 13. ☑ The Instant Action time row for a multi-seat Stunt Flying run
+14. ☐ A held Display Scores key on Tab, drawn in the original's look
+15. ☐ The race board's Back row, and an Original-looking race board
+16. ☐ No lives in a race
 
 ### Wave C, the network race
 
@@ -129,7 +132,8 @@ The waves are a chain: B builds on A's run rules and count, C carries B's race o
 and A2 both edit `StuntMission.cs` and the respawn path in `FlightController.cs`: run them in
 order, not in parallel. B11 and B12 are independent in files (race bookkeeping and boards against
 collision, weapons and rendering) and may run side by side with that boundary. B13 is UI only and
-can run beside either. C21 blocks C22 and C23; C22 and C23 both edit the race's network messages and
+can run beside either. B14 to B16 are the user's rulings on B11's report: B15 runs before B14 so the
+scores display can reuse its Original race table, and B16 is independent in files. C21 blocks C22 and C23; C22 and C23 both edit the race's network messages and
 should run in order.
 
 ---
@@ -662,6 +666,58 @@ two, and a written Y lands on an authored box in one of them (INSTR-77). The win
 on every Instant Action launch, solo included; only a multi-seat stunt run may read it.
 
 **Verified.** <pending orchestrator run>
+
+## B14 ☐ A held Display Scores key on Tab, drawn in the original's look
+
+**Goal.** A held Display Scores action, default `Tab` plus a pad binding, on both controls screens,
+shows the full standings while held: the race table (place, pilot, aircraft, best, gap, runs) in a
+stunt race and the match scores in a Dogfight, local split screen and network alike. Under the
+Original presentation it is drawn in the original game's own scores look.
+
+**Evidence (confidence: traced for the original's command; lead-only for its look).** B11 found no
+held scoreboard key in the remake: `InputAction` has no scores member, and
+`docs/org/multiplayer-messages.md` (the Display Scores paragraph) says the remake binds none in
+flight. The original binds "Display Scores (Multiplayer Only)", command `0x23`, default `Tab`
+(`docs/org/input.md`, `MSG_CMD_DISPLAY_SCORES` in `docs/formats/strings.md`); its handler is
+`FUN_00489320`, which also hides the chat lines. The user's ruling: add it, shared with Dogfight, and
+make the display look like the original's.
+
+**Approach.** Decode `FUN_00489320` and what it draws (layout, art, font, columns) before building;
+append the action (never renumber `InputAction`), bind it on both controls screens, and draw the
+table through the original's decoded look under Original and the chrome type scale under Built-in.
+Reuse B15's Original race table where the two overlap.
+
+**⚠ Traps.** Never invent the original's look: decode it or say what could not be decoded and ask.
+An appended action must not shift any saved binding.
+
+## B15 ☐ The race board's Back row, and an Original-looking race board
+
+**Goal.** The race board's exit row reads "Back" (Decision 17), and under the Original presentation
+the end-of-race board is drawn in the original game's look rather than the remake's chrome board.
+
+**Evidence (confidence: lead-only).** B11's `StuntRaceBoard` is a chrome `ResultsBoard` whose exit
+row is the standard "Exit to Menu" (`Launcher.ExitSession` returns to the Instant Action screen). The
+Original presentation already has a decoded Instant Action wrap-up page (`[@IA_WrapUp@]`,
+`OriginalWrapupPage`, `docs/architecture/UI.md`), the nearest original-game results screen. The
+user's ruling: rename the row to Back, and build an Original-looking board for the Original UI.
+
+**Approach.** Decide from the original's own results screens (the Instant Action wrap-up, and the
+multiplayer end-of-match screen if one is decoded) which one a race board should look like, and
+build it from that decode with the race's rows and best-run splits. Built-in keeps the chrome board.
+
+**⚠ Traps.** Never invent the original's look; a race board the original never had borrows the
+nearest decoded screen's art and layout, flagged as such.
+
+## B16 ☐ No lives in a race
+
+**Goal.** A multi-seat stunt race spends no lives: a crash costs only time, the mission cannot be
+lost by running out, and the Instant Action Lives row is hidden while the Race Time row shows.
+
+**Evidence (confidence: traced-to-code, from B11's report).** B11 left Instant Action's lives
+counting crashes in a race, and a race where every pilot runs out is lost onto the wrap-up board
+(`InstantActionDirector`). The user's ruling: no lives in a race.
+
+**⚠ Traps.** A solo stunt run and every other mission type keep their lives exactly as today.
 
 # Wave C, the network race
 
