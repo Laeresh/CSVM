@@ -93,7 +93,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A, seat model and match bookkeeping
 
 1. ☐ A seat knows whether a human or a bot flies it, and the roster carries that across the wire
-2. ☐ `VersusMatch` keys its scores by pilot, so a row survives its seat being reused
+2. ❌ `VersusMatch` keys its scores by pilot, so a row survives its seat being reused
 3. ☐ The host flies a bot seat with an `AiPilot`; guests see it as a remote seat
 4. ☐ CLI twin: `--vs-bots=` / `--vs-bot=` build bot seats in a scripted host
 
@@ -118,13 +118,12 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ## Dependency and parallelism notes
 
-A1 blocks everything. A2 and A3 both need A1 and can run in parallel (A2 owns `VersusMatch`,
-`VersusDirector` scoring and `VersusBoard`; A3 owns `SessionNet`, `FlightRoster`/`AiFlightAssembler`
-and the bot rig). A4 needs A3, and every later item's tests lean on A4. Wave B needs A3 and A4; B11,
+A1 blocks everything. A2 is closed (see A2). A3 needs A1 (A3 owns `SessionNet`,
+`FlightRoster`/`AiFlightAssembler` and the bot rig). A4 needs A3, and every later item's tests lean on A4. Wave B needs A3 and A4; B11,
 B12 and B13 touch different files and can run in parallel, B14 after B12 (a rearm trip and a respawn
-share the bot's standing-order state). Wave C needs A1 (and A2 only if A2 survives its re-check, see A2);
+share the bot's standing-order state). Wave C needs A1;
 C21 and C23 both edit `DogfightLobby.cs`, so they run in sequence, C21 first, and C22 follows C21.
-D31 needs A2 and C21. D32 and D33 run last, on the merged tree.
+D31 needs A1, A3 and C21. D32 and D33 run last, on the merged tree.
 
 ---
 
@@ -162,14 +161,27 @@ still green; `<TODO: the engine suite that proves a bot seat builds no pane on h
 input. The `NetNamespaceDependency` test confines engine types to the carriers
 (`docs/architecture/Net.md:261-264`), so the pilot kind stays engine-free in `Net/`.
 
-## A2 ☐ `VersusMatch` keys its scores by pilot, so a row survives its seat being reused
+## A2 ❌ `VersusMatch` keys its scores by pilot, so a row survives its seat being reused
 
-**Goal.** The match keeps one score row per pilot who has flown in it. When a bot leaves and a
+**Closed as not needed.** Under Decision 7 the seats are fixed for the life of a `VersusMatch`:
+`VersusDirector.TryCreate` builds it once per session from the session's seat rigs,
+`SessionNet.Seats` is fixed when the session is built and nothing compacts it, a host Restart
+zeroes the rows in place, and a guest who leaves keeps a row marked `Left`. Every reader that
+outlives the match takes strings before the lobby can swap a seat: `Launcher.ExitSession` calls
+`LobbyLanding` while the session is alive, and `DogfightLobby.ScoresOf` bakes names into
+`DogfightScore` there. A bot seat carries the host's peer id, so `OnPeerLeft` never matches it.
+`OutOfLives` and `CheckAlone` read seat rows, which are stable for the match. No reader needs a
+pilot id.
+
+The real defect the re-check found is naming, and it moves to D31: `ScoresOf` reads
+`names[seat]`, but `LaunchNames` holds one entry per lobby row (`DogfightLobby.HostRows`, the
+host then each seated peer), so names and seats agree only when every peer flies one seat in row
+order. Bot seats break that.
+
+The original item text follows for reference.
+
+**Goal (original).** The match keeps one score row per pilot who has flown in it. When a bot leaves and a
 human takes its seat, the bot's row stays, marked as left, and the human gets a new row.
-`<TODO: re-check whether this item is still needed. It was written for a seat changing hands
-mid-match, which Decision 7 no longer allows: a seat now changes hands only in the lobby, between
-matches. Name any reader left that needs a pilot key (the lobby's Game Scores tab for the match
-just finished, D31's bot tag), or close this item as not needed>`
 
 **Evidence (confidence: lead-only).** `VersusMatch` (`CSVM/src/Flight/Modes/VersusMatch.cs:36,53`)
 sizes its score array by seat count (`PlayerCount`). `VersusDirector.ScoreDeath`
@@ -430,6 +442,16 @@ planes appear only through `TargetPool` (`TargetPool.cs:243`, `MarkerName` else 
 **Approach.** After A3 a bot is a seat rig, so `VersusHud` may cover it already; `<TODO: check
 whether A3's rig lands in VersusHud's Rigs>`. The tag's look is `<TODO: the user's call, from a
 capture>`.
+
+Name the finished match's Game Scores rows from the session's seat roster, not the lobby rows
+(taken over from A2's re-check). `DogfightLobby.ScoresOf` reads `names[seat]` from `LaunchNames`,
+which holds one entry per lobby row, so a bot seat, or a host flying split-screen seats (a lead,
+not verified), misnames rows. Take the snapshot in `Launcher.LobbyLanding`, which runs while the
+session is alive: build each row from the seat's callsign and A1's pilot kind, keep `LaunchNames`
+as the fallback for a launch with no seat roster, and add a bot flag to `DogfightScore` for the
+Game Scores tag. The in-flight board (`VersusBoard.Build`, which has only the match today) reads
+the kind from the session's seat list by `PlayerIndex`. Test: a three-seat match whose rows are
+named off a seat roster ordered differently from the lobby rows.
 
 **Model recommendation.** `<TODO: not settled in the session>`
 
