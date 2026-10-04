@@ -1,8 +1,7 @@
 # Bot planes in Deathmatch
 
-**QUEUED PLAN** (written 2026-10-03). Work starts after the next published release; until then
-PROJECT_CONTEXT.md's "Current status" does not name it, and the session that starts Wave A flips
-this banner to ACTIVE PLAN and points "Current status" at it. When every item lands, the closing
+**ACTIVE PLAN** (written 2026-10-03), executed on the `bots` branch in
+`.claude/worktrees/bots`. When every item lands, the closing
 commit deletes this file, records the completion in its message, and clears the "Current status"
 pointer; any live prose linking this file by path is unlinked in the same commit.
 
