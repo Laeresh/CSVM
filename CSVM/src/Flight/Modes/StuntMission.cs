@@ -114,10 +114,10 @@ public sealed class StuntMission
 
     public IReadOnlyList<StuntZone> Zones => _zones;
 
-    /// <summary>Elapsed run time, seconds, advanced by <see cref="Tick"/> every physics frame,
-    /// including through the crash freeze ("the clock never stops"), frozen only once the run is
-    /// complete. Read by the marker HUD and scoring. Not reset by a tapped respawn (a mid-run
-    /// crash keeps the same clock, like the completed zones); a held one calls <see cref="Reset"/>.</summary>
+    /// <summary>Elapsed run time, seconds. It starts at GO: a run behind a <see cref="StartCount"/>
+    /// reads 0 until the count hands over. Once started the clock never stops: <see cref="Tick"/>
+    /// advances it every physics frame, through the crash freeze, until the run is complete.
+    /// A tapped respawn keeps it, like the zones; a held one calls <see cref="Reset"/>.</summary>
     public float Elapsed { get; private set; }
 
     /// <summary>The one-shot run-start line the marker HUD shows ("Fly through all the Danger
@@ -288,9 +288,9 @@ public sealed class StuntMission
         return (gate.Center, gate.Normal.Dot(last.ExitTravel) < 0f ? -gate.Normal : gate.Normal);
     }
 
-    /// <summary>Advance the run clock one physics frame. Called every frame, including through
-    /// the crash freeze so the clock never stops (a deliberate rule), and stops accumulating once the
-    /// run is complete.</summary>
+    /// <summary>Advance the run clock one physics frame. Not called while a start count runs,
+    /// because the clock starts at GO. Once started it is called every frame, through the crash
+    /// freeze, so the clock never stops (a deliberate rule). It stops only at completion.</summary>
     public void Tick(float dt)
     {
         if (!AllComplete)

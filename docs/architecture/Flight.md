@@ -657,10 +657,19 @@ Stunt Flying's per-pilot run state: `Load` builds the ordered danger-zone list f
 ia.json `dzones` (marker positions, gate polygons, strings through `MissionTargets` and `Messages`,
 null where a mission authors none), `Update` requires both polygon-plane crossings in either order and records the gate a zone was left through,
 `CollectTargets` offers the still-unflown zones to that pilot's own target pool as objectives,
-`Elapsed`, `CompletedAt`, `CompletionOrder` and `InCompletionOrder` carry the clock and the splits, and `ReturnPose` is where a tapped respawn lands: on the zone's `dzpathN` ribbon abeam the exit of the zone cleared last, heading the way it was flown.
+`Elapsed` (from GO), `CompletedAt`, `CompletionOrder` and `InCompletionOrder` carry the clock and the splits, and `ReturnPose` is where a tapped respawn lands: on the zone's `dzpathN` ribbon abeam the exit of the zone cleared last, heading the way it was flown.
 `ForAnotherPlayer()` clones an independent run so the archives parse once per session. Engine-free
 apart from its logging. Read `TargetSelection` for how a pilot picks a zone, `StuntRunHud` for the
 rest of what a run draws, and `StuntScoreboard` for what it scores.
+
+## src/Flight/Modes/StartCount.cs
+A run's start count, engine-free and one per seat: `Begin` takes the figures (`Restart` is 3, 2, 1;
+`Opening` puts READY first for a race window), `Advance` steps it on the sim dt and answers a beat
+per figure and GO, and `Figure` is what the HUD draws, GO lingering for `GoSeconds`. `WalkPose` is
+the kinematic walk the aircraft rides meanwhile, back along the spawn nose by the spawn speed times
+the time left, answering the spawn pose itself at GO. `FlightController.BeginStartCount` drives it,
+holding the controls and the run clock until the step after GO; `StuntRunHud` draws the figure and
+`FlightAudio.OnStartCount` sounds it. Coverage: `CSVM.Tests/StartCountTests.cs`, suite `stunt-start-count`.
 
 ## src/Flight/Modes/StuntSummary.cs
 One finished stunt run's numbers for a split table: the run, its total, the stored best it is
@@ -741,8 +750,8 @@ the zone apply (`Session/World/WeatherRig.cs`), the Shadow Quality level and a s
 ## src/Flight/Modes/StuntRunHud.cs
 The stunt run's own readouts, one per pane and sized through `HudMetrics.Scale`: the clock and
 zones-cleared status line, the one-shot intro banner, the zone-cleared flash, and the completion
-banner, which in a race becomes this pilot's placing and who they are still waiting on. It draws
-no marker: a danger zone is an objective on the pilot's own cycle and `TargetHud` marks it like
+banner, which in a race becomes this pilot's placing and who they are still waiting on, and the
+start count's figure, large in the middle of the pane (`StartCount`). It draws no marker: a danger zone is an objective on the pilot's own cycle and `TargetHud` marks it like
 every other one. What it reports is `StuntMission`'s.
 
 ## src/Flight/Modes/StuntCapture.cs
@@ -918,7 +927,7 @@ a `PauseFrame` and the host performs its two edges, the audio's hold and the re-
 ## src/Flight/Audio/FlightAudio.cs
 The own plane's non-positional audio: the engine, overspeed whine and rattle loops, plus the
 one-shots a crash, a ground or water explosion, a survivable graze, an engine stop and a stunt
-run's Danger Zone camera fire, most drawing the sound their own definition authors, not a fixed name.
+run's Danger Zone camera and start count fire, most drawing the sound their own definition authors, not a fixed name (the count's two are shipped menu sounds).
 The three incoming-fire cues are group draws, flat as the original plays them: `OnWarningShot`,
 `OnBulletHit` and `OnWindowHit`, rate-limited by `FlightController`. The engine slot's pitch, gain,
 definition and damage phase come from `EngineAudioCurves`, the gun loop and dry cue from
@@ -1253,7 +1262,7 @@ text, dials and gates compose and assert here with no `Control` (`ComputeStallWa
 ## src/Flight/Airframe/FlightController.cs
 The flying-aircraft node: input through `FlightModel` to a transform (or, for an AI pilot publishing
 a `RailPose`, the danger-zone ribbon's pose in place of the model step, the sweep still run), plus
-weapon fire as `FireControl`'s engine adapter and the crash and respawn paths (a stunt run splits the respawn control by hold length into `ReturnToLastZone` and `Rerun`; `Respawn` takes what its `RespawnPlacement` hook answers, `RespawnAt` a pose handed to it instead, and `RespawnRequest` withholds the return altogether for a seat whose placement is somebody else's to grant), and `Rearm`, a rearm base's in-flight restore of parts, damage stages and every slot. It keeps no rule it
+weapon fire as `FireControl`'s engine adapter and the crash and respawn paths (a stunt run splits the respawn control by hold length into `ReturnToLastZone` and `Rerun`, which opens on `RestartCount` through `BeginStartCount`, the `StartCount` walk that holds the controls and the run clock until GO; `Respawn` takes what its `RespawnPlacement` hook answers, `RespawnAt` a pose handed to it instead, and `RespawnRequest` withholds the return altogether for a seat whose placement is somebody else's to grant), and `Rearm`, a rearm base's in-flight restore of parts, damage stages and every slot. It keeps no rule it
 can delegate: the camera is `CameraController`'s, the pilot HUD `FlightHud`'s, this frame's stick
 one `IFlightInputSource`, the states an aircraft moves between `AircraftLifecycle`'s, and what a
 contact costs `AircraftContactResolver`'s. The seat's rendered-frame parts are modules it composes and steps, none reaching back into it: `Mouse` (`SeatMouse`), `Look` (`SeatLook`), `Pause` (`SeatPause`), `Dressing` (`FirstPersonDressing`), `TargetInput` (`SeatTargeting`) and the propeller slot `Propellers` (`PropellerSlot`); the AI gunner's acquisition is `Acquisition` (`GunnerAcquisition`). This node reads the devices, performs what each of those

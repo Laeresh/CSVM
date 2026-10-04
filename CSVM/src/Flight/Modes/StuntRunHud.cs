@@ -25,14 +25,20 @@ public sealed partial class StuntRunHud : Control
     /// <see cref="Race"/>.</summary>
     public int PlayerIndex;
 
+    /// <summary>This pilot's start count, whose figure draws large in the middle of the pane while
+    /// it stands. Null draws none.</summary>
+    public StartCount? Count;
+
     // 1440p reference metrics (scaled by viewport height).
     private const float RefStatusY = 100f;   // run-status baseline y, just under the compass tape
     private const float IntroDuration = 5f;  // s the run-start line shows (fades the last second)
     private const float FlashDuration = 1.6f;// s a zone-cleared flash shows
+    private const float GoFade = 0.4f;       // s GO takes to fade at the end of its stand
 
-    // The status line's and the banners' sizes, chrome type scale rungs in the same reference.
+    // The status line's, the banners' and the count's sizes, chrome type scale rungs in the same reference.
     private static readonly float RefStatusFont = ChromeType.InReference(ChromeSize.Readout, HudMetrics.ReferenceHeight);
     private static readonly float RefBannerFont = ChromeType.InReference(ChromeSize.Note, HudMetrics.ReferenceHeight);
+    private static readonly float RefCountFont = ChromeType.InReference(ChromeSize.Count, HudMetrics.ReferenceHeight);
 
     private static readonly Color HudBlue = MarkerDraw.HudBlue;
     private static readonly Color HudGreen = new(0.60f, 1f, 0.70f); // completion feedback
@@ -99,6 +105,17 @@ public sealed partial class StuntRunHud : Control
 
         if (_mission.AllComplete)
             DrawLines(font, new Vector2(cx, Size.Y * 0.26f), CompleteBanner(), bannerFont, HudGreen);
+
+        // The start count's figure, centred; GO in the completion green, fading out at the end.
+        if (Count?.Figure is { } figure)
+        {
+            int countFont = Mathf.Max(1, Mathf.RoundToInt(RefCountFont * s));
+            bool go = !Count.Running;
+            var color = go
+                ? new Color(HudGreen, Mathf.Clamp((StartCount.GoSeconds - Count.FigureAge) / GoFade, 0f, 1f))
+                : HudBlue;
+            DrawLines(font, new Vector2(cx, Size.Y * 0.5f), new[] { figure }, countFont, color);
+        }
     }
 
     private void OnZoneCompleted(StuntZone z)

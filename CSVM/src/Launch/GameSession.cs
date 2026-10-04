@@ -1911,6 +1911,9 @@ public partial class GameSession : Node3D
         IFlightStarts flightStarts = coopCampaign || (race != null && !_spec.Det)
             ? new StartGrid(_spawnPicker, GroundSampler())
             : _spawnPicker;
+        // ⚠ No count under --det, the grid's rule: a scripted run and every pinned golden stay
+        // byte-identical because the count is then never begun. A race's counts are its own.
+        var soloStartCount = stuntZones != null && race == null && !_spec.Det ? StartCount.Restart : null;
         var aircraftResources = new AircraftAssemblyResources
         {
             PlanesGamez = planesGamez,
@@ -1993,6 +1996,8 @@ public partial class GameSession : Node3D
             SpawnList = spawnList,
             SpawnBase = spawnBase,
             StuntZones = stuntZones,
+            SoloStartCount = soloStartCount,
+            MenuSounds = soloStartCount != null ? MenuSounds() : null,
             Race = race,
             VersusMatch = versus,
             Rigs = _seatRigs,
@@ -2469,6 +2474,14 @@ public partial class GameSession : Node3D
             FrameCamera(state.NodeAabb);
 
         _labs!.BuildOverlays(state, _plane, _rigs, _edgeExtender);
+    }
+
+    // The rof tree's menu sound folder, the shipped UI sounds a start count beeps with, or null where
+    // this install's extraction carries none.
+    private SoundArchive? MenuSounds()
+    {
+        string dir = RofTree.Member(_rofPath, "ASSETS/SOUNDS");
+        return Directory.Exists(dir) ? new SoundArchive(dir) : null;
     }
 
     // The production ground sampler StartGrid probes its slots with: the world height under a point,

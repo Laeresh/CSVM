@@ -19,8 +19,9 @@ public static class ChromeType
     public const float FrameHeight = BoardFit.AuthoredHeight;
 
     // The ladder in frame units, indexed by ChromeSize. Five rungs are the join board's draft sizes,
-    // its 14 folded into 13; the rest carry the results total and the in-flight text.
-    private static readonly float[] Rungs = { 26f, 22f, 19f, 17f, 15f, 13f, 11f, 8f, 6f };
+    // its 14 folded into 13. The rest carry the start count, the results total and the in-flight
+    // text. The count's 72 is TUNE at the controls.
+    private static readonly float[] Rungs = { 72f, 26f, 22f, 19f, 17f, 15f, 13f, 11f, 8f, 6f };
 
     /// <summary>The theme's default face, the one font choice every piece of this chrome draws in.
     /// A board's italic and bold are variations of it (<see cref="ComposedBoardView"/>).</summary>

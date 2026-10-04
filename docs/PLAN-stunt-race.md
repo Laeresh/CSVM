@@ -109,7 +109,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A, the time-attack run (solo)
 
 1. ☑ Tap respawn returns to the last cleared Danger Zone; hold restarts the run
-2. ☐ The on-rails restart count, and the run clock starting at GO; one bests key
+2. ☑ The on-rails restart count, and the run clock starting at GO; one bests key
 
 ### Wave B, the split screen race
 
@@ -232,7 +232,7 @@ structure. The crash prompt still reads "Press %1 to respawn" and names no hold.
 
 **Verified.** <pending orchestrator run>
 
-## A2 ☐ The on-rails restart count, and the run clock starting at GO; one bests key
+## A2 ☑ The on-rails restart count, and the run clock starting at GO; one bests key
 
 **Goal.** A hold-restart, and a solo run's first start too (the user's ruling: every solo run starts
 the same way, at GO in the spawn state), runs a 3, 2, 1, GO count during which the
@@ -248,23 +248,112 @@ running through a crash freeze (`StuntMission.cs:105-109, 239-246`, `FlightContr
 `Session/Roster/HumanFlightAdapter.cs:481`); race totals are not recorded today
 (`StuntRace.cs:50-51`, `HumanFlightAdapter.cs:480`).
 
-**Approach.** A count controller shared by solo, split screen and network (B11 and C22 reuse it):
-it owns the count's phase, drives the walk into `_model.Reset` each frame, ignores stick and
-throttle, and hands control over on GO. Rewrite the `StuntMission.Elapsed` comments to separate
-"the clock starts at GO" from "the clock never stops once started". Count numbers on the chrome
-type scale with a beep per number and a higher GO tone (Decision 15). <TODO: which shipped UI
-sounds>.
+**Approach.** *The controller (traced-to-code).* `Flight/Modes/StartCount.cs`, engine-free, one
+per seat (`FlightController.StartCount`). `Begin(phases)` takes the figures as data: `Restart` is
+3, 2, 1 at a second each, and `Opening(readySeconds)` puts READY first for B11's window opening.
+`Advance(dt)` steps it on the sim dt and answers a beat when a figure comes up and GO on the step
+that reaches the end. The first beat comes from the first `Advance`, so a count begun while the
+session is still building sounds when the sim moves. `Figure` is what to draw, GO lingering for
+`GoSeconds` (1 s, TUNE). `WalkPose(spawnPos, spawnAttitude, spawnSpeed)` is the walk.
+*The seat (traced-to-code).* `FlightController.BeginStartCount(phases)` begins the count from the
+spawn pose a respawn just set, places the aircraft on the walk's first point and snaps the camera;
+`Rerun` calls it after its `Respawn` when `RestartCount` is set (`FlightController.cs:1335`). In
+`SimStep` the count is decided before anything steps (`FlightController.cs:2088`): while it runs,
+`StuntMission.Tick` is not called, `--debug-scoreboard`'s synthetic finish waits, and
+`StepStartCount` (`:3662`) writes the walk into `_model.Reset(pos, spawnAttitude, spawnSpeed,
+lever)` and returns before the input read, the model step, the sweep, weapons, turrets, the stunt
+gate test, the camera latch and the under-map backstop. The GO step is still the count's and leaves
+exactly the state `Respawn` leaves; the clock reads 0 at its end, and the step after it reads the
+controls and ticks the clock to one step. `Respawn` cancels a running count (`:1390`), so a tap
+(`ReturnToLastZone`) never runs one and a respawn is never dragged back onto the walk. A held
+respawn read inside `InputSource.Read` that begins a count leaves the step at once (`:2207`), so the
+rest of that step does not fly and sweep from the walk's first point.
+*Trap 1, read (traced-to-code).* The rule the trap forbids is a setback whose END follows from
+arithmetic on a speed, which hard-codes one map's number. Here the end is the spawn pose by
+construction: `WalkPose` answers `(spawnPos, spawnAttitude)` itself once nothing remains
+(`StartCount.cs:138`), never a sum that lands near it. How far back the walk STARTS is the
+mission's own spawn speed, read at run time from `FlightStart`, times the time left, so the walk's
+velocity is the one the flight model takes at GO and the hand-over does not jump. A different
+mission or a re-read speed changes only the start distance (54 m at C1/IA1's 18 m/s, 174 m at
+C1C/M01's 58 m/s). The walk runs along the spawn's own nose, which is level on every Instant Action
+spawn (`SpawnPoint` carries a yaw only).
+*Trap 2 (traced-to-code).* `StuntMission.Elapsed`'s comment (`StuntMission.cs:121`) and `Tick`'s
+(`:294`) each now say first that the clock starts at GO, and then that once started it never stops,
+through the crash freeze; `SimStep`'s comment says the same.
+*Trap 3 (traced-to-code).* Nothing is simulated during the count (the model is reset each step,
+never stepped) and nothing is frozen: the clock, the world, the AI, audio and the camera all run.
+*A walk through structure (traced-to-code).* The walk passes kinematically through whatever lies
+behind the spawn. The airframe's own
+contact path is the sweep and centre ray inside the flying branch, which a count step never
+reaches, so a walk through terrain or a building resolves no contact and crashes nothing. Another
+aircraft's round or ram still reaches it, as at any spawn; a solo Stunt Flying run fields none
+unless the Instant Action wizard adds waves. A hull downed mid-count freezes the count and the
+clock starts ticking through the crash freeze; the crash branch runs as usual, and the respawn that
+follows cancels the count.
+*Who gets a count (traced-to-code).* `GameSession` hands `HumanRosterBindings.SoloStartCount`
+`StartCount.Restart` only for a stunt run with no race and not under `--det` (`GameSession.cs:1916`);
+`HumanFlightAdapter` sets it as the seat's `RestartCount` and begins the first count after `Setup`
+(`HumanFlightAdapter.cs:460, 565`). That covers `--stunt`, the Instant Action Stunt Flying run
+(its Restart rebuilds the session, so it counts again) and the solo board's R. A remote seat, an AI
+rig, a race seat and every suite-built rig carry no `RestartCount`.
+*The look (direction-sound, size TUNE).* A new top rung of the chrome type scale, `ChromeSize.Count`
+at 72 frame units (`ChromeType.cs`), drawn centred by `StuntRunHud` in the HUD blue; GO in the
+completion green, fading over its last 0.4 s.
+*The sounds (traced-to-data, choice TUNE).* The shipped UI sounds are the four menu cues under
+`extracted/rof/ASSETS/SOUNDS` (`Launch/MenuCueTable.cs:17-20`). Decoded from their MS ADPCM:
+`MOUSEOVER.WAV` and `MOUSECLICK.WAV` are noisy clicks (energy near 3.8 and 4.1 kHz, 50 and 87 ms),
+`ENTERTEXT.WAV` is a 4 ms tick, and `ENTERTEXT_ERROR.WAV` is the one plain tone (1.56 kHz, 25 ms, no
+second peak above 2 % of the first). The beat is `ENTERTEXT_ERROR.WAV`; GO is `MOUSECLICK.WAV`,
+louder, longer and higher (`FlightAudio.cs:32, 36`). They load through a directory `SoundArchive`
+over that folder (`GameSession.MenuSounds`) into two players on the seat's `FlightAudio`
+(`BindStartCount`, `OnStartCount`), under `MixGain`; a missing file is a logged silent cue.
+*One bests key (traced-to-code).* The solo board records `<chapter>/<mission>/<plane>`
+(`HumanFlightAdapter.cs:489`, `StuntScoreboard.cs:68`) and the Instant Action wrap-up the same
+shape (`InstantActionDirector.cs:845, 137`), the mission being `IA1` for every stunt course. Both
+record `StuntMission.Elapsed`, which the count leaves at 0 until GO, so the only change is that the
+time starts at GO. The Instant Action mission clock (the wrap-up's "Time to Complete Mission") is
+the runtime's own and still includes the count. Race recording is B11's.
+*For B11 (traced-to-code for the API, lead-only for its use).* Each seat keeps its own controller.
+To open a window: set every seat's `RestartCount = StartCount.Restart` and call
+`BeginStartCount(StartCount.Opening(2f))` on every seat in the same step; they stay in lockstep on
+the shared sim dt. `GameSession.RestartRace` calls `Respawn()` per seat today; B11 adds
+`BeginStartCount(StartCount.Opening(2f))` after each `Respawn()` there. `--det` must keep reaching
+no count. C22's start on a host instant may need a `Begin` that takes the seconds already elapsed.
 
-**Model recommendation.** <TODO>
+**Model recommendation.** Opus for the seat integration (the step ordering against the crash
+branch, the respawn read inside the input read, and the bit-equal hand-over); Sonnet for the docs
+once the rules are fixed.
 
-**Verify.** <TODO: a unit for the walk ending bit-equal on the spawn pose at GO for two missions
-with different spawn speeds; an engine suite asserting the clock reads 0 at GO and inputs held
-through the count change nothing before GO; `--det` runs byte-identical (every golden unchanged)>.
+**Verify.** Built: `CSVM.Tests/StartCountTests.cs`: the walk over C1/IA1's (18 m/s) and C1C/M01's
+(58 m/s) own `PLAYER_INIT` spawns starts the spawn speed times the count's length back along the
+nose, moves the spawn speed each step, and lands on the spawn pose bit for bit at GO; the restart
+count beats at steps 1, 60 and 120 and goes at 180 at 60 Hz, GO standing about 60 steps; the
+opening count beats READY, 3, 2, 1 at 1, 120, 180 and 240 and goes at 300; the controls are held
+for every step through GO's (180) and released after; a cancelled count holds and shows nothing.
+Engine suite `stunt-start-count` (`Testing/FlightInputHandoffSuites.cs`, weighted in
+`analysis/engine-suite-weights.json`) on a real human rig at a 71.5 m/s spawn over C1/IA1: a
+crashed tap after a zone returns with no count and the clock running; an in-flight hold restarts
+behind the count, the aircraft on the nose line the spawn speed times the time left back; with
+pitch, roll, throttle and respawn held through the count, no count step changes the clock, the
+nose, the lever or the command, nothing leaves the walk line; the GO step's position, nose,
+velocity and lever equal a plain respawn's bit for bit with the clock at 0; the step after, the
+held stick acts and the clock reads one step (able-to-fail control); the respawn held over GO taps
+nothing on release; a crashed hold runs the count too. Mutation-checked: the clock ticking through
+the count, the input read inside the count, a setback from a fixed 18 m/s, `Rerun` without the
+count and a tap that begins one each turned the suite red; the fixed-speed setback and GO one step
+early each turned the units red. Not caught by either: dropping the early return after the input
+read, since the suite's rig flies an empty world with nothing behind the spawn to strike. Every
+pinned golden is unchanged, `c1-stunt-marker` (a `--det --stunt` solo run) among them, which is
+the check that `--det` reaches no count. A non-`--det` probe (`--stunt --no-det --volume=0`) drew
+2 at frame 75 with the clock at 0:00.0, logged three beats and GO, and drew GO fading with the
+clock at 0:00.9. Hand-flown: the count's feel, the two sounds and the figure's size and colour.
 
 **⚠ Traps.** From `BL-314`, verbatim in substance: (1) do not derive a setback from a speed; the
 walk ends on the spawn pose whatever the speed is; (2) "the clock never stops" is stated twice in
 `StuntMission.cs` on purpose, keep it and add the start-at-GO rule beside it; (3) do not simulate
 the count and do not freeze the sim; (4) the instrument is a hand-flown sitting.
+
+**Verified.** <pending orchestrator run>
 
 # Wave B, the split screen race
 

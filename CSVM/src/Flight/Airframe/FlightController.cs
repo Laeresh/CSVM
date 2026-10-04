@@ -240,6 +240,10 @@ public partial class FlightController : Node3D
     /// restarts the run (<see cref="Rerun"/>). Null in free flight.</summary>
     public StuntMission? Stunt;
 
+    /// <summary>The count <see cref="Rerun"/> opens a restarted run with, or null for none.
+    /// ⚠ Never set under <c>--det</c>: a scripted run must stay byte-identical.</summary>
+    public IReadOnlyList<StartCountPhase>? RestartCount;
+
     /// <summary>This pane's Danger Zone camera: one latched photograph per marker per run, stepped
     /// from <see cref="SimStep"/> beside the run itself. Null in free flight and on every rig with
     /// no pane of its own to photograph.</summary>
@@ -824,6 +828,10 @@ public partial class FlightController : Node3D
     /// (<see cref="SeatMouse.Allowed"/>), which the build resolves once per session.</summary>
     public SeatMouse Mouse { get; } = new();
 
+    /// <summary>This seat's start count: the figures, the walk to the spawn pose and the held
+    /// controls before GO. Idle until <see cref="BeginStartCount"/> starts it.</summary>
+    public StartCount StartCount { get; } = new();
+
     /// <summary>This seat's look controls, read once a frame into the one head every view is
     /// placed by. It also holds the run's scripted twins and the Auto Head Turn option.</summary>
     public SeatLook Look { get; }
@@ -1315,14 +1323,31 @@ public partial class FlightController : Node3D
     }
 
     /// <summary>Rerun this plane's own run: fresh clock and every zone incomplete, then the
-    /// respawn below at the start. A plane with no stunt run is simply respawned, which is all a
-    /// free flight's rerun amounts to. Every restart of a run comes through here: the solo board's
-    /// R, the session's restart and a held respawn.</summary>
+    /// respawn below at the start, behind <see cref="RestartCount"/> where one is set. A plane with
+    /// no stunt run is simply respawned. Every restart of a run comes through here: the solo
+    /// board's R, the session's restart and a held respawn.</summary>
     public void Rerun()
     {
         Stunt?.Reset();
         StuntShots?.Reset();
         Respawn();
+        if (RestartCount is { } count)
+            BeginStartCount(count);
+    }
+
+    /// <summary>Starts a start count of <paramref name="phases"/> on this seat now, from the spawn
+    /// pose a respawn just set. The aircraft goes to the walk's first point and rides it to that
+    /// pose at GO. Until then the controls are held and the run clock stands at zero. A race
+    /// begins every seat on one step for a shared opening count.</summary>
+    public void BeginStartCount(IReadOnlyList<StartCountPhase> phases)
+    {
+        StartCount.Begin(phases);
+        PlaceOnStartWalk();
+        _simPrev = _simCurr;
+        _sweep.Reset();
+        Stunt?.Relocated();
+        if (_cam != null && IsInsideTree())
+            SnapCamera();
     }
 
     /// <summary>A stunt run's tap of respawn: back on the route through the zone cleared last,
@@ -1362,6 +1387,7 @@ public partial class FlightController : Node3D
         var (placePos, placeAttitude) = _zoneReturn ?? (_spawnPos, _spawnAttitude);
         _zoneReturn = null;
         Stunt?.Relocated();  // the jump to the new pose is no flight through any gate
+        StartCount.Cancel(); // a count's walk would drag the aircraft off the pose placed here
         _lifecycle.Respawn();
         (_inputSource as ScriptedInputSource)?.Reset(); // scripted hold sequences restart from the spawn
         RemotePoses?.Clear();  // the received history describes an aeroplane that is no longer there
@@ -2058,10 +2084,14 @@ public partial class FlightController : Node3D
         if (RemoteOwned)
             RemotePoses?.Advance(dt);
 
-        // Advance the stunt clock every physics frame, including through the crash freeze so the
-        // clock never stops (a deliberate rule); it stops only at AllComplete (inside Tick). A
-        // halted GameClock stops the calls entirely, so the timer freezes with the rest of the sim.
-        Stunt?.Tick(dt);
+        // Read before anything steps: the GO step is still the count's, and the clock starts after.
+        bool counting = StartCount.Running && !Crashed && !RemoteOwned;
+
+        // The stunt clock starts at GO, so a start count holds it at zero. Once started it advances
+        // every physics frame, through the crash freeze: the clock never stops (a deliberate rule).
+        // It stops only at AllComplete, and a halted GameClock stops these calls with the sim.
+        if (!counting)
+            Stunt?.Tick(dt);
 
         // The incoming-fire block's own tick, one interval feeding both cues: the shield charges or
         // drains on the sim clock, and an interval that closed with a hit is what may open a hole.
@@ -2069,7 +2099,7 @@ public partial class FlightController : Node3D
 
         // Race players finish STAGGERED by index, exercising the real one-finishes-while-others-fly
         // path instead of four identical totals landing on frame one.
-        if (DebugCompleteStunt && Stunt is { AllComplete: false }
+        if (DebugCompleteStunt && !counting && Stunt is { AllComplete: false }
             && (Race == null || Stunt.Elapsed >= PlayerIndex * DebugFinishStagger))
             Stunt.DebugCompleteAll(Race != null ? PlayerIndex * 2f : 0f);
 
@@ -2087,6 +2117,14 @@ public partial class FlightController : Node3D
             return;
         }
         _autoRestartIn = AircraftLifecycle.AutoRespawnDelay; // re-armed while the run is live
+
+        if (counting)
+        {
+            StepStartCount(dt);
+            return;
+        }
+        if (!StartCount.Running)
+            StartCount.Advance(dt); // ages GO's figure; a count frozen by a crash stays put
 
         if (Crashed)
         {
@@ -2164,6 +2202,10 @@ public partial class FlightController : Node3D
             var input = EffectiveHold == FlightControlHold.All
                 ? new FlightInput { Throttle = _throttle }
                 : InputSource.Read(dt);
+            // ⚠ Leave now if a held respawn inside that read began a start count. Flying on would
+            // step and sweep from the walk's first point, which can stand inside structure.
+            if (StartCount.Running)
+                return;
             // Read AFTER the input: R respawns inside it, and a sweep from the pose before that
             // respawn would run the whole way to the spawn point and strike whatever lies between.
             var entered = _model.Position;       // the position this step enters with
@@ -3610,6 +3652,30 @@ public partial class FlightController : Node3D
             return;
         }
         _simPrev = _simCurr;
+        _simCurr = _renderPose = new Transform3D(_model.Attitude, _model.Position);
+        GlobalTransform = _simCurr;
+    }
+
+    // One step of a start count. The aircraft is placed on the walk, and no input is read. Nothing
+    // is flown, swept or fired, so a walk through structure resolves no contact. On the GO step the
+    // walk answers the spawn pose itself. ⚠ Keep the input read out; held controls act after GO.
+    private void StepStartCount(float dt)
+    {
+        var cue = StartCount.Advance(dt);
+        _simPrev = _simCurr;
+        PlaceOnStartWalk();
+        _cam?.UpdateDynamics(dt, _model.Speed);
+        if (cue != StartCountCue.None)
+            Audio?.OnStartCount(cue);
+    }
+
+    // The count's walk written onto the flight model: the reset a respawn makes, at the spawn speed
+    // and the lever the respawn set. The GO step so leaves exactly the state a respawn leaves.
+    private void PlaceOnStartWalk()
+    {
+        var (pos, attitude) = StartCount.WalkPose(_spawnPos, _spawnAttitude, _spawnSpeed);
+        _model.Reset(pos, attitude, _spawnSpeed, _throttle);
+        _lastInput = default;
         _simCurr = _renderPose = new Transform3D(_model.Attitude, _model.Position);
         GlobalTransform = _simCurr;
     }

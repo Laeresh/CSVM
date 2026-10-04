@@ -451,7 +451,15 @@ internal sealed class HumanFlightAdapter
             // The run HUD, one per pane: clock, zones cleared, banners. The zone MARKER is the
             // targeting HUD's, since a zone is an objective like any other.
             var runHud = StuntRunHud.Build(run);
+            runHud.Count = controller.StartCount;
             pilotHud.StuntRun = runHud;
+            // A solo run starts, and restarts, behind the count; the first one begins once Setup
+            // below has placed the spawn it walks to.
+            if (_human.Race == null && _human.SoloStartCount is { } count)
+            {
+                controller.RestartCount = count;
+                controller.Audio?.BindStartCount(_human.MenuSounds);
+            }
             if (_human.Race is { } race)
             {
                 // Racing: no per-player splits board, the shared ranked board
@@ -553,6 +561,8 @@ internal sealed class HumanFlightAdapter
         controller.Setup(new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),
             remote ? null : rig.Camera, camParams, start.Pos, start.LookAt,
             start.ThrottleFrac, start.SpeedMps, cockpitCameraOffset: planeBuilder.CockpitCameraOffset);
+        if (controller.RestartCount is { } firstCount)
+            controller.BeginStartCount(firstCount); // a solo run's first start is a start like any other
         // The Danger Zone eye, framed off the airframe's own chase distance and aimed at the pose
         // the controller draws, which is the controller node's own transform.
         if (!remote)

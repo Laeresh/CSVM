@@ -200,6 +200,14 @@ internal sealed class HumanRosterBindings
     public List<SpawnPoint>? SpawnList { get; init; }
     public int SpawnBase { get; init; }
     public StuntMission? StuntZones { get; init; }
+
+    /// <summary>The count a solo stunt run starts and restarts behind, or null for none.
+    /// ⚠ Null under <c>--det</c>, so a scripted run stays byte-identical, and in a race.</summary>
+    public IReadOnlyList<StartCountPhase>? SoloStartCount { get; init; }
+
+    /// <summary>The rof tree's menu sound folder, whose shipped UI sounds a start count beeps
+    /// with. Null leaves the count silent.</summary>
+    public SoundArchive? MenuSounds { get; init; }
     public StuntRace? Race { get; init; }
     public VersusMatch? VersusMatch { get; init; }
     public IReadOnlyList<PlayerRig> Rigs { get; init; } = Array.Empty<PlayerRig>();

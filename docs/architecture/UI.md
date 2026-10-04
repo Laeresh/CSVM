@@ -306,8 +306,8 @@ a results board or the launchscreen) converts it through `InReference`. Painted 
 carries no type scale: `BoardPalette` and the composed campaign boards keep their layout's own sizes.
 
 ## src/UI/Boards/ChromeSize.cs
-The rungs of `ChromeType`'s ladder, largest first: 26, 22, 19, 17, 15 and 13 frame units for the
-boards, 11, 8 and 6 for in-flight text. Each member's comment names where the rung stands today.
+The rungs of `ChromeType`'s ladder, largest first: 72 for a start count's figure, 26, 22, 19, 17,
+15 and 13 frame units for the boards, 11, 8 and 6 for in-flight text. Each member's comment names where the rung stands today.
 
 ## src/UI/Boards/SeatStrip.cs
 The shape both presentations' player chip strip shares, so the two corners cannot drift apart: the

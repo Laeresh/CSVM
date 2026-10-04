@@ -293,6 +293,122 @@ internal static class FlightInputHandoffSuites
         ctx.Note($"the stunt respawn taps back to the last cleared zone and holds into a restart");
     }
 
+    [Suite("stunt-start-count",
+        "a solo stunt run's start count over C1/IA1's real zones on a 71.5 m/s spawn: a tap from a "
+        + "crash returns with no count and the clock running on, a hold in flight restarts the run "
+        + "behind the count with the aircraft walking in along its nose from the spawn speed times "
+        + "the time left, stick, throttle and respawn held through the count move nothing but the "
+        + "walk and leave the clock at 0, the GO step lands on the spawn state a respawn leaves bit "
+        + "for bit with the clock still 0, the step after it the held controls act and the clock "
+        + "reads one step, the respawn held over GO taps nothing on release, and a hold from a "
+        + "crash runs the count as well")]
+    internal static void StuntStartCount(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
+        ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
+        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, "C1");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ctx.RequireData(gamezPath, $"C1 gamez");
+        ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
+        var run = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, Messages.Load(ctx.MessagesPath));
+        if (run is not { TotalCount: >= 3 })
+        {
+            throw new SuiteSkippedException($"C1/IA1 loads fewer than three danger zones");
+        }
+
+        var textures = new TextureArchive(texturesPath);
+        var pool = new ProjectilePool(textures, null, null);
+        ctx.Host.AddChild(pool);
+        FlightController? pilot = null;
+        try
+        {
+            pilot = HumanRig(ctx, GameZ.Load(ctx.PlanesGamezPath), textures, pool, StuntSpawnSpeed);
+            pilot.Stunt = run;
+            pilot.RestartCount = StartCount.Restart;
+            // The spawn state a plain respawn leaves, which GO must reproduce bit for bit.
+            var spawnPos = pilot.WorldPosition;
+            var spawnNose = pilot.NoseDirection;
+            var spawnVelocity = pilot.WorldVelocity;
+            float spawnLever = pilot.Throttle;
+            Fly(pilot, 30);
+
+            // A tap never runs the count: back after a zone with the clock running on.
+            ClearZone(run, run.Zones[2]);
+            pilot.DebugForceCrash();
+            float clock = run.Elapsed;
+            Press(pilot, TapFrames);
+            ctx.Check(!pilot.Crashed && !pilot.StartCount.Running && run.CompletedCount == 1 && run.Elapsed > clock,
+                $"a tap from a crash returns with no count: count running={pilot.StartCount.Running}, clock {StuntMission.FormatTime(clock)} on to {StuntMission.FormatTime(run.Elapsed)}");
+
+            // A hold in flight restarts the run behind the count.
+            Fly(pilot, 20);
+            int respawns = pilot.RespawnCount;
+            Hold(pilot, HoldFrames);
+            var walkStart = pilot.WorldPosition;
+            float expectedBack = StuntSpawnSpeed * pilot.StartCount.Remaining;
+            ctx.Check(pilot.RespawnCount == respawns + 1 && pilot.StartCount.Running && run.CompletedCount == 0 && run.Elapsed == 0f,
+                $"a hold in flight restarts the run behind the count: respawns {pilot.RespawnCount - respawns}, count running={pilot.StartCount.Running}, zones {run.CompletedCount}, clock {run.Elapsed}");
+            ctx.Check(Mathf.Abs(walkStart.DistanceTo(spawnPos) - expectedBack) < 0.05f
+                    && (spawnPos - walkStart).Normalized().Dot(spawnNose) > 0.9999f,
+                $"…walking in along the nose from {walkStart.DistanceTo(spawnPos):0.00} m behind the start, the spawn speed times the {pilot.StartCount.Remaining:0.000} s left ({expectedBack:0.00} m)");
+
+            // Through the count, stick, throttle and respawn all held hard.
+            pilot.HoldActionForTest(InputAction.PitchUp, true);
+            pilot.HoldActionForTest(InputAction.RollLeft, true);
+            pilot.HoldActionForTest(InputAction.ThrottleUp, true);
+            pilot.HoldActionForTest(InputAction.Respawn, true);
+            int steps = 0;
+            int disturbed = 0;
+            float offLine = 0f;
+            while (pilot.StartCount.Running && steps < 600)
+            {
+                pilot.SimStep(StepDt);
+                steps++;
+                if (pilot.StartCount.Running
+                    && (run.Elapsed != 0f || pilot.NoseDirection != spawnNose || pilot.Throttle != spawnLever
+                        || pilot.LastCommand.Pitch != 0f || pilot.LastCommand.Roll != 0f))
+                {
+                    disturbed++;
+                }
+                var along = pilot.WorldPosition - spawnPos;
+                offLine = Mathf.Max(offLine, (along - (spawnNose * along.Dot(spawnNose))).Length());
+            }
+            ctx.Check(!pilot.StartCount.Running && disturbed == 0 && offLine < 0.01f && pilot.RespawnCount == respawns + 1,
+                $"held controls move nothing but the walk for the {steps} count steps: {disturbed} disturbed, {offLine:0.000} m off the line, respawns {pilot.RespawnCount - respawns}");
+            ctx.Check(pilot.WorldPosition == spawnPos && pilot.NoseDirection == spawnNose
+                    && pilot.WorldVelocity == spawnVelocity && pilot.Throttle == spawnLever && run.Elapsed == 0f,
+                $"the GO step is the spawn state a respawn leaves, bit for bit, and the clock reads 0: {pilot.WorldPosition.DistanceTo(spawnPos):0.000000} m off, velocity {pilot.WorldVelocity.DistanceTo(spawnVelocity):0.000000} m/s off, lever {pilot.Throttle:0.000} of {spawnLever:0.000}, clock {run.Elapsed}");
+
+            pilot.SimStep(StepDt);
+            ctx.Check(run.Elapsed == StepDt && (pilot.LastCommand.Pitch != 0f || pilot.LastCommand.Roll != 0f),
+                $"ABLE-TO-FAIL CONTROL: the step after GO the held stick acts (pitch {pilot.LastCommand.Pitch:0.000}, roll {pilot.LastCommand.Roll:0.000}) and the clock reads one step ({run.Elapsed:0.0000} s)");
+            pilot.HoldActionForTest(InputAction.PitchUp, false);
+            pilot.HoldActionForTest(InputAction.RollLeft, false);
+            pilot.HoldActionForTest(InputAction.ThrottleUp, false);
+            Release(pilot);
+            ctx.Check(pilot.RespawnCount == respawns + 1 && !pilot.StartCount.Running,
+                $"…and the respawn held over GO taps nothing on release ({pilot.RespawnCount - respawns} respawn(s))");
+
+            // A hold from a crash runs the count as well.
+            Fly(pilot, 20);
+            pilot.DebugForceCrash();
+            Hold(pilot, HoldFrames);
+            ctx.Check(!pilot.Crashed && pilot.StartCount.Running && run.Elapsed == 0f,
+                $"a hold from a crash restarts behind the count too: count running={pilot.StartCount.Running}, clock {run.Elapsed}");
+            Release(pilot);
+        }
+        finally
+        {
+            pilot?.Free();
+            pool.Free();
+            textures.Dispose();
+        }
+
+        ctx.Note($"a held restart runs the start count and hands over on the spawn state at GO");
+    }
+
     // One skipped episode on a bound rig: out of flight, the skip armed, then the press taken. The
     // hand-back is what arms flight's consumed-input latch, so each leg drives the real codes.
     private static void Skipped(TestContext ctx, CutsceneController cutscene, FlightController pilot,
