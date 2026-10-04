@@ -115,7 +115,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☐ The split screen race becomes a time attack: window, opening count, best-run ranking, FINAL RUN, boards
 12. ☐ Race presence: no collisions, weapons off, ghosts when near
-13. ☐ The Instant Action time row for a multi-seat Stunt Flying run
+13. ☑ The Instant Action time row for a multi-seat Stunt Flying run
 
 ### Wave C, the network race
 
@@ -412,24 +412,69 @@ skipping the other pilot>. Every pinned golden unchanged (no golden flies a race
 **⚠ Traps.** The 80 m and 40 m are TUNE, judged at the controls. Ghosting must not change a
 non-race session's rendering.
 
-## B13 ☐ The Instant Action time row for a multi-seat Stunt Flying run
+## B13 ☑ The Instant Action time row for a multi-seat Stunt Flying run
 
 **Goal.** With Stunt Flying chosen and more than one seat joined, the Original Instant Action
 screen shows a time row (3, 5, 10, 15 minutes, default 5) that sets the race window; a solo run
 shows no row.
 
-**Evidence (confidence: lead-only).** The Instant Action screen's rows are listed in the focus-order
-census of #25 (`IA_D_LIVES`, `IA_D_NWING` and the other dropdowns).
+**Evidence (confidence: traced-to-code).** The screen's focus order is its row list order within a
+`Column` (`OriginalShell.StepWithinColumn`, `OriginalShell.cs:1288`), a sideways step crosses
+columns by ordinal (`OrdinalInColumn`, `:1350`, which counts disabled rows), and a focus on a dead
+row falls back to the page's first live row (`EnsureFocus`, `:1585`), the contents window on the
+far page. The shipped `[@InstantAction@]` section's setup lines are 210, 235, 280, 305, 350, 375
+with 18-pixel boxes (`extracted/rof/ASSETS/LAYOUT.CSV`), so it leaves two clear lines: one between
+Wingmen and Mission, which the remake-only Lives box takes, and one between Environment and the
+enemy block. The Lives box is the precedent for a remake-only row: a hardcoded label string, the
+mission dropdown's left edge and height, its line read off the gaps (INSTR-77). The Instant Action
+def already carries the remake's other invented rule, `Lives`, from the wizard to the session
+(`InstantAction.BuildFromWizard`, `SessionSpec.FromMenu`).
 
-**Approach.** <TODO: where the row sits in the column and its focus order (#25 is open on this
-screen's order); its label (no original string exists; a remake string)>.
+**Approach.** Placement (traced-to-code): the box takes the setup stack's second clear line,
+`ClearLine(screen, height, 1)` (`OriginalInstantActionScreen.cs:893-910`), which on the shipped
+layout is Y 327.5 under Environment and over the enemy block, at the mission dropdown's X (525),
+110 wide. Focus order (traced-to-code): `AddRaceTime` inserts the row before the first setup row
+standing below its line (`:845-862`), so the walk reaches it between Environment and the enemy
+count, the order the page reads in. That leaves #25 no worse: no row's order departs from its
+line. Hidden (solo, or another mission type), the row stays in the list with `Visible` and
+`Enabled` false and `Column` -1 (`:861-862`), so no other row's index or column ordinal moves when
+a seat joins or leaves; the precedent for an unseen, unhit row is `OriginalWidgets.PageRows`. A
+focus left on the hidden row, or inside its list when a seat leaves under it, lifts to the nearest
+live box above (`LiftFocusOffHiddenRaceTime`, `:679, 695`); a hidden box answers no dropdown
+(`:1079`). Label (traced-to-code, the look is the user's): "Race Time:" in the title column and
+heading ink (`:149, 1321`), items "3 minutes" to "15 minutes", the closed box drawn by the same
+`ComposeRow` path and arrow strip (art 4 of the mission dropdown) as Lives. Visibility is
+`InstantActionFeature.OffersRaceWindow(seats)`, stunt flying with more than one seat
+(`InstantActionFeature.cs:343`), read on every build. The pick is
+`InstantActionFeature.RaceWindowMinutes` (default 5, left alone by a preset, reset by `Discard`),
+carried on `InstantActionDef.RaceWindowMinutes` (`InstantAction.cs:409`) and resolved into
+`SessionSpec.StuntRaceMinutes` (`SessionSpec.cs:396, 1856`), which keeps 5 on every launch that
+builds no def. B11 reads `_spec.StuntRaceMinutes` where `GameSession` builds the `StuntRace`
+(`Launch/GameSession.cs:1874-1875`). A screenshot aid, `--menu=instant-action:race-time` with
+`--debug-join=1 --presentation=original`, poses it (`OriginalInstantActionScreen.PoseRaceTime`).
 
-**Model recommendation.** <TODO>
+**Model recommendation.** A mid-tier model suffices: the work is one menu module, a feature field
+and a spec field, with the Lives box as the pattern to copy. The look needs the user's eyes.
 
-**Verify.** <TODO: a menu suite: the row hidden solo, shown with two seats, its choice reaching the
-race window>.
+**Verify.** Units: `OriginalInstantActionTests.TheRaceTimeBoxShowsOnlyForAStuntRunWithASecondSeatAndKeepsItsPlaceInTheWalk`
+and `ASeatLeavingUnderTheOpenRaceTimeListClosesItAndTheRaceWindowRidesTheLaunch` (hidden solo, shown
+at the same index with two seats, sideways step and list pick, hidden under another type, the focus
+lift, the list closing on a leave, the def and `SessionSpec.FromMenu` carrying the pick, 5 without a
+def), `InstantActionFeatureTests.TheRaceWindowIsOfferedToAMultiSeatStuntRunAndRidesTheDefUntilDiscarded`.
+Engine: `menu-original-instant-action` over the install's layout (Y 327.5, no overlap, walk order
+Environment, Race Time, enemy count, sideways step, hidden under Zeppelin Run, the launch's spec at
+10 minutes). Mutation-checked: showing it solo, appending it at the column's end, dropping the
+spec field, dropping the focus lift and reusing the Lives line each turned a test red. Every pinned
+golden unchanged (no pinned shot shows the Instant Action screen).
 
-**⚠ Traps.** <TODO>
+**⚠ Traps.** Do not drop the hidden row from the list: the shell's focus is an index, so a row that
+comes and goes moves the focus of every row under it when a seat joins. Do not leave the hidden
+row in column 1: `OrdinalInColumn` counts disabled rows, so a solo screen's column crossings would
+shift by one. Do not write the box's Y: the unit fixture has one clear line, the shipped layout
+two, and a written Y lands on an authored box in one of them (INSTR-77). The window rides the def
+on every Instant Action launch, solo included; only a multi-seat stunt run may read it.
+
+**Verified.** <pending orchestrator run>
 
 # Wave C, the network race
 

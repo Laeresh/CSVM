@@ -336,7 +336,7 @@ the launchscreen's Instant Action wizard. The first two funnel through one priva
 key/[values] shape `ZrdrDict` already wraps, so a hand-authored mission parses through exactly the
 path a real chapter's does; the wizard overlays only the fields a pilot can configure onto the
 chosen environment's own `Load` result. `spawn_points` and `dzones` stay in `Flight/Modes/SpawnPoints`
-and `Flight/Modes/StuntMission`, and the wingmen's fit rides beside the def (`SessionSpec.IaWingmanLoadout`) since it is a flight type. Every optional key's default: [../formats/instant-action.md](../formats/instant-action.md).
+and `Flight/Modes/StuntMission`, and the wingmen's fit rides beside the def (`SessionSpec.IaWingmanLoadout`) since it is a flight type. Two fields no `ia.json` key carries are the remake's own rules: `Lives`, and `RaceWindowMinutes`, the split screen stunt race's window, which only the wizard sets and which defaults to 5. Every optional key's default: [../formats/instant-action.md](../formats/instant-action.md).
 
 ## src/Mech3/AiSkills.cs
 The AI pilot-skill constants from `player.json`: the `ai_skill_parameters` block as

@@ -390,6 +390,10 @@ public sealed record SessionSpec
     /// screen, null for the stock fit and on every CLI launch. Kept beside <see cref="IaDef"/>
     /// rather than on it because a fit is a flight type the Mech3 def must not name.</summary>
     public LoadoutChoice? IaWingmanLoadout { get; private set; }
+    /// <summary>The split screen stunt race's window in minutes. <see cref="FromMenu"/> takes it off
+    /// the Instant Action def's time row; every other launch keeps the
+    /// <see cref="InstantActionDef.DefaultRaceWindowMinutes"/> default.</summary>
+    public int StuntRaceMinutes { get; private set; } = InstantActionDef.DefaultRaceWindowMinutes;
     /// <summary>The <c>--stage=</c> value as given, unvalidated, only "empty" names a stage.
     /// Whether it survived is <see cref="EmptyStage"/>.</summary>
     public string? Stage { get; private set; }
@@ -1849,6 +1853,7 @@ public sealed record SessionSpec
             },
             IaDef = iaDef,
             IaWingmanLoadout = iaDef != null ? iaWingmanLoadout : null,
+            StuntRaceMinutes = iaDef?.RaceWindowMinutes ?? cli.StuntRaceMinutes,
         };
     }
 

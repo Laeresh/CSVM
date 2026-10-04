@@ -45,6 +45,7 @@ public class OriginalInstantActionTests
                 OriginalInstantActionScreen.WingmanPlaneKey,
                 OriginalInstantActionScreen.LivesKey, OriginalInstantActionScreen.MissionKey,
                 OriginalInstantActionScreen.EnvironmentKey, "IA_D_NENEMY0", "IA_D_EGROUP0", "IA_D_DIFFICULTY0", "IA_D_PLANEE0",
+                OriginalInstantActionScreen.RaceTimeKey,
                 OriginalInstantActionScreen.PageUpKey, OriginalInstantActionScreen.PageDownKey,
                 OriginalInstantActionScreen.PlayerRadioKey, OriginalInstantActionScreen.WingmanRadioKey,
                 OriginalInstantActionScreen.WeaponLoadoutKey,
@@ -388,6 +389,109 @@ public class OriginalInstantActionTests
         Assert.True(host.Module.PoseLives(5));
         Assert.Equal(5, ia.Lives);
         Assert.Equal(OriginalInstantActionScreen.LivesKey, host.FocusedKey);
+    }
+
+    [Fact]
+    public void TheRaceTimeBoxShowsOnlyForAStuntRunWithASecondSeatAndKeepsItsPlaceInTheWalk()
+    {
+        var host = OpenSeated(out var ia, out var setup);
+        Click(host, 1);
+        Assert.Equal("stunt_flying", ia.MissionType.Key);
+
+        // Solo, the box keeps its place in the rows unseen, unhit and in no column, and the page
+        // draws neither it nor its title.
+        int index = host.Rows.ToList().FindIndex(r => r.Key == OriginalInstantActionScreen.RaceTimeKey);
+        var hidden = host.Rows[index];
+        Assert.False(hidden.Visible);
+        Assert.False(hidden.Enabled);
+        Assert.Equal(-1, hidden.Column);
+        Assert.Equal(string.Empty, hidden.Label);
+        var solo = Compose(host);
+        Assert.DoesNotContain(solo.Lines, l => l.Text == "Race Time:");
+        Assert.DoesNotContain(solo.Fills, f => f.X == hidden.X && f.Y == hidden.Y);
+
+        // A second seat shows it at the same index. The lives box takes this layout's one clear
+        // line, so this box stands under the stack. Its place in the walk follows: after the last
+        // enemy box and before the paging buttons.
+        var guest = setup.Join(new ScriptedMenuSeat())!;
+        Assert.Equal(index, host.Rows.ToList().FindIndex(r => r.Key == OriginalInstantActionScreen.RaceTimeKey));
+        var shown = Row(host, OriginalInstantActionScreen.RaceTimeKey);
+        Assert.True(shown.Visible);
+        Assert.True(shown.Enabled);
+        Assert.Equal(1, shown.Column);
+        Assert.Equal(OriginalRowKind.Dropdown, shown.Kind);
+        Assert.Equal((520f, 380f, 110f, 20f), Rect(shown));
+        Assert.Equal("5 minutes", shown.Label);
+        Assert.Equal("IA_D_PLANEE0", host.Rows[index - 1].Key);
+        Assert.Equal(OriginalInstantActionScreen.PageUpKey, host.Rows[index + 1].Key);
+        Assert.DoesNotContain(host.Rows, r => r.Key != OriginalInstantActionScreen.RaceTimeKey && r.Visible && Overlaps(r, shown));
+        var board = Compose(host);
+        Assert.Contains(board.Lines, l => l.Text == "Race Time:" && l.X == 420f && l.Y == 380f);
+        Assert.Contains(board.Fills, f => f.X == 520f && f.Y == 380f && f.Border);
+        // The closed box wears the authored dropdowns' own arrow strip, centred on its line.
+        Assert.Contains(board.Pictures, p => p.Art.Name == "PI_B_Down.png" && p.X == 615f && p.Y == 383f);
+
+        // A sideways step and a picked row both write the shared feature's window.
+        Hover(host, OriginalInstantActionScreen.RaceTimeKey);
+        Assert.True(Step(host, 1));
+        Assert.Equal(10, ia.RaceWindowMinutes);
+        Assert.Equal("10 minutes", Row(host, OriginalInstantActionScreen.RaceTimeKey).Label);
+        Click(host, OriginalInstantActionScreen.RaceTimeKey);
+        Assert.Equal(OriginalInstantActionScreen.RaceTimeKey, host.Module.OpenDropdown);
+        Assert.Equal(new[] { "3 minutes", "5 minutes", "10 minutes", "15 minutes" }, host.Rows.Select(r => r.Label));
+        Assert.Equal((520f, 400f, 110f, 20f), Rect(host.Rows[0]));
+        Click(host, 3);
+        Assert.Null(host.Module.OpenDropdown);
+        Assert.Equal(15, ia.RaceWindowMinutes);
+        Assert.Equal(OriginalInstantActionScreen.RaceTimeKey, host.FocusedKey);
+
+        // Another mission type hides it again with the pick kept, and stunt flying brings it back.
+        Hover(host, OriginalInstantActionScreen.MissionKey);
+        Step(host, 1);
+        Assert.Equal("zeppelin_run", ia.MissionType.Key);
+        Assert.False(Row(host, OriginalInstantActionScreen.RaceTimeKey).Visible);
+        Assert.DoesNotContain(Compose(host).Lines, l => l.Text == "Race Time:");
+        Step(host, -1);
+        Assert.Equal("15 minutes", Row(host, OriginalInstantActionScreen.RaceTimeKey).Label);
+
+        // The guest leaving with the cursor on the box lifts the cursor to the live box above it.
+        // It never stays on the hidden row, and never jumps to the far page's first row.
+        Hover(host, OriginalInstantActionScreen.RaceTimeKey);
+        Assert.True(setup.Unjoin(guest));
+        Assert.Equal("IA_D_PLANEE0", host.FocusedKey);
+        Assert.False(Row(host, OriginalInstantActionScreen.RaceTimeKey).Enabled);
+        Assert.False(host.Module.OpenDropdownOn(OriginalInstantActionScreen.RaceTimeKey));
+        Assert.Equal(15, ia.BuildDef().RaceWindowMinutes);
+    }
+
+    [Fact]
+    public void ASeatLeavingUnderTheOpenRaceTimeListClosesItAndTheRaceWindowRidesTheLaunch()
+    {
+        var host = OpenSeated(out var ia, out var setup);
+        Click(host, 1);
+        var guest = setup.Join(new ScriptedMenuSeat())!;
+        Click(host, OriginalInstantActionScreen.RaceTimeKey);
+        Click(host, 0);
+        Assert.Equal(3, ia.RaceWindowMinutes);
+        Click(host, OriginalInstantActionScreen.RaceTimeKey);
+        Assert.Equal(OriginalInstantActionScreen.RaceTimeKey, host.Module.OpenDropdown);
+
+        // The next build after the leave, which the shell makes every frame, closes the list.
+        setup.Unjoin(guest);
+        Assert.Contains(host.Rows, r => r.Key == OriginalInstantActionScreen.PlayerPlaneKey);
+        Assert.Null(host.Module.OpenDropdown);
+        Assert.Equal("IA_D_PLANEE0", host.FocusedKey);
+        Assert.Empty(Compose(host).Overlays);
+
+        // The window rides the built def whichever door launches, and the menu's session spec
+        // carries it for the race to read. A launch with no def keeps the five-minute default.
+        var launch = Assert.IsType<LaunchExit>(Click(host, OriginalInstantActionScreen.FlyMissionKey));
+        Assert.Equal(3, launch.InstantAction!.RaceWindowMinutes);
+        var cli = SessionSpec.Parse(Array.Empty<string>());
+        Assert.Equal(InstantActionDef.DefaultRaceWindowMinutes, cli.StuntRaceMinutes);
+        var spec = SessionSpec.FromMenu(cli, launch.Chapter, new[] { "player_bhawk", "player_fury" }, launch.Mode, launch.InstantAction);
+        Assert.Equal(3, spec.StuntRaceMinutes);
+        Assert.Equal(5, SessionSpec.FromMenu(cli, "C5", new[] { "player_bhawk", "player_fury" }, MenuMode.Stunt).StuntRaceMinutes);
     }
 
     [Fact]
