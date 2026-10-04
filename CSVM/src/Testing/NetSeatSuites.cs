@@ -49,8 +49,9 @@ internal static class NetSeatSuites
         + "the roster's own airframe pick beats this machine's launch flags, and every remote seat "
         + "is built with no HUD in a pane, no pad, no keyboard, no pause key, no target selection "
         + "and no camera-anchored cue, while the local seat in the same build has all of them; a "
-        + "bot seat this host flies is built paneless the same way, with no menu pick, and keeps "
-        + "no pose buffer because its pose is simulated here")]
+        + "bot seat this host flies is built paneless the same way, with no menu pick and no pose "
+        + "buffer, steered by an armed AI pilot under its own seat index, and joins the seat list "
+        + "rather than the roster's AI")]
     internal static void RemoteSeatsWithoutPanes(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -156,13 +157,21 @@ internal static class NetSeatSuites
             ctx.Check(!bot.UseKeyboard && bot.PadDevices is { Length: 0 } && !bot.AllowPause
                       && bot.Targeting == null && bot.VersusHud == null && bot.Photograph == null && bot.SpeedCue == null,
                 $"and reads no keyboard, pad or pause key, with nothing built that needs a camera or a pane");
+            ctx.Check(!bot.IsHumanPiloted && bot.Pilot is { Gunner: not null, Rocketeer: not null, Machine: not null },
+                $"an AI pilot flies the bot, armed with a gunner, ordnance and a mode machine (human {bot.IsHumanPiloted}, gunner {bot.Pilot?.Gunner != null}, machine {bot.Pilot?.Machine != null})");
+            ctx.Check(bot.PlayerIndex == 3 && bot.Team == AimAssist.TeamOfPilot(3)
+                      && bot.Pilot?.Machine?.AttackRange == bot.Stats?.AiAttackRange,
+                $"under its seat index and that seat's team, with the airframe's engagement range (shooter {bot.PlayerIndex}, team {bot.Team}, attack {bot.Pilot?.Machine?.AttackRange})");
+            ctx.Check(flightRoster.AiAircraft.Count == 0,
+                $"and it is a seat, not one of the roster's AI, which the world link would replicate again ({flightRoster.AiAircraft.Count} AI)");
 
             // ABLE-TO-FAIL CONTROL: the local seat in this same build takes every one of those.
             // The assertions above cannot be passing because the roster built nothing at all.
             var local = pilots[0];
             ctx.Check(ReferenceEquals(local.HudParent, pane) && local.VersusHud != null
-                      && local.Targeting != null && local.AllowPause && local.UseKeyboard,
-                $"ABLE-TO-FAIL CONTROL: the pane in the same build has its HUD, board, targeting, pause key and keyboard");
+                      && local.Targeting != null && local.AllowPause && local.UseKeyboard
+                      && local.IsHumanPiloted && local.Pilot == null,
+                $"ABLE-TO-FAIL CONTROL: the pane in the same build has its HUD, board, targeting, pause key and keyboard, and no AI pilot");
             ctx.Check(pane.GetChildren().OfType<CanvasLayer>().Any(),
                 $"ABLE-TO-FAIL CONTROL: and its own canvases are in the pane");
 

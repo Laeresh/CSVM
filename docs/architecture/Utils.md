@@ -256,7 +256,8 @@ runs Verbose and adds a `[perf] gc-types` line naming the allocation sampler's m
 The session's randomness policy: one master seed and a named generator per subsystem derived from
 it, independent across subsystems so a draw added to one cannot shift another's. The stream names
 are the `public const string` fields on `Rng` itself, each carrying the reason it is its own
-stream. `Reset(master, pinned)` runs once per session build, before anything draws; `Stream(name)`
+stream; `Bots` exists because only the host builds a network bot's pilot, so those draws must stay
+off any stream both ends share. `Reset(master, pinned)` runs once per session build, before anything draws; `Stream(name)`
 is the shared generator, `SeedFor` / `IntSeedFor` the pure seed, and `NewIntSeed` /
 `NewSystemRandom` a per-instance stream off the subsystem's own. Unpinned, the master comes from
 `TimeSeed()` so the shipped game keeps its variety; a scripted flag implies `--det` and pins it.

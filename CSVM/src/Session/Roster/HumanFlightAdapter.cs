@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Effects;
+using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Audio;
 using CSVM.Flight.Camera;
@@ -40,6 +41,8 @@ internal sealed class HumanFlightAdapter
     private readonly AircraftAssemblyResources _aircraft;
     private readonly FlightWorldBindings _world;
     private readonly HumanRosterBindings _human;
+    // Arms a bot seat's AI pilot off the AI path's skill tables.
+    private readonly AiFlightAssembler _botPilots;
 
     // What each rig is flying now, by rig index: a swap replaces the entry. The mission-script
     // hand-over gives wingman_4 the aeroplane the player is LEAVING, and nothing else records it.
@@ -50,7 +53,7 @@ internal sealed class HumanFlightAdapter
 
     public HumanFlightAdapter(FlightRosterPolicy policy, LiveryResolver liveries, IFlightStarts spawns,
         WorldEffectsFactory worldEffects, Node3D worldRoot, AircraftAssemblyResources aircraft,
-        FlightWorldBindings world, HumanRosterBindings human)
+        FlightWorldBindings world, HumanRosterBindings human, AiFlightAssembler botPilots)
     {
         _policy = policy;
         _liveries = liveries;
@@ -60,6 +63,7 @@ internal sealed class HumanFlightAdapter
         _aircraft = aircraft;
         _world = world;
         _human = human;
+        _botPilots = botPilots;
     }
 
     /// <summary>Mesh instances the assembled planes added, accumulated across the rigs, the
@@ -113,6 +117,10 @@ internal sealed class HumanFlightAdapter
         var seat = pi < _human.NetSeats.Count ? _human.NetSeats[pi] : null;
         bool paneless = seat is { HasPane: false };
         bool flownElsewhere = seat is { FlownHere: false };
+        // A bot is AI-piloted on every machine, so each plays its hits, shakes and wreck alike.
+        // Only the host, which flies it, gives it a pilot to steer it.
+        bool bot = seat is { IsBot: true };
+        var botPilot = bot && !flownElsewhere ? new AiPilot() : null;
         // Each player flies their own pick; an Instant Action mission overrides it for every human
         // alike (HumanFieldPlanes.InstantActionOverride settles which do). A mission's own swap outranks
         // both. In a network match the roster's pick comes first: every peer builds the same field.
@@ -197,7 +205,8 @@ internal sealed class HumanFlightAdapter
             PlayerIndex = pi,
             // The keymap file and the sticks are this machine's player's, not the roster seat's.
             LocalPlayer = MenuSeatOf(pi),
-            IsHumanPiloted = true,
+            IsHumanPiloted = !bot,
+            Pilot = botPilot,
             // A seat flown elsewhere takes its pose out of this history, not a flight model.
             // The buffer's presence IS that ownership, so it is built here and nowhere else.
             // The session fills it from the samples that seat's owner sends.
@@ -221,7 +230,7 @@ internal sealed class HumanFlightAdapter
             GrazeEffectSink = _world.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
             TouchdownDefs = _world.TouchdownDefs,
             Projectiles = _world.Projectiles,
-            HumanPositions = _world.HumanPositions,
+            HumanPositions = botPilot != null ? PersonSeatPositions() : _world.HumanPositions,
             // ⚠ Pass the null through. Null and empty are DIFFERENT bindings to Pads.For: null
             // reads every connected pad (what AssignPads returns for one player), empty reads none.
             // Coalescing flew a single player pad-dead; a remote seat takes empty, it reads none.
@@ -545,15 +554,24 @@ internal sealed class HumanFlightAdapter
         // so the caller can construct the assembler first. A swap brings its own instead.
         var start = swap?.Start ?? (_starts ??= _spawns.ChooseStarts(
             _human.SpawnList, _world.MissionZrdrPath, _human.SpawnBase, _human.RigCount))[pi];
-        // The plant's force path is chosen once, here, off who is flying, a person, so the
-        // player path. FlightModel.UsesAiForcePath carries why this is a construction argument
-        // rather than the original's own pointer-compare-against-the-player test.
+        // The plant's force path is chosen once, here, off who is flying: a person takes the player
+        // path and a bot the AI one. FlightModel.UsesAiForcePath carries why this is a construction
+        // argument rather than the original's own pointer-compare-against-the-player test.
         var camParams = _aircraft.CamParamsFor(planeName);
         // A remote seat passes no camera, the same null an AI rig passes. The chase rig, the head
         // look and every camera write inside Setup are then not built at all.
         controller.Setup(new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),
             paneless ? null : rig.Camera, camParams, start.Pos, start.LookAt,
             start.ThrottleFrac, start.SpeedMps, cockpitCameraOffset: planeBuilder.CockpitCameraOffset);
+        // A bot holds the course it spawned on until its gunner finds a quarry. Armed before the
+        // tree takes it, since its first step reads the gunner and the mode machine.
+        if (botPilot != null)
+        {
+            botPilot.TargetHeadingDeg = AiPilot.HeadingDegOf(start.LookAt - start.Pos);
+            botPilot.TargetAltitude = start.Pos.Y;
+            _botPilots.ArmSeatPilot(botPilot, stats, planeName, controller.Team);
+            controller.ArmSpawnTimers();
+        }
         // The Danger Zone eye, framed off the airframe's own chase distance and aimed at the pose
         // the controller draws, which is the controller node's own transform.
         if (!paneless)
@@ -688,6 +706,29 @@ internal sealed class HumanFlightAdapter
         int menu when menu < _policy.MenuCustomPlanes.Count => _policy.MenuCustomPlanes[menu],
         _ => null,
     };
+
+    // Where every person in the field flies, this machine's panes and seats flown elsewhere alike,
+    // which a bot's far-field plant is selected on. ⚠ Never the session's pane snapshot: a bot
+    // fighting a guest a kilometre from the host would then fly the speed-hold plant.
+    private Func<IReadOnlyList<Vector3>> PersonSeatPositions()
+    {
+        var seats = _human.NetSeats;
+        var rigs = _human.Rigs;
+        var positions = new List<Vector3>(seats.Count);
+        return () =>
+        {
+            positions.Clear();
+            for (int i = 0; i < seats.Count && i < rigs.Count; i++)
+            {
+                if (!seats[i].IsBot && rigs[i].Controller is { } person && GodotObject.IsInstanceValid(person))
+                {
+                    positions.Add(person.WorldPosition);
+                }
+            }
+
+            return positions;
+        };
+    }
 
     // Which of this machine's menu seats flies seat pi. The menu lists only the local seats, and a
     // guest's own seat stands behind its host's in the roster. A seat flown elsewhere has none.

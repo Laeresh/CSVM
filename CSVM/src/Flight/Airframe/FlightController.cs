@@ -1130,6 +1130,11 @@ public partial class FlightController : Node3D
     /// the wreck's retained speed alone.</summary>
     internal FlightInput LastCommand => _lastInput;
 
+    /// <summary>Whether the last step flew the far-field speed-hold plant
+    /// (<see cref="FlightModel.FarFieldPlant"/>), for a suite to read off a session's aircraft.
+    /// </summary>
+    internal bool FarFieldPlant => _model != null && _model.FarFieldPlant;
+
     // A remote airframe is a pose that arrives late, never a stick that arrives late. It takes no
     // arm at all: a neutral hold answers any incidental read, and no device is touched. That wins
     // over a supplied stick, whose pose is not this machine's to write.

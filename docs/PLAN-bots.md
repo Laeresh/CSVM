@@ -94,7 +94,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ A seat knows whether a human or a bot flies it, and the roster carries that across the wire
 2. ❌ `VersusMatch` keys its scores by pilot, so a row survives its seat being reused
-3. ☐ The host flies a bot seat with an `AiPilot`; guests see it as a remote seat
+3. ☑ The host flies a bot seat with an `AiPilot`; guests see it as a remote seat
 4. ☐ CLI twin: `--vs-bots=` / `--vs-bot=` build bot seats in a scripted host
 
 ### Wave B, bot behaviour in a Dogfight
@@ -225,40 +225,71 @@ green; `<TODO: a unit test where a seat's pilot changes between matches and the 
 **⚠ Traps.** This is the data change most likely to cause trouble: every seat-indexed score reader
 must move, and a guest's mirror must agree with the host's after a seat changes hands.
 
-## A3 ☐ The host flies a bot seat with an `AiPilot`; guests see it as a remote seat
+## A3 ☑ The host flies a bot seat with an `AiPilot`; guests see it as a remote seat
 
 **Goal.** On the host, a bot seat is a `FlightController` driven by an `AiPilot`, sending its state
 on its seat channel at the owner cadence. On a guest it is a remote seat rig fed by
 `AircraftStateMessage`. Hits on it and by it, its death and its score take the seat paths.
 
-**Evidence (confidence: lead-only).** Remote seats: `SessionNet.BuildSeatRigs`
-(`SessionNet.cs:180,596-624`), samples to `_seatRigs[seat].Controller.RemotePoses.Receive`
-(`:630-637`), `AircraftStateMessage` 44 bytes UnreliableSequenced (`NetMessages.cs:453-466`), cadence
-`AircraftStateCadence.SendStepInterval = 3` (`CSVM/src/Net/AircraftStateCadence.cs:18`). Deaths:
-`SessionNet.ReportDeath` (`SessionNet.cs:530-556`) runs only for local human seats (`:532`); killer
-by `SeatOfShooter` (`:575-591`). Hits: `SessionNet.RouteHit` (`:727-763`) has the host stand in for
-every round no seat fired. AI creation: `FlightRoster.SpawnAi(AiSpawn)`
-(`CSVM/src/Session/Roster/FlightRoster.cs:246`, record at `:31-44`), AI `PlayerIndex = 100 + index`
-(`:52`, `AiFlightAssembler.cs:162`). An AI kill on a seat is scored today as a no-killer death
-(`SessionNet.cs:537-547`). The co-op path (`NetWorldLink`, `AiStateMessage` 0x45) is the precedent for
-host-flown AI but is not the path this item takes (Decision 3).
+**Evidence (confidence: traced-to-code).** The lead's seam, the AI assembler, was the wrong one.
+`AiFlightAssembler.Assemble` loads `PlaneStats.LoadForAi` (the AI def's zone-less armour/health pair
+and its `weapons` block), scales the hull by `Difficulty.FactorForSpawn` (Decision 8 refuses that),
+jitters it (`WithAiSpawnJitter`) and adds the aircraft to `FlightRoster._ai`. Every guest builds the
+same seat through `HumanFlightAdapter` on the player chain, so the two ends would fly different
+damage models, and `SessionNet.Mirror` would take only the whole pair. Membership of `_ai` puts it
+in `GameSession.CaptureAiAircraft`, which steps it a second time and hands it to
+`NetWorldLink.Admit`. Most of the seat path already held after A1, and the lead understated it:
+`SessionNet.ReportDeath` gates on `FlownHere`, not on a local human; `VersusDirector.Wire` subscribes
+every seat rig's `Downed` to it; `WireSeatCombat`, `BroadcastAircraftState` (on
+`NetChannels.ForSeat`), `RouteHit`, `TakeHit` and `SendChangedDamage` all key on `FlownHere`; and
+`SeatOfShooter` reads `PlayerIndex` off the seat rigs, so a bot whose `PlayerIndex` is its seat is
+charged its kills with no change to scoring. A roster AI's kill stays a no-killer death. The gunner
+sweeps `ProjectilePool.CollectVehicleList`, where every seat rig, local and remote, is registered,
+through the team gate. `AiFlightAssembler.PreparePilot` arms a gunner only when a rating exists.
+An AI-force-path aircraft flies `FlightModel`'s far-field speed-hold plant past 1000 m from the
+nearest position its `HumanPositions` gives, and the session's binding (`PlayerPositionsSnapshot`)
+reads the host's own panes alone, so a bot instead measures against every person's seat in the field
+(`HumanFlightAdapter.PersonSeatPositions`, `net-bot-seat` places one beside the guest 3 km from the
+host's plane and reads the full plant).
 
-**Approach.** Assemble the bot's aircraft through the AI assembler but register it as the seat's
-controller, with the seat's `PlayerIndex` rather than 100+n, so `SeatOfShooter` resolves a bot's
-rounds to its seat. Send its state through the same cadence and seat channel a human owner uses.
-Run `ReportDeath` for bot seats too. The host applies damage to a bot as the bot's owner. Team id
-is `AimAssist.LobbyTeam(N)` in a team match (`AimAssist.cs:185-195`), never a raw lobby team.
+**Approach (landed).** The seam is `HumanFlightAdapter`, with an AI pilot swapped in. The bot
+stays a member of the seat list (`FlightRoster.Humans`, `SessionNet._seatRigs`), which keeps the
+spawn walk, the `VersusMatch` row, `VersusHud.Rigs`, markers, colours, the paint stream and every
+seat path treating it as a seat, and it is never in `FlightRoster.AiAircraft`, so `NetWorldLink`
+never admits it and no opposition count sees it. Its paneless build already skips HUD, camera,
+audio, pads and pause key. A bot seat is AI-piloted on every machine (`IsHumanPiloted = !seat.IsBot`),
+so both ends play its hits, AI shakes and `ai_crash_*` wreck alike. On the host it binds a new
+`AiPilot`, holding its spawn course, armed by `AiFlightAssembler.ArmSeatPilot` (gunner, ordnance,
+mode machine, the airframe's ranges) at `SeatRating` 5 and `Difficulty.Hard`, drawn from a new
+`Rng.Bots` stream so a host-only draw moves no stream both ends share. Its `PlayerIndex` is its
+seat. Team is the seat rule `HumanFlightAdapter` already had: `AimAssist.LobbyTeam(N)` in a team
+match, `TeamOfPilot(seat)` in free-for-all. Bots stay silent: `SessionVoices` skips them (A1) and
+no AI voice registration reaches a seat. A scripted host adds a bot by putting `NetSeats.Bot(...)`
+in the roster its `LauncherContext.NetSeats` carries; the A3 suites do exactly that, and A4's
+flags need no other seam. For later items: on both ends `TargetHud.NearestHostile` tracks a bot as
+an AI hostile (its fallback marker reads the node name `player{seat+1}`) beside `VersusHud`'s seat
+marker, which D31 settles; a bot, like a remote human, has no engine or gun audio on any machine.
 
-**Model recommendation.** `<TODO: not settled in the session>`
+**Model recommendation.** Opus: choosing the seam meant reading both assembly paths, the session's
+step phases and the world link together; the code change itself is small.
 
-**Verify.** A new loopback suite on the `NetWorldSuites` template (`CSVM/src/Testing/NetWorldSuites.cs:620-650`,
-`LoopbackTransport.Mesh`): a bot kills the guest's seat and the host scores the bot; the guest
-kills the bot and the host scores the guest; both ends' standings agree. Run it lossless and over
-`LoopbackConditions` with loss.
+**Verify.** `net-bot-seat` (clean loopback) and `net-bot-seat-lossy` (30 ms, 25 per cent loss),
+`CSVM/src/Testing/NetBotSuites.cs`: a host pane, a guest seat and a host bot. The host flies the
+bot with an armed pilot under seat index 2 and admits no world AI on either end; the guest builds a
+remote, pilotless, AI-flown copy whose path traces the host's (0.00 m clean, 1.42 m lossy mean at
+the best lag, against 3600 m for the other aeroplane); the gunner ranks a hostile seat as its quarry;
+a bot round on the host's copy of the guest lands on the guest's own aeroplane, a guest round on
+its copy of the bot lands on the host's bot and is mirrored back; the bot's lethal claim on the
+guest scores the bot and posts "Destroyed by bot", the guest's on the bot scores the guest, both
+boards agree, and the downed bot is granted its return on both ends and flies on its pilot. Every
+lossy wait reads every condition its checks read (DET-17). `net-seats` checks the bot's armed pilot,
+seat index, team and engagement range, and that the roster's AI list stays empty.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** DET-17 (`docs/verification.md:283`): a lossy loopback suite must wait on every
-condition its checks read. A bot's controller must not also be admitted by `NetWorldLink.Admit`,
-which walks the roster's AI list and would replicate it twice.
+condition its checks read. ⚠ Never assemble a bot through `FlightRoster.SpawnAi`: it would carry the
+AI def's damage model, be stepped twice and be replicated again through `AiStateMessage`.
 
 ## A4 ☐ CLI twin: `--vs-bots=` / `--vs-bot=` build bot seats in a scripted host
 
@@ -297,6 +328,8 @@ choice comes down to the ranking's other terms (Decision 10).
 
 **Approach.** Gate the human preference on the session mode, off in a Dogfight. Whether a bot seat
 counts as a "player" in the ranking after A3 is `<TODO: check how the ranking recognises a player>`.
+After A3 a bot reads `IsHumanPiloted` false on every machine, so `GunnerAcquisition` files a person
+seat with `IsPlayer` set and a bot seat without it; the gate belongs on the ranking, not the flag.
 
 **Model recommendation.** `<TODO: not settled in the session>`
 
@@ -319,6 +352,9 @@ camera time in a match is not a reading of the original (`docs/org/multiplayer-s
 
 **Approach.** The host's bot rig asks the rotation for a point as a local human seat does, on the
 auto-respawn path. `<TODO: read how a local seat's respawn request reaches the rotation>`
+After A3 a downed bot already returns through `VersusDirector.AskSpawn` and `GrantSpawn` with Auto
+Respawn on (`net-bot-seat`), keeping its `AiPilot` unreset, while with it off the `RespawnOnFire`
+that `VersusDirector.Wire` sets on every seat rig holds the bot down for a Fire press it never makes.
 
 **Model recommendation.** `<TODO: not settled in the session>`
 
@@ -346,6 +382,9 @@ personalities plus the flat average are the table ending at `instant-action.md:5
 personality as `RosterSkills`. Draw callsigns without repeats from the pilot-name strings,
 truncated to the 12-character limit. `<TODO: confirm which of 500-599 are names and which are skill
 ratings>`; `<TODO: the stock plane list a bot may draw from>`.
+After A3 the ratings come from `AiFlightAssembler.ArmSeatPilot`, which passes `SeatRating` 5 and
+`Difficulty.Hard` into `PreparePilot`, so the seat's `NetBotSkill` (0/1/2, `Difficulty`'s own
+numbers) and the rolled personality as `RosterSkills` plug in there.
 
 **Model recommendation.** `<TODO: not settled in the session>`
 

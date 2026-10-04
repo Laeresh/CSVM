@@ -702,8 +702,8 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 
 - `src/Session/Roster/FlightRoster.cs`, the session's aircraft set: builds the human field in player order and introduces AI aircraft later through one assembly seam.
 - `src/Session/Roster/FlightRosterInputs.cs`, the roster's grouped dependency contracts: aircraft resources, world bindings, human-session bindings and the policy.
-- `src/Session/Roster/HumanFlightAdapter.cs`, the roster's private human path: painted plane, controller, loadout, instruments, damage visuals, spawn, crash rig.
-- `src/Session/Roster/AiFlightAssembler.cs`, the roster's private AI path: pilot preparation, model, controller, loadout, damage and crash runtime, and placement.
+- `src/Session/Roster/HumanFlightAdapter.cs`, the roster's private seat path, a person's or a network bot's: painted plane, controller, loadout, instruments, damage visuals, spawn, crash rig.
+- `src/Session/Roster/AiFlightAssembler.cs`, the roster's private AI path: pilot preparation (a network bot seat's too), model, controller, loadout, damage and crash runtime, and placement.
 - `src/Session/Roster/AiAirframePool.cs`, the wave aeroplanes built in the loading screen and held out of the tree, so a launch binds one instead of building it.
 - `src/Session/Roster/CrashRigQueue.cs`, the queue of crash rigs for aeroplanes already flying, advanced one build step a frame so a launch costs less on its frame.
 - `src/Session/Roster/LiveryResolver.cs`, each player's livery from a `SessionSpec`: the paint catalog, the pattern-mask library and the per-player scheme pick.

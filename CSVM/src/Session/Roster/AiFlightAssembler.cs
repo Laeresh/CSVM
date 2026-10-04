@@ -14,6 +14,10 @@ namespace CSVM.Session.Roster;
 
 internal sealed class AiFlightAssembler
 {
+    /// <summary>The flat skill rating a bot seat's nine ratings take: the 5 an AI spawn with no
+    /// rating of its own falls back to.</summary>
+    public const int SeatRating = 5;
+
     private readonly FlightRosterPolicy _policy;
     private readonly LiveryResolver _liveries;
     private readonly WorldEffectsFactory? _worldEffects;
@@ -119,10 +123,7 @@ internal sealed class AiFlightAssembler
         }
         if (spawn.Pilot.Machine is { } machine)
         {
-            machine.AttackRange = stats.AiAttackRange;
-            machine.ReturnRange = stats.AiReturnRange;
-            machine.AttackDwellS = stats.AiAttackDwell;
-            machine.NotPursuitDwellS = stats.AiNotPursuitDwell;
+            ApplyRanges(machine, stats);
         }
 
         FlightController controller;
@@ -304,6 +305,31 @@ internal sealed class AiFlightAssembler
         return controller;
     }
 
+    /// <summary>Arms a bot seat's pilot with an AI spawn's gunner, ordnance and mode machine, off
+    /// the same skill tables. The machine's ranges come off the airframe. The seat's
+    /// aeroplane is built by the human path, so its hull, fit and spawn are a person's. Every
+    /// rating is <see cref="SeatRating"/> (or <c>--ai-attack=</c>), unshifted by the difficulty.
+    /// </summary>
+    public void ArmSeatPilot(AiPilot pilot, PlaneStats stats, string planeName, int team)
+    {
+        var spawn = new AiSpawn(planeName, Vector3.Zero, Vector3.Zero, pilot, Team: team,
+            AttackRating: _policy.AiAttackSkill ?? SeatRating, Difficulty: Difficulty.Hard);
+        PreparePilot(spawn, stats, Rng.Bots);
+        if (pilot.Machine is { } machine)
+        {
+            ApplyRanges(machine, stats);
+        }
+    }
+
+    // The airframe def's engagement volumes and dwell timers onto a mode machine.
+    private static void ApplyRanges(AiModeMachine machine, PlaneStats stats)
+    {
+        machine.AttackRange = stats.AiAttackRange;
+        machine.ReturnRange = stats.AiReturnRange;
+        machine.AttackDwellS = stats.AiAttackDwell;
+        machine.NotPursuitDwellS = stats.AiNotPursuitDwell;
+    }
+
     // The spawn-independent half of an AI aeroplane, in the order a launch builds it: the
     // painted model, the prop and surface animators, the wing lamps and the collision hulls. The
     // pool runs this at load and a claim-less launch runs it in place, so both produce one tree.
@@ -386,7 +412,7 @@ internal sealed class AiFlightAssembler
         return true;
     }
 
-    private void PreparePilot(AiSpawn spawn, PlaneStats defStats)
+    private void PreparePilot(AiSpawn spawn, PlaneStats defStats, string stream = Rng.Ai)
     {
         var pilot = spawn.Pilot;
         var defSkills = defStats.AiPilotSkills;
@@ -413,7 +439,7 @@ internal sealed class AiFlightAssembler
             {
                 _aiSkills ??= AiSkills.Load(_aircraft.ZrdrPath);
                 var rng = new RandomNumberGenerator
-                { Seed = (ulong)(uint)Rng.NewIntSeed(Rng.Ai) };
+                { Seed = (ulong)(uint)Rng.NewIntSeed(stream) };
                 pilot.Gunner = new AiGunner(rng)
                 {
                     DeadEyeAngleDeg = _aiSkills.DeadEyeAngleDeg(
@@ -422,7 +448,7 @@ internal sealed class AiFlightAssembler
                         SkillFor(defSkills.QuickDraw, skill, roster.QuickDraw)),
                 };
                 var ordRng = new RandomNumberGenerator
-                { Seed = (ulong)(uint)Rng.NewIntSeed(Rng.Ai) };
+                { Seed = (ulong)(uint)Rng.NewIntSeed(stream) };
                 int quickDraw = SkillFor(defSkills.QuickDraw, skill, roster.QuickDraw);
                 pilot.Rocketeer = new AiRocketeer(ordRng.Randf)
                 {
@@ -445,7 +471,7 @@ internal sealed class AiFlightAssembler
             _maneuvers ??= Maneuvers.Load(_aircraft.ZrdrPath);
             int rating = spawn.AttackRating ?? _policy.AiAttackSkill ?? 5;
             int sixthSense = SkillFor(defSkills.SixthSense, rating, roster.SixthSense);
-            pilot.Machine = new AiModeMachine(Rng.NewSystemRandom(Rng.Ai))
+            pilot.Machine = new AiModeMachine(Rng.NewSystemRandom(stream))
             {
                 ActivationRange = _aiSkills.MinAiActiveDist,
                 SteadyHandExponent = AiModeMachine.ExponentFor(_aiSkills.At("steady_hand_chance",

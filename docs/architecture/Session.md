@@ -489,7 +489,7 @@ back new nodes and registrations on failure. It owns the live human and AI membe
 `VehicleDowned`, the AI death report the HUD kill line is fed from. `SwapPlayerAirframe` is the third commit path, a mission putting one
 player into a different airframe mid-flight, and `RunSwap` the whole order a cutscene code raises. The loading screen builds the coming
 waves' aeroplanes through `OrderWaveAirframes` and `BuildOrderedAirframe`, and `PumpDeferredCrashRigs` takes one more off the owed list
-per quiet frame, never on a frame a crash rig or a launch already builds on. `HumanFlightAdapter.cs`, `AiFlightAssembler.cs` and
+per quiet frame, never on a frame a crash rig or a launch already builds on. A network bot seat is a member of the human field, not of the AI list. `HumanFlightAdapter.cs`, `AiFlightAssembler.cs` and
 `AiAirframePool.cs` are the private assembly paths; the swap decode is [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
 
 ## src/Session/Roster/FlightRosterInputs.cs
@@ -528,17 +528,17 @@ from `AiAirframePool.cs` where one is ready and built in place otherwise, over o
 `PlanePainter` per airframe and livery (PERF-22). That runtime is OPENED rather than built wherever the caller supplied a queue, so the
 launch frame carries no rig and the prop choreography plays from the queue's completion hook. It chains the durability override ahead of
 the enemy scale and the spawn jitter, the engine's own order ([../org/vehicleDamage.md](../org/vehicleDamage.md)), resolves the readout's
-title, stamps the block's objective marker, and owns the AI skills cache. The danger-zone look's daredevil chance is drawn from that cache here and zeroed for anything but a `jet`, the original's own class gate on the arm that rolls it. Read `FlightRoster.cs` next.
+title, stamps the block's objective marker, and owns the AI skills cache. The danger-zone look's daredevil chance is drawn from that cache here and zeroed for anything but a `jet`, the original's own class gate on the arm that rolls it. `ArmSeatPilot` arms a network bot seat's pilot (gunner, ordnance, mode machine and the airframe's ranges) at the flat `SeatRating`, unshifted by the difficulty and drawn from `Rng.Bots`, for the human path that builds the seat's aeroplane. Read `FlightRoster.cs` next.
 
 ## src/Session/Roster/HumanFlightAdapter.cs
-`FlightRoster`'s private human-aircraft path: `Assemble` builds the painted model, `FlightController`, loadout and ordnance, carried turrets, HUD and
-instruments, damage visuals, audio, stunt and match bindings, target selection, the start placement, the Danger Zone eye, the crash runtime, and last
+`FlightRoster`'s private seat path: `Assemble` builds the painted model, `FlightController`, loadout and ordnance, carried turrets, HUD and instruments, damage visuals, audio, stunt and match bindings, target selection, the start placement, the Danger Zone eye, the crash runtime, and last
 the `UI.Boards.SplitScreen.SeatAirframe` stamp that keeps the model out of this pilot's spyglass disc and the cockpit-hidden body out of this pilot's pane alone. A seat of the bindings' `NetSeats` without a pane
 (flown elsewhere, or a host's bot) takes the aeroplane, paint, loadout, spawn slot and score row, only one flown elsewhere is built with the `RemotePoseBuffer` that IS its ownership, and
-both skip every pane, HUD, camera, listener, pad and pause key, the roster's airframe pick and a co-op seat's `SeatFit` beating this machine's launch flags. It reads only the roster's
-copied policy plus the grouped aircraft, world and human-session contracts; player order decides the paint and spawn draws. An airframe swap lays its
-captured scheme and own build over that assembly, the one path a bought plane takes. An Instant Action racer takes no `Race`, so it flies on through
-the ending's hold, and `BuildDamageVisuals` opens AI damage too. Read `FlightRoster.cs` next.
+both skip every pane, HUD, camera, listener, pad and pause key, the roster's airframe pick and a co-op seat's `SeatFit` beating this machine's launch flags. A bot seat is AI-piloted
+(`IsHumanPiloted` false) on every machine, so each plays its hits, shakes and `ai_crash_*` wreck alike, and on the host it flies an `AiPilot` armed by `AiFlightAssembler.ArmSeatPilot`
+under its seat index as `PlayerIndex`, its far-field plant measured against every person's seat rather than this machine's panes. It stays in the seat list, never in the roster's AI, so the world link never admits it and the seat paths carry its state, fire, hits and death.
+It reads only the roster's copied policy plus the grouped aircraft, world and human-session contracts; player order decides the paint and spawn draws. An airframe swap lays its captured scheme and own build over
+that assembly, the one path a bought plane takes. An Instant Action racer takes no `Race`, so it flies on through the ending's hold, and `BuildDamageVisuals` opens AI damage too. Read `FlightRoster.cs` next.
 
 ## src/Session/World/WorldEffectsFactory.cs
 Builds the two effect stages a session needs and the runtimes bound to them: the world-effects

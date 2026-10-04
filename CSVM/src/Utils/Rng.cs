@@ -33,6 +33,9 @@ public static class Rng
     // AI behaviour draws (patrol-net branch choices; later waves add theirs). Its own stream so
     // an AI's route never shifts what the weapons or paint code rolls, and vice versa.
     public const string Ai = "ai";
+    // A network bot's pilot draws (gunner, ordnance and mode-machine seeds). Its own stream, not
+    // Rng.Ai: only the host builds a bot's pilot, so its draws must not move a stream both ends share.
+    public const string Bots = "bots";
     public const string Puffer = "puffer";
     public const string Clouds = "clouds";
     // The cloud field's per-sprite fade band (FogVolumeClutter). Its own stream, not

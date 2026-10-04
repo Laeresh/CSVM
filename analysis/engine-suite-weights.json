@@ -335,6 +335,8 @@
     "net-ai-world": 10.0,
     "net-aircraft-replication": 6.5,
     "net-blacke-warp": 3.73,
+    "net-bot-seat": 7.7,
+    "net-bot-seat-lossy": 5.1,
     "net-enet-join": 6.63,
     "net-combat-events": 7.0,
     "net-coop-cabbie-delivered": 18.5,
