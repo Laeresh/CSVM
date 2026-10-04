@@ -403,8 +403,8 @@ Decode: [../org/aiPilot.md](../org/aiPilot.md). Read `AiPilot.cs` next.
 ## src/Flight/Modes/DangerZoneRibbon.cs
 The decoded danger-zone run ([../org/aiPilot.md](../org/aiPilot.md) "The danger-zone run"),
 engine-free: `DangerZoneRibbon` is one `dzpathN` route as the original builds it, the polygon's
-vertices joined by cubics parameterised in metres plus the lane table; `DangerZoneRun` is a pilot's
-cursor on it, entered from the nearer end, walking the segments either way and `Done` past the exit;
+vertices joined by cubics parameterised in metres plus the lane table (`NearestTo` finds the cursor
+abeam a point); `DangerZoneRun` is a pilot's cursor on it, entered from the nearer end, walking the segments either way and `Done` past the exit;
 `DangerZoneRail` is the state-5 integrator that writes the pose off the ribbon in place of the flight
 model, closing the aeroplane's residual offset, banking the wings into the bend and settling on the
 cruise speed. Every constant is read out of the image and named at its declaration. Pinned by
@@ -655,9 +655,9 @@ looks like.
 ## src/Flight/Modes/StuntMission.cs
 Stunt Flying's per-pilot run state: `Load` builds the ordered danger-zone list from a mission's
 ia.json `dzones` (marker positions, gate polygons, strings through `MissionTargets` and `Messages`,
-null where a mission authors none), `Update` requires both polygon-plane crossings in either order,
-`CollectTargets` offers the still-unflown zones to that pilot's own target pool as objectives, and
-`Elapsed`, `CompletedAt`, `CompletionOrder` and `InCompletionOrder` carry the clock and the splits.
+null where a mission authors none), `Update` requires both polygon-plane crossings in either order and records the gate a zone was left through,
+`CollectTargets` offers the still-unflown zones to that pilot's own target pool as objectives,
+`Elapsed`, `CompletedAt`, `CompletionOrder` and `InCompletionOrder` carry the clock and the splits, and `ReturnPose` is where a tapped respawn lands: on the zone's `dzpathN` ribbon abeam the exit of the zone cleared last, heading the way it was flown.
 `ForAnotherPlayer()` clones an independent run so the archives parse once per session. Engine-free
 apart from its logging. Read `TargetSelection` for how a pilot picks a zone, `StuntRunHud` for the
 rest of what a run draws, and `StuntScoreboard` for what it scores.
@@ -1253,7 +1253,7 @@ text, dials and gates compose and assert here with no `Control` (`ComputeStallWa
 ## src/Flight/Airframe/FlightController.cs
 The flying-aircraft node: input through `FlightModel` to a transform (or, for an AI pilot publishing
 a `RailPose`, the danger-zone ribbon's pose in place of the model step, the sweep still run), plus
-weapon fire as `FireControl`'s engine adapter and the crash and respawn paths (`Respawn` takes what its `RespawnPlacement` hook answers, `RespawnAt` a pose handed to it instead, and `RespawnRequest` withholds the return altogether for a seat whose placement is somebody else's to grant), and `Rearm`, a rearm base's in-flight restore of parts, damage stages and every slot. It keeps no rule it
+weapon fire as `FireControl`'s engine adapter and the crash and respawn paths (a stunt run splits the respawn control by hold length into `ReturnToLastZone` and `Rerun`; `Respawn` takes what its `RespawnPlacement` hook answers, `RespawnAt` a pose handed to it instead, and `RespawnRequest` withholds the return altogether for a seat whose placement is somebody else's to grant), and `Rearm`, a rearm base's in-flight restore of parts, damage stages and every slot. It keeps no rule it
 can delegate: the camera is `CameraController`'s, the pilot HUD `FlightHud`'s, this frame's stick
 one `IFlightInputSource`, the states an aircraft moves between `AircraftLifecycle`'s, and what a
 contact costs `AircraftContactResolver`'s. The seat's rendered-frame parts are modules it composes and steps, none reaching back into it: `Mouse` (`SeatMouse`), `Look` (`SeatLook`), `Pause` (`SeatPause`), `Dressing` (`FirstPersonDressing`), `TargetInput` (`SeatTargeting`) and the propeller slot `Propellers` (`PropellerSlot`); the AI gunner's acquisition is `Acquisition` (`GunnerAcquisition`). This node reads the devices, performs what each of those

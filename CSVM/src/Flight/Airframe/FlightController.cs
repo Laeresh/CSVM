@@ -234,10 +234,10 @@ public partial class FlightController : Node3D
     /// itself until the def's <c>Callback 15</c>. Derived by <c>EffectCatalogue.FliesOwnHull</c>.</summary>
     public bool DestroyDefFliesWreck;
 
-    /// <summary>The stunt run, when flying --stunt: danger-zone sphere
-    /// detection, tested against the plane each physics frame. Deliberately NOT reset on
-    /// respawn, a mid-run crash keeps completed zones (the clock keeps running).
-    /// Null in free flight.</summary>
+    /// <summary>The stunt run, when flying --stunt: danger-zone gate
+    /// detection, tested against the plane each physics frame. Set, the respawn control splits: a
+    /// tap keeps completed zones and the running clock (<see cref="ReturnToLastZone"/>), a hold
+    /// restarts the run (<see cref="Rerun"/>). Null in free flight.</summary>
     public StuntMission? Stunt;
 
     /// <summary>This pane's Danger Zone camera: one latched photograph per marker per run, stepped
@@ -496,6 +496,8 @@ public partial class FlightController : Node3D
     // Swallows a discrete flight command's next read when a cutscene skip or a pause-sheet dismiss
     // hands input back while the control that confirmed it is still down.
     private readonly FlightReentryLatch _reentryLatch = new();
+    // A stunt run's one respawn control, split by hold length: a tap returns, a hold restarts.
+    private readonly TapHoldButton _respawnSplit = new(TapHoldButton.PadHoldSeconds);
     // CrashRuntime as a deferred read, so the propeller slot forces an armed rig only on a change.
     private readonly Func<AnimRuntime?> _rigOnDemand;
 
@@ -546,6 +548,9 @@ public partial class FlightController : Node3D
                                                  // hide above deliberately leaves up
     private Vector3 _spawnPos;
     private (Vector3 Pos, Vector3 LookAt)? _grantedPlacement; // a granted pose, armed by RespawnAt
+    // A stunt tap's pose, armed by ReturnToLastZone and spent by the one Respawn it arms. ⚠ Never
+    // written into _spawnPos: the held restart must still find the start line there.
+    private (Vector3 Pos, Basis Attitude)? _zoneReturn;
     private Basis _spawnAttitude;
     private float _spawnThrottle = FallbackSpawnThrottle;
     private float _spawnSpeed = FallbackSpawnSpeed;
@@ -1118,6 +1123,10 @@ public partial class FlightController : Node3D
     // original's does, so a finished run there must not stop the aircraft.
     private bool SoloBoardHolds => Stunt is { AllComplete: true } && Race == null && Scoreboard != null;
 
+    // Whether the respawn control splits into a tap and a hold. A seat whose return somebody else
+    // grants keeps the one press it asks with.
+    private bool StuntRespawnSplits => Stunt != null && RespawnRequest == null;
+
     // Which stick flies this aircraft: set in Bind, and lazy here too so a bare test rig that
     // never binds still gets one, off whichever of _holdSegments/Pilot it already set (Decision 8,
     // no suite mutates either after stepping starts.
@@ -1306,8 +1315,9 @@ public partial class FlightController : Node3D
     }
 
     /// <summary>Rerun this plane's own run: fresh clock and every zone incomplete, then the
-    /// respawn below. A plane with no stunt run is simply respawned, which is all a free flight's
-    /// rerun amounts to.</summary>
+    /// respawn below at the start. A plane with no stunt run is simply respawned, which is all a
+    /// free flight's rerun amounts to. Every restart of a run comes through here: the solo board's
+    /// R, the session's restart and a held respawn.</summary>
     public void Rerun()
     {
         Stunt?.Reset();
@@ -1315,9 +1325,26 @@ public partial class FlightController : Node3D
         Respawn();
     }
 
-    /// <summary>Back to the spawn pose at half throttle with a healthy, repaired airframe: the
-    /// crash respawn (R), and the session's per-plane reset for a race rematch. Leaves the
-    /// stunt run alone, a mid-run crash deliberately keeps its zones and clock.</summary>
+    /// <summary>A stunt run's tap of respawn: back on the route through the zone cleared last,
+    /// heading on the way the pilot left it. It flies at the spawn speed, and the zones and the
+    /// clock are kept. With no zone cleared it is the plain respawn at the start. It repairs,
+    /// restocks and refuels exactly as <see cref="Respawn"/> does, so it is offered only where that
+    /// is.</summary>
+    public void ReturnToLastZone()
+    {
+        if (Stunt?.ReturnPose() is { } exit)
+        {
+            // A heading straight up or down has no wings-level roll off world up.
+            var up = Mathf.Abs(exit.Heading.Y) > 0.999f ? Vector3.Back : Vector3.Up;
+            _zoneReturn = (exit.Position, Basis.LookingAt(exit.Heading, up));
+        }
+        Respawn();
+    }
+
+    /// <summary>Back to the spawn pose at half throttle with a repaired airframe: the crash
+    /// respawn (R), and the session's per-plane reset for a rematch. A pose
+    /// <see cref="ReturnToLastZone"/> armed is taken instead, once. Leaves the stunt run alone, a
+    /// mid-run crash deliberately keeps its zones and clock.</summary>
     public void Respawn()
     {
         // Read before anything reads the spawn pose, so the whole reset below lands on the new
@@ -1332,6 +1359,9 @@ public partial class FlightController : Node3D
             if (aim.LengthSquared() > 1e-6f)
                 _spawnAttitude = Basis.LookingAt(aim.Normalized(), Vector3.Up);
         }
+        var (placePos, placeAttitude) = _zoneReturn ?? (_spawnPos, _spawnAttitude);
+        _zoneReturn = null;
+        Stunt?.Relocated();  // the jump to the new pose is no flight through any gate
         _lifecycle.Respawn();
         (_inputSource as ScriptedInputSource)?.Reset(); // scripted hold sequences restart from the spawn
         RemotePoses?.Clear();  // the received history describes an aeroplane that is no longer there
@@ -1389,7 +1419,7 @@ public partial class FlightController : Node3D
         _aiNitroArmed = false;
         SpeedCue?.Reset();
         WindStreaks?.Reset();
-        _model.Reset(_spawnPos, _spawnAttitude, _spawnSpeed, _throttle);
+        _model.Reset(placePos, placeAttitude, _spawnSpeed, _throttle);
         _simPrev = _simCurr = _renderPose = new Transform3D(_model.Attitude, _model.Position);
         GlobalTransform = _simCurr;
         if (_cam != null && IsInsideTree())
@@ -2064,6 +2094,25 @@ public partial class FlightController : Node3D
             // reads the same answer. A hull that dies inside a hold keeps falling.
             if (!RespawnOffered)
             {
+                StepWreckFall(dt);
+                return;
+            }
+            // A stunt run splits the button, and the crash cam's own timer takes the tap's return.
+            if (!RemoteOwned && StuntRespawnSplits)
+            {
+                bool down = RespawnPressed();
+                var press = _respawnSplit.Step(down, dt);
+                if (press == TapHold.Hold)
+                {
+                    Rerun();
+                    return;
+                }
+                if (press == TapHold.Tap
+                    || (!down && _lifecycle.TickAutoRespawn(dt, _holdSegments != null, FirePressed)))
+                {
+                    ReturnToLastZone();
+                    return;
+                }
                 StepWreckFall(dt);
                 return;
             }
@@ -4063,11 +4112,24 @@ public partial class FlightController : Node3D
         // The live respawn, read only where the mission does not count (AllowLiveRespawn): this
         // body runs on a flying aircraft alone, since SimStep leaves through its crashed branch,
         // and that branch's own read is what brings a crashed pilot back.
-        if (AllowLiveRespawn && _padActions.Held(InputAction.Respawn))
-            Respawn();
+        if (StuntRespawnSplits)
+        {
+            // ⚠ Step the split even where the pin refuses it, reading up. A refused press must not
+            // live on in the button and resolve after a crash.
+            var press = _respawnSplit.Step(AllowLiveRespawn && RespawnPressed(), dt);
+            if (AllowLiveRespawn && press == TapHold.Hold)
+                Rerun();
+            else if (AllowLiveRespawn && press == TapHold.Tap)
+                ReturnToLastZone();
+        }
+        else
+        {
+            if (AllowLiveRespawn && _padActions.Held(InputAction.Respawn))
+                Respawn();
 
-        if (AllowLiveRespawn && _keyActions.Held(InputAction.Respawn))
-            Respawn();
+            if (AllowLiveRespawn && _keyActions.Held(InputAction.Respawn))
+                Respawn();
+        }
 
         // The commanded lever, as FUN_00487460 writes it. The up and down keys move it at 0.5/s,
         // and a digit puts it on its eighth. It stays there once the key is up. The handler never

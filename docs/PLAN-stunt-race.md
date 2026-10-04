@@ -108,7 +108,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A, the time-attack run (solo)
 
-1. ☐ Tap respawn returns to the last cleared Danger Zone; hold restarts the run
+1. ☑ Tap respawn returns to the last cleared Danger Zone; hold restarts the run
 2. ☐ The on-rails restart count, and the run clock starting at GO; one bests key
 
 ### Wave B, the split screen race
@@ -136,7 +136,7 @@ should run in order.
 
 # Wave A, the time-attack run (solo)
 
-## A1 ☐ Tap respawn returns to the last cleared Danger Zone; hold restarts the run
+## A1 ☑ Tap respawn returns to the last cleared Danger Zone; hold restarts the run
 
 **Goal.** In a solo stunt run, a tap of the respawn control (`Backspace` / pad Y) after a crash or
 in flight puts the pilot at the exit of the Danger Zone they most recently completed, heading
@@ -153,26 +153,89 @@ completed" is the highest `CompletionOrder`. Gates come from the `dzpathN` mesh'
 (`StuntMission.cs:412-448`). The respawn being a port action, not the original's:
 `docs/controls.md`, the `Backspace` row.
 
-**Approach.** <TODO: the respawn pose at a zone's exit: which aperture ring is the exit when zones
-are order-free and each has a green and a red gate; derive the heading from the ring's normal or the
-route ribbon, and the speed from `FlightStart` (never a constant)>. Split respawn into tap and hold
-inside the respawn consumer (as D-pad up already splits tap and hold for targeting,
-`docs/controls.md`). <TODO: the hold duration>. Update `docs/controls.md`'s `Backspace` row.
+**Approach.** *The exit ring (traced-to-code for the rule, lead-only for the choice).* The data
+authors no direction for a zone: the original's AI enters a `dzpathN` ribbon from whichever end is
+nearer (`FUN_00421500`, `docs/org/aiPilot.md` "Two entries"), and the two rings' normals disagree in
+sign within a pair (C1B `dzpath1` and `dzpath4`, C5 `dzpath16`), so neither the data nor the ring
+winding says which ring is the exit. The exit is therefore the pilot's own: the ring whose crossing
+completed the zone, and of two crossed in the same frame the later along the movement segment.
+`StuntMission.Update` records it as `StuntZone.ExitGate` with the crossing direction as
+`ExitTravel`.
+*The heading and position (lead-only, measured over all 54 IA1 zones).* The route ribbon, not the
+ring normal. The ring planes follow the structure, not the flight line: the red portal rings of
+C1's three train tunnels sit 45° to 51° off the tunnel's level ribbon (normal Y up to 0.76), so a
+normal heading would pitch a respawn 50° up out of a tunnel. `StuntMission.ReturnPose` puts the pilot on the zone's own
+ribbon (`DangerZoneRibbon.FromPolyline` over the route polygon, the line the original's AI flies
+through the zone) at the point nearest the exit ring's centre, heading along the ribbon's tangent
+signed to agree with `ExitTravel`; a zone whose route builds no ribbon falls back to the ring centre
+and its signed normal. Measured with both flight orders: every zone completes, every heading agrees
+with the crossing (dot 0.46 to 1.00), and the return sits 0 to 44 m from the exit ring centre except
+C1 Passenger Hangar (43 and 69 m), C4 Zep Dock (74 and 81 m) and C5 Brooklyn Bridge (238 m, a 1.1 km
+ring), where the ribbon passes that far from the ring's centre. C1B Bootlegger's Tunnel is
+a vertical shaft whose ribbon is vertical at the gates (heading Y ±1.00), so its return points
+straight up or down; `ReturnToLastZone` rolls such a heading off `Vector3.Back` instead of world up.
+The speed is `_spawnSpeed`, the `spawnSpeed` `Setup` took from `FlightStart.SpeedMps`
+(`HumanFlightAdapter.cs:555`), never a constant; the lever is the spawn lever, as every respawn.
+*The pose path (traced-to-code).* `Respawn` takes a one-shot `_zoneReturn` and never writes it into
+`_spawnPos`, because `RespawnPlacement`, `WarpTo` and `Activate` all overwrite the spawn pose and a
+hold must still find the start line. `Respawn` also calls `StuntMission.Relocated`, so the jump to
+the new pose is not tested against every gate as a flown segment.
+*The split.* One `TapHoldButton` per `FlightController`, so every splitscreen seat splits its own
+button. In the crashed branch a tap calls `ReturnToLastZone`, a hold `Rerun`, and the crash camera's
+auto-respawn timer takes the tap's return (it ticks only while the button is up, as today's
+short-circuit already did). In flight the split runs inside `ReadKeyboard` where the old level read
+was, only where `AllowLiveRespawn` is true; where it is false (Instant Action, which pins it) the
+button is stepped reading up, so a refused press cannot resolve after a crash. A seat with a
+`RespawnRequest` (a granted network return) keeps the old single press. Non-stunt sessions keep the
+old code path untouched.
+*The hold duration (traced-to-code, TUNE).* `TapHoldButton.PadHoldSeconds`, 0.25 s, the constant
+d-pad up's targeting split and the pad weapon selectors already share (`Utils/TapHoldButton.cs:29`),
+already marked TUNE there. The tap resolves on release and the hold fires once at the threshold, so
+a long press never also taps. The one reason not to reuse it is that the hold is destructive (it
+throws the run away) where the targeting hold is not; that is a judgement for the controls sitting,
+and raising it means a constant of its own beside this split.
+*Trap check (traced-to-code).* The tap and the hold both go through `Respawn`, which repairs,
+restocks and refuels as today's stunt respawn already does, and neither is read in flight where
+today's live respawn was refused, so neither is more generous than today. The in-flight read now goes
+through the reentry latch and `CommandsHeld`, which is stricter than the old raw level read.
+`docs/controls.md`'s `Backspace` row is updated.
 
-**Model recommendation.** <TODO>
+**Model recommendation.** Opus for the design read (choosing the exit and heading needed the
+data measured across every zone and the ribbon decode), Sonnet for the docs edits once the rule is
+fixed.
 
-**Verify.** <TODO: a unit over StuntMission for the respawn target after 0, 1 and 3 zones; an engine
-suite that crashes after a zone and asserts the respawn pose and the unchanged clock; the hold path
-clearing zones and clock; mutation-checked>. Every pinned golden unchanged.
+**Verify.** Built: `CSVM.Tests/StuntReturnTests.cs` over C1/IA1's real gates and ribbons: no return
+with no zone cleared; one zone flown both ways returns abeam the right exit ring heading the right
+way; zones flown 3, 1, 2 return exactly where zone 2 alone would and away from zone 3's and zone 1's
+returns; `Reset` leaves no return. Engine suite `stunt-respawn-tap-hold` (in
+`Testing/FlightInputHandoffSuites.cs`, weighted in `analysis/engine-suite-weights.json`) on a real
+human rig set up at a distinct 71.5 m/s spawn speed: a crashed tap with no zone returns to the start
+with the clock running on; a crashed tap after a zone returns abeam its exit, nose along the route,
+at 71.5 m/s, zones and clock kept; an in-flight tap after a second zone returns to that one; an
+in-flight hold and a crashed hold both restart at the start with zones and clock cleared and their
+release taps nothing; pinned as Instant Action pins it, neither press is taken in flight while a
+crashed tap still returns (able-to-fail control). Presses straddle the threshold, two frames either
+side of 15 at 60 Hz. Mutation-checked: return pose ignored, return written into the spawn, in-flight
+hold returning instead of restarting, the pin ignored in flight, the crashed tap restarting, the
+threshold raised and lowered 20 %, each turned the suite red; choosing the lowest `CompletionOrder`,
+always taking the green ring, and dropping the heading's sign each turned a unit red. No pinned
+golden flies a stunt crash (`c1-stunt-marker` is an early-frame shot), so every golden is unchanged
+by construction; the orchestrator's battery confirms.
 
 **⚠ Traps.** A respawn while still flying must not become a free repair, restock and refuel beyond
 what a stunt run already allows (`docs/controls.md`, the `Backspace` row). The respawn speed is the
-mission's own spawn speed, carried on `FlightStart` (`BL-314` trap 1).
+mission's own spawn speed, carried on `FlightStart` (`BL-314` trap 1). A respawn arms no
+collision grace (`AircraftLifecycle.Respawn` re-arms no spawn window), so a return inside a narrow
+aperture rests on the ribbon being the AI's flyable line; if a return crashes on arrival at the
+controls, the fix is the return's placement, not a grace window that would let a pilot fly through
+structure. The crash prompt still reads "Press %1 to respawn" and names no hold.
+
+**Verified.** <pending orchestrator run>
 
 ## A2 ☐ The on-rails restart count, and the run clock starting at GO; one bests key
 
-**Goal.** A hold-restart (and a solo run's first start, <TODO: decide whether a solo run's very
-first start gets the count or starts at once as today>) runs a 3, 2, 1, GO count during which the
+**Goal.** A hold-restart, and a solo run's first start too (the user's ruling: every solo run starts
+the same way, at GO in the spawn state), runs a 3, 2, 1, GO count during which the
 aircraft rides a kinematic level walk that ends exactly on today's spawn state at GO; the run clock
 starts at GO. Solo bests record under the existing `<chapter>/IA1/<plane>` key.
 

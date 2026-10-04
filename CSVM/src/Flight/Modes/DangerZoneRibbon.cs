@@ -133,6 +133,33 @@ public sealed class DangerZoneRibbon
     public Vector3 EndTangentInto(bool far) =>
         far ? -TangentAt(Segments.Count - 1, Segments[Segments.Count - 1].Length) : TangentAt(0, 0f);
 
+    /// <summary>The cursor on the zero lane nearest <paramref name="point"/>, as a segment and the
+    /// metres into it. Searched every <paramref name="stepM"/> metres and at both ends of each
+    /// segment.</summary>
+    public (int Segment, float T) NearestTo(Vector3 point, float stepM = 1f)
+    {
+        int bestSegment = 0;
+        float bestT = 0f;
+        float best = float.MaxValue;
+        for (int s = 0; s < Segments.Count; s++)
+        {
+            float length = Segments[s].Length;
+            int steps = Math.Max(1, (int)MathF.Ceiling(length / stepM));
+            for (int i = 0; i <= steps; i++)
+            {
+                float t = length * i / steps;
+                float distance = PointAt(s, t).DistanceSquaredTo(point);
+                if (distance < best)
+                {
+                    best = distance;
+                    bestSegment = s;
+                    bestT = t;
+                }
+            }
+        }
+        return (bestSegment, bestT);
+    }
+
     /// <summary>Takes the least-occupied lane for a run, counting it occupied until
     /// <see cref="ReleaseLane"/>.</summary>
     public int TakeLane()

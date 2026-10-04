@@ -8,16 +8,17 @@ using CSVM.Flight.Weapons;
 using CSVM.Mech3;
 using CSVM.Session.Roster;
 using CSVM.Session.World;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>What the flight side does with a control at the moments a session hands input over:
-/// the frame a cutscene skip gives flight back, the frame a pause-sheet dismiss does, and the frame
-/// a respawn is asked for. All are level reads on a fixed tick, so a control that was already down
-/// when flight resumed reads as a fresh command unless something swallows it, and one control
-/// serves both sides (gamepad B is the menu's Back and the gun trigger). A respawn button read
-/// while the aeroplane is still flying is a free repair wherever the mission counts.</summary>
+/// <summary>What the flight side does with a control when a session hands input over: a cutscene
+/// skip, a pause-sheet dismiss, a respawn. Each is a level read on a fixed tick, so a control
+/// down when flight resumes reads as a fresh command unless something swallows it. One
+/// control serves both sides, since gamepad B is the menu's Back and the gun trigger. A respawn
+/// read while the aeroplane still flies is a free repair wherever the mission counts. In a stunt
+/// run the same button splits by hold length into a return and a restart.</summary>
 internal static class FlightInputHandoffSuites
 {
     private const float StepDt = 1f / 60f;
@@ -25,6 +26,13 @@ internal static class FlightInputHandoffSuites
     // Where the respawn rig flies: high enough over an empty world that nothing it steps through
     // resolves a ground contact.
     private const float SpawnAltitudeM = 800f;
+
+    // A spawn speed no fallback carries, so a return at it can only have come from the rig's start.
+    private const float StuntSpawnSpeed = 71.5f;
+
+    // Presses either side of the split's threshold, two frames clear of it at 60 Hz.
+    private static readonly int TapFrames = Mathf.RoundToInt(TapHoldButton.PadHoldSeconds / StepDt) - 2;
+    private static readonly int HoldFrames = Mathf.RoundToInt(TapHoldButton.PadHoldSeconds / StepDt) + 2;
 
     [Suite("flight-input-handback",
         "the control that ended a mission intro or dismissed the pause sheet does not also act on "
@@ -165,6 +173,126 @@ internal static class FlightInputHandoffSuites
         ctx.Note($"the live respawn is refused where the mission counts and kept from a crash");
     }
 
+    [Suite("stunt-respawn-tap-hold",
+        "a stunt run's respawn button split by hold length over C1/IA1's real zones: a tap from a "
+        + "crash with no zone cleared returns to the start with the clock running on, a tap after a "
+        + "zone returns abeam that zone's exit heading the way it was flown at the start's own spawn "
+        + "speed with zones and clock kept, a tap in flight does the same for the zone cleared last, "
+        + "a hold in flight or from a crash restarts the run at the start with zones and clock "
+        + "cleared and its release taps nothing, and a rig pinned the way Instant Action pins it "
+        + "takes neither in flight while a crash still returns it")]
+    internal static void StuntRespawnTapHold(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
+        ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
+        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, "C1");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ctx.RequireData(gamezPath, $"C1 gamez");
+        ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
+        var run = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, Messages.Load(ctx.MessagesPath));
+        if (run is not { TotalCount: >= 3 })
+        {
+            throw new SuiteSkippedException($"C1/IA1 loads fewer than three danger zones");
+        }
+
+        var textures = new TextureArchive(texturesPath);
+        var pool = new ProjectilePool(textures, null, null);
+        ctx.Host.AddChild(pool);
+        FlightController? pilot = null;
+        try
+        {
+            pilot = HumanRig(ctx, GameZ.Load(ctx.PlanesGamezPath), textures, pool, StuntSpawnSpeed);
+            pilot.Stunt = run;
+            var start = pilot.WorldPosition;
+            Fly(pilot, 30);
+
+            // No zone cleared: the tap is the plain return to the start, and the clock runs on.
+            float clock = run.Elapsed;
+            pilot.DebugForceCrash();
+            int respawns = pilot.RespawnCount;
+            Press(pilot, TapFrames);
+            ctx.Check(!pilot.Crashed && pilot.RespawnCount == respawns + 1
+                    && pilot.WorldPosition.DistanceTo(start) < 1e-3f && run.Elapsed > clock,
+                $"a tap from a crash with no zone cleared flies again at the start, clock {StuntMission.FormatTime(clock)} running on to {StuntMission.FormatTime(run.Elapsed)}: moved {pilot.WorldPosition.DistanceTo(start):0.000} m from it");
+
+            // One zone, then a crash: the tap returns abeam that zone's exit.
+            ClearZone(run, run.Zones[2]);
+            var exit = run.ReturnPose()!.Value;
+            var zone = run.Zones[2];
+            var exitGate = zone.ExitGate!;
+            var entryGate = exitGate == zone.RedGate ? zone.GreenGate : zone.RedGate;
+            clock = run.Elapsed;
+            pilot.DebugForceCrash();
+            Press(pilot, TapFrames);
+            var at = pilot.WorldPosition;
+            ctx.Check(at.DistanceTo(exit.Position) < 1e-2f && at.DistanceTo(exitGate.Center) < at.DistanceTo(entryGate.Center),
+                $"a tap from a crash after {zone.PathName} returns abeam its exit gate: {at.DistanceTo(exitGate.Center):0.0} m from the exit, {at.DistanceTo(entryGate.Center):0.0} m from the entry");
+            ctx.Check(pilot.NoseDirection.Dot(exit.Heading) > 0.999f && exit.Heading.Dot(zone.ExitTravel) > 0f,
+                $"…heading on the way the zone was flown: nose·route={pilot.NoseDirection.Dot(exit.Heading):0.0000}, route·travel={exit.Heading.Dot(zone.ExitTravel):0.00}");
+            ctx.Check(Mathf.Abs(pilot.WorldVelocity.Length() - StuntSpawnSpeed) < 0.01f,
+                $"…at the start's own spawn speed, {pilot.WorldVelocity.Length():0.00} of {StuntSpawnSpeed:0.0} m/s");
+            ctx.Check(run.CompletedCount == 1 && zone.Completed && run.Elapsed > clock,
+                $"…with the zone kept and the clock running on from {StuntMission.FormatTime(clock)} to {StuntMission.FormatTime(run.Elapsed)}");
+
+            // A second zone, then the tap in flight: the zone cleared last is the one returned to.
+            ClearZone(run, run.Zones[0]);
+            exit = run.ReturnPose()!.Value;
+            clock = run.Elapsed;
+            respawns = pilot.RespawnCount;
+            Press(pilot, TapFrames);
+            float drift = pilot.WorldPosition.DistanceTo(exit.Position);
+            ctx.Check(pilot.RespawnCount == respawns + 1 && drift < StuntSpawnSpeed * StepDt * 2f
+                    && run.CompletedCount == 2 && run.Elapsed > clock,
+                $"a tap in flight returns once, abeam {run.Zones[0].PathName}'s exit ({drift:0.00} m off after one step), zones 2 and the clock {StuntMission.FormatTime(run.Elapsed)} kept");
+
+            // The hold in flight restarts the run: the start, zones and clock cleared.
+            respawns = pilot.RespawnCount;
+            Hold(pilot, HoldFrames);
+            ctx.Check(pilot.RespawnCount == respawns + 1 && run.CompletedCount == 0
+                    && run.Elapsed < StepDt * 4f && pilot.WorldPosition.DistanceTo(start) < StuntSpawnSpeed * StepDt * 4f,
+                $"a hold in flight restarts once at the start: zones {run.CompletedCount}, clock {StuntMission.FormatTime(run.Elapsed)}, {pilot.WorldPosition.DistanceTo(start):0.0} m from the start");
+            Release(pilot);
+            ctx.Check(pilot.RespawnCount == respawns + 1,
+                $"…and letting go of that hold taps nothing ({pilot.RespawnCount - respawns} respawn(s))");
+
+            // The hold from a crash restarts as well.
+            Fly(pilot, 20);
+            ClearZone(run, run.Zones[1]);
+            pilot.DebugForceCrash();
+            respawns = pilot.RespawnCount;
+            Hold(pilot, HoldFrames);
+            Release(pilot);
+            ctx.Check(!pilot.Crashed && pilot.RespawnCount == respawns + 1 && run.CompletedCount == 0
+                    && run.Elapsed < StepDt * 5f && pilot.WorldPosition.DistanceTo(start) < StuntSpawnSpeed * StepDt * 5f,
+                $"a hold from a crash restarts once at the start: zones {run.CompletedCount}, clock {StuntMission.FormatTime(run.Elapsed)}, {pilot.WorldPosition.DistanceTo(start):0.0} m from the start");
+
+            // Pinned as Instant Action pins it: neither press is taken in flight.
+            pilot.AllowLiveRespawn = false;
+            ClearZone(run, run.Zones[1]);
+            exit = run.ReturnPose()!.Value;
+            respawns = pilot.RespawnCount;
+            Press(pilot, TapFrames);
+            Hold(pilot, HoldFrames);
+            Release(pilot);
+            ctx.Check(pilot.RespawnCount == respawns && run.CompletedCount == 1,
+                $"pinned, neither a tap nor a hold in flight is taken: {pilot.RespawnCount - respawns} respawn(s), zones {run.CompletedCount}");
+            pilot.DebugForceCrash();
+            Press(pilot, TapFrames);
+            ctx.Check(pilot.RespawnCount == respawns + 1 && pilot.WorldPosition.DistanceTo(exit.Position) < 1e-2f,
+                $"ABLE-TO-FAIL CONTROL: the pinned rig still takes the tap from a crash, abeam {run.Zones[1].PathName}'s exit ({pilot.WorldPosition.DistanceTo(exit.Position):0.000} m off)");
+        }
+        finally
+        {
+            pilot?.Free();
+            pool.Free();
+            textures.Dispose();
+        }
+
+        ctx.Note($"the stunt respawn taps back to the last cleared zone and holds into a restart");
+    }
+
     // One skipped episode on a bound rig: out of flight, the skip armed, then the press taken. The
     // hand-back is what arms flight's consumed-input latch, so each leg drives the real codes.
     private static void Skipped(TestContext ctx, CutsceneController cutscene, FlightController pilot,
@@ -220,7 +348,7 @@ internal static class FlightInputHandoffSuites
     // The human rig, built the way the campaign suites build theirs: a real aircraft node with real
     // damage state, so DebugForceCrash goes through the production death path.
     private static FlightController HumanRig(TestContext ctx, GameZ planesGamez,
-        TextureArchive textures, ProjectilePool live)
+        TextureArchive textures, ProjectilePool live, float? spawnSpeed = null)
     {
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
@@ -241,8 +369,51 @@ internal static class FlightInputHandoffSuites
             Name = "LiveRespawnPilot",
         };
         rig.AddChild(model);
-        rig.Setup(new FlightModel(stats), null, new CamParams(), pos, pos + Vector3.Forward);
+        if (spawnSpeed is { } speed)
+            rig.Setup(new FlightModel(stats), null, new CamParams(), pos, pos + Vector3.Forward, spawnSpeed: speed);
+        else
+            rig.Setup(new FlightModel(stats), null, new CamParams(), pos, pos + Vector3.Forward);
         ctx.Host.AddChild(rig);
         return rig;
+    }
+
+    // Steps flying with the respawn button up.
+    private static void Fly(FlightController pilot, int frames)
+    {
+        pilot.HoldActionForTest(InputAction.Respawn, false);
+        for (int i = 0; i < frames; i++)
+            pilot.SimStep(StepDt);
+    }
+
+    // The respawn button down for this many steps, left down.
+    private static void Hold(FlightController pilot, int frames)
+    {
+        pilot.HoldActionForTest(InputAction.Respawn, true);
+        for (int i = 0; i < frames; i++)
+            pilot.SimStep(StepDt);
+    }
+
+    private static void Release(FlightController pilot) => Fly(pilot, 1);
+
+    // Down for this many steps, then the one step that lets it go.
+    private static void Press(FlightController pilot, int frames)
+    {
+        Hold(pilot, frames);
+        Release(pilot);
+    }
+
+    // Both gates of a zone crossed green to red on the run itself, each along its own axis. A fresh
+    // segment follows, so the aircraft's next step is not tested from the last gate.
+    private static void ClearZone(StuntMission run, StuntZone zone)
+    {
+        var travel = (zone.RedGate.Center - zone.GreenGate.Center).Normalized();
+        foreach (var gate in new[] { zone.GreenGate, zone.RedGate })
+        {
+            var along = gate.Normal * (gate.Normal.Dot(travel) < 0f ? -20f : 20f);
+            run.Relocated();
+            run.Update(gate.Center - along);
+            run.Update(gate.Center + along);
+        }
+        run.Relocated();
     }
 }
