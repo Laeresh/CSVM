@@ -106,6 +106,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C, lobby and local setup
 
+20. ☐ A local match runs off a seat roster with no wire, so it can hold bot seats
 21. ☐ Multiplayer Lobby: Add bot, Fill-to-N, per-row plane/skill/team/callsign, Remove
 22. ☐ A joining human takes the newest bot's seat in the lobby, a late joiner once the match is back there
 23. ☐ Local join board: bot rows, and the two-pilot minimum counts bots
@@ -123,6 +124,8 @@ A1 blocks everything. A2 is closed (see A2). A3 needs A1 (A3 owns `SessionNet`,
 B12 and B13 touch different files and can run in parallel, B14 after B12 (a rearm trip and a respawn
 share the bot's standing-order state). Wave C needs A1;
 C21 and C23 both edit `DogfightLobby.cs`, so they run in sequence, C21 first, and C22 follows C21.
+C20 (added on A4's finding) needs A4 and blocks C23; it touches `VersusDirector`, so it does not
+run beside B12.
 D31 needs A1, A3 and C21. D32 and D33 run last, on the merged tree.
 
 ---
@@ -181,7 +184,7 @@ unit covers, and A3's first bot rig is where a live session shows it.
 input. The `NetNamespaceDependency` test confines engine types to the carriers
 (`docs/architecture/Net.md:261-264`), so the pilot kind stays engine-free in `Net/`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` on the merged Wave A tree (0d45b43c): build, units 6228 passed / 0 failed / 3 skipped, engine 515 passed / 0 failed / 2 skipped (6 shards, engine errors clean), goldens 24 hash-identical; exit 0.
 
 ## A2 ❌ `VersusMatch` keys its scores by pilot, so a row survives its seat being reused
 
@@ -285,7 +288,7 @@ boards agree, and the downed bot is granted its return on both ends and flies on
 lossy wait reads every condition its checks read (DET-17). `net-seats` checks the bot's armed pilot,
 seat index, team and engagement range, and that the roster's AI list stays empty.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` on the merged Wave A tree (0d45b43c): build, units 6228 passed / 0 failed / 3 skipped, engine 515 passed / 0 failed / 2 skipped (6 shards, engine errors clean), goldens 24 hash-identical; exit 0.
 
 **⚠ Traps.** DET-17 (`docs/verification.md:283`): a lossy loopback suite must wait on every
 condition its checks read. ⚠ Never assemble a bot through `FlightRoster.SpawnAi`: it would carry the
@@ -343,7 +346,7 @@ the guest, given no bot flag, joins "as seat 1 of 4", and its trace shows both b
 moving with the host's own pose (seat 3 about 1600 m over the run, within 5 m of the host's).
 `net-bot-seat`, `net-bot-seat-lossy`, `net-seats` and the whole `net-` filter stay green.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` on the merged Wave A tree (0d45b43c): build, units 6228 passed / 0 failed / 3 skipped, engine 515 passed / 0 failed / 2 skipped (6 shards, engine errors clean), goldens 24 hash-identical; exit 0.
 
 **⚠ Traps.** Name `127.0.0.1` in a scripted run; a wildcard bind puts a firewall dialog on the
 user's screen. A bot's plane outside `StockAirframes.Nodes` reaches a guest as no plane at all.
@@ -453,6 +456,38 @@ restored>`
 test on `MP1`. The rearm latch is one per seat and releases only outside every serving base.
 
 # Wave C, lobby and local setup
+
+## C20 ☐ A local match runs off a seat roster with no wire, so it can hold bot seats
+
+**Goal.** A local split-screen or solo Deathmatch can carry a seat roster (its panes plus bot
+seats) and run without any network link: bots respawn, score and rematch exactly as in a network
+match. This is the user's ruling on A4's finding (decouple roster from wire, rather than running a
+local bot match as a guestless network host).
+
+**Evidence (confidence: traced-to-code, from A4).** The seat model already copes: `SessionNet`
+takes `Seats` from `ctx.NetSeats` without a transport, `FillSeatRigs` builds paneless rigs for any
+roster, and `HumanFlightAdapter` is seat-based. `VersusDirector` reads "has a seat roster" as "has a
+wire": with seats and no wire it builds no respawn rotation, sends `AskSpawn` and `Restart`'s grants
+to a null wire (nobody respawns or is placed), reports deaths through `SessionNet.ReportDeath`,
+which returns without a link (nothing scores), refuses the rematch (`RematchIsTheHosts`), and skips
+the split-screen kill lines (`TakeKillLine`). `SessionVoices` and `GameSession`'s
+`_wire.Seats.Count` checks branch the same way.
+
+**Approach.** Separate the two questions at every such reader: "is there a seat roster" (seat-
+indexed bookkeeping, bots) and "is there a wire" (sending, receiving, host authority over peers).
+With a roster and no wire the local machine is the authority: the rotation is built and granted
+locally, deaths score locally, rematch is local. `<TODO: the full reader list, found by grepping
+the wire and seat checks in VersusDirector, SessionNet, SessionVoices and GameSession>`. Then let
+A4's flags reach a local `--vs` (today `ResolveBots` drops them there with a warning).
+
+**Model recommendation.** Opus.
+
+**Verify.** A local `--vs --vs-bots=1` engine suite: the bot and the pane kill each other, both
+score, both respawn, a rematch places both; every existing local `vs-*` / split-screen Dogfight
+suite and every `net-` suite stays green (the change must not move a wired session).
+
+**⚠ Traps.** A wired session must behave exactly as before; most risk is in a reader that used
+the wire check as a stand-in for "host". C23 depends on this item; C21 does not.
 
 ## C21 ☐ Multiplayer Lobby: Add bot, Fill-to-N, per-row plane/skill/team/callsign, Remove
 
