@@ -164,6 +164,8 @@ internal static class NetSeatSuites
                 $"under its seat index and that seat's team, with the airframe's engagement range (shooter {bot.PlayerIndex}, team {bot.Team}, attack {bot.Pilot?.Machine?.AttackRange})");
             ctx.Check(flightRoster.AiAircraft.Count == 0,
                 $"and it is a seat, not one of the roster's AI, which the world link would replicate again ({flightRoster.AiAircraft.Count} AI)");
+            ctx.Check(bot.Pilot?.Gunner is { PlayersPreferred: false },
+                $"and its gunner ranks a person at the weight it gives a bot (players preferred {bot.Pilot?.Gunner?.PlayersPreferred})");
 
             // ABLE-TO-FAIL CONTROL: the local seat in this same build takes every one of those.
             // The assertions above cannot be passing because the roster built nothing at all.

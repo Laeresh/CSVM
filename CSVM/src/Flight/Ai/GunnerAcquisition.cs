@@ -292,7 +292,8 @@ public sealed class GunnerAcquisition
             // Log the assigned pick with its own rank inputs (informational, rank not consulted).
             int idx = _sources.IndexOf(primary);
             if (idx >= 0)
-                score = AiTargetRanking.Score(ownPos, ownFwd, attack, AiScorer.Jet, _candidates[idx]);
+                score = AiTargetRanking.Score(ownPos, ownFwd, attack, AiScorer.Jet, _candidates[idx],
+                    gunner.PlayersPreferred);
             how = byRole ? "primary target: nearest human" : "primary target";
             return primary;
         }
@@ -300,7 +301,7 @@ public sealed class GunnerAcquisition
         // ⚠ Jet is asserted, not derived: the engine picks the scorer off the SHOOTER's own mode.
         // Deriving it would change what a mode plane or heli targets, a claim wanting its own evidence.
         int best = AiTargetRanking.SelectBest(ownPos, ownFwd, attack, AiScorer.Jet,
-            AiTargetRanking.AircraftFirst, _candidates, out score);
+            AiTargetRanking.AircraftFirst, _candidates, out score, gunner.PlayersPreferred);
         if (best < 0)
             return null;
         // Only the ranked arm stamps the hold. An assigned primary_target wins outright at every

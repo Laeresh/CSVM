@@ -522,7 +522,7 @@ line from that barrel to the intercept point so wing guns converge, perturbed in
 draw per shot. Gates in the engine's order: the quick-draw cone off the target's nose-tail axis, the separation inside
 the slot's authored engagement window, then the airframe's traverse clamp on the lead with the residual the clamp
 leaves gated in turn, so the employable cone is the traverse limit plus that gate. It also carries the standing target:
-`TakeTarget` stamps the engine's 20 s `TargetHoldSeconds` and keeps the rank the host re-scores while the hold stands, and `IsPrimaryTarget` says whether a target is the roster's assigned `PrimaryTargetName`.
+`TakeTarget` stamps the engine's 20 s `TargetHoldSeconds` and keeps the rank the host re-scores while the hold stands, and `IsPrimaryTarget` says whether a target is the roster's assigned `PrimaryTargetName`. `PlayersPreferred` is the pilot's own switch for the ranking's player weight: on for every campaign, Instant Action and `--ai=` pilot, off for a bot seat's, since a Dogfight ranks every pilot alike.
 Engine-free; the live half is the `ai-gunnery` suite. Decode: [../org/aiPilot/aiWeapons.md](../org/aiPilot/aiWeapons.md).
 
 ## src/Flight/Weapons/SurfaceGunMount.cs
@@ -557,7 +557,7 @@ session answers off the radio channel. Pinned by `AiVoiceDispatcherTests` and th
 ## src/Flight/Ai/AiTargetRanking.cs
 The decoded target-ranking formula ([../org/aiPilot.md](../org/aiPilot.md) "Target acquisition"): a
 rank built from a weight, the distance and the bias terms, and MINIMISED, with the player carrying
-a lower base weight than everyone else, a wingman a higher one, a gasbag a lower one, ±0.2 terms for
+a lower base weight than everyone else (unless the shooter passes `playersPreferred` false, which weighs a player as any other), a wingman a higher one, a gasbag a lower one, ±0.2 terms for
 ahead/behind on a half-metre deadband, altitude sign and closing, and an effectively infinite rank
 beyond the scorer's own ATTACK radius, the volume both decoded scorers admit on (the activation volume is the engine's awake test alone and reaches admission nowhere). `AiScorer` names the engine's two implementations and is required
 because the wrong one is silent: `Other` drops those three geometry terms. Snapshots in, index and
@@ -567,7 +567,7 @@ score out, engine-free. `SelectBest` prefers the best candidate no ally holds; `
 One AI aircraft's target acquisition, stepped from the sim step before the guns: the decoded hold
 that re-scores a standing target until it fails or expires, then the sweep over the whole
 VehicleList, the turrets and the structures, each candidate carrying its own class bias, handed with
-the machine's ATTACK radius to `AiTargetRanking.SelectBest`. A gasbag is admitted only past the
+the machine's ATTACK radius and the gunner's `PlayersPreferred` to `AiTargetRanking.SelectBest`. A gasbag is admitted only past the
 ordnance gate. `AcquiringShooter` is the shooter's view the host answers once per tick; `Step`
 leaves the pick on `AiGunner.Target`, and `RankedSources`/`ScannedStructureCount` expose the last
 sweep. `FlightController` owns one as `Acquisition`. Decode: [../org/aiPilot.md](../org/aiPilot.md).

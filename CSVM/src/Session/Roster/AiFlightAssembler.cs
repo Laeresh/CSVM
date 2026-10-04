@@ -315,6 +315,11 @@ internal sealed class AiFlightAssembler
         var spawn = new AiSpawn(planeName, Vector3.Zero, Vector3.Zero, pilot, Team: team,
             AttackRating: _policy.AiAttackSkill ?? SeatRating, Difficulty: Difficulty.Hard);
         PreparePilot(spawn, stats, Rng.Bots);
+        if (pilot.Gunner is { } gunner)
+        {
+            gunner.PlayersPreferred = false;   // a Dogfight ranks a person and a bot alike
+        }
+
         if (pilot.Machine is { } machine)
         {
             ApplyRanges(machine, stats);

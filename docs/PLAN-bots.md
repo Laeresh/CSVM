@@ -99,7 +99,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B, bot behaviour in a Dogfight
 
-11. ☐ Equal target weights for every pilot in a Dogfight
+11. ☑ Equal target weights for every pilot in a Dogfight
 12. ☐ Bots respawn through the host's rotation and follow Limited Lives
 13. ☐ Skill tiers, personalities, stock plane with Random, and the callsign pool
 14. ☐ Rearm standing order: a bot breaks off to a base when low or badly damaged
@@ -353,27 +353,64 @@ user's screen. A bot's plane outside `StockAirframes.Nodes` reaches a guest as n
 
 # Wave B, bot behaviour in a Dogfight
 
-## B11 ☐ Equal target weights for every pilot in a Dogfight
+## B11 ☑ Equal target weights for every pilot in a Dogfight
 
 **Goal.** In a Deathmatch a bot ranks a human and another bot with the same base weight, so the
 choice comes down to the ranking's other terms (Decision 10).
 
-**Evidence (confidence: lead-only).** `AiTargetRanking.PlayerWeight = 0.7` against `BaseWeight`
-(`CSVM/src/Flight/Ai/AiTargetRanking.cs:123,187`), wingman +0.4, score minimised.
-`GunnerAcquisition.cs:187,220-235` sweeps the whole vehicle list through `AimAssist.Hostile`
-(`AimAssist.cs:325`).
+**Evidence (confidence: traced-to-code).** `AiTargetRanking.Score` picks the base weight as
+`c.IsPlayer ? PlayerWeight : BaseWeight` (0.7 against 1.0, 360 rank units at the 1200 scale), and
+that is the only place the weight reads `IsPlayer`. The ranking recognises a player through
+`RankedTargetCandidate.IsPlayer`, which `GunnerAcquisition.Select` fills from the candidate's
+`FlightController.IsHumanPiloted`, so after A3 a person seat (local or remote) carries it and a bot
+seat does not, as the lead said. The other places a human reads differently in an AI's choice were
+checked and none needs the gate: the `"player"` role in `primary_target` and `rating_biases`
+(`GunnerAcquisition.Select`, `EnemyAircraftRanks`, `AiGunner.IsPrimaryTarget`) is reached only
+through a roster's fields, and `ArmSeatPilot` sets neither (only `CampaignRoster` and
+`InstantActionDirector` write them); the wingman +0.4 reads `Pilot.Escort`, which a bot has not;
+deconfliction (`AlliedAttackers`) counts team members, never humans; `AircraftFirst` is by class;
+the hold (`KeepsStandingTarget`) and the withdrawal walk (`AnyAircraftRanks`, `EnemyAircraftRanks`)
+compare against `NotRanked` only, which no weight reaches. `TargetPool` is the player's HUD pool
+and holds no human term. `SurfaceGunner` and `TurretController` are world gunners, not pilots, and
+keep the decoded weight. One human-specific behaviour stays, and it is not target choice: the mode
+machine's lay-off assist (`AiModeMachine.UpdateLayOff`, fed `PursuitQuarry.IsHumanPiloted`) lets a
+bot ease off while the human it targets is chasing it and falling behind, and `PreparePilot` arms a
+bot with `AssistEnabled = !--no-assist` like any other AI. A bot fighting another bot never lays off.
 
-**Approach.** Gate the human preference on the session mode, off in a Dogfight. Whether a bot seat
-counts as a "player" in the ranking after A3 is `<TODO: check how the ranking recognises a player>`.
-After A3 a bot reads `IsHumanPiloted` false on every machine, so `GunnerAcquisition` files a person
-seat with `IsPlayer` set and a bot seat without it; the gate belongs on the ranking, not the flag.
+**Approach (landed).** The switch is a per-pilot setting given at arming time,
+`AiGunner.PlayersPreferred` (default true). `AiTargetRanking.Score` and `SelectBest` take
+`playersPreferred` (default true, the decoded constant), and the weight is `PlayerWeight` only when
+the candidate is a player AND the shooter prefers players. `GunnerAcquisition.Select` passes the
+gunner's setting to `SelectBest` and to the primary-target log's `Score`. The candidate's `IsPlayer`
+and `IsHumanPiloted` stay truthful, so the aim assist, the force path and the `"player"` role are
+untouched. The hook is three lines in `AiFlightAssembler.ArmSeatPilot`, right after
+`PreparePilot(spawn, stats, Rng.Bots);`: `if (pilot.Gunner is { } gunner) { gunner.PlayersPreferred
+= false; }`. The gate is on the bot, not on the session: Decision 10 asks whom a bot prefers, and a
+bot exists only in a Deathmatch (Decision 1). `--ai=` aircraft in a `--vs` session are not match
+participants (no seat, no board row, no score) and are a development instrument for flying the
+decoded AI, so they keep the preference; a session-wide gate would also have needed the mode in
+`AiFlightAssembler`'s policy for no player-facing gain. A local bot built for C20 arms through
+`ArmSeatPilot` and so takes the setting with no further change.
 
-**Model recommendation.** `<TODO: not settled in the session>`
+**Model recommendation.** Sonnet would do: the change is a parameter and one arming line. The audit
+of what else reads a human in target choice is the part that wants care, and it is recorded above.
 
-**Verify.** `<TODO: a unit test on the ranking with a human and a bot at equal geometry>`; the
-campaign AI suites stay green.
+**Verify.** `AiTargetRankingTests.AShooterThatDoesNotPreferPlayersRanksAPersonAndABotAlike`: a
+person and a bot at equal geometry score one weight and one rank with the preference off, and the
+same pair stays 360 apart under it (able-to-fail control); a bot 100 m nearer loses the pick under
+the preference and wins it without. `ai-gunnery` (live acquisition) gains the same A/B on real
+aircraft: with the preference a human at 800 m out-ranks an AI rival at 700 m, with it off the rival
+wins. `net-seats` checks the host's bot is armed with `PlayersPreferred` false. Units 6229 passed /
+0 failed / 3 skipped (`RunTests.ps1 -SkipEngine -SkipGoldens`); engine 69 passed / 0 failed with
+`-Filter 'ai-,instant-action,wingman,target,campaign-roster,net-bot-seat,net-seats' -Shards 4
+-SkipUnits -SkipGoldens`, engine errors clean.
 
-**⚠ Traps.** The campaign and Instant Action keep the preference; only the Dogfight path changes.
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** The campaign and Instant Action keep the preference; only a bot seat's gunner turns it
+off. ⚠ Do not gate on `IsHumanPiloted`: the aim assist, the AI force path and the `"player"` role
+read it. Whether the lay-off assist should also treat a bot quarry like a human one is a separate
+question Decision 10 does not answer; it is left for the D32 playtest.
 
 ## B12 ☐ Bots respawn through the host's rotation and follow Limited Lives
 

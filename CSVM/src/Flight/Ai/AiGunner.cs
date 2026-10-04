@@ -75,6 +75,14 @@ public sealed class AiGunner
     /// until mission spawns attach roster identities.</summary>
     public System.Collections.Generic.IReadOnlyList<Mech3.AiRatingBias>? RatingBiases;
 
+    /// <summary>Whether the ranking gives a human-piloted candidate the decoded player weight
+    /// (<see cref="AiTargetRanking.PlayerWeight"/>) over the base one. The campaign, Instant Action
+    /// and <c>--ai=</c> keep it; a bot seat's pilot is armed with it off, because a Dogfight ranks
+    /// every pilot alike. ⚠ Gate the weight here, never on
+    /// <see cref="FlightController.IsHumanPiloted"/>, which the aim assist, the flight model's force
+    /// path and the <c>"player"</c> role also read.</summary>
+    public bool PlayersPreferred = true;
+
     /// <summary>Dead-eye aim-error cone half-angle, degrees, <c>ai_skill_parameters</c>'s
     /// <c>dead_eye_angle</c> at the pilot's rating (4.0° at 1, 1.45° at 9; the default is the
     /// worst rating, matching the 89 shipped mook blocks whose only authored skill is
