@@ -544,7 +544,7 @@ flown elsewhere: it takes the aeroplane, paint, loadout, spawn slot and score ro
 skips every pane, HUD, camera, listener, pad and pause key, the roster's airframe pick and a co-op seat's `SeatFit` beating this machine's launch flags. It reads only the roster's
 copied policy plus the grouped aircraft, world and human-session contracts; player order decides the paint and spawn draws. An airframe swap lays its
 captured scheme and own build over that assembly, the one path a bought plane takes. A racer, in Instant Action too, joins the `Race` with its run
-followed and its solo score key, and every stunt seat outside `--det` carries the restart count and opens on its first count; `BuildDamageVisuals` opens AI damage too. Under the race flag a seat is built with no loadout, ordnance or carried turret, a ghost-keyed airframe stamped by `RaceGhost`, and `TargetHud.RaceMarks` on. Read `FlightRoster.cs` next.
+followed, its solo score key and its network seat's callsign; a remote seat runs no course here and joins no local race, and every stunt seat outside `--det` carries the restart count and opens on its first count; `BuildDamageVisuals` opens AI damage too. Under the race flag a seat is built with no loadout, ordnance or carried turret, a ghost-keyed airframe stamped by `RaceGhost` with its own first-person layer (a remote seat with `SplitScreen.EveryCameraLayer`), and `TargetHud.RaceMarks` on. Read `FlightRoster.cs` next.
 
 ## src/Session/World/WorldEffectsFactory.cs
 Builds the two effect stages a session needs and the runtimes bound to them: the world-effects

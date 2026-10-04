@@ -188,7 +188,7 @@ internal sealed class OppositionStage
         ProjectilePool? projectiles, WeaponDefs weaponDefs)
     {
         var spec = _in.Spec;
-        if (!(spec.Zeppelins || iaZeppelinRun || spec.Zep != null || spec.ZeppelinVsZeppelin))
+        if (!(spec.Zeppelins || iaZeppelinRun || spec.Zep != null || spec.MissionType == DogfightMissionType.ZeppelinVsZeppelin))
         {
             return null;
         }

@@ -159,9 +159,10 @@ internal sealed class HumanFlightAdapter
             raceGhost: _world.Racing);
         var planeModel = planeBuilder.Build(planeName);
         // A race pilot draws as a ghost to every camera but its own pilot's, the cameras that drop
-        // its first-person layer. The stamp is static; the fade is the shader's, per drawing camera.
+        // its first-person layer. A seat flown elsewhere has no camera here, so it names a layer
+        // every camera keeps; the four-wide band then serves this machine's seats alone.
         if (_world.Racing)
-            RaceGhost.Stamp(planeModel, SplitScreen.FirstPersonLayer(pi));
+            RaceGhost.Stamp(planeModel, remote ? SplitScreen.EveryCameraLayer : SplitScreen.FirstPersonLayer(pi));
         StartupProfile.Record("plane", mark);
         MeshInstances += planeBuilder.MeshInstanceCount;
 
@@ -437,9 +438,8 @@ internal sealed class HumanFlightAdapter
             if (verbose)
                 Log.Info("flight", $"audio: engine={stats.EngineSound} damaged={stats.DamagedEngineSound ?? "none"} whine={stats.WhineSound ?? "none (no def names prop_sound)"} rattle={stats.RattleSound}{(_human.MixGain < 1f ? $" (per-player mix gain {_human.MixGain:0.00})" : "")}");
         }
-        // This player's stunt run: player 1 flies the loaded instance, everyone else an
-        // independent copy of the same zones, own progress, own clock. Never on a swap, which
-        // would restart the clock and stack a second run HUD (see AirframeSwapRequest).
+        // Each seat's own run, player 1 on the loaded instance. Never on a swap, which would stack a
+        // second run HUD (AirframeSwapRequest). Never on a remote seat: its own machine times it.
         if (swap == null && !remote && _human.StuntZones != null)
         {
             var run = pi == 0 ? _human.StuntZones : _human.StuntZones.ForAnotherPlayer();
@@ -479,7 +479,9 @@ internal sealed class HumanFlightAdapter
                 // Racing: no per-player splits board. The race's shared board covers the whole
                 // window when it ends, in Instant Action too, and the run HUD carries the live
                 // leaderboard meanwhile. The race hears this run's own clock, zones and finish.
-                race.Add(pi, planeDisplay, scoreKey);
+                var racer = race.Add(pi, planeDisplay, scoreKey);
+                if (seat is { Callsign.Length: > 0 })
+                    racer.Callsign = seat.Callsign;
                 race.Follow(pi, run);
                 runHud.Race = race;
                 runHud.PlayerIndex = pi;

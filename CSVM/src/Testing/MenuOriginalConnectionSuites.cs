@@ -401,6 +401,82 @@ internal static class MenuOriginalConnectionSuites
         }
     }
 
+    [Suite("menu-original-lobby-stunt-race",
+        "The Multiplayer Lobby's Stunt Race over the loopback: the host's Type list offers Stunt Race as its "
+        + "fourth row, and picking it on Above the Clouds moves the Environment off that greyed row onto "
+        + "Hawai'ian Islands with the Time box at 5 on both ends. Every chapter without Danger Zones greys in the "
+        + "Environment list, every Mission Option but the Time box greys on the host, and both ends describe "
+        + "the race under the Type box. A typed Time reaches the guest, and both LAUNCH! and the "
+        + "guest's launch leave as stunt launches on the chapter with the race type and that window, which "
+        + "the menu's own spec turns into the chapter's IA1. Back on a Deathmatch every option is live again")]
+    internal static void TheLobbyStuntRace(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var lan = new LoopbackLan();
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(93));
+        var gate = new ArrivalGate(mesh[0]);
+        var hostDoor = new NetPlayFeature(
+            (_, _, _) => gate,
+            (_, _) => throw new InvalidOperationException("the host does not join"),
+            new RouterAccess(
+                port => new UpnpPortMapResult(UpnpPortMapOutcome.Mapped, port, NetDoorAid.ExternalAddress, "suite"),
+                _ => { }),
+            lan.Bind);
+        var guestDoor = new NetPlayFeature(
+            (_, _, _) => throw new InvalidOperationException("the guest does not host"),
+            (_, _) =>
+            {
+                gate.Arrive(mesh[1].LocalPeer);
+                return new Hangup(mesh[1]);
+            },
+            lan: lan.Bind);
+        foreach (var door in new[] { hostDoor, guestDoor })
+        {
+            door.BindAddress = Loopback;
+            door.SearchAddress = Loopback;
+        }
+
+        var ends = new List<End>();
+        var hostExits = new List<MenuExit>();
+        var guestExits = new List<MenuExit>();
+        string? options = MenuSuiteHost.ScratchOptions(ctx, "menu-original-lobby-stunt-race");
+        try
+        {
+            var host = Open(ctx, layout, hostDoor, ends, hostExits);
+            var guest = Open(ctx, layout, guestDoor, ends, guestExits);
+            if (host == null || guest == null || !HostTheLobby(ctx, host) || !JoinTheLobby(ctx, guest, ends))
+            {
+                return;
+            }
+
+            if (PickTheStuntRace(ctx, host, guest, ends))
+            {
+                GreyedForTheRace(ctx, host, guest, ends);
+                LaunchTheRace(ctx, host, guest, ends, hostExits, guestExits);
+            }
+        }
+        finally
+        {
+            foreach (var end in ends)
+            {
+                end.Host.Deactivate();
+            }
+
+            hostDoor.Discard();
+            guestDoor.Discard();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+            CSVM.Utils.OptionsStore.DirectoryOverride = options;
+        }
+    }
+
     [Suite("menu-original-builtin-host",
         "An Original guest against a Built-in Dogfight host over the loopback: the host's door opens "
         + "with its lobby unshown, the guest finds it on the games list and lands in the lobby, its "
@@ -2160,8 +2236,8 @@ internal static class MenuOriginalConnectionSuites
                   && Row(guest.Shell, OriginalLobbyScreen.TimeRadioKey) is { Enabled: false }
                   && guest.Door.Dogfight!.SetEnvironment(3) == false,
             $"a guest's option controls are greyed and its option set is refused");
-        ctx.Check(Row(host.Shell, OriginalLobbyScreen.TypeKey) is { Enabled: true } && host.Door.Dogfight!.SetMissionType((DogfightMissionType)3) == false,
-            $"the host's Type box is live but a type past the box's three is refused");
+        ctx.Check(Row(host.Shell, OriginalLobbyScreen.TypeKey) is { Enabled: true } && host.Door.Dogfight!.SetMissionType((DogfightMissionType)DogfightLobby.TypeCount) == false,
+            $"the host's Type box is live but a type past the box's four is refused");
         TypeDescriptions(ctx, host, guest, ends);
         ClickRow(ctx, host, OriginalLobbyScreen.EnvironmentKey);
         ctx.Check(host.Shell.Lobby.OpenDropdown == OriginalLobbyScreen.EnvironmentKey, $"the Environment box opens its list ({host.Shell.Lobby.OpenDropdown})");
@@ -2685,6 +2761,129 @@ internal static class MenuOriginalConnectionSuites
     }
 
     // One team refuses LAUNCH!; the guest's own team lets it go, each seat carrying its team.
+    // The Type list's fourth row, picked on Above the Clouds. The race moves to the next environment
+    // with a course and arms the Time box at its default on both ends.
+    private static bool PickTheStuntRace(TestContext ctx, End host, End guest, List<End> ends)
+    {
+        var lobby = host.Door.Dogfight!;
+        lobby.SetEnvironment(0);
+        ClickRow(ctx, host, OriginalLobbyScreen.TypeKey);
+        string race = OriginalLobbyScreen.TypeKey + ":" + ((int)DogfightMissionType.StuntRace).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        ctx.Check(host.Shell.Lobby.OpenDropdown == OriginalLobbyScreen.TypeKey
+                  && Row(host.Shell, race) is { Enabled: true, Label: DogfightLobby.StuntRaceName }
+                  && Row(host.Shell, OriginalLobbyScreen.TypeKey + ":4") == null,
+            $"the Type list offers Stunt Race as its fourth and last row ('{Row(host.Shell, race)?.Label}')");
+        ClickRow(ctx, host, race);
+        for (int frame = 0; frame < 4; frame++)
+        {
+            Pump(ends.ToArray());
+        }
+
+        var heard = guest.Door.Dogfight!.Options;
+        bool picked = DogfightLobby.IsStuntRace(lobby.Options) && DogfightLobby.IsStuntRace(heard);
+        ctx.Check(picked && lobby.Options is { Environment: 1, TimeMinutes: DogfightLobby.StuntRaceDefaultMinutes, Victory: DogfightVictory.Time }
+                  && heard is { Environment: 1, TimeMinutes: DogfightLobby.StuntRaceDefaultMinutes },
+            $"Stunt Race leaves Above the Clouds for Hawai'ian Islands with Time at 5, on both ends ({lobby.Options.MissionType}/{heard.MissionType}, environment {heard.Environment}, time {heard.TimeMinutes})");
+        ctx.Check(Row(guest.Shell, OriginalLobbyScreen.TypeKey) is { Label: DogfightLobby.StuntRaceName }
+                  && Draws(host.Shell.Compose(), OriginalLobbyScreen.StuntRaceDescription)
+                  && Draws(guest.Shell.Compose(), OriginalLobbyScreen.StuntRaceDescription)
+                  && !Draws(guest.Shell.Compose(), "Dogfight to the death."),
+            $"both ends name the race in the Type box and describe it under it ('{Row(guest.Shell, OriginalLobbyScreen.TypeKey)?.Label}')");
+        return picked;
+    }
+
+    // The Environment list greys the chapters with no Danger Zones, and every Mission Option but the
+    // Time box greys on the host. A typed Time reaches the guest.
+    private static void GreyedForTheRace(TestContext ctx, End host, End guest, List<End> ends)
+    {
+        ClickRow(ctx, host, OriginalLobbyScreen.EnvironmentKey);
+        var offered = new List<string>();
+        bool matches = true;
+        for (int environment = 0; environment < DogfightLobby.EnvironmentCount; environment++)
+        {
+            var row = Row(host.Shell, OriginalLobbyScreen.EnvironmentKey + ":" + environment.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            matches &= row != null && row.Enabled == MenuChapters.DangerZonesFor(DogfightLobby.ChapterOf(environment));
+            offered.Add($"{DogfightLobby.ChapterOf(environment)} {(row?.Enabled == true ? "live" : "greyed")}");
+        }
+
+        ctx.Check(matches && Row(host.Shell, OriginalLobbyScreen.EnvironmentKey + ":0") is { Enabled: false },
+            $"the Environment list greys Above the Clouds and offers every chapter with a course ({string.Join(", ", offered)})");
+        ClickRow(ctx, host, OriginalLobbyScreen.EnvironmentKey + ":4");
+
+        string[] greyed =
+        {
+            OriginalLobbyScreen.TimeRadioKey, OriginalLobbyScreen.ScoreRadioKey, OriginalLobbyScreen.ScoreKey,
+            OriginalLobbyScreen.TeamsKey, OriginalLobbyScreen.LimitedLivesKey, OriginalLobbyScreen.LivesKey,
+            OriginalLobbyScreen.AutoRespawnKey, OriginalLobbyScreen.CustomPlanesKey, OriginalLobbyScreen.OutlawKey,
+            OriginalLobbyScreen.SelectKey,
+        };
+        var live = greyed.Where(key => Row(host.Shell, key) is not { Enabled: false }).ToList();
+        ctx.Check(live.Count == 0 && Row(host.Shell, OriginalLobbyScreen.TimeKey) is { Enabled: true }
+                  && Row(host.Shell, OriginalLobbyScreen.TypeKey) is { Enabled: true } && Row(host.Shell, OriginalLobbyScreen.EnvironmentKey) is { Enabled: true },
+            $"every Mission Option but the Time box greys on the host (still live: {string.Join(", ", live)})");
+
+        // ABLE-TO-FAIL CONTROL: on a Deathmatch the same rows and Above the Clouds are live.
+        var lobby = host.Door.Dogfight!;
+        lobby.SetMissionType(DogfightMissionType.Deathmatch);
+        Pump(host);
+        var dead = greyed.Where(key => key != OriginalLobbyScreen.ScoreKey && key != OriginalLobbyScreen.LivesKey
+                                       && key != OriginalLobbyScreen.SelectKey && Row(host.Shell, key) is not { Enabled: true }).ToList();
+        ctx.Check(dead.Count == 0 && lobby.SetEnvironment(0) && lobby.SetEnvironment(4),
+            $"ABLE-TO-FAIL CONTROL: on a Deathmatch the same options and Above the Clouds are live (still greyed: {string.Join(", ", dead)})");
+        lobby.SetMissionType(DogfightMissionType.StuntRace);
+        ClickRow(ctx, host, OriginalLobbyScreen.TimeKey);
+        TypeInto(host, new MenuCommands { Erase = true }, new MenuCommands { Erase = true }, new MenuCommands { Typed = "7" });
+        for (int frame = 0; frame < 4; frame++)
+        {
+            Pump(ends.ToArray());
+        }
+
+        var heard = guest.Door.Dogfight!.Options;
+        ctx.Check(heard is { Environment: 4, TimeMinutes: 7 } && DogfightLobby.IsStuntRace(heard),
+            $"NW Boeing Field and a typed Time of 7 reach the guest ({heard.Environment}, {heard.TimeMinutes})");
+    }
+
+    // Both ends Ready, LAUNCH! and the host's opener. Each end leaves as a stunt launch on the chapter
+    // with the race and its window. The menu's own spec flies it as the chapter's IA1.
+    private static void LaunchTheRace(TestContext ctx, End host, End guest, List<End> ends, List<MenuExit> hostExits, List<MenuExit> guestExits)
+    {
+        ClickRow(ctx, host, OriginalLobbyScreen.ReadyKey);
+        ClickRow(ctx, guest, OriginalLobbyScreen.ReadyKey);
+        for (int frame = 0; frame < 4; frame++)
+        {
+            Pump(ends.ToArray());
+        }
+
+        int before = hostExits.Count;
+        ClickRow(ctx, host, OriginalLobbyScreen.LaunchKey);
+        var launch = hostExits.Skip(before).OfType<LaunchExit>().FirstOrDefault();
+        ctx.Check(launch is { Mode: MenuMode.Stunt, Chapter: "C1", Net.IsHost: true, Match: { MissionType: DogfightMissionType.StuntRace, TimeLimitMinutes: 7, KillTarget: 0, Lives: 0 } },
+            $"LAUNCH! hands out a stunt launch on C1 with the race and its window ({launch?.Mode}, {launch?.Chapter}, {launch?.Match})");
+        if (launch?.Net is not { } wire)
+        {
+            return;
+        }
+
+        var planes = launch.Seats.Select(s => s.PlaneNode).ToList();
+        var (roster, _) = CSVM.Launch.Launcher.VersusLaunchField(wire.Transport, planes, launch.Seats.Select(s => s.Fit).ToList(), StockLoadouts.Load());
+        int guestBefore = guestExits.Count;
+        _ = NetSession.Host((NetLobby)wire.Transport, roster, 7UL);
+        for (int frame = 0; frame < 4 && guestExits.Count == guestBefore; frame++)
+        {
+            Pump(guest);
+        }
+
+        var guestLaunch = guestExits.Skip(guestBefore).OfType<LaunchExit>().FirstOrDefault();
+        ctx.Check(guestLaunch is { Mode: MenuMode.Stunt, Chapter: "C1", Net.IsHost: false, Match: { MissionType: DogfightMissionType.StuntRace, TimeLimitMinutes: 7 } },
+            $"the guest launches behind the host on the same race ({guestLaunch?.Mode}, {guestLaunch?.Chapter}, {guestLaunch?.Match})");
+
+        var cli = SessionSpec.Parse(new[] { "--mission=MP1" });
+        var spec = SessionSpec.FromMenu(cli, launch.Chapter, planes, launch.Mode, vsTimeMinutes: launch.Match!.TimeLimitMinutes,
+            missionType: launch.Match.MissionType);
+        ctx.Check(spec is { Stunt: true, Versus: false, Mission: SessionSpec.StuntRaceMission, MissionType: DogfightMissionType.StuntRace, StuntRaceMinutes: 7 },
+            $"and the menu's own spec flies C1's IA1 as a 7 minute race whatever --mission says ({spec.Mission}, {spec.MissionType}, {spec.StuntRaceMinutes} min)");
+    }
+
     private static void LaunchOnTeams(TestContext ctx, End host, End guest, List<End> ends, List<MenuExit> exits, byte team)
     {
         ClickRow(ctx, host, OriginalLobbyScreen.ReadyKey);

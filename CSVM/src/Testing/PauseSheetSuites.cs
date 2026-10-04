@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using CSVM.Extraction;
 using CSVM.Mech3;
+using CSVM.Spec;
 using CSVM.UI.Boards;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
@@ -526,9 +527,10 @@ internal static class PauseSheetSuites
             return;
         }
 
-        var modes = new (bool CaptureTheFlag, bool ZeppelinVsZeppelin, bool Teamed)[]
+        var modes = new (DogfightMissionType Type, bool Teamed)[]
         {
-            (false, false, false), (false, false, true), (true, false, false), (false, true, false),
+            (DogfightMissionType.Deathmatch, false), (DogfightMissionType.Deathmatch, true),
+            (DogfightMissionType.CaptureTheFlag, false), (DogfightMissionType.ZeppelinVsZeppelin, false),
         };
         int offered = 0, sheets = 0, striped = 0, labelled = 0;
         for (int environment = 0; environment < DogfightLobby.EnvironmentCount; environment++)
@@ -537,17 +539,14 @@ internal static class PauseSheetSuites
             foreach (var mode in modes)
             {
                 // A greyed row is never flown, and Above the Clouds authors no flag dialog for it.
-                var type = mode.CaptureTheFlag ? DogfightMissionType.CaptureTheFlag
-                    : mode.ZeppelinVsZeppelin ? DogfightMissionType.ZeppelinVsZeppelin
-                    : DogfightMissionType.Deathmatch;
-                if (!DogfightLobby.Offers(type, environment))
+                if (!DogfightLobby.Offers(mode.Type, environment))
                 {
                     continue;
                 }
 
                 offered++;
                 if (LoadScreens.MultiplayerKey(
-                        chapter, mode.CaptureTheFlag, mode.ZeppelinVsZeppelin, mode.Teamed) is not { } key
+                        chapter, mode.Type, mode.Teamed) is not { } key
                     || PauseSheet.LoadMultiplayer(ctx.ZrdrPath, ctx.MessagesPath, key) is not { } sheet)
                 {
                     ctx.Check(false, $"{chapter}'s Dogfight ({mode}) resolves a multiplayer sheet");

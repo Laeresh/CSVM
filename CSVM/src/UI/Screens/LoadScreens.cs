@@ -270,15 +270,14 @@ public static class LoadScreens
     /// <summary>The multiplayer dialog a Dogfight on <paramref name="chapter"/> names, keyed by the
     /// original's own number for the environment row and the mode letter. Null for a chapter none
     /// of the lobby's seven rows flies, which keeps the blackboard's heading.</summary>
-    public static string? MultiplayerKey(
-        string chapter, bool captureTheFlag, bool zeppelinVsZeppelin, bool teamed)
+    public static string? MultiplayerKey(string chapter, Spec.DogfightMissionType type, bool teamed)
     {
         int environment = DogfightLobby.EnvironmentOf(chapter.ToUpperInvariant());
         return environment < 0
             ? null
             : EscapeDialog.MultiplayerKey(
                 DogfightLobby.EnvironmentNumber(environment),
-                MultiplayerLetter(DogfightLobby.ModeOf(captureTheFlag, zeppelinVsZeppelin, teamed)));
+                MultiplayerLetter(DogfightLobby.ModeOf(type, teamed)));
     }
 
     /// <summary>The words one load screen writes. An Instant Action mission takes its dialog's four

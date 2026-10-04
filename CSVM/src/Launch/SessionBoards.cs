@@ -326,7 +326,7 @@ internal sealed class SessionBoards
         var spec = _in.Spec;
         if (!spec.Versus
             || LoadScreens.MultiplayerKey(
-                spec.Chapter, spec.CaptureTheFlag, spec.ZeppelinVsZeppelin, sheetInputs.Teamed) is not { } key)
+                spec.Chapter, spec.MissionType, sheetInputs.Teamed) is not { } key)
         {
             return null;
         }

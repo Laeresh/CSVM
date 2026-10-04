@@ -469,6 +469,13 @@ public partial class GameSession : Node3D
     /// credit them and read their launch counters.</summary>
     internal AiGeneratorRuntime? Generators => _generators;
 
+    /// <summary>The Instant Action mission's runtime, null outside one. A suite reads that a lobby
+    /// Stunt Race flies the course with no mission behind it.</summary>
+    internal InstantActionRuntime? InstantAction => _iaDirector?.Runtime;
+
+    /// <summary>How many AI aircraft the flight roster holds now.</summary>
+    internal int AiAircraftCount => AiPlanes.Count;
+
     /// <summary>The session's subject plane (null until the build lands one), the Launcher's
     /// capture tick reads it, because CaptureDirector only shoots once a plane exists.</summary>
     internal Node3D? Plane => _plane;
@@ -1886,8 +1893,8 @@ public partial class GameSession : Node3D
                 // Expected for the chapters whose IA1 has no dzones (C1C, C2B), a data
                 // fact, not a fault, so a plain line (log hygiene: no stack traces).
                 Log.Info("flight", $"--stunt: no danger zones for {_spec.Chapter}/{_spec.Mission}, flying free");
-            else if (_rigs.Count > 1)
-                race = new StuntRace(RaceWindowSeconds(), stuntZones.TotalCount); // splitscreen: a time attack
+            else if (IsRace())
+                race = new StuntRace(RaceWindowSeconds(), stuntZones.TotalCount);
             if (stuntZones != null && iaStunt && !_spec.Stunt)
                 Log.Info("flight", $"ia: stunt_flying, {stuntZones.TotalCount} danger zone(s) from {_spec.Chapter}/{_spec.Mission}, the mission type's own objective");
         }
@@ -2076,7 +2083,7 @@ public partial class GameSession : Node3D
             var bests = ScoreStore.ForSession(_spec.ScoresPath, _spec.ScoresThrowaway);
             race.BestImproved += racer => RecordRaceBest(bests, racer);
             race.BeginOpening(OpeningSeconds(firstCount));
-            Log.Info("flight", $"stunt race: {_rigs.Count} pilots over {stuntZones.TotalCount} danger zones, a {StuntRace.FormatClock(race.WindowSeconds)} time attack, best run ranks");
+            Log.Info("flight", $"stunt race: {_seatRigs.Count} pilots over {stuntZones.TotalCount} danger zones, a {StuntRace.FormatClock(race.WindowSeconds)} time attack, best run ranks{(race.Racers.Count < _seatRigs.Count ? $" ({race.Racers.Count} timed on this machine)" : "")}");
         }
 
         // Dogfight (--vs): the match's scoring, respawn rotation and lives, fed by every rig's
@@ -2098,7 +2105,7 @@ public partial class GameSession : Node3D
             // takes it to the lobby.
             boards.BuildDogfightBoard(dogfight.Match, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
                 dogfight.Restart,
-                dogfight.RematchIsTheHosts && !_spec.ZeppelinVsZeppelin ? VersusBoard.HostCallsTheRematch : null);
+                dogfight.RematchIsTheHosts && _spec.MissionType != DogfightMissionType.ZeppelinVsZeppelin ? VersusBoard.HostCallsTheRematch : null);
         }
 
         // Fire, hit, damage and death over the wire. It runs after the match so a death report
@@ -2843,6 +2850,10 @@ public partial class GameSession : Node3D
         }
         race.BeginOpening(OpeningSeconds(opening));
     }
+
+    // A stunt run races once it has a second seat, a network guest's included. A lobby Stunt Race
+    // races even a host left alone.
+    private bool IsRace() => _seatRigs.Count > 1 || _spec.MissionType == DogfightMissionType.StuntRace;
 
     // The race window the launch asked for. A --debug-scoreboard race closes it at once: its
     // staggered forced finishes then run as the final run, and the last wakes the board.

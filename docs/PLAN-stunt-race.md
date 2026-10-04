@@ -122,7 +122,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C, the network race
 
-21. ☐ Stunt Race in the Original lobby, flying the chapter's stunt course over the network
+21. ☑ Stunt Race in the Original lobby, flying the chapter's stunt course over the network
 22. ☐ Owner-timed runs on the wire; the host's window, leaderboard and match end
 23. ☐ Network race end: Restart and Lobby, guests waiting, pilots leaving
 
@@ -868,7 +868,7 @@ Mission Options imply, and nothing here enforces that.
 
 # Wave C, the network race
 
-## C21 ☐ Stunt Race in the Original lobby, flying the chapter's stunt course over the network
+## C21 ☑ Stunt Race in the Original lobby, flying the chapter's stunt course over the network
 
 **Goal.** The Original Multiplayer Lobby's Type box offers Stunt Race. With it chosen the
 Environment box greys Above the Clouds, the Mission Options grey everything but the time limit
@@ -886,17 +886,157 @@ course (`UI/Menu/MenuChapters.cs:22-30`).
 `CaptureTheFlag` and `ZeppelinVsZeppelin`, checked across 14 files, while `DogfightMissionType`
 lives in `UI/Menu/DogfightLobby.cs` and the lobby compares raw bytes against it. Move the enum
 beside `SessionSpec`, make it the spec's one mission field and remove the bools, so Stunt Race
-lands as an enum value rather than a third bool. <TODO: the new `DogfightMissionType` value and
-its wire encoding (a wire-version consideration); how a network session loads `<chapter>/IA1` with its `dzones` and what of the IA1
-mission's own content (opposition, objectives) it suppresses; the lobby text strings (remake-only,
-no langui id)>.
+lands as an enum value rather than a third bool.
+*The refactor (traced-to-code).* `DogfightMissionType` now stands beside `MenuMode` in
+`Spec/SessionSpec.cs:56`, and `SessionSpec.MissionType` (`:234`, default Deathmatch) replaces the
+two bools. `--ctf` and `--zvz` became parse votes that `Resolve` turns into the one field (`:2417`),
+keeping both old drops (no `--vs`, `--zvz` beside `--ctf`). `FromMenu` takes a `missionType` in
+place of the two bools (`MenuType`, `:2293`: the Dogfight types need `MenuMode.Versus`, Stunt Race a
+stunt launch with no Instant Action def). `VersusRules` carries `MissionType` in place of its two
+bools (`UI/Menu/MenuExit.cs`), `DogfightLobby.ModeOf` and `LoadScreens.MultiplayerKey` take the
+enum, and the lobby reads the wire byte through `DogfightLobby.TypeOf`. Footprint: 13 source files
+(`SessionSpec`, `DogfightLobby`, `MenuExit`, `OriginalLobbyScreen`, `LoadScreens`, `Launcher`,
+`GameSession`, `SessionBoards`, `SessionVoices`, `OppositionStage`, `VersusDirector`, plus
+`HumanFlightAdapter` and `SplitScreen` for the race), 4 suite files and 3 unit files.
+`RearmRuntime`'s own `CaptureTheFlag` input stays a bool: it is a rearm rule input that
+`VersusDirector` fills from the type, not a second home for the type.
+*The value and the wire (traced-to-code for the layout, lead-only for the release rule).* Stunt Race
+is value 3, appended after the string table's three, in `DogfightOptionsMessage`'s existing type
+byte (`Net/NetDogfightMessages.cs:78`): same id `0x53`, same 16 bytes, no new field. There is no
+protocol version to bump: two builds share a lobby only on the same MAJOR.MINOR
+(`NetBuildVersion.PlaysWith`, `Net/NetBuildVersion.cs:114`, checked by `BuildVersionMessage`), and a
+patch never changes the protocol. A build without type 3 that heard it would draw an empty Type
+label, the Zeppelin vs Zeppelin line (the description index clamps), and fly a Deathmatch on `MP1`
+while its host races, a desync. **Decision:** no wire change; Stunt Race must ship in a minor
+release, never a 0.3.x patch (the tree reads 0.3.0, tagged), which the release must bump. Recorded
+in `docs/org/multiplayer-messages.md`, the Dogfight lobby section.
+*The course on every machine (traced-to-code).* The lobby launch leaves in `MenuMode.Stunt`
+(`DogfightLobby.LaunchMode`, `UI/Menu/DogfightLobby.cs:423`; `OriginalLobbyScreen.cs:1173`), so
+`FromMenu` builds `Stunt` on, `Versus` off, `Mission` `StuntRaceMission` = `IA1` whatever
+`--mission` says (`SessionSpec.cs:143, 1849`), Scenario `stunt_flying`, and every machine loads the
+same `<chapter>/IA1` and its `ia.json` `dzones` through the unchanged `StuntMission.Load` path
+(`GameSession.cs:1884`). The guest builds its own spec from the host's options, the same path, so
+both machines agree by construction.
+*What the IA1 mission's content does (traced-to-code).* Nothing needs suppressing beyond what the
+build already leaves out: the lobby launch carries no `InstantActionDef`, so
+`InstantActionDirector.TryCreate` (`Session/InstantAction/InstantActionDirector.cs:107`) builds no
+director (no waves, ace, wingmen, objective, lives, zeppelin switch or wrap-up), and `FromMenu`
+clears a command line's `--ia=` for a race (`SessionSpec.cs:1865`). `Versus` is off, so
+`VersusDirector.TryCreate` returns null (`Session/World/VersusDirector.cs:126`): no `VersusMatch`,
+no lives limit, no kill or time end, no "fewer than two pilots left" ending, no match-state wire.
+The opposition stage spawns only from the command line's own `--ai=`/`--zeppelins`/`--generators`
+(`OppositionStage`), and B12 sleeps every world emplacement (`GameSession.cs:2301`). The suite reads
+it: no Instant Action runtime, no AI aircraft, no Dogfight director, no generators on either machine.
+*The race and its window (traced-to-code).* `GameSession.IsRace` (`GameSession.cs:2856`) builds the
+`StuntRace` (`:1896`) when the stunt run has a second seat, a network guest's included
+(`_seatRigs`, where it read `_rigs`, the local panes), or when the spec's type is Stunt Race, so a
+host left alone in a lobby race still races. Its window is `StuntRaceMinutes`, which `FromMenu`
+takes off the lobby's Time box (`VersusRules.TimeLimitMinutes`, `SessionSpec.cs:1891`). `Racing` is
+set from `race != null` (`:2010`), so B12's no-contact, weapons-off, sleeping ground, race marks and
+ghosts apply on every machine unchanged. Lives: the lobby greys Limited Lives in a race,
+`RulesOf` carries 0 lives for a Stunt Race, and nothing on a non-Versus, non-Instant-Action session
+reads a lives limit.
+*Each machine's local race, and C22's hook (traced-to-code).* Each machine's `StuntRace` times its
+own seats alone: `HumanFlightAdapter.Assemble` runs a course and calls `race.Add`/`race.Follow` only
+for a local seat (`Session/Roster/HumanFlightAdapter.cs:443`, unchanged guard, now commented), and
+the racer takes the network seat's callsign (`:484`). A remote seat flies its pose with no
+`StuntMission`, no `Race` and no board row. So each machine's leaderboard and board show its own
+pilot, each window opens on its own opening count (both counts begin in the build and run on the
+sim, which the start gate holds until every machine has loaded; the loopback suite opens both on
+one step), and each machine ends its own race. Restart (`RestartRace`, `GameSession.cs:2832`)
+resets this machine's panes alone. **C22's hook:** keep `Follow` as each owner's local feed, report
+`RunStarted`, `ZoneCleared(index, zone, runTime)`, `RunFinished(index, runTime)` and
+`RunAbandoned` off that feed to the host, and on the host call the same `StuntRace` entry points
+for each remote seat after `race.Add(seat, plane, "")` for it (the `Add` call this item skips at
+`HumanFlightAdapter.cs:443`); the host's `BeginOpening`/`Advance` own the window and a guest's race
+reads the host's. `StuntRace.Add` takes any seat index (`Flight/Modes/StuntRace.cs:237`), so the
+seat numbering needs no change.
+*The start (traced-to-code).* Outside `--det` every seat on every machine takes
+`SharedSpawnStarts` (`GameSession.cs:1934`): the one spawn player 1 takes, the same pick on both
+machines (shared seed). Each machine's own seat begins its opening count on the rails behind it, so
+at build the remote seat stands on the spawn and the local one on the rails' start; at GO the local
+seat is on the spawn (the suite measures it). No contact between them is B12's rule.
+*The lobby (traced-to-code for the greying, the look is the user's).* The Type list offers four rows,
+the fourth "Stunt Race" (`DogfightLobby.StuntRaceName`, remake-only, no langui id;
+`OriginalLobbyScreen.cs:1364`), and the line under the Type box is the remake's own
+`OriginalLobbyScreen.StuntRaceDescription` ("Race the chapter's Danger Zone course against the
+clock. Fly as many runs as the time allows. The fastest complete run wins.") in langui 10123's face
+(`:64, 1890`). Picking Stunt Race moves off a greyed environment as Capture the Flag's pick does,
+sets Victory to Time and the Time box to 5 (`DogfightLobby.StuntRaceDefaultMinutes`; a repeat pick
+keeps a typed window; `DogfightLobby.cs:508`). The Environment list greys every row whose chapter
+ships no Danger Zones (`MenuChapters.DangerZonesFor`, `DogfightLobby.cs:403`): of the seven, Above
+the Clouds (`C1C`) alone; `C2B` is not a lobby row. The greying follows the existing pattern, an
+`Enabled` flag per row: `MissionRows` computes `rules = live && !race` (`OriginalLobbyScreen.cs:1275`)
+and greys both radios, Score, Restrict Teams and its boxes, Limited Lives, Lives, Auto Respawn,
+Allow Custom Planes, Outlaw Components and Select...; only the Time box, Type and Environment stay
+live. The setters refuse the same options in a race (`SetVictory` `:531` and the rest), and
+`LaunchRefusal` passes a race whatever the greyed team boxes stood on (`:273`). The plane rules stand
+as the type change found them.
+*The first-person band past four seats (traced-to-code).* Neither widened nor capped: a remote seat's
+ghost stamp names `SplitScreen.EveryCameraLayer` (`UI/Boards/SplitScreen.cs:36`, the world's layer
+1, which every pane, spyglass and photograph camera draws) in place of its seat's first-person
+layer (`HumanFlightAdapter.cs:165`). No camera on a machine looks out of a remote aeroplane, so the
+owner exemption is never wanted for one. The band then carries only a machine's own seats: a host's
+panes are seats 0 to k-1 and a guest's seats are one contiguous run (`NetSeats`' run rule), at most
+four either way, so `FirstPersonLayer`'s wrap (`:167`) never lands two of one machine's seats on one
+bit, at any field size up to `NetSeats.MaxPlayers` (16).
 
-**Model recommendation.** <TODO>
+**Model recommendation.** Opus: the refactor touches 13 files and the session wiring (the race's
+seat rule, the remote seat's stamp and race membership) needs the whole net seat model read. The
+lobby greying and its strings alone are mid-tier work.
 
-**Verify.** <TODO: a menu suite for the Type, the greyed environment and options; a loopback net
-suite launching a two-seat Stunt Race and asserting both machines load the same course>.
+**Verify.** Built: units in `CSVM.Tests/DogfightLobbyTests.cs`:
+`AStuntRaceGreysAboveTheCloudsAndEveryOptionButTheTime` (the type moves off Above the Clouds, Time 5
+and Victory Time, `Offers` equal to `MenuChapters.DangerZonesFor` per row, every other setter
+refused, a repeat pick keeps 7, `RulesOf` = `(0, 7, 0, true, StuntRace)`, `LaunchMode` Stunt, back
+on Deathmatch everything live), `AStuntRaceLaunchesWhateverTeamsTheGreyedBoxesStoodOn`,
+`AStuntRaceCrossesTheWireAsTypeThree` (byte at offset 6 is 3, round trip, 4 flies nothing) and
+`AStuntRaceLaunchFliesTheChaptersIa1WithTheLobbysWindow` (IA1 over `--mission=MP2`, window 7, each
+Dogfight type on its own map, no other launch races); the refactor's units adjusted in place
+(`ZeppelinVersusTests`, `LoadScreensTests`, `DogfightLobbyTests`, same assertions on the enum).
+Engine suite `menu-original-lobby-stunt-race` (`Testing/MenuOriginalConnectionSuites.cs`): over the
+loopback the Type list's fourth row is Stunt Race, picking it on Above the Clouds lands on Hawai'ian
+Islands with Time 5 on both ends, the Environment list greys exactly the rows without Danger Zones,
+every option but Time greys on the host (control: all live on Deathmatch), both ends draw the race
+line, a typed 7 reaches the guest, and LAUNCH! and the guest's launch both leave as
+`MenuMode.Stunt` on C1 with the race and 7 minutes, which `FromMenu` flies as C1/IA1. Engine suite
+`net-lobby-stunt-race` (`Testing/NetLobbyEnvironmentSuites.cs`): two sessions over the loopback from
+the lobby's options with Limited Lives ticked: both specs C1/IA1, Stunt, not Versus, 7 minutes, 0
+lives; both build with no Instant Action runtime, AI aircraft, Dogfight director or generators; the
+same 5-zone course on both; the remote seat on the spawn and each local seat on the same rails'
+start on both machines; each machine races its own seat alone, 420 s, under the seat's callsign;
+every aircraft unarmed and racing; ghost stamps local = its first-person layer, remote = the
+every-camera layer; both windows open on one step with each local seat on the spawn. Both weighted.
+Mutation-checked, each red then restored: `IsRace` back on the local panes (net suite: no race),
+the remote stamp on the seat's band (net suite: 0/111 right/wrong), the Time box dropped from the
+window (unit and net suite: 300 s), the race on `cli.Mission` (unit and menu suite: MP1), Stunt Race
+offering Above the Clouds (unit and menu suite), the lobby rows greyed on `live` alone (menu suite:
+seven rows still live), `LaunchMode` always Versus (unit and menu suite), `LaunchRefusal`'s race pass
+removed (unit), `SetVictory`'s race refusal removed (unit), `RulesOf`'s race branch removed (unit and
+net suite), the callsign dropped (net suite: P1/P2), the default 5 not set (unit and menu suite).
+Battery: every unit (6227 passed, 3 skipped), the 105 engine suites matching net-, lobby,
+menu-original, versus, stunt, race, pause-sheet, load-sheet and instant-action, `-Quick` and the
+goldens (24 hash-identical) all pass. Hand-flown, owed: a two-machine sitting (the Deck can host,
+per `analysis/net-real-link/`) picking Stunt Race in the lobby, both machines on the same course,
+each pilot's own race and board, the ghosts and no contact; the Type list's fourth row and the
+race line are the user's look.
 
-**⚠ Traps.** <TODO>
+**⚠ Traps.** Do not put the race's type back on two bools or a third bool: every check reads
+`SessionSpec.MissionType`. Do not ship type 3 in a patch of a minor that lacks it: the wire has no
+version of its own, only MAJOR.MINOR keeps an older build out. Do not set `Versus` for a Stunt Race:
+it would build a `VersusMatch` with its lives, its time end and Deathmatch's "fewer than two pilots
+left" end, the match-state wire and the `MP1` spawn table. Do not read the race condition off
+`_rigs`: a network guest has one pane, so the race would vanish on two machines. Do not stamp a
+remote seat with its seat's first-person layer: past four seats it shares a bit with a local pane
+and draws solid there. A remote seat must stay out of the local race until C22 feeds it from the
+host, or a machine would rank a pilot it cannot time. A Built-in guest of an Original host flies what
+its own screen chose, as it already does for Capture the Flag and Zeppelin vs Zeppelin; the race
+does not change that. The race board's Exit and the lobby return are C23's: `Launcher.LobbyLanding`
+lands only a completed `VersusMatch`, so a race exits to the launch's own destination today. The
+command line's opposition flags (`--ai=`, `--zeppelins`, `--generators`) still reach a lobby race
+launched from a development command line.
+
+**Verified.** <pending orchestrator run>
 
 ## C22 ☐ Owner-timed runs on the wire; the host's window, leaderboard and match end
 

@@ -1798,7 +1798,7 @@ public partial class Launcher : Node3D
     private string? LaunchBriefing() =>
         _spec.Versus
             ? UI.Screens.LoadScreens.MultiplayerKey(
-                _spec.Chapter, _spec.CaptureTheFlag, _spec.ZeppelinVsZeppelin,
+                _spec.Chapter, _spec.MissionType,
                 _lobbyFlight && _netDoor?.Dogfight is { Teamed: true })
             : null;
 
@@ -1918,7 +1918,7 @@ public partial class Launcher : Node3D
     // with nobody on a team. docs/org/pause-screen.md.
     private void ShowMultiplayerPauseSheet(string chapter)
     {
-        if (UI.Screens.LoadScreens.MultiplayerKey(chapter, false, false, false) is not { } key)
+        if (UI.Screens.LoadScreens.MultiplayerKey(chapter, DogfightMissionType.Deathmatch, false) is not { } key)
         {
             Log.Warn("ui", $"pause aid: no lobby environment flies {chapter}");
             return;
@@ -1995,7 +1995,8 @@ public partial class Launcher : Node3D
         {
             return Mech3.InstantAction.MissionTypeLabel(def.MissionType);
         }
-        return _spec.Versus ? "Dogfight" : "Free Flight";
+        return _spec.MissionType == DogfightMissionType.StuntRace ? DogfightLobby.StuntRaceName
+            : _spec.Versus ? "Dogfight" : "Free Flight";
     }
 
     private void HideLoadScreen()
@@ -2738,8 +2739,8 @@ public partial class Launcher : Node3D
         TakeNetLaunch(launch, planes, fits, customs);
         _spec = SessionSpec.FromMenu(_cli, launch.Chapter, planes, launch.Mode, launch.InstantAction, fits, customs,
             launch.Match?.KillTarget, launch.Match?.TimeLimitMinutes, launch.Match?.Lives, launch.Match?.AutoRespawn,
-            launch.WingmanLoadout, launch.Match?.CaptureTheFlag == true, launch.Match?.FlagHomeToCapture == true,
-            launch.Match?.ZeppelinVsZeppelin == true);
+            launch.WingmanLoadout, launch.Match?.MissionType ?? DogfightMissionType.Deathmatch,
+            launch.Match?.FlagHomeToCapture == true);
         // Step the master so flying again is a new mission rather than a replay: without this every
         // relaunch re-derives the same spawn, opposition and liveries. ⚠ A pinned run must hold
         // still, which is what keeps the goldens and the perf harnesses reproducible.

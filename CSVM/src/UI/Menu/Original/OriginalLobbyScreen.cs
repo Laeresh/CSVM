@@ -59,6 +59,11 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     /// <summary>The Mission Type box.</summary>
     public const string TypeKey = "MPL_D_TYPE";
 
+    /// <summary>The line under the Type box for a Stunt Race, the remake's own type, so no string
+    /// table id carries it. It is written in the register of the original's three.</summary>
+    public const string StuntRaceDescription =
+        "Race the chapter's Danger Zone course against the clock. Fly as many runs as the time allows. The fastest complete run wins.";
+
     /// <summary>LAUNCH!, live on the host once every pilot is Ready.</summary>
     public const string LaunchKey = "MPL_B_LAUNCH";
 
@@ -218,6 +223,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private static readonly string[] RatingLabels = { "TOP SPEED:", "ARMOR:", "AGILITY:", "OFFENSE:" };
     private static readonly string[] RatingWords = { "Poor", "Fair", "Average", "Good", "Excellent" };
     private static readonly int[] Calibres = { 70, 60, 50, 40, 30 };
+    // The string table's three types; Stunt Race, the fourth, is the remake's and has no id.
     private static readonly string[] TypeNames = { "Capture the Flag", "Deathmatch", "Zeppelin vs Zeppelin" };
     private static readonly int[] TypeDescriptions = { 10124, 10123, 10125 };
     private static readonly int[] ScoreHeaderIds = { 10542, 10543, 10544, 10545, 10546 };
@@ -1164,7 +1170,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             StockAirframes.Node(lobby.Airframe), _pads(), CampaignLoadout.For(lobby.LaunchFit, _stock()),
             CSVM.Flight.Hangar.CustomPlaneWire.Def(lobby.Build));
         return new LaunchExit(
-            DogfightLobby.ChapterOf(options.Environment), new[] { seat }, MenuMode.Versus,
+            DogfightLobby.ChapterOf(options.Environment), new[] { seat }, DogfightLobby.LaunchMode(options),
             Match: DogfightLobby.RulesOf(options), Net: net.BuildLaunch());
     }
 
@@ -1264,16 +1270,19 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         rows.Add(Drop(EnvironmentKey, EnvironmentWord(options.Environment), PageX + 25f, PageY + 63f, 175f, 22f, live));
         rows.Add(Drop(TypeKey, TypeWord(options.MissionType), PageX + 25f, PageY + 108f, 175f, 22f, live));
         rows.Add(_text.Strip(LaunchKey, LargeArt, PageX + 47f, PageY + 284f, lobby.CanLaunch, 1, 131f, 37f));
-        rows.Add(Check(TimeRadioKey, RadioArt, PageX + 241f, PageY + 70f, 120f, 12f, live));
+        // A Stunt Race keeps the Time box alone, the race window; every other option greys.
+        bool race = DogfightLobby.IsStuntRace(options);
+        bool rules = live && !race;
+        rows.Add(Check(TimeRadioKey, RadioArt, PageX + 241f, PageY + 70f, 120f, 12f, rules));
         rows.Add(Box(TimeKey, BoxText(TimeKey, lobby), PageX + 370f, PageY + 68f, 73f, 18f, live && DogfightLobby.Arms(options.Victory, DogfightVictory.Time)));
-        rows.Add(Check(ScoreRadioKey, RadioArt, PageX + 241f, PageY + 92f, 120f, 12f, live));
-        rows.Add(Box(ScoreKey, BoxText(ScoreKey, lobby), PageX + 370f, PageY + 92f, 73f, 18f, live && DogfightLobby.Arms(options.Victory, DogfightVictory.Score)));
+        rows.Add(Check(ScoreRadioKey, RadioArt, PageX + 241f, PageY + 92f, 120f, 12f, rules));
+        rows.Add(Box(ScoreKey, BoxText(ScoreKey, lobby), PageX + 370f, PageY + 92f, 73f, 18f, rules && DogfightLobby.Arms(options.Victory, DogfightVictory.Score)));
         // Capture the Flag and Zeppelin vs Zeppelin fix the team count at two, as their type change's
         // mail(5) and mail(1109) do. The remake's own-flag-home option stands under the boxes.
         bool ctf = DogfightLobby.IsCtf(options);
         bool fixedTeams = DogfightLobby.FixesTeams(options);
-        rows.Add(Check(TeamsKey, CheckArt, PageX + 241f, PageY + 133f, 180f, 11f, live && !fixedTeams));
-        bool counts = live && options.RestrictTeams && !fixedTeams;
+        rows.Add(Check(TeamsKey, CheckArt, PageX + 241f, PageY + 133f, 180f, 11f, rules && !fixedTeams));
+        bool counts = rules && options.RestrictTeams && !fixedTeams;
         if (ctf)
         {
             rows.Add(Check(FlagHomeKey, CheckArt, PageX + 241f, PageY + 177f, 180f, 11f, live));
@@ -1285,14 +1294,14 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         rows.Add(Box(MaxTeamsKey, BoxText(MaxTeamsKey, lobby), PageX + 387f, PageY + 150f, 42f, 22f, counts));
         rows.Add(Arrow(TeamArrowPrefix + "MAX+", UpArt, PageX + 429f, PageY + 150f, counts && options.MaxTeams < DogfightLobby.MaxTeams));
         rows.Add(Arrow(TeamArrowPrefix + "MAX-", DownArt, PageX + 429f, PageY + 161f, counts && options.MaxTeams > options.MinTeams));
-        rows.Add(Check(LimitedLivesKey, CheckArt, PageX + 241f, PageY + 192f, 110f, 11f, live));
-        rows.Add(Box(LivesKey, BoxText(LivesKey, lobby), PageX + 360f, PageY + 193f, 25f, 22f, live && options.LimitedLives));
-        rows.Add(Check(AutoRespawnKey, CheckArt, PageX + 241f, PageY + 207f, 110f, 11f, live));
-        rows.Add(Check(CustomPlanesKey, CheckArt, PageX + 241f, PageY + 247f, 150f, 11f, live));
-        rows.Add(Check(OutlawKey, CheckArt, PageX + 265f, PageY + 262f, 150f, 11f, live));
+        rows.Add(Check(LimitedLivesKey, CheckArt, PageX + 241f, PageY + 192f, 110f, 11f, rules));
+        rows.Add(Box(LivesKey, BoxText(LivesKey, lobby), PageX + 360f, PageY + 193f, 25f, 22f, rules && options.LimitedLives));
+        rows.Add(Check(AutoRespawnKey, CheckArt, PageX + 241f, PageY + 207f, 110f, 11f, rules));
+        rows.Add(Check(CustomPlanesKey, CheckArt, PageX + 241f, PageY + 247f, 150f, 11f, rules));
+        rows.Add(Check(OutlawKey, CheckArt, PageX + 265f, PageY + 262f, 150f, 11f, rules));
         // Live on either end while the tick stands and greyed while it is clear, a Ready host's
         // included. The mission script's refresh 1015 mails 2 or 1 to it on that alone.
-        rows.Add(_text.Strip(SelectKey, MediumArt, PageX + 295f, PageY + 277f, lobby.Rules.Outlawing, 1, 96f, 37f));
+        rows.Add(_text.Strip(SelectKey, MediumArt, PageX + 295f, PageY + 277f, lobby.Rules.Outlawing && !race, 1, 96f, 37f));
     }
 
     private void PlaneRows(DogfightLobby lobby, List<OriginalRow> rows)
@@ -1349,8 +1358,12 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
     private string EnvironmentWord(int environment) => _text.Word(10558 + environment, DogfightLobby.EnvironmentName(environment));
 
-    private string TypeWord(int type) =>
-        type is >= 0 and < 3 ? _text.Word(10555 + type, TypeNames[type]) : string.Empty;
+    private string TypeWord(int type) => type switch
+    {
+        >= 0 and < 3 => _text.Word(10555 + type, TypeNames[type]),
+        (int)DogfightMissionType.StuntRace => DogfightLobby.StuntRaceName,
+        _ => string.Empty,
+    };
 
     private string PlaneWord(int airframe) =>
         _text.Word(10565, "Stock") + " " + ShortNames[Math.Clamp(airframe, 0, ShortNames.Length - 1)];
@@ -1384,12 +1397,21 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
                     }
 
                     return new DropdownList(items, lobby.Options.Environment,
-                        i => DogfightLobby.Offers((DogfightMissionType)lobby.Options.MissionType, i), i => lobby.SetEnvironment(i));
+                        i => DogfightLobby.Offers(DogfightLobby.TypeOf(lobby.Options), i), i => lobby.SetEnvironment(i));
                 }
 
             case TypeKey:
-                return new DropdownList(new[] { TypeWord(0), TypeWord(1), TypeWord(2) }, lobby.Options.MissionType,
-                    i => DogfightLobby.Flies((DogfightMissionType)i), i => lobby.SetMissionType((DogfightMissionType)i));
+                {
+                    var types = new string[DogfightLobby.TypeCount];
+                    for (int i = 0; i < types.Length; i++)
+                    {
+                        types[i] = TypeWord(i);
+                    }
+
+                    return new DropdownList(types, lobby.Options.MissionType,
+                        i => DogfightLobby.Flies((DogfightMissionType)i), i => lobby.SetMissionType((DogfightMissionType)i));
+                }
+
             case PlaneKey when CustomPlanes:
                 {
                     var saved = SavedPlanes();
@@ -1862,8 +1884,17 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private void ComposeMission(DogfightLobby lobby, BoardLayers layers)
     {
         var options = lobby.Options;
-        int type = Math.Clamp((int)options.MissionType, 0, TypeDescriptions.Length - 1);
-        layers.Lines.Add(_text.Line(TypeDescriptions[type], string.Empty, PageX + 25f, PageY + 134f, 200f, Black));
+        if (DogfightLobby.IsStuntRace(options))
+        {
+            // The remake's own line, in the face the string table's three are drawn in.
+            layers.Lines.Add(_text.Line(10123, string.Empty, PageX + 25f, PageY + 134f, 200f, Black, text: StuntRaceDescription));
+        }
+        else
+        {
+            int type = Math.Clamp((int)options.MissionType, 0, TypeDescriptions.Length - 1);
+            layers.Lines.Add(_text.Line(TypeDescriptions[type], string.Empty, PageX + 25f, PageY + 134f, 200f, Black));
+        }
+
         layers.Lines.Add(_text.Line(10098, "Victory Conditions", PageX + 241f, PageY + 46f, 0f, Black));
         layers.Lines.Add(_text.Line(10099, "Teams", PageX + 241f, PageY + 110f, 0f, Black));
         layers.Lines.Add(_text.Line(10100, "Lives", PageX + 241f, PageY + 170f, 0f, Black));

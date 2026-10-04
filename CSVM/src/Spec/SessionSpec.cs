@@ -49,6 +49,28 @@ public enum MenuMode
     Versus,
 }
 
+/// <summary>The mission types the Multiplayer Lobby's Type box lists, in its order: the string
+/// table's three, then the remake's Stunt Race. The byte is the wire's
+/// (<c>DogfightOptionsMessage.MissionType</c>), so a value never moves. A session reads its type
+/// off <see cref="SessionSpec.MissionType"/>.</summary>
+public enum DogfightMissionType : byte
+{
+    /// <summary>Capture the Flag, two lobby teams on a chapter's <c>MP2</c> map.</summary>
+    CaptureTheFlag = 0,
+
+    /// <summary>Deathmatch, the Dogfight every lobby flies, and the type of every launch that
+    /// names none.</summary>
+    Deathmatch = 1,
+
+    /// <summary>Zeppelin vs Zeppelin, the first two lobby teams each flying a hull on a chapter's
+    /// <c>MP3</c> map.</summary>
+    ZeppelinVsZeppelin = 2,
+
+    /// <summary>Stunt Race, the remake's own: a time-attack race over the chapter's Instant
+    /// Action Danger Zone course, its <c>IA1</c> world, with weapons off.</summary>
+    StuntRace = 3,
+}
+
 /// <summary>The enhanced presentation's screen-space passes, as doors a run can close one at a
 /// time. Each can lay a pattern of its own over the frame. Bisecting a full-screen artefact means
 /// rendering one pose per closed door until the pattern goes. Reaches
@@ -116,6 +138,10 @@ public sealed record SessionSpec
     /// </summary>
     public const string ZvzMission = "MP3";
 
+    /// <summary>The mission a lobby Stunt Race flies: the chapter's Instant Action world, whose
+    /// <c>ia.json</c> carries the Danger Zone course. No multiplayer folder ships one.</summary>
+    public const string StuntRaceMission = "IA1";
+
     // The sim frame a bare `--crash` (no `=frame`) fires at, early enough that
     // the default `--frames=` screenshot lands mid-break-up rather than pre-impact.
     private const int DefaultCrashFrame = 5;
@@ -135,6 +161,9 @@ public sealed record SessionSpec
     // --effects-test for the freecam, --play-anim=/--debug-anim-ui for the anim lab), and the
     // arbitration below is the only thing entitled to turn them into one.
     private bool _flyArg, _viewerArg, _freecamArg, _animLabArg, _stuntArg, _vsArg, _damageLabArg, _detArg;
+
+    // The two lobby types the command line can ask for, as votes MissionType is resolved from.
+    private bool _ctfArg, _zvzArg;
 
     private SessionSpec()
     {
@@ -198,17 +227,14 @@ public sealed record SessionSpec
     public bool VsAutoRespawn { get; private set; } = true;
     /// <summary>Resolved. <c>--vs-no-respawn</c> was spelled out, so the flag beats a lobby's box.</summary>
     public bool VsAutoRespawnExplicit { get; private set; }
-    /// <summary><c>--ctf</c>: a network Dogfight flown as Capture the Flag, the mission's
-    /// <c>cs_flag_n</c> flags live for its lobby teams. Resolved false without <see cref="Versus"/>.
-    /// </summary>
-    public bool CaptureTheFlag { get; private set; }
-    /// <summary><c>--ctf=home</c>: <see cref="CaptureTheFlag"/> with the host's option that an enemy
-    /// flag scores only while the carrier's own flag stands at home.</summary>
+    /// <summary>Resolved: the lobby type this session flies. Capture the Flag (<c>--ctf</c>) flies the
+    /// flags for the lobby teams. Zeppelin vs Zeppelin (<c>--zvz</c>) flies the two hulls. Each needs
+    /// <see cref="Versus"/>, and Capture the Flag beats Zeppelin vs Zeppelin. Stunt Race comes only
+    /// from the lobby (<see cref="FromMenu"/>). Every other launch reads Deathmatch.</summary>
+    public DogfightMissionType MissionType { get; private set; } = DogfightMissionType.Deathmatch;
+    /// <summary><c>--ctf=home</c>: Capture the Flag with the host's option that an enemy flag scores
+    /// only while the carrier's own flag stands at home.</summary>
     public bool FlagHomeToCapture { get; private set; }
-    /// <summary><c>--zvz</c>: a network Dogfight flown as Zeppelin vs Zeppelin, the mission's two
-    /// hulls flown for its first two lobby teams. It switches the zeppelins on. Resolved false
-    /// without <see cref="Versus"/> or beside <see cref="CaptureTheFlag"/>.</summary>
-    public bool ZeppelinVsZeppelin { get; private set; }
     /// <summary><c>--net-host</c>, <c>--net-host=port</c> or <c>--net-host=address:port</c>: open
     /// a listen server on that port and fly this session as its host. Null when the flag is
     /// absent. A scripted smoke is what it is for; a player opens the same socket from the menu's
@@ -390,9 +416,9 @@ public sealed record SessionSpec
     /// screen, null for the stock fit and on every CLI launch. Kept beside <see cref="IaDef"/>
     /// rather than on it because a fit is a flight type the Mech3 def must not name.</summary>
     public LoadoutChoice? IaWingmanLoadout { get; private set; }
-    /// <summary>The split screen stunt race's window in minutes. <see cref="FromMenu"/> takes it off
-    /// the Instant Action def's time row; every other launch keeps the
-    /// <see cref="InstantActionDef.DefaultRaceWindowMinutes"/> default.</summary>
+    /// <summary>The stunt race's window in minutes. <see cref="FromMenu"/> takes it off the Instant
+    /// Action def's time row, or off the lobby's Time box for a Stunt Race. Every other launch
+    /// keeps the <see cref="InstantActionDef.DefaultRaceWindowMinutes"/> default.</summary>
     public int StuntRaceMinutes { get; private set; } = InstantActionDef.DefaultRaceWindowMinutes;
     /// <summary>The <c>--stage=</c> value as given, unvalidated, only "empty" names a stage.
     /// Whether it survived is <see cref="EmptyStage"/>.</summary>
@@ -1159,9 +1185,9 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--vs-time=")) { s.VsTimeMinutes = int.Parse(arg["--vs-time=".Length..]); s.VsTimeExplicit = true; }
             else if (arg.StartsWith("--vs-lives=")) { s.VsLives = Math.Max(0, int.Parse(arg["--vs-lives=".Length..])); s.VsLivesExplicit = true; }
             else if (arg == "--vs-no-respawn") { s.VsAutoRespawn = false; s.VsAutoRespawnExplicit = true; }
-            else if (arg == "--ctf") { s.CaptureTheFlag = true; }
-            else if (arg == "--ctf=home") { s.CaptureTheFlag = true; s.FlagHomeToCapture = true; }
-            else if (arg == "--zvz") { s.ZeppelinVsZeppelin = true; }
+            else if (arg == "--ctf") { s._ctfArg = true; }
+            else if (arg == "--ctf=home") { s._ctfArg = true; s.FlagHomeToCapture = true; }
+            else if (arg == "--zvz") { s._zvzArg = true; }
             else if (arg == "--net-host") { netHost = ""; }
             else if (arg.StartsWith("--net-host=")) { netHost = arg["--net-host=".Length..]; }
             else if (arg.StartsWith("--net-join=")) { s.NetJoin = arg["--net-join=".Length..]; }
@@ -1810,24 +1836,33 @@ public sealed record SessionSpec
     /// <summary>The spec for a launchscreen launch, one plane per player, derived from the pristine command line
     /// <paramref name="cli"/>, never the last session's spec. ⚠ Does not re-resolve: every menu-settable field must
     /// be written here, or the pristine base drops it. An <paramref name="iaDef"/> decides <see cref="Scenario"/> and
-    /// <see cref="Stunt"/> instead. The vs arguments are a screen's match rules, null where none offers them.
-    /// ⚠ A Dogfight flies its type's map whatever <c>--mission</c> says, <see cref="DeathmatchMission"/>,
-    /// <see cref="CtfMission"/> or <see cref="ZvzMission"/>: the type is all a guest hears of the host's mission.</summary>
+    /// <see cref="Stunt"/> instead. The vs arguments are a screen's match rules, a Stunt Race's window among them.
+    /// ⚠ A lobby launch flies its type's map (<see cref="StuntRaceMission"/> and the rest) whatever
+    /// <c>--mission</c> says. The type is all a guest hears of the host's mission.</summary>
     public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
         MenuMode mode, InstantActionDef? iaDef = null, IReadOnlyList<LoadoutChoice?>? loadouts = null,
         IReadOnlyList<CustomPlaneDef?>? customPlanes = null, int? vsKills = null, int? vsTimeMinutes = null,
         int? vsLives = null, bool? vsAutoRespawn = null, LoadoutChoice? iaWingmanLoadout = null,
-        bool captureTheFlag = false, bool flagHomeToCapture = false, bool zeppelinVsZeppelin = false)
+        DogfightMissionType missionType = DogfightMissionType.Deathmatch, bool flagHomeToCapture = false)
     {
         var names = planeNodes.ToArray();
-        bool ctf = captureTheFlag && mode == MenuMode.Versus;
-        bool zvz = zeppelinVsZeppelin && !ctf && mode == MenuMode.Versus;
+        var type = MenuType(missionType, mode, iaDef);
+        bool ctf = type == DogfightMissionType.CaptureTheFlag;
+        bool race = type == DogfightMissionType.StuntRace;
         return cli with
         {
-            CaptureTheFlag = ctf,
+            MissionType = type,
             FlagHomeToCapture = ctf && flagHomeToCapture,
-            ZeppelinVsZeppelin = zvz,
-            Mission = ctf ? CtfMission : zvz ? ZvzMission : mode == MenuMode.Versus ? DeathmatchMission : cli.Mission,
+            Mission = type switch
+            {
+                DogfightMissionType.CaptureTheFlag => CtfMission,
+                DogfightMissionType.ZeppelinVsZeppelin => ZvzMission,
+                DogfightMissionType.StuntRace => StuntRaceMission,
+                _ => mode == MenuMode.Versus ? DeathmatchMission : cli.Mission,
+            },
+            // A race flies the course alone: an --ia= mission on the command line would bring its
+            // director, waves and objective along.
+            IaPath = race ? null : cli.IaPath,
             MenuLoadouts = loadouts ?? Array.Empty<LoadoutChoice?>(),
             MenuCustomPlanes = customPlanes ?? Array.Empty<CustomPlaneDef?>(),
             Chapter = chapter,
@@ -1853,7 +1888,7 @@ public sealed record SessionSpec
             },
             IaDef = iaDef,
             IaWingmanLoadout = iaDef != null ? iaWingmanLoadout : null,
-            StuntRaceMinutes = iaDef?.RaceWindowMinutes ?? cli.StuntRaceMinutes,
+            StuntRaceMinutes = iaDef?.RaceWindowMinutes ?? (race ? vsTimeMinutes : null) ?? cli.StuntRaceMinutes,
         };
     }
 
@@ -2253,6 +2288,16 @@ public sealed record SessionSpec
         return true;
     }
 
+    // The type a menu launch flies. The three Dogfight types need the Dogfight mode, and Stunt Race
+    // a stunt launch with no Instant Action def; anything else is a plain Deathmatch.
+    private static DogfightMissionType MenuType(DogfightMissionType asked, MenuMode mode, InstantActionDef? iaDef) =>
+        asked switch
+        {
+            DogfightMissionType.StuntRace when mode == MenuMode.Stunt && iaDef == null => asked,
+            DogfightMissionType.CaptureTheFlag or DogfightMissionType.ZeppelinVsZeppelin when mode == MenuMode.Versus => asked,
+            _ => DogfightMissionType.Deathmatch,
+        };
+
     // Turns the parsed votes into the one answer each: the mode, its modifiers, the world
     // selection, the player count, the `--det` bundle and the placement routing. Runs once.
     // ⚠ The step ORDER below is the behaviour; do not reorder it while tidying. `--stunt` moves
@@ -2354,18 +2399,24 @@ public sealed record SessionSpec
             Coop = false;
         }
 
-        if (CaptureTheFlag && !Versus)
+        bool ctf = _ctfArg;
+        if (ctf && !Versus)
         {
             Warn("core", "--ctf is a Dogfight mode; ignoring it without --vs");
-            CaptureTheFlag = false;
+            ctf = false;
             FlagHomeToCapture = false;
         }
 
-        if (ZeppelinVsZeppelin && (!Versus || CaptureTheFlag))
+        bool zvz = _zvzArg;
+        if (zvz && (!Versus || ctf))
         {
             Warn("core", "--zvz is a Dogfight mode of its own; ignoring it without --vs or beside --ctf");
-            ZeppelinVsZeppelin = false;
+            zvz = false;
         }
+
+        MissionType = ctf ? DogfightMissionType.CaptureTheFlag
+            : zvz ? DogfightMissionType.ZeppelinVsZeppelin
+            : DogfightMissionType.Deathmatch;
 
         // A campaign sortie is co-op by construction: the authored AI teams assume one player side.
         // Silent, not warned, --coop asks for exactly this. !Versus so the rule above still holds.
