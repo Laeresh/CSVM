@@ -371,6 +371,7 @@ public partial class Launcher : Node3D
         _cli = SessionSpec.Parse(OS.GetCmdlineUserArgs());
         _spec = _cli;
         Tooling.ShaderDiagnostics.Enabled = _spec.DebugShaders;
+        MouseCapture.ScriptedLaunch = _cli.IsScripted || _cli.Det;
         foreach (var note in _spec.Warnings)
         {
             if (note.Category.Length == 0)
