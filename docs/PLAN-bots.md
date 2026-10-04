@@ -405,7 +405,7 @@ wins. `net-seats` checks the host's bot is armed with `PlayersPreferred` false. 
 `-Filter 'ai-,instant-action,wingman,target,campaign-roster,net-bot-seat,net-seats' -Shards 4
 -SkipUnits -SkipGoldens`, engine errors clean.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` on the merged Wave B tree (faa4c0f4, B11 to B13): build, units 6245 passed / 0 failed / 3 skipped, engine 517 passed / 0 failed / 2 skipped (6 shards, engine errors clean), goldens 24 hash-identical; exit 0.
 
 **⚠ Traps.** The campaign and Instant Action keep the preference; only a bot seat's gunner turns it
 off. ⚠ Do not gate on `IsHumanPiloted`: the aim assist, the AI force path and the `"player"` role
@@ -480,7 +480,7 @@ already carries a bot's grant over loss (DET-17 does not bite). Units: `AiModeMa
 versus-spawn-rotation,versus-spawn-net-table,flight-live-respawn-gate,death-respawn-rest-pose,splitscreen-listeners`
 5 passed; units 6231 passed / 0 failed / 3 skipped.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` on the merged Wave B tree (faa4c0f4, B11 to B13): build, units 6245 passed / 0 failed / 3 skipped, engine 517 passed / 0 failed / 2 skipped (6 shards, engine errors clean), goldens 24 hash-identical; exit 0.
 
 **⚠ Traps.** Never move the reset into `FlightController.Respawn`: a mission AI's `Activate` goes
 through it and would lose its net and orders. `ResetForSpawn` keeps `AutoTarget`, which
@@ -526,9 +526,10 @@ defaults to Random, and an unnamed bot's callsign stays empty for the host to dr
 through `IntSeedFor`, a function of the master alone): Random over the eleven nodes, then a callsign
 per unnamed bot from `CallsignPool`, shuffled once, skipping every seat's callsign and every
 `name=`, falling back to `Bot <n>` when spent. The pool is 28 people (13001 to 13036 less the
-player's "Zachary" and six rows naming an aircraft or role), cut to whole words within the Callsign
-box's 12 characters (`Sir Charles`, `Show Stopper`; `Big John Howard` cuts onto `Big John` and is
-dropped), 27 distinct. A `name=` is cut hard at 12, as the box cuts typing. Loadout and livery are
+player's "Zachary" and six rows naming an aircraft or role), brought within the Callsign box's 12
+characters by dropping whole words from the front, the user's ruling over keeping words from the
+front (`Winthrop`, `Crawford`, `Black Swan`, `Von Beck`, `John Howard`), 28 distinct. A `name=` is
+cut hard at 12, as the box cuts typing. Loadout and livery are
 the seat path's stock ones already: a bot has no menu pick, and `SchemeFor` paints it the Fortune
 Hunters default as a stock human pick. `NetSeats.Bot`/`AddBots` are unchanged. For C21: the lobby's
 Random and callsign rows reuse `BotSeats.Resolve` (or its two halves) on the host; the personality
@@ -555,7 +556,7 @@ and the novice enemy scale would have cut that hull (control). Two processes on 
 Kays, Ilsa and DK on bhawk, fury, kestrel, peacemaker and balmoral, and the guest builds the same
 seven airframes seat for seat. Units 6241 passed / 0 failed / 3 skipped; `net-` 57/57 on 4 shards.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` on the merged Wave B tree (faa4c0f4, B11 to B13): build, units 6245 passed / 0 failed / 3 skipped, engine 517 passed / 0 failed / 2 skipped (6 shards, engine errors clean), goldens 24 hash-identical; exit 0.
 
 **⚠ Traps.** `Difficulty` treats team 1 as exempt; a bot never flies it today, and the shifted
 vector with `Difficulty.Hard` keeps the tier off that gate should one ever do so. An earlier probe

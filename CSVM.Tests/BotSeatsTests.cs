@@ -102,16 +102,17 @@ public sealed class BotSeatsTests
     }
 
     [Fact]
-    public void ThePoolHoldsThePeoplesNamesCutToWholeWordsWithinTwelve()
+    public void ThePoolHoldsThePeoplesNamesCutToTheirLastWordsWithinTwelve()
     {
         var pool = BotSeats.CallsignPool(Names);
 
-        // Big John Howard cuts to the Big John already in the pool, so it is dropped. Zachary is
-        // the player's own character, and Getaway Plane names an aeroplane.
-        Assert.Equal(new[] { "Jack", "Big John", "Tex", "Show Stopper", "Sir Charles" }, pool);
-        Assert.Equal("Abcdefghijkl", BotSeats.CutName("Abcdefghijklmnop Q"));
+        // A long name drops words from the front, so it keeps its surname. Zachary is the
+        // player's own character, and Getaway Plane names an aeroplane.
+        Assert.Equal(new[] { "Jack", "Big John", "Tex", "Crawford", "Winthrop", "John Howard" }, pool);
+        Assert.Equal("Abcdefghijkl", BotSeats.CutName("Q Abcdefghijklmnop"));
         Assert.Equal("Tex", BotSeats.CutName("  Tex "));
-        Assert.Equal("Show Stopper", BotSeats.CutName("Show Stopper Crawford"));
+        Assert.Equal("Crawford", BotSeats.CutName("Show Stopper Crawford"));
+        Assert.Equal("Black Swan", BotSeats.CutName("The Black Swan"));
     }
 
     [Fact]
@@ -119,20 +120,20 @@ public sealed class BotSeatsTests
     {
         var pool = BotSeats.CallsignPool(Names);
         var bots = Enumerable.Repeat(new VsBotEntry(null, NetBotSkill.Veteran, 0, ""), 6)
-            .Prepend(new VsBotEntry("player_fury", NetBotSkill.Ace, 0, "Show Stopper"))
+            .Prepend(new VsBotEntry("player_fury", NetBotSkill.Ace, 0, "Crawford"))
             .ToArray();
 
         var seated = BotSeats.Resolve(bots, new[] { "P1", "TEX" }, pool, new Random(3));
         var names = seated.Select(bot => bot.Callsign).ToArray();
 
-        Assert.Equal("Show Stopper", names[0]);
+        Assert.Equal("Crawford", names[0]);
         Assert.Equal(names.Length, names.Distinct(StringComparer.OrdinalIgnoreCase).Count());
         Assert.DoesNotContain("Tex", names, StringComparer.OrdinalIgnoreCase);
         Assert.All(names, name => Assert.InRange(name.Length, 1, BotSeats.CallsignLimit));
-        // Three pool names are free once Tex and Show Stopper are taken, so the last three bots
-        // take the "Bot <n>" fallback by place.
-        Assert.Equal(new[] { "Big John", "Jack", "Sir Charles" }, names.Skip(1).Take(3).OrderBy(n => n, StringComparer.Ordinal));
-        Assert.Equal(new[] { "Bot 5", "Bot 6", "Bot 7" }, names.Skip(4));
+        // Four pool names are free once Tex and Crawford are taken, so the last two bots take
+        // the "Bot <n>" fallback by place.
+        Assert.Equal(new[] { "Big John", "Jack", "John Howard", "Winthrop" }, names.Skip(1).Take(4).OrderBy(n => n, StringComparer.Ordinal));
+        Assert.Equal(new[] { "Bot 6", "Bot 7" }, names.Skip(5));
     }
 
     [Fact]
@@ -149,10 +150,10 @@ public sealed class BotSeatsTests
     {
         var pool = BotSeats.CallsignPool(Messages.Load(Path.Combine(TestData.ExtractedRoot!, "messages.json")));
 
-        Assert.Equal(27, pool.Count);
+        Assert.Equal(28, pool.Count);
         Assert.Equal(pool.Count, pool.Distinct(StringComparer.OrdinalIgnoreCase).Count());
         Assert.All(pool, name => Assert.InRange(name.Length, 1, BotSeats.CallsignLimit));
-        Assert.Contains("Sir Charles", pool);
+        Assert.Contains("Winthrop", pool);
         Assert.DoesNotContain("Zachary", pool);
         Assert.DoesNotContain(pool, name => name.Contains("Plane", StringComparison.Ordinal));
         Assert.True(pool.Count >= NetSeats.MaxPlayers - 1, "the pool names every bot of a field with one person");

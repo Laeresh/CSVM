@@ -65,19 +65,19 @@ public static class BotSeats
         return pool;
     }
 
-    /// <summary>A pilot name brought within <see cref="CallsignLimit"/>: the whole words that fit,
-    /// or the first <see cref="CallsignLimit"/> characters of a first word longer than that. A
-    /// name that fits is returned trimmed.</summary>
+    /// <summary>A pilot name brought within <see cref="CallsignLimit"/> by dropping whole words from
+    /// the front. A long name keeps its surname: "Sir Charles Emmett Winthrop" is "Winthrop". A
+    /// last word longer than the limit is cut to it, and a name that fits is returned trimmed.
+    /// </summary>
     public static string CutName(string name)
     {
-        string trimmed = (name ?? "").Trim();
-        if (trimmed.Length <= CallsignLimit)
+        string rest = (name ?? "").Trim();
+        while (rest.Length > CallsignLimit && rest.IndexOf(' ') is int space and > 0)
         {
-            return trimmed;
+            rest = rest[(space + 1)..].TrimStart();
         }
 
-        int space = trimmed.LastIndexOf(' ', CallsignLimit);
-        return space > 0 ? trimmed[..space].TrimEnd() : trimmed[..CallsignLimit];
+        return rest.Length <= CallsignLimit ? rest : rest[..CallsignLimit];
     }
 
     /// <summary>A host-given callsign cut as the Callsign box cuts what is typed into it: at
