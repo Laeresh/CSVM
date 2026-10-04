@@ -528,7 +528,17 @@ from `AiAirframePool.cs` where one is ready and built in place otherwise, over o
 `PlanePainter` per airframe and livery (PERF-22). That runtime is OPENED rather than built wherever the caller supplied a queue, so the
 launch frame carries no rig and the prop choreography plays from the queue's completion hook. It chains the durability override ahead of
 the enemy scale and the spawn jitter, the engine's own order ([../org/vehicleDamage.md](../org/vehicleDamage.md)), resolves the readout's
-title, stamps the block's objective marker, and owns the AI skills cache. The danger-zone look's daredevil chance is drawn from that cache here and zeroed for anything but a `jet`, the original's own class gate on the arm that rolls it. `ArmSeatPilot` arms a network bot seat's pilot (gunner, ordnance, mode machine and the airframe's ranges) at the flat `SeatRating`, unshifted by the difficulty and drawn from `Rng.Bots`, its gunner preferring no player so a Dogfight ranks a person and a bot alike, for the human path that builds the seat's aeroplane. Read `FlightRoster.cs` next.
+title, stamps the block's objective marker, and owns the AI skills cache. The danger-zone look's daredevil chance is drawn from that cache here and zeroed for anything but a `jet`, the original's own class gate on the arm that rolls it. `ArmSeatPilot` arms a network bot seat's pilot (gunner, ordnance, mode machine and the airframe's ranges) on a personality rolled off `Rng.Bots` and shifted by the seat's tier (`BotSeats.cs`), its gunner preferring no player so a Dogfight ranks a person and a bot alike, for the human path that builds the seat's aeroplane, so no tier reaches its hull. Read `FlightRoster.cs` next.
+
+## src/Session/Roster/BotSeats.cs
+What a network bot seat is once its host seats it, engine-free. `Resolve` turns the command line's
+bot field into seats: a Random plane drawn over the eleven stock airframes, so the roster carries a
+real one, and each unnamed bot a callsign drawn once from `CallsignPool`, the message table's
+character names cut to the Callsign box's 12 characters, skipping every name a seat already holds.
+`Personality` is Instant Action's five-row roll and `Ratings` shifts it by the seat's tier, the whole
+of a tier's effect. Only the host calls it; a guest reads the roster. Decodes:
+[../formats/missions.md](../formats/missions.md#message-table), [../formats/instant-action.md](../formats/instant-action.md).
+Read `AiFlightAssembler.cs` next.
 
 ## src/Session/Roster/HumanFlightAdapter.cs
 `FlightRoster`'s private seat path: `Assemble` builds the painted model, `FlightController`, loadout and ordnance, carried turrets, HUD and instruments, damage visuals, audio, stunt and match bindings, target selection, the start placement, the Danger Zone eye, the crash runtime, and last

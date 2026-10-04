@@ -14,8 +14,8 @@ namespace CSVM.Session.Roster;
 
 internal sealed class AiFlightAssembler
 {
-    /// <summary>The flat skill rating a bot seat's nine ratings take: the 5 an AI spawn with no
-    /// rating of its own falls back to.</summary>
+    /// <summary>The flat rating a bot seat's spawn carries, the 5 an AI spawn with no rating of its
+    /// own falls back to. It arms the gunner; the seat's nine ratings outrank it slot by slot.</summary>
     public const int SeatRating = 5;
 
     private readonly FlightRosterPolicy _policy;
@@ -306,14 +306,18 @@ internal sealed class AiFlightAssembler
     }
 
     /// <summary>Arms a bot seat's pilot with an AI spawn's gunner, ordnance and mode machine, off
-    /// the same skill tables. The machine's ranges come off the airframe. The seat's
-    /// aeroplane is built by the human path, so its hull, fit and spawn are a person's. Every
-    /// rating is <see cref="SeatRating"/> (or <c>--ai-attack=</c>), unshifted by the difficulty.
-    /// </summary>
-    public void ArmSeatPilot(AiPilot pilot, PlaneStats stats, string planeName, int team)
+    /// the same skill tables, and the airframe's ranges. Its nine ratings are a personality rolled
+    /// on <see cref="Rng.Bots"/> and shifted by <paramref name="tier"/> (<see cref="BotSeats.Ratings"/>);
+    /// <c>--ai-attack=</c> pins them instead. The human path builds the seat's aeroplane, so no tier
+    /// reaches its hull, fit or spawn.</summary>
+    public void ArmSeatPilot(AiPilot pilot, PlaneStats stats, string planeName, int team, Net.NetBotSkill tier)
     {
+        var ratings = BotSeats.Ratings(BotSeats.Personality(Rng.Stream(Rng.Bots).Randi()), tier);
+        // Already shifted, so the spawn's own difficulty is the unshifting middle tier, whatever the
+        // bot's team reads to the hostility gate.
         var spawn = new AiSpawn(planeName, Vector3.Zero, Vector3.Zero, pilot, Team: team,
-            AttackRating: _policy.AiAttackSkill ?? SeatRating, Difficulty: Difficulty.Hard);
+            AttackRating: _policy.AiAttackSkill ?? SeatRating,
+            RosterSkills: _policy.AiAttackSkillExplicit ? null : ratings, Difficulty: Difficulty.Hard);
         PreparePilot(spawn, stats, Rng.Bots);
         if (pilot.Gunner is { } gunner)
         {
@@ -323,6 +327,15 @@ internal sealed class AiFlightAssembler
         if (pilot.Machine is { } machine)
         {
             ApplyRanges(machine, stats);
+        }
+
+        if (_policy.AiAttackSkillExplicit)
+        {
+            Log.Info("flight", $"bot: '{planeName}' {tier} pinned at --ai-attack={_policy.AiAttackSkill}");
+        }
+        else
+        {
+            Log.Info("flight", $"bot: '{planeName}' {tier} on ratings {ratings.DareDevil} {ratings.NaturalTouch} {ratings.SixthSense} {ratings.DeadEye} {ratings.QuickDraw} {ratings.SteadyHand} {ratings.StunRecovery} {ratings.Talker} {ratings.Constitution}");
         }
     }
 

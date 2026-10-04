@@ -182,16 +182,17 @@ lines**.
 - `--vs-no-respawn` (with `--vs`, a downed pilot stays on the crash camera until it presses the
   respawn key itself, rather than coming back on the timer. The Multiplayer Lobby's Auto Respawn box
   unchecked is the same rule, and spelling this flag out beats the box)
-- `--vs-bots=N` (with `--vs` and `--net-host`, seat N bots after the guests, each on the host's own
-  plane, veteran, on no team and called `Bot <n>` by its place among the bots. The host flies them
+- `--vs-bots=N` (with `--vs` and `--net-host`, seat N bots after the guests: a Random stock plane,
+  veteran, no team, and a callsign the host draws from the shipped pilot names. The host flies them
   and its roster carries them, so a guest passes no flag; one passed there, or in a local match, is
   ignored with a warning. A field past 16 seats is cut with a warning, and guests that fill it leave
   the last bots out. `--vs-bot=` entries take the first places)
 - `--vs-bot=<plane>[:skill=<tier>][:team=<n>][:name=<callsign>][,...]` (with `--vs` and
-  `--net-host`, one bot per entry, seated ahead of `--vs-bots=`'s. `<plane>` is a stock node such as
-  `player_fury`, empty for the host's plane; `skill=` takes `--difficulty=`'s words or 0-2, default
-  veteran; `team=` a lobby team 0-16, the command line's own pilots flying on 0; `name=` the
-  callsign. A part it cannot read keeps its default with a warning, and the last flag wins)
+  `--net-host`, one bot per entry, ahead of `--vs-bots=`'s. `<plane>` is a stock node such as
+  `player_fury`, or `random` or empty for Random; `skill=` takes `--difficulty=`'s words or 0-2,
+  default veteran; `team=` a lobby team 0-16, the command line's pilots flying on 0; `name=` the
+  callsign, cut to 12 characters. A part it cannot read keeps its default with a warning, and the
+  last flag wins)
 - `--ctf`, `--ctf=home` (with `--vs` over the wire, fly the match as Capture the Flag: each lobby
   team's `cs_flag_n` flag is live, taken, carried, dropped and brought home, the host deciding and
   scoring. Pair with `--mission=MP2`, the one mission that lays the flags out. `home` adds the host's

@@ -569,7 +569,7 @@ internal sealed class HumanFlightAdapter
         {
             botPilot.TargetHeadingDeg = AiPilot.HeadingDegOf(start.LookAt - start.Pos);
             botPilot.TargetAltitude = start.Pos.Y;
-            _botPilots.ArmSeatPilot(botPilot, stats, planeName, controller.Team);
+            _botPilots.ArmSeatPilot(botPilot, stats, planeName, controller.Team, seat!.Skill);
             controller.ArmSpawnTimers();
         }
         // The Danger Zone eye, framed off the airframe's own chase distance and aimed at the pose

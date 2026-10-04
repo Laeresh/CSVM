@@ -23,15 +23,27 @@ public sealed class VsBotFlagTests
             "--vs", Host, "--vs-bots=2", "--vs-bot=player_fury:skill=ace:team=2:name=Red,:skill=novice",
         });
 
+        // A null plane is Random and an empty callsign a draw, both the host's to make at launch.
         Assert.Equal(
             new[]
             {
                 new VsBotEntry("player_fury", NetBotSkill.Ace, 2, "Red"),
-                new VsBotEntry(null, NetBotSkill.Novice, 0, "Bot 2"),
-                new VsBotEntry(null, NetBotSkill.Veteran, 0, "Bot 3"),
-                new VsBotEntry(null, NetBotSkill.Veteran, 0, "Bot 4"),
+                new VsBotEntry(null, NetBotSkill.Novice, 0, ""),
+                new VsBotEntry(null, NetBotSkill.Veteran, 0, ""),
+                new VsBotEntry(null, NetBotSkill.Veteran, 0, ""),
             },
             s.VsBots);
+        Assert.DoesNotContain(s.Warnings, w => w.Message.Contains("--vs-bot", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("random")]
+    [InlineData("RANDOM")]
+    [InlineData("")]
+    public void RandomOrNoPlaneAsksForRandom(string plane)
+    {
+        var s = SessionSpec.Parse(new[] { "--vs", Host, $"--vs-bot={plane}:skill=ace" });
+        Assert.Equal(new VsBotEntry(null, NetBotSkill.Ace, 0, ""), Assert.Single(s.VsBots));
         Assert.DoesNotContain(s.Warnings, w => w.Message.Contains("--vs-bot", StringComparison.Ordinal));
     }
 
@@ -54,7 +66,7 @@ public sealed class VsBotFlagTests
     public void AnUnreadablePartKeepsItsDefaultAndIsNamed(string entry)
     {
         var s = SessionSpec.Parse(new[] { "--vs", Host, $"--vs-bot={entry}" });
-        Assert.Equal(new VsBotEntry(null, NetBotSkill.Veteran, 0, "Bot 1"), Assert.Single(s.VsBots));
+        Assert.Equal(new VsBotEntry(null, NetBotSkill.Veteran, 0, ""), Assert.Single(s.VsBots));
         Assert.Contains(s.Warnings, w => w.Category == "core" && w.Message.StartsWith("--vs-bot:", StringComparison.Ordinal));
     }
 
@@ -107,7 +119,6 @@ public sealed class VsBotFlagTests
     {
         var s = SessionSpec.Parse(new[] { "--vs", Host, "--players=4", "--vs-bots=20" });
         Assert.Equal(NetSeats.MaxPlayers - 4, s.VsBots.Count);
-        Assert.Equal("Bot 12", s.VsBots[^1].Callsign);
         Assert.Contains(s.Warnings, w => w.Message.Contains("seating the first 12", StringComparison.Ordinal));
     }
 

@@ -36,6 +36,9 @@ public static class Rng
     // A network bot's pilot draws (gunner, ordnance and mode-machine seeds). Its own stream, not
     // Rng.Ai: only the host builds a bot's pilot, so its draws must not move a stream both ends share.
     public const string Bots = "bots";
+    // A host's bot field at launch (a Random plane, the callsign draw). Its own stream, read through
+    // IntSeedFor, so seating bots takes nothing out of Rng.Bots, which the pilots then draw from.
+    public const string BotField = "botfield";
     public const string Puffer = "puffer";
     public const string Clouds = "clouds";
     // The cloud field's per-sprite fade band (FogVolumeClutter). Its own stream, not

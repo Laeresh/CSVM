@@ -82,8 +82,9 @@ public readonly record struct AiPlaneEntry(string Plane, string? Net = null, int
     string? Def = null, int? Team = null, int Count = 1, Vector3? Pos = null);
 
 /// <summary>One bot seat a scripted network host adds (<c>--vs-bot=</c>, <c>--vs-bots=</c>).
-/// <c>Plane</c> is a stock airframe node, or null for the host's own plane. <c>Team</c> is a lobby
-/// team number, 0 for none.</summary>
+/// <c>Plane</c> is a stock airframe node, or null for Random, which the host resolves at launch.
+/// <c>Team</c> is a lobby team number, 0 for none. An empty <c>Callsign</c> is drawn by the host
+/// from the pilot names.</summary>
 public readonly record struct VsBotEntry(string? Plane, Net.NetBotSkill Skill, int Team, string Callsign);
 
 /// <summary>One <c>--zep=</c> request: the zeppelin record to graft onto the empty stage, and the
@@ -120,6 +121,9 @@ public sealed record SessionSpec
     /// <c>multiplayer1zep</c> and <c>multiplayer2zep</c>, in <c>MP3</c> (docs/org/multiplayer-zvz.md).
     /// </summary>
     public const string ZvzMission = "MP3";
+
+    /// <summary>The <c>--vs-bot=</c> plane word that asks for Random, as an empty plane does.</summary>
+    public const string RandomBotPlane = "random";
 
     // The sim frame a bare `--crash` (no `=frame`) fires at, early enough that
     // the default `--frames=` screenshot lands mid-break-up rather than pre-impact.
@@ -1796,8 +1800,8 @@ public sealed record SessionSpec
         return s;
     }
 
-    /// <summary>The callsign the <paramref name="ordinal"/>th bot of a command line takes when its
-    /// entry names none, counted from 1 over the whole field of bots.</summary>
+    /// <summary>The callsign the <paramref name="ordinal"/>th bot of a command line takes, counted
+    /// from 1, when it names none and the pilot-name pool is empty or spent.</summary>
     public static string BotCallsign(int ordinal) =>
         "Bot " + ordinal.ToString(CultureInfo.InvariantCulture);
 
@@ -2685,17 +2689,18 @@ public sealed record SessionSpec
 
     // --vs-bot='s comma list, each entry <plane>[:skill=<tier>][:team=<n>][:name=<callsign>]. A part
     // this cannot read keeps its default and is named, the rule --difficulty= follows: a typo must
-    // not quietly change who the bot is. The callsign is filled in once the whole field is known.
+    // not quietly change who the bot is. An empty plane or `random` is Random, the host's to draw.
     private static List<VsBotEntry> ParseBots(string value, List<Note> notes)
     {
         var bots = new List<VsBotEntry>();
         foreach (var token in value.Split(',', StringSplitOptions.RemoveEmptyEntries))
         {
             var segments = token.Split(':');
-            string? plane = segments[0].Trim() is { Length: > 0 } named ? named : null;
+            string? plane = segments[0].Trim() is { Length: > 0 } named
+                && !named.Equals(RandomBotPlane, StringComparison.OrdinalIgnoreCase) ? named : null;
             if (plane != null && Flight.Hangar.StockAirframes.IdOf(plane) == null)
             {
-                notes.Add(new Note("core", $"--vs-bot: '{plane}' is no stock airframe node, the bot flies the host's own plane"));
+                notes.Add(new Note("core", $"--vs-bot: '{plane}' is no stock airframe node, the bot flies a Random one"));
                 plane = null;
             }
 
@@ -2736,14 +2741,14 @@ public sealed record SessionSpec
         return bots;
     }
 
-    // The named entries, then the count's defaults, every unnamed bot called by its ordinal.
+    // The named entries, then the count's defaults: a Random plane, veteran, no team, and a callsign
+    // the host draws once it knows the people's names.
     private static VsBotEntry[] BotField(List<VsBotEntry> entries, int count)
     {
         var field = new VsBotEntry[entries.Count + count];
         for (int i = 0; i < field.Length; i++)
         {
-            var entry = i < entries.Count ? entries[i] : new VsBotEntry(null, Net.NetBotSkill.Veteran, 0, "");
-            field[i] = entry.Callsign.Length > 0 ? entry : entry with { Callsign = BotCallsign(i + 1) };
+            field[i] = i < entries.Count ? entries[i] : new VsBotEntry(null, Net.NetBotSkill.Veteran, 0, "");
         }
 
         return field;

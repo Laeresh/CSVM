@@ -2863,10 +2863,9 @@ public partial class Launcher : Node3D
             });
         }
 
-        // The command line's bots, after every guest, each on the host's own plane unless it names
-        // one. The roster carries them to every guest, which seats none of its own.
-        int left = Net.NetSeats.AddBots(seats, _netWire.LocalPeer, System.Linq.Enumerable.Select(
-            _spec.VsBots, bot => (bot.Plane ?? _spec.PlaneName, bot.Skill, bot.Team, bot.Callsign)));
+        // The command line's bots, after every guest. Random planes and callsigns are drawn here,
+        // on the host alone. The roster carries real ones to every guest, which seats no bot.
+        int left = Net.NetSeats.AddBots(seats, _netWire.LocalPeer, ResolveCliBots(seats));
         if (left > 0)
         {
             Log.Warn("core", $"net: {left.ToString(System.Globalization.CultureInfo.InvariantCulture)} bot(s) left out, the guests filled the {Net.NetSeats.MaxPlayers.ToString(System.Globalization.CultureInfo.InvariantCulture)}-seat field");
@@ -2875,6 +2874,30 @@ public partial class Launcher : Node3D
         Net.NetSeats.Validate(seats, _netWire.LocalPeer);
         _netRoster = seats.ToArray();
         Log.Info("core", $"net: host roster of {seats.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)} seat(s), {System.Linq.Enumerable.Count(seats, s => s.IsBot).ToString(System.Globalization.CultureInfo.InvariantCulture)} of them bots");
+        foreach (var bot in seats)
+        {
+            if (bot.IsBot)
+            {
+                Log.Info("core", $"net: bot seat {bot.SeatIndex.ToString(System.Globalization.CultureInfo.InvariantCulture)} '{bot.Callsign}' flies {bot.PlaneNode} at {bot.Skill.ToString().ToLowerInvariant()}");
+            }
+        }
+    }
+
+    // The command line's bots as this host seats them. The pilot names are read once from the message
+    // table, which nothing has loaded before the session builds. A missing table seats "Bot <n>".
+    // The draws take a stream of their own, a function of the master seed alone.
+    private IReadOnlyList<(string Plane, Net.NetBotSkill Skill, int Team, string Callsign)> ResolveCliBots(
+        IReadOnlyList<Net.NetSeat> people)
+    {
+        if (_spec.VsBots.Count == 0)
+        {
+            return System.Array.Empty<(string, Net.NetBotSkill, int, string)>();
+        }
+
+        var pool = Session.Roster.BotSeats.CallsignPool(Messages.Load(_messagesPath));
+        return Session.Roster.BotSeats.Resolve(_spec.VsBots,
+            System.Linq.Enumerable.Select(people, seat => seat.Callsign), pool,
+            new System.Random(Rng.IntSeedFor(Rng.BotField)));
     }
 
     // The wire a menu launch carried, kept for the session build. A host also builds the match's

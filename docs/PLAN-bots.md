@@ -101,7 +101,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ Equal target weights for every pilot in a Dogfight
 12. ☐ Bots respawn through the host's rotation and follow Limited Lives
-13. ☐ Skill tiers, personalities, stock plane with Random, and the callsign pool
+13. ☑ Skill tiers, personalities, stock plane with Random, and the callsign pool
 14. ☐ Rearm standing order: a bot breaks off to a base when low or badly damaged
 
 ### Wave C, lobby and local setup
@@ -437,36 +437,81 @@ that `VersusDirector.Wire` sets on every seat rig holds the bot down for a Fire 
 
 **⚠ Traps.** The respawned bot's AI state (target, standing order, rearm trip) must reset.
 
-## B13 ☐ Skill tiers, personalities, stock plane with Random, and the callsign pool
+## B13 ☑ Skill tiers, personalities, stock plane with Random, and the callsign pool
 
 **Goal.** A bot flies a stock plane (Random resolved by the host) with its stock loadout and livery,
 at novice/veteran/ace, with a rolled Instant Action personality and a callsign from the shipped
 pilot names (Decisions 8, 9, 11).
 
-**Evidence (confidence: lead-only).** The tier offset is -2/0/+2 on the nine ratings, clamped to
-[0, 9], and the original also scales a hostile's armour and health 0.75/1.0/1.25
-(`docs/formats/instant-action.md:547-572`); this plan takes the rating offset only. The four
-personalities plus the flat average are the table ending at `instant-action.md:540-545`. Skill strings are
-`IDS_IA_DIFFICULTY` (langui 3695, `instant-action.md:162`). Pilot names are langui 500 to 599
-(`docs/formats/strings.md:105`). `Difficulty` applies only to teams other than `PlayerTeam` and
-`NeutralTeam` (`CSVM/src/Flight/Hangar/Difficulty.cs:41-57`). `AiSpawn` carries `RosterSkills`,
-`Difficulty`, `PilotName`, `PlaneName`, `Fit`.
+**Evidence (confidence: traced-to-code).** The tier offset is -2/0/+2 on the nine ratings, clamped
+to [0, 9]; the original's 0.75/1.0/1.25 hull scale is not taken (`docs/formats/instant-action.md`
+"What novice / veteran / ace becomes"). The personalities are `InstantActionRuntime.RandomPilotStats`,
+Instant Action's own roll, `rand() % 5` per aircraft over four authored rows and the flat row of
+fours, so equal odds (`instant-action.md` "A wave enemy's nine pilot stats"). `IDS_IA_DIFFICULTY`
+3695 to 3697 read novice, veteran, ace, which `Difficulty.Parse` already takes. **The lead's pilot
+names were wrong:** langui 500 to 599 holds `IDS_DEFAULTPLAYERNAME` "Nathan Zachary" (500), the
+quality words Poor to Excellent (501 to 505), the campaign's named planes (511 to 517, "Gypsy
+Magic") and format strings; no pilot-name pool and no skill ratings. The shipped pilot names are the
+message table's character rows, ids 13000 to 13036 (`MSG_JACK_NAME` and the rest), which
+`docs/formats/missions.md` and `strings.md` now record. The trap does not bite: a bot never flies
+team id 1 or 0, since a free-for-all seat flies `TeamOfPilot(seat)` = 10 + seat with seat 0 always a
+person, and a team seat `LobbyTeam(N)` = 40 + N; `net-bot-skill` puts a bot on lobby team 1 (id 41)
+and reads `Difficulty.AppliesTo` true. The ace exemption (`spawn.Ace`, roster slot 67) defaults
+false and no bot sets it. The Dogfight picker offers all eleven stock airframes
+(`InstantActionFeature.Airframes` through `PlanePickerRoster`), so Random draws over
+`StockAirframes.Nodes`. The launcher had no string table loaded at roster time; it holds
+`_messagesPath`, and one `Messages.Load` there is the cheapest correct path.
 
-**Approach.** Map the tier onto the existing offset without the armour multiplier; pass the rolled
-personality as `RosterSkills`. Draw callsigns without repeats from the pilot-name strings,
-truncated to the 12-character limit. `<TODO: confirm which of 500-599 are names and which are skill
-ratings>`; `<TODO: the stock plane list a bot may draw from>`.
-After A3 the ratings come from `AiFlightAssembler.ArmSeatPilot`, which passes `SeatRating` 5 and
-`Difficulty.Hard` into `PreparePilot`, so the seat's `NetBotSkill` (0/1/2, `Difficulty`'s own
-numbers) and the rolled personality as `RosterSkills` plug in there.
+**Approach (landed).** New engine-free `Session/Roster/BotSeats.cs`. `Ratings(personality, tier)`
+shifts each slot through the new `Difficulty.ShiftRating` (the ungated half of
+`SkillRatingForSpawn`). `AiFlightAssembler.ArmSeatPilot` takes the seat's `NetBotSkill`, rolls
+`Personality(Rng.Bots)` first, and passes the shifted vector as `RosterSkills` with `Difficulty.Hard`
+(k 0), so the team gate cannot reach the tier at all; `--ai-attack=N` still pins every slot. It logs
+`bot: '<plane>' <tier> on ratings ...`. `HumanFlightAdapter`'s call line passes `seat!.Skill`. The
+hull is the seat path's `PlaneDamage.For(stats)`, which no tier reaches. `SessionSpec`: a `--vs-bot=`
+plane of `random` or empty is Random (null), an unknown one warns and is Random, `--vs-bots=N`
+defaults to Random, and an unnamed bot's callsign stays empty for the host to draw.
+`Launcher.BuildCliNetRoster` resolves through `BotSeats.Resolve` on a new `Rng.BotField` stream (read
+through `IntSeedFor`, a function of the master alone): Random over the eleven nodes, then a callsign
+per unnamed bot from `CallsignPool`, shuffled once, skipping every seat's callsign and every
+`name=`, falling back to `Bot <n>` when spent. The pool is 28 people (13001 to 13036 less the
+player's "Zachary" and six rows naming an aircraft or role), cut to whole words within the Callsign
+box's 12 characters (`Sir Charles`, `Show Stopper`; `Big John Howard` cuts onto `Big John` and is
+dropped), 27 distinct. A `name=` is cut hard at 12, as the box cuts typing. Loadout and livery are
+the seat path's stock ones already: a bot has no menu pick, and `SchemeFor` paints it the Fortune
+Hunters default as a stock human pick. `NetSeats.Bot`/`AddBots` are unchanged. For C21: the lobby's
+Random and callsign rows reuse `BotSeats.Resolve` (or its two halves) on the host; the personality
+is rolled at arming, so it needs no field.
 
-**Model recommendation.** `<TODO: not settled in the session>`
+**Model recommendation.** Sonnet would do; the data reading (which strings are names) was the only
+judgement.
 
-**Verify.** `<TODO: a unit test that an ace bot's ratings and hull match the expected values, and
-that Random resolves on the host only>`
+**Verify.** `BotSeatsTests` (10 units): every row's ace ratings are +2 and novice -2 clamped (row 0
+worked through), a tier is `Difficulty`'s number and takes no team gate, 10000 draws split 2000 per
+row, Random lands on stock nodes and a named plane is kept, one seed seats one field, the pool's
+cut and exclusions, callsigns unique and at most 12 with the people's names skipped and the `Bot <n>`
+fallback, a `name=` cut, the shipped pool (27 names), and a loopback guest reading the host's
+Random-resolved plane, callsign and tier off the roster while its own spec seats nothing.
+`VsBotFlagTests` (21) updated for Random and the empty callsign. New engine suite `net-bot-skill`
+(`NetBotSkillSuites.cs`): a pane and three bots on one airframe; each bot is armed on exactly the
+values a personality row at its tier gives (novice row 1 at 2 1 2 3 5 3 1, ace row 2 at 5 6 5 9 5
+8 6, veteran the flat row), the novice and ace match no unshifted row (control), every bot passes
+the hostility gate, each bot's armour, health and part maxima and stock loadout equal the pane's,
+and the novice enemy scale would have cut that hull (control). Two processes on loopback through
+`RunProbe.ps1` (host `--vs --mission=MP1 --mute --net-host=127.0.0.1:47743 --vs-bots=3
+'--vs-bot=random:skill=ace,player_fury:skill=novice:name=Sir Charles Emmett' --frames=600`, guest
+`--net-join=127.0.0.1:47743`, 4 s apart): both exit 0, the host seats Cabbie, Sir Charles, Graham
+Kays, Ilsa and DK on bhawk, fury, kestrel, peacemaker and balmoral, and the guest builds the same
+seven airframes seat for seat. Units 6241 passed / 0 failed / 3 skipped; `net-` 57/57 on 4 shards.
 
-**⚠ Traps.** `Difficulty` treats team 1 as exempt; in a team Deathmatch bots fly `LobbyTeam(N)`, so
-check the exemption does not reach them or a human's team by accident.
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** `Difficulty` treats team 1 as exempt; a bot never flies it today, and the shifted
+vector with `Difficulty.Hard` keeps the tier off that gate should one ever do so. An earlier probe
+pair passed `--debug-net-trace` and both ends died at quit in `EnetTransport.Serve`
+(`ObjectDisposedException` on `ENetMultiplayerPeer.GetConnectionStatus`, the service thread polling
+a peer Godot had already disposed); a rerun exited 0, so it is an intermittent shutdown race in code
+this item does not touch.
 
 ## B14 ☐ Rearm standing order: a bot breaks off to a base when low or badly damaged
 
