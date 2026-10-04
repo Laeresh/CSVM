@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CSVM.Flight.Hangar;
 using CSVM.Net;
+using CSVM.Session.Roster;
 using CSVM.UI.Menu;
 using Xunit;
 
@@ -727,12 +729,262 @@ public sealed class DogfightLobbyTests
         Assert.False(DogfightLobby.RulesOf(host.Options).ZeppelinVsZeppelin);
     }
 
+    [Fact]
+    public void AnAddedBotJoinsTheSmallestTeamAndStaysWhereTheHostPutsIt()
+    {
+        var (host, guests, _) = Lobbies(3);
+        Settle(host, guests);
+
+        // No team stands: the bot flies the free-for-all, on a Random plane at veteran, Ready.
+        Assert.True(host.AddBot());
+        var first = host.Bots[0];
+        Assert.Equal((byte)0, first.Team);
+        Assert.True(first.RandomPlane);
+        Assert.Equal(NetBotSkill.Veteran, first.Skill);
+        Assert.True(host.Players[3] is { IsBot: true, Ready: true });
+        Assert.True(host.RemoveBot(first.Id));
+
+        Assert.True(host.CreateTeam("Home"));
+        Assert.True(guests[0].CreateTeam("Away"));
+        Settle(host, guests);
+        Assert.True(guests[1].JoinTeam(host.OwnTeam));
+        Settle(host, guests);
+        byte home = host.OwnTeam;
+        byte away = host.Players[1].Team;
+
+        // Home holds two and Away one, so the bot goes Away; then two and two, the first created wins.
+        Assert.True(host.AddBot());
+        Assert.Equal(away, host.Bots[0].Team);
+        Assert.True(host.AddBot());
+        Assert.Equal(home, host.Bots[1].Team);
+
+        // The host moves a bot, and nothing moves it back when the teams change after.
+        Assert.True(host.SetBotTeam(host.Bots[0].Id, home));
+        Assert.True(guests[1].LeaveTeam());
+        Settle(host, guests);
+        Assert.Equal(home, host.Bots[0].Team);
+
+        // ABLE-TO-FAIL CONTROL: a team that does not stand is refused. A disbanded team's bots go
+        // teamless rather than joining whatever team takes its number next.
+        Assert.False(host.SetBotTeam(host.Bots[0].Id, 9));
+        Assert.True(host.LeaveTeam());
+        Settle(host, guests);
+        Assert.All(host.Bots, bot => Assert.NotEqual(home, bot.Team));
+        Assert.True(host.CreateTeam("Again"));
+        Assert.Equal(home, host.OwnTeam);
+        Assert.All(host.Bots, bot => Assert.NotEqual(home, bot.Team));
+    }
+
+    [Fact]
+    public void FillToStopsAtItsCountAndAtSixteenPilots()
+    {
+        var (host, guests, _) = Lobbies(3);
+        host.CallsignPool = new[] { "Winthrop", "Crawford", "Steele", "Tex" };
+        Settle(host, guests);
+
+        Assert.Equal(3, host.FillTo(6));
+        Assert.Equal(6, host.FieldSeats);
+        Assert.Equal(0, host.FillTo(5));
+        Assert.Equal(3, host.Bots.Count);
+
+        // Sixteen pilots at most, however many the count asks, and Add stops there too.
+        Assert.Equal(10, host.FillTo(40));
+        Assert.Equal(NetSeats.MaxPlayers, host.FieldSeats);
+        Assert.Equal(0, host.BotRoom);
+        Assert.False(host.AddBot());
+
+        // Four pool names, then "Bot n"; no two rows share a name.
+        var names = host.Bots.Select(b => b.Callsign).ToList();
+        Assert.Equal(names.Count, names.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(4, names.Count(n => host.CallsignPool.Contains(n)));
+        Assert.All(names, n => Assert.True(n.Length <= BotSeats.CallsignLimit));
+
+        // ABLE-TO-FAIL CONTROL: a host flying two splitscreen seats has one bot fewer of room.
+        var (split, _, _) = Lobbies(1, localSeats: 2);
+        Assert.Equal(14, split.FillTo(NetSeats.MaxPlayers));
+    }
+
+    [Fact]
+    public void ABotRowIsEditedAndRemovedOnTheHostAloneWhileItIsNotReady()
+    {
+        var (host, guests, _) = Lobbies(2, "Lucy");
+        Settle(host, guests);
+        host.FillTo(4);
+        var (a, b) = (host.Bots[0].Id, host.Bots[1].Id);
+
+        Assert.True(host.SetBotAirframe(a, 7));
+        Assert.True(host.SetBotSkill(a, NetBotSkill.Ace));
+        Assert.True(host.SetBotCallsign(a, "  The Red Baron Jr  "));
+        Assert.Equal(new DogfightBot(a, "The Red Baro", 7, NetBotSkill.Ace, 0), host.BotById(a));
+        Assert.Equal(a, host.BotAt(2));
+        Assert.Equal(b, host.BotAt(3));
+        Assert.Equal(-1, host.BotAt(1));
+
+        // A blank name, a person's name, another bot's, a plane past the eleven and a guest's edit are refused.
+        Assert.False(host.SetBotCallsign(a, "   "));
+        Assert.False(host.SetBotCallsign(a, "lucy"));
+        Assert.False(host.SetBotCallsign(b, "the red baro"));
+        Assert.False(host.SetBotAirframe(a, DogfightLobby.AirframeCount));
+        Assert.False(guests[0].AddBot());
+        Assert.False(guests[0].RemoveBot(a));
+
+        Assert.True(host.RemoveBot(a));
+        Assert.Null(host.BotById(a));
+        Assert.Equal(b, host.BotAt(2));
+        Assert.False(host.RemoveBot(a));
+
+        // ABLE-TO-FAIL CONTROL: a Ready host's bot rows are locked, as its options are.
+        host.SetReady(true);
+        Assert.False(host.AddBot());
+        Assert.False(host.SetBotSkill(b, NetBotSkill.Novice));
+        Assert.False(host.RemoveBot(b));
+        host.SetReady(false);
+        Assert.True(host.RemoveBot(b));
+        Assert.Empty(host.Bots);
+    }
+
+    [Fact]
+    public void BotRowsSurviveAMatchAndItsReturnToTheLobby()
+    {
+        var (host, guests, _) = Lobbies(2, "Lucy");
+        Settle(host, guests);
+        host.FillTo(4);
+        Assert.True(host.SetBotAirframe(host.Bots[1].Id, 3));
+        var kept = host.Bots.ToArray();
+
+        host.Launched();
+        Assert.Equal(new[] { "Host", "Lucy", kept[0].Callsign, kept[1].Callsign }, host.LaunchNames);
+        host.Land(new[] { new DogfightScore("Lucy", 2, 2, 0) });
+        Settle(host, guests);
+
+        Assert.Equal(kept, host.Bots);
+        Assert.Equal(4, guests[0].Players.Count);
+        Assert.True(guests[0].Players[3] is { IsBot: true, Airframe: 3 });
+
+        // ABLE-TO-FAIL CONTROL: the lobby's own round moved on, so the rows were not frozen with it.
+        Assert.False(host.Ready);
+        Assert.True(host.AddBot());
+    }
+
+    [Fact]
+    public void AHostAndItsBotsOnOneTeamAreRefusedAsOneStandingTeam()
+    {
+        var (host, _, _) = Lobbies(1);
+        Assert.True(host.CreateTeam("Solo"));
+        Assert.Equal(TeamLaunchRefusal.NotEnoughPlayers, host.LaunchRefusal);
+
+        // The bot joins the one team standing, which makes two players on one team: langui 10519.
+        Assert.True(host.AddBot());
+        Assert.Equal(host.OwnTeam, host.Bots[0].Team);
+        Assert.Equal(TeamLaunchRefusal.TooFewTeams, host.LaunchRefusal);
+        Assert.True(host.Teamed);
+
+        // Off the team it is still one standing team, now with a teamless player beside it.
+        Assert.True(host.SetBotTeam(host.Bots[0].Id, 0));
+        Assert.Equal(TeamLaunchRefusal.TooFewTeams, host.LaunchRefusal);
+
+        // ABLE-TO-FAIL CONTROL: with no team standing the two fly a free-for-all.
+        Assert.True(host.LeaveTeam());
+        Assert.False(host.Teamed);
+        Assert.Equal(TeamLaunchRefusal.None, host.LaunchRefusal);
+
+        // And bots on two people's teams balance them.
+        var (mixed, others, _) = Lobbies(2);
+        Settle(mixed, others);
+        mixed.CreateTeam("Home");
+        others[0].CreateTeam("Away");
+        Settle(mixed, others);
+        Assert.Equal(2, mixed.FillTo(4));
+        Assert.Equal(TeamLaunchRefusal.None, mixed.LaunchRefusal);
+        Assert.True(mixed.SetBotTeam(mixed.Bots[1].Id, mixed.OwnTeam));
+        Assert.Equal(TeamLaunchRefusal.Unbalanced, mixed.LaunchRefusal);
+    }
+
+    [Fact]
+    public void BotRowsFlyADeathmatchOnly()
+    {
+        var (host, _, _) = Lobbies(1);
+        Assert.True(host.AddBot());
+        Assert.False(host.BotsGrounded);
+        Assert.Single(host.LaunchBots);
+
+        // Capture the Flag has no flag-flying pilot to give a bot: no new row, and the launch is held.
+        Assert.True(host.SetMissionType(DogfightMissionType.CaptureTheFlag));
+        Assert.False(host.AddBot());
+        Assert.True(host.BotsGrounded);
+        Assert.Empty(host.LaunchBots);
+        Assert.Single(host.Bots);
+
+        // ABLE-TO-FAIL CONTROL: removing the row, or going back to Deathmatch, frees the launch.
+        Assert.True(host.SetMissionType(DogfightMissionType.Deathmatch));
+        Assert.False(host.BotsGrounded);
+        Assert.True(host.SetMissionType(DogfightMissionType.ZeppelinVsZeppelin));
+        Assert.True(host.RemoveBot(host.Bots[0].Id));
+        Assert.False(host.BotsGrounded);
+    }
+
+    [Fact]
+    public void AGuestReadsTheHostsBotRowsAndCannotTouchThem()
+    {
+        var (host, guests, _) = Lobbies(2, "Lucy");
+        host.CreateTeam("Home");
+        Settle(host, guests);
+        host.FillTo(3);
+        Assert.True(host.SetBotSkill(host.Bots[0].Id, NetBotSkill.Novice));
+        Settle(host, guests);
+
+        var guest = guests[0];
+        var row = guest.Players[2];
+        Assert.True(row.IsBot);
+        Assert.Equal((host.Bots[0].Callsign, DogfightLobbySeat.RandomAirframe, NetBotSkill.Novice, host.OwnTeam, true),
+            (row.Name, row.Airframe, row.Skill, row.Team, row.Ready));
+        Assert.False(guest.Players[1].IsBot);
+        Assert.Empty(guest.Bots);
+        Assert.Equal(-1, guest.BotAt(2));
+
+        // ABLE-TO-FAIL CONTROL: a bot edit on the host reaches the guest's row on the next step.
+        Assert.True(host.SetBotAirframe(host.Bots[0].Id, 9));
+        Settle(host, guests);
+        Assert.Equal(9, guest.Players[2].Airframe);
+    }
+
+    [Fact]
+    public void ALaunchDrawsRandomPlanesOnTheHostAndSeatsTheBotsAfterTheGuests()
+    {
+        var (host, guests, _) = Lobbies(3, "Lucy");
+        Settle(host, guests);
+        host.FillTo(6);
+        Assert.True(host.SetBotAirframe(host.Bots[1].Id, 7));
+
+        var entries = host.LaunchBots;
+        Assert.Equal(new string?[] { null, StockAirframes.Node(7), null }, entries.Select(e => e.Plane));
+        Assert.Equal(host.Bots.Select(b => b.Callsign), entries.Select(e => e.Callsign));
+
+        // The host's field as the launch builds it: its seat, each guest's, then the bots.
+        var people = new List<NetSeat>
+        {
+            new() { PeerId = 0, SeatIndex = 0, FlownHere = true, Callsign = "Host", PlaneNode = StockAirframes.Node(0) },
+            new() { PeerId = 1, SeatIndex = 1, Callsign = "Lucy", PlaneNode = StockAirframes.Node(1) },
+            new() { PeerId = 2, SeatIndex = 2, Callsign = "Lucy2", PlaneNode = StockAirframes.Node(2) },
+        };
+        var resolved = BotSeats.Resolve(entries, people.Select(s => s.Callsign), Array.Empty<string>(), new Random(5));
+        Assert.Equal(0, NetSeats.AddBots(people, 0, resolved));
+        NetSeats.Validate(people, 0);
+        Assert.Equal(new[] { false, false, false, true, true, true }, people.Select(s => s.IsBot));
+        Assert.All(people.Skip(3), seat => Assert.Contains(seat.PlaneNode, StockAirframes.Nodes));
+        Assert.Equal(StockAirframes.Node(7), people[4].PlaneNode);
+        Assert.Equal(host.Bots.Select(b => b.Callsign), people.Skip(3).Select(s => s.Callsign));
+
+        // ABLE-TO-FAIL CONTROL: a guest's lobby hands the launch no bots of its own.
+        Assert.Empty(guests[0].LaunchBots);
+    }
+
     private static (DogfightLobby Host, List<DogfightLobby> Guests, IReadOnlyList<LoopbackTransport> Mesh) Lobbies(
-        int players, string guestName = "", Func<INetTransport, INetTransport>? hostCarrier = null)
+        int players, string guestName = "", Func<INetTransport, INetTransport>? hostCarrier = null, int localSeats = 1)
     {
         var mesh = LoopbackTransport.Mesh(players, Clean, new Random(players));
         var hostWire = new NetLobby(hostCarrier?.Invoke(mesh[0]) ?? mesh[0]);
-        var host = new DogfightLobby(hostWire, () => "Host");
+        var host = new DogfightLobby(hostWire, () => "Host") { LocalSeats = () => localSeats, BotDraws = new Random(players) };
         var guests = new List<DogfightLobby>();
         var wires = new List<NetLobby> { hostWire };
         for (int i = 1; i < players; i++)

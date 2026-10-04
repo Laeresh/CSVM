@@ -107,7 +107,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C, lobby and local setup
 
 20. ☑ A local match runs off a seat roster with no wire, so it can hold bot seats
-21. ☐ Multiplayer Lobby: Add bot, Fill-to-N, per-row plane/skill/team/callsign, Remove
+21. ◐ Multiplayer Lobby: Add bot, Fill-to-N, per-row plane/skill/team/callsign, Remove (the user's look at the layout)
 22. ☐ A joining human takes the newest bot's seat in the lobby, a late joiner once the match is back there
 23. ☐ Local join board: bot rows, and the two-pilot minimum counts bots
 
@@ -681,25 +681,93 @@ menu-original-lobby,pause-sheet,voice-runtime,ai-voice,flight-live-respawn-gate'
 roster (`VersusDirector.Wired` carries the warning). A local roster's panes must name no plane, or
 the seat's plane overrules the pane's own pick.
 
-## C21 ☐ Multiplayer Lobby: Add bot, Fill-to-N, per-row plane/skill/team/callsign, Remove
+## C21 ◐ Multiplayer Lobby: Add bot, Fill-to-N, per-row plane/skill/team/callsign, Remove
+
+Landed in code and tests; left: the user's look at the layout (`c21-lobby.png`, below).
 
 **Goal.** The host adds a bot row with Add, or creates rows with Fill-to-N; edits each row's plane,
 skill, team and callsign; removes a row; new bots join the smallest team (Decisions 5, 12); rows
 survive a rematch (Decision 18). Guests see the rows.
 
-**Evidence (confidence: lead-only).** Lobby state is `UI/Menu/DogfightLobby.cs`, the original-
-presentation screen `OriginalLobbyScreen.cs` (`docs/architecture/UI.md:1301-1305,1460-1465`). The
-host's options and roster reach guests as `DogfightOptionsMessage`, `DogfightRosterMessage`,
-`LobbyTeamActionMessage`, `LobbyTeamsMessage` (`NetDogfightMessages.cs`). Team weighting already
-counts each row's seats (`DogfightLobby.cs:270-279`).
+**Evidence (confidence: traced-to-code).** The leads held. `DogfightLobby.HostRows` builds the list
+the host and every guest read (host, then each seated peer), `LaunchRefusal` weighs each row (the
+host's by `LocalSeats`), and `Teamed` reads every row, so a bot row in that list is counted by the
+team rule with no second path. The roster row (`DogfightLobbySeat`, 20 bytes) had flag bits 3 to 7
+and a reserved byte free, so the bot needs no new message and no width change. `NetTeamBook` keys
+members by peer and mints the lowest free team number, so a bot cannot be a book member: its team
+is held on its row, and a disband must clear it or a later team taking the same number would
+inherit it. The menu launch built its field in `Launcher.VersusLaunchField` with no bots;
+`BuildCliNetRoster` was the only `AddBots` caller. Three findings beyond the plan: the Built-in
+presentation has no lobby screen at all (its host's `DogfightLobby` is never shown), so it needs no
+controls and can add no bots; `DogfightLobby.LocalSeats` is never set in production, which is
+harmless because the Original lobby launches one local seat; and Decision 1 (bots fly Deathmatch
+only) was not enforced anywhere a lobby could reach. GitHub issue #140 is still open with no
+comment. Reading the routes found one that skips the team check, not the one #140 describes: a
+Built-in host's launch (`CheckBuiltInLaunch`) asks no team rule, yet Original guests can still
+form teams on its book and `TakeNetLaunch` seats them with those teams. The bot path adds no
+route: bots exist only through the Original lobby, and its LAUNCH! asks `LaunchRefusal` over the
+same rows.
 
-**Approach.** Bot rows live in the host's lobby roster and ride the existing roster message with
-A1's pilot kind. `<TODO: where the controls sit on the original-presentation screen; this is a
-remake addition with no original layout to follow>`.
+**Approach (landed).** `DogfightLobby` holds `Bots` (`DogfightBot`: an id that outlives the row's
+place, callsign, airframe or `DogfightLobbySeat.RandomAirframe` 0xFF, `NetBotSkill`, lobby team),
+listed and seated after the guests and untouched by `Launched`/`Land`, so they survive a rematch.
+`AddBot` takes a Random plane at veteran, a callsign drawn from `CallsignPool` (the screen loads
+`BotSeats.CallsignPool` from the message table) that no row holds, else `Bot n`, and the team with
+the fewest players at that moment (the first created of a tie, 0 with no team standing); nothing
+rebalances it later. **Fill-to-N's N is a total pilot count**, people (the host's splitscreen seats
+included) and bots together: `FillTo(n)` adds rows until `FieldSeats` reaches `min(n, 16)` and
+removes none. `BotRoom` stops Add at `NetSeats.MaxPlayers`. `RemoveBot` and the per-row setters
+(`SetBotAirframe`, `SetBotSkill`, `SetBotTeam` to a standing team or 0, `SetBotCallsign` cut by
+`BotSeats.ClipName` to 12, refusing a blank name or one another row holds) are refused on a guest
+and while the host is Ready, the gate its options have; a bot change starts no new round, as a
+team change does not. A disband sets that team's bots to 0. Only a Deathmatch takes bots
+(`TakesBots`): Add is refused outside it, `BotsGrounded` holds LAUNCH! with the remake's line
+`BotsDeathmatchOnly`, and `LaunchBots` is empty there. Wire: the roster row's flags gain bit 3
+(bot) and bits 4 and 5 (tier), the airframe byte carries 0xFF for Random; a reader refuses a tier
+of 3, tier bits on a person and a bot marked host or captain; an older build reads a bot row as a
+person's, so no version change. Guests read bot rows from `Players` (`IsBot`, `Skill`) and can
+neither pick nor edit them. Launch: `TakeNetLaunch` passes `LaunchBots` and the callsign pool to
+`VersusLaunchField`, which resolves Random planes and empty callsigns through `BotSeats.Resolve`
+on the host (`Rng.BotField`) and appends the bots after the guests with `NetSeats.AddBots`, each on
+the stock fit; the roster then carries real stock planes to every guest. **Where the controls sit
+(the user's call from the capture):** Mission Options' empty left column under the type's
+description holds a "Bots" heading, Add Bot and Fill to (small plaques) and the count box with
+arrows (2 to 16, opening on `DogfightLobby.DefaultFillTo` 8), plus a hint line on the host; a
+guest's draw greyed. A host's press on a bot's row in the player list opens Select Plane on that
+bot in place of its own picker: Callsign box, Plane (Random, then the eleven stock), Skill
+(langui 3695 to 3697), Team (No team, then each standing team), Remove and Accept, with the stock
+plane's icon and ratings on the right ("Drawn at launch" for Random). Any tab press lets it go.
+The `--menu=lobby:host:bots` and `lobby:host:bot` aids pose it.
 
-**Model recommendation.** `<TODO: not settled in the session>`
+For later items: C22's "newest bot" is the last entry of `DogfightLobby.Bots` (ids rise with each
+add). A guest joining a full field makes the lobby list more than 16 rows; `DogfightRosterMessage`
+then cuts the last bot rows from the guests' view, and `AddBots` leaves those bots out at launch
+with a log line, until C22 yields a bot. `LaunchNames` lists bot names after the guests, so
+`ScoresOf` names bot seats correctly while the host flies one seat; D31's seat-roster naming still
+applies. The "Players (n of cap)" line counts bot rows against the human cap.
 
-**Verify.** `<TODO: a lobby unit or suite test, plus a look at the controls by the user>`
+**Model recommendation.** Opus: the team-book interaction (disband, lowest-free numbering), the
+roster bits and the screen integration had to be read together; the code itself is plain.
+
+**Verify.** `DogfightLobbyTests` (8 new): Add joins the smallest team with the first created of a
+tie, is not moved by later team changes, and a disbanded team's bots go teamless; Fill-to-N stops at
+N and at 16, with a two-seat host leaving one bot fewer of room; edits and Remove on the host alone,
+refused while Ready; rows and `LaunchNames` survive `Launched`/`Land`; a host and its bot on one
+team is `TooFewTeams` (10519) and bots balance two people's teams; Deathmatch only; a guest reads
+the rows and cannot touch them; `LaunchBots` resolved through `BotSeats.Resolve` and
+`NetSeats.AddBots` seats the bots after the guests on stock nodes. `NetMessagesTests` round-trips
+bot rows with tier and Random plane and refuses the three malformed flag forms. New engine suite
+`menu-original-lobby-bots` (weight 0.4): Add Bot and Fill to through the screen on a loopback host
+and guest, the editor's boxes, Remove, LAUNCH! refused with 10519 for host, guest and both bots on
+one team, then launched with no team; `VersusLaunchField` seats the bots after the guest with the
+Random plane drawn, and the guest's `NetSession` joins reading both bots on stock planes (its last
+check was flipped once to confirm it can fail). Captures for the look:
+`.scratch/c21-lobby.png` (Select Plane on a bot), `c21-lobby-mission.png` (Mission Options with
+three bot rows) and `c21-lobby-guest.png` (a guest's greyed view). Runs: units 6254 passed / 0
+failed / 3 skipped; `-Filter menu- -Shards 4` 45/45; `-Filter net- -Shards 4` 58/58. No golden
+shows the lobby.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** The screen layout is a look judgement; bring a capture to the user before settling it.
 Bot rows count toward the team-launch rule (`NetTeamBook.Check`, fed by `DogfightLobby.LaunchRefusal`

@@ -211,10 +211,9 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     /// <summary>The aid value that opens the Multiplayer Lobby over the aids' loopback wire with two
     /// guests on it. Its first colon argument names the view: host (the default), guest (Ready) or
-    /// waiting (a guest not yet Ready). The second names the tab: mission (the default), plane,
-    /// ammo, rockets or scores, which lands a finished match first. Outlaw and outlaw-rockets open
-    /// the outlaw list on Airframes or Rockets, with two airframes and All Rockets outlawed. A third,
-    /// <c>code</c> or <c>offline</c>, says what the host's master server does.</summary>
+    /// waiting (a guest not yet Ready). The second names the tab or pose, mission by default, and a
+    /// third, <c>code</c> or <c>offline</c>, what the host's master server does. Each value is
+    /// listed in <c>docs/org/menu-inventory.md</c>.</summary>
     public const string LobbyAid = "lobby";
 
     /// <summary>The campaign aid values Original shares with Built-in, each over the scratch
@@ -1071,6 +1070,21 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
 
         NetDoorAid.PoseDogfight(host, guests);
+        if (tab is "bots" or "bot" && host.Dogfight is { } field)
+        {
+            // Three bot rows after the two guests, the first an ace on the Fury.
+            field.FillTo(6);
+            field.SetBotAirframe(field.Bots[0].Id, 7);
+            field.SetBotSkill(field.Bots[0].Id, NetBotSkill.Ace);
+            NetDoorAid.SettleDogfight(host, guests);
+            if (tab == "bot")
+            {
+                _shell.Lobby.ShowBot(field.Bots[0].Id);
+                _shell.StepNet(0.0);
+                return;
+            }
+        }
+
         if (outlaw)
         {
             _shell.Lobby.ShowOutlawList(tab == "outlaw-rockets" ? OutlawPage.Rockets : OutlawPage.Airframes);

@@ -1012,6 +1012,39 @@ public class NetMessagesTests
     }
 
     [Fact]
+    public void ADogfightRosterCarriesBotRowsWithTheirTierAndRandomPlane()
+    {
+        var buffer = new byte[DogfightRosterMessage.Size];
+        var sent = new DogfightRosterMessage(3, 1, new[]
+        {
+            new DogfightLobbySeat("Host", 5, false, true, 1, true),
+            new DogfightLobbySeat("Lucy", 1, true, false),
+            new DogfightLobbySeat("Winthrop", DogfightLobbySeat.RandomAirframe, true, false, 1, false, NetPilot.Bot, NetBotSkill.Ace),
+            new DogfightLobbySeat("Cabbie", 7, true, false, 0, false, NetPilot.Bot, NetBotSkill.Novice),
+        });
+        sent.Write(buffer);
+        Assert.True(DogfightRosterMessage.TryRead(buffer, out var got));
+        Assert.Equal(sent, got);
+        Assert.Equal(new[] { false, false, true, true }, got.Rows.Select(r => r.IsBot));
+        Assert.Equal((NetBotSkill.Ace, DogfightLobbySeat.RandomAirframe, (byte)1), (got.Rows[2].Skill, got.Rows[2].Airframe, got.Rows[2].Team));
+        Assert.Equal(NetBotSkill.Novice, got.Rows[3].Skill);
+
+        // ABLE-TO-FAIL CONTROL: a tier on a person's row, a tier past ace and a bot hosting are refused.
+        int flagsAt = NetMessage.HeaderBytes + 4;
+        int lucy = flagsAt + DogfightRosterMessage.RowSize;
+        int bot = flagsAt + (2 * DogfightRosterMessage.RowSize);
+        var tiered = (byte[])buffer.Clone();
+        tiered[lucy] |= 0x10;
+        Assert.False(DogfightRosterMessage.TryRead(tiered, out _));
+        var past = (byte[])buffer.Clone();
+        past[bot] |= 0x30;
+        Assert.False(DogfightRosterMessage.TryRead(past, out _));
+        var hosting = (byte[])buffer.Clone();
+        hosting[bot] |= 0x02;
+        Assert.False(DogfightRosterMessage.TryRead(hosting, out _));
+    }
+
+    [Fact]
     public void ALobbyChatLineRoundTripsItsNameAndAFullWidthLine()
     {
         var buffer = new byte[LobbyChatMessage.Size];

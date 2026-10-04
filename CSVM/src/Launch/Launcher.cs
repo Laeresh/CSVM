@@ -1327,7 +1327,8 @@ public partial class Launcher : Node3D
     /// <paramref name="teamOf"/>, by peer; none leaves every seat on 0.</summary>
     internal static (Net.NetSeat[] Roster, Net.CoopFit[] SeatFits) VersusLaunchField(
         Net.INetTransport wire, IReadOnlyList<string> planes, IReadOnlyList<LoadoutChoice?> fits, StockLoadouts stock,
-        Net.NetPlaneRules? rules = null, System.Func<int, byte>? teamOf = null)
+        Net.NetPlaneRules? rules = null, System.Func<int, byte>? teamOf = null,
+        IReadOnlyList<VsBotEntry>? bots = null, IReadOnlyList<string>? callsignPool = null, System.Random? draws = null)
     {
         teamOf ??= _ => 0;
         var seats = new List<Net.NetSeat>(planes.Count + wire.Peers.Count);
@@ -1375,6 +1376,25 @@ public partial class Launcher : Node3D
             });
             // The guest's own lobby flies its pick through the same rules, so both ends agree.
             seatFits.Add(picked ? rules?.Enforce(chosen.Fit) ?? chosen.Fit : default);
+        }
+
+        // The lobby's bots follow every guest on the stock fit. Random planes and missing callsigns
+        // are drawn here, on the host alone, so a guest reads a real plane off the roster.
+        if (bots is { Count: > 0 })
+        {
+            var resolved = Session.Roster.BotSeats.Resolve(bots, System.Linq.Enumerable.Select(seats, seat => seat.Callsign),
+                callsignPool ?? System.Array.Empty<string>(), draws ?? new System.Random(Rng.IntSeedFor(Rng.BotField)));
+            int people = seats.Count;
+            int left = Net.NetSeats.AddBots(seats, wire.LocalPeer, resolved);
+            for (int seat = people; seat < seats.Count; seat++)
+            {
+                seatFits.Add(default);
+            }
+
+            if (left > 0)
+            {
+                Log.Warn("core", $"net: {left.ToString(System.Globalization.CultureInfo.InvariantCulture)} lobby bot(s) left out, the people filled the {Net.NetSeats.MaxPlayers.ToString(System.Globalization.CultureInfo.InvariantCulture)}-seat field");
+            }
         }
 
         Net.NetSeats.Validate(seats, wire.LocalPeer);
@@ -2953,7 +2973,10 @@ public partial class Launcher : Node3D
 
         var rules = _lobbyFlight ? _netDoor!.Dogfight!.Rules : (Net.NetPlaneRules?)null;
         System.Func<int, byte>? teamOf = _lobbyFlight ? _netDoor!.Dogfight!.TeamOfPeer : null;
-        (_netRoster, _coopSeatFits) = VersusLaunchField(_netWire, planes, fits, _coopStock ??= StockLoadouts.Load(), rules, teamOf);
+        var bots = _lobbyFlight ? _netDoor!.Dogfight!.LaunchBots : System.Array.Empty<VsBotEntry>();
+        var pool = bots.Count > 0 ? Session.Roster.BotSeats.CallsignPool(Messages.Load(_messagesPath)) : null;
+        (_netRoster, _coopSeatFits) = VersusLaunchField(_netWire, planes, fits, _coopStock ??= StockLoadouts.Load(), rules, teamOf,
+            bots, pool);
         _seatBuilds = SeatBuildsFor(_netRoster, customs, _netWire, rules);
         if (_lobbyFlight)
         {

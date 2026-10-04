@@ -391,12 +391,12 @@ wingman's; `CoopFilmMessage` names a film. [Layout](../org/multiplayer-messages.
 ## src/Net/NetDogfightMessages.cs
 The Multiplayer Lobby's five messages, all reliable and kept in `NetLobby` rather than a session.
 `DogfightOptionsMessage` is the host's Mission Options under their round, `DogfightRosterMessage`
-the whole player list with each row's team and the reading guest's own row marked, and
-`LobbyChatMessage` one typed line, which the host relays. `LobbyTeamActionMessage` is a guest's
-team action to its host and `LobbyTeamsMessage` the host's team names. A guest's plane and Ready
-ride `CoopPickMessage`. Capture the Flag's two, in the session: `FlagRequestMessage`, a pilot's ask
-of its host, and `FlagTableMessage`, the host's flags. Zeppelin vs Zeppelin's placed return is
-`NetMessages.cs`'s `SpawnAtMessage`. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+the whole player list with each row's team, a bot row's tier and Random plane, and the reading
+guest's own row marked, and `LobbyChatMessage` one typed line, which the host relays.
+`LobbyTeamActionMessage` is a guest's team action to its host and `LobbyTeamsMessage` the host's
+team names. A guest's plane and Ready ride `CoopPickMessage`. Capture the Flag's two, in the
+session: `FlagRequestMessage`, a pilot's ask of its host, and `FlagTableMessage`, the host's flags.
+Zeppelin vs Zeppelin's placed return is `NetMessages.cs`'s `SpawnAtMessage`. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Net/NetTeams.cs
 The team core every Dogfight team mode shares, engine-free: `NetTeamBook`, a host's free-form named
