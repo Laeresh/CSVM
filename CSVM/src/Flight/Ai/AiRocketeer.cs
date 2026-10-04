@@ -138,6 +138,16 @@ public sealed class AiRocketeer
     public bool SlotReady(int index) =>
         _lockout <= 0f && (!_slotLockouts.TryGetValue(index, out float slot) || slot <= 0f);
 
+    /// <summary>A fresh airframe's launcher: no trigger, no selection and no lockout on any slot.
+    /// </summary>
+    public void Reset()
+    {
+        WantsFire = false;
+        SelectedPylon = -1;
+        _lockout = 0f;
+        _slotLockouts.Clear();
+    }
+
     /// <summary>Clears the trigger and ages the lockout. Called every tick, including the ticks
     /// where no fire decision runs at all, so the lockout is a vehicle timer rather than one that
     /// stops whenever the AI loses its target or leaves Pursue.</summary>

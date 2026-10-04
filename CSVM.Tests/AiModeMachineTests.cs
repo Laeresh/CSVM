@@ -83,6 +83,32 @@ public class AiModeMachineTests
         Assert.Equal(AiMode.Pursue, m.Update(Home, Level, target, null, 0.3f));
     }
 
+    /// <summary>A respawn's reset leaves a fresh machine's state: patrol, no anchor, no stun and
+    /// no wait. The first quarry the new airframe is handed is chased at once. Without it the
+    /// revert's wait, armed by the life that ended, would still refuse that promotion.</summary>
+    [Fact]
+    public void AResetLeavesNoChaseStunOrWaitBehind()
+    {
+        var m = Machine();
+        m.NotPursuitDwellS = 5f;
+        var target = Home + new Vector3(500f, 0f, 0f);
+        PursueFrom(m, target);
+        Assert.Equal(AiMode.Patrol, m.Update(Home, Level, null, null, 0.1f));
+        Assert.True(m.DwellRemainingS > 4f);
+        m.Stun(3f);
+        Assert.Equal(AiMode.Stunned, m.Mode);
+
+        m.Reset("respawned");
+
+        Assert.Equal(AiMode.Patrol, m.Mode);
+        Assert.Null(m.PursuitAnchor);
+        Assert.Null(m.Executor);
+        Assert.False(m.Evading);
+        Assert.Equal(0f, m.StunRemainingS);
+        Assert.Equal(0f, m.DwellRemainingS);
+        Assert.Equal(AiMode.Pursue, m.Update(Home, Level, target, null, 1f / 60f));
+    }
+
     /// <summary>The return cylinder's revert re-arms the wait: the original's re-promotion on the
     /// very next tick, with a fresh anchor, is exactly what this refuses.</summary>
     [Fact]

@@ -404,6 +404,26 @@ public sealed class AiModeMachine
         Transition(mode, reason);
     }
 
+    /// <summary>Back to patrol with no task, reaction, stun or climb-out standing, and no wait
+    /// before the next chase, as a fresh machine opens. The clock and the last two maneuvers flown
+    /// are kept: they are the pilot's, not the engagement's.</summary>
+    public void Reset(string reason)
+    {
+        Evading = false;
+        _returnMode = AiMode.Patrol;
+        _lastTargetMode = null;
+        _dwellUntil = _clock;
+        _layOffHold = 0f;
+        _probeCooldown = 0f;
+        ClimbOutAltitude = 0f;
+        Transition(AiMode.Patrol, reason);
+        // Transition leaves these alone when the machine already reads patrol.
+        Executor = null;
+        _pursuitAnchor = null;
+        _stunRemaining = 0f;
+        _pursuedFor = 0f;
+    }
+
     /// <summary>One sim tick's transitions. The <paramref name="targetMode"/> argument is an AI
     /// target's own mode for the sixth-sense trigger, null for a human, the roll being undecoded
     /// against one. The <paramref name="targetVelocity"/> and <paramref name="targetIsHuman"/>

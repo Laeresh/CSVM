@@ -171,9 +171,10 @@ public sealed class VersusDirector
             {
                 int seat = rig.Index;
                 // Crash cam, then back in, R skips. With the lobby's Auto Respawn off the same
-                // crash cam runs and then waits for Fire Guns, as the original's does.
+                // crash cam runs and then waits for Fire Guns, as the original's does. ⚠ Never on a
+                // bot seat, which has no Fire Guns to press and would stay down for the match.
                 pilot.AutoRespawnAfter = RespawnDelay;
-                pilot.RespawnOnFire = !_spec.VsAutoRespawn;
+                pilot.RespawnOnFire = !_spec.VsAutoRespawn && !IsBot(seat);
                 pilot.Match = match;                  // R-ownership gate: board-up ⇒ rematch
                 pilot.RestartMatch = Restart;
                 if (_field.NetSeats.Count > 0)
@@ -583,6 +584,9 @@ public sealed class VersusDirector
 
     private bool HasPane(int seat) =>
         seat >= 0 && seat < _field.NetSeats.Count && _field.NetSeats[seat].HasPane;
+
+    private bool IsBot(int seat) =>
+        seat >= 0 && seat < _field.NetSeats.Count && _field.NetSeats[seat].IsBot;
 
     // A splitscreen match's death in every pane, the seats named by their player tags. The match
     // handler subscribed first, so the death is already counted for the lives line.

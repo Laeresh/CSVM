@@ -571,6 +571,15 @@ internal sealed class HumanFlightAdapter
             botPilot.TargetAltitude = start.Pos.Y;
             _botPilots.ArmSeatPilot(botPilot, stats, planeName, controller.Team, seat!.Skill);
             controller.ArmSpawnTimers();
+            // Every later return, whatever placed it, starts the pilot over on the new placement's
+            // course and lever. No quarry, mode or course outlives the aeroplane it lost, and the
+            // airframe takes the collision window its first spawn took.
+            controller.Respawned = () =>
+            {
+                var at = controller.WorldPosition;
+                botPilot.ResetForSpawn(at, at + controller.NoseDirection, controller.Throttle);
+                controller.ArmSpawnTimers();
+            };
         }
         // The Danger Zone eye, framed off the airframe's own chase distance and aimed at the pose
         // the controller draws, which is the controller node's own transform.

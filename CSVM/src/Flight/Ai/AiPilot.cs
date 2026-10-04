@@ -282,6 +282,37 @@ public sealed class AiPilot
             machine.Enter(AiMode.Patrol, "respawned");
     }
 
+    /// <summary>A seat pilot's one reset on a return, so any standing order added later is cleared
+    /// here too. No quarry, mode, stun or danger-zone run survives the aeroplane it lost. It holds
+    /// the new placement's course and lever until its gunner finds a quarry. What a mission or a
+    /// launch ordered (net, escort, primary target, auto-targeting, ratings) stays.</summary>
+    public void ResetForSpawn(Vector3 pos, Vector3 lookAt, float throttle)
+    {
+        TargetHeadingDeg = HeadingDegOf(lookAt - pos);
+        TargetAltitude = pos.Y;
+        Throttle = throttle;
+        _bareStunRemainingS = 0f;
+        ZoneRun?.Release();
+        ZoneRun = null;
+        _rail = null;
+        _zoneEntryLegFrom = -1;
+        _zoneEntryLegTo = -1;
+        RailPose = null;
+        RailSpeed = 0f;
+        SteeringPatrol = false;
+        if (Gunner is { } gunner)
+        {
+            gunner.Target = null;
+            gunner.TargetRank = default;
+            gunner.TargetRankFor = null;
+            gunner.TargetHoldUntil = 0d;
+            gunner.HoldFire();
+        }
+
+        Rocketeer?.Reset();
+        Machine?.Reset("respawned");
+    }
+
     /// <summary>One sim step's stick and throttle for the current orders. Pure over the model's
     /// state and this instance's fields (no clocks, and the only randomness is
     /// <see cref="Patrol"/>'s own seeded branch draw), so a fixed-dt run is deterministic. The

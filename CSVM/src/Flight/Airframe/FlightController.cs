@@ -303,6 +303,12 @@ public partial class FlightController : Node3D
     /// leaves the seat to come back on its own timer.</summary>
     public Action? RespawnRequest;
 
+    /// <summary>Run at the end of every <see cref="Respawn"/>, once the new pose stands, for what
+    /// the seat's assembler owes a fresh airframe beyond the reset here. A bot seat starts its AI
+    /// pilot over on it. Null, the default, adds nothing, and a mission AI keeps its orders through
+    /// a respawn.</summary>
+    public Action? Respawned;
+
     /// <summary>Splitscreen pause bookkeeping, the SAME instance on every rig, assigned by
     /// <c>GameSession</c> the way <see cref="Match"/> is. Any player's Start/P here can pause
     /// everyone, but only <see cref="PauseState.OwnerPlayerIndex"/> can resume. It is null only on
@@ -1399,6 +1405,7 @@ public partial class FlightController : Node3D
         GlobalTransform = _simCurr;
         if (_cam != null && IsInsideTree())
             SnapCamera();
+        Respawned?.Invoke();
     }
 
     /// <summary>The same return, at a pose this machine did not choose: the placement a match's

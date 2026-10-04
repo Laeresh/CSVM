@@ -23,6 +23,40 @@ public class AiPilotTests
     private static string ZrdrPath =>
         SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
 
+    // A seat pilot's respawn: the course, altitude and lever come off the new placement. The mode
+    // machine and the launcher start over, and the orders a launch set stay.
+    [Fact]
+    public void AResetForSpawnHoldsTheNewPlacementWithNoEngagementLeft()
+    {
+        var machine = new AiModeMachine(new System.Random(3)) { AttackRange = 1500f };
+        var pilot = new AiPilot
+        {
+            TargetHeadingDeg = 37f,
+            TargetAltitude = 5f,
+            Throttle = 0.3f,
+            Machine = machine,
+            Rocketeer = new AiRocketeer(() => 1f),
+        };
+        machine.Enter(AiMode.Pursue, "a chase standing at the death");
+        pilot.Stun(2f);
+        Assert.True(pilot.IsStunned);
+        var at = new Vector3(100f, 650f, -40f);
+
+        pilot.ResetForSpawn(at, at + Vector3.Right, 0.6f);
+
+        Assert.Equal(AiPilot.HeadingDegOf(Vector3.Right), pilot.TargetHeadingDeg, 3);
+        Assert.Equal(650f, pilot.TargetAltitude);
+        Assert.Equal(0.6f, pilot.Throttle);
+        Assert.False(pilot.IsStunned);
+        Assert.Null(pilot.ZoneRun);
+        Assert.Null(pilot.RailPose);
+        Assert.Equal(AiMode.Patrol, machine.Mode);
+        Assert.Null(machine.PursuitAnchor);
+        Assert.Equal(-1, pilot.Rocketeer.SelectedPylon);
+        Assert.Same(machine, pilot.Machine);
+        Assert.Equal(1500f, machine.AttackRange);
+    }
+
     [ExtractedDataFact]
     public void HoldsCourseFliesOrderedTurnsAndTakesMidFlightRetargets()
     {

@@ -334,6 +334,26 @@ public class AiRocketeerTests
         Assert.Equal(0, r.SelectedPylon);
     }
 
+    // A respawned seat pilot's launcher is a fresh airframe's. The lockout its last launch stamped
+    // does not follow it, or a bot downed after a launch would come back unable to fire.
+    [Fact]
+    public void AResetLauncherCarriesNoLockoutOrSelection()
+    {
+        var r = Rocketeer(rollsPass: true);
+        Solve(r, 500f);
+        Assert.True(r.WantsFire);
+        Assert.True(r.LockoutRemaining > 0f && !r.SlotReady(0));
+
+        r.Reset();
+
+        Assert.False(r.WantsFire);
+        Assert.Equal(-1, r.SelectedPylon);
+        Assert.Equal(0f, r.LockoutRemaining);
+        Assert.True(r.SlotReady(0));
+        Solve(r, 500f);
+        Assert.True(r.WantsFire);
+    }
+
     private static void Solve(AiRocketeer r, float separation)
     {
         var ownPos = new Vector3(0f, 0f, separation);

@@ -100,7 +100,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B, bot behaviour in a Dogfight
 
 11. ☑ Equal target weights for every pilot in a Dogfight
-12. ☐ Bots respawn through the host's rotation and follow Limited Lives
+12. ☑ Bots respawn through the host's rotation and follow Limited Lives
 13. ☑ Skill tiers, personalities, stock plane with Random, and the callsign pool
 14. ☐ Rearm standing order: a bot breaks off to a base when low or badly damaged
 
@@ -412,30 +412,81 @@ off. ⚠ Do not gate on `IsHumanPiloted`: the aim assist, the AI force path and 
 read it. Whether the lay-off assist should also treat a bot quarry like a human one is a separate
 question Decision 10 does not answer; it is left for the D32 playtest.
 
-## B12 ☐ Bots respawn through the host's rotation and follow Limited Lives
+## B12 ☑ Bots respawn through the host's rotation and follow Limited Lives
 
 **Goal.** A downed bot respawns after the crash camera time at a point the host's
 `VersusSpawnRotation` grants, whatever Auto Respawn says (Decision 16), and stays down when out of
 lives.
 
-**Evidence (confidence: lead-only).** The host's single `VersusSpawnRotation` grants returns as
-`SpawnMessage`/`SpawnAtMessage` (`VersusDirector.cs:158,205`); it relaxes its one-living-seat-per-point
-rule for a field larger than the table (`docs/architecture/Session.md:207`). The remake's 3 s crash
-camera time in a match is not a reading of the original (`docs/org/multiplayer-scoring.md:193-195`).
-`VersusMatch.OutOfLives` exists.
+**Evidence (confidence: traced-to-code).** A seat's return reaches the rotation the same way for a
+person and a bot. `VersusDirector.Wire` arms every seat rig with `AutoRespawnAfter = RespawnDelay`
+(3 s, the remake's own value, `docs/org/multiplayer-scoring.md`) and, on a wire, a
+`RespawnRequest` of `AskSpawn(seat)`. The crashed branch of `FlightController`'s sim step calls it
+once `AircraftLifecycle.TickAutoRespawn` is due, and on the host `AskSpawn` calls `GrantSpawn`
+directly, which walks the rotation, broadcasts the `SpawnMessage` and places the aeroplane through
+`TakeSpawn` and `RespawnAt` on every peer. With Auto Respawn on, A3's reading held. With it off,
+`Wire` set `RespawnOnFire` on every rig, and `TickAutoRespawn` then waits on `FirePressed`, which on
+a paneless bot reads an empty keyboard and pad binding and never fires: with the exemption removed
+the bot was still down 420 steps after a 180-step crash camera. The pilot was not reset either:
+`FlightController.Respawn` only calls `AiPilot.ClearStun`, so the gunner's quarry (held 20 s by
+`TakeTarget`), the mode machine's mode, pursuit anchor, dwell stamp, reaction and evade flag, the
+rocketeer's lockouts and the course orders all outlived the aeroplane (the reset removed, the
+respawned bot read quarry P1, mode pursue, and a course of 0° against a nose of 122°). Limited
+Lives needed no change: the score rows are per seat and a bot seat is a row, `CheckAlone` counts
+every row neither `Left` nor `OutOfLives` as a pilot on its own team (a teamless seat is a team of
+one), `GrantSpawn` refuses a spent seat, and `HoldSpentPilots` sets `Spectating`, which turns off
+`RespawnOffered` so a spent bot never asks. A guest reads the same deaths off the host's scores.
 
-**Approach.** The host's bot rig asks the rotation for a point as a local human seat does, on the
-auto-respawn path. `<TODO: read how a local seat's respawn request reaches the rotation>`
-After A3 a downed bot already returns through `VersusDirector.AskSpawn` and `GrantSpawn` with Auto
-Respawn on (`net-bot-seat`), keeping its `AiPilot` unreset, while with it off the `RespawnOnFire`
-that `VersusDirector.Wire` sets on every seat rig holds the bot down for a Fire press it never makes.
+**Approach (landed).** `VersusDirector.Wire` sets `RespawnOnFire = !VsAutoRespawn && !IsBot(seat)`,
+so a bot seat takes the auto path on the same crash camera time as a person's auto-respawn. The
+reset is one method, `AiPilot.ResetForSpawn(pos, lookAt, throttle)`: it drops the gunner's quarry,
+rank and hold, resets the launcher (`AiRocketeer.Reset`, both lockouts) and the mode machine
+(`AiModeMachine.Reset`: patrol, no anchor, reaction, stun, climb-out or wait, keeping the clock and
+the maneuver history), releases any danger-zone run, and holds the new placement's course and
+lever. Orders a mission or a launch set (net, escort, primary target, `AutoTarget`, ratings) stay.
+It runs off a new `FlightController.Respawned` hook, invoked at the end of every `Respawn` once the
+new pose stands, which `HumanFlightAdapter` sets for a bot seat on the host beside A3's arming; the
+hook also re-arms the AI collision window (`ArmSpawnTimers`) the first spawn took. The hook rather
+than `Respawn` itself, because `Activate` (wave and generator launches) and every mission AI also
+respawn through it and must keep their orders; the hook rather than `VersusDirector`'s grant,
+because the rematch's opening grant, a local match's `RespawnPlacement` (C20) and a suite's
+`RespawnAt` all reach the bot through `Respawn`. For B14: the rearm standing order clears in
+`ResetForSpawn`.
 
-**Model recommendation.** `<TODO: not settled in the session>`
+**Model recommendation.** Sonnet would do the code, which is small. Opus was used because the
+reset's placement needed every caller of `FlightController.Respawn` read (grants, rematch,
+`Activate`, the suites' placements) and the lives logic traced across `VersusMatch` and
+`VersusDirector` to show it needed no change.
 
-**Verify.** Extend the A3 suite: a downed bot returns at a rotation point on both ends; with
-`--vs-lives=1` it stays down and the match ends on "nobody left to fight" when it should.
+**Verify.** New suite `net-bot-respawn` (`CSVM/src/Testing/NetBotSuites.cs`, clean loopback,
+weight 15.3): two host and guest pairs, each with two bots. Under `--vs-no-respawn` the bot and the
+guest's own seat go down on one step; the bot is back after 180 steps (the 3 s crash camera) on the
+entry the host granted, standing on it, with one grant, and the guest places its copy on the same
+entry; its pilot, given a quarry, a pursuit and a stale course before the death (checked as a
+control), comes back with no quarry, in patrol with no anchor, reaction or stun, holding the new
+placement's heading, altitude and lever, and flies on the same pilot. The guest's seat, downed on
+the same step, is still down on both machines (control). Under `--vs-lives=1` the first bot's
+death leaves it down and spectating on both machines with no grant while the match runs; the
+guest's death leaves the host and the second bot and the match still runs, which is a living bot
+counted as an opponent; the second bot's death ends the match on `NobodyLeft` on both machines.
+Deaths there are unattributed, since three kills to the host reach the default kill target and end
+on the score first. With the bot exemption removed the suite fails eight checks; with the reset
+removed it fails the three pilot-state checks and nothing else. Clean link only: every reading is a
+grant, score or match-state message on the reliable ordered channel, and `net-bot-seat-lossy`
+already carries a bot's grant over loss (DET-17 does not bite). Units: `AiModeMachineTests.AResetLeavesNoChaseStunOrWaitBehind`,
+`AiPilotTests.AResetForSpawnHoldsTheNewPlacementWithNoEngagementLeft`,
+`AiRocketeerTests.AResetLauncherCarriesNoLockoutOrSelection`. Run in `bots-b12`: `RunTests.ps1
+-Filter net- -Shards 4 -SkipUnits -SkipGoldens -SkipHitch` 57 passed / 0 failed; `-Suite
+versus-spawn-rotation,versus-spawn-net-table,flight-live-respawn-gate,death-respawn-rest-pose,splitscreen-listeners`
+5 passed; units 6231 passed / 0 failed / 3 skipped.
 
-**⚠ Traps.** The respawned bot's AI state (target, standing order, rearm trip) must reset.
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** Never move the reset into `FlightController.Respawn`: a mission AI's `Activate` goes
+through it and would lose its net and orders. `ResetForSpawn` keeps `AutoTarget`, which
+`net-bot-seat` turns off and relies on through its placements. A match ending reads `ScoreTarget`,
+not `NobodyLeft`, when the death that empties the field also reaches the kill target, because
+`CheckAlone` returns once the match is complete.
 
 ## B13 ☑ Skill tiers, personalities, stock plane with Random, and the callsign pool
 

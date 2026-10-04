@@ -3,12 +3,15 @@ using System.Collections.Generic;
 using System.Linq;
 using CSVM.Extraction;
 using CSVM.Flight;
+using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Hud;
+using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
 using CSVM.Launch;
 using CSVM.Mech3;
 using CSVM.Net;
+using CSVM.Session.World;
 using CSVM.Spec;
 using CSVM.UI.Overlays;
 using CSVM.Utils;
@@ -30,6 +33,15 @@ internal static class NetBotSuites
     private const int HostSeat = 0;
     private const int GuestSeat = 1;
     private const int BotSeat = 2;
+    private const int SecondBotSeat = 3;
+
+    // How close to a table entry a placed aeroplane counts as standing on it, horizontally, in
+    // metres. Read on the step it is placed, before it has flown.
+    private const float EntryTolerance = 5f;
+
+    // How long a check that something does NOT happen keeps watching, in sim steps. That is a
+    // second past the quick crash camera and the grant that would follow it.
+    private const int HeldSteps = 60;
 
     // The most steps any one wait is given. A reliable payload crosses the lossy link in a few
     // dozen at worst. A death adds its crash, the ask and the grant of the return.
@@ -85,6 +97,45 @@ internal static class NetBotSuites
         + "boards agree")]
     internal static void BotSeatOnALossyLink(TestContext ctx) =>
         Run(ctx, new LoopbackConditions(0.03, 0.01, 0.25), 5102, "lossy");
+
+    // Clean link only. Every reading below is a grant, a score or the match state, all on the one
+    // reliable ordered channel. The lossy twin of net-bot-seat already carries a bot's grant over loss.
+    [Suite("net-bot-respawn",
+        "two host and guest pairs in one process, each with two bots: with Auto Respawn off a "
+        + "downed bot comes back after the crash camera time at the host's granted rotation "
+        + "entry on both machines while the guest's own seat waits for Fire Guns, and its pilot "
+        + "starts over with no quarry, no chase and the new placement's course; with one life a "
+        + "downed bot stays down on both machines, the host granting it nothing, a living bot "
+        + "keeps the match running as an opponent, and the last bot's death ends it on "
+        + "nobody left to fight")]
+    internal static void BotsRespawnAndSpendLives(TestContext ctx)
+    {
+        var pressed = NetCombatSuites.MatchSpec(ctx, out var table, "--vs-no-respawn");
+        var limited = NetCombatSuites.MatchSpec(ctx, out _, "--vs-lives=1");
+        var ambient = NetCombatSuites.Ambient.Save();
+        var ends = new List<NetCombatSuites.Ends>();
+        try
+        {
+            if (Field(ctx, pressed, 5103, "no auto respawn", ends) is { } waiting)
+            {
+                ReturnsUnasked(ctx, waiting, table);
+            }
+
+            if (Field(ctx, limited, 5104, "one life", ends) is { } spent)
+            {
+                SpendsItsLife(ctx, spent);
+            }
+        }
+        finally
+        {
+            foreach (var end in Enumerable.Reverse(ends))
+            {
+                end.Close();
+            }
+
+            ambient.Restore();
+        }
+    }
 
     private static void Run(TestContext ctx, LoopbackConditions conditions, int seed, string cell)
     {
@@ -382,6 +433,189 @@ internal static class NetBotSuites
             $"[{cell}] the downed bot comes back on both machines and flies on its pilot ({Downs(peers)}, {steps} step(s))");
         ctx.Check(peers.All(p => p.Wire.World is { Admitted: 0 }),
             $"[{cell}] and its return admits nothing to the world link ({string.Join(", ", peers.Select(p => p.Wire.World?.Admitted))})");
+    }
+
+    // A host with two bots and a guest on one launch, started. Every gunner is held off so no bot
+    // round adds a death, and every aeroplane is lifted clear of the ground by its owner. Null
+    // when either session failed to build.
+    private static GameSession[]? Field(TestContext ctx, SessionSpec spec, int seed, string cell,
+        List<NetCombatSuites.Ends> ends)
+    {
+        var mesh = LoopbackTransport.Mesh(2, LoopbackConditions.Perfect, new Random(seed));
+        var roster = new NetSeat[]
+        {
+            new() { PeerId = 0, SeatIndex = HostSeat, FlownHere = true, Callsign = "host", PlaneNode = Airframes[0] },
+            new() { PeerId = 1, SeatIndex = GuestSeat, Callsign = "guest", PlaneNode = Airframes[1] },
+            NetSeats.Bot(0, BotSeat, "bot", Airframes[0]),
+            NetSeats.Bot(0, SecondBotSeat, "other bot", Airframes[1]),
+        };
+        NetSeats.Validate(roster, hostPeer: 0);
+        var host = NetCombatSuites.Ends.Open(ctx, spec, mesh[0], isHost: true, HostSeed, roster, Airframes);
+        ends.Add(host);
+        var guest = NetCombatSuites.Ends.Open(ctx, spec, mesh[1], isHost: false, HostSeed + 1, null, Airframes);
+        ends.Add(guest);
+        ctx.Check(host.Built && guest.Built,
+            $"[{cell}] both sessions build in one process (host {host.Built}, guest {guest.Built})");
+        if (!host.Built || !guest.Built)
+        {
+            return null;
+        }
+
+        NetStartSuites.UntilStarted(host.Session, guest.Session);
+        var peers = new[] { host.Session, guest.Session };
+        Lockstep(1, peers);
+        foreach (int seat in new[] { BotSeat, SecondBotSeat })
+        {
+            if (host.Session.SeatRigs[seat].Controller?.Pilot?.Gunner is { } gunner)
+            {
+                gunner.AutoTarget = false;
+                gunner.Target = null;
+            }
+        }
+
+        Lift(host.Session.SeatRigs[HostSeat].Controller!);
+        Lift(host.Session.SeatRigs[BotSeat].Controller!);
+        Lift(host.Session.SeatRigs[SecondBotSeat].Controller!);
+        Lift(guest.Session.SeatRigs[GuestSeat].Controller!);
+        Lockstep(1, peers);
+        return peers;
+    }
+
+    // Auto Respawn off. The bot and the guest's own seat go down on the same step. The bot is back
+    // on the host's granted entry after the crash camera time a person's auto-respawn waits. The
+    // guest's seat still waits for its pilot's Fire Guns. The bot's pilot is given a quarry, a
+    // chase and a stale course before it dies, and none of it survives the return.
+    private static void ReturnsUnasked(TestContext ctx, GameSession[] peers, IReadOnlyList<SpawnPoint> table)
+    {
+        const string cell = "no auto respawn";
+        var (host, guest) = (peers[0], peers[1]);
+        var bot = host.SeatRigs[BotSeat].Controller!;
+        var botCopy = guest.SeatRigs[BotSeat].Controller!;
+        var guestOwn = guest.SeatRigs[GuestSeat].Controller!;
+        var guestCopy = host.SeatRigs[GuestSeat].Controller!;
+        var hostPlane = host.SeatRigs[HostSeat].Controller!;
+        ctx.Check(!bot.RespawnOnFire && bot.AutoRespawnAfter == VersusDirector.RespawnDelay,
+            $"[{cell}] the bot's seat respawns on the crash camera's {bot.AutoRespawnAfter} s without waiting for Fire Guns (waits {bot.RespawnOnFire})");
+        ctx.Check(guestOwn.RespawnOnFire && guestOwn.AutoRespawnAfter == bot.AutoRespawnAfter,
+            $"ABLE-TO-FAIL CONTROL: [{cell}] the guest's own seat on the same launch waits for Fire Guns after the same {guestOwn.AutoRespawnAfter} s (waits {guestOwn.RespawnOnFire})");
+
+        var pilot = bot.Pilot!;
+        var gunner = pilot.Gunner!;
+        var machine = pilot.Machine!;
+        gunner.TakeTarget(hostPlane, default, 0d);
+        machine.Enter(AiMode.Pursue, "a chase the suite stands up");
+        pilot.TargetHeadingDeg = AiPilot.HeadingDegOf(bot.NoseDirection) + 90f;
+        pilot.TargetAltitude = 1f;
+        ctx.Check(gunner.Target != null && machine is { Mode: AiMode.Pursue, PursuitAnchor: not null },
+            $"ABLE-TO-FAIL CONTROL: [{cell}] the bot dies with a quarry ({FlightController.TargetLabel(gunner.Target)}) and a chase ({AiModeMachine.NameOf(machine.Mode)}) standing");
+
+        int before = host.Dogfight!.SpawnsTaken;
+        int guestBefore = guest.Dogfight!.SpawnsTaken;
+        bot.DebugForceCrash(guestCopy.PlayerIndex);
+        guestOwn.DebugForceCrash(hostPlane.PlayerIndex);
+        int due = Mathf.RoundToInt(VersusDirector.RespawnDelay / GameClock.FixedDt);
+        int down = 0;
+        while (bot.Crashed && down < due + WaitSteps)
+        {
+            Lockstep(1, peers);
+            down++;
+        }
+
+        // Read on the step the grant placed it, before the pilot has flown a metre of its own.
+        int entry = host.Dogfight.SpawnEntries[BotSeat];
+        int standing = EntryAt(table, bot);
+        float heading = AiPilot.HeadingDegOf(bot.NoseDirection);
+        float headingError = Mathf.Abs(Mathf.Wrap(pilot.TargetHeadingDeg - heading, -180f, 180f));
+        string course = $"course {pilot.TargetHeadingDeg:0.0} against a nose of {heading:0.0}, altitude {pilot.TargetAltitude:0} at {bot.WorldPosition.Y:0} m";
+        ctx.Check(!bot.Crashed && down >= due - 1 && down <= due + 2,
+            $"[{cell}] the downed bot returns on its own after the crash camera time ({down} step(s) against {due})");
+        ctx.Check(entry >= 0 && entry < table.Count && standing == entry && host.Dogfight.SpawnsTaken == before + 1,
+            $"[{cell}] on the rotation entry the host granted (entry {entry}, aeroplane on {standing}, {host.Dogfight.SpawnsTaken - before} grant(s))");
+        ctx.Check(gunner.Target == null && gunner.TargetRankFor == null && !gunner.WantsFire,
+            $"[{cell}] its gunner comes back with no quarry ({FlightController.TargetLabel(gunner.Target)})");
+        ctx.Check(machine is { Mode: AiMode.Patrol, PursuitAnchor: null, Executor: null, Evading: false } && !pilot.IsStunned,
+            $"[{cell}] and its mode machine with no chase, reaction or stun standing ({AiModeMachine.NameOf(machine.Mode)}, anchor {machine.PursuitAnchor?.ToString() ?? "none"})");
+        ctx.Check(headingError < 0.5f && Mathf.Abs(pilot.TargetAltitude - bot.WorldPosition.Y) < 0.5f
+                  && Mathf.IsEqualApprox(pilot.Throttle, bot.Throttle),
+            $"[{cell}] and its pilot holds the course it was placed on ({course}, throttle {pilot.Throttle:0.00} on a lever of {bot.Throttle:0.00})");
+
+        int steps = StepUntil(() => !botCopy.Crashed && guest.Dogfight.SpawnsTaken > guestBefore, peers);
+        ctx.Check(!botCopy.Crashed && guest.Dogfight.SpawnEntries[BotSeat] == entry,
+            $"[{cell}] the guest places its copy of the bot on the same entry ({guest.Dogfight.SpawnEntries[BotSeat]} against {entry}, {steps} step(s))");
+
+        var at = bot.WorldPosition;
+        Lockstep(HeldSteps, peers);
+        ctx.Check(ReferenceEquals(bot.Pilot, pilot) && !bot.Crashed && bot.WorldPosition.DistanceTo(at) > 10f,
+            $"[{cell}] and the bot flies on the same pilot ({bot.WorldPosition.DistanceTo(at):0} m since its return)");
+        ctx.Check(guestOwn.Crashed && guestCopy.Crashed,
+            $"ABLE-TO-FAIL CONTROL: [{cell}] the guest's own seat, downed on the same step, is still down on both machines ({Downs(peers)})");
+    }
+
+    // One life each. The first bot's death spends its seat, which stays down on both machines with
+    // no grant from the host. Three pilots with lives keep the match running. The guest's
+    // death then leaves the host and the second bot, and the match runs on, so a living bot is an
+    // opponent. The second bot's death leaves the host alone, which is reason 4 on both machines.
+    private static void SpendsItsLife(TestContext ctx, GameSession[] peers)
+    {
+        const string cell = "one life";
+        var (host, guest) = (peers[0], peers[1]);
+        foreach (var rig in peers.SelectMany(p => p.SeatRigs))
+        {
+            if (rig.Controller is { } pilot)
+            {
+                pilot.AutoRespawnAfter = QuickRespawn;
+            }
+        }
+
+        ctx.Check(peers.All(p => p.Dogfight!.Match.Lives == 1),
+            $"[{cell}] both machines run one life ({string.Join(", ", peers.Select(p => p.Dogfight!.Match.Lives))})");
+        var bot = host.SeatRigs[BotSeat].Controller!;
+        var other = host.SeatRigs[SecondBotSeat].Controller!;
+        var guestOwn = guest.SeatRigs[GuestSeat].Controller!;
+
+        int grants = host.Dogfight!.SpawnsTaken;
+        // Every death here is unattributed. Three kills to one pilot reach the launch's kill target,
+        // which would end the match on its score before the field ran out.
+        bot.DebugForceCrash();
+        int steps = StepUntil(() => peers.All(p => p.Dogfight!.Match.OutOfLives(BotSeat)), peers);
+        Lockstep(HeldSteps, peers);
+        ctx.Check(peers.All(p => p.SeatRigs[BotSeat].Controller is { Crashed: true, Spectating: true }),
+            $"[{cell}] the downed bot stays down on both machines, out of lives ({Downs(peers)}, {steps} step(s) for the score)");
+        ctx.Check(host.Dogfight.SpawnsTaken == grants,
+            $"[{cell}] and the host grants it no return ({host.Dogfight.SpawnsTaken - grants} grant(s))");
+        ctx.Check(peers.All(p => p.Dogfight!.End == NetMatchEnd.Running && !p.Dogfight.Match.Completed),
+            $"[{cell}] with three pilots left the match runs on both machines ({Endings(peers)})");
+
+        guestOwn.DebugForceCrash();
+        steps = StepUntil(() => peers.All(p => p.Dogfight!.Match.OutOfLives(GuestSeat)), peers);
+        Lockstep(HeldSteps, peers);
+        ctx.Check(peers.All(p => p.Dogfight!.Match.OutOfLives(GuestSeat))
+                  && peers.All(p => p.Dogfight!.End == NetMatchEnd.Running && !p.Dogfight.Match.Completed),
+            $"[{cell}] with the guest spent, the second bot is the host's opponent and the match runs on both machines ({Endings(peers)}, {steps} step(s))");
+
+        other.DebugForceCrash();
+        steps = StepUntil(() => peers.All(p => p.Dogfight!.End == NetMatchEnd.NobodyLeft), peers);
+        ctx.Check(peers.All(p => p.Dogfight!.Match.Completed && p.Dogfight.End == NetMatchEnd.NobodyLeft),
+            $"[{cell}] the second bot's death leaves the host alone and ends the match on nobody left to fight on both machines ({Endings(peers)}, {steps} step(s))");
+    }
+
+    private static string Endings(GameSession[] peers) =>
+        string.Join(", ", peers.Select(p => p.Dogfight!.End));
+
+    // Which table entry a placed aeroplane stands on, horizontally, or -1.
+    private static int EntryAt(IReadOnlyList<SpawnPoint> table, FlightController placed)
+    {
+        var pos = placed.WorldPosition;
+        for (int i = 0; i < table.Count; i++)
+        {
+            var d = table[i].Position - pos;
+            if (Mathf.Abs(d.X) < EntryTolerance && Mathf.Abs(d.Z) < EntryTolerance)
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     // The board as one (score, kills, deaths) per seat, the host's count or a guest's mirror of it.
