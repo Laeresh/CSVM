@@ -114,9 +114,15 @@ internal static class RacePresenceSuites
         ctx.Check(RaceGhost.Alpha(RaceGhost.GhostWithinM) <= near + 1e-4f
                 && Mathf.IsEqualApprox(RaceGhost.Alpha(RaceGhost.SolidBeyondM), 1f),
             $"the ramp starts at {RaceGhost.GhostWithinM:0} m and ends at {RaceGhost.SolidBeyondM:0} m");
-        string line = RaceGhost.VertexLine;
+        string line = RaceGhost.VertexLineFor(enhanced: false);
         ctx.Check(line.Contains("40.0, 80.0, 0.35,", System.StringComparison.Ordinal),
             $"the shader line passes the law's constants: {line.Trim()}");
+        float nearEnhanced = RaceGhost.Alpha(30f, enhanced: true);
+        string enhancedLine = RaceGhost.VertexLineFor(enhanced: true);
+        ctx.Check(Mathf.IsEqualApprox(nearEnhanced, RaceGhost.EnhancedGhostAlpha)
+                && nearEnhanced > near && Mathf.IsEqualApprox(RaceGhost.Alpha(100f, enhanced: true), 1f)
+                && enhancedLine.Contains("40.0, 80.0, 0.55,", System.StringComparison.Ordinal),
+            $"Enhanced keeps more of the ghost: alpha {nearEnhanced:0.000} at 30 m, {enhancedLine.Trim()}");
         ctx.Note($"the ghost is {RaceGhost.GhostAlpha:0.00} within {RaceGhost.GhostWithinM:0} m and solid beyond {RaceGhost.SolidBeyondM:0} m");
     }
 

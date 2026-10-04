@@ -1,4 +1,5 @@
 using System.Globalization;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -19,9 +20,13 @@ public static class RaceGhost
     /// <summary>Beyond this many metres the aircraft draws solid. TUNE, judged at the controls.</summary>
     public const float SolidBeyondM = 80f;
 
-    /// <summary>The share of an aircraft's pixels a full ghost keeps, through the 4x4 ordered dither.
-    /// TUNE, the user's look judgement in both presentations.</summary>
+    /// <summary>The share of an aircraft's pixels a full ghost keeps under the original graphics,
+    /// through the 4x4 ordered dither. TUNE, the user's look judgement.</summary>
     public const float GhostAlpha = 0.35f;
+
+    /// <summary>The same share under Enhanced, higher because the lit, shadowed airframe dithered
+    /// to <see cref="GhostAlpha"/> all but vanishes there. TUNE, the user's look judgement.</summary>
+    public const float EnhancedGhostAlpha = 0.55f;
 
     /// <summary>The instance shader parameter the stamp writes: x the owning pilot's first-person
     /// layer bit, w 1 while armed. Declared last in <c>csky_instance_uniforms.gdshaderinc</c>.</summary>
@@ -35,22 +40,20 @@ public static class RaceGhost
     internal const string FragmentLine =
         "    if (!csky_clutter_dither_keep(FRAGCOORD.xy, v_ghost_alpha)) { discard; }";
 
-    /// <summary>The vertex stage's one line: the instance's alpha for the drawing camera, flat per
-    /// mesh instance. ⚠ Keep the constants coming from this class. The suite measures
-    /// <see cref="Alpha"/>, and a literal typed into the shader alone would escape it.</summary>
-    internal static string VertexLine =>
-        "    v_ghost_alpha = csky_race_ghost_alpha(MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD, "
-        + "CAMERA_VISIBLE_LAYERS, csky_ghost, csky_photo_eye, "
-        + $"{Literal(GhostWithinM)}, {Literal(SolidBeyondM)}, {Literal(GhostAlpha)}, "
-        + $"{Literal(SceneBuilder.PhotoEyeReach)});";
+    /// <summary><see cref="VertexLineFor"/> under the current graphics mode, which is what the bias
+    /// shader generator writes.</summary>
+    internal static string VertexLine => VertexLineFor(GraphicsMode.Enhanced);
+
+    /// <summary>A full ghost's share of pixels under the given presentation.</summary>
+    public static float FloorAlpha(bool enhanced) => enhanced ? EnhancedGhostAlpha : GhostAlpha;
 
     /// <summary>The share of the aircraft drawn at <paramref name="distanceM"/> from a camera that
-    /// is not its own pilot's: <see cref="GhostAlpha"/> within <see cref="GhostWithinM"/>, 1 beyond
+    /// is not its own pilot's: <see cref="FloorAlpha"/> within <see cref="GhostWithinM"/>, 1 beyond
     /// <see cref="SolidBeyondM"/>, linear between. The shader's law, term for term.</summary>
-    public static float Alpha(float distanceM)
+    public static float Alpha(float distanceM, bool enhanced = false)
     {
         float t = Mathf.Clamp((distanceM - GhostWithinM) / (SolidBeyondM - GhostWithinM), 0f, 1f);
-        return Mathf.Lerp(GhostAlpha, 1f, t);
+        return Mathf.Lerp(FloorAlpha(enhanced), 1f, t);
     }
 
     /// <summary>Arms every mesh instance under <paramref name="model"/> as the aircraft of the pilot
@@ -74,6 +77,15 @@ public static class RaceGhost
 
         return stamped;
     }
+
+    /// <summary>The vertex stage's one line: the instance's alpha for the drawing camera, flat per
+    /// mesh instance. ⚠ Keep the constants coming from this class. The suite measures
+    /// <see cref="Alpha"/>, and a literal typed into the shader alone would escape it.</summary>
+    internal static string VertexLineFor(bool enhanced) =>
+        "    v_ghost_alpha = csky_race_ghost_alpha(MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD, "
+        + "CAMERA_VISIBLE_LAYERS, csky_ghost, csky_photo_eye, "
+        + $"{Literal(GhostWithinM)}, {Literal(SolidBeyondM)}, {Literal(FloorAlpha(enhanced))}, "
+        + $"{Literal(SceneBuilder.PhotoEyeReach)});";
 
     private static string Literal(float value) => value.ToString("0.0###", CultureInfo.InvariantCulture);
 }

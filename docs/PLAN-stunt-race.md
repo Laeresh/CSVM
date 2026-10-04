@@ -546,7 +546,7 @@ through the same on-screen tag and edge arrow the hostile marker uses, in the fr
 Enhanced's lit arm). `SceneBuilder.RaceGhostShader` (260, key bit 262144 at 1883) adds one vertex
 line and one fragment discard (2047) under a key bit of its own, set only on a race session's human
 airframe builder (`PlaneBuilder` `raceGhost`, the interior builder never), so every other build keeps
-its exact shader text. `Mech3/RaceGhost.cs` holds the law: alpha `GhostAlpha` 0.35 within
+its exact shader text. `Mech3/RaceGhost.cs` holds the law: alpha `GhostAlpha` 0.35 (`EnhancedGhostAlpha` 0.55 under Enhanced, the user's ruling: a 0.35 ghost all but vanishes there) within
 `GhostWithinM` 40 m, 1 beyond `SolidBeyondM` 80 m, linear between; the shader
 (`shaders/csky_race_ghost.gdshaderinc`) evaluates it per mesh instance from `CAMERA_POSITION_WORLD`,
 the drawing camera, and dithers through the clutter fade's ordered 4x4 keep in the opaque pass. A
@@ -572,7 +572,8 @@ loadout, no weapon gauge) and puts 0 rounds in the pool while the control fires;
 pilot is on no cycle yet labelled, while the control offers it on the Enemy cycle; the race build
 stamps 105 instances and compiles the ghost into 75 shaders (the shader's uniform list parses),
 the control stamps none and carries the ghost in none. Engine suite `race-ghost-fade`: alpha 0.35
-at 30 m, 0.675 at 60 m, 1 at 100 m, and the shader line carries the same constants.
+at 30 m, 0.675 at 60 m, 1 at 100 m (0.55 at 30 m under Enhanced), and each presentation's shader
+line carries the same constants.
 Mutation-checked, each red then restored: bodies left on the layer (race rams, 20+20 health lost),
 the race loadout bound (9 rounds), the cycle skip removed (enemy 1), the labels off, the stamp
 removed (0 instances), the law's denominator wrong (0.513 at 60 m), the shader's floor literal
@@ -583,7 +584,7 @@ awake)`. Captures of the ghost at about 30, 60 and 100 m in both presentations a
 user's eye. No pinned golden flies a race, and the ghost reaches no shader outside a race.
 Hand-flown: the 80/40 m band and the ghost's look in both presentations, at a two-seat sitting.
 
-**⚠ Traps.** The 80 m, 40 m and 0.35 floor are TUNE, judged at the controls; change them in
+**⚠ Traps.** The 80 m, 40 m and the 0.35 / 0.55 floors are TUNE, judged at the controls; change them in
 `RaceGhost` alone, never as literals in the shader. Ghosting must not change a non-race session's
 rendering, which is why it is a shader key bit and not a uniform branch in every aircraft shader.
 The owner test is a first-person layer bit, and that band is four layers wide

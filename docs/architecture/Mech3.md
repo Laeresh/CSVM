@@ -134,7 +134,7 @@ mounts `cockpit1` hidden at that offset under `InteriorScale` and that same tilt
 
 ## src/Mech3/RaceGhost.cs
 The race ghost: how solid another race pilot's aircraft draws at a camera distance (`Alpha`,
-`GhostWithinM`, `SolidBeyondM`, `GhostAlpha`, all TUNE), the vertex line that carries those constants
+`GhostWithinM`, `SolidBeyondM`, and a floor per presentation, `GhostAlpha` and `EnhancedGhostAlpha`, all TUNE), the vertex line that carries those constants
 into `csky_race_ghost.gdshaderinc`, and `Stamp`, the static per-instance `csky_ghost` write naming the
 owning pilot's first-person layer. The fade is measured in the shader from the drawing camera, so each
 splitscreen pane fades every other aircraft at its own distance in one shared scene; the owner's own
