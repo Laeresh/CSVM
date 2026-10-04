@@ -657,7 +657,7 @@ Stunt Flying's per-pilot run state: `Load` builds the ordered danger-zone list f
 ia.json `dzones` (marker positions, gate polygons, strings through `MissionTargets` and `Messages`,
 null where a mission authors none), `Update` requires both polygon-plane crossings in either order and records the gate a zone was left through,
 `CollectTargets` offers the still-unflown zones to that pilot's own target pool as objectives,
-`Elapsed` (from GO), `CompletedAt`, `CompletionOrder` and `InCompletionOrder` carry the clock and the splits, and `ReturnPose` is where a tapped respawn lands: on the zone's `dzpathN` ribbon abeam the exit of the zone cleared last, heading the way it was flown.
+`Elapsed` (from GO), `CompletedAt`, `CompletionOrder` and `InCompletionOrder` carry the clock and the splits, `RunStarted` (the clock's first tick) and `RunReset` feed a race, and `ReturnPose` is where a tapped respawn lands: on the zone's `dzpathN` ribbon abeam the exit of the zone cleared last, heading the way it was flown.
 `ForAnotherPlayer()` clones an independent run so the archives parse once per session. Engine-free
 apart from its logging. Read `TargetSelection` for how a pilot picks a zone, `StuntRunHud` for the
 rest of what a run draws, and `StuntScoreboard` for what it scores.
@@ -749,9 +749,10 @@ the zone apply (`Session/World/WeatherRig.cs`), the Shadow Quality level and a s
 
 ## src/Flight/Modes/StuntRunHud.cs
 The stunt run's own readouts, one per pane and sized through `HudMetrics.Scale`: the clock and
-zones-cleared status line, the one-shot intro banner, the zone-cleared flash, and the completion
-banner, which in a race becomes this pilot's placing and who they are still waiting on, and the
-start count's figure, large in the middle of the pane (`StartCount`). It draws no marker: a danger zone is an objective on the pilot's own cycle and `TargetHud` marks it like
+zones-cleared status line, in a race the live leaderboard on the line under it
+(`StuntRace.LeaderboardLine`: the window clock or FINAL RUN, place, the leader's best, the gap),
+the one-shot intro banner, the zone-cleared flash, the completion banner (in a race this run
+against the pilot's best), and the start count's figure, large in the middle of the pane (`StartCount`). It draws no marker: a danger zone is an objective on the pilot's own cycle and `TargetHud` marks it like
 every other one. What it reports is `StuntMission`'s.
 
 ## src/Flight/Modes/StuntCapture.cs
@@ -812,13 +813,14 @@ file instead; `stunt-scores-scripted` pins the choice.
 `CustomPlaneStore` is the same file-backed shape for a heavier record.
 
 ## src/Flight/Modes/StuntRace.cs
-Splitscreen stunt-race bookkeeping: one `Racer` per player over their own `StuntMission`, with
-finishing stamping the next placing, `RaceCompleted` firing once the last pilot is in, and
-`Standings()` ordering finishers by placing then in-flight players by progress. `Restart()` resets
-every mission and clears the placings, leaving the respawn to `GameSession`, which owns the
-planes. Membership is append-only apart from the internal `Remove`, which compensates an
-uncommitted roster build. Off-engine coverage: `CSVM.Tests/StuntRaceTests.cs`. Read
-`StuntRaceBoard` for what a finished race draws.
+The time-attack race's bookkeeping, engine-free and fed by events, never by a controller:
+`BeginOpening` and `Advance` drive the opening count, the window and the FINAL RUN stretch
+(`FinalRunCap` past time up), and `RunStarted`, `ZoneCleared`, `RunFinished` and `RunAbandoned`
+carry each pilot's runs, a network host's entry points as much as `Follow`'s local feed off a
+`StuntMission`. A `Racer` keeps its best completed run and the furthest run, each with splits by
+course index; `Standings()` ranks by best, then most zones and time to them. `MayStartRun` gates
+restarts, `BestImproved` records bests and `RaceCompleted` raises the board.
+Coverage: `CSVM.Tests/StuntRaceTests.cs`, suite `stunt-race-time-attack`. Read `StuntRaceBoard` next.
 
 ## src/Flight/Modes/MatchScores.cs
 What each network match scoring event is worth, engine-free: the nine `score_*` keys of

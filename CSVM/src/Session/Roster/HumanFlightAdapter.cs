@@ -466,28 +466,24 @@ internal sealed class HumanFlightAdapter
             var runHud = StuntRunHud.Build(run);
             runHud.Count = controller.StartCount;
             pilotHud.StuntRun = runHud;
-            // A solo run starts, and restarts, behind the count; the first one begins once Setup
-            // below has placed the spawn it walks to.
-            if (_human.Race == null && _human.SoloStartCount is { } count)
+            // A run starts, and restarts, behind the count; the first one begins once Setup below
+            // has placed the spawn it walks to.
+            if (_human.RestartCount is { } count)
             {
                 controller.RestartCount = count;
                 controller.Audio?.BindStartCount(_human.MenuSounds);
             }
+            var scoreKey = $"{_policy.Chapter}/{_policy.Mission}/{custom?.Name ?? planeName}";
             if (_human.Race is { } race)
             {
-                // Racing: no per-player splits board, the shared ranked board
-                // below covers the whole window when the last pilot is in. The run
-                // HUD shows this player's placing meanwhile.
-                race.Add(pi, controller.Stunt, planeDisplay);
+                // Racing: no per-player splits board. The race's shared board covers the whole
+                // window when it ends, in Instant Action too, and the run HUD carries the live
+                // leaderboard meanwhile. The race hears this run's own clock, zones and finish.
+                race.Add(pi, planeDisplay, scoreKey);
+                race.Follow(pi, run);
                 runHud.Race = race;
                 runHud.PlayerIndex = pi;
-                // ⚠ Instant Action keeps the placings and nothing else: its ending is the
-                // director's hold and wrap-up, which the pilot flies through, so the seat takes
-                // none of the race board's rules (the finish hold, R as a rematch).
-                if (!_human.InstantActionActive)
-                {
-                    controller.Race = race;
-                }
+                controller.Race = race;
             }
             else if (_human.InstantActionActive)
             {
@@ -496,10 +492,9 @@ internal sealed class HumanFlightAdapter
             }
             else if (_human.StuntBoard is { } stuntBoard)
             {
-                // Solo: the end-of-run scoreboard, per-zone splits + total +
-                // persisted best time, keyed chapter/mission/plane in
-                // user://stunt_scores.json (race totals are deliberately not recorded).
-                var scoreKey = $"{_policy.Chapter}/{_policy.Mission}/{custom?.Name ?? planeName}";
+                // Solo: the end-of-run scoreboard, per-zone splits + total + persisted best time,
+                // keyed chapter/mission/plane in user://stunt_scores.json, the key a race run
+                // records under too.
                 controller.Scoreboard = stuntBoard(controller.Stunt, planeDisplay,
                     $"{_policy.Chapter}   ·   {PlaneRoster.Humanize(_policy.Scenario)}",
                     scoreKey, controller.Rerun, capture);
@@ -576,8 +571,8 @@ internal sealed class HumanFlightAdapter
         controller.Setup(new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),
             remote ? null : rig.Camera, camParams, start.Pos, start.LookAt,
             start.ThrottleFrac, start.SpeedMps, cockpitCameraOffset: planeBuilder.CockpitCameraOffset);
-        if (controller.RestartCount is { } firstCount)
-            controller.BeginStartCount(firstCount); // a solo run's first start is a start like any other
+        if (controller.RestartCount != null && _human.FirstStartCount is { } firstCount)
+            controller.BeginStartCount(firstCount); // a run's first start is a start like any other
         // The Danger Zone eye, framed off the airframe's own chase distance and aimed at the pose
         // the controller draws, which is the controller node's own transform.
         if (!remote)

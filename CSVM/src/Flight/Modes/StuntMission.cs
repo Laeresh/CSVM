@@ -97,6 +97,7 @@ public sealed class StuntMission
     private readonly HashSet<StuntGate> _crossedGates = new();
     private Vector3 _lastPlanePos;
     private bool _haveLastPlanePos;
+    private bool _clockStarted;
 
     private StuntMission(List<StuntZone> zones) => _zones = zones;
 
@@ -105,6 +106,12 @@ public sealed class StuntMission
 
     /// <summary>Fired once when the last zone completes (stops the clock / shows the board).</summary>
     public event Action? RunCompleted;
+
+    /// <summary>Fired on the first <see cref="Tick"/> of a run, the step its clock starts.</summary>
+    public event Action? RunStarted;
+
+    /// <summary>Fired by <see cref="Reset"/>: the run so far is thrown away.</summary>
+    public event Action? RunReset;
 
     public bool AllComplete { get; private set; }
 
@@ -293,8 +300,14 @@ public sealed class StuntMission
     /// freeze, so the clock never stops (a deliberate rule). It stops only at completion.</summary>
     public void Tick(float dt)
     {
-        if (!AllComplete)
-            Elapsed += dt;
+        if (AllComplete)
+            return;
+        if (!_clockStarted)
+        {
+            _clockStarted = true;
+            RunStarted?.Invoke();
+        }
+        Elapsed += dt;
     }
 
     /// <summary>Appends this run's still-unflown zones as objective-flagged candidates, the feed
@@ -340,8 +353,10 @@ public sealed class StuntMission
         CompletedCount = 0;
         AllComplete = false;
         Elapsed = 0f;
+        _clockStarted = false;
         _crossedGates.Clear();
         _haveLastPlanePos = false;
+        RunReset?.Invoke();
     }
 
     /// <summary>Debug/testing only (--debug-scoreboard): instantly complete the whole run with

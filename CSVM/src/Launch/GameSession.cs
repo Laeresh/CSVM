@@ -55,6 +55,9 @@ public partial class GameSession : Node3D
     // subject still leaves something to orbit rather than spinning about the eye.
     private const float MinOrbitRadius = 1f;
 
+    // How long a race's opening count stands on READY before its 3, 2, 1. TUNE at the controls.
+    private const float RaceReadySeconds = 2f;
+
     // Everything this launch settled, parsed and resolved once (see SessionSpec), the command
     // line verbatim, or the launchscreen's pick (SessionSpec.FromMenu). Every consumer below reads
     // it and nothing re-derives a launch setting; the pristine command line stays on the Launcher.
@@ -1112,6 +1115,18 @@ public partial class GameSession : Node3D
         }
     }
 
+    // How long a seat's first count runs before GO, the window's opening; none opens it at once.
+    private static float OpeningSeconds(IReadOnlyList<StartCountPhase>? phases) =>
+        phases?.Sum(phase => phase.Seconds) ?? 0f;
+
+    // A race run that is its pilot's best so far records under the solo run's key, the same store
+    // and the same never-worsen rule. A pilot with no key records nothing.
+    private static void RecordRaceBest(ScoreStore store, Racer racer)
+    {
+        if (racer.ScoreKey.Length > 0 && racer.BestTime is { } best && store.RecordIfBest(racer.ScoreKey, best))
+            Log.Info("flight", $"stunt race: {racer.Tag} set a new best {StuntMission.FormatTime(best)} for '{racer.ScoreKey}'");
+    }
+
     // A campaign mission has ended and its result is banked (the director records the attempt and
     // saves the profile before raising this). The world stays up for the rest of the frame; the
     // Launcher frees this session and shows the menu at the debrief, which re-reads the profile
@@ -1872,7 +1887,7 @@ public partial class GameSession : Node3D
                 // fact, not a fault, so a plain line (log hygiene: no stack traces).
                 Log.Info("flight", $"--stunt: no danger zones for {_spec.Chapter}/{_spec.Mission}, flying free");
             else if (_rigs.Count > 1)
-                race = new StuntRace(); // splitscreen: a race, ranked on the shared board
+                race = new StuntRace(RaceWindowSeconds(), stuntZones.TotalCount); // splitscreen: a time attack
             if (stuntZones != null && iaStunt && !_spec.Stunt)
                 Log.Info("flight", $"ia: stunt_flying, {stuntZones.TotalCount} danger zone(s) from {_spec.Chapter}/{_spec.Mission}, the mission type's own objective");
         }
@@ -1906,14 +1921,16 @@ public partial class GameSession : Node3D
         // (docs/architecture.md, ## src/Session/Roster/StartGrid.cs).
         bool coopCampaign = _spec.CampaignProfile != null && _seatRigs.Count > 1;
         // ⚠ Choose the spawn placement ONCE, by picking an implementation here, never by a runtime
-        // flag inside one: a --det race stays byte-identical because StartGrid is then not built at
-        // all. It cannot move up beside new SpawnPicker, which runs before `race` is settled.
-        IFlightStarts flightStarts = coopCampaign || (race != null && !_spec.Det)
-            ? new StartGrid(_spawnPicker, GroundSampler())
+        // flag inside one. A --det race stays byte-identical because the shared start is not built.
+        // It cannot move up beside new SpawnPicker, which runs before `race` is settled.
+        IFlightStarts flightStarts = coopCampaign ? new StartGrid(_spawnPicker, GroundSampler())
+            : race != null && !_spec.Det ? new SharedSpawnStarts(_spawnPicker)
             : _spawnPicker;
-        // ⚠ No count under --det, the grid's rule: a scripted run and every pinned golden stay
-        // byte-identical because the count is then never begun. A race's counts are its own.
-        var soloStartCount = stuntZones != null && race == null && !_spec.Det ? StartCount.Restart : null;
+        // ⚠ No count under --det, the shared start's rule: a scripted run and every pinned golden
+        // stay byte-identical because no count is ever begun. A race opens on its own count.
+        var restartCount = stuntZones != null && !_spec.Det ? StartCount.Restart : null;
+        var firstCount = restartCount == null ? null
+            : race != null ? StartCount.Opening(RaceReadySeconds) : restartCount;
         var aircraftResources = new AircraftAssemblyResources
         {
             PlanesGamez = planesGamez,
@@ -1999,8 +2016,9 @@ public partial class GameSession : Node3D
             SpawnList = spawnList,
             SpawnBase = spawnBase,
             StuntZones = stuntZones,
-            SoloStartCount = soloStartCount,
-            MenuSounds = soloStartCount != null ? MenuSounds() : null,
+            RestartCount = restartCount,
+            FirstStartCount = firstCount,
+            MenuSounds = restartCount != null ? MenuSounds() : null,
             Race = race,
             VersusMatch = versus,
             Rigs = _seatRigs,
@@ -2044,21 +2062,21 @@ public partial class GameSession : Node3D
         // The weapon lab in flight, bound to player 1's held aircraft.
         _labs!.BuildWeaponLab(state, _rigs, weaponDefs);
 
-        // The race's shared results board, one ranked row per player over the whole window; R
-        // rematches every plane through the session. Instant Action keeps the race for the run
-        // HUD's placings alone and builds no board.
-        if (race != null && boards.BuildRaceBoard(race, instantAction: iaRt != null,
-                $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}", () => RestartRace(race)) != null)
+        // The board's Restart is Rerun's: a new window in place, or a rebuilt Instant Action
+        // mission. The seats' opening counts began in this same build, so the window opens on GO.
+        if (race != null)
         {
             _race = race;
+            var zoneNames = stuntZones!.Zones.Select(z => z.Description).ToList();
+            boards.BuildRaceBoard(race, zoneNames,
+                $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}", Rerun);
             foreach (var rig in _rigs)
                 if (rig.Controller != null)
-                    rig.Controller.RestartRace = () => RestartRace(race);
-            Log.Info("flight", $"stunt race: {_rigs.Count} pilots over {stuntZones!.TotalCount} danger zones, own progress + clock each, shared ranked board");
-        }
-        else if (race != null)
-        {
-            Log.Info("flight", $"stunt race: {_rigs.Count} pilots over {stuntZones!.TotalCount} danger zones, placings on each run HUD, no race board (the Instant Action wrap-up ends the run)");
+                    rig.Controller.RestartRace = Rerun;
+            var bests = ScoreStore.ForSession(_spec.ScoresPath, _spec.ScoresThrowaway);
+            race.BestImproved += racer => RecordRaceBest(bests, racer);
+            race.BeginOpening(OpeningSeconds(firstCount));
+            Log.Info("flight", $"stunt race: {_rigs.Count} pilots over {stuntZones.TotalCount} danger zones, a {StuntRace.FormatClock(race.WindowSeconds)} time attack, best run ranks");
         }
 
         // Dogfight (--vs): the match's scoring, respawn rotation and lives, fed by every rig's
@@ -2254,6 +2272,7 @@ public partial class GameSession : Node3D
         _iaDirector?.WireEndConditions(new InstantActionDirector.EndConditionInputs
         {
             StuntZones = stuntZones,
+            Race = race,
             Zeppelins = _zeppelins,
             Projectiles = _projectiles,
             WorldRoot = _worldRoot!,
@@ -2800,21 +2819,34 @@ public partial class GameSession : Node3D
             rig.Controller?.Rerun();
     }
 
-    // Rematch from the shared race board (R): every player's zones, clock and placing cleared, then
-    // every plane back to its own spawn. The session owns the planes, so the restart lands here
-    // rather than in the FlightController that read the button.
+    // A new window from the shared race board (R). Every pilot's runs are cleared, every plane goes
+    // back to the start, and every seat opens on the count again in one step. The session owns the
+    // planes, so the restart lands here rather than in the FlightController that read the button.
     private void RestartRace(StuntRace race)
     {
-        Log.Info("flight", $"stunt race: rematch, fresh clocks and zones for every pilot");
+        Log.Info("flight", $"stunt race: a new window, every pilot's runs cleared");
         race.Restart();
+        IReadOnlyList<StartCountPhase>? opening = null;
         foreach (var rig in _rigs)
         {
-            // The race owns every pilot's zones and clock, but each pane's own camera is the
-            // controller's, so the rematch clears the photographs seat by seat.
-            rig.Controller?.StuntShots?.Reset();
-            rig.Controller?.Respawn();
+            if (rig.Controller is not { } seat)
+                continue;
+            seat.Stunt?.Reset();
+            seat.StuntShots?.Reset();
+            seat.Respawn();
+            // ⚠ Only a seat that carries a restart count opens on one: under --det none does.
+            if (seat.RestartCount != null)
+            {
+                opening = StartCount.Opening(RaceReadySeconds);
+                seat.BeginStartCount(opening);
+            }
         }
+        race.BeginOpening(OpeningSeconds(opening));
     }
+
+    // The race window the launch asked for. A --debug-scoreboard race closes it at once: its
+    // staggered forced finishes then run as the final run, and the last wakes the board.
+    private float RaceWindowSeconds() => _spec.DebugScoreboard ? 0f : _spec.StuntRaceMinutes * 60f;
 
     // Frames the parked plane in the orbit view. ⚠ --lookat is a POINT and is used verbatim;
     // --direction is only an aim, so a pivot is synthesized on the ray. Either way the orbit still
@@ -3072,6 +3104,8 @@ public partial class GameSession : Node3D
         {
             foreach (var rig in session._seatRigs)
                 rig.Controller?.SimStep(dt);
+            // After every seat: a run started this step was started inside the window it saw.
+            session._race?.Advance(dt);
             session._wire.BroadcastAircraftState();
             session._wire.TraceStep();
         }

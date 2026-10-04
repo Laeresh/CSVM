@@ -78,8 +78,8 @@ public abstract partial class ResultsBoard : Control
     internal bool RowsShowCursor => _host?.View.ShowsCursor == true;
 
     /// <summary>Whether the run this board reported is still over. A live flag here (the match's
-    /// <c>Completed</c>, the race's <c>AllFinished</c>) makes a rerun retire the board from
-    /// <c>_Process</c>; a board nothing retires answers true and overrides
+    /// <c>Completed</c>, the race's <c>Ended</c>) lets a rerun retire the board from
+    /// <c>_Process</c>. A board nothing retires answers true and overrides
     /// <see cref="OnRestartChosen"/> instead.</summary>
     protected abstract bool StillEnded { get; }
 

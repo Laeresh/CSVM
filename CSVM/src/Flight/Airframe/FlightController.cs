@@ -271,13 +271,12 @@ public partial class FlightController : Node3D
     /// OnKill.</summary>
     public VersusHud? VersusHud;
 
-    /// <summary>The splitscreen stunt race this plane is one seat of, or null when
-    /// flying solo and in Instant Action, whose pilots fly on through the ending. Set, clearing every zone parks this player at the finish while the others fly
-    /// on, and R only becomes a rematch once the whole field is in, a rematch restarts every
-    /// player, so it goes through <see cref="RestartRace"/> rather than this plane alone.</summary>
+    /// <summary>The time-attack race this plane is one seat of, or null flying solo. Set, a
+    /// restart of this pilot's run is taken only while <see cref="StuntRace.MayStartRun"/>. Once
+    /// the race has ended, R is a new window for every pilot through <see cref="RestartRace"/>.</summary>
     public StuntRace? Race;
 
-    /// <summary>Restarts the whole race (the session owns every player's plane, so it does the
+    /// <summary>Opens a new race window (the session owns every player's plane, so it does the
     /// work). Invoked when a player presses R on the shared results board.</summary>
     public Action? RestartRace;
 
@@ -1330,9 +1329,11 @@ public partial class FlightController : Node3D
     /// <summary>Rerun this plane's own run: fresh clock and every zone incomplete, then the
     /// respawn below at the start, behind <see cref="RestartCount"/> where one is set. A plane with
     /// no stunt run is simply respawned. Every restart of a run comes through here: the solo
-    /// board's R, the session's restart and a held respawn.</summary>
+    /// board's R, the session's restart and a held respawn. A race refuses it outside its window.</summary>
     public void Rerun()
     {
+        if (Race is { MayStartRun: false })
+            return;
         Stunt?.Reset();
         StuntShots?.Reset();
         Respawn();
@@ -2113,7 +2114,7 @@ public partial class FlightController : Node3D
         if (Match is { Completed: true })
             return;
 
-        if (Race is { AllFinished: true } && Stunt is { AllComplete: true })
+        if (Race is { Ended: true })
             return;
 
         if (SoloBoardHolds)
@@ -3903,7 +3904,7 @@ public partial class FlightController : Node3D
                 RestartMatch?.Invoke();
             return;
         }
-        if (Race is { AllFinished: true } && Stunt is { AllComplete: true })
+        if (Race is { Ended: true })
         {
             bool autoRematch = _holdSegments != null && PlayerIndex == 0
                 && (_autoRestartIn -= delta) <= 0f;

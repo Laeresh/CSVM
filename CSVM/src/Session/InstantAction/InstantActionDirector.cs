@@ -589,6 +589,12 @@ public sealed class InstantActionDirector
             // Reported by Step off InstantActionWaves.Finished, the sequencer owns "every
             // configured wave is cleared" and nothing here re-derives it.
         }
+        else if (objective == InstantActionObjective.ZonesFlown && inputs.Race != null)
+        {
+            // A multi-seat run is a time attack: the race's window ends it on the race's own board,
+            // so no zone set wins the mission. It can still be lost.
+            Log.Info("core", $"ia: stunt_flying with {inputs.Race.Racers.Count} pilots is a time attack, the race's window ends it");
+        }
         else if (objective == InstantActionObjective.ZonesFlown && inputs.StuntZones != null)
         {
             // ⚠ All-finished, never first past the post, and evaluated only over pilots who can
@@ -647,9 +653,9 @@ public sealed class InstantActionDirector
             // human seat for splitscreen (ProjectilePool.ScoredShooters).
             inputs.Projectiles?.ScoredShooters.Add(pilot.PlayerIndex);
             pilot.AutoRespawnAfter = inputs.RespawnDelay; // crash cam, then back in, R skips
-            // A mission with lives counts them, so R is the crash cam's skip and nothing else: a
-            // respawn taken while flying would repair, restock and refuel for free.
-            pilot.AllowLiveRespawn = false;
+            // Lives make R the crash cam's skip alone; a live respawn would repair, restock and
+            // refuel for free. A race's pilot restarts at will instead, the time attack's rule.
+            pilot.AllowLiveRespawn = inputs.Race != null;
             pilot.Downed += (victim, _) =>
             {
                 // ⚠ Ahead of the ledger: the ending settled the result, so a hull lost inside the
@@ -818,6 +824,10 @@ public sealed class InstantActionDirector
     // predicate the session runs. A no-op on every other mission type.
     private void CheckZoneSets()
     {
+        if (_end?.Race != null)
+        {
+            return; // a time attack's window ends it, never a zone set
+        }
         var pilots = new List<(bool OutOfLives, bool Finished)>(_rigs!.Count);
         foreach (var rig in _rigs)
         {
@@ -924,6 +934,9 @@ public sealed class InstantActionDirector
     internal sealed class EndConditionInputs
     {
         public StuntMission? StuntZones;
+
+        // A multi-seat stunt run's time attack, which ends the run in place of the zone sets.
+        public StuntRace? Race;
         public ZeppelinRuntime? Zeppelins;
         public ProjectilePool? Projectiles;
         public Node3D WorldRoot = null!;

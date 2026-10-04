@@ -135,16 +135,14 @@ internal sealed class SessionBoards
         }
     }
 
-    /// <summary>The splitscreen race's shared results board, one ranked row per player over the
-    /// whole window. Null in Instant Action, which keeps the race for the run HUD's placings
-    /// alone and builds no board.</summary>
-    public StuntRaceBoard? BuildRaceBoard(StuntRace race, bool instantAction, string context,
+    /// <summary>The time-attack race's shared results board, one ranked row per pilot over the
+    /// whole window. Instant Action builds it too, since the race ends a multi-seat stunt run.
+    /// <paramref name="zoneNames"/> names the course's zones in course order.</summary>
+    public StuntRaceBoard BuildRaceBoard(StuntRace race, IReadOnlyList<string> zoneNames, string context,
         Action restart)
     {
-        var board = RaceBoardFor(race, instantAction, context, exitsToMenu: _in.MenuDriven,
+        var board = StuntRaceBoard.Build(race, zoneNames, context, exitsToMenu: _in.MenuDriven,
             _in.PauseState, InputFor);
-        if (board == null)
-            return null;
         board.Restart = restart;
         board.Exit = _in.Exit;
         // Player 1: a results board reads _inputFor(0), so its cursor is P1's whoever won.
@@ -231,14 +229,6 @@ internal sealed class SessionBoards
         foreach (var rig in _in.Rigs)
             InputFor(rig.Index).Prime();
     }
-
-    // The splitscreen stunt race's shared results board, or none in Instant Action. ⚠ Never build
-    // one there. It wakes on the last pilot's finish, which is also the mission's win. Its halt
-    // stops the clock the director's hold counts down on, so the wrap-up never comes. Internal so
-    // the instant-action-end suite builds the board the session builds.
-    internal static StuntRaceBoard? RaceBoardFor(StuntRace race, bool instantAction, string context,
-        bool exitsToMenu, PauseState pauseState, Func<int, MenuInput> inputFor) =>
-        instantAction ? null : StuntRaceBoard.Build(race, context, exitsToMenu, pauseState, inputFor);
 
     // The reader a board menu drives its cursor from, for a roster seat. The readers are this
     // machine's players in order, so the seat goes through its local player first: a guest's own

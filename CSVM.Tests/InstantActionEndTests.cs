@@ -183,8 +183,8 @@ public class InstantActionEndTests
         Assert.False(InstantActionRuntime.ZoneSetsFlown(new[] { (false, true), (false, false) }));
         Assert.True(InstantActionRuntime.ZoneSetsFlown(new[] { (false, true), (false, true) }));
 
-        // A pilot out of lives can never clear another gate: counting it would hold the mission
-        // open forever, which is exactly what StuntRace's own all-finished rule would do.
+        // A pilot out of lives can never clear another gate. Counting it would hold the mission
+        // open forever.
         Assert.True(InstantActionRuntime.ZoneSetsFlown(new[] { (false, true), (true, false) }));
 
         // Nobody left flying is a LOSS, decided by the lives ledger, never a win.

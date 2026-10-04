@@ -287,10 +287,10 @@ rows).
 - `src/Flight/Modes/StuntMission.cs`, Stunt Flying state: ia.json `dzones` → a danger-zone run with completion, clock and splits, one per pilot.
 - `src/Flight/Modes/StartCount.cs`, a run's start count, engine-free: the figures and their beats, GO, and the kinematic walk that ends on the spawn pose at GO.
 - `src/Flight/Modes/StuntSummary.cs`, one finished stunt run against its stored best, and its split table as flat text.
-- `src/Flight/Modes/StuntRunHud.cs`, the stunt run's readouts: clock and zones cleared, intro banner, cleared flash, completion or race placing; one per player.
+- `src/Flight/Modes/StuntRunHud.cs`, the stunt run's readouts: clock and zones cleared, a race's live leaderboard line, intro banner, cleared flash, completion; one per player.
 - `src/Flight/Modes/StuntCapture.cs`, the Danger Zone camera: one latched photograph per marker per run, written beside the saves with its sting.
 - `src/Flight/Modes/DangerZonePhotograph.cs`, the Danger Zone camera's own eye: the decoded pose ahead of the aircraft looking back, on a viewport sharing the pane's world.
-- `src/Flight/Modes/StuntRace.cs`, splitscreen stunt race bookkeeping: one `Racer` per player, finish placings, standings, rematch reset.
+- `src/Flight/Modes/StuntRace.cs`, the time-attack race's engine-free bookkeeping: window, final run, each pilot's best and furthest run, best-run standings.
 - `src/Flight/Modes/ScoreStore.cs`, stunt best-time persistence: `user://stunt_scores.json` keyed chapter/mission/plane, faster runs only; a scripted run's store is a throwaway.
 - `src/Flight/Modes/MatchScores.cs`, what each network match scoring event is worth: `player.zrd`'s nine `score_*` keys, each with the executable's fallback.
 - `src/Flight/Modes/VersusMatch.cs`, Dogfight deathmatch bookkeeping: one signed score plus kills and deaths per player, team totals in a team match, the host-fed clock, threshold and time-out completion, standings.
@@ -407,7 +407,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Screens/StuntScoreboard.cs`, end-of-run results overlay: a per-pane panel of per-zone splits, total, the persisted best time, and the run's photo strip.
 - `src/UI/Screens/StuntShotStrip.cs`, the run's Danger Zone photographs as a selectable grid in marker order, shared by the scoreboard and the wrap-up board.
 - `src/UI/Screens/StuntSplits.cs`, the stunt run's split table, shared by the scoreboard and the wrap-up board: per-zone rows, the total, and the best comparison.
-- `src/UI/Screens/StuntRaceBoard.cs`, the race's shared ranked results overlay, on its own full-window CanvasLayer above the splitscreen panes.
+- `src/UI/Screens/StuntRaceBoard.cs`, the race's shared results overlay, ranked by best run with each pilot's best-run splits, over the whole window.
 - `src/UI/Screens/VersusBoard.cs`, the Dogfight results overlay, one whole-window CanvasLayer above the splitscreen panes.
 - `src/UI/Screens/IaWrapupBoard.cs`, Instant Action's wrap-up board: outcome headline and the per-counter score rows, summed across every seat, with a stunt run's splits and photographs.
 - `src/UI/Screens/PauseBoard.cs`, the shared pause board and its Resume · Photo · Preferences · Restart · Exit menu, one whole-window CanvasLayer.
@@ -713,6 +713,7 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 - `src/Session/Roster/SpawnPicker.cs`, each player's flight spawn: the shared spawn-list index and the per-player point; also the plain `IFlightStarts`.
 - `src/Session/Roster/IFlightStarts.cs`, the spawn-placement seam: one call answering for the whole field, and the `FlightStart` pair every rig is placed from.
 - `src/Session/Roster/StartGrid.cs`, the abreast starting grid: every pilot fanned about one anchor spawn, the whole field lifted as one to clear terrain.
+- `src/Session/Roster/SharedSpawnStarts.cs`, a time-attack race's start: every pilot on player 1's one spawn point and start state.
 - `src/Session/Roster/SpectateHandoff.cs`, the shared pane handoff for a downed pilot whose teammates fly on: the wreck pinned, a spectator camera in the freed pane.
 - `src/Session/Roster/AirframeSwap.cs`, the three `CALLBACK` codes that hand the player a different airframe in mid mission, and the def and node each names.
 - `src/Session/Roster/GeneratorCycle.cs`, the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel, the credit.

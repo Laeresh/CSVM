@@ -113,7 +113,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B, the split screen race
 
-11. ☐ The split screen race becomes a time attack: window, opening count, best-run ranking, FINAL RUN, boards
+11. ☑ The split screen race becomes a time attack: window, opening count, best-run ranking, FINAL RUN, boards
 12. ☑ Race presence: no collisions, weapons off, ghosts when near
 13. ☑ The Instant Action time row for a multi-seat Stunt Flying run
 
@@ -357,7 +357,7 @@ the count and do not freeze the sim; (4) the instrument is a hand-flown sitting.
 
 # Wave B, the split screen race
 
-## B11 ☐ The split screen race becomes a time attack: window, opening count, best-run ranking, FINAL RUN, boards
+## B11 ☑ The split screen race becomes a time attack: window, opening count, best-run ranking, FINAL RUN, boards
 
 **Goal.** A multi-seat Stunt Flying run is a time attack: the shared opening count, a window of the
 chosen length, per-pilot restarts through A1/A2, best-run ranking, a compact live leaderboard and
@@ -374,19 +374,126 @@ finishing order and `Standings()` already orders unfinished pilots by zones then
 (`StuntRace.cs:118-131, 148-150`); R on the board restarts the race (`StuntRace.cs:101-113`,
 `GameSession.cs:2775-2786`).
 
-**Approach.** Rework `StuntRace` into the window's bookkeeping: per pilot a best run (time and
-splits), the current run, a run count, and the window clock with its FINAL RUN stretch. Retire
-`StartGrid` from the race path (co-op keeps it). <TODO: the live leaderboard's HUD placement and
-the held scoreboard key's binding in a stunt race>. Bests record per Decision 10b.
+**Approach.** *The bookkeeping (traced-to-code for the build, lead-only for the rules).*
+`Flight/Modes/StuntRace.cs` is engine-free and fed by events, never by a controller:
+`BeginOpening(seconds)`, `Advance(dt)`, `RunStarted(index)`, `ZoneCleared(index, zone, runTime)`,
+`RunFinished(index, runTime)`, `RunAbandoned(index)` and `Restart()`. Its `Phase` runs Opening,
+Open, FinalRun, Ended; `MayStartRun` is true in Open alone. A `Racer` keeps its best completed run
+(`BestTime`, splits by course index), its furthest run (`MostZones`, `TimeToMostZones`, splits),
+`InRun`, `RunsStarted`, `RunsFinished`, `Callsign` (the player tag in split screen) and `ScoreKey`.
+`Standings()` is Decision 9's order: best time, then most zones, then time to them, then player
+order. A completion with no counted run, a zone or finish after the end, and a start outside Open
+count nothing. The window clock accumulates in a double, so a five-minute window ends on its step.
+`Follow(index, run)` is the local feed: `StuntMission` gained `RunStarted` (its clock's first
+`Tick`, `StuntMission.cs:308`) and `RunReset` (`:359`) beside `ZoneCompleted` and `RunCompleted`.
+*For C22 (lead-only).* The host calls the same entry points from owner reports (run started, zone
+split, run finished, run thrown away) and `Advance` on its own clock; a guest's leaderboard and
+board read a `StuntRace` the host's messages feed. `Callsign` takes the network seat's name.
+*The opening count and the window (traced-to-code).* `HumanRosterBindings.RestartCount`
+(`StartCount.Restart`) and `FirstStartCount` (`StartCount.Opening(RaceReadySeconds)` in a race,
+`Restart` solo) replace the solo-only field (`GameSession.cs:1931-1933`, `GameSession.cs:59`);
+every seat begins its first count in `BuildPlayers` (`HumanFlightAdapter.cs:559`) and
+`GameSession` calls `race.BeginOpening` with the same count's length in the same build
+(`GameSession.cs:2075`). `StepHumanAircraft` advances the race after every seat
+(`GameSession.cs:3102`), so the window opens on the seats' GO step and the step after it reads one
+step on the window and on every run clock. A restart's own 3, 2, 1 is A2's `Rerun` path.
+`RestartRace` (`GameSession.cs:2819`) resets every run and spawn and opens again on every seat.
+*Restarts and FINAL RUN (traced-to-code; a small API addition in `Rerun` only).*
+`FlightController.Rerun` returns without acting while `Race is { MayStartRun: false }`
+(`FlightController.cs:1330`): no restart during the opening count, after time up or after the end.
+A restart whose count straddles time up has its run start refused by the race, so that run never
+counts, and the pane reads TIME UP. A run in progress at time up may finish inside
+`StuntRace.FinalRunCap` (120 s); the race ends at the cap or as soon as no run is in progress, and
+`RaceCompleted` wakes `StuntRaceBoard`, which halts the sim (`SimStep` and `PollResultsShortcuts`
+read `Race.Ended`, `FlightController.cs:2112, 3900`).
+*The board (traced-to-code, the look is the user's).* `UI/Screens/StuntRaceBoard.cs`: placing,
+callsign, aircraft, best, gap to the winner and runs (completed/started); a pilot with no
+completed run shows their furthest run's zones and the time to them; under it the best-run splits,
+a row per zone in course order and a column per pilot. Its Restart is `GameSession.Rerun`: a new
+window in place, or in Instant Action a rebuilt mission that opens on its own count. Its Exit row
+is the standard "Exit to Menu", which `Launcher.ExitSession` (`Launcher.cs:3087`) takes back to the
+screen the flight launched from, the Instant Action screen for a menu launch; whether it should
+read "Back" is a look call.
+*Instant Action (traced-to-code, lead-only for the choice).* A multi-seat Stunt Flying run from
+the Instant Action screen is this race (B13's row sets its window). `EndConditionInputs.Race`
+makes the director wire no zone-set win (`InstantActionDirector.cs:592`, `:827`), so the race's
+board ends the run, and it leaves a race seat's live respawn on (`:658`): Decision 1's restart at
+will. Lives still count a crash, and a race whose every pilot runs out of lives still loses the
+mission onto the wrap-up.
+*The start (traced-to-code).* `Session/Roster/SharedSpawnStarts.cs` puts every pilot on player 1's
+spawn and start state (`GameSession.cs:1927`); co-op keeps `StartGrid`. It relies on B12's
+no-collision rule.
+*The live leaderboard's placement (traced-to-code for the geometry, TUNE for the look).* The line
+under the run-status line, top centre (`StuntRunHud.cs:97`, `RefRaceLineGap` 8 at `:32`):
+`StuntRace.LeaderboardLine` reads `TIME 4:12   2nd/2   LEADER P1 0:45.2   +1.3`, FINAL RUN and
+its countdown in place of TIME after time up, `NO TIME` for a pilot with no completed run, the
+leader's own gap being its lead over second. The band is clear: the compass tape ends at 75 of
+1440 (`CompassTape.cs:15`), the status line stands at 100 (`StuntRunHud.cs:31`) in the Readout
+rung, 8 of 600 frame units, 19.2 at 1440 (`ChromeType.cs:24`), so this line's bottom is near 154;
+the message slots start a fifth of the pane down (`HudMessages.cs:111, 316`), 288 full screen.
+In a 2P stacked or 3P/4P grid pane the HUD scale is damped by the square root of the pane share,
+so the line ends near 0.076 of the window height against slot 0's 0.1; side by side matches full
+screen. The banners stand at 0.26 and 0.34 of the pane and the count at 0.5 (`StuntRunHud.cs:105,
+111, 127`), the gauges at the bottom corners (`GaugeCluster.cs:490`), and in a race pane B12
+builds no weapon gauges at all. The zone marker is `TargetHud`'s and can pass anywhere, as it
+already does behind the status line. A 50-character line at the damped Readout size spans about
+a quarter of a 4P pane's width.
+*The held scoreboard key (premise disproven, traced-to-code).* No scoreboard key exists in
+Dogfight or anywhere in flight: `InputAction` has no scores member (`Bindings/InputAction.cs`), and
+`docs/org/multiplayer-messages.md` says the remake binds none. The original's own is Display
+Scores (Multiplayer Only), command `0x23`, default `Tab` (`docs/org/input.md`, its table).
+⚠ Not built: the full table on a held key needs an appended `InputAction` (default `Tab` per the
+original), both controls screens and a pad binding, a decision for the user that Dogfight would
+share. The compact line and the end board carry the race meanwhile.
+*Bests, Decision 10b (traced-to-code).* `ScoreStore` is one file per machine keyed
+`chapter/mission/plane` with no profile or seat dimension (`ScoreStore.cs:38, 57`). Each racer
+carries the solo key for its own aircraft (`HumanFlightAdapter.cs:463`), and `BestImproved` records
+it through `GameSession.RecordRaceBest` (`GameSession.cs:1124`) into the session's store, a
+throwaway under `--det`, a scripted run or `--debug-scoreboard`. Two seats on one aircraft share
+that key's best, as two players on one machine always have; no seat is skipped.
+*`--det` (traced-to-code).* Under `--det` no seat carries a count, `BeginOpening(0)` opens the
+window at once and the plain `SpawnPicker` places the field. No pinned golden flies a race (the
+manifest has no `--stunt` with `--players`), so every hash holds. `--debug-scoreboard` builds a
+zero window, so its staggered forced finishes run as the final run and the last wakes the board.
 
-**Model recommendation.** <TODO>
+**Model recommendation.** Opus for the race bookkeeping and the session wiring (the step order
+between the seats and the window, the Instant Action ending's hand-over, the refusal in `Rerun`);
+a mid-tier model for the board and the HUD text once the rules hold. The look is the user's.
 
-**Verify.** <TODO: units for the ranking (finishers by best, non-finishers by zones then time), the
-FINAL RUN cap and the no-start-after-time-up rule; an engine suite flying two scripted seats through
-a short window with one restart each>. Hand-flown: a two-seat split screen sitting for the count
-and the restarts.
+**Verify.** Built: `CSVM.Tests/StuntRaceTests.cs` (13): the window opens on step 300 of a 5 s
+opening and reads one step after it; finishers rank by best, not finish order; pilots with none
+rank by most zones in any run, then time to them, an earlier run's furthest counting; a restart
+keeps the best and only a faster run replaces it, splits and all; no run starts in the opening or
+after time up; a run in progress at time up finishes inside the cap and counts, and ends the race;
+one still going at the cap does not count; time up with nobody running ends at once; `Restart`;
+the leaderboard line; `Follow` off a run's clock, zones, finish and reset; the formats. Engine
+suite `stunt-race-time-attack` (`Testing/StuntRaceSuites.cs`, weighted): two seats built through
+the session's roster over C1/IA1 race a 20 s window; their opening counts hand over together on
+step 300 with the window opening on that step and both clocks and the window one step on after it;
+P1's held restart runs its own count while P2 flies on, keeps its first best until a faster run
+replaces it with that run's splits; P2 restarts late, is in a run at time up and finishes it as the
+final run, faster than P1; P1's hold in the final run is refused; the race ends on P2's finish
+with the board up, the sim halted, the rows ranking P2 then P1 and each pilot's best-run splits.
+Mutation-checked, each red and restored: finishers ranked slowest first (unit and suite),
+non-finishers by the slower time (unit), a slower run replacing the best (unit), the cap doubled
+(unit), runs allowed in the final run (unit and suite), the window opening a step early (unit and
+suite), `Rerun` ignoring the race (suite), a reset not abandoning the run (unit), the run clock
+not reporting its start (unit and suite). Captures (temporary manifest entries through the golden
+stage, manifest restored byte-identical): the window line, the final run and the end board.
+Hand-flown: a two-seat split screen sitting for the opening count, the restarts, the final run
+and the board; the leaderboard line's place and wording; whether the Exit row should read Back.
 
-**⚠ Traps.** <TODO>
+**⚠ Traps.** Do not let the race read a controller or a run in its ranking or window: C22 feeds it
+from the wire, and `Follow` is the only local wiring. The window opens on the seats' GO step only
+because `BeginOpening` is called in the same build as the counts and `Advance` runs after every
+seat in `StepHumanAircraft`; moving either breaks the lockstep, which the unit and the suite catch.
+`Rerun`'s refusal is the one place a seat reads the window. The shared spawn needs B12's
+no-collision rule; without it the field rams at GO. A multi-seat Instant Action stunt run no longer
+ends on the zone sets, so `InstantActionRuntime.ZoneSetsFlown` decides a solo run alone. A race
+seat in Instant Action may restart in flight, a free repair the solo run refuses; with weapons off
+(B12) it restores nothing a race uses.
+
+**Verified.** <pending orchestrator run>
 
 ## B12 ☑ Race presence: no collisions, weapons off, ghosts when near
 

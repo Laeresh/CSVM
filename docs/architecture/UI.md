@@ -493,13 +493,14 @@ flat text for the Original wrap-up page. A single flag keeps the two boards' shi
 since the scoreboard rules off its total and the wrap-up board runs the table straight into it.
 
 ## src/UI/Screens/StuntRaceBoard.cs
-The race's shared ranked results overlay on `ResultsBoard`'s shell: one row per player from
-`StuntRace.Standings()` with placing, tag, plane, zones, total and gap to the winner, and a DNF
-row for an unfinished run. Whole-window rather than per-pane, since a race ends for everybody at
-once. Wakes on `RaceCompleted` and retires once `AllFinished` clears, so the rematch is reachable
-without going through the menu. No Instant Action run builds one (`Launch/SessionBoards.cs`, `RaceBoardFor`):
-there the last finish is the mission's win, and the director's hold and wrap-up end the run.
-`StuntScoreboard` is the single-pilot form of the same table.
+The time-attack race's shared results overlay on `ResultsBoard`'s shell: one row per pilot from
+`StuntRace.Standings()` with placing, callsign, plane, best time, gap to the winner and runs, a
+pilot with no completed run showing their furthest run's zones and time to them, then each
+pilot's best-run splits, a row per zone in course order. Whole-window, since a race ends for
+everybody at once, and built in Instant Action too, where the race rather than the mission ends a
+multi-seat run. Wakes on `RaceCompleted` and retires once `Ended` clears, so a new window is
+reachable without the menu; `Rows` is the ranked text the suite reads. `StuntScoreboard` is the
+single-pilot form.
 
 ## src/UI/Screens/VersusBoard.cs
 The whole-window Dogfight results overlay on `ResultsBoard`'s shell: the winner in their own
