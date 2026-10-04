@@ -28,7 +28,7 @@ Names only, deliberately: a gloss here would be a second description of the same
 exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One flag, one description.
 
 **Modes and content, what gets built**
-`--viewer` · `--fly` · `--stunt` · `--vs` · `--vs-kills` · `--vs-time` · `--vs-lives` · `--vs-no-respawn` · `--ctf` · `--zvz` · `--coop` · `--freecam` · `--anim-lab` · `--menu` · `--skip-intro` · `--intro` · `--chapter` · `--stage` · `--node` · `--plane` · `--players` · `--mission` · `--scenario` · `--ia` · `--campaign` · `--profiles` · `--scores` · `--play-anim` · `--movie` · `--presentation` · `--force-builtin`
+`--viewer` · `--fly` · `--stunt` · `--vs` · `--vs-kills` · `--vs-time` · `--vs-lives` · `--vs-no-respawn` · `--vs-bots` · `--vs-bot` · `--ctf` · `--zvz` · `--coop` · `--freecam` · `--anim-lab` · `--menu` · `--skip-intro` · `--intro` · `--chapter` · `--stage` · `--node` · `--plane` · `--players` · `--mission` · `--scenario` · `--ia` · `--campaign` · `--profiles` · `--scores` · `--play-anim` · `--movie` · `--presentation` · `--force-builtin`
 
 **Multiplayer, the wire a match flies over**
 `--net-host` · `--net-join` · `--net-shape` · `--net-port-base` · `--master-server`
@@ -95,7 +95,7 @@ the shared selection (`--debug-select`), the node lab (`--debug-nodelab`), the w
 **Written exceptions to "one flag, one bullet":** `--spawn-dir` shares `--spawn-at`'s bullet, since
 the pair is one mechanism, so `Grep` the partner's name to find it; `--debug-nodelab` and
 `--debug-damage` each carry a short opener bullet plus the full behaviour under their lab's own
-section further down. The counts reconcile as **159 index entries, 159 parser flags and 160 bullet
+section further down. The counts reconcile as **161 index entries, 161 parser flags and 162 bullet
 lines**.
 
 ## Flags
@@ -182,6 +182,16 @@ lines**.
 - `--vs-no-respawn` (with `--vs`, a downed pilot stays on the crash camera until it presses the
   respawn key itself, rather than coming back on the timer. The Multiplayer Lobby's Auto Respawn box
   unchecked is the same rule, and spelling this flag out beats the box)
+- `--vs-bots=N` (with `--vs` and `--net-host`, seat N bots after the guests, each on the host's own
+  plane, veteran, on no team and called `Bot <n>` by its place among the bots. The host flies them
+  and its roster carries them, so a guest passes no flag; one passed there, or in a local match, is
+  ignored with a warning. A field past 16 seats is cut with a warning, and guests that fill it leave
+  the last bots out. `--vs-bot=` entries take the first places)
+- `--vs-bot=<plane>[:skill=<tier>][:team=<n>][:name=<callsign>][,...]` (with `--vs` and
+  `--net-host`, one bot per entry, seated ahead of `--vs-bots=`'s. `<plane>` is a stock node such as
+  `player_fury`, empty for the host's plane; `skill=` takes `--difficulty=`'s words or 0-2, default
+  veteran; `team=` a lobby team 0-16, the command line's own pilots flying on 0; `name=` the
+  callsign. A part it cannot read keeps its default with a warning, and the last flag wins)
 - `--ctf`, `--ctf=home` (with `--vs` over the wire, fly the match as Capture the Flag: each lobby
   team's `cs_flag_n` flag is live, taken, carried, dropped and brought home, the host deciding and
   scoring. Pair with `--mission=MP2`, the one mission that lays the flags out. `home` adds the host's

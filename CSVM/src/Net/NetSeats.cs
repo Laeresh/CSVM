@@ -105,6 +105,30 @@ public static class NetSeats
         RequireHostBots(roster, first!);
     }
 
+    /// <summary>Appends <paramref name="bots"/> to a host's roster as bot seats of
+    /// <paramref name="hostPeer"/>, numbered on from the seats already in it. A bot past
+    /// <see cref="MaxPlayers"/> is not seated, so a guest always outranks a bot. Answers how many
+    /// were left out.</summary>
+    public static int AddBots(List<NetSeat> roster,
+        int hostPeer, IEnumerable<(string Plane, NetBotSkill Skill, int Team, string Callsign)> bots)
+    {
+        ArgumentNullException.ThrowIfNull(roster);
+        ArgumentNullException.ThrowIfNull(bots);
+        int left = 0;
+        foreach (var bot in bots)
+        {
+            if (roster.Count >= MaxPlayers)
+            {
+                left++;
+                continue;
+            }
+
+            roster.Add(Bot(hostPeer, roster.Count, bot.Callsign, bot.Plane, bot.Skill, bot.Team));
+        }
+
+        return left;
+    }
+
     /// <summary>A bot seat at <paramref name="seatIndex"/>, owned and flown by the host whose peer
     /// is <paramref name="hostPeer"/>. It has no pane and no menu pick. Its loadout and build reach
     /// the session by seat, as a guest's do. <paramref name="team"/> is a lobby team number.

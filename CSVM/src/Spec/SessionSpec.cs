@@ -81,6 +81,11 @@ public enum EnhancedPasses
 public readonly record struct AiPlaneEntry(string Plane, string? Net = null, int? Accent = null,
     string? Def = null, int? Team = null, int Count = 1, Vector3? Pos = null);
 
+/// <summary>One bot seat a scripted network host adds (<c>--vs-bot=</c>, <c>--vs-bots=</c>).
+/// <c>Plane</c> is a stock airframe node, or null for the host's own plane. <c>Team</c> is a lobby
+/// team number, 0 for none.</summary>
+public readonly record struct VsBotEntry(string? Plane, Net.NetBotSkill Skill, int Team, string Callsign);
+
 /// <summary>One <c>--zep=</c> request: the zeppelin record to graft onto the empty stage, and the
 /// two overrides the stage needs. <c>Team</c> reaches the hull as the borrowed def's own team id,
 /// so it arrives through <c>ZeppelinRuntime.AuthoredTeam</c> rather than as a stamp on the part
@@ -198,6 +203,11 @@ public sealed record SessionSpec
     public bool VsAutoRespawn { get; private set; } = true;
     /// <summary>Resolved. <c>--vs-no-respawn</c> was spelled out, so the flag beats a lobby's box.</summary>
     public bool VsAutoRespawnExplicit { get; private set; }
+    /// <summary><b>Resolved.</b> The <c>--vs-bot=</c> entries, then <c>--vs-bots=N</c>'s defaults:
+    /// the bot seats a <c>--net-host</c> Dogfight seats after its guests. Empty without
+    /// <see cref="Versus"/>, on a guest and in a local match, and cut to the seats
+    /// <see cref="Players"/> leaves.</summary>
+    public IReadOnlyList<VsBotEntry> VsBots { get; private set; } = Array.Empty<VsBotEntry>();
     /// <summary><c>--ctf</c>: a network Dogfight flown as Capture the Flag, the mission's
     /// <c>cs_flag_n</c> flags live for its lobby teams. Resolved false without <see cref="Versus"/>.
     /// </summary>
@@ -1110,6 +1120,9 @@ public sealed record SessionSpec
 
         // Split after the loop, so a bare port falls back to --net-port-base in either order.
         string? netHost = null;
+        // The two bot flags, joined after the loop so their order on the line does not matter.
+        var botEntries = new List<VsBotEntry>();
+        int botCount = 0;
 
         void Deprecate(string old, string replacement)
         {
@@ -1155,6 +1168,8 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--vs-time=")) { s.VsTimeMinutes = int.Parse(arg["--vs-time=".Length..]); s.VsTimeExplicit = true; }
             else if (arg.StartsWith("--vs-lives=")) { s.VsLives = Math.Max(0, int.Parse(arg["--vs-lives=".Length..])); s.VsLivesExplicit = true; }
             else if (arg == "--vs-no-respawn") { s.VsAutoRespawn = false; s.VsAutoRespawnExplicit = true; }
+            else if (arg.StartsWith("--vs-bots=")) { botCount = ParseBotCount(arg["--vs-bots=".Length..], notes); }
+            else if (arg.StartsWith("--vs-bot=")) { botEntries = ParseBots(arg["--vs-bot=".Length..], notes); }
             else if (arg == "--ctf") { s.CaptureTheFlag = true; }
             else if (arg == "--ctf=home") { s.CaptureTheFlag = true; s.FlagHomeToCapture = true; }
             else if (arg == "--zvz") { s.ZeppelinVsZeppelin = true; }
@@ -1772,6 +1787,7 @@ public sealed record SessionSpec
             notes.Add(new Note("core", "--net-shape does nothing without --net-join or --net-host, ignoring it"));
         }
 
+        s.VsBots = BotField(botEntries, botCount);
         s._notes = notes;
         s.Deprecated = deprecated;
         s.LogSpecs = logSpecs;
@@ -1779,6 +1795,11 @@ public sealed record SessionSpec
         s.Resolve();
         return s;
     }
+
+    /// <summary>The callsign the <paramref name="ordinal"/>th bot of a command line takes when its
+    /// entry names none, counted from 1 over the whole field of bots.</summary>
+    public static string BotCallsign(int ordinal) =>
+        "Bot " + ordinal.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>Splits a <see cref="NetJoin"/> value into the address and the port to join. A
     /// value naming no port takes <paramref name="defaultPort"/>, the launcher's
@@ -2497,9 +2518,10 @@ public sealed record SessionSpec
             Print($"--players={Players} needs flight (nothing to fly in --viewer); using 1");
             Players = 1;
         }
+        ResolveBots();
         // The menu refuses to start a Dogfight below 2 joined pilots; the CLI has no join flow to
         // gate on, so it only warns and runs with whatever --players= asked for.
-        if (Versus && Players < 2)
+        if (Versus && Players + VsBots.Count < 2)
         {
             Warn("core", $"--vs with --players={Players} needs at least 2 pilots to fight (the menu enforces this; the CLI only warns)");
         }
@@ -2529,6 +2551,35 @@ public sealed record SessionSpec
         }
 
         ResolvePlacement();
+    }
+
+    // The bot flags' scope, each refusal named and the flags dropped, as --ctf's is. A bot is a seat
+    // the host's roster carries, so a guest never seats one, and a local match has no seat roster.
+    // The field is cut to the seats this machine's own pilots leave; guests can cut it again.
+    private void ResolveBots()
+    {
+        if (VsBots.Count == 0)
+        {
+            return;
+        }
+
+        string? refusal = !Versus ? "a Dogfight seats bots; ignoring them without --vs"
+            : NetJoin != null ? "a guest flies the host's roster, whose bots the host seats; ignoring them"
+            : NetHostPort == null ? "a local match seats no bots, only a --net-host match does; ignoring them"
+            : null;
+        if (refusal != null)
+        {
+            Warn("core", $"--vs-bot/--vs-bots: {refusal}");
+            VsBots = Array.Empty<VsBotEntry>();
+            return;
+        }
+
+        int room = Net.NetSeats.MaxPlayers - Players;
+        if (VsBots.Count > room)
+        {
+            Warn("core", $"--vs-bot/--vs-bots: {VsBots.Count} bots and {Players} pilot(s) here pass the {Net.NetSeats.MaxPlayers}-seat field; seating the first {room}");
+            VsBots = VsBots.Take(room).ToArray();
+        }
     }
 
     // Routes `--pos`/`--direction` onto the per-mode plumbing (docs/cli.md "the placement pair"):
@@ -2618,6 +2669,84 @@ public sealed record SessionSpec
             Warn("world", $"--mips='{value}' is neither 'authored' nor 'generated', "
                           + $"keeping {Mips.ToString().ToLowerInvariant()}");
         }
+    }
+
+    // --vs-bots=N's count. A word that is no count, or a negative one, adds none and says so.
+    private static int ParseBotCount(string value, List<Note> notes)
+    {
+        if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int count) && count >= 0)
+        {
+            return count;
+        }
+
+        notes.Add(new Note("core", $"--vs-bots: '{value}' is not a count of bots, adding none"));
+        return 0;
+    }
+
+    // --vs-bot='s comma list, each entry <plane>[:skill=<tier>][:team=<n>][:name=<callsign>]. A part
+    // this cannot read keeps its default and is named, the rule --difficulty= follows: a typo must
+    // not quietly change who the bot is. The callsign is filled in once the whole field is known.
+    private static List<VsBotEntry> ParseBots(string value, List<Note> notes)
+    {
+        var bots = new List<VsBotEntry>();
+        foreach (var token in value.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var segments = token.Split(':');
+            string? plane = segments[0].Trim() is { Length: > 0 } named ? named : null;
+            if (plane != null && Flight.Hangar.StockAirframes.IdOf(plane) == null)
+            {
+                notes.Add(new Note("core", $"--vs-bot: '{plane}' is no stock airframe node, the bot flies the host's own plane"));
+                plane = null;
+            }
+
+            var skill = Net.NetBotSkill.Veteran;
+            int team = 0;
+            string callsign = "";
+            for (int si = 1; si < segments.Length; si++)
+            {
+                string part = segments[si];
+                if (part.StartsWith("skill=", StringComparison.Ordinal))
+                {
+                    if (Flight.Hangar.Difficulty.Parse(part["skill=".Length..]) is { } tier)
+                        skill = (Net.NetBotSkill)tier;
+                    else
+                        notes.Add(new Note("core", $"--vs-bot: '{part}' is not novice, veteran or ace, the bot flies veteran"));
+                }
+                else if (part.StartsWith("team=", StringComparison.Ordinal))
+                {
+                    if (int.TryParse(part["team=".Length..], NumberStyles.Integer, CultureInfo.InvariantCulture, out int n)
+                        && n >= 0 && n <= Net.NetTeamBook.MaxTeams)
+                        team = n;
+                    else
+                        notes.Add(new Note("core", $"--vs-bot: '{part}' is no lobby team from 0 to {Net.NetTeamBook.MaxTeams}, the bot flies on none"));
+                }
+                else if (part.StartsWith("name=", StringComparison.Ordinal))
+                {
+                    callsign = part["name=".Length..].Trim();
+                }
+                else if (part.Length > 0)
+                {
+                    notes.Add(new Note("core", $"--vs-bot: '{part}' is not skill=, team= or name=, ignoring it"));
+                }
+            }
+
+            bots.Add(new VsBotEntry(plane, skill, team, callsign));
+        }
+
+        return bots;
+    }
+
+    // The named entries, then the count's defaults, every unnamed bot called by its ordinal.
+    private static VsBotEntry[] BotField(List<VsBotEntry> entries, int count)
+    {
+        var field = new VsBotEntry[entries.Count + count];
+        for (int i = 0; i < field.Length; i++)
+        {
+            var entry = i < entries.Count ? entries[i] : new VsBotEntry(null, Net.NetBotSkill.Veteran, 0, "");
+            field[i] = entry.Callsign.Length > 0 ? entry : entry with { Callsign = BotCallsign(i + 1) };
+        }
+
+        return field;
     }
 
     private void Warn(string category, string message) => _notes.Add(new Note(category, message));

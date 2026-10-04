@@ -2863,8 +2863,18 @@ public partial class Launcher : Node3D
             });
         }
 
+        // The command line's bots, after every guest, each on the host's own plane unless it names
+        // one. The roster carries them to every guest, which seats none of its own.
+        int left = Net.NetSeats.AddBots(seats, _netWire.LocalPeer, System.Linq.Enumerable.Select(
+            _spec.VsBots, bot => (bot.Plane ?? _spec.PlaneName, bot.Skill, bot.Team, bot.Callsign)));
+        if (left > 0)
+        {
+            Log.Warn("core", $"net: {left.ToString(System.Globalization.CultureInfo.InvariantCulture)} bot(s) left out, the guests filled the {Net.NetSeats.MaxPlayers.ToString(System.Globalization.CultureInfo.InvariantCulture)}-seat field");
+        }
+
         Net.NetSeats.Validate(seats, _netWire.LocalPeer);
         _netRoster = seats.ToArray();
+        Log.Info("core", $"net: host roster of {seats.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)} seat(s), {System.Linq.Enumerable.Count(seats, s => s.IsBot).ToString(System.Globalization.CultureInfo.InvariantCulture)} of them bots");
     }
 
     // The wire a menu launch carried, kept for the session build. A host also builds the match's

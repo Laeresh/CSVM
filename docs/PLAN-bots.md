@@ -95,7 +95,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ A seat knows whether a human or a bot flies it, and the roster carries that across the wire
 2. ❌ `VersusMatch` keys its scores by pilot, so a row survives its seat being reused
 3. ☑ The host flies a bot seat with an `AiPilot`; guests see it as a remote seat
-4. ☐ CLI twin: `--vs-bots=` / `--vs-bot=` build bot seats in a scripted host
+4. ☑ CLI twin: `--vs-bots=` / `--vs-bot=` build bot seats in a scripted host
 
 ### Wave B, bot behaviour in a Dogfight
 
@@ -112,7 +112,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D, presentation and measurement
 
-31. ☐ Bot tag on the lobby roster and the board; seat-style in-flight markers for bots
+31. ☐ Bot tag on the lobby roster and the board; a bot's callsign on the target marker
 32. ☐ Crowded free-for-all playtest at the controls
 33. ☐ Host cost of fifteen bots, measured
 
@@ -291,28 +291,62 @@ seat index, team and engagement range, and that the roster's AI list stays empty
 condition its checks read. ⚠ Never assemble a bot through `FlightRoster.SpawnAi`: it would carry the
 AI def's damage model, be stepped twice and be replicated again through `AiStateMessage`.
 
-## A4 ☐ CLI twin: `--vs-bots=` / `--vs-bot=` build bot seats in a scripted host
+## A4 ☑ CLI twin: `--vs-bots=` / `--vs-bot=` build bot seats in a scripted host
 
-**Goal.** A scripted `--vs` run, local or `--net-host`, can add bots, so suites and probes drive the
-feature without the menu. Flag names are a proposal: `<TODO: confirm names against docs/cli.md's
-conventions>`.
+**Goal.** A scripted `--vs --net-host` run can add bots, so suites and probes drive the feature
+without the menu. A local `--vs` seats none (see Approach).
 
-**Evidence (confidence: lead-only).** Today's `--ai=` (`SessionSpec.cs:75-82,512-516,1364-1396`,
-built in `Launch/OppositionStage.cs:78-180`) spawns AI per machine from each machine's own spec, so a
-real guest would not build them; the loopback suite works only because both ends parse the same
-args (`NetWorldSuites.cs:33,90-94`).
+**Evidence (confidence: traced-to-code).** `SessionSpec.Parse` is last-occurrence-wins for every
+flag, and its one list-valued AI flag, `--ai=`, is a comma list of entries with colon-separated
+`key=value` parts, so the proposed repeatable `--vs-bot=` became a comma list instead. A flag in
+the wrong mode is warned and dropped in `Resolve` (`--ctf`, `--zvz`), and an unreadable word keeps
+the default and is named (`--difficulty=`, `--ai-targeting=`). `Launcher.BuildCliNetRoster` seats
+this machine's panes, then one seat per linked peer, each `break`ing at `NetSeats.MaxPlayers`; the
+menu's `VersusLaunchField` is a separate path the menu alone takes, so menu bots stay C21's. Every
+wire launch hands the session `StockAirframes.Nodes` as its airframe list, and the roster carries a
+plane as an index into it, so a bot's plane must be a stock node. A local match has no seat roster:
+`LauncherContext.NetSeats` is null and `SessionNet.Seats` empty. `VersusDirector` equates a seat
+roster with a wire: with seats and no wire it builds no rotation, asks a null wire for every return
+(`AskSpawn`), reports deaths to a `ReportDeath` that needs a link, refuses the rematch
+(`RematchIsTheHosts`) and posts no split-screen kill lines (`TakeKillLine`).
 
-**Approach.** The flags add bot seats to the host's launch roster (`Launcher.cs:2813-2851`), and
-the roster carries them to guests (Decision 17). `docs/cli.md` gains the flag bullets within its
-600-character cap.
+**Approach (landed).** `--vs-bots=N` adds N bots at the defaults: the host's own plane
+(`SessionSpec.PlaneName`, the rule a command-line guest's seat already takes), veteran, no team, and
+the callsign `Bot <n>` by place in the field. `--vs-bot=<plane>[:skill=<tier>][:team=<n>][:name=<callsign>][,...]`
+names bots that take the first places. `<plane>` is a stock node or empty, `skill=` reads
+`Difficulty.Parse`'s words onto `NetBotSkill`, `team=` is a lobby team 0 to `NetTeamBook.MaxTeams`,
+and `name=` is the callsign. Random waits for B13. An unreadable part keeps its default with a
+warning. `SessionSpec.ResolveBots` drops the flags with a warning without `--vs`, on a guest
+(`--net-join`) and in a local match, and cuts the field to the seats `Players` leaves. The resolved
+list is `SessionSpec.VsBots`. `BuildCliNetRoster` appends it after the guests through
+`NetSeats.AddBots`, which leaves a bot out once guests fill the 16 seats and says so in the log;
+the roster then carries the bots to every guest. Command-line pilots fly on lobby team 0, so a
+`team=` bot puts the match in team mode beside unteamed people until a flag sets a human's team.
+Local `--vs` with bots is not built. The seat model works for it (`HumanFlightAdapter` and
+`SessionNet.FillSeatRigs` take any roster), but `VersusDirector` must first tell "has a seat roster"
+from "has a wire" at the places Evidence lists; the smaller route is a host with no guests on an
+in-process wire, untried, whose chat, pause and start gate would need checking. C23 depends on one
+of the two.
 
-**Model recommendation.** `<TODO: not settled in the session>`
+**Model recommendation.** Sonnet would do for the parser and roster; Opus was used because the
+local-match finding needed `VersusDirector`'s wire assumptions read whole.
 
-**Verify.** `--net-host=127.0.0.1` with bots and a `--net-join=127.0.0.1` guest with no bot flags:
-the guest flies against the host's bots. `<TODO: the exact RunProbe.ps1 invocation>`
+**Verify.** `VsBotFlagTests` (18 units): field order and defaults, the skill vocabulary, refusals
+of an unreadable skill, team, plane, part or count, last flag wins, guest and local scope, the
+16-seat cut, and `NetSeats.AddBots` seating after the guests and leaving bots out of a full field.
+Two processes on loopback, each through `RunProbe.ps1` on the hidden desktop, from one PowerShell
+call (`$r` the worktree, the guest started 4 s after the host, both waited on):
+`RunProbe.ps1 -TimeoutSec 180 --vs --mission=MP1 --mute --debug-net-trace --net-host=127.0.0.1:47731 --vs-bots=1 --vs-bot=player_fury:skill=ace:name=Ace --screenshot=$r\.scratch\a4-host.png --frames=900`
+and `RunProbe.ps1 -TimeoutSec 180 --vs --mission=MP1 --mute --debug-net-trace --net-join=127.0.0.1:47731 --screenshot=$r\.scratch\a4-guest.png --frames=900`.
+Both exit 0. The host logs "host roster of 4 seat(s), 2 of them bots" and its bot's gunner takes P1;
+the guest, given no bot flag, joins "as seat 1 of 4", and its trace shows both bot seats as copies
+moving with the host's own pose (seat 3 about 1600 m over the run, within 5 m of the host's).
+`net-bot-seat`, `net-bot-seat-lossy`, `net-seats` and the whole `net-` filter stay green.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** Name `127.0.0.1` in a scripted run; a wildcard bind puts a firewall dialog on the
-user's screen.
+user's screen. A bot's plane outside `StockAirframes.Nodes` reaches a guest as no plane at all.
 
 # Wave B, bot behaviour in a Dogfight
 
@@ -441,6 +475,11 @@ remake addition with no original layout to follow>`.
 **Verify.** `<TODO: a lobby unit or suite test, plus a look at the controls by the user>`
 
 **⚠ Traps.** The screen layout is a look judgement; bring a capture to the user before settling it.
+Bot rows count toward the team-launch rule (`NetTeamBook.Check`, fed by `DogfightLobby.LaunchRefusal`
+with each row's team): a host plus bots all on one team is "one standing team", which LAUNCH!
+must refuse with langui 10519. GitHub issue #140 reports a Deathmatch that launched with every
+player on one team through some route round that check; read its state before wiring bot rows
+into the refusal, so the bot path does not add a second route round it.
 
 ## C22 ☐ A joining human takes the newest bot's seat in the lobby, a late joiner once the match is back there
 
@@ -491,17 +530,27 @@ seats (`DogfightLobby.cs:152-155`). The join board is `UI/Menu/Original/Original
 
 # Wave D, presentation and measurement
 
-## D31 ☐ Bot tag on the lobby roster and the board; seat-style in-flight markers for bots
+## D31 ☐ Bot tag on the lobby roster and the board; a bot's callsign on the target marker
 
 **Goal.** The lobby roster and the results board show a bot tag beside a bot's callsign; in flight
-a bot wears the same seat marker a human does, with its callsign (Decision 11).
+a bot is marked as any aircraft is, and the target marker's name line shows its callsign
+(Decision 11).
 
 **Evidence (confidence: lead-only).** `VersusHud` iterates human seat rigs only and draws
 `P{n}` tags in `SplitScreen.PlayerColor` (`CSVM/src/Flight/Modes/VersusHud.cs:76-78,106-118`). AI
 planes appear only through `TargetPool` (`TargetPool.cs:243`, `MarkerName` else `PilotName`).
 
-**Approach.** After A3 a bot is a seat rig, so `VersusHud` may cover it already; `<TODO: check
-whether A3's rig lands in VersusHud's Rigs>`. The tag's look is `<TODO: the user's call, from a
+**Re-aimed at `TargetHud` by GitHub issue #141.** That issue deletes `VersusHud` in every versus
+mode: its permanent `P1`/`P2` seat markers predate `TargetHud`, which now marks players as the
+original does, and the match status line moves out into its own element. So a bot does not get a
+seat marker; it is found and marked through `TargetHud` like any other aircraft, and Decision 11's
+"the in-flight marker shows only the callsign" means `TargetHud`'s name line shows the bot's
+callsign while it is the selected target. A3 found that `TargetHud.NearestHostile` already tracks
+a bot on both ends, but its fallback name reads the node name `player{seat+1}`, not the callsign:
+set the bot controller's `PilotName`/`MarkerName` from the seat's callsign on both ends. If #141
+has not landed when D31 starts, do not build anything on `VersusHud`.
+
+**Approach.** The tag's look on the lobby roster and the board is `<TODO: the user's call, from a
 capture>`.
 
 Name the finished match's Game Scores rows from the session's seat roster, not the lobby rows
