@@ -136,20 +136,37 @@ internal sealed class SessionBoards
     }
 
     /// <summary>The time-attack race's shared results board, one ranked row per pilot over the
-    /// whole window. Instant Action builds it too, since the race ends a multi-seat stunt run.
-    /// <paramref name="zoneNames"/> names the course's zones in course order.</summary>
-    public StuntRaceBoard BuildRaceBoard(StuntRace race, IReadOnlyList<string> zoneNames, string context,
+    /// whole window. It is the Original presentation's lobby-scores board where that art and the
+    /// string table are installed, the Built-in chrome board otherwise. Instant Action builds it too,
+    /// since the race ends a multi-seat stunt run. <paramref name="zoneNames"/> are in course order.</summary>
+    public Control BuildRaceBoard(StuntRace race, IReadOnlyList<string> zoneNames, string context,
         Action restart)
     {
-        var board = StuntRaceBoard.Build(race, zoneNames, context, exitsToMenu: _in.MenuDriven,
-            _in.PauseState, InputFor);
-        board.Restart = restart;
-        board.Exit = _in.Exit;
+        Control built;
+        string exitLabel = StuntRaceBoard.ExitLabel(_in.MenuDriven);
         // Player 1: a results board reads _inputFor(0), so its cursor is P1's whoever won.
-        board.PhotoMode = () => EnterPhotoMode(0);
-        _boards.Add(board);
-        AddLayer(board, "race_board");
-        return board;
+        if (OriginalRaceStrings() is { } strings)
+        {
+            var board = OriginalRaceBoard.Build(race, zoneNames, context, exitLabel, _in.PauseState,
+                InputFor, _in.DataRoot, strings);
+            board.Restart = restart;
+            board.Exit = _in.Exit;
+            board.PhotoMode = () => EnterPhotoMode(0);
+            built = board;
+        }
+        else
+        {
+            var board = StuntRaceBoard.Build(race, zoneNames, context, exitsToMenu: _in.MenuDriven,
+                _in.PauseState, InputFor);
+            board.Restart = restart;
+            board.Exit = _in.Exit;
+            board.PhotoMode = () => EnterPhotoMode(0);
+            built = board;
+        }
+
+        _boards.Add(built);
+        AddLayer(built, "race_board");
+        return built;
     }
 
     /// <summary>The match's shared results board, one layer over the whole window, since the match
@@ -248,6 +265,25 @@ internal sealed class SessionBoards
         var layer = new CanvasLayer { Name = name, Layer = HudLayers.Board };
         layer.AddChild(board);
         _in.WorldRoot.AddChild(layer);
+    }
+
+    // The string table the Original race board writes in, or null where that board does not apply.
+    // That is the Built-in presentation, or an install missing the table or the borrowed lobby art.
+    private UiStrings? OriginalRaceStrings()
+    {
+        if (_in.Presentation != PresentationId.Original
+            || !File.Exists(Extraction.RofTree.Under(_in.DataRoot, "ASSETS/GRAPHICS/" + OriginalRaceTable.PageArt)))
+        {
+            return null;
+        }
+
+        var strings = UiStrings.TryLoad(_in.DataRoot);
+        if (strings == null)
+        {
+            Log.Warn("ui", $"race board: no string table under {_in.DataRoot}, the Built-in board stands in");
+        }
+
+        return strings;
     }
 
     // The Original presentation's pause sheet, or null where it does not apply. That is the

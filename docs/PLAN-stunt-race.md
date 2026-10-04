@@ -117,7 +117,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☑ Race presence: no collisions, weapons off, ghosts when near
 13. ☑ The Instant Action time row for a multi-seat Stunt Flying run
 14. ☐ A held Display Scores key on Tab, drawn in the original's look
-15. ☐ The race board's Back row, and an Original-looking race board
+15. ☑ The race board's Back row, and an Original-looking race board
 16. ☑ No lives in a race
 
 ### Wave C, the network race
@@ -689,23 +689,98 @@ Reuse B15's Original race table where the two overlap.
 **⚠ Traps.** Never invent the original's look: decode it or say what could not be decoded and ask.
 An appended action must not shift any saved binding.
 
-## B15 ☐ The race board's Back row, and an Original-looking race board
+## B15 ☑ The race board's Back row, and an Original-looking race board
 
 **Goal.** The race board's exit row reads "Back" (Decision 17), and under the Original presentation
 the end-of-race board is drawn in the original game's look rather than the remake's chrome board.
 
-**Evidence (confidence: lead-only).** B11's `StuntRaceBoard` is a chrome `ResultsBoard` whose exit
-row is the standard "Exit to Menu" (`Launcher.ExitSession` returns to the Instant Action screen). The
-Original presentation already has a decoded Instant Action wrap-up page (`[@IA_WrapUp@]`,
-`OriginalWrapupPage`, `docs/architecture/UI.md`), the nearest original-game results screen. The
-user's ruling: rename the row to Back, and build an Original-looking board for the Original UI.
+**Evidence (confidence: traced-to-data for the borrowed screen, lead-only for the borrowing).**
+B11's `StuntRaceBoard` is a chrome `ResultsBoard` whose exit row was the standard "Exit to Menu"
+(`Launcher.ExitSession` returns to the Instant Action screen). Two original results screens exist.
+The Instant Action wrap-up page (`[@IA_WrapUp@]`, `UI/Menu/Original/OriginalWrapupScreen.cs`,
+`docs/formats/instant-action/wrap-up.md`) is one pilot's four title/value pairs on a magazine
+spread, a menu page shown after the flight; it has no table. The multiplayer lobby's Game Scores tab
+(`MULTIPLAYERLOBBY_STATS.SCRIPT`, page art `MP_LOBBY_STATSCREEN.PNG` at (314, 26)) is the original's
+multiplayer results table: five headed columns (10542 to 10546, TREB13B), ten rows at a 20-pixel
+pitch from (+24, +69), the name column 154 wide and left-justified, four figure columns 62, 61, 60
+and 57 wide and centred (TREB10B, faces 10573 and 10574), a grey row for a flagged pilot and a
+scroll bar past ten. It is where a finished Dogfight lands (`OriginalLobbyScreen.Land`), so it is
+the original's end-of-match screen. `FUN_00489320` (Display Scores) was not decompiled here: the
+Ghidra session had no program loaded, and that decode is B14's.
 
-**Approach.** Decide from the original's own results screens (the Instant Action wrap-up, and the
-multiplayer end-of-match screen if one is decoded) which one a race board should look like, and
-build it from that decode with the race's rows and best-run splits. Built-in keeps the chrome board.
+**Approach.** *The borrowed screen (lead-only, the look is the user's).* The race is a multi-pilot
+ranking, which is the Game Scores page's shape and not the wrap-up's, so the board is the lobby on
+Game Scores with the race in it: `MP_LOBBY_BACKGROUND.JPG`, the scores page at its tab corner with
+"Game Scores" (10507) on its picked tab and the other three tabs unlabelled, "STUNT RACE RESULTS" in
+the lobby's title box (10046's face), and the lobby's three plaque slots.
+*The table, reusable (traced-to-data).* `UI/Menu/Original/OriginalRaceTable.cs`:
+`Rows(standings, zoneCount)` and `Compose(rows, pageX, pageY, strings, layers)` draw the page and
+its rows at the script's positions and faces. Six race columns into five page columns: place and
+callsign at the name column's left and the aircraft right-aligned in it, then best, gap and runs;
+the fifth column stays empty. A 62-pixel figure column clips "Bloodhawk" (measured in the first
+capture), which is why the aircraft shares the wide column. The columns' words are the Built-in
+board's (`StuntRace.BestText`, `GapText`).
+*The screen (lead-only).* `UI/Menu/Original/OriginalRaceResults.cs`: the zone key ("1  Passenger
+Hangar") down the player list's lines from (34, 83), two columns past eleven zones (the longest
+shipped course's 17 take nine and eight); the best-run splits in the chat pane, zone numbers on its first line and a pilot
+per 20-pixel line, columns no wider than the scores page's 62; the context line in the chat box;
+Photo Mode, Restart and the exit on the Create Team, Send and Leave Game plaques, in the lobby's
+strip frames and label tints. "Photo Mode" overflows the 74-pixel Send plaque, so it takes the
+131-pixel Create Team one. The sheet is frozen at the race's end (`RaceResultsSheet`).
+*The board (traced-to-code).* `UI/Menu/Original/OriginalRaceBoard.cs`, a whole-window Control on the
+race board layer: wakes on `RaceCompleted`, raises `HaltReason.Ended`, retires once `Ended` clears
+(Restart, R and pad Y), a fresh menu each end resting on Photo Mode, any arrow stepping the three
+plaques, player 1's pointer on `BoardMenuPointer`'s rule. `SessionBoards.BuildRaceBoard` builds it
+when the presentation is Original and the install has the scores page art and `ui_strings.json`,
+else the chrome board; it now returns `Control`.
+*Back (traced-to-code).* `StuntRaceBoard.ExitLabel`: "Back" for a menu launch, which returns to the
+Instant Action screen as before; a command-line `--stunt` race keeps "Quit Game", since its exit
+quits and "Back" would misname it. `ResultsBoard.InitShell` takes the label. Both boards use it.
+*Borrowed, not original.* Every header ("Pilot", "Aircraft", "Best", "Gap", "Runs"), the title, the
+zone heading and key, the splits, the context and the three plaque labels are remake text drawn in
+the face of the lobby string standing at that place; the placement of the zone key, the splits,
+the context and the plaques in the player list, chat pane, chat line and Create Team, Send and Leave
+Game slots is the remake's reuse of those areas; the empty fifth column and unlabelled tabs follow
+from it. The art, the fonts, the scores page geometry and Game Scores are the original's.
+*For B14 (traced-to-code for the API).* `OriginalRaceTable.Rows(race.Standings(), race.ZoneCount)`
+then `OriginalRaceTable.Compose(rows, pageX, pageY, UiStrings, layers)` into a `BoardLayers`, built
+into a `ComposedBoard` and shown through `ComposedBoardView`; `VisibleRows` (10), `RowPitch` (20),
+`PageArt`. The script's grey row and scroll bar are decoded and not built.
 
-**⚠ Traps.** Never invent the original's look; a race board the original never had borrows the
-nearest decoded screen's art and layout, flagged as such.
+**Model recommendation.** Opus for the choice of screen and the layout read (the script, the
+lobby's geometry and the column fit), a mid-tier model for a change of columns or plaque slots.
+
+**Verify.** Units: `CSVM.Tests/OriginalRaceBoardTests.cs` (8): the table's rows, order and words;
+its page, headers and cells at the script's positions, justifications and widths; the ten-row cap;
+the frozen sheet's splits in race order and the "Zone n" fallback; the screen's background, page,
+title, tab, context, zone key and splits; a 17-zone course's two key columns and narrower split
+columns; the plaques' slots, frames and label tints; the pointer hit test. Engine suite
+`stunt-race-boards` (`Testing/StuntRaceSuites.cs`, weighted): through `SessionBoards` with the
+install's art and strings, Original builds `OriginalRaceBoard`, which wakes on the race's end with
+the sim halted, ranks 1st P2, 2nd P1, 3rd P3 (one zone, no finish) with the install's faces, draws
+P1's splits in its chat line, rests on Photo Mode and offers Restart and Back; Restart opens a new
+window and retires it with the clock released; on the next end the pointer fires Back and Photo
+Mode; Built-in keeps `StuntRaceBoard` with Back from the menu and Quit Game from the command line,
+and the Original board's command-line exit reads Quit Game. Mutation-checked, each red and
+restored: row pitch 21, aircraft left-justified, Best and Gap headers swapped, eleven rows, splits
+in player order, Photo Mode and Restart plaques swapped, a hit test ignoring x, one key column to
+20 zones, an uncapped split column (units); presentation ignored, no retire on a new window, no
+halt, "Exit to Menu" from the menu, the menu resting on Restart, a pointer hitting nothing (suite).
+Captures (temporary manifest entries through the golden stage, `--chapter=C1 --stunt --players=3
+--debug-scoreboard` with and without `--force-builtin`, and `--menu=lobby:host:scores
+--presentation=original`; manifest restored byte-identical): the Original board, the chrome board
+and the remake's Game Scores page side by side. Every pinned golden unchanged (no pinned shot
+flies a race). Hand-flown: the board's look, the column fit and plaque slots, and Back at the
+controls from the Instant Action screen.
+
+**⚠ Traps.** The original has no race board: do not describe this one as decoded beyond the scores
+page; the reuse of the player list, chat pane and plaques is the remake's. Do not move the aircraft
+back into a figure column: the 62-pixel cells clip most aircraft names. A field past ten rows (the
+page) or seven pilots (the chat pane's splits) is cut off; C21's larger network field needs the
+decoded scroll bar or a cap. The remake's own Game Scores tab left-aligns its figures where the
+script centres them; the race table follows the script.
+
+**Verified.** <pending orchestrator run>
 
 ## B16 ☑ No lives in a race
 

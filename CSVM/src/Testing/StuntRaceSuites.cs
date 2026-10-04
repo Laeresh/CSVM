@@ -14,6 +14,8 @@ using CSVM.Session.Roster;
 using CSVM.Session.World;
 using CSVM.Spec;
 using CSVM.UI.Boards;
+using CSVM.UI.Menu;
+using CSVM.UI.Menu.Original;
 using CSVM.UI.Screens;
 using CSVM.Utils;
 using Godot;
@@ -268,6 +270,169 @@ internal static class StuntRaceSuites
         }
 
         ctx.Note($"a two-seat window ranked by best run, with a restart each and a final run");
+    }
+
+    [Suite("stunt-race-boards",
+        "the session's race board under each presentation: Original builds the lobby-scores board over "
+        + "the install's art and strings, which wakes on the race's end with the sim halted, ranks "
+        + "the field on the scores page with each pilot's splits, rests on Photo Mode and offers "
+        + "Restart and Back; Restart retires it and releases the clock, the pointer fires Back and "
+        + "Photo Mode; Built-in keeps the chrome board, its exit row reading Back from the menu and "
+        + "Quit Game from the command line, which the Original board follows too")]
+    internal static void StuntRaceBoards(TestContext ctx)
+    {
+        ctx.RequireData(RofTree.Under(ctx.DataRoot, "ASSETS/GRAPHICS/" + OriginalRaceTable.PageArt), $"the lobby's scores page art");
+        ctx.RequireData(Path.Combine(ctx.DataRoot, "extracted", "rof", "ui_strings.json"), $"ui_strings.json");
+        string[] zoneNames = { "Pier", "Bridge", "Tower" };
+        var built = new List<Node>();
+
+        // One race board built the way a session builds it, under a presentation and launch kind.
+        (Control Board, StuntRace Race, PauseState Pause) Build(PresentationId presentation, bool menuDriven, Action exit)
+        {
+            var race = new StuntRace(60f, zoneNames.Length);
+            race.Add(0, "Bloodhawk");
+            race.Add(1, "Kestrel");
+            race.Add(2, "Hoplite");
+            race.BeginOpening(0f);
+            var pause = new PauseState();
+            var boards = new Launch.SessionBoards(new Launch.SessionBoards.Inputs
+            {
+                Spec = SessionSpec.Parse(new[] { "--no-pads" }),
+                Presentation = presentation,
+                MenuDriven = menuDriven,
+                Exit = exit,
+                Restart = () => { },
+                WorldRoot = ctx.Host,
+                Rigs = Array.Empty<PlayerRig>(),
+                NetSeats = Array.Empty<Net.NetSeat>(),
+                PauseState = pause,
+                LockCandidates = () => Array.Empty<Node3D>(),
+                DataRoot = ctx.DataRoot,
+            });
+            var board = boards.BuildRaceBoard(race, zoneNames, "C1   ·   Stunt Flying", () =>
+            {
+                race.Restart();
+                race.BeginOpening(0f);
+            });
+            built.Add(board.GetParent());
+            return (board, race, pause);
+        }
+
+        void Fly(StuntRace race, int index, float[] at)
+        {
+            race.RunStarted(index);
+            for (int zone = 0; zone < at.Length; zone++)
+            {
+                race.ZoneCleared(index, zone, at[zone]);
+            }
+
+            race.RunFinished(index, at[^1]);
+        }
+
+        // P2 fastest, P1 second, P3 one zone and no completed run; the window then runs out.
+        void End(StuntRace race)
+        {
+            Fly(race, 0, new[] { 3f, 6f, 9.5f });
+            Fly(race, 1, new[] { 2f, 5f, 8f });
+            race.RunStarted(2);
+            race.ZoneCleared(2, 2, 4f);
+            race.RunAbandoned(2);
+            race.Advance(61f);
+        }
+
+        try
+        {
+            int exits = 0, photos = 0;
+            var (control, race, pause) = Build(PresentationId.Original, menuDriven: true, () => exits++);
+            if (control is not OriginalRaceBoard board)
+            {
+                ctx.Check(false, $"the Original presentation builds the lobby-scores board, not {control.GetType().Name}");
+                return;
+            }
+
+            board.PhotoMode = () => photos++;
+            End(race);
+            var shown = board.Shown;
+            ctx.Check(board.Visible && pause.Halted && race.Ended && shown != null,
+                $"the race's end wakes the Original board with the sim halted: visible={board.Visible} halted={pause.Halted} composed={shown != null}");
+            ctx.Check(board.Rows.Count == 3 && board.Rows[0].StartsWith("1st  P2  Kestrel  0:08.0", StringComparison.Ordinal)
+                    && board.Rows[1].StartsWith("2nd  P1  Bloodhawk  0:09.5  +1.5  1/1", StringComparison.Ordinal)
+                    && board.Rows[2].StartsWith("3rd  P3  Hoplite  1/3 ZONES  at 0:04.0  0/1", StringComparison.Ordinal),
+                $"the board ranks the field by best run: {string.Join(" | ", board.Rows)}");
+            if (shown == null)
+            {
+                return;
+            }
+
+            var pilot = shown.Lines.FirstOrDefault(l => l.Text == "Pilot");
+            var leader = shown.Lines.FirstOrDefault(l => l.Text == "1st  P2");
+            ctx.Check(shown.Backdrop.Any(p => p.Art.Name == OriginalRaceTable.PageArt && p.X == 314f && p.Y == 26f)
+                    && pilot is { X: 335f, Y: 69f, Face: not null } && leader is { X: 338f, Y: 95f, Face: not null },
+                $"the standings stand on the scores page at its tab corner in the install's faces: header at ({pilot?.X}, {pilot?.Y}) face {pilot?.Face}, leader at ({leader?.X}, {leader?.Y}) face {leader?.Face}");
+            var p1Splits = shown.Lines.Where(l => l.Y == 413f && l.X >= 134f).Select(l => l.Text).ToList();
+            ctx.Check(p1Splits.SequenceEqual(new[] { "0:03.0", "0:06.0", "0:09.5" }),
+                $"P1's best-run splits fill its line of the chat pane: {string.Join(", ", p1Splits)}");
+            var menu = board.Menu;
+            ctx.Check(menu != null && menu.Index == 0
+                    && menu.Items.Select(i => i.Label).SequenceEqual(new[] { "Photo Mode", "Restart", "Back" })
+                    && shown.Lines.Any(l => l.Text == "Back" && l.X == 655f),
+                $"the board rests on Photo Mode and offers Restart and Back, Back on Leave Game's plaque: {string.Join(", ", menu?.Items.Select(i => i.Label) ?? Array.Empty<string>())}");
+            if (menu == null)
+            {
+                return;
+            }
+
+            // Restart from the menu: a new window clears the end, which retires the board.
+            menu.Handle(1, accept: false, back: false);
+            menu.Handle(0, accept: true, back: false);
+            board._Process(Dt);
+            ctx.Check(!race.Ended && !board.Visible && !pause.Halted,
+                $"Restart opens a new window and the board retires, releasing the clock: ended={race.Ended} visible={board.Visible} halted={pause.Halted}");
+
+            // The next end raises a fresh menu on Photo Mode; player 1's pointer fires Back, then Photo Mode.
+            End(race);
+            var (bx, by, bw, bh) = OriginalRaceResults.PlaqueRect(OriginalRaceResults.ExitRow);
+            var (px, py, pw, ph) = OriginalRaceResults.PlaqueRect(OriginalRaceResults.PhotoRow);
+            void Point(float x, float y, bool pressed)
+            {
+                board.PointerSource = () => (x, y, pressed);
+                board._Process(Dt);
+            }
+
+            int indexAfterEnd = board.Menu?.Index ?? -1;
+            Point(bx + (bw / 2f), by + (bh / 2f), false);
+            Point(bx + (bw / 2f), by + (bh / 2f), true);
+            Point(bx + (bw / 2f), by + (bh / 2f), false);
+            Point(px + (pw / 2f), py + (ph / 2f), false);
+            Point(px + (pw / 2f), py + (ph / 2f), true);
+            Point(px + (pw / 2f), py + (ph / 2f), false);
+            ctx.Check(board.Visible && indexAfterEnd == 0 && exits == 1 && photos == 1,
+                $"the pointer fires Back and Photo Mode on their plaques: rested on {indexAfterEnd}, {exits} exit(s), {photos} photo(s)");
+
+            // Built-in keeps the chrome board; the exit row reads Back from the menu, Quit Game otherwise.
+            string ChromeExit(bool menuDriven)
+            {
+                var (chrome, chromeRace, _) = Build(PresentationId.BuiltIn, menuDriven, () => { });
+                End(chromeRace);
+                return chrome is StuntRaceBoard { StandardMenu: { } standard } ? standard.Items[^1].Label : $"no chrome board ({chrome.GetType().Name})";
+            }
+
+            string chromeMenu = ChromeExit(true), chromeCli = ChromeExit(false);
+            var (cli, cliRace, _) = Build(PresentationId.Original, menuDriven: false, () => { });
+            End(cliRace);
+            string originalCli = (cli as OriginalRaceBoard)?.Menu?.Items[^1].Label ?? "none";
+            ctx.Check(chromeMenu == "Back" && chromeCli == "Quit Game" && originalCli == "Quit Game",
+                $"Built-in keeps the chrome board with Back from the menu ({chromeMenu}) and Quit Game from the command line ({chromeCli}); the Original board's command-line exit reads {originalCli}");
+        }
+        finally
+        {
+            foreach (var node in built)
+            {
+                node.Free();
+            }
+        }
+
+        ctx.Note($"the Original race board's rows, splits and actions, and both presentations' exit rows");
     }
 
     [Suite("stunt-race-no-lives",

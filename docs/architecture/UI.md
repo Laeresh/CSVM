@@ -455,9 +455,8 @@ clicks and raise `Dismissed`, and the Original presentation builds it to take no
 polls its own pointer and closes it through the wrap-up page's rows.
 
 ## src/UI/Screens/ResultsBoard.cs
-The shared shell every results board is built on (`StuntScoreboard`, `StuntRaceBoard`,
-`VersusBoard`, `IaWrapupBoard`): backdrop and centred panel, palette and label factories, the
-halt-and-retire contract on the sim clock, and the standard Photo Mode, Restart and Exit menu.
+The shared shell every results board is built on (`StuntScoreboard`, `StuntRaceBoard`, `VersusBoard`, `IaWrapupBoard`): backdrop and centred panel, palette and label factories, the
+halt-and-retire contract on the sim clock, and the standard Photo Mode, Restart and Exit menu, whose exit row reads Exit to Menu or `QuitLabel` unless a subclass hands `InitShell` its own words.
 `RestartWithheld` leaves the Restart row off and draws its line over the other two. A panel taller than the window is re-centred and shrunk about its centre to fit. Photographs added
 through `AddShotStrip` are the cursor's second region above the rows: up off Photo Mode (the
 resting row) enters the grid, confirm opens one in a `ShotViewer` over the board, back or a click
@@ -493,14 +492,12 @@ flat text for the Original wrap-up page. A single flag keeps the two boards' shi
 since the scoreboard rules off its total and the wrap-up board runs the table straight into it.
 
 ## src/UI/Screens/StuntRaceBoard.cs
-The time-attack race's shared results overlay on `ResultsBoard`'s shell: one row per pilot from
-`StuntRace.Standings()` with placing, callsign, plane, best time, gap to the winner and runs, a
-pilot with no completed run showing their furthest run's zones and time to them, then each
-pilot's best-run splits, a row per zone in course order. Whole-window, since a race ends for
-everybody at once, and built in Instant Action too, where the race rather than the mission ends a
-multi-seat run. Wakes on `RaceCompleted` and retires once `Ended` clears, so a new window is
-reachable without the menu; `Rows` is the ranked text the suite reads. `StuntScoreboard` is the
-single-pilot form.
+The time-attack race's shared Built-in results overlay on `ResultsBoard`'s shell: one row per pilot from `StuntRace.Standings()` with placing, callsign, plane, best time, gap to the winner and runs, a
+pilot with no completed run showing their furthest run's zones and time to them (the columns' words are `StuntRace.BestText` and `GapText`, which the Original board shares), then each
+pilot's best-run splits, a row per zone in course order. Whole-window, since a race ends for everybody at once, and built in Instant Action too, where the race rather than the mission ends a
+multi-seat run. Wakes on `RaceCompleted` and retires once `Ended` clears, so a new window is reachable without the menu; `Rows` is the ranked text the suite reads. Its exit row is
+`ExitLabel`: Back from a menu launch, which returns to the screen the race was launched from, and Quit Game from the command line, the label both race boards take. `StuntScoreboard` is the
+single-pilot form; the Original presentation builds `Menu/Original/OriginalRaceBoard.cs` instead.
 
 ## src/UI/Screens/VersusBoard.cs
 The whole-window Dogfight results overlay on `ResultsBoard`'s shell: the winner in their own
@@ -1270,6 +1267,15 @@ player's reader alone. What it draws is `PauseScreens`' composition through `Com
 the screen tests off engine and this node owns the cursor, the pointer and the five actions. An Instant Action sortie's sheet is the blackboard, which it writes in `BoardPalette.EscapeBlackboard` rather than the campaign sheet's ink. That
 seat's pointer shares the cursor on `BoardMenuPointer`'s rule: entering a strip moves it, a press holds the strip, the release on it fires, and the OS pointer gives way to the dialog's own. Its readout is a delegate, since the objectives follow the running mission. Preferences stands `PausePreferences` over the held world and `Reprime`s on its close, and photo mode does the same over the frozen world. It draws no control hints, since the original's sheet carries none. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
+## src/UI/Menu/Original/OriginalRaceTable.cs
+A stunt race's standings drawn as the original's multiplayer scores page, engine-free. `Rows(standings, zoneCount)` turns `StuntRace.Standings()` into `RaceTableRow`s in the Built-in board's own words, and `Compose(rows, pageX, pageY, strings, layers)` writes `MP_LOBBY_STATSCREEN.PNG` into the backdrop at that page corner and the headers and up to ten rows into the lines, at `MULTIPLAYERLOBBY_STATS.SCRIPT`'s positions and faces: rows from (+24, +69) at a 20-pixel pitch, the name column 154 wide and left-justified, then cells 62, 61, 60 and 57 wide, centred. The original has no race table, so the race borrows the page: place and callsign at the name column's left and the aircraft at its right, best, gap and runs in the next three, the fifth empty, under remake-only headers. A held scores display composes it over its own frame. Geometry: [../org/menu-inventory.md](../org/menu-inventory.md), the Multiplayer Lobby.
+
+## src/UI/Menu/Original/OriginalRaceResults.cs
+The Original presentation's end-of-race screen, engine-free. `RaceResultsSheet.Of(race, zoneNames, context, exitLabel)` freezes one ended race (standings, zone names, each pilot's splits in race order), so a restart's cleared field never redraws it, and `Compose(sheet, strings, focus, pressed)` draws it into the screen a Dogfight's end lands on, the Multiplayer Lobby on its Game Scores tab: `MP_LOBBY_BACKGROUND.JPG`, `OriginalRaceTable` at the tab page's corner, the title in the lobby's title box, the zone key down the player list's lines (two columns past eleven zones), the splits in the chat pane (zone numbers on its first line, a pilot per line, columns no wider than the scores page's), the context in the chat line, and Photo Mode, Restart and the exit on the Create Team, Send and Leave Game plaques with the lobby's strip frames and label tints. Every word but the tab's is remake-only, in the face of the lobby string at that place. `RowAt` is the pointer's hit test.
+
+## src/UI/Menu/Original/OriginalRaceBoard.cs
+The Original presentation's end-of-race board, in `UI/Screens/StuntRaceBoard.cs`'s place: `Launch/SessionBoards.cs` builds it when the presentation is Original and the install carries the lobby art and the string table. Whole-window over the panes, it wakes on `RaceCompleted` with the sim halted, freezes a `RaceResultsSheet` and draws `OriginalRaceResults` through `ComposedBoardView`, and retires once a new window clears `Ended`, so R and pad Y reach the rerun without it. Player 1's reader steps Photo Mode, Restart and the exit in turn with any arrow, resting on Photo Mode, and player 1's pointer shares the cursor on `BoardMenuPointer`'s rule. `Rows`, `Sheet`, `Shown` and `Menu` are what the suite reads and drives.
+
 ## src/UI/Menu/Original/OriginalHangarScreen.cs
 The Original hangar, a standalone module over the shared `HangarFeature` and the decoded hangar
 sections: the PLANE NAME screen, the Plane Construction hub with one of six tab sections on its
@@ -1289,7 +1295,7 @@ screen graph, the rows at the rectangles the board draws them at, the pointer hi
 their strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/MultiplayerBoardText.cs
-The words, faces, label tints and plaques the Multiplayer Connection and Lobby pages share, one instance per page over its `IOriginalScreenHost` and data root. It loads the original's string table once, drops the leading `]` several lobby strings carry, draws every multiplayer face in regular weight as the original's capture does, and sizes a plaque strip by its art.
+The words, faces, label tints and plaques the Multiplayer Connection and Lobby pages share, one instance per page over its `IOriginalScreenHost` and data root. It loads the original's string table once, drops the leading `]` several lobby strings carry, draws every multiplayer face in regular weight as the original's capture does, and sizes a plaque strip by its art. Its static `Word` and `Regular` take a string table directly, for the race boards drawn in flight with no page host.
 
 ## src/UI/Menu/Original/OriginalConnectionScreen.cs
 The original's Multiplayer Connection page and the LAN games list behind its Connect, one `IOriginalScreenModule` over `NetPlayFeature`. The multiplayer scripts place their widgets inline, so every corner is the scripts' own rather than the layout's.

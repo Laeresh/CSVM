@@ -41,16 +41,17 @@ public sealed partial class StuntRaceBoard : ResultsBoard
         bool exitsToMenu, PauseState state, System.Func<int, MenuInput> inputFor)
     {
         var board = new StuntRaceBoard { _race = race, _zoneNames = zoneNames, _context = context };
-        board.InitShell(state, exitsToMenu, inputFor);
+        board.InitShell(state, exitsToMenu, inputFor, ExitLabel(exitsToMenu));
         race.RaceCompleted += board.OnRaceCompleted;
         return board;
     }
 
-    public override void _ExitTree() => _race.RaceCompleted -= OnRaceCompleted;
+    /// <summary>The exit row's words on both race boards. Back is for an exit that returns to the
+    /// menu the race was launched from; a command-line launch quits, so it keeps Quit Game.
+    /// </summary>
+    public static string ExitLabel(bool exitsToMenu) => exitsToMenu ? "Back" : QuitLabel;
 
-    // The best column of one pilot: the best time, or the furthest run's zones.
-    private static string BestText(Racer r, int zoneCount) =>
-        r.BestTime is { } best ? StuntMission.FormatTime(best) : $"{r.MostZones}/{zoneCount} ZONES";
+    public override void _ExitTree() => _race.RaceCompleted -= OnRaceCompleted;
 
     private void OnRaceCompleted()
     {
@@ -60,7 +61,7 @@ public sealed partial class StuntRaceBoard : ResultsBoard
         for (int i = 0; i < standings.Count; i++)
         {
             var r = standings[i];
-            _rows.Add($"{StuntRace.Ordinal(i + 1)}  {r.Callsign}  {r.PlaneDisplay}  {BestText(r, _race.ZoneCount)}  {GapText(r, winner)}  {r.RunsFinished}/{r.RunsStarted}");
+            _rows.Add($"{StuntRace.Ordinal(i + 1)}  {r.Callsign}  {r.PlaneDisplay}  {StuntRace.BestText(r, _race.ZoneCount)}  {StuntRace.GapText(r, winner)}  {r.RunsFinished}/{r.RunsStarted}");
         }
 
         // Log the final order too, so a race is reviewable from a headless run's log.
@@ -70,11 +71,6 @@ public sealed partial class StuntRaceBoard : ResultsBoard
         Populate(standings, winner);
         Wake();
     }
-
-    // The gap column: behind the winner, or the time to the furthest run's zones.
-    private string GapText(Racer r, float? winner) =>
-        r.BestTime is { } best ? (winner is { } w && best > w ? StuntRace.FormatGap(best - w) : "")
-        : r.MostZones > 0 ? $"at {StuntMission.FormatTime(r.TimeToMostZones)}" : "";
 
     private void Populate(List<Racer> standings, float? winner)
     {
@@ -111,8 +107,8 @@ public sealed partial class StuntRaceBoard : ResultsBoard
             AddCell(grid, StuntRace.Ordinal(i + 1), font, color, HorizontalAlignment.Left, rankW);
             AddCell(grid, r.Callsign, font, r.Color, HorizontalAlignment.Left, nameW);
             AddCell(grid, r.PlaneDisplay, font, color, HorizontalAlignment.Left, planeW);
-            AddCell(grid, BestText(r, _race.ZoneCount), font, color, HorizontalAlignment.Right, bestW);
-            AddCell(grid, GapText(r, winner), font, color, HorizontalAlignment.Right, gapW);
+            AddCell(grid, StuntRace.BestText(r, _race.ZoneCount), font, color, HorizontalAlignment.Right, bestW);
+            AddCell(grid, StuntRace.GapText(r, winner), font, color, HorizontalAlignment.Right, gapW);
             AddCell(grid, $"{r.RunsFinished}/{r.RunsStarted}", font, color, HorizontalAlignment.Right, runsW);
         }
 

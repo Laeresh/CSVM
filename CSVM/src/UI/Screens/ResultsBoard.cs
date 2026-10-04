@@ -23,6 +23,9 @@ public abstract partial class ResultsBoard : Control
     // converts into for a board (ChromeType.InReference).
     internal const float ReferenceHeight = 720f;
 
+    /// <summary>The exit row's words on a board launched from the command line, where it quits.</summary>
+    internal const string QuitLabel = "Quit Game";
+
     // The shared board style: one palette so every board reads as the same screen. All TUNE.
     internal static readonly Color TitleColor = new(0.93f, 0.96f, 1f);
     internal static readonly Color ContextColor = new(0.60f, 0.75f, 0.95f);
@@ -246,11 +249,13 @@ public abstract partial class ResultsBoard : Control
     }
 
     /// <summary>The board's own state for the Build methods: hidden, input-transparent, full-rect,
-    /// with the backdrop and centre container underneath. Call once from the subclass Build.</summary>
-    protected void InitShell(PauseState state, bool exitsToMenu, System.Func<int, MenuInput> inputFor)
+    /// with the backdrop and centre container underneath. Call once from the subclass Build.
+    /// <paramref name="exitLabel"/> replaces the standard exit row's words, null keeping them.</summary>
+    protected void InitShell(PauseState state, bool exitsToMenu, System.Func<int, MenuInput> inputFor,
+        string? exitLabel = null)
     {
         _state = state;
-        _exitLabel = exitsToMenu ? "Exit to Menu" : "Quit Game";
+        _exitLabel = exitLabel ?? (exitsToMenu ? "Exit to Menu" : QuitLabel);
         _inputFor = inputFor;
         _center = BuildShell(this);
         _viewer = ShotViewer.Build(clickCloses: true);

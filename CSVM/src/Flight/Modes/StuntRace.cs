@@ -233,6 +233,18 @@ public sealed class StuntRace
             : sign + StuntMission.FormatTime(magnitude);
     }
 
+    /// <summary>A board's best column for one pilot: the best time, or the furthest run's zones out
+    /// of <paramref name="zoneCount"/> for a pilot with no completed run.</summary>
+    public static string BestText(Racer racer, int zoneCount) =>
+        racer.BestTime is { } best ? StuntMission.FormatTime(best) : $"{racer.MostZones}/{zoneCount} ZONES";
+
+    /// <summary>A board's gap column for one pilot: behind <paramref name="winner"/>'s best, and
+    /// blank for the winner. A pilot with no completed run shows the time to the furthest zones.
+    /// </summary>
+    public static string GapText(Racer racer, float? winner) =>
+        racer.BestTime is { } best ? (winner is { } w && best > w ? FormatGap(best - w) : "")
+        : racer.MostZones > 0 ? $"at {StuntMission.FormatTime(racer.TimeToMostZones)}" : "";
+
     /// <summary>Enters a player. Call in player order at session build.</summary>
     public Racer Add(int index, string planeDisplay, string scoreKey = "")
     {
