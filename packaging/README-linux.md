@@ -183,6 +183,12 @@ custom planes and the install folder you last extracted from are kept outside it
 those two folders removes everything CSVM has written; your copy of the original game is
 never modified.
 
+Flight stick bindings are kept in the `stick_profiles` folder inside it, one file per stick
+model. The Controls screen writes those files for you. To edit one by hand, for example to
+set a deadzone, fly two sticks together, or stop a keypad being read as a stick, follow
+<https://github.com/Laeresh/CSVM/blob/main/docs/stick-profiles.md>, which links an example
+file that binds every action.
+
 ## What else is in this folder
 
 - `CSVM.x86_64` and the `data_CSVM_linuxbsd_x86_64` folder beside it are the engine. They

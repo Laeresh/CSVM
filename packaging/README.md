@@ -139,6 +139,12 @@ and custom planes are kept outside it, in:
 (paste that into Explorer's address bar). Deleting those two folders removes everything
 CSVM has written; your Crimson Skies install is never modified.
 
+Flight stick bindings are kept in the `stick_profiles` folder inside it, one file per stick
+model. The Controls screen writes those files for you. To edit one by hand, for example to
+set a deadzone, fly two sticks together, or stop a keypad being read as a stick, follow
+<https://github.com/Laeresh/CSVM/blob/main/docs/stick-profiles.md>, which links an example
+file that binds every action.
+
 ## What else is in this folder
 
 - `CSVM.exe` and the `data_CSVM_windows_x86_64` folder beside it are the engine. They
