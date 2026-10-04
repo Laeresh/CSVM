@@ -922,6 +922,7 @@ public partial class Launcher : Node3D
 
         // Before the build, because the session reads its wire in its own constructor.
         OpenCliNet();
+        _netRoster = _netWire == null ? LocalVersusField(_spec, _messagesPath) : _netRoster;
         // A CLI launch has no load screen, so the cover is the whole of what stands between the
         // build and the session's first real frame. Same rule as the interactive paths: a session
         // starts from dark, whatever opened it.
@@ -1520,6 +1521,50 @@ public partial class Launcher : Node3D
         {
             shut.Close();
         }
+    }
+
+    /// <summary>A local Dogfight's seat roster: its panes, then the command line's bots, all flown
+    /// here with no wire. Null without bots, so such a match keeps its panes as its seats. Random
+    /// planes and callsigns are drawn as a host draws them.</summary>
+    internal static Net.NetSeat[]? LocalVersusField(SessionSpec spec, string messagesPath)
+    {
+        if (!spec.Versus || spec.VsBots.Count == 0)
+        {
+            return null;
+        }
+
+        var seats = Net.NetSeats.LocalPanes(spec.Players);
+        int left = Net.NetSeats.AddBots(seats, Net.NetSeats.OfflinePeer, ResolveBots(spec, seats, messagesPath));
+        Net.NetSeats.Validate(seats, Net.NetSeats.OfflinePeer);
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        Log.Info("core", $"local roster of {seats.Count.ToString(inv)} seat(s), {(seats.Count - spec.Players).ToString(inv)} of them bots{(left > 0 ? $", {left.ToString(inv)} left out of the {Net.NetSeats.MaxPlayers.ToString(inv)}-seat field" : "")}");
+        foreach (var bot in seats)
+        {
+            if (bot.IsBot)
+            {
+                Log.Info("core", $"local: bot seat {bot.SeatIndex.ToString(inv)} '{bot.Callsign}' flies {bot.PlaneNode} at {bot.Skill.ToString().ToLowerInvariant()}");
+            }
+        }
+
+        return seats.ToArray();
+    }
+
+    /// <summary>The command line's bots resolved for a field whose people are
+    /// <paramref name="people"/>. The pilot names are read once from the message table, which
+    /// nothing has loaded before the session builds; a missing table seats "Bot n". The draws take
+    /// a stream of their own, a function of the master seed alone.</summary>
+    internal static IReadOnlyList<(string Plane, Net.NetBotSkill Skill, int Team, string Callsign)> ResolveBots(
+        SessionSpec spec, IReadOnlyList<Net.NetSeat> people, string messagesPath)
+    {
+        if (spec.VsBots.Count == 0)
+        {
+            return System.Array.Empty<(string, Net.NetBotSkill, int, string)>();
+        }
+
+        var pool = Session.Roster.BotSeats.CallsignPool(Messages.Load(messagesPath));
+        return Session.Roster.BotSeats.Resolve(spec.VsBots,
+            System.Linq.Enumerable.Select(people, seat => seat.Callsign), pool,
+            new System.Random(Rng.IntSeedFor(Rng.BotField)));
     }
 
     // Where a flight left early lands, taken from the launch that starts it. Every menu launch path
@@ -2883,22 +2928,9 @@ public partial class Launcher : Node3D
         }
     }
 
-    // The command line's bots as this host seats them. The pilot names are read once from the message
-    // table, which nothing has loaded before the session builds. A missing table seats "Bot <n>".
-    // The draws take a stream of their own, a function of the master seed alone.
+    // The command line's bots as this host seats them.
     private IReadOnlyList<(string Plane, Net.NetBotSkill Skill, int Team, string Callsign)> ResolveCliBots(
-        IReadOnlyList<Net.NetSeat> people)
-    {
-        if (_spec.VsBots.Count == 0)
-        {
-            return System.Array.Empty<(string, Net.NetBotSkill, int, string)>();
-        }
-
-        var pool = Session.Roster.BotSeats.CallsignPool(Messages.Load(_messagesPath));
-        return Session.Roster.BotSeats.Resolve(_spec.VsBots,
-            System.Linq.Enumerable.Select(people, seat => seat.Callsign), pool,
-            new System.Random(Rng.IntSeedFor(Rng.BotField)));
-    }
+        IReadOnlyList<Net.NetSeat> people) => ResolveBots(_spec, people, _messagesPath);
 
     // The wire a menu launch carried, kept for the session build. A host also builds the match's
     // roster here. The transport's peer list is the field, and the door is the only thing that

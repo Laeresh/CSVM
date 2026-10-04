@@ -1476,10 +1476,11 @@ internal static class NetCombatSuites
         }
     }
 
-    // One peer's whole rig: its own pane, its own world, its own session node.
+    // One peer's whole rig: its own pane, its own world, its own session node. With no transport
+    // it is a local match, whose roster a host's argument carries as the launcher hands one over.
     internal sealed record Ends(SubViewport Pane, GameSession Session, bool Built)
     {
-        public static Ends Open(TestContext ctx, SessionSpec spec, INetTransport transport,
+        public static Ends Open(TestContext ctx, SessionSpec spec, INetTransport? transport,
             bool isHost, ulong seed, IReadOnlyList<NetSeat>? roster,
             IReadOnlyList<string>? airframes = null, Func<int, LoadoutChoice?>? seatFit = null,
             Func<CoopWingmanMessage?>? coopWingman = null,
@@ -1525,8 +1526,8 @@ internal static class NetCombatSuites
                 RestartSession = () => { },
                 NetSeats = isHost ? roster : null,
                 NetTransport = transport,
-                NetHost = isHost,
-                NetAirframes = airframes ?? Airframes,
+                NetHost = isHost && transport != null,
+                NetAirframes = transport == null ? null : airframes ?? Airframes,
                 NetSeatFit = seatFit,
                 NetCoopWingman = coopWingman,
                 NetSeatBuild = seatBuild,

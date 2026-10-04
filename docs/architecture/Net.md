@@ -481,7 +481,7 @@ aeroplane without a pane.
 The roster's rules: `MaxPlayers = 16` pilots admitted, the count the original's lobby shows and
 its data holds, every seat-indexed table built `SeatCapacity = 16` wide, each seat's identity
 colour, and `Validate`: seats numbered from zero with no gap, at least one with a pane here, a
-person at seat 0, and every bot owned and flown where seat 0 is. `Field` builds a host's roster from its local planes and the peers on its wire; `CoopField` does so for co-op, a guest's several seats side by side, each named by its pick. `Bot` makes a host's bot seat and `AddBots` appends several after the guests, leaving out any past the field, `LocalOrdinal` a seat's pane ordinal, and `LeavingWith` the seats a dropped guest takes with it, never a bot.
+person at seat 0, and every bot owned and flown where seat 0 is. `Field` builds a host's roster from its local planes and the peers on its wire; `CoopField` does so for co-op, a guest's several seats side by side, each named by its pick. `Bot` makes a host's bot seat and `AddBots` appends several after the guests, leaving out any past the field, `LocalPanes` opens a local match's roster with its panes on `OfflinePeer`, `LocalOrdinal` a seat's pane ordinal, and `LeavingWith` the seats a dropped guest takes with it, never a bot.
 Seats 0 to 7 take the original's authored dwords at `00628eb4` in order, low byte red as the
 original's one reader takes them (the remake's index is 0-based where the original's was 1-based
 and its eighth pilot read past the table); seats 8 to 15 take the channel-wise complement of seat

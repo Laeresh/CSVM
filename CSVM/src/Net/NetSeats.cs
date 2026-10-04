@@ -17,6 +17,11 @@ public static class NetSeats
     /// (<c>docs/org/multiplayer-spawn.md</c>).</summary>
     public const int MaxPlayers = 16;
 
+    /// <summary>The peer every seat of a local match's roster is owned by, its bots included. No
+    /// transport hands it out, and with no wire nothing reads it but <see cref="Validate"/>.
+    /// </summary>
+    public const int OfflinePeer = NetSession.NoPeer;
+
     /// <summary>How wide every seat-indexed table is built, never below <see cref="MaxPlayers"/>.
     /// Sixteen is what the original's own data holds: 16-entry spawn blocks, a 16-entry lobby
     /// player array and a 16-entry team array.</summary>
@@ -210,6 +215,26 @@ public static class NetSeats
 
         Validate(seats, localPeer);
         return seats.ToArray();
+    }
+
+    /// <summary>A local match's panes as the first seats of its roster, P1 upward, owned by
+    /// <see cref="OfflinePeer"/>. Each names no plane, so a pane flies its own pick as it does
+    /// with no roster. Bots follow through <see cref="AddBots"/>.</summary>
+    public static List<NetSeat> LocalPanes(int panes)
+    {
+        var seats = new List<NetSeat>(MaxPlayers);
+        for (int i = 0; i < panes && seats.Count < MaxPlayers; i++)
+        {
+            seats.Add(new NetSeat
+            {
+                PeerId = OfflinePeer,
+                SeatIndex = seats.Count,
+                FlownHere = true,
+                Callsign = $"P{(i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)}",
+            });
+        }
+
+        return seats;
     }
 
     /// <summary>A co-op host's field: one seat per plane in <paramref name="localPlanes"/> flown

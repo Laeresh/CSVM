@@ -8,8 +8,8 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>The command line's bot seats. Both bot flags reach the spec with their refusals and
-/// scope. <see cref="NetSeats.AddBots"/> seats the bots on a host's roster after its guests.
-/// </summary>
+/// scope. <see cref="NetSeats.AddBots"/> seats the bots after a host's guests or a local match's
+/// panes.</summary>
 [Trait("Tier", "Quick")]
 public sealed class VsBotFlagTests
 {
@@ -87,23 +87,59 @@ public sealed class VsBotFlagTests
         Assert.Equal("player_warhawk", Assert.Single(s.VsBots).Plane);
     }
 
-    [Theory]
-    [InlineData("--net-join=127.0.0.1:47600", "a guest flies the host's roster")]
-    [InlineData(null, "a local match seats no bots")]
-    public void OnlyANetworkHostSeatsBots(string? net, string why)
+    [Fact]
+    public void AGuestSeatsNoBots()
     {
-        var args = new List<string> { "--vs", "--vs-bots=3" };
-        if (net != null)
-        {
-            args.Add(net);
-        }
-
-        var s = SessionSpec.Parse(args);
+        var s = SessionSpec.Parse(new[] { "--vs", "--vs-bots=3", "--net-join=127.0.0.1:47600" });
         Assert.Empty(s.VsBots);
-        Assert.Contains(s.Warnings, w => w.Category == "core" && w.Message.Contains(why, StringComparison.Ordinal));
+        Assert.Contains(s.Warnings, w => w.Category == "core"
+            && w.Message.Contains("a guest flies the host's roster", StringComparison.Ordinal));
 
         // ABLE-TO-FAIL CONTROL: the same flag on a host seats them.
         Assert.Equal(3, SessionSpec.Parse(new[] { "--vs", "--vs-bots=3", Host }).VsBots.Count);
+    }
+
+    [Fact]
+    public void ALocalMatchSeatsItsBots()
+    {
+        var s = SessionSpec.Parse(new[] { "--vs", "--vs-bots=2", "--vs-bot=player_fury:skill=ace" });
+        Assert.Equal(
+            new[]
+            {
+                new VsBotEntry("player_fury", NetBotSkill.Ace, 0, ""),
+                new VsBotEntry(null, NetBotSkill.Veteran, 0, ""),
+                new VsBotEntry(null, NetBotSkill.Veteran, 0, ""),
+            },
+            s.VsBots);
+        Assert.DoesNotContain(s.Warnings, w => w.Message.Contains("--vs-bot", StringComparison.Ordinal));
+
+        // A local field is cut by its panes alone, as a host's is before its guests arrive.
+        var full = SessionSpec.Parse(new[] { "--vs", "--players=3", "--vs-bots=20" });
+        Assert.Equal(NetSeats.MaxPlayers - 3, full.VsBots.Count);
+    }
+
+    [Fact]
+    public void ALocalRosterSeatsThePanesThenTheBotsOnOnePeer()
+    {
+        var roster = NetSeats.LocalPanes(2);
+        int left = NetSeats.AddBots(roster, NetSeats.OfflinePeer, new[]
+        {
+            ("player_fury", NetBotSkill.Ace, 0, "Red"),
+        });
+
+        Assert.Equal(0, left);
+        Assert.Equal(new[] { "P1", "P2", "Red" }, roster.Select(s => s.Callsign));
+        Assert.Equal(new[] { true, true, false }, roster.Select(s => s.HasPane));
+        Assert.All(roster, s => Assert.True(s.FlownHere && s.PeerId == NetSeats.OfflinePeer));
+        // A pane names no plane, so it flies its own pick exactly as it does with no roster.
+        Assert.Equal(new[] { "", "", "player_fury" }, roster.Select(s => s.PlaneNode));
+        Assert.Equal(new[] { 0, 1 }, Enumerable.Range(0, 2).Select(seat => NetSeats.LocalOrdinal(roster, seat)));
+        Assert.Equal(-1, NetSeats.LocalOrdinal(roster, 2));
+        NetSeats.Validate(roster, NetSeats.OfflinePeer);
+
+        // ABLE-TO-FAIL CONTROL: a bot on any other peer than the panes' is refused.
+        roster.Add(NetSeats.Bot(NetSeats.OfflinePeer + 7, roster.Count, "Stray", "player_fury"));
+        Assert.Throws<ArgumentException>(() => NetSeats.Validate(roster, NetSeats.OfflinePeer));
     }
 
     [Fact]

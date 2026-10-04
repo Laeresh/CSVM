@@ -106,7 +106,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C, lobby and local setup
 
-20. ☐ A local match runs off a seat roster with no wire, so it can hold bot seats
+20. ☑ A local match runs off a seat roster with no wire, so it can hold bot seats
 21. ☐ Multiplayer Lobby: Add bot, Fill-to-N, per-row plane/skill/team/callsign, Remove
 22. ☐ A joining human takes the newest bot's seat in the lobby, a late joiner once the match is back there
 23. ☐ Local join board: bot rows, and the two-pilot minimum counts bots
@@ -591,37 +591,95 @@ test on `MP1`. The rearm latch is one per seat and releases only outside every s
 
 # Wave C, lobby and local setup
 
-## C20 ☐ A local match runs off a seat roster with no wire, so it can hold bot seats
+## C20 ☑ A local match runs off a seat roster with no wire, so it can hold bot seats
 
 **Goal.** A local split-screen or solo Deathmatch can carry a seat roster (its panes plus bot
 seats) and run without any network link: bots respawn, score and rematch exactly as in a network
 match. This is the user's ruling on A4's finding (decouple roster from wire, rather than running a
 local bot match as a guestless network host).
 
-**Evidence (confidence: traced-to-code, from A4).** The seat model already copes: `SessionNet`
-takes `Seats` from `ctx.NetSeats` without a transport, `FillSeatRigs` builds paneless rigs for any
-roster, and `HumanFlightAdapter` is seat-based. `VersusDirector` reads "has a seat roster" as "has a
-wire": with seats and no wire it builds no respawn rotation, sends `AskSpawn` and `Restart`'s grants
-to a null wire (nobody respawns or is placed), reports deaths through `SessionNet.ReportDeath`,
-which returns without a link (nothing scores), refuses the rematch (`RematchIsTheHosts`), and skips
-the split-screen kill lines (`TakeKillLine`). `SessionVoices` and `GameSession`'s
-`_wire.Seats.Count` checks branch the same way.
+**Evidence (confidence: traced-to-code).** A4's reading held in full and was reproduced: with
+`VersusDirector`'s wire test put back to "the roster is not empty", the new suite fails 15 checks
+(every return asked of a null host, no kill scored, no death line, no return in 420 steps, no
+rematch placement, a spent bot never spent and the one-life match never ending). The seat model
+needed nothing: `SessionNet` takes `Seats` from `ctx.NetSeats` with no transport, `FillSeatRigs`
+builds the paneless rigs, and `HumanFlightAdapter` arms a bot's pilot and its `Respawned` hook for
+any seat it flies. One reader beyond A4's list: `KillLines` hooks the panes alone, so a bot's death
+reached no death line even once `TakeKillLine` posted with no wire.
 
-**Approach.** Separate the two questions at every such reader: "is there a seat roster" (seat-
-indexed bookkeeping, bots) and "is there a wire" (sending, receiving, host authority over peers).
-With a roster and no wire the local machine is the authority: the rotation is built and granted
-locally, deaths score locally, rematch is local. `<TODO: the full reader list, found by grepping
-the wire and seat checks in VersusDirector, SessionNet, SessionVoices and GameSession>`. Then let
-A4's flags reach a local `--vs` (today `ResolveBots` drops them there with a warning).
+**Approach (landed).** The reader list, each now asking the question it means. `VersusDirector`:
+`Wired` (a link and a roster) and `Guest` (wired, not host) replace `NetSeats.Count > 0`;
+`RematchIsTheHosts` is `Guest`; `Wire` builds the rotation unless `Guest`, sets `RespawnRequest =
+AskSpawn` only when `Wired` and otherwise `RespawnPlacement` off the local rotation, and its Downed
+handler reports to the host only when `Wired`, otherwise scoring the death and posting the death
+lines itself for every seat (a bot is named by its callsign, a pane by its player tag);
+`TakeKillLine(victim)` only says the seat is the match's, and `KillLines` no longer passes a
+killer; `Restart`'s wire branch runs only when `Wired`, and its local branch respawns every seat
+rig rather than the panes. Already wire-gated and unchanged: `WireSpawns`, `WireMatchState`,
+`WireFlags`, `WireZeppelinVersus`, `ScoreDeath`, `TakeScore`, `SendScore`, `SendMatchState`,
+`TakeMatchState`, `AskSpawn`, `GrantSpawn`. Roster readings that are right with no wire and
+unchanged: `WireRearmBases`' `IsLocal`, `PostLivesLeft`, `IsBot`/`IsLocal`/`HasPane`,
+`SeatTeams`/`SpawnTeams`. `SessionNet`: every wire step, `ReportDeath`, `RouteHit`, `SendFire`,
+`SendChangedDamage`, `BroadcastAircraftState` and `TraceStep` gate on `Link`; `FillSeatRigs`
+reads the roster alone; doc change only. `SessionVoices.RegisterPlayers` branched on the roster's
+size and now takes `onWire` from `GameSession`, so local panes stay voiceless with a roster and a
+bot stays silent. `GameSession`: `RestartOffered` and the pause overlay already read `Link`; the
+cutscene's scripted seat (`Seats.Count > 0 ? _seatRigs[0]`) is the first pane either way;
+`FieldPositionsSnapshot` now counts a local bot, as a network host counts its own; the seat-voice
+prewarm reads voice 0 as none. `SessionSpec.ResolveBots` no longer refuses a local match.
+`Launcher.LocalVersusField` builds a local `--vs` roster right after `OpenCliNet` when no wire
+opened (so a `--net-host` whose socket failed flies its bots locally): `NetSeats.LocalPanes` (P1
+upward, no plane named, so each pane flies its own pick as without a roster), then
+`NetSeats.AddBots` over `Launcher.ResolveBots` (the host's resolution on `Rng.BotField`), then
+`Validate`. With no transport there is no peer id; every local seat carries
+`NetSeats.OfflinePeer` (`NetSession.NoPeer`), so seat 0 is the first pane and the host-owned-bot
+rule holds. **A local match with no bots keeps no roster**, the cheaper of the two: a roster for
+every local match would move pane-visible readings (each pane's `PilotName` becomes `P1`/`P2`,
+`FieldPositionsSnapshot` switches source) and put the seat's plane ahead of Instant Action's
+override in `HumanFlightAdapter`, all for no gain. A local match never sets `End` (the wire's
+reason byte), so "No Enemies Left" is still not posted locally; the match does end on
+`AllAlone`. For C23: a menu launch runs `StartSessionFromMenu`, whose `TakeNetLaunch` sets
+`_netRoster = null` and returns when there is no wire; after it, with bot rows on the join board,
+set `_netRoster` to `NetSeats.LocalPanes(planes.Count)` plus `NetSeats.AddBots(seats,
+NetSeats.OfflinePeer, rows)` and `Validate`, the rows' Random planes and blank callsigns resolved
+through `BotSeats.Resolve` (as `Launcher.ResolveBots` does) unless the board already holds real
+ones. `SessionSpec.FromMenu` carries no `VsBots`, so `LocalVersusField` (which reads the spec) does
+not serve a menu launch as it stands. Nothing else moves: pane seats name no plane, and pads, fits
+and custom planes index by `LocalOrdinal`, which counts panes alone. `CloseNetLaunch` clears
+`_netRoster` only when a wire existed, so a local roster survives a Restart and the next menu
+launch's `TakeNetLaunch` clears it.
 
-**Model recommendation.** Opus.
+**Model recommendation.** Opus: the reader audit across four files, where a missed one fails
+silently in a wired session.
 
-**Verify.** A local `--vs --vs-bots=1` engine suite: the bot and the pane kill each other, both
-score, both respawn, a rematch places both; every existing local `vs-*` / split-screen Dogfight
-suite and every `net-` suite stays green (the change must not move a wired session).
+**Verify.** New suite `versus-local-bot` (`CSVM/src/Testing/LocalBotSuites.cs`, weight 13.0, MP1,
+roster from `Launcher.LocalVersusField`, opened through `NetCombatSuites.Ends` with no transport):
+auto respawn, one pane and one bot: no link, two seat rigs, the bot armed with `PlayersPreferred`
+off, both seats' returns local (control: the pane is a person's); the bot's kill of the pane and the
+pane's of the bot each score the killer and post a line naming the bot's callsign; each comes back
+after the crash camera on a table entry, the bot on the same pilot with its quarry dropped; a
+`Restart` with the bot down and the pane lifted zeroes the board and places both on their opening
+entries. Auto Respawn off: the bot returns after 180 steps without Fire Guns while the pane downed
+on the same step still waits (control). One life, two bots: the first bot stays down spectating and
+the match runs (control), the second's death ends it with `AllAlone`. Two panes and no bots: no
+roster, the seats are the panes, a kill scores and names `P2`, the victim returns on an entry.
+Able-to-fail: the wire test as before the change fails 15 checks (listed under Evidence); with the
+local death-line post removed, the three death-line checks fail. Units: `VsBotFlagTests` 22 (a
+guest still refused, a local match seats its bots and is cut by its panes, a local roster's panes
+then bots on `OfflinePeer` with a stray-peer bot refused). Probe through `RunProbe.ps1 --vs
+--mission=MP1 --mute --vs-bots=2 --vs-bot=player_fury:skill=ace:name=Ace --frames=900`: exit 0,
+"local roster of 4 seat(s), 3 of them bots", three bots armed. Runs: `RunTests.ps1 -SkipEngine
+-SkipGoldens` units 6246 passed / 0 failed / 3 skipped; `-Filter net- -Shards 4 -SkipUnits
+-SkipGoldens` 58 passed / 0 failed; `-Filter 'vs-,versus-,splitscreen,hud-kill-line,air-to-air,
+incoming-fire-cues,death-respawn-rest-pose,menu-launch-return,menu-player-setup-journey,
+menu-original-lobby,pause-sheet,voice-runtime,ai-voice,flight-live-respawn-gate' -Shards 4`
+24 passed / 0 failed, engine errors clean.
 
-**⚠ Traps.** A wired session must behave exactly as before; most risk is in a reader that used
-the wire check as a stand-in for "host". C23 depends on this item; C21 does not.
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** Never read the roster's size as "on a wire" again: a local match with bots holds a
+roster (`VersusDirector.Wired` carries the warning). A local roster's panes must name no plane, or
+the seat's plane overrules the pane's own pick.
 
 ## C21 ☐ Multiplayer Lobby: Add bot, Fill-to-N, per-row plane/skill/team/callsign, Remove
 

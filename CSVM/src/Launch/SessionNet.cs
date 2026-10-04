@@ -110,8 +110,9 @@ internal sealed class SessionNet
     /// counters and its roster; a replication feature registers its handlers on it.</summary>
     public Net.NetSession? Link { get; }
 
-    /// <summary>The whole match's seat roster in seat order, empty outside a network match. A
-    /// guest's arrives over the wire, between construction and the build.</summary>
+    /// <summary>The whole match's seat roster in seat order. A local match with bots holds one
+    /// with no <see cref="Link"/>; any other session without a wire holds none. A guest's arrives
+    /// over the wire, between construction and the build.</summary>
     public IReadOnlyList<Net.NetSeat> Seats { get; private set; }
 
     /// <summary>Each seat's loadout and custom plane, from the lobby.</summary>

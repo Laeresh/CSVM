@@ -208,8 +208,8 @@ public sealed record SessionSpec
     /// <summary>Resolved. <c>--vs-no-respawn</c> was spelled out, so the flag beats a lobby's box.</summary>
     public bool VsAutoRespawnExplicit { get; private set; }
     /// <summary><b>Resolved.</b> The <c>--vs-bot=</c> entries, then <c>--vs-bots=N</c>'s defaults:
-    /// the bot seats a <c>--net-host</c> Dogfight seats after its guests. Empty without
-    /// <see cref="Versus"/>, on a guest and in a local match, and cut to the seats
+    /// the bot seats a <c>--net-host</c> Dogfight seats after its guests, or a local one after its
+    /// panes. Empty without <see cref="Versus"/> and on a guest, and cut to the seats
     /// <see cref="Players"/> leaves.</summary>
     public IReadOnlyList<VsBotEntry> VsBots { get; private set; } = Array.Empty<VsBotEntry>();
     /// <summary><c>--ctf</c>: a network Dogfight flown as Capture the Flag, the mission's
@@ -2558,7 +2558,7 @@ public sealed record SessionSpec
     }
 
     // The bot flags' scope, each refusal named and the flags dropped, as --ctf's is. A bot is a seat
-    // the host's roster carries, so a guest never seats one, and a local match has no seat roster.
+    // the host's roster carries, so a guest never seats one; a local match seats them in its own.
     // The field is cut to the seats this machine's own pilots leave; guests can cut it again.
     private void ResolveBots()
     {
@@ -2569,7 +2569,6 @@ public sealed record SessionSpec
 
         string? refusal = !Versus ? "a Dogfight seats bots; ignoring them without --vs"
             : NetJoin != null ? "a guest flies the host's roster, whose bots the host seats; ignoring them"
-            : NetHostPort == null ? "a local match seats no bots, only a --net-host match does; ignoring them"
             : null;
         if (refusal != null)
         {
