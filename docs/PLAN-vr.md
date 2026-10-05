@@ -200,6 +200,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ◐ A1 OpenXR boots in a flight session on VDXR and SteamVR
 2. ☑ A2 The `--xr-sim` stand-in interface
 3. ❌ A3 Precision near the eye: render-only floating origin, double-precision fallback
+   ☐ A3b A precise VR cockpit built from small numbers, the flat cockpit pass's idea in stereo
 4. ☑ A4 Screen-space effects under multiview
 5. ☑ A5 Cockpit scale per plane
 
@@ -330,7 +331,12 @@ The active runtime on the author's machine is VDXR; a SteamVR test needs the run
 session stays set for every later launch from it. The `xr frames` line must stay at Debug: a console
 line costs about 2 ms on the frame path (PERF-35) and would make its own late frame every second.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged Wave A tree: build 0 warnings, units 6294 passed
+of 6297, engine 527 passed, 2 skipped, goldens 25/25 hash-identical. That first run's engine stage
+logged two `Uniform buffer supplied ... (128) is smaller than ... (144)` errors in one shard, the
+first flat run after the author's headset session; the engine stage re-run was clean. Godot's
+shader cache is `user://shader_cache`, shared by every worktree and session, so a headset run's
+stereo variants reach them all once (B6 owns the fix).
 
 ## A2 ☑ The `--xr-sim` stand-in interface
 
@@ -417,7 +423,12 @@ the distortion, not the jitter; the stand-in has none, and the window's blit is 
 reads. A shell that keeps `GODOT_EDITOR_CUSTOM_FEATURES=csvm_xr_sim` set gives every later launch from
 it the stereo variants and no shader cache; the scripts set it per process only.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged Wave A tree: build 0 warnings, units 6294 passed
+of 6297, engine 527 passed, 2 skipped, goldens 25/25 hash-identical. That first run's engine stage
+logged two `Uniform buffer supplied ... (128) is smaller than ... (144)` errors in one shard, the
+first flat run after the author's headset session; the engine stage re-run was clean. Godot's
+shader cache is `user://shader_cache`, shared by every worktree and session, so a headset run's
+stereo variants reach them all once (B6 owns the fix).
 
 ## A3 ❌ Precision near the eye: render-only floating origin, double-precision fallback
 
@@ -573,7 +584,12 @@ that only steadies the dials against the shell has not steadied either against t
 re-parent that keeps the same float operations (the interior under the XR origin) renders
 bit-identical frames. Check a candidate with a pixel diff against the baseline before measuring it.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged Wave A tree: build 0 warnings, units 6294 passed
+of 6297, engine 527 passed, 2 skipped, goldens 25/25 hash-identical. That first run's engine stage
+logged two `Uniform buffer supplied ... (128) is smaller than ... (144)` errors in one shard, the
+first flat run after the author's headset session; the engine stage re-run was clean. Godot's
+shader cache is `user://shader_cache`, shared by every worktree and session, so a headset run's
+stereo variants reach them all once (B6 owns the fix).
 
 ## A4 ☑ Screen-space effects under multiview
 
@@ -674,7 +690,12 @@ All with `--det --mute --frames=120`. Flat goldens unmoved: no code changed.
   local seats under `--xr-sim` leave the root viewport without a 3D camera (a flat grey frame,
   `ghost-try.png`). D17 checks it on a networked race or with a suite that arms the stamp.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged Wave A tree: build 0 warnings, units 6294 passed
+of 6297, engine 527 passed, 2 skipped, goldens 25/25 hash-identical. That first run's engine stage
+logged two `Uniform buffer supplied ... (128) is smaller than ... (144)` errors in one shard, the
+first flat run after the author's headset session; the engine stage re-run was clean. Godot's
+shader cache is `user://shader_cache`, shared by every worktree and session, so a headset run's
+stereo variants reach them all once (B6 owns the fix).
 
 ## A5 ☑ Cockpit scale per plane
 
@@ -797,7 +818,12 @@ the world and the hulls are metres, so a world scale other than 1.0 resizes the 
 and every other aircraft along with the cockpit. ⚠ Keep the eye offset on the interior's own Z
 axis; a lateral or vertical one breaks the gunsight's alignment with the guns.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged Wave A tree: build 0 warnings, units 6294 passed
+of 6297, engine 527 passed, 2 skipped, goldens 25/25 hash-identical. That first run's engine stage
+logged two `Uniform buffer supplied ... (128) is smaller than ... (144)` errors in one shard, the
+first flat run after the author's headset session; the engine stage re-run was clean. Godot's
+shader cache is `user://shader_cache`, shared by every worktree and session, so a headset run's
+stereo variants reach them all once (B6 owns the fix).
 
 # Wave B, the VR rig
 
