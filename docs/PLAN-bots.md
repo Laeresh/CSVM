@@ -916,6 +916,10 @@ named off a seat roster ordered differently from the lobby rows.
 
 **Verify.** A capture of the board and of a bot's marker in flight, shown to the user.
 
+**Also settles (the user's ruling on C21's capture):** a bot row's Ready tick (a bot always reads
+Ready today) and the lobby header's "Players (n of cap)", which counts bot rows against the human
+cap and can read "Players (14 of 4)". Settle both from D31's capture together with the tag.
+
 **⚠ Traps.** `SplitScreen.PlayerColor` is a 4-colour palette taken modulo 4
 (`CSVM/src/UI/Boards/SplitScreen.cs:76-82,142`), so colours repeat at 16 pilots. That predates bots
 (16 humans repeat too) and stays a separate change; file it if D32 shows it confuses play.
@@ -929,6 +933,18 @@ convincingly in a crowded arena, rearm sensibly and do not pile into terrain.
 player-centred fights; no suite flies a dozen hostile AI against each other.
 
 **Approach.** A `playtest.md` entry (minted with `New-ItemId.ps1`) once Waves A to C land.
+
+The watch-list the landed items left for this sortie:
+- **Rearm thresholds (TUNE, B14):** `AiRearmOrder.LowAmmoShare = 0.2` of the forward guns' load and
+  `DamagedHullShare = 0.35` of whole-vehicle health. Judge whether bots leave the fight too early,
+  too late, or too often.
+- **Rearm detour (B14):** a bot on a base's closed side flies to a gate 2.5 km out and back in, up to
+  about 95 s away from the fight. Only C1's MP1 base was flown; watch the other chapters' bases.
+- **Lay-off assist (B11):** `AiModeMachine.UpdateLayOff` eases a bot off a human it targets who chases
+  it and falls behind; a bot never lays off for a bot. Decision 10 does not cover it; judge whether it
+  reads as fair or as bots going soft on people.
+- **`--hold=` (B14, INSTR-100):** a hold script outranks the AI pilot, so a scripted run with bots
+  and `--hold=` flies the bots on the script. Not a play issue; a probe trap.
 
 **Model recommendation.** `<TODO: not settled in the session>`
 
