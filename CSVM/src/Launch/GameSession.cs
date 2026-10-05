@@ -372,6 +372,9 @@ public partial class GameSession : Node3D
     /// <summary>Whether the wave ocean stands in this session's world.</summary>
     public bool OceanBuilt => _ocean != null;
 
+    /// <summary>The static world's scene builder, null outside a built world. Read by the suites.</summary>
+    internal SceneBuilder? WorldScene => _worldScene;
+
     /// <summary>Has the session drawn the first frame the player is meant to see. That frame is
     /// an intro's camera posed onto the rigs, or the flown aeroplane on its spawn under its own
     /// HUD. It latches at the end of the frame that reaches it, and it is what the start cover

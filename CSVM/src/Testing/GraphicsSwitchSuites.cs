@@ -30,6 +30,13 @@ internal static class GraphicsSwitchSuites
     // The one chapter the wave ocean covers (Effects.Ocean.Covers).
     private const string OceanChapter = "C1B";
 
+    // A chapter whose whole-map wtr sheet the ocean does not cover. Its sheet carries the same
+    // collapse under Enhanced, so a switch a closed session left on would hole its whole sea.
+    private const string UncoveredSeaChapter = "C2B";
+
+    // The base sheet's vertex-stage call. The include line alone never matches it.
+    private const string HideCall = "csky_ocean_hides_sea(";
+
     // Every shader text a reading met, by its census key, for the mismatch artifact.
     private static readonly Dictionary<string, string> TextByKey = new(StringComparer.Ordinal);
 
@@ -333,6 +340,118 @@ internal static class GraphicsSwitchSuites
             {
                 door.Close();
             }
+        }
+        finally
+        {
+            WaterQualitySetting.Resolve(launched, null, null);
+            Restore(wasEnhanced);
+        }
+    }
+
+    [Suite("graphics-ocean-switch",
+        "the C1B wave ocean follows a live graphics switch at water quality waves: an Enhanced build "
+        + "stands one ocean and every sea-level base sheet material carries the vertex collapse; "
+        + "switched to Original the ocean leaves the tree and the sheet carries a fresh Original "
+        + "build's text, with no collapse; back to Enhanced exactly one ocean stands and the sheet "
+        + "carries a fresh Enhanced build's text; an Original build switched to Enhanced builds the "
+        + "ocean; a closed session leaves no ocean in the tree, and a following Enhanced session on "
+        + "a sea chapter the ocean does not cover builds none")]
+    internal static void OceanFollowsSwitch(TestContext ctx)
+    {
+        RequireData(ctx, OceanChapter);
+        RequireData(ctx, UncoveredSeaChapter);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = WaterQualitySetting.Word;
+        var report = new StringBuilder();
+        try
+        {
+            ViewDistance.Set(null);
+            WaterQualitySetting.Resolve(WaterQualitySetting.Waves, null, null);
+            SeaReading freshOriginal, originalToEnhanced;
+            Effects.Ocean? builtLive;
+            var original = Open(ctx, enhanced: false, chapter: OceanChapter);
+            try
+            {
+                if (!original.Built)
+                {
+                    ctx.Check(false, $"the Original C1B session builds");
+                    return;
+                }
+                freshOriginal = Sea(original);
+                Switch(original, true);
+                originalToEnhanced = Sea(original);
+                builtLive = FirstOcean(ctx.Host);
+            }
+            finally
+            {
+                original.Close();
+            }
+            ctx.Check(freshOriginal.Oceans == 0 && freshOriginal.Materials > 0 && freshOriginal.Drawn > 0 && freshOriginal.Hidden == 0,
+                $"an Original C1B build stands no ocean and its base sheet carries no collapse ({freshOriginal})");
+            ctx.Check(originalToEnhanced.Oceans == 1 && originalToEnhanced.Hidden == originalToEnhanced.Materials,
+                $"switched to Enhanced it builds the ocean and hides the sheet ({originalToEnhanced})");
+            Left(ctx, builtLive, "the Original build switched to Enhanced");
+            report.AppendLine($"fresh original\n{freshOriginal.Print()}\noriginal switched to enhanced\n{originalToEnhanced.Print()}");
+
+            var enhanced = Open(ctx, enhanced: true, chapter: OceanChapter);
+            Effects.Ocean? builtFresh;
+            try
+            {
+                if (!enhanced.Built)
+                {
+                    ctx.Check(false, $"the Enhanced C1B session builds");
+                    return;
+                }
+                var freshEnhanced = Sea(enhanced);
+                builtFresh = FirstOcean(ctx.Host);
+                ctx.Check(freshEnhanced.Oceans == 1 && enhanced.Session.OceanBuilt && freshEnhanced.Materials > 0
+                        && freshEnhanced.Drawn > 0 && freshEnhanced.Hidden == freshEnhanced.Materials,
+                    $"an Enhanced C1B build stands one ocean and every base sheet material collapses its sea-level vertices ({freshEnhanced})");
+                ctx.Check(originalToEnhanced.Census == freshEnhanced.Census,
+                    $"the Original build switched to Enhanced carries a fresh Enhanced build's base sheet text");
+                ctx.Check(freshEnhanced.Census != freshOriginal.Census,
+                    $"ABLE-TO-FAIL CONTROL: the two modes' fresh base sheet texts differ");
+
+                Switch(enhanced, false);
+                var switchedOriginal = Sea(enhanced);
+                ctx.Check(switchedOriginal.Oceans == 0 && !enhanced.Session.OceanBuilt && OceansUnder(ctx.Host) == 0
+                        && builtFresh is { } dropped && (!GodotObject.IsInstanceValid(dropped) || !dropped.IsInsideTree()),
+                    $"switched to Original the ocean leaves the tree ({switchedOriginal}, {OceansUnder(ctx.Host)} under the host)");
+                ctx.Check(switchedOriginal.Hidden == 0 && switchedOriginal.Census == freshOriginal.Census,
+                    $"and the base sheet carries a fresh Original build's text, with no collapse ({switchedOriginal.Hidden} collapsing)");
+
+                Switch(enhanced, true);
+                var roundTrip = Sea(enhanced);
+                var rebuilt = FirstOcean(ctx.Host);
+                ctx.Check(roundTrip.Oceans == 1 && OceansUnder(ctx.Host) == 1 && rebuilt != null && !ReferenceEquals(rebuilt, builtFresh),
+                    $"back to Enhanced the ocean is built again, exactly once ({roundTrip}, {OceansUnder(ctx.Host)} under the host)");
+                ctx.Check(roundTrip.Hidden == roundTrip.Materials && roundTrip.Census == freshEnhanced.Census,
+                    $"and the base sheet carries a fresh Enhanced build's text, hidden again ({roundTrip.Hidden} of {roundTrip.Materials} collapsing)");
+                report.AppendLine($"fresh enhanced\n{freshEnhanced.Print()}\nswitched original\n{switchedOriginal.Print()}\nround trip\n{roundTrip.Print()}");
+                builtFresh = rebuilt;
+            }
+            finally
+            {
+                enhanced.Close();
+            }
+            Left(ctx, builtFresh, "the round-tripped Enhanced session");
+
+            var uncovered = Open(ctx, enhanced: true, chapter: UncoveredSeaChapter);
+            try
+            {
+                var sea = uncovered.Built ? Sea(uncovered) : null;
+                ctx.Check(!Effects.Ocean.Covers(UncoveredSeaChapter) && uncovered.Built && !uncovered.Session.OceanBuilt
+                        && sea is { Oceans: 0 } && OceansUnder(ctx.Host) == 0,
+                    $"a following Enhanced {UncoveredSeaChapter} session builds no ocean (built={uncovered.Built}, {sea?.ToString() ?? "no reading"}, {OceansUnder(ctx.Host)} under the host)");
+                ctx.Check(sea is { Materials: > 0, Drawn: > 0 } && sea.Hidden == sea.Materials,
+                    $"and its drawn sheet carries the collapse, so a switch left on would hole its sea ({sea?.ToString() ?? "no reading"})");
+                report.AppendLine($"uncovered {UncoveredSeaChapter}\n{sea?.Print() ?? "no reading"}");
+            }
+            finally
+            {
+                uncovered.Close();
+            }
+            ctx.WriteArtifact("test-graphics-ocean-switch.txt", report.ToString());
         }
         finally
         {
@@ -829,6 +948,63 @@ internal static class GraphicsSwitchSuites
         return string.Create(CultureInfo.InvariantCulture, $"{inTree} in tree");
     }
 
+    // The ocean nodes standing anywhere under the host, so one parented outside the session counts.
+    private static int OceansUnder(Node root)
+    {
+        int count = 0;
+        Walk(root, node =>
+        {
+            if (node is Effects.Ocean { } ocean && ocean.IsInsideTree())
+                count++;
+        });
+        return count;
+    }
+
+    private static Effects.Ocean? FirstOcean(Node root)
+    {
+        Effects.Ocean? found = null;
+        Walk(root, node => found ??= node as Effects.Ocean);
+        return found;
+    }
+
+    // A closed session's ocean has left the tree, which is what puts the sheet's switch back.
+    private static void Left(TestContext ctx, Effects.Ocean? ocean, string what)
+    {
+        bool gone = ocean == null || !GodotObject.IsInstanceValid(ocean) || !ocean.IsInsideTree();
+        ctx.Check(ocean != null && gone && OceansUnder(ctx.Host) == 0,
+            $"closing {what} leaves no ocean in the tree (held ocean {(ocean == null ? "never built" : gone ? "gone" : "still in the tree")}, {OceansUnder(ctx.Host)} under the host)");
+    }
+
+    // The base sheet's materials as the world builder named them, by texture and shader text. Also
+    // how many carry the collapse and are drawn.
+    private static SeaReading Sea(Rig rig)
+    {
+        var sheet = new HashSet<ShaderMaterial>();
+        var census = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        int hidden = 0;
+        foreach (var (material, texture) in rig.Session.WorldScene?.TexturedMaterials ?? Array.Empty<(ShaderMaterial, string)>())
+        {
+            if (!Mech3.SceneBuilder.IsOceanBaseTexture(texture) || !sheet.Add(material))
+                continue;
+            string code = material.Shader?.Code ?? "";
+            hidden += code.Contains(HideCall, StringComparison.Ordinal) ? 1 : 0;
+            Count(census, texture.ToLowerInvariant() + ":" + code.GetHashCode().ToString("x8", CultureInfo.InvariantCulture));
+        }
+        int drawn = 0;
+        Walk(rig.Session, node =>
+        {
+            if (node is GeometryInstance3D geometry && geometry.IsVisibleInTree())
+                drawn += Materials(geometry).Count(sheet.Contains);
+        });
+        int oceans = 0;
+        Walk(rig.Session, node =>
+        {
+            if (node is Effects.Ocean { } ocean && ocean.IsInsideTree())
+                oceans++;
+        });
+        return new SeaReading(oceans, sheet.Count, hidden, drawn, Print(census));
+    }
+
     // The switch as the launcher makes it, then the steps a reading waits for.
     private static void Switch(Rig rig, bool enhanced)
     {
@@ -1146,6 +1322,14 @@ internal static class GraphicsSwitchSuites
             text.Append($"  shaders {Shaders}");
             return text.ToString();
         }
+    }
+
+    private sealed record SeaReading(int Oceans, int Materials, int Hidden, int Drawn, string Census)
+    {
+        public override string ToString() => string.Create(CultureInfo.InvariantCulture,
+            $"{Oceans} ocean(s), {Materials} base sheet material(s), {Hidden} collapsing, {Drawn} drawn surface(s)");
+
+        public string Print() => $"  {this}\n  census {Census}";
     }
 
     private sealed record CoverReading(string Order, int WorkFrame, bool HeldThroughStall, int Steps, bool Dropped,

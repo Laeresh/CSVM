@@ -234,6 +234,22 @@ its own sessions). Ask the user to fly C1B at cruise and low level for the motio
 **⚠ Traps.** Look judgements are the user's. Do not settle shimmer by a frame-difference metric
 alone.
 
+**Landed (scripted half).** The engine suite `graphics-ocean-switch` (`Testing/GraphicsSwitchSuites.cs`,
+about 11 s) drives `EnhancedLook.Switch` on whole C1B flight sessions at `waves`. It names the base
+sheet's materials through `SceneBuilder.TexturedMaterials` and `IsOceanBaseTexture` (C1B has one,
+`wtr00000`, drawn in 144 surfaces under Original and 3 merged ones under Enhanced), read through a
+new suite-only `GameSession.WorldScene` accessor. It proves: an Enhanced build stands one ocean and
+the sheet's text carries the `csky_ocean_hides_sea` collapse; a live switch to Original takes the
+ocean out of the tree and leaves the sheet the text a fresh Original build gives it, with no
+collapse; a switch back builds a new ocean, exactly one under the whole test host, and the sheet's
+text is a fresh Enhanced build's again; an Original-built session switched to Enhanced builds the
+ocean with the same sheet text; each closed session leaves no ocean in the tree, so the sheet's
+switch is back at 0; and a following Enhanced C2B session (a whole-map `wtr00000` sheet that
+carries the collapse, which a switch left on would hole) builds none. A network session's refusal
+is already `net-pause-overlay`'s, and it returns before the session follows anything. Mutating
+`FollowOcean` to forget the dropped ocean fails the leave and exactly-once checks. The motion
+judgement at the controls is still owed.
+
 # Wave B, cost
 
 ## B11 ☐ Bring the low-altitude SSR cost within budget
