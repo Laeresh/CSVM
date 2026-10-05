@@ -108,10 +108,10 @@ internal sealed class FlightRosterPolicy
         NoAssist = spec.NoAssist,
         WeaponLab = spec.WeaponLab,
         // The display is read here because it is a property of the launch, not of the seat. It
-        // answers for a headless host alone; the hidden test desktop is a real one, and the
-        // scripted arm is what keeps a suite's mouse mode its own.
+        // answers for a headless host alone; the hidden test desktop is a real one. The scripted
+        // arm, the launch's included, is what keeps a suite's mouse mode its own.
         MouseCaptureAllowed = MouseCapture.Allowed(
-            DisplayServer.GetName() != "headless", spec.Det, spec.IsScripted),
+            DisplayServer.GetName() != "headless", spec.Det, spec.IsScripted || MouseCapture.ScriptedLaunch),
     };
 }
 

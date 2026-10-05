@@ -89,8 +89,9 @@ internal static class MouseFlightSuites
     [Suite("flight-mouse-capture",
         "the desktop mouse a flight seat takes, and the guard that keeps it off this harness: a "
         + "session assembled from this launch's own command line resolves the capture OFF because "
-        + "the launch is scripted, while the same resolution from an interactive command line on "
-        + "this very display says yes, a human seat carrying the harness's own answer holds no "
+        + "the launch is scripted, and so does one a suite assembles from an interactive command "
+        + "line inside this launch, while that same resolution in a launch that is not scripted "
+        + "answers the display alone, a human seat carrying the harness's own answer holds no "
         + "mouse and leaves Input.MouseMode exactly where the harness left it over a run of frames, "
         + "and the decision goes false for a halted frame, a photo-mode pane, the pause options "
         + "leaf and a watcher's seat, which is what hands the pointer back to every board that "
@@ -103,8 +104,20 @@ internal static class MouseFlightSuites
         bool realDisplay = DisplayServer.GetName() != "headless";
         ctx.Check(!scripted.MouseCaptureAllowed,
             $"a session assembled from this launch's command line takes no mouse ({scripted.MouseCaptureAllowed})");
-        ctx.Check(interactive.MouseCaptureAllowed == realDisplay,
-            $"ABLE-TO-FAIL CONTROL: the same resolution from an interactive command line answers the display alone (allowed {interactive.MouseCaptureAllowed}, real display {realDisplay})");
+        ctx.Check(MouseCapture.ScriptedLaunch && !interactive.MouseCaptureAllowed,
+            $"and neither does one a suite assembles from an interactive command line inside this launch (launch scripted {MouseCapture.ScriptedLaunch}, allowed {interactive.MouseCaptureAllowed})");
+        bool launch = MouseCapture.ScriptedLaunch;
+        MouseCapture.ScriptedLaunch = false;
+        try
+        {
+            var unscripted = FlightRosterPolicy.From(SessionSpec.Parse(new[] { "--fly" }));
+            ctx.Check(unscripted.MouseCaptureAllowed == realDisplay,
+                $"ABLE-TO-FAIL CONTROL: the same resolution in a launch that is not scripted answers the display alone (allowed {unscripted.MouseCaptureAllowed}, real display {realDisplay})");
+        }
+        finally
+        {
+            MouseCapture.ScriptedLaunch = launch;
+        }
 
         var before = Godot.Input.MouseMode;
         var seat = Rig(ctx, PlaneStats.Load(ctx.ZrdrPath, "player_bhawk"), "MouseCaptureSeat",
