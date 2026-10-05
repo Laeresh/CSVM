@@ -162,6 +162,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
+- `BL-1052` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **The Original lobby's Game Scores tab draws
+  its figures left-aligned at the header corners, where the original's script centres them in the
+  row cells.** *Evidence:* the shipped `MULTIPLAYERLOBBY_STATS.SCRIPT` places the four figure cells
+  at offsets 154/216/277/337 from the row origin, 62/61/60/57 wide, centred, in face 10574
+  (`docs/org/menu-inventory.md`, the Game Scores page); the race table (`OriginalRaceTable`) follows
+  the script, while the Dogfight rows of `OriginalLobbyScreen`'s scores page start each figure at
+  its header's left corner. *Fix shape:* lay the Dogfight figures through the same cell geometry
+  the race table uses.
+
 
 ## Splitscreen
 
@@ -173,8 +182,7 @@ nearest/union rule, or record it as deliberately single/global. This theme colle
 viewer set behind `ProjectilePool.Viewers` / `ScreenSize.NearestFloor` for draw rules that say
 "the camera". Sim state stays global, the mission wind is the worked example
 (`Session/WeatherRig.Tick`, stepped once per frame outside the per-rig loop on purpose). Splitscreen-scoped items that live with
-their own system: `BL-537` (the 4-player pool judgement), `BL-296` (per-player ActionMap),
-`BL-314` (race countdown).
+their own system: `BL-537` (the 4-player pool judgement), `BL-296` (per-player ActionMap).
 
 The theme's first batch (`BL-126`, `BL-365`–`BL-376`) landed via
 `PLAN-splitscreen-polish` (2026-08-15,
@@ -192,10 +200,6 @@ usual.
   (line ~2238), not the `1/sqrt(N)` splitscreen term itself, which is confirmed correct.
 
 ## Missions, modes & campaign
-
-- `BL-314` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A time-attack stunt race, solo, split screen and network.**
-  Scheduled as [`docs/PLAN-stunt-race.md`](docs/PLAN-stunt-race.md); the countdown shape and its four
-  traps live in that plan's A2.
 
 ## Tooling, platform & docs
 
