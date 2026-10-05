@@ -924,7 +924,9 @@ label, and every other guest hears it through the world link's seat-left event. 
 every board with its record, ranked as it stood and marked left: the scores page's grey row on the
 Original board and in the lobby, a "(left)" suffix on the Built-in board, the Built-in held scores
 table and the live leaderboard line. A run it had in progress stops, nothing more counts for it, and a new
-window leaves it out. A race left with one pilot runs on to the window's end, since a race builds no
+window leaves it out. Only a mid-race leave marks the racer: a guest that flew the whole window and
+leaves from the ended race's board keeps an unmarked row, since the host marks nobody once the race
+has ended. A race left with one pilot runs on to the window's end, since a race builds no
 Dogfight match and so has no "fewer than two pilots" ending. The host leaving mid-race closes its
 door, which ends every guest's flight as a Dogfight's host leaving does.
 

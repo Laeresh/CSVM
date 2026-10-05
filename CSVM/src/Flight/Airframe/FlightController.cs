@@ -2115,8 +2115,8 @@ public partial class FlightController : Node3D
         bool counting = StartCount.Running && !Crashed && !RemoteOwned;
 
         // The stunt clock starts at GO and stops only at AllComplete or with a halted GameClock. It
-        // runs through the crash freeze, a remake-only rule so a crash costs the run its freeze.
-        // A start count holds it at zero.
+        // runs through the crash freeze, a remake-only rule: a crash costs the run the seconds it
+        // spends frozen. A start count holds it at zero.
         if (!counting)
             Stunt?.Tick(dt);
 
