@@ -1012,7 +1012,7 @@ on armed pilots (able-to-fail: with `FromMenu` dropping the bots, the roster che
 `-Filter menu- -Shards 4 -SkipUnits -SkipGoldens -SkipHitch` 46/46; `-Filter net- -Shards 4 -SkipUnits
 -SkipGoldens -SkipHitch` 60/60; `-Suite versus-local-bot` pass; engine errors clean on every run.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` on the merged tree (4f95503c, C23 and D31 with main through #148 merged in): build, units 6355 passed / 0 failed / 3 skipped, engine 536 passed / 0 failed / 2 skipped (6 shards, engine errors clean), goldens 24 hash-identical; exit 0.
 
 **⚠ Traps.** Never let a menu launch read the command line's `VsBots`: `FromMenu` replaces them, or
 a `--menu --vs-bots=` run would seat bots no board shows. The join board's bots fly a Dogfight
@@ -1130,7 +1130,7 @@ or the results board). Captures for the user, through `RunProbe.ps1` on the hidd
 `d31-target-marker.png` (`--vs --mission=MP1 --mute --vs-bots=1 --target=player2 --frames=90`, the
 bot off screen in the spyglass, its name line "Black Swan").
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` on the merged tree (4f95503c, C23 and D31 with main through #148 merged in): build, units 6355 passed / 0 failed / 3 skipped, engine 536 passed / 0 failed / 2 skipped (6 shards, engine errors clean), goldens 24 hash-identical; exit 0.
 
 **⚠ Traps.** `SplitScreen.PlayerColor` is a 4-colour palette taken modulo 4
 (`CSVM/src/UI/Boards/SplitScreen.cs:76-82,142`), so colours repeat at 16 pilots. That predates bots
