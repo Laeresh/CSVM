@@ -225,6 +225,22 @@ public sealed class SceneBuilder
     internal const string CoverageLines = "    ALPHA_ANTIALIASING_EDGE = 0.0;\n"
         + "    ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));";
 
+    /// <summary>The global uniform holding the left eye of the frame being drawn. It is the eye's
+    /// offset from the XR origin in world axes, written by <c>Launch/XrEyeFeed.cs</c>.</summary>
+    internal const string XrEyeLeftGlobal = "csky_xr_eye_left";
+
+    /// <summary>The right eye's twin of <see cref="XrEyeLeftGlobal"/>.</summary>
+    internal const string XrEyeRightGlobal = "csky_xr_eye_right";
+
+    /// <summary>The XR origin's world position, for the terms that need the interior's true place in
+    /// the world: the point lights and the sun's shadow pass.</summary>
+    internal const string XrOriginGlobal = "csky_xr_origin";
+
+    /// <summary>The three global uniforms <see cref="XrPreciseInterior"/> reads, as declared.</summary>
+    internal const string XrInteriorGlobals = "global uniform vec3 " + XrEyeLeftGlobal + ";\n"
+        + "global uniform vec3 " + XrEyeRightGlobal + ";\n"
+        + "global uniform vec3 " + XrOriginGlobal + ";";
+
     /// <summary>Multiplies every depth bias this builder emits. Each is a fraction of VIEW
     /// DISTANCE, so a subtree mounted at a scale other than 1 has all of them compressed by that
     /// factor while the renderer's depth noise floor stays put; a caller mounting one passes the
@@ -258,6 +274,13 @@ public sealed class SceneBuilder
     /// human airframes alone, so every other build keeps its shader text. Set before building: it
     /// keys the shader.</summary>
     internal bool RaceGhostShader;
+
+    /// <summary>Build this builder's surfaces as the stereo path's cockpit interior
+    /// (<c>Flight/Hud/XrCockpit.cs</c>). Each eye places a vertex from its own offset to that eye,
+    /// never through a chapter-scale translation. ⚠ Set only on the interior's builder while the
+    /// stereo path is live, since the shader reads <see cref="XrInteriorGlobals"/>. Set before
+    /// building: it keys the shader.</summary>
+    internal bool XrPreciseInterior;
 
     /// <summary>Names the sky sprites whose opaque texture paints the sky's own colour as a
     /// backdrop: the moon and the star field. Under Enhanced their materials take
@@ -1861,7 +1884,7 @@ void fragment() {
     // fogged surface then emits the shader text it always did, free of a mix()'s float rounding.
     // Key bits: 1-64 the flags, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade.
     // Then 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage,
-    // 262144 the race ghost.
+    // 262144 the race ghost, 524288 the stereo interior.
     // ⚠ Keep the graphics mode out of the key: each key holds one shader per mode (ShaderTwins).
     private ModeShader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
@@ -1876,17 +1899,18 @@ void fragment() {
         bool gammaBlend = blend && GammaBlendAlpha;
         bool debugClutter = DebugClutterFlag;
         bool noAlphaCoverage = NoAlphaCoverage;
+        bool xrInterior = XrPreciseInterior;
         int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0)
             | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256)
             | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (debugClutter ? 4096 : 0)
             | (water ? 16384 : 0) | (sunVertexLit ? 32768 : 0) | (gammaBlend ? 65536 : 0)
-            | (noAlphaCoverage ? 131072 : 0) | (raceGhost ? 262144 : 0);
+            | (noAlphaCoverage ? 131072 : 0) | (raceGhost ? 262144 : 0) | (xrInterior ? 524288 : 0);
         ShaderTwins.EnsureCurrent();
         if (!BiasShaders.TryGetValue(key, out var twins))
         {
             BiasShaders[key] = twins = ShaderTwins.Make(() => BiasShaderCode(shaded, textured, blend, scissor,
                 doubleSided, scroll, clampUv, lit, fogged, edgeClamp, clutterFade, water, sunVertexLit, gammaBlend,
-                debugClutter, noAlphaCoverage, raceGhost), "world", $"world:{key:x}");
+                debugClutter, noAlphaCoverage, raceGhost, xrInterior), "world", $"world:{key:x}");
         }
         return twins;
     }
@@ -1898,7 +1922,8 @@ void fragment() {
     // GraphicsMode.Enhanced, so ShaderTwins can write it again under either mode.
     private static string BiasShaderCode(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp, bool clutterFade, bool water,
-        bool sunVertexLit, bool gammaBlend, bool debugClutter, bool noAlphaCoverage, bool raceGhost)
+        bool sunVertexLit, bool gammaBlend, bool debugClutter, bool noAlphaCoverage, bool raceGhost,
+        bool xrInterior)
     {
         // Enhanced mode only: a world surface authored `lighting: true` shades under the real scene
         // lights off its decoded normals. `lighting: false` is self-lit by intent and keeps the
@@ -1928,6 +1953,8 @@ void fragment() {
             sb.Append(CoverageMode);
         sb.AppendLine(";");
         sb.AppendLine("uniform float depth_bias = 0.0;");
+        if (xrInterior)
+            sb.AppendLine(XrInteriorGlobals);
         if (shaded && !sunLit && GraphicsMode.Enhanced)
             sb.AppendLine("uniform float shadow_lookup_offset = 0.0;");
         // The shared ordered instance-uniform block; this shader always carries instance uniforms,
@@ -1991,7 +2018,7 @@ void fragment() {
             sb.AppendLine("varying vec3 v_sun_lit;");
             // Where this frame's origin sits in the world, for a model drawn in a frame of its own
             // (the cockpit pass, CockpitOverlay). Zero for anything drawn in the world itself.
-            if (lit)
+            if (lit && !xrInterior)
                 sb.AppendLine("uniform vec3 light_origin = vec3(0.0);");
         }
         if (fullbright && lit)
@@ -2007,18 +2034,22 @@ void fragment() {
               + "    VERTEX *= step(0.004, v_clutter_alpha);\n"
             : "";
         string ghostVertex = raceGhost ? RaceGhost.VertexLine + "\n" : "";
+        // The stereo interior's model frame is the XR origin's, in the main world. Its camera is
+        // already a world position, so only the model term takes the origin back.
+        string sunAt = xrInterior ? "CAMERA_POSITION_WORLD" : "CAMERA_POSITION_WORLD + light_origin";
+        string modelAt = xrInterior ? " + " + XrOriginGlobal : "";
         // Per vertex in world space: the drawing view's sun and the point lights, summed into one
         // factor on the authored colour, clamped at white. At an armed eye (PhotoEyeParam) the
         // ambient half is the photograph's fill; `lighting: false` keeps the authored colour.
         string sunVertex = !sunLit ? ""
             : lit ? "    vec3 sun_dir;\n    vec3 sun_ambient_rgb;\n    vec3 sun_diffuse_rgb;\n    vec3 sun_fill_rgb;\n"
-                    + "    csky_sun_rgb_at(CAMERA_POSITION_WORLD + light_origin, sun_dir, sun_ambient_rgb, sun_diffuse_rgb, sun_fill_rgb);\n"
+                    + $"    csky_sun_rgb_at({sunAt}, sun_dir, sun_ambient_rgb, sun_diffuse_rgb, sun_fill_rgb);\n"
                     + "    vec3 sun_ambient = csky_photo_eye.w > 0.5 && distance(CAMERA_POSITION_WORLD, csky_photo_eye.xyz) < "
                     + PhotoEyeReach.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture) + "\n"
                     + "        ? sun_fill_rgb : sun_ambient_rgb;\n"
                     + "    v_sun_lit = clamp(COLOR.rgb * (sun_ambient + sun_diffuse_rgb\n"
                     + "        * max(dot(normalize(MODEL_NORMAL_MATRIX * NORMAL), sun_dir), 0.0)\n"
-                    + "        + csky_point_light((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz + light_origin)), 0.0, 1.0);\n"
+                    + $"        + csky_point_light((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz + {(xrInterior ? XrOriginGlobal : "light_origin")})), 0.0, 1.0);\n"
             : "    v_sun_lit = COLOR.rgb;\n";
         // The fullbright world keeps its collapsed sun, csky_world_light. It takes the point lights
         // as the linear gain they make on the clamped product, per vertex as the original evaluates
@@ -2026,12 +2057,22 @@ void fragment() {
         string pointVertex = !(fullbright && lit) ? ""
             : "    v_point_gain = vec3(0.0);\n"
               + "    if (csky_light_count > 0) {\n"
-              + "        vec3 point = csky_point_light((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz);\n"
+              + $"        vec3 point = csky_point_light((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz{modelAt});\n"
               + "        float world_light = csky_world_light_at(CAMERA_POSITION_WORLD);\n"
               + "        v_point_gain = csky_srgb_to_linear(clamp(COLOR.rgb * (world_light + point), 0.0, 1.0))\n"
               + "            - csky_srgb_to_linear(COLOR.rgb * world_light);\n"
               + "    }\n";
-        sb.AppendLine($@"
+        if (xrInterior)
+        {
+            sb.AppendLine($@"
+void vertex() {{
+{clutterVertex}{ghostVertex}{sunVertex}{pointVertex}{XrInteriorVertex(normalSign)}}}
+
+void fragment() {{");
+        }
+        else
+        {
+            sb.AppendLine($@"
 void vertex() {{
 {clutterVertex}{ghostVertex}{sunVertex}{pointVertex}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     NORMAL = {normalSign}normalize(MODELVIEW_NORMAL_MATRIX * NORMAL);
@@ -2041,6 +2082,7 @@ void vertex() {{
 }}
 
 void fragment() {{");
+        }
         if (clutterFade)
             sb.AppendLine("    if (!csky_clutter_dither_keep(FRAGCOORD.xy, v_clutter_alpha)) { discard; }");
         if (raceGhost)
@@ -2133,6 +2175,23 @@ void fragment() {{");
         sb.AppendLine("}");
         return sb.ToString();
     }
+
+    // The stereo interior's placement, the tail of its vertex stage. MODEL_MATRIX holds the vertex's
+    // offset from the XR origin, small, and each eye takes it from its own offset to that eye. The
+    // combined view's rotation and EYE_OFFSET bring it into the frame PROJECTION_MATRIX expects,
+    // whose world-scale rounding cancels in that projection. The bias pulls toward the drawing eye,
+    // so depth moves and the projected position does not. The sun's orthographic shadow pass takes
+    // the interior where it stands in the world instead, unbiased.
+    private static string XrInteriorVertex(string normalSign) =>
+        "    vec3 csky_rel = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;\n"
+        + $"    NORMAL = {normalSign}normalize(MODELVIEW_NORMAL_MATRIX * NORMAL);\n"
+        + "    if (PROJECTION_MATRIX[3][3] < 0.5) {\n"
+        + $"        vec3 csky_eye = VIEW_INDEX == 0 ? {XrEyeLeftGlobal} : {XrEyeRightGlobal};\n"
+        + "        VERTEX = mat3(VIEW_MATRIX) * (csky_rel - csky_eye) + EYE_OFFSET;\n"
+        + "        VERTEX = EYE_OFFSET + (VERTEX - EYE_OFFSET) * (1.0 - (depth_bias + node_bias));\n"
+        + "    } else {\n"
+        + $"        VERTEX = (VIEW_MATRIX * vec4(csky_rel + {XrOriginGlobal}, 1.0)).xyz;\n"
+        + "    }\n";
 #pragma warning restore SA1204
 
     // A camera-facing billboard material for the cloud sprites (cloud1/cloud2, flat 2D cards

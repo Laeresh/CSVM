@@ -206,6 +206,12 @@ member, and it does not go here.
   count is above one (`can_draw_2d` in its `renderer_viewport.cpp`), so under `--xr-sim` the HUD,
   the boards and the cockpit pass are absent from both eyes.
 
+- **SHOT-45**, **Judge where a stereo eye draws the cockpit against the flat `--no-cockpit-pass`
+  frame taken from that eye's own point, not against another stereo build.** On the empty stage
+  `--xr-sim=eye=1280x720,fov=96.4268,ipd=20,head=0.01/0/0,shot=left,pitch=-4.70001` puts the left eye
+  on the flat camera; the stereo interior registered within 0.04 px of the flat frame in every
+  region at 0 and 20 km, while the earlier stereo path differed by 0.1 px through its depth bias.
+
 ## GOLD, golden images
 
 - **GOLD-1**, **Update moved hashes with the visual change, and explain each moved shot in the

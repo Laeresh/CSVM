@@ -41,6 +41,11 @@ public sealed class FirstPersonDressing
     /// renders in the main world instead.</summary>
     public CockpitOverlay? Pass { get; set; }
 
+    /// <summary>The interior's placement under the stereo path, which draws it in the main world
+    /// from the XR origin's frame. Null outside that path and whenever <see cref="Pass"/> holds the
+    /// interior.</summary>
+    public XrCockpit? Stereo { get; set; }
+
     /// <summary>One frame's dressing for <paramref name="selected"/> under the pose the frame took.
     /// <paramref name="firstPersonPose"/> is that pose, not the selection, so a held look-behind
     /// brings the body back. The pass follows the drawn attitude and the airframe's wobble, and

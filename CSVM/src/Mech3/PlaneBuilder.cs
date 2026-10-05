@@ -104,7 +104,7 @@ public sealed class PlaneBuilder
     public PlaneBuilder(GameZ gamez, TextureArchive textures, bool spinningProps = false,
         bool damagePanels = false, PaintScheme? scheme = null, PatternLibrary? patterns = null,
         bool cockpitInterior = false, bool dockingHook = false, PlanePainter? painter = null,
-        bool raceGhost = false)
+        bool raceGhost = false, bool xrInterior = false)
     {
         _gamez = gamez;
         _textures = textures;
@@ -133,6 +133,8 @@ public sealed class PlaneBuilder
                 // the linear-space composite departs visibly from the original's (see the field).
                 GammaBlendAlpha = true,
                 NoAlphaCoverage = true,
+                // The stereo path's interior, which XrCockpit lifts to the XR origin's frame.
+                XrPreciseInterior = xrInterior,
             };
         }
         _spinningProps = spinningProps;

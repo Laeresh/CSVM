@@ -120,11 +120,11 @@ come in under 50 ms or twice the fastest since (never past 500 ms). A player's p
 The stereo path of a process, built once by `Launcher._Ready` when Godot brought OpenXR up
 (`--xr-mode on` before `--`), else for `--xr-sim` through `XrSimInterface.cs` when the launch carries
 its feature tag; otherwise `Boot` logs why not and builds nothing. It turns the main viewport's
-`UseXR` on, paces by `Utils/VSyncSetting.cs`'s `Headset` under OpenXR alone, and each frame places
-an `XROrigin3D` at the first pane's eye (`Flight/Camera/XrMount.cs`) with the tracked `XRCamera3D`
-(`Head`) under it. The flat camera stays current for near/far, Environment and the zone cull mask.
-It logs the boot, the OpenXR session states and an `xr frames` Debug line per wall second
-(`XrFrameWindow.cs`). `XrLaunch` reads `--xr-mode` off the process arguments and names the tag.
+`UseXR` on, paces by `Utils/VSyncSetting.cs`'s `Headset` under OpenXR alone, adds `XrEyeFeed.cs`,
+and each frame places an `XROrigin3D` with the tracked `XRCamera3D` (`Head`) at the first pane's
+eye (`Flight/Camera/XrMount.cs`), then that pane's interior (`Flight/Hud/XrCockpit.cs`). The flat
+camera stays current for near/far, Environment and the zone cull mask. It logs the boot, the session
+states and an `xr frames` Debug line per wall second (`XrFrameWindow.cs`); `XrLaunch` reads `--xr-mode`.
 
 ## src/Launch/XrRelaunch.cs
 VR mode's relaunch rules, engine-free. OpenXR starts only with the engine, so the saved option
@@ -150,6 +150,14 @@ answering the renderer's per-eye transform and projection. The window shows both
 without lens distortion; `Tooling/CaptureDirector.cs` reads the eye layers for a screenshot. The
 multiview shader variants come from the `csvm_xr_sim` feature tag the launch scripts set, never from
 this code. Read `XrSession.cs` for the boot.
+
+## src/Launch/XrEyeFeed.cs
+A tracking-only `XRInterfaceExtension`, never primary, that hands the stereo cockpit interior the
+eyes its frame is drawn with. Godot runs every initialised interface's pre-render on the render
+thread after the headset's own has located the eye poses, so this one reads them there and writes
+each eye's offset from the XR origin, and the origin's world position, into the global shader
+uniforms `Mech3/SceneBuilder.cs` names; Godot uploads them before it culls that frame. Added by
+`XrSession.cs` after the headset's interface; `Flight/Hud/XrCockpit.cs` declares the uniforms.
 
 ## src/Launch/XrFrameWindow.cs
 The headset's frame pacing folded into wall-time windows: frame count, mean and worst interval, the

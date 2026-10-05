@@ -65,7 +65,7 @@ judgement.
 | 14 | Release | **Lands on main behind the off-by-default option and ships in v0.4.0 as "VR (experimental)"** with a known-issues list; the label drops in a later release once the playtests and community reports are clean. |
 | 15 | Dev modes, spyglass, photograph (defaults proposed in the grilling, not objected to) | **`--viewer`, `--freecam`, `--anim-lab` and the labs stay flat-only; the spyglass is a mono zoom picture on a binocular-style quad; the Danger Zone photograph and the screenshot capture keep reading a mono camera.** |
 | 16 | The lens flare and full-pane effects in VR | **One angle-based world flare rig, used by VR always and by flat Enhanced once the author has judged a C3 montage in Chase and Cockpit; Original keeps the calibrated screen-space `LensFlareRig`.** Whiteout, flash and fade become head-locked near quads in VR. The Enhanced adoption is the one deliberate exception to the boundary rule, argued on its own merits: partial occlusion of the core and HDR glow. |
-| 17 | float32 precision near the eye, after A3 found no render-only fix | **Accept the shimmer and continue on the stock single-precision engine.** The cockpit interior and the HUD panel shimmer 5-8 px per eye at 10-20 km from the chapter origin at headset density; rigid chase is unaffected. It ships as a known issue of the experimental release. The double-precision build and a game-wide floating origin stay open as later work (A3's write-up), not items of this plan. |
+| 17 | float32 precision near the eye, after A3 found no render-only fix | **Accept the shimmer and continue on the stock single-precision engine.** The cockpit interior and the HUD panel shimmer 5-8 px per eye at 10-20 km from the chapter origin at headset density; rigid chase is unaffected. It ships as a known issue of the experimental release. The double-precision build and a game-wide floating origin stay open as later work (A3's write-up), not items of this plan. Note: A3b draws the interior from the XR origin's frame with the render thread's own eyes and measures 0.04 px per eye at 20 km on the stand-in; the author's headset judgement is owed before the known issue is dropped. |
 
 ## ⚠ Read this before implementing anything
 
@@ -200,7 +200,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ◐ A1 OpenXR boots in a flight session on VDXR and SteamVR
 2. ☑ A2 The `--xr-sim` stand-in interface
 3. ❌ A3 Precision near the eye: render-only floating origin, double-precision fallback
-   ☐ A3b A precise VR cockpit built from small numbers, the flat cockpit pass's idea in stereo
+   ◐ A3b A precise VR cockpit built from small numbers, the flat cockpit pass's idea in stereo
 4. ☑ A4 Screen-space effects under multiview
 5. ☑ A5 Cockpit scale per plane
 
@@ -239,7 +239,10 @@ Wave A gates everything. A1 blocks A2-A5 (they all need a booting XR session or 
 exist); A2, A3, A4 and A5 can then run in parallel, since they touch disjoint files (A2 new
 `Tooling`/`Utils` stand-in code, A3 `PlayerRig`/`GameSession` anchoring, A4 the `Effects/` shaders,
 A5 measurement only). A3 found no render-only fix, and the author chose to accept the cockpit
-shimmer and continue on the stock engine (Decision 17), so Wave B follows Wave A unchanged.
+shimmer and continue on the stock engine (Decision 17), so Wave B follows Wave A unchanged. A3b
+then drew the interior from the XR origin's frame on the stock engine (`Launch/XrSession.cs`,
+`Flight/Hud/XrCockpit.cs`, `Launch/XrEyeFeed.cs`, the interior shader in `Mech3/SceneBuilder.cs`);
+B7 builds on its contract, and B8 starts from what it already did.
 
 B6 and B7 run in parallel (Options/Launcher versus `PlayerRig`); B8 and B9 need B7 and both touch
 `Flight/Camera/CameraController.cs` and `Flight/Hud/CockpitOverlay.cs`, so run them in sequence.
@@ -590,6 +593,172 @@ logged two `Uniform buffer supplied ... (128) is smaller than ... (144)` errors 
 first flat run after the author's headset session; the engine stage re-run was clean. Godot's
 shader cache is `user://shader_cache`, shared by every worktree and session, so a headset run's
 stereo variants reach them all once (B6 owns the fix).
+
+## A3b ◐ A precise VR cockpit built from small numbers, the flat cockpit pass's idea in stereo
+
+**Outcome: candidate (i) works on the stand-in; the headset judgement is owed.** The interior is
+drawn in the main world from the XR origin's frame, as the flat pass draws it from the eye, and
+each eye places it from the eye poses the render thread located for that same frame. A3's
+instrument reads 0.04 px or less per eye at 0, 10 and 20 km, against A3's 5-8 px. Candidate (ii),
+a stereo pass of its own, was not needed.
+
+**Goal.** Answer the author's question, "And why can't we use the same technique like in flat?
+Render the cockpit in the center?", with a VR-only interior that is sub-pixel per eye at 20 km from
+the chapter origin, flat output and flat goldens unchanged. Every chapter's `area` runs from
+-12288 (C3, C5: -16384) to 0 on x and z, so the chapter origin is a map corner, the map centre is
+8.7 km (11.6 km) out, and almost all flying is in A3's bad range.
+
+**Evidence (confidence: traced to the Godot 4.7-stable source for the timing, the shader
+built-ins and the render-thread hook; measured on the stand-in for the precision and the
+placement; direction sound, magnitude a judgement for the mismatch a game-thread head pose would
+have carried).** The fetched sources are in `.scratch/A3b-src`, the instruments and captures in
+`.scratch/A3b` (`a3b_burst.ps1`) and A3's `.scratch/A3`.
+
+- **When the head and the eyes are sampled (step 1).**
+  - The game thread's head. `Main::iteration` calls `XRServer::_process` before physics and
+    `_process`. `OpenXRInterface::process` runs `OpenXRAPI::process`, which calls `xrWaitFrame`,
+    hands its `predictedDisplayTime` to the render thread (`set_render_display_info`, a
+    `call_on_render_thread`), and returns; `get_head_center` then locates the VIEW space at that
+    same predicted time (`xrLocateSpace`). The `head` tracker's `set_pose` fires `pose_changed`,
+    and the `XRCamera3D` takes the pose as its transform at once.
+  - The render thread's eyes. `RenderingServerDefault::_draw` calls `XRServer::pre_render` first,
+    and `OpenXRAPI::pre_render` calls `xrLocateViews` at `render_state.predicted_display_time`,
+    the value from that same `xrWaitFrame`, then `xrBeginFrame`. `get_view_transform` refuses any
+    other thread (`ERR_NOT_ON_RENDER_THREAD`).
+  - `--render-thread safe`: one thread, in order: `xrWaitFrame`, head located, physics and
+    `_process`, `RenderingServer::sync`, `draw`, eyes located. The same predicted time; the eyes
+    are located later by the frame's game work.
+  - `--render-thread separate`: `draw` queues `_draw` behind the queued display info, and `sync`
+    first waits for the previous frame's draw to finish, so the render thread locates the eyes
+    after the game work and that wait. The same predicted time from the same `xrWaitFrame`, not a
+    frame apart; the gap is bounded in steady state by about one display period (11.1 ms at 90 Hz).
+  - The mismatch a game-thread head would carry is the runtime refining one prediction: zero at a
+    steady head rate, roughly `α·Δ·h` for an angular acceleration α, a gap Δ and the horizon h
+    still left at the second call. At 3000°/s², 5 ms and 30 ms (a streamed headset predicts far
+    ahead) that is 0.45°, about 9 px at 20 px per degree: the whole cockpit swimming against the
+    world while the head speeds up or slows down. An estimate, not a measurement.
+- **What a shader can reach.** `VIEW_INDEX`, `EYE_OFFSET` and a per-view `PROJECTION_MATRIX` are
+  built-ins of the spatial vertex stage (`shader_types.cpp`), and under multiview the vertex stage
+  runs once per view. `PROJECTION_MATRIX` is the eye's projection times the inverse of
+  `view_offset`, the eye in the combined camera's frame, and `EYE_OFFSET` is that offset's
+  translation (`set_multiview_camera`, `render_scene_data_rd.cpp`). Both are formed at world scale,
+  so `EYE_OFFSET` carries the eyes' millimetre rounding and cannot give an eye's offset from the
+  head. It is consistent with `PROJECTION_MATRIX`, though: `PROJECTION_MATRIX * (R·p + EYE_OFFSET)`,
+  with R the combined frame's rotation into the eye's, is the eye's own projection of a point p
+  given in the eye's frame, so the world-scale rounding cancels if the shader supplies p itself.
+- **The render thread's eyes reach the shader in the same frame, so no head pose is needed.**
+  `XRServer::pre_render` calls `pre_render` on every initialised interface in the order they were
+  added, before the frame's culling, whose `update_dirty_instances` uploads the global shader
+  uniforms (`_update_global_shader_uniforms`). A tracking-only C# `XRInterfaceExtension` added after
+  the headset's interface therefore runs on the render thread right after `xrLocateViews` and can
+  write the located eyes into global uniforms for that frame. A `RenderingServer` call made on the
+  render thread executes directly, and the queue flush it attempts inside `_draw` is a no-op
+  (`CommandQueueMT::_flush`'s thread-local `flushing`), so the next frame's queued commands cannot
+  leak in. The OpenXR-specific hook, `OpenXRExtensionWrapper._on_pre_render`, is out of reach:
+  `register_extension_wrapper` refuses once the OpenXR instance exists, before any game C# runs.
+- **The measurement (step 3).** A3's instrument and pose: `--chapter=C1 --plane=player_bhawk
+  --pos=X,300,0 --direction=-0.743,0,-0.669 --view=cockpit --no-cockpit-pass --hold=0,0,0,0.6
+  --xr-sim=eye=2732x2732,fov=100,shot=left|right --frames=60 --shots=6`, worst frame-to-frame step
+  in pixels (3.0 arcmin each), far-world control as A3 defines it.
+
+  | Region | 0 km L | 0 km R | 10 km L | 10 km R | 20 km L | 20 km R |
+  |---|---|---|---|---|---|---|
+  | A3 worst dial | 0.22 | 0.16 | 5.06 | 5.41 | 7.23 | 5.21 |
+  | A3 worst shell | 0.09 | 0.18 | 3.55 | 3.64 | 8.03 | 7.67 |
+  | A3b worst dial | 0.036 | 0.030 | 0.036 | 0.030 | 0.036 | 0.030 |
+  | A3b worst shell | 0.000 | 0.000 | 0.010 | 0.000 | 0.000 | 0.000 |
+  | A3b far-world control | 0.05 | 0.08 | 0.05 | 0.09 | 0.04 | 0.09 |
+
+  The A3b rows do not depend on distance. The 0.036 px is the speedometer's and the attitude
+  ball's own motion through the bezel mask; the other four dials and every shell region register
+  as identical frames. The panel's offset from the left eye to the right is -167.7 px at every
+  distance, where A3's drifted from -174.5 to -177.2 px with the rounding and the depth bias.
+  `--render-thread safe` renders the 20 km left burst bit-identical to `separate`. Enhanced reads
+  0.19 px at 0 km and 0.01 px at 20 km; the 0.19 is frame-to-frame lighting noise on the dash
+  (soft shadows), a brightness change with no displacement in the frames.
+- **The placement is right, not merely steady.** On the empty stage the stand-in's left eye was put
+  on the flat camera (`--xr-sim=eye=1280x720,fov=96.4268,ipd=20,head=0.01/0/0,shot=left,
+  pitch=-4.70001`) and registered against the flat `--no-cockpit-pass` frame: every region within
+  0.04 px at 0 km and at 20 km (`docs/verification.md` SHOT-45). A turned, offset head
+  (`yaw=30,pitch=-12,head=0.05/0.03/0.10`) lines up with the old stereo path at the origin within
+  0.13 px on the panel and the plate; the canopy struts differ by about 1 px, which is the old
+  path's depth bias moving them in each eye (next bullet).
+- **B8's gauge-depth defect is fixed on the way.** The interior's depth bias now pulls a vertex
+  toward the eye drawing it, so its projected position stays put in both eyes; the old scale toward
+  the combined camera put the needles and the lamps beside their dials in each eye
+  (`.scratch/A3b/cmp_b0_p0_panel.png`). This and the precision move the two stand-in goldens; the
+  24 flat goldens are hash-identical.
+- **The engine-free arithmetic** is pinned by `CSVM.Tests/XrCockpitTests.cs`: at 20 km on a rotated
+  heading, the shader's composition recovers a dial's eye-frame position within 20 µm, where
+  Godot's own view-times-model composition misses it by more than 200 µm.
+
+**Approach (landed, VR only).** Gated on `XrCockpit.Live` (the stereo path booted) and the interior
+staying in the main world (`--no-cockpit-pass` until B8 makes that the VR default); a flat launch
+builds nothing new and draws the same shader text.
+- `Launch/XrEyeFeed.cs`, the tracking-only interface above. Its `_PreRender` writes
+  `csky_xr_eye_left`, `csky_xr_eye_right` (each eye's offset from the XR origin in world axes, from
+  the primary interface's `GetTransformForView(v, Identity)` and the render thread's
+  `XRServer.WorldOrigin`) and `csky_xr_origin`. `XrSession.Build` adds it after the headset's or
+  the stand-in's interface and declares the globals (`XrCockpit.DeclareEyeFeed`).
+- `Flight/Hud/XrCockpit.cs`, per rig in `FirstPersonDressing.Stereo`. While the interior shows it
+  is top level at the world origin with the XR origin's axes and its offset from the origin as the
+  airframe holds it, composed from local transforms only (`InOrigin`: mount, wobble pivot and model
+  root, minus the eye point). A custom AABB keeps it from being culled at the origin and a sorting
+  offset keeps its glass after the world's. Hidden, it goes back under the airframe.
+  `XrSession._Process` calls `Follow` right after placing the origin.
+- `Mech3/SceneBuilder.cs`'s `XrPreciseInterior` variant (key bit 524288, set by `PlaneBuilder`'s
+  `xrInterior` on the interior's builder alone). In a perspective pass it sets
+  `VERTEX = mat3(VIEW_MATRIX) * (MODEL_MATRIX·v - eye) + EYE_OFFSET` and biases toward that eye; in
+  the sun's orthographic shadow pass it draws the interior at its world place, unbiased. The point
+  lights take `csky_xr_origin` in place of the cockpit pass's `light_origin`.
+
+**B7's contract.** The XR origin stands at `XrCockpit.EyeInAircraft` on the aircraft with the
+aircraft's attitude (the first-person arm of `XrMount.For`), and `Follow(origin, aircraft)` runs
+each frame after the origin is placed, with the same transform. A per-plane seated eye offset
+moves both together: add it to `XrMount`'s eye and to `EyeInAircraft` (a constructor argument).
+A per-plane interior scale goes on the interior's mount before the `XrCockpit` is built, which
+captures the mount. The eye feed stays added after the headset's interface, and `Live` stays set
+before the first plane build. The HUD panel (C12), head-locked quads (C14, D16) and the spyglass
+quad (D19) can take the same two pieces: a top-level node in the XR origin's frame and a shader
+that subtracts the fed eye.
+
+**Model recommendation.** The derivation took the High tier; the follow-ups (B7's contract, B8's
+remainder, the same shader for C12) are Standard.
+
+**Verify.** On the stand-in: the table above (`a3b_burst.ps1 -Tag p -Km 0,10,20`, then
+`a3_table.py`), the flat-truth comparison, units (`XrCockpitTests`), the `cockpit` engine suites
+and the goldens stage, where `c1-cockpit-xr-sim` re-pins and `c1-cockpit-xr-sim-far` (A3's 20 km
+pose, both eyes) pins the precise path; the 24 flat shots are unmoved.
+
+Owed at the headset (the author's), runtime at 90 Hz, VDXR first, from the tree this lands in:
+```
+.\RunGame.ps1 -EngineArgs '--xr-mode','on','--render-thread','separate' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit --no-cockpit-pass
+.\RunGame.ps1 -EngineArgs '--xr-mode','on','--render-thread','safe' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --view=cockpit --no-cockpit-pass
+.\RunGame.ps1 -EngineArgs '--xr-mode','on','--render-thread','separate' --chapter=C1 --plane=player_bhawk "--pos=-11500,300,-11500" "--direction=-0.743,0,-0.669" --view=cockpit --no-cockpit-pass
+.\RunGame.ps1 -EngineArgs '--xr-mode','on','--render-thread','safe' --chapter=C1 --plane=player_bhawk "--pos=-11500,300,-11500" "--direction=-0.743,0,-0.669" --view=cockpit --no-cockpit-pass
+```
+The first pose is the C1 map centre (8.7 km from the origin), the second a far corner (16.3 km).
+Look for: (1) sitting still, the dials, needles and canopy frame hold steady with no shimmer at both
+poses; (2) on fast head turns and leans, the cockpit stays fixed against the world rather than
+swimming behind or ahead of it; (3) the needles and lamps sit on their dial faces at the panel's
+depth. An interior with no depth of its own (both eyes alike) would mean the eye feed never ran.
+The red plate behind the eye is still there (B8). The first flat run after a headset session
+prints one shader-cache error (B6 owns it).
+
+**⚠ Traps.**
+- Do not take an eye's offset from `EYE_OFFSET` differences or the combined camera's position:
+  both are formed at world scale and carry the rounding this item removes.
+- Do not place the stereo interior from the `XRCamera3D`'s pose: it is an earlier prediction of
+  the same instant, and the difference shows as swim while the head accelerates.
+- ⚠ Keep `XrEyeFeed` added after the headset's interface; added first, it reads the previous
+  frame's eyes.
+- While it shows, the interior's global transform is relative to the XR origin. A new reader of
+  an interior node's world position must read it while hidden or go through the airframe.
+- The shader tells the shadow pass by an orthographic projection. A shadowed omni or spot light on
+  the interior would be drawn as if it were an eye; none casts on it today.
+- Never `ipd=0` on a chapter world (A4's Traps).
+
+**Verified.** <pending orchestrator run>
 
 ## A4 ☑ Screen-space effects under multiview
 
@@ -984,18 +1153,25 @@ traced to the data and the code:
   (30) about 7 cm, the gun and missile arrows (49) about 11.5 cm, and the compass bezel (-10)
   2.9 cm behind, at a 0.47-0.50 m panel.
 
+**Already done by A3b.** Under the stereo path with the interior in the main world, the interior is
+`Flight/Hud/XrCockpit.cs`'s: drawn from the XR origin's frame with the render thread's eyes, so it
+holds still far from the chapter origin, and its depth bias pulls toward the drawing eye, which is
+the "true position, depth only" fix in another form (the gauge-depth defect is gone on the
+stand-in). The
+wobble reaches it through `XrCockpit.InOrigin`, the point lights through `csky_xr_origin` in place
+of `light_origin`, and the gauge drive is untouched. Left for B8: make VR take the main-world
+interior without `--no-cockpit-pass` (today `FlightRosterPolicy.XrInterior` needs the flag), the
+plate filter, and a headset look at the lighting.
+
 **Approach.** Under VR take the `--no-cockpit-pass` path, keep `light_origin`, the shake and the
-gauge drive working on the in-world interior. There is no precision fix (A3, Decision 17): the
-interior shimmers far from the chapter origin and that is a known issue, not a B8 defect. Under VR
+gauge drive working on the in-world interior. The precision is A3b's (above). Under VR
 only: leave the
 plate out of the interior build with a polygon filter (all vertices on one z plane with
 0 < z ≤ 2.5 iu, normal aft, Colored, priority 5; on the diagnosis scan this matches exactly the 5-7
-plate polygons per interior and nothing else), and give the interior a shader variant that keeps the
-true position and biases depth only:
-`vec4 c = PROJECTION_MATRIX * vec4(VERTEX, 1.0); vec4 p = PROJECTION_MATRIX * vec4(VERTEX * (1.0 - bias), 1.0); POSITION = vec4(c.xy, p.z / p.w * c.w, c.w);`
-(`PROJECTION_MATRIX` is per view under multiview). The cheaper fallback, `DepthBiasScale = 1` under
-VR, leaves about 0.5 cm on the arrows and needs a z-fighting check. The world materials carry the
-same unscaled bias, negligible in stereo beyond a few metres.
+plate polygons per interior and nothing else). The depth-only bias landed with A3b as a pull toward
+the drawing eye, `EYE_OFFSET + (VERTEX - EYE_OFFSET) * (1.0 - bias)`, which keeps each eye's
+projected position exactly; the `POSITION` rewrite once proposed here is not needed. The world
+materials carry the same unscaled bias, negligible in stereo beyond a few metres.
 
 **Model recommendation.** <TODO: tier not settled in the session.>
 

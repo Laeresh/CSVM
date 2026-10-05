@@ -156,7 +156,7 @@ internal sealed class HumanFlightAdapter
         _flying[pi] = new FlyingAirframe(planeName, scheme);
         var planeBuilder = new PlaneBuilder(_aircraft.PlanesGamez, _aircraft.Textures, spinningProps: true,
             scheme: scheme, patterns: _liveries.Patterns, cockpitInterior: true, dockingHook: true,
-            raceGhost: _world.Racing);
+            raceGhost: _world.Racing, xrInterior: _policy.XrInterior && !remote);
         var planeModel = planeBuilder.Build(planeName);
         // A race pilot draws as a ghost to every camera but its own pilot's, the cameras that drop
         // its first-person layer. A seat flown elsewhere has no camera here, so it names a layer
@@ -183,6 +183,9 @@ internal sealed class HumanFlightAdapter
                 Visibility = CockpitVisibility.Bind(planeModel, planeBuilder.CockpitInterior, pi),
                 Interior = planeBuilder.CockpitInterior,
                 Panel = CockpitGauges.Bind(planeBuilder),
+                Stereo = _policy.XrInterior && !remote && planeBuilder.CockpitInterior is { } interior
+                    ? new XrCockpit(interior)
+                    : null,
             },
             Scheme = scheme,
             Painter = planeBuilder.Painter,

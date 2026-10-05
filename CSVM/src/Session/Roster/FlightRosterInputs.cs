@@ -72,6 +72,11 @@ internal sealed class FlightRosterPolicy
     /// answer).</summary>
     public bool MouseCaptureAllowed { get; init; }
 
+    /// <summary>Whether a human rig builds its interior for the stereo path
+    /// (<see cref="CSVM.Flight.Hud.XrCockpit"/>). That path is live, and no cockpit pass takes the
+    /// interior out of the main world.</summary>
+    public bool XrInterior { get; init; }
+
     public static FlightRosterPolicy From(SessionSpec spec) => new()
     {
         HoldSets = spec.HoldSets,
@@ -112,6 +117,8 @@ internal sealed class FlightRosterPolicy
         // arm, the launch's included, is what keeps a suite's mouse mode its own.
         MouseCaptureAllowed = MouseCapture.Allowed(
             DisplayServer.GetName() != "headless", spec.Det, spec.IsScripted || MouseCapture.ScriptedLaunch),
+        // Read here for the same reason: the stereo path is the process's, booted before any session.
+        XrInterior = CSVM.Flight.Hud.XrCockpit.Live && !spec.CockpitPass,
     };
 }
 

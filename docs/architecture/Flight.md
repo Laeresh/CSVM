@@ -299,8 +299,8 @@ Decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Flight/Hud/FirstPersonDressing.cs
 What one pilot's own aircraft wears in a first-person view: `Visibility` (`CockpitVisibility`),
-`Interior`, `Panel` (`CockpitGauges`) and `Pass` (`CockpitOverlay`), all null on a rig built no
-interior. `Show` applies one frame's rules to the pose the camera took, not the selection, so a
+`Interior`, `Panel` (`CockpitGauges`), `Pass` (`CockpitOverlay`) and, under the stereo path,
+`Stereo` (`XrCockpit`), all null on a rig built no interior. `Show` applies one frame's rules to the pose the camera took, not the selection, so a
 held look-behind brings the body back, and takes the screen-space cluster off while the panel is
 on screen; `Leave` takes everything off for an outside vantage; `DriveNeedles` moves the panel
 after the HUD's own feed. `FlightController` owns one as `Dressing`. Decode:
@@ -315,6 +315,15 @@ since those cancel between eye and panel, so the projection is the main world's 
 viewport sits on `HudLayers.CockpitPass`, over the flare and whiteout overlays and under the HUD,
 lit by a re-aimed copy of the world's sun and a duplicated Environment (enhanced adds shadows). `GameSession.BuildCockpitPasses` builds one per `PlayerRig`; `Sync` follows
 the interior `Visible` and sets each material's `light_origin` to the eye for the point lights.
+
+## src/Flight/Hud/XrCockpit.cs
+The cockpit interior under the stereo path, drawn in the main world the cockpit pass's way: while it
+shows it is top level at the world origin, turned to the XR origin's axes and offset from that
+origin as the airframe holds it (`InOrigin`, engine-free), so every transform Godot composes for it
+is small. Its shader, `Mech3/SceneBuilder.cs`'s stereo interior variant, places each vertex from
+its offset to the eye drawing it, read off the render thread by `Launch/XrEyeFeed.cs`. Hidden, it
+goes back under the airframe. `Live` tells a plane build to choose that shader;
+`Launch/XrSession.cs` calls `Follow` each frame.
 
 ## src/Flight/Hud/CockpitGauges.cs
 The authored instrument panel inside the pilot's own `cockpit1` interior: five needle nodes take an

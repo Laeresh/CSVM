@@ -262,6 +262,7 @@ rows).
 - `src/Flight/Hud/CockpitVisibility.cs`, the per-mode hiding of the pilot's OWN plane in first person, from that pilot's pane alone; `Rules` is pure, `Bind`/`Apply` write it onto a built model.
 - `src/Flight/Hud/FirstPersonDressing.cs`, what a pilot's own aircraft wears in first person, frame by frame: the body hide, the interior pass and the panel needles.
 - `src/Flight/Hud/CockpitOverlay.cs`, the shipped cockpit pass: the interior drawn in a `SubViewport` world of its own, composited under the HUD; one per player, `--no-cockpit-pass` opts out.
+- `src/Flight/Hud/XrCockpit.cs`, the cockpit interior under the stereo path: top level at the world origin in the XR origin's frame, so float32 rounds it below a pixel at any distance.
 - `src/Flight/Hud/CockpitGauges.cs`, the 3D instrument panel inside `cockpit1`: needles, horizon ball, belts and lamps, driven off `GaugeCluster`'s state.
 - `src/Flight/Hud/WarningShotCue.cs`, the decoded incoming-fire shield (player.json `warning_shot_*`): which gun rounds on the player are discarded, and which tell.
 - `src/Flight/Hud/CanopyHoleCue.cs`, the decoded canopy-glass cadence: which interval of gun hits opens one of the five `bullethole_anims` holes, and so sounds `window_hit_sg`.
@@ -682,6 +683,7 @@ The process and the per-launch session: the top family bar `Testing`, so nothing
 - `src/Launch/XrRelaunch.cs`, VR mode's relaunch rules: when a boot or a menu apply relaunches, the child's arguments, the flat-only runs, the fallback notice.
 - `src/Launch/XrShaderCache.cs`, a headset launch's shader cache writes swept as it ends, with a marker that covers a crash, so flat launches never misread them.
 - `src/Launch/XrSimInterface.cs`, the `--xr-sim` stand-in headset: an XR interface with a pinned head and no runtime, drawing both eyes side by side.
+- `src/Launch/XrEyeFeed.cs`, a tracking-only XR interface whose render-thread pre-render writes the frame's own eye poses into the stereo interior's global uniforms.
 - `src/Launch/XrFrameWindow.cs`, the headset's frame pacing in wall-second windows: mean and worst interval, late frames and skipped refreshes.
 
 ### `src/Session/`, the session-build layer

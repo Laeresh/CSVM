@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
+using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
+using CSVM.Flight.Hud;
 using CSVM.Spec;
 using CSVM.Utils;
 using Godot;
@@ -133,7 +135,12 @@ public partial class XrSession : Node
 
     public override void _Process(double delta)
     {
-        _origin.GlobalTransform = CurrentMount();
+        var (mount, pilot) = CurrentMount();
+        _origin.GlobalTransform = mount;
+        if (pilot?.Dressing.Stereo is { } cockpit)
+        {
+            cockpit.Follow(mount, pilot);
+        }
 
         var (_, gpuMs) = _renderTime.Read();
         _gpuSumMs += gpuMs;
@@ -218,6 +225,11 @@ public partial class XrSession : Node
         session.Head = new XRCamera3D { Name = "xr_head", Current = false };
         session._origin.AddChild(session.Head);
         session.AddChild(session._origin);
+        // After the headset's own interface, so its pre-render reads the eyes that one just located.
+        var feed = new XrEyeFeed();
+        XRServer.AddInterface(feed);
+        feed.Initialize();
+        XrCockpit.DeclareEyeFeed();
         root.UseXR = true;
         return session;
     }
@@ -225,16 +237,16 @@ public partial class XrSession : Node
     private static string Field(Godot.Collections.Dictionary info, string key) =>
         info.ContainsKey(key) ? info[key].AsString() : "?";
 
-    // The first pane's flat camera and aircraft; the persistent camera while no flight is up.
-    private Transform3D CurrentMount()
+    // The first pane's flat camera and aircraft; the persistent camera while no flight is up. The
+    // pilot comes back too, live or null, for the interior that follows the origin.
+    private (Transform3D Mount, FlightController? Pilot) CurrentMount()
     {
         var rigs = _rigs();
         var rig = rigs.Count > 0 ? rigs[0] : null;
         var camera = rig != null && IsInstanceValid(rig.Camera) ? rig.Camera : _eye;
-        Basis? attitude = rig?.Controller is { FirstPersonView: true, Crashed: false } pilot && IsInstanceValid(pilot)
-            ? pilot.GlobalTransform.Basis
-            : null;
-        return XrMount.For(camera.GlobalTransform, attitude);
+        var pilot = rig?.Controller is { } controller && IsInstanceValid(controller) ? controller : null;
+        Basis? attitude = pilot is { FirstPersonView: true, Crashed: false } ? pilot.GlobalTransform.Basis : null;
+        return (XrMount.For(camera.GlobalTransform, attitude), pilot);
     }
 
     private void WireSessionLog(OpenXRInterface xr)
