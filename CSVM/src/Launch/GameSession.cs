@@ -293,6 +293,8 @@ public partial class GameSession : Node3D
     // The enhanced-only world layers and the mode-dependent builds, held so a live graphics-mode
     // switch can build, free or rewrite each (ApplyGraphicsMode). Null where the build made none.
     private Effects.ScorchField? _scorches;
+    private Effects.OceanPrototype? _ocean;
+    private bool _oceanEligible;
     private ClutterBuilder? _clutter;
     private SceneBuilder? _worldScene;
     // The session-owned texture archive, kept open past the build scope so the data-driven crash can
@@ -783,6 +785,8 @@ public partial class GameSession : Node3D
         }
 
         FinishFraming(state);
+        _oceanEligible = state.NodeSubtree == null && (_spec.Fly || _spec.Freecam);
+        FollowOcean();
         BuildWorldMerge(state);
         // By default only once this process has switched. The warm-up costs what one switch does,
         // and a player who never switches would pay it at every load.
@@ -811,6 +815,7 @@ public partial class GameSession : Node3D
         // After the world's own materials, whose blend verdicts decide what merges.
         _worldMerge?.Follow(enhanced);
         SwitchProfile.Mark("merge");
+        FollowOcean();
         _clutter?.Recut();
         _edgeExtender?.FollowClutterFade();
         SwitchProfile.Mark("clutter");
@@ -2503,6 +2508,41 @@ public partial class GameSession : Node3D
         }
         if (state.Textures.MissingTextures.Count > 0)
             Log.Info("world", $"[textures] {state.Textures.MissingTextures.Count} referenced texture(s) absent from this install: {string.Join(", ", state.Textures.MissingTextures)}");
+    }
+
+    // PROTOTYPE: the Enhanced wave ocean, built on the first Enhanced frame. A switch back to
+    // Original drops it, and the sea sheet draws again because the shared switch resets.
+    private void FollowOcean()
+    {
+        if (!GraphicsMode.Enhanced)
+        {
+            Drop(_ocean);
+            _ocean = null;
+            return;
+        }
+        if (_ocean != null || !_oceanEligible || _plane == null || _worldScene == null || _sessionTextures == null
+            || !Effects.OceanPrototype.Wanted(_spec.Chapter))
+            return;
+        var hulls = new HashSet<Node>();
+        if (_surfaceVehicles != null)
+        {
+            foreach (var v in _surfaceVehicles.Vessels)
+                hulls.Add(v.Body);
+        }
+        _ocean = Effects.OceanPrototype.Create(_plane, _worldScene, _sessionTextures, OceanHulls, hulls);
+        if (_ocean != null)
+            _plane.AddChild(_ocean);
+    }
+
+    private IEnumerable<Vector3> OceanHulls()
+    {
+        if (_surfaceVehicles == null)
+            yield break;
+        foreach (var v in _surfaceVehicles.Vessels)
+        {
+            if (GodotObject.IsInstanceValid(v.Body) && v.Body.IsVisibleInTree())
+                yield return v.Body.GlobalPosition;
+        }
     }
 
     // Flight only: the inspection modes pick and edit single nodes, which a merged draw would not show.
