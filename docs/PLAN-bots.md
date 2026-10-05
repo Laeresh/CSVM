@@ -102,7 +102,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ Equal target weights for every pilot in a Dogfight
 12. ☑ Bots respawn through the host's rotation and follow Limited Lives
 13. ☑ Skill tiers, personalities, stock plane with Random, and the callsign pool
-14. ☐ Rearm standing order: a bot breaks off to a base when low or badly damaged
+14. ☑ Rearm standing order: a bot breaks off to a base when low or badly damaged
 
 ### Wave C, lobby and local setup
 
@@ -565,29 +565,83 @@ pair passed `--debug-net-trace` and both ends died at quit in `EnetTransport.Ser
 a peer Godot had already disposed); a rerun exited 0, so it is an intermittent shutdown race in code
 this item does not touch.
 
-## B14 ☐ Rearm standing order: a bot breaks off to a base when low or badly damaged
+## B14 ☑ Rearm standing order: a bot breaks off to a base when low or badly damaged
 
 **Goal.** A bot whose ammo runs low or whose hull is badly damaged flies to the nearest base that
 serves it, is restored there, and rejoins the fight (Decision 14).
 
-**Evidence (confidence: lead-only).** AI planes spend ammo: `AiFlightAssembler.cs:222` builds
-`PylonOrdnance` with the controller's `InfiniteAmmo`, which the AI path never sets.
-`RearmRuntime` lists the bases and runs them in any Dogfight, each machine checking only the seats
-it flies, and `FlightController.Rearm` restores parts, damage stages and every slot
-(`docs/org/multiplayer-rearm.md:98-115`). `AiPilot` has standing orders (heading, altitude, throttle,
-`Patrol`, `Gunner`, `Machine`, `Escort`; `docs/architecture/Flight.md:468-583`).
+**Evidence (confidence: traced-to-code for the seams; direction-sound-magnitude-TUNE for the two
+thresholds and the approach geometry).** The lead's ammo line was the wrong path:
+`AiFlightAssembler`'s `PylonOrdnance` is the world AI's, and a bot is built on the seat path, where
+`HumanFlightAdapter` sets `InfiniteAmmo` from `--infinite-ammo` (off by default). Its gun groups
+carry the stock loadout's finite `Capacity` and `Ammo`, which `FireControl` draws down, so a bot runs
+dry like a person. `RearmRuntime.Step` checks the seats `IsLocal` names, a bot's is the host's, so
+the host checks its bots with no change, and `FlightController.Rearm` refills its guns and hull as a
+person's. The gunner holds its quarry 20 s and re-acquires whenever `AutoTarget` is on, and guns and
+rockets fire only in `Pursue`, so keeping a bot out of new fights needs a gate on acquisition.
+Measured on C1's MP1 (`docs/org/multiplayer-rearm.md`, "Bots at a base"): the base is a
+fly-through bay, walls 42 m and 47 m to either side, roof 28 m above, floor 16 m below, about 75 m
+long and open at both ends; no landing is needed, the restore is the 25 m radius. The AI's
+avoid-crash probe (4.5 s along the velocity, about 500 m) reads a descent near the bay, or a line
+into the hall off its axis, as an obstacle and climbs out, so a run must arrive level and on the
+axis. A `--hold=` script outranks an AI pilot, so a bot under one never runs its pilot (INSTR-100).
 
-**Approach.** A new standing order that steers to the base's node and hands back to combat once
-`RearmRuntime` restores the seat. Thresholds are TUNE: `<TODO: ammo and hull thresholds, measured
-in a playtest, then added to backlog.md's TUNE list>`.
+**Approach (landed).** New engine-free `Flight/Ai/AiRearmOrder.cs`, held as `AiPilot.RearmOrder`
+and given only to a bot this machine flies: `HumanFlightAdapter.cs:573-574`, beside the arming, with
+the controller's `WorldBlocksLine` as its world probe. `RearmRuntime.Step` updates it after the
+restore check with the guns' `LoadShare` (over `FirableGuns`, 1 with infinite ammo), the hull's
+`SummaryHealthFraction`, the nearest serving base (new `RearmBases.NearestServing`) and whether
+the base restored it on this step. Thresholds (TUNE, remake values, one named constant each):
+`AiRearmOrder.LowAmmoShare = 0.2`, a fifth of the forward guns' full load (pylons are not counted,
+a bot fights with its guns); `AiRearmOrder.DamagedHullShare = 0.35` of whole-vehicle health, the
+pool the death test reads. A run plans the bay's open side once: on 24 bearings a level line out to
+700 m (the bay) and a line from there up to the gate (the leg), taking the clear leg nearest the bot
+centred on the bay's clear arc (heading 180 on MP1 from every start). It flies to the gate, 2500 m
+out and 120 m up, joins the final leg inside a 10 degree corridor only with its track within 60
+degrees of inbound, aims 400 m ahead along the leg, and is level at the node's height for the last
+700 m. A pass 150 m beyond the node unrestored plans afresh; a base that offers nothing ends the
+run. Restored, it holds the node's height 60 m past, climbs, and hands back to combat 150 m from the
+node, which is past the latch radius and the bay's 37 m half-length. While a run stands
+`AiPilot.Next` sets the new `AiGunner.Disengaged`, takes no quarry (the machine reverts any chase)
+and flies the order's aim on the cruise table in place of patrol; a stun, avoid crash and an evasive
+maneuver still come first. `GunnerAcquisition.Step` drops and takes nothing for a disengaged gunner.
+The gunner object stays armed. **Return fire on the way: no.** Guns and rockets fire only in
+`Pursue`, a chase would turn the bot off its leg, and an emptied bot has nothing to fire.
+`AiPilot.ResetForSpawn` clears the run and the flag, so a bot shot down on the way comes back with
+none. For D32: file the two thresholds on the TUNE list; a bot on the bay's closed side flies
+2.5 km past the base to the gate and back, up to about 95 s, which the playtest should judge. For
+C20: a local bot built through the same bot block gets the order, and `RearmRuntime` already checks
+every seat of a local match.
 
-**Model recommendation.** `<TODO: not settled in the session>`
+**Model recommendation.** Opus: the code is moderate, but the approach had to be measured in the
+engine and redesigned three times (a 1500 m gate with a 600 m level probe failed four of eight
+starts) before every start reached the base.
 
-**Verify.** `<TODO: a suite where a bot with an emptied magazine reaches a base on MP1 and is
-restored>`
+**Verify.** New suite `net-bot-rearm` (`CSVM/src/Testing/NetBotRearmSuites.cs`, clean loopback, host
+pane, guest seat and one bot on MP1, weight 13.1): with half its guns and half its hull the bot keeps
+a quarry and starts no run over 300 steps (able-to-fail control); its guns emptied, it breaks off in
+2 steps and drops its quarry; set down 3 km out on the bay's closed side it plans the gate on the
+open side; with the host's aeroplane put 800 m ahead in its path it takes no quarry and chases
+nothing; it reaches the base (24 m, 5268 steps) and `RearmRuntime` restores its guns to full and its
+hull from half to 100/100; it flies the run without going down, hands back 152 m out, and takes a
+quarry and chases it 65 steps later. With its hull at 0.30 and full guns it breaks off in one step;
+120 steps on the run stands with the gunner disengaged (control); shot down, it comes back with no
+run and its gunner on duty, and starts none over 300 steps. With the `ResetForSpawn` clear and the
+disengage removed, five checks fail. A temporary probe flew runs from eight starts 3 km out at
+every 45 degrees: all eight restored with no return, in 2044 to 5611 steps. Units
+`AiRearmOrderTests` (8: thresholds, load share, open bearing, the world probe, the legs and the aim,
+a missed pass and a lost base, no run without a base or need, `NearestServing`) and
+`AiPilotTests.AResetForSpawnHoldsTheNewPlacementWithNoEngagementLeft` (a standing run is cleared).
+Run in `bots-b14`: `RunTests.ps1 -Suite 'net-bot-rearm,net-bot-seat,net-bot-seat-lossy,net-bot-respawn,net-bot-skill,net-seats,net-rearm-deathmatch,net-rearm-zeppelins,net-lobby-deathmatch-mp1,ai-engine-rearm' -Shards 4 -SkipGoldens -SkipHitch`:
+units 6253 passed / 0 failed / 3 skipped, engine 10 passed; `-Filter 'ai-,net-,wingman,campaign-roster,instant-action' -Shards 4 -SkipUnits -SkipGoldens -SkipHitch`: 103 passed / 0 failed, engine errors clean.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** A base the mission switched off offers nothing (`IA1` has both plain nodes off), so
-test on `MP1`. The rearm latch is one per seat and releases only outside every serving base.
+test on `MP1`. The rearm latch is one per seat and releases only outside every serving base. Never
+launch a bot session with `--hold=` (INSTR-100). A suite that places a bot with `RespawnAt` clears
+its run and refills it, so empty it again after the placement. Do not gate the run on fire instead
+of acquisition: a held quarry keeps the machine chasing it.
 
 # Wave C, lobby and local setup
 

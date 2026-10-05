@@ -217,6 +217,7 @@ rows).
 - `src/Flight/Ai/SurfaceVehicle.cs`, one built hull: the scripted-path follower over its patrol net, the wake and injure anims, and the pool a hit reaches.
 - `src/Flight/Ai/SurfaceGunner.cs`, a hull's own gun: the non-jet acquisition, the 20 s target hold, the mount, and the fire decision on the def's authored tuple.
 - `src/Flight/Ai/AiPilot.cs`, the non-player `FlightModel` driver: standing orders, patrol, gunner, escort and mode machine into one `FlightInput` per sim step.
+- `src/Flight/Ai/AiRearmOrder.cs`, a bot's rearm standing order: the low-supply trigger, the bay's open side, the gate and the final leg through a base, and the hand-back.
 - `src/Flight/Ai/AiControlLaw.cs`, the original's own AI steering law: an aim point, its velocity and one of four decoded tables into stick and throttle lever.
 - `src/Flight/Ai/AiEscort.cs`, the formation-escort law a netless `mode wingman` flies: leader and target snapshots into one station point and its velocity.
 - `src/Flight/Ai/AiModeMachine.cs`, the nine-mode AI state machine over the engine's own mode vocabulary, with the steady-hand and sixth-sense reaction rolls.

@@ -47,6 +47,11 @@ public sealed class AiGunner
     /// Off, a cleared target simply holds fire, an explicitly ordered gunner.</summary>
     public bool AutoTarget = true;
 
+    /// <summary>Whether the pilot has broken off: no quarry is held or taken while it stands. The
+    /// pilot sets it each step from its rearm run (<see cref="AiPilot.RearmOrder"/>), so a launch's
+    /// <see cref="AutoTarget"/> is never touched and comes back as it was.</summary>
+    public bool Disengaged;
+
     /// <summary>Game time the standing target's hold runs out, after which the host sweeps the
     /// pool again (<see cref="TakeTarget"/>). Settable so a suite can force the expiry rather
     /// than sim twenty seconds.</summary>

@@ -570,6 +570,8 @@ internal sealed class HumanFlightAdapter
             botPilot.TargetHeadingDeg = AiPilot.HeadingDegOf(start.LookAt - start.Pos);
             botPilot.TargetAltitude = start.Pos.Y;
             _botPilots.ArmSeatPilot(botPilot, stats, planeName, controller.Team, seat!.Skill);
+            // Low on guns or hull, it breaks off to a base; the match's base runtime runs the order.
+            botPilot.RearmOrder = new AiRearmOrder(controller.WorldBlocksLine);
             controller.ArmSpawnTimers();
             // Every later return, whatever placed it, starts the pilot over on the new placement's
             // course and lever. No quarry, mode or course outlives the aeroplane it lost, and the

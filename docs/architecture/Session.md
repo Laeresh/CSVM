@@ -234,7 +234,9 @@ The multiplayer rearm bases in any Dogfight, built by `VersusDirector.WireRearmB
 serving its side while the hull lives. Each machine steps only the seats it flies through
 `RearmBases`, and on entry calls `FlightController.Rearm` and posts "Rearmed!" in the seat's own
 pane. The restored ledger reaches every other machine in the next `0x40` damage report, where a
-hurt copy reading full again takes its stages off. Decode: [../org/multiplayer-rearm.md](../org/multiplayer-rearm.md).
+hurt copy reading full again takes its stages off. A bot's `Flight/Ai/AiRearmOrder.cs` is updated
+there after the restore check, with its guns, its hull, the nearest serving base and the restore.
+Decode: [../org/multiplayer-rearm.md](../org/multiplayer-rearm.md).
 
 ## src/Session/World/NetCutsceneLink.cs
 The cutscene skip over the wire, one per network session with a cutscene host. On the host it
@@ -546,7 +548,7 @@ the `UI.Boards.SplitScreen.SeatAirframe` stamp that keeps the model out of this 
 (flown elsewhere, or a host's bot) takes the aeroplane, paint, loadout, spawn slot and score row, only one flown elsewhere is built with the `RemotePoseBuffer` that IS its ownership, and
 both skip every pane, HUD, camera, listener, pad and pause key, the roster's airframe pick and a co-op seat's `SeatFit` beating this machine's launch flags. A bot seat is AI-piloted
 (`IsHumanPiloted` false) on every machine, so each plays its hits, shakes and `ai_crash_*` wreck alike, and on the host it flies an `AiPilot` armed by `AiFlightAssembler.ArmSeatPilot`
-under its seat index as `PlayerIndex`, its far-field plant measured against every person's seat rather than this machine's panes. Every later return of that aeroplane, through `FlightController.Respawned`, starts the pilot over with `AiPilot.ResetForSpawn` on its new placement's course. It stays in the seat list, never in the roster's AI, so the world link never admits it and the seat paths carry its state, fire, hits and death.
+under its seat index as `PlayerIndex`, its far-field plant measured against every person's seat rather than this machine's panes, and given an `AiRearmOrder` probing the world's lines. Every later return of that aeroplane, through `FlightController.Respawned`, starts the pilot over with `AiPilot.ResetForSpawn` on its new placement's course. It stays in the seat list, never in the roster's AI, so the world link never admits it and the seat paths carry its state, fire, hits and death.
 It reads only the roster's copied policy plus the grouped aircraft, world and human-session contracts; player order decides the paint and spawn draws. An airframe swap lays its captured scheme and own build over
 that assembly, the one path a bought plane takes. An Instant Action racer takes no `Race`, so it flies on through the ending's hold, and `BuildDamageVisuals` opens AI damage too. Read `FlightRoster.cs` next.
 

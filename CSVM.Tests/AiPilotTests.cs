@@ -36,11 +36,16 @@ public class AiPilotTests
             Throttle = 0.3f,
             Machine = machine,
             Rocketeer = new AiRocketeer(() => 1f),
+            RearmOrder = new AiRearmOrder(),
         };
         machine.Enter(AiMode.Pursue, "a chase standing at the death");
         pilot.Stun(2f);
         Assert.True(pilot.IsStunned);
         var at = new Vector3(100f, 650f, -40f);
+
+        // A rearm run standing at the death, as a bot shot down on its way to a base has one.
+        pilot.RearmOrder.Update(at, Vector3.Zero, 0f, 1f, at + new Vector3(0f, 0f, -3000f), restored: false);
+        Assert.True(pilot.RearmOrder.Flying);
 
         pilot.ResetForSpawn(at, at + Vector3.Right, 0.6f);
 
@@ -55,6 +60,7 @@ public class AiPilotTests
         Assert.Equal(-1, pilot.Rocketeer.SelectedPylon);
         Assert.Same(machine, pilot.Machine);
         Assert.Equal(1500f, machine.AttackRange);
+        Assert.Equal(AiRearmLeg.None, pilot.RearmOrder.Leg);
     }
 
     [ExtractedDataFact]

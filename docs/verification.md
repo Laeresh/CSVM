@@ -994,6 +994,9 @@ member, and it does not go here.
   A Resource reached through a node's signal after its wrapper was collected reproduced the release
   check's trace on the first run, and the original shard 3/6's 70 suites produced none under the gate
   either way.
+- **INSTR-100**, **A `--hold=` script flies every seat its launch builds, a bot's included, because
+  the scripted input outranks the AI pilot; keep it off any session that reads a bot's flight.** A
+  bot under `--hold=0.3,0,0,1` looped between 20 m and 900 m, and its pilot never ran.
 
 ## SRC, sources and documents
 
