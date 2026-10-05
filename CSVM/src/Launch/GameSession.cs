@@ -1948,9 +1948,9 @@ public partial class GameSession : Node3D
             : _spawnPicker;
         // ⚠ No count under --det, the shared start's rule: a scripted run and every pinned golden
         // stay byte-identical because no count is ever begun. A race opens on its own count.
-        var restartCount = stuntZones != null && !_spec.Det ? StartCount.Restart : null;
-        var firstCount = restartCount == null ? null
-            : race != null ? StartCount.Opening(RaceReadySeconds) : restartCount;
+        var rerunCount = stuntZones != null && !_spec.Det ? StartCount.Rerun : null;
+        var firstCount = rerunCount == null ? null
+            : race != null ? StartCount.Opening(RaceReadySeconds) : rerunCount;
         // A network race before the roster, which feeds each local seat's run through it. A guest's
         // opening catches up to the host's on every local seat's count at once.
         var raceLink = race != null ? _wire.WireRace(race) : null;
@@ -2047,9 +2047,9 @@ public partial class GameSession : Node3D
             SpawnList = spawnList,
             SpawnBase = spawnBase,
             StuntZones = stuntZones,
-            RestartCount = restartCount,
+            RerunCount = rerunCount,
             FirstStartCount = firstCount,
-            MenuSounds = restartCount != null ? MenuSounds() : null,
+            MenuSounds = rerunCount != null ? MenuSounds() : null,
             Race = race,
             RaceFeed = raceLink != null ? raceLink.Feed : null,
             VersusMatch = versus,
@@ -2102,7 +2102,7 @@ public partial class GameSession : Node3D
             _race = race;
             var zoneNames = stuntZones!.Zones.Select(z => z.Description).ToList();
             if (raceLink is { IsHost: false })
-                raceLink.Restarted = () => RestartRace(race);
+                raceLink.Rerun = () => RerunRace(race);
             // --debug-race-end poses a split screen race's board as a network one's, P2 left.
             string? posed = raceLink == null ? _spec.DebugRaceEnd : null;
             if (posed != null)
@@ -2114,7 +2114,7 @@ public partial class GameSession : Node3D
                 guest ? StuntRaceBoard.WaitingForHost : null);
             foreach (var rig in _rigs)
                 if (rig.Controller != null)
-                    rig.Controller.RestartRace = Rerun;
+                    rig.Controller.RerunRace = Rerun;
             var bests = ScoreStore.ForSession(_spec.ScoresPath, _spec.ScoresThrowaway);
             race.BestImproved += racer => RecordRaceBest(bests, racer);
             race.BeginOpening(OpeningSeconds(firstCount));
@@ -2851,13 +2851,13 @@ public partial class GameSession : Node3D
         if (_race is { Replicated: true })
         {
             // ⚠ Never on a guest: a window opened here would be one nobody else flies. The host's
-            // restart call opens the guest's (RestartRace through the race link).
+            // rerun call opens the guest's (RerunRace through the race link).
             Log.Info("flight", $"stunt race: a new window is the host's to call");
             return;
         }
         if (_race is { } race)
         {
-            RestartRace(race);
+            RerunRace(race);
             return;
         }
         if (_dogfight is { } dogfight)
@@ -2872,11 +2872,11 @@ public partial class GameSession : Node3D
     // A new window from the shared race board (R), or on a network guest from the host's call.
     // Every pilot's runs are cleared, every plane here goes back to the start, and every seat opens
     // on the count again in one step. A host's call goes out first, ahead of the window's lines.
-    private void RestartRace(StuntRace race)
+    private void RerunRace(StuntRace race)
     {
         Log.Info("flight", $"stunt race: a new window, every pilot's runs cleared");
-        race.Restart();
-        _wire.Race?.CallRestart();
+        race.Rerun();
+        _wire.Race?.CallRerun();
         IReadOnlyList<StartCountPhase>? opening = null;
         foreach (var rig in _rigs)
         {
@@ -2885,8 +2885,8 @@ public partial class GameSession : Node3D
             seat.Stunt?.Reset();
             seat.StuntShots?.Reset();
             seat.Respawn();
-            // ⚠ Only a seat that carries a restart count opens on one: under --det none does.
-            if (seat.RestartCount != null)
+            // ⚠ Only a seat that carries a rerun count opens on one: under --det none does.
+            if (seat.RerunCount != null)
             {
                 opening = StartCount.Opening(RaceReadySeconds);
                 seat.BeginStartCount(opening);

@@ -77,7 +77,7 @@ public class StuntRaceTests
 
         FlyRun(race, 0, new[] { 50f, 90f, 99f }); // slow, but the only completed run
         PartialRun(race, 1, new[] { (0, 10f), (1, 30f) });
-        // Two zones in an earlier run, faster to them than P2, then a restart that gets only one.
+        // Two zones in an earlier run, faster to them than P2, then a rerun that gets only one.
         PartialRun(race, 2, new[] { (2, 8f), (0, 20f) });
         race.RunAbandoned(2);
         PartialRun(race, 2, new[] { (1, 4f) });
@@ -90,15 +90,15 @@ public class StuntRaceTests
     }
 
     [Fact]
-    public void ARestartKeepsTheBestAndOnlyAFasterRunReplacesIt()
+    public void ARerunKeepsTheBestAndOnlyAFasterRunReplacesIt()
     {
         var race = OpenRace(3, out var a, out _, out _);
         FlyRun(race, 0, new[] { 3f, 6f, 9f });
-        race.RunAbandoned(0); // the restart's reset after a completed run throws nothing away
+        race.RunAbandoned(0); // the rerun's reset after a completed run throws nothing away
         Assert.Equal(9f, a.BestTime);
 
         PartialRun(race, 0, new[] { (0, 1f) });
-        race.RunAbandoned(0); // a held restart mid-run
+        race.RunAbandoned(0); // a held rerun mid-run
         Assert.Equal(9f, a.BestTime);
         Assert.Equal(new float?[] { 3f, 6f, 9f }, a.Splits);
 
@@ -117,7 +117,7 @@ public class StuntRaceTests
     }
 
     [Fact]
-    public void NoRunStartsOrRestartsAfterTimeUp()
+    public void NoRunStartsOrRerunsAfterTimeUp()
     {
         var race = new StuntRace(1f, 3);
         var a = race.Add(0, "Bloodhawk");
@@ -195,11 +195,11 @@ public class StuntRaceTests
     }
 
     [Fact]
-    public void ARestartedRaceClearsEveryRunAndWaitsForItsOpening()
+    public void ARerunRaceClearsEveryRunAndWaitsForItsOpening()
     {
         var race = OpenRace(3, out var a, out _, out _);
         FlyRun(race, 0, new[] { 3f, 6f, 9f });
-        race.Restart();
+        race.Rerun();
 
         Assert.Equal(StuntRacePhase.Opening, race.Phase);
         Assert.Null(a.BestTime);
@@ -279,7 +279,7 @@ public class StuntRaceTests
         Assert.Equal(new[] { 1, 0, 2 }, race.Standings().Select(r => r.Index));
 
         // A new window leaves them out; the rest go again.
-        race.Restart();
+        race.Rerun();
         Assert.Equal(new[] { 1, 2 }, race.Racers.Select(r => r.Index));
     }
 

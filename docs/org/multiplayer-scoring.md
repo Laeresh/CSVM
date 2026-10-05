@@ -216,13 +216,13 @@ flag its aircraft carries (aircraft `+0x720`, [`multiplayer-ctf.md`](multiplayer
 in a free-for-all the pilots go by score, then by the join counter at record `+0x18`, higher first.
 
 **The remake.** `UI/Overlays/ScoresOverlay.cs` draws the table while a seat holds Display Scores
-and drops it on release, the user's ruling over the decoded four-second tap; a score update does not
-raise it. Under the Original presentation the lines are `OriginalScoresText`'s, built by the table
-above, drawn at the decoded positions three times over in the HUD's 1440-line reference, every
+and drops it on release. That hold is a remake-only rule in place of the decoded four-second tap, so
+the table stands exactly as long as the pilot asks for it, and a score update does not raise it.
+Under the Original presentation the lines are `OriginalScoresText`'s, built by the table above, drawn at the decoded positions three times over in the HUD's 1440-line reference, every
 character on the 8-pixel cell, in Courier New at weight 600 in `hudNetPlay`'s ink with its shadow,
 and the flag column marks a Capture the Flag carrier in the colours above. After the original's two
 columns each pilot line carries the remake's kills (6 characters) and deaths under "kills" and
-"deaths" in the header's lowercase, the user's ruling, so the line reads like the Dogfight board; a
+"deaths" in the header's lowercase, a remake-only rule so the line reads like the Dogfight board; a
 team's line stays the original's own. Not carried: the entry
 colour, `scorecolors`, and the join-order tie break (ties keep `VersusMatch.Standings` order). A seat
 on no lobby team in a team match, which the original has no counterpart for, follows the teams as a

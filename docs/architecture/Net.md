@@ -399,7 +399,7 @@ of its host, and `FlagTableMessage`, the host's flags. Zeppelin vs Zeppelin's pl
 `NetMessages.cs`'s `SpawnAtMessage`. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
 ## src/Net/NetRaceMessages.cs
-A network stunt race's four session messages, all reliable. `RaceCallMessage` (`NetRaceCall`) is the window's end one machine decides for the rest: the host's restart and return to the lobby, a guest's leaving. `RaceRunMessage` is one event of a
+A network stunt race's four session messages, all reliable. `RaceCallMessage` (`NetRaceCall`) is the window's end one machine decides for the rest: the host's rerun and return to the lobby, a guest's leaving. `RaceRunMessage` is one event of a
 seat's own run (`NetRaceRun`: started, a zone split, finished, abandoned) from the machine flying
 it to the host, under the owner's run number and the window's round. `RaceStateMessage` is the
 host's clock (`NetRacePhase`, how far into it, the window, the host's session clock), and

@@ -93,7 +93,7 @@ internal static class StuntRaceSuites
                 PauseState = pause,
                 StuntZones = zones,
                 Race = race,
-                RestartCount = StartCount.Restart,
+                RerunCount = StartCount.Rerun,
                 FirstStartCount = StartCount.Opening(ReadySeconds),
             }, new ApartStarts());
         var zoneNames = zones.Zones.Select(z => z.Description).ToList();
@@ -140,7 +140,7 @@ internal static class StuntRaceSuites
                 }
             }
 
-            void Restart(FlightController seat)
+            void Rerun(FlightController seat)
             {
                 seat.HoldActionForTest(InputAction.Respawn, true);
                 Frames(HoldFrames);
@@ -186,7 +186,7 @@ internal static class StuntRaceSuites
 
             // P1 holds into a new run behind its own count while P2's clock runs on.
             float p2Before = run2.Elapsed;
-            Restart(p1);
+            Rerun(p1);
             ctx.Check(p1.StartCount.Running && run1.CompletedCount == 0 && run1.Elapsed == 0f
                     && r1.BestTime == firstRun && run2.Elapsed > p2Before,
                 $"a held respawn restarts P1 behind its count with its best kept ({r1.BestTime}) while P2's clock runs on ({StuntMission.FormatTime(p2Before)} to {StuntMission.FormatTime(run2.Elapsed)})");
@@ -218,7 +218,7 @@ internal static class StuntRaceSuites
             {
                 Frame();
             }
-            Restart(p2);
+            Rerun(p2);
             while (p2.StartCount.Running)
             {
                 Frame();
@@ -235,7 +235,7 @@ internal static class StuntRaceSuites
 
             // P1 cannot start another run in the final run.
             int respawns = p1.RespawnCount;
-            Restart(p1);
+            Rerun(p1);
             ctx.Check(p1.RespawnCount == respawns && !p1.StartCount.Running && run1.AllComplete && run1.Elapsed == secondRun,
                 $"P1's hold in the final run is refused: {p1.RespawnCount - respawns} respawn(s), count running={p1.StartCount.Running}, run kept at {StuntMission.FormatTime(run1.Elapsed)}");
 
@@ -311,7 +311,7 @@ internal static class StuntRaceSuites
             });
             var board = boards.BuildRaceBoard(race, zoneNames, "C1   ·   Stunt Flying", () =>
             {
-                race.Restart();
+                race.Rerun();
                 race.BeginOpening(0f);
             });
             built.Add(board.GetParent());

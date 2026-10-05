@@ -13,7 +13,7 @@ public enum StuntRacePhase
     /// <summary>The opening count runs, and no run may start.</summary>
     Opening,
 
-    /// <summary>The window clock runs, and any pilot may start or restart a run.</summary>
+    /// <summary>The window clock runs, and any pilot may start a run or rerun one.</summary>
     Open,
 
     /// <summary>Time is up. A run in progress may still finish inside the cap; none may start.</summary>
@@ -248,7 +248,7 @@ public sealed class StuntRace
     /// <summary>Seconds of the opening count gone, what a network host's clock carries while it runs.</summary>
     public float OpeningElapsed => _openingElapsed;
 
-    /// <summary>Which window this is: zero for the first, one more for each <see cref="Restart"/>.
+    /// <summary>Which window this is: zero for the first, one more for each <see cref="Rerun"/>.
     /// A network report or line names it, so one from an earlier window is told apart.</summary>
     public int Round { get; private set; }
 
@@ -270,7 +270,7 @@ public sealed class StuntRace
         ? Mathf.Max(0f, (float)(WindowSeconds + FinalRunCap - _windowElapsed))
         : 0f;
 
-    /// <summary>Whether a run may start or restart now: only while the window is open.</summary>
+    /// <summary>Whether a run may start or rerun now: only while the window is open.</summary>
     public bool MayStartRun => Phase == StuntRacePhase.Open;
 
     public bool Ended => Phase == StuntRacePhase.Ended;
@@ -337,7 +337,7 @@ public sealed class StuntRace
     }
 
     /// <summary>Feeds this race from player <paramref name="index"/>'s own run: its clock
-    /// starting, each zone, its completion and a restart throwing it away.</summary>
+    /// starting, each zone, its completion and a rerun throwing it away.</summary>
     public void Follow(int index, StuntMission run)
     {
         run.RunStarted += () => RunStarted(index);
@@ -492,7 +492,7 @@ public sealed class StuntRace
     /// <summary>A new window over the same field: every pilot's runs cleared and the race back
     /// before its opening, which <see cref="BeginOpening"/> starts again. A pilot who left is not in
     /// it, since nobody joins a race in progress.</summary>
-    public void Restart()
+    public void Rerun()
     {
         _racers.RemoveAll(r => r.Left);
         foreach (var r in _racers)

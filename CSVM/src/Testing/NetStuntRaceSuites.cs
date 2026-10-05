@@ -220,7 +220,7 @@ internal static class NetStuntRaceSuites
             ctx.Check(MenuRows(guestBoard) == "Photo Mode|Leave" && guestBoard!.WithheldLine == UI.Screens.StuntRaceBoard.WaitingForHost,
                 $"[{cell}] the guest's board says it waits for the host and offers Leave ({MenuRows(guestBoard)}, \"{guestBoard?.WithheldLine}\")");
 
-            s.Guest.RestartRace!();
+            s.Guest.RerunRace!();
             Steps(s.Peers, 10);
             ctx.Check(s.GuestRace.Ended && s.HostRace.Ended && s.GuestRace.Round == 0 && s.HostRace.Round == 0,
                 $"[{cell}] the guest's own restart opens no window anywhere ({s.HostRace.Phase} {s.HostRace.Round}/{s.GuestRace.Phase} {s.GuestRace.Round})");
@@ -242,7 +242,7 @@ internal static class NetStuntRaceSuites
     private static void Reopen(TestContext ctx, string cell, RaceSeats s, Vector3 spawn,
         UI.Screens.StuntRaceBoard? hostBoard, UI.Screens.StuntRaceBoard? guestBoard)
     {
-        s.Host.RestartRace!();
+        s.Host.RerunRace!();
         var opened = new[] { -1, -1 };
         var at = new Vector3[2];
         var races = new[] { s.HostRace, s.GuestRace };

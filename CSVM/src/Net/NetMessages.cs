@@ -176,7 +176,7 @@ public enum NetMessageType : ushort
     FlightChat = 0x0066,
 
     /// <summary>A stunt race seat's own run, reported by the machine flying it to the host: a start,
-    /// a zone split, a finish or a restart.</summary>
+    /// a zone split, a finish or a rerun.</summary>
     RaceRun = 0x0067,
 
     /// <summary>A stunt race host's clock: the phase, how far into it, and the window's length.</summary>
