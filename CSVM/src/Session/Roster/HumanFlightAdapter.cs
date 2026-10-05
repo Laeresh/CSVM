@@ -155,8 +155,14 @@ internal sealed class HumanFlightAdapter
                         _liveries.PatternsForPlane(_aircraft.PlanesGamez, planeName)));
         _flying[pi] = new FlyingAirframe(planeName, scheme);
         var planeBuilder = new PlaneBuilder(_aircraft.PlanesGamez, _aircraft.Textures, spinningProps: true,
-            scheme: scheme, patterns: _liveries.Patterns, cockpitInterior: true, dockingHook: true);
+            scheme: scheme, patterns: _liveries.Patterns, cockpitInterior: true, dockingHook: true,
+            raceGhost: _world.Racing);
         var planeModel = planeBuilder.Build(planeName);
+        // A race pilot draws as a ghost to every camera but its own pilot's, the cameras that drop
+        // its first-person layer. A seat flown elsewhere has no camera here, so it names a layer
+        // every camera keeps; the four-wide band then serves this machine's seats alone.
+        if (_world.Racing)
+            RaceGhost.Stamp(planeModel, remote ? SplitScreen.EveryCameraLayer : SplitScreen.FirstPersonLayer(pi));
         StartupProfile.Record("plane", mark);
         MeshInstances += planeBuilder.MeshInstanceCount;
 
@@ -181,6 +187,7 @@ internal sealed class HumanFlightAdapter
             Scheme = scheme,
             Painter = planeBuilder.Painter,
             ShippedSkins = swap is { ShippedSkins: true },
+            Racing = _world.Racing,
         };
         if (verbose && controller.Dressing.Visibility != null)
             Log.Info("flight", $"cockpit: '{planeName}' interior built hidden at the cockpit_camera marker");
@@ -245,7 +252,14 @@ internal sealed class HumanFlightAdapter
         // its built model, resolves markers to muzzle nodes + weapons to WeaponDefs.
         // Set before the controller enters the tree (its _Ready builds the fire state).
         var loadoutDefName = _policy.LoadoutOverride ?? stats.DefName;
-        if (_aircraft.StockLoadouts.For(loadoutDefName) is { } stockDef)
+        if (_world.Racing)
+        {
+            // A race pilot carries no weapons. With no loadout there is no fire control, so a held
+            // trigger does nothing. No gun gauge, missile gauge, pipper or pylon rocket is built.
+            if (verbose)
+                Log.Info("flight", $"weapons: none, a race pilot flies unarmed");
+        }
+        else if (_aircraft.StockLoadouts.For(loadoutDefName) is { } stockDef)
         {
             // A custom plane's guns and hardpoints replace the stock ones and the Ammo Selection
             // layer composes over THAT (the built def leaves WeaponId null so a picked ammo still
@@ -308,7 +322,7 @@ internal sealed class HumanFlightAdapter
         // The carried turret gunners: the vehicle def's thirdp turrets block resolved
         // by TITLE against ai.zrd and by node against this built model. Independent of the
         // stock loadout, the gunner's weapon comes from its ai.zrd row, not from a gun slot.
-        if (_aircraft.TurretDefs is { } turretDefs && stats.TurretMounts.Count > 0)
+        if (!_world.Racing && _aircraft.TurretDefs is { } turretDefs && stats.TurretMounts.Count > 0)
         {
             // ⚠ A human's carried gunner IS positional, unlike the pilot's own forward guns: the
             // original's turret path hands its sound slot a world position whoever owns the mount.
@@ -424,9 +438,8 @@ internal sealed class HumanFlightAdapter
             if (verbose)
                 Log.Info("flight", $"audio: engine={stats.EngineSound} damaged={stats.DamagedEngineSound ?? "none"} whine={stats.WhineSound ?? "none (no def names prop_sound)"} rattle={stats.RattleSound}{(_human.MixGain < 1f ? $" (per-player mix gain {_human.MixGain:0.00})" : "")}");
         }
-        // This player's stunt run: player 1 flies the loaded instance, everyone else an
-        // independent copy of the same zones, own progress, own clock. Never on a swap, which
-        // would restart the clock and stack a second run HUD (see AirframeSwapRequest).
+        // Each seat's own run, player 1 on the loaded instance. Never on a swap, which would stack a
+        // second run HUD (AirframeSwapRequest). Never on a remote seat: its own machine times it.
         if (swap == null && !remote && _human.StuntZones != null)
         {
             var run = pi == 0 ? _human.StuntZones : _human.StuntZones.ForAnotherPlayer();
@@ -451,22 +464,33 @@ internal sealed class HumanFlightAdapter
             // The run HUD, one per pane: clock, zones cleared, banners. The zone MARKER is the
             // targeting HUD's, since a zone is an objective like any other.
             var runHud = StuntRunHud.Build(run);
+            runHud.Count = controller.StartCount;
             pilotHud.StuntRun = runHud;
+            // A run starts, and restarts, behind the count; the first one begins once Setup below
+            // has placed the spawn it walks to.
+            if (_human.RestartCount is { } count)
+            {
+                controller.RestartCount = count;
+                controller.Audio?.BindStartCount(_human.MenuSounds);
+            }
+            var scoreKey = $"{_policy.Chapter}/{_policy.Mission}/{custom?.Name ?? planeName}";
             if (_human.Race is { } race)
             {
-                // Racing: no per-player splits board, the shared ranked board
-                // below covers the whole window when the last pilot is in. The run
-                // HUD shows this player's placing meanwhile.
-                race.Add(pi, controller.Stunt, planeDisplay);
+                // Racing: no per-player splits board. The race's shared board covers the whole
+                // window when it ends, in Instant Action too, and the run HUD carries the live
+                // leaderboard meanwhile. The race hears this run's own clock, zones and finish.
+                var racer = race.Add(pi, planeDisplay, scoreKey);
+                if (seat is { Callsign.Length: > 0 })
+                    racer.Callsign = seat.Callsign;
+                if (_human.RaceFeed is { } feed)
+                    feed(pi, run);
+                else
+                    race.Follow(pi, run);
                 runHud.Race = race;
                 runHud.PlayerIndex = pi;
-                // ⚠ Instant Action keeps the placings and nothing else: its ending is the
-                // director's hold and wrap-up, which the pilot flies through, so the seat takes
-                // none of the race board's rules (the finish hold, R as a rematch).
-                if (!_human.InstantActionActive)
-                {
-                    controller.Race = race;
-                }
+                // The pane's held scores stand across the top, so the two top lines step aside.
+                runHud.StatusHiddenWhile = () => controller.ScoresShown;
+                controller.Race = race;
             }
             else if (_human.InstantActionActive)
             {
@@ -475,10 +499,9 @@ internal sealed class HumanFlightAdapter
             }
             else if (_human.StuntBoard is { } stuntBoard)
             {
-                // Solo: the end-of-run scoreboard, per-zone splits + total +
-                // persisted best time, keyed chapter/mission/plane in
-                // user://stunt_scores.json (race totals are deliberately not recorded).
-                var scoreKey = $"{_policy.Chapter}/{_policy.Mission}/{custom?.Name ?? planeName}";
+                // Solo: the end-of-run scoreboard, per-zone splits + total + persisted best time,
+                // keyed chapter/mission/plane in user://stunt_scores.json, the key a race run
+                // records under too.
                 controller.Scoreboard = stuntBoard(controller.Stunt, planeDisplay,
                     $"{_policy.Chapter}   ·   {PlaneRoster.Humanize(_policy.Scenario)}",
                     scoreKey, controller.Rerun, capture);
@@ -490,6 +513,14 @@ internal sealed class HumanFlightAdapter
                 WhatSuffix += $" [stunt: {controller.Stunt.TotalCount} zones]";
             }
         }
+        else if (swap == null && remote && _human.StuntZones != null && _human.Race is { } remoteRace)
+        {
+            // A seat flown elsewhere still races on every board here. It runs no course on this
+            // machine: its own machine times it, and the host's line feeds this record.
+            var racer = remoteRace.Add(pi, planeDisplay);
+            if (seat is { Callsign.Length: > 0 })
+                racer.Callsign = seat.Callsign;
+        }
 
         // Dogfight (--vs): the per-pane match timer/K-D/leader line + kill banner, bound to the
         // match GameSession built before this loop ran; kill facts arrive later via Downed.
@@ -500,6 +531,7 @@ internal sealed class HumanFlightAdapter
             // player assembles, so by the time this pane draws, every opponent's is populated.
             controller.VersusHud = VersusHud.Build(versus, pi, rig.Camera);
             controller.VersusHud.Rigs = _human.Rigs;
+            controller.VersusHud.StatusHiddenWhile = () => controller.ScoresShown;
             if (verbose)
                 Log.Info("flight", $"dogfight HUD: match timer/K-D/leader line + kill banner + opponent markers");
         }
@@ -528,6 +560,8 @@ internal sealed class HumanFlightAdapter
             // reads this pane's side off, and the pilot-index derivation it falls back to is the
             // wingman-in-the-marker bug.
             targetHud.Own = controller;
+            // A race labels every other pilot with the marker's name line, none of them a target.
+            targetHud.RaceMarks = _world.Racing;
 
             // --debug-markers: the same HUD marks every live aircraft instead of one hostile. Own also
             // keeps it from marking the aircraft the camera is sitting on.
@@ -553,6 +587,8 @@ internal sealed class HumanFlightAdapter
         controller.Setup(new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),
             remote ? null : rig.Camera, camParams, start.Pos, start.LookAt,
             start.ThrottleFrac, start.SpeedMps, cockpitCameraOffset: planeBuilder.CockpitCameraOffset);
+        if (controller.RestartCount != null && _human.FirstStartCount is { } firstCount)
+            controller.BeginStartCount(firstCount); // a run's first start is a start like any other
         // The Danger Zone eye, framed off the airframe's own chase distance and aimed at the pose
         // the controller draws, which is the controller node's own transform.
         if (!remote)

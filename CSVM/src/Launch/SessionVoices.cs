@@ -81,12 +81,12 @@ internal sealed class SessionVoices
         // further down and every carried gunner report through one seam.
         voice.WatchTurrets(projectiles);
         RegisterPlayers(voice);
-        if (_spec.CaptureTheFlag)
+        if (_spec.MissionType == DogfightMissionType.CaptureTheFlag)
         {
             worldSounds.Prewarm(FlagRuntime.VoiceLines);
         }
 
-        if (_spec.ZeppelinVsZeppelin)
+        if (_spec.MissionType == DogfightMissionType.ZeppelinVsZeppelin)
         {
             worldSounds.Prewarm(ZeppelinVersusRuntime.VoiceLines);
         }

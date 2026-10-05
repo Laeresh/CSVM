@@ -39,17 +39,25 @@ internal sealed class MultiplayerBoardText
     internal static BoardTint LabelTint(bool enabled, bool focused, bool pressed) =>
         !enabled ? LabelDisabled : pressed ? LabelPressed : focused ? LabelRollover : LabelNormal;
 
-    /// <summary>String <paramref name="id"/>'s text, or <paramref name="fallback"/> when the table
-    /// lacks it. A leading <c>]</c>, which several lobby strings carry, is not drawn.</summary>
-    internal string Word(int id, string fallback)
+    /// <summary>String <paramref name="id"/>'s text in <paramref name="strings"/>, or
+    /// <paramref name="fallback"/> when the table lacks it. A leading <c>]</c>, which several lobby
+    /// strings carry, is not drawn. A board drawn in flight reads the lobby's words this way.</summary>
+    internal static string Word(UiStrings strings, int id, string fallback)
     {
-        string text = Strings.Text(id, fallback).Trim().TrimStart(']');
+        string text = strings.Text(id, fallback).Trim().TrimStart(']');
         return text.Length > 0 ? text : fallback;
     }
 
     /// <summary>A string's face in regular weight: the original's capture draws every multiplayer
     /// face that way, its B tags included.</summary>
-    internal LanguiFace? Regular(int id) => LanguiFace.Parse(Strings.Face(id)) is { } face ? face with { Bold = false } : null;
+    internal static LanguiFace? Regular(UiStrings strings, int id) =>
+        LanguiFace.Parse(strings.Face(id)) is { } face ? face with { Bold = false } : null;
+
+    /// <summary><see cref="Word(UiStrings, int, string)"/> over this page's table.</summary>
+    internal string Word(int id, string fallback) => Word(Strings, id, fallback);
+
+    /// <summary><see cref="Regular(UiStrings, int)"/> over this page's table.</summary>
+    internal LanguiFace? Regular(int id) => Regular(Strings, id);
 
     /// <summary>One string of the table in the face its row names, or the face of
     /// <paramref name="faceId"/> when that is set, in an authored colour.</summary>

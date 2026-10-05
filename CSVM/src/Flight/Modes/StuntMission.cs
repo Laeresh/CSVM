@@ -31,6 +31,18 @@ public sealed class StuntZone
     /// the flown order, not the ia.json list order). −1 until completed.</summary>
     public int CompletionOrder = -1;
 
+    /// <summary>The <c>dzpathN</c> route ribbon, the original's own line through the zone, which a
+    /// return to this zone heads the pilot along. Null when the route polygon builds no ribbon.</summary>
+    public DangerZoneRibbon? Route;
+
+    /// <summary>The gate whose crossing completed this zone, the one the pilot left it through.
+    /// Null until the zone is flown, and after a debug completion, which crosses nothing.</summary>
+    public StuntGate? ExitGate;
+
+    /// <summary>Unit direction of the pilot's travel across <see cref="ExitGate"/>. The data
+    /// authors no direction for a zone, so the pilot's own crossing is the only one there is.</summary>
+    public Vector3 ExitTravel;
+
     /// <summary>The original's assembled marker text without the clock suffix (the marker HUD
     /// adds that): "Danger Zone [Fly Through] - Train Tunnel Mid". Degrades gracefully if any
     /// part is absent.</summary>
@@ -85,6 +97,7 @@ public sealed class StuntMission
     private readonly HashSet<StuntGate> _crossedGates = new();
     private Vector3 _lastPlanePos;
     private bool _haveLastPlanePos;
+    private bool _clockStarted;
 
     private StuntMission(List<StuntZone> zones) => _zones = zones;
 
@@ -94,6 +107,12 @@ public sealed class StuntMission
     /// <summary>Fired once when the last zone completes (stops the clock / shows the board).</summary>
     public event Action? RunCompleted;
 
+    /// <summary>Fired on the first <see cref="Tick"/> of a run, the step its clock starts.</summary>
+    public event Action? RunStarted;
+
+    /// <summary>Fired by <see cref="Reset"/>: the run so far is thrown away.</summary>
+    public event Action? RunReset;
+
     public bool AllComplete { get; private set; }
 
     public int CompletedCount { get; private set; }
@@ -102,10 +121,10 @@ public sealed class StuntMission
 
     public IReadOnlyList<StuntZone> Zones => _zones;
 
-    /// <summary>Elapsed run time, seconds, advanced by <see cref="Tick"/> every physics frame,
-    /// including through the crash freeze ("the clock never stops"), frozen only once the run is
-    /// complete. Read by the marker HUD and scoring. Not reset on respawn (a
-    /// mid-run crash keeps the same clock, like the completed zones).</summary>
+    /// <summary>Elapsed run time, seconds. It starts at GO: a run behind a <see cref="StartCount"/>
+    /// reads 0 until the count hands over. Once started the clock never stops: <see cref="Tick"/>
+    /// advances it every physics frame, through the crash freeze, until the run is complete.
+    /// A tapped respawn keeps it, like the zones; a held one calls <see cref="Reset"/>.</summary>
     public float Elapsed { get; private set; }
 
     /// <summary>The one-shot run-start line the marker HUD shows ("Fly through all the Danger
@@ -147,7 +166,7 @@ public sealed class StuntMission
                 unresolved.Add(dzName);
                 continue;
             }
-            if (!TryReadGates(worldGamez, pathName, out var green, out var red))
+            if (!TryReadGates(worldGamez, pathName, out var green, out var red, out var route))
             {
                 unresolved.Add(pathName);
                 continue;
@@ -160,6 +179,7 @@ public sealed class StuntMission
                 Position = GeometryAnchor(worldGamez, node) ?? worldGamez.WorldTransformOf(node).Origin,
                 GreenGate = green,
                 RedGate = red,
+                Route = route,
                 Description = messages.Get(t.Description),
                 Category = messages.Get(t.CategoryLabel),
                 Help = messages.Get(t.HelpLabel),
@@ -202,6 +222,7 @@ public sealed class StuntMission
                 Position = z.Position,
                 GreenGate = z.GreenGate,
                 RedGate = z.RedGate,
+                Route = z.Route,
                 Description = z.Description,
                 Category = z.Category,
                 Help = z.Help,
@@ -226,23 +247,67 @@ public sealed class StuntMission
         {
             if (z.Completed)
                 continue;
-            if (GateCrossing(_lastPlanePos, planePos, z.GreenGate, out _))
+            bool green = GateCrossing(_lastPlanePos, planePos, z.GreenGate, out float greenT);
+            bool red = GateCrossing(_lastPlanePos, planePos, z.RedGate, out float redT);
+            if (green)
                 _crossedGates.Add(z.GreenGate);
-            if (GateCrossing(_lastPlanePos, planePos, z.RedGate, out _))
+            if (red)
                 _crossedGates.Add(z.RedGate);
             if (_crossedGates.Contains(z.GreenGate) && _crossedGates.Contains(z.RedGate))
+            {
+                // The completing frame crossed at least one gate; of two, the later along the segment.
+                z.ExitGate = red && (!green || redT >= greenT) ? z.RedGate : z.GreenGate;
+                z.ExitTravel = (planePos - _lastPlanePos).Normalized();
                 Complete(z);
+            }
         }
         _lastPlanePos = planePos;
     }
 
-    /// <summary>Advance the run clock one physics frame. Called every frame, including through
-    /// the crash freeze so the clock never stops (a deliberate rule), and stops accumulating once the
-    /// run is complete.</summary>
+    /// <summary>The pilot was placed rather than flown there, a respawn, so the next
+    /// <see cref="Update"/> starts a fresh segment instead of testing the jump against every gate.</summary>
+    public void Relocated() => _haveLastPlanePos = false;
+
+    /// <summary>Where a tap of respawn puts the pilot: on the route ribbon abeam the exit gate of
+    /// the zone cleared last, the highest <see cref="StuntZone.CompletionOrder"/>. It heads along
+    /// the ribbon the way the pilot crossed that gate. Null with no zone cleared, which is the
+    /// start. Falls back to the exit ring's own centre and axis where the zone has no ribbon.</summary>
+    public (Vector3 Position, Vector3 Heading)? ReturnPose()
+    {
+        StuntZone? last = null;
+        foreach (var z in _zones)
+        {
+            if (z.Completed && (last == null || z.CompletionOrder > last.CompletionOrder))
+                last = z;
+        }
+        if (last?.ExitGate is not { } gate)
+            return null;
+        if (last.Route is { } route)
+        {
+            var (segment, t) = route.NearestTo(gate.Center);
+            var tangent = route.TangentAt(segment, t);
+            if (tangent.LengthSquared() > 1e-8f)
+            {
+                tangent = tangent.Normalized();
+                return (route.PointAt(segment, t), tangent.Dot(last.ExitTravel) < 0f ? -tangent : tangent);
+            }
+        }
+        return (gate.Center, gate.Normal.Dot(last.ExitTravel) < 0f ? -gate.Normal : gate.Normal);
+    }
+
+    /// <summary>Advance the run clock one physics frame. Not called while a start count runs,
+    /// because the clock starts at GO. Once started it is called every frame, through the crash
+    /// freeze, so the clock never stops (a deliberate rule). It stops only at completion.</summary>
     public void Tick(float dt)
     {
-        if (!AllComplete)
-            Elapsed += dt;
+        if (AllComplete)
+            return;
+        if (!_clockStarted)
+        {
+            _clockStarted = true;
+            RunStarted?.Invoke();
+        }
+        Elapsed += dt;
     }
 
     /// <summary>Appends this run's still-unflown zones as objective-flagged candidates, the feed
@@ -271,10 +336,10 @@ public sealed class StuntMission
         }
     }
 
-    /// <summary>Start a fresh run (a results board's Restart item, or R): every zone incomplete,
-    /// the clock back to zero, the active target back to the first zone. Unlike a mid-run respawn
-    /// this DOES clear progress and the clock, it is the deliberate opposite of the
-    /// crash-keeps-everything rule.</summary>
+    /// <summary>Start a fresh run: a results board's Restart item, R on it, or a held respawn.
+    /// Every zone is incomplete, the clock back to zero, the active target back to the first zone.
+    /// Unlike a tapped respawn this DOES clear progress and the clock, it is the deliberate opposite
+    /// of the crash-keeps-everything rule.</summary>
     public void Reset()
     {
         foreach (var z in _zones)
@@ -282,12 +347,16 @@ public sealed class StuntMission
             z.Completed = false;
             z.CompletedAt = 0f;
             z.CompletionOrder = -1;
+            z.ExitGate = null;
+            z.ExitTravel = Vector3.Zero;
         }
         CompletedCount = 0;
         AllComplete = false;
         Elapsed = 0f;
+        _clockStarted = false;
         _crossedGates.Clear();
         _haveLastPlanePos = false;
+        RunReset?.Invoke();
     }
 
     /// <summary>Debug/testing only (--debug-scoreboard): instantly complete the whole run with
@@ -409,10 +478,12 @@ public sealed class StuntMission
         }
     }
 
-    private static bool TryReadGates(GameZ gz, string pathName, out StuntGate green, out StuntGate red)
+    private static bool TryReadGates(GameZ gz, string pathName, out StuntGate green, out StuntGate red,
+        out DangerZoneRibbon? routeRibbon)
     {
         green = null!;
         red = null!;
+        routeRibbon = null;
         var node = gz.FindByName(pathName);
         if (node == null || node.MeshIndex < 0 || node.MeshIndex >= gz.Meshes.Count)
             return false;
@@ -444,7 +515,36 @@ public sealed class StuntMission
             || !TryMakeGate(gz, node, gates[0], out green)
             || !TryMakeGate(gz, node, gates[1], out red))
             return false;
+        routeRibbon = RouteRibbon(gz, node, route);
         return true;
+    }
+
+    // The route polygon as the ribbon the original's AI flies through the zone, docs/org/aiPilot.md
+    // "The danger-zone run". Null for a polygon too short or too degenerate to make one.
+    private static DangerZoneRibbon? RouteRibbon(GameZ gz, GameZNode node, GameZPolygon route)
+    {
+        var xf = gz.WorldTransformOf(node);
+        var mesh = gz.Meshes[node.MeshIndex];
+        var vertices = new List<Vector3>(route.VertexIndices.Count);
+        foreach (int index in route.VertexIndices)
+        {
+            if (index >= 0 && index < mesh.Vertices.Count)
+                vertices.Add(xf * mesh.Vertices[index]);
+        }
+        if (vertices.Count < 2)
+            return null;
+        const string Prefix = "dzpath";
+        int number = node.Name.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(node.Name.AsSpan(Prefix.Length), System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out int parsed) ? parsed : 0;
+        try
+        {
+            return DangerZoneRibbon.FromPolyline(node.Name, number, vertices);
+        }
+        catch (ArgumentException)
+        {
+            return null; // every vertex coincides: no line through the zone to follow
+        }
     }
 
     private static bool TryMakeGate(GameZ gz, GameZNode node, GameZPolygon poly, out StuntGate gate)

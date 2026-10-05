@@ -162,6 +162,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
+- `BL-1052` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **The Original lobby's Game Scores tab draws
+  its figures left-aligned at the header corners, where the original's script centres them in the
+  row cells.** *Evidence:* the shipped `MULTIPLAYERLOBBY_STATS.SCRIPT` places the four figure cells
+  at offsets 154/216/277/337 from the row origin, 62/61/60/57 wide, centred, in face 10574
+  (`docs/org/menu-inventory.md`, the Game Scores page); the race table (`OriginalRaceTable`) follows
+  the script, while the Dogfight rows of `OriginalLobbyScreen`'s scores page start each figure at
+  its header's left corner. *Fix shape:* lay the Dogfight figures through the same cell geometry
+  the race table uses.
+
 
 ## Splitscreen
 
@@ -173,8 +182,7 @@ nearest/union rule, or record it as deliberately single/global. This theme colle
 viewer set behind `ProjectilePool.Viewers` / `ScreenSize.NearestFloor` for draw rules that say
 "the camera". Sim state stays global, the mission wind is the worked example
 (`Session/WeatherRig.Tick`, stepped once per frame outside the per-rig loop on purpose). Splitscreen-scoped items that live with
-their own system: `BL-537` (the 4-player pool judgement), `BL-296` (per-player ActionMap),
-`BL-314` (race countdown).
+their own system: `BL-537` (the 4-player pool judgement), `BL-296` (per-player ActionMap).
 
 The theme's first batch (`BL-126`, `BL-365`–`BL-376`) landed via
 `PLAN-splitscreen-polish` (2026-08-15,
@@ -192,56 +200,6 @@ usual.
   (line ~2238), not the `1/sqrt(N)` splitscreen term itself, which is confirmed correct.
 
 ## Missions, modes & campaign
-
-- `BL-314` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A network stunt race: a timed, Trackmania-style run over the network,
-  started together by a countdown.** Splitscreen needs no countdown, since every pane shares one
-  load and nobody gets a head start; the abreast grid (`StartGrid`) reads right at the controls
-  there. The case left is a network race, where machines finish loading at different times. Stunt
-  mode does not exist over the network yet (the original's stunt mode is single-player Instant
-  Action only), so that comes first.
-
-  **The race, as the user designed it.** Everyone starts together at the same point, with no
-  collision between the aeroplanes; anyone may respawn as often as they like; when the timer runs
-  out, the fastest completion time wins. With no collision a shared start point needs no grid,
-  so the network race need not use `StartGrid` at all.
-
-  **The countdown's shape, as decided.** (a) A **rolling start**, not a full freeze: the aircraft stay
-  physics-alive and moving through the count, which reads as a race start rather than four parked
-  planes popping into motion, and is exactly as fair as a freeze since nobody may manoeuvre. (b) The
-  countdown flight is **on rails**, a kinematic level walk of the field, driven straight into
-  `_model.Reset(...)` (`FlightController.cs:649` is the existing call shape:
-  `_model.Reset(pos, attitude, SpawnSpeed, throttle)`), arranged so that **GO is exactly today's
-  spawn state**. Nothing is simulated during the count, so there is no sink to fight, no per-plane
-  divergence, and the handoff is the pose the flight model already starts from. (c) `--det` never
-  sees any of this: like the grid, the countdown is reached only through the race path, so a scripted
-  run must remain byte-identical and the whole feature stays hand-flown verification only.
-
-  **⚠ Traps, read before touching this.**
-
-  1. **Do not derive the pre-GO setback from a speed.** Spawn speed is the mission's own
-     (`PLAYER_INIT[4] × 0.1`, 18 m/s in nearly every mission), resolved per session by
-     `SpawnPicker.StartState` and carried on `FlightStart`
-     ([`docs/formats/spawns.md`](docs/formats/spawns.md)). It is data, so it differs
-     between missions and can differ again whenever a mission is re-read; any "start N seconds back
-     at the spawn speed" arithmetic therefore hard-codes one map's number into a rule meant to hold
-     on all of them. The on-rails walk above avoids this by construction: it simulates nothing and
-     it ends on the spawn pose whatever the speed is.
-  2. **This changes `StuntMission.Elapsed`'s documented rule.** "The clock never stops" is stated
-     twice and on purpose (`StuntMission.cs:109-113` on the property, `:247-249` on `Tick`), it is
-     why a mid-run crash freeze still costs you time. A countdown means the clock must not *start*
-     until GO, which is a different claim from stopping it mid-run; make the distinction explicit in
-     both comments rather than deleting the rule, or the next reader reads the crash freeze as
-     negotiable too.
-  3. **Do not simulate the count and do not freeze the sim.** A physics-alive count that is actually
-     flown re-opens the sink (`FlightController.Respawn`'s start state) and diverges per plane; a hard freeze
-     was rejected as the presentation this mode wants. Both are the alternatives already considered.
-  4. **The instrument is a hand-flown sitting, not a screenshot.** `--det` cannot reach the race
-     path at all, so an automated check can prove only that scripted runs are unchanged. Whether the
-     count *feels* like a race start comes from a two-machine sitting.
-
-  *Unlocked by the grid, noted here rather than promised:* race best-times become feasible once a
-  race has a defined start (`StuntRace.cs`, `ScoreStore.GetBest`/`RecordIfBest`), and would want
-  their own key namespace, since a countdown makes race and solo totals diverge again.
 
 ## Tooling, platform & docs
 

@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CSVM.Mech3;
 using CSVM.Net;
+using CSVM.Spec;
 using CSVM.UI.Menu;
 using Xunit;
 
@@ -46,7 +48,7 @@ public sealed class DogfightLobbyTests
     {
         var (host, _, _) = Lobbies(1);
 
-        Assert.False(host.SetMissionType((DogfightMissionType)3));
+        Assert.False(host.SetMissionType((DogfightMissionType)DogfightLobby.TypeCount));
         Assert.False(host.SetOutlawed(NetPlaneRules.Flags, true));
         Assert.Equal((byte)DogfightMissionType.Deathmatch, host.Options.MissionType);
 
@@ -398,6 +400,28 @@ public sealed class DogfightLobbyTests
     }
 
     [Fact]
+    public void ARaceLandsItsTableOnGameScoresAndTheNextMatchReplacesIt()
+    {
+        var (host, _, _) = Lobbies(1);
+        Assert.False(host.HasScores);
+        var table = new[]
+        {
+            new RaceTableRow("1st  Blue", "Kestrel", "0:41.2", "", "2/3", Left: true),
+            new RaceTableRow("2nd  Red", "Bloodhawk", "0:44.0", "+2.8", "1/1"),
+        };
+        host.Land(Array.Empty<DogfightScore>(), table);
+        Assert.True(host.HasScores);
+        Assert.Empty(host.Scores);
+        Assert.Equal(table, host.RaceScores);
+        Assert.False(host.Ready);
+
+        // ABLE-TO-FAIL CONTROL: a Dogfight landed after it clears the race's table.
+        host.Land(new[] { new DogfightScore("Host", 1, 1, 0) });
+        Assert.Empty(host.RaceScores);
+        Assert.True(host.HasScores);
+    }
+
+    [Fact]
     public void OneChatLineArrivesOnceOnEveryEnd()
     {
         var (host, guests, _) = Lobbies(3);
@@ -616,7 +640,7 @@ public sealed class DogfightLobbyTests
         Settle(host, guests);
         Assert.True(guests[0].Options.FlagHomeToCapture);
         var rules = DogfightLobby.RulesOf(guests[0].Options);
-        Assert.True(rules.CaptureTheFlag);
+        Assert.Equal(DogfightMissionType.CaptureTheFlag, rules.MissionType);
         Assert.True(rules.FlagHomeToCapture);
 
         // ABLE-TO-FAIL CONTROL: back on Deathmatch every environment and the team boxes are live.
@@ -624,7 +648,7 @@ public sealed class DogfightLobbyTests
         Assert.True(host.SetEnvironment(0));
         Assert.True(host.SetMaxTeams(4));
         Assert.False(host.SetFlagHomeToCapture(false));
-        Assert.False(DogfightLobby.RulesOf(host.Options).CaptureTheFlag);
+        Assert.NotEqual(DogfightMissionType.CaptureTheFlag, DogfightLobby.RulesOf(host.Options).MissionType);
     }
 
     /// <summary>Each Environment row flies the world its row's number names (0x413c08). Above the
@@ -705,8 +729,7 @@ public sealed class DogfightLobbyTests
         Assert.False(host.SetMinTeams(1));
         Assert.False(host.SetFlagHomeToCapture(true));
         var rules = DogfightLobby.RulesOf(guests[0].Options);
-        Assert.True(rules.ZeppelinVsZeppelin);
-        Assert.False(rules.CaptureTheFlag);
+        Assert.Equal(DogfightMissionType.ZeppelinVsZeppelin, rules.MissionType);
 
         // Two teams numbered 2 and 3 launch: the sides follow lobby order, not the numbers.
         host.CreateTeam("One");
@@ -724,7 +747,126 @@ public sealed class DogfightLobbyTests
 
         // ABLE-TO-FAIL CONTROL: back on Deathmatch the rules name no zeppelins.
         Assert.True(host.SetMissionType(DogfightMissionType.Deathmatch));
-        Assert.False(DogfightLobby.RulesOf(host.Options).ZeppelinVsZeppelin);
+        Assert.NotEqual(DogfightMissionType.ZeppelinVsZeppelin, DogfightLobby.RulesOf(host.Options).MissionType);
+    }
+
+    [Fact]
+    public void AStuntRaceGreysAboveTheCloudsAndEveryOptionButTheTime()
+    {
+        var (host, guests, _) = Lobbies(2);
+        Assert.True(host.SetEnvironment(0));
+        Assert.True(host.SetTimeMinutes(12));
+        Assert.True(host.SetVictory(DogfightVictory.Both));
+
+        Assert.True(host.SetMissionType(DogfightMissionType.StuntRace));
+        Settle(host, guests);
+
+        // Above the Clouds has no course, so the pick moves to the next environment with one.
+        var heard = guests[0].Options;
+        Assert.Equal(DogfightMissionType.StuntRace, DogfightLobby.TypeOf(heard));
+        Assert.Equal(1, heard.Environment);
+        Assert.Equal(DogfightLobby.StuntRaceDefaultMinutes, heard.TimeMinutes);
+        Assert.Equal(DogfightVictory.Time, heard.Victory);
+        for (int environment = 0; environment < DogfightLobby.EnvironmentCount; environment++)
+        {
+            Assert.Equal(MenuChapters.DangerZonesFor(DogfightLobby.ChapterOf(environment)), DogfightLobby.Offers(DogfightMissionType.StuntRace, environment));
+        }
+
+        Assert.False(host.SetEnvironment(0));
+        Assert.True(host.SetEnvironment(4));
+        Assert.True(host.SetTimeMinutes(7));
+        Assert.False(host.SetVictory(DogfightVictory.Score));
+        Assert.False(host.SetScore(20));
+        Assert.False(host.SetLimitedLives(true));
+        Assert.False(host.SetAutoRespawn(false));
+        Assert.False(host.SetRestrictTeams(true));
+        Assert.False(host.SetAllowCustomPlanes(false));
+        Assert.False(host.SetOutlawComponents(true));
+        Assert.False(host.SetOutlawed(NetPlaneRules.NitroFlag, true));
+
+        // Picking the race again keeps the typed window.
+        Assert.True(host.SetMissionType(DogfightMissionType.StuntRace));
+        Settle(host, guests);
+        var rules = DogfightLobby.RulesOf(guests[0].Options);
+        Assert.Equal(new VersusRules(0, 7, 0, true, DogfightMissionType.StuntRace), rules);
+        Assert.Equal(MenuMode.Stunt, DogfightLobby.LaunchMode(guests[0].Options));
+        Assert.Equal("C1", DogfightLobby.ChapterOf(guests[0].Options.Environment));
+
+        // ABLE-TO-FAIL CONTROL: back on Deathmatch the options and Above the Clouds are live again.
+        Assert.True(host.SetMissionType(DogfightMissionType.Deathmatch));
+        Assert.Equal(MenuMode.Versus, DogfightLobby.LaunchMode(host.Options));
+        Assert.True(host.SetEnvironment(0));
+        Assert.True(host.SetVictory(DogfightVictory.Score));
+        Assert.True(host.SetLimitedLives(true));
+        Assert.NotEqual(DogfightMissionType.StuntRace, DogfightLobby.RulesOf(host.Options).MissionType);
+    }
+
+    [Fact]
+    public void AStuntRaceLaunchesWhateverTeamsTheGreyedBoxesStoodOn()
+    {
+        var (host, guests, _) = Lobbies(3);
+        Assert.True(host.SetMissionType(DogfightMissionType.CaptureTheFlag));
+        host.CreateTeam("One");
+        Settle(host, guests);
+        Assert.NotEqual(TeamLaunchRefusal.None, host.LaunchRefusal);
+
+        Assert.True(host.SetMissionType(DogfightMissionType.StuntRace));
+        Assert.True(host.Options.RestrictTeams);
+        Assert.Equal(TeamLaunchRefusal.None, host.LaunchRefusal);
+
+        // ABLE-TO-FAIL CONTROL: the same lobby on Capture the Flag is refused again.
+        Assert.True(host.SetMissionType(DogfightMissionType.CaptureTheFlag));
+        Assert.NotEqual(TeamLaunchRefusal.None, host.LaunchRefusal);
+    }
+
+    [Fact]
+    public void AStuntRaceCrossesTheWireAsTypeThree()
+    {
+        var sent = new DogfightOptionsMessage(4, 4, (byte)DogfightMissionType.StuntRace, DogfightVictory.Time, 7, 40, false, 3, true);
+        var wire = new byte[DogfightOptionsMessage.Size];
+        Assert.Equal(DogfightOptionsMessage.Size, sent.Write(wire));
+        Assert.Equal(3, wire[NetMessage.HeaderBytes + 2]);
+        Assert.True(DogfightOptionsMessage.TryRead(wire, out var heard));
+        Assert.Equal(sent, heard);
+        Assert.Equal(DogfightMissionType.StuntRace, DogfightLobby.TypeOf(heard));
+        Assert.True(DogfightLobby.IsStuntRace(heard));
+
+        // ABLE-TO-FAIL CONTROL: the byte past the box's four flies nothing.
+        Assert.False(DogfightLobby.Flies(DogfightLobby.TypeOf(heard with { MissionType = DogfightLobby.TypeCount })));
+        Assert.True(DogfightLobby.Flies(DogfightLobby.TypeOf(heard)));
+    }
+
+    [Fact]
+    public void AStuntRaceLaunchFliesTheChaptersIa1WithTheLobbysWindow()
+    {
+        var cli = SessionSpec.Parse(new[] { "--mission=MP2" });
+        var race = SessionSpec.FromMenu(cli, "C1", new[] { "player_bhawk" }, MenuMode.Stunt, vsTimeMinutes: 7,
+            missionType: DogfightMissionType.StuntRace);
+        Assert.Equal(DogfightMissionType.StuntRace, race.MissionType);
+        Assert.Equal(SessionSpec.StuntRaceMission, race.Mission);
+        Assert.True(race.Stunt);
+        Assert.False(race.Versus);
+        Assert.Equal(7, race.StuntRaceMinutes);
+        Assert.Equal("stunt_flying", race.Scenario);
+        Assert.Null(race.IaDef);
+
+        // ABLE-TO-FAIL CONTROL: each other type flies its own map, and no other launch races.
+        var types = new[] { DogfightMissionType.Deathmatch, DogfightMissionType.CaptureTheFlag, DogfightMissionType.ZeppelinVsZeppelin };
+        var maps = new[] { SessionSpec.DeathmatchMission, SessionSpec.CtfMission, SessionSpec.ZvzMission };
+        for (int i = 0; i < types.Length; i++)
+        {
+            var dogfight = SessionSpec.FromMenu(cli, "C1", new[] { "player_bhawk" }, MenuMode.Versus, vsTimeMinutes: 7, missionType: types[i]);
+            Assert.Equal(types[i], dogfight.MissionType);
+            Assert.Equal(maps[i], dogfight.Mission);
+            Assert.Equal(InstantActionDef.DefaultRaceWindowMinutes, dogfight.StuntRaceMinutes);
+        }
+
+        var asVersus = SessionSpec.FromMenu(cli, "C1", new[] { "player_bhawk" }, MenuMode.Versus, missionType: DogfightMissionType.StuntRace);
+        Assert.Equal(DogfightMissionType.Deathmatch, asVersus.MissionType);
+        var solo = SessionSpec.FromMenu(cli, "C1", new[] { "player_bhawk" }, MenuMode.Stunt, vsTimeMinutes: 7);
+        Assert.Equal(DogfightMissionType.Deathmatch, solo.MissionType);
+        Assert.Equal("MP2", solo.Mission);
+        Assert.Equal(InstantActionDef.DefaultRaceWindowMinutes, solo.StuntRaceMinutes);
     }
 
     private static (DogfightLobby Host, List<DogfightLobby> Guests, IReadOnlyList<LoopbackTransport> Mesh) Lobbies(

@@ -1941,7 +1941,12 @@ public sealed partial class LaunchMenu : CanvasLayer
                 return true;
             case Screen.MissionType:
                 // The lives stepper rides the same screen as the mission choice (decision 18),
-                // so it never competes with the vertical list cursor above.
+                // so it never competes with the vertical list cursor above. A race has none.
+                if (LivesHidden())
+                {
+                    return false;
+                }
+
                 _ia.StepLives(dir);
                 return true;
             case Screen.WaveEdit:
@@ -4816,6 +4821,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         string who = _slots.Count > 1 ? "       (P1 chooses)" : "";
         string nav = _screen switch
         {
+            Screen.MissionType when LivesHidden() => "↑↓  Choose mission",
             Screen.MissionType => "↑↓  Choose mission       ←→  Lives",
             Screen.WaveEdit or Screen.Wingmen or Screen.Options => "↑↓  Choose field       ←→  Change",
             // W/A/S/D are dead on the address row (MenuInput.TextEntry), so the arrows are named
@@ -4928,7 +4934,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                 ? "←→  how many kills end the match; no limit leaves the clock to end it."
                 : "←→  how long the match runs; no limit leaves the kill target to end it.",
         Screen.Environment => $"Region {InstantActionFeature.Environments[focus].Code}",
-        Screen.MissionType => LivesDetail(),
+        Screen.MissionType => LivesHidden() ? "" : LivesDetail(),
         Screen.Waves => focus == InstantActionFeature.WaveSlots ? "Enter / A  on to the wingmen" : "Enter / A  edit a wave",
         Screen.WaveEdit or Screen.Wingmen => "←→  change",
         // Blank: the footer already names the steppers, and a second copy of "←→ change" directly
@@ -4956,6 +4962,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     // stat/region, it is not per-row, so it does not vary with the mission-type cursor.
     private string LivesDetail() =>
         $"Lives   {InstantActionFeature.LivesLabel(_ia.Lives)}        ◀ ▶  change";
+
+    // A multi-seat stunt run is a race, which spends no lives. The stepper and its footer words go
+    // while the cursor stands on Stunt Flying with a second seat joined, the Original's rule.
+    private bool LivesHidden() => _ia.OffersRaceWindow(_setup.Seats.Count);
 
     // The Plane screen's own Instant Action line: the flown-wingmen re-clamp (decision
     // 8a, InstantActionRuntime.FlownWingmen) against the CURRENT joined-player count

@@ -36,7 +36,9 @@ internal static class MenuInstantActionSuites
 
     [Suite("menu-instant-action-journey",
         "Built-in's Instant Action journey pinned end to end: a real LaunchMenu is driven Mode to "
-        + "Environment, the Table of Contents applies a preset, Mission type steps the lives, the "
+        + "Environment, the Table of Contents applies a preset, Mission type steps the lives, a second "
+        + "seat on Stunt Flying hides the stepper, which a race does not spend, and another type or a "
+        + "solo run brings it back with its count, the "
         + "ace duel skips Waves and Wingmen both ways, the wave editor edits a slot live and a new "
         + "militia resets its aircraft, Wingmen hides its aircraft row at zero and opens the "
         + "wingman loadout, the launch leaves as a LaunchExit carrying the built InstantActionDef, "
@@ -55,6 +57,7 @@ internal static class MenuInstantActionSuites
             EnvironmentScreen(ctx, menu);
             TableOfContents(ctx, menu);
             MissionTypeScreen(ctx, menu);
+            RaceSpendsNoLives(ctx, menu, host.Features.Get<PlayerSetupFeature>());
             AceSkip(ctx, menu);
             WavesScreen(ctx, menu);
             WingmenScreen(ctx, menu);
@@ -90,7 +93,12 @@ internal static class MenuInstantActionSuites
         + "and ACCEPT keeps a stepped pick, and Build Custom Plane opens the wallet-free hangar whose "
         + "Back and Purchase Now both return to the screen, the purchase's plane in the Pilot Plane list, "
         + "and a second pilot joined on the screen is named by the seat strip and walked through its own "
-        + "aircraft screen by Fly Mission before the launch carries both seats")]
+        + "aircraft screen by Fly Mission before the launch carries both seats, the remake-only race time box hidden "
+        + "on a solo stunt run showing once that pilot joins on the clear line over the enemy block, taking the walk "
+        + "between the environment and the enemy count and a sideways step, hiding under another mission type, "
+        + "and its pick riding the def into the session spec, while the lives box, which a race does not spend, "
+        + "hides with its title as the pilot joins, the cursor left on it lifting to the box above, and returns "
+        + "with its count under another type")]
     internal static void MenuOriginalInstantAction(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -143,7 +151,7 @@ internal static class MenuInstantActionSuites
             OriginalCustomPilot(ctx, host, seat, shell, fit, ia, exits, store, scratch);
             OriginalLoadout(ctx, host, seat, shell, fit, ia);
             OriginalBuild(ctx, host, seat, shell, fit, host.Features.Get<HangarFeature>(), store, built);
-            OriginalTwoSeats(ctx, host, seat, shell, fit, host.Features.Get<PlayerSetupFeature>(), exits);
+            OriginalTwoSeats(ctx, host, seat, shell, fit, host.Features.Get<PlayerSetupFeature>(), ia, exits);
         }
         finally
         {
@@ -244,6 +252,34 @@ internal static class MenuInstantActionSuites
         ctx.Check(menu.ShownScreen == "Environment", $"Back returns to Environment ({menu.ShownScreen})");
         menu.Drive(Accept);
         Is(ctx, "and the mission cursor survives it", "Dogfighting a Squadron", menu.ShownRowText);
+    }
+
+    // A multi-seat stunt run is a race, which spends no lives. With a second seat joined the
+    // stepper leaves the Mission screen on Stunt Flying alone. It returns with its count on
+    // another type and once the run is solo again.
+    private static void RaceSpendsNoLives(TestContext ctx, LaunchMenu menu, PlayerSetupFeature setup)
+    {
+        menu.Drive(Down);
+        Is(ctx, "the row under the squadron is the stunt run", "Stunt Flying", menu.ShownRowText);
+        Is(ctx, "a solo stunt run keeps the lives stepper", "Lives   1        ◀ ▶  change", menu.ShownDetail);
+        var guest = setup.Join(new ScriptedSeat());
+        ctx.Check(guest != null && setup.Seats.Count == 2, $"a second pilot joins ({setup.Seats.Count})");
+        Is(ctx, "two seats on a stunt run show no lives", "", menu.ShownDetail);
+        ctx.Check(!menu.ShownFooter.Contains("Lives", StringComparison.Ordinal),
+            $"and the footer no longer names the stepper ({menu.ShownFooter})");
+        menu.Drive(Right);
+        Is(ctx, "a sideways press leaves the hidden count alone", "Stunt Flying", menu.ShownRowText);
+        menu.Drive(Down);
+        Is(ctx, "two seats on another type keep the stepper and its count", "Lives   1        ◀ ▶  change", menu.ShownDetail);
+        menu.Drive(Up);
+        if (guest != null)
+        {
+            setup.Unjoin(guest);
+        }
+
+        Is(ctx, "the stunt run alone again shows the stepper", "Lives   1        ◀ ▶  change", menu.ShownDetail);
+        menu.Drive(Up);
+        Is(ctx, "back on the squadron", "Dogfighting a Squadron", menu.ShownRowText);
     }
 
     private static void AceSkip(TestContext ctx, LaunchMenu menu)
@@ -1029,21 +1065,42 @@ internal static class MenuInstantActionSuites
         ctx.Check(shell.Screen == OriginalScreen.TopLevel, $"Exit returns to the top level ({shell.Screen})");
     }
 
-    // A second pilot joined on the Instant Action screen: the strip names it, FLY MISSION opens
-    // its per-seat aircraft screen instead of launching, and the launch that follows carries both.
+    // A second pilot joined on the Instant Action screen. The strip names it and the race time box
+    // shows for a stunt run. FLY MISSION opens its per-seat aircraft screen instead of launching,
+    // and the launch that follows carries both seats and the picked race window.
     private static void OriginalTwoSeats(
         TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit,
-        PlayerSetupFeature setup, List<MenuExit> exits)
+        PlayerSetupFeature setup, InstantActionFeature ia, List<MenuExit> exits)
     {
         if (!EnterInstantAction(ctx, host, seat, shell, fit))
         {
             return;
         }
 
+        var stunt = Row(shell, $"{OriginalInstantActionScreen.ContentsKey}:1");
+        if (stunt != null)
+        {
+            Click(host, seat, Pointer(fit, stunt.X + 5f, stunt.Y + 5f, pressed: true, clicked: true));
+        }
+
+        ctx.Check(ia.MissionType.Key == InstantActionFeature.StuntKey
+            && Row(shell, OriginalInstantActionScreen.RaceTimeKey) is { Visible: false, Enabled: false } && !HasLine(shell, "Race Time:"),
+            $"a solo stunt run shows no race time box ({ia.MissionType.Key}, {Row(shell, OriginalInstantActionScreen.RaceTimeKey)?.Visible})");
         ctx.Check(StripLines(shell) == 0, $"one seat draws no seat strip over the screen ({StripLines(shell)})");
+        string livesLabel = InstantActionFeature.LivesLabel(ia.Lives);
+        ctx.Check(Row(shell, OriginalInstantActionScreen.LivesKey) is { Visible: true, Enabled: true, Column: 1 } solo && solo.Label == livesLabel
+            && HasLine(shell, "Lives:"),
+            $"a solo stunt run keeps its lives box ({Row(shell, OriginalInstantActionScreen.LivesKey)?.Label})");
+        ctx.Check(shell.InstantAction.PoseLives(ia.Lives) && shell.FocusedKey == OriginalInstantActionScreen.LivesKey,
+            $"the cursor stands on the lives box before the second pilot joins ({shell.FocusedKey})");
         var guest = new ScriptedSeat();
         ctx.Check(setup.Join(guest) != null && host.Seats.Count == 2, $"a second pilot joins on the screen ({host.Seats.Count})");
         ctx.Check(StripLines(shell) == 2, $"and the strip names both seats ({StripLines(shell)})");
+        ctx.Check(Row(shell, OriginalInstantActionScreen.LivesKey) is { Visible: false, Enabled: false, Column: -1, Label: "" } && !HasLine(shell, "Lives:"),
+            $"a race spends no lives, so the lives box and its title go ({Row(shell, OriginalInstantActionScreen.LivesKey)?.Visible})");
+        ctx.Check(shell.FocusedKey is OriginalInstantActionScreen.WingmenKey or OriginalInstantActionScreen.WingmanPlaneKey,
+            $"and the cursor left on it lifts to the live box above it, not the far page ({shell.FocusedKey})");
+        OriginalRaceTime(ctx, host, seat, shell, ia, livesLabel);
 
         var fly = Row(shell, OriginalInstantActionScreen.FlyMissionKey);
         ctx.Check(fly != null, $"Fly Mission is on screen");
@@ -1067,8 +1124,77 @@ internal static class MenuInstantActionSuites
         {
             ctx.Check(both.Seats[1].PlaneNode == shell.InstantAction.PilotRoster[1].Node && both.InstantAction != null,
                 $"the guest flying the row it picked, the def still the screen's ({both.Seats[1].PlaneNode})");
+            var spec = SessionSpec.FromMenu(SessionSpec.Parse(Array.Empty<string>()), both.Chapter,
+                both.Seats.Select(s => s.PlaneNode).ToList(), both.Mode, both.InstantAction);
+            ctx.Check(both.InstantAction?.RaceWindowMinutes == 10 && spec.StuntRaceMinutes == 10 && spec.Players == 2,
+                $"the def carries the picked race window into the session spec ({both.InstantAction?.RaceWindowMinutes}, {spec.StuntRaceMinutes})");
         }
     }
+
+    // The race time box over the install's layout with a second seat joined on a stunt run. It
+    // stands on the clear line above the enemy block, the one the lives box leaves free. The
+    // keyboard walk reaches it between the environment and the enemy count, where its line falls.
+    // A sideways step picks the next window. Another mission type hides it with the pick kept and
+    // brings the lives box back with its count.
+    private static void OriginalRaceTime(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, InstantActionFeature ia, string livesLabel)
+    {
+        var rows = shell.Rows;
+        int at = -1;
+        for (int i = 0; i < rows.Count; i++)
+        {
+            if (rows[i].Key == OriginalInstantActionScreen.RaceTimeKey)
+            {
+                at = i;
+            }
+        }
+
+        var box = at >= 0 ? rows[at] : null;
+        ctx.Check(box is { Visible: true, Enabled: true, Column: 1, Label: "5 minutes", X: 525f, Y: 327.5f, Width: 110f, Height: 18f },
+            $"two seats show the race time box on the clear line over the enemy block at five minutes ({box?.Label}, {box?.X}, {box?.Y})");
+        if (box == null)
+        {
+            return;
+        }
+
+        ctx.Check(!rows.Any(r => r.Key != box.Key && r.Visible && r.Width > 0f && r.Height > 0f
+            && r.X < box.X + box.Width && box.X < r.X + r.Width && r.Y < box.Y + box.Height && box.Y < r.Y + r.Height),
+            $"no other row shares its space ({box.Y})");
+        ctx.Check(at > 0 && at + 1 < rows.Count && rows[at - 1].Key == OriginalInstantActionScreen.EnvironmentKey && rows[at + 1].Key == "IA_D_NENEMY0",
+            $"its place in the walk is between the environment and the enemy count ({(at > 0 ? rows[at - 1].Key : "?")}, {(at + 1 < rows.Count ? rows[at + 1].Key : "?")})");
+        ctx.Check(HasLine(shell, "Race Time:", 420f, 327.5f), $"titled in the column's title ink and place");
+
+        ctx.Check(shell.InstantAction.PoseRaceTime() && shell.FocusedKey == OriginalInstantActionScreen.RaceTimeKey,
+            $"the screenshot aid's pose focuses it ({shell.FocusedKey})");
+        Press(host, seat, Up);
+        bool upLands = shell.FocusedKey == OriginalInstantActionScreen.EnvironmentKey;
+        Press(host, seat, Down);
+        bool downLands = shell.FocusedKey == OriginalInstantActionScreen.RaceTimeKey;
+        ctx.Check(upLands && downLands, $"Up walks to the environment and Down back onto it ({upLands}, {shell.FocusedKey})");
+        Press(host, seat, Right);
+        ctx.Check(ia.RaceWindowMinutes == 10 && Row(shell, OriginalInstantActionScreen.RaceTimeKey)?.Label == "10 minutes",
+            $"a sideways step picks the next window ({ia.RaceWindowMinutes})");
+        Press(host, seat, Down);
+        ctx.Check(shell.FocusedKey == "IA_D_NENEMY0", $"and Down leaves it for the enemy count ({shell.FocusedKey})");
+
+        Press(host, seat, Up);
+        Press(host, seat, Up);
+        Press(host, seat, Up);
+        Press(host, seat, Right);
+        ctx.Check(ia.MissionType.Key == "zeppelin_run" && Row(shell, OriginalInstantActionScreen.RaceTimeKey) is { Visible: false, Enabled: false }
+            && !HasLine(shell, "Race Time:"),
+            $"another mission type hides it ({ia.MissionType.Key}, focus {shell.FocusedKey})");
+        ctx.Check(Row(shell, OriginalInstantActionScreen.LivesKey) is { Visible: true, Enabled: true, Column: 1 } lives && lives.Label == livesLabel
+            && HasLine(shell, "Lives:"),
+            $"and brings the lives box back with its count, two seats on another type spending lives ({Row(shell, OriginalInstantActionScreen.LivesKey)?.Label})");
+        Press(host, seat, Left);
+        ctx.Check(ia.MissionType.Key == InstantActionFeature.StuntKey && Row(shell, OriginalInstantActionScreen.RaceTimeKey) is { Visible: true, Label: "10 minutes" }
+            && Row(shell, OriginalInstantActionScreen.LivesKey) is { Visible: false },
+            $"and stunt flying brings it back with the pick kept and the lives box gone again ({Row(shell, OriginalInstantActionScreen.RaceTimeKey)?.Label})");
+    }
+
+    // Whether the composed screen writes a line, at a place when one is given.
+    private static bool HasLine(OriginalShell shell, string text, float? x = null, float? y = null) =>
+        shell.Compose().Lines.Any(l => l.Text == text && (x == null || l.X == x) && (y == null || l.Y == y));
 
     // How many seat-strip chips the composed screen carries, the strip being the overlay whose
     // lines are the player tags alone.

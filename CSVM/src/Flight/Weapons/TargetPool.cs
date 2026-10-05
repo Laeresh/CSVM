@@ -133,6 +133,15 @@ public sealed class TargetPool
         _ => "",
     };
 
+    /// <summary>The name line an aircraft's marker prints for a pane on <paramref name="ownTeam"/>.
+    /// A mode's tag (a flag carrier's) wins while it stands, read by that pane's side. Under it a
+    /// network seat reads by its callsign. Under that is the airframe's common name (plane type
+    /// alone, decision 10), never the node name the selection is held by. Null with no airframe
+    /// bound. The race's pilot labels print the same line.</summary>
+    internal static string? AircraftDisplayName(FlightController? plane, int ownTeam) =>
+        plane?.MarkerName?.Invoke(ownTeam) ?? plane?.PilotName
+        ?? (plane?.Stats is { } stats ? PlaneRoster.PlaneDisplayName(stats) : null);
+
     /// <summary>Every name a candidate ALSO answers to, nearest first, appended to
     /// <paramref name="into"/>: a zeppelin zone's owning airship, then each node above the pool's
     /// anchor in the world tree. Nothing is appended for a whole thing in its own right.
@@ -238,14 +247,7 @@ public sealed class TargetPool
             case AimTargetKind.Vehicle:
                 var plane = c.Source as FlightController;
                 var dmg = plane?.Damage;
-                // A mode's tag (a flag carrier's) replaces the name line while it stands, read by
-                // the selecting pane's own side. Under it, a network seat reads by its callsign.
-                string? tag = plane?.MarkerName?.Invoke(ownTeam) ?? plane?.PilotName;
-                // The MARKER prints the airframe's common name (plane type alone, decision 10),
-                // not the node name the selection is held and pinned by. A rig with no flight model
-                // bound has no airframe to name, and falls back to that node name.
-                return TargetRef.ForAircraft(c, cls, name,
-                    tag ?? (plane?.Stats is { } stats ? PlaneRoster.PlaneDisplayName(stats) : null),
+                return TargetRef.ForAircraft(c, cls, name, AircraftDisplayName(plane, ownTeam),
                     dmg == null ? null : TargetRef.Fraction(dmg.WholeHealth, dmg.WholeHealthMax),
                     dmg == null ? null : TargetRef.Fraction(dmg.WholeArmor, dmg.WholeArmorMax),
                     objective, plane?.ObjectiveTypeLabel, plane?.ObjectiveCategory);
@@ -289,6 +291,13 @@ public sealed class TargetPool
         bool objectiveTarget = false)
     {
         if (c.Source == null || ReferenceEquals(c.Source, self))
+        {
+            return;
+        }
+
+        // Another race pilot is never a target, so no cycle, --target= or spyglass reaches it. Its
+        // label is TargetHud.RaceMarks' instead. An AI aircraft in a race session stays selectable.
+        if (c.Source is FlightController { Racing: true, IsHumanPiloted: true })
         {
             return;
         }

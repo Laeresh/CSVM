@@ -165,4 +165,8 @@ public enum InputAction
     LookUpRight,
     LookUpLeftRear,
     LookUpRightRear,
+
+    // The original's Display Scores (Multiplayer Only), Tab by default: held, it shows the race's
+    // or the Dogfight's standings in that seat's pane. Appended because the enum is positional.
+    DisplayScores,
 }

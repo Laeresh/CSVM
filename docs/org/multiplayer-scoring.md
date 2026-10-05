@@ -161,6 +161,78 @@ reason 2 when a team's `+0x10` reaches the target `0071c17c`, and skips the per-
 **Reason 4 is one team left.** [Evidence: decoded] `FUN_004999f0` compares the team slots, so a
 team match ends when every pilot with lives is on one team, however many of them there are.
 
+## The in-flight scores
+
+[Evidence: decoded] **The command.** Display Scores (command `0x23`, Tab, [`input.md`](input.md))
+is registered by `FUN_004895a0` to `FUN_00489320`. The handler hides the chat panel at
+`0x0071d8a8` (`FUN_004a8510`, its vtable `+0x64`) and hands the score list at `0x0071c13c` to
+`FUN_00456400`, which calls `FUN_004565d0` on the HUD object at `0x00654234`. It does not test for
+a network game. [Evidence: inferred] The list's entries are made by the multiplayer setup
+`FUN_004136e0` and by each arriving player's record (`FUN_00414640`), so outside a network game the
+list is empty and the press only hides the chat.
+
+[Evidence: decoded] **A tap, not a hold.** The keyboard dispatch in `FUN_00535a80`
+(`0x00535dfe`..`0x00535e24`) calls a code's handler only while its state word has bit 0 set. A press
+writes 1 (3 if the word was already 1) and a release ORs 4; the next frame's `FUN_00535a00` turns 1
+into 2 and any released word into 0. A key held across a frame is therefore released from 2 into 6
+and calls nothing: the handler runs on the press, and on a press and release inside one frame.
+
+[Evidence: decoded] **What it draws.** `FUN_004565d0` builds 18 rows once (the byte at `+0x10`),
+each two text items in the `hudNetPlay` font: the line at x 50 and a flag column at x 40, rows at
+y 30 to 200 every 10 (`0x004565f5`..`0x0045668e`), in the 640 by 480 frame the chat panel is placed
+in. It hides all 36 items, then shows one line per list entry: the entry's text at `+0`, its colour
+at `+0x28` when that is non-zero, a show with no timer (vtable `+0x60` with -1.0) and then
+`FUN_005c55f0(4.0)`, which arms the item's timer at `+0x10` with flag bit 0, the field and bit the
+chat panel's ten-second timer arms. An entry whose `+0x10` is non-zero also shows "F" (`0x0062507c`)
+in the flag column, coloured by that index from the table `0xffffff`, `0xaaaa`, `0xaa`.
+[Evidence: inferred] The timer's expiry hides each line as it hides the chat panel, so a press shows
+the scores for four seconds. [Evidence: data] `hudNetPlay` is Courier New, height -12, width 8,
+colour 255, 250, 66, shadowed, weight 600 (`fonts.zrd`).
+
+[Evidence: decoded] **What else raises it.** The score table's handler `FUN_004993f0` (message
+`0x13`, [`multiplayer-messages.md`](multiplayer-messages.md)) recomputes the team totals
+(`FUN_0046ea40`), rewrites the lines (`FUN_0046e310(21, 7)`) and calls `FUN_00456400`, so every
+score update shows the table, without hiding the chat. The console command `scorecolors`
+(`FUN_0043d640`, `0x0043f06d`..`0x0043f0d0`) packs its three numbers as `a | b << 8 | c << 16` into
+`0x0071c860`, recolours all 18 lines through `FUN_00456410` and shows the table. [Evidence: inferred]
+That packing is a GDI colour word, which reads the flag table as team 1's flag in 170, 170, 0 and
+team 2's in 170, 0, 0.
+
+[Evidence: decoded] **The lines.** `FUN_0046e310(21, 7)` writes each pilot's line into the display
+entry at pilot record `+0x2c` and sorts the list by entry `+0x24`, highest first:
+
+| Line | Text |
+|---|---|
+| header | `Left(MSG_MPHUD_PLAYER, 21) + " " + Left(MSG_MPHUD_SCORE, 7)`, `MSG_MPHUD_PLAYER_TEAM` in a team match: "  Player" padded to 21, a space, "score  " |
+| pilot, free for all | `Left(name + 24 spaces, 21) + " " + Left(score + 13 spaces, 7)` (`0x00627344`, `0x00627364`) |
+| team, team match | `"%s (Team Score: %d)"` (`0x00627300`) of the team's name and its `+0x10` total, unpadded |
+| pilot, team match | `Left(" " + name + 19 spaces, 21) + " " + Left(score + 13 spaces, 7)`, one character in |
+
+The header entry is made by `FUN_004136e0` (`0x004139eb`..`0x00413a64`) with every key field -1, so
+it sorts first. The name is the pilot record's `+0x10` and the score its `+0x1c`; a record whose
+byte `+0x28` is set gets no line. Only the team branch writes a member's entry `+0x10`, from the
+flag its aircraft carries (aircraft `+0x720`, [`multiplayer-ctf.md`](multiplayer-ctf.md)). The keys
+(`FUN_0046ec40`) put teams in total order, a team's line over its members and the members by score;
+in a free-for-all the pilots go by score, then by the join counter at record `+0x18`, higher first.
+
+**The remake.** `UI/Overlays/ScoresOverlay.cs` draws the table while a seat holds Display Scores
+and drops it on release, the user's ruling over the decoded four-second tap; a score update does not
+raise it. Under the Original presentation the lines are `OriginalScoresText`'s, built by the table
+above, drawn at the decoded positions three times over in the HUD's 1440-line reference, every
+character on the 8-pixel cell, in Courier New at weight 600 in `hudNetPlay`'s ink with its shadow,
+and the flag column marks a Capture the Flag carrier in the colours above. After the original's two
+columns each pilot line carries the remake's kills (6 characters) and deaths under "kills" and
+"deaths" in the header's lowercase, the user's ruling, so the line reads like the Dogfight board; a
+team's line stays the original's own. Not carried: the entry
+colour, `scorecolors`, and the join-order tie break (ties keep `VersusMatch.Standings` order). A seat
+on no lobby team in a team match, which the original has no counterpart for, follows the teams as a
+plain line. A stunt race borrows the grid for its own columns, remake text in the header's style:
+place and callsign in the name column, then the aircraft (12), best (10), gap (9) and runs. Under
+Built-in the same standings stand as a chrome table in the results board's columns. Either look
+stands in the holding seat's pane alone, as the original's stands in its one screen's HUD, so a
+split screen seat's table never covers another pilot's flight. While it stands, that pane's chat
+lines step aside; the original instead hides the panel at once on the press until the next line.
+
 ## What the remake takes
 
 `Flight/Modes/MatchScores.cs` reads the nine keys from `player.zrd` at session build, each with

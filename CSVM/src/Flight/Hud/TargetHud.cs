@@ -54,6 +54,12 @@ public sealed partial class TargetHud : Control
     /// </summary>
     public bool MarkAll;
 
+    /// <summary>A race pane's pilot labels. Every other live race pilot in <see cref="HostilePool"/>
+    /// carries the marker's name line (<see cref="TargetPool.AircraftDisplayName"/>) in the friendly
+    /// colour, on screen or at the edge. None of them is a target, so none takes brackets or the
+    /// spyglass. Off everywhere but a race session.</summary>
+    public bool RaceMarks;
+
     /// <summary>This pane's own aircraft: the side every team test here runs against
     /// (<see cref="OwnTeam"/>), and the plane excluded from <see cref="MarkAll"/>'s sweep. Null
     /// marks everything the pool lists, which is what the suite wants and what a pane with no
@@ -125,6 +131,7 @@ public sealed partial class TargetHud : Control
 
     private readonly AimCandidateSet _hostileScan = new(); // rebuilt per frame, aircraft list only
     private readonly List<(TargetRef Target, bool Friendly)> _marks = new(); // --debug-markers
+    private readonly List<FlightController> _racePilots = new(); // RaceMarks, refilled per draw
 
     private Camera3D _camera = null!;
     private SpyglassView? _spyglass;
@@ -260,6 +267,21 @@ public sealed partial class TargetHud : Control
                 dmg == null ? null : TargetRef.Fraction(dmg.WholeHealth, dmg.WholeHealthMax),
                 dmg == null ? null : TargetRef.Fraction(dmg.WholeArmor, dmg.WholeArmorMax));
             into.Add((target, c.Team == ownTeam && c.Team != AimAssist.NeutralTeam));
+        }
+    }
+
+    /// <summary>Every live race pilot in <paramref name="scan"/> but <paramref name="own"/>, the ones
+    /// <see cref="RaceMarks"/> labels: a human-piloted aircraft carrying the session's race flag. An
+    /// AI aircraft is left to the hostile marker and the target cycle, which still reach it.</summary>
+    public static void CollectRacePilots(object? own, AimCandidateSet scan, List<FlightController> into)
+    {
+        foreach (var c in scan.Vehicles)
+        {
+            if (c.Live && !ReferenceEquals(c.Source, own)
+                && c.Source is FlightController { Racing: true, IsHumanPiloted: true } pilot)
+            {
+                into.Add(pilot);
+            }
         }
     }
 
@@ -568,6 +590,21 @@ public sealed partial class TargetHud : Control
             }
 
             return;
+        }
+
+        if (RaceMarks && HostilePool != null)
+        {
+            _racePilots.Clear();
+            CollectRacePilots(Own, _hostileScan, _racePilots);
+            int stagger = 0;
+            foreach (var pilot in _racePilots)
+            {
+                if (!GodotObject.IsInstanceValid(pilot) || !pilot.IsInsideTree())
+                    continue;
+                var at = FlightController.TryRenderPosition(pilot, out var render) ? render : pilot.GlobalPosition;
+                DrawOpponent(font, at, HudGreen, TargetPool.AircraftDisplayName(pilot, OwnTeam) ?? pilot.Name,
+                    s, markerFont, stagger++);
+            }
         }
 
         // The tracked AI hostile, a FALLBACK: a pilot who has a selection marks that one target and

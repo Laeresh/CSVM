@@ -67,6 +67,10 @@ internal sealed class SessionBoards
     /// </summary>
     public ResultsBoard? DogfightBoard => _boards.OfType<VersusBoard>().FirstOrDefault();
 
+    /// <summary>The race board, either presentation's, null outside a race. A suite reads its menu
+    /// and rows through this.</summary>
+    public Control? RaceBoard { get; private set; }
+
     /// <summary>The Restart the pause board carries, null where it offers none. A suite reads it,
     /// and fires it, through this.</summary>
     public Action? PauseRestart => _originalPause?.Restart ?? (_pauseBoard as PauseBoard)?.Restart;
@@ -135,23 +139,43 @@ internal sealed class SessionBoards
         }
     }
 
-    /// <summary>The splitscreen race's shared results board, one ranked row per player over the
-    /// whole window. Null in Instant Action, which keeps the race for the run HUD's placings
-    /// alone and builds no board.</summary>
-    public StuntRaceBoard? BuildRaceBoard(StuntRace race, bool instantAction, string context,
-        Action restart)
+    /// <summary>The time-attack race's shared results board, one ranked row per pilot over the
+    /// whole window. It is the Original presentation's lobby-scores board where that art and the
+    /// string table are installed, the Built-in chrome board otherwise. Instant Action builds it too,
+    /// since the race ends a multi-seat stunt run. <paramref name="zoneNames"/> are in course order.
+    /// A network race names its own exit row in <paramref name="exitLabel"/>, and a guest's board
+    /// shows <paramref name="restartWithheld"/> in place of Restart.</summary>
+    public Control BuildRaceBoard(StuntRace race, IReadOnlyList<string> zoneNames, string context,
+        Action restart, string? exitLabel = null, string? restartWithheld = null)
     {
-        var board = RaceBoardFor(race, instantAction, context, exitsToMenu: _in.MenuDriven,
-            _in.PauseState, InputFor);
-        if (board == null)
-            return null;
-        board.Restart = restart;
-        board.Exit = _in.Exit;
+        Control built;
+        exitLabel ??= StuntRaceBoard.ExitLabel(_in.MenuDriven);
         // Player 1: a results board reads _inputFor(0), so its cursor is P1's whoever won.
-        board.PhotoMode = () => EnterPhotoMode(0);
-        _boards.Add(board);
-        AddLayer(board, "race_board");
-        return board;
+        if (OriginalRaceStrings() is { } strings)
+        {
+            var board = OriginalRaceBoard.Build(race, zoneNames, context, exitLabel, _in.PauseState,
+                InputFor, _in.DataRoot, strings);
+            board.Restart = restart;
+            board.RestartWithheld = restartWithheld;
+            board.Exit = _in.Exit;
+            board.PhotoMode = () => EnterPhotoMode(0);
+            built = board;
+        }
+        else
+        {
+            var board = StuntRaceBoard.Build(race, zoneNames, context, exitsToMenu: _in.MenuDriven,
+                _in.PauseState, InputFor, exitLabel);
+            board.Restart = restart;
+            board.RestartWithheld = restartWithheld;
+            board.Exit = _in.Exit;
+            board.PhotoMode = () => EnterPhotoMode(0);
+            built = board;
+        }
+
+        _boards.Add(built);
+        RaceBoard = built;
+        AddLayer(built, "race_board");
+        return built;
     }
 
     /// <summary>The match's shared results board, one layer over the whole window, since the match
@@ -232,14 +256,6 @@ internal sealed class SessionBoards
             InputFor(rig.Index).Prime();
     }
 
-    // The splitscreen stunt race's shared results board, or none in Instant Action. ⚠ Never build
-    // one there. It wakes on the last pilot's finish, which is also the mission's win. Its halt
-    // stops the clock the director's hold counts down on, so the wrap-up never comes. Internal so
-    // the instant-action-end suite builds the board the session builds.
-    internal static StuntRaceBoard? RaceBoardFor(StuntRace race, bool instantAction, string context,
-        bool exitsToMenu, PauseState pauseState, Func<int, MenuInput> inputFor) =>
-        instantAction ? null : StuntRaceBoard.Build(race, context, exitsToMenu, pauseState, inputFor);
-
     // The reader a board menu drives its cursor from, for a roster seat. The readers are this
     // machine's players in order, so the seat goes through its local player first: a guest's own
     // seat is not 0. A seat with no local player here falls back to player 1, who always exists.
@@ -258,6 +274,25 @@ internal sealed class SessionBoards
         var layer = new CanvasLayer { Name = name, Layer = HudLayers.Board };
         layer.AddChild(board);
         _in.WorldRoot.AddChild(layer);
+    }
+
+    // The string table the Original race board writes in, or null where that board does not apply.
+    // That is the Built-in presentation, or an install missing the table or the borrowed lobby art.
+    private UiStrings? OriginalRaceStrings()
+    {
+        if (_in.Presentation != PresentationId.Original
+            || !File.Exists(Extraction.RofTree.Under(_in.DataRoot, "ASSETS/GRAPHICS/" + OriginalRaceTable.PageArt)))
+        {
+            return null;
+        }
+
+        var strings = UiStrings.TryLoad(_in.DataRoot);
+        if (strings == null)
+        {
+            Log.Warn("ui", $"race board: no string table under {_in.DataRoot}, the Built-in board stands in");
+        }
+
+        return strings;
     }
 
     // The Original presentation's pause sheet, or null where it does not apply. That is the
@@ -300,7 +335,7 @@ internal sealed class SessionBoards
         var spec = _in.Spec;
         if (!spec.Versus
             || LoadScreens.MultiplayerKey(
-                spec.Chapter, spec.CaptureTheFlag, spec.ZeppelinVsZeppelin, sheetInputs.Teamed) is not { } key)
+                spec.Chapter, spec.MissionType, sheetInputs.Teamed) is not { } key)
         {
             return null;
         }

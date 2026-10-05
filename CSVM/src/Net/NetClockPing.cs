@@ -25,6 +25,8 @@ public sealed class NetClockPing
     private readonly NetClockSlew? _slew;
     private readonly Func<double> _clock;
     private int _wait;
+    // An ask owed whatever the interval says; an answer arriving meanwhile does not cancel it.
+    private bool _askSoon;
     private double _newestAsked = double.NegativeInfinity;
 
     private NetClockPing(NetSession net, NetClockSlew? slew, Func<double> clock)
@@ -86,15 +88,21 @@ public sealed class NetClockPing
     /// one link's worth after it starts flying.</summary>
     public void Step()
     {
-        if (_slew is null || _net.HostPeer == NetSession.NoPeer || _wait-- > 0)
+        if (_slew is null || _net.HostPeer == NetSession.NoPeer || (_wait-- > 0 && !_askSoon))
         {
             return;
         }
 
+        _askSoon = false;
         _net.Send(_net.HostPeer, new ClockPingMessage((float)_clock()), NetChannels.Events);
         Asked++;
         _wait = RetrySteps - 1;
     }
+
+    /// <summary>Makes the next <see cref="Step"/> ask, whatever the interval left. Both clocks stand
+    /// still through a held start. A round trip measured there reads short, and its offset lags by
+    /// the latency; a race's opening needs one measured on running clocks.</summary>
+    public void AskSoon() => _askSoon = true;
 
     // An answer older than one already taken was overtaken in flight, and one stamped later than
     // this clock reads was never asked here. Neither is a round trip. A stamp is a float, which

@@ -23,6 +23,9 @@ public abstract partial class ResultsBoard : Control
     // converts into for a board (ChromeType.InReference).
     internal const float ReferenceHeight = 720f;
 
+    /// <summary>The exit row's words on a board launched from the command line, where it quits.</summary>
+    internal const string QuitLabel = "Quit Game";
+
     // The shared board style: one palette so every board reads as the same screen. All TUNE.
     internal static readonly Color TitleColor = new(0.93f, 0.96f, 1f);
     internal static readonly Color ContextColor = new(0.60f, 0.75f, 0.95f);
@@ -78,8 +81,8 @@ public abstract partial class ResultsBoard : Control
     internal bool RowsShowCursor => _host?.View.ShowsCursor == true;
 
     /// <summary>Whether the run this board reported is still over. A live flag here (the match's
-    /// <c>Completed</c>, the race's <c>AllFinished</c>) makes a rerun retire the board from
-    /// <c>_Process</c>; a board nothing retires answers true and overrides
+    /// <c>Completed</c>, the race's <c>Ended</c>) lets a rerun retire the board from
+    /// <c>_Process</c>. A board nothing retires answers true and overrides
     /// <see cref="OnRestartChosen"/> instead.</summary>
     protected abstract bool StillEnded { get; }
 
@@ -246,11 +249,13 @@ public abstract partial class ResultsBoard : Control
     }
 
     /// <summary>The board's own state for the Build methods: hidden, input-transparent, full-rect,
-    /// with the backdrop and centre container underneath. Call once from the subclass Build.</summary>
-    protected void InitShell(PauseState state, bool exitsToMenu, System.Func<int, MenuInput> inputFor)
+    /// with the backdrop and centre container underneath. Call once from the subclass Build.
+    /// <paramref name="exitLabel"/> replaces the standard exit row's words, null keeping them.</summary>
+    protected void InitShell(PauseState state, bool exitsToMenu, System.Func<int, MenuInput> inputFor,
+        string? exitLabel = null)
     {
         _state = state;
-        _exitLabel = exitsToMenu ? "Exit to Menu" : "Quit Game";
+        _exitLabel = exitLabel ?? (exitsToMenu ? "Exit to Menu" : QuitLabel);
         _inputFor = inputFor;
         _center = BuildShell(this);
         _viewer = ShotViewer.Build(clickCloses: true);

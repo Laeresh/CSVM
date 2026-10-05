@@ -150,6 +150,9 @@ internal sealed class SessionNet
     /// <summary>The in-flight chat over the wire, null outside a network match.</summary>
     public NetChatLink? Chat { get; private set; }
 
+    /// <summary>The stunt race over the wire, null outside a network race.</summary>
+    public NetRaceLink? Race { get; private set; }
+
     /// <summary>The chat panel each local pane draws, in pane order.</summary>
     public IReadOnlyList<ChatPanel> ChatPanels => _chatPanels;
 
@@ -388,13 +391,7 @@ internal sealed class SessionNet
         Chat = NetChatLink.Open(net, strings);
         foreach (var pane in _rigs)
         {
-            var panel = new ChatPanel
-            {
-                Chat = Chat.Chat,
-                ShowsEntry = pane.Controller is { UseKeyboard: true },
-                MouseFilter = Control.MouseFilterEnum.Ignore,
-                FocusMode = Control.FocusModeEnum.None,
-            };
+            var panel = ChatPanel.ForPane(Chat.Chat, pane);
             var layer = new CanvasLayer { Name = "chat", Layer = HudLayers.Hud };
             layer.AddChild(panel);
             pane.HudParent.AddChild(layer);
@@ -403,6 +400,24 @@ internal sealed class SessionNet
         }
 
         Log.Info("core", $"net chat: {_rigs.Count} pane(s), {(net.IsHost ? "host (relaying an all-chat to every machine and a team line to the typist's team)" : "guest (sending its lines to the host)")}");
+    }
+
+    /// <summary>The stunt race over the wire, before the roster builds, since each local seat's run
+    /// is fed through it. Each machine times its own seats; the host keeps the window, the board
+    /// and the ending, and a guest's race replicates it. ⚠ Nothing is sent from here: the join stays
+    /// the two payloads it is counted as.</summary>
+    public NetRaceLink? WireRace(StuntRace race)
+    {
+        if (Link is not { } net || Seats.Count == 0)
+        {
+            return null;
+        }
+
+        Race = NetRaceLink.Open(net, race, _clockTime, Clock, Ping, GameClock.FixedDt);
+        // A guest walking back to the lobby keeps its link, so its word is the only sign it left.
+        Race.GuestLeft += TakeGuestLeft;
+        Log.Info("core", $"net race: {(net.IsHost ? "host (timing its own seats, taking every guest's run reports, sending each changed racer's line and its clock)" : "guest (reporting its own seats' runs, its board and window replicated from the host's)")}");
+        return Race;
     }
 
     /// <summary>An airframe swap's replacement on the wire again, its combat (unless
@@ -1017,7 +1032,8 @@ internal sealed class SessionNet
         }
     }
 
-    // Takes one departed guest's seat out of play and names it in every pane's message stack.
+    // Takes one departed guest's seat out of play and names it in every pane's message stack. A
+    // race keeps its record, marked left; the inert aeroplane takes its ghost and label with it.
     private bool TakeSeatLeft(int seat)
     {
         if (seat < 0 || seat >= Seats.Count || Seats[seat].IsLocal || !_seatsLeft.Add(seat))
@@ -1034,6 +1050,7 @@ internal sealed class SessionNet
         // host's step sends that ending; a guest's replicated match only marks the seat. A flag the
         // seat carried floats, as a death's does (FUN_004995a0).
         _dogfight?.SeatLeft(seat);
+        Race?.SeatLeft(seat);
         string line = UI.Menu.CoopDoorText.Left(Seats[seat].Callsign);
         foreach (var rig in _rigs)
         {

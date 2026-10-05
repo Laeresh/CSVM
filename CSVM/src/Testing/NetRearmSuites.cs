@@ -179,7 +179,7 @@ internal static class NetRearmSuites
             new[] { "player_pfighter" }, MenuMode.Versus);
         var guestSpec = SessionSpec.FromMenu(SessionSpec.Parse(args), ctx.Chapter, new[] { "player_pfighter" }, MenuMode.Versus);
         ctx.Check(hostSpec.Mission == SessionSpec.DeathmatchMission && guestSpec.Mission == SessionSpec.DeathmatchMission
-                  && hostSpec is { Versus: true, CaptureTheFlag: false, ZeppelinVsZeppelin: false },
+                  && hostSpec is { Versus: true, MissionType: DogfightMissionType.Deathmatch },
             $"both machines' menu launches fly {ctx.Chapter}'s MP1 as a Deathmatch whatever their command lines name ({hostSpec.Mission}, {guestSpec.Mission})");
 
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, SessionSpec.DeathmatchMission);

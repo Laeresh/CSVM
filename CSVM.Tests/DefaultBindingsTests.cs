@@ -69,6 +69,7 @@ public class DefaultBindingsTests
         { InputAction.Pause, Key.Escape, KeyModifiers.None },
         { InputAction.ChatEveryone, Key.Quoteleft, KeyModifiers.None },
         { InputAction.ChatTeam, Key.Quoteleft, KeyModifiers.Shift },
+        { InputAction.DisplayScores, Key.Tab, KeyModifiers.None },
     };
 
     /// <summary>The coverage gate: a migrating polling site must never discover a missing default
@@ -372,7 +373,7 @@ public class DefaultBindingsTests
     }
 
     /// <summary>The spyglass toggle ships on both devices, on the original's own Shift+S now that a
-    /// binding carries the modifier. Misc1 is the pad's one free control, and the original spends a
+    /// binding carries the modifier. Misc1 is a pad control no other action holds, and the original spends a
     /// joystick button on this too. A pad-only pilot is not left without it.</summary>
     [Fact]
     public void TheSpyglassToggle_ShipsOnBothDevices()

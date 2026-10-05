@@ -116,6 +116,39 @@ public class InstantActionEndTests
     }
 
     [Fact]
+    public void AWaiverMakesEveryDeathFreeWhateverTheDefHolds()
+    {
+        // A multi-seat stunt race. Two pilots on the default one life crash again and again and
+        // nobody runs out, so the mission never ends on lives. The def keeps its count.
+        var race = new InstantActionRuntime(Def("stunt_flying"));
+        race.WaiveLives();
+        race.RegisterPilot(0);
+        race.RegisterPilot(1);
+        Assert.True(race.UnlimitedLives);
+        for (int i = 0; i < 5; i++)
+        {
+            Assert.True(race.NotifyPilotDown(0));
+            Assert.True(race.NotifyPilotDown(1));
+        }
+
+        Assert.Equal(1, race.Def.Lives);
+        Assert.Equal(1, race.LivesLeft(0));
+        Assert.Equal(1, race.LivesLeft(1));
+        Assert.False(race.IsSpectating(0));
+        Assert.False(race.IsSpectating(1));
+        Assert.False(race.Ended);
+
+        // The control, one field changed: the same field unwaived loses on the second death.
+        var counted = new InstantActionRuntime(Def("stunt_flying"));
+        counted.RegisterPilot(0);
+        counted.RegisterPilot(1);
+        Assert.False(counted.UnlimitedLives);
+        Assert.False(counted.NotifyPilotDown(0));
+        Assert.False(counted.NotifyPilotDown(1));
+        Assert.Equal(InstantActionOutcome.Lost, counted.Outcome);
+    }
+
+    [Fact]
     public void AnUnregisteredPilotKeepsItsOrdinaryRespawn()
     {
         var ia = new InstantActionRuntime(Def("dogfight_ace"));
@@ -183,8 +216,8 @@ public class InstantActionEndTests
         Assert.False(InstantActionRuntime.ZoneSetsFlown(new[] { (false, true), (false, false) }));
         Assert.True(InstantActionRuntime.ZoneSetsFlown(new[] { (false, true), (false, true) }));
 
-        // A pilot out of lives can never clear another gate: counting it would hold the mission
-        // open forever, which is exactly what StuntRace's own all-finished rule would do.
+        // A pilot out of lives can never clear another gate. Counting it would hold the mission
+        // open forever.
         Assert.True(InstantActionRuntime.ZoneSetsFlown(new[] { (false, true), (true, false) }));
 
         // Nobody left flying is a LOSS, decided by the lives ledger, never a win.

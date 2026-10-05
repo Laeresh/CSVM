@@ -395,8 +395,9 @@ director transition, the join handshake and a seat's ask to be spawned again hav
 counterpart, so they are minted at `0x40`, `0x41`, `0x42`, `0x43` and `0x44`, above the ceiling
 above. The host-owned world's four (AI state, AI fire, a guest's hit claim on an AI, and a world
 event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, the start barrier's word at `0x5B`, a match's death notice at `0x5C`, the lobby's plane build and plane rules at `0x5D` and `0x5E`, the lobby's co-op hangar plane at `0x5F`, the lobby's join password at `0x60`, and the lobby's team action and team list at `0x61` and `0x62`, Capture the Flag's ask and table at `0x63` and `0x64`, Zeppelin
-vs Zeppelin's placed return at `0x65`, and the in-flight chat at `0x66`, the original's `0x15` with
-the typist's seat added ("In-flight chat" below). The handshake carries the master seed, the host's clock and the seat the joining peer was
+vs Zeppelin's placed return at `0x65`, the in-flight chat at `0x66`, the original's `0x15` with
+the typist's seat added ("In-flight chat" below), and a stunt race's run report, race clock, racer
+line and race call at `0x67` to `0x6A` ("Stunt race" below). The handshake carries the master seed, the host's clock and the seat the joining peer was
 given, in 24 bytes: the seed as two 32-bit words at 4, the clock's double as two at 12, the seat at
 20 and, at 21, how many seats after it the same machine flies (0 for one pilot, which is the byte a
 one-seat join always carried), then two reserved bytes. The original needs none of the three, because it draws from no shared stream and hands
@@ -782,7 +783,8 @@ object (`0x0071d8a8`): a five-line text list (`FUN_005c5950(5)`), font `mpChat` 
 display pixels (`0x004a8404` to `0x004a842d`). `FUN_004a8570` formats a line into it (vtable
 `+0xa0`, `FUN_005c5e10`, which writes the newest line with no timer of its own) and then hands the
 whole panel a 10.0 s timer (vtable `+0x60`, `FUN_005c54a0`), after which the panel hides with its
-lines kept. Display Scores (command `0x23`, `FUN_00489320`) hides it at once.
+lines kept. Display Scores (command `0x23`, `FUN_00489320`) hides it at once
+([`multiplayer-scoring.md`](multiplayer-scoring.md) "The in-flight scores").
 
 **The remake.** `Session/World/NetChatLink.cs` routes by lobby team, `NetSeat.TeamId`, never by a
 team id. A guest sends its line to the host alone; the host forwards an all-chat to every other
@@ -795,7 +797,8 @@ flying the seat it names. The panel draws in every local pane (`Flight/Hud/ChatP
 entry only in the pane whose seat reads the keyboard: the splitscreen seats beyond the first are
 pad-only, so they read the chat and type nothing. While a line is open, and until every key pressed
 into it is released, that seat's flight keys read idle. The panel stays up while its typist types.
-Display Scores does not hide it, as the remake has no bound scores key in flight.
+While a pane's seat holds Display Scores the panel steps aside in that pane and comes back on the
+release ([`multiplayer-scoring.md`](multiplayer-scoring.md) "The in-flight scores").
 
 | Id | Message | Class | Carries |
 |---|---|---|---|
@@ -854,6 +857,86 @@ under the round it kept. While a machine holds, its clock takes no step: the
 mission clock, the AI, the director and the world events wait with the aeroplanes, and only the
 link and the clock ping are stepped. The host-owned world therefore sends nothing to a guest
 before that guest's world can apply it, unless the wait gave up on that guest.
+
+## Stunt race
+
+The remake's own Stunt Race (mission type 3, "Dogfight lobby" below) has no counterpart in the
+original. Each machine times its own seats' runs on its own sim clock, as it owns their aircraft
+state and deaths, and reports them to the host. The host keeps the window clock, the leaderboard
+of best runs, the final-run stretch and the ending, and sends the leaderboard and its clock to
+every guest (`Session/World/NetRaceLink.cs`, the race itself `Flight/Modes/StuntRace.cs`).
+
+| Id | Message | Class | Carries |
+|---|---|---|---|
+| `0x67` | Race run | reliable, guest to host | seat at 4, kind at 5 (started 1, zone 2, finished 3, abandoned 4), course zone at 6 (`0xFF` for none), round at 7, the owner's run number at 8, two reserved bytes, the run time at 12 (16 bytes) |
+| `0x68` | Race state | reliable, host to each guest | phase at 4 (opening 0, open 1, final run 2, ended 3), round at 5, two reserved bytes, seconds into the phase's clock at 8 (the opening's while it runs, the window's after), the window's length at 12, the host's session clock at 16 (20 bytes) |
+| `0x69` | Race standing | reliable, host to each guest | seat at 4, flags at 5 (bit 0 in a run, bit 1 a completed run, bit 2 the pilot left), round at 6, split count at 7, runs started at 8, runs finished at 10, best time at 12 (0 without a completed run), time to the most zones at 16, most zones at 20, the run in progress's zones at 21, two reserved bytes, then 24 splits of 4 bytes, the ranking run's, -1 for a zone it never cleared (120 bytes) |
+| `0x6A` | Race call | reliable, host to each guest (restart, lobby) and guest to host (leave) | call at 4 (restart 1, lobby 2, leave 3), round at 5, two reserved bytes (8 bytes) |
+
+**The reports.** A guest sends one report per event of its own seat's run: the run clock's start on
+the step after its count's GO, each zone's first clearing with its run time, the finish, and a
+restart that throws the run away. The owner numbers its runs from 1 within a window, and the round
+is the window's (0 for the first). The host takes a report only from the machine flying its seat
+and only under its own round. A start must carry a run number above the newest it heard from that
+seat, and any other report must name that newest run, so a repeated start or a report of a run
+already superseded counts nothing. A zone or finish with no finite run time is dropped. The race
+then applies its own rules to what passes: a start counts only in the open window, by when it
+reaches the host, a finish after time up counts while the race runs, and nothing counts after the
+end. The host's own seats feed its race directly.
+
+**The leaderboard and the clock.** The host sends a racer's line whenever its record of that racer
+changes, then its clock once a second (`MatchStateCadence`'s tick) and at once on every change of
+phase. The lines go first on the one ordered channel, so a guest's board, which wakes on the
+ending, already holds every line the host decided before it. The race does not reuse `0x17`: its
+fields are a Dogfight's score target and end reasons, and a race has an opening and a final run
+where a match has neither. A guest's race is a replica. It takes each line whole and takes the
+host's phase, which only moves on; its opening and window clock run between readings, so its own
+time up refuses a restart there, but it never ends of its own accord and ends on the host's
+ending. A guest records its own pilot's best off the host's line, so a finish the host refused is
+never saved. The final-run cap is the host's alone.
+
+**The opening.** Every machine holds on the start barrier, and the host's start word reaches a
+guest a link later, so the guest's opening count would start that much behind. The host's reading
+carries its session clock; the guest reads it forward by its lateness, its own clock plus the
+newest offset reading less the stamp, and catches its race's opening and every local seat's count
+up in whole steps. It counts the step it is about to take, rounds down and stops one step short of
+GO, so it errs a step behind: a guest that opened first would send a run start into the host's
+still-closed window, which refuses it. A round trip measured across the held start reads short,
+since neither clock moves while held, so a guest asks the host's clock again on its first flown
+step.
+
+**Wire compatibility.** A build without these ids drops them as unknown. Builds share a lobby only
+on the same MAJOR.MINOR (`BuildVersionMessage`), and these ship with type 3 in a minor release.
+
+**A new window.** Only the host's board offers Restart; a guest's reads "Waiting for the host" in
+its place, and a guest's own restart opens nothing. The host's Restart sends a restart call naming
+the new round, at the restart itself and so ahead of that window's lines and clock on the one
+ordered channel. A guest takes it only when the round is the one after its own, and opens the same
+window: every local seat back on the shared spawn behind a fresh opening count, its race cleared.
+The new window's clock then catches the guest's opening up to the host's instant exactly as the
+first window's does. A guest drops a line or a clock under another round than its own, which is an
+old window's.
+
+**Leaving.** A guest that leaves a race keeps its link when it walks back to the lobby, so it sends
+a leave call first; a dropped link reads the same. The host takes each seat of that machine out of
+play as for any guest leaving a mission: the aeroplane goes inert, which takes its ghost and its
+label, and every other guest hears it through the world link's seat-left event. The racer stays on
+every board with its record, ranked as it stood and marked left: the scores page's grey row on the
+Original board and in the lobby, a "(left)" suffix on the Built-in board, the Built-in held scores
+table and the live leaderboard line. A run it had in progress stops, nothing more counts for it, and a new
+window leaves it out. A race left with one pilot runs on to the window's end, since a race builds no
+Dogfight match and so has no "fewer than two pilots" ending. The host leaving mid-race closes its
+door, which ends every guest's flight as a Dogfight's host leaving does.
+
+**The lobby.** The host's board names its exit Lobby. Taken from an ended race it sends a lobby call
+and lands the host on the lobby's Game Scores, its door kept; each guest's launcher follows the call
+the same way. Game Scores then shows the race's table in the race board's own columns, a pilot who
+left on the grey row, where a Dogfight's lines stand after a match. A guest's board names its exit
+Leave, which lands it on the same page.
+
+**Joining late.** A peer that connects while a race is in flight waits on the lobby with the advert,
+as for every network match: the lobby passes a bound session only the peers present when it bound,
+so no line reaches the newcomer and no report of its counts.
 
 ## The lobby
 
@@ -1102,7 +1185,7 @@ session.
 
 | Id | Message | Class | Carries |
 |---|---|---|---|
-| `0x53` | Dogfight options | reliable, host to each guest | round at 4, environment at 5, mission type at 6 (Capture the Flag 0, Deathmatch 1, Zeppelin vs Zeppelin 2), flags at 7 (bit 0 Score rather than Time, bit 1 Limited Lives, bit 2 Auto Respawn, bit 3 both Time and Score, bit 4 Restrict Number of Teams, bit 5 Capture the Flag's own flag home to capture), minutes at 8, lives at 9, score at 10, team minimum at 12, team maximum at 13, two reserved bytes (16 bytes) |
+| `0x53` | Dogfight options | reliable, host to each guest | round at 4, environment at 5, mission type at 6 (Capture the Flag 0, Deathmatch 1, Zeppelin vs Zeppelin 2, the remake's Stunt Race 3), flags at 7 (bit 0 Score rather than Time, bit 1 Limited Lives, bit 2 Auto Respawn, bit 3 both Time and Score, bit 4 Restrict Number of Teams, bit 5 Capture the Flag's own flag home to capture), minutes at 8, lives at 9, score at 10, team minimum at 12, team maximum at 13, two reserved bytes (16 bytes) |
 | `0x54` | Dogfight roster | reliable, host to each guest | round at 4, row count at 5, the reading guest's own row at 6, one reserved byte, then sixteen rows of 20 bytes: flags (bit 0 Ready, bit 1 host, bit 2 team captain), airframe, team number (0 for none), one reserved byte, the name in 16 bytes (328 bytes) |
 | `0x55` | Lobby chat | reliable, guest to host and host to each guest | the speaker's name in 16 bytes at 4, the line in 84 bytes at 20 (104 bytes) |
 | `0x5D` | Plane build | reliable, guest to host (its pick, seat `0xFF`) and host to each guest (every seat, at launch) | seat at 4, flags at 5 (bit 0 custom), then 26 bytes: airframe, engine, four armour presses (nose, tail, left, right), left and right hardpoints, four gun calibres (5 empty), twin mask, paint pattern, three colours, three shades, three decals, three spare; the name in 16 bytes (48 bytes) |
@@ -1115,6 +1198,15 @@ launch waits until every row is Ready. A guest's
 chat line goes to the host, which adds it to its own list and relays it to every other guest under
 the name the guest's pick gave, so each end shows the line once. The advert's mission sequence
 carries the environment index for a Dogfight, which is what the games list reads.
+
+**Stunt Race, the remake's fourth type.** The original's Type box lists three types; the remake
+appends Stunt Race as mission type 3 in the same byte, so the message keeps its 16 bytes and its id.
+A launch under it flies the chapter's `IA1` course with only the Time box carried, as the race
+window. No wire version guards the value: two builds play together only on the same MAJOR.MINOR
+(`BuildVersionMessage`), so a build that knows type 3 never shares a lobby with one that does not,
+provided the type ships in a minor release. A build without it, given type 3, would name no type,
+describe the lobby as Zeppelin vs Zeppelin and fly a Deathmatch on `MP1` while its host races, so
+type 3 must not reach a patch release of a minor that lacks it.
 
 A custom plane crosses whole, where the original's player data leaves out the engine, the armour
 and the hardpoints. The shooter decides a hit here, so every copy of a plane needs its owner's hit

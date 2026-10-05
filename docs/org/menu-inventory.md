@@ -550,7 +550,14 @@ constants rather than reading a layout.
   20 px pitch with its `MP_B_CHECKBOX.PNG` mark 230 px right of each name, and the chat pane at
   (34, 373), 735 x 165, the speaker's name then the line 100 px right of it. The tab strip's four
   tabs (10094, 10114, 10119, 10507) stand at y 24 from x 324, 442, 548 and 656, and the picked tab's
-  page (`MP_LOBBY_MISSION.PNG`, `_PLANE`, `_AMMO`, `_STATSCREEN`) at (314, 26). Mission Options
+  page (`MP_LOBBY_MISSION.PNG`, `_PLANE`, `_AMMO`, `_STATSCREEN`) at (314, 26). Game Scores
+  (`MULTIPLAYERLOBBY_STATS.SCRIPT`) heads its five columns with 10542 to 10546 (TREB13B), the
+  first at (+21, +43) left in 150 and the rest at (+179, +44), (+242, +44), (+303, +44) and
+  (+362, +44) centred in 60, 58, 56 and 54, and lists ten rows from (+24, +69) at a 20 px pitch:
+  the name in 10573's face (TREB10B) left in 154, then four figures in 10574's face centred in 62,
+  61, 60 and 57. A row its own flag marks draws grey (`0xffbbbbbb`), and a scroll bar stands at
+  (+419, +66), 195 tall, once there are more than ten. The remake's Game Scores draws the figures
+  left-aligned at the header boxes' corners rather than centred in those cells. Mission Options
   carries the Environment and Type boxes (`MP_B_LISTBOXARROW.PNG`), the victory radios
   (`MP_B_RADIO8STATESSM.PNG`) with their Time and Score boxes, and the teams, lives and planes
   checkboxes (`MP_B_CHECKBOX8STATES.PNG`); Select Plane the Default and Custom sub-tabs
@@ -582,7 +589,13 @@ constants rather than reading a layout.
   every Ready cleared for the next round. Game Scores is greyed until a match has landed. The own
   name is drawn red in the list and the chat, and the player list shows its first eleven rows with
   no scroll bar. Leave Game always lands on the Connection page. The host's options lock while it
-  is Ready, and any option change clears every Ready. A guest's plane and ammo picks stay live, and
+  is Ready, and any option change clears every Ready. A stunt race's end-of-race board under the
+  Original presentation is this screen on Game Scores, drawn in flight, since the original has no
+  race: the standings on the scores page (place and callsign left and the aircraft right in the name
+  column, best, gap and runs in the next three, the fifth empty), the zone key on the player
+  list's lines, the splits in the chat pane, the context in the chat line, and Photo Mode, Restart
+  and Back on the Create Team, Send and Leave Game plaques. The other three tabs stand unlabelled.
+  Every word on it but Game Scores is the remake's own. A guest's plane and ammo picks stay live, and
   a changed pick clears that guest's own Ready. The Lives box is greyed until Limited Lives is
   ticked, then reads 3 (the remake's own default) and takes 1..99. A host's chat pane carries
   remake-only rows pinned at its top under the name Network, in the picked sub-tab's red: the

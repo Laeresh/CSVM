@@ -55,6 +55,9 @@ public partial class GameSession : Node3D
     // subject still leaves something to orbit rather than spinning about the eye.
     private const float MinOrbitRadius = 1f;
 
+    // How long a race's opening count stands on READY before its 3, 2, 1. TUNE at the controls.
+    private const float RaceReadySeconds = 2f;
+
     // Everything this launch settled, parsed and resolved once (see SessionSpec), the command
     // line verbatim, or the launchscreen's pick (SessionSpec.FromMenu). Every consumer below reads
     // it and nothing re-derives a launch setting; the pristine command line stays on the Launcher.
@@ -417,6 +420,10 @@ public partial class GameSession : Node3D
     /// the spawns granted over the wire.</summary>
     internal VersusDirector? Dogfight => _dogfight;
 
+    /// <summary>The stunt race, null outside one. The launcher lands an ended network race's table
+    /// in the lobby from it.</summary>
+    internal StuntRace? Race => _race;
+
     /// <summary>The mission's zeppelins, null in a flight that runs none.</summary>
     internal ZeppelinRuntime? ZeppelinHulls => _zeppelins;
 
@@ -465,6 +472,13 @@ public partial class GameSession : Node3D
     /// <summary>The mission's enemy generators, null on a stage without them. The harness suites
     /// credit them and read their launch counters.</summary>
     internal AiGeneratorRuntime? Generators => _generators;
+
+    /// <summary>The Instant Action mission's runtime, null outside one. A suite reads that a lobby
+    /// Stunt Race flies the course with no mission behind it.</summary>
+    internal InstantActionRuntime? InstantAction => _iaDirector?.Runtime;
+
+    /// <summary>How many AI aircraft the flight roster holds now.</summary>
+    internal int AiAircraftCount => AiPlanes.Count;
 
     /// <summary>The session's subject plane (null until the build lands one), the Launcher's
     /// capture tick reads it, because CaptureDirector only shoots once a plane exists.</summary>
@@ -1097,6 +1111,15 @@ public partial class GameSession : Node3D
     /// there is no frame budget, rather than to the launch frame that needs one.</summary>
     internal bool StepOwedLoad() => _flightRoster?.BuildOrderedAirframe() ?? false;
 
+    /// <summary>Every board's and the pause sheet's way out. A network race says so first. A guest's
+    /// word marks its seats left on the host; a host leaving an ended race takes every guest to the
+    /// lobby.</summary>
+    internal void LeaveFlight()
+    {
+        _wire.Race?.Leave(toLobby: _menuDriven);
+        _exitSession();
+    }
+
     // The --campaign= zeppelin/generator peek's plumbing: true when the loader's list is
     // non-empty, false on an empty (authored [null]) or altogether missing mission file. Both
     // loaders already tolerate [null]; only the "no file at all" case needs the catch.
@@ -1110,6 +1133,18 @@ public partial class GameSession : Node3D
         {
             return false;
         }
+    }
+
+    // How long a seat's first count runs before GO, the window's opening; none opens it at once.
+    private static float OpeningSeconds(IReadOnlyList<StartCountPhase>? phases) =>
+        phases?.Sum(phase => phase.Seconds) ?? 0f;
+
+    // A race run that is its pilot's best so far records under the solo run's key, the same store
+    // and the same never-worsen rule. A pilot with no key records nothing.
+    private static void RecordRaceBest(ScoreStore store, Racer racer)
+    {
+        if (racer.ScoreKey.Length > 0 && racer.BestTime is { } best && store.RecordIfBest(racer.ScoreKey, best))
+            Log.Info("flight", $"stunt race: {racer.Tag} set a new best {StuntMission.FormatTime(best)} for '{racer.ScoreKey}'");
     }
 
     // A campaign mission has ended and its result is banked (the director records the attempt and
@@ -1751,7 +1786,7 @@ public partial class GameSession : Node3D
             Spec = _spec,
             Presentation = _presentation,
             MenuDriven = _menuDriven,
-            Exit = _exitSession,
+            Exit = LeaveFlight,
             Restart = _restartSession,
             WorldRoot = _worldRoot!,
             Rigs = _rigs,
@@ -1871,8 +1906,8 @@ public partial class GameSession : Node3D
                 // Expected for the chapters whose IA1 has no dzones (C1C, C2B), a data
                 // fact, not a fault, so a plain line (log hygiene: no stack traces).
                 Log.Info("flight", $"--stunt: no danger zones for {_spec.Chapter}/{_spec.Mission}, flying free");
-            else if (_rigs.Count > 1)
-                race = new StuntRace(); // splitscreen: a race, ranked on the shared board
+            else if (IsRace())
+                race = new StuntRace(RaceWindowSeconds(), stuntZones.TotalCount);
             if (stuntZones != null && iaStunt && !_spec.Stunt)
                 Log.Info("flight", $"ia: stunt_flying, {stuntZones.TotalCount} danger zone(s) from {_spec.Chapter}/{_spec.Mission}, the mission type's own objective");
         }
@@ -1906,11 +1941,27 @@ public partial class GameSession : Node3D
         // (docs/architecture.md, ## src/Session/Roster/StartGrid.cs).
         bool coopCampaign = _spec.CampaignProfile != null && _seatRigs.Count > 1;
         // ⚠ Choose the spawn placement ONCE, by picking an implementation here, never by a runtime
-        // flag inside one: a --det race stays byte-identical because StartGrid is then not built at
-        // all. It cannot move up beside new SpawnPicker, which runs before `race` is settled.
-        IFlightStarts flightStarts = coopCampaign || (race != null && !_spec.Det)
-            ? new StartGrid(_spawnPicker, GroundSampler())
+        // flag inside one. A --det race stays byte-identical because the shared start is not built.
+        // It cannot move up beside new SpawnPicker, which runs before `race` is settled.
+        IFlightStarts flightStarts = coopCampaign ? new StartGrid(_spawnPicker, GroundSampler())
+            : race != null && !_spec.Det ? new SharedSpawnStarts(_spawnPicker)
             : _spawnPicker;
+        // ⚠ No count under --det, the shared start's rule: a scripted run and every pinned golden
+        // stay byte-identical because no count is ever begun. A race opens on its own count.
+        var restartCount = stuntZones != null && !_spec.Det ? StartCount.Restart : null;
+        var firstCount = restartCount == null ? null
+            : race != null ? StartCount.Opening(RaceReadySeconds) : restartCount;
+        // A network race before the roster, which feeds each local seat's run through it. A guest's
+        // opening catches up to the host's on every local seat's count at once.
+        var raceLink = race != null ? _wire.WireRace(race) : null;
+        if (raceLink != null)
+        {
+            raceLink.CatchUp = seconds =>
+            {
+                foreach (var rig in _rigs)
+                    rig.Controller?.CatchUpStartCount(seconds);
+            };
+        }
         var aircraftResources = new AircraftAssemblyResources
         {
             PlanesGamez = planesGamez,
@@ -1978,6 +2029,9 @@ public partial class GameSession : Node3D
             // Read through the field rather than captured by value: the rig is built after these
             // bindings, and a zone apply rewrites the band while the mission runs.
             FogRange = rigIndex => _sky?.Weather?.FogOf(rigIndex).Range ?? Vector2.Zero,
+            // The session's race flag, keyed off the race itself and not off the pane count. A
+            // network race that builds a StuntRace takes the same presence rules.
+            Racing = race != null,
         };
         var humanBindings = new HumanRosterBindings
         {
@@ -1993,7 +2047,11 @@ public partial class GameSession : Node3D
             SpawnList = spawnList,
             SpawnBase = spawnBase,
             StuntZones = stuntZones,
+            RestartCount = restartCount,
+            FirstStartCount = firstCount,
+            MenuSounds = restartCount != null ? MenuSounds() : null,
             Race = race,
+            RaceFeed = raceLink != null ? raceLink.Feed : null,
             VersusMatch = versus,
             Rigs = _seatRigs,
             InstantActionPlayerPlaneNode = iaOverride,
@@ -2036,21 +2094,31 @@ public partial class GameSession : Node3D
         // The weapon lab in flight, bound to player 1's held aircraft.
         _labs!.BuildWeaponLab(state, _rigs, weaponDefs);
 
-        // The race's shared results board, one ranked row per player over the whole window; R
-        // rematches every plane through the session. Instant Action keeps the race for the run
-        // HUD's placings alone and builds no board.
-        if (race != null && boards.BuildRaceBoard(race, instantAction: iaRt != null,
-                $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}", () => RestartRace(race)) != null)
+        // The board's Restart is Rerun's: a new window in place, or a rebuilt Instant Action
+        // mission. The seats' opening counts began in this same build, so the window opens on GO.
+        // A network guest's board waits for the host's window instead, which opens here on its call.
+        if (race != null)
         {
             _race = race;
+            var zoneNames = stuntZones!.Zones.Select(z => z.Description).ToList();
+            if (raceLink is { IsHost: false })
+                raceLink.Restarted = () => RestartRace(race);
+            // --debug-race-end poses a split screen race's board as a network one's, P2 left.
+            string? posed = raceLink == null ? _spec.DebugRaceEnd : null;
+            if (posed != null)
+                race.BestImproved += racer => _ = racer.Index == 1 && race.MarkLeft(1);
+            bool guest = raceLink is { IsHost: false } || posed == "guest";
+            boards.BuildRaceBoard(race, zoneNames,
+                $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}", Rerun,
+                raceLink != null || posed != null ? StuntRaceBoard.NetworkExitLabel(_menuDriven || posed != null, !guest) : null,
+                guest ? StuntRaceBoard.WaitingForHost : null);
             foreach (var rig in _rigs)
                 if (rig.Controller != null)
-                    rig.Controller.RestartRace = () => RestartRace(race);
-            Log.Info("flight", $"stunt race: {_rigs.Count} pilots over {stuntZones!.TotalCount} danger zones, own progress + clock each, shared ranked board");
-        }
-        else if (race != null)
-        {
-            Log.Info("flight", $"stunt race: {_rigs.Count} pilots over {stuntZones!.TotalCount} danger zones, placings on each run HUD, no race board (the Instant Action wrap-up ends the run)");
+                    rig.Controller.RestartRace = Rerun;
+            var bests = ScoreStore.ForSession(_spec.ScoresPath, _spec.ScoresThrowaway);
+            race.BestImproved += racer => RecordRaceBest(bests, racer);
+            race.BeginOpening(OpeningSeconds(firstCount));
+            Log.Info("flight", $"stunt race: {_seatRigs.Count} pilots over {stuntZones.TotalCount} danger zones, a {StuntRace.FormatClock(race.WindowSeconds)} time attack, best run ranks{(race.Replicated ? ", the host's board and window replicated here" : "")}");
         }
 
         // Dogfight (--vs): the match's scoring, respawn rotation and lives, fed by every rig's
@@ -2072,7 +2140,7 @@ public partial class GameSession : Node3D
             // takes it to the lobby.
             boards.BuildDogfightBoard(dogfight.Match, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
                 dogfight.Restart,
-                dogfight.RematchIsTheHosts && !_spec.ZeppelinVsZeppelin ? VersusBoard.HostCallsTheRematch : null);
+                dogfight.RematchIsTheHosts && _spec.MissionType != DogfightMissionType.ZeppelinVsZeppelin ? VersusBoard.HostCallsTheRematch : null);
         }
 
         // Fire, hit, damage and death over the wire. It runs after the match so a death report
@@ -2088,6 +2156,7 @@ public partial class GameSession : Node3D
         _dogfight?.WireMatchState();
         // The in-flight chat, once every local seat has its aeroplane to take the keys from.
         _wire.WireChat(weaponMessages);
+        AttachScores(race, weaponMessages);
 
         // --incoming: the incoming-fire test rig, a phantom shooter on every pilot's six, so both
         // cues and the shield are reachable with one player, no AI gunner needed.
@@ -2246,6 +2315,7 @@ public partial class GameSession : Node3D
         _iaDirector?.WireEndConditions(new InstantActionDirector.EndConditionInputs
         {
             StuntZones = stuntZones,
+            Race = race,
             Zeppelins = _zeppelins,
             Projectiles = _projectiles,
             WorldRoot = _worldRoot!,
@@ -2262,6 +2332,9 @@ public partial class GameSession : Node3D
         // World AA emplacements, after the zeppelins and the Instant Action turret arm above.
         _turretEmplacements = opposition.PlaceEmplacements(state, turretDefs, weaponDefs, projectiles,
             _zeppelins, iaZepTurretSwitch);
+        // A race's ground stays inert: the pilots carry nothing to answer a gun with.
+        if (worldBindings.Racing)
+            _turretEmplacements?.SleepAll("the stunt race");
 
         // The campaign objectives graph (D31): armed once every runtime a directive can touch is
         // up, which is why it sits after the emplacement block rather than with the other
@@ -2469,6 +2542,14 @@ public partial class GameSession : Node3D
             FrameCamera(state.NodeAabb);
 
         _labs!.BuildOverlays(state, _plane, _rigs, _edgeExtender);
+    }
+
+    // The rof tree's menu sound folder, the shipped UI sounds a start count beeps with, or null where
+    // this install's extraction carries none.
+    private SoundArchive? MenuSounds()
+    {
+        string dir = RofTree.Member(_rofPath, "ASSETS/SOUNDS");
+        return Directory.Exists(dir) ? new SoundArchive(dir) : null;
     }
 
     // The production ground sampler StartGrid probes its slots with: the world height under a point,
@@ -2767,6 +2848,13 @@ public partial class GameSession : Node3D
             _restartSession();
             return;
         }
+        if (_race is { Replicated: true })
+        {
+            // ⚠ Never on a guest: a window opened here would be one nobody else flies. The host's
+            // restart call opens the guest's (RestartRace through the race link).
+            Log.Info("flight", $"stunt race: a new window is the host's to call");
+            return;
+        }
         if (_race is { } race)
         {
             RestartRace(race);
@@ -2781,20 +2869,64 @@ public partial class GameSession : Node3D
             rig.Controller?.Rerun();
     }
 
-    // Rematch from the shared race board (R): every player's zones, clock and placing cleared, then
-    // every plane back to its own spawn. The session owns the planes, so the restart lands here
-    // rather than in the FlightController that read the button.
+    // A new window from the shared race board (R), or on a network guest from the host's call.
+    // Every pilot's runs are cleared, every plane here goes back to the start, and every seat opens
+    // on the count again in one step. A host's call goes out first, ahead of the window's lines.
     private void RestartRace(StuntRace race)
     {
-        Log.Info("flight", $"stunt race: rematch, fresh clocks and zones for every pilot");
+        Log.Info("flight", $"stunt race: a new window, every pilot's runs cleared");
         race.Restart();
+        _wire.Race?.CallRestart();
+        IReadOnlyList<StartCountPhase>? opening = null;
         foreach (var rig in _rigs)
         {
-            // The race owns every pilot's zones and clock, but each pane's own camera is the
-            // controller's, so the rematch clears the photographs seat by seat.
-            rig.Controller?.StuntShots?.Reset();
-            rig.Controller?.Respawn();
+            if (rig.Controller is not { } seat)
+                continue;
+            seat.Stunt?.Reset();
+            seat.StuntShots?.Reset();
+            seat.Respawn();
+            // ⚠ Only a seat that carries a restart count opens on one: under --det none does.
+            if (seat.RestartCount != null)
+            {
+                opening = StartCount.Opening(RaceReadySeconds);
+                seat.BeginStartCount(opening);
+            }
         }
+        race.BeginOpening(OpeningSeconds(opening));
+    }
+
+    // A stunt run races once it has a second seat, a network guest's included. A lobby Stunt Race
+    // races even a host left alone.
+    private bool IsRace() => _seatRigs.Count > 1 || _spec.MissionType == DogfightMissionType.StuntRace;
+
+    // The race window the launch asked for. A --debug-scoreboard race closes it at once: its
+    // staggered forced finishes then run as the final run, and the last wakes the board.
+    private float RaceWindowSeconds() => _spec.DebugScoreboard ? 0f : _spec.StuntRaceMinutes * 60f;
+
+    // Display Scores in every local pane, wherever a race or a Dogfight keeps scores. A seat is
+    // named by its network callsign, else its splitscreen tag.
+    private void AttachScores(StuntRace? race, Messages strings)
+    {
+        var source = new ScoresSource
+        {
+            Race = race,
+            Match = _dogfight?.Match,
+            Name = seat => _wire.Seats.FirstOrDefault(s => s.SeatIndex == seat) is { Callsign.Length: > 0 } net
+                ? net.Callsign : SplitScreen.PlayerTag(seat),
+            Carried = seat => _dogfight?.Flags?.Flags.Carried(seat) ?? 0,
+            Words = OriginalScoresWords.From(strings),
+        };
+        if (!source.HasScores)
+            return;
+        bool original = _presentation == UI.Menu.PresentationId.Original;
+        foreach (var pane in _rigs)
+        {
+            if (pane.Controller != null)
+                pane.Controller.DebugHoldScores = _spec.DebugScores;
+            ScoresOverlay.Attach(pane, source, original);
+        }
+
+        Log.Info("flight", $"display scores: {_rigs.Count} pane(s), {(original ? "the original's HUD text" : "the chrome table")}{(_spec.DebugScores ? ", held by --debug-scores" : "")}");
     }
 
     // Frames the parked plane in the orbit view. ⚠ --lookat is a POINT and is used verbatim;
@@ -3053,6 +3185,9 @@ public partial class GameSession : Node3D
         {
             foreach (var rig in session._seatRigs)
                 rig.Controller?.SimStep(dt);
+            // After every seat: a run started this step was started inside the window it saw.
+            session._race?.Advance(dt);
+            session._wire.Race?.Step();
             session._wire.BroadcastAircraftState();
             session._wire.TraceStep();
         }

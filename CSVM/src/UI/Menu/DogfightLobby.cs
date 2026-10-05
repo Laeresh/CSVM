@@ -2,23 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using CSVM.Net;
+using CSVM.Spec;
 
 namespace CSVM.UI.Menu;
-
-/// <summary>The three mission types the lobby's Type box lists, in the string table's order. All
-/// three are flown.</summary>
-public enum DogfightMissionType : byte
-{
-    /// <summary>Capture the Flag, two lobby teams on a chapter's <c>MP2</c> map.</summary>
-    CaptureTheFlag = 0,
-
-    /// <summary>Deathmatch, the Dogfight every lobby flies.</summary>
-    Deathmatch = 1,
-
-    /// <summary>Zeppelin vs Zeppelin, the first two lobby teams each flying a hull on a chapter's
-    /// <c>MP3</c> map.</summary>
-    ZeppelinVsZeppelin = 2,
-}
 
 /// <summary>One line of the lobby's chat panel: who typed it and what.</summary>
 public readonly record struct DogfightChatLine(string Name, string Text);
@@ -26,6 +12,11 @@ public readonly record struct DogfightChatLine(string Name, string Text);
 /// <summary>One line on the Game Scores page after a match: a pilot's name, or a team's when
 /// <paramref name="IsTeam"/>, and its final points, kills and deaths.</summary>
 public readonly record struct DogfightScore(string Name, int Points, int Kills, int Deaths, bool IsTeam = false);
+
+/// <summary>One pilot's line of a stunt race's table, every column already in its words. They are
+/// the place and callsign, the aircraft, the best or furthest run, the gap and the runs. A pilot
+/// who left the race carries <paramref name="Left"/>, and the table draws the row grey.</summary>
+public sealed record RaceTableRow(string Pilot, string Aircraft, string Best, string Gap, string Runs, bool Left = false);
 
 /// <summary>
 /// The Multiplayer Lobby of a Dogfight, on both of its ends, engine-free. The host owns the Mission
@@ -66,6 +57,17 @@ public sealed class DogfightLobby
     /// <summary>How many teams a Capture the Flag launch takes, one per flag. It fixes the Restrict
     /// Number of Teams boxes at this, and langui 10519 says "one of two teams".</summary>
     public const int CtfTeams = 2;
+
+    /// <summary>How many types the Type box lists: the string table's three and Stunt Race.</summary>
+    public const int TypeCount = 4;
+
+    /// <summary>The Type box's word for Stunt Race. The remake's own, so no string table id names it.
+    /// </summary>
+    public const string StuntRaceName = "Stunt Race";
+
+    /// <summary>The Time box's value when the Type turns to Stunt Race, the race window's default.
+    /// </summary>
+    public const int StuntRaceDefaultMinutes = Mech3.InstantActionDef.DefaultRaceWindowMinutes;
 
     /// <summary>How many chat lines the panel keeps; older lines scroll away.</summary>
     public const int ChatDepth = 64;
@@ -124,6 +126,7 @@ public sealed class DogfightLobby
     private CoopPickMessage? _pickSent;
     private string[] _launchNames = Array.Empty<string>();
     private DogfightScore[] _scores = Array.Empty<DogfightScore>();
+    private RaceTableRow[] _raceScores = Array.Empty<RaceTableRow>();
 
     /// <summary>A host's lobby over <paramref name="wire"/>, its pilot named by
     /// <paramref name="name"/>.</summary>
@@ -272,6 +275,12 @@ public sealed class DogfightLobby
     {
         get
         {
+            // A race flies no teams, so whatever the greyed boxes stood on cannot hold it up.
+            if (IsStuntRace(Options))
+            {
+                return TeamLaunchRefusal.None;
+            }
+
             var players = Players;
             var weighed = new List<(byte Team, int Seats)>(players.Count);
             for (int i = 0; i < players.Count; i++)
@@ -308,6 +317,13 @@ public sealed class DogfightLobby
     /// match has been flown from this lobby.</summary>
     public IReadOnlyList<DogfightScore> Scores => _scores;
 
+    /// <summary>The last stunt race's table for the Game Scores page, best first, or empty when the
+    /// last flight from this lobby was no race.</summary>
+    public IReadOnlyList<RaceTableRow> RaceScores => _raceScores;
+
+    /// <summary>Whether a flight from this lobby has landed anything on the Game Scores page.</summary>
+    public bool HasScores => _scores.Length > 0 || _raceScores.Length > 0;
+
     /// <summary>The players named at the last launch, in seat order.</summary>
     public IReadOnlyList<string> LaunchNames => _launchNames;
 
@@ -332,9 +348,13 @@ public sealed class DogfightLobby
 
     /// <summary>The original's 1-based multiplayer mode for a launch (docs/org/multiplayer-spawn.md).
     /// Capture the Flag is 3 and Zeppelin vs Zeppelin 4. A Deathmatch is 2 once any pilot is on a
-    /// team, else 1.</summary>
-    public static int ModeOf(bool captureTheFlag, bool zeppelinVsZeppelin, bool teamed) =>
-        captureTheFlag ? 3 : zeppelinVsZeppelin ? 4 : teamed ? 2 : 1;
+    /// team, else 1. Stunt Race, which the original never had, reads as a Deathmatch.</summary>
+    public static int ModeOf(DogfightMissionType type, bool teamed) => type switch
+    {
+        DogfightMissionType.CaptureTheFlag => 3,
+        DogfightMissionType.ZeppelinVsZeppelin => 4,
+        _ => teamed ? 2 : 1,
+    };
 
     /// <summary>The Game Scores lines for a match's standings, best first. Each seat is named from
     /// <paramref name="names"/>, the list as it stood at the launch, or by its player tag past it.
@@ -380,40 +400,65 @@ public sealed class DogfightLobby
         return lines.ToArray();
     }
 
-    /// <summary>Whether the Type box offers a mission type as live. All three fly.</summary>
+    /// <summary>Whether the Type box offers a mission type as live. All four fly.</summary>
     public static bool Flies(DogfightMissionType type) =>
-        type is DogfightMissionType.Deathmatch or DogfightMissionType.CaptureTheFlag or DogfightMissionType.ZeppelinVsZeppelin;
+        type is DogfightMissionType.Deathmatch or DogfightMissionType.CaptureTheFlag
+            or DogfightMissionType.ZeppelinVsZeppelin or DogfightMissionType.StuntRace;
 
     /// <summary>Whether the Environment box offers <paramref name="environment"/> under
     /// <paramref name="type"/>. Capture the Flag greys Above the Clouds and NW Lighthouse, the two
-    /// chapters with no <c>MP2</c> map, as the mission script's type change does.</summary>
+    /// chapters with no <c>MP2</c> map, as the mission script's type change does. Stunt Race greys
+    /// every chapter whose Instant Action data ships no Danger Zones, which is Above the Clouds.</summary>
     public static bool Offers(DogfightMissionType type, int environment) =>
-        environment is >= 0 and < EnvironmentCount
-        && (type != DogfightMissionType.CaptureTheFlag || EnvironmentChapters[environment] is not ("C1C" or "C1B"));
+        environment is >= 0 and < EnvironmentCount && type switch
+        {
+            DogfightMissionType.CaptureTheFlag => EnvironmentChapters[environment] is not ("C1C" or "C1B"),
+            DogfightMissionType.StuntRace => MenuChapters.DangerZonesFor(EnvironmentChapters[environment]),
+            _ => true,
+        };
+
+    /// <summary>The type <paramref name="options"/> name. A byte past the box's four, which only a
+    /// newer build writes, reads as itself and flies nothing (<see cref="Flies"/>).</summary>
+    public static DogfightMissionType TypeOf(DogfightOptionsMessage options) => (DogfightMissionType)options.MissionType;
 
     /// <summary>Whether <paramref name="options"/> fly Capture the Flag.</summary>
-    public static bool IsCtf(DogfightOptionsMessage options) =>
-        options.MissionType == (byte)DogfightMissionType.CaptureTheFlag;
+    public static bool IsCtf(DogfightOptionsMessage options) => TypeOf(options) == DogfightMissionType.CaptureTheFlag;
 
     /// <summary>Whether <paramref name="options"/> fly Zeppelin vs Zeppelin.</summary>
-    public static bool IsZvz(DogfightOptionsMessage options) =>
-        options.MissionType == (byte)DogfightMissionType.ZeppelinVsZeppelin;
+    public static bool IsZvz(DogfightOptionsMessage options) => TypeOf(options) == DogfightMissionType.ZeppelinVsZeppelin;
+
+    /// <summary>Whether <paramref name="options"/> fly a Stunt Race, whose Mission Options keep only
+    /// the Time box.</summary>
+    public static bool IsStuntRace(DogfightOptionsMessage options) => TypeOf(options) == DogfightMissionType.StuntRace;
+
+    /// <summary>The menu mode a launch under <paramref name="options"/> leaves in: a stunt launch for
+    /// a Stunt Race, a Dogfight for the other three.</summary>
+    public static MenuMode LaunchMode(DogfightOptionsMessage options) =>
+        IsStuntRace(options) ? MenuMode.Stunt : MenuMode.Versus;
 
     /// <summary>Whether <paramref name="options"/>' type fixes Restrict Number of Teams at two, as
     /// Capture the Flag's and Zeppelin vs Zeppelin's type changes do.</summary>
     public static bool FixesTeams(DogfightOptionsMessage options) => IsCtf(options) || IsZvz(options);
 
     /// <summary>The match rules a launch carries: the victory condition as a kill target, a match
-    /// clock or both, and the lives rule. They say too which team mode it flies. A limit not chosen is
-    /// off. With both, the first one reached ends the match.</summary>
-    public static VersusRules RulesOf(DogfightOptionsMessage options) => new(
-        options.Victory != DogfightVictory.Time ? options.Score : 0,
-        options.Victory != DogfightVictory.Score ? options.TimeMinutes : 0,
-        options.LimitedLives ? ClampLives(options.Lives) : 0,
-        options.AutoRespawn,
-        IsCtf(options),
-        IsCtf(options) && options.FlagHomeToCapture,
-        IsZvz(options));
+    /// clock or both, and the lives rule. They say too which type it flies. A limit not chosen is
+    /// off. With both, the first one reached ends the match. A Stunt Race carries its Time box alone,
+    /// the race window.</summary>
+    public static VersusRules RulesOf(DogfightOptionsMessage options)
+    {
+        if (IsStuntRace(options))
+        {
+            return new VersusRules(0, options.TimeMinutes, MissionType: DogfightMissionType.StuntRace);
+        }
+
+        return new VersusRules(
+            options.Victory != DogfightVictory.Time ? options.Score : 0,
+            options.Victory != DogfightVictory.Score ? options.TimeMinutes : 0,
+            options.LimitedLives ? ClampLives(options.Lives) : 0,
+            options.AutoRespawn,
+            IsCtf(options) || IsZvz(options) ? TypeOf(options) : DogfightMissionType.Deathmatch,
+            IsCtf(options) && options.FlagHomeToCapture);
+    }
 
     /// <summary>Whether <paramref name="victory"/> arms <paramref name="limit"/>, Time or Score.
     /// </summary>
@@ -449,11 +494,12 @@ public sealed class DogfightLobby
     /// <summary>Picks the environment. Refused on a guest, outside the seven, and on one the type
     /// greys (<see cref="Offers"/>).</summary>
     public bool SetEnvironment(int environment) =>
-        Offers((DogfightMissionType)_options.MissionType, environment) && Change(_options with { Environment = (byte)environment });
+        Offers(TypeOf(_options), environment) && Change(_options with { Environment = (byte)environment });
 
     /// <summary>Picks the mission type. Refused on a guest and for a greyed type. Capture the Flag
-    /// and Zeppelin vs Zeppelin tick Restrict Number of Teams at two teams exactly. Capture the Flag
-    /// moves off an environment it greys to the first it offers.</summary>
+    /// and Zeppelin vs Zeppelin tick Restrict Number of Teams at two teams exactly. Stunt Race arms
+    /// the Time box alone at <see cref="StuntRaceDefaultMinutes"/>. A type moves off an environment
+    /// it greys to the first it offers.</summary>
     public bool SetMissionType(DogfightMissionType type)
     {
         if (!Flies(type))
@@ -472,6 +518,17 @@ public sealed class DogfightLobby
             environment = (environment + 1) % EnvironmentCount;
         }
 
+        if (type == DogfightMissionType.StuntRace)
+        {
+            return Change(_options with
+            {
+                MissionType = (byte)type,
+                Environment = (byte)environment,
+                Victory = DogfightVictory.Time,
+                TimeMinutes = IsStuntRace(_options) ? _options.TimeMinutes : (byte)StuntRaceDefaultMinutes,
+            });
+        }
+
         return Change(_options with
         {
             MissionType = (byte)type,
@@ -482,23 +539,25 @@ public sealed class DogfightLobby
         });
     }
 
-    /// <summary>Picks how the match is won: Time, Score or both. Refused on a guest.</summary>
+    /// <summary>Picks how the match is won: Time, Score or both. Refused on a guest and in a Stunt
+    /// Race, which runs on the clock alone.</summary>
     public bool SetVictory(DogfightVictory victory) =>
-        victory is DogfightVictory.Time or DogfightVictory.Score or DogfightVictory.Both && Change(_options with { Victory = victory });
+        victory is DogfightVictory.Time or DogfightVictory.Score or DogfightVictory.Both
+        && !IsStuntRace(_options) && Change(_options with { Victory = victory });
 
-    /// <summary>Checks or clears Restrict Number of Teams. Refused on a guest and in a type that fixes
-    /// it (<see cref="FixesTeams"/>).</summary>
-    public bool SetRestrictTeams(bool restrict) => !FixesTeams(_options) && Change(_options with { RestrictTeams = restrict });
+    /// <summary>Checks or clears Restrict Number of Teams. Refused on a guest, in a type that fixes
+    /// it (<see cref="FixesTeams"/>) and in a Stunt Race.</summary>
+    public bool SetRestrictTeams(bool restrict) => TeamsEditable() && Change(_options with { RestrictTeams = restrict });
 
     /// <summary>Sets the minimum team count, held to 0 up to the maximum as the script's box binds
-    /// it. Refused on a guest, while Restrict Number of Teams is clear, and in a type fixing it.</summary>
+    /// it. Refused on a guest, while Restrict Number of Teams is clear, and where the teams are not live.</summary>
     public bool SetMinTeams(int teams) =>
-        _options.RestrictTeams && !FixesTeams(_options) && Change(_options with { MinTeams = (byte)Math.Clamp(teams, 0, _options.MaxTeams) });
+        _options.RestrictTeams && TeamsEditable() && Change(_options with { MinTeams = (byte)Math.Clamp(teams, 0, _options.MaxTeams) });
 
     /// <summary>Sets the maximum team count, held to the minimum up to <see cref="MaxTeams"/>.
-    /// Refused on a guest, while Restrict Number of Teams is clear, and in a type fixing it.</summary>
+    /// Refused on a guest, while Restrict Number of Teams is clear, and where the teams are not live.</summary>
     public bool SetMaxTeams(int teams) =>
-        _options.RestrictTeams && !FixesTeams(_options) && Change(_options with { MaxTeams = (byte)Math.Clamp(teams, _options.MinTeams, MaxTeams) });
+        _options.RestrictTeams && TeamsEditable() && Change(_options with { MaxTeams = (byte)Math.Clamp(teams, _options.MinTeams, MaxTeams) });
 
     /// <summary>Checks or clears Capture the Flag's own-flag-home rule: an enemy flag scores only
     /// while the carrier's own flag stands at its base. Refused on a guest and outside Capture the
@@ -544,33 +603,35 @@ public sealed class DogfightLobby
     public bool SetTimeMinutes(int minutes) =>
         minutes is >= 1 and <= MaxTimeMinutes && Change(_options with { TimeMinutes = (byte)minutes });
 
-    /// <summary>Sets the Score box. Refused on a guest and outside 1 to 999.</summary>
-    public bool SetScore(int score) => score is >= 1 and <= MaxScore && Change(_options with { Score = (ushort)score });
+    /// <summary>Sets the Score box. Refused on a guest, outside 1 to 999 and in a Stunt Race.</summary>
+    public bool SetScore(int score) =>
+        score is >= 1 and <= MaxScore && !IsStuntRace(_options) && Change(_options with { Score = (ushort)score });
 
-    /// <summary>Checks or clears Limited Lives. Refused on a guest.</summary>
-    public bool SetLimitedLives(bool limited) => Change(_options with { LimitedLives = limited });
+    /// <summary>Checks or clears Limited Lives. Refused on a guest and in a Stunt Race.</summary>
+    public bool SetLimitedLives(bool limited) => !IsStuntRace(_options) && Change(_options with { LimitedLives = limited });
 
-    /// <summary>Sets the Lives box, clamped to 1..99. Refused on a guest and while Limited Lives is
-    /// clear, which is when the box is greyed.</summary>
+    /// <summary>Sets the Lives box, clamped to 1..99. Refused on a guest, in a Stunt Race and while
+    /// Limited Lives is clear, which is when the box is greyed.</summary>
     public bool SetLives(int lives) =>
-        _options.LimitedLives && Change(_options with { Lives = (byte)ClampLives(lives) });
+        _options.LimitedLives && !IsStuntRace(_options) && Change(_options with { Lives = (byte)ClampLives(lives) });
 
-    /// <summary>Checks or clears Auto Respawn. Refused on a guest.</summary>
-    public bool SetAutoRespawn(bool auto) => Change(_options with { AutoRespawn = auto });
+    /// <summary>Checks or clears Auto Respawn. Refused on a guest and in a Stunt Race.</summary>
+    public bool SetAutoRespawn(bool auto) => !IsStuntRace(_options) && Change(_options with { AutoRespawn = auto });
 
-    /// <summary>Checks or clears Allow Custom Planes. Refused on a guest.</summary>
-    public bool SetAllowCustomPlanes(bool allow) => ChangeRules(_rules with { AllowCustom = allow });
+    /// <summary>Checks or clears Allow Custom Planes. Refused on a guest and in a Stunt Race, whose
+    /// plane rules stand as the type change found them.</summary>
+    public bool SetAllowCustomPlanes(bool allow) => !IsStuntRace(_options) && ChangeRules(_rules with { AllowCustom = allow });
 
     /// <summary>Checks or clears Outlaw Components, which puts the outlaw list in force. A toggle
     /// either way empties the list in the same round, as the original's 5044 does. Refused on a
-    /// guest.</summary>
+    /// guest and in a Stunt Race.</summary>
     public bool SetOutlawComponents(bool outlaw) =>
-        ChangeRules(outlaw == _rules.Outlawing ? _rules : _rules with { Outlawing = outlaw, Outlawed = 0 });
+        !IsStuntRace(_options) && ChangeRules(outlaw == _rules.Outlawing ? _rules : _rules with { Outlawing = outlaw, Outlawed = 0 });
 
     /// <summary>Sets or clears one flag of the outlaw list (<see cref="NetPlaneRules"/> names them).
-    /// Refused on a guest and outside the list.</summary>
+    /// Refused on a guest, outside the list and in a Stunt Race.</summary>
     public bool SetOutlawed(int flag, bool outlawed) =>
-        flag is >= 0 and < NetPlaneRules.Flags && ChangeRules(_rules.With(flag, outlawed));
+        flag is >= 0 and < NetPlaneRules.Flags && !IsStuntRace(_options) && ChangeRules(_rules.With(flag, outlawed));
 
     /// <summary>Picks this pilot's stock airframe and fit, live whether or not it is Ready. A changed
     /// pick clears this pilot's own Ready. Refused outside the eleven stock airframes.</summary>
@@ -697,11 +758,13 @@ public sealed class DogfightLobby
     }
 
     /// <summary>Back from a match: its scores stand on the Game Scores page and this pilot's Ready
-    /// clears. The host opens a new round, which clears every guest's mark too.</summary>
-    public void Land(IReadOnlyList<DogfightScore> scores)
+    /// clears. The host opens a new round, which clears every guest's mark too. A stunt race lands its
+    /// table in <paramref name="race"/> instead.</summary>
+    public void Land(IReadOnlyList<DogfightScore> scores, IReadOnlyList<RaceTableRow>? race = null)
     {
         ArgumentNullException.ThrowIfNull(scores);
         _scores = new List<DogfightScore>(scores).ToArray();
+        _raceScores = race != null ? new List<RaceTableRow>(race).ToArray() : Array.Empty<RaceTableRow>();
         _ready = false;
         if (IsHost)
         {
@@ -920,6 +983,9 @@ public sealed class DogfightLobby
         _ready = false;
         return true;
     }
+
+    // The team boxes take a press only where the type neither fixes them nor flies without teams.
+    private bool TeamsEditable() => !FixesTeams(_options) && !IsStuntRace(_options);
 
     // Round 0 is a guest's "heard nothing", so the count wraps past it.
     private byte NextEpoch() => (byte)(_options.Epoch == byte.MaxValue ? 1 : _options.Epoch + 1);
