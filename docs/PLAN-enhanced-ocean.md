@@ -45,6 +45,7 @@ capture agree through `csky_time`.
 | 9 | Look approval | **Approved by the user from the montage** after the foam change. |
 | 10 | Water Quality default | **Waves on the desktop, flat on the Deck and Linux.** B12's measurement confirms or revises it. |
 | 11 | B11 budget | **At most 1.5 ms over the flat sea** at the low-pass pose, desktop 1080p; about the ocean's cost with SSR off today. |
+| 12 | C21 chapter scope | **Every chapter with a sea at y = 0: C1, C1C, C2, C2B, C3, C5.** C4 keeps its flat lakes. C2's coplanar beaches, C3's shore sheets and C5's fog-gradient overlays are the item's to solve, not reasons to leave a chapter out. |
 
 ## ⚠ Read this before implementing anything
 
@@ -288,9 +289,11 @@ matches `wtr*`; C1 and C1C need `water1` matched EXACTLY, since the opaque `wate
 tiles must stay out. Inference, not measured: C5's fog-gradient passes would stay a flat layer over
 the waves.
 
-**Approach.** <TODO: the chapter scope is the user's call. As is: C2B. Classifier widened: C1, C1C.
-Riskier: C2 (two-level sheet, 110 coplanar polys), C5 (fog passes over the sea), C3 (2090 coplanar
-shore polys). Then per chapter: lift the gate, check the mask, shoot a coast and an open-sea pose.>
+**Approach.** Scope per Decision 12. Order by risk: C2B as is; C1 and C1C with `water1` matched
+exactly; then C2 (two-level sheet, coplanar beaches), C5 (fog-gradient overlay passes over the sea),
+C3 (2090 coplanar shore polys, terrain pits below the sheet). Per chapter: lift the gate, check the
+mask, shoot a coast and an open-sea pose against the flat sea. <TODO: how C5's fog passes and C3's
+shore sheets are kept from lying flat over waves or being overrun by them.>
 
 **Model recommendation.** high: per-chapter data reading, where a wrong classifier hides real sea or
 leaves a z-fight.
