@@ -59,6 +59,7 @@ internal static class DisplaySettingsSuites
         ("RenderScale", "200", true),
         ("AntiAliasing", DisplayWords.AntiAliasingFsr2, true),
         ("ShadowQuality", ShadowQualitySetting.Low, true),
+        ("WaterQuality", WaterQualitySetting.Flat, true),
         ("AudioMaster", 0, false),
         ("AudioMusic", 100, false),
         ("AudioEffects", 50, false),

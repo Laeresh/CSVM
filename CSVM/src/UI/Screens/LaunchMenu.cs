@@ -178,13 +178,12 @@ public sealed partial class LaunchMenu : CanvasLayer
     // in its order: reset the keymap, abandon the staged edits, commit them. Accept stays last. TUNE.
     private const int ControlsFooterRows = 4;
     private const int ControlsFolderButton = 0;
-    // The Options screen's stepper rows, above the Controls door and the apply row. The screen
-    // is a form the cursor walks top to bottom. First the five gameplay settings: the three the
-    // Original presentation's GAME OPTIONS page draws, in its order, then the targeting switch
-    // and the rumble. Then the graphics mode, its view distance, the six display settings and the
-    // shadow quality in the order the Original presentation's VIDEO page draws them. Then the four
-    // volume levels in the order its AUDIO page draws them, then the two doors.
-    private const int OptionsStepperRows = 18;
+    // The Options screen's stepper rows, above the Controls door and the apply row, walked top to
+    // bottom. First the three GAME OPTIONS settings in that page's order, then the targeting switch
+    // and the rumble. Then the graphics mode and its view distance. Then the six display
+    // settings and the shadow quality in the VIDEO page's order, then the water quality. Then the
+    // four volume levels in the AUDIO page's order, then the two doors.
+    private const int OptionsStepperRows = 19;
     // How many Options rows show at once. Twenty rows do not fit the band at 720p, and a band
     // sized to all of them shrinks every row. The screen is windowed at the Controls list's
     // height, which is known to fit.
@@ -322,6 +321,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     private bool? _autoHeadTurnChoice;
     private string _graphicsChoice = GraphicsMode.Default;
     private string? _viewDistanceChoice;
+    // The water quality as saved, null while never set, which shows and applies the run's own word.
+    private string? _waterQualityChoice;
     // The six display settings, stepped by the six rows under the view distance. Each is stored as
     // the word the options file carries, never as a row index. A screen unplugged or a size the
     // monitor stopped offering then meets the resolver's own forgiving read, not a stale position.
@@ -1872,7 +1873,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         switch (_screen)
         {
             case Screen.Options:
-                // The eighteen choice rows are steppers; the doors under them have nothing to step.
+                // The nineteen choice rows are steppers; the doors under them have nothing to step.
                 switch (_optionsIndex)
                 {
                     case 0: StepDifficultyChoice(dir); return true;
@@ -1889,10 +1890,11 @@ public sealed partial class LaunchMenu : CanvasLayer
                     case 11: StepRenderScaleChoice(dir); return true;
                     case 12: StepAntiAliasingChoice(dir); return true;
                     case 13: StepShadowQualityChoice(dir); return true;
-                    case 14: _audioMasterChoice = StepLevel(_audioMasterChoice, AudioMix.DefaultMaster, dir); return true;
-                    case 15: _audioMusicChoice = StepLevel(_audioMusicChoice, AudioMix.DefaultMusic, dir); return true;
-                    case 16: _audioEffectsChoice = StepLevel(_audioEffectsChoice, AudioMix.DefaultEffects, dir); return true;
-                    case 17: _audioVoiceChoice = StepLevel(_audioVoiceChoice, AudioMix.DefaultVoice, dir); return true;
+                    case 14: StepWaterQualityChoice(dir); return true;
+                    case 15: _audioMasterChoice = StepLevel(_audioMasterChoice, AudioMix.DefaultMaster, dir); return true;
+                    case 16: _audioMusicChoice = StepLevel(_audioMusicChoice, AudioMix.DefaultMusic, dir); return true;
+                    case 17: _audioEffectsChoice = StepLevel(_audioEffectsChoice, AudioMix.DefaultEffects, dir); return true;
+                    case 18: _audioVoiceChoice = StepLevel(_audioVoiceChoice, AudioMix.DefaultVoice, dir); return true;
                     default: return false;
                 }
             case Screen.Network:
@@ -2024,7 +2026,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                         Difficulty.Word(_difficultyChoice), _monitorChoice, _resolutionChoice,
                         _displayModeChoice, _vsyncChoice, _renderScaleChoice, _antiAliasingChoice, _shadowQualityChoice, _audioMasterChoice,
                         _audioMusicChoice, _audioEffectsChoice, _audioVoiceChoice, _nearestAfterKillChoice,
-                        _rumbleChoice, _defaultViewChoice, _autoHeadTurnChoice, _viewDistanceChoice));
+                        _rumbleChoice, _defaultViewChoice, _autoHeadTurnChoice, _viewDistanceChoice, _waterQualityChoice));
                 }
 
                 break;
@@ -3468,6 +3470,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         _renderScaleChoice = saved.RenderScale;
         _antiAliasingChoice = saved.AntiAliasing;
         _shadowQualityChoice = saved.ShadowQuality;
+        _waterQualityChoice = saved.WaterQuality;
         _audioMasterChoice = saved.AudioMaster;
         _audioMusicChoice = saved.AudioMusic;
         _audioEffectsChoice = saved.AudioEffects;
@@ -3950,6 +3953,25 @@ public sealed partial class LaunchMenu : CanvasLayer
         int at = DisplaySettingRows.WordIndex(words, _shadowQualityChoice, ShadowQualitySetting.Word);
         _shadowQualityChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
     }
+
+    // Dead under Original, whose sea is the flat sheet whatever the word. The saved word is kept for
+    // a later flip, as the shadow row keeps its own.
+    private void StepWaterQualityChoice(int dir)
+    {
+        if (_graphicsChoice != GraphicsMode.EnhancedWord)
+        {
+            return;
+        }
+
+        var words = WaterQualitySetting.Words;
+        int at = DisplaySettingRows.WordIndex(words, _waterQualityChoice, WaterQualitySetting.Word);
+        _waterQualityChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
+    }
+
+    // The row says why it does not step rather than refusing in silence.
+    private string WaterQualityDetail() => _graphicsChoice == GraphicsMode.EnhancedWord
+        ? "Flat draws the original's sea; Waves draws a swell in its place. Flat runs faster. Applies at once."
+        : "Enhanced Graphics only: the original world's sea is always flat.";
 
     // The size row's detail says what the size does under the mode standing with it. The size does
     // something different in each mode, and under borderless the row does not step at all. A
@@ -4504,11 +4526,12 @@ public sealed partial class LaunchMenu : CanvasLayer
                 11 => $"Render scale: {RenderScaleChoiceLabel()}",
                 12 => $"Anti-aliasing: {AntiAliasingChoiceLabel()}",
                 13 => $"Shadow quality: {ShadowQualityChoiceLabel()}",
-                14 => $"Master volume: {LevelLabel(_audioMasterChoice, AudioMix.DefaultMaster)}",
-                15 => $"Music volume: {LevelLabel(_audioMusicChoice, AudioMix.DefaultMusic)}",
-                16 => $"Effects volume: {LevelLabel(_audioEffectsChoice, AudioMix.DefaultEffects)}",
-                17 => $"Voice volume: {LevelLabel(_audioVoiceChoice, AudioMix.DefaultVoice)}",
-                18 => ControlsRow,
+                14 => $"Water quality: {WaterQualitySetting.Label(_waterQualityChoice)}",
+                15 => $"Master volume: {LevelLabel(_audioMasterChoice, AudioMix.DefaultMaster)}",
+                16 => $"Music volume: {LevelLabel(_audioMusicChoice, AudioMix.DefaultMusic)}",
+                17 => $"Effects volume: {LevelLabel(_audioEffectsChoice, AudioMix.DefaultEffects)}",
+                18 => $"Voice volume: {LevelLabel(_audioVoiceChoice, AudioMix.DefaultVoice)}",
+                19 => ControlsRow,
                 _ => "Apply and restart the menu",
             },
             Screen.Controls => $"{ControlsRowLabel(index)}   {ControlsRowValue(index)}",
@@ -4919,11 +4942,12 @@ public sealed partial class LaunchMenu : CanvasLayer
             11 => "Render the world below native to spare the GPU, or above it for cleaner edges. Applies at once.",
             12 => "Select how edges are smoothed. FSR 2.2 also upscales a Render Scale below 100%. Applies at once.",
             13 => DisplaySettingRows.ShadowQualityDetail(_graphicsChoice),
-            14 => "Set the overall volume of all sounds. Heard once the choices are applied.",
-            15 => "Set the volume of the in-game music. Heard once the choices are applied.",
-            16 => "Set the volume of the sound effects. Heard once the choices are applied.",
-            17 => "Set the volume of the voices. Heard once the choices are applied.",
-            18 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
+            14 => WaterQualityDetail(),
+            15 => "Set the overall volume of all sounds. Heard once the choices are applied.",
+            16 => "Set the volume of the in-game music. Heard once the choices are applied.",
+            17 => "Set the volume of the sound effects. Heard once the choices are applied.",
+            18 => "Set the volume of the voices. Heard once the choices are applied.",
+            19 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
             _ => "Saves every choice and restarts the menu at its top level; unfinished setup is discarded.",
         },
         Screen.Controls => ControlsDetail(focus),

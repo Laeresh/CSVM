@@ -57,8 +57,9 @@ The Enhanced wave ocean, C1B only (`Ocean.Covers`). A camera-centred polar grid 
 swell in its vertex stage and chop in its fragment normals replaces the sea-level base sheet, which
 steps aside through `csky_ocean.gdshaderinc` (`SceneBuilder.IsOceanBaseTexture`) while its colliders
 stay flat. Owns the wave tables, the foam patch field and the calm discs at hulls and wake sheets,
-all on `csky_time`. `GameSession.FollowOcean` builds it on an Enhanced frame and drops it on
-Original; `--no-ocean` closes it. The shore calm comes from `OceanMask.cs`.
+all on `csky_time`. `GameSession.FollowOcean` builds it on an Enhanced frame at the `waves` Water
+Quality (`Utils/WaterQualitySetting.cs`) and drops it on Original or `flat`; `--no-ocean` closes it.
+The shore calm comes from `OceanMask.cs`.
 
 ## src/Effects/OceanMask.cs
 The wave ocean's shore mask, baked once from the built world's mesh instances at 8 m texels: sea

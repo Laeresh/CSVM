@@ -125,6 +125,9 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     // The view distance as saved, null while never set, which resolves to Normal. No row shows it;
     // the apply carries it unchanged.
     private string? _viewDistance;
+    // The water quality as saved, null while never set. No row shows it either; the apply carries
+    // it unchanged.
+    private string? _waterQuality;
     private string? _monitorIndex;
     private string? _resolution;
     // The size the options file named when the page last read it, which the size row offers as an
@@ -176,6 +179,10 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
 
     /// <summary>The view-distance word the page would apply, null while never set.</summary>
     public string? ViewDistanceChoice => _viewDistance;
+
+    /// <summary>The water-quality word the page would apply, which is the saved one, null while never
+    /// set.</summary>
+    public string? WaterQualityChoice => _waterQuality;
 
     /// <summary>The screen index (<see cref="CSVM.Utils.MonitorSetting.Word"/>'s spelling) the
     /// page would apply, or null while nothing has been saved and no row has been touched.</summary>
@@ -420,6 +427,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     {
         _graphics = saved?.GraphicsMode ?? CSVM.Utils.GraphicsMode.Default;
         _viewDistance = saved?.ViewDistance;
+        _waterQuality = saved?.WaterQuality;
         _monitorIndex = saved?.MonitorIndex;
         _resolution = saved?.Resolution;
         _savedResolution = saved?.Resolution;

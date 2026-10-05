@@ -369,6 +369,9 @@ public partial class GameSession : Node3D
     /// launchscreen only once a world is actually up).</summary>
     public bool InSession { get; private set; }
 
+    /// <summary>Whether the wave ocean stands in this session's world.</summary>
+    public bool OceanBuilt => _ocean != null;
+
     /// <summary>Has the session drawn the first frame the player is meant to see. That frame is
     /// an intro's camera posed onto the rigs, or the flown aeroplane on its spawn under its own
     /// HUD. It latches at the end of the frame that reaches it, and it is what the start cover
@@ -869,6 +872,10 @@ public partial class GameSession : Node3D
         _clutter?.Recut();
         _edgeExtender?.FollowClutterFade();
     }
+
+    /// <summary>A live Water Quality change builds or drops the wave ocean
+    /// (<see cref="EnhancedLook.ApplyWaterQuality"/>). The graphics-mode switch follows it too.</summary>
+    public void FollowWaterQuality() => FollowOcean();
 
     /// <summary>After the launcher re-dressed the session sun: each cockpit pass re-takes it, then
     /// the zone is written again over them all. ⚠ Keep the zone last. The Environment and sun
@@ -2510,11 +2517,12 @@ public partial class GameSession : Node3D
             Log.Info("world", $"[textures] {state.Textures.MissingTextures.Count} referenced texture(s) absent from this install: {string.Join(", ", state.Textures.MissingTextures)}");
     }
 
-    // The Enhanced wave ocean, built on the first Enhanced frame. A switch back to Original drops
-    // it, and the sea sheet draws again because the shared switch resets.
+    // The Enhanced wave ocean, built on the first Enhanced frame that asks for waves. A switch back
+    // to Original or to flat water drops it, and the sea sheet draws again because the shared
+    // switch resets.
     private void FollowOcean()
     {
-        if (!GraphicsMode.Enhanced)
+        if (!GraphicsMode.Enhanced || !WaterQualitySetting.DrawsWaves)
         {
             Drop(_ocean);
             _ocean = null;

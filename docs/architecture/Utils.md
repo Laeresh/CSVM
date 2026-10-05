@@ -301,12 +301,12 @@ which is how a golden or a deterministic capture pins the mode on purpose. The m
 written up as a divergence in `docs/architecture/Spec.md`.
 
 ## src/Utils/WordSetting.cs
-The source order the four word-valued graphics settings share (`AntiAliasingSetting`, `RenderScaleSetting`,
-`ShadowQualitySetting`, `ViewDistance`), each holding one instance as its `Lookup` over its words, key and flag. `Resolve`
+The source order the five word-valued graphics settings share (`AntiAliasingSetting`, `RenderScaleSetting`,
+`ShadowQualitySetting`, `WaterQualitySetting`, `ViewDistance`), each holding one instance as its `Lookup` over its words, key and flag. `Resolve`
 takes the flag where the setting has one, then the saved word, then the config key, then the fallback the setting hands
 it; a word outside the list falls through, a key spelling the fallback reads as it, and an unknown config word the lookup
 reaches warns. The result is a `ResolvedWord` carrying a `SettingSource`, and `SourceName` spells that source for a log
-line (`options.json`, the key, the flag, `default` or shadow quality's GPU rules). `ReadSaved` is the `--det` guard each
+line (`options.json`, the key, the flag, `default`, or shadow and water quality's machine rules). `ReadSaved` is the `--det` guard each
 setting's `SavedWord` goes through. `Spec/SessionSpec.cs` parses a setting's flag through its `Lookup`.
 
 ## src/Utils/AntiAliasingSetting.cs
@@ -327,6 +327,15 @@ holds the `--det` guard. `Launch/GameSession.cs` calls `ResolveForPanes` as its 
 casts, its angular distance and blur, and the renderer's soft filter and atlas edge. `ApplyTo` is the one writer, called by
 `Launcher.ApplyShadowQuality` at the sun's build and on every Options apply; it writes nothing on the faithful path and bumps
 `Revision`, which the cockpit pass re-copies the sun on. Why each level stands where it does: `analysis/screen-dither/FINDINGS.md`.
+
+## src/Utils/WaterQualitySetting.cs
+The Enhanced sea's water quality: `flat`, the sea-level sheet the faithful path draws, or `waves`, the wave ocean
+(`Effects/Ocean.cs`) in its place. `Resolve` runs `WordSetting` over `--water-quality=`, the saved `waterQuality` word,
+the `graphics.waterQuality` key, then `DefaultFor(det)`: `waves` under `--det`, otherwise `FallbackFor(linux, integrated)`,
+which is `flat` on Linux or on an integrated GPU (`ShadowQualitySetting.IntegratedGpu`), so the Steam Deck runs flat, under
+the source `default_linux_or_integrated_gpu`. `Pick` is the lookup without the store; `SavedWord` holds the `--det` guard.
+`Launcher` resolves it at startup and on every Options apply, then `EnhancedLook.ApplyWaterQuality` has
+`Launch/GameSession.cs` build or drop the ocean, which reads `DrawsWaves`. Only Built-in's Options screen shows a row.
 
 ## src/Utils/ViewportQuality.cs
 What `AntiAliasingSetting` and `RenderScaleSetting` write on a 3D viewport, gathered here because
@@ -409,7 +418,7 @@ block, where the same predicate drives both window hiding and the interactive ru
 
 ## src/Utils/OptionsStore.cs
 Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode, view distance and difficulty words, the six
-display settings (monitor index, resolution, display mode, V-Sync, render scale, anti-aliasing), the Enhanced shadow quality, the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn, the remembered install folder (fully qualified or dropped), and the network callsign, voice and game name the Game and Player Information boxes remember. One file, `user://options.json`,
+display settings (monitor index, resolution, display mode, V-Sync, render scale, anti-aliasing), the Enhanced shadow and water quality, the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn, the remembered install folder (fully qualified or dropped), and the network callsign, voice and game name the Game and Player Information boxes remember. One file, `user://options.json`,
 independent of `Session/Campaign/CampaignProfileStore.cs`. A missing or malformed file reads as empty, an unknown version invalidates it, an
 unknown value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
 `Version`. Four reads hold that one contract: a word set (`DisplayWords`, `DifficultyWords` and `ViewWords` hold the vocabularies, whose resolved tier and view mode belong to `Flight`), a shape predicate for the

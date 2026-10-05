@@ -15,9 +15,9 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>The live graphics-mode switch and the live View Distance, driven through the one
-/// sequence the launcher runs (<see cref="EnhancedLook.Switch"/>,
-/// <see cref="EnhancedLook.ApplyViewDistance"/>) on whole flight sessions. A world switched away and
+/// <summary>The live graphics-mode switch, View Distance and Water Quality on whole flight sessions.
+/// Each runs through the one sequence the launcher runs (<see cref="EnhancedLook.Switch"/>,
+/// <see cref="EnhancedLook.ApplyViewDistance"/>, <see cref="EnhancedLook.ApplyWaterQuality"/>). A world switched away and
 /// back must read as a fresh session in that mode. That covers the layers only one mode builds, the
 /// clutter's cells and ranges, and the shader text on every material. It covers the Environment's
 /// passes and the sun's shadow too. The pixels are the montage's, not this suite's.</summary>
@@ -26,6 +26,9 @@ internal static class GraphicsSwitchSuites
     // Physics steps between a switch and the reading. The world lights free or grow their omni pool
     // on a commit, so a reading taken before one would show the pool the switch left.
     private const int Steps = 3;
+
+    // The one chapter the wave ocean covers (Effects.Ocean.Covers).
+    private const string OceanChapter = "C1B";
 
     // Every shader text a reading met, by its census key, for the mismatch artifact.
     private static readonly Dictionary<string, string> TextByKey = new(StringComparer.Ordinal);
@@ -261,6 +264,79 @@ internal static class GraphicsSwitchSuites
         }
         finally
         {
+            Restore(wasEnhanced);
+        }
+    }
+
+    [Suite("graphics-water-quality",
+        "the C1B wave ocean follows a live Water Quality change in an Enhanced flight: built into the "
+        + "world's tree at waves, out of the tree after a live move to flat (its leaving resets the "
+        + "switch the flat sheet's sea draws on), and built again by a move back to waves; a session "
+        + "built at flat builds none, and --no-ocean still builds none at waves, live apply included")]
+    internal static void WaterQualityOcean(TestContext ctx)
+    {
+        RequireData(ctx, OceanChapter);
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        string launched = WaterQualitySetting.Word;
+        try
+        {
+            WaterQualitySetting.Resolve(WaterQualitySetting.Waves, null, null);
+            var live = Open(ctx, enhanced: true, chapter: OceanChapter);
+            try
+            {
+                if (!live.Built)
+                {
+                    ctx.Check(false, $"the Enhanced C1B session builds");
+                    return;
+                }
+
+                string built = OceanState(live);
+                ctx.Check(live.Session.OceanBuilt && built == "1 in tree",
+                    $"at waves the session builds the ocean into its tree ({built})");
+                ApplyWater(live, WaterQualitySetting.Flat);
+                string flat = OceanState(live);
+                ctx.Check(!live.Session.OceanBuilt && flat == "0 in tree",
+                    $"a live move to flat drops it and the sheet draws its sea again ({flat})");
+                ApplyWater(live, WaterQualitySetting.Waves);
+                string again = OceanState(live);
+                ctx.Check(live.Session.OceanBuilt && again == "1 in tree",
+                    $"and a move back to waves builds it again ({again})");
+            }
+            finally
+            {
+                live.Close();
+            }
+
+            WaterQualitySetting.Resolve(WaterQualitySetting.Flat, null, null);
+            var flatBuild = Open(ctx, enhanced: true, chapter: OceanChapter);
+            try
+            {
+                string none = OceanState(flatBuild);
+                ctx.Check(flatBuild.Built && !flatBuild.Session.OceanBuilt && none == "0 in tree",
+                    $"a session built at flat builds no ocean (built={flatBuild.Built}, {none})");
+            }
+            finally
+            {
+                flatBuild.Close();
+            }
+
+            WaterQualitySetting.Resolve(WaterQualitySetting.Waves, null, null);
+            var door = Open(ctx, enhanced: true, chapter: OceanChapter, extra: new[] { "--no-ocean" });
+            try
+            {
+                EnhancedLook.ApplyWaterQuality(door.Session);
+                string skipped = OceanState(door);
+                ctx.Check(door.Built && !door.Session.OceanBuilt && skipped == "0 in tree",
+                    $"and --no-ocean still builds none at waves, through a live apply as well (built={door.Built}, {skipped})");
+            }
+            finally
+            {
+                door.Close();
+            }
+        }
+        finally
+        {
+            WaterQualitySetting.Resolve(launched, null, null);
             Restore(wasEnhanced);
         }
     }
@@ -723,12 +799,34 @@ internal static class GraphicsSwitchSuites
     private static string Light(DirectionalLight3D light) => string.Create(CultureInfo.InvariantCulture,
         $"layers 0x{light.Layers:X5} casts {light.ShadowEnabled} energy {light.LightEnergy:0.###} colour {light.LightColor.ToHtml(false)} specular {light.LightSpecular:0.###} angular {light.LightAngularDistance:0.##} beam {-light.GlobalBasis.Z}");
 
-    private static void RequireData(TestContext ctx)
+    private static void RequireData(TestContext ctx, string? chapter = null)
     {
+        chapter ??= ctx.Chapter;
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
-        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} textures");
-        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, ctx.Chapter), $"{ctx.Chapter} gamez");
+        ctx.RequireData(SessionPaths.ChapterTextures(ctx.DataRoot, chapter), $"{chapter} textures");
+        ctx.RequireData(SessionPaths.ChapterGamez(ctx.DataRoot, chapter), $"{chapter} gamez");
+    }
+
+    // A Water Quality apply as the Options accept makes it, then the steps a reading waits for.
+    private static void ApplyWater(Rig rig, string word)
+    {
+        WaterQualitySetting.Resolve(word, null, null);
+        EnhancedLook.ApplyWaterQuality(rig.Session);
+        Step(rig);
+    }
+
+    // The ocean nodes standing in the session's tree. Entering and leaving the tree sets the sheet's
+    // switch. The server's getter for that errors outside the editor, so the tree is read instead.
+    private static string OceanState(Rig rig)
+    {
+        int inTree = 0;
+        Walk(rig.Session, node =>
+        {
+            if (node is Effects.Ocean { } ocean && ocean.IsInsideTree())
+                inTree++;
+        });
+        return string.Create(CultureInfo.InvariantCulture, $"{inTree} in tree");
     }
 
     // The switch as the launcher makes it, then the steps a reading waits for.
@@ -746,13 +844,13 @@ internal static class GraphicsSwitchSuites
 
     // One flight session in its own pane, lit as the launcher lights one. The sun and the
     // Environment are the launcher's, dressed by EnhancedLook when the session opens under Enhanced.
-    private static Rig Open(TestContext ctx, bool enhanced, int players = 1)
+    private static Rig Open(TestContext ctx, bool enhanced, int players = 1, string? chapter = null, params string[] extra)
     {
         GraphicsMode.Set(enhanced);
         Mech3.ShaderTwins.Regenerate();
         EffectsLevel.RegisteredScaleSq = EnhancedLook.ClutterFadeScaleSq();
         RenderingServer.GlobalShaderParameterSet(EffectsLevel.ShaderParam, EffectsLevel.RegisteredScaleSq);
-        var spec = SessionSpec.Parse(new[] { $"--chapter={ctx.Chapter}", $"--players={players}", "--mute", "--no-pads" });
+        var spec = SessionSpec.Parse(new[] { $"--chapter={chapter ?? ctx.Chapter}", $"--players={players}", "--mute", "--no-pads" }.Concat(extra));
         var pane = new SubViewport
         {
             Size = new Vector2I(640, 480),

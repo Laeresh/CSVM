@@ -1076,6 +1076,11 @@ public sealed record SessionSpec
     /// the saved option and the config key, including under <c>--det</c>.</summary>
     public string? ViewDistance { get; private set; }
 
+    /// <summary><c>--water-quality=flat|waves</c>, whether Enhanced draws the wave ocean or the flat
+    /// sea. Null when not given, and for an unknown word with a warning. Beats the saved option and the
+    /// config key, including under <c>--det</c>. <c>--no-ocean</c> still wins over waves.</summary>
+    public string? WaterQuality { get; private set; }
+
     /// <summary><c>--debug-graphics-switch=N[,N...]</c>: the sim frames at which the running session
     /// flips the graphics mode, as the Toggle Graphics Mode action does but unsaved. The scripted
     /// twin of the live switch, so a capture shows a world after a round trip. Empty = none.</summary>
@@ -1671,6 +1676,10 @@ public sealed record SessionSpec
             else if (TryWordFlag(arg, Utils.ViewDistance.Lookup, notes, out string? viewWord))
             {
                 s.ViewDistance = viewWord ?? s.ViewDistance;
+            }
+            else if (TryWordFlag(arg, Utils.WaterQualitySetting.Lookup, notes, out string? waterWord))
+            {
+                s.WaterQuality = waterWord ?? s.WaterQuality;
             }
             else if (arg == "--dump-mips") { s.DumpMips = true; }
             else if (arg.StartsWith("--dump-mips=")) { s.DumpMips = true; s.DumpMipsFilter = arg["--dump-mips=".Length..]; }

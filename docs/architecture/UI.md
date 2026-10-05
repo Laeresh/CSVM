@@ -1214,7 +1214,7 @@ The VIDEO page, the Game Options table's shape over the authored Video rows: the
 Anti-aliasing over `Utils/OptionsStore.cs`'s `DisplayWords`, and Enhanced Graphics on the Shadows checkbox whose gate it owns. Render Scale stands on
 the Objects Detail line and Anti-aliasing on the Lighting Quality line (whose `VP_D_DLight` authors five items), picking FSR 2.2 narrowing the scale
 list to 50..100 on the spot; Shadow Quality (`Utils/ShadowQualitySetting.cs`) stands on the Texture Quality line, dead while Enhanced Graphics is
-clear. The Graphics row's title and description are the page's own. It holds the display settings and the view distance it carries unshown.
+clear. The Graphics row's title and description are the page's own. It holds the display settings and the view distance and water quality it carries unshown.
 
 ## src/UI/Menu/Original/OriginalControlsPage.cs
 The CONTROLS page over the shared `ControlsFeature`: the seat chooser on the Controller Type row, the authored Mouse Sensitivity slider over

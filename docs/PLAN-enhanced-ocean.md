@@ -82,7 +82,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A, from prototype to feature
 
 1. ☑ Port the prototype to a production module on C1B
-2. ☐ Water Quality setting (flat or waves), live switch included
+2. ◐ Water Quality setting (flat or waves), live switch included
 3. ☐ Verify the live graphics switch and the motion look
 
 ### Wave B, cost
@@ -167,7 +167,27 @@ equivalence check (waves off, roughness 0.25) within 1/255.
 - The ocean must stay one-sided: a cutscene camera below y = 0 (C1B/M03's intro) otherwise sees the
   ocean across the sky.
 
-## A2 ☐ Water Quality setting (flat or waves), live switch included
+## A2 ◐ Water Quality setting (flat or waves), live switch included
+
+**Landed.** `Utils/WaterQualitySetting.cs` is a `WordSetting` over `flat`/`waves`:
+`--water-quality=` beats the saved `waterQuality` option, which beats the `graphics.waterQuality`
+config key, then the machine's fallback. Under `--det` only the flag survives, over `waves`, so the
+goldens and the A1 cruise shot do not move. The fallback is `waves` on a desktop and `flat` on Linux
+or an integrated GPU (`OperatingSystem.IsLinux()`, plus the integrated-GPU test shadow quality
+already made, now `ShadowQualitySetting.IntegratedGpu`); the Deck is both. The log names it
+`water_source=default_linux_or_integrated_gpu`. Built-in's Options screen has a Water Quality row
+under Shadow Quality, dead under Original like that row; the Original VIDEO page has no line for it
+and carries the saved word through `OptionsApplyExit` unchanged, as it does the view distance. An
+apply re-resolves the word and `EnhancedLook.ApplyWaterQuality` calls
+`GameSession.FollowWaterQuality`, so `FollowOcean` builds the ocean at `waves` and drops it at
+`flat` (the dropped node's `_ExitTree` resets `csky_ocean_on`, so the sheet draws its sea again).
+A switch to Original drops it as before. `--no-ocean` still wins. The word is announced on the
+`[world] graphics mode:` line and on `water quality applied:`. `docs/cli.md` has the bullet and
+index entry.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** An option chooses flat or waves in Enhanced, saved like the other display options, with a
 `--` flag and a config key, and a change applies live.
@@ -177,14 +197,23 @@ settled in this session. The other Enhanced options (`--view-distance`, `--shado
 pattern to copy.
 
 **Approach.** Copy the --view-distance/--shadow-quality option pattern: a `--water-quality=flat|waves` flag, a saved option, a config key, a menu row beside the other Enhanced graphics options, and a live
-apply through GameSession.FollowOcean. Default per Decision 10. <TODO: how the default tells the
-Deck/Linux from the desktop; reuse whatever platform test the options already make, if any.>
+apply through GameSession.FollowOcean. Default per Decision 10. The default tells the Deck and Linux
+from the desktop by `OperatingSystem.IsLinux()` or the integrated-GPU test the shadow-quality
+fallback already makes.
 
 **Model recommendation.** medium: follows an established option pattern.
 
-**Verify.** <TODO: the suite or probe that proves flag, saved option and live change.>
+**Verify.** `CSVM.Tests/WaterQualitySettingTests.cs` (the ladder, the platform fallback and its
+source, the `--det` fallback, the flag parse, the options-file round trip); the engine suite
+`graphics-water-quality` (a C1B Enhanced flight at waves builds the ocean, a live move to flat drops
+it from the tree, back to waves builds it again; a flat build builds none; `--no-ocean` builds none
+at waves); `display-det-guard` covers the saved word's `--det` drop; `menu-original-tracer` walks
+the new Built-in row. A C1B cruise shot at `--water-quality=waves` stays pixel-identical to A1's,
+and one at `flat` matches the `--no-ocean` shot.
 
 **⚠ Traps.** Under `--det` only the flag survives, so a golden cannot read the saved option.
+`RenderingServer.GlobalShaderParameterGet` errors outside the editor, so a suite cannot read
+`csky_ocean_on` back; it reads the ocean node's tree membership, which is what sets it.
 
 ## A3 ☐ Verify the live graphics switch and the motion look
 

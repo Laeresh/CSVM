@@ -24,6 +24,9 @@ public enum SettingSource
 
     /// <summary>Shadow quality's fallback on an integrated GPU drawing three or more panes.</summary>
     IntegratedGpuPanesDefault,
+
+    /// <summary>Water quality's fallback on Linux or on an integrated GPU, the Steam Deck being both.</summary>
+    LowPowerDefault,
 }
 
 /// <summary>One resolved word and the source that won.</summary>
@@ -33,9 +36,10 @@ public readonly record struct ResolvedWord(string Word, SettingSource Source);
 /// The lookup a word-valued graphics setting shares. Highest first, it reads the setting's flag, the
 /// saved word, the config key, then a fallback the setting chooses. A word outside
 /// <see cref="Words"/> reads as never set and falls through. Each setting keeps its own rules beside
-/// this: <see cref="AntiAliasingSetting"/>'s mode-dependent fallback, <see cref="RenderScaleSetting"/>'s
-/// FSR 2.2 clamp, <see cref="ShadowQualitySetting"/>'s GPU and pane fallback, and
-/// <see cref="ViewDistance"/>'s reach. Engine-free, so the order tests without a renderer.
+/// this, such as the mode-dependent fallback in <see cref="AntiAliasingSetting"/> and the FSR 2.2 clamp
+/// in <see cref="RenderScaleSetting"/>. Others are the GPU fallback in <see cref="ShadowQualitySetting"/>,
+/// the platform fallback in <see cref="WaterQualitySetting"/> and the reach in <see cref="ViewDistance"/>.
+/// Engine-free, so the order tests without a renderer.
 /// </summary>
 public sealed class WordSetting
 {
@@ -122,6 +126,7 @@ public sealed class WordSetting
         SettingSource.Config => Key,
         SettingSource.IntegratedGpuDefault => "default_integrated_gpu",
         SettingSource.IntegratedGpuPanesDefault => "default_integrated_gpu_panes",
+        SettingSource.LowPowerDefault => "default_linux_or_integrated_gpu",
         _ => "default",
     };
 }

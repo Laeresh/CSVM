@@ -708,9 +708,12 @@ public partial class Launcher : Node3D
         var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality,
             Utils.ShadowQualitySetting.SavedWord(_spec.Det),
             Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
+        // Before any session builds, since the ocean's build reads the word.
+        var waterQuality = Utils.WaterQualitySetting.ResolveForLaunch(_spec.WaterQuality,
+            Utils.WaterQualitySetting.SavedWord(_spec.Det), _spec.Det);
         string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
         string clamped = renderScale.Clamped ? " clamped_by=fsr2" : string.Empty;
-        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={Utils.RenderScaleSetting.Lookup.SourceName(renderScale.Source)}{clamped} anti_aliasing={antiAliasing.Word} aa_source={Utils.AntiAliasingSetting.Lookup.SourceName(antiAliasing.Source)} shadow_quality={shadowQuality.Word} shadow_source={Utils.ShadowQualitySetting.Lookup.SourceName(shadowQuality.Source)} view_distance={viewDistance.Word} view_source={Utils.ViewDistance.Lookup.SourceName(viewDistance.Source)}");
+        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={Utils.RenderScaleSetting.Lookup.SourceName(renderScale.Source)}{clamped} anti_aliasing={antiAliasing.Word} aa_source={Utils.AntiAliasingSetting.Lookup.SourceName(antiAliasing.Source)} shadow_quality={shadowQuality.Word} shadow_source={Utils.ShadowQualitySetting.Lookup.SourceName(shadowQuality.Source)} view_distance={viewDistance.Word} view_source={Utils.ViewDistance.Lookup.SourceName(viewDistance.Source)} water_quality={waterQuality.Word} water_source={Utils.WaterQualitySetting.Lookup.SourceName(waterQuality.Source)}");
         // The window's own viewport takes the render flags here, before any scene builds. The
         // three SubViewports take them at construction.
         Utils.ViewportQuality.Apply(GetViewport());
@@ -2572,6 +2575,7 @@ public partial class Launcher : Node3D
         options.RenderScale = applied.RenderScale;
         options.AntiAliasing = applied.AntiAliasing;
         options.ShadowQuality = applied.ShadowQuality;
+        options.WaterQuality = applied.WaterQuality;
         options.AudioMaster = applied.AudioMaster;
         options.AudioMusic = applied.AudioMusic;
         options.AudioEffects = applied.AudioEffects;
@@ -2598,14 +2602,20 @@ public partial class Launcher : Node3D
         var shadowQuality = Utils.ShadowQualitySetting.Resolve(_spec.ShadowQuality, applied.ShadowQuality,
             Config.GetString(Utils.ShadowQualitySetting.Key, shadowFallback), shadowFallback);
         Log.Info("world", $"shadow quality applied: {shadowQuality.Word} source={Utils.ShadowQualitySetting.Lookup.SourceName(shadowQuality.Source)}");
-        // A mode switch dresses the sun at the new level itself; otherwise the level alone moves.
+        // The same for the sea; --water-quality still beats the saved word.
+        var waterQuality = Utils.WaterQualitySetting.ResolveForLaunch(_spec.WaterQuality, applied.WaterQuality, _spec.Det);
+        Log.Info("world", $"water quality applied: {waterQuality.Word} source={Utils.WaterQualitySetting.Lookup.SourceName(waterQuality.Source)}");
+        // A mode switch dresses the sun at the new level and follows the sea itself; otherwise the
+        // level and the sea alone move.
         if (GraphicsMode.TryParse(applied.Graphics, out bool enhanced) && enhanced != GraphicsMode.Enhanced)
         {
             RequestGraphicsSwitch(enhanced, "options", save: false);
         }
-        else if (IsInstanceValid(_sun))
+        else
         {
-            ApplyShadowQuality(_sun);
+            if (IsInstanceValid(_sun))
+                ApplyShadowQuality(_sun);
+            EnhancedLook.ApplyWaterQuality(_session);
         }
 
         // The render scale and the anti-aliasing method reach every 3D viewport now as well.
