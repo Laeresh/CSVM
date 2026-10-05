@@ -1,8 +1,8 @@
 #ifndef CSKY_OCEAN_INC
 #define CSKY_OCEAN_INC
 
-// PROTOTYPE: the Enhanced wave ocean's switch, shared by the ocean and the base sea sheet it
-// replaces. 1 while an ocean node is live (Effects/OceanPrototype.cs), 0 otherwise.
+// The Enhanced wave ocean's switch, shared by the ocean and the base sea sheet it replaces.
+// 1 while an ocean node is live (Effects/Ocean.cs), 0 otherwise.
 global uniform float csky_ocean_on;
 
 // Whether a base-sea vertex at world height `world_y` steps aside for the ocean. Only the

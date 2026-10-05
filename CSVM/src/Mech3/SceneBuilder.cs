@@ -704,8 +704,8 @@ void fragment() {
         return null;
     }
 
-    /// <summary>PROTOTYPE: whether a water texture is the open-sea base sheet the wave ocean
-    /// replaces. A coastline blend, surf ring or wake drawn over it is not.</summary>
+    /// <summary>Whether a water texture is the open-sea base sheet the Enhanced wave ocean
+    /// (<c>Effects.Ocean</c>) replaces. A coastline blend, surf ring or wake drawn over it is not.</summary>
     internal static bool IsOceanBaseTexture(string texName) =>
         texName.StartsWith("wtr", StringComparison.OrdinalIgnoreCase);
 
@@ -1869,7 +1869,7 @@ void fragment() {
     // fogged surface then emits the shader text it always did, free of a mix()'s float rounding.
     // Key bits: 1-64 the flags, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade.
     // Then 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage,
-    // 262144 the race ghost, 524288 the ocean prototype's hideable base sea.
+    // 262144 the race ghost, 524288 the hideable base sea.
     // ⚠ Keep the graphics mode out of the key: each key holds one shader per mode (ShaderTwins).
     private ModeShader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
@@ -1917,7 +1917,7 @@ void fragment() {
         // ⚠ The water arm exists only inside the lit world arm, so original mode's shader text
         // cannot move.
         bool waterLit = worldLit && water;
-        // PROTOTYPE: the sea-level base sheet steps aside while the wave ocean draws in its place.
+        // The sea-level base sheet steps aside while the wave ocean draws in its place.
         bool oceanHide = waterLit && oceanBase;
         // The original's own aircraft light: unshaded, the per-vertex sun term times the authored
         // colour, clamped, then the texel (docs/org/vertexLighting.md). No Godot light reaches it.

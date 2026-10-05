@@ -80,7 +80,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A, from prototype to feature
 
-1. ☐ Port the prototype to a production module on C1B
+1. ☑ Port the prototype to a production module on C1B
 2. ☐ Water Quality setting (flat or waves), live switch included
 3. ☐ Verify the live graphics switch and the motion look
 
@@ -104,13 +104,35 @@ touch `GameSession`'s follow path, so they run in sequence. B11 and B12 share th
 instrument and should run together; B12 needs the Deck reachable. C21 needs B13 only if the bake
 cost grows with the chapter's polygon count beyond what C1B showed. C24 goes last, after the look
 and the cost settle, because every tune moves its hash. File contention: A1, A2, B11 and C23 all
-edit `Effects/OceanPrototype.cs` (or its successor); never run them in parallel worktrees.
+edit `Effects/Ocean.cs` (B13 edits `Effects/OceanMask.cs`); never run them in parallel worktrees.
 
 ---
 
 # Wave A, from prototype to feature
 
-## A1 ☐ Port the prototype to a production module on C1B
+## A1 ☑ Port the prototype to a production module on C1B
+
+**Landed.** `Effects/OceanPrototype.cs` is now two modules: `Effects/Ocean.cs` (class `Ocean`: the
+grid, the shader text, the wave tables, the foam and the calm discs) and `Effects/OceanMask.cs`
+(the shore mask bake, its walk state in a nested walker instead of ref parameters). Every wave,
+foam, roughness, calm-radius and mask value is unchanged. The PROTOTYPE labels are gone from the
+code, `csky_ocean.gdshaderinc`, `SceneBuilder` and `docs/architecture/Effects.md`; the log lines
+read `ocean: ...`. Env-var doors: `CSVM_OCEAN=0` became `--no-ocean` (an `EnhancedPasses.Ocean`
+bisect door beside `--no-ssr`, parsed in `SessionSpec`), `CSVM_OCEAN_MASK_PNG` became
+`--dump-ocean-mask=<path>` (writes the mask and does not end the run), and `CSVM_OCEAN_PARAMS` and
+`CSVM_OCEAN_TRACE` are deleted. Both flags have `docs/cli.md` bullets and index entries. The chapter
+gate (`Ocean.Covers`, C1B), the `--fly`/`--freecam` gate and the Enhanced-only build/drop in
+`GameSession.FollowOcean` are as before. The wave tables stay generated shader constants.
+
+**Verified.** The cruise pose (`--chapter=C1B --graphics=enhanced --pos=-6000,450,-10800
+--direction=-0.12,0,1 --look=0,-0.45`) is pixel-identical before and after the port (decoded md5
+`6E4CA61F...`); `--no-ocean` draws the flat sheet with no hole. The complete battery on the plan
+tree: units 6275 passed, 3 skipped; engine 527 passed, 2 skipped, errors clean; 24 goldens
+hash-identical. A first engine run lost one shard to a 300 s timeout and showed a
+`shader_rd.cpp` cache-read error while another session's battery ran beside it; both went away
+on a quiet machine.
+
+**Original approach (kept for reference).**
 
 **Goal.** C1B in Enhanced draws the approved ocean from a module named and documented as a feature,
 with the prototype's debug doors removed or turned into documented flags.
@@ -153,7 +175,7 @@ equivalence check (waves off, roughness 0.25) within 1/255.
 settled in this session. The other Enhanced options (`--view-distance`, `--shadow-quality`) are the
 pattern to copy.
 
-**Approach.** Copy the --view-distance/--shadow-quality option pattern: a --water-quality=flat|waves`nflag, a saved option, a config key, a menu row beside the other Enhanced graphics options, and a live
+**Approach.** Copy the --view-distance/--shadow-quality option pattern: a `--water-quality=flat|waves` flag, a saved option, a config key, a menu row beside the other Enhanced graphics options, and a live
 apply through GameSession.FollowOcean. Default per Decision 10. <TODO: how the default tells the
 Deck/Linux from the desktop; reuse whatever platform test the options already make, if any.>
 
@@ -198,8 +220,8 @@ keep SSR for near objects.>
 
 **Model recommendation.** high: a performance bisect where the look must not regress.
 
-**Verify.** The same `--perf` A/B on the cruise and low poses, alternating ocean and flat over at
-least two rounds, on an otherwise idle GPU.
+**Verify.** The same `--perf` A/B on the cruise and low poses, alternating ocean and flat
+(`--no-ocean`) over at least two rounds, on an otherwise idle GPU.
 
 **⚠ Traps.** Read `docs/verification.md` PERF-1/PERF-2 first: judge `gpu_ms`, not `fps`. A shared
 GPU (another session's battery) inflates both arms.
@@ -226,7 +248,7 @@ timed out). The handoff notes Enhanced split-screen already runs below 60 fps th
 **Goal.** The bake adds no noticeable load time.
 
 **Evidence (confidence: direction-sound).** About 0.9-1.1 s in `--fly` loads and 3.3 s in one
-campaign load (C1B), from the `ocean prototype: built` log line. It walks every mesh instance and
+campaign load (C1B), from the `ocean: built` log line. It walks every mesh instance and
 reads `SurfaceGetArrays` per surface.
 
 **Approach.** <TODO: cache per chapter under user data keyed by the gamez hash, or bake from gamez
@@ -235,7 +257,7 @@ polygons directly instead of the built tree.>
 **Model recommendation.** medium.
 
 **Verify.** The `ms=` field of the build log line, before and after; the mask image unchanged
-(`CSVM_OCEAN_MASK_PNG` or its successor flag).
+(`--dump-ocean-mask=<path>`).
 
 **⚠ Traps.** The edge extender's tiles are rolling and absent at bake time; clamp-to-edge sampling
 carries the border sea outward instead.

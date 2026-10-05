@@ -293,7 +293,7 @@ public partial class GameSession : Node3D
     // The enhanced-only world layers and the mode-dependent builds, held so a live graphics-mode
     // switch can build, free or rewrite each (ApplyGraphicsMode). Null where the build made none.
     private Effects.ScorchField? _scorches;
-    private Effects.OceanPrototype? _ocean;
+    private Effects.Ocean? _ocean;
     private bool _oceanEligible;
     private ClutterBuilder? _clutter;
     private SceneBuilder? _worldScene;
@@ -2510,8 +2510,8 @@ public partial class GameSession : Node3D
             Log.Info("world", $"[textures] {state.Textures.MissingTextures.Count} referenced texture(s) absent from this install: {string.Join(", ", state.Textures.MissingTextures)}");
     }
 
-    // PROTOTYPE: the Enhanced wave ocean, built on the first Enhanced frame. A switch back to
-    // Original drops it, and the sea sheet draws again because the shared switch resets.
+    // The Enhanced wave ocean, built on the first Enhanced frame. A switch back to Original drops
+    // it, and the sea sheet draws again because the shared switch resets.
     private void FollowOcean()
     {
         if (!GraphicsMode.Enhanced)
@@ -2521,15 +2521,20 @@ public partial class GameSession : Node3D
             return;
         }
         if (_ocean != null || !_oceanEligible || _plane == null || _worldScene == null || _sessionTextures == null
-            || !Effects.OceanPrototype.Wanted(_spec.Chapter))
+            || !Effects.Ocean.Covers(_spec.Chapter))
             return;
+        if ((_spec.SkippedPasses & EnhancedPasses.Ocean) != 0)
+        {
+            Log.Info("world", $"ocean: skipped (--no-ocean)");
+            return;
+        }
         var hulls = new HashSet<Node>();
         if (_surfaceVehicles != null)
         {
             foreach (var v in _surfaceVehicles.Vessels)
                 hulls.Add(v.Body);
         }
-        _ocean = Effects.OceanPrototype.Create(_plane, _worldScene, _sessionTextures, OceanHulls, hulls);
+        _ocean = Effects.Ocean.Create(_plane, _worldScene, _sessionTextures, OceanHulls, hulls, _spec.OceanMaskPath);
         if (_ocean != null)
             _plane.AddChild(_ocean);
     }

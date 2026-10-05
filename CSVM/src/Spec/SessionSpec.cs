@@ -71,9 +71,9 @@ public enum DogfightMissionType : byte
     StuntRace = 3,
 }
 
-/// <summary>The enhanced presentation's screen-space passes, as doors a run can close one at a
-/// time. Each can lay a pattern of its own over the frame. Bisecting a full-screen artefact means
-/// rendering one pose per closed door until the pattern goes. Reaches
+/// <summary>The enhanced presentation's screen-space passes and world layers, as doors a run can
+/// close one at a time. Each can lay a pattern of its own over the frame. Bisecting a full-screen
+/// artefact means rendering one pose per closed door until the pattern goes. Reaches
 /// <c>--graphics=enhanced</c> alone, the faithful path running none of them.</summary>
 [Flags]
 public enum EnhancedPasses
@@ -92,6 +92,10 @@ public enum EnhancedPasses
     /// <summary><c>--no-soft-shadows</c>: the sun's penumbra, angular distance and blur both 0,
     /// leaving a hard shadow edge rather than no shadow.</summary>
     SoftShadows = 8,
+
+    /// <summary><c>--no-ocean</c>: the wave ocean (<c>Effects.Ocean</c>), so the flat sea-level
+    /// sheet draws as it does without one.</summary>
+    Ocean = 16,
 }
 
 /// <summary>One <c>--ai=</c> entry: the airframe, plus the optional tokens that follow it.
@@ -445,6 +449,10 @@ public sealed record SessionSpec
     /// <c>--no-</c> door. Empty in the faithful presentation, which builds none of them anyway.
     /// See <c>docs/cli.md</c>.</summary>
     public EnhancedPasses SkippedPasses { get; private set; }
+
+    /// <summary><c>--dump-ocean-mask=&lt;path&gt;</c>: where the wave ocean writes its baked shore
+    /// mask as a PNG when it builds; empty for none. See <c>docs/cli.md</c>.</summary>
+    public string OceanMaskPath { get; private set; } = "";
 
     /// <summary><c>--debug-clutterflag</c>: recolour the built world by each polygon's decoded
     /// <c>no_clutter</c> flag (raw polygon bit <c>0x800</c>, <see cref="Mech3.GameZPolygon.NoClutter"/>)
@@ -1641,6 +1649,8 @@ public sealed record SessionSpec
             else if (arg == "--no-ssr") { s.SkippedPasses |= EnhancedPasses.Ssr; }
             else if (arg == "--no-glow") { s.SkippedPasses |= EnhancedPasses.Glow; }
             else if (arg == "--no-soft-shadows") { s.SkippedPasses |= EnhancedPasses.SoftShadows; }
+            else if (arg == "--no-ocean") { s.SkippedPasses |= EnhancedPasses.Ocean; }
+            else if (arg.StartsWith("--dump-ocean-mask=")) { s.OceanMaskPath = arg["--dump-ocean-mask=".Length..]; }
             else if (arg.StartsWith("--mips=")) { s.SetMips(arg["--mips=".Length..]); }
             else if (arg.StartsWith("--graphics="))
             {
