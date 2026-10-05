@@ -1414,6 +1414,13 @@ behind a cull mask. `CameraWeatherState` is a per-rig field rather than a shared
 splitscreen panes can sit in different states at the same instant; `Session/WeatherRig.Tick`
 writes it each frame.
 
+## src/Flight/Camera/XrMount.cs
+Where a headset's tracking origin sits in the world each frame, engine-free: in a first-person view
+of a live aircraft, the flat camera's eye at the aircraft's attitude (the flat view's fixed head
+pitch left out, since the headset supplies the look); in every other view, the flat camera's eye
+with its heading only, so a chase swing or a tumbling wreck never rolls the player's horizon.
+`Launch/XrSession.cs` is the one caller.
+
 ## src/Flight/Airframe/CollisionLayers.cs
 The named physics collision layers, world and aircraft, plus the combined mask. The first and only
 place a layer bit is given a meaning; a new layer goes here rather than inline at a collider.

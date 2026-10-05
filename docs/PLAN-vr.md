@@ -195,7 +195,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A, spikes (the gate)
 
-1. ☐ A1 OpenXR boots in a flight session on VDXR and SteamVR
+1. ◐ A1 OpenXR boots in a flight session on VDXR and SteamVR
 2. ☐ A2 The `--xr-sim` stand-in interface
 3. ☐ A3 Precision near the eye: render-only floating origin, double-precision fallback
 4. ☐ A4 Screen-space effects under multiview
@@ -250,34 +250,73 @@ author at the headset.
 
 # Wave A, spikes (the gate)
 
-## A1 ☐ OpenXR boots in a flight session on VDXR and SteamVR
+## A1 ◐ OpenXR boots in a flight session on VDXR and SteamVR
 
 **Goal.** A dev launch with `--xr-mode on` puts a `--stage=empty` flight into the headset on both
 runtimes, head tracking moves the view, and the flat launch is unchanged. The render-thread question
 (keep `thread_model=2` or drop it under XR) has a measured answer.
 
-**Evidence (confidence: lead-only).** `project.godot` has no XR settings and runs the experimental
-separate render thread (`:46`). Godot's OpenXR loader is already in the export. Whether Godot 4.7
-.NET's OpenXR frame pacing works with the separate render thread is unknown. Whether enabling
-`xr/shaders/enabled` (the multiview shader variants) moves any flat golden or the shader warmup cost
-is unknown.
+**Evidence (confidence: traced to code in the Godot 4.7-stable source for the settings, the arguments
+and the render path; lead-only for anything the headset shows until the author's run).**
+- `--xr-mode on` overrides both XR settings for one launch. `OpenXRAPI::openxr_is_enabled` reads
+  `xr/openxr/enabled` only under `default`, and the `RendererCompositor` constructor
+  (`servers/rendering/renderer_compositor.cpp`) reads `xr/shaders/enabled` only under `default`
+  too. Its `is_xr_enabled()` is what makes `SceneShaderForwardClustered` enable the multiview shader
+  groups. So both settings stay off in `project.godot` and a headset launch still gets multiview.
+- `xr/shaders/enabled=true` moved no golden: 24 of 24 hash-identical with the setting flipped
+  (`RunTests.ps1 -SkipUnits -SkipEngine`). Its startup cost is direction only: three interleaved
+  off/on pairs of the perf stage's `c1-flight` (`-Perf -PerfFilter flight -PerfIterations 2`, every
+  launch's `[perf] startup` line, PERF-8) read a median total of 10,995 ms off against 11,905 ms on,
+  and a `world` phase of 2,392 against 2,759 ms. The same-build spread was 7.7 to 15.2 s, since
+  another session ran six Godots beside it at 79 % CPU (PERF-48, METHOD-2). It is kept off: Godot
+  turns the variants on itself under `--xr-mode on`, so a flat run gains nothing from paying for it.
+- Godot consumes `--xr-mode` and `--render-thread` before filling `OS.GetCmdlineArgs` (`main.cpp`'s
+  `main_args`). `XrLaunch` reads `System.Environment.GetCommandLineArgs()` instead; a hidden-desktop
+  probe confirmed it carries the engine arguments.
+- `--render-thread safe|separate` exists in 4.7 (`main.cpp`) and beats `thread_model` for one launch.
+  `RenderingServer.IsOnRenderThread()` on the main thread reports which one is live.
+- Under XR the renderer takes the eye poses from `XRServer`'s world origin (the `XROrigin3D`) and the
+  runtime, and from the current camera only its near/far planes, Environment and cull mask
+  (`renderer_scene_cull.cpp`, `render_camera`). So the flat camera stays current and its zone cull
+  mask keeps working; the origin follows it.
+- `xr/openxr/startup_alert` defaults to a modal dialog when the runtime fails, and
+  `xr/openxr/reference_space` to Stage (floor level). The project sets no dialog and Local.
+- A dev launch runs the editor binary, which saves Godot's default action map to
+  `CSVM/openxr_action_map.tres` the first time OpenXR starts (`OpenXRInterface::_load_action_map`
+  under `TOOLS_ENABLED`). C11 owns that file; until then it is an untracked side effect.
 
-**Approach.** Add the OpenXR settings to `project.godot` with `xr/openxr/enabled=false` and
-`xr/shaders/enabled=true`, start with Godot's `--xr-mode on`, and put an `XROrigin3D` + `XRCamera3D`
-at the flight's first-person pose in a throwaway branch of the camera code. Find out from the XR
-interface whether initialisation succeeded, and log the runtime name. Try both thread models.
-<TODO: whether `xr/shaders/enabled` may stay on for flat runs depends on the golden and warmup
-measurement this item takes.>
+**Approach (landed).** `project.godot` gains an `[xr]` section: OpenXR and its shaders off, Local
+reference space, no startup dialog. `Launch/XrSession.cs` is built once by `Launcher._Ready` when
+Godot's OpenXR interface is initialised: the main viewport's `UseXR`, `VSyncSetting.Headset` pacing
+(no V-Sync, no cap, also on an Options apply), and an `XROrigin3D` with the tracked `XRCamera3D`
+(`Head`) placed every frame by `Flight/Camera/XrMount.cs`: the first pane's flat camera eye at the
+aircraft's attitude in Cockpit or Nose, heading only in every other view. It logs
+`xr: OpenXR live runtime=... version=... system=... eye_px=WxH refresh_hz=... render_thread=...`,
+the session states, and an `xr frames n= mean_ms= max_ms= late= missed= refresh_hz= gpu_ms=
+render_thread=` Debug line per wall second (`Launch/XrFrameWindow.cs`; `late` is an interval of
+1.5 refresh periods or more, `missed` the refreshes those skipped). A requested launch whose runtime
+did not start logs a warning and flies flat. `RunGame.ps1 -EngineArgs` puts engine arguments before
+the `--`. B7 grows the per-player rig out of `XrSession` and `XrMount`.
 
 **Model recommendation.** <TODO: tier not settled in the session.>
 
-**Verify.** Both runtimes show the stage in the headset (the author's check). The complete battery is
-green with the new project settings and OpenXR off, goldens unmoved. <TODO: the frame-timing
-instrument for the render-thread comparison.>
+**Verify.** The complete battery is green with the new settings and OpenXR off, goldens unmoved.
+Owed at the headset (the author's): on VDXR and on SteamVR (`XR_RUNTIME_JSON` at
+`C:\Program Files (x86)\Steam\steamapps\common\SteamVR\steamxr_win64.json`), each with the
+separate and the single render thread, a `--stage=empty --view=cockpit --no-cockpit-pass` flight
+(1) shows the stage in stereo, (2) turns with the head, (3) logs `xr: OpenXR live` naming the
+runtime, and (4) leaves `xr frames` lines whose `late`/`missed` and `mean_ms` against the refresh
+period answer which thread model holds the headset rate. A launch with the runtime off logs the
+warning and flies flat. The HUD, menus, boards and the cockpit pass are canvas layers and do not
+show in the headset; that is C10, C12 and B8, not a failure here.
 
 **⚠ Traps.** `--xr-mode` is a Godot engine argument and goes before `--`, not among the user args.
 The active runtime on the author's machine is VDXR; a SteamVR test needs the runtime switched (or
-`XR_RUNTIME_JSON` set), otherwise both "runs" exercise VDXR.
+`XR_RUNTIME_JSON` set), otherwise both "runs" exercise VDXR. `XR_RUNTIME_JSON` set in a PowerShell
+session stays set for every later launch from it. The `xr frames` line must stay at Debug: a console
+line costs about 2 ms on the frame path (PERF-35) and would make its own late frame every second.
+
+**Verified.** <pending orchestrator run>
 
 ## A2 ☐ The `--xr-sim` stand-in interface
 
@@ -288,7 +327,10 @@ images for suites and goldens.
 **Evidence (confidence: lead-only).** Godot ships `MobileVRInterface`, which renders stereo side by
 side into an ordinary window; C# can implement `XRInterfaceExtension`. Capture reads one viewport
 (`Tooling/CaptureDirector.cs:150`), goldens hash raw pixels plus adapter (`Tooling/GoldenShot.cs`).
-Neither path has been tried here.
+Neither path has been tried here. Godot compiles the multiview shader variants only when the engine
+starts under `--xr-mode on` or with `xr/shaders/enabled` (A1, `RendererCompositor`), and
+`--xr-mode on` also starts the machine's active OpenXR runtime, so a stand-in needs another way to
+turn the variants on. `Launch/XrSession.cs` keys on Godot's `OpenXR` interface today.
 
 **Approach.** First cut on `MobileVRInterface` with fixed IPD and a pose from the flags; replace with
 an `XRInterfaceExtension` if MobileVR's lens distortion or pose handling gets in the way of a pinned,

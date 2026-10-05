@@ -56,3 +56,17 @@ textures/default_filters/anisotropic_filtering_level=4
 ; and inside a shard of sixty suites that overflowed it again. 1048576 = ~65536
 ; instances, 16 MB, room for three of the largest chapter and the shard's residue.
 limits/global_shader_variables/buffer_size=1048576
+
+[xr]
+
+; OpenXR and its multiview shader variants stay off, so a plain launch is the flat game and compiles
+; nothing for stereo. The engine argument `--xr-mode on` (before `--`) turns both on for that launch
+; only: Godot reads the mode ahead of either setting (RendererCompositor and openxr_is_enabled in its
+; source). src/Launch/XrSession.cs takes the session from there; how to launch it is docs/cli.md.
+openxr/enabled=false
+; Local (0): the tracking origin is the seated head where the session started, which the game
+; anchors at the cockpit eye. Godot's default, Stage, would put it on the room's floor.
+openxr/reference_space=0
+; No modal dialog when the runtime or headset is missing: the game logs it and flies flat.
+openxr/startup_alert=false
+shaders/enabled=false

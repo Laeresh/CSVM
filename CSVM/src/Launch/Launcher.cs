@@ -127,6 +127,8 @@ public partial class Launcher : Node3D
     // The static inspection view's orbit camera (LMB orbit, wheel zoom, AABB framing); created in
     // _Ready and kept across sessions, like _camera. --yaw=/--pitch= seed its initial angles.
     private OrbitCamera _orbit = null!;
+    // The headset path, null on every flat launch. Built once in _Ready, like the camera it follows.
+    private XrSession? _xr;
 
     // Session lifecycle (the launchscreen's in-process world rebuild): each launch instantiates a
     // GameSession node, freed again by ReturnToMenu or RestartSession. The camera, lights and
@@ -849,6 +851,14 @@ public partial class Launcher : Node3D
             int code = _probeRunner.RunTestSuites(_spec, this, _camera, out _clock);
             GetTree().Quit(code);
             return;
+        }
+
+        // OpenXR starts with the engine or not at all. Without a live interface Boot builds nothing,
+        // so a flat launch draws and paces exactly as it did.
+        _xr = XrSession.Boot(GetViewport(), _camera, () => _session?.Rigs ?? NoRigs, _renderTime);
+        if (_xr != null)
+        {
+            AddChild(_xr);
         }
 
         // The F14 / --debug-fps readout, process-wide like the camera so it works at the
@@ -2584,7 +2594,9 @@ public partial class Launcher : Node3D
         ResolutionSetting.Apply(
             ResolutionSetting.Resolve(applied.Resolution, ResolutionSetting.ScreenSizes(), applied.DisplayMode),
             GetWindow());
-        VSyncSetting.Apply(VSyncSetting.Resolve(_spec.NoVsync, applied.VSync, Config.GetBool(VSyncSetting.Key, VSyncSetting.ConfigDefault)));
+        VSyncSetting.Apply(_xr != null
+            ? VSyncSetting.Headset
+            : VSyncSetting.Resolve(_spec.NoVsync, applied.VSync, Config.GetBool(VSyncSetting.Key, VSyncSetting.ConfigDefault)));
         // The mix takes effect now too, through the same call the startup path makes. Apply is
         // idempotent, so an accept from a page that shows no slider rewrites the same three gains.
         AudioMix.Apply(applied.AudioMaster, applied.AudioMusic, applied.AudioEffects, applied.AudioVoice);

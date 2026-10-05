@@ -34,6 +34,11 @@ public static class VSyncSetting
     /// "as fast as it renders".</summary>
     public const int Uncapped = 0;
 
+    /// <summary>The pacing a live OpenXR session runs under, whatever the three sources say. The
+    /// runtime's own frame wait paces the loop. A desktop V-Sync or cap on top of it would hold the
+    /// headset to the monitor's rate. <c>Launch.XrSession</c> applies it.</summary>
+    public static readonly VSyncPlan Headset = new(false, Uncapped, "openxr");
+
     /// <summary>The pacing the three sources resolve to, highest first: <paramref name="flagOff"/>
     /// (<c>--no-vsync</c>), then <paramref name="savedWord"/>, then <paramref name="configOn"/>,
     /// then off. A saved word this vocabulary does not know reads as never set and falls through,

@@ -251,6 +251,7 @@ rows).
 - `src/Flight/Camera/OrbitLock.cs`, the re-lock rule behind that key: nearest first, then outward, engine-free.
 - `src/Flight/Camera/PlaneShake.cs`, the plane wobble: the seven component blocks (gunfire buzz, hit rocks, overspeed rattle, contact, nitro engage) summed and rendered as a rotation of `ShakePivot`.
 - `src/Flight/Camera/PlayerRig.cs`, one rendered view's state: camera, SubViewport, HUD parent, visual layer, controller, own sky/deck/puffs.
+- `src/Flight/Camera/XrMount.cs`, where a headset's tracking origin sits: the eye at the aircraft's attitude in first person, heading only otherwise.
 - `src/Flight/Camera/OrbitCamera.cs`, the static inspection view's orbit camera: orbit, zoom and AABB framing over a camera it does not own.
 
 **`Flight.Hud`**, everything drawn over the pilot's view, and the cockpit.
@@ -675,6 +676,8 @@ The process and the per-launch session: the top family bar `Testing`, so nothing
 - `src/Launch/MenuCueTable.cs`, the menu cue table: cue name to wav under the rof tree's `ASSETS/SOUNDS`, the four the globals script binds.
 - `src/Launch/MasterServerLink.cs`, the shipped way to the master server over .NET's HTTP and WebSocket clients: the games list fetch and the socket with its two loops.
 - `src/Launch/MasterFrames.cs`, the master server socket's read of one whole message, shared by the game and the server.
+- `src/Launch/XrSession.cs`, the OpenXR path when Godot started it: the viewport to the headset, the origin at the pilot's eye, the runtime and frame-pacing log lines.
+- `src/Launch/XrFrameWindow.cs`, the headset's frame pacing in wall-second windows: mean and worst interval, late frames and skipped refreshes.
 
 ### `src/Session/`, the session-build layer
 

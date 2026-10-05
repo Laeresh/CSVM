@@ -358,10 +358,10 @@ The frame pacing, one setting carrying both whether the loop waits for the scree
 runs to without it, since a cap only means anything with V-Sync off. `Resolve` layers the sources
 the way `GraphicsMode` does: `--no-vsync`, then the saved `vsync` word, then the `display.vsync`
 config key (true turns it on), then off and uncapped; a word outside `DisplayWords.VSyncChoices`
-reads as never set, and `Default` is the word a never-set VIDEO row shows. `SavedWord` holds the
-`--det` guard. `Apply` is the one place `DisplayServer.WindowSetVsyncMode` and `Engine.MaxFps` are
-called, by `Launcher`'s startup and its Options apply, and logs the source that won. The cap is a
-render rate and reaches no simulation. Read `Launch/Launcher.cs` next for both call sites.
+reads as never set, and `Default` is the word a never-set VIDEO row shows. `Headset` replaces all of
+them while `Launch/XrSession.cs` drives a headset. `SavedWord` holds the `--det` guard. `Apply` is the
+one place `DisplayServer.WindowSetVsyncMode` and `Engine.MaxFps` are called, and logs the source
+that won. The cap is a render rate and reaches no simulation. Read `Launch/Launcher.cs` next.
 
 ## src/Utils/DisplayModeSetting.cs
 The window's display mode over `DisplayWords.DisplayModes`: a bordered window, a borderless one filling

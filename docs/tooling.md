@@ -83,6 +83,9 @@ never `CSVM_DATA_ROOT`, so a worktree run cannot overwrite the primary tree's `e
 **`RunGame.ps1`, the play entry point.** `dotnet build`, then Godot with **no user args**, so the
 launchscreen (`src/UI/Screens/LaunchMenu.cs`, Mode → Chapter → Plane) shows. Args are forwarded verbatim,
 so a content arg (`--fly`/`--stunt`/`--plane=`/`--chapter=`/`--screenshot=`) bypasses it.
+`-EngineArgs` places Godot's own options before the `--` instead, the way `RunProbe.ps1`'s does:
+`-EngineArgs '--xr-mode','on'` for a headset, `'--render-thread','safe'` for the single-thread
+renderer ([cli.md](cli.md)'s last section).
 
 **`RunDev.ps1`, the dev helper**, same build step but with console prompts: no args gives
 interactive menus (plane roster, chapter) and then `--fly`, flight flags prompt for what is

@@ -6,7 +6,9 @@ Full per-flag reference for the Godot project's user arguments, passed after `--
 tools/godot/.../Godot_v4.7-stable_mono_win64_console.exe --path CSVM res://scenes/Main.tscn -- --plane=player_bhawk
 ```
 
-`RunGame.ps1` (play) and `RunDev.ps1` (dev, with console prompts) forward these verbatim.
+`RunGame.ps1` (play) and `RunDev.ps1` (dev, with console prompts) forward these verbatim. Godot's
+own engine arguments go before the separator instead; the ones this project relies on are in the
+last section, [Godot engine arguments](#godot-engine-arguments-before-the-separator).
 
 **Flight is the default.** Any content arg builds a *flight* unless
 `--viewer` is present: `--plane=player_fury` flies the Fury and `--chapter=C4` flies over C4.
@@ -463,4 +465,17 @@ effects runtime `--destroy` uses; a name outside its fixed closure fires in the 
   and run an **ordered** script on the second frame, logging to the `ui` category. Steps, left to right:
   `node=<cs_name>`, `pool=<n>` (an unreachable pool is refused out loud), `hp=<value>`, `kill`, `reset`,
   `tick=<seconds>` and `open`. **It forces the collision build on**, so the kill's census is real.)
+
+## Godot engine arguments (before the separator)
+
+Godot reads these itself and consumes them, so they go between the scene path and the `--`, never
+after it. `RunGame.ps1 -EngineArgs '<arg>','<value>'` and `RunProbe.ps1 -EngineArgs` put them there.
+
+* `--xr-mode on` starts OpenXR through the system's active runtime (`XR_RUNTIME_JSON` names another),
+  and with it the multiview shader variants `project.godot` keeps off. `Launch/XrSession.cs` then
+  sends the main viewport to the headset and logs `xr: OpenXR live runtime=...`, or a warning and a
+  flat flight if the runtime did not start. Its `xr frames` Debug line in the log file reports the
+  headset's frame pacing once a wall second. `off` and `default` (the project setting) leave it flat.
+* `--render-thread safe|separate` overrides `project.godot`'s separate render thread for one launch;
+  `safe` renders on the main thread.
 
