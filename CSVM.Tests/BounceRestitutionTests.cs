@@ -192,7 +192,7 @@ public class CollideResponseTests
         var prev = new Vector3(10f, 5f, 0f);
         var step = new Vector3(2f, 0f, -1f);
 
-        m.Collide(prev, step, 0.6f, impact: Vector3.Zero, normal: Vector3.Up, humanPiloted: true);
+        m.Collide(prev, step, 0.6f, impact: Vector3.Zero, normal: Vector3.Up, personsRule: true);
 
         Assert.Equal(11.2f, m.Position.X, 4);
         Assert.Equal(5.03f, m.Position.Y, 4);
@@ -214,7 +214,7 @@ public class CollideResponseTests
 
         var prev = new Vector3(10f, 5f, 0f);
         var step = new Vector3(2f, 0f, -1f);
-        m.Collide(prev, step, 0.6f, impact: Vector3.Zero, normal: Vector3.Up, humanPiloted: false);
+        m.Collide(prev, step, 0.6f, impact: Vector3.Zero, normal: Vector3.Up, personsRule: false);
 
         Assert.Equal(11.2f, m.Position.X, 4);
         Assert.Equal(5f, m.Position.Y, 4);          // exactly the stop: no 0.03, no 0.15
@@ -240,7 +240,7 @@ public class CollideResponseTests
         // impact 2 m down the normal from the resting pose: the arm is parallel to the normal, so
         // the angular share vanishes and the rebound is the pure bounce_factor case.
         m.Collide(Vector3.Zero, Vector3.Zero, 0f, impact: new Vector3(0f, 0f, -2f),
-            normal: new Vector3(0f, 0f, 1f), humanPiloted: true);
+            normal: new Vector3(0f, 0f, 1f), personsRule: true);
 
         Assert.Equal(0.6f * Sink, m.Speed, 2);
         Assert.Equal(0f, m.VelocityDir.X, 4);
@@ -264,7 +264,7 @@ public class CollideResponseTests
 
         // Arm along the normal so no kick muddies the read; vn = 6 m/s into an Up surface.
         m.Collide(Vector3.Zero, Vector3.Zero, 0f, impact: new Vector3(0f, -2f, 0f),
-            normal: Vector3.Up, humanPiloted: true);
+            normal: Vector3.Up, personsRule: true);
 
         var after = m.VelocityDir * m.Speed;
         Assert.Equal(28f, after.X, 3);              // tangential untouched: no friction term
@@ -288,7 +288,7 @@ public class CollideResponseTests
         // J = 30·Up; u = (r×J)/|r|² = (0,0,15); A = 15/recI.z = 13.636; L = 2.25·30 = 67.5;
         // f_ang = 0.16806; kick_z = 15·(1 + 0.16806·0.6)·0.5 = 8.256.
         m.Collide(Vector3.Zero, Vector3.Zero, 0f, impact: new Vector3(2f, 0.03f, 0f),
-            normal: Vector3.Up, humanPiloted: true);
+            normal: Vector3.Up, personsRule: true);
 
         Assert.Equal(8.256f, m.BodyRates.Z, 2);
         Assert.Equal(0f, m.BodyRates.X, 4);
@@ -307,7 +307,7 @@ public class CollideResponseTests
         m.VelocityDir = new Vector3(0f, -1f, 0f);
 
         m.Collide(Vector3.Zero, Vector3.Zero, 0f, impact: new Vector3(impactX, 0f, 0f),
-            normal: Vector3.Up, humanPiloted: true);
+            normal: Vector3.Up, personsRule: true);
 
         if (expectPositiveZ)
             Assert.True(m.BodyRates.Z > 0f, $"BodyRates.Z={m.BodyRates.Z:0.000}");
@@ -338,7 +338,7 @@ public class CollideResponseTests
             m.VelocityDir = new Vector3(-Mathf.Sin(Theta), 0f, -Mathf.Cos(Theta));
             m.BodyRates = Vector3.Zero;
             m.Collide(m.Position, Vector3.Zero, 0f, impact: m.Position - wallNormal * 2f,
-                normal: wallNormal, humanPiloted: true);
+                normal: wallNormal, personsRule: true);
 
             Assert.True(m.Speed < prevSpeed,
                 $"tick {tick}: speed must bleed every contact, {prevSpeed:0.00} → {m.Speed:0.00} m/s");
@@ -364,7 +364,7 @@ public class CollideResponseTests
         m.VelocityDir = new Vector3(-Mathf.Sin(Theta), 0f, -Mathf.Cos(Theta));
 
         m.Collide(m.Position, Vector3.Zero, 0f, impact: m.Position - wallNormal * 2f,
-            normal: wallNormal, humanPiloted: true);
+            normal: wallNormal, personsRule: true);
         float afterFirst = m.Speed;
 
         // A pure tangential drag along the same wall: no closing component, nothing to spend.
@@ -373,7 +373,7 @@ public class CollideResponseTests
         m.Speed = tangential.Length();
         float beforeSlide = m.Speed;
         m.Collide(m.Position, Vector3.Zero, 0f, impact: m.Position - wallNormal * 2f,
-            normal: wallNormal, humanPiloted: true);
+            normal: wallNormal, personsRule: true);
 
         Assert.True(afterFirst < 60f, "the first, closing contact must have cost speed");
         Assert.Equal(beforeSlide, m.Speed, 3);

@@ -3025,6 +3025,13 @@ player-pointer guard to every human-piloted aircraft that `C21` recorded for the
 by the `graze-bounce` suite, which flies a player rig and an AI rig down the same trajectory into the
 same floor and measures `e = 0.56` against `0.00`.
 
+**Remake-only rule: a Dogfight bot seat takes the player's arm.** A bot is AI-piloted but stands in
+a person's seat with a person's hull, so it dies to a contact only when a person in the same plane
+would: it sweeps the airframe hulls, bounces, and is exempt from `local_11` below
+(`FlightController.TakesPersonsContactRule`). It keeps the 0.2 entity cut, the AI force path and the
+AI shakes. World AI keeps the decoded rule. `graze-bounce-bot` flies a person, a bot and world AI
+down `graze-bounce`'s trajectory, and `versus-local-bot-graze` stages a local match's bot into MP1.
+
 With `r` the contact point minus `obj+0x204`, `ω` the body rates at `obj+0x16c`, and
 `I⁻¹ = (obj[0x197], obj[0x198], obj[0x199])`:
 

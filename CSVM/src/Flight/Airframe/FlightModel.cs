@@ -816,17 +816,17 @@ public sealed class FlightModel
     public Vector3 BounceRateKick(Vector3 velocity, Vector3 normal, Vector3 contactArm) =>
         BounceImpulse(velocity, normal, contactArm).RateKick;
 
-    /// <summary>The decoded collision response: the placement at the sweep's stop and, for a human
-    /// pilot, the normal-only impulse on velocity and body rates. Nothing else: the original edits
-    /// no tangential speed, no friction and no vertical component on contact, so a sustained scrape
-    /// bleeds speed only through repeated impulses as the plant steers back into the surface.
-    /// ⚠ The impulse is PLAYER-only, as the original is; an AI gets the position correction alone,
-    /// resting exactly at the stop with no push-out.</summary>
+    /// <summary>The decoded collision response: the placement at the sweep's stop and, on a
+    /// person's contact rule, the normal-only impulse on velocity and body rates. The original edits
+    /// no tangential or vertical speed and adds no friction, so a scrape bleeds speed only through
+    /// repeated impulses. ⚠ The impulse is PLAYER-only, as the original is; an AI rests exactly at
+    /// the stop with no push-out. A bot seat takes the player's arm
+    /// (<see cref="FlightController.TakesPersonsContactRule"/>).</summary>
     public void Collide(Vector3 prev, Vector3 step, float stopFrac, Vector3 impact, Vector3 normal,
-        bool humanPiloted)
+        bool personsRule)
     {
-        Position = prev + step * stopFrac + (humanPiloted ? normal * ContactPushOut : Vector3.Zero);
-        if (!humanPiloted)
+        Position = prev + step * stopFrac + (personsRule ? normal * ContactPushOut : Vector3.Zero);
+        if (!personsRule)
             return;
 
         var vel = VelocityDir * Speed;

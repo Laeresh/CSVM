@@ -103,7 +103,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☑ Bots respawn through the host's rotation and follow Limited Lives
 13. ☑ Skill tiers, personalities, stock plane with Random, and the callsign pool
 14. ☑ Rearm standing order: a bot breaks off to a base when low or badly damaged
-15. ☐ A bot takes a person's world-contact rule: it grazes and bounces, never destroyed outright
+15. ☑ A bot takes a person's world-contact rule: it grazes and bounces, never destroyed outright
 
 ### Wave C, lobby and local setup
 
@@ -644,37 +644,89 @@ launch a bot session with `--hold=` (INSTR-101). A suite that places a bot with 
 its run and refills it, so empty it again after the placement. Do not gate the run on fire instead
 of acquisition: a held quarry keeps the machine chasing it.
 
-## B15 ☐ A bot takes a person's world-contact rule: it grazes and bounces, never destroyed outright
+## B15 ☑ A bot takes a person's world-contact rule: it grazes and bounces, never destroyed outright
 
 **Goal.** A bot that touches world geometry grazes, bounces and takes contact damage as a person
 does, so it dies to a world contact only when a person in the same plane would. The user's ruling
 on the first D32 sortie, by extension of Decision 8 (a bot's hull equals a person's).
 
-**Evidence (confidence: traced-to-code).** The user's first crowded sortie
-(`vs-20261005-231643.log`, local `--vs --mission=MP1 --vs-bots=15`): P3 spawned on MP1's point #8,
-52 m from P4 on #9 at the same height; both bots took each other as their first target, P3 opened
-fire at 51 m, and at t = 2.75 s logged `AI ram into g140/col, destroyed outright (the decoded
-local_11 rule)`. P16 later logged "embedded in terrain after a graze, destroyed". Every seat had its
-own spawn point. `AircraftContactResolver` applies the decoded doom rule (`local_11`,
-`0x0048d79e`) to a non-player striker: one that resolves anything but an aeroplane is destroyed
-whatever health it has left, and the graze restitution impulse is player-only (`graze-bounce`
-suite). A3 set `IsHumanPiloted = false` for a bot on both ends, which puts it on the AI side of
-both gates.
+**Evidence (confidence: traced-to-code; the bot's rebound magnitude is direction-sound, judged at
+the controls in D32).** The user's first crowded sortie (`vs-20261005-231643.log`, local `--vs
+--mission=MP1 --vs-bots=15`): P3 spawned on MP1's point #8, 52 m from P4 on #9 at the same height;
+both bots took each other as their first target, P3 opened fire at 51 m, and at t = 2.75 s logged
+`AI ram into g140/col, destroyed outright (the decoded local_11 rule)`. The plan's second lead
+was misread: P16's "embedded in terrain after a graze, destroyed" was a mid-air at 1144 m, not
+terrain. P16 rammed P8 (`rammed P8 by P16 (tail)`), its contact reported part `center`, and the
+un-embed test, which reads aeroplanes as well as the world, found its hull boxes still inside P8.
+`center` is the AI probe sweep's label: a world-AI rig sweeps its def's collision probes, so the
+point contact came with the boxes already inside the other aeroplane, and an AI response has no
+push-out. Every contact-path reader of the split, and the decision on each:
+- `AircraftContactResolver` doom rule (`Dooms`, `local_11`): **moved** to the new question.
+- `FlightController`'s sweep shape (`SweepAirframe` against `SweepProbes`): **moved**. A person's
+  hull sweep stops at first touch, and the un-embed test reads those same hulls.
+- `ContactEffects.ApplyResponse` into `FlightModel.Collide` (the 0.03 m push-out and the
+  normal impulse): **moved**; `Collide`'s flag is renamed `personsRule`.
+- The 0.2 entity cut (`entityImpact`): **kept** on `IsHumanPiloted`. It prices a mid-air, not a
+  world contact, so a bot's ram into an aeroplane still deals and takes a fifth. Open for the user:
+  as a person, a bot's mid-air would cost five times as much.
+- The camera kick (`ShakeMagnitude`) and the AI shake (`AiShake`): **kept** (A3's AI shakes).
+- The contact pad rumble (`PerformContact`, `Crash`): **kept**, a bot has no pad.
+- `groundBlowReady` (the AI ground blow off during a collision grace) and the danger-zone rail
+  pose: **kept**, both are the AI force path and its crash avoidance.
+- `TakeCollisionHit` (the struck half) and the un-embed loop read no split; the embed line now names
+  what it grazed (`embedded in <collider> after a graze, destroyed`).
 
-**Approach.** Give the contact gates their own question, "takes a person's contact rule", answered
-true for a person and for a bot seat, instead of reading `IsHumanPiloted`. A bot keeps the AI force
-path, the AI's crash avoidance, its AI shakes and `ai_crash_*` wreck, so only world contact
-changes. The host decides a bot's death (it flies it), and a guest's copy takes its pose off the
-wire, so check that both ends agree on the visible bounce. Leave world AI and every campaign path on
-the decoded rule.
+A guest never resolves a contact for a bot: its copy is `RemoteOwned`, `SimStep` takes
+`StepRemotePose` in place of the model step, the sweep and the resolver, and `TakeCollisionHit`
+returns for a remote airframe. The guest's copy shows the host's bounce through the pose samples
+(`net-bot-seat` traces the bot's path at 0.00 m clean and 1.42 m lossy) and its death through the
+host's report.
 
-**Model recommendation.** Opus.
+**Approach (landed).** A new field `FlightController.IsBotSeat`, carried by
+`FlightControllerBuild.IsBotSeat` and set by `HumanFlightAdapter`'s seat path (`IsBotSeat = bot`)
+on every machine. The question is `FlightController.TakesPersonsContactRule => IsHumanPiloted ||
+IsBotSeat`, mirrored as `ContactConditions.TakesPersonsContactRule` for the resolver.
+`IsHumanPiloted` stays truthful for everything else (aim assist, the AI force path, the `"player"`
+role, the shakes, the pad). World AI and every campaign path never set the flag and keep the decoded
+rule. Finding for D32: the bot's rebound is the decoded impulse applied to the AI plant's own body
+rates, and the impulse reads the contact point's velocity, rotation included. A bot that lands while
+its pilot and AI ground blow pitch it up rebounds harder than a person in the same plane. Staged into
+MP1's ground (Fury, 25 degrees down at 80 m/s), across runs the pane measured e 0.56 to 0.76 and the bot 1.07 to 1.36; one
+random-plane staging went from 31.7 m/s down to 124 m/s up. A 15-bot local probe (`RunProbe.ps1 --vs
+--mission=MP1 --mute --vs-bots=15`, about 280 s) logged no `AI ram into` line and 12 grazes. It also
+logged two embed deaths, which are the person's rule: one into the airstrip (`col_soil8`) at severity
+0, a contact facing away from its normal, and one into another bot's airframe at 3 m/s. For D33: a bot
+now sweeps hull shape casts where it swept probe rays, as a person does; D33's measurement predates it.
 
-**Verify.** An engine check on the `graze-bounce` template: a bot rig on the trajectory a person
-grazes survives with the person's rebound, and a world-AI rig on it is still destroyed outright
-(the control). `net-bot-*`, `versus-local-bot` and the AI suites stay green.
+**Model recommendation.** Opus: the change is a few lines, but the reader audit had to tell world
+contact from mid-air and the user's log had to be re-read to find the second death's real cause.
 
-**⚠ Traps.** `graze-bounce` pins the decoded AI rule for world AI; it must stay green unchanged.
+**Verify.** New suites in `CSVM/src/Testing/BotContactSuites.cs`. `graze-bounce-bot` (weight 1.4):
+on `graze-bounce`'s floor trajectory a person rig and a bare bot rig (AI force path, `IsBotSeat`)
+both graze and survive, 20 steps on too, the bot rebounding at e 0.52 against the person's 0.52 and
+spending the same pair; world AI on it is destroyed outright with its ledger unspent (control); a
+bot rammed into a parked aeroplane's tail bounces off (-64.9 to +39.0 m/s) and flies on, where world
+AI on that ram spends the pair and gains no rebound (control). `versus-local-bot-graze` (weight 4.5,
+local MP1 match, `--plane=player_fury --vs-bot=player_fury`): the bot is AI-piloted on a person's
+rule and the pane is no bot seat (control); the pane and then the bot are staged 4 m over a flat
+patch of MP1's ground, nosed 25 degrees down at 80 m/s; both graze and survive, the bot rebounds and
+spends the pair; staged again with `IsBotSeat` cleared the bot is destroyed outright with its ledger
+unspent (control). Able-to-fail: with `TakesPersonsContactRule` reduced to `IsHumanPiloted`, eight
+checks fail across the two suites. `graze-bounce` unchanged and green. Unit
+`AircraftContactResolverTests.ABotSeatIsSparedTheDoomRuleAndKeepsTheEntityCut` (graze, not doomed,
+no camera kick, AI shake, the cut on a mid-air). Runs in `bots-b15`: `RunTests.ps1 -SkipEngine
+-SkipGoldens -SkipHitch` units 6356 passed / 0 failed / 3 skipped; `-Filter
+'ai-,graze,contact,collide,crash,bounce,airframe' -Shards 4 -SkipUnits -SkipGoldens -SkipHitch` 46
+passed / 0 failed; `-Filter 'net-,versus-' -Shards 4 -SkipUnits -SkipGoldens -SkipHitch` 66 passed /
+0 failed (every `net-bot-*`, `versus-local-bot`, `versus-local-bot-graze`); engine errors clean on
+every run. `CheckCommentCaps.ps1`, `CheckDocEntries.ps1` and `CheckEncoding.ps1` clean.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** `graze-bounce` pins the decoded AI rule for world AI; it must stay green unchanged. Never
+widen the question to `IsHumanPiloted` itself: that flag also picks the force path, the aim assist
+and the shakes. A piloted bot near the ground cannot be read with a 0.5 m/s rebound test, since its
+own pull-up moves the normal speed by up to 0.8 m/s a step.
 
 # Wave C, lobby and local setup
 

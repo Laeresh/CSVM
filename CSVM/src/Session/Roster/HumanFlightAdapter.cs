@@ -118,7 +118,8 @@ internal sealed class HumanFlightAdapter
         bool paneless = seat is { HasPane: false };
         bool flownElsewhere = seat is { FlownHere: false };
         // A bot is AI-piloted on every machine, so each plays its hits, shakes and wreck alike.
-        // Only the host, which flies it, gives it a pilot to steer it.
+        // Only the host, which flies it, gives it a pilot to steer it. Its contacts take a
+        // person's rule, since its hull is a person's (FlightController.IsBotSeat).
         bool bot = seat is { IsBot: true };
         var botPilot = bot && !flownElsewhere ? new AiPilot() : null;
         // Each player flies their own pick; an Instant Action mission overrides it for every human
@@ -213,6 +214,7 @@ internal sealed class HumanFlightAdapter
             // The keymap file and the sticks are this machine's player's, not the roster seat's.
             LocalPlayer = MenuSeatOf(pi),
             IsHumanPiloted = !bot,
+            IsBotSeat = bot,
             Pilot = botPilot,
             // A seat flown elsewhere takes its pose out of this history, not a flight model.
             // The buffer's presence IS that ownership, so it is built here and nowhere else.

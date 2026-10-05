@@ -347,6 +347,11 @@ public partial class FlightController : Node3D
     /// else-branch), not "pane 1 only".</summary>
     public bool IsHumanPiloted = true;
 
+    /// <summary>A Dogfight's bot seat: AI-piloted (<see cref="IsHumanPiloted"/> false) but standing in
+    /// a person's seat, so its contacts take a person's rule (<see cref="TakesPersonsContactRule"/>).
+    /// Set by the seat assembler on every machine; world AI never sets it.</summary>
+    public bool IsBotSeat;
+
     /// <summary>This plane's carried turret gunners: built by the rig assembler from the
     /// vehicle def's <c>turrets</c> block against <c>ai.zrd</c>, ticked from <see cref="SimStep"/>
     /// (so a crash silences them), and collected into every shooter's aim-assist candidate set
@@ -1087,6 +1092,13 @@ public partial class FlightController : Node3D
     /// would move a pose whose owner is elsewhere. What hangs off the aeroplane is untouched: it
     /// is hit, damaged, heard, drawn, marked and crashed exactly as a local one is.</summary>
     public bool RemoteOwned => RemotePoses != null;
+
+    /// <summary>Whether a person's contact rule decides this plane's contacts: the airframe sweep, no
+    /// doom on a world contact, and the bounce. True for a person and for a bot seat, whose hull
+    /// equals a person's in the same plane. World AI keeps the decoded rule.
+    /// ⚠ Contact only. A bot keeps the AI force path, AI shakes, its wreck and the entity cut, all of
+    /// which still read <see cref="IsHumanPiloted"/>.</summary>
+    public bool TakesPersonsContactRule => IsHumanPiloted || IsBotSeat;
 
     /// <summary>The flight model's world position, the plane as a SIM value, not a node transform
     /// (the node lags it by the render interpolation). What another plane's aim assist aims at.</summary>
@@ -2290,10 +2302,10 @@ public partial class FlightController : Node3D
             bool sweeping = onSweepStep && !_lifecycle.CollisionGraceActive;
             ContactReport contact = default;
             Node? hitBody = null;
-            // A human rig sweeps the airframe hulls; an AI rig sweeps its def's collision probes,
-            // the original's shape (see SweepProbes): one origin point on every AI def, so its
-            // wings clip through a slot the hull cannot pass, the CM13 racers' dzpath2 arch first.
-            bool hit = sweeping && (IsHumanPiloted
+            // A person's rule sweeps the airframe hulls. World AI sweeps its def's collision probes,
+            // the original's single origin point, so its wings clip a slot the hull cannot pass
+            // (SweepProbes). A bot takes the hulls, which the un-embed test reads after a contact.
+            bool hit = sweeping && (TakesPersonsContactRule
                 ? SweepAirframe(prev, step, out contact, out hitBody)
                 : SweepProbes(prev, step, out contact, out hitBody));
             if (!hit && sweeping)
@@ -4378,6 +4390,7 @@ public partial class FlightController : Node3D
     private ContactConditions Striking() => new()
     {
         IsHumanPiloted = IsHumanPiloted,
+        IsBotSeat = IsBotSeat,
         VelocityDir = _model.VelocityDir,
         Speed = _model.Speed,
         Pose = GlobalTransform,
@@ -4756,7 +4769,7 @@ public partial class FlightController : Node3D
         public ContactResponse ApplyResponse()
         {
             _rig._model.Collide(_from, _motion, _contact.StopFraction, _contact.Impact, _contact.Normal,
-                _rig.IsHumanPiloted && !_rig.Crashed);
+                _rig.TakesPersonsContactRule && !_rig.Crashed);
             return new ContactResponse(new Transform3D(_rig._model.Attitude, _rig._model.Position));
         }
     }
