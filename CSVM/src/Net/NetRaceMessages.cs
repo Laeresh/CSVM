@@ -18,7 +18,7 @@ public enum NetRaceRun : byte
     /// <summary>The run cleared every zone, in the run time carried.</summary>
     Finished = 3,
 
-    /// <summary>The run was thrown away by a restart.</summary>
+    /// <summary>The run was thrown away by a rerun.</summary>
     Abandoned = 4,
 }
 
@@ -47,7 +47,7 @@ public enum NetRaceCall : byte
     Unknown = 0,
 
     /// <summary>The host opened a new window, the round carried, over the same course and field.</summary>
-    Restart = 1,
+    Rerun = 1,
 
     /// <summary>The host took the race back to the lobby; every guest follows it there.</summary>
     Lobby = 2,
@@ -163,7 +163,7 @@ public readonly record struct RaceStateMessage(NetRacePhase Phase, byte Round, f
 /// <summary>
 /// The window's end decided by one machine for the rest. The host sends every guest its new window
 /// or its return to the lobby; a guest tells the host it left. Reliable, on the channel the race's
-/// lines and clock take, so a restart reaches a guest ahead of the new window's lines.
+/// lines and clock take, so a rerun reaches a guest ahead of the new window's lines.
 /// <c>Round</c> names the window the call opens or ends (<c>docs/org/multiplayer-messages.md</c>,
 /// "Stunt race").
 /// </summary>

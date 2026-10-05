@@ -77,7 +77,7 @@ public class StuntReturnTests
     }
 
     [ExtractedDataFact]
-    public void A_restarted_run_has_no_return_left()
+    public void A_rerun_has_no_return_left()
     {
         var mission = Load();
         Fly(mission, mission.Zones[0], reverse: false);

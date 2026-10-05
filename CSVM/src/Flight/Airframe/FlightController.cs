@@ -242,12 +242,12 @@ public partial class FlightController : Node3D
     /// <summary>The stunt run, when flying --stunt: danger-zone gate
     /// detection, tested against the plane each physics frame. Set, the respawn control splits: a
     /// tap keeps completed zones and the running clock (<see cref="ReturnToLastZone"/>), a hold
-    /// restarts the run (<see cref="Rerun"/>). Null in free flight.</summary>
+    /// reruns it (<see cref="Rerun"/>). Null in free flight.</summary>
     public StuntMission? Stunt;
 
-    /// <summary>The count <see cref="Rerun"/> opens a restarted run with, or null for none.
+    /// <summary>The count <see cref="Rerun"/> opens a fresh run with, or null for none.
     /// ⚠ Never set under <c>--det</c>: a scripted run must stay byte-identical.</summary>
-    public IReadOnlyList<StartCountPhase>? RestartCount;
+    public IReadOnlyList<StartCountPhase>? RerunCount;
 
     /// <summary>This pane's Danger Zone camera: one latched photograph per marker per run, stepped
     /// from <see cref="SimStep"/> beside the run itself. Null in free flight and on every rig with
@@ -272,13 +272,14 @@ public partial class FlightController : Node3D
     public VersusHud? VersusHud;
 
     /// <summary>The time-attack race this plane is one seat of, or null flying solo. Set, a
-    /// restart of this pilot's run is taken only while <see cref="StuntRace.MayStartRun"/>. Once
-    /// the race has ended, R is a new window for every pilot through <see cref="RestartRace"/>.</summary>
+    /// rerun of this pilot's run is taken only while <see cref="StuntRace.MayStartRun"/>. Once
+    /// the race has ended, R is a new window for every pilot through <see cref="RerunRace"/>.</summary>
     public StuntRace? Race;
 
-    /// <summary>Opens a new race window (the session owns every player's plane, so it does the
-    /// work). Invoked when a player presses R on the shared results board.</summary>
-    public Action? RestartRace;
+    /// <summary>Reruns the race as a new window in place; the session does the work, since it owns
+    /// every player's plane. An Instant Action race is restarted instead, as every Instant Action
+    /// mission is. Invoked when a player presses R on the shared results board.</summary>
+    public Action? RerunRace;
 
     /// <summary>What <see cref="InputAction.ToggleGraphicsMode"/> does, set by the session for a
     /// seat somebody sits at: the launcher's live switch, which is process-wide rather than this
@@ -287,9 +288,9 @@ public partial class FlightController : Node3D
 
     /// <summary>The dogfight this plane is one seat of, or null outside <c>--vs</c>. Set, once
     /// <see cref="VersusMatch.Completed"/> the results board is up and any player's R there means
-    /// "rematch" instead of "respawn me", checked before the crash branch, exactly the same
-    /// R-ownership rule <see cref="Race"/>/<see cref="RestartRace"/> already follow (the board
-    /// owns R only while it is visible, which mirrors <c>Completed</c> exactly).</summary>
+    /// "rematch" instead of "respawn me", checked before the crash branch. That is the R-ownership
+    /// rule <see cref="Race"/>/<see cref="RerunRace"/> follow: the board owns R only while it is
+    /// visible, which mirrors <c>Completed</c> exactly.</summary>
     public VersusMatch? Match;
 
     /// <summary><c>--debug-scores</c>: this seat reads Display Scores as held for the whole run. It is
@@ -508,7 +509,7 @@ public partial class FlightController : Node3D
     // Swallows a discrete flight command's next read when a cutscene skip or a pause-sheet dismiss
     // hands input back while the control that confirmed it is still down.
     private readonly FlightReentryLatch _reentryLatch = new();
-    // A stunt run's one respawn control, split by hold length: a tap returns, a hold restarts.
+    // A stunt run's one respawn control, split by hold length: a tap returns, a hold reruns.
     private readonly TapHoldButton _respawnSplit = new(TapHoldButton.PadHoldSeconds);
     // CrashRuntime as a deferred read, so the propeller slot forces an armed rig only on a change.
     private readonly Func<AnimRuntime?> _rigOnDemand;
@@ -561,7 +562,7 @@ public partial class FlightController : Node3D
     private Vector3 _spawnPos;
     private (Vector3 Pos, Vector3 LookAt)? _grantedPlacement; // a granted pose, armed by RespawnAt
     // A stunt tap's pose, armed by ReturnToLastZone and spent by the one Respawn it arms. ⚠ Never
-    // written into _spawnPos: the held restart must still find the start line there.
+    // written into _spawnPos: the held rerun must still find the start line there.
     private (Vector3 Pos, Basis Attitude)? _zoneReturn;
     private Basis _spawnAttitude;
     private float _spawnThrottle = FallbackSpawnThrottle;
@@ -581,7 +582,7 @@ public partial class FlightController : Node3D
     private FlightInput _lastInput;              // this physics frame's stick input (drives the surfaces)
     // s until auto-rematch on a finished race (scripted hold runs only). Not the lifecycle's
     // respawn timer: this one belongs to a results board, which no aircraft state reaches.
-    private float _autoRestartIn = AircraftLifecycle.AutoRespawnDelay;
+    private float _autoRerunIn = AircraftLifecycle.AutoRespawnDelay;
 
     /// <summary>When set (from <see cref="FlightControllerBuild.HoldSegments"/>), replaces keyboard
     /// input for automated screenshot/demo runs: each segment holds its input for its duration
@@ -1339,9 +1340,9 @@ public partial class FlightController : Node3D
     }
 
     /// <summary>Rerun this plane's own run: fresh clock and every zone incomplete, then the
-    /// respawn below at the start, behind <see cref="RestartCount"/> where one is set. A plane with
-    /// no stunt run is simply respawned. Every restart of a run comes through here: the solo
-    /// board's R, the session's restart and a held respawn. A race refuses it outside its window.</summary>
+    /// respawn below at the start, behind <see cref="RerunCount"/> where one is set. A plane with
+    /// no stunt run is simply respawned. Every rerun of a run comes through here: the solo
+    /// board's R, the session's rerun and a held respawn. A race refuses it outside its window.</summary>
     public void Rerun()
     {
         if (Race is { MayStartRun: false })
@@ -1349,7 +1350,7 @@ public partial class FlightController : Node3D
         Stunt?.Reset();
         StuntShots?.Reset();
         Respawn();
-        if (RestartCount is { } count)
+        if (RerunCount is { } count)
             BeginStartCount(count);
     }
 
@@ -2110,9 +2111,9 @@ public partial class FlightController : Node3D
         // Read before anything steps: the GO step is still the count's, and the clock starts after.
         bool counting = StartCount.Running && !Crashed && !RemoteOwned;
 
-        // The stunt clock starts at GO, so a start count holds it at zero. Once started it advances
-        // every physics frame, through the crash freeze: the clock never stops (a deliberate rule).
-        // It stops only at AllComplete, and a halted GameClock stops these calls with the sim.
+        // The stunt clock starts at GO and stops only at AllComplete or with a halted GameClock. It
+        // runs through the crash freeze, a remake-only rule so a crash costs the run its freeze.
+        // A start count holds it at zero.
         if (!counting)
             Stunt?.Tick(dt);
 
@@ -2139,7 +2140,7 @@ public partial class FlightController : Node3D
             _simPrev = _simCurr;   // hold the finish pose, no stale pair left to interpolate
             return;
         }
-        _autoRestartIn = AircraftLifecycle.AutoRespawnDelay; // re-armed while the run is live
+        _autoRerunIn = AircraftLifecycle.AutoRespawnDelay; // re-armed while the run is live
 
         if (counting)
         {
@@ -3398,7 +3399,7 @@ public partial class FlightController : Node3D
         }
     }
 
-    // Full stunt restart from the results scoreboard (R): fresh clock + every
+    // Full stunt rerun from the results scoreboard (R): fresh clock + every
     // zone incomplete, then the normal respawn (spawn pose / throttle / cleared damage). The
     // scoreboard hides itself once AllComplete clears; the marker HUD replays its intro line.
 
@@ -3924,9 +3925,9 @@ public partial class FlightController : Node3D
         if (Race is { Ended: true })
         {
             bool autoRematch = _holdSegments != null && PlayerIndex == 0
-                && (_autoRestartIn -= delta) <= 0f;
+                && (_autoRerunIn -= delta) <= 0f;
             if (RespawnPressed() || autoRematch)
-                RestartRace?.Invoke();
+                RerunRace?.Invoke();
             return;
         }
         if (SoloBoardHolds && RespawnPressed())

@@ -72,7 +72,7 @@ The engine side of one Instant Action mission, behind `GameSession`'s one nullab
 field: a plain sealed class that builds no node of its own, so every actor it makes parents under
 the handed world root. `TryCreate` takes the wizard's def or `--ia=<path>`; `BuildActors` is the
 contiguous actor phase (the chapter's first patrol net, the ace, the wingman fan and its escort
-chain, every configured wave built inert at the world origin, each actor's walk seated where it spawns and kept on activation, each actor named on its `AiSpawn.PilotName`: the ace's `ace_name`, a wave's `enemy_name`, a wingman slot's fixed pilot); `Step` ticks the sequencer and activates what it returns; `WireEndConditions` routes each mode's own win signal (none for a multi-seat stunt run, whose race window ends it, whose pilots may restart in flight and whose lives are waived, so it cannot be lost), the lives
+chain, every configured wave built inert at the world origin, each actor's walk seated where it spawns and kept on activation, each actor named on its `AiSpawn.PilotName`: the ace's `ace_name`, a wave's `enemy_name`, a wingman slot's fixed pilot); `Step` ticks the sequencer and activates what it returns; `WireEndConditions` routes each mode's own win signal (none for a multi-seat stunt run, whose race window ends it, whose pilots may rerun in flight and whose lives are waived, so it cannot be lost), the lives
 ledger and the wrap-up, which it reaches only through `IaWrapupSnapshot.cs`'s seam (the board `Launch/SessionBoards.cs` builds, or the menu page), snapshotting the four counters at the ending and holding the pilots' seats (not the world, not the cameras) until the hold runs out and the board is due: a win keeps the stick and loses the commands, a loss loses both, and a hull lost inside the hold spends no life and takes no pane. The decoded rules stay engine-free in
 `InstantActionRuntime.cs` and `InstantActionWaves.cs`; this class owns every `ia:` log line, and `Scenario`, `IsStuntRun` and `PlayerPlaneOverride` settle the mission's spawn table, its stunt objective and the aircraft it forces on the humans.
 
@@ -266,7 +266,7 @@ takes each local seat's run. The host's race follows its own seats and takes eac
 `Step` sends every changed racer's line, then the clock once a second and on each change of phase.
 A guest's race is a `StuntRace.Replicate` copy fed by those lines and that clock. Its opening
 catches up to the host's by the reading's lateness, and `CatchUp` skips each local seat's count
-alike. The host's `CallRestart` opens a guest's next window through `Restarted` ahead of its lines, `Leave` sends a guest's leaving (`GuestLeft` on the host) or an ended race's return to the lobby (`LobbyCalled` on a guest), and `SeatLeft` marks a departed seat's racer on every machine. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Read
+alike. The host's `CallRerun` opens a guest's next window through `Rerun` ahead of its lines, `Leave` sends a guest's leaving (`GuestLeft` on the host) or an ended race's return to the lobby (`LobbyCalled` on a guest), and `SeatLeft` marks a departed seat's racer on every machine. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Read
 `Flight/Modes/StuntRace.cs` next.
 
 ## src/Session/Campaign/NetPositionalStartLink.cs
@@ -554,7 +554,7 @@ flown elsewhere: it takes the aeroplane, paint, loadout, spawn slot and score ro
 skips every pane, HUD, camera, listener, pad and pause key, the roster's airframe pick and a co-op seat's `SeatFit` beating this machine's launch flags. It reads only the roster's
 copied policy plus the grouped aircraft, world and human-session contracts; player order decides the paint and spawn draws. An airframe swap lays its
 captured scheme and own build over that assembly, the one path a bought plane takes. A racer, in Instant Action too, joins the `Race` with its run
-followed, its solo score key and its network seat's callsign; a remote seat runs no course here and joins no local race, and every stunt seat outside `--det` carries the restart count and opens on its first count; `BuildDamageVisuals` opens AI damage too. Under the race flag a seat is built with no loadout, ordnance or carried turret, a ghost-keyed airframe stamped by `RaceGhost` with its own first-person layer (a remote seat with `SplitScreen.EveryCameraLayer`), and `TargetHud.RaceMarks` on. Read `FlightRoster.cs` next.
+followed, its solo score key and its network seat's callsign; a remote seat runs no course here and joins no local race, and every stunt seat outside `--det` carries the rerun count and opens on its first count; `BuildDamageVisuals` opens AI damage too. Under the race flag a seat is built with no loadout, ordnance or carried turret, a ghost-keyed airframe stamped by `RaceGhost` with its own first-person layer (a remote seat with `SplitScreen.EveryCameraLayer`), and `TargetHud.RaceMarks` on. Read `FlightRoster.cs` next.
 
 ## src/Session/World/WorldEffectsFactory.cs
 Builds the two effect stages a session needs and the runtimes bound to them: the world-effects

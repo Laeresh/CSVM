@@ -297,7 +297,8 @@ public sealed class StuntMission
 
     /// <summary>Advance the run clock one physics frame. Not called while a start count runs,
     /// because the clock starts at GO. Once started it is called every frame, through the crash
-    /// freeze, so the clock never stops (a deliberate rule). It stops only at completion.</summary>
+    /// freeze. That is a remake-only rule, so a crash costs the run its freeze. It stops only at
+    /// completion.</summary>
     public void Tick(float dt)
     {
         if (AllComplete)

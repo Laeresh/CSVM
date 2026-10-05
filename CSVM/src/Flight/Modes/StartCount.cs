@@ -37,8 +37,8 @@ public sealed class StartCount
     /// <summary>The text GO shows.</summary>
     public const string GoLabel = "GO";
 
-    /// <summary>The count a restart opens with: 3, 2, 1, a second each.</summary>
-    public static readonly IReadOnlyList<StartCountPhase> Restart = new StartCountPhase[]
+    /// <summary>The count a rerun opens with: 3, 2, 1, a second each.</summary>
+    public static readonly IReadOnlyList<StartCountPhase> Rerun = new StartCountPhase[]
     {
         new("3", 1f), new("2", 1f), new("1", 1f),
     };
@@ -73,11 +73,11 @@ public sealed class StartCount
     public float FigureAge => Running ? _elapsed - PhaseStart(PhaseAt(_elapsed)) : _sinceGo;
 
     /// <summary>The count a race window opens with: READY for <paramref name="readySeconds"/>
-    /// while the field rolls in, then <see cref="Restart"/>'s figures.</summary>
+    /// while the field rolls in, then <see cref="Rerun"/>'s figures.</summary>
     public static IReadOnlyList<StartCountPhase> Opening(float readySeconds)
     {
         var phases = new List<StartCountPhase> { new("READY", readySeconds) };
-        phases.AddRange(Restart);
+        phases.AddRange(Rerun);
         return phases;
     }
 

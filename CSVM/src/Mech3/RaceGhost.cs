@@ -21,11 +21,11 @@ public static class RaceGhost
     public const float SolidBeyondM = 80f;
 
     /// <summary>The share of an aircraft's pixels a full ghost keeps under the original graphics,
-    /// through the 4x4 ordered dither. TUNE, the user's look judgement.</summary>
+    /// through the 4x4 ordered dither. TUNE, judged by eye.</summary>
     public const float GhostAlpha = 0.35f;
 
     /// <summary>The same share under Enhanced, higher because the lit, shadowed airframe dithered
-    /// to <see cref="GhostAlpha"/> all but vanishes there. TUNE, the user's look judgement.</summary>
+    /// to <see cref="GhostAlpha"/> all but vanishes there. TUNE, judged by eye.</summary>
     public const float EnhancedGhostAlpha = 0.55f;
 
     /// <summary>The instance shader parameter the stamp writes: x the owning pilot's first-person

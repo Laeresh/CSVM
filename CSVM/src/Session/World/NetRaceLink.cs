@@ -9,11 +9,11 @@ namespace CSVM.Session.World;
 /// <summary>
 /// A stunt race over the wire, one per network race session. Each machine times its own seats'
 /// runs and the host keeps the window, the leaderboard and the ending. A guest reports its seats'
-/// run starts, splits, finishes and restarts to the host as <see cref="RaceRunMessage"/>s. The host
+/// run starts, splits, finishes and reruns to the host as <see cref="RaceRunMessage"/>s. The host
 /// feeds them to its race beside its own seats' runs, and sends every changed racer's line and its
 /// clock to every guest. A guest's race is a replica that takes both, and its opening count
 /// catches up to the host's. The window's end crosses as <see cref="RaceCallMessage"/>s: the host's
-/// restart and return to the lobby, a guest's leaving (<c>docs/org/multiplayer-messages.md</c>,
+/// rerun and return to the lobby, a guest's leaving (<c>docs/org/multiplayer-messages.md</c>,
 /// "Stunt race").
 /// </summary>
 internal sealed class NetRaceLink
@@ -53,14 +53,14 @@ internal sealed class NetRaceLink
     internal event Action<int>? GuestLeft;
 
     /// <summary>On a guest, the host's new window to open here. Every local seat goes back to the
-    /// start behind a fresh opening count, as the host's own restart does.</summary>
-    internal Action? Restarted { get; set; }
+    /// start behind a fresh opening count, as the host's own rerun does.</summary>
+    internal Action? Rerun { get; set; }
 
     /// <summary>On a guest, whether the host took the race back to the lobby. The launcher's upkeep
     /// follows it there.</summary>
     internal bool LobbyCalled { get; private set; }
 
-    /// <summary>Calls taken from the other end: restarts and the lobby on a guest, leaves on the host.</summary>
+    /// <summary>Calls taken from the other end: reruns and the lobby on a guest, leaves on the host.</summary>
     internal int CallsTaken { get; private set; }
 
     /// <summary>On a guest, what each local seat's running count must skip when the opening
@@ -110,13 +110,13 @@ internal sealed class NetRaceLink
         return link;
     }
 
-    /// <summary>The host's new window, told to every guest. Sent at the restart itself, ahead of the
+    /// <summary>The host's new window, told to every guest. Sent at the rerun itself, ahead of the
     /// new window's lines and clock on the same channel.</summary>
-    internal void CallRestart()
+    internal void CallRerun()
     {
         if (_net.IsHost)
         {
-            _net.Broadcast(new RaceCallMessage(NetRaceCall.Restart, (byte)_race.Round), NetChannels.Events);
+            _net.Broadcast(new RaceCallMessage(NetRaceCall.Rerun, (byte)_race.Round), NetChannels.Events);
         }
     }
 
@@ -258,8 +258,8 @@ internal sealed class NetRaceLink
             (byte)Math.Min(line.CurrentZones, byte.MaxValue), splits, line.Left);
     }
 
-    // A call is taken only from the end that may make it: a restart or the lobby from the host, a
-    // leave from a guest. A restart must name the window after this guest's own, which it opens.
+    // A call is taken only from the end that may make it: a rerun or the lobby from the host, a
+    // leave from a guest. A rerun must name the window after this guest's own, which it opens.
     private void TakeCall(int peer, RaceCallMessage call)
     {
         if (_net.IsHost)
@@ -279,11 +279,11 @@ internal sealed class NetRaceLink
             return;
         }
 
-        if (call.Call == NetRaceCall.Restart && call.Round == (byte)(_race.Round + 1))
+        if (call.Call == NetRaceCall.Rerun && call.Round == (byte)(_race.Round + 1))
         {
             CallsTaken++;
             Log.Info("flight", $"net race: the host opened window {call.Round}");
-            Restarted?.Invoke();
+            Rerun?.Invoke();
         }
         else if (call.Call == NetRaceCall.Lobby && call.Round == (byte)_race.Round)
         {
@@ -370,7 +370,7 @@ internal sealed class NetRaceLink
         Log.Info("flight", $"net race: dropped seat {report.Seat}'s {report.Kind} report (run {report.Run}, round {report.Round}), {why}");
     }
 
-    // A guest takes a line only under its own window. The host's restart call reaches it ahead of
+    // A guest takes a line only under its own window. The host's rerun call reaches it ahead of
     // the next window's lines, so a line under another round is an old window's.
     private void TakeLine(in RaceStandingMessage line)
     {

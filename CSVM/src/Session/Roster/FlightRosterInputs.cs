@@ -207,12 +207,12 @@ internal sealed class HumanRosterBindings
     public int SpawnBase { get; init; }
     public StuntMission? StuntZones { get; init; }
 
-    /// <summary>The count a stunt run restarts behind, solo or in a race, or null for none.
+    /// <summary>The count a stunt run reruns behind, solo or in a race, or null for none.
     /// ⚠ Null under <c>--det</c>, so a scripted run stays byte-identical.</summary>
-    public IReadOnlyList<StartCountPhase>? RestartCount { get; init; }
+    public IReadOnlyList<StartCountPhase>? RerunCount { get; init; }
 
-    /// <summary>The count a stunt run's first start runs: the restart count solo, a race's
-    /// opening count in a race. Begun only on a seat that carries <see cref="RestartCount"/>.</summary>
+    /// <summary>The count a stunt run's first start runs: the rerun count solo, a race's
+    /// opening count in a race. Begun only on a seat that carries <see cref="RerunCount"/>.</summary>
     public IReadOnlyList<StartCountPhase>? FirstStartCount { get; init; }
 
     /// <summary>The rof tree's menu sound folder, whose shipped UI sounds a start count beeps
