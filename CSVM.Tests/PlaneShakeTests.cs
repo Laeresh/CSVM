@@ -317,7 +317,7 @@ public class PlaneShakeTests
     }
 
     [Fact]
-    public void AResetStopsEveryBlockWhereItStands()
+    public void AResetBringsEveryBlockBackToRest()
     {
         // A crash leaves the contact block ringing for seconds. A respawn hands the next airframe
         // a level pivot instead, and it stays level with nothing new kicked.
