@@ -108,7 +108,7 @@ public sealed partial class StuntRaceBoard : ResultsBoard
         AddCell(grid, "PILOT", header, HeaderColor, HorizontalAlignment.Left, nameW);
         AddCell(grid, "AIRCRAFT", header, HeaderColor, HorizontalAlignment.Left, planeW);
         AddCell(grid, "BEST", header, HeaderColor, HorizontalAlignment.Right, bestW);
-        AddCell(grid, "", header, HeaderColor, HorizontalAlignment.Right, gapW);
+        AddCell(grid, "GAP", header, HeaderColor, HorizontalAlignment.Right, gapW);
         AddCell(grid, "RUNS", header, HeaderColor, HorizontalAlignment.Right, runsW);
 
         int font = (int)(RowFont * s);

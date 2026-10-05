@@ -277,7 +277,7 @@ internal static class StuntRaceSuites
         + "the install's art and strings, which wakes on the race's end with the sim halted, ranks "
         + "the field on the scores page with each pilot's splits, rests on Photo Mode and offers "
         + "Restart and Back; Restart retires it and releases the clock, the pointer fires Back and "
-        + "Photo Mode; Built-in keeps the chrome board, its exit row reading Back from the menu and "
+        + "Photo Mode; Built-in keeps the chrome board, its gap column headed GAP and its exit row reading Back from the menu and "
         + "Quit Game from the command line, which the Original board follows too")]
     internal static void StuntRaceBoards(TestContext ctx)
     {
@@ -410,14 +410,22 @@ internal static class StuntRaceSuites
                 $"the pointer fires Back and Photo Mode on their plaques: rested on {indexAfterEnd}, {exits} exit(s), {photos} photo(s)");
 
             // Built-in keeps the chrome board; the exit row reads Back from the menu, Quit Game otherwise.
+            string chromeHeaders = "";
             string ChromeExit(bool menuDriven)
             {
                 var (chrome, chromeRace, _) = Build(PresentationId.BuiltIn, menuDriven, () => { });
                 End(chromeRace);
+                if (chrome.FindChildren("*", nameof(GridContainer), true, false).FirstOrDefault() is { } grid)
+                {
+                    chromeHeaders = string.Join("|", grid.GetChildren().Take(6).Select(c => (c as Label)?.Text));
+                }
+
                 return chrome is StuntRaceBoard { StandardMenu: { } standard } ? standard.Items[^1].Label : $"no chrome board ({chrome.GetType().Name})";
             }
 
             string chromeMenu = ChromeExit(true), chromeCli = ChromeExit(false);
+            ctx.Check(chromeHeaders == "|PILOT|AIRCRAFT|BEST|GAP|RUNS",
+                $"the chrome board heads every column but the place, the gap's included: {chromeHeaders}");
             var (cli, cliRace, _) = Build(PresentationId.Original, menuDriven: false, () => { });
             End(cliRace);
             string originalCli = (cli as OriginalRaceBoard)?.Menu?.Items[^1].Label ?? "none";

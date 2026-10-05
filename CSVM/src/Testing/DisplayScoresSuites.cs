@@ -21,13 +21,14 @@ namespace CSVM.Testing;
 /// <summary>The held Display Scores on two real seats built through the session's roster. Each seat
 /// has a pane of its own with the chat panel and both looks of the scores overlay. A race's and a
 /// Dogfight's standings stand in the holding seat's pane alone while the action is held. The chat
-/// lines step aside for them, and both go back on release.</summary>
+/// lines and the top status lines step aside for them, and all go back on release.</summary>
 internal static class DisplayScoresSuites
 {
     [Suite("stunt-race-display-scores",
         "two race seats over C1/IA1's zones, each in its own pane with a chat line up: nothing shows "
         + "before a hold; P1 holding Display Scores puts the race's standings in P1's pane alone, in "
-        + "the original's HUD text and in the chrome table, and hides P1's chat lines while P2's stay; "
+        + "the original's HUD text and in the chrome table, and hides P1's chat lines and its run status "
+        + "and leaderboard lines while P2's stay; "
         + "the release takes both back; a seat in no race shows nothing however long it holds")]
     internal static void StuntRaceDisplayScores(TestContext ctx)
     {
@@ -61,15 +62,16 @@ internal static class DisplayScoresSuites
         HeldScores(ctx, seats, source, p1, p2, "race",
             lines => lines.Count == 3 && lines[0].StartsWith("  Player", StringComparison.Ordinal)
                 && lines[1].StartsWith("1st P1", StringComparison.Ordinal) && lines[2].StartsWith("2nd P2", StringComparison.Ordinal),
-            rows => rows.Count == 2 && rows[0].StartsWith("1st  P1", StringComparison.Ordinal));
+            rows => rows.Count == 2 && rows[0].StartsWith("1st  P1", StringComparison.Ordinal),
+            seat => seat.PilotHud.StuntRun is { StatusShown: true });
 
-        // A seat in no race has no scores to show: the overlay stays down and the chat stays up.
+        // A seat in no race has no scores to show: the overlay stays down, the chat and the status lines stay up.
         p1.Race = null;
         p1.HoldActionForTest(InputAction.DisplayScores, true);
         var solo = seats.Attach(0, new ScoresSource(), original: true);
         solo.Refresh();
-        ctx.Check(!p1.ScoresShown && !solo.Shown && seats.Chat(0).LinesShown,
-            $"a seat in no race holding the action shows nothing: shown={p1.ScoresShown}/{solo.Shown}, chat up={seats.Chat(0).LinesShown}");
+        ctx.Check(!p1.ScoresShown && !solo.Shown && seats.Chat(0).LinesShown && p1.PilotHud.StuntRun is { StatusShown: true },
+            $"a seat in no race holding the action shows nothing: shown={p1.ScoresShown}/{solo.Shown}, chat up={seats.Chat(0).LinesShown}, status up={p1.PilotHud.StuntRun?.StatusShown}");
         ctx.Note($"a held race table in the holder's pane alone, gone on release");
     }
 
@@ -77,7 +79,7 @@ internal static class DisplayScoresSuites
         "two Dogfight seats, each in its own pane with a chat line up: nothing shows before a hold; "
         + "P2 holding Display Scores puts the match's scores in P2's pane alone, in the original's "
         + "name and score columns with the remake's kills and deaths after them, and in the board's "
-        + "chrome columns, and hides P2's chat lines while "
+        + "chrome columns, and hides P2's chat lines and match line while "
         + "P1's stay; the release takes both back")]
     internal static void DogfightDisplayScores(TestContext ctx)
     {
@@ -100,15 +102,17 @@ internal static class DisplayScoresSuites
             lines => lines.Count == 3
                 && lines[1] == OriginalScoresText.Cell("P2", OriginalScoresText.NameWidth) + " " + OriginalScoresText.Cell("1", OriginalScoresText.ScoreWidth) + " " + OriginalScoresText.Cell("1", 6) + " 0"
                 && lines[2] == OriginalScoresText.Cell("P1", OriginalScoresText.NameWidth) + " " + OriginalScoresText.Cell("0", OriginalScoresText.ScoreWidth) + " " + OriginalScoresText.Cell("0", 6) + " 1",
-            rows => rows.Count == 2 && rows[0] == "#1  P2  1  1  0" && rows[1] == "#2  P1  0  0  1");
+            rows => rows.Count == 2 && rows[0] == "#1  P2  1  1  0" && rows[1] == "#2  P1  0  0  1",
+            seat => seat.VersusHud is { StatusShown: true });
         ctx.Note($"a held Dogfight table in the holder's pane alone, gone on release");
     }
 
     // The hold and the release on one seat, with the other seat's pane as the control. Both looks
-    // show only in the holder's pane, and that pane's chat lines are away while it lasts.
+    // show only in the holder's pane, and that pane's chat lines and top status lines are away while
+    // it lasts.
     private static void HeldScores(TestContext ctx, TwoSeats seats, ScoresSource source, FlightController holder,
         FlightController other, string mode, Func<System.Collections.Generic.IReadOnlyList<string>, bool> originalLines,
-        Func<System.Collections.Generic.IReadOnlyList<string>, bool> tableRows)
+        Func<System.Collections.Generic.IReadOnlyList<string>, bool> tableRows, Func<FlightController, bool> statusShown)
     {
         int held = holder.PlayerIndex, idle = other.PlayerIndex;
         var original = new[] { seats.Attach(0, source, true), seats.Attach(1, source, true) };
@@ -120,8 +124,9 @@ internal static class DisplayScoresSuites
         }
 
         Refresh();
-        ctx.Check(original.Concat(builtIn).All(o => !o.Shown && o.Lines.Count == 0) && seats.Chat(0).LinesShown && seats.Chat(1).LinesShown,
-            $"before any hold no pane shows the {mode} scores and both chat panels are up");
+        ctx.Check(original.Concat(builtIn).All(o => !o.Shown && o.Lines.Count == 0) && seats.Chat(0).LinesShown && seats.Chat(1).LinesShown
+                && statusShown(holder) && statusShown(other),
+            $"before any hold no pane shows the {mode} scores and both chat panels and status lines are up: status {statusShown(holder)}/{statusShown(other)}");
 
         holder.HoldActionForTest(InputAction.DisplayScores, true);
         other.HoldActionForTest(InputAction.DisplayScores, false);
@@ -134,11 +139,14 @@ internal static class DisplayScoresSuites
             $"the Built-in look is the board's columns: {string.Join(" | ", builtIn[held].Lines)}");
         ctx.Check(!seats.Chat(held).LinesShown && seats.Chat(idle).LinesShown,
             $"the holder's chat lines step aside and the other pane's stay: P{held + 1} up={seats.Chat(held).LinesShown}, P{idle + 1} up={seats.Chat(idle).LinesShown}");
+        ctx.Check(!statusShown(holder) && statusShown(other),
+            $"the holder's top status lines step aside and the other pane's stay: P{held + 1} up={statusShown(holder)}, P{idle + 1} up={statusShown(other)}");
 
         holder.HoldActionForTest(InputAction.DisplayScores, false);
         Refresh();
-        ctx.Check(!holder.ScoresShown && original.Concat(builtIn).All(o => !o.Shown && o.Lines.Count == 0) && seats.Chat(held).LinesShown,
-            $"the release takes the {mode} scores down and brings the chat lines back");
+        ctx.Check(!holder.ScoresShown && original.Concat(builtIn).All(o => !o.Shown && o.Lines.Count == 0) && seats.Chat(held).LinesShown
+                && statusShown(holder) && statusShown(other),
+            $"the release takes the {mode} scores down and brings the chat and status lines back: status {statusShown(holder)}/{statusShown(other)}");
     }
 
     // Two seats built through the roster over C1, each in a pane of its own. Each pane carries the

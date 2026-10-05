@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using CSVM.Flight.Hud;
 using CSVM.UI.Boards;
@@ -46,6 +47,13 @@ public sealed partial class StuntRunHud : Control
     private float _flash;         // s left on the zone-cleared flash
     private string _flashText = "";
 
+    /// <summary>What sends the status and leaderboard lines away while it answers true: the pane's
+    /// held scores. Their Original text runs across the top of the pane. Null keeps them.</summary>
+    public Func<bool>? StatusHiddenWhile { get; set; }
+
+    /// <summary>Whether the status line and the leaderboard line draw this frame.</summary>
+    public bool StatusShown => StatusHiddenWhile?.Invoke() != true;
+
     /// <summary>Binds the run and subscribes to the completion flash. Add to the HUD canvas;
     /// nothing needs feeding per frame.</summary>
     public static StuntRunHud Build(StuntMission mission)
@@ -85,13 +93,17 @@ public sealed partial class StuntRunHud : Control
         float cx = Size.X / 2f;
 
         // Run-status: elapsed time + zones done, top-centre under the compass tape.
-        DrawLines(font, new Vector2(cx, RefStatusY * s),
-            new[] { $"{StuntMission.FormatTime(_mission.Elapsed)}    ZONES {_mission.CompletedCount}/{_mission.TotalCount}" },
-            statusFont, HudBlue, topAnchored: true);
+        bool status = StatusShown;
+        if (status)
+        {
+            DrawLines(font, new Vector2(cx, RefStatusY * s),
+                new[] { $"{StuntMission.FormatTime(_mission.Elapsed)}    ZONES {_mission.CompletedCount}/{_mission.TotalCount}" },
+                statusFont, HudBlue, topAnchored: true);
+        }
 
         // The live leaderboard, the next line down, so it shares the status line's clear band
         // between the compass tape and the message slots.
-        if (Race != null)
+        if (status && Race != null)
         {
             float y = (RefStatusY + RefRaceLineGap) * s + font.GetHeight(statusFont);
             DrawLines(font, new Vector2(cx, y), new[] { Race.LeaderboardLine(PlayerIndex) },

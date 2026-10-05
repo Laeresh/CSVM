@@ -488,6 +488,8 @@ internal sealed class HumanFlightAdapter
                     race.Follow(pi, run);
                 runHud.Race = race;
                 runHud.PlayerIndex = pi;
+                // The pane's held scores stand across the top, so the two top lines step aside.
+                runHud.StatusHiddenWhile = () => controller.ScoresShown;
                 controller.Race = race;
             }
             else if (_human.InstantActionActive)
@@ -529,6 +531,7 @@ internal sealed class HumanFlightAdapter
             // player assembles, so by the time this pane draws, every opponent's is populated.
             controller.VersusHud = VersusHud.Build(versus, pi, rig.Camera);
             controller.VersusHud.Rigs = _human.Rigs;
+            controller.VersusHud.StatusHiddenWhile = () => controller.ScoresShown;
             if (verbose)
                 Log.Info("flight", $"dogfight HUD: match timer/K-D/leader line + kill banner + opponent markers");
         }

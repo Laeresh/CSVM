@@ -753,7 +753,7 @@ The stunt run's own readouts, one per pane and sized through `HudMetrics.Scale`:
 zones-cleared status line, in a race the live leaderboard on the line under it
 (`StuntRace.LeaderboardLine`: the window clock or FINAL RUN, place, the leader's best, the gap),
 the one-shot intro banner, the zone-cleared flash, the completion banner (in a race this run
-against the pilot's best), and the start count's figure, large in the middle of the pane (`StartCount`). It draws no marker: a danger zone is an objective on the pilot's own cycle and `TargetHud` marks it like
+against the pilot's best), and the start count's figure, large in the middle of the pane (`StartCount`). The status and leaderboard lines step aside while `StatusHiddenWhile` answers true, which `HumanFlightAdapter` sets to the seat's held scores. It draws no marker: a danger zone is an objective on the pilot's own cycle and `TargetHud` marks it like
 every other one. What it reports is `StuntMission`'s.
 
 ## src/Flight/Modes/StuntCapture.cs
@@ -853,7 +853,7 @@ Off-engine coverage: `CSVM.Tests/VersusSpawnRotationTests.cs`; the suites are `v
 The per-pane Dogfight HUD: a compact status line (remaining time, this pane's kills and deaths, the
 leader's tag, or in a team match this pane's team total and the leading team) in `StuntRunHud`'s run-status slot, and one marker per living opponent rig, either an
 on-screen tag or `EdgeMarker`'s arrow and bearing in that opponent's own `SplitScreen.PlayerColor`,
-a teammate's in `TargetHud`'s friendly green (`MarkerColor`).
+a teammate's in `TargetHud`'s friendly green (`MarkerColor`). The status line steps aside while `StatusHiddenWhile` answers true (the seat's held scores); the markers stay.
 `Build` binds the match and this pane's own camera; `HumanFlightAdapter` attaches the live rig list
 and `FlightController` feeds the pose each frame. A kill has no banner of its own here: `HudMessages`
 words and shows it, the one message element the original has. The per-opponent marker is CSVM's splitscreen answer to the original's radar; the shape's

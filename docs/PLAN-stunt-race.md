@@ -715,7 +715,11 @@ the whole window, because the original's table is one screen's HUD and a held co
 a whole-window table would cover the other pilots' flight in the middle of a race. Network: the local
 pane, seats named by network callsign. `ChatPanel.ForPane` (now every pane's chat) steps aside while
 its pane's seat holds the action; the original instead hides it at once on the press until the next
-line, which is not reproduced.
+line, which is not reproduced. By the user's ruling the pane's top-centre status lines step aside
+the same way while the seat holds (the race's run status and leaderboard lines, the Dogfight's match
+line, `StatusHiddenWhile` on `StuntRunHud` and `VersusHud`), in both looks, because the Original
+text keeps the decoded position and overprints them in a 16:9 pane; the compass tape, banners,
+count and crash prompt stay.
 *The looks.* Original (traced-to-code for a Dogfight): `OriginalScoresText` builds the decoded
 lines, the team branch and the flag included, and the overlay draws them three times over in the
 HUD's 1440-line reference, every character on the 8-pixel cell so the columns hold under any stand-in
@@ -747,8 +751,10 @@ Also the shipped-table rows in `DefaultBindingsTests` and `FlightBindingMappingT
 Engine suites (weighted): `stunt-race-display-scores` and `dogfight-display-scores`
 (`Testing/DisplayScoresSuites.cs`), two seats through the roster, each in its own pane with
 `ChatPanel.ForPane` up and both looks attached: nothing before a hold; the holder's pane alone shows
-the standings in both looks while the other pane does not; the holder's chat steps aside and the
-other's stays; the release takes both back; a race seat with no race shows nothing.
+the standings in both looks while the other pane does not; the holder's chat and top status lines
+step aside and the other's stay; the release takes them back; a race seat with no race shows nothing
+and keeps its status lines. The status lines' step-aside was mutation-checked by unwiring
+`StatusHiddenWhile` in each mode (each suite red on that check alone).
 Mutation-checked, each red and restored: name column 20, no member indent, 17 lines, gap column 8,
 team lines unmarked, no pad Back, the tab order moved, a member filed before the action, kills 5, deaths dropped, the score in the kills column, the header without kills and deaths
 (units); deaths dropped (Dogfight suite);
@@ -802,7 +808,8 @@ its rows at the script's positions and faces. Six race columns into five page co
 callsign at the name column's left and the aircraft right-aligned in it, then best, gap and runs;
 the fifth column stays empty. A 62-pixel figure column clips "Bloodhawk" (measured in the first
 capture), which is why the aircraft shares the wide column. The columns' words are the Built-in
-board's (`StuntRace.BestText`, `GapText`).
+board's (`StuntRace.BestText`, `GapText`), and the Built-in board heads its gap column "GAP" as this
+page heads it "Gap".
 *The screen (lead-only).* `UI/Menu/Original/OriginalRaceResults.cs`: the zone key ("1  Passenger
 Hangar") down the player list's lines from (34, 83), two columns past eleven zones (the longest
 shipped course's 17 take nine and eight); the best-run splits in the chat pane, zone numbers on its first line and a pilot
@@ -843,12 +850,14 @@ install's art and strings, Original builds `OriginalRaceBoard`, which wakes on t
 the sim halted, ranks 1st P2, 2nd P1, 3rd P3 (one zone, no finish) with the install's faces, draws
 P1's splits in its chat line, rests on Photo Mode and offers Restart and Back; Restart opens a new
 window and retires it with the clock released; on the next end the pointer fires Back and Photo
-Mode; Built-in keeps `StuntRaceBoard` with Back from the menu and Quit Game from the command line,
-and the Original board's command-line exit reads Quit Game. Mutation-checked, each red and
+Mode; Built-in keeps `StuntRaceBoard`, every column but the placing headed (GAP included), with Back
+from the menu and Quit Game from the command line, and the Original board's command-line exit reads
+Quit Game. Mutation-checked, each red and
 restored: row pitch 21, aircraft left-justified, Best and Gap headers swapped, eleven rows, splits
 in player order, Photo Mode and Restart plaques swapped, a hit test ignoring x, one key column to
 20 zones, an uncapped split column (units); presentation ignored, no retire on a new window, no
-halt, "Exit to Menu" from the menu, the menu resting on Restart, a pointer hitting nothing (suite).
+halt, "Exit to Menu" from the menu, the menu resting on Restart, a pointer hitting nothing, the gap
+header blank (suite).
 Captures (temporary manifest entries through the golden stage, `--chapter=C1 --stunt --players=3
 --debug-scoreboard` with and without `--force-builtin`, and `--menu=lobby:host:scores
 --presentation=original`; manifest restored byte-identical): the Original board, the chrome board

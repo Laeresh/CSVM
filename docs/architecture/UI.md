@@ -493,7 +493,7 @@ since the scoreboard rules off its total and the wrap-up board runs the table st
 
 ## src/UI/Screens/StuntRaceBoard.cs
 The time-attack race's shared Built-in results overlay on `ResultsBoard`'s shell: one row per pilot from `StuntRace.Standings()` with placing, callsign, plane, best time, gap to the winner and runs, a
-pilot with no completed run showing their furthest run's zones and time to them (the columns' words are `StuntRace.BestText` and `GapText`, which the Original board shares), then each
+pilot with no completed run showing their furthest run's zones and time to them (the columns' words are `StuntRace.BestText` and `GapText`, which the Original board shares; every column but the placing is headed), then each
 pilot's best-run splits, a row per zone in course order. Whole-window, since a race ends for everybody at once, and built in Instant Action too, where the race rather than the mission ends a
 multi-seat run. Wakes on `RaceCompleted` and retires once `Ended` clears, so a new window is reachable without the menu; `Rows` is the ranked text the suite reads. Its exit row is
 `ExitLabel`: Back from a menu launch, which returns to the screen the race was launched from, and Quit Game from the command line, the label both race boards take; a network race's is `NetworkExitLabel`, Lobby on the host and Leave on a guest, whose board shows `WaitingForHost` in place of Restart. A pilot who left reads dim, marked by `StuntRace.NameText`. `StuntScoreboard` is the
@@ -642,7 +642,8 @@ a Dogfight. Each frame it reads the pane's seat (`FlightController.ScoresShown`)
 while that seat holds the action and survives an airframe swap. Under the Original presentation it
 draws `OriginalScoresText`'s lines in Courier New on the original's character cell at the decoded HUD
 positions, with the flag column; under Built-in it draws `ScoresTable` as a chrome table centred in the
-pane. `Flight/Hud/ChatPanel.cs` steps aside on the same reading. Decode:
+pane. `Flight/Hud/ChatPanel.cs` steps aside on the same reading, and so do the pane's top-centre
+status lines (`StuntRunHud`'s status and leaderboard lines, `VersusHud`'s match line). Decode:
 [../org/multiplayer-scoring.md](../org/multiplayer-scoring.md) "The in-flight scores".
 
 ## src/UI/Overlays/OriginalScoresText.cs
