@@ -15,6 +15,13 @@ namespace CSVM.UI.Screens;
 /// Restart directly; detail is in this module's docs/architecture/UI.md entry.</summary>
 public sealed partial class StuntRaceBoard : ResultsBoard
 {
+    /// <summary>The line a network guest's race board shows in place of Restart, a new window being
+    /// the host's to call.</summary>
+    public const string WaitingForHost = "Waiting for the host";
+
+    // A left pilot's row, dimmed under the neutral rows.
+    private static readonly Color LeftColor = new(0.55f, 0.58f, 0.63f);
+
     // The board's sizes, chrome type scale rungs at the boards' 720p reference, scaled by
     // window height. The heading's are StuntScoreboard's, so the solo and race boards match.
     private static readonly float TitleFont = ChromeType.InReference(ChromeSize.Title, ReferenceHeight);
@@ -36,12 +43,14 @@ public sealed partial class StuntRaceBoard : ResultsBoard
 
     /// <summary>Builds the (hidden) board and subscribes to the race's end. Add it to a CanvasLayer
     /// above the splitscreen panes; it wakes itself on <see cref="StuntRace.RaceCompleted"/> and
-    /// retires on a restart. <paramref name="zoneNames"/> names the course's zones in course order.</summary>
+    /// retires on a restart. <paramref name="zoneNames"/> names the course's zones in course order.
+    /// A network race names its exit row in <paramref name="exitLabel"/>, else <see cref="ExitLabel"/>'s
+    /// words stand.</summary>
     public static StuntRaceBoard Build(StuntRace race, IReadOnlyList<string> zoneNames, string context,
-        bool exitsToMenu, PauseState state, System.Func<int, MenuInput> inputFor)
+        bool exitsToMenu, PauseState state, System.Func<int, MenuInput> inputFor, string? exitLabel = null)
     {
         var board = new StuntRaceBoard { _race = race, _zoneNames = zoneNames, _context = context };
-        board.InitShell(state, exitsToMenu, inputFor, ExitLabel(exitsToMenu));
+        board.InitShell(state, exitsToMenu, inputFor, exitLabel ?? ExitLabel(exitsToMenu));
         race.RaceCompleted += board.OnRaceCompleted;
         return board;
     }
@@ -50,6 +59,11 @@ public sealed partial class StuntRaceBoard : ResultsBoard
     /// menu the race was launched from; a command-line launch quits, so it keeps Quit Game.
     /// </summary>
     public static string ExitLabel(bool exitsToMenu) => exitsToMenu ? "Back" : QuitLabel;
+
+    /// <summary>The exit row's words on a network race's boards: Lobby for the host, which takes
+    /// every machine there, and Leave for a guest. A command-line launch quits either way.</summary>
+    public static string NetworkExitLabel(bool exitsToMenu, bool host) =>
+        !exitsToMenu ? QuitLabel : host ? "Lobby" : "Leave";
 
     public override void _ExitTree() => _race.RaceCompleted -= OnRaceCompleted;
 
@@ -61,7 +75,7 @@ public sealed partial class StuntRaceBoard : ResultsBoard
         for (int i = 0; i < standings.Count; i++)
         {
             var r = standings[i];
-            _rows.Add($"{StuntRace.Ordinal(i + 1)}  {r.Callsign}  {r.PlaneDisplay}  {StuntRace.BestText(r, _race.ZoneCount)}  {StuntRace.GapText(r, winner)}  {r.RunsFinished}/{r.RunsStarted}");
+            _rows.Add($"{StuntRace.Ordinal(i + 1)}  {StuntRace.NameText(r)}  {r.PlaneDisplay}  {StuntRace.BestText(r, _race.ZoneCount)}  {StuntRace.GapText(r, winner)}  {r.RunsFinished}/{r.RunsStarted}");
         }
 
         // Log the final order too, so a race is reviewable from a headless run's log.
@@ -102,10 +116,10 @@ public sealed partial class StuntRaceBoard : ResultsBoard
         {
             var r = standings[i];
             // The winner's row wears their own identity colour; everyone else stays neutral so the
-            // placing reads at a glance.
-            var color = i == 0 && r.Finished ? r.Color : RowColor;
+            // placing reads at a glance. A pilot who left reads dim, their place kept.
+            var color = r.Left ? LeftColor : i == 0 && r.Finished ? r.Color : RowColor;
             AddCell(grid, StuntRace.Ordinal(i + 1), font, color, HorizontalAlignment.Left, rankW);
-            AddCell(grid, r.Callsign, font, r.Color, HorizontalAlignment.Left, nameW);
+            AddCell(grid, StuntRace.NameText(r), font, r.Left ? LeftColor : r.Color, HorizontalAlignment.Left, nameW);
             AddCell(grid, r.PlaneDisplay, font, color, HorizontalAlignment.Left, planeW);
             AddCell(grid, StuntRace.BestText(r, _race.ZoneCount), font, color, HorizontalAlignment.Right, bestW);
             AddCell(grid, StuntRace.GapText(r, winner), font, color, HorizontalAlignment.Right, gapW);
@@ -133,7 +147,7 @@ public sealed partial class StuntRaceBoard : ResultsBoard
         int zoneW = (int)(190f * s), cellW = (int)(70f * s);
         AddCell(grid, "", font, HeaderColor, HorizontalAlignment.Left, zoneW);
         foreach (var r in standings)
-            AddCell(grid, r.Callsign, font, r.Color, HorizontalAlignment.Right, cellW);
+            AddCell(grid, r.Callsign, font, r.Left ? LeftColor : r.Color, HorizontalAlignment.Right, cellW);
         for (int zone = 0; zone < _race.ZoneCount; zone++)
         {
             string name = zone < _zoneNames.Count && _zoneNames[zone].Length > 0 ? _zoneNames[zone] : $"Zone {zone + 1}";

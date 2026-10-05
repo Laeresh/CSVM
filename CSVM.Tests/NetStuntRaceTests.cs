@@ -273,6 +273,166 @@ public sealed class NetStuntRaceTests
         Assert.Equal(300 - 35, steps + 1);
     }
 
+    [Fact]
+    public void TheRaceCallAndALeftLineRoundTripAtTheirDocumentedOffsets()
+    {
+        Assert.Equal(0x6A, (int)NetMessageType.RaceCall);
+        Assert.Equal(NetReliability.Reliable, NetMessage.ReliabilityOf(NetMessageType.RaceCall));
+        var bytes = new byte[RaceStandingMessage.Size];
+        var call = new RaceCallMessage(NetRaceCall.Lobby, 3);
+        Assert.Equal(8, call.Write(bytes));
+        Assert.Equal(new byte[] { 2, 3, 0, 0 }, bytes[4..8]);
+        Assert.True(RaceCallMessage.TryRead(bytes.AsSpan(0, 8), out var back));
+        Assert.Equal(call, back);
+        Assert.False(RaceCallMessage.TryRead(bytes.AsSpan(0, 7), out _));
+        Assert.Equal(new[] { 1, 2, 3 }, new[] { NetRaceCall.Restart, NetRaceCall.Lobby, NetRaceCall.Leave }.Select(c => (int)c));
+
+        var line = new RaceStandingMessage(1, 0, inRun: false, completed: true, 2, 1, 9f, 9f, 3, 0, new[] { 3f, 6f, 9f }, left: true);
+        Assert.Equal(120, line.Write(bytes));
+        Assert.Equal(0x06, bytes[5]);
+        Assert.True(RaceStandingMessage.TryRead(bytes, out var lineBack));
+        Assert.True(lineBack.Left);
+        Assert.Equal(line, lineBack);
+
+        // ABLE-TO-FAIL CONTROL: a line of a pilot still racing carries no mark.
+        new RaceStandingMessage(1, 0, false, true, 2, 1, 9f, 9f, 3, 0, new[] { 3f, 6f, 9f }).Write(bytes);
+        Assert.Equal(0x02, bytes[5]);
+    }
+
+    [Fact]
+    public void TheHostsRestartOpensTheGuestsNextWindowAheadOfItsLinesAndAnOldLineOrCallOpensNothing()
+    {
+        var f = Field();
+        int restarts = 0;
+        f.Guest.Restarted = () =>
+        {
+            restarts++;
+            f.GuestRace.Restart();
+            f.GuestRace.BeginOpening(0f);
+        };
+        f.Guest.Report(1, NetRaceRun.Started);
+        f.Guest.Report(1, NetRaceRun.Finished, runTime: 9f);
+        f.Pump();
+        f.Step();
+        Assert.Equal(9f, f.GuestRace.Of(1)!.BestTime);
+
+        f.HostRace.Restart();
+        f.HostRace.BeginOpening(0f);
+        f.Host.CallRestart();
+        f.Step();
+        Assert.Equal((1, 1, 1), (restarts, f.HostRace.Round, f.GuestRace.Round));
+        Assert.Null(f.GuestRace.Of(1)!.BestTime);
+
+        // The old window's line, arriving now, is dropped; so is the same restart heard again.
+        int lines = f.Guest.Lines;
+        f.HostSession.Broadcast(new RaceStandingMessage(1, 0, false, true, 1, 1, 9f, 9f, 3, 0, new[] { 3f, 6f, 9f }), NetChannels.Events);
+        f.HostSession.Broadcast(new RaceCallMessage(NetRaceCall.Restart, 1), NetChannels.Events);
+        f.HostSession.Broadcast(new RaceCallMessage(NetRaceCall.Lobby, 0), NetChannels.Events);
+        f.Pump();
+        Assert.Equal((lines, 1, false), (f.Guest.Lines, restarts, f.Guest.LobbyCalled));
+        Assert.Null(f.GuestRace.Of(1)!.BestTime);
+
+        // ABLE-TO-FAIL CONTROL: the new window's own line is taken, and so is its runs' report.
+        f.Guest.Report(1, NetRaceRun.Started);
+        f.Pump();
+        f.Step();
+        Assert.Equal((1, true), (f.GuestRace.Of(1)!.RunsStarted, f.HostRace.Of(1)!.InRun));
+    }
+
+    [Fact]
+    public void TheHostCallsTheLobbyOnlyFromAnEndedRaceAndAGuestsLeaveReachesTheHost()
+    {
+        var f = Field();
+        var left = new List<int>();
+        f.Host.GuestLeft += left.Add;
+        f.Host.Leave(toLobby: true);
+        f.Pump();
+        Assert.False(f.Guest.LobbyCalled);
+
+        Advance(f.HostRace, Window + 1f);
+        f.Step();
+        Assert.True(f.GuestRace.Ended);
+        f.Host.Leave(toLobby: false);
+        f.Pump();
+        Assert.False(f.Guest.LobbyCalled);
+        f.Host.Leave(toLobby: true);
+        f.Pump();
+        Assert.True(f.Guest.LobbyCalled);
+
+        f.Guest.Leave(toLobby: true);
+        f.Pump();
+        Assert.Equal(new[] { f.Sessions[1].LocalPeer }, left);
+
+        // ABLE-TO-FAIL CONTROL: the host's own leave reaches no guest as a leave.
+        Assert.Equal(1, f.Host.CallsTaken);
+    }
+
+    [Fact]
+    public void ASeatThatLeftKeepsItsBestMarkedOnTheGuestsBoardAndItsLaterReportsCountNothing()
+    {
+        var f = Field();
+        f.Guest.Report(1, NetRaceRun.Started);
+        f.Guest.Report(1, NetRaceRun.Finished, runTime: 7f);
+        f.Pump();
+        f.Step();
+
+        f.Host.SeatLeft(1);
+        f.Pump();
+        var copy = f.GuestRace.Of(1)!;
+        Assert.Equal((true, 7f), (copy.Left, copy.BestTime));
+        Assert.Equal(new[] { 1, 0 }, f.GuestRace.Standings().Select(r => r.Index));
+
+        f.Guest.Report(1, NetRaceRun.Started);
+        f.Pump();
+        Assert.Equal((1, false), (f.HostRace.Of(1)!.RunsStarted, f.HostRace.Of(1)!.InRun));
+
+        // ABLE-TO-FAIL CONTROL: the host's own pilot, still in, starts a run.
+        Assert.True(f.HostRace.RunStarted(0));
+    }
+
+    [Fact]
+    public void ALateJoinerWaitsInTheLobbyAndNeverReachesTheRace()
+    {
+        var carrier = new RecordingCarrier(localPeer: 0);
+        carrier.Connect(1);
+        var lobby = new NetLobby(carrier);
+        var roster = new[]
+        {
+            new NetSeat { PeerId = 0, SeatIndex = 0, IsLocal = true, Callsign = "Red" },
+            new NetSeat { PeerId = 1, SeatIndex = 1, Callsign = "Blue" },
+        };
+        var host = NetSession.Host(lobby, roster, 0x5EEDUL);
+        var race = new StuntRace(Window, Zones);
+        race.Add(0, "Bloodhawk");
+        race.Add(1, "Kestrel");
+        var link = NetRaceLink.Open(host, race, () => 0.0, null, null, Dt);
+        var left = new List<int>();
+        link.GuestLeft += left.Add;
+        race.BeginOpening(0f);
+
+        carrier.Connect(7);
+        int before = carrier.Sent.Count;
+        link.Step();
+        Assert.Contains(carrier.Sent.Skip(before), sent => sent.Peer == 1);
+        Assert.DoesNotContain(carrier.Sent.Skip(before), sent => sent.Peer == 7);
+
+        carrier.Deliver(7, Bytes(new RaceRunMessage(1, NetRaceRun.Started, RaceRunMessage.NoZone, 0, 1, 0f)));
+        carrier.Deliver(7, Bytes(new RaceCallMessage(NetRaceCall.Leave, 0)));
+        Assert.Equal((2, false, 0, 0), (race.Racers.Count, race.Of(1)!.InRun, link.ReportsRefused, left.Count));
+
+        // ABLE-TO-FAIL CONTROL: the seated guest's same report counts.
+        carrier.Deliver(1, Bytes(new RaceRunMessage(1, NetRaceRun.Started, RaceRunMessage.NoZone, 0, 1, 0f)));
+        Assert.True(race.Of(1)!.InRun);
+    }
+
+    private static byte[] Bytes<T>(in T message)
+        where T : struct, INetMessage<T>
+    {
+        var bytes = new byte[RaceStandingMessage.Size];
+        int length = message.Write(bytes);
+        return bytes.AsSpan(0, length).ToArray();
+    }
+
     private static void Advance(StuntRace race, float seconds)
     {
         for (float t = 0f; t < seconds; t += Dt)
@@ -321,6 +481,40 @@ public sealed class NetStuntRaceTests
             {
                 session.Step(0.016);
             }
+        }
+    }
+
+    // A carrier that records its sends and connects or delivers on demand.
+    private sealed class RecordingCarrier : INetTransport
+    {
+        private readonly List<int> _peers = new();
+        private INetTransportListener? _listener;
+
+        public RecordingCarrier(int localPeer) => LocalPeer = localPeer;
+
+        public List<(int Peer, byte[] Bytes)> Sent { get; } = new();
+
+        public int LocalPeer { get; }
+
+        public IReadOnlyList<int> Peers => _peers;
+
+        public void Bind(INetTransportListener listener) => _listener = listener;
+
+        public void Connect(int peer)
+        {
+            _peers.Add(peer);
+            _listener?.OnPeerConnected(peer);
+        }
+
+        public void Deliver(int peer, byte[] payload) => _listener?.OnPayload(peer, NetChannels.Events, payload);
+
+        public void Send(int peer, ReadOnlySpan<byte> payload, NetReliability reliability, int channel = 0) =>
+            Sent.Add((peer, payload.ToArray()));
+
+        public void Disconnect(int peer) => _peers.Remove(peer);
+
+        public void Step(double dt)
+        {
         }
     }
 

@@ -24,10 +24,10 @@ public enum StuntRacePhase
 }
 
 /// <summary>One racer's record as a network host sends it, which a guest's race takes whole. It
-/// holds the counts, the best or furthest run, and the ranking run's splits.</summary>
+/// holds the counts, the best or furthest run, the ranking run's splits and whether the pilot left.</summary>
 public readonly record struct RacerLine(
     bool InRun, int RunsStarted, int RunsFinished, float? BestTime, int MostZones, float TimeToMostZones,
-    int CurrentZones, IReadOnlyList<float?> Splits);
+    int CurrentZones, IReadOnlyList<float?> Splits, bool Left = false);
 
 /// <summary>One pilot of a time-attack stunt race: their best completed run, their furthest run,
 /// and the run they are flying now. Every field is fed through <see cref="StuntRace"/>'s event
@@ -84,6 +84,10 @@ public sealed class Racer
 
     public bool Finished => BestTime != null;
 
+    /// <summary>Whether the pilot left the race. The record stays on the boards and ranks as it
+    /// stood; nothing more counts for it, and a new window leaves it out.</summary>
+    public bool Left { get; private set; }
+
     /// <summary>The run time each zone was cleared at, by course index, in the run that ranks this
     /// pilot: the best completed run, else the furthest. Null where that run never cleared it.</summary>
     public IReadOnlyList<float?> Splits => Finished ? _best : _furthest;
@@ -100,7 +104,14 @@ public sealed class Racer
 
     /// <summary>This record as a network host sends it.</summary>
     public RacerLine Line() => new(InRun, RunsStarted, RunsFinished, BestTime, MostZones, TimeToMostZones,
-        CurrentZones, Splits.ToArray());
+        CurrentZones, Splits.ToArray(), Left);
+
+    internal void Leave()
+    {
+        Left = true;
+        InRun = false;
+        Revision++;
+    }
 
     internal void Start()
     {
@@ -160,6 +171,7 @@ public sealed class Racer
         MostZones = line.MostZones;
         TimeToMostZones = line.TimeToMostZones;
         CurrentZones = line.CurrentZones;
+        Left |= line.Left;
         var into = line.BestTime != null ? _best : _furthest;
         Array.Clear(into);
         for (int i = 0; i < into.Length && i < line.Splits.Count; i++)
@@ -197,6 +209,9 @@ public sealed class StuntRace
 {
     /// <summary>How long after time up a run in progress may still finish, seconds.</summary>
     public const float FinalRunCap = 120f;
+
+    /// <summary>What the boards add to the name of a pilot who left the race.</summary>
+    public const string LeftSuffix = " (left)";
 
     // The start count's own boundary rule. A window opening on the seats' steps then opens on
     // the step of their GO.
@@ -288,6 +303,9 @@ public sealed class StuntRace
             ? sign + magnitude.ToString("0.0", CultureInfo.InvariantCulture)
             : sign + StuntMission.FormatTime(magnitude);
     }
+
+    /// <summary>A board's name for one pilot: the callsign, marked when the pilot left the race.</summary>
+    public static string NameText(Racer racer) => racer.Left ? racer.Callsign + LeftSuffix : racer.Callsign;
 
     /// <summary>A board's best column for one pilot: the best time, or the furthest run's zones out
     /// of <paramref name="zoneCount"/> for a pilot with no completed run.</summary>
@@ -414,7 +432,7 @@ public sealed class StuntRace
     /// is open; answers whether it was.</summary>
     public bool RunStarted(int index)
     {
-        if (Replicated || Of(index) is not { } racer)
+        if (Replicated || Of(index) is not { Left: false } racer)
             return false;
         if (!MayStartRun)
         {
@@ -429,18 +447,31 @@ public sealed class StuntRace
     /// <summary>Player <paramref name="index"/> threw the run in progress away.</summary>
     public void RunAbandoned(int index)
     {
-        if (Replicated || Of(index) is not { InRun: true } racer)
+        if (Replicated || Of(index) is not { InRun: true, Left: false } racer)
             return;
         racer.Stop();
         EndIfNoRunLeft();
+    }
+
+    /// <summary>Player <paramref name="index"/>'s pilot left the race. Their record stays and ranks as
+    /// it stood, and a run in progress stops, which may end a final run. A replica marks it alone.
+    /// Answers whether the racer was still in.</summary>
+    public bool MarkLeft(int index)
+    {
+        if (Of(index) is not { Left: false } racer)
+            return false;
+        racer.Leave();
+        Log.Info("flight", $"stunt race: {racer.Callsign} left, their record kept ({BestText(racer, ZoneCount)})");
+        EndIfNoRunLeft();
+        return true;
     }
 
     /// <summary>The run in progress cleared course zone <paramref name="zone"/> at run time
     /// <paramref name="runTime"/>. A zone already cleared in this run, or no run, counts nothing.</summary>
     public void ZoneCleared(int index, int zone, float runTime)
     {
-        if (!Replicated && Phase is StuntRacePhase.Open or StuntRacePhase.FinalRun)
-            Of(index)?.ClearZone(zone, runTime);
+        if (!Replicated && Phase is StuntRacePhase.Open or StuntRacePhase.FinalRun && Of(index) is { Left: false } racer)
+            racer.ClearZone(zone, runTime);
     }
 
     /// <summary>The run in progress completed in <paramref name="runTime"/>. A completion with
@@ -448,7 +479,7 @@ public sealed class StuntRace
     public void RunFinished(int index, float runTime)
     {
         if (Replicated || Phase is not (StuntRacePhase.Open or StuntRacePhase.FinalRun)
-            || Of(index) is not { InRun: true } racer)
+            || Of(index) is not { InRun: true, Left: false } racer)
             return;
         bool best = racer.Finish(runTime);
         Log.Info("flight",
@@ -459,9 +490,11 @@ public sealed class StuntRace
     }
 
     /// <summary>A new window over the same field: every pilot's runs cleared and the race back
-    /// before its opening, which <see cref="BeginOpening"/> starts again.</summary>
+    /// before its opening, which <see cref="BeginOpening"/> starts again. A pilot who left is not in
+    /// it, since nobody joins a race in progress.</summary>
     public void Restart()
     {
+        _racers.RemoveAll(r => r.Left);
         foreach (var r in _racers)
             r.Clear();
         Round++;
@@ -501,7 +534,7 @@ public sealed class StuntRace
         var me = order[place - 1];
         var leader = order[0];
         string line = $"{clock}   {Ordinal(place)}/{order.Count}   LEADER "
-            + (leader.BestTime is { } lead ? $"{leader.Callsign} {StuntMission.FormatTime(lead)}" : "--");
+            + (leader.BestTime is { } lead ? $"{NameText(leader)} {StuntMission.FormatTime(lead)}" : "--");
         if (me.BestTime is not { } mine)
             return line + "   NO TIME";
         if (me != leader)

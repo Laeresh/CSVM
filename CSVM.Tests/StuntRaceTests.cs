@@ -253,6 +253,58 @@ public class StuntRaceTests
     }
 
     [Fact]
+    public void APilotWhoLeftKeepsTheirBestAndRanksAsItStoodMarkedOnEveryNameAndCountingNothingMore()
+    {
+        var race = OpenRace(3, out var a, out var b, out _);
+        FlyRun(race, 0, new[] { 1f, 2f, 5f });
+        FlyRun(race, 1, new[] { 1f, 2f, 6f });
+        PartialRun(race, 0, new[] { (0, 1f) });
+        Assert.True(race.MarkLeft(0));
+        Assert.False(race.MarkLeft(0));
+
+        // Their best still leads, and their run in progress stopped with them.
+        Assert.Equal(new[] { 0, 1, 2 }, race.Standings().Select(r => r.Index));
+        Assert.Equal((5f, false, true), (a.BestTime, a.InRun, a.Left));
+        Assert.Equal("P1 (left)", StuntRace.NameText(a));
+        Assert.Equal("P2", StuntRace.NameText(b));
+        Assert.Contains("LEADER P1 (left) 0:05.0", race.LeaderboardLine(1), StringComparison.Ordinal);
+        Assert.True(race.Racers[0].Line().Left);
+
+        // Nothing more counts for them, and a later faster run of a rival still outranks them.
+        Assert.False(race.RunStarted(0));
+        race.ZoneCleared(0, 1, 2f);
+        race.RunFinished(0, 3f);
+        Assert.Equal((5f, 2, 3, 1), (a.BestTime, a.RunsStarted, a.MostZones, a.RunsFinished));
+        FlyRun(race, 1, new[] { 1f, 2f, 4f });
+        Assert.Equal(new[] { 1, 0, 2 }, race.Standings().Select(r => r.Index));
+
+        // A new window leaves them out; the rest go again.
+        race.Restart();
+        Assert.Equal(new[] { 1, 2 }, race.Racers.Select(r => r.Index));
+    }
+
+    [Fact]
+    public void APilotLeavingInTheFinalRunEndsItWhenTheirsWasTheLastRunAndAReplicaOnlyMarksThem()
+    {
+        var race = OpenRace(3, out _, out _, out _);
+        PartialRun(race, 2, new[] { (0, 1f) });
+        Advance(race, 61f);
+        Assert.Equal(StuntRacePhase.FinalRun, race.Phase);
+        race.MarkLeft(2);
+        Assert.True(race.Ended);
+
+        // ABLE-TO-FAIL CONTROL: a replica keeps waiting for the host's ending.
+        var copy = OpenRace(3, out _, out _, out _);
+        copy.Replicate();
+        copy.TakeLine(2, new RacerLine(true, 1, 0, null, 1, 1f, 1, new float?[3]));
+        Advance(copy, 61f);
+        Assert.True(copy.MarkLeft(2));
+        Assert.Equal(StuntRacePhase.FinalRun, copy.Phase);
+        copy.TakeLine(1, new RacerLine(false, 0, 0, null, 0, 0f, 0, new float?[3], Left: true));
+        Assert.True(copy.Of(1)!.Left);
+    }
+
+    [Fact]
     public void GapsAndClocksFormatInvariantly()
     {
         Assert.Equal("+1.3", StuntRace.FormatGap(1.25f + 0.04f));

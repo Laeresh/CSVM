@@ -427,9 +427,10 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         Enter();
     }
 
-    /// <summary>Back from a match onto its lobby's Game Scores page, every Ready cleared. False when
-    /// the door no longer holds a lobby, and the caller then shows the Connection page.</summary>
-    public bool Land(IReadOnlyList<DogfightScore> scores)
+    /// <summary>Back from a match onto its lobby's Game Scores page, every Ready cleared, a stunt race's
+    /// table in <paramref name="race"/>. False when the door no longer holds a lobby, and the caller
+    /// then shows the Connection page.</summary>
+    public bool Land(IReadOnlyList<DogfightScore> scores, IReadOnlyList<RaceTableRow>? race = null)
     {
         ArgumentNullException.ThrowIfNull(scores);
         if (_net() is not { CanLaunch: true } || Lobby is not { Shown: true } lobby)
@@ -437,7 +438,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             return false;
         }
 
-        lobby.Land(scores);
+        lobby.Land(scores, race);
         Enter();
         Tab = LobbyTab.Scores;
         return true;
@@ -1004,6 +1005,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         hash.Add(lobby.You);
         hash.Add(lobby.Chat.Count);
         hash.Add(lobby.Scores.Count);
+        hash.Add(lobby.RaceScores.Count);
         foreach (var player in lobby.Players)
         {
             hash.Add(player);
@@ -1209,7 +1211,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         for (int i = 0; i < TabKeys.Length; i++)
         {
             rows.Add(new OriginalRow(TabKeys[i], string.Empty, OriginalRowKind.TextButton, TabX[i], 24f, TabWidth[i], 25f,
-                lobby != null && !_outlaw.IsOpen && (i != (int)LobbyTab.Scores || lobby.Scores.Count > 0), 1, null));
+                lobby != null && !_outlaw.IsOpen && (i != (int)LobbyTab.Scores || lobby.HasScores), 1, null));
         }
 
         if (lobby != null && _outlaw.IsOpen)
@@ -1942,9 +1944,15 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
     // The scores page: the headers over the last match's lines, best first. A team match lists
     // each team's line with its pilots indented under it. Hits % stays blank, since no end counts a
-    // pilot's hits.
+    // pilot's hits. A stunt race's table takes the race board's own columns and grey rows.
     private void ComposeScores(DogfightLobby lobby, BoardLayers layers)
     {
+        if (lobby.RaceScores.Count > 0)
+        {
+            OriginalRaceTable.ComposeRows(lobby.RaceScores, PageX, PageY, _text.Strings, layers);
+            return;
+        }
+
         for (int i = 0; i < ScoreHeaderIds.Length; i++)
         {
             layers.Lines.Add(_text.Line(ScoreHeaderIds[i], ScoreHeaders[i], PageX + ScoreHeaderAt[i].X, PageY + ScoreHeaderAt[i].Y, 0f, Black));

@@ -124,7 +124,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ Stunt Race in the Original lobby, flying the chapter's stunt course over the network
 22. ☑ Owner-timed runs on the wire; the host's window, leaderboard and match end
-23. ☐ Network race end: Restart and Lobby, guests waiting, pilots leaving
+23. ☑ Network race end: Restart and Lobby, guests waiting, pilots leaving
 
 ## Dependency and parallelism notes
 
@@ -1249,7 +1249,7 @@ network mode, and only the race asks again. The suite rig drives `_PhysicsProces
 
 **Verified.** <pending orchestrator run>
 
-## C23 ☐ Network race end: Restart and Lobby, guests waiting, pilots leaving
+## C23 ☑ Network race end: Restart and Lobby, guests waiting, pilots leaving
 
 **Goal.** The host's race board offers Restart (a fresh window, opening count, same course and
 rules) and Lobby (everyone back to the lobby); a guest's board says it is waiting for the host and
@@ -1260,12 +1260,138 @@ the race; a race left with one pilot runs on to the window's end.
 calls `RestartMatch` (`FlightController.cs:3695-3698`); a guest's Dogfight board offers no Restart
 (`docs/controls.md`, the `Backspace` row).
 
-**Approach.** <TODO>
+**Approach.** *The wire (traced-to-code for the layout, lead-only for the choice).* One new
+message, `RaceCallMessage`, `0x6A` (`Net/NetRaceMessages.cs:170`, `Net/NetMessages.cs:190`),
+reliable on the events channel, 8 bytes: call at 4 (restart 1, lobby 2, leave 3), round at 5. The
+host sends restart and lobby to every guest; a guest sends leave to the host. One message rather
+than three, because each is one word naming a window. Not a newer-round `RaceStateMessage` as the
+restart word: C22's `Flush` sends the lines before the clock, so a guest would drop the new
+window's lines under its old round before the clock arrived. The call goes out at the restart
+itself (`GameSession.RestartRace`, `:2879`), ahead of that window's lines and clock on the same
+ordered channel, so the guest is in the new round when they land. The racer line `0x69` gains
+flag bit 2, the pilot left (`NetRaceMessages.cs:224`), so a guest's replica takes the mark from the
+host's record as it takes the rest. Same minor release as type 3 and `0x67` to `0x69`.
+*Restart (traced-to-code).* The host's board keeps Restart; its R and the row are `Rerun`, now
+`RestartRace` plus `NetRaceLink.CallRestart` (`Session/World/NetRaceLink.cs:115`). A guest's
+`TakeCall` (`:263`) takes a restart only from the host and only for the round after its own, and
+runs `Restarted`, which `GameSession` binds to the same `RestartRace` (`GameSession.cs:2105`):
+every local seat respawned on the shared spawn behind `StartCount.Opening`, the race restarted and
+`BeginOpening` called in one step. The new window's first clock reading then catches the guest's
+opening up to the host's instant through C22's unchanged `TakeState`/`CatchUpOpening`/`CatchUp`
+path, since the race is back in its opening when it arrives. A guest's own `Rerun` stays refused
+(`:2855`). A guest's restart resets its seat's run, whose abandon would name run 0 of the new window;
+`Report` sends nothing for a run the window never numbered (`NetRaceLink.cs:194`).
+*Lobby, and where the results land (traced-to-code for the path, lead-only for the place).* The
+host's board names its exit Lobby and a guest's Leave (`StuntRaceBoard.NetworkExitLabel`,
+`UI/Screens/StuntRaceBoard.cs:65`; Quit Game from a command line). Every board's and the pause
+sheet's exit is now `GameSession.LeaveFlight` (`:1117`): `NetRaceLink.Leave` first, then the
+launcher's exit. A host leaving an ended race from a menu launch sends the lobby call; a guest sends
+leave. On a guest the call sets `LobbyCalled`, and the launcher's lobby-guest upkeep
+(`Launcher.TickVersusGuestFlight`, `Launch/Launcher.cs:3214`, the check at `:3227`) runs its own
+`ExitSession`, which lands it as a finished Dogfight lands. **Decision:** the race's results land
+on the lobby's Game Scores tab, the page the Original race board already borrows.
+`Launcher.LobbyLanding` (`:1471`) takes the race, `RaceLanding` (`:1489`) builds
+`OriginalRaceTable.Rows` of an ended race, `LobbyReturn` carries them (`UI/Menu/MenuReturnDestination.cs:77`),
+`DogfightLobby.Land` holds them as `RaceScores` (`UI/Menu/DogfightLobby.cs:322`; `RaceTableRow`
+moved beside `DogfightScore`, `:19`), and `OriginalLobbyScreen.ComposeScores` draws them with
+`OriginalRaceTable.ComposeRows` (`UI/Menu/Original/OriginalLobbyScreen.cs:1950`) in the race board's
+columns and grey rows; the next Dogfight's landing replaces them. A Built-in lobby has no page and
+lands nothing, as for a Dogfight.
+*The guest's board (traced-to-code, the look is the user's).* Built-in: `ResultsBoard.RestartWithheld`
+reads `StuntRaceBoard.WaitingForHost`, "Waiting for the host", over Photo Mode and Leave, the
+Dogfight guest's pattern. Original: `OriginalRaceBoard.RestartWithheld` (`OriginalRaceBoard.cs:53`)
+builds a two-row menu, `OriginalRaceResults.Slots` (`OriginalRaceResults.cs:144`) leaves the Send
+plaque empty so Leave keeps the Leave Game slot, `MenuRowAt` maps the pointer, and the chat line
+reads "C1 · Stunt Flying · Waiting for the host". `SessionBoards.BuildRaceBoard` takes both
+(`Launch/SessionBoards.cs:148`).
+*A pilot leaving (traced-to-code).* A guest walking back to the lobby keeps its link, so its leave
+call is the sign: `SessionNet.WireRace` hooks `GuestLeft` to `TakeGuestLeft` (`Launch/SessionNet.cs:418`);
+a dropped link reaches the same `OnPeerLeft`. `TakeSeatLeft` sets the aeroplane inert (`:1046`),
+which hides its pivot and leaves `InPlay` (`FlightController.cs:3133`), so the ghost, the race label
+and every query go with it, and now calls `NetRaceLink.SeatLeft` (`SessionNet.cs:1053`), which runs
+`StuntRace.MarkLeft` (`Flight/Modes/StuntRace.cs:459`) and on the host flushes the marked line at
+once. Every guest reaches `TakeSeatLeft` through the world link's seat-left event. `MarkLeft` keeps
+the record and `Racer.Left` (`:89`); `Compare` is untouched, so the pilot ranks as their record
+stands; a run in progress stops, which can end a final run; the run entry points count nothing more
+for a left racer; `Restart` drops left racers (`:497`), since nobody joins a race in progress.
+*The marks (traced-to-code, the look is the user's).* Original board and lobby: the scores page's
+decoded grey (`0xffbbbbbb`, `OriginalRaceTable.cs:66`) on the whole row and on the splits row.
+Built-in board: `StuntRace.NameText` (`:308`) adds " (left)" and the row dims. Built-in held table:
+`ScoresTable.Race` takes `NameText` (`UI/Overlays/ScoresTable.cs:50`), as does the live leaderboard's
+leader name. ⚠ Not built: the Original held table (`UI/Overlays/OriginalScoresText.cs:108`, B14's
+borrowed race grid) still writes `r.Callsign` unmarked, because a B14 follow-up owns that file on
+another branch; the fix is `StuntRace.NameText(r)` in its name cell once that branch lands.
+*One pilot left, the host leaving (traced-to-code).* A network race builds no `VersusMatch`
+(`VersusDirector.TryCreate` returns at `Session/World/VersusDirector.cs:126` for a non-Versus spec),
+so no "fewer than two pilots left" ending exists to apply; the race runs to its window and final run.
+The host leaving mid-race lands nowhere in the lobby (the race has not ended), so `EndNetWire` closes
+its door with the notice, and each guest's door fails and its upkeep returns it to the Connection
+page: the Dogfight's path, unchanged.
+*No join in progress, Decision 13 (traced-to-code).* `NetLobby.Peers` is the peers present when the
+session bound (`Net/NetLobby.cs:209`), so a peer arriving mid-race is handed the advert and waits in
+the lobby; no race line reaches it and its payloads never reach the session. Verified, nothing
+changed.
+*A capture aid.* `--debug-race-end=host|guest` (`Spec/SessionSpec.cs:871`, `docs/cli.md`) poses a
+split screen `--debug-scoreboard` race's board as the host's or a guest's with player 2 marked left
+once its run counts, since a golden shot is one process and a network board needs two.
 
-**Model recommendation.** <TODO>
+**Model recommendation.** Opus for the window's end on the wire (the call's place ahead of the
+lines, the guest's restart riding C22's catch-up, the lobby hand-off through the launcher's guest
+upkeep and the left mark through the seat-left path); a mid-tier model for a board label, the grey
+or the suffix.
 
-**Verify.** <TODO: a loopback suite: host Restart reopens the window on both machines; Lobby returns
-both; a guest leaving mid-window keeps its row marked "left">.
+**Verify.** Built: units `NetStuntRaceTests` (13): the race call's id, reliability, 8-byte layout
+and round trip, a left line's flag byte; the host's restart opening the guest's next window ahead of
+its lines, an old window's line, the same restart again and an old lobby call each dropped, the new
+window's report counted; the lobby call only from an ended race and only on `toLobby`, a guest's
+leave reaching the host as `GuestLeft`; a seat marked left keeping its best on the guest's board,
+first, and its later start counting nothing; a late joiner on a `NetLobby` getting no race line and
+its report and leave reaching nothing. `StuntRaceTests` (15): a left pilot's best ranked as it stood,
+`NameText` and the leaderboard's leader marked, nothing more counted, a rival's faster run still
+outranking it, `Restart` dropping it; a left pilot's run ending a final run, a replica only marking.
+`OriginalRaceBoardTests` (10): the grey row and grey splits, the other rows black; the guest sheet's
+two plaques, Leave on the Leave Game slot, the waiting line, `MenuRowAt`. `DogfightLobbyTests`: a
+race landing its table and the next Dogfight replacing it. Engine suite `net-stunt-race-end`
+(`Testing/NetStuntRaceSuites.cs`, weighted), two sessions from the lobby's options over a 100 ms
+loopback: at the window's end the host's board offers Photo Mode, Restart, Lobby and the guest's
+Photo Mode, Leave under "Waiting for the host"; the guest's restart opens nothing; the host's Restart
+puts both machines in round 1 on the guest's one call, both openings ending on step 299 with each
+local seat on the shared spawn, both boards retiring, an old window's line sent into the new one
+dropped; in the new window the guest's Leave keeps its best first and marked left on the host's
+board, its aeroplane inert and undrawn there, the host's race still open 120 steps later and ending
+on its window's step, the host's board row reading "1st  guest1 (left)"; on a second pair the host's
+Lobby calls the guest and both machines land the same table (control: a running race lands none).
+Engine suite `menu-original-lobby-race-end` (`Testing/MenuOriginalConnectionSuites.cs`, weighted)
+over two lobby doors: an ended race lands both ends on a live Game Scores with the race's table, the
+left pilot's row grey and the other black and no Dogfight header; a second race launches from that
+lobby; the host leaving it fails the guest's door ("Host left the game") onto the Connection page.
+Mutation-checked, each red then restored byte for byte (METHOD-9, METHOD-17): left racers ranked
+last, `Restart` keeping them, a left racer's start counted, `MarkLeft` not stopping the run, the
+grey ink black, the guest's slots on the Restart plaque, the line's left flag unwritten, the
+restart call's round check dropped, the lobby call from a running race, the late joiner reaching the
+session (`NetLobby.Peers` = every peer), `Land` keeping an old table, the line round check dropped
+(units); the restart call never sent, the guest's restart catch-up lost (299/304), `TakeSeatLeft`
+not marking the racer, the guest's leave never sent, the seat not set inert, the race ending at
+fewer than two pilots, the guest's board not withheld, the lobby call never sent, the line round
+check dropped, the guest's `Restarted` doing nothing (net suite); the lobby page ignoring the race,
+`LobbyLanding` ignoring it, `VersusGuestFlightOver` never true, `RaceLanding` of a running race
+(menu suite). Captures through the golden stage (temporary manifest entries, `--chapter=C1 --stunt
+--players=3 --debug-scoreboard --debug-race-end=host|guest --det --mute` with `--presentation=original`
+and `--force-builtin`; manifest restored byte-identical; the 24 pinned shots unchanged): the host's
+and the guest's boards in both looks with P2's row left. Hand-flown, owed: a two-machine sitting for
+the host's Restart reopening both machines' windows on one count, Lobby taking the guest to Game
+Scores with the table, the guest's Leave and its grey row on the host, and the host leaving
+mid-race; the guest board's waiting line, the Lobby and Leave words, the grey row and the "(left)"
+suffix are the user's look.
 
-**⚠ Traps.** Deathmatch's "fewer than two pilots left" ending (`VersusMatch.cs:17-27`) must not
-apply to a race (Decision 16).
+**⚠ Traps.** Deathmatch's "fewer than two pilots left" ending must not reach a race (Decision 16):
+it lives in `VersusMatch`, which a race never builds, so do not set `Versus` for a race or add a
+field-size end to `StuntRace`. Do not make the restart word a newer-round clock reading or move the
+call after `Flush`: a guest drops every line under a round it is not in yet. Do not let a guest's
+board restart in place: its window is the host's. Do not remove a left racer from the field
+mid-window: Decision 16 keeps the record ranked; only a new window drops it. A guest's walk back to
+the lobby keeps its link, so the host learns of it only from the leave call; a dropped link is the
+other path, and both meet in `TakeSeatLeft`. The host's lobby call is sent only from an ended race:
+a host leaving mid-race closes its door instead, which is what ends the guest's flight.
+
+**Verified.** <pending orchestrator run>

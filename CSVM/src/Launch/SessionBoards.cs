@@ -67,6 +67,10 @@ internal sealed class SessionBoards
     /// </summary>
     public ResultsBoard? DogfightBoard => _boards.OfType<VersusBoard>().FirstOrDefault();
 
+    /// <summary>The race board, either presentation's, null outside a race. A suite reads its menu
+    /// and rows through this.</summary>
+    public Control? RaceBoard { get; private set; }
+
     /// <summary>The Restart the pause board carries, null where it offers none. A suite reads it,
     /// and fires it, through this.</summary>
     public Action? PauseRestart => _originalPause?.Restart ?? (_pauseBoard as PauseBoard)?.Restart;
@@ -138,18 +142,21 @@ internal sealed class SessionBoards
     /// <summary>The time-attack race's shared results board, one ranked row per pilot over the
     /// whole window. It is the Original presentation's lobby-scores board where that art and the
     /// string table are installed, the Built-in chrome board otherwise. Instant Action builds it too,
-    /// since the race ends a multi-seat stunt run. <paramref name="zoneNames"/> are in course order.</summary>
+    /// since the race ends a multi-seat stunt run. <paramref name="zoneNames"/> are in course order.
+    /// A network race names its own exit row in <paramref name="exitLabel"/>, and a guest's board
+    /// shows <paramref name="restartWithheld"/> in place of Restart.</summary>
     public Control BuildRaceBoard(StuntRace race, IReadOnlyList<string> zoneNames, string context,
-        Action restart)
+        Action restart, string? exitLabel = null, string? restartWithheld = null)
     {
         Control built;
-        string exitLabel = StuntRaceBoard.ExitLabel(_in.MenuDriven);
+        exitLabel ??= StuntRaceBoard.ExitLabel(_in.MenuDriven);
         // Player 1: a results board reads _inputFor(0), so its cursor is P1's whoever won.
         if (OriginalRaceStrings() is { } strings)
         {
             var board = OriginalRaceBoard.Build(race, zoneNames, context, exitLabel, _in.PauseState,
                 InputFor, _in.DataRoot, strings);
             board.Restart = restart;
+            board.RestartWithheld = restartWithheld;
             board.Exit = _in.Exit;
             board.PhotoMode = () => EnterPhotoMode(0);
             built = board;
@@ -157,14 +164,16 @@ internal sealed class SessionBoards
         else
         {
             var board = StuntRaceBoard.Build(race, zoneNames, context, exitsToMenu: _in.MenuDriven,
-                _in.PauseState, InputFor);
+                _in.PauseState, InputFor, exitLabel);
             board.Restart = restart;
+            board.RestartWithheld = restartWithheld;
             board.Exit = _in.Exit;
             board.PhotoMode = () => EnterPhotoMode(0);
             built = board;
         }
 
         _boards.Add(built);
+        RaceBoard = built;
         AddLayer(built, "race_board");
         return built;
     }

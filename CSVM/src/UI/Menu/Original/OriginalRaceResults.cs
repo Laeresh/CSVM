@@ -7,22 +7,26 @@ using CSVM.UI.Boards;
 namespace CSVM.UI.Menu.Original;
 
 /// <summary>One pilot's best-run splits as drawn: the callsign and one cell per zone in course
-/// order, "-" where that run never cleared the zone.</summary>
-public sealed record RaceSplitRow(string Pilot, IReadOnlyList<string> Cells);
+/// order, "-" where that run never cleared the zone. A pilot who left carries
+/// <paramref name="Left"/>.</summary>
+public sealed record RaceSplitRow(string Pilot, IReadOnlyList<string> Cells, bool Left = false);
 
 /// <summary>What one ended race's Original board shows, frozen at the race's end so a restart's
 /// cleared field never redraws it. It holds the standings, the zone names in course order, each
-/// pilot's splits in race order, the context line and the exit row's words.</summary>
+/// pilot's splits in race order, the context line and the exit row's words. A network guest's sheet
+/// carries its line in place of Restart as <paramref name="Withheld"/>, null where Restart stands.</summary>
 public sealed record RaceResultsSheet(
     IReadOnlyList<RaceTableRow> Standings,
     IReadOnlyList<string> ZoneNames,
     IReadOnlyList<RaceSplitRow> Splits,
     string Context,
-    string ExitLabel)
+    string ExitLabel,
+    string? Withheld = null)
 {
     /// <summary>The sheet of an ended <paramref name="race"/>. <paramref name="zoneNames"/> names
     /// the course's zones in course order; a missing or empty name reads "Zone n".</summary>
-    public static RaceResultsSheet Of(StuntRace race, IReadOnlyList<string> zoneNames, string context, string exitLabel)
+    public static RaceResultsSheet Of(StuntRace race, IReadOnlyList<string> zoneNames, string context, string exitLabel,
+        string? withheld = null)
     {
         ArgumentNullException.ThrowIfNull(race);
         ArgumentNullException.ThrowIfNull(zoneNames);
@@ -42,10 +46,10 @@ public sealed record RaceResultsSheet(
                 cells.Add(racer.Splits[zone] is { } at ? StuntMission.FormatTime(at) : "-");
             }
 
-            splits.Add(new RaceSplitRow(racer.Callsign, cells));
+            splits.Add(new RaceSplitRow(racer.Callsign, cells, racer.Left));
         }
 
-        return new RaceResultsSheet(OriginalRaceTable.Rows(standings, race.ZoneCount), names, splits, context, exitLabel);
+        return new RaceResultsSheet(OriginalRaceTable.Rows(standings, race.ZoneCount), names, splits, context, exitLabel, withheld);
     }
 }
 
@@ -126,7 +130,38 @@ public static class OriginalRaceResults
         (LargeArt, 655f, 548f, 131f, 37f, 10062),
     };
 
+    // A left pilot's splits, the scores page's grey for a row its flag marks.
+    private static readonly BoardTint Grey = new(0xbb, 0xbb, 0xbb);
+
+    // The plaques the menu's rows take, in menu order, with Restart standing and withheld.
+    private static readonly int[] AllSlots = { PhotoRow, RestartRow, ExitRow };
+    private static readonly int[] WithheldSlots = { PhotoRow, ExitRow };
+
     private static readonly BoardTint Black = new(0, 0, 0);
+
+    /// <summary>The plaque each menu row stands on, in menu order. A withheld Restart leaves its
+    /// plaque empty, so the exit keeps its own slot.</summary>
+    public static IReadOnlyList<int> Slots(RaceResultsSheet sheet)
+    {
+        ArgumentNullException.ThrowIfNull(sheet);
+        return sheet.Withheld == null ? AllSlots : WithheldSlots;
+    }
+
+    /// <summary>The menu row whose plaque stands at an authored point, or -1 for none.</summary>
+    public static int MenuRowAt(RaceResultsSheet sheet, float x, float y)
+    {
+        int plaque = RowAt(x, y);
+        var slots = Slots(sheet);
+        for (int i = 0; i < slots.Count; i++)
+        {
+            if (slots[i] == plaque)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
 
     /// <summary>The plaque at an authored point, or -1 for none: the pointer's whole hit test.
     /// </summary>
@@ -148,9 +183,9 @@ public static class OriginalRaceResults
     public static (float X, float Y, float Width, float Height) PlaqueRect(int row) =>
         (Plaques[row].X, Plaques[row].Y, Plaques[row].Width, Plaques[row].Height);
 
-    /// <summary>The screen for one frame. <paramref name="focus"/> is the plaque the cursor stands
-    /// on and <paramref name="pressed"/> whether the pointer holds it. The two pick the strip frame
-    /// and the label tint as the lobby's plaques do.</summary>
+    /// <summary>The screen for one frame. <paramref name="focus"/> is the menu row the cursor stands
+    /// on and <paramref name="pressed"/> whether the pointer holds it. The two pick that plaque's
+    /// strip frame and label tint as the lobby's plaques do.</summary>
     public static ComposedBoard Compose(RaceResultsSheet sheet, UiStrings strings, int focus, bool pressed)
     {
         ArgumentNullException.ThrowIfNull(sheet);
@@ -165,11 +200,13 @@ public static class OriginalRaceResults
         ComposeSplits(sheet, strings, layers);
         var face = MultiplayerBoardText.Regular(strings, 10575);
         float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
-        layers.Lines.Add(new BoardLine(sheet.Context, LineBoxX + 4f, LineBoxY + ((LineBoxHeight - size) / 2f) - 1f,
+        string line = sheet.Withheld is { } withheld ? $"{sheet.Context}   ·   {withheld}" : sheet.Context;
+        layers.Lines.Add(new BoardLine(line, LineBoxX + 4f, LineBoxY + ((LineBoxHeight - size) / 2f) - 1f,
             LineBoxWidth - 8f, size, BoardInk.Row, -1, Face: face, Colour: Black));
-        for (int row = 0; row < Plaques.Length; row++)
+        var slots = Slots(sheet);
+        for (int i = 0; i < slots.Count; i++)
         {
-            ComposePlaque(row, row == focus, row == focus && pressed, Label(sheet, row), strings, layers);
+            ComposePlaque(slots[i], i == focus, i == focus && pressed, Label(sheet, slots[i]), strings, layers);
         }
 
         return new ComposedBoard(layers.Pictures, layers.Strokes, layers.Lines, layers.Plaques, layers.Notes,
@@ -222,10 +259,11 @@ public static class OriginalRaceResults
         {
             var row = sheet.Splits[i];
             float y = ChatY + (OriginalRaceTable.RowPitch * (i + 1));
-            layers.Lines.Add(Line(strings, 10575, row.Pilot, ChatX + 4f, y, ChatNameColumn - 8f));
+            var ink = row.Left ? Grey : Black;
+            layers.Lines.Add(Line(strings, 10575, row.Pilot, ChatX + 4f, y, ChatNameColumn - 8f, ink: ink));
             for (int zone = 0; zone < zones && zone < row.Cells.Count; zone++)
             {
-                layers.Lines.Add(Line(strings, 10575, row.Cells[zone], left + (column * zone), y, column, BoardJustify.Center));
+                layers.Lines.Add(Line(strings, 10575, row.Cells[zone], left + (column * zone), y, column, BoardJustify.Center, ink));
             }
         }
     }
@@ -244,12 +282,12 @@ public static class OriginalRaceResults
             Colour: MultiplayerBoardText.LabelTint(true, focused, pressed)));
     }
 
-    // One line in a string's face, in the lobby's black.
+    // One line in a string's face, in the lobby's black unless an ink is named.
     private static BoardLine Line(UiStrings strings, int faceId, string text, float x, float y, float width,
-        BoardJustify justify = BoardJustify.Left)
+        BoardJustify justify = BoardJustify.Left, BoardTint? ink = null)
     {
         var face = MultiplayerBoardText.Regular(strings, faceId);
         return new BoardLine(text, x, y, width, face?.Pixels ?? MultiplayerBoardText.TextFallback, BoardInk.Row, -1,
-            Justify: justify, Face: face, Colour: Black);
+            Justify: justify, Face: face, Colour: ink ?? Black);
     }
 }

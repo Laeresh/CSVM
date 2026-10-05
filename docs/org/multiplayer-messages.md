@@ -396,8 +396,8 @@ counterpart, so they are minted at `0x40`, `0x41`, `0x42`, `0x43` and `0x44`, ab
 above. The host-owned world's four (AI state, AI fire, a guest's hit claim on an AI, and a world
 event) are minted at `0x45` to `0x48`, below, the clock ping at `0x49`, the lobby's session advert at `0x4A`, the zeppelin path at `0x4B`, a generator's AI launch at `0x4C`, the surface-vehicle patrol at `0x4D`, a positional start at `0x4E`, the lobby's session closed at `0x4F`, and the lobby's co-op flow, co-op pick and co-op seat fit at `0x50` to `0x52`, the Dogfight lobby's options, roster and chat at `0x53` to `0x55`, the lobby's build version at `0x56`, a guest's destructible hit at `0x57`, a cutscene skip at `0x58`, the lobby's co-op wingman at `0x59`, the lobby's co-op film at `0x5A`, the start barrier's word at `0x5B`, a match's death notice at `0x5C`, the lobby's plane build and plane rules at `0x5D` and `0x5E`, the lobby's co-op hangar plane at `0x5F`, the lobby's join password at `0x60`, and the lobby's team action and team list at `0x61` and `0x62`, Capture the Flag's ask and table at `0x63` and `0x64`, Zeppelin
 vs Zeppelin's placed return at `0x65`, the in-flight chat at `0x66`, the original's `0x15` with
-the typist's seat added ("In-flight chat" below), and a stunt race's run report, race clock and
-racer line at `0x67` to `0x69` ("Stunt race" below). The handshake carries the master seed, the host's clock and the seat the joining peer was
+the typist's seat added ("In-flight chat" below), and a stunt race's run report, race clock, racer
+line and race call at `0x67` to `0x6A` ("Stunt race" below). The handshake carries the master seed, the host's clock and the seat the joining peer was
 given, in 24 bytes: the seed as two 32-bit words at 4, the clock's double as two at 12, the seat at
 20 and, at 21, how many seats after it the same machine flies (0 for one pilot, which is the byte a
 one-seat join always carried), then two reserved bytes. The original needs none of the three, because it draws from no shared stream and hands
@@ -870,7 +870,8 @@ every guest (`Session/World/NetRaceLink.cs`, the race itself `Flight/Modes/Stunt
 |---|---|---|---|
 | `0x67` | Race run | reliable, guest to host | seat at 4, kind at 5 (started 1, zone 2, finished 3, abandoned 4), course zone at 6 (`0xFF` for none), round at 7, the owner's run number at 8, two reserved bytes, the run time at 12 (16 bytes) |
 | `0x68` | Race state | reliable, host to each guest | phase at 4 (opening 0, open 1, final run 2, ended 3), round at 5, two reserved bytes, seconds into the phase's clock at 8 (the opening's while it runs, the window's after), the window's length at 12, the host's session clock at 16 (20 bytes) |
-| `0x69` | Race standing | reliable, host to each guest | seat at 4, flags at 5 (bit 0 in a run, bit 1 a completed run), round at 6, split count at 7, runs started at 8, runs finished at 10, best time at 12 (0 without a completed run), time to the most zones at 16, most zones at 20, the run in progress's zones at 21, two reserved bytes, then 24 splits of 4 bytes, the ranking run's, -1 for a zone it never cleared (120 bytes) |
+| `0x69` | Race standing | reliable, host to each guest | seat at 4, flags at 5 (bit 0 in a run, bit 1 a completed run, bit 2 the pilot left), round at 6, split count at 7, runs started at 8, runs finished at 10, best time at 12 (0 without a completed run), time to the most zones at 16, most zones at 20, the run in progress's zones at 21, two reserved bytes, then 24 splits of 4 bytes, the ranking run's, -1 for a zone it never cleared (120 bytes) |
+| `0x6A` | Race call | reliable, host to each guest (restart, lobby) and guest to host (leave) | call at 4 (restart 1, lobby 2, leave 3), round at 5, two reserved bytes (8 bytes) |
 
 **The reports.** A guest sends one report per event of its own seat's run: the run clock's start on
 the step after its count's GO, each zone's first clearing with its run time, the finish, and a
@@ -907,9 +908,35 @@ step.
 **Wire compatibility.** A build without these ids drops them as unknown. Builds share a lobby only
 on the same MAJOR.MINOR (`BuildVersionMessage`), and these ship with type 3 in a minor release.
 
-**A new window.** A guest drops a line or a clock under another round than its own: the host's
-restart does not cross the wire, and a guest's own Restart is refused, since its window is the
-host's.
+**A new window.** Only the host's board offers Restart; a guest's reads "Waiting for the host" in
+its place, and a guest's own restart opens nothing. The host's Restart sends a restart call naming
+the new round, at the restart itself and so ahead of that window's lines and clock on the one
+ordered channel. A guest takes it only when the round is the one after its own, and opens the same
+window: every local seat back on the shared spawn behind a fresh opening count, its race cleared.
+The new window's clock then catches the guest's opening up to the host's instant exactly as the
+first window's does. A guest drops a line or a clock under another round than its own, which is an
+old window's.
+
+**Leaving.** A guest that leaves a race keeps its link when it walks back to the lobby, so it sends
+a leave call first; a dropped link reads the same. The host takes each seat of that machine out of
+play as for any guest leaving a mission: the aeroplane goes inert, which takes its ghost and its
+label, and every other guest hears it through the world link's seat-left event. The racer stays on
+every board with its record, ranked as it stood and marked left: the scores page's grey row on the
+Original board and in the lobby, a "(left)" suffix on the Built-in board, the Built-in held scores
+table and the live leaderboard line. A run it had in progress stops, nothing more counts for it, and a new
+window leaves it out. A race left with one pilot runs on to the window's end, since a race builds no
+Dogfight match and so has no "fewer than two pilots" ending. The host leaving mid-race closes its
+door, which ends every guest's flight as a Dogfight's host leaving does.
+
+**The lobby.** The host's board names its exit Lobby. Taken from an ended race it sends a lobby call
+and lands the host on the lobby's Game Scores, its door kept; each guest's launcher follows the call
+the same way. Game Scores then shows the race's table in the race board's own columns, a pilot who
+left on the grey row, where a Dogfight's lines stand after a match. A guest's board names its exit
+Leave, which lands it on the same page.
+
+**Joining late.** A peer that connects while a race is in flight waits on the lobby with the advert,
+as for every network match: the lobby passes a bound session only the peers present when it bound,
+so no line reaches the newcomer and no report of its counts.
 
 ## The lobby
 

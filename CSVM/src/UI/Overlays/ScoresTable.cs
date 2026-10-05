@@ -34,7 +34,8 @@ public sealed class ScoresTable
     /// <summary>The lines in standing order.</summary>
     public IReadOnlyList<ScoresRow> Rows { get; }
 
-    /// <summary>A race's standings, ranked by best run, in <c>StuntRaceBoard</c>'s words.</summary>
+    /// <summary>A race's standings, ranked by best run, in <c>StuntRaceBoard</c>'s words, a pilot who
+    /// left marked so.</summary>
     public static ScoresTable Race(StuntRace race)
     {
         ArgumentNullException.ThrowIfNull(race);
@@ -46,7 +47,7 @@ public sealed class ScoresTable
             var r = standings[i];
             rows.Add(new ScoresRow(new[]
             {
-                StuntRace.Ordinal(i + 1), r.Callsign, r.PlaneDisplay, StuntRace.BestText(r, race.ZoneCount),
+                StuntRace.Ordinal(i + 1), StuntRace.NameText(r), r.PlaneDisplay, StuntRace.BestText(r, race.ZoneCount),
                 StuntRace.GapText(r, winner),
                 string.Format(CultureInfo.InvariantCulture, "{0}/{1}", r.RunsFinished, r.RunsStarted),
             }, r.Index, false));

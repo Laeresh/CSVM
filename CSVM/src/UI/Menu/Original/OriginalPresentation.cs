@@ -508,7 +508,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         {
             // The lobby the match was launched from, on its scores, or the Connection page saying
             // why the link ended.
-            if (!_shell.Lobby.Land(landing.Scores))
+            if (!_shell.Lobby.Land(landing.Scores, landing.Race))
             {
                 _shell.ReturnToConnection();
             }

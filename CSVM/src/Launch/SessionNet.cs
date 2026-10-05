@@ -414,6 +414,8 @@ internal sealed class SessionNet
         }
 
         Race = NetRaceLink.Open(net, race, _clockTime, Clock, Ping, GameClock.FixedDt);
+        // A guest walking back to the lobby keeps its link, so its word is the only sign it left.
+        Race.GuestLeft += TakeGuestLeft;
         Log.Info("core", $"net race: {(net.IsHost ? "host (timing its own seats, taking every guest's run reports, sending each changed racer's line and its clock)" : "guest (reporting its own seats' runs, its board and window replicated from the host's)")}");
         return Race;
     }
@@ -1030,7 +1032,8 @@ internal sealed class SessionNet
         }
     }
 
-    // Takes one departed guest's seat out of play and names it in every pane's message stack.
+    // Takes one departed guest's seat out of play and names it in every pane's message stack. A
+    // race keeps its record, marked left; the inert aeroplane takes its ghost and label with it.
     private bool TakeSeatLeft(int seat)
     {
         if (seat < 0 || seat >= Seats.Count || Seats[seat].IsLocal || !_seatsLeft.Add(seat))
@@ -1047,6 +1050,7 @@ internal sealed class SessionNet
         // host's step sends that ending; a guest's replicated match only marks the seat. A flag the
         // seat carried floats, as a death's does (FUN_004995a0).
         _dogfight?.SeatLeft(seat);
+        Race?.SeatLeft(seat);
         string line = UI.Menu.CoopDoorText.Left(Seats[seat].Callsign);
         foreach (var rig in _rigs)
         {

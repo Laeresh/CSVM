@@ -12,7 +12,9 @@ namespace CSVM.Session.World;
 /// run starts, splits, finishes and restarts to the host as <see cref="RaceRunMessage"/>s. The host
 /// feeds them to its race beside its own seats' runs, and sends every changed racer's line and its
 /// clock to every guest. A guest's race is a replica that takes both, and its opening count
-/// catches up to the host's (<c>docs/org/multiplayer-messages.md</c>, "Stunt race").
+/// catches up to the host's. The window's end crosses as <see cref="RaceCallMessage"/>s: the host's
+/// restart and return to the lobby, a guest's leaving (<c>docs/org/multiplayer-messages.md</c>,
+/// "Stunt race").
 /// </summary>
 internal sealed class NetRaceLink
 {
@@ -46,6 +48,20 @@ internal sealed class NetRaceLink
         _stepSeconds = stepSeconds;
         _cadence = net.IsHost ? new MatchStateCadence() : null;
     }
+
+    /// <summary>On the host, a guest machine that left the race, by its peer.</summary>
+    internal event Action<int>? GuestLeft;
+
+    /// <summary>On a guest, the host's new window to open here. Every local seat goes back to the
+    /// start behind a fresh opening count, as the host's own restart does.</summary>
+    internal Action? Restarted { get; set; }
+
+    /// <summary>On a guest, whether the host took the race back to the lobby. The launcher's upkeep
+    /// follows it there.</summary>
+    internal bool LobbyCalled { get; private set; }
+
+    /// <summary>Calls taken from the other end: restarts and the lobby on a guest, leaves on the host.</summary>
+    internal int CallsTaken { get; private set; }
 
     /// <summary>On a guest, what each local seat's running count must skip when the opening
     /// catches up to the host's, in seconds. The race has already skipped the same.</summary>
@@ -90,7 +106,43 @@ internal sealed class NetRaceLink
             net.On<RaceStateMessage>((_, state) => link.TakeState(state));
         }
 
+        net.On<RaceCallMessage>(link.TakeCall);
         return link;
+    }
+
+    /// <summary>The host's new window, told to every guest. Sent at the restart itself, ahead of the
+    /// new window's lines and clock on the same channel.</summary>
+    internal void CallRestart()
+    {
+        if (_net.IsHost)
+        {
+            _net.Broadcast(new RaceCallMessage(NetRaceCall.Restart, (byte)_race.Round), NetChannels.Events);
+        }
+    }
+
+    /// <summary>This machine leaves the race. A guest tells the host, which marks its seats left. The
+    /// host tells its guests only when it takes an ended race to the lobby (<paramref name="toLobby"/>).
+    /// A host leaving otherwise closes its door, which ends every guest's flight.</summary>
+    internal void Leave(bool toLobby)
+    {
+        if (!_net.IsHost)
+        {
+            _net.Send(_net.HostPeer, new RaceCallMessage(NetRaceCall.Leave, (byte)_race.Round), NetChannels.Events);
+        }
+        else if (toLobby && _race.Ended)
+        {
+            _net.Broadcast(new RaceCallMessage(NetRaceCall.Lobby, (byte)_race.Round), NetChannels.Events);
+        }
+    }
+
+    /// <summary>A seat whose pilot left the mission, on every machine. Its record stays, marked; the
+    /// host sends the marked line at once, since a halted race takes no step to send it.</summary>
+    internal void SeatLeft(int seat)
+    {
+        if (_race.MarkLeft(seat) && _cadence != null)
+        {
+            Flush(false);
+        }
     }
 
     /// <summary>The owner's feed off seat <paramref name="seat"/>'s own run, flown here. The host's
@@ -138,6 +190,11 @@ internal sealed class NetRaceLink
         if (kind == NetRaceRun.Started)
         {
             _ownRuns[seat] = ++run;
+        }
+        else if (run == 0)
+        {
+            // No run of this window to name, as when a new window resets the seat's run.
+            return;
         }
 
         _net.Send(_net.HostPeer,
@@ -198,7 +255,46 @@ internal sealed class NetRaceLink
         return new RaceStandingMessage((byte)racer.Index, (byte)_race.Round, line.InRun, line.BestTime != null,
             (ushort)Math.Min(line.RunsStarted, ushort.MaxValue), (ushort)Math.Min(line.RunsFinished, ushort.MaxValue),
             line.BestTime ?? 0f, line.TimeToMostZones, (byte)Math.Min(line.MostZones, byte.MaxValue),
-            (byte)Math.Min(line.CurrentZones, byte.MaxValue), splits);
+            (byte)Math.Min(line.CurrentZones, byte.MaxValue), splits, line.Left);
+    }
+
+    // A call is taken only from the end that may make it: a restart or the lobby from the host, a
+    // leave from a guest. A restart must name the window after this guest's own, which it opens.
+    private void TakeCall(int peer, RaceCallMessage call)
+    {
+        if (_net.IsHost)
+        {
+            if (call.Call == NetRaceCall.Leave && peer != _net.LocalPeer)
+            {
+                CallsTaken++;
+                Log.Info("flight", $"net race: peer {peer} left the race");
+                GuestLeft?.Invoke(peer);
+            }
+
+            return;
+        }
+
+        if (peer != _net.HostPeer)
+        {
+            return;
+        }
+
+        if (call.Call == NetRaceCall.Restart && call.Round == (byte)(_race.Round + 1))
+        {
+            CallsTaken++;
+            Log.Info("flight", $"net race: the host opened window {call.Round}");
+            Restarted?.Invoke();
+        }
+        else if (call.Call == NetRaceCall.Lobby && call.Round == (byte)_race.Round)
+        {
+            CallsTaken++;
+            LobbyCalled = true;
+            Log.Info("flight", $"net race: the host took the race back to the lobby");
+        }
+        else
+        {
+            Log.Info("flight", $"net race: dropped the host's {call.Call} call for window {call.Round} in window {_race.Round}");
+        }
     }
 
     // The host's intake. Only the machine flying a seat reports it, under the current window; a
@@ -245,7 +341,7 @@ internal sealed class NetRaceLink
                 _ownerRuns[report.Seat] = report.Run;
                 if (!_race.RunStarted(report.Seat))
                 {
-                    Log.Info("flight", $"net race: seat {report.Seat}'s run {report.Run} started outside the open window, not counted");
+                    Log.Info("flight", $"net race: seat {report.Seat}'s run {report.Run} started outside the open window or after its pilot left, not counted");
                 }
 
                 break;
@@ -274,8 +370,8 @@ internal sealed class NetRaceLink
         Log.Info("flight", $"net race: dropped seat {report.Seat}'s {report.Kind} report (run {report.Run}, round {report.Round}), {why}");
     }
 
-    // A guest takes a line only under its own window. A line of the host's next window waits for
-    // the race's restart over the wire, which this link does not carry.
+    // A guest takes a line only under its own window. The host's restart call reaches it ahead of
+    // the next window's lines, so a line under another round is an old window's.
     private void TakeLine(in RaceStandingMessage line)
     {
         if (line.Round != (byte)_race.Round)
@@ -290,7 +386,7 @@ internal sealed class NetRaceLink
         }
 
         _race.TakeLine(line.Seat, new RacerLine(line.InRun, line.RunsStarted, line.RunsFinished,
-            line.Completed ? line.BestTime : null, line.MostZones, line.TimeToMostZones, line.CurrentZones, splits));
+            line.Completed ? line.BestTime : null, line.MostZones, line.TimeToMostZones, line.CurrentZones, splits, line.Left));
         Lines++;
     }
 

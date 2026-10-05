@@ -3,6 +3,7 @@ using System.Linq;
 using CSVM.Flight.Modes;
 using CSVM.Mech3;
 using CSVM.UI.Boards;
+using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
 using Xunit;
 
@@ -167,8 +168,54 @@ public class OriginalRaceBoardTests
         Assert.Equal(-1, OriginalRaceResults.RowAt(400f, 300f));
     }
 
+    [Fact]
+    public void APilotWhoLeftKeepsTheirPlaceInTheScoresPagesGreyRow()
+    {
+        var race = EndedRace(leaves: 0);
+        var rows = OriginalRaceTable.Rows(race.Standings(), race.ZoneCount);
+        Assert.Equal(new[] { "1st  P2", "2nd  P1", "3rd  P3" }, rows.Select(r => r.Pilot));
+        Assert.Equal(new[] { false, true, false }, rows.Select(r => r.Left));
+
+        var layers = new BoardLayers();
+        OriginalRaceTable.Compose(rows, PageX, PageY, UiStrings.Empty, layers);
+        var grey = new BoardTint(0xbb, 0xbb, 0xbb);
+        Assert.All(layers.Lines.Skip(5 + 5).Take(5), l => Assert.Equal(grey, l.Colour));
+
+        // ABLE-TO-FAIL CONTROL: the headers and every other row keep the script's black.
+        Assert.All(layers.Lines.Take(5 + 5).Concat(layers.Lines.Skip(5 + 10)), l => Assert.Equal(new BoardTint(0, 0, 0), l.Colour));
+
+        var sheet = RaceResultsSheet.Of(race, new[] { "a", "b", "c" }, "", "Lobby");
+        Assert.Equal(new[] { false, true, false }, sheet.Splits.Select(s => s.Left));
+        var board = OriginalRaceResults.Compose(sheet, UiStrings.Empty, 0, false);
+        Assert.All(board.Lines.Where(l => l.Y == 413f && l.X >= 34f && l.Text.Length > 0 && l.X < 800f), l => Assert.Equal(grey, l.Colour));
+    }
+
+    [Fact]
+    public void AGuestsBoardLeavesTheRestartPlaqueEmptyAndSaysItWaitsForTheHost()
+    {
+        var sheet = RaceResultsSheet.Of(EndedRace(), new[] { "a", "b", "c" }, "C1", "Leave", "Waiting for the host");
+        var board = OriginalRaceResults.Compose(sheet, UiStrings.Empty, 1, pressed: false);
+
+        var plaques = board.Pictures.Where(p => p.Art.Frames == 4).ToList();
+        Assert.Equal(new[] { (105f, 325f), (655f, 548f) }, plaques.Select(p => (p.X, p.Y)));
+        Assert.Equal(new[] { 1, 2 }, plaques.Select(p => p.Frame));
+        Assert.DoesNotContain(board.Lines, l => l.Text == OriginalRaceResults.RestartLabel);
+        Assert.Contains(board.Lines, l => l.Text == "Leave" && l.X == 655f);
+        Assert.Contains(board.Lines, l => l.Text == "C1   ·   Waiting for the host" && l.X == 92f);
+
+        // The pointer reaches the exit on its own plaque, and the empty Restart slot is no row.
+        var (sx, sy, _, _) = OriginalRaceResults.PlaqueRect(OriginalRaceResults.RestartRow);
+        var (ex, ey, _, _) = OriginalRaceResults.PlaqueRect(OriginalRaceResults.ExitRow);
+        Assert.Equal(-1, OriginalRaceResults.MenuRowAt(sheet, sx + 1f, sy + 1f));
+        Assert.Equal(1, OriginalRaceResults.MenuRowAt(sheet, ex + 1f, ey + 1f));
+
+        // ABLE-TO-FAIL CONTROL: the host's sheet keeps all three, its exit on menu row 2.
+        var host = RaceResultsSheet.Of(EndedRace(), new[] { "a", "b", "c" }, "C1", "Lobby");
+        Assert.Equal(new[] { 0, 1, 2 }, OriginalRaceResults.Slots(host));
+        Assert.Equal(2, OriginalRaceResults.MenuRowAt(host, ex + 1f, ey + 1f));
+    }
     // Three pilots over three zones: P2 fastest, P1 second over two runs, P3 one zone and no finish.
-    private static StuntRace EndedRace()
+    private static StuntRace EndedRace(int leaves = -1)
     {
         var race = new StuntRace(60f, 3);
         race.Add(0, "Bloodhawk");
@@ -182,6 +229,11 @@ public class OriginalRaceBoardTests
         race.RunStarted(2);
         race.ZoneCleared(2, 2, 4f);
         race.RunAbandoned(2);
+        if (leaves >= 0)
+        {
+            Assert.True(race.MarkLeft(leaves));
+        }
+
         race.Advance(61f);
         Assert.True(race.Ended);
         return race;

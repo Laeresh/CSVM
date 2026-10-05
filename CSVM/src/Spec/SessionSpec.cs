@@ -865,6 +865,11 @@ public sealed record SessionSpec
     /// <c>--screenshot</c> of a race or a Dogfight then shows the scores table.</summary>
     public bool DebugScores { get; private set; }
 
+    /// <summary><c>--debug-race-end=host|guest</c>: a split screen stunt race's board posed as a
+    /// network host's (Restart, Lobby) or guest's (waiting, Leave). Player 2 is marked left once its
+    /// first run counts. A capture aid; a network race keeps its own roles.</summary>
+    public string? DebugRaceEnd { get; private set; }
+
     /// <summary><c>--debug-pause[=frame]</c>: open the pause board at that sim frame, the scripted
     /// twin of the Start press, so a <c>--screenshot</c> captures the pause screen with nobody at
     /// the controls. A frame late enough for the mission to have run is the point: the objectives
@@ -1272,6 +1277,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--rof=")) { s.Rof = arg["--rof=".Length..]; }
             else if (arg == "--debug-scoreboard") { s.DebugScoreboard = true; }
             else if (arg == "--debug-scores") { s.DebugScores = true; }
+            else if (arg.StartsWith("--debug-race-end=")) { string role = arg["--debug-race-end=".Length..]; s.DebugRaceEnd = role is "host" or "guest" ? role : null; }
             else if (arg == "--debug-pause") { s.DebugPauseFrame = DefaultDebugPauseFrame; }
             else if (arg.StartsWith("--debug-pause=")) { s.DebugPauseFrame = int.Parse(arg["--debug-pause=".Length..]); }
             else if (arg.StartsWith("--debug-objective=")) { s.DebugObjective = int.Parse(arg["--debug-objective=".Length..]); }

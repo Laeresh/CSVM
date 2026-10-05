@@ -13,6 +13,11 @@ public readonly record struct DogfightChatLine(string Name, string Text);
 /// <paramref name="IsTeam"/>, and its final points, kills and deaths.</summary>
 public readonly record struct DogfightScore(string Name, int Points, int Kills, int Deaths, bool IsTeam = false);
 
+/// <summary>One pilot's line of a stunt race's table, every column already in its words. They are
+/// the place and callsign, the aircraft, the best or furthest run, the gap and the runs. A pilot
+/// who left the race carries <paramref name="Left"/>, and the table draws the row grey.</summary>
+public sealed record RaceTableRow(string Pilot, string Aircraft, string Best, string Gap, string Runs, bool Left = false);
+
 /// <summary>
 /// The Multiplayer Lobby of a Dogfight, on both of its ends, engine-free. The host owns the Mission
 /// Options, the plane rules and the player list, and each guest reads them off the wire. Every pilot
@@ -121,6 +126,7 @@ public sealed class DogfightLobby
     private CoopPickMessage? _pickSent;
     private string[] _launchNames = Array.Empty<string>();
     private DogfightScore[] _scores = Array.Empty<DogfightScore>();
+    private RaceTableRow[] _raceScores = Array.Empty<RaceTableRow>();
 
     /// <summary>A host's lobby over <paramref name="wire"/>, its pilot named by
     /// <paramref name="name"/>.</summary>
@@ -310,6 +316,13 @@ public sealed class DogfightLobby
     /// <summary>The last match's lines for the Game Scores page, best first, or empty before any
     /// match has been flown from this lobby.</summary>
     public IReadOnlyList<DogfightScore> Scores => _scores;
+
+    /// <summary>The last stunt race's table for the Game Scores page, best first, or empty when the
+    /// last flight from this lobby was no race.</summary>
+    public IReadOnlyList<RaceTableRow> RaceScores => _raceScores;
+
+    /// <summary>Whether a flight from this lobby has landed anything on the Game Scores page.</summary>
+    public bool HasScores => _scores.Length > 0 || _raceScores.Length > 0;
 
     /// <summary>The players named at the last launch, in seat order.</summary>
     public IReadOnlyList<string> LaunchNames => _launchNames;
@@ -745,11 +758,13 @@ public sealed class DogfightLobby
     }
 
     /// <summary>Back from a match: its scores stand on the Game Scores page and this pilot's Ready
-    /// clears. The host opens a new round, which clears every guest's mark too.</summary>
-    public void Land(IReadOnlyList<DogfightScore> scores)
+    /// clears. The host opens a new round, which clears every guest's mark too. A stunt race lands its
+    /// table in <paramref name="race"/> instead.</summary>
+    public void Land(IReadOnlyList<DogfightScore> scores, IReadOnlyList<RaceTableRow>? race = null)
     {
         ArgumentNullException.ThrowIfNull(scores);
         _scores = new List<DogfightScore>(scores).ToArray();
+        _raceScores = race != null ? new List<RaceTableRow>(race).ToArray() : Array.Empty<RaceTableRow>();
         _ready = false;
         if (IsHost)
         {

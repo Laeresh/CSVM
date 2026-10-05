@@ -15,7 +15,8 @@ namespace CSVM.UI.Menu.Original;
 /// retires once a new window clears <see cref="StuntRace.Ended"/>. It draws
 /// <see cref="OriginalRaceResults"/>' composition through <see cref="ComposedBoardView"/>, frozen at
 /// the race's end. Player 1's reader steps Photo Mode, Restart and the exit with any arrow, and
-/// player 1's pointer shares the cursor on <see cref="BoardMenuPointer"/>'s rule.
+/// player 1's pointer shares the cursor on <see cref="BoardMenuPointer"/>'s rule. A network guest's
+/// board withholds Restart.
 /// Module entry: docs/architecture/UI.md on src/UI/Menu/Original/OriginalRaceBoard.cs.
 /// </summary>
 public sealed partial class OriginalRaceBoard : Control
@@ -46,6 +47,10 @@ public sealed partial class OriginalRaceBoard : Control
     /// <summary>Hand player 1's pane to a free camera over the frozen world, chosen from Photo Mode.
     /// </summary>
     public Action? PhotoMode { get; set; }
+
+    /// <summary>A network guest's line in place of the Restart plaque, a new window being the host's
+    /// to call; null where Restart stands. Read at the race's end.</summary>
+    public string? RestartWithheld { get; set; }
 
     /// <summary>The pointer in the board's authored 800x600 space and whether its button is down, or
     /// null for none this frame. Defaults to player 1's mouse; a suite replaces it.</summary>
@@ -127,7 +132,7 @@ public sealed partial class OriginalRaceBoard : Control
         bool changed = _menu.Handle(Math.Sign(_input.Move + _input.MoveX), _input.Accept, false);
         if (Visible)
         {
-            changed |= _pointer.Step(_menu, PointerSource(), OriginalRaceResults.RowAt);
+            changed |= _pointer.Step(_menu, PointerSource(), (x, y) => _sheet is { } sheet ? OriginalRaceResults.MenuRowAt(sheet, x, y) : -1);
         }
 
         if (changed && Visible)
@@ -138,7 +143,7 @@ public sealed partial class OriginalRaceBoard : Control
 
     private void OnRaceCompleted()
     {
-        _sheet = RaceResultsSheet.Of(_race, _zoneNames, _context, _exitLabel);
+        _sheet = RaceResultsSheet.Of(_race, _zoneNames, _context, _exitLabel, RestartWithheld);
         _rows.Clear();
         foreach (var row in _sheet.Standings)
         {
@@ -153,11 +158,16 @@ public sealed partial class OriginalRaceBoard : Control
 
         // A fresh menu each end, so the cursor starts on Photo Mode. A stray confirm on a board that
         // just appeared then neither restarts nor leaves.
-        var menu = new BoardMenu(
-            dismissable: false,
-            (BoardMenuItem.Photo, OriginalRaceResults.PhotoLabel),
-            (BoardMenuItem.Restart, OriginalRaceResults.RestartLabel),
-            (BoardMenuItem.Exit, _exitLabel));
+        var menu = RestartWithheld != null
+            ? new BoardMenu(
+                dismissable: false,
+                (BoardMenuItem.Photo, OriginalRaceResults.PhotoLabel),
+                (BoardMenuItem.Exit, _exitLabel))
+            : new BoardMenu(
+                dismissable: false,
+                (BoardMenuItem.Photo, OriginalRaceResults.PhotoLabel),
+                (BoardMenuItem.Restart, OriginalRaceResults.RestartLabel),
+                (BoardMenuItem.Exit, _exitLabel));
         menu.Activated += OnActivated;
         _menu = menu;
         _input = _inputFor(0);

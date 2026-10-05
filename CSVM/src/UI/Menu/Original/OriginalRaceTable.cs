@@ -7,11 +7,6 @@ using CSVM.UI.Boards;
 
 namespace CSVM.UI.Menu.Original;
 
-/// <summary>One pilot's line of a race table, every column already in its words. They are the
-/// place and callsign, the aircraft, the best (or the furthest run's zones), the gap and the runs.
-/// </summary>
-public sealed record RaceTableRow(string Pilot, string Aircraft, string Best, string Gap, string Runs);
-
 /// <summary>
 /// A stunt race's standings drawn as the original's multiplayer scores page. The page art is
 /// <c>MP_LOBBY_STATSCREEN.PNG</c>, and its columns, headers and ten rows stand where
@@ -65,8 +60,10 @@ public static class OriginalRaceTable
         (0f, 154f), (154f, 62f), (216f, 61f), (277f, 60f), (337f, 57f),
     };
 
-    // The script's row ink, black.
+    // The script's row ink, black, and the grey (0xffbbbbbb) of a row its own flag marks. Here the
+    // flag is a pilot who left the race (docs/org/menu-inventory.md, the lobby's Game Scores).
     private static readonly BoardTint Ink = new(0, 0, 0);
+    private static readonly BoardTint FlaggedInk = new(0xbb, 0xbb, 0xbb);
 
     /// <summary>The field in <paramref name="standings"/>' order as table rows, each column in the
     /// words the Built-in board uses too. <paramref name="zoneCount"/> is the course's.</summary>
@@ -83,22 +80,30 @@ public static class OriginalRaceTable
                 r.PlaneDisplay,
                 StuntRace.BestText(r, zoneCount),
                 StuntRace.GapText(r, winner),
-                string.Format(CultureInfo.InvariantCulture, "{0}/{1}", r.RunsFinished, r.RunsStarted)));
+                string.Format(CultureInfo.InvariantCulture, "{0}/{1}", r.RunsFinished, r.RunsStarted),
+                r.Left));
         }
 
         return rows;
     }
 
     /// <summary>The page at (<paramref name="pageX"/>, <paramref name="pageY"/>) in authored pixels.
-    /// Its art goes into the backdrop. The headers and rows, <see cref="VisibleRows"/> at most, go
-    /// into the lines. <paramref name="strings"/> supplies the faces, else the fallback size holds.
-    /// </summary>
+    /// Its art goes into the backdrop, and <see cref="ComposeRows"/> writes the rest.</summary>
     public static void Compose(IReadOnlyList<RaceTableRow> rows, float pageX, float pageY, UiStrings strings, BoardLayers layers)
+    {
+        ArgumentNullException.ThrowIfNull(layers);
+        layers.Backdrop.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, PageArt), pageX, pageY));
+        ComposeRows(rows, pageX, pageY, strings, layers);
+    }
+
+    /// <summary>The headers and rows into the lines, <see cref="VisibleRows"/> at most. The page stands
+    /// drawn already at (<paramref name="pageX"/>, <paramref name="pageY"/>), as on the lobby's Game
+    /// Scores tab. The string table supplies the faces, else the fallback size holds.</summary>
+    public static void ComposeRows(IReadOnlyList<RaceTableRow> rows, float pageX, float pageY, UiStrings strings, BoardLayers layers)
     {
         ArgumentNullException.ThrowIfNull(rows);
         ArgumentNullException.ThrowIfNull(strings);
         ArgumentNullException.ThrowIfNull(layers);
-        layers.Backdrop.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, PageArt), pageX, pageY));
         var name = HeaderBoxes[0];
         layers.Lines.Add(Line(strings, name.Id, Headers[0], pageX + name.X, pageY + name.Y, name.Width, BoardJustify.Left));
         layers.Lines.Add(Line(strings, name.Id, AircraftHeader, pageX + name.X, pageY + name.Y, name.Width, BoardJustify.Right));
@@ -116,23 +121,26 @@ public static class OriginalRaceTable
             var row = rows[i];
             float x = pageX + RowX;
             float y = pageY + RowY + (RowPitch * i);
-            layers.Lines.Add(Line(strings, NameFace, row.Pilot, x, y, Cells[0].Width, BoardJustify.Left));
-            layers.Lines.Add(Line(strings, NameFace, row.Aircraft, x, y, Cells[0].Width - AircraftInset, BoardJustify.Right));
+            var ink = row.Left ? FlaggedInk : Ink;
+            layers.Lines.Add(Line(strings, NameFace, row.Pilot, x, y, Cells[0].Width, BoardJustify.Left, ink));
+            layers.Lines.Add(Line(strings, NameFace, row.Aircraft, x, y, Cells[0].Width - AircraftInset, BoardJustify.Right, ink));
             string[] figures = { row.Best, row.Gap, row.Runs };
             for (int column = 0; column < figures.Length; column++)
             {
                 var cell = Cells[column + 1];
-                layers.Lines.Add(Line(strings, NumberFace, figures[column], x + cell.X, y, cell.Width, BoardJustify.Center));
+                layers.Lines.Add(Line(strings, NumberFace, figures[column], x + cell.X, y, cell.Width, BoardJustify.Center, ink));
             }
         }
     }
 
-    // One cell in a string's face and the script's ink. The words are the race's, never the
-    // string's own, which for the row faces is empty and for a header names a Dogfight column.
-    private static BoardLine Line(UiStrings strings, int faceId, string text, float x, float y, float width, BoardJustify justify)
+    // One cell in a string's face and an ink, the script's black unless named. The words are the
+    // race's, never the string's own, which for the row faces is empty and for a header names a
+    // Dogfight column.
+    private static BoardLine Line(UiStrings strings, int faceId, string text, float x, float y, float width, BoardJustify justify,
+        BoardTint? ink = null)
     {
         var face = MultiplayerBoardText.Regular(strings, faceId);
         return new BoardLine(text, x, y, width, face?.Pixels ?? MultiplayerBoardText.TextFallback, BoardInk.Row, -1,
-            Justify: justify, Face: face, Colour: Ink);
+            Justify: justify, Face: face, Colour: ink ?? Ink);
     }
 }

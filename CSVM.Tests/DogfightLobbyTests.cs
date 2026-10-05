@@ -400,6 +400,28 @@ public sealed class DogfightLobbyTests
     }
 
     [Fact]
+    public void ARaceLandsItsTableOnGameScoresAndTheNextMatchReplacesIt()
+    {
+        var (host, _, _) = Lobbies(1);
+        Assert.False(host.HasScores);
+        var table = new[]
+        {
+            new RaceTableRow("1st  Blue", "Kestrel", "0:41.2", "", "2/3", Left: true),
+            new RaceTableRow("2nd  Red", "Bloodhawk", "0:44.0", "+2.8", "1/1"),
+        };
+        host.Land(Array.Empty<DogfightScore>(), table);
+        Assert.True(host.HasScores);
+        Assert.Empty(host.Scores);
+        Assert.Equal(table, host.RaceScores);
+        Assert.False(host.Ready);
+
+        // ABLE-TO-FAIL CONTROL: a Dogfight landed after it clears the race's table.
+        host.Land(new[] { new DogfightScore("Host", 1, 1, 0) });
+        Assert.Empty(host.RaceScores);
+        Assert.True(host.HasScores);
+    }
+
+    [Fact]
     public void OneChatLineArrivesOnceOnEveryEnd()
     {
         var (host, guests, _) = Lobbies(3);

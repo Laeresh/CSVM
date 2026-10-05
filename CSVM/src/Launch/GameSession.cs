@@ -420,6 +420,10 @@ public partial class GameSession : Node3D
     /// the spawns granted over the wire.</summary>
     internal VersusDirector? Dogfight => _dogfight;
 
+    /// <summary>The stunt race, null outside one. The launcher lands an ended network race's table
+    /// in the lobby from it.</summary>
+    internal StuntRace? Race => _race;
+
     /// <summary>The mission's zeppelins, null in a flight that runs none.</summary>
     internal ZeppelinRuntime? ZeppelinHulls => _zeppelins;
 
@@ -1107,6 +1111,15 @@ public partial class GameSession : Node3D
     /// there is no frame budget, rather than to the launch frame that needs one.</summary>
     internal bool StepOwedLoad() => _flightRoster?.BuildOrderedAirframe() ?? false;
 
+    /// <summary>Every board's and the pause sheet's way out. A network race says so first. A guest's
+    /// word marks its seats left on the host; a host leaving an ended race takes every guest to the
+    /// lobby.</summary>
+    internal void LeaveFlight()
+    {
+        _wire.Race?.Leave(toLobby: _menuDriven);
+        _exitSession();
+    }
+
     // The --campaign= zeppelin/generator peek's plumbing: true when the loader's list is
     // non-empty, false on an empty (authored [null]) or altogether missing mission file. Both
     // loaders already tolerate [null]; only the "no file at all" case needs the catch.
@@ -1773,7 +1786,7 @@ public partial class GameSession : Node3D
             Spec = _spec,
             Presentation = _presentation,
             MenuDriven = _menuDriven,
-            Exit = _exitSession,
+            Exit = LeaveFlight,
             Restart = _restartSession,
             WorldRoot = _worldRoot!,
             Rigs = _rigs,
@@ -2083,12 +2096,22 @@ public partial class GameSession : Node3D
 
         // The board's Restart is Rerun's: a new window in place, or a rebuilt Instant Action
         // mission. The seats' opening counts began in this same build, so the window opens on GO.
+        // A network guest's board waits for the host's window instead, which opens here on its call.
         if (race != null)
         {
             _race = race;
             var zoneNames = stuntZones!.Zones.Select(z => z.Description).ToList();
+            if (raceLink is { IsHost: false })
+                raceLink.Restarted = () => RestartRace(race);
+            // --debug-race-end poses a split screen race's board as a network one's, P2 left.
+            string? posed = raceLink == null ? _spec.DebugRaceEnd : null;
+            if (posed != null)
+                race.BestImproved += racer => _ = racer.Index == 1 && race.MarkLeft(1);
+            bool guest = raceLink is { IsHost: false } || posed == "guest";
             boards.BuildRaceBoard(race, zoneNames,
-                $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}", Rerun);
+                $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}", Rerun,
+                raceLink != null || posed != null ? StuntRaceBoard.NetworkExitLabel(_menuDriven || posed != null, !guest) : null,
+                guest ? StuntRaceBoard.WaitingForHost : null);
             foreach (var rig in _rigs)
                 if (rig.Controller != null)
                     rig.Controller.RestartRace = Rerun;
@@ -2827,7 +2850,8 @@ public partial class GameSession : Node3D
         }
         if (_race is { Replicated: true })
         {
-            // A guest's window is the host's, and its restart does not cross the wire yet.
+            // ⚠ Never on a guest: a window opened here would be one nobody else flies. The host's
+            // restart call opens the guest's (RestartRace through the race link).
             Log.Info("flight", $"stunt race: a new window is the host's to call");
             return;
         }
@@ -2845,13 +2869,14 @@ public partial class GameSession : Node3D
             rig.Controller?.Rerun();
     }
 
-    // A new window from the shared race board (R). Every pilot's runs are cleared, every plane goes
-    // back to the start, and every seat opens on the count again in one step. The session owns the
-    // planes, so the restart lands here rather than in the FlightController that read the button.
+    // A new window from the shared race board (R), or on a network guest from the host's call.
+    // Every pilot's runs are cleared, every plane here goes back to the start, and every seat opens
+    // on the count again in one step. A host's call goes out first, ahead of the window's lines.
     private void RestartRace(StuntRace race)
     {
         Log.Info("flight", $"stunt race: a new window, every pilot's runs cleared");
         race.Restart();
+        _wire.Race?.CallRestart();
         IReadOnlyList<StartCountPhase>? opening = null;
         foreach (var rig in _rigs)
         {

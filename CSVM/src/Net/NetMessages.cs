@@ -184,6 +184,10 @@ public enum NetMessageType : ushort
 
     /// <summary>One racer's line of a stunt race host's leaderboard, with its ranking run's splits.</summary>
     RaceStanding = 0x0069,
+
+    /// <summary>A stunt race's window decided for the field: the host's new window or its return to the
+    /// lobby, or a guest leaving.</summary>
+    RaceCall = 0x006A,
 }
 
 /// <summary>Which campaign film a <see cref="CoopFilmMessage"/> names.</summary>
@@ -1655,6 +1659,7 @@ public static class NetMessage
         NetMessageType.RaceRun => RaceRunMessage.Reliability,
         NetMessageType.RaceState => RaceStateMessage.Reliability,
         NetMessageType.RaceStanding => RaceStandingMessage.Reliability,
+        NetMessageType.RaceCall => RaceCallMessage.Reliability,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "no such message type"),
     };
 
