@@ -252,6 +252,7 @@ rows).
 - `src/Flight/Camera/PlaneShake.cs`, the plane wobble: the seven component blocks (gunfire buzz, hit rocks, overspeed rattle, contact, nitro engage) summed and rendered as a rotation of `ShakePivot`.
 - `src/Flight/Camera/PlayerRig.cs`, one rendered view's state: camera, SubViewport, HUD parent, visual layer, controller, own sky/deck/puffs.
 - `src/Flight/Camera/XrMount.cs`, where a headset's tracking origin sits: the eye at the aircraft's attitude in first person, heading only otherwise.
+- `src/Flight/Camera/XrSimEyes.cs`, the `--xr-sim` stand-in's eyes: the pinned head, each eye's view transform and its symmetric projection.
 - `src/Flight/Camera/OrbitCamera.cs`, the static inspection view's orbit camera: orbit, zoom and AABB framing over a camera it does not own.
 
 **`Flight.Hud`**, everything drawn over the pilot's view, and the cockpit.
@@ -676,7 +677,8 @@ The process and the per-launch session: the top family bar `Testing`, so nothing
 - `src/Launch/MenuCueTable.cs`, the menu cue table: cue name to wav under the rof tree's `ASSETS/SOUNDS`, the four the globals script binds.
 - `src/Launch/MasterServerLink.cs`, the shipped way to the master server over .NET's HTTP and WebSocket clients: the games list fetch and the socket with its two loops.
 - `src/Launch/MasterFrames.cs`, the master server socket's read of one whole message, shared by the game and the server.
-- `src/Launch/XrSession.cs`, the OpenXR path when Godot started it: the viewport to the headset, the origin at the pilot's eye, the runtime and frame-pacing log lines.
+- `src/Launch/XrSession.cs`, the stereo path when Godot started OpenXR or `--xr-sim` asked for the stand-in: the viewport to the interface, the origin at the pilot's eye, the boot and frame-pacing log lines.
+- `src/Launch/XrSimInterface.cs`, the `--xr-sim` stand-in headset: an XR interface with a pinned head and no runtime, drawing both eyes side by side.
 - `src/Launch/XrFrameWindow.cs`, the headset's frame pacing in wall-second windows: mean and worst interval, late frames and skipped refreshes.
 
 ### `src/Session/`, the session-build layer
@@ -941,6 +943,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 ### `src/Spec/`, the launch spec
 
 - `src/Spec/SessionSpec.cs`, the launch args as one immutable, engine-free value: `Parse` parses **and** resolves, plus the pure arg parsers the tests reach.
+- `src/Spec/XrSimSpec.cs`, the `--xr-sim[=spec]` stand-in headset as one value: head pose, IPD, eye size, field of view and what a screenshot saves.
 
 ### `CSVM.Tests/`, the unit tests
 

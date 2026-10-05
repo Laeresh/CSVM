@@ -115,10 +115,12 @@ if ($HiddenDesktop) {
     Write-Host ("desktop: {0}   streams: {1}.out / .err" -f [CSVMHiddenDesktop]::Name, $streamBase) -ForegroundColor DarkGray
     # CreateProcess takes ONE command line and it must carry argv[0] itself.
     $cmdLine = ('"{0}" {1}' -f $GodotExe, ($quoted -join " "))
-    $code = Invoke-OnHiddenDesktop -Exe $GodotExe -CommandLine $cmdLine `
-                                   -WorkingDirectory $RepoRoot `
-                                   -StdOut "$streamBase.out" -StdErr "$streamBase.err" `
-                                   -TimeoutSec $TimeoutSec
+    $code = Invoke-WithXrSimFeature -Arguments $Launch -Launch {
+        Invoke-OnHiddenDesktop -Exe $GodotExe -CommandLine $cmdLine `
+                               -WorkingDirectory $RepoRoot `
+                               -StdOut "$streamBase.out" -StdErr "$streamBase.err" `
+                               -TimeoutSec $TimeoutSec
+    }
 } else {
     # Refused a desktop: run visibly, but STILL with real std handles -- the console
     # scribble is the part that must never degrade back (SHELL-10).
@@ -130,7 +132,7 @@ if ($HiddenDesktop) {
     $psi.UseShellExecute        = $false
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError  = $true
-    $p = [System.Diagnostics.Process]::Start($psi)
+    $p = Invoke-WithXrSimFeature -Arguments $Launch -Launch { [System.Diagnostics.Process]::Start($psi) }
     # Both pipes drained asynchronously before the wait, or a chatty launch fills the
     # ~4 KB buffer and deadlocks.
     $outRead = $p.StandardOutput.ReadToEndAsync()

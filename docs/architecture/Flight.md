@@ -1421,6 +1421,13 @@ pitch left out, since the headset supplies the look); in every other view, the f
 with its heading only, so a chase swing or a tumbling wreck never rolls the player's horizon.
 `Launch/XrSession.cs` is the one caller.
 
+## src/Flight/Camera/XrSimEyes.cs
+The `--xr-sim` stand-in headset's eyes, engine-free: the head pinned by a yaw, a pitch and an offset
+from the seated eye, each eye's world transform composed as Godot's OpenXR interface composes it
+(the XR origin, the recenter frame, then head and eye in world-scaled metres), and each eye's
+symmetric projection at a horizontal field of view. `Launch/XrSimInterface.cs` answers the
+renderer through it, and `Spec/XrSimSpec.cs` holds the values it is built from.
+
 ## src/Flight/Airframe/CollisionLayers.cs
 The named physics collision layers, world and aircraft, plus the combined mask. The first and only
 place a layer bit is given a meaning; a new layer goes here rather than inline at a collider.

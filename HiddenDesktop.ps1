@@ -1,5 +1,7 @@
 # Runs child processes on a SEPARATE, never-switched-to Windows desktop, so their windows cannot
-# appear on the user's screen at all. Dot-sourced by RunTests.ps1; see docs/tooling.md.
+# appear on the user's screen at all. Dot-sourced by RunTests.ps1 and RunProbe.ps1; see
+# docs/tooling.md. It also holds the one per-launch environment switch those launches share,
+# Invoke-WithXrSimFeature.
 #
 # Why this exists: a scripted run's window is created without focus and the engine hides it as soon
 # as _Ready knows the flags, but the window still EXISTS for the ~1 s Godot takes to boot, and a full
@@ -202,6 +204,40 @@ function Wait-OnHiddenDesktop {
     )
     $timeoutMs = if ($TimeoutSec -gt 0) { [uint32]($TimeoutSec * 1000) } else { [uint32]::MaxValue }
     return [CSVMHiddenDesktop]::Wait($Process, $timeoutMs)
+}
+
+<#
+.SYNOPSIS
+Runs $Launch with Godot's custom feature tag csvm_xr_sim in the environment when the CSVM arguments
+(those after "--") carry --xr-sim, and puts the variable back afterwards.
+
+.DESCRIPTION
+The --xr-sim stand-in headset renders in stereo, which needs Godot's multiview shader variants, and
+Godot compiles those only at engine start. project.godot turns them on under the csvm_xr_sim feature
+tag, and the editor binary reads custom tags from GODOT_EDITOR_CUSTOM_FEATURES. A process inherits
+the variable at creation, so it is set around the start alone: concurrent launches without the flag
+(the other golden workers) and every later launch from the same shell never see it.
+#>
+function Invoke-WithXrSimFeature {
+    param(
+        [Parameter(Mandatory=$true)][string[]]$Arguments,
+        [Parameter(Mandatory=$true)][scriptblock]$Launch
+    )
+    $xrSimSep = [Array]::IndexOf($Arguments, "--")
+    $xrSimUserArgs = if ($xrSimSep -ge 0) { @($Arguments | Select-Object -Skip ($xrSimSep + 1)) } else { @() }
+    $xrSimWanted = @($xrSimUserArgs | Where-Object { $_ -eq "--xr-sim" -or $_ -like "--xr-sim=*" }).Count -gt 0
+    if (-not $xrSimWanted) {
+        return & $Launch
+    }
+    $xrSimVar = "GODOT_EDITOR_CUSTOM_FEATURES"
+    $xrSimBefore = [Environment]::GetEnvironmentVariable($xrSimVar, "Process")
+    $xrSimTags = if ($xrSimBefore) { "$xrSimBefore,csvm_xr_sim" } else { "csvm_xr_sim" }
+    [Environment]::SetEnvironmentVariable($xrSimVar, $xrSimTags, "Process")
+    try {
+        return & $Launch
+    } finally {
+        [Environment]::SetEnvironmentVariable($xrSimVar, $xrSimBefore, "Process")
+    }
 }
 
 <#

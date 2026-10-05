@@ -139,8 +139,18 @@ $LogDir  = Join-Path $RepoRoot ".scratch\logs"
 New-Item -ItemType Directory -Force $LogDir | Out-Null
 $OutFile = Join-Path $LogDir "game-$Stamp.out"
 $ErrFile = Join-Path $LogDir "game-$Stamp.err"
-$proc = Start-Process -FilePath $GodotExe -ArgumentList $LaunchArgs -WindowStyle Normal -PassThru `
-    -RedirectStandardOutput $OutFile -RedirectStandardError $ErrFile
+# --xr-sim needs the csvm_xr_sim feature tag at engine start; HiddenDesktop.ps1's
+# Invoke-WithXrSimFeature says why. Set for this one child, then put back for the shell.
+$XrSimBefore = $env:GODOT_EDITOR_CUSTOM_FEATURES
+if (@($UserArgs | Where-Object { $_ -eq '--xr-sim' -or $_ -like '--xr-sim=*' }).Count -gt 0) {
+    $env:GODOT_EDITOR_CUSTOM_FEATURES = if ($XrSimBefore) { "$XrSimBefore,csvm_xr_sim" } else { "csvm_xr_sim" }
+}
+try {
+    $proc = Start-Process -FilePath $GodotExe -ArgumentList $LaunchArgs -WindowStyle Normal -PassThru `
+        -RedirectStandardOutput $OutFile -RedirectStandardError $ErrFile
+} finally {
+    $env:GODOT_EDITOR_CUSTOM_FEATURES = $XrSimBefore
+}
 # The main window does not exist at spawn; poll briefly rather than guessing a sleep.
 # Found via EnumWindows by pid, NOT Process.MainWindowHandle -- that property is zero for a
 # HIDDEN window, which is exactly the case this rescue exists for.

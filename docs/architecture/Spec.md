@@ -97,3 +97,11 @@ the pure arg parsers (`ParseVec3`, `ParsePlanes`, `ParseHold`, the lab grammars 
 campaign cabin's counterparts to a command line, each carrying its own no-re-resolve rule on itself. `FromMenu` flies every Dogfight on its type's multiplayer map (`DeathmatchMission`, `CtfMission`, `ZvzMission`) and a lobby Stunt Race on the chapter's `StuntRaceMission` whatever `--mission` says, so every machine in one match builds the same mission, and takes `StuntRaceMinutes`, the race window, off the Instant Action def or a Stunt Race's Time box, every other launch keeping 5;
 a menu value that a spelled-out flag beats says so in an `*Explicit` field (`ScenarioExplicit`, `ViewModeExplicit` over the opening view, which keeps a `--view=` above the saved Default View even where both name chase, and `VsKillsExplicit`/`VsTimeExplicit` over Dogfight's kill target and time limit). The `WithSaved*` folds are how a saved option reaches a spec, each dropped under `--det`.
 `Resolve` carries its step order and the type's purity contract (DET-9). Per-rule coverage lives in `CSVM.Tests/SessionSpec*Tests`.
+
+## src/Spec/XrSimSpec.cs
+The stand-in headset a `--xr-sim[=spec]` launch asks for, as one engine-free value parsed from the
+flag's tokens ([../cli.md](../cli.md)): the pinned head's yaw, pitch and offset, the IPD, each
+eye's pixel size and field of view, and whether a screenshot saves both eyes side by side or one.
+A token that does not parse keeps its default and becomes a spec warning. `SessionSpec.XrSim`
+carries it; `Launch/XrSimInterface.cs` draws through it and `Tooling/CaptureDirector.cs` reads its
+shot choice. Read `Flight/Camera/XrSimEyes.cs` for the pose law.

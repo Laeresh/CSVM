@@ -853,9 +853,9 @@ public partial class Launcher : Node3D
             return;
         }
 
-        // OpenXR starts with the engine or not at all. Without a live interface Boot builds nothing,
-        // so a flat launch draws and paces exactly as it did.
-        _xr = XrSession.Boot(GetViewport(), _camera, () => _session?.Rigs ?? NoRigs, _renderTime);
+        // OpenXR starts with the engine or not at all, and the --xr-sim stand-in only with its feature
+        // tag. Without either Boot builds nothing, so a flat launch draws and paces exactly as it did.
+        _xr = XrSession.Boot(GetViewport(), _camera, () => _session?.Rigs ?? NoRigs, _renderTime, _spec.XrSim);
         if (_xr != null)
         {
             AddChild(_xr);
@@ -2594,7 +2594,7 @@ public partial class Launcher : Node3D
         ResolutionSetting.Apply(
             ResolutionSetting.Resolve(applied.Resolution, ResolutionSetting.ScreenSizes(), applied.DisplayMode),
             GetWindow());
-        VSyncSetting.Apply(_xr != null
+        VSyncSetting.Apply(_xr is { PacesFrames: true }
             ? VSyncSetting.Headset
             : VSyncSetting.Resolve(_spec.NoVsync, applied.VSync, Config.GetBool(VSyncSetting.Key, VSyncSetting.ConfigDefault)));
         // The mix takes effect now too, through the same call the startup path makes. Apply is

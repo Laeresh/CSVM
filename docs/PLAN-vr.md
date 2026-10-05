@@ -196,7 +196,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A, spikes (the gate)
 
 1. ◐ A1 OpenXR boots in a flight session on VDXR and SteamVR
-2. ☐ A2 The `--xr-sim` stand-in interface
+2. ☑ A2 The `--xr-sim` stand-in interface
 3. ☐ A3 Precision near the eye: render-only floating origin, double-precision fallback
 4. ☐ A4 Screen-space effects under multiview
 5. ☑ A5 Cockpit scale per plane
@@ -306,8 +306,11 @@ Owed at the headset (the author's): on VDXR and on SteamVR (`XR_RUNTIME_JSON` at
 separate and the single render thread, a `--stage=empty --view=cockpit --no-cockpit-pass` flight
 (1) shows the stage in stereo, (2) turns with the head, (3) logs `xr: OpenXR live` naming the
 runtime, and (4) leaves `xr frames` lines whose `late`/`missed` and `mean_ms` against the refresh
-period answer which thread model holds the headset rate. A launch with the runtime off logs the
-warning and flies flat. The HUD, menus, boards and the cockpit pass are canvas layers and do not
+period answer which thread model holds the headset rate. A headset launch writes its stereo variants
+into the shared shader cache, so the next flat launch on the machine should print one
+`br != variant_size` line (A2, LOG-25; traced, not run under OpenXR): the first engine stage after a
+headset session can fail its error screen on it, and a second run is clean. A launch with the
+runtime off logs the warning and flies flat. The HUD, menus, boards and the cockpit pass are canvas layers and do not
 show in the headset; that is C10, C12 and B8, not a failure here.
 
 The first run (VDXR, separate render thread) came up as `VirtualDesktopXR 1.0.10`, Meta Quest 3,
@@ -327,32 +330,91 @@ line costs about 2 ms on the frame path (PERF-35) and would make its own late fr
 
 **Verified.** <pending orchestrator run>
 
-## A2 ☐ The `--xr-sim` stand-in interface
+## A2 ☑ The `--xr-sim` stand-in interface
 
 **Goal.** `--xr-sim` runs any flight with a stereo XR path and a pinned head pose, no headset and no
 OpenXR, on the hidden desktop, deterministic under `--det`, and capturable as per-eye or side-by-side
 images for suites and goldens.
 
-**Evidence (confidence: lead-only).** Godot ships `MobileVRInterface`, which renders stereo side by
-side into an ordinary window; C# can implement `XRInterfaceExtension`. Capture reads one viewport
-(`Tooling/CaptureDirector.cs:150`), goldens hash raw pixels plus adapter (`Tooling/GoldenShot.cs`).
-Neither path has been tried here. Godot compiles the multiview shader variants only when the engine
-starts under `--xr-mode on` or with `xr/shaders/enabled` (A1, `RendererCompositor`), and
-`--xr-mode on` also starts the machine's active OpenXR runtime, so a stand-in needs another way to
-turn the variants on. `Launch/XrSession.cs` keys on Godot's `OpenXR` interface today.
+**Evidence (confidence: traced to code in the Godot 4.7-stable source for the feature tag, the
+cache misread and the stereo readback; measured for determinism, the pose law and the golden).**
+- The multiview variants are turned on per launch by a **custom feature tag**, not by `--xr-mode
+  on`. `ProjectSettings`' constructor (`core/config/project_settings.cpp`, `TOOLS_ENABLED`, not in
+  the editor) reads custom tags from `GODOT_EDITOR_CUSTOM_FEATURES`, `OS::has_feature` honours
+  them, and `RendererCompositor` reads `xr/shaders/enabled` through `GLOBAL_GET`, which applies
+  feature overrides. So `shaders/enabled.csvm_xr_sim=true` in `[xr]` turns the variants on for a
+  launch whose environment names the tag, and `openxr/enabled` has no override, so OpenXR never
+  starts. `XR_RUNTIME_JSON` at a missing file with `--xr-mode on` was not needed and never tried.
+- `override.cfg` was rejected: Godot loads it from `res://` and the executable's folder on every
+  launch (`ProjectSettings::_setup`), so it is not per launch and four golden workers share it.
+- **The stereo launch must not share the shader cache.** Godot 4.7's `ShaderRD::_load_from_cache`
+  skips a disabled variant's size field without skipping its bytes, so a flat launch reading a cache
+  file an `--xr-sim` launch wrote misreads it: after one `--xr-sim` run the next flat run printed
+  `br != variant_size` for `VrsShaderRD` (one shader), which would fail the engine stage's error
+  screen. `rendering/shader_compiler/shader_cache/enabled.csvm_xr_sim=false` keeps the stand-in out
+  of it; three xr/flat alternations afterwards printed nothing. The C1 golden launch takes 11.1 s
+  wall without the cache (LOG-25).
+- **`MobileVRInterface` is disqualified, from its source and a capture.** Its `post_draw_viewport`
+  applies lens distortion to the window unconditionally; its eye size is the window's half times a
+  1.5 oversample (a 1920x1080 pair from the 1280x720 window, which breaks the manifest's size); its
+  projection comes from phone geometry (`set_for_hmd`, display width and lens distance, no angle);
+  and its head orientation comes only from device sensors on wall-clock ticks, so no yaw or pitch can
+  be pinned. The capture (`.scratch/A2/mobilevr.png`, scratch code since removed) drew a far wider,
+  off-centre pair than the cockpit eye.
+- **The stand-in is a C# `XRInterfaceExtension`** (`Launch/XrSimInterface.cs`): symmetric
+  per-eye frusta at a horizontal angle, eyes IPD apart, a pinned `head` tracker, the view transform
+  composed in OpenXR's order, and an undistorted side-by-side blit to the window. Its render-thread
+  callbacks read only `XRServer`'s render-thread copies and immutable eyes. Godot calls them from the
+  separate render thread without complaint.
+- **Pose law checked against the flat camera.** `--xr-sim=eye=1280x720,fov=96.4268,ipd=0,shot=left,
+  pitch=-4.70001` (the flat cockpit's 64.37° vertical angle at 16:9, and its fixed head pitch) against
+  the flat `--view=cockpit --no-cockpit-pass` frame on the empty stage at `--direction=-0.743,0,
+  -0.669`: phase correlation 0, 0 px, and 0.036 % of pixels over 32 levels (the flat HUD reticle).
+- **Capture.** Under XR the root viewport's texture is a two-layer array: `GetImage()` returns layer 0
+  (`TextureStorage::texture_2d_get`), and `RenderingServer.Texture2DLayerGet` reads either eye.
+  `CaptureDirector` saves both side by side (default) or one eye (`shot=left|right`). Canvas layers
+  draw nothing in stereo (`can_draw_2d` requires one view): no HUD, boards or cockpit pass (SHOT-44).
+- **Determinism.** Two consecutive `RunProbe.ps1 --stage=empty --plane=player_bhawk "--pos=0,300,0"
+  "--direction=-0.743,0,-0.669" --view=cockpit --no-cockpit-pass "--hold=0,0,0,0.6" --xr-sim --det
+  --mute --frames=60 --screenshot=...` runs: `3fe1549cdeee62f088a18aeff3784c78` both (four runs in all,
+  with and without the shader cache). The golden pose below: `cc3ee9a3916db3c79a8d007d6c5dc5b2` on
+  three probe runs and the golden stage; frame 121 moves 59.24 % of its pixels, and `ipd=64` against
+  63 moves 0.62 % of a chase frame, so the hash can fail.
 
-**Approach.** First cut on `MobileVRInterface` with fixed IPD and a pose from the flags; replace with
-an `XRInterfaceExtension` if MobileVR's lens distortion or pose handling gets in the way of a pinned,
-undistorted pair. Wire it through the same rig code A1 uses, so the stand-in exercises the real VR
-path. Add `--xr-sim` to `docs/cli.md` and to the `--det` story.
+**Approach (landed).** `--xr-sim[=spec]` (`Spec/XrSimSpec.cs`; tokens `yaw=`, `pitch=`, `head=x/y/z`,
+`ipd=`, `eye=WxH`, `fov=`, `shot=both|left|right`, defaults the seated eye at the mount looking
+ahead, 63 mm, two 640x720 eyes at 90° horizontal, side by side) boots `Launch/XrSimInterface.cs`
+through `XrSession.Boot`, which builds the same `XROrigin3D`, `XRCamera3D` and `XrMount` origin law
+as the OpenXR path; OpenXR wins when it is live, and the stand-in keeps the flat game's pacing
+(`XrSession.PacesFrames`). The eye law is `Flight/Camera/XrSimEyes.cs`. Without the tag the stand-in
+logs an error and flies flat rather than draw with no variants. `RunTests.ps1`, `RunProbe.ps1` and
+`RunGame.ps1` set `GODOT_EDITOR_CUSTOM_FEATURES` around the one process start whose user args carry
+`--xr-sim` (`HiddenDesktop.ps1`'s `Invoke-WithXrSimFeature`), so the golden runner needed no change.
+The new golden is `c1-cockpit-xr-sim`: `--chapter=C1 --plane=player_bhawk --pos=-6350,300,-4144
+--direction=-0.743,0,-0.669 --view=cockpit --no-cockpit-pass --hold=0,0,0,0.6 --xr-sim`, frame 120.
+
+**How A3 and A4 take per-eye captures.** Always through `RunProbe.ps1` (or a manifest shot), never a
+direct launch. One eye: `--xr-sim=shot=left` or `shot=right`; both at once: the default side-by-side
+image, left eye in the left half. A headset-like pixel density: `eye=WxH` with `fov=`, whose centre
+density is `W / (2 tan(fov/2))` px per radian (`eye=2732x2732,fov=100` is about 20 px per degree at
+the centre; the default 640 at 90° is 5.6). A burst for jitter: `--shots=N` writes `_00`.. per
+frame of the chosen eye. A3's rotated pose: `--pos=` at 0, 10 and 20 km with
+`--direction=-0.743,0,-0.669`, `--view=cockpit --no-cockpit-pass` (the private cockpit pass does not
+draw in stereo), and `ipd=0` when a single-eye control against the flat frame is wanted. Each eye's
+HUD is absent, so the shell-control mask is the bezel alone.
 
 **Model recommendation.** <TODO: tier not settled in the session.>
 
-**Verify.** Two consecutive `--det --xr-sim --screenshot=` runs hash identically; one new golden in
-the manifest. <TODO: the exact pose/chapter the golden pins.>
+**Verify.** Two consecutive `--det --xr-sim --screenshot=` runs hash identically (above); the golden
+`c1-cockpit-xr-sim` pinned with the 24 existing shots unmoved; units for the flag grammar, the eye law
+and the project switch (`CSVM.Tests/XrSimTests.cs`).
 
 **⚠ Traps.** A lens-distorted stand-in output would make per-eye precision measurements (A3) read
-the distortion, not the jitter.
+the distortion, not the jitter; the stand-in has none, and the window's blit is not what a capture
+reads. A shell that keeps `GODOT_EDITOR_CUSTOM_FEATURES=csvm_xr_sim` set gives every later launch from
+it the stereo variants and no shader cache; the scripts set it per process only.
+
+**Verified.** <pending orchestrator run>
 
 ## A3 ☐ Precision near the eye: render-only floating origin, double-precision fallback
 

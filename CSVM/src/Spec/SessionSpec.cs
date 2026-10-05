@@ -768,6 +768,10 @@ public sealed record SessionSpec
     /// head alike, so one run can compare the two. Zero (the default) is a centred stick, i.e.
     /// exactly today's behaviour, and a live stick beats it while deflected.</summary>
     public Vector2 PinnedLook { get; private set; }
+    /// <summary>The stand-in headset <c>--xr-sim[=spec]</c> asks for, null on every other launch.
+    /// <c>Launch/XrSession.cs</c> boots it when no OpenXR runtime is live; docs/cli.md has the
+    /// tokens and the launch it needs.</summary>
+    public XrSimSpec? XrSim { get; private set; }
     /// <summary>Deprecated spellings seen, first-seen order, deduplicated, with their replacement.</summary>
     public IReadOnlyList<(string Old, string New)> Deprecated { get; private set; }
         = Array.Empty<(string, string)>();
@@ -1784,6 +1788,16 @@ public sealed record SessionSpec
                 else
                 {
                     notes.Add(new Note("core", $"--look={want} is not an x,y pair, leaving the look stick centred"));
+                }
+            }
+            else if (arg == "--xr-sim") { s.XrSim = XrSimSpec.Default; }
+            else if (arg.StartsWith("--xr-sim="))
+            {
+                var problems = new List<string>();
+                s.XrSim = XrSimSpec.Parse(arg["--xr-sim=".Length..], problems);
+                foreach (string problem in problems)
+                {
+                    notes.Add(new Note("core", problem));
                 }
             }
         }

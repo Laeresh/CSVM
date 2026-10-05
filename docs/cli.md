@@ -39,7 +39,7 @@ exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One 
 `--pos` · `--direction` · `--lookat` · `--fov` · `--view` · `--spawn` · `--campos` · `--spawn-at` · `--spawn-dir`
 
 **Capture, screenshots and the scripted-run workhorses**
-`--screenshot` · `--export-gltf` · `--frames` · `--shots` · `--jitter` · `--no-focus` · `--no-vsync`
+`--screenshot` · `--export-gltf` · `--frames` · `--shots` · `--jitter` · `--no-focus` · `--no-vsync` · `--xr-sim`
 
 **Determinism, pin a run so two runs are byte-identical**
 `--det` · `--no-det` · `--seed` · `--no-pads`
@@ -97,7 +97,7 @@ the shared selection (`--debug-select`), the node lab (`--debug-nodelab`), the w
 **Written exceptions to "one flag, one bullet":** `--spawn-dir` shares `--spawn-at`'s bullet, since
 the pair is one mechanism, so `Grep` the partner's name to find it; `--debug-nodelab` and
 `--debug-damage` each carry a short opener bullet plus the full behaviour under their lab's own
-section further down. The counts reconcile as **159 index entries, 159 parser flags and 160 bullet
+section further down. The counts reconcile as **160 index entries, 160 parser flags and 161 bullet
 lines**.
 
 ## Flags
@@ -416,6 +416,7 @@ lines**.
 - `--frames=N` (warm-up frames rendered before the shot, default 15. **Under `--det`, which `--screenshot` implies, this is exactly frame N**: the fixed clock advances one 1/60 s step per rendered frame, so N is a frame coordinate and not a wall-clock delay. The saved-shot line carries the frame reached and the counter that named it, `frame=120 clock=sim sim_frame=120 sim_time=2`; a capture with no session reports `clock=render` and counts rendered frames (`docs/tooling.md`). Two runs at the same N are md5-identical and different Ns differ, so a shot's frame number is part of what it shows)
 - `--shots=N` (after the `--frames` warm-up, capture N **consecutive** frames, one per `_Process`, then quit; default 1 = the single-shot behavior at the verbatim path; N>1 writes zero-padded indexed files `foo.png`→`foo_00.png`/`foo_01.png`/… via `IndexedShotPath`, for **z-fighting debugging** since the flicker is only visible across frames)
 - `--jitter=<deg>` (per-frame camera dither during a `--shots` burst, micro-orbits the eye around the framed point (`_orbit.OrbitCenter`) so a dead-still camera doesn't render bit-identical frames; default 0.15° when `--shots>1` else 0, **and 0 under `--det`** whatever `--shots` is, since the dither exists to break the bit-identity `--det` wants; `0` disables; static mode only, in `--fly` the FlightController owns the camera and the plane's motion already surfaces the fight; file `_00` is the un-jittered baseline)
+- `--xr-sim[=spec]` (fly through the **stand-in headset**: stereo through Godot's XR path with no runtime and the head pinned, so a `--det` shot repeats. Comma tokens: `yaw=`/`pitch=` degrees (+ right, + up), `head=x/y/z` metres from the seated eye, `ipd=` mm (63), `eye=WxH` per eye (640x720), `fov=` horizontal degrees per eye (90), `shot=both|left|right` for what `--screenshot` saves (both, side by side). Needs the `csvm_xr_sim` feature tag `RunTests.ps1`, `RunProbe.ps1` and `RunGame.ps1` set; without it, flat. Canvas layers draw nothing in stereo)
 
 ## The shared selection (`--freecam` / `--anim-lab`)
 
@@ -478,4 +479,11 @@ after it. `RunGame.ps1 -EngineArgs '<arg>','<value>'` and `RunProbe.ps1 -EngineA
   headset's frame pacing once a wall second. `off` and `default` (the project setting) leave it flat.
 * `--render-thread safe|separate` overrides `project.godot`'s separate render thread for one launch;
   `safe` renders on the main thread.
+
+`--xr-sim` is a user argument, but what it needs is engine state: Godot compiles the multiview
+shader variants only at start, and `project.godot` turns them on (and the shared shader cache off)
+under the `csvm_xr_sim` feature tag. The editor binary reads custom tags from the
+`GODOT_EDITOR_CUSTOM_FEATURES` environment variable, which the three launch scripts set for that
+one process alone. A direct launch needs it set by hand; a shell that keeps it set gives every later
+launch from it the stand-in's variants and no shader cache.
 

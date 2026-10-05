@@ -384,9 +384,11 @@ function Start-Godot {
     if ($HiddenDesktop) {
         # CreateProcess takes ONE command line and it must carry argv[0] itself.
         $cmdLine = ('"{0}" {1}' -f $GodotExe, ($quoted -join " "))
-        $handle = Start-OnHiddenDesktop -Exe $GodotExe -CommandLine $cmdLine `
-                                        -WorkingDirectory $RepoRoot `
-                                        -StdOut "$streamBase.out" -StdErr "$streamBase.err"
+        $handle = Invoke-WithXrSimFeature -Arguments $Arguments -Launch {
+            Start-OnHiddenDesktop -Exe $GodotExe -CommandLine $cmdLine `
+                                  -WorkingDirectory $RepoRoot `
+                                  -StdOut "$streamBase.out" -StdErr "$streamBase.err"
+        }
         return [pscustomobject]@{ Kind = "desktop"; Handle = $handle }
     }
     $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -396,7 +398,7 @@ function Start-Godot {
     $psi.UseShellExecute        = $false
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError  = $true
-    $p = [System.Diagnostics.Process]::Start($psi)
+    $p = Invoke-WithXrSimFeature -Arguments $Arguments -Launch { [System.Diagnostics.Process]::Start($psi) }
     return [pscustomobject]@{
         Kind = "process"; Process = $p; StreamBase = $streamBase
         OutRead = $p.StandardOutput.ReadToEndAsync()

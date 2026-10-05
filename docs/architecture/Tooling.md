@@ -51,12 +51,12 @@ them on the main thread waits for the previous draw. Off unless the flag is give
 ## src/Tooling/CaptureDirector.cs
 The `--screenshot=`/`--shots=`/`--frames=` capture state machine plus F11's pose print and F12's
 ad-hoc save, built in `Launcher._Ready` from the spec and `Tick()`ed from its `_Process`, so
-`--menu --screenshot` captures the launchscreen with no session alive; camera/orbit/rigs/clock are
-parameters. That capture reads synchronously, since the process exits on its file. `SaveScreenshot`,
-the F12 save every screen shares, writes `PaneReadback`'s frame into `ShotDir()` (`ShotDirFor`: the
-repo's `Screenshots/`, or one beside an export's executable) on the worker it lands on. F11 reads each
-pane's own camera (chase, cockpit, photo mode, free camera) through the pure `PlacementLines`: a
-`--freecam` line, `--fov=` off the external base, and each flight aircraft's `--fly` line.
+`--menu --screenshot` captures the launchscreen with no session alive. That capture reads
+synchronously, since the process exits on its file; under `--xr-sim` it reads each eye's layer and
+saves them side by side or alone. `SaveScreenshot`, the F12 save every screen shares, writes
+`PaneReadback`'s frame into `ShotDir()` (`ShotDirFor`: the repo's `Screenshots/`, or one beside an
+export's executable) on the worker it lands on. F11 reads each pane's own camera through the pure
+`PlacementLines`: a `--freecam` line, `--fov=` off the external base, each aircraft's `--fly` line.
 
 ## src/Tooling/GltfExporter.cs
 Exports any `Node3D` subtree to glTF: mesh, live material state, no animation and no emitters.

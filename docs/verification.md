@@ -200,6 +200,12 @@ member, and it does not go here.
   grid, so a frame-only figure scores the texture; at C3's spawn the shadow's own high-pass excess
   over the red paint was 1.13 levels against a 3.48 texture floor (`AirframeShadowLookupOffset`).
 
+- **SHOT-44**, **A stereo viewport is a two-layer texture and draws no canvas layers, so a plain
+  `GetImage()` of it is the left eye alone and a missing HUD in it is not a HUD defect; read each
+  eye by its layer (`RenderingServer.Texture2DLayerGet`).** Godot skips 2D on any viewport whose view
+  count is above one (`can_draw_2d` in its `renderer_viewport.cpp`), so under `--xr-sim` the HUD,
+  the boards and the cockpit pass are absent from both eyes.
+
 ## GOLD, golden images
 
 - **GOLD-1**, **Update moved hashes with the visual change, and explain each moved shot in the
@@ -505,6 +511,10 @@ member, and it does not go here.
   With the old fixed ports held by another process,
   `lan-discovery` failed and three `Couldn't create an ENet host` lines failed the run, though
   every walking suite then found a free port.
+- **LOG-25**, **A launch that compiles a different set of shader variants must not write the shader
+  cache the other launches read: Godot 4.7 misreads a cache file holding a variant the reader has
+  disabled, and the `br != variant_size` line it prints fails the engine stage's error screen.**
+  One `--xr-sim` launch with the cache on made the next flat launch print it for `VrsShaderRD`.
 
 ## WORLD, world data and runtime traps
 
@@ -1066,6 +1076,8 @@ flows, and fidelity claims requiring the original. Automated checks must state t
 Scripted probes are pinned by `--det`; `--no-det` restores live input, clocks, spawn, and
 randomness. Expect variation in flight framing, weather, water, particles, random animation,
 damage effects, and liveries. Measure a fresh same-build floor for the exact scenario.
+A stereo run is pinned only through `--xr-sim`, whose head pose comes from the flag; a headset's
+head pose is live input, so a capture from a real session is a sample, never a baseline.
 
 ## The standing checklist
 

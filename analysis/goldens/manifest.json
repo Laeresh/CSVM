@@ -179,6 +179,13 @@
       "hash": "366314f638592ae6b7c42f3a97ed10bd",
       "exercises": "Enhanced graphics from the pilot's seat in held pitch-and-roll flight: the shaded cockpit1 interior in its transparent pass with MSAA and no TAA, over the enhanced C1 world with TAA; frame-sensitive 41.10 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--view=cockpit", "--hold=0.2,0.1,0,1", "--det", "--mute", "--graphics=enhanced"]
+    },
+    {
+      "name": "c1-cockpit-xr-sim",
+      "frame": 120,
+      "hash": "cc3ee9a3916db3c79a8d007d6c5dc5b2",
+      "exercises": "The --xr-sim stand-in headset: both eyes side by side through the multiview path on a rotated heading, cockpit interior in the main world, C1 terrain, sky and clutter; no HUD in stereo; frame-sensitive 59.24 %.",
+      "args": ["--chapter=C1", "--plane=player_bhawk", "--pos=-6350,300,-4144", "--direction=-0.743,0,-0.669", "--view=cockpit", "--no-cockpit-pass", "--hold=0,0,0,0.6", "--xr-sim", "--det", "--mute"]
     }
   ]
 }

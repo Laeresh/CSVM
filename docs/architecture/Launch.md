@@ -117,14 +117,22 @@ come in under 50 ms or twice the fastest since (never past 500 ms). A player's p
 `GraphicsMode.SwitchLocked` greys the Options row in a network session. Read `EnhancedLook.cs`.
 
 ## src/Launch/XrSession.cs
-The OpenXR path of a process, built once by `Launcher._Ready` and only when Godot brought OpenXR up
-(`--xr-mode on` before `--`); otherwise `Boot` logs why not and builds nothing. It turns the main
-viewport's `UseXR` on, applies `Utils/VSyncSetting.cs`'s `Headset` pacing, and each frame places an
-`XROrigin3D` at the first pane's eye through `Flight/Camera/XrMount.cs`, with the tracked
-`XRCamera3D` (`Head`) under it. The flat camera stays current and serves near/far, Environment and
-the zone cull mask. It logs the runtime, eye size and render thread at boot, the session states, and
-an `xr frames` Debug line per wall second off `XrFrameWindow.cs`. `XrLaunch` reads the request off
-the process arguments, since Godot consumes its own. Read `Flight/Camera/XrMount.cs` next.
+The stereo path of a process, built once by `Launcher._Ready` when Godot brought OpenXR up
+(`--xr-mode on` before `--`), else for `--xr-sim` through `XrSimInterface.cs` when the launch carries
+its feature tag; otherwise `Boot` logs why not and builds nothing. It turns the main viewport's
+`UseXR` on, paces by `Utils/VSyncSetting.cs`'s `Headset` under OpenXR alone, and each frame places
+an `XROrigin3D` at the first pane's eye (`Flight/Camera/XrMount.cs`) with the tracked `XRCamera3D`
+(`Head`) under it. The flat camera stays current for near/far, Environment and the zone cull mask.
+It logs the boot, the OpenXR session states and an `xr frames` Debug line per wall second
+(`XrFrameWindow.cs`). `XrLaunch` reads `--xr-mode` off the process arguments and names the tag.
+
+## src/Launch/XrSimInterface.cs
+The `--xr-sim` stand-in headset: an `XRInterfaceExtension` that renders the main viewport in stereo
+through Godot's own XR path with no runtime, a pinned `head` tracker and `Flight/Camera/XrSimEyes.cs`
+answering the renderer's per-eye transform and projection. The window shows both eyes side by side
+without lens distortion; `Tooling/CaptureDirector.cs` reads the eye layers for a screenshot. The
+multiview shader variants come from the `csvm_xr_sim` feature tag the launch scripts set, never from
+this code. Read `XrSession.cs` for the boot.
 
 ## src/Launch/XrFrameWindow.cs
 The headset's frame pacing folded into wall-time windows: frame count, mean and worst interval, the
