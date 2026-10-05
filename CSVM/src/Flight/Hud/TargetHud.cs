@@ -280,6 +280,12 @@ public sealed partial class TargetHud : Control
         return head.Length > 0 ? head.ToUpperInvariant() : "AI";
     }
 
+    /// <summary>The tracked hostile's tag: the pilot's name where its seat gives one, else
+    /// <see cref="HostileTag"/> of the node name. A bot then reads by its callsign, as on the name
+    /// line.</summary>
+    public static string TrackedTag(FlightController plane) =>
+        plane.PilotName is { Length: > 0 } callsign ? callsign : HostileTag(plane.Name);
+
     /// <summary><c>--debug-markers</c>' own tag: <c>AI1 Fury 640 m H78 A91 pursue</c>. The one
     /// marker that keeps the FULL identity string rather than the shipped marker's plane-type-alone
     /// label, plus the plane type, the slant range, health then armor as whole percentages with no
@@ -470,7 +476,7 @@ public sealed partial class TargetHud : Control
             return;
         if (next != null)
         {
-            _hostileTag = HostileTag(next.Name);
+            _hostileTag = TrackedTag(next);
             Utils.Log.Info("flight",
                 $"targeting hud: P{PlayerIndex + 1} tracking {next.Name} at {PlanePos.DistanceTo(next.WorldPosition):0} m");
         }

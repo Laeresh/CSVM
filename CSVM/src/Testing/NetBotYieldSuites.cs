@@ -41,8 +41,9 @@ internal static class NetBotYieldSuites
         + "full lobby takes the newest bot's place at once on both ends, and its leave hands the seat "
         + "to nobody; launched with fifteen bots, a guest joining mid-match lands in the lobby reading "
         + "In mission, hears no state of the match and is no seat of it, and the bots stay put; a "
-        + "Restart flies the same field while it waits; when the match lands, the newest bot's row "
-        + "leaves the list and the late guest holds the freed place on both ends, and the next launch "
+        + "Restart flies the same field while it waits; when the match lands, its Game Scores name "
+        + "each seat by the session's callsign and tag the bots, the newest bot's row leaves the list "
+        + "with a notice in both chats, the late guest holds the freed place on both ends, and the next launch "
         + "seats it at seat 1 with fourteen bots on the host's roster and on its own copy")]
     internal static void ALateJoinerTakesTheNewestBotsSeat(TestContext ctx)
     {
@@ -107,8 +108,12 @@ internal static class NetBotYieldSuites
 
             director.Match.Advance(MatchSeconds);
             Fly(SettleSteps, host, hostDoor, lateDoor);
-            var landing = Launcher.LobbyLanding(true, lobby, director.Match);
+            var landing = Launcher.LobbyLanding(true, lobby, director.Match, host.Session.NetSeats);
             ctx.Check(landing != null && hostDoor.Reclaim(), $"the finished match lands the host on its lobby and the door takes its wire back");
+            var lines = landing?.Scores ?? Array.Empty<DogfightScore>();
+            ctx.Check(lines.Select(l => l.Name).OrderBy(n => n, StringComparer.Ordinal).SequenceEqual(seats.OrderBy(n => n, StringComparer.Ordinal))
+                      && lines.Count(l => l.IsBot) == NetSeats.MaxPlayers - 1 && lines.Single(l => !l.IsBot).Name == HostName,
+                $"its Game Scores name every seat by the session's callsign and tag the fifteen bots ({lines.Count(l => l.IsBot)} tagged, {string.Join(", ", lines.Take(4).Select(l => l.Name))} ...)");
             host.Close();
             lobby.Land(landing?.Scores ?? Array.Empty<DogfightScore>());
             StepDoors(SettleSteps, hostDoor, lateDoor);
@@ -156,8 +161,8 @@ internal static class NetBotYieldSuites
     {
         var waiting = lateDoor.Dogfight;
         ctx.Check(lateDoor.IsDogfightGuest && waiting is { HasOptions: false } && !lateDoor.DogfightLaunchDue
-                  && lateDoor.Advert?.Status == NetSessionStatus.InMission,
-            $"{when}: the late guest stands in the lobby reading In mission, with no launch due ({lateDoor.Stage}, {lateDoor.Advert?.Status}, options {waiting?.HasOptions})");
+                  && lateDoor.Advert?.Status == NetSessionStatus.InMission && waiting.WaitsOnMatch(lateDoor.Advert?.Status),
+            $"{when}: the late guest stands in the lobby reading In mission and waiting on the match, with no launch due ({lateDoor.Stage}, {lateDoor.Advert?.Status}, options {waiting?.HasOptions})");
         ctx.Check(!lateDoor.HostStarted && !wire.Peers.Contains(latePeer) && wire.AllPeers.Contains(latePeer),
             $"{when}: it holds a peer on the host's wire but no seat of the match, and no match payload reached it");
         ctx.Check(hostDoor.Dogfight!.Bots.SequenceEqual(field),
@@ -177,8 +182,11 @@ internal static class NetBotYieldSuites
             $"back in the lobby the newest bot '{field[^1].Callsign}' leaves the host's list and the late guest holds the freed place ({lobby.Bots.Count} bots, {lobby.Players[1].Name})");
         ctx.Check(lateDoor.Dogfight is { HasOptions: true, You: 1 } && heard.Count == NetSeats.MaxPlayers
                   && heard[1].Name == LateName && heard.All(row => row.Name != field[^1].Callsign)
-                  && lateDoor.Advert?.Status == NetSessionStatus.Waiting,
-            $"and the late guest's own lobby reads the same field with it in that place ({heard.Count} rows, you {lateDoor.Dogfight?.You}, {lateDoor.Advert?.Status})");
+                  && lateDoor.Advert?.Status == NetSessionStatus.Waiting && !lateDoor.Dogfight.WaitsOnMatch(lateDoor.Advert?.Status),
+            $"and the late guest's own lobby reads the same field with it in that place, no longer waiting ({heard.Count} rows, you {lateDoor.Dogfight?.You}, {lateDoor.Advert?.Status})");
+        string yielded = DogfightLobby.YieldLine(field[^1].Callsign);
+        ctx.Check(lobby.Chat.Any(line => line.Text == yielded) && lateDoor.Dogfight!.Chat.Any(line => line.Text == yielded),
+            $"both chats say the newest bot left the game to make room ('{yielded}')");
     }
 
     // The next launch carries the late guest at seat 1, the bots after it, on both ends.

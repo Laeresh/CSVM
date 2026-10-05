@@ -370,6 +370,102 @@ public sealed class DogfightLobbyTests
         Assert.Equal(2, scores[2].Deaths);
     }
 
+    // A host flying two panes beside one bot: three seats on two lobby rows. The lobby's list and
+    // the session's roster disagree from seat 1 on.
+    [Fact]
+    public void TheScoresNameEachSeatOffTheSessionsRosterAndMarkItsBots()
+    {
+        var match = new CSVM.Flight.Modes.VersusMatch(3, killTarget: 0, timeLimit: 60f);
+        match.RegisterKill(2, 0);
+        match.RegisterKill(2, 0);
+        match.RegisterKill(1, 2);
+        var launchNames = new[] { "Zachary", "Crawford" };
+        var seats = new[]
+        {
+            new NetSeat { SeatIndex = 0, Callsign = "Zachary", FlownHere = true },
+            new NetSeat { SeatIndex = 1, Callsign = "P2", FlownHere = true },
+            NetSeats.Bot(0, 2, "Crawford", StockAirframes.Node(7)),
+        };
+
+        var scores = DogfightLobby.ScoresOf(match, seats);
+
+        Assert.Equal(new[] { "Crawford", "P2", "Zachary" }, scores.Select(s => s.Name));
+        Assert.Equal(new DogfightScore("Crawford", 2, 2, 1, IsBot: true), scores[0]);
+        Assert.Equal(new[] { true, false, false }, scores.Select(s => s.IsBot));
+
+        // ABLE-TO-FAIL CONTROL: the lobby's list names the second pane's line after the bot and the
+        // bot's by its player tag, untagged.
+        var listed = DogfightLobby.ScoresOf(match, launchNames);
+        Assert.Equal(new[] { "P3", "Crawford", "Zachary" }, listed.Select(s => s.Name));
+        Assert.DoesNotContain(listed, s => s.IsBot);
+    }
+
+    [Fact]
+    public void ATeamMatchTagsABotsLineUnderItsTeam()
+    {
+        var match = new CSVM.Flight.Modes.VersusMatch(2, killTarget: 0, timeLimit: 60f);
+        match.AssignTeams(new[] { 1, 2 }, new Dictionary<int, string> { [1] = "Blue", [2] = "Red" });
+        match.RegisterKill(1, 0);
+        var seats = new[] { new NetSeat { SeatIndex = 0, Callsign = "Zachary", FlownHere = true }, NetSeats.Bot(0, 1, "Tex", StockAirframes.Node(2)) };
+
+        var lines = DogfightLobby.ScoresOf(match, seats);
+
+        Assert.Equal(new[] { "Red", "Tex", "Blue", "Zachary" }, lines.Select(l => l.Name));
+        Assert.Equal(new[] { false, true, false, false }, lines.Select(l => l.IsBot));
+    }
+
+    [Fact]
+    public void TheListCountsItsPeopleApartFromItsBotsOnBothEnds()
+    {
+        var (host, guests, _) = Lobbies(2);
+        Settle(host, guests);
+
+        // ABLE-TO-FAIL CONTROL: with no bot row every row is a person.
+        Assert.Equal((2, 0), (host.PeopleListed, host.BotsListed));
+        Assert.Equal(4, host.FillTo(6));
+        Settle(host, guests);
+
+        Assert.Equal((2, 4), (host.PeopleListed, host.BotsListed));
+        Assert.Equal((2, 4), (guests[0].PeopleListed, guests[0].BotsListed));
+    }
+
+    [Fact]
+    public void ABotThatGivesItsPlaceToAPersonSaysSoInTheChatOnBothEnds()
+    {
+        var admitted = new HashSet<int>();
+        var (host, guests, _) = Lobbies(2, "Lucy", seated: admitted.Contains);
+        Settle(host, guests);
+        host.FillTo(NetSeats.MaxPlayers);
+        string newest = host.Bots[^1].Callsign;
+        string line = DogfightLobby.YieldLine(newest);
+
+        // ABLE-TO-FAIL CONTROL: a full field with nobody waiting posts nothing.
+        Settle(host, guests);
+        Assert.DoesNotContain(host.Chat, said => said.Text == line);
+
+        admitted.Add(1);
+        Settle(host, guests);
+        Assert.Equal($"[{newest} left the game to make room for a player.]", line);
+        Assert.Single(host.Chat, said => said.Text == line && said.Name.Length == 0);
+        Assert.Single(guests[0].Chat, said => said.Text == line);
+    }
+
+    [Fact]
+    public void AGuestWaitsOnTheMatchOnlyWhileItsHostFliesOneAndNoOptionsHaveCome()
+    {
+        var (host, guests, _) = Lobbies(2);
+        var guest = guests[0];
+
+        Assert.True(guest.WaitsOnMatch(NetSessionStatus.InMission));
+        Assert.False(guest.WaitsOnMatch(NetSessionStatus.Waiting));
+        Assert.False(guest.WaitsOnMatch(null));
+        Assert.False(host.WaitsOnMatch(NetSessionStatus.InMission));
+
+        // ABLE-TO-FAIL CONTROL: once the host's options land the guest is in the lobby proper.
+        Settle(host, guests);
+        Assert.False(guest.WaitsOnMatch(NetSessionStatus.InMission));
+    }
+
     [Fact]
     public void LandingShowsTheScoresAndOpensANewRoundThatClearsEveryReady()
     {

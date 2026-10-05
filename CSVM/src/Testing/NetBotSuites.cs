@@ -80,7 +80,8 @@ internal static class NetBotSuites
     [Suite("net-bot-seat",
         "a host with a bot seat and a guest seat in one process over a clean loopback: the host flies "
         + "the bot with an armed AI pilot under its seat index, never as world AI, and the guest "
-        + "builds it as a remote seat whose path traces the host's; beside the guest and over a "
+        + "builds it as a remote seat whose path traces the host's; each end's pane names it by its "
+        + "callsign in the target pool and on the hostile tracker; beside the guest and over a "
         + "kilometre from the host's plane the bot flies the full plant, not the far-field one; the "
         + "bot's gunner picks a seat as "
         + "its quarry; a hit by the bot lands on the guest's own aeroplane and a hit on it lands on "
@@ -91,7 +92,8 @@ internal static class NetBotSuites
 
     [Suite("net-bot-seat-lossy",
         "net-bot-seat's readings over a 30 ms, 25 per cent lossy loopback, each waiting on every "
-        + "condition it reads: the guest's copy of the bot still traces the host's path, a bot near "
+        + "condition it reads: both ends name the bot by its callsign, the guest's copy of the bot "
+        + "still traces the host's path, a bot near "
         + "the guest alone flies the full plant, hits by "
         + "and on the bot land on their owners, both kills score as on the clean link and both "
         + "boards agree")]
@@ -183,6 +185,7 @@ internal static class NetBotSuites
                 return;
             }
 
+            Marked(ctx, cell, peers);
             Tracking(ctx, cell, peers);
             FarField(ctx, cell, peers);
             Targeting(ctx, cell, peers);
@@ -227,6 +230,32 @@ internal static class NetBotSuites
                   && guestCopy is { RemoteOwned: true, IsHumanPiloted: true },
             $"ABLE-TO-FAIL CONTROL: [{cell}] the guest's own seat is a person's, flown on the guest and copied on the host");
         return true;
+    }
+
+    // Each end's aeroplane for the bot carries its callsign. The pane on that end names it so in the
+    // target pool and on the hostile tracker, not by its node name. The pool is built here as the
+    // pane's rendered frame builds it, since a suite steps no rendered frame.
+    private static void Marked(TestContext ctx, string cell, GameSession[] peers)
+    {
+        var ends = new[] { (End: "host", Bot: peers[0].SeatRigs[BotSeat].Controller!, Pane: peers[0].SeatRigs[HostSeat].Controller!),
+            (End: "guest", Bot: peers[1].SeatRigs[BotSeat].Controller!, Pane: peers[1].SeatRigs[GuestSeat].Controller!) };
+        string callsign = peers[0].NetSeats[BotSeat].Callsign;
+        foreach (var (end, bot, pane) in ends)
+        {
+            var scan = new AimCandidateSet();
+            pane.Projectiles?.CollectAircraft(scan);
+            var pool = new TargetPool();
+            pool.Rebuild(scan, null, pane.Team, pane);
+            string? listed = pool.Enemy.Where(t => ReferenceEquals(t.Source, bot)).Select(t => t.DisplayName).FirstOrDefault();
+            ctx.Check(bot.PilotName == callsign && listed == callsign && TargetHud.TrackedTag(bot) == callsign,
+                $"[{cell}] the {end}'s aeroplane for the bot carries '{callsign}' as its pilot name, its pane's pool names it so and its tracker tags it so ({bot.PilotName}, {listed ?? "<not listed>"}, {TargetHud.TrackedTag(bot)})");
+        }
+
+        // ABLE-TO-FAIL CONTROL. The node name the tracker read before reads otherwise, so the line
+        // above is the callsign and not a name the node happened to share.
+        var node = TargetHud.HostileTag(ends[1].Bot.Name);
+        ctx.Check(node != callsign,
+            $"ABLE-TO-FAIL CONTROL: [{cell}] the bot's node name tags it '{node}', not '{callsign}'");
     }
 
     // The guest's copy of the bot follows the path the host's AI flies, through the seat's state

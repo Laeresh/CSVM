@@ -892,7 +892,7 @@ reads the keyboard. It draws only: a splitscreen pane routes no input, so the ke
 ## src/Flight/Hud/TargetHud.cs
 The per-pane targeting HUD, built on every human pane in every flight session: the pilot's own
 selection from `TargetSelection` (objective sites included), a nearest AI-hostile fallback where no
-selection exists, and the F16 / `--debug-markers` every-aircraft overlay. Draws the original's
+selection exists (a bot tagged by its callsign, `TrackedTag`), and the F16 / `--debug-markers` overlay. Draws the original's
 bracket box and label block and owns the colour table, the label layout, the selected gun's reach
 gate and the debug identity string. Off screen it owns the arrow, `ArrowHead`, `ShaftTail` and
 `EdgeLabelAnchor` over `EdgeMarker`'s placement. It owns the spyglass's gates (sim pose, `PlanePos`)

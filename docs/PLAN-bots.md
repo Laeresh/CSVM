@@ -113,7 +113,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D, presentation and measurement
 
-31. ☐ Bot tag on the lobby roster and the board; a bot's callsign on the target marker
+31. ☑ Bot tag on the lobby roster and the board; a bot's callsign on the target marker
 32. ☐ Crowded free-for-all playtest at the controls
 33. ☐ Host cost of fifteen bots, measured
 
@@ -1020,53 +1020,124 @@ alone; a Free Flight exit must carry none.
 
 # Wave D, presentation and measurement
 
-## D31 ☐ Bot tag on the lobby roster and the board; a bot's callsign on the target marker
+## D31 ☑ Bot tag on the lobby roster and the board; a bot's callsign on the target marker
+
+The user approved the captures: the BOT tag, the tag in place of the Ready tick, the header, and
+both remake lines as worded. The user ruled that the results board names a bot by its callsign
+("Crawford BOT") while people keep P1 to Pn, which landed with the capture re-taken.
 
 **Goal.** The lobby roster and the results board show a bot tag beside a bot's callsign; in flight
 a bot is marked as any aircraft is, and the target marker's name line shows its callsign
 (Decision 11).
 
-**Evidence (confidence: lead-only).** `VersusHud` iterates human seat rigs only and draws
-`P{n}` tags in `SplitScreen.PlayerColor` (`CSVM/src/Flight/Modes/VersusHud.cs:76-78,106-118`). AI
-planes appear only through `TargetPool` (`TargetPool.cs:243`, `MarkerName` else `PilotName`).
+**Evidence (confidence: traced-to-code).** GitHub issue #141 (delete `VersusHud`) is still open, so
+nothing here touches `VersusHud`; a bot is marked through `TargetHud` like any aircraft. **The
+lead's marker fix was already in place:** `HumanFlightAdapter` sets `controller.PilotName` from the
+seat's callsign for every seat that has one ("Unknown" for a nameless person), bots included, on
+the host and on a guest, and `TargetPool.Describe` reads `MarkerName` else `PilotName`, so the
+selected bot's name line already read its callsign. A3's "fallback name" is the other path:
+`TargetHud.UpdateHostile`, the nearest-AI-hostile tracker drawn only while the pane has no
+selection (after Target Nothing, or with an empty pool), tagged the bot `HostileTag(node name)`,
+"PLAYER3". A remote person never reaches it (`NearestHostile` takes AI-piloted aircraft only), and
+a world AI aircraft has no `PilotName`. **Game Scores naming:** `LaunchNames` holds one name per
+lobby row (host, seated guests, bots), so it names seats right only while every machine flies one
+seat in row order; a host flying split-screen seats shifts every later name (unit below, three
+seats on two rows). `Launcher.ExitSession` calls `LobbyLanding` while `_session` lives, and
+`GameSession.NetSeats` is the roster on both ends (a guest's is the host's copy). **The board:**
+`VersusBoard` labels every row by `SplitScreen.PlayerTag`, network persons included, and
+`SessionBoards` already holds the session's seat list (`_in.NetSeats`), a local bot match's roster
+too. **langui:** 10048 "Players (%1!d! of %2!d!)" is the header; the cap it names is the door's
+`SessionCap`, which `RefuseOverCap` counts people against, so a bot row has no place in it. 10090
+"In Progress" is the games list's word for a running game (status 3,
+`docs/org/multiplayer-messages.md`), the only string near the waiting cue; 10506 "[%1!s! left the
+game.]" is the nearest lobby notice to a yield; no string names a bot. `HostRows` marks every bot
+Ready, since it has no plane to consent to.
 
-**Re-aimed at `TargetHud` by GitHub issue #141.** That issue deletes `VersusHud` in every versus
-mode: its permanent `P1`/`P2` seat markers predate `TargetHud`, which now marks players as the
-original does, and the match status line moves out into its own element. So a bot does not get a
-seat marker; it is found and marked through `TargetHud` like any other aircraft, and Decision 11's
-"the in-flight marker shows only the callsign" means `TargetHud`'s name line shows the bot's
-callsign while it is the selected target. A3 found that `TargetHud.NearestHostile` already tracks
-a bot on both ends, but its fallback name reads the node name `player{seat+1}`, not the callsign:
-set the bot controller's `PilotName`/`MarkerName` from the seat's callsign on both ends. If #141
-has not landed when D31 starts, do not build anything on `VersusHud`.
+**Approach (landed).** Each proposal below was settled from the captures.
+- **Game Scores naming.** `DogfightScore` gains `IsBot`. `DogfightLobby.ScoresOf(match, seats)`
+  names each seat by its callsign on the session's roster and marks a bot's line (team lines and
+  members laid out as before); the `LaunchNames` overloads stay as the fallback.
+  `Launcher.LobbyLanding` takes the session's seats (`_session.NetSeats` from `ExitSession`) and
+  uses the roster when it has one.
+- **The tag** is the word `BOT` (`OriginalLobbyScreen.BotTag`, `VersusBoard.BotTag`), in the lobby
+  in the dark red the pinned Network rows use, so the remake's words read apart from the original's.
+  Lobby list: in the Ready column, in place of the tick. Game Scores: at the right end of the name
+  column (a callsign holds 12 characters). Results board: a bot's row reads its callsign in the
+  seat's colour with the tag after it in the headers' smaller ink, and a bot that wins heads the
+  board by its callsign; `VersusBoard.Build` takes `Func<int, string?> botName` by `PlayerIndex`,
+  which `SessionBoards` fills from the seat list, and a board with no bot is unchanged.
+- **Mission Options spacing** (a C21 layout bug the capture showed): the type's description wrapped
+  into the Bots heading at 1280x720. The Bots block now starts at `BotsY`, 205 below the page top,
+  and the description is boxed to the gap with a fixed pitch, so the view's fit steps its face down
+  rather than overlap; checked for all three types at 800x600 and 1280x720.
+- **Ready tick:** a bot row draws no tick; the BOT tag stands in its column. `AllReady` still counts
+  a bot Ready.
+- **Header:** langui 10048 counts people only (`DogfightLobby.PeopleListed`) against the cap, and the
+  bots follow it: "Players (3 of 16) + 3 bots" (`BotsListed`), "+ 1 bot" for one.
+- **Waiting cue:** `DogfightLobby.WaitsOnMatch(advert status)` (a guest, no options heard, its
+  host's advert In mission). While it holds, the guest's chat pins one row, as a host's Network rows
+  are pinned: langui 10090 "In Progress" in the name column and the remake's
+  `OriginalLobbyScreen.MatchInProgress`, "The host's match is under way. You take a seat when it
+  ends." It goes when the landed lobby's options arrive.
+- **Yield notice:** `YieldToPeople` announces `DogfightLobby.YieldLine`, langui 10506's form with
+  the reason, "[Crawford left the game to make room for a player.]", to the host's chat and every
+  seated guest's, one per bot that yields.
+- **Target marker:** `TargetHud.TrackedTag` tags the tracked hostile by its `PilotName` where a seat
+  gives one, else by `HostileTag` of the node name as before.
+- Capture aids: `--menu=lobby:guest:bots` now draws the pilot-name callsigns, `lobby:host:bot-scores`
+  (and `guest:bot-scores`) lands Game Scores over the six posed seats, and `lobby:late` is a guest
+  joined to a stand-in host advertising In mission (`NetDoorAid.LateDogfightGuest`; the in-process
+  mesh links every peer at once, so the real doors cannot hold a guest back as `net-bot-yield`'s
+  arrival gate does).
 
-**Approach.** The tag's look on the lobby roster and the board is `<TODO: the user's call, from a
-capture>`.
+For later items: a local bot match's results board tags its bots with no further change, since
+`SessionBoards` reads the local roster too. `--debug-scoreboard` fires its kill between the first
+two panes (`VersusDirector.ForceDebugScoreboard` reads `Panes`), so a board capture with bots needs
+`--players=2`.
 
-Name the finished match's Game Scores rows from the session's seat roster, not the lobby rows
-(taken over from A2's re-check). `DogfightLobby.ScoresOf` reads `names[seat]` from `LaunchNames`,
-which holds one entry per lobby row, so a bot seat, or a host flying split-screen seats (a lead,
-not verified), misnames rows. Take the snapshot in `Launcher.LobbyLanding`, which runs while the
-session is alive: build each row from the seat's callsign and A1's pilot kind, keep `LaunchNames`
-as the fallback for a launch with no seat roster, and add a bot flag to `DogfightScore` for the
-Game Scores tag. The in-flight board (`VersusBoard.Build`, which has only the match today) reads
-the kind from the session's seat list by `PlayerIndex`. Test: a three-seat match whose rows are
-named off a seat roster ordered differently from the lobby rows.
+**Model recommendation.** Sonnet would do the code, which is presentation over existing state.
+Opus was used because the marker lead had to be traced to the tracker fallback rather than the
+name line it named, and the naming defect needed the launch field and both ends' rosters read
+together.
 
-**Model recommendation.** `<TODO: not settled in the session>`
+**Verify.** Units: `DogfightLobbyTests.TheScoresNameEachSeatOffTheSessionsRosterAndMarkItsBots` (a
+host flying two panes beside a bot, three seats on two lobby rows: the roster names Crawford, P2,
+Zachary with only Crawford marked; control, the lobby's list names the bot's line P3 and puts
+Crawford on the second pane's line), `ATeamMatchTagsABotsLineUnderItsTeam`,
+`TheListCountsItsPeopleApartFromItsBotsOnBothEnds` (2 and 0, then 2 and 4 on both ends after Fill to
+six), `ABotThatGivesItsPlaceToAPersonSaysSoInTheChatOnBothEnds` (control: a full field with nobody
+waiting posts nothing), `AGuestWaitsOnTheMatchOnlyWhileItsHostFliesOneAndNoOptionsHaveCome` (In
+mission yes; Waiting, none and the host no; control: false once the options land), and
+`VersusBoardTagTests` ("Crawford BOT" and "CRAWFORD WINS"; control: a person, a seat past the list
+and a board with no seat list read the plain tag, a person who wins keeps it). Engine: `net-bot-seat` and
+`net-bot-seat-lossy` gain a reading on both ends: the bot's aeroplane carries its callsign as
+`PilotName`, a target pool built as the pane builds it names it so, and `TrackedTag` tags it so;
+control, its node name tags it otherwise. `net-bot-yield`: the landing, named off the live
+session's seats, names every seat by callsign and tags fifteen bots; the late guest waits on the
+match while it runs and after the Restart, not once landed; both chats carry the yield notice.
+`menu-original-lobby-bots`: after Fill to five, host and guest each draw three BOT tags and the
+header "Players (2 of N) + 3 bots"; control, none before Add Bot. Runs in `bots-d31`:
+`RunTests.ps1 -Suite 'net-bot-seat,net-bot-seat-lossy' -SkipUnits -SkipGoldens` 2 passed and
+`-Suite 'net-bot-yield,menu-original-lobby-bots'` 2 passed; `RunTests.ps1 -Filter 'menu-,net-,versus-local-bot' -Shards 4
+-SkipGoldens`: units 6271 passed / 0 failed / 3 skipped, engine 105 passed / 0 failed, engine errors
+clean; `RunTests.ps1 -SkipUnits -SkipEngine`: goldens 24 hash-identical (no golden shows the lobby
+or the results board). Captures for the user, through `RunProbe.ps1` on the hidden desktop:
+`d31-lobby-host.png` and `d31-lobby-guest.png` (`--menu=lobby:host:bots`, `lobby:guest:bots`),
+`d31-before-lobby-host.png` and `d31-before-lobby-guest.png` (the same before D31),
+`d31-lobby-late.png` (`--menu=lobby:late`), `d31-game-scores.png` and `d31-game-scores-guest.png`
+(`lobby:host:bot-scores`, `lobby:guest:bot-scores`), `d31-versus-board.png` (`--vs --mission=MP1
+--mute --players=2 --vs-bots=2 --debug-scoreboard --vs-kills=1 --frames=120`) and
+`d31-target-marker.png` (`--vs --mission=MP1 --mute --vs-bots=1 --target=player2 --frames=90`, the
+bot off screen in the spyglass, its name line "Black Swan").
 
-**Verify.** A capture of the board and of a bot's marker in flight, shown to the user.
-
-**Also settles (the user's ruling on C21's capture):** a bot row's Ready tick (a bot always reads
-Ready today) and the lobby header's "Players (n of cap)", which counts bot rows against the human
-cap and can read "Players (14 of 4)". Settle both from D31's capture together with the tag. Two
-cues C22 left unbuilt belong here too: a "Match in progress" line for a guest waiting in the lobby
-(the door's `Advert.Status` is InMission and `HasOptions` false), and a chat notice when a bot
-yields its place, for which no langui line exists.
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** `SplitScreen.PlayerColor` is a 4-colour palette taken modulo 4
 (`CSVM/src/UI/Boards/SplitScreen.cs:76-82,142`), so colours repeat at 16 pilots. That predates bots
 (16 humans repeat too) and stays a separate change; file it if D32 shows it confuses play.
+`VersusHud`'s per-seat `Pn` markers still stand until #141 lands; do not tag a bot there. The
+results board names a person's seat by `Pn`, a network person's too; naming people by callsign
+there is #141's open question, not this item's.
 
 ## D32 ☐ Crowded free-for-all playtest at the controls
 

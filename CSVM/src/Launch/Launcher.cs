@@ -1487,12 +1487,17 @@ public partial class Launcher : Node3D
         return CustomPlaneWire.Def(build);
     }
 
-    /// <summary>Where a finished lobby Dogfight lands: its lobby's Game Scores, named off the list
-    /// at the launch. Null for any other flight, a match left before its end, or a Built-in board.
-    /// </summary>
-    internal static LobbyReturn? LobbyLanding(bool lobbyFlight, UI.Menu.DogfightLobby? lobby, Flight.Modes.VersusMatch? match) =>
+    /// <summary>Where a finished lobby Dogfight lands: its lobby's Game Scores. Each seat is named
+    /// by its callsign on <paramref name="seats"/>, the session's own roster, and a bot's line is
+    /// marked. It is read while the session lives, before the lobby can move a seat. A launch with
+    /// no roster names seats off the lobby's list at the launch. Null for any other flight, a match
+    /// left before its end, or a Built-in board.</summary>
+    internal static LobbyReturn? LobbyLanding(bool lobbyFlight, UI.Menu.DogfightLobby? lobby, Flight.Modes.VersusMatch? match,
+        IReadOnlyList<Net.NetSeat>? seats = null) =>
         lobbyFlight && lobby is { Shown: true } && match is { Completed: true }
-            ? new LobbyReturn(UI.Menu.DogfightLobby.ScoresOf(match, lobby.LaunchNames))
+            ? new LobbyReturn(seats is { Count: > 0 }
+                ? UI.Menu.DogfightLobby.ScoresOf(match, seats)
+                : UI.Menu.DogfightLobby.ScoresOf(match, lobby.LaunchNames))
             : null;
 
     /// <summary>A lobby's team names by team number, the form a session reads them in.</summary>
@@ -3181,7 +3186,7 @@ public partial class Launcher : Node3D
     {
         if (_menuDriven && _session is { InSession: true })
         {
-            var landing = LobbyLanding(_lobbyFlight, _netDoor?.Dogfight, _session.Dogfight?.Match);
+            var landing = LobbyLanding(_lobbyFlight, _netDoor?.Dogfight, _session.Dogfight?.Match, _session.NetSeats);
             _keepLobby = landing != null;
             ReturnToMenu(landing ?? _exitDestination);
             return;

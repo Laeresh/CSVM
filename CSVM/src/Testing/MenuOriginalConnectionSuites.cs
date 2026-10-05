@@ -2826,6 +2826,9 @@ internal static class MenuOriginalConnectionSuites
         ctx.Check(Row(guest.Shell, OriginalLobbyScreen.AddBotKey) is { Enabled: false } && Row(guest.Shell, OriginalLobbyScreen.FillKey) is { Enabled: false }
                   && Row(host.Shell, OriginalLobbyScreen.AddBotKey) is { Enabled: true },
             $"ABLE-TO-FAIL CONTROL: Add Bot and Fill to are live on the host and greyed on the guest");
+        var before = host.Shell.Compose();
+        ctx.Check(!before.Lines.Any(line => line.Text == OriginalLobbyScreen.BotTag || line.Text.EndsWith(" bots", StringComparison.Ordinal)),
+            $"ABLE-TO-FAIL CONTROL: with no bot row the list draws no bot tag and its header names no bots");
         ClickRow(ctx, host, OriginalLobbyScreen.AddBotKey);
         SettleEnds(ends);
         var lobby = host.Door.Dogfight!;
@@ -2846,6 +2849,14 @@ internal static class MenuOriginalConnectionSuites
         ctx.Check(host.Shell.Lobby.FillCount == 5 && lobby.FieldSeats == 5 && lobby.Bots.Count == 3 && guest.Door.Dogfight!.Players.Count == 5
                   && Row(host.Shell, OriginalLobbyScreen.FillKey) is { Enabled: false },
             $"Fill to with its count stepped to five fills the field to five pilots and greys ({host.Shell.Lobby.FillCount}, {lobby.FieldSeats}, {guest.Door.Dogfight!.Players.Count})");
+        foreach (var (end, who) in new[] { (host, "host"), (guest, "guest") })
+        {
+            var board = end.Shell.Compose();
+            int tags = board.Lines.Count(line => line.Text == OriginalLobbyScreen.BotTag);
+            string header = board.Lines.Select(line => line.Text).FirstOrDefault(text => text.StartsWith("Players (", StringComparison.Ordinal)) ?? "<none>";
+            ctx.Check(tags == 3 && header.StartsWith("Players (2 of ", StringComparison.Ordinal) && header.EndsWith(") + 3 bots", StringComparison.Ordinal),
+                $"the {who}'s list tags each of the three bots in its Ready column and its header counts the two people apart from them ({tags} tag(s), '{header}')");
+        }
     }
 
     // A press on the first bot's row opens Select Plane on it. Its boxes set the Fury, ace, a typed

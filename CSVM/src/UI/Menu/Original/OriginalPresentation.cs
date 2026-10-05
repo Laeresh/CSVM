@@ -1045,6 +1045,15 @@ public sealed class OriginalPresentation : IMenuPresentation
     private void OpenLobbyAid(string argument)
     {
         string[] parts = argument.Split(':');
+        if (parts[0] == "late")
+        {
+            // A guest that joined while its host flies a match: no options, no list but its own row.
+            _shell!.StandInNetDoor(NetDoorAid.LateDogfightGuest());
+            _shell.Lobby.OpenGuest();
+            _shell.StepNet(0.0);
+            return;
+        }
+
         bool waiting = parts[0] == "waiting";
         bool guestView = parts[0] == "guest" || waiting;
         string tab = parts.Length > 1 ? parts[1] : parts[0] is "host" or "guest" or "waiting" ? string.Empty : parts[0];
@@ -1054,6 +1063,10 @@ public sealed class OriginalPresentation : IMenuPresentation
         if (guestView)
         {
             host.OpenDogfightHost(NetSeats.MaxPlayers - 1);
+            if (host.Dogfight is { } drawn)
+            {
+                drawn.CallsignPool = _shell.Lobby.BotNames();
+            }
         }
         else
         {
@@ -1082,7 +1095,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
 
         NetDoorAid.PoseDogfight(host, guests);
-        if (tab is "bots" or "bot" && host.Dogfight is { } field)
+        if (tab is "bots" or "bot" or "bot-scores" && host.Dogfight is { } field)
         {
             // Three bot rows after the two guests, the first an ace on the Fury.
             field.FillTo(6);
@@ -1104,10 +1117,10 @@ public sealed class OriginalPresentation : IMenuPresentation
             return;
         }
 
-        if (tab == "scores")
+        if (tab is "scores" or "bot-scores")
         {
             // Game Scores fills only on the way back from a match, so every door lands one.
-            var scores = NetDoorAid.PlayedScores(host);
+            var scores = tab == "scores" ? NetDoorAid.PlayedScores(host) : NetDoorAid.PlayedBotScores(host);
             foreach (var door in guests.Prepend(host).Where(door => door != shown))
             {
                 door.Dogfight?.Land(scores);
@@ -1122,7 +1135,7 @@ public sealed class OriginalPresentation : IMenuPresentation
             {
                 "plane" => LobbyTab.Plane,
                 "ammo" or "rockets" => LobbyTab.Ammo,
-                "scores" => LobbyTab.Scores,
+                "scores" or "bot-scores" => LobbyTab.Scores,
                 _ => LobbyTab.Mission,
             },
             rockets: tab == "rockets");
