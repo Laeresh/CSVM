@@ -108,7 +108,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 20. ☑ A local match runs off a seat roster with no wire, so it can hold bot seats
 21. ☑ Multiplayer Lobby: Add bot, Fill-to-N, per-row plane/skill/team/callsign, Remove
-22. ☐ A joining human takes the newest bot's seat in the lobby, a late joiner once the match is back there
+22. ☑ A joining human takes the newest bot's seat in the lobby, a late joiner once the match is back there
 23. ☐ Local join board: bot rows, and the two-pilot minimum counts bots
 
 ### Wave D, presentation and measurement
@@ -834,29 +834,91 @@ must refuse with langui 10519. GitHub issue #140 reports a Deathmatch that launc
 player on one team through some route round that check; read its state before wiring bot rows
 into the refusal, so the bot path does not add a second route round it.
 
-## C22 ☐ A joining human takes the newest bot's seat in the lobby, a late joiner once the match is back there
+## C22 ☑ A joining human takes the newest bot's seat in the lobby, a late joiner once the match is back there
 
 **Goal.** A guest who joins a full lobby takes the most recently added bot's seat (Decision 6). A
 guest who joins while a match runs lands in the lobby, not the match, and takes the newest bot's
 seat when the match is back in the lobby (Decision 7); a host Restart keeps the match running and
 changes no seat. A guest who leaves is not replaced.
 
-**Evidence (confidence: lead-only).** A late joiner lands in the lobby, never in a running match
-(the user's correction to Decision 7). `WorldEventMessage` code 6 is `SeatLeft`. ENet host peers are
-`MaxPlayers - 1` (`Launcher.cs:2758`), so a full field of bots must not block the ENet accept, and a
-waiting late joiner holds a peer while every seat is still flown.
+**Evidence (confidence: traced-to-code).** The holding already existed; the yield and the host's
+in-flight advert did not. **How a late joiner is held.** The socket accepts it: ENet host peers are
+`MaxPlayers - 1` on every host (`Launcher.OpenCliNet`, `LaunchMenu`, `OriginalLobbyScreen.OpenHost`,
+`OriginalPresentation`), and a bot holds no peer, so fifteen bots leave all fifteen peer slots free.
+The host's `NetLobby` is bound to the running session, and a bound lobby's `Peers` is the list
+fixed at bind: `OnPeerConnected` sends the newcomer only the build version and the last advert,
+`Keep` drops anything an unbound peer sends, and `NetSession` sends state, fire, damage and roster
+only to `Peers`. The guest's door reaches Joined and its lobby opens at once (`OriginalShell.FollowDogfight`);
+with no options heard it shows the guest alone (`GuestAlone`), the default options, Ready greyed
+(`HasOptions` false), a silent chat, and `DogfightLaunchDue` stays false because nothing is held.
+`RefuseOverCap` counts people only and does not run in flight, so a late joiner past the human cap
+is refused in arrival order when the lobby comes back. **A finding beyond the plan:** nothing stepped
+a Dogfight host's door in flight (the menu host is hidden, and the launcher stepped only a guest's
+door), so the host answered no LAN search, let its master listing lapse, and a late joiner by typed
+address read the lobby's last advert (Waiting). **Where "back in the lobby" is signalled.** Only a
+completed match lands there: `ExitSession` asks `LobbyLanding` while the session lives, `CloseNetLaunch`
+hands `EndNetWire` the kept lobby, `NetPlayFeature.Reclaim` unbinds the wire, the menu's `LobbyReturn`
+reaches `DogfightLobby.Land`, and the door's next Hosting step runs `RefuseOverCap` and then the
+lobby's `Step`. A match left early closes the door and tells every guest, so there is no lobby to
+wait for. A Restart (`VersusDirector.Restart`) stays in the session and touches neither the door nor
+the bound list. **The trap does not bite.** Seats change hands only in the lobby, and every launch
+builds a new `GameSession`, whose new `SessionNet` holds a fresh `AircraftStateCadence` (`_sequence`
+zeroed) and `_fireSequence`, whose new `NetSession` holds fresh `Instruments`, and whose every remote
+rig takes a new `RemotePoseBuffer` (`HumanFlightAdapter`); `NetLobby.Unbind` drops the old flight's
+held payloads. **Split-screen.** A Dogfight guest flies exactly one seat (`VersusLaunchField` seats
+each peer once; `SeatsWanted` is co-op's), and only the host flies more (`LocalSeats`, unset in
+production), so a guest with more seats than one bot frees does not arise; the rule below frees one
+bot per seat past sixteen whoever brings it. **A seat changing hands is a row change.** People are
+listed and seated before bots, so the guest takes the place after the people already seated (seat 1
+here) and every bot moves up one; what changes hands is the sixteenth place, not the bot's seat
+index. C21's backstop already cut the newest bot at launch (`NetSeats.AddBots` stops at sixteen), so
+the yield's effect is the lobby: the host's list, `FieldSeats` and `BotRoom`, and a guest's view
+that no longer silently drops the last row.
 
-**Approach.** On a join into a full lobby, retire the newest bot seat and seat the guest in it. On a
-join while a match runs, hold the guest in the lobby as a waiting pilot; when the match returns to
-the lobby, retire the newest bot seat and seat the waiting guest, one bot per waiting guest, in join
-order. `<TODO: read how a late joiner is held in the lobby today and where "the match is back in
-the lobby" is signalled; and what a waiting guest sees in the roster>`.
+**Approach (landed).** `DogfightLobby.Step` on the host runs `YieldToPeople` between the team actions
+and the send: while `FieldSeats` exceeds `NetSeats.MaxPlayers` and a bot row stands, the last row
+(the newest bot) goes. One bot per seat past the cap, newest first, so people who waited take the
+newest bots' places in join order; no row is added when a person leaves. It runs only from `Step`,
+and a host's door steps its lobby only while the lobby stands, so nothing yields in flight or on a
+Restart, and a join into a standing full lobby yields on the next step. The host's door in flight
+(`NetPlayFeature`'s released branch) now also hands its advert to every connected peer, and the
+launcher steps a host's door in a lobby flight as it already stepped a guest's
+(`Launcher.TickVersusFlight`, was `TickVersusGuestFlight`): the door steps neither its wire nor its
+lobby, but its advert reads In mission to its peers, the LAN search and the master listing. A late
+joiner therefore finds the running game and reads `Advert.Status == InMission` while it waits. **Not
+built, for the screen's owner:** a cue on `OriginalLobbyScreen` for a waiting guest (it could read
+the door's `Advert` status In mission with `HasOptions` false, for example "Match in progress"), and
+a lobby notice when a bot yields (`DogfightLobby.Announce` would post one; no langui line exists for
+it, so the wording is a look call). For C23: `YieldToPeople` reads `FieldSeats`, whose people count
+is `LocalSeats` plus seated peers; a local board with no wire has no peers and yields nothing.
 
-**Model recommendation.** `<TODO: not settled in the session>`
+**Model recommendation.** Sonnet would do the code, which is a loop and a stepped door. Opus was
+used because the holding had to be traced through the lobby's binding, the session's peer list, the
+door's released branch and the launcher's landing path before deciding where the yield may run.
 
-**Verify.** A loopback suite: host with 15 bots, a guest joins mid-match and stays in the lobby
-while the match runs; a host Restart leaves the field unchanged; when the match returns to the
-lobby, the newest bot's row leaves the roster and the guest holds its seat on both ends.
+**Verify.** New suite `net-bot-yield` (`CSVM/src/Testing/NetBotYieldSuites.cs`, clean loopback, real
+doors, the host's flight a whole `GameSession` on MP1, weight 7.0): Fill to sixteen seats fifteen
+bots; a guest joining the full lobby takes the newest bot's place on the host and in its own lobby
+(sixteen rows, its row 1); its leave refills nothing (control); launched with the host and fifteen
+bots, a guest joining mid-match stands in its lobby reading In mission with no options and no launch
+due, holds a peer on the host's wire outside the bound list, has nothing held, and the host's lobby
+keeps all fifteen bots (control) while the session flies the same sixteen seats; after the match
+ends and the host's Restart, all of that still holds; when the completed match lands, the newest
+bot's row leaves the host's list and the late guest holds row 1 on both ends, its advert back to
+Waiting; the next launch seats it at seat 1 with the fourteen remaining bots after it on the host's
+roster, and its own `NetSession` joins flying seat 1. Able-to-fail, each run and reverted: with the
+yield removed, four checks fail (the full-lobby join, the leave control, the re-add, the landing)
+while the launch checks pass on `AddBots`' cut, and both new units fail; with the in-flight advert
+removed, the two In mission checks fail; with the lobby stepped in flight, the two keep-fifteen
+controls and the two waiting checks fail. Units: `DogfightLobbyTests.AGuestSeatedOnAFullFieldTakesTheNewestBotsPlaceInJoinOrder`
+(an unstepped lobby lets no bot go, as a control; two guests take the two newest in order; a leaver
+is not replaced) and `ABotYieldsOnlyWhenTheFieldIsFullCountingTheHostsSplitscreenSeats` (a guest
+seated with room takes no bot's place, as a control; a host flying two seats still frees one bot per
+guest). Runs in `bots-c22`: `RunTests.ps1 -UnitFilter FullyQualifiedName~DogfightLobbyTests -SkipEngine
+-SkipGoldens` 41 passed; `-Filter 'menu-,net-' -Shards 4 -SkipGoldens -SkipHitch` units 6265 passed /
+0 failed / 3 skipped, engine 104 passed / 0 failed, engine errors clean.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** No seat changes hands mid-match, so a swap must never be triggered by Restart. The
 seat's channels and sequence counters (`AircraftStateCadence._sequence`, `SessionNet._fireSequence`,
@@ -922,7 +984,10 @@ named off a seat roster ordered differently from the lobby rows.
 
 **Also settles (the user's ruling on C21's capture):** a bot row's Ready tick (a bot always reads
 Ready today) and the lobby header's "Players (n of cap)", which counts bot rows against the human
-cap and can read "Players (14 of 4)". Settle both from D31's capture together with the tag.
+cap and can read "Players (14 of 4)". Settle both from D31's capture together with the tag. Two
+cues C22 left unbuilt belong here too: a "Match in progress" line for a guest waiting in the lobby
+(the door's `Advert.Status` is InMission and `HasOptions` false), and a chat notice when a bot
+yields its place, for which no langui line exists.
 
 **⚠ Traps.** `SplitScreen.PlayerColor` is a 4-colour palette taken modulo 4
 (`CSVM/src/UI/Boards/SplitScreen.cs:76-82,142`), so colours repeat at 16 pilots. That predates bots

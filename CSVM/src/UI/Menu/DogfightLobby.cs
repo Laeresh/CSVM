@@ -191,7 +191,9 @@ public sealed class DogfightLobby
     public bool IsHost => _hostPeer < 0;
 
     /// <summary>The host's bot rows in the order they were added, the order they are listed and
-    /// seated in. Empty on a guest, which reads them as rows of <see cref="Players"/>.</summary>
+    /// seated in. A person seated past <see cref="NetSeats.MaxPlayers"/> pilots takes the last
+    /// row's place on the next <see cref="Step"/>. Empty on a guest, which reads them as rows of
+    /// <see cref="Players"/>.</summary>
     public IReadOnlyList<DogfightBot> Bots => _bots;
 
     /// <summary>How many pilots the field holds: every seat the host's machine flies, one per seated
@@ -933,8 +935,9 @@ public sealed class DogfightLobby
     }
 
     /// <summary>One menu frame, after the socket was stepped. The host relays each guest's chat to the
-    /// others and sends each guest its options and list when they change. A guest takes the host's
-    /// chat and sends its own pick.</summary>
+    /// others and lets the newest bots go while the field holds more than sixteen pilots. It sends
+    /// each guest its options and list when they change. A guest takes the host's chat and sends
+    /// its own pick.</summary>
     public void Step()
     {
         foreach (var (from, line) in _wire.TakeChat())
@@ -957,6 +960,7 @@ public sealed class DogfightLobby
         if (IsHost)
         {
             TakeTeamActions();
+            YieldToPeople();
             SendToGuests();
         }
         else
@@ -1055,6 +1059,18 @@ public sealed class DogfightLobby
         }
 
         return names;
+    }
+
+    // ⚠ Do not call this outside Step. A host's door steps its lobby only while the lobby stands.
+    // A player who joins mid-match then waits, and no seat changes hands in flight or on a Restart.
+    // One bot goes per seat past the cap, newest first, so waiting people take the newest bots'
+    // places in join order. A leaver's seat is not refilled.
+    private void YieldToPeople()
+    {
+        while (_bots.Count > 0 && FieldSeats > NetSeats.MaxPlayers)
+        {
+            _bots.RemoveAt(_bots.Count - 1);
+        }
     }
 
     // A pilot name no row holds, at random from the pool, else the first "Bot n" none holds.

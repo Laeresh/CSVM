@@ -1128,7 +1128,7 @@ public partial class Launcher : Node3D
         }
 
         TickCoopFlight(delta);
-        TickVersusGuestFlight(delta);
+        TickVersusFlight(delta);
 
         // An Options apply, one frame after the exit that asked for it.
         if (_pendingApply is { } applied)
@@ -3279,17 +3279,18 @@ public partial class Launcher : Node3D
         }
     }
 
-    // A lobby Dogfight guest's upkeep. The session steps the wire, and the door only watches the
-    // host. A host that leaves ends the match here, and the Connection page names why.
-    private void TickVersusGuestFlight(double delta)
+    // A lobby Dogfight's upkeep in flight. The session steps the wire, never the door. A host's door
+    // still advertises, so a player who joins mid-match finds the game and waits in the lobby. A
+    // guest's door watches its host, and a host that leaves ends the match here.
+    private void TickVersusFlight(double delta)
     {
-        if (!_lobbyFlight || _netIsHost || _netDoor is not { } door || _netWire == null || _session is not { InSession: true })
+        if (!_lobbyFlight || _netDoor is not { } door || _netWire == null || _session is not { InSession: true })
         {
             return;
         }
 
         door.Step(delta);
-        if (VersusGuestFlightOver(door))
+        if (!_netIsHost && VersusGuestFlightOver(door))
         {
             Log.Info("core", $"net: versus flight over, the host left ({door.Fault})");
             ReturnToMenu(new LobbyReturn(System.Array.Empty<UI.Menu.DogfightScore>()));

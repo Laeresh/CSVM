@@ -979,12 +979,80 @@ public sealed class DogfightLobbyTests
         Assert.Empty(guests[0].LaunchBots);
     }
 
+    // Seated stands in for the door's admission, so a test can seat a guest after the field fills.
+    [Fact]
+    public void AGuestSeatedOnAFullFieldTakesTheNewestBotsPlaceInJoinOrder()
+    {
+        var admitted = new HashSet<int>();
+        var (host, guests, mesh) = Lobbies(3, "Lucy", seated: admitted.Contains);
+        Settle(host, guests);
+        Assert.Equal(NetSeats.MaxPlayers - 1, host.FillTo(NetSeats.MaxPlayers));
+        var full = host.Bots.ToArray();
+        Assert.Equal(full.Max(b => b.Id), full[^1].Id);
+
+        // ABLE-TO-FAIL CONTROL: a lobby nobody steps, as a host's door leaves it in flight, lets no
+        // bot go however many people are seated.
+        admitted.Add(1);
+        Steps[host].ForEach(wire => wire.Step(0.016));
+        Assert.Equal(full, host.Bots);
+        Assert.Equal(NetSeats.MaxPlayers + 1, host.FieldSeats);
+
+        Settle(host, guests);
+        Assert.Equal(full.Take(14), host.Bots);
+        Assert.Equal(NetSeats.MaxPlayers, host.FieldSeats);
+        Assert.Equal(NetSeats.MaxPlayers, guests[0].Players.Count);
+        Assert.Equal(1, guests[0].You);
+        Assert.Equal(("Lucy", false), (guests[0].Players[1].Name, guests[0].Players[1].IsBot));
+        Assert.DoesNotContain(guests[0].Players, row => row.Name == full[^1].Callsign);
+
+        // A second guest takes the next newest; then a guest who leaves is not replaced.
+        admitted.Add(2);
+        Settle(host, guests);
+        Assert.Equal(full.Take(13), host.Bots);
+        Assert.Equal(2, guests[1].You);
+        mesh[0].Disconnect(1);
+        Settle(host, guests);
+        Assert.Equal(full.Take(13), host.Bots);
+        Assert.Equal(1, host.BotRoom);
+    }
+
+    [Fact]
+    public void ABotYieldsOnlyWhenTheFieldIsFullCountingTheHostsSplitscreenSeats()
+    {
+        // ABLE-TO-FAIL CONTROL: a guest seated where the field has room takes no bot's place.
+        var room = new HashSet<int>();
+        var (roomy, others, _) = Lobbies(2, seated: room.Contains);
+        Settle(roomy, others);
+        Assert.Equal(14, roomy.FillTo(NetSeats.MaxPlayers - 1));
+        room.Add(1);
+        Settle(roomy, others);
+        Assert.Equal(14, roomy.Bots.Count);
+        Assert.Equal(NetSeats.MaxPlayers, roomy.FieldSeats);
+
+        // A host flying two seats fills to sixteen pilots on fifteen rows, and a guest still frees one.
+        var admitted = new HashSet<int>();
+        var (split, guests, _) = Lobbies(2, localSeats: 2, seated: admitted.Contains);
+        Settle(split, guests);
+        Assert.Equal(14, split.FillTo(NetSeats.MaxPlayers));
+        admitted.Add(1);
+        Settle(split, guests);
+        Assert.Equal(13, split.Bots.Count);
+        Assert.Equal(NetSeats.MaxPlayers, split.FieldSeats);
+        Assert.Equal(NetSeats.MaxPlayers - 1, split.Players.Count);
+    }
+
     private static (DogfightLobby Host, List<DogfightLobby> Guests, IReadOnlyList<LoopbackTransport> Mesh) Lobbies(
-        int players, string guestName = "", Func<INetTransport, INetTransport>? hostCarrier = null, int localSeats = 1)
+        int players, string guestName = "", Func<INetTransport, INetTransport>? hostCarrier = null, int localSeats = 1,
+        Func<int, bool>? seated = null)
     {
         var mesh = LoopbackTransport.Mesh(players, Clean, new Random(players));
         var hostWire = new NetLobby(hostCarrier?.Invoke(mesh[0]) ?? mesh[0]);
-        var host = new DogfightLobby(hostWire, () => "Host") { LocalSeats = () => localSeats, BotDraws = new Random(players) };
+        var host = new DogfightLobby(hostWire, () => "Host")
+        {
+            LocalSeats = () => localSeats,
+            BotDraws = new Random(players),
+            Seated = seated ?? (_ => true),
+        };
         var guests = new List<DogfightLobby>();
         var wires = new List<NetLobby> { hostWire };
         for (int i = 1; i < players; i++)

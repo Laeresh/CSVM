@@ -1233,7 +1233,14 @@ public sealed class NetPlayFeature : IMenuFeature
                 return;
             }
 
+            // A host's advert reaches its connected peers too. A player who joins mid-match then
+            // reads In mission, not the lobby's last word.
             var flying = CurrentAdvert();
+            if (IsHost)
+            {
+                _transport.Advertise(flying);
+            }
+
             _responder?.Poll(flying, Port);
             _listing?.List(MasterDirectory.ListingOf(flying, Version, Private));
             return;
