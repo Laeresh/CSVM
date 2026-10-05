@@ -635,7 +635,7 @@ a missed pass and a lost base, no run without a base or need, `NearestServing`) 
 Run in `bots-b14`: `RunTests.ps1 -Suite 'net-bot-rearm,net-bot-seat,net-bot-seat-lossy,net-bot-respawn,net-bot-skill,net-seats,net-rearm-deathmatch,net-rearm-zeppelins,net-lobby-deathmatch-mp1,ai-engine-rearm' -Shards 4 -SkipGoldens -SkipHitch`:
 units 6253 passed / 0 failed / 3 skipped, engine 10 passed; `-Filter 'ai-,net-,wingman,campaign-roster,instant-action' -Shards 4 -SkipUnits -SkipGoldens -SkipHitch`: 103 passed / 0 failed, engine errors clean.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` on the merged tree (4a179350, B14, C20, C21 and C22 with main merged in): build, units 6265 passed / 0 failed / 3 skipped, engine 521 passed / 0 failed / 2 skipped (6 shards, engine errors clean), goldens 24 hash-identical; exit 0.
 
 **⚠ Traps.** A base the mission switched off offers nothing (`IA1` has both plain nodes off), so
 test on `MP1`. The rearm latch is one per seat and releases only outside every serving base. Never
@@ -729,7 +729,7 @@ incoming-fire-cues,death-respawn-rest-pose,menu-launch-return,menu-player-setup-
 menu-original-lobby,pause-sheet,voice-runtime,ai-voice,flight-live-respawn-gate' -Shards 4`
 24 passed / 0 failed, engine errors clean.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` on the merged tree (4a179350, B14, C20, C21 and C22 with main merged in): build, units 6265 passed / 0 failed / 3 skipped, engine 521 passed / 0 failed / 2 skipped (6 shards, engine errors clean), goldens 24 hash-identical; exit 0.
 
 **⚠ Traps.** Never read the roster's size as "on a wire" again: a local match with bots holds a
 roster (`VersusDirector.Wired` carries the warning). A local roster's panes must name no plane, or
@@ -825,7 +825,7 @@ three bot rows) and `c21-lobby-guest.png` (a guest's greyed view). Runs: units 6
 failed / 3 skipped; `-Filter menu- -Shards 4` 45/45; `-Filter net- -Shards 4` 58/58. No golden
 shows the lobby.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` on the merged tree (4a179350, B14, C20, C21 and C22 with main merged in): build, units 6265 passed / 0 failed / 3 skipped, engine 521 passed / 0 failed / 2 skipped (6 shards, engine errors clean), goldens 24 hash-identical; exit 0.
 
 **⚠ Traps.** The screen layout is a look judgement; bring a capture to the user before settling it.
 Bot rows count toward the team-launch rule (`NetTeamBook.Check`, fed by `DogfightLobby.LaunchRefusal`
@@ -918,7 +918,7 @@ guest). Runs in `bots-c22`: `RunTests.ps1 -UnitFilter FullyQualifiedName~Dogfigh
 -SkipGoldens` 41 passed; `-Filter 'menu-,net-' -Shards 4 -SkipGoldens -SkipHitch` units 6265 passed /
 0 failed / 3 skipped, engine 104 passed / 0 failed, engine errors clean.
 
-**Verified.** <pending orchestrator run>
+**Verified.** Full `RunTests.ps1` on the merged tree (4a179350, B14, C20, C21 and C22 with main merged in): build, units 6265 passed / 0 failed / 3 skipped, engine 521 passed / 0 failed / 2 skipped (6 shards, engine errors clean), goldens 24 hash-identical; exit 0.
 
 **⚠ Traps.** No seat changes hands mid-match, so a swap must never be triggered by Restart. The
 seat's channels and sequence counters (`AircraftStateCadence._sequence`, `SessionNet._fireSequence`,
