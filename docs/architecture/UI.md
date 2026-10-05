@@ -192,6 +192,13 @@ element goes through the same mapping and only the scale changes; a viewport wit
 to 1:1 rather than a scale nothing can draw at. The rejected alternatives and why the art is sampled
 nearest are in [../org/campaign-board.md](../org/campaign-board.md), and bind every campaign screen.
 
+## src/UI/Boards/AuthoredPointer.cs
+A keyboard seat's mouse on a board drawn in the authored 800x600 space: the viewport pointer
+mapped back through `BoardFit` into authored pixels, with the left button, and none for a pad seat
+or a board out of the tree. The Original race and pause boards (`Menu/Original/OriginalRaceBoard.cs`,
+`OriginalPauseBoard.cs`) hand it to `BoardMenuPointer`. `PausePreferences` and the Built-in
+`PauseBoard` read their pointer their own way, raw and capture-aware.
+
 ## src/UI/Boards/ComposedBoard.cs
 What a composed campaign screen is made of, engine-free: the screen's fixed backdrop, the fills a
 page paints on it, pictures at authored pixel positions, connector strokes, text lines, button
