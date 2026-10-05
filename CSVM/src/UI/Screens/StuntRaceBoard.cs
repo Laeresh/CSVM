@@ -70,23 +70,20 @@ public sealed partial class StuntRaceBoard : ResultsBoard
     private void OnRaceCompleted()
     {
         var standings = _race.Standings();
+        var rows = RaceRows.Of(standings, _race.ZoneCount);
         _rows.Clear();
-        float? winner = standings.Count > 0 ? standings[0].BestTime : null;
-        for (int i = 0; i < standings.Count; i++)
-        {
-            var r = standings[i];
-            _rows.Add($"{StuntRace.Ordinal(i + 1)}  {StuntRace.NameText(r)}  {r.PlaneDisplay}  {StuntRace.BestText(r, _race.ZoneCount)}  {StuntRace.GapText(r, winner)}  {r.RunsFinished}/{r.RunsStarted}");
-        }
+        foreach (var row in rows)
+            _rows.Add($"{row.Place}  {row.Name}  {row.Aircraft}  {row.Best}  {row.Gap}  {row.Runs}");
 
         // Log the final order too, so a race is reviewable from a headless run's log.
         Log.Info("flight", $"stunt race results:");
         foreach (var row in _rows)
             Log.Info("flight", $"  {row}");
-        Populate(standings, winner);
+        Populate(standings, rows);
         Wake();
     }
 
-    private void Populate(List<Racer> standings, float? winner)
+    private void Populate(List<Racer> standings, IReadOnlyList<RaceRow> rows)
     {
         float s = BoardScale();
         var body = BeginPanel(s);
@@ -112,18 +109,19 @@ public sealed partial class StuntRaceBoard : ResultsBoard
         AddCell(grid, "RUNS", header, HeaderColor, HorizontalAlignment.Right, runsW);
 
         int font = (int)(RowFont * s);
-        for (int i = 0; i < standings.Count; i++)
+        for (int i = 0; i < rows.Count; i++)
         {
-            var r = standings[i];
+            var row = rows[i];
+            var r = row.Racer;
             // The winner's row wears their own identity colour; everyone else stays neutral so the
             // placing reads at a glance. A pilot who left reads dim, their place kept.
             var color = r.Left ? LeftColor : i == 0 && r.Finished ? r.Color : RowColor;
-            AddCell(grid, StuntRace.Ordinal(i + 1), font, color, HorizontalAlignment.Left, rankW);
-            AddCell(grid, StuntRace.NameText(r), font, r.Left ? LeftColor : r.Color, HorizontalAlignment.Left, nameW);
-            AddCell(grid, r.PlaneDisplay, font, color, HorizontalAlignment.Left, planeW);
-            AddCell(grid, StuntRace.BestText(r, _race.ZoneCount), font, color, HorizontalAlignment.Right, bestW);
-            AddCell(grid, StuntRace.GapText(r, winner), font, color, HorizontalAlignment.Right, gapW);
-            AddCell(grid, $"{r.RunsFinished}/{r.RunsStarted}", font, color, HorizontalAlignment.Right, runsW);
+            AddCell(grid, row.Place, font, color, HorizontalAlignment.Left, rankW);
+            AddCell(grid, row.Name, font, r.Left ? LeftColor : r.Color, HorizontalAlignment.Left, nameW);
+            AddCell(grid, row.Aircraft, font, color, HorizontalAlignment.Left, planeW);
+            AddCell(grid, row.Best, font, color, HorizontalAlignment.Right, bestW);
+            AddCell(grid, row.Gap, font, color, HorizontalAlignment.Right, gapW);
+            AddCell(grid, row.Runs, font, color, HorizontalAlignment.Right, runsW);
         }
 
         body.AddChild(Separator(s));

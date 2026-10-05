@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using CSVM.Flight.Modes;
+using CSVM.UI.Screens;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -265,8 +266,8 @@ public class StuntRaceTests
         // Their best still leads, and their run in progress stopped with them.
         Assert.Equal(new[] { 0, 1, 2 }, race.Standings().Select(r => r.Index));
         Assert.Equal((5f, false, true), (a.BestTime, a.InRun, a.Left));
-        Assert.Equal("P1 (left)", StuntRace.NameText(a));
-        Assert.Equal("P2", StuntRace.NameText(b));
+        Assert.Equal("P1 (left)", RaceRows.NameText(a));
+        Assert.Equal("P2", RaceRows.NameText(b));
         Assert.Contains("LEADER P1 (left) 0:05.0", race.LeaderboardLine(1), StringComparison.Ordinal);
         Assert.True(race.Racers[0].Line().Left);
 
@@ -318,7 +319,7 @@ public class StuntRaceTests
         Advance(race, 61f);
         Assert.True(race.Ended);
         Assert.False(race.MarkLeft(1));
-        Assert.Equal((false, "P2", false), (b.Left, StuntRace.NameText(b), race.Racers[1].Line().Left));
+        Assert.Equal((false, "P2", false), (b.Left, RaceRows.NameText(b), race.Racers[1].Line().Left));
 
         var copy = OpenRace(3, out _, out _, out _);
         copy.Replicate();
