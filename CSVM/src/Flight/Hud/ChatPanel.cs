@@ -1,3 +1,5 @@
+using System;
+using CSVM.Flight.Camera;
 using Godot;
 
 namespace CSVM.Flight.Hud;
@@ -43,6 +45,25 @@ public sealed partial class ChatPanel : Control
     /// the seat that reads the keyboard can type a line.</summary>
     public bool ShowsEntry { get; set; }
 
+    /// <summary>What hides the panel while it answers true: the pane's scores table, which the
+    /// original's Display Scores handler clears the chat panel for. Null hides it never.</summary>
+    public Func<bool>? HiddenWhile { get; set; }
+
+    /// <summary>Whether the held lines draw this frame: the chat is up and nothing hides it.</summary>
+    public bool LinesShown => _chat is { Shown: true } && HiddenWhile?.Invoke() != true;
+
+    /// <summary>The panel for <paramref name="pane"/>: the entry where its seat reads the keyboard,
+    /// and out of the way while that seat holds Display Scores. Every pane's chat is built here.
+    /// </summary>
+    public static ChatPanel ForPane(FlightChat chat, PlayerRig pane) => new()
+    {
+        Chat = chat,
+        ShowsEntry = pane.Controller is { UseKeyboard: true },
+        HiddenWhile = () => pane.Controller is { ScoresShown: true },
+        MouseFilter = MouseFilterEnum.Ignore,
+        FocusMode = FocusModeEnum.None,
+    };
+
     public override void _Process(double delta)
     {
         Position = Vector2.Zero;
@@ -52,12 +73,13 @@ public sealed partial class ChatPanel : Control
             return;
         }
 
-        // Redraw only on a change: a new line, the timer running out, or a keystroke.
+        // Redraw only on a change: a new line, the timer running out, a keystroke or the scores.
         string entry = ShowsEntry && _chat.Typing ? _chat.EntryLine : string.Empty;
-        if (_chat.Posted != _drawnPosts || _chat.Shown != _drawnShown || entry != _drawnEntry)
+        bool shown = LinesShown;
+        if (_chat.Posted != _drawnPosts || shown != _drawnShown || entry != _drawnEntry)
         {
             _drawnPosts = _chat.Posted;
-            _drawnShown = _chat.Shown;
+            _drawnShown = shown;
             _drawnEntry = entry;
             QueueRedraw();
         }
@@ -65,7 +87,7 @@ public sealed partial class ChatPanel : Control
 
     public override void _Draw()
     {
-        float s = _chat is not { Shown: true } || Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
+        float s = !LinesShown || Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
         if (s <= 0f)
         {
             return;

@@ -641,7 +641,7 @@ internal static class StuntRaceSuites
     }
 
     // Two starts well above C1's terrain, clear of every zone and of each other.
-    private sealed class ApartStarts : IFlightStarts
+    internal sealed class ApartStarts : IFlightStarts
     {
         public IReadOnlyList<FlightStart> ChooseStarts(IReadOnlyList<SpawnPoint>? spawns,
             string missionZrdrPath, int spawnBase, int playerCount)

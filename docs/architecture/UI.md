@@ -636,6 +636,29 @@ The `--viewer` marker overlay (key K, `--markers` at launch): every firepoint, p
 the parked aircraft as a coloured gizmo with a billboarded label. Reuses `MarkerRig`'s own
 classification and co-location grouping, so its gizmos agree with the marker dump by construction.
 
+## src/UI/Overlays/ScoresOverlay.cs
+One pane's held Display Scores, attached by `Launch/GameSession.cs` to every local pane of a race or
+a Dogfight. Each frame it reads the pane's seat (`FlightController.ScoresShown`), so it stands only
+while that seat holds the action and survives an airframe swap. Under the Original presentation it
+draws `OriginalScoresText`'s lines in Courier New on the original's character cell at the decoded HUD
+positions, with the flag column; under Built-in it draws `ScoresTable` as a chrome table centred in the
+pane. `Flight/Hud/ChatPanel.cs` steps aside on the same reading. Decode:
+[../org/multiplayer-scoring.md](../org/multiplayer-scoring.md) "The in-flight scores".
+
+## src/UI/Overlays/OriginalScoresText.cs
+The original's in-flight scores as monospaced lines, engine-free: a Dogfight's header, team lines
+and pilot lines in the decoded 21- and 7-character columns and order, each pilot line carrying the
+flag it holds, and a race's standings borrowing that grid for its own columns. `OriginalScoresWords`
+reads the three header strings out of the message table. Capped at the HUD's 18 lines. Drawn by
+`ScoresOverlay.cs`.
+
+## src/UI/Overlays/ScoresTable.cs
+The Built-in standings a held Display Scores shows, engine-free, in the mode's results board
+columns: a race's place, pilot, aircraft, best, gap and runs, or a Dogfight's place, pilot, score,
+kills and deaths with a team match's lines first. `ScoresSource` holds a session's race or Dogfight,
+its seat names and flag carriers and the header words, and answers both looks, or nothing where no
+mode keeps scores.
+
 ## src/UI/Overlays/PhotoModeHud.cs
 Photo mode's only screen furniture and its way out: a hint line naming the bindings on a layer of
 its own, and the Escape or pad-B read that raises `Exit` for `SessionBoards.ExitPhotoMode` to act on.

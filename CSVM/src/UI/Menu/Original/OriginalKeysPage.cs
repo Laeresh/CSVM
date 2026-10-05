@@ -139,7 +139,7 @@ public sealed class OriginalKeysPage : IOriginalOptionsPage
     private static readonly InputAction[] OtherFlightGroup =
     {
         InputAction.AutoLand, InputAction.Nitro, InputAction.Respawn, InputAction.Pause,
-        InputAction.ChatEveryone, InputAction.ChatTeam,
+        InputAction.DisplayScores, InputAction.ChatEveryone, InputAction.ChatTeam,
         InputAction.ToggleGraphicsMode,
     };
 

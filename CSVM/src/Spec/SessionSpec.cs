@@ -861,6 +861,10 @@ public sealed record SessionSpec
 
     public bool DebugScoreboard { get; private set; }
 
+    /// <summary><c>--debug-scores</c>: every local seat reads Display Scores as held. A
+    /// <c>--screenshot</c> of a race or a Dogfight then shows the scores table.</summary>
+    public bool DebugScores { get; private set; }
+
     /// <summary><c>--debug-pause[=frame]</c>: open the pause board at that sim frame, the scripted
     /// twin of the Start press, so a <c>--screenshot</c> captures the pause screen with nobody at
     /// the controls. A frame late enough for the mission to have run is the point: the objectives
@@ -1267,6 +1271,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--paint-seed=")) { s.PaintSeed = ulong.Parse(arg["--paint-seed=".Length..]); s.PaintSeedExplicit = true; }
             else if (arg.StartsWith("--rof=")) { s.Rof = arg["--rof=".Length..]; }
             else if (arg == "--debug-scoreboard") { s.DebugScoreboard = true; }
+            else if (arg == "--debug-scores") { s.DebugScores = true; }
             else if (arg == "--debug-pause") { s.DebugPauseFrame = DefaultDebugPauseFrame; }
             else if (arg.StartsWith("--debug-pause=")) { s.DebugPauseFrame = int.Parse(arg["--debug-pause=".Length..]); }
             else if (arg.StartsWith("--debug-objective=")) { s.DebugObjective = int.Parse(arg["--debug-objective=".Length..]); }

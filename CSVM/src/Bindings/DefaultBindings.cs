@@ -164,8 +164,8 @@ public static class DefaultBindings
         // settles as the flyby rather than the following chase view); the pad has no spare button.
         b.Keys(InputAction.FlybyView, Key.F7);
 
-        // The spyglass on the original's own Shift+S, now that a binding carries the modifier; Misc1
-        // is the pad's one free control, and the original spends a joystick button on this too.
+        // The spyglass on the original's own Shift+S. Misc1 is a pad control no other flight action
+        // holds, and the original spends a joystick button on this too.
         b.Mod(InputAction.ToggleSpyglass, KeyModifiers.Shift, Key.S)
             .Buttons(InputAction.ToggleSpyglass, JoyButton.Misc1);
         // The original's Views 2 page, one numpad key per row; the bottom row looks rearward.
@@ -206,6 +206,10 @@ public static class DefaultBindings
         // The graphics-mode switch, this port's own action. Keyboard only: it is a comparison
         // tool, and the pad has no free control to spend on it.
         b.Keys(InputAction.ToggleGraphicsMode, Key.G);
+
+        // The scores table on the original's own Tab. Back is a pad button no other flight action
+        // holds, and the conventional place for a held scoreboard.
+        b.Keys(InputAction.DisplayScores, Key.Tab).Buttons(InputAction.DisplayScores, JoyButton.Back);
         return b;
     }
 

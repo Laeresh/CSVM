@@ -203,6 +203,13 @@ Not a scan. The buffered DirectInput keyboard read in `FUN_005357b0` composes
 `(&DAT_007582e4)[code * 2]`, with the registered handler for that code at `(&DAT_007582e8)[code * 2]`.
 Lookup is a direct index by control code.
 
+[Evidence: decoded] **A handler runs on the press.** The dispatch loop in `FUN_00535a80`
+(`0x00535dfe`..`0x00535e24`) calls the handler of each code that changed this frame only while the
+code's state word has bit 0 set. A press writes 1 (3 when the word was already 1), a release ORs 4,
+and the next frame's `FUN_00535a00` turns 1 into 2 and any released word into 0. A key held across a
+frame is released from 2 into 6, so its release calls nothing; a press and release inside one frame
+(5 or 7) calls the handler once.
+
 `FUN_00536e80` maintains the inverse direction as four arrays inside the manager, one per slot
 (`+0x18` keyboard A, `+0x1f90` keyboard B, `+0x3f08` joystick, `+0x3f48` mouse), each mapping a code
 to a command id and rebuilt whenever the map changes.

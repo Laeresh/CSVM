@@ -43,6 +43,7 @@ public class FlightBindingMappingTests
         { Key.KpAdd, InputAction.ZoomIn },
         { Key.KpSubtract, InputAction.ZoomOut },
         { Key.Quoteleft, InputAction.ChatEveryone },
+        { Key.Tab, InputAction.DisplayScores },
     };
 
     /// <summary>The keyboard rows that carry a modifier, which are a control of their own rather
@@ -75,6 +76,7 @@ public class FlightBindingMappingTests
         { JoyButton.RightStick, InputAction.LookBack },
         { JoyButton.LeftShoulder, InputAction.YawLeft },
         { JoyButton.RightShoulder, InputAction.YawRight },
+        { JoyButton.Back, InputAction.DisplayScores },
     };
 
     [Theory]
@@ -359,11 +361,11 @@ public class FlightBindingMappingTests
     {
         var state = new FakeDevices();
         state.Buttons.Add((Pad, (int)JoyButton.DpadDown));
-        state.Buttons.Add((Pad, (int)JoyButton.Back));
+        state.Buttons.Add((Pad, (int)JoyButton.Paddle1));
 
         var map = FlightMap();
         map.Add(InputAction.SelectChaseView,
-            new Binding(Pad, BindingControl.Button((int)JoyButton.Back)));
+            new Binding(Pad, BindingControl.Button((int)JoyButton.Paddle1)));
 
         var keyActions = new PlayerActions(map, true);
         keyActions.Poll(new PadMuted(state));

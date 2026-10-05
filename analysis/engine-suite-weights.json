@@ -519,6 +519,8 @@
     "stunt-race-time-attack": 1.91,
     "stunt-race-no-lives": 1.9,
     "stunt-race-boards": 0.6,
+    "stunt-race-display-scores": 1.9,
+    "dogfight-display-scores": 1.9,
     "target-class-cycle": 2.17,
     "mode-target-table": 3.49,
     "world-node-active-depth": 3.540,

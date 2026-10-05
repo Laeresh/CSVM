@@ -889,7 +889,8 @@ panel show it. `Session/World/NetChatLink.cs` fills it and `ChatPanel.cs` draws 
 One pane's drawing of the machine's `FlightChat`, at the top left of the reading box in the
 original's `mpChat` green with its drop shadow, and the entry line under it in the pane whose seat
 reads the keyboard. It draws only: a splitscreen pane routes no input, so the keys are
-`Session/World/NetChatLink.cs`'s.
+`Session/World/NetChatLink.cs`'s. `ForPane` builds every pane's panel, which steps aside while that
+pane's seat holds Display Scores (`UI/Overlays/ScoresOverlay.cs`).
 
 ## src/Flight/Hud/TargetHud.cs
 The per-pane targeting HUD, built on every human pane in every flight session: the pilot's own

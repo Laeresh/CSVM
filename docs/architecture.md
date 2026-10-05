@@ -458,6 +458,9 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Overlays/TileGridOverlay.cs`, the map-edge tile-grid overlay (`--debug-tilegrid`): every ground tile tinted by repetition band, so one band is one block.
 - `src/UI/Overlays/NodeLabels.cs`, floating `cs_name` labels over scene nodes (`--debug-names`, no key): meshes or all, anchored on mesh centres and de-cluttered.
 - `src/UI/Overlays/MarkerOverlay.cs`, the `--viewer` firepoint, pylon and target overlay (K): coloured gizmos with de-cluttered labels.
+- `src/UI/Overlays/ScoresOverlay.cs`, one pane's held Display Scores: the original's HUD text or a chrome table, while the pane's seat holds the action.
+- `src/UI/Overlays/OriginalScoresText.cs`, the original's in-flight scores as monospaced lines in its decoded columns, and a race in the same grid.
+- `src/UI/Overlays/ScoresTable.cs`, the Built-in standings of a held Display Scores, and the source both looks read a race or a Dogfight from.
 - `src/UI/Overlays/PhotoModeHud.cs`, photo mode's fading hint line and its Escape or pad-B way out; it raises an event and decides nothing.
 - `src/UI/Overlays/PerfHud.cs`, the frame-cost readout (F14): fps, current frame cost and worst recent frame, once for the window, drawn above the launchscreen too.
 - `src/UI/Overlays/NetReadout.cs`, the `--debug-net` corner readout: a network match's desync counters, the line the launcher logs once a second, built only under the flag.

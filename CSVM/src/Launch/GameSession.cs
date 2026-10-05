@@ -2121,6 +2121,7 @@ public partial class GameSession : Node3D
         _dogfight?.WireMatchState();
         // The in-flight chat, once every local seat has its aeroplane to take the keys from.
         _wire.WireChat(weaponMessages);
+        AttachScores(race, weaponMessages);
 
         // --incoming: the incoming-fire test rig, a phantom shooter on every pilot's six, so both
         // cues and the shield are reachable with one player, no AI gunner needed.
@@ -2858,6 +2859,32 @@ public partial class GameSession : Node3D
     // The race window the launch asked for. A --debug-scoreboard race closes it at once: its
     // staggered forced finishes then run as the final run, and the last wakes the board.
     private float RaceWindowSeconds() => _spec.DebugScoreboard ? 0f : _spec.StuntRaceMinutes * 60f;
+
+    // Display Scores in every local pane, wherever a race or a Dogfight keeps scores. A seat is
+    // named by its network callsign, else its splitscreen tag.
+    private void AttachScores(StuntRace? race, Messages strings)
+    {
+        var source = new ScoresSource
+        {
+            Race = race,
+            Match = _dogfight?.Match,
+            Name = seat => _wire.Seats.FirstOrDefault(s => s.SeatIndex == seat) is { Callsign.Length: > 0 } net
+                ? net.Callsign : SplitScreen.PlayerTag(seat),
+            Carried = seat => _dogfight?.Flags?.Flags.Carried(seat) ?? 0,
+            Words = OriginalScoresWords.From(strings),
+        };
+        if (!source.HasScores)
+            return;
+        bool original = _presentation == UI.Menu.PresentationId.Original;
+        foreach (var pane in _rigs)
+        {
+            if (pane.Controller != null)
+                pane.Controller.DebugHoldScores = _spec.DebugScores;
+            ScoresOverlay.Attach(pane, source, original);
+        }
+
+        Log.Info("flight", $"display scores: {_rigs.Count} pane(s), {(original ? "the original's HUD text" : "the chrome table")}{(_spec.DebugScores ? ", held by --debug-scores" : "")}");
+    }
 
     // Frames the parked plane in the orbit view. ⚠ --lookat is a POINT and is used verbatim;
     // --direction is only an aim, so a pivot is synthesized on the ray. Either way the orbit still

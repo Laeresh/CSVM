@@ -388,13 +388,7 @@ internal sealed class SessionNet
         Chat = NetChatLink.Open(net, strings);
         foreach (var pane in _rigs)
         {
-            var panel = new ChatPanel
-            {
-                Chat = Chat.Chat,
-                ShowsEntry = pane.Controller is { UseKeyboard: true },
-                MouseFilter = Control.MouseFilterEnum.Ignore,
-                FocusMode = Control.FocusModeEnum.None,
-            };
+            var panel = ChatPanel.ForPane(Chat.Chat, pane);
             var layer = new CanvasLayer { Name = "chat", Layer = HudLayers.Hud };
             layer.AddChild(panel);
             pane.HudParent.AddChild(layer);

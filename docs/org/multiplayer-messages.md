@@ -782,7 +782,8 @@ object (`0x0071d8a8`): a five-line text list (`FUN_005c5950(5)`), font `mpChat` 
 display pixels (`0x004a8404` to `0x004a842d`). `FUN_004a8570` formats a line into it (vtable
 `+0xa0`, `FUN_005c5e10`, which writes the newest line with no timer of its own) and then hands the
 whole panel a 10.0 s timer (vtable `+0x60`, `FUN_005c54a0`), after which the panel hides with its
-lines kept. Display Scores (command `0x23`, `FUN_00489320`) hides it at once.
+lines kept. Display Scores (command `0x23`, `FUN_00489320`) hides it at once
+([`multiplayer-scoring.md`](multiplayer-scoring.md) "The in-flight scores").
 
 **The remake.** `Session/World/NetChatLink.cs` routes by lobby team, `NetSeat.TeamId`, never by a
 team id. A guest sends its line to the host alone; the host forwards an all-chat to every other
@@ -795,7 +796,8 @@ flying the seat it names. The panel draws in every local pane (`Flight/Hud/ChatP
 entry only in the pane whose seat reads the keyboard: the splitscreen seats beyond the first are
 pad-only, so they read the chat and type nothing. While a line is open, and until every key pressed
 into it is released, that seat's flight keys read idle. The panel stays up while its typist types.
-Display Scores does not hide it, as the remake has no bound scores key in flight.
+While a pane's seat holds Display Scores the panel steps aside in that pane and comes back on the
+release ([`multiplayer-scoring.md`](multiplayer-scoring.md) "The in-flight scores").
 
 | Id | Message | Class | Carries |
 |---|---|---|---|

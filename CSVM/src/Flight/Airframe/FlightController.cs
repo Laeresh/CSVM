@@ -292,6 +292,10 @@ public partial class FlightController : Node3D
     /// owns R only while it is visible, which mirrors <c>Completed</c> exactly).</summary>
     public VersusMatch? Match;
 
+    /// <summary><c>--debug-scores</c>: this seat reads Display Scores as held for the whole run. It is
+    /// the scripted twin of holding Tab, for a shot of the scores table.</summary>
+    public bool DebugHoldScores;
+
     /// <summary>Restarts the whole match (the session owns every player's plane, so it does the
     /// work): scores and clock reset, every plane respawns. Invoked when a player presses R on the
     /// dogfight results board.</summary>
@@ -853,6 +857,14 @@ public partial class FlightController : Node3D
     /// targeting keys, the spyglass toggle and <c>--target=</c>. It holds the sub-part and objective
     /// feeds a session binds. Stepped on the rendered frame of a human seat with a selection.</summary>
     public SeatTargeting TargetInput { get; }
+
+    /// <summary>Whether this seat's scores table stands in its pane. Display Scores is held in a race
+    /// or a Dogfight, the modes that keep scores. The results board, the pause sheet and photo mode are
+    /// all down. The chat lines step aside for it, as the original's handler hides them.</summary>
+    public bool ScoresShown => IsHumanPiloted && (Race != null || Match != null)
+        && Race is not { Ended: true } && Match is not { Completed: true }
+        && !Pause.Silenced && !Pause.SheetOverFlight
+        && (DebugHoldScores || _actions.Held(InputAction.DisplayScores));
 
     /// <summary>The AI gunner's target acquisition: the decoded hold and the four-pool sweep behind
     /// it. Stepped from the sim step before the guns, which fire on the target it leaves on

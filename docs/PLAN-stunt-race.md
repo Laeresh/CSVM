@@ -116,7 +116,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ The split screen race becomes a time attack: window, opening count, best-run ranking, FINAL RUN, boards
 12. ☑ Race presence: no collisions, weapons off, ghosts when near
 13. ☑ The Instant Action time row for a multi-seat Stunt Flying run
-14. ☐ A held Display Scores key on Tab, drawn in the original's look
+14. ☑ A held Display Scores key on Tab, drawn in the original's look
 15. ☑ The race board's Back row, and an Original-looking race board
 16. ☑ No lives in a race
 
@@ -666,7 +666,7 @@ on every Instant Action launch, solo included; only a multi-seat stunt run may r
 
 **Verified.** <pending orchestrator run>
 
-## B14 ☐ A held Display Scores key on Tab, drawn in the original's look
+## B14 ☑ A held Display Scores key on Tab, drawn in the original's look
 
 **Goal.** A held Display Scores action, default `Tab` plus a pad binding, on both controls screens,
 shows the full standings while held: the race table (place, pilot, aircraft, best, gap, runs) in a
@@ -681,13 +681,91 @@ flight. The original binds "Display Scores (Multiplayer Only)", command `0x23`, 
 `FUN_00489320`, which also hides the chat lines. The user's ruling: add it, shared with Dogfight, and
 make the display look like the original's.
 
-**Approach.** Decode `FUN_00489320` and what it draws (layout, art, font, columns) before building;
-append the action (never renumber `InputAction`), bind it on both controls screens, and draw the
-table through the original's decoded look under Original and the chrome type scale under Built-in.
-Reuse B15's Original race table where the two overlap.
+**Approach.** *The decode (traced-to-code, `docs/org/multiplayer-scoring.md` "The in-flight
+scores", `docs/org/input.md` "Dispatch").* `FUN_00489320` does two things: it hides the chat panel
+(`FUN_004a8510` on `0x0071d8a8`) and hands the score list `0x0071c13c` to `FUN_00456400`, which
+runs `FUN_004565d0` on the HUD object `0x00654234`. That draws no art and does not reuse the lobby's
+Game Scores page: it is 18 HUD text lines in the `hudNetPlay` font (Courier New, height -12, width
+8, 255/250/66, shadowed, weight 600), at x 50 and y 30 to 200 every 10 in the 640 by 480 HUD frame,
+with an "F" column at x 40 for a Capture the Flag carrier (team 1 170/170/0, team 2 170/0/0, the
+colour word order inferred from the `scorecolors` console command). The lines come from
+`FUN_0046e310(21, 7)`: a header `Left(MSG_MPHUD_PLAYER, 21) + " " + Left(MSG_MPHUD_SCORE, 7)`, then
+per pilot `Left(name + 24 spaces, 21) + " " + Left(score + 13 spaces, 7)` by score; a team match
+puts `"%s (Team Score: %d)"` over each team's pilots, indented by one. Each line is shown with
+`FUN_005c55f0(4.0)`, a four-second timer, and the dispatch calls a handler on the press only, so the
+original's Display Scores is a tap that shows the table for four seconds (expiry hiding the lines is
+inferred from the chat panel's identical timer field). Every score message `0x13` raises it too.
+*The action (traced-to-code).* `InputAction.DisplayScores` is appended after `LookUpRightRear`
+(92, the old members keep 0 to 91); saved keymaps name actions, so no saved row moves, and a file
+that already put `Tab` on another action keeps it (the saved row's claim). Defaults: `Tab`, the
+original's key, and pad Back: every other pad button is a flight action's (B, A, X, Y, the d-pad,
+both shoulders, both stick clicks, Start, Misc1) or the throttle triggers, while Back holds no flight
+action (the chase view, the one action ever given it, ships unbound); it is also the conventional
+held-scoreboard button. Label: the
+original's own "Display Scores (Multiplayer Only)", kept because the remake's split screen is
+multiplayer too; it fits the Original page's action column (capture). The Original KEYS AND BUTTONS
+page lists it on the Other tab between Pause/Quit/Objectives and Chat to Everyone, as the original's
+page does; the Built-in controls screen lists every flight action already.
+*Held, per pane (lead-only, the user's ruling over the decoded tap).* `FlightController.ScoresShown`
+is the held action in a race or a Dogfight with no board, pause sheet or photo mode over the flight
+(`--debug-scores` holds it, documented in `docs/cli.md`). `GameSession.AttachScores` gives every local
+pane a `UI/Overlays/ScoresOverlay.cs` on a layer over its HUD wherever a race or a Dogfight exists,
+so solo, campaign and co-op get none. Split screen: the table stands in the holding seat's pane, not
+the whole window, because the original's table is one screen's HUD and a held control is one seat's;
+a whole-window table would cover the other pilots' flight in the middle of a race. Network: the local
+pane, seats named by network callsign. `ChatPanel.ForPane` (now every pane's chat) steps aside while
+its pane's seat holds the action; the original instead hides it at once on the press until the next
+line, which is not reproduced.
+*The looks.* Original (traced-to-code for a Dogfight): `OriginalScoresText` builds the decoded
+lines, the team branch and the flag included, and the overlay draws them three times over in the
+HUD's 1440-line reference, every character on the 8-pixel cell so the columns hold under any stand-in
+face, in Courier New weight 600 where installed. A race (borrowed, remake text): the same grid with
+place and callsign in the name column, then aircraft (12), best (10), gap (9) and runs, headed
+"aircraft", "best", "gap", "runs" in the score header's lowercase. B15's `OriginalRaceTable` is not
+used, since the in-flight display is not the lobby page. Built-in: `ScoresTable` in the results
+boards' columns (race: place, pilot, aircraft, best, gap, runs; Dogfight: place, pilot, score, kills,
+deaths, team lines first) as a chrome table centred in the pane, the Text and Note rungs.
+*Not carried (decoded):* the four-second tap, the raise on every score update, `scorecolors` and the
+per-entry colour, the join-order tie break.
 
-**⚠ Traps.** Never invent the original's look: decode it or say what could not be decoded and ask.
-An appended action must not shift any saved binding.
+**Model recommendation.** Opus for a decode of this kind (the dispatch's press rule and the
+CString formatting were read off the disassembly where the decompiler lost them); a mid-tier model
+for a change of the race columns, the Built-in table's placement or the label.
+
+**Verify.** Units: `CSVM.Tests/DisplayScoresTests.cs` (12): the action is 92 after `LookUpRightRear`
+91 and the last member; it ships on `Tab` and pad Back as a flight action, each control owned by it
+alone, captioned with the original's string; a keymap saved before it reads every other flight row
+back as saved (a rebind included) and the new action at its default; a saved row on `Tab` keeps the
+key and the action keeps Back; the Other tab's order; a free-for-all's lines (header, a cut long
+name, a negative score, no flag); a team match's lines (team totals, one-character indent, the
+carrier's flag); the 18-line cap; a race's rows and lines in both looks; the Dogfight table's team
+rows first; a source with no mode shows nothing; the header words from the table and the fallback.
+Also the shipped-table rows in `DefaultBindingsTests` and `FlightBindingMappingTests` (`Tab`, Back).
+Engine suites (weighted): `stunt-race-display-scores` and `dogfight-display-scores`
+(`Testing/DisplayScoresSuites.cs`), two seats through the roster, each in its own pane with
+`ChatPanel.ForPane` up and both looks attached: nothing before a hold; the holder's pane alone shows
+the standings in both looks while the other pane does not; the holder's chat steps aside and the
+other's stays; the release takes both back; a race seat with no race shows nothing.
+Mutation-checked, each red and restored: name column 20, no member indent, 17 lines, gap column 8,
+team lines unmarked, no pad Back, the tab order moved, a member filed before the action (units);
+the held action ignored (both suites), the chat never hidden (both suites), no mode gate (race
+suite). Captures through the golden stage with temporary manifest entries (`--debug-scores`, two
+seats, with and without `--force-builtin`, a Dogfight with `--debug-scoreboard`'s kill, and
+`--menu=keys:other`); the manifest was restored byte-identical and every pinned golden held.
+Hand-flown: the held table at a two-seat split screen sitting in both presentations, the Original
+text's size and line pitch at the pane's scale, the Built-in table's centred place (it covers the
+crash prompt when a crashed seat holds it), and Back on a pad.
+
+**⚠ Traps.** The original's in-flight scores are HUD text, not the lobby's Game Scores page; do not
+dress them in B15's page art. Its Display Scores is a four-second tap; held is the user's ruling,
+so a report of "the table vanishes after four seconds" is the original's behaviour, not a defect.
+Do not draw the Original lines as whole strings in a proportional face: the columns are character
+cells. The table is per pane on purpose; a whole-window version must decide whose hold raises it.
+A team-less seat in a team match has no counterpart in the original and follows the teams as a
+plain line. C21's network race reaches the overlay through the `StuntRace` it builds; its seats'
+callsigns come from `NetSeat.Callsign`.
+
+**Verified.** <pending orchestrator run>
 
 ## B15 ☑ The race board's Back row, and an Original-looking race board
 
