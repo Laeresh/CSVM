@@ -219,6 +219,11 @@ internal sealed class HumanRosterBindings
     /// with. Null leaves the count silent.</summary>
     public SoundArchive? MenuSounds { get; init; }
     public StuntRace? Race { get; init; }
+
+    /// <summary>A network race's feed off a local seat's run, in place of
+    /// <see cref="StuntRace.Follow"/>. The host follows the run, and a guest reports it to the host.
+    /// Null in split screen.</summary>
+    public Action<int, StuntMission>? RaceFeed { get; init; }
     public VersusMatch? VersusMatch { get; init; }
     public IReadOnlyList<PlayerRig> Rigs { get; init; } = Array.Empty<PlayerRig>();
     public string? InstantActionPlayerPlaneNode { get; init; }

@@ -174,6 +174,16 @@ public enum NetMessageType : ushort
     /// <summary>One line a pilot typed in flight, to everybody or to its lobby team. The original's
     /// <c>0x15</c>.</summary>
     FlightChat = 0x0066,
+
+    /// <summary>A stunt race seat's own run, reported by the machine flying it to the host: a start,
+    /// a zone split, a finish or a restart.</summary>
+    RaceRun = 0x0067,
+
+    /// <summary>A stunt race host's clock: the phase, how far into it, and the window's length.</summary>
+    RaceState = 0x0068,
+
+    /// <summary>One racer's line of a stunt race host's leaderboard, with its ranking run's splits.</summary>
+    RaceStanding = 0x0069,
 }
 
 /// <summary>Which campaign film a <see cref="CoopFilmMessage"/> names.</summary>
@@ -1642,6 +1652,9 @@ public static class NetMessage
         NetMessageType.FlagTable => FlagTableMessage.Reliability,
         NetMessageType.SpawnAt => SpawnAtMessage.Reliability,
         NetMessageType.FlightChat => FlightChatMessage.Reliability,
+        NetMessageType.RaceRun => RaceRunMessage.Reliability,
+        NetMessageType.RaceState => RaceStateMessage.Reliability,
+        NetMessageType.RaceStanding => RaceStandingMessage.Reliability,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, "no such message type"),
     };
 

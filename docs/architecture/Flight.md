@@ -669,7 +669,8 @@ per figure and GO, and `Figure` is what the HUD draws, GO lingering for `GoSecon
 the kinematic walk the aircraft rides meanwhile, back along the spawn nose by the spawn speed times
 the time left, answering the spawn pose itself at GO. `FlightController.BeginStartCount` drives it,
 holding the controls and the run clock until the step after GO; `StuntRunHud` draws the figure and
-`FlightAudio.OnStartCount` sounds it. Coverage: `CSVM.Tests/StartCountTests.cs`, suite `stunt-start-count`.
+`FlightAudio.OnStartCount` sounds it. `CatchUp` moves a network guest's opening on to its host's.
+Coverage: `CSVM.Tests/StartCountTests.cs`, suite `stunt-start-count`.
 
 ## src/Flight/Modes/StuntSummary.cs
 One finished stunt run's numbers for a split table: the run, its total, the stored best it is
@@ -816,11 +817,11 @@ file instead; `stunt-scores-scripted` pins the choice.
 The time-attack race's bookkeeping, engine-free and fed by events, never by a controller:
 `BeginOpening` and `Advance` drive the opening count, the window and the FINAL RUN stretch
 (`FinalRunCap` past time up), and `RunStarted`, `ZoneCleared`, `RunFinished` and `RunAbandoned`
-carry each pilot's runs, a network host's entry points as much as `Follow`'s local feed off a
-`StuntMission`. A `Racer` keeps its best completed run and the furthest run, each with splits by
-course index; `Standings()` ranks by best, then most zones and time to them. `MayStartRun` gates
-restarts, `BestImproved` records bests and `RaceCompleted` raises the board.
-Coverage: `CSVM.Tests/StuntRaceTests.cs`, suite `stunt-race-time-attack`. Read `StuntRaceBoard` next.
+carry each pilot's runs, a network host's entry points as much as `Follow`'s local feed. A `Racer`
+keeps its best and furthest runs with splits by course index; `Standings()` ranks by best, then
+most zones and time to them. `MayStartRun` gates restarts, `BestImproved` records bests and
+`RaceCompleted` raises the board. A network guest's race is `Replicate`d, fed by `TakeLine` and
+`TakeHostClock` and never ending of its own accord. Read `StuntRaceTests.cs` and `StuntRaceBoard`.
 
 ## src/Flight/Modes/MatchScores.cs
 What each network match scoring event is worth, engine-free: the nine `score_*` keys of

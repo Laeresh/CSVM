@@ -482,7 +482,10 @@ internal sealed class HumanFlightAdapter
                 var racer = race.Add(pi, planeDisplay, scoreKey);
                 if (seat is { Callsign.Length: > 0 })
                     racer.Callsign = seat.Callsign;
-                race.Follow(pi, run);
+                if (_human.RaceFeed is { } feed)
+                    feed(pi, run);
+                else
+                    race.Follow(pi, run);
                 runHud.Race = race;
                 runHud.PlayerIndex = pi;
                 controller.Race = race;
@@ -507,6 +510,14 @@ internal sealed class HumanFlightAdapter
                 Log.Info("flight", $"stunt run HUD: clock + zones cleared + banners; zones ride the target cycle");
                 WhatSuffix += $" [stunt: {controller.Stunt.TotalCount} zones]";
             }
+        }
+        else if (swap == null && remote && _human.StuntZones != null && _human.Race is { } remoteRace)
+        {
+            // A seat flown elsewhere still races on every board here. It runs no course on this
+            // machine: its own machine times it, and the host's line feeds this record.
+            var racer = remoteRace.Add(pi, planeDisplay);
+            if (seat is { Callsign.Length: > 0 })
+                racer.Callsign = seat.Callsign;
         }
 
         // Dogfight (--vs): the per-pane match timer/K-D/leader line + kill banner, bound to the

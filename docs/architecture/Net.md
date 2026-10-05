@@ -398,6 +398,14 @@ ride `CoopPickMessage`. Capture the Flag's two, in the session: `FlagRequestMess
 of its host, and `FlagTableMessage`, the host's flags. Zeppelin vs Zeppelin's placed return is
 `NetMessages.cs`'s `SpawnAtMessage`. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
+## src/Net/NetRaceMessages.cs
+A network stunt race's three session messages, all reliable. `RaceRunMessage` is one event of a
+seat's own run (`NetRaceRun`: started, a zone split, finished, abandoned) from the machine flying
+it to the host, under the owner's run number and the window's round. `RaceStateMessage` is the
+host's clock (`NetRacePhase`, how far into it, the window, the host's session clock), and
+`RaceStandingMessage` one racer's line of its leaderboard with the ranking run's splits.
+`Session/World/NetRaceLink.cs` sends and takes them. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
+
 ## src/Net/NetTeams.cs
 The team core every Dogfight team mode shares, engine-free: `NetTeamBook`, a host's free-form named
 teams, each with a number minted lowest-free from 1, a captain and its members. `Create`, `Join`,
@@ -447,8 +455,9 @@ The round trip a guest's `NetClockSlew` takes the link latency from, modelled on
 `IntervalSteps` (the original's ten seconds) after an answer and every `RetrySteps` (the
 remake's own second) without one;
 `Answer` makes the host reply at once with its clock. An answer overtaken by a newer one, or
-stamped later than the guest's clock reads, is dropped. `Asked` and `Answered` are the counters a
-suite reads, the host's `Answered` being the arrivals its relay leaves alone.
+stamped later than the guest's clock reads, is dropped. `AskSoon` owes an ask at the next step, a
+race's opening asking once both clocks run. `Asked` and `Answered` are the counters a suite reads,
+the host's `Answered` being the arrivals its relay leaves alone.
 
 ## src/Net/NetStartGate.cs
 The start barrier of a network flight, and its `0x5B` word. A host's gate takes a fresh `Round`

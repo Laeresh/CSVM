@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using CSVM.Utils;
 using Godot;
 
@@ -21,6 +22,12 @@ public enum StuntRacePhase
     /// <summary>The race is over and its board is due.</summary>
     Ended,
 }
+
+/// <summary>One racer's record as a network host sends it, which a guest's race takes whole. It
+/// holds the counts, the best or furthest run, and the ranking run's splits.</summary>
+public readonly record struct RacerLine(
+    bool InRun, int RunsStarted, int RunsFinished, float? BestTime, int MostZones, float TimeToMostZones,
+    int CurrentZones, IReadOnlyList<float?> Splits);
 
 /// <summary>One pilot of a time-attack stunt race: their best completed run, their furthest run,
 /// and the run they are flying now. Every field is fed through <see cref="StuntRace"/>'s event
@@ -87,15 +94,30 @@ public sealed class Racer
 
     public string Tag => UI.Boards.SplitScreen.PlayerTag(Index);
 
+    /// <summary>Counts every change to this record, so a network host sends a racer's line only
+    /// when it moved.</summary>
+    public int Revision { get; private set; }
+
+    /// <summary>This record as a network host sends it.</summary>
+    public RacerLine Line() => new(InRun, RunsStarted, RunsFinished, BestTime, MostZones, TimeToMostZones,
+        CurrentZones, Splits.ToArray());
+
     internal void Start()
     {
         InRun = true;
         RunsStarted++;
         CurrentZones = 0;
         Array.Clear(_current);
+        Revision++;
     }
 
-    internal void Stop() => InRun = false;
+    internal void Stop()
+    {
+        if (!InRun)
+            return;
+        InRun = false;
+        Revision++;
+    }
 
     // A first clearing of a course zone in the run in progress; the furthest run follows it.
     internal bool ClearZone(int zone, float runTime)
@@ -110,6 +132,7 @@ public sealed class Racer
             TimeToMostZones = runTime;
             Array.Copy(_current, _furthest, _current.Length);
         }
+        Revision++;
         return true;
     }
 
@@ -118,6 +141,7 @@ public sealed class Racer
     {
         InRun = false;
         RunsFinished++;
+        Revision++;
         if (BestTime is { } best && best <= runTime)
             return false;
         BestTime = runTime;
@@ -125,8 +149,27 @@ public sealed class Racer
         return true;
     }
 
+    // A network host's line, taken whole. Only the ranking run's splits travel, so they fill the
+    // best run's table for a pilot with a completed run and the furthest run's otherwise.
+    internal void Load(in RacerLine line)
+    {
+        InRun = line.InRun;
+        RunsStarted = line.RunsStarted;
+        RunsFinished = line.RunsFinished;
+        BestTime = line.BestTime;
+        MostZones = line.MostZones;
+        TimeToMostZones = line.TimeToMostZones;
+        CurrentZones = line.CurrentZones;
+        var into = line.BestTime != null ? _best : _furthest;
+        Array.Clear(into);
+        for (int i = 0; i < into.Length && i < line.Splits.Count; i++)
+            into[i] = line.Splits[i];
+        Revision++;
+    }
+
     internal void Clear()
     {
+        Revision++;
         BestTime = null;
         MostZones = 0;
         TimeToMostZones = 0f;
@@ -144,8 +187,9 @@ public sealed class Racer
 /// The time-attack stunt race: one shared window over one course, every pilot flying as many runs
 /// as it allows, ranked by their best completed run. Engine-free bookkeeping fed by explicit
 /// events: the opening's length, time advanced, a run started, a zone cleared, a run finished or
-/// thrown away. A network host can feed the same calls from its peers' reports, and
-/// <see cref="Follow"/> is the local wiring off a <see cref="StuntMission"/>. The window clock
+/// thrown away. A network host feeds the same calls from its guests' reports. A guest's race is
+/// a <see cref="Replicated"/> copy of the host's. <see cref="Follow"/> is the local wiring
+/// off a <see cref="StuntMission"/>. The window clock
 /// starts at the opening count's GO; at time up a run in progress may finish, inside
 /// <see cref="FinalRunCap"/>, and no run starts. Not a Node: it is freed with the session.
 /// </summary>
@@ -185,6 +229,18 @@ public sealed class StuntRace
 
     /// <summary>Seconds since the opening GO; zero during the opening.</summary>
     public float WindowElapsed => (float)_windowElapsed;
+
+    /// <summary>Seconds of the opening count gone, what a network host's clock carries while it runs.</summary>
+    public float OpeningElapsed => _openingElapsed;
+
+    /// <summary>Which window this is: zero for the first, one more for each <see cref="Restart"/>.
+    /// A network report or line names it, so one from an earlier window is told apart.</summary>
+    public int Round { get; private set; }
+
+    /// <summary>True on a network guest: every racer's record and the race's end arrive from the
+    /// host (<see cref="TakeLine"/>, <see cref="TakeHostClock"/>). The run entry points then count
+    /// nothing, and the race never ends of its own accord.</summary>
+    public bool Replicated { get; private set; }
 
     /// <summary>Seconds of the window left: all of it during the opening, none after time up.</summary>
     public float TimeLeft => Phase switch
@@ -307,17 +363,58 @@ public sealed class StuntRace
                 break;
             case StuntRacePhase.FinalRun:
                 _windowElapsed += dt;
-                if (_windowElapsed >= WindowSeconds + FinalRunCap)
+                // ⚠ Never on a replica: the cap is the host's to decide, and its ending arrives.
+                if (!Replicated && _windowElapsed >= WindowSeconds + FinalRunCap)
                     End();
                 break;
         }
+    }
+
+    /// <summary>Hands every racer's record and the race's end to a network host. The opening and
+    /// the window still run here between the host's readings, so this machine's counts and its
+    /// time up stay its own.</summary>
+    public void Replicate() => Replicated = true;
+
+    /// <summary>A replica takes player <paramref name="index"/>'s record whole from the host. A best
+    /// that improved raises <see cref="BestImproved"/>, which records a local pilot's own best.</summary>
+    public void TakeLine(int index, in RacerLine line)
+    {
+        if (!Replicated || Of(index) is not { } racer)
+            return;
+        bool improved = line.BestTime is { } best && (racer.BestTime is not { } had || best < had);
+        racer.Load(line);
+        if (improved)
+            BestImproved?.Invoke(racer);
+    }
+
+    /// <summary>A replica takes the host's clock: its phase and how far into it, read forward by
+    /// the lateness. The phase only moves on, and the host's ending ends this race. An opening
+    /// behind the host's catches up in whole <paramref name="stepSeconds"/>; the answer is the
+    /// seconds caught up, which every local seat's count must skip too.</summary>
+    public float TakeHostClock(StuntRacePhase phase, double elapsed, float stepSeconds)
+    {
+        if (!Replicated || Phase == StuntRacePhase.Ended)
+            return 0f;
+        if (phase == StuntRacePhase.Ended)
+        {
+            End();
+            return 0f;
+        }
+
+        if (Phase == StuntRacePhase.Opening)
+            return CatchUpOpening(phase == StuntRacePhase.Opening ? elapsed : double.PositiveInfinity, stepSeconds);
+        if (phase == StuntRacePhase.FinalRun && Phase == StuntRacePhase.Open)
+            Phase = StuntRacePhase.FinalRun;
+        if (phase == Phase)
+            _windowElapsed = elapsed;
+        return 0f;
     }
 
     /// <summary>Player <paramref name="index"/>'s run clock started. Counted only while the window
     /// is open; answers whether it was.</summary>
     public bool RunStarted(int index)
     {
-        if (Of(index) is not { } racer)
+        if (Replicated || Of(index) is not { } racer)
             return false;
         if (!MayStartRun)
         {
@@ -332,7 +429,7 @@ public sealed class StuntRace
     /// <summary>Player <paramref name="index"/> threw the run in progress away.</summary>
     public void RunAbandoned(int index)
     {
-        if (Of(index) is not { InRun: true } racer)
+        if (Replicated || Of(index) is not { InRun: true } racer)
             return;
         racer.Stop();
         EndIfNoRunLeft();
@@ -342,7 +439,7 @@ public sealed class StuntRace
     /// <paramref name="runTime"/>. A zone already cleared in this run, or no run, counts nothing.</summary>
     public void ZoneCleared(int index, int zone, float runTime)
     {
-        if (Phase is StuntRacePhase.Open or StuntRacePhase.FinalRun)
+        if (!Replicated && Phase is StuntRacePhase.Open or StuntRacePhase.FinalRun)
             Of(index)?.ClearZone(zone, runTime);
     }
 
@@ -350,7 +447,7 @@ public sealed class StuntRace
     /// no counted run, or after the race ended, counts nothing.</summary>
     public void RunFinished(int index, float runTime)
     {
-        if (Phase is not (StuntRacePhase.Open or StuntRacePhase.FinalRun)
+        if (Replicated || Phase is not (StuntRacePhase.Open or StuntRacePhase.FinalRun)
             || Of(index) is not { InRun: true } racer)
             return;
         bool best = racer.Finish(runTime);
@@ -367,6 +464,7 @@ public sealed class StuntRace
     {
         foreach (var r in _racers)
             r.Clear();
+        Round++;
         Phase = StuntRacePhase.Opening;
         _openingSeconds = 0f;
         _openingElapsed = 0f;
@@ -451,8 +549,27 @@ public sealed class StuntRace
 
     private void EndIfNoRunLeft()
     {
-        if (Phase == StuntRacePhase.FinalRun && !_racers.Exists(r => r.InRun))
+        if (!Replicated && Phase == StuntRacePhase.FinalRun && !_racers.Exists(r => r.InRun))
             End();
+    }
+
+    // Moves the opening on toward the host's, in whole steps and never back. ⚠ Keep it erring a
+    // step behind: a guest that opens first sends a run start the host's closed window refuses.
+    // So whole steps round down, and the step this machine is about to take is counted. It stops
+    // one step short of the end, so the window still opens on the seats' GO step.
+    private float CatchUpOpening(double target, float stepSeconds)
+    {
+        if (stepSeconds <= 0f)
+            return 0f;
+        double ahead = Math.Min((target - _openingElapsed) / stepSeconds, int.MaxValue);
+        int behind = (int)Math.Floor(ahead) - 1;
+        int left = (int)Math.Ceiling((_openingSeconds - _openingElapsed - OpeningTolerance) / stepSeconds);
+        int steps = Math.Min(behind, left - 1);
+        if (steps <= 0)
+            return 0f;
+        float skip = steps * stepSeconds;
+        _openingElapsed += skip;
+        return skip;
     }
 
     private void End()

@@ -149,8 +149,8 @@ internal static class NetLobbyEnvironmentSuites
         + "Boeing Field with a 7 minute Time box and Limited Lives left ticked: both machines fly C1's IA1 "
         + "with no lives limit, no Instant Action mission, no AI and no Dogfight match, load the same Danger "
         + "Zone course, put both seats on the one spawn (each local seat on the opening count's rails "
-        + "behind it), and build a race for their own pilot alone with a 420 s window under the seat's "
-        + "callsign. No aircraft on either machine carries a loadout and every one races. Each machine stamps its own "
+        + "behind it), and build a race holding both pilots with a 420 s window under the seats' "
+        + "callsigns, the guest's a replica of the host's. No aircraft on either machine carries a loadout and every one races. Each machine stamps its own "
         + "seat's ghost with that seat's first-person layer and the remote seat's with the layer every "
         + "camera draws, and both windows open after the opening count on one step with each local seat "
         + "rolled onto the spawn")]
@@ -270,21 +270,23 @@ internal static class NetLobbyEnvironmentSuites
             $"and each local seat stands on the spawn at its GO ({string.Join(", ", at.Select(p => $"{p.DistanceTo(spawn):0.0} m"))})");
     }
 
-    // Each machine's race times its own seat alone, under that seat's callsign, with the lobby's window.
+    // Each machine's race holds both seats under their callsigns with the lobby's window. Only its own
+    // seat records a best here and is timed here; the guest's race is the host's replica.
     private static void Raced(TestContext ctx, GameSession[] peers, IReadOnlyList<NetSeat> roster)
     {
         var read = new List<string>();
-        bool own = true;
+        bool both = true;
         for (int machine = 0; machine < peers.Length; machine++)
         {
             var race = peers[machine].SeatRigs[machine].Controller?.Race;
             var other = peers[machine].SeatRigs[1 - machine].Controller;
-            own &= race is { Racers.Count: 1 } && race.WindowSeconds == RaceMinutes * 60f
-                && race.Racers[0].Index == machine && race.Racers[0].Callsign == roster[machine].Callsign && other?.Race == null;
-            read.Add(race == null ? "none" : $"{race.WindowSeconds:0}s {string.Join("+", race.Racers.Select(r => $"{r.Index}:{r.Callsign}"))}");
+            both &= race is { Racers.Count: 2 } && race.WindowSeconds == RaceMinutes * 60f && race.Replicated == (machine == 1)
+                && race.Racers.Select(r => (r.Index, r.Callsign)).SequenceEqual(roster.Select(s => (s.SeatIndex, s.Callsign)))
+                && race.Of(machine)!.ScoreKey.Length > 0 && race.Of(1 - machine)!.ScoreKey.Length == 0 && other?.Race == null;
+            read.Add(race == null ? "none" : $"{race.WindowSeconds:0}s {string.Join("+", race.Racers.Select(r => $"{r.Index}:{r.Callsign}"))}{(race.Replicated ? " replica" : "")}");
         }
 
-        ctx.Check(own, $"each machine races its own seat alone with a {RaceMinutes * 60} s window under its callsign ({string.Join(" | ", read)})");
+        ctx.Check(both, $"each machine's race holds both seats with a {RaceMinutes * 60} s window under their callsigns, the guest's a replica ({string.Join(" | ", read)})");
     }
 
     // Every aircraft on both machines races, and none carries a loadout or a carried gunner.

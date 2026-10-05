@@ -150,6 +150,9 @@ internal sealed class SessionNet
     /// <summary>The in-flight chat over the wire, null outside a network match.</summary>
     public NetChatLink? Chat { get; private set; }
 
+    /// <summary>The stunt race over the wire, null outside a network race.</summary>
+    public NetRaceLink? Race { get; private set; }
+
     /// <summary>The chat panel each local pane draws, in pane order.</summary>
     public IReadOnlyList<ChatPanel> ChatPanels => _chatPanels;
 
@@ -397,6 +400,22 @@ internal sealed class SessionNet
         }
 
         Log.Info("core", $"net chat: {_rigs.Count} pane(s), {(net.IsHost ? "host (relaying an all-chat to every machine and a team line to the typist's team)" : "guest (sending its lines to the host)")}");
+    }
+
+    /// <summary>The stunt race over the wire, before the roster builds, since each local seat's run
+    /// is fed through it. Each machine times its own seats; the host keeps the window, the board
+    /// and the ending, and a guest's race replicates it. ⚠ Nothing is sent from here: the join stays
+    /// the two payloads it is counted as.</summary>
+    public NetRaceLink? WireRace(StuntRace race)
+    {
+        if (Link is not { } net || Seats.Count == 0)
+        {
+            return null;
+        }
+
+        Race = NetRaceLink.Open(net, race, _clockTime, Clock, Ping, GameClock.FixedDt);
+        Log.Info("core", $"net race: {(net.IsHost ? "host (timing its own seats, taking every guest's run reports, sending each changed racer's line and its clock)" : "guest (reporting its own seats' runs, its board and window replicated from the host's)")}");
+        return Race;
     }
 
     /// <summary>An airframe swap's replacement on the wire again, its combat (unless

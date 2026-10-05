@@ -98,6 +98,15 @@ public sealed class StartCount
         Running = true;
     }
 
+    /// <summary>Moves a running count on by <paramref name="seconds"/> without stepping it, a
+    /// network guest's opening catching up to the host's. It never passes the end, so GO still
+    /// comes from an <see cref="Advance"/>, and the next one sounds the figure it lands in.</summary>
+    public void CatchUp(float seconds)
+    {
+        if (Running && seconds > 0f)
+            _elapsed = Mathf.Min(_elapsed + seconds, Duration);
+    }
+
     /// <summary>Drops the count, figure and GO alike. A respawn does this, since it places the
     /// aircraft somewhere the walk would drag it back from.</summary>
     public void Cancel()

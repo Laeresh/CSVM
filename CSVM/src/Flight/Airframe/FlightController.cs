@@ -1368,6 +1368,11 @@ public partial class FlightController : Node3D
             SnapCamera();
     }
 
+    /// <summary>Moves this seat's running count on by <paramref name="seconds"/>, the share of a
+    /// network race's opening its host already counted. The next step writes the walk from there.
+    /// </summary>
+    public void CatchUpStartCount(float seconds) => StartCount.CatchUp(seconds);
+
     /// <summary>A stunt run's tap of respawn: back on the route through the zone cleared last,
     /// heading on the way the pilot left it. It flies at the spawn speed, and the zones and the
     /// clock are kept. With no zone cleared it is the plain respawn at the start. It repairs,

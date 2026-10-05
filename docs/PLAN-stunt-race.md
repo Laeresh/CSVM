@@ -123,7 +123,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C, the network race
 
 21. ☑ Stunt Race in the Original lobby, flying the chapter's stunt course over the network
-22. ☐ Owner-timed runs on the wire; the host's window, leaderboard and match end
+22. ☑ Owner-timed runs on the wire; the host's window, leaderboard and match end
 23. ☐ Network race end: Restart and Lobby, guests waiting, pilots leaving
 
 ## Dependency and parallelism notes
@@ -1116,7 +1116,7 @@ launched from a development command line.
 
 **Verified.** <pending orchestrator run>
 
-## C22 ☐ Owner-timed runs on the wire; the host's window, leaderboard and match end
+## C22 ☑ Owner-timed runs on the wire; the host's window, leaderboard and match end
 
 **Goal.** Each machine times its own pilot's runs and reports zone splits, finishes and restarts to
 the host; the host keeps the window clock, the leaderboard of best runs and the FINAL RUN stretch,
@@ -1129,17 +1129,120 @@ only by the host (`NetMessages.cs:1000-1014`) and sent on `MatchStateCadence`'s 
 match end sent at once (`Net/MatchStateCadence.cs:10-27`, `Session/World/VersusDirector.cs:247,
 685, 690`); `VersusMatch` takes a guest's clock and ending from the host (`Flight/Modes/VersusMatch.cs:78-81`).
 
-**Approach.** <TODO: the run-report message (reliable, per split or per finish), the leaderboard
-message, and whether the race reuses `MatchStateMessage` for the window clock; the opening count's
-start on every machine from one host instant>.
+**Approach.** *The shape (traced-to-code).* `Session/World/NetRaceLink.cs` is the one link, opened
+by `SessionNet.WireRace` (`Launch/SessionNet.cs:415`) before the roster builds
+(`GameSession.cs:1943`), since `HumanRosterBindings.RaceFeed` (`GameSession.cs:2041`) replaces
+`race.Follow` for each local seat (`HumanFlightAdapter.cs:485`). Every machine's race now holds every
+seat: a remote seat is `Add`ed with no score key and its callsign and runs no course
+(`HumanFlightAdapter.cs:514`). On the host `Feed` is `race.Follow`; on a guest it reports the run's
+four events. The layouts and the rules are `docs/org/multiplayer-messages.md`, "Stunt race".
+*The run report (traced-to-code for the build, lead-only for the choice).* `RaceRunMessage`, `0x67`,
+reliable on the events channel, guest to host, one per event: the run clock's start, each zone's
+first clearing with its run time, the finish, a restart (`NetRaceMessages.cs:48`). Per split rather
+than per finish, because Decision 9 ranks a pilot with no finish by zones and time, and the host's
+board must show that while the run is in progress. It carries seat, kind, zone, round, the owner's
+run number and the run time, 16 bytes. Reliable delivery is ordered and never duplicated
+(`Net/INetTransport.cs:10`), so the run number and round guard what the transport cannot: a report
+from a window the host has moved past, a repeated start, an event of a superseded run, a seat the
+sender does not fly, a non-finite time (`NetRaceLink.cs:207-234`). Each is dropped and counted. The
+race then applies its own rules to what passes (B11): a start counts only while the window is open,
+judged by its arrival at the host; a finish counts in the final run; nothing counts after the end.
+*The leaderboard (traced-to-code).* `RaceStandingMessage`, `0x69`,
+one racer's line: counts, best or furthest run, and the ranking run's splits, 120 bytes for up to 24
+zones (the longest shipped course has 17). One message per racer, because a whole table of 16
+racers' splits would pass the session's 512-byte send buffer (`Net/NetSession.cs:19`).
+Event-driven: `Racer.Revision` (`StuntRace.cs:99`) counts every change, and the host's `Flush`
+(`NetRaceLink.cs:166`) sends each racer whose revision moved, from its step after `race.Advance`
+(`GameSession.cs:3138`) and at once from the report handler, since a finish that ends the race
+halts the host's simulation. No cadence for the lines: reliable delivery already guarantees them.
+*The window clock (traced-to-code, lead-only for the choice).* Its own message, `RaceStateMessage`,
+`0x68`: phase, round, seconds into the phase's clock, the window, the host's session clock. Not
+`MatchStateMessage`: its fields are a Dogfight's score target and `NetMatchEnd` reasons, and a race
+has an opening and a final run where a match has neither; `VersusDirector` owns its handler. Sent on
+`MatchStateCadence`'s 1 Hz tick and at once on every change of phase, the ending among them, always
+after the lines on the same ordered channel, so a guest's board waking on the ending reads final
+lines.
+*A guest's race (traced-to-code).* `StuntRace.Replicate` (`StuntRace.cs:376`): `TakeLine` (`:380`)
+loads a racer whole and raises `BestImproved` on a better best, which records the guest's own
+pilot's best off the host's accepted run (Decision 10). `TakeHostClock` (`:394`) moves the phase only
+forward and ends the race on the host's ending. The run entry points count nothing on a replica, the
+cap never ends it (`:366`) and `EndIfNoRunLeft` is the host's (`:552`). Its opening and window still
+run between readings, so its own time up already refuses a guest's `Rerun` through the unchanged
+`Race.MayStartRun` gate (`FlightController.cs:1335`), and the host's FinalRun reading closes it
+for a guest whose clock lags.
+*The opening from one host instant (traced-to-code; the one-step bias lead-only).* The start
+barrier releases a guest a link after the host, so its count would open that much late. Each host
+reading carries the host's session clock. The guest reads it forward by its lateness, its own clock
+plus the slew's newest reading less the stamp (`NetRaceLink.cs:314`), and catches its race's
+opening up in whole steps (`StuntRace.CatchUpOpening`, `:560`). `CatchUp` then skips every local
+seat's count the same seconds (`StartCount.CatchUp`, `StartCount.cs:104`, through
+`FlightController.CatchUpStartCount`), so the seats' GO and the window stay on one step. It rounds
+down, counts the step this machine is about to take and stops one step short of GO, so a guest errs
+a step behind. A guest that opened first would send its first run's start into the host's
+still-closed window. A round trip measured across the held start reads short, since neither
+session clock moves while held, so a guest asks the host's clock again on its first flown step
+(`NetClockPing.AskSoon`, `Net/NetClockPing.cs:105`). A plain `StartCount.Begin` overload was not
+enough: the counts begin in the build, before the reading arrives.
+*How a race ends on a guest (traced-to-code).* The host decides time up, the final run and its
+120 s cap; its ending goes out at once like the Dogfight's, and the guest's replica raises
+`RaceCompleted` on it, which wakes its board (`Flush` and `TakeHostClock`).
+*Wire compatibility (traced-to-code).* Ids `0x67` to `0x69` follow `0x66`, minted above the
+original's ceiling (`NetMessages.cs:180`). A build without them drops them as unknown, and
+MAJOR.MINOR keeps such builds apart; they ship with type 3 in the minor release C21 named.
+*Seams for C23 (traced-to-code).* `StuntRace.Round` (`:238`) counts windows and `Restart` advances it
+(`:467`); every message carries it, and a guest drops a line or a clock under another round
+(`NetRaceLink.TakeLine`, `TakeState`), where C23's restart word starts the guest's new window. A
+guest's `GameSession.Rerun` is refused for a replicated race (`GameSession.cs:2827`), where C23 puts
+Leave and the host's Restart and Lobby. A pilot leaving: `SessionNet.TakeSeatLeft` is where C23
+marks the racer "left"; the race keeps a racer whose reports stop. The display B14 needs is
+`StuntRace.Standings()` on every machine, which now holds the whole field.
 
-**Model recommendation.** <TODO>
+**Model recommendation.** Opus for the clock and authority design (the opening's catch-up rests on
+the slew, the start barrier's step order and the held-clock round trip, each found by measurement);
+a mid-tier model for a message field or a doc change once the rules hold.
 
-**Verify.** <TODO: serialisation units for the new messages; a loopback suite with one lossy cell
-where a guest's finish reaches the host's leaderboard and the guest's board; the FINAL RUN cap on
-the host>. Hand-flown: a two-machine sitting (the Deck can host, per `analysis/net-real-link/`).
+**Verify.** Built: `CSVM.Tests/NetStuntRaceTests.cs` (8), two sessions over a perfect loopback:
+the three messages' ids, sizes, reliability, byte offsets and round trips, a line cut at 24 zones; a
+guest's run reaching the host's race and coming back to the guest's board with its splits, the
+guest's own best raised once, the replica's run entry points counting nothing; a repeated start and
+a superseded run's zone and finish dropped while the run in progress's zone counts; another window
+and a spoofed seat dropped; a finish after time up counted, the ending reaching the guest after the
+final line, and a start reaching the host in the final run refused; a finish past the cap refused,
+the guest's replica outliving its own cap and ending on the host's word; the catch-up in whole steps,
+never back and never past GO; the lateness read off the slew and the count skipping the same
+seconds. Engine suite `net-stunt-race-wire` (`Testing/NetStuntRaceSuites.cs`, weighted): two
+sessions from the lobby's options over a 100 ms loopback, then over 100 ms with 20 ms jitter and
+25 % loss: the guest released 5 and 6 steps late opens its window on the host's step (304/304,
+305/305, caught up 5 and 6 steps); both boards hold both pilots, the guest's a replica; the guest's
+and the host's first runs reach the other's board with their splits; both boards agree on order,
+bests, splits and run counts after a run each, after a final run and at the end; a guest run
+finished after time up counts as its best while the host's pilot flies on; the guest's restart in
+the final run is refused; the guest's race passes its own cap and ends on the host's, which cut the
+host pilot's run at the cap. `net-lobby-stunt-race` now reads both seats on both machines' races,
+own seat with a score key, the guest's a replica, and still opens both windows on one step.
+Mutation-checked, each red then restored byte for byte (METHOD-9, METHOD-17): no catch-up (units and
+suite: 304/309), the guest never asking again (suite: 304/309), the replica ending at its own cap
+(unit and suite), the host ignoring remote starts (units and suite), the repeated start counted, a
+superseded run's event counted, the round check dropped, the owner check dropped (units), the clock
+sent before the lines (unit), the lines never sent (units and suite), the guest's best never raised
+(unit), the remote racer not added (both suites), the catch-up rounding to nearest with no one-step
+bias (units and both suites: the guest opening a step first, 299/298 and 304/302). Hand-flown, owed:
+a two-machine sitting (the Deck can host, per `analysis/net-real-link/`) for the opening count's
+start on both machines, both boards during and after the window, and a run finished after time up.
 
-**⚠ Traps.** <TODO>
+**⚠ Traps.** Do not feed a guest's race from its own runs: its record is the host's, and a local feed
+would flicker the leaderboard with each line and save a finish the host refused. Do not let a guest's
+race end of its own accord: the cap and "no run in progress" are the host's to decide. Do not
+compute the lateness from the slew's walked offset: it lags the newest reading, and the suites never
+walk it. Do not round the catch-up to nearest or drop the step it counts: a guest that opens first
+has its first run's start refused at the host. A start within one link's latency of time up is
+refused by its arrival, the host's decision by Decision 7; stamping it with the guest's clock would
+move that decision to the guest. Do not move the lines after the clock in `Flush`. A session clock
+stands still through a held start, so a round trip measured there reads short; that holds for every
+network mode, and only the race asks again. The suite rig drives `_PhysicsProcess` alone, so its
+`Step` frames each session's clock first; without it every clock reads 0 and no lateness is seen.
+
+**Verified.** <pending orchestrator run>
 
 ## C23 ☐ Network race end: Restart and Lobby, guests waiting, pilots leaving
 

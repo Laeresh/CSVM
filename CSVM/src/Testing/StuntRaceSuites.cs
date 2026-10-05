@@ -626,7 +626,7 @@ internal static class StuntRaceSuites
 
     // Both gates of a zone crossed green to red on the run itself, each along its own axis, the
     // respawn suites' own crossing. A fresh segment follows, so the next step is not tested from it.
-    private static void ClearZone(StuntMission run, StuntZone zone)
+    internal static void ClearZone(StuntMission run, StuntZone zone)
     {
         var travel = (zone.RedGate.Center - zone.GreenGate.Center).Normalized();
         foreach (var gate in new[] { zone.GreenGate, zone.RedGate })

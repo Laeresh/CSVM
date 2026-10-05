@@ -259,6 +259,16 @@ flight keys idle until every key pressed into a line is up. A line whose first w
 console's `ejectflag` is no chat: it runs `EjectFlag` for the typist. It owns the machine's
 `Flight/Hud/FlightChat.cs`. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md).
 
+## src/Session/World/NetRaceLink.cs
+A stunt race over the wire, one per network race session, opened before the roster so `Feed`
+takes each local seat's run. The host's race follows its own seats and takes each guest's
+`RaceRunMessage`s, dropping a spoofed seat, another window, a repeated start or a superseded run;
+`Step` sends every changed racer's line, then the clock once a second and on each change of phase.
+A guest's race is a `StuntRace.Replicate` copy fed by those lines and that clock. Its opening
+catches up to the host's by the reading's lateness, and `CatchUp` skips each local seat's count
+alike. Layout: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Read
+`Flight/Modes/StuntRace.cs` next.
+
 ## src/Session/Campaign/NetPositionalStartLink.cs
 The landing rows, the ladder switch and the code-raising range gates over the wire, one per network
 session with any of them bound. On the host it sends each row start, holder change and gate verdict

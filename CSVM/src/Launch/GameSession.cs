@@ -1938,6 +1938,17 @@ public partial class GameSession : Node3D
         var restartCount = stuntZones != null && !_spec.Det ? StartCount.Restart : null;
         var firstCount = restartCount == null ? null
             : race != null ? StartCount.Opening(RaceReadySeconds) : restartCount;
+        // A network race before the roster, which feeds each local seat's run through it. A guest's
+        // opening catches up to the host's on every local seat's count at once.
+        var raceLink = race != null ? _wire.WireRace(race) : null;
+        if (raceLink != null)
+        {
+            raceLink.CatchUp = seconds =>
+            {
+                foreach (var rig in _rigs)
+                    rig.Controller?.CatchUpStartCount(seconds);
+            };
+        }
         var aircraftResources = new AircraftAssemblyResources
         {
             PlanesGamez = planesGamez,
@@ -2027,6 +2038,7 @@ public partial class GameSession : Node3D
             FirstStartCount = firstCount,
             MenuSounds = restartCount != null ? MenuSounds() : null,
             Race = race,
+            RaceFeed = raceLink != null ? raceLink.Feed : null,
             VersusMatch = versus,
             Rigs = _seatRigs,
             InstantActionPlayerPlaneNode = iaOverride,
@@ -2083,7 +2095,7 @@ public partial class GameSession : Node3D
             var bests = ScoreStore.ForSession(_spec.ScoresPath, _spec.ScoresThrowaway);
             race.BestImproved += racer => RecordRaceBest(bests, racer);
             race.BeginOpening(OpeningSeconds(firstCount));
-            Log.Info("flight", $"stunt race: {_seatRigs.Count} pilots over {stuntZones.TotalCount} danger zones, a {StuntRace.FormatClock(race.WindowSeconds)} time attack, best run ranks{(race.Racers.Count < _seatRigs.Count ? $" ({race.Racers.Count} timed on this machine)" : "")}");
+            Log.Info("flight", $"stunt race: {_seatRigs.Count} pilots over {stuntZones.TotalCount} danger zones, a {StuntRace.FormatClock(race.WindowSeconds)} time attack, best run ranks{(race.Replicated ? ", the host's board and window replicated here" : "")}");
         }
 
         // Dogfight (--vs): the match's scoring, respawn rotation and lives, fed by every rig's
@@ -2813,6 +2825,12 @@ public partial class GameSession : Node3D
             _restartSession();
             return;
         }
+        if (_race is { Replicated: true })
+        {
+            // A guest's window is the host's, and its restart does not cross the wire yet.
+            Log.Info("flight", $"stunt race: a new window is the host's to call");
+            return;
+        }
         if (_race is { } race)
         {
             RestartRace(race);
@@ -3144,6 +3162,7 @@ public partial class GameSession : Node3D
                 rig.Controller?.SimStep(dt);
             // After every seat: a run started this step was started inside the window it saw.
             session._race?.Advance(dt);
+            session._wire.Race?.Step();
             session._wire.BroadcastAircraftState();
             session._wire.TraceStep();
         }
