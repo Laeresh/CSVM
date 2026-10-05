@@ -207,6 +207,11 @@ race, the dogfight and a free flight do. Distinct from a respawn, which returns 
 air mid-run.
 _Avoid_: restart (that is the other mechanism, below), soft restart, reset
 
+**Race window**:
+The shared time a race runs for, numbered from zero and one more for each rerun; every run, report
+and line names its window.
+_Avoid_: round (the lobby's match)
+
 **Restart**:
 Freeing the session and building a fresh one from the same settings, behind the load screen. What
 an Instant Action mission does, because its opposition lives in the world and cannot be put back

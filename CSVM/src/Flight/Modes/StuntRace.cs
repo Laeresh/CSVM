@@ -251,7 +251,7 @@ public sealed class StuntRace
 
     /// <summary>Which window this is: zero for the first, one more for each <see cref="Rerun"/>.
     /// A network report or line names it, so one from an earlier window is told apart.</summary>
-    public int Round { get; private set; }
+    public int Window { get; private set; }
 
     /// <summary>True on a network guest: every racer's record and the race's end arrive from the
     /// host (<see cref="TakeLine"/>, <see cref="TakeHostClock"/>). The run entry points then count
@@ -485,7 +485,7 @@ public sealed class StuntRace
         _racers.RemoveAll(r => r.Left);
         foreach (var r in _racers)
             r.Clear();
-        Round++;
+        Window++;
         Phase = StuntRacePhase.Opening;
         _openingSeconds = 0f;
         _openingElapsed = 0f;

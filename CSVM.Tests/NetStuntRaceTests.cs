@@ -320,7 +320,7 @@ public sealed class NetStuntRaceTests
         f.HostRace.BeginOpening(0f);
         f.Host.CallRerun();
         f.Step();
-        Assert.Equal((1, 1, 1), (reruns, f.HostRace.Round, f.GuestRace.Round));
+        Assert.Equal((1, 1, 1), (reruns, f.HostRace.Window, f.GuestRace.Window));
         Assert.Null(f.GuestRace.Of(1)!.BestTime);
 
         // The old window's line, arriving now, is dropped; so is the same rerun heard again.
