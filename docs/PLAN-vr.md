@@ -31,8 +31,9 @@ A3 can redirect the whole plan to a custom engine build.
   pointer or the pad; campaign cutscenes play on that screen as a stereo 3D-cinema pair.
 - The HUD reads in the headset: flat chrome on a cockpit-locked panel, world-tied markers at their
   real depth.
-- Near-eye geometry (cockpit, HUD panel, chase plane) is free of float32 shimmer at 20 km from the
-  chapter origin.
+- The rigid chase plane is free of float32 shimmer at 20 km from the chapter origin. The cockpit and
+  the HUD panel shimmer far from the chapter origin (A3: 5-8 px per eye at 10-20 km at headset
+  density), accepted as a known issue of the experimental release (Decision 17).
 - 90 Hz on the reference rig, comfort basics (recenter, fades, optional vignette, render scale), and
   a headless `--xr-sim` stand-in that keeps the VR path inside the automated battery.
 - No headset, no runtime, or the option off: the game is exactly the flat game it is today, goldens
@@ -51,7 +52,7 @@ judgement.
 | 1 | Platform | **PC VR, Windows only**, OpenXR in the existing Forward+ build; reference rig is the author's Quest over Steam Link/SteamVR and over Virtual Desktop (VDXR), RTX 5080. Linux VR and standalone Quest are out. |
 | 2 | How much is stereo | **Flight, the in-flight HUD and cutscenes in stereo; menus, boards, briefings and cinemas on a floating virtual screen** (a SubViewport on a quad), so there is one UI codebase and no menu redesign. |
 | 3 | Views and head look | **Cockpit is the VR default, Nose stays, Chase is offered rigidly attached to the plane** (no spring lag, no speed FOV, no swing). Head tracking replaces snap, free and padlock head look; padlock may return later as an optional aid. |
-| 4 | float32 precision near the eye | **Spike a render-only floating origin first; if it cannot reach sub-pixel per eye without touching sim or physics, fall back to a double-precision Godot build** (editor, export templates, .NET glue, WebRTC extension). The stock engine is kept if possible. |
+| 4 | float32 precision near the eye | **Spike a render-only floating origin first; if it cannot reach sub-pixel per eye without touching sim or physics, fall back to a double-precision Godot build** (editor, export templates, .NET glue, WebRTC extension). The stock engine is kept if possible.** Superseded by Decision 17. |
 | 5 | HUD | **Split: flat chrome (gauges, compass, messages, chat, scores) on a cockpit-locked quad 1.5-2 m ahead and slightly low; world-tied markers (target boxes, impact reticle, lead) as 3D billboards at real depth; edge markers as a head-relative arrow ring.** |
 | 6 | Motion controllers | **Laser pointer on the virtual screen plus a few actions (recenter, pause, view cycle) through a new `DeviceKind.Xr`** in the binding seam, rebindable like any device. Flying stays on pad, stick or keyboard; a virtual stick is a follow-up. |
 | 7 | Play modes | **One local seat, all modes** (campaign, Instant Action, stunt race, network play). With VR on, local splitscreen is refused. |
@@ -64,6 +65,7 @@ judgement.
 | 14 | Release | **Lands on main behind the off-by-default option and ships in v0.4.0 as "VR (experimental)"** with a known-issues list; the label drops in a later release once the playtests and community reports are clean. |
 | 15 | Dev modes, spyglass, photograph (defaults proposed in the grilling, not objected to) | **`--viewer`, `--freecam`, `--anim-lab` and the labs stay flat-only; the spyglass is a mono zoom picture on a binocular-style quad; the Danger Zone photograph and the screenshot capture keep reading a mono camera.** |
 | 16 | The lens flare and full-pane effects in VR | **One angle-based world flare rig, used by VR always and by flat Enhanced once the author has judged a C3 montage in Chase and Cockpit; Original keeps the calibrated screen-space `LensFlareRig`.** Whiteout, flash and fade become head-locked near quads in VR. The Enhanced adoption is the one deliberate exception to the boundary rule, argued on its own merits: partial occlusion of the core and HDR glow. |
+| 17 | float32 precision near the eye, after A3 found no render-only fix | **Accept the shimmer and continue on the stock single-precision engine.** The cockpit interior and the HUD panel shimmer 5-8 px per eye at 10-20 km from the chapter origin at headset density; rigid chase is unaffected. It ships as a known issue of the experimental release. The double-precision build and a game-wide floating origin stay open as later work (A3's write-up), not items of this plan. |
 
 ## ⚠ Read this before implementing anything
 
@@ -74,7 +76,7 @@ judgement.
 | Confidence | Items | What that means for you |
 |---|---|---|
 | **Traced to an exact mechanism in code, with the data that proves it** | none | |
-| **Direction sound, magnitude a judgement call** | A3 (the jitter is measured; the size of the VR fix's residual is not) | The *what* is settled; the *how much* is TUNE. |
+| **Direction sound, magnitude a judgement call** | none | |
 | **Leads only, no mechanism yet** | every other item | Budget for investigation. The approaches come from a grilling and a code survey, not from a working prototype; Wave A exists to turn them into evidence or disproofs. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees, never use it in a
@@ -198,7 +200,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ◐ A1 OpenXR boots in a flight session on VDXR and SteamVR
 2. ☑ A2 The `--xr-sim` stand-in interface
 3. ❌ A3 Precision near the eye: render-only floating origin, double-precision fallback
-4. ☐ A4 Screen-space effects under multiview
+4. ☑ A4 Screen-space effects under multiview
 5. ☑ A5 Cockpit scale per plane
 
 ### Wave B, the VR rig
@@ -235,8 +237,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 Wave A gates everything. A1 blocks A2-A5 (they all need a booting XR session or its stand-in to
 exist); A2, A3, A4 and A5 can then run in parallel, since they touch disjoint files (A2 new
 `Tooling`/`Utils` stand-in code, A3 `PlayerRig`/`GameSession` anchoring, A4 the `Effects/` shaders,
-A5 measurement only). If A3 ends in the double-precision fallback, stop and re-plan before Wave B: the
-engine, templates and WebRTC builds become their own wave and every golden is re-pinned.
+A5 measurement only). A3 found no render-only fix, and the author chose to accept the cockpit
+shimmer and continue on the stock engine (Decision 17), so Wave B follows Wave A unchanged.
 
 B6 and B7 run in parallel (Options/Launcher versus `PlayerRig`); B8 and B9 need B7 and both touch
 `Flight/Camera/CameraController.cs` and `Flight/Hud/CockpitOverlay.cs`, so run them in sequence.
@@ -400,7 +402,8 @@ density is `W / (2 tan(fov/2))` px per radian (`eye=2732x2732,fov=100` is about 
 the centre; the default 640 at 90° is 5.6). A burst for jitter: `--shots=N` writes `_00`.. per
 frame of the chosen eye. A3's rotated pose: `--pos=` at 0, 10 and 20 km with
 `--direction=-0.743,0,-0.669`, `--view=cockpit --no-cockpit-pass` (the private cockpit pass does not
-draw in stereo), and `ipd=0` when a single-eye control against the flat frame is wanted. Each eye's
+draw in stereo). A single-eye control uses `ipd=20` with the head moved onto that eye (A4's Verify),
+never `ipd=0`, which is degenerate on a chapter world (A4's Traps). Each eye's
 HUD is absent, so the shell-control mask is the bezel alone.
 
 **Model recommendation.** <TODO: tier not settled in the session.>
@@ -418,10 +421,11 @@ it the stereo variants and no shader cache; the scripts set it per process only.
 
 ## A3 ❌ Precision near the eye: render-only floating origin, double-precision fallback
 
-**Outcome: no render-only remedy exists in the stock single-precision engine; this is a stop for a
-re-plan.** The VR jitter is measured and is worse than flat. Candidate (a) is measured to change
-nothing, (b) is not render-only in this tree, and the double-precision path is written up below
-and not started.
+**Outcome: no render-only remedy exists in the stock single-precision engine.** The VR jitter is
+measured and is worse than flat. Candidate (a) is measured to change nothing, (b) is not render-only
+in this tree, and the double-precision path is written up below and not started. **Ruling (Decision
+17): the author accepts the shimmer as a known issue and the plan continues on the stock engine;**
+the double-precision build and a game-wide floating origin are later work outside this plan.
 
 **Goal.** In VR, the cockpit interior, a HUD quad and the plane in rigid chase show sub-pixel jitter
 per eye at 20 km from the chapter origin, with simulation, physics and network still in chapter
@@ -571,24 +575,106 @@ bit-identical frames. Check a candidate with a pixel diff against the baseline b
 
 **Verified.** <pending orchestrator run>
 
-## A4 ☐ Screen-space effects under multiview
+## A4 ☑ Screen-space effects under multiview
 
 **Goal.** A per-effect verdict on how each screen-space shader behaves in stereo: correct as is,
 portable to `VIEW_INDEX`, or impossible, with the porting cost named.
 
-**Evidence (confidence: lead-only).** The users are `Effects/EmitterRenderer.cs` (depth texture,
-screen texture), `Effects/FogVolumeClutter.cs` (depth), `Effects/HeatShimmer.cs` (screen texture),
-`shaders/csky_clutter_fade.gdshaderinc` (fragcoord dither). No shader uses `VIEW_INDEX` today.
-How Godot 4.7 exposes the depth and screen textures under multiview is not checked here.
+**Evidence (confidence: traced to code in the Godot 4.7-stable source for the compiler rewrite and
+the matrices; measured per eye on the stand-in for every effect but the race ghost, whose verdict
+is arithmetic).**
+- **Godot rewrites the screen-reading samples itself.** For a spatial shader the forward-clustered
+  compiler sets `check_multiview_samplers` (`scene_shader_forward_clustered.cpp`), and
+  `shader_compiler.cpp` turns every `texture()`-family call on a `hint_screen_texture`,
+  `hint_depth_texture` or `hint_normal_roughness_texture` uniform (or a function argument carrying
+  one) into a `multiviewSampler` read at `multiview_uv(uv)`, which the scene shader defines as
+  `vec3(uv, ViewIndex)` under `USE_MULTIVIEW` and as the plain `uv` otherwise. So the same shader
+  text reads its own eye's layer in stereo and the flat texture in mono, and no game shader needs
+  `VIEW_INDEX` for these reads.
+- **The other built-ins, per view.** `SCREEN_UV` is `gl_FragCoord.xy * screen_pixel_size`, the
+  eye's own layer. `PROJECTION_MATRIX` and `INV_PROJECTION_MATRIX` are
+  `projection_matrix_view[ViewIndex]`, each eye's projection times its offset from the combined
+  camera (`RendererSceneRender::CameraData::set_multiview_camera`). `VIEW_MATRIX`,
+  `INV_VIEW_MATRIX`, `VERTEX` and `CAMERA_POSITION_WORLD` stay in that one combined frame, whose
+  origin is the apex of a frustum enclosing both eyes, behind them: 31.5 mm behind the eye midpoint
+  for the stand-in's default 90° eyes, 118 mm at `fov=30`. Godot's documentation calls it the
+  midpoint; the source does not. A soft-particle compare of `VERTEX.z` against a depth unprojected
+  through `INV_PROJECTION_MATRIX` therefore stays in one frame and is correct in both eyes.
+- **Measured per eye.** Each stereo eye was compared with a capture whose own view stands exactly
+  where that eye stood (Verify). Across five poses every eye matched its truth to 0.064 % of pixels
+  or less over 2 levels, against 1.2 to 23.5 % for the opposite eye's truth. Every stereo run's
+  engine log is free of shader errors.
 
-**Approach.** Run each effect under A2's stand-in and under A1's headset session, compare the two
-eyes, and read the Godot multiview shader documentation for the depth/screen texture forms.
+| Effect | File (member) | What it reads | Per eye, observed | Verdict | Port cost |
+|---|---|---|---|---|---|
+| Soft particles | `Effects/EmitterRenderer.cs` (`ShaderCode`, `SOFT_EXPR`) | depth texture at `SCREEN_UV`, `INV_PROJECTION_MATRIX`, `VERTEX.z` | rocket, crash and lake poses: each eye matches its truth (0.003 to 0.064 % over 2 levels) | correct as is | none |
+| Gamma-space mix composite | `Effects/EmitterRenderer.cs` (`GammaMixComposite`) | screen texture at `SCREEN_UV` | the mixed smoke and the crash plume match per eye; a wrong-layer or stale copy would differ by the parallax (23.5 %) | correct as is | none; the colour copy is made per eye (D18) |
+| Fog-volume soft fade (Enhanced) | `Effects/FogVolumeClutter.cs` (`EnhancedGradeTemplate`) | the same depth term over 12 m | deckfly pose, plane inside the C1 deck: 0.21 to 0.27 % in the box around the plane against 9.3 % cross | correct as is | none |
+| Heat shimmer (Enhanced) | `Effects/HeatShimmer.cs` (`ShaderCode`) | screen texture at `SCREEN_UV` + offset; `POSITION` from `PROJECTION_MATRIX` | rocket pose shimmer box: 0.052 / 0.059 % against 9.0 % cross; the noise is in quad UV, so it sits at the quad's depth | correct as is | none |
+| Clutter fade dither | `shaders/csky_clutter_fade.gdshaderinc` (`csky_clutter_dither_keep`), `Mech3/Clutter.cs`, `Mech3/SceneBuilder.cs` clutter variant | `FRAGCOORD.xy` 4x4 ordered dither | identical screen phase in both eyes (`dither-crop.png`). The pattern carries no disparity while the card carries `IPD x f / d`: at about 20 px per degree (1146 px/rad) that is 1.4 px at the nearest authored fade start (50 m) and 0.24 px at C1 firs' 300 m | keep; reads at the card's depth within a pixel. The author's eye at E21 decides | none |
+| Race ghost dither | `Mech3/RaceGhost.cs` (`FragmentLine`) through the same keep | the same `FRAGCOORD` dither over a whole aircraft, 35 % (55 % Enhanced) within 40 m, solid by 80 m | not capturable (Traps); arithmetic: 1.8 px at 40 m, 7 px at 10 m, a screen-door that stays on the display and fuses at infinity | port (D17) | small: a VR-only text variant that offsets `FRAGCOORD` by the instance origin's projected pixel per view (one flat `vec2` varying, one projection in `vertex()`), so the pattern carries the aircraft's disparity |
+| Rain and snow, wind streaks | `Effects/Precipitation.cs`, `Effects/WindStreaks.cs` | `POSITION = PROJECTION_MATRIX * VIEW_MATRIX * world`, centre from `CAMERA_POSITION_WORLD` | rain pose: max 2 levels per eye against 2.75 % cross; streaks in the rocket pose | correct as is | none |
+| Billboards facing the eye | `EmitterRenderer`, `FogVolumeClutter`, `Clutter`, `SceneBuilder` billboard and cylindrical shaders, `PlaneBuilder` flare | `CAMERA_POSITION_WORLD`, the combined basis | one world quad seen by both eyes, as Godot's own billboard does under multiview | correct as is | none |
+| Point-light sprites | `Mech3/SceneBuilder.cs` (`LightShaderCode`) | `PROJECTION_MATRIX[1][1]`, `VIEWPORT_SIZE` | the same in both eyes (symmetric vertical term, per-eye viewport) | correct as is | none |
+| Depth bias | `Mech3/SceneBuilder.cs` (`VERTEX *= 1.0 - (depth_bias + node_bias)`) | `VERTEX` in the combined frame | world materials: the bias is at most 0.0098 (49 levels), a disparity error of `b x IPD / d`, 0.7 px at 1 m and 0.07 px at 10 m at 20 px per degree, and a depth pull of 1 % of distance, below stereo acuity | world: correct enough as is; the interior (25x) is B8's | B8 |
+| Fog, world light, view table | `shaders/csky_atmosphere.gdshaderinc` | `CAMERA_POSITION_WORLD` | the combined camera sits a few cm from the flat camera; the view table only matters across zones, and one VR seat publishes one zone per rig | correct as is | none |
+| Sky dome, cloud deck, ground shadow, cloud puffs | `WorldBuilder.BuildHorizon`, `WeatherRig`, `GroundShadowPass`, `csky_cloud_puffs.gdshaderinc` | world geometry, km-scale dome | no screen or depth read | correct as is | none |
+| Engine passes (Enhanced) | `Launch/EnhancedLook.cs` (SSAO, SSR, glow, TAA) | Godot's own multiview paths | rocket and lake poses (SSR water) match per eye | correct as is | none here; cost is D18's |
+
+Not drawn in stereo, so not this item's: every canvas layer (lens flare, sun wash, whiteout,
+`ScreenFlash`, fades) is C14's, the cockpit pass B8's, the spyglass picture D19's. `UI/Labs/MeshLab.cs`
+is a flat-only lab. No ocean shader exists on this branch; one landed later needs the same review.
+
+**Approach (investigation, no code).** Read the Godot 4.7-stable compiler, scene shader and camera
+sources (`.scratch/A4-src`), sweep every generated and shipped shader for screen, depth, projection
+and view-space reads, and capture each effect per eye under A2's stand-in with a per-eye truth. D17
+inherits one port, the race ghost's dither. The headset look is the author's (E21).
 
 **Model recommendation.** <TODO: tier not settled in the session.>
 
-**Verify.** <TODO: the capture per effect and what counts as correct per eye.>
+**Verify.** Per pose, three `RunProbe.ps1` captures at frame 120 (scratch scripts
+`.scratch/A4/a4_triple.ps1` and `a4_eyes.py`): the stereo pair (`--xr-sim=pitch=P,eye=960x960,
+fov=F`), and two truths at `ipd=20` with the head moved to `head=-0.0215/0/0` (`shot=left`) and
+`head=0.0215/0/0` (`shot=right`), so the saved view stands exactly where the stereo eye stood. Correct
+per eye means the stereo eye matches its truth within the residual of the combined camera's few cm
+(billboard facing, fog distance, TAA); a wrong-eye or stale layer read would reach the difference
+against the opposite eye's truth. The poses, with stereo-vs-truth then cross, as the share of pixels
+over 2 levels:
+- `rocket`: `--chapter=C1 --plane=player_bhawk --pos=-6104,300,-4420 --direction=0,-0.33,0.94
+  --fire-rockets --hold=0,0,0,0.3 --graphics=enhanced`, `pitch=-22,fov=30`: 0.064 / 0.060 % against
+  10.9 %; the shimmer box 0.052 / 0.059 % against 9.0 %.
+- `crash`: `--chapter=C1 --plane=player_bhawk --crash=5 --hold=0,0,0,0.6`, `pitch=-15,fov=70`:
+  0.003 / 0.003 % against 23.5 %.
+- `deckfly`: `--chapter=C1 --plane=player_bhawk --pos=-6144,1170,-6144 --direction=0,0,-1
+  --hold=0,0,0,0.6 --graphics=enhanced`, `pitch=-12,fov=50`: 0.046 / 0.058 % against 2.0 %.
+- `lake`: `--freecam --chapter=C1 --pos=-7620,140,-3240 --direction=-0.765,0,-0.645
+  --graphics=enhanced`, `pitch=-17,fov=70`: 0.002 / 0.004 % against 1.2 %.
+- `rain`: `--freecam --chapter=C1C --pos=-3843,700,-1101 --direction=-0.052,0,-0.999`,
+  `pitch=-14,fov=70`: at most 2 levels against 2.75 %.
+- The dither: `--freecam --chapter=C1 --pos=-7400,250,-3000 --direction=-0.4,0,-0.9`,
+  `--xr-sim=eye=960x960,fov=40,pitch=-12`, a fir in its fade band cropped from both eyes.
+All with `--det --mute --frames=120`. Flat goldens unmoved: no code changed.
 
-**⚠ Traps.** <TODO: none known yet.>
+**⚠ Traps.**
+- **Do not port these reads by hand.** A `sampler2DArray` or an explicit `VIEW_INDEX` layer in the
+  shader text would break the flat twin, which Godot compiles without `USE_MULTIVIEW`; the compiler
+  already picks the layer.
+- **`CAMERA_POSITION_WORLD` and `VERTEX` live in the combined frame behind the eyes, not at either
+  eye.** A shader that needs the eye itself adds `EYE_OFFSET` (view space). Nothing in the game needs
+  it today.
+- **The stand-in's `ipd=0` is degenerate.** `set_multiview_camera` cannot build the combined
+  frustum from two coincident eyes: the log fills with `p_right <= p_left`, culling breaks and whole
+  C1 terrain tiles vanish. At 1 to 4 mm the light culler still logs `create_frustum_points` `!res`
+  under the 40 km far plane (and 4 mm left a freecam frame flat grey). A single-eye control takes
+  `ipd=20` and moves the head by the remaining half IPD, as Verify does. A2's empty-stage control
+  at `ipd=0` happened to survive; a chapter world does not.
+- **A dither cannot be judged by the truth comparison**, which is screen-locked on both sides; its
+  verdict is the disparity arithmetic and the author's eye.
+- **The race ghost cannot be captured on the stand-in.** It arms only between race pilots, and two
+  local seats under `--xr-sim` leave the root viewport without a 3D camera (a flat grey frame,
+  `ghost-try.png`). D17 checks it on a networked race or with a suite that arms the stamp.
+
+**Verified.** <pending orchestrator run>
 
 ## A5 ☑ Cockpit scale per plane
 
@@ -789,7 +875,9 @@ traced to the data and the code:
   2.9 cm behind, at a 0.47-0.50 m panel.
 
 **Approach.** Under VR take the `--no-cockpit-pass` path, keep `light_origin`, the shake and the
-gauge drive working on the in-world interior, and rely on A3 for precision. Under VR only: leave the
+gauge drive working on the in-world interior. There is no precision fix (A3, Decision 17): the
+interior shimmers far from the chapter origin and that is a known issue, not a B8 defect. Under VR
+only: leave the
 plate out of the interior build with a polygon filter (all vertices on one z plane with
 0 < z ≤ 2.5 iu, normal aft, Colored, priority 5; on the diagnosis scan this matches exactly the 5-7
 plate polygons per interior and nothing else), and give the interior a shader variant that keeps the
@@ -995,13 +1083,35 @@ headset.>
 **Goal.** Soft particles, the fog-volume fade and heat shimmer render correctly in both eyes; the
 clutter dither stays if A4 found it reads fine per eye.
 
-**Evidence (confidence: lead-only).** A4's verdicts. <TODO: depends on A4.>
+**Evidence (confidence: traced to code and measured per eye, A4).** Soft particles, the
+gamma-space mix composite, the fog-volume soft fade and heat shimmer are already correct in both
+eyes: Godot 4.7's compiler turns every read of a `hint_screen_texture` or `hint_depth_texture`
+uniform into a read of the drawing eye's layer, and `INV_PROJECTION_MATRIX` is per eye while
+`VERTEX` stays in the combined frame, so the depth compare holds. Each stereo eye matched a
+capture taken from that eye's own position to 0.064 % of pixels or less, against 1.2 to 23.5 % for
+the other eye's. The clutter fade dither stays: its screen-locked pattern is off the card's
+disparity by at most 1.4 px at the nearest authored fade start (50 m) at headset density. The one
+port is the **race ghost's dither** (`Mech3/RaceGhost.cs`, `FragmentLine`), a 35 % (55 % Enhanced)
+screen-locked 4x4 pattern over an aircraft within 40 to 80 m, 1.8 to 7 px off its disparity: a
+screen-door fixed to the display.
 
-**Approach.** Per A4.
+**Approach.** Under VR only, give the ghost's keep test a pattern anchored to the aircraft: a
+`varying flat vec2` set in `vertex()` to the pixel the instance origin projects to in this view
+(`PROJECTION_MATRIX * VIEW_MATRIX * MODEL_MATRIX[3]`, scaled by `VIEWPORT_SIZE`, floored), and
+`csky_clutter_dither_keep(FRAGCOORD.xy - anchor, alpha)`, so the pattern carries the aircraft's
+disparity. VR is fixed for a launch (an Options apply relaunches), so the generator can read a
+launch-time flag beside `GraphicsMode.Enhanced` and emit the anchored text only then, leaving the
+flat text byte-identical. Alpha-to-coverage under the 4x MSAA is the alternative if the anchored
+pattern still reads as a mesh. The clutter dither keeps its text unless the author's headset pass
+(E21) finds it reads as a screen-door.
 
 **Model recommendation.** <TODO: tier not settled in the session.>
 
-**Verify.** Flat goldens unmoved; <TODO: the per-eye check from A4.>
+**Verify.** Flat goldens unmoved. The race ghost cannot be captured on the `--xr-sim` stand-in
+(two local seats leave the root viewport without a 3D camera, A4 Traps), so the check is a suite
+that arms the stamp on a single-seat stereo session, or a networked stunt race in the headset, with
+the ghost's dither phase measured against the aircraft in each eye. A4's per-eye truth method
+(`ipd=20` with the head moved onto the eye) re-checks the four effects that need no port.
 
 **⚠ Traps.** The shaders are generated in C# (`Mech3/ShaderTwins.cs` pairs per graphics mode); a
 port touches both twins.
@@ -1080,6 +1190,8 @@ controller binding, the theater screen, the HUD and the cutscene window.
 flags documented, and a known-issues list.
 
 **Evidence (confidence: lead-only).** Decision 14. The release runs through `PublishRelease.ps1`.
+The known-issues list carries at least the cockpit and HUD-panel shimmer far from the chapter origin
+(Decision 17, A3's measurements).
 
 **Approach.** `docs/cli.md` (`--xr-sim`, `--xr-mode`), `docs/controls.md` (XR bindings), the README
 and the release notes; the shortcut through `ExportRelease.ps1`'s packaging. <TODO: the known-issues
