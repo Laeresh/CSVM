@@ -180,6 +180,19 @@ public sealed class PlaneShake
             : 0f;
     }
 
+    /// <summary>Brings every block to rest and drops the overspeed drive. A respawned airframe
+    /// starts level rather than ringing on from the crash that ended the last one.</summary>
+    public void Reset()
+    {
+        foreach (var block in _all)
+        {
+            block.Reset();
+        }
+        _speedDrive = 0f;
+        Sum = Vector3.Zero;
+        Rotation = Vector3.Zero;
+    }
+
     /// <summary>Advances every block by one sim tick, then re-sums <see cref="Sum"/> and renders
     /// <see cref="Rotation"/> from it. Pure function of sim dt and the events since the last
     /// tick, deterministic under <c>--det</c>'s fixed clock.</summary>
@@ -244,6 +257,12 @@ public sealed class PlaneShake
             float yaw = ((float)rng.NextDouble() - 0.5f) * step * 1.2f;
             float roll = ((float)rng.NextDouble() - 0.5f) * step * 2.5f;
             _vel += new Vector3(pitch, yaw, roll);
+        }
+
+        public void Reset()
+        {
+            _vel = Vector3.Zero;
+            Position = Vector3.Zero;
         }
 
         /// <summary>Integrates the block over one sim tick, <c>FUN_0042bec0</c>. A smooth source is

@@ -1424,7 +1424,10 @@ public partial class FlightController : Node3D
         _warningShots?.Reset(); // and a fresh airframe's shield, which the constructor arms
         _pilotHud.Reset();   // damage-dial blink timers cleared, no impact line pending
         Visuals?.Reset();    // torn panels off, healthy twins back, smoke trail cleared
-        RefillWeapons();     // full ammo, dry warnings re-armed, any live tracers cleared
+        Shake?.Reset();      // the crash's wobble stops with the airframe it rocked
+        if (ShakePivot != null)
+            ShakePivot.Rotation = Vector3.Zero;
+        RefillWeapons();    // full ammo, dry warnings re-armed, any live tracers cleared
         // ⚠ The field, not the forcing property: a rig that is still armed has never played
         // anything, so there is nothing here to undo, and asking for it would build the whole rig
         // on the frame an aeroplane is placed, which is the frame the deferral exists to spare.

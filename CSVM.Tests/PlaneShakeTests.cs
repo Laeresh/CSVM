@@ -317,6 +317,23 @@ public class PlaneShakeTests
     }
 
     [Fact]
+    public void AResetStopsEveryBlockWhereItStands()
+    {
+        // A crash leaves the contact block ringing for seconds. A respawn hands the next airframe
+        // a level pivot instead, and it stays level with nothing new kicked.
+        var shake = NewShake();
+        shake.ContactHit(CollisionDamage.ContactShakeCap);
+        shake.NitroEngaged();
+        shake.SetSpeedRatio(1.3f);
+        Assert.True(MaxTurnOver(shake, seconds: 0.2f) > 0f, "the kicks rock the plane before the reset");
+
+        shake.Reset();
+        Assert.Equal(Vector3.Zero, shake.Sum);
+        Assert.Equal(Vector3.Zero, shake.Rotation);
+        Assert.Equal(0f, MaxTurnOver(shake, seconds: 1f));
+    }
+
+    [Fact]
     public void AMissingSourceIsANoOpNotACrash()
     {
         // An install whose file authors nothing at all: no source has a law or a magnitude to run.
