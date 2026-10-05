@@ -178,6 +178,7 @@ public static class BindingLabels
         InputAction.Pause => "Pause/Quit/Objectives",
         InputAction.ChatEveryone => "Chat to Everyone",
         InputAction.ChatTeam => "Chat to Team",
+        InputAction.DisplayScores => "Display Scores (Multiplayer Only)",
         _ => ThrottleFraction(action),
     };
 

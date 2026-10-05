@@ -209,7 +209,7 @@ internal static class NetBotRearmSuites
         PutAhead(peers[0].SeatRigs[HostSeat].Controller!, bot);
         steps = StepUntil(() => pilot.Gunner!.Target != null && pilot.Machine!.Mode == AiMode.Pursue, peers, WaitSteps);
         ctx.Check(pilot.Gunner!.Target != null && pilot.Machine!.Mode == AiMode.Pursue && !pilot.Gunner.Disengaged,
-            $"and back in the fight its gunner takes a quarry and the pilot chases it ({FlightController.TargetLabel(pilot.Gunner.Target)}, {AiModeMachine.NameOf(pilot.Machine.Mode)}, {steps} step(s))");
+            $"and back in the fight its gunner takes a quarry and the pilot chases it ({FlightController.TargetLabel(pilot.Gunner.Target)}, {AiModeMachine.NameOf(pilot.Machine!.Mode)}, {steps} step(s))");
     }
 
     // The hull alone starts a run with full guns. Shot down on the way, the bot comes back with none.

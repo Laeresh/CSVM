@@ -157,6 +157,7 @@ internal sealed class AiFlightAssembler
                 Scheme = scheme,
                 ShippedSkins = spawn.ShippedSkins,
                 Painter = planeBuilder.Painter,
+                Racing = _world.Racing,
             };
             controller.Bind(new FlightControllerBuild
             {

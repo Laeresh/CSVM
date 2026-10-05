@@ -99,6 +99,20 @@ public sealed class VsBotFlagTests
         Assert.Equal(3, SessionSpec.Parse(new[] { "--vs", "--vs-bots=3", Host }).VsBots.Count);
     }
 
+    [Theory]
+    [InlineData("--ctf")]
+    [InlineData("--zvz")]
+    public void OnlyADeathmatchSeatsBots(string type)
+    {
+        var s = SessionSpec.Parse(new[] { "--vs", type, "--vs-bots=2", Host });
+        Assert.Empty(s.VsBots);
+        Assert.Contains(s.Warnings, w => w.Category == "core"
+            && w.Message.Contains("only a Deathmatch seats bots", StringComparison.Ordinal));
+
+        // ABLE-TO-FAIL CONTROL: the same host on a Deathmatch seats them.
+        Assert.Equal(2, SessionSpec.Parse(new[] { "--vs", "--vs-bots=2", Host }).VsBots.Count);
+    }
+
     [Fact]
     public void ALocalMatchSeatsItsBots()
     {

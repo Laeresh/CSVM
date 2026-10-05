@@ -6,6 +6,9 @@ namespace CSVM.UI.Boards;
 /// </summary>
 public enum ChromeSize
 {
+    /// <summary>A start count's figure, the one word standing alone in the middle of a pane.</summary>
+    Count,
+
     /// <summary>A board's page heading.</summary>
     Heading,
 

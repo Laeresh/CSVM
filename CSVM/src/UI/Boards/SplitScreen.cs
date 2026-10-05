@@ -30,6 +30,11 @@ public sealed partial class SplitScreen : CanvasLayer
     /// carries it (<see cref="PaneCullMask"/>), or a pane would be lit twice.</summary>
     public const uint SpyglassSunLayer = 1u << 6;
 
+    /// <summary>The world's layer 1, which every pane, spyglass and photograph camera draws. A race
+    /// ghost of a seat flown on another machine names it as its owner's layer. No camera here then
+    /// takes that aeroplane for its own, however many seats the race has.</summary>
+    public const uint EveryCameraLayer = 1u;
+
     // First visual layer of the reserved per-player band. Godot has 20 layers (bits 0–19); the
     // world builds everything on layer 1 (bit 0), so taking the top four leaves the whole middle
     // range free for future use.

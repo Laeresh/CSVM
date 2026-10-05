@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight.Camera;
@@ -52,6 +53,14 @@ public sealed partial class VersusHud : Control
     /// <summary>This pane's own nose heading, 0 = north (−Z), see <see cref="PlanePos"/>.</summary>
     public float HeadingDeg { get; set; }
 
+    /// <summary>What sends the status line away while it answers true: the pane's held scores, whose
+    /// Original text runs across the top of the pane. The opponent markers stay. Null keeps it.
+    /// </summary>
+    public Func<bool>? StatusHiddenWhile { get; set; }
+
+    /// <summary>Whether the status line draws this frame.</summary>
+    public bool StatusShown => StatusHiddenWhile?.Invoke() != true;
+
     /// <summary>Binds the match + this pane's own camera (opponent markers project through it).
     /// Add to the HUD canvas; <see cref="Rigs"/> is attached once the whole field is built, and
     /// <see cref="PlanePos"/>/<see cref="HeadingDeg"/> every frame, nothing else needs feeding,
@@ -96,7 +105,7 @@ public sealed partial class VersusHud : Control
         int statusFont = Mathf.Max(1, Mathf.RoundToInt(RefStatusFont * s * HudMetrics.StatusTextScale));
         float cx = Size.X / 2f;
 
-        if (_match is { } match)
+        if (_match is { } match && StatusShown)
             DrawCentered(font, new Vector2(cx, RefStatusY * s), StatusLine(match), statusFont, HudBlue);
 
         if (Rigs == null)

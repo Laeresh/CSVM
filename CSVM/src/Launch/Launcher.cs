@@ -1487,18 +1487,34 @@ public partial class Launcher : Node3D
         return CustomPlaneWire.Def(build);
     }
 
-    /// <summary>Where a finished lobby Dogfight lands: its lobby's Game Scores. Each seat is named
-    /// by its callsign on <paramref name="seats"/>, the session's own roster, and a bot's line is
-    /// marked. It is read while the session lives, before the lobby can move a seat. A launch with
-    /// no roster names seats off the lobby's list at the launch. Null for any other flight, a match
-    /// left before its end, or a Built-in board.</summary>
+    /// <summary>Where a finished lobby Dogfight or stunt race lands: its lobby's Game Scores. A
+    /// match's seat is named by its callsign on <paramref name="seats"/>, the session's own roster,
+    /// and a bot's line is marked. It is read while the session lives, before the lobby can move a
+    /// seat. A launch with no roster names seats off the lobby's list at the launch. A race lands
+    /// its board's own table. Null for any other flight, one left before its end, or a Built-in
+    /// board.</summary>
     internal static LobbyReturn? LobbyLanding(bool lobbyFlight, UI.Menu.DogfightLobby? lobby, Flight.Modes.VersusMatch? match,
-        IReadOnlyList<Net.NetSeat>? seats = null) =>
-        lobbyFlight && lobby is { Shown: true } && match is { Completed: true }
-            ? new LobbyReturn(seats is { Count: > 0 }
+        IReadOnlyList<Net.NetSeat>? seats = null, Flight.Modes.StuntRace? race = null)
+    {
+        if (!lobbyFlight || lobby is not { Shown: true })
+        {
+            return null;
+        }
+
+        if (match is { Completed: true })
+        {
+            return new LobbyReturn(seats is { Count: > 0 }
                 ? UI.Menu.DogfightLobby.ScoresOf(match, seats)
-                : UI.Menu.DogfightLobby.ScoresOf(match, lobby.LaunchNames))
-            : null;
+                : UI.Menu.DogfightLobby.ScoresOf(match, lobby.LaunchNames));
+        }
+
+        return RaceLanding(race) is { } table ? new LobbyReturn(System.Array.Empty<UI.Menu.DogfightScore>(), table) : null;
+    }
+
+    /// <summary>An ended stunt race's table as the lobby's Game Scores draws it, a pilot who left
+    /// marked; null for no race or one still running.</summary>
+    internal static IReadOnlyList<UI.Menu.RaceTableRow>? RaceLanding(Flight.Modes.StuntRace? race) =>
+        race is { Ended: true } ? UI.Menu.Original.OriginalRaceTable.Rows(race.Standings(), race.ZoneCount) : null;
 
     /// <summary>A lobby's team names by team number, the form a session reads them in.</summary>
     internal static Dictionary<int, string> TeamNames(IReadOnlyList<Net.LobbyTeamName> teams)
@@ -1870,7 +1886,7 @@ public partial class Launcher : Node3D
     private string? LaunchBriefing() =>
         _spec.Versus
             ? UI.Screens.LoadScreens.MultiplayerKey(
-                _spec.Chapter, _spec.CaptureTheFlag, _spec.ZeppelinVsZeppelin,
+                _spec.Chapter, _spec.MissionType,
                 _lobbyFlight && _netDoor?.Dogfight is { Teamed: true })
             : null;
 
@@ -1990,7 +2006,7 @@ public partial class Launcher : Node3D
     // with nobody on a team. docs/org/pause-screen.md.
     private void ShowMultiplayerPauseSheet(string chapter)
     {
-        if (UI.Screens.LoadScreens.MultiplayerKey(chapter, false, false, false) is not { } key)
+        if (UI.Screens.LoadScreens.MultiplayerKey(chapter, DogfightMissionType.Deathmatch, false) is not { } key)
         {
             Log.Warn("ui", $"pause aid: no lobby environment flies {chapter}");
             return;
@@ -2067,7 +2083,8 @@ public partial class Launcher : Node3D
         {
             return Mech3.InstantAction.MissionTypeLabel(def.MissionType);
         }
-        return _spec.Versus ? "Dogfight" : "Free Flight";
+        return _spec.MissionType == DogfightMissionType.StuntRace ? DogfightLobby.StuntRaceName
+            : _spec.Versus ? "Dogfight" : "Free Flight";
     }
 
     private void HideLoadScreen()
@@ -2810,8 +2827,8 @@ public partial class Launcher : Node3D
         TakeNetLaunch(launch, planes, fits, customs);
         _spec = SessionSpec.FromMenu(_cli, launch.Chapter, planes, launch.Mode, launch.InstantAction, fits, customs,
             launch.Match?.KillTarget, launch.Match?.TimeLimitMinutes, launch.Match?.Lives, launch.Match?.AutoRespawn,
-            launch.WingmanLoadout, launch.Match?.CaptureTheFlag == true, launch.Match?.FlagHomeToCapture == true,
-            launch.Match?.ZeppelinVsZeppelin == true, launch.Bots);
+            launch.WingmanLoadout, launch.Match?.MissionType ?? DogfightMissionType.Deathmatch,
+            launch.Match?.FlagHomeToCapture == true, launch.Bots);
         // Step the master so flying again is a new mission rather than a replay: without this every
         // relaunch re-derives the same spawn, opposition and liveries. ⚠ A pinned run must hold
         // still, which is what keeps the goldens and the perf harnesses reproducible.
@@ -3186,7 +3203,8 @@ public partial class Launcher : Node3D
     {
         if (_menuDriven && _session is { InSession: true })
         {
-            var landing = LobbyLanding(_lobbyFlight, _netDoor?.Dogfight, _session.Dogfight?.Match, _session.NetSeats);
+            var landing = LobbyLanding(_lobbyFlight, _netDoor?.Dogfight, _session.Dogfight?.Match, _session.NetSeats,
+                _session.Race);
             _keepLobby = landing != null;
             ReturnToMenu(landing ?? _exitDestination);
             return;
@@ -3288,9 +3306,10 @@ public partial class Launcher : Node3D
         }
     }
 
-    // A lobby Dogfight's upkeep in flight. The session steps the wire, never the door. A host's door
-    // still advertises, so a player who joins mid-match finds the game and waits in the lobby. A
-    // guest's door watches its host, and a host that leaves ends the match here.
+    // A lobby Dogfight's or stunt race's upkeep in flight. The session steps the wire, never the door.
+    // A host's door still advertises, so a player who joins mid-match finds the game and waits in the
+    // lobby. A guest's door watches its host, and a host that leaves ends the flight here. A host that
+    // takes an ended race to the lobby takes this guest there, the race's table with it.
     private void TickVersusFlight(double delta)
     {
         if (!_lobbyFlight || _netDoor is not { } door || _netWire == null || _session is not { InSession: true })
@@ -3303,6 +3322,11 @@ public partial class Launcher : Node3D
         {
             Log.Info("core", $"net: versus flight over, the host left ({door.Fault})");
             ReturnToMenu(new LobbyReturn(System.Array.Empty<UI.Menu.DogfightScore>()));
+        }
+        else if (!_netIsHost && _session.Wire.Race is { LobbyCalled: true })
+        {
+            Log.Info("core", $"net: the host took the race back to the lobby");
+            ExitSession();
         }
     }
 

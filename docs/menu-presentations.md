@@ -549,7 +549,9 @@ the active presentation: every value in [`cli.md`](cli.md)'s bullet is Built-in'
 list open, `instant-action:weapon-loadout` on the pilot's loadout screen and
 `instant-action:lives[:<count>]` with the remake-only Lives box focused, at Unlimited without a
 count and at that count with one (the screen opens on one life, so neither reading is a state a
-plain shot of it can show), `instant-action-wrapup` and `instant-action-wrapup:failed` on the
+plain shot of it can show), `instant-action:race-time` on stunt flying with the remake-only Race
+Time box focused (shown only beside `--debug-join=1` or more, since a solo run has no race),
+`instant-action-wrapup` and `instant-action-wrapup:failed` on the
 wrap-up page a flown mission's ending lands on, over a sample stunt run in each outcome, and
 `instant-action-wrapup:long` over a seventeen-zone run whose splits take three post-its,
 `instant-action-wrapup:photos` and `instant-action-wrapup:long-photos` over the same two runs with a

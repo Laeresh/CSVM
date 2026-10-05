@@ -121,7 +121,7 @@ public sealed class VersusDirector
     /// the block the map lays around its own hull, whatever the side's lobby team number is.
     /// </summary>
     internal static int[]? SpawnTeams(SessionSpec spec, IReadOnlyList<Net.NetSeat> seats) =>
-        spec.ZeppelinVsZeppelin && SeatTeams(spec, seats) is { } teams
+        spec.MissionType == DogfightMissionType.ZeppelinVsZeppelin && SeatTeams(spec, seats) is { } teams
             ? ZeppelinVersus.SpawnBlocks(teams)
             : SeatTeams(spec, seats);
 
@@ -272,7 +272,7 @@ public sealed class VersusDirector
     /// console's ejectflag typed into the chat.</summary>
     internal void WireFlags(FlagInputs inputs)
     {
-        if (!_spec.CaptureTheFlag || _field.Net is not { } net || SeatTeams(_spec, _field.NetSeats) is not { } teams)
+        if (_spec.MissionType != DogfightMissionType.CaptureTheFlag || _field.Net is not { } net || SeatTeams(_spec, _field.NetSeats) is not { } teams)
         {
             return;
         }
@@ -323,7 +323,7 @@ public sealed class VersusDirector
     /// side. The parts they lose are scored, and the first hull lost ends the match.</summary>
     internal void WireZeppelinVersus(ZeppelinVersusWireInputs inputs)
     {
-        if (!_spec.ZeppelinVsZeppelin || _field.Net is not { } net
+        if (_spec.MissionType != DogfightMissionType.ZeppelinVsZeppelin || _field.Net is not { } net
             || SeatTeams(_spec, _field.NetSeats) is not { } teams || inputs.Zeppelins is not { } zeppelins)
         {
             return;
@@ -354,7 +354,7 @@ public sealed class VersusDirector
     /// at all.</summary>
     internal void WireRearmBases(AnimRuntime? world, string zrdrPath, ZeppelinRuntime? hulls)
     {
-        if (world == null || (_spec.ZeppelinVsZeppelin && ZvzPlay == null))
+        if (world == null || (_spec.MissionType == DogfightMissionType.ZeppelinVsZeppelin && ZvzPlay == null))
         {
             return;
         }
@@ -365,7 +365,7 @@ public sealed class VersusDirector
             IsLocal = seat => _field.NetSeats.Count == 0 || IsLocal(seat),
             SeatTeams = SeatTeams(_spec, _field.NetSeats),
             World = world,
-            CaptureTheFlag = _spec.CaptureTheFlag,
+            CaptureTheFlag = _spec.MissionType == DogfightMissionType.CaptureTheFlag,
             Zeppelins = ZvzPlay,
             Hulls = hulls,
             RadiusSquared = RearmBases.LoadRadiusSquared(zrdrPath, why => Log.Warn("flight", $"rearm: player.zrd unreadable, the radius keeps its initialised value: {why}")),

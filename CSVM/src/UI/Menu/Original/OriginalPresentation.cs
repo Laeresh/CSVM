@@ -104,6 +104,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// count a further <c>:n</c> names, and at Unlimited when it names none.</summary>
     public const string InstantActionLivesAid = "lives";
 
+    /// <summary>The Instant Action aid's argument that picks stunt flying and focuses the race time
+    /// control, which shows once <c>--debug-join</c> has seated a second pilot.</summary>
+    public const string InstantActionRaceTimeAid = "race-time";
+
     /// <summary>The aid value that opens the Instant Action wrap-up page on a sample completed run,
     /// the page a flown mission's ending lands on. Original's own: Built-in shows a board inside
     /// the flight instead and has no menu page to open.</summary>
@@ -511,7 +515,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         {
             // The lobby the match was launched from, on its scores, or the Connection page saying
             // why the link ended.
-            if (!_shell.Lobby.Land(landing.Scores))
+            if (!_shell.Lobby.Land(landing.Scores, landing.Race))
             {
                 _shell.ReturnToConnection();
             }
@@ -639,6 +643,10 @@ public sealed class OriginalPresentation : IMenuPresentation
                     // above one is a state a plain shot of it can show.
                     _shell.InstantAction.OpenInstantAction();
                     _shell.InstantAction.PoseLives(AidCount(lives));
+                    break;
+                case InstantActionAid + ":" + InstantActionRaceTimeAid:
+                    _shell.InstantAction.OpenInstantAction();
+                    _shell.InstantAction.PoseRaceTime();
                     break;
                 case InstantActionWrapupAid:
                     _shell.Wrapup.ShowWrapup(InstantActionWrapupPage.Sample(won: true));
@@ -1095,12 +1103,18 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
 
         NetDoorAid.PoseDogfight(host, guests);
-        if (tab is "bots" or "bot" or "bot-scores" && host.Dogfight is { } field)
+        if (tab is "bots" or "bot" or "bot-scores" or "race" && host.Dogfight is { } field)
         {
             // Three bot rows after the two guests, the first an ace on the Fury.
             field.FillTo(6);
             field.SetBotAirframe(field.Bots[0].Id, 7);
             field.SetBotSkill(field.Bots[0].Id, NetBotSkill.Ace);
+            if (tab == "race")
+            {
+                // A Stunt Race over those rows, which stand grounded with the bot controls greyed.
+                field.SetMissionType(Spec.DogfightMissionType.StuntRace);
+            }
+
             NetDoorAid.SettleDogfight(host, guests);
             if (tab == "bot")
             {

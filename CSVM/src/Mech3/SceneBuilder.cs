@@ -253,6 +253,12 @@ public sealed class SceneBuilder
     /// composite shows the world through a gauge face. Set before building: it keys the shader.</summary>
     internal bool NoAlphaCoverage;
 
+    /// <summary>Build this builder's shaded surfaces with the race ghost (<see cref="RaceGhost"/>):
+    /// a stamped instance then fades by the drawing camera's distance. Set on a race session's
+    /// human airframes alone, so every other build keeps its shader text. Set before building: it
+    /// keys the shader.</summary>
+    internal bool RaceGhostShader;
+
     /// <summary>Names the sky sprites whose opaque texture paints the sky's own colour as a
     /// backdrop: the moon and the star field. Under Enhanced their materials take
     /// <see cref="ColorKeyed"/>'s copy and blend, so only the figure draws. The faithful path keeps
@@ -1854,7 +1860,8 @@ void fragment() {
     // `lit` / `fogged` are authored render flags that select shader VARIANTS, not a uniform. A lit,
     // fogged surface then emits the shader text it always did, free of a mix()'s float rounding.
     // Key bits: 1-64 the flags, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade.
-    // Then 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage.
+    // Then 4096 DebugClutterFlag, 16384 water, 32768 sun, 65536 gamma blend, 131072 NoAlphaCoverage,
+    // 262144 the race ghost.
     // ⚠ Keep the graphics mode out of the key: each key holds one shader per mode (ShaderTwins).
     private ModeShader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
@@ -1863,6 +1870,7 @@ void fragment() {
         // Only a lit world surface can take the water arm, and only a shaded one the sun term.
         water &= !shaded && lit;
         bool sunVertexLit = shaded && _sunVertexLit;
+        bool raceGhost = shaded && RaceGhostShader;
         // Only a blending surface has an alpha to correct; a scissor compares against a fixed 0.5
         // and moving its alpha would move the cutout silhouette instead of the composite.
         bool gammaBlend = blend && GammaBlendAlpha;
@@ -1872,13 +1880,13 @@ void fragment() {
             | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256)
             | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (debugClutter ? 4096 : 0)
             | (water ? 16384 : 0) | (sunVertexLit ? 32768 : 0) | (gammaBlend ? 65536 : 0)
-            | (noAlphaCoverage ? 131072 : 0);
+            | (noAlphaCoverage ? 131072 : 0) | (raceGhost ? 262144 : 0);
         ShaderTwins.EnsureCurrent();
         if (!BiasShaders.TryGetValue(key, out var twins))
         {
             BiasShaders[key] = twins = ShaderTwins.Make(() => BiasShaderCode(shaded, textured, blend, scissor,
                 doubleSided, scroll, clampUv, lit, fogged, edgeClamp, clutterFade, water, sunVertexLit, gammaBlend,
-                debugClutter, noAlphaCoverage), "world", $"world:{key:x}");
+                debugClutter, noAlphaCoverage, raceGhost), "world", $"world:{key:x}");
         }
         return twins;
     }
@@ -1890,7 +1898,7 @@ void fragment() {
     // GraphicsMode.Enhanced, so ShaderTwins can write it again under either mode.
     private static string BiasShaderCode(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp, bool clutterFade, bool water,
-        bool sunVertexLit, bool gammaBlend, bool debugClutter, bool noAlphaCoverage)
+        bool sunVertexLit, bool gammaBlend, bool debugClutter, bool noAlphaCoverage, bool raceGhost)
     {
         // Enhanced mode only: a world surface authored `lighting: true` shades under the real scene
         // lights off its decoded normals. `lighting: false` is self-lit by intent and keeps the
@@ -1934,6 +1942,13 @@ void fragment() {
         {
             sb.AppendLine(ClutterFadeInclude);
             sb.AppendLine("varying flat float v_clutter_alpha;");
+        }
+        // The race ghost reuses the clutter fade's dither; the include guard admits it once.
+        if (raceGhost)
+        {
+            sb.AppendLine(ClutterFadeInclude);
+            sb.AppendLine(RaceGhost.Include);
+            sb.AppendLine(RaceGhost.Varying);
         }
         // The point-light term reaches only the two original-mode arms that evaluate the original's
         // vertex light, and only on a model authored `lighting: true`.
@@ -1991,6 +2006,7 @@ void fragment() {
             ? "    v_clutter_alpha = csky_clutter_fade_alpha(MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);\n"
               + "    VERTEX *= step(0.004, v_clutter_alpha);\n"
             : "";
+        string ghostVertex = raceGhost ? RaceGhost.VertexLine + "\n" : "";
         // Per vertex in world space: the drawing view's sun and the point lights, summed into one
         // factor on the authored colour, clamped at white. At an armed eye (PhotoEyeParam) the
         // ambient half is the photograph's fill; `lighting: false` keeps the authored colour.
@@ -2017,7 +2033,7 @@ void fragment() {
               + "    }\n";
         sb.AppendLine($@"
 void vertex() {{
-{clutterVertex}{sunVertex}{pointVertex}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+{clutterVertex}{ghostVertex}{sunVertex}{pointVertex}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     NORMAL = {normalSign}normalize(MODELVIEW_NORMAL_MATRIX * NORMAL);
     // Scale toward the eye (the view-space origin): identical projected position,
     // depth nudged nearer by bias × distance, a scale-invariant polygon offset.
@@ -2027,6 +2043,8 @@ void vertex() {{
 void fragment() {{");
         if (clutterFade)
             sb.AppendLine("    if (!csky_clutter_dither_keep(FRAGCOORD.xy, v_clutter_alpha)) { discard; }");
+        if (raceGhost)
+            sb.AppendLine(RaceGhost.FragmentLine);
         // Shaded (planes) keeps raw COLOR for the real-lighting path; fullbright (world) applies
         // the gamma-space vertex modulate (see SrgbToLinearFn above).
         string vcol = sunLit ? "vec4(csky_srgb_to_linear(v_sun_lit), COLOR.a)"

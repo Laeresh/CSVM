@@ -48,6 +48,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/TerrainCarve.cs`, subtracts the ring from the struck node's ground and lays the bowl in it, in a private mesh and a private trimesh.
 - `src/Mech3/ClutterCull.cs`, counts and destroys the decorations inside a crater: a zeroed MultiMesh basis and a disabled RID-attached shape.
 - `src/Mech3/PlaneBuilder.cs`, builds one aircraft from its GameZ subtree (shaded, backface-culled); `Repaint` re-liveries it in place.
+- `src/Mech3/RaceGhost.cs`, the race ghost's distance law, its shader line and the per-instance stamp that arms a race pilot's airframe.
 - `src/Mech3/PaintScheme.cs`, one aircraft livery: pattern + 3 colours + 3 decals, parsed from vehicle.json or drawn at random.
 - `src/Mech3/PatternLibrary.cs`, decodes the original's `.BM` paint patterns from the extracted ROF archive; `PatternsFor` lists a plane's liveries.
 - `src/Mech3/PlanePainter.cs`, applies a `PaintScheme` to one aircraft: composites skins from the pattern's region masks, swaps decals.
@@ -285,11 +286,12 @@ rows).
 - `src/Flight/Modes/DangerZoneRibbons.cs`, a mission's ribbon set off the chapter gamez with its inactive list; one per session, lanes being occupancy-counted.
 - `src/Flight/Modes/SpawnPoints.cs`, flight spawn from the mission's own zrdr: ia.json `spawn_points`, a multiplayer `net.zrd` table by block, or objectives.json PLAYER_INIT as fallback.
 - `src/Flight/Modes/StuntMission.cs`, Stunt Flying state: ia.json `dzones` → a danger-zone run with completion, clock and splits, one per pilot.
+- `src/Flight/Modes/StartCount.cs`, a run's start count, engine-free: the figures and their beats, GO, and the kinematic walk that ends on the spawn pose at GO.
 - `src/Flight/Modes/StuntSummary.cs`, one finished stunt run against its stored best, and its split table as flat text.
-- `src/Flight/Modes/StuntRunHud.cs`, the stunt run's readouts: clock and zones cleared, intro banner, cleared flash, completion or race placing; one per player.
+- `src/Flight/Modes/StuntRunHud.cs`, the stunt run's readouts: clock and zones cleared, a race's live leaderboard line, intro banner, cleared flash, completion; one per player.
 - `src/Flight/Modes/StuntCapture.cs`, the Danger Zone camera: one latched photograph per marker per run, written beside the saves with its sting.
 - `src/Flight/Modes/DangerZonePhotograph.cs`, the Danger Zone camera's own eye: the decoded pose ahead of the aircraft looking back, on a viewport sharing the pane's world.
-- `src/Flight/Modes/StuntRace.cs`, splitscreen stunt race bookkeeping: one `Racer` per player, finish placings, standings, rematch reset.
+- `src/Flight/Modes/StuntRace.cs`, the time-attack race's engine-free bookkeeping: window, final run, each pilot's best and furthest run, best-run standings.
 - `src/Flight/Modes/ScoreStore.cs`, stunt best-time persistence: `user://stunt_scores.json` keyed chapter/mission/plane, faster runs only; a scripted run's store is a throwaway.
 - `src/Flight/Modes/MatchScores.cs`, what each network match scoring event is worth: `player.zrd`'s nine `score_*` keys, each with the executable's fallback.
 - `src/Flight/Modes/VersusMatch.cs`, Dogfight deathmatch bookkeeping: one signed score plus kills and deaths per player, team totals in a team match, the host-fed clock, threshold and time-out completion, standings.
@@ -360,6 +362,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Boards/ListWindow.cs`, a scrolled list as a pointer sees it: the window's box, the thumb on its track, and where a wheel step or a thumb drag puts the window.
 - `src/UI/Boards/SliderTrack.cs`, a slider's track as a pointer sees it: the slot, the thumb on it, and the clamped value a press, a drag or a sideways step lands on.
 - `src/UI/Boards/BoardFit.cs`, how the original's fixed 800x600 dialog space lands on any window: one uniform scale, the board centred, the rest letterboxed.
+- `src/UI/Boards/AuthoredPointer.cs`, a keyboard seat's mouse mapped back into a board's authored 800x600 pixels, the Original race and pause boards' pointer.
 - `src/UI/Boards/ComposedBoard.cs`, what a composed screen is made of: a backdrop that may be a movie, fills, pictures, strokes, lines, plaques and flowed lists in draw order.
 - `src/UI/Boards/BoardMarquee.cs`, how far a one-line caption too wide for its box has scrolled: rest, scroll, rest, return, and the pin a deterministic run holds it at.
 - `src/UI/Boards/ComposedBoardView.cs`, the Godot half of the boards: a composed board drawn through `BoardFit` at nearest filtering, the art and movie cache, the hint band.
@@ -406,7 +409,8 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Screens/StuntScoreboard.cs`, end-of-run results overlay: a per-pane panel of per-zone splits, total, the persisted best time, and the run's photo strip.
 - `src/UI/Screens/StuntShotStrip.cs`, the run's Danger Zone photographs as a selectable grid in marker order, shared by the scoreboard and the wrap-up board.
 - `src/UI/Screens/StuntSplits.cs`, the stunt run's split table, shared by the scoreboard and the wrap-up board: per-zone rows, the total, and the best comparison.
-- `src/UI/Screens/StuntRaceBoard.cs`, the race's shared ranked results overlay, on its own full-window CanvasLayer above the splitscreen panes.
+- `src/UI/Screens/StuntRaceBoard.cs`, the race's shared Built-in results overlay, ranked by best run with each pilot's best-run splits, over the whole window.
+- `src/UI/Screens/RaceRows.cs`, a stunt race's standings as board rows in one set of column words, which every race board and scores table lays out.
 - `src/UI/Screens/VersusBoard.cs`, the Dogfight results overlay, one whole-window CanvasLayer above the splitscreen panes.
 - `src/UI/Screens/IaWrapupBoard.cs`, Instant Action's wrap-up board: outcome headline and the per-counter score rows, summed across every seat, with a stunt run's splits and photographs.
 - `src/UI/Screens/PauseBoard.cs`, the shared pause board and its Resume · Photo · Preferences · Restart · Exit menu, one whole-window CanvasLayer.
@@ -457,6 +461,9 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Overlays/TileGridOverlay.cs`, the map-edge tile-grid overlay (`--debug-tilegrid`): every ground tile tinted by repetition band, so one band is one block.
 - `src/UI/Overlays/NodeLabels.cs`, floating `cs_name` labels over scene nodes (`--debug-names`, no key): meshes or all, anchored on mesh centres and de-cluttered.
 - `src/UI/Overlays/MarkerOverlay.cs`, the `--viewer` firepoint, pylon and target overlay (K): coloured gizmos with de-cluttered labels.
+- `src/UI/Overlays/ScoresOverlay.cs`, one pane's held Display Scores: the original's HUD text or a chrome table, while the pane's seat holds the action.
+- `src/UI/Overlays/OriginalScoresText.cs`, the original's in-flight scores as monospaced lines in its decoded columns, and a race in the same grid.
+- `src/UI/Overlays/ScoresTable.cs`, the Built-in standings of a held Display Scores, and the source both looks read a race or a Dogfight from.
 - `src/UI/Overlays/PhotoModeHud.cs`, photo mode's fading hint line and its Escape or pad-B way out; it raises an event and decides nothing.
 - `src/UI/Overlays/PerfHud.cs`, the frame-cost readout (F14): fps, current frame cost and worst recent frame, once for the window, drawn above the launchscreen too.
 - `src/UI/Overlays/NetReadout.cs`, the `--debug-net` corner readout: a network match's desync counters, the line the launcher logs once a second, built only under the flag.
@@ -531,6 +538,9 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/Original/OriginalInstantActionScreen.cs`, the Instant Action screen and its Weapon Loadout as one standalone module: the contents list, dropdowns, enemy pages, the Build door, and the decoded ammo chrome over one aeroplane's fit.
 - `src/UI/Menu/Original/OriginalWrapupScreen.cs`, the Instant Action wrap-up page as one standalone module: one ended mission's frozen numbers on the notepad, prints that open full size, CONTINUE back to the screen.
 - `src/UI/Menu/Original/OriginalPauseBoard.cs`, the Original presentation's pause screen: the mission's own `escape.zrd` sheet over the held world, on the same seam.
+- `src/UI/Menu/Original/OriginalRaceTable.cs`, a stunt race's standings drawn on the lobby's Game Scores page at any page corner, the piece every Original race board composes.
+- `src/UI/Menu/Original/OriginalRaceResults.cs`, the Original end-of-race screen, engine-free: the lobby on Game Scores with the standings, zone key, splits and three plaques.
+- `src/UI/Menu/Original/OriginalRaceBoard.cs`, the Original presentation's end-of-race board over the panes: wakes on the race's end, halts, retires on a new window.
 - `src/UI/Menu/Original/OriginalHangarScreen.cs`, the hangar as one standalone module: the name screen, the tabbed hub, the totals page, the inventory.
 - `src/UI/Menu/Original/OriginalCampaignScreen.cs`, the campaign as one standalone module: the ten decoded screens over the shared board component.
 - `src/UI/Menu/Original/OriginalConnectionScreen.cs`, the Multiplayer Connection page and the LAN games list as one standalone module over the network door: the ways, the search, a join followed on a messagebox.
@@ -715,6 +725,7 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 - `src/Session/Roster/SpawnPicker.cs`, each player's flight spawn: the shared spawn-list index and the per-player point; also the plain `IFlightStarts`.
 - `src/Session/Roster/IFlightStarts.cs`, the spawn-placement seam: one call answering for the whole field, and the `FlightStart` pair every rig is placed from.
 - `src/Session/Roster/StartGrid.cs`, the abreast starting grid: every pilot fanned about one anchor spawn, the whole field lifted as one to clear terrain.
+- `src/Session/Roster/SharedSpawnStarts.cs`, a time-attack race's start: every pilot on player 1's one spawn point and start state.
 - `src/Session/Roster/SpectateHandoff.cs`, the shared pane handoff for a downed pilot whose teammates fly on: the wreck pinned, a spectator camera in the freed pane.
 - `src/Session/Roster/AirframeSwap.cs`, the three `CALLBACK` codes that hand the player a different airframe in mid mission, and the def and node each names.
 - `src/Session/Roster/GeneratorCycle.cs`, the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel, the credit.
@@ -739,6 +750,7 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 - `src/Session/World/RearmRuntime.cs`, the multiplayer rearm bases in a Dogfight: each machine's own seats restored in full on entering a base that serves them.
 - `src/Session/World/NetCutsceneLink.cs`, the cutscene skip over the wire: a guest's skip asks the host, and the host's skip ends the named episode on every guest.
 - `src/Session/World/NetChatLink.cs`, the in-flight chat over the wire and its keys: an all-chat to every machine, a team line to the typist's lobby team alone.
+- `src/Session/World/NetRaceLink.cs`, a stunt race over the wire: each machine reports its own runs, the host keeps the window, board and ending, and a guest's race replicates them.
 - `src/Session/World/ZeppelinRuntime.Cannons.cs`, the broadside half of that partial: the cannon wiring, the target and arc gate, the anims and the rounds fired.
 - `src/Session/World/TurretEmplacementRuntime.cs`, the world AA emplacements: placed against the built world, in the shared aim pool, stepped after the airships.
 
@@ -911,6 +923,7 @@ original's own message set, with ids and guarantees, is in [`org/multiplayer-mes
 - `src/Net/NetWorldMessages.cs`, the host-owned world's messages: an AI's pose, fire and hit claim, a generator launch, a zeppelin's and a surface vehicle's path sample, and the world event.
 - `src/Net/NetCoopMessages.cs`, the co-op boards' lobby messages: the host's flow one guest follows (screen, mission, round, Ready mask, hangar, result), the host's campaign films, its hangar with each plane's holder, and a guest's plane pick and Ready under a round.
 - `src/Net/NetDogfightMessages.cs`, the Multiplayer Lobby's messages: the host's options under a round, the player list, one chat line, the team action and team list, and Capture the Flag's ask and flag table.
+- `src/Net/NetRaceMessages.cs`, a network stunt race's messages: an owner's run report to the host, the host's race clock, and one racer's leaderboard line with its splits.
 - `src/Net/NetTeams.cs`, the team core every team mode shares: a host's free-form named teams and the team launch check.
 - `src/Net/NetPositionalMessages.cs`, the positional start: a landing row the host started and for which seat, the ladder holder, and a guest's held auto-land button.
 - `src/Net/NetMessageWriter.cs`, the writer and reader cursors every message is packed and unpacked through: little-endian primitives, quantised unit fields, fixed-width text.

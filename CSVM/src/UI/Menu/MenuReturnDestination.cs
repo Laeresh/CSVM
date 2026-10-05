@@ -72,6 +72,6 @@ public sealed record CoopGuestReturn(CSVM.Session.Campaign.MissionAttempt? Attem
 
 /// <summary>Back into the Multiplayer Lobby a Dogfight was launched from, on its Game Scores page. It
 /// carries the match's final lines, best first, because the session that counted them is freed
-/// before the page draws. A lobby whose link has ended lands on the Connection page instead.
-/// </summary>
-public sealed record LobbyReturn(IReadOnlyList<DogfightScore> Scores) : MenuReturnDestination;
+/// before the page draws. A stunt race carries its table in <paramref name="Race"/>. A lobby whose
+/// link has ended lands on the Connection page instead.</summary>
+public sealed record LobbyReturn(IReadOnlyList<DogfightScore> Scores, IReadOnlyList<RaceTableRow>? Race = null) : MenuReturnDestination;

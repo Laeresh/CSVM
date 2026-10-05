@@ -198,15 +198,14 @@ public sealed class ZeppelinVersusTests
     public void AMenuLaunchOfZeppelinVsZeppelinFliesMp3WithItsZeppelins()
     {
         var cli = SessionSpec.Parse(new[] { "--vs" });
-        var spec = SessionSpec.FromMenu(cli, "C1", new[] { "player_bhawk" }, MenuMode.Versus, zeppelinVsZeppelin: true);
-        Assert.True(spec.ZeppelinVsZeppelin);
+        var spec = SessionSpec.FromMenu(cli, "C1", new[] { "player_bhawk" }, MenuMode.Versus, missionType: DogfightMissionType.ZeppelinVsZeppelin);
+        Assert.Equal(DogfightMissionType.ZeppelinVsZeppelin, spec.MissionType);
         Assert.Equal(SessionSpec.ZvzMission, spec.Mission);
 
         // ABLE-TO-FAIL CONTROL: Capture the Flag beside it wins, and the command line needs --vs.
-        var ctf = SessionSpec.FromMenu(cli, "C1", new[] { "player_bhawk" }, MenuMode.Versus, captureTheFlag: true, zeppelinVsZeppelin: true);
-        Assert.False(ctf.ZeppelinVsZeppelin);
-        Assert.Equal(SessionSpec.CtfMission, ctf.Mission);
-        Assert.False(SessionSpec.Parse(new[] { "--zvz" }).ZeppelinVsZeppelin);
-        Assert.True(SessionSpec.Parse(new[] { "--vs", "--zvz" }).ZeppelinVsZeppelin);
+        var ctf = SessionSpec.Parse(new[] { "--vs", "--zvz", "--ctf" });
+        Assert.Equal(DogfightMissionType.CaptureTheFlag, ctf.MissionType);
+        Assert.Equal(DogfightMissionType.Deathmatch, SessionSpec.Parse(new[] { "--zvz" }).MissionType);
+        Assert.Equal(DogfightMissionType.ZeppelinVsZeppelin, SessionSpec.Parse(new[] { "--vs", "--zvz" }).MissionType);
     }
 }

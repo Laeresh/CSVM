@@ -494,6 +494,40 @@ against `BL-389` rather than against the wash routing.
   *Variations:* `--presentation=original` for (c). *Blocks:* nothing tracks the outcome; a fail
   mints a new `BL` item.
 
+### C1 · the stunt run's time-attack rules, one pilot then two, sound on
+
+```powershell
+./RunGame.ps1
+```
+
+- `PT-177` `[Own]` **A solo stunt run starts behind the on-rails count, and the respawn control
+  returns to the last zone on a tap and restarts the run on a hold.** Menu path: Instant Action →
+  C1 → Stunt Flying, one pilot. The rules are proved by the `stunt-respawn-tap-hold` and
+  `stunt-start-count` suites; no human has flown them. *Look for:*
+  - (a) the first start and every hold-restart roll in on rails behind 3, 2, 1, GO with a beep per
+    figure and a higher GO tone, the clock at 0:00.0 until GO, held stick and throttle acting only
+    after GO;
+  - (b) a tap of `Backspace` / pad Y after clearing a zone puts the aircraft on that zone's route,
+    heading the way it was flown, clock and zones kept; a return inside a narrow gate survives
+    arriving there;
+  - (c) the 0.25 s hold is long enough not to throw a run away by accident;
+  - (d) the walk into a start line backed by structure looks acceptable.
+  *Blocks:* nothing tracks the outcome; a fail mints a new `BL` item.
+- `PT-178` `[Own]` **A two-seat split screen stunt race reads as a time attack.** Menu path:
+  Instant Action → C1 → Stunt Flying with a second seat joined, Race Time 3 minutes, then the same
+  with `--presentation=original` and with Enhanced graphics. *Look for:*
+  - (a) both panes roll in on READY, 3, 2, 1, GO together; each pilot's hold-restart runs its own
+    3, 2, 1 while the other flies on;
+  - (b) the leaderboard line under the run clock reads right, and FINAL RUN after time up lets a
+    run in progress finish while a restart is refused;
+  - (c) the other aircraft fades to a ghost inside 40 m in both looks (Enhanced keeps more of it),
+    never collides, carries no weapons and is never a target; no lives are spent;
+  - (d) holding `Tab` / pad Back shows the race table in that pane alone, the status lines stepping
+    aside; the end board ranks by best run with the splits, and Back returns to Instant Action;
+  - (e) P1's RUN COMPLETE banner and a "zone CLEARED" flash overlap in a half-height pane: judge
+    whether that needs moving.
+  *Blocks:* nothing tracks the outcome; a fail mints a new `BL` item.
+
 ### C1 · Instant Action, Dogfighting an Ace, sound on
 
 ```powershell

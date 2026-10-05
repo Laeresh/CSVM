@@ -128,6 +128,10 @@ public sealed class InstantActionFeature : IMenuFeature
 
     private static readonly string[] SkillRows = { "novice", "veteran", "ace" };
 
+    // The race window lengths the time row offers, in minutes. INVENTED with the race itself, which
+    // the original does not have.
+    private static readonly int[] RaceWindowRows = { 3, 5, 10, 15 };
+
     private readonly Func<string, InstantActionDef> _loadBase;
     private readonly InstantActionWaveSetup[] _waves = new InstantActionWaveSetup[WaveSlots];
 
@@ -158,6 +162,9 @@ public sealed class InstantActionFeature : IMenuFeature
     /// <summary>The presets the Table of Contents offers, in its order.</summary>
     public static IReadOnlyList<InstantActionPresets.Preset> Presets => InstantActionPresets.All;
 
+    /// <summary>The race window lengths in minutes, in the time row's order.</summary>
+    public static IReadOnlyList<int> RaceWindows => RaceWindowRows;
+
     /// <summary>The picked environment's row.</summary>
     public int EnvironmentIndex { get; private set; }
 
@@ -180,6 +187,13 @@ public sealed class InstantActionFeature : IMenuFeature
 
     /// <summary>The lives stepper: 0 is unlimited, 1 the default one-life run.</summary>
     public int Lives { get; private set; }
+
+    /// <summary>The split screen stunt race's window in minutes, one of <see cref="RaceWindows"/>.
+    /// The built def carries it on every launch; only a stunt run with more than one seat reads it.</summary>
+    public int RaceWindowMinutes { get; private set; }
+
+    /// <summary>The picked race window's row within <see cref="RaceWindows"/>.</summary>
+    public int RaceWindowIndex => Array.IndexOf(RaceWindowRows, RaceWindowMinutes);
 
     /// <summary>The four waves as configured.</summary>
     public IReadOnlyList<InstantActionWaveSetup> Waves => _waves;
@@ -273,6 +287,10 @@ public sealed class InstantActionFeature : IMenuFeature
     public static string LivesLabel(int lives) =>
         lives <= 0 ? "Unlimited" : lives.ToString(CultureInfo.InvariantCulture);
 
+    /// <summary>A race window as a screen writes it, the count with its unit.</summary>
+    public static string RaceWindowLabel(int minutes) =>
+        minutes.ToString(CultureInfo.InvariantCulture) + " minutes";
+
     /// <summary>One wave slot as the <see cref="InstantActionWave"/> the def stores: the empty
     /// wave at 0 enemies whatever the cursors, so an unconfigured slot matches an omitted
     /// <c>groupN</c> byte for byte; else the militia's aircraft at the skill, with a plain label
@@ -315,6 +333,14 @@ public sealed class InstantActionFeature : IMenuFeature
 
     /// <summary>Steps the lives, clamped to 0 (unlimited) and <see cref="MaxLives"/>.</summary>
     public void StepLives(int direction) => Lives = Math.Clamp(Lives + direction, 0, MaxLives);
+
+    /// <summary>Picks a race window row within <see cref="RaceWindows"/>.</summary>
+    public void SelectRaceWindow(int index) =>
+        RaceWindowMinutes = RaceWindowRows[Index(index, RaceWindowRows.Length, nameof(index))];
+
+    /// <summary>Whether the setup offers the race window: stunt flying with more than one seat
+    /// joined, the one setup that launches a race.</summary>
+    public bool OffersRaceWindow(int joinedSeats) => MissionType.Key == StuntKey && joinedSeats > 1;
 
     /// <summary>One wave's aircraft roster, its militia's.</summary>
     public IReadOnlyList<string> WaveAircraft(int wave) => MilitiaRows[_waves[Slot(wave)].MilitiaIndex].Aircraft;
@@ -408,10 +434,11 @@ public sealed class InstantActionFeature : IMenuFeature
         PlayerPlaneIndex = Index(index, AirframeRows.Length, nameof(index));
     }
 
-    /// <summary>Writes one Table of Contents preset over the fields: environment, mission type,
-    /// player aircraft, wingman count (and aircraft where there are wingmen), and all four waves.
-    /// Deliberately partial: the lives are invented and have no preset value, and the base def is
-    /// left to <see cref="ConfirmEnvironment"/>, so what flies is exactly what the fields say.</summary>
+    /// <summary>Writes one Table of Contents preset over the fields. It covers the environment,
+    /// the mission type, the player aircraft, the wingman count (and aircraft where there are
+    /// wingmen), and all four waves. The lives and the race window are invented and no preset carries them, so a preset
+    /// leaves both. The base def is left to <see cref="ConfirmEnvironment"/>, so what flies is
+    /// exactly what the fields say.</summary>
     public void ApplyPreset(int index)
     {
         var applied = InstantActionPresets.Resolve(index, WaveSlots);
@@ -478,7 +505,8 @@ public sealed class InstantActionFeature : IMenuFeature
             NumWingmen,
             WingmanPlane.Name,
             BuildWaves(),
-            Lives);
+            Lives,
+            RaceWindowMinutes);
 
     /// <summary>The typed exit for the confirmed seats, in seat order. It carries the environment's
     /// chapter, the seats, the mode, the built def and <see cref="LaunchWingmanFit"/>. Throws when the gate is closed or a
@@ -503,15 +531,17 @@ public sealed class InstantActionFeature : IMenuFeature
             WingmanLoadout: LaunchWingmanFit);
     }
 
-    /// <summary>Puts every field back to the screen's opening state: the first environment, the
-    /// ace duel, one life, four empty waves with their cursors on the first rows, no wingmen on
-    /// the first airframe with the stock fit, the first airframe for the player, no preset and no
-    /// base def. The option sets are not state and stay.</summary>
+    /// <summary>Puts every field back to the screen's opening state. That is the first
+    /// environment, the ace duel, one life and the five-minute race window. The four waves are
+    /// empty with their cursors on the first rows, and there are no wingmen, on the first airframe
+    /// with the stock fit. The player takes the first airframe, with no preset and no base def.
+    /// The option sets are not state and stay.</summary>
     public void Discard()
     {
         EnvironmentIndex = 0;
         MissionTypeIndex = 0;
         Lives = 1;
+        RaceWindowMinutes = InstantActionDef.DefaultRaceWindowMinutes;
         NumWingmen = 0;
         WingmanPlaneIndex = 0;
         WingmanFit = new LoadoutChoice();

@@ -235,11 +235,11 @@ public class LoadScreensTests
         Assert.Equal(
             new[] { 'd', 't', 'c', 'z', 'd', 'd' },
             new[] { 1, 2, 3, 4, 0, 5 }.Select(LoadScreens.MultiplayerLetter));
-        Assert.Equal("loading_m3d", LoadScreens.MultiplayerKey("C1C", false, false, false));
-        Assert.Equal("loading_m6t", LoadScreens.MultiplayerKey("c3", false, false, true));
-        Assert.Equal("loading_m4c", LoadScreens.MultiplayerKey("C2", true, false, true));
-        Assert.Equal("loading_m7z", LoadScreens.MultiplayerKey("C4", false, true, true));
-        Assert.Null(LoadScreens.MultiplayerKey("C2B", false, false, false));
+        Assert.Equal("loading_m3d", LoadScreens.MultiplayerKey("C1C", Spec.DogfightMissionType.Deathmatch, false));
+        Assert.Equal("loading_m6t", LoadScreens.MultiplayerKey("c3", Spec.DogfightMissionType.Deathmatch, true));
+        Assert.Equal("loading_m4c", LoadScreens.MultiplayerKey("C2", Spec.DogfightMissionType.CaptureTheFlag, true));
+        Assert.Equal("loading_m7z", LoadScreens.MultiplayerKey("C4", Spec.DogfightMissionType.ZeppelinVsZeppelin, true));
+        Assert.Null(LoadScreens.MultiplayerKey("C2B", Spec.DogfightMissionType.Deathmatch, false));
     }
 
     /// <summary>Every dialog a lobby launch can name is in <c>Loading.zrd</c>, so no Dogfight falls
@@ -252,17 +252,17 @@ public class LoadScreensTests
         for (int environment = 0; environment < UI.Menu.DogfightLobby.EnvironmentCount; environment++)
         {
             string chapter = UI.Menu.DogfightLobby.ChapterOf(environment);
-            foreach (var (ctf, zvz, teamed) in new[]
+            foreach (var (type, teamed) in new[]
             {
-                (false, false, false), (false, false, true), (true, false, true), (false, true, true),
+                (Spec.DogfightMissionType.Deathmatch, false), (Spec.DogfightMissionType.Deathmatch, true), (Spec.DogfightMissionType.CaptureTheFlag, true), (Spec.DogfightMissionType.ZeppelinVsZeppelin, true),
             })
             {
-                if (ctf && !UI.Menu.DogfightLobby.Offers(UI.Menu.DogfightMissionType.CaptureTheFlag, environment))
+                if (!UI.Menu.DogfightLobby.Offers(type, environment))
                 {
                     continue;
                 }
 
-                var board = Briefing(LoadScreens.MultiplayerKey(chapter, ctf, zvz, teamed)!);
+                var board = Briefing(LoadScreens.MultiplayerKey(chapter, type, teamed)!);
                 Assert.Equal("loadframempt", board.Pictures[0].Art.Name);
                 Assert.True(board.Lines.Count >= 8, $"{chapter} writes {board.Lines.Count} texts");
                 Assert.All(board.Lines, l => Assert.DoesNotContain("MSG_", l.Text));

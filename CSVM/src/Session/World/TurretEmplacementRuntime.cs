@@ -91,6 +91,24 @@ public sealed partial class TurretEmplacementRuntime : Node
         return woken;
     }
 
+    /// <summary>Puts every emplacement to sleep for the whole session, with one breadcrumb naming
+    /// <paramref name="why"/> and how many were awake. A race's own rule rather than any mission's:
+    /// its pilots carry no weapons, so a live gun on the course is fire nobody can answer.</summary>
+    public int SleepAll(string why)
+    {
+        int slept = 0;
+        foreach (var t in _turrets)
+        {
+            if (t.Activated)
+            {
+                t.SetActivated(false);
+                slept++;
+            }
+        }
+        Log.Info("flight", $"turrets: all {_turrets.Length} emplacement(s) dormant for {why} ({slept} were awake)");
+        return slept;
+    }
+
     /// <summary>Writes <c>ACTIVATED</c> on every emplacement standing on
     /// <paramref name="root"/> or anywhere under it, and reports how many changed state. The
     /// engine's own primitive: a recursive walk of the node's children that looks each node up in

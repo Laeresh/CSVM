@@ -161,6 +161,12 @@ internal sealed class FlightWorldBindings
     /// pair itself: the zone apply rewrites it mid-mission, and the weather rig is built after
     /// these bindings are.</summary>
     public Func<int, Vector2>? FogRange { get; init; }
+
+    /// <summary>The session's race flag: true wherever the session runs a race, whatever carries
+    /// it. Both assemblers stamp it on every aircraft (<c>FlightController.Racing</c>), and the human
+    /// one also builds the pilot unarmed, ghosted and labelled. False leaves every build as it was.
+    /// </summary>
+    public bool Racing { get; init; }
 }
 
 internal sealed class HumanRosterBindings
@@ -201,7 +207,24 @@ internal sealed class HumanRosterBindings
     public List<SpawnPoint>? SpawnList { get; init; }
     public int SpawnBase { get; init; }
     public StuntMission? StuntZones { get; init; }
+
+    /// <summary>The count a stunt run reruns behind, solo or in a race, or null for none.
+    /// ⚠ Null under <c>--det</c>, so a scripted run stays byte-identical.</summary>
+    public IReadOnlyList<StartCountPhase>? RerunCount { get; init; }
+
+    /// <summary>The count a stunt run's first start runs: the rerun count solo, a race's
+    /// opening count in a race. Begun only on a seat that carries <see cref="RerunCount"/>.</summary>
+    public IReadOnlyList<StartCountPhase>? FirstStartCount { get; init; }
+
+    /// <summary>The rof tree's menu sound folder, whose shipped UI sounds a start count beeps
+    /// with. Null leaves the count silent.</summary>
+    public SoundArchive? MenuSounds { get; init; }
     public StuntRace? Race { get; init; }
+
+    /// <summary>A network race's feed off a local seat's run, in place of
+    /// <see cref="StuntRace.Follow"/>. The host follows the run, and a guest reports it to the host.
+    /// Null in split screen.</summary>
+    public Action<int, StuntMission>? RaceFeed { get; init; }
     public VersusMatch? VersusMatch { get; init; }
     public IReadOnlyList<PlayerRig> Rigs { get; init; } = Array.Empty<PlayerRig>();
     public string? InstantActionPlayerPlaneNode { get; init; }
