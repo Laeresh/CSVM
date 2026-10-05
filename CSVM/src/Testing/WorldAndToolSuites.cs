@@ -321,7 +321,9 @@ internal static class WorldAndToolSuites
             return;
         }
 
-        double before = Performance.GetMonitor(Performance.Monitor.ObjectCount);
+        // A collection during the build lets earlier suites' finalizers free their objects, so both
+        // readings are taken once the count has stopped moving.
+        long? before = FinalizerGate.SettledObjectCount();
         bool threw = false;
         try
         {
@@ -333,9 +335,13 @@ internal static class WorldAndToolSuites
         {
             threw = true;
         }
-        double after = Performance.GetMonitor(Performance.Monitor.ObjectCount);
+        long? after = FinalizerGate.SettledObjectCount();
         ctx.Check(threw, $"the staged failure at node {throwAt} under {parent.Name} reached the caller");
-        ctx.Same((long)before, (long)after, $"objects alive across the failed build of {parent.Name}");
+        ctx.Check(before != null && after != null, $"the object count settled on both sides of the build");
+        if (before is long b && after is long a)
+        {
+            ctx.Same(b, a, $"objects alive across the failed build of {parent.Name}");
+        }
     }
 
     // The distinct Shader resources every ShaderMaterial in the subtree points at, by reference:
