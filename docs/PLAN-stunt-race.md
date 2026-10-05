@@ -234,7 +234,7 @@ aperture rests on the ribbon being the AI's flyable line; if a return crashes on
 controls, the fix is the return's placement, not a grace window that would let a pilot fly through
 structure. The crash prompt still reads "Press %1 to respawn" and names no hold.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the finished plan tree (00295edf6, every item and the follow-ups merged, main merged in): build PASS; units 6272 passed, 3 skipped of 6275; engine 527 passed, 2 skipped, engine errors clean; goldens 24/24 hash-identical. This item's own suites and units are among them; the at-the-controls checks are PT-177 and PT-178 in `playtest.md` and the two-machine sitting.
 
 ## A2 ☑ The on-rails restart count, and the run clock starting at GO; one bests key
 
@@ -357,7 +357,7 @@ walk ends on the spawn pose whatever the speed is; (2) "the clock never stops" i
 `StuntMission.cs` on purpose, keep it and add the start-at-GO rule beside it; (3) do not simulate
 the count and do not freeze the sim; (4) the instrument is a hand-flown sitting.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the finished plan tree (00295edf6, every item and the follow-ups merged, main merged in): build PASS; units 6272 passed, 3 skipped of 6275; engine 527 passed, 2 skipped, engine errors clean; goldens 24/24 hash-identical. This item's own suites and units are among them; the at-the-controls checks are PT-177 and PT-178 in `playtest.md` and the two-machine sitting.
 
 # Wave B, the split screen race
 
@@ -496,7 +496,7 @@ ends on the zone sets, so `InstantActionRuntime.ZoneSetsFlown` decides a solo ru
 seat in Instant Action may restart in flight, a free repair the solo run refuses; with weapons off
 (B12) it restores nothing a race uses.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the finished plan tree (00295edf6, every item and the follow-ups merged, main merged in): build PASS; units 6272 passed, 3 skipped of 6275; engine 527 passed, 2 skipped, engine errors clean; goldens 24/24 hash-identical. This item's own suites and units are among them; the at-the-controls checks are PT-177 and PT-178 in `playtest.md` and the two-machine sitting.
 
 ## B12 ☑ Race presence: no collisions, weapons off, ghosts when near
 
@@ -600,7 +600,7 @@ plane type; whether a local seat reads `P2` instead is #116's separate decision.
 rule into the contact resolver: the body off the layer is what keeps every query, the AI probe and
 the AGL ray included, from finding a ghost.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the finished plan tree (00295edf6, every item and the follow-ups merged, main merged in): build PASS; units 6272 passed, 3 skipped of 6275; engine 527 passed, 2 skipped, engine errors clean; goldens 24/24 hash-identical. This item's own suites and units are among them; the at-the-controls checks are PT-177 and PT-178 in `playtest.md` and the two-machine sitting.
 
 ## B13 ☑ The Instant Action time row for a multi-seat Stunt Flying run
 
@@ -664,7 +664,7 @@ shift by one. Do not write the box's Y: the unit fixture has one clear line, the
 two, and a written Y lands on an authored box in one of them (INSTR-77). The window rides the def
 on every Instant Action launch, solo included; only a multi-seat stunt run may read it.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the finished plan tree (00295edf6, every item and the follow-ups merged, main merged in): build PASS; units 6272 passed, 3 skipped of 6275; engine 527 passed, 2 skipped, engine errors clean; goldens 24/24 hash-identical. This item's own suites and units are among them; the at-the-controls checks are PT-177 and PT-178 in `playtest.md` and the two-machine sitting.
 
 ## B14 ☑ A held Display Scores key on Tab, drawn in the original's look
 
@@ -776,7 +776,7 @@ plain line. Kills and deaths under Original are the remake's columns, not a deco
 lines carry name and score alone. C21's network race reaches the overlay through the `StuntRace` it builds; its seats'
 callsigns come from `NetSeat.Callsign`.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the finished plan tree (00295edf6, every item and the follow-ups merged, main merged in): build PASS; units 6272 passed, 3 skipped of 6275; engine 527 passed, 2 skipped, engine errors clean; goldens 24/24 hash-identical. This item's own suites and units are among them; the at-the-controls checks are PT-177 and PT-178 in `playtest.md` and the two-machine sitting.
 
 ## B15 ☑ The race board's Back row, and an Original-looking race board
 
@@ -872,7 +872,7 @@ page) or seven pilots (the chat pane's splits) is cut off; C21's larger network 
 decoded scroll bar or a cap. The remake's own Game Scores tab left-aligns its figures where the
 script centres them; the race table follows the script.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the finished plan tree (00295edf6, every item and the follow-ups merged, main merged in): build PASS; units 6272 passed, 3 skipped of 6275; engine 527 passed, 2 skipped, engine errors clean; goldens 24/24 hash-identical. This item's own suites and units are among them; the at-the-controls checks are PT-177 and PT-178 in `playtest.md` and the two-machine sitting.
 
 ## B16 ☑ No lives in a race
 
@@ -956,7 +956,7 @@ waiver lives in the Instant Action director alone: a network race (C21) built ou
 the lobby's Limited Lives (`VersusDirector`) off for Stunt Race, as Decision 4's time-limit-only
 Mission Options imply, and nothing here enforces that.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the finished plan tree (00295edf6, every item and the follow-ups merged, main merged in): build PASS; units 6272 passed, 3 skipped of 6275; engine 527 passed, 2 skipped, engine errors clean; goldens 24/24 hash-identical. This item's own suites and units are among them; the at-the-controls checks are PT-177 and PT-178 in `playtest.md` and the two-machine sitting.
 
 # Wave C, the network race
 
@@ -1128,7 +1128,7 @@ lands only a completed `VersusMatch`, so a race exits to the launch's own destin
 command line's opposition flags (`--ai=`, `--zeppelins`, `--generators`) still reach a lobby race
 launched from a development command line.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the finished plan tree (00295edf6, every item and the follow-ups merged, main merged in): build PASS; units 6272 passed, 3 skipped of 6275; engine 527 passed, 2 skipped, engine errors clean; goldens 24/24 hash-identical. This item's own suites and units are among them; the at-the-controls checks are PT-177 and PT-178 in `playtest.md` and the two-machine sitting.
 
 ## C22 ☑ Owner-timed runs on the wire; the host's window, leaderboard and match end
 
@@ -1256,7 +1256,7 @@ stands still through a held start, so a round trip measured there reads short; t
 network mode, and only the race asks again. The suite rig drives `_PhysicsProcess` alone, so its
 `Step` frames each session's clock first; without it every clock reads 0 and no lateness is seen.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the finished plan tree (00295edf6, every item and the follow-ups merged, main merged in): build PASS; units 6272 passed, 3 skipped of 6275; engine 527 passed, 2 skipped, engine errors clean; goldens 24/24 hash-identical. This item's own suites and units are among them; the at-the-controls checks are PT-177 and PT-178 in `playtest.md` and the two-machine sitting.
 
 ## C23 ☑ Network race end: Restart and Lobby, guests waiting, pilots leaving
 
@@ -1403,4 +1403,4 @@ the lobby keeps its link, so the host learns of it only from the leave call; a d
 other path, and both meet in `TakeSeatLeft`. The host's lobby call is sent only from an ended race:
 a host leaving mid-race closes its door instead, which is what ends the guest's flight.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete `.\RunTests.ps1` on the finished plan tree (00295edf6, every item and the follow-ups merged, main merged in): build PASS; units 6272 passed, 3 skipped of 6275; engine 527 passed, 2 skipped, engine errors clean; goldens 24/24 hash-identical. This item's own suites and units are among them; the at-the-controls checks are PT-177 and PT-178 in `playtest.md` and the two-machine sitting.
