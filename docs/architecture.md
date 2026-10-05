@@ -628,7 +628,7 @@ determinism repo-wide; read `docs/verification.md` first.
 `src/Tooling/`.
 
 - `src/Testing/TestHarness.cs`, `--run-tests`: the suite registry, `TestContext`, the PASS/FAIL/SKIP table, `test-report.json` and the process exit code.
-- `src/Testing/FinalizerGate.cs`, `--debug-finalizers`: parks the finalizer thread for a suite and drains it at the suite's end, so a late wrapper finalizer errors beside the suite that dropped it.
+- `src/Testing/FinalizerGate.cs`, `--debug-finalizers`: parks the finalizer thread for a suite and drains it at the suite's end, so a late wrapper finalizer errors beside the suite that dropped it; also the settled global object count.
 - `src/Testing/SuiteShards.cs`, the `shard:<index>/<count>` term and the deterministic weighted division behind it, over `analysis/engine-suite-weights.json`.
 - `src/Testing/SuitePorts.cs`, where each socket-opening suite opens its socket: an offset into this process's `--net-port-base` block, so concurrent shards never share a port.
 - `src/Testing/ScreenKeyboardRecorder.cs`, a suite's stand-in for the on-screen keyboard: available, its URLs recorded, the detected state put back on dispose.

@@ -584,7 +584,7 @@ fly-through bay, walls 42 m and 47 m to either side, roof 28 m above, floor 16 m
 long and open at both ends; no landing is needed, the restore is the 25 m radius. The AI's
 avoid-crash probe (4.5 s along the velocity, about 500 m) reads a descent near the bay, or a line
 into the hall off its axis, as an obstacle and climbs out, so a run must arrive level and on the
-axis. A `--hold=` script outranks an AI pilot, so a bot under one never runs its pilot (INSTR-100).
+axis. A `--hold=` script outranks an AI pilot, so a bot under one never runs its pilot (INSTR-101).
 
 **Approach (landed).** New engine-free `Flight/Ai/AiRearmOrder.cs`, held as `AiPilot.RearmOrder`
 and given only to a bot this machine flies: `HumanFlightAdapter.cs:573-574`, beside the arming, with
@@ -639,7 +639,7 @@ units 6253 passed / 0 failed / 3 skipped, engine 10 passed; `-Filter 'ai-,net-,w
 
 **⚠ Traps.** A base the mission switched off offers nothing (`IA1` has both plain nodes off), so
 test on `MP1`. The rearm latch is one per seat and releases only outside every serving base. Never
-launch a bot session with `--hold=` (INSTR-100). A suite that places a bot with `RespawnAt` clears
+launch a bot session with `--hold=` (INSTR-101). A suite that places a bot with `RespawnAt` clears
 its run and refills it, so empty it again after the placement. Do not gate the run on fire instead
 of acquisition: a held quarry keeps the machine chasing it.
 
@@ -1158,7 +1158,7 @@ The watch-list the landed items left for this sortie:
 - **Lay-off assist (B11):** `AiModeMachine.UpdateLayOff` eases a bot off a human it targets who chases
   it and falls behind; a bot never lays off for a bot. Decision 10 does not cover it; judge whether it
   reads as fair or as bots going soft on people.
-- **`--hold=` (B14, INSTR-100):** a hold script outranks the AI pilot, so a scripted run with bots
+- **`--hold=` (B14, INSTR-101):** a hold script outranks the AI pilot, so a scripted run with bots
   and `--hold=` flies the bots on the script. Not a play issue; a probe trap.
 
 **Model recommendation.** `<TODO: not settled in the session>`
