@@ -199,7 +199,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☐ A2 The `--xr-sim` stand-in interface
 3. ☐ A3 Precision near the eye: render-only floating origin, double-precision fallback
 4. ☐ A4 Screen-space effects under multiview
-5. ☐ A5 Cockpit scale per plane
+5. ☑ A5 Cockpit scale per plane
 
 ### Wave B, the VR rig
 
@@ -354,24 +354,128 @@ eyes, and read the Godot multiview shader documentation for the depth/screen tex
 
 **⚠ Traps.** <TODO: none known yet.>
 
-## A5 ☐ Cockpit scale per plane
+## A5 ☑ Cockpit scale per plane
 
 **Goal.** For each of the 11 planes, a measured answer to whether `cockpit1` and the
 `cockpit_camera` eye point are human-scale at 1:1, giving starting values for `data/vr_cockpits.json`.
 
-**Evidence (confidence: lead-only).** Nothing documents the interior's scale. `docs/org/cameraViews.md`
-holds the per-plane `cockpit_camera` offsets and the 80° flat FOV the interior was authored for.
+**Evidence (confidence: the measurements are traced to the data; the proposal is
+direction-sound, magnitude TUNE).**
 
-**Approach.** Measure panel width, seat-to-panel distance and canopy dimensions per plane from the
-built interiors, compare with real 1930s fighter cockpits, and propose a world scale and eye offset
-for each. The author's judgement at the headset (E20) overrides the proposal.
+- **The world and the hulls are already metres.** World units are metres (`docs/org/flightModel.md`,
+  identified from `nom_gravity`'s 9.82 reference divisor), and the exterior `healthy` hulls built at
+  scale 1 measure as aircraft: 5.6-26.0 m span, 6.1-17.9 m long (Bloodhawk 11.6 × 10.3 m). So the
+  XR world scale has no reason to leave 1.0 on any plane.
+- **The interior is NOT in metres, and 1:1 is not on offer.** `cockpit1` is authored in its own
+  units (iu) with the eye at its origin looking down −Z, and `PlaneBuilder.InteriorScale` mounts it
+  at 0.04 m/iu, a port TUNE chosen for the flat view, where the cockpit pass makes framing
+  scale-invariant. At "1:1" the panel would sit 11 m from the eye. In VR the mount scale stops being
+  free: stereo and head motion read it as the cockpit's real size.
+- **No uniform scale maps the interior onto its own hull.** The scale that matches the interior's
+  own wings to the exterior span runs 0.030 (Bloodhawk) to 0.078 (Balmoral); the Hoplite's interior
+  has no wings. At 0.04 the Balmoral's interior wings read at half the hull's span.
+- **No uniform scale makes the interior human either; its depth and width are distorted in
+  opposite directions.** The eleven interiors share one instrument assembly (main dials 2.0 iu
+  across, centred 10.6-12.7 iu from the eye) inside tubs 22-39 iu wide. Each human reference
+  implies its own scale: the dials want 0.040 on every plane, the headroom 0.027-0.043, the panel
+  distance 0.058-0.093 (the panel is pulled in toward the eye) and the tub width 0.016-0.028 (the tub
+  is widened). The 80° flat view these were framed for explains both: a near panel fills the bottom
+  of the picture and a wide tub keeps the rails out of it.
+- **The median of the cues lands on the shipped mount.** Per plane the four cues spread 3-4×, while
+  their medians across planes stay within 0.033-0.041, and 0.040 is within 20% of every one. A
+  per-plane deviation smaller than the disagreement inside one plane is not a measurement, so the
+  proposal is 0.040 for all eleven, with a first alternative named where the median sits low.
+- **A flat head-and-shoulders plate sits just behind the eye** in 10 of 11 interiors (all but the
+  Warhawk), 0.16-1.8 iu aft, about 9 iu wide at the head and 20 iu at the shoulders, under
+  `structure` (`g366`, `canopy2`, …). At 0.04 it is 0.6-7 cm behind the eye, where a real head
+  extends about 0.18 m. Whether it is a headrest or the pilot's own silhouette, and whether it
+  faces the eye, is not settled here; B8 should check it when a VR head turns round.
+- **The eye sits on the sight line, and that pins the offset.** `PlaneBuilder` mounts the interior
+  at the −4.70° head-pitch tilt so the gunsight lies on the guns from the origin. Any lateral or
+  vertical eye offset puts parallax between the sight ring and the pipper; an offset along the
+  interior's own Z axis does not. The Kestrel's and Peacemaker's eyes sit 1.8-2 iu off their tub's
+  centre, which is authored and left alone for the same reason.
+- **`instruments.zrd` is not the panel's geometry.** It lists the seven gauge assemblies at
+  z −17.5 and x ±9; the built meshes put the main dials at z ≈ −10.6 and x ±5.0. The archived
+  cockpit-view plan's "0.04 puts the panel ~0.7 m ahead" came from the zrd; the meshes give 0.42-0.51 m.
 
-**Model recommendation.** <TODO: tier not settled in the session.>
+Measured interior (iu, eye at origin; metres at the shipped 0.04 in brackets). Dials: main dial
+backplate width. Eye→dials: eye to the altimeter/speedometer centres. Width: wall to wall 8 iu below
+the eye at the eye station. Rim: top of the side wall below the eye. Headroom: lowest overhead
+canopy member at z 0 or +6. Plate: the head-and-shoulders plate's distance aft of the eye.
 
-**Verify.** <TODO: the measurement method and the reference dimensions.>
+| Plane | `cockpit_camera` (m) | Dials | Eye→dials | Width | Rim below eye | Headroom | Floor below eye | Plate aft |
+|---|---|---|---|---|---|---|---|---|
+| Bloodhawk | (0, 0.75, −0.20) | 2.0 (80 mm) | 11.4 (0.46) | 28.6 (1.14) | 6.4 (0.26) | 5.9 (0.24) | 23.8 (0.95) | 0.80 (0.03) |
+| Devastator | (0, 0.75, −0.20) | 2.0 (80 mm) | 11.4 (0.46) | 28.7 (1.15) | 6.3 (0.25) | 5.9 (0.24) | 25.9 (1.04) | 0.80 (0.03) |
+| Fury | (0, 0.75, −0.20) | 2.0 (80 mm) | 10.8 (0.43) | 27.8 (1.11) | 3.8 (0.15) | 6.9 (0.28) | 25.4 (1.02) | 1.30 (0.05) |
+| Warhawk | (0, 2.31, 3.30) | 2.0 (80 mm) | 7.9 (0.32) | 29.8 (1.19) | 7.4 (0.30) | none | 36.4 (1.46) | none |
+| Hoplite | (0, 0.75, −0.20) | 2.0 (80 mm) | 11.5 (0.46) | 39.2 (1.57) | 5.3 (0.21) | 7.7 (0.31) | 19.6 (0.78) | 0.80 (0.03) |
+| Hellhound | (0, 0.75, −0.20) | 2.0 (80 mm) | 11.4 (0.46) | 30.5 (1.22) | 3.6 (0.14) | 8.9 (0.36) | 25.9 (1.04) | 0.80 (0.03) |
+| Balmoral | (0, 0.70, −0.34) | 2.0 (80 mm) | 11.4 (0.46) | 35.9 (1.44) | 6.9 (0.27) | 8.1 (0.32) | 33.8 (1.35) | 0.32 (0.01) |
+| Brigand | (0, 0.83, 0.72) | 2.0 (80 mm) | 11.4 (0.46) | 28.8 (1.15) | 6.7 (0.27) | 6.8 (0.27) | 26.2 (1.05) | 0.40 (0.02) |
+| Firebrand | (−0.08, 1.17, −0.91) | 2.0 (80 mm) | 11.1 (0.44) | 30.9 (1.24) | 5.2 (0.21) | 7.1 (0.28) | 24.5 (0.98) | 0.89 (0.04) |
+| Kestrel | (1.98, 0.75, −1.21) | 2.0 (80 mm) | 12.7 (0.51) | 21.7 (0.87) | 7.7 (0.31) | 5.6 (0.22) | 27.0 (1.08) | 0.16 (0.01) |
+| Peacemaker | (−1.80, 0.95, −0.44) | 2.0 (80 mm) | 10.6 (0.42) | 22.3 (0.89) | 5.7 (0.23) | open | 26.1 (1.04) | 1.80 (0.07) |
+
+Implied scale per cue (reference metres ÷ measured iu) and the proposal. "Hull" is the scale that
+matches the interior's own wings to the exterior span, given for comparison, not as a cue. The
+proposed interior scale is the `cockpit1` mount under VR; the XR world scale is 1.0 on every row.
+The eye offset is in the interior mount's own frame (+Z aft along the sight line).
+
+| Plane | Dials | Eye→dials | Width | Headroom | Median | Hull | Proposed interior scale | Eye offset (m) | Reasoning |
+|---|---|---|---|---|---|---|---|---|---|
+| Bloodhawk | 0.040 | 0.065 | 0.021 | 0.041 | 0.040 | 0.030 | 0.040 | (0, 0, 0) | Median on the mount. |
+| Devastator | 0.040 | 0.065 | 0.021 | 0.041 | 0.040 | 0.048 | 0.040 | (0, 0, 0) | Median on the mount. |
+| Fury | 0.040 | 0.068 | 0.022 | 0.035 | 0.037 | 0.040 | 0.040 | (0, 0, 0) | Within 8%. |
+| Warhawk | 0.040 | 0.093 | 0.020 | - | 0.040 | 0.052 | 0.040 | (0, 0, +0.06) | Dials at 0.32 m, under MIL-STD-1472F's 0.33 m floor; 6 cm aft gives 0.37 m and leaves 0.21 m to the seat back (6.8 iu). No plate in the way. |
+| Hoplite | 0.040 | 0.064 | 0.016 | 0.031 | 0.035 | - | 0.040 | (0, 0, 0) | Open tub 1.57 m wide; try 0.035 first if it reads big. |
+| Hellhound | 0.040 | 0.065 | 0.020 | 0.027 | 0.033 | 0.034 | 0.040 | (0, 0, 0) | Lowest median; try 0.035 first if it reads big. |
+| Balmoral | 0.040 | 0.065 | 0.017 | 0.030 | 0.035 | 0.078 | 0.040 | (0, 0, 0) | Tub 1.44 m wide; try 0.035 first. Its interior wings are half the hull's whatever the mount. |
+| Brigand | 0.040 | 0.065 | 0.021 | 0.035 | 0.038 | 0.042 | 0.040 | (0, 0, 0) | Within 7%. |
+| Firebrand | 0.040 | 0.066 | 0.020 | 0.034 | 0.037 | 0.040 | 0.040 | (0, 0, 0) | Within 8%. |
+| Kestrel | 0.040 | 0.058 | 0.028 | 0.043 | 0.041 | 0.039 | 0.040 | (0, 0, 0) | Narrowest tub, closest to human. |
+| Peacemaker | 0.040 | 0.070 | 0.027 | - | 0.040 | 0.033 | 0.040 | (0, 0, 0) | Open cockpit, median on the mount. |
+
+The eye-offset alternative E20 should try first on every plane but the Warhawk is a forward move
+(−Z) of 0.09-0.17 m: that clears a real head out of the plate but pulls the dials to the
+0.33 m minimum, which is why it is not the default. Raising the interior scale instead to push the
+panel out is the wrong lever: at the panel's own 0.065 the dials grow to 130 mm and the tub to 1.9 m.
+
+**Approach.** Read `extracted/planes/nodes.json` and `models.json` with GameZ's own rules (flat
+child indices, column basis or YXZ Euler, scale ignored, LOD range-min 0 only), accumulate each
+`cockpit1` subtree in its own frame with the bullet-hole quads and inactive nodes left out, slice
+the triangles through the eye (sections x=0, z=0, z=+6, y=−6), and read the dimensions off the
+sections and the dial meshes. Compare with these references:
+
+- Eye to instrument panel: 0.737 m nominal, 0.254-1.016 m range (FAA human factors design
+  guidance, [hfcc.dot.gov chapter 2.3](https://hfcc.dot.gov/publications/docs/GeneralGuidance/zz_FAA_GeneralGuidanceDoc_Chapter_02_Section_03.pdf));
+  at most 0.64 m (0.76 m with ejection seats), at least 0.33 m and preferably 0.51 m (MIL-STD-1472F,
+  [denix.osd.mil](https://www.denix.osd.mil/soh/denix-files/sites/21/2016/03/02_MIL-STD-1472F-Human-Engineering.pdf)).
+- Cockpit width 0.61 m (2 ft 0 in), length panel to seatback 0.99 m (3 ft 3 in), height seat to
+  canopy 1.04 m (3 ft 5 in): P-51D Mustang, [AOPA](https://www.aopa.org/news-and-media/all-news/2007/august/01/north-american-aviation-p-51d-mustang).
+  A 1940s fighter, the nearest era with a published cockpit box; the game's types are fictional, so
+  the question is only whether a seated adult fits.
+- Seated eye height about 0.80 m (ANSUR II male, [DTIC ADA611869](https://apps.dtic.mil/sti/tr/pdf/ADA611869.pdf)),
+  so headroom above the eye is about 1.04 − 0.80 = 0.24 m; eye to back of head about 0.18 m
+  (head length ≈ 0.19-0.20 m, same survey; not read off its table).
+- Instrument dial: the 3-1/8 in (79 mm) standard instrument case.
+
+**Model recommendation.** Measurement only; closed without code.
+
+**Verify.** The scratch instruments are `.scratch/A5_measure.py` (node walk, group bboxes),
+`A5_slices.py` (section plots, `A5_<plane>.png`) and `A5_table.py` (the tables above), run with the
+system Python against `Z:\CSVM\extracted\planes`. The Kestrel's headroom was read off its z=+6
+section by hand (the sloped canopy side tripped the automatic pick). Re-run: `python A5_table.py`
+from `.scratch\`. The proposal is checked by the author at the headset (E20), not by a suite.
 
 **⚠ Traps.** A measured number is a starting point; the decision is the author's at the headset
-(Decision 13).
+(Decision 13). ⚠ The per-plane scale belongs on the interior mount, not on `XRServer.world_scale`:
+the world and the hulls are metres, so a world scale other than 1.0 resizes the sky, the terrain
+and every other aircraft along with the cockpit. ⚠ Keep the eye offset on the interior's own Z
+axis; a lateral or vertical one breaks the gunsight's alignment with the guns.
+
+**Verified.** <pending orchestrator run>
 
 # Wave B, the VR rig
 
@@ -402,7 +506,10 @@ follow the XR camera; recenter snaps the seated eye back to `cockpit_camera`.
 
 **Evidence (confidence: lead-only).** Single player uses the main viewport's camera
 (`Flight/Camera/PlayerRig.cs:29-40`); the dome and deck are anchored per rig every frame by reading
-`Camera.Position` (`PlayerRig.cs:49-62`, the anchoring loop in `GameSession`).
+`Camera.Position` (`PlayerRig.cs:49-62`, the anchoring loop in `GameSession`). A5 measured the world and the hulls as
+metres and the interior as a separately scaled set piece, so the file's per-plane scale is best
+applied to the `cockpit1` mount (`PlaneBuilder.InteriorScale`, 0.04 today) with
+`XRServer.world_scale` left at 1.0, and the eye offset in the mount's own frame along its Z axis.
 
 **Approach.** An XR flavour of `PlayerRig` holding the `XROrigin3D`/`XRCamera3D`, the anchoring loop
 reading the XR camera, recenter as a new named action, and the data file read once per session.

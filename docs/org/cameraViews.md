@@ -261,19 +261,24 @@ half.
 
 ### Per-plane `cockpit_camera` offsets (local body frame)
 
-Decoded from the plane scene graphs (`extracted/…/planes/nodes.json`). The marker sits on the
-fuselage centerline, a bit above the local origin; the exact number is authored per plane. The
-current player fighter `player_pfighter` uses `(0, +0.75, −0.2)`, ~0.75 up, ~0.2 aft of the local
-origin. Selected values:
+Decoded from the plane scene graphs (`extracted/…/planes/nodes.json`), accumulated from below the
+plane root through `markers`. Most markers sit on the fuselage centerline a little above the local
+origin; the Kestrel and the Peacemaker seat the pilot off the centerline. The eleven player
+airframes:
 
-| Plane node | `cockpit_camera` translate (x, y, z) |
-|---|---|
-| `player_pfighter` (default fighter) | `(0, +0.75, −0.2)` |
-| (another) | `(0, +0.70, −0.34)` |
-| (another) | `(0, +0.83, +0.72)` |
-| (another) | `(1.98, +0.75, −1.21)` |
-| (another) | `(−1.8, +0.95, −0.44)` |
-| (another) | `(0, +2.31, +3.30)` |
+| Airframe | Plane node | `cockpit_camera` translate (x, y, z) |
+|---|---|---|
+| Bloodhawk | `player_bhawk` | `(0, +0.75, −0.20)` |
+| Devastator | `player_pfighter` | `(0, +0.75, −0.20)` |
+| Fury | `player_fury` | `(0, +0.75, −0.20)` |
+| Hoplite | `player_autogyro` | `(0, +0.75, −0.20)` |
+| Hellhound | `player_avenger` | `(0, +0.75, −0.20)` |
+| Balmoral | `player_balmoral` | `(0, +0.70, −0.34)` |
+| Brigand | `player_brigand` | `(0, +0.83, +0.72)` |
+| Firebrand | `player_fbrand` | `(−0.08, +1.17, −0.91)` |
+| Kestrel | `player_kestrel` | `(+1.98, +0.75, −1.21)` |
+| Peacemaker | `player_peacemaker` | `(−1.80, +0.95, −0.44)` |
+| Warhawk | `player_warhawk` | `(0, +2.31, +3.30)` |
 
 ### Axis convention (fixed from the default fighter's cockpit sub-nodes)
 
@@ -590,11 +595,20 @@ same footage without re-judging what it should look like would carry the old bas
 new number.
 
 **The interior is authored in its own space, and the two spaces are not a similarity apart.** The
-eye sits at `cockpit1`'s origin looking down −Z (`extracted/zrdr/instruments.zrd.json` places the
-instrument panel at z −17.5 straight ahead of it), while the interior's own elevators sit at
-y −10.5 where the exterior's sit at −0.40. It is a stylised model built to be looked at from one
-point, not a scaled copy of the aircraft, so the framing is scale-invariant and
-`PlaneBuilder.InteriorScale` chooses only how the interior composites against world geometry. The
+eye sits at `cockpit1`'s origin looking down −Z (the built dials sit straight ahead of it at
+z ≈ −10.6), while the interior's own elevators sit at y −10.5 where the exterior's sit at −0.40;
+the scale that fits the interior's wings to the hull's span runs from 0.030 (Bloodhawk) to 0.078
+(Balmoral). It is a stylised model built to be looked at from one point, not a scaled copy of the
+aircraft, so the framing is scale-invariant and `PlaneBuilder.InteriorScale` chooses only how the
+interior composites against world geometry.
+
+⚠ **The interior is not a human-proportioned room at any single scale.** All eleven share one
+instrument assembly whose main dials are 2.0 interior units across, centred 10.6-12.7 units from
+the eye (the Warhawk's 7.9), inside a tub 22-39 units wide. At 0.04 m per unit the dials are the
+79 mm standard instrument and a canopy, where there is one overhead, clears the eye by
+0.22-0.36 m, but the panel sits only 0.42-0.51 m away (the Warhawk's 0.32 m) and the tub is 0.9-1.6 m wide: depth is
+compressed and width is stretched, which is what an 80° flat view wants. Ten interiors (all but the
+Warhawk) also carry a flat head-and-shoulders plate 0.16-1.8 units behind the eye. The
 original draws the interior in its own pass from the interior origin along the interior's own −Z,
 which is why a single-pass renderer says the same thing by mounting the subtree at the −4.70°
 head-pitch tilt: that tilt is what puts the gunsight on the guns, and head-look is deliberately not
@@ -626,9 +640,9 @@ stiffer than the faithful camera, while one stacked on it lags the camera twice.
   identity.** The player-view selector (`FUN_0042c210`) rejects all of them, so none is a
   player-selected view; they are internal/context camera poses. Modes `5`, `8` and `9` are settled:
   the **crash** cut, the **death camera** and the **flyby**, the three static cameras above.
-- Which of the 22 `cockpit_camera` offsets corresponds to each named player airframe by display
-  name (the node→display map lives in `../formats/markers.md`); only `player_pfighter`'s is
-  pinned here.
+- **What reads `instruments.zrd`.** Its seven gauge positions (z −17.5, x ±9) are not where the
+  built `cockpit1` meshes put the same assemblies (z ≈ −10.6, x ±5.0), and no uniform scale maps one
+  onto the other. The port reads the meshes.
 - **The tilted interior mount overshoots by 0.60°.** It leaves the gun pipper about 6 px above the
   sight ring's crosshair at 720p where the original has them coincident. The exact fit is a 3.82°
   tilt, but that is a Bloodhawk-fitted number with no decode behind it and the sight's height is
