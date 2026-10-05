@@ -994,6 +994,12 @@ member, and it does not go here.
   A Resource reached through a node's signal after its wrapper was collected reproduced the release
   check's trace on the first run, and the original shard 3/6's 70 suites produced none under the gate
   either way.
+- **INSTR-100**, **Read Godot's global `ObjectCount` only after finalizer drains have stopped changing
+  it, never after a fixed number: one drain can leave objects that only the next one frees, and any
+  collection inside the measured span frees earlier suites' objects into it.**
+  `FinalizerGate.SettledObjectCount` takes the reading that way. Late in an engine shard, successive
+  drains freed 308, then 84, then 0 objects, and one drain before a staged build still let 98 fall
+  during it.
 
 ## SRC, sources and documents
 
