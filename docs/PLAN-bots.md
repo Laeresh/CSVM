@@ -116,7 +116,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 31. ☑ Bot tag on the lobby roster and the board; a bot's callsign on the target marker
 32. ☐ Crowded free-for-all playtest at the controls
-33. ☐ Host cost of fifteen bots, measured
+33. ☑ Host cost of fifteen bots, measured (the Deck reading owed)
 
 ## Dependency and parallelism notes
 
@@ -1200,19 +1200,113 @@ The watch-list the landed items left for this sortie:
 
 **⚠ Traps.** Check which build is running before reading a symptom as a bot defect.
 
-## D33 ☐ Host cost of fifteen bots, measured
+## D33 ☑ Host cost of fifteen bots, measured
+
+Measured on the user's rig. Left: the Deck reading, owed by the user (the last line of Verify).
 
 **Goal.** A number for the host's step cost with fifteen bots, and a judgement whether it holds on
 the host machines that matter (the user's rig, the Steam Deck).
 
-**Evidence (confidence: lead-only).** Each bot adds an `AiPilot`, a physics body and a 44-byte
-state send at 20 Hz per receiver. No measurement exists.
+**Evidence (confidence: traced-to-code for where each cost lands; direction-sound-magnitude-TUNE
+for the Deck, which is projected, not measured).** A bot's whole flight step runs in the
+`HumanAircraft` phase (`GameSession`'s `StepHumanAircraft` walks every seat rig, then
+`BroadcastAircraftState`), its rearm order in `Versus` (`RearmPlay.Step`), its rounds in
+`Projectiles`, and its rig's animation runtime in `AnimAdvance`. A bot is never in
+`AiAircraft`, so `--perf`'s `ai_ms` reads 0 for it. The lead's cost list held except for its
+weights: the `AiPilot` decision is about 4 µs a bot a tick, the state send to one guest about 3 µs,
+the `PersonSeatPositions` scan about 1 µs, and the rearm order with the match clock about 1 µs. The largest single
+term is one the lead did not name: the pose write at the end of `FlightController.SimStep`
+(`GlobalTransform = _simCurr`), 31 to 49 µs a bot a tick, because each bot's rig adds about 1,195
+nodes (17,578 nodes with no bot, 35,501 with fifteen) and Godot walks the whole subtree on a
+transform write. It is the same write every aircraft rig makes, a pane's and a world AI's, so it is
+not a bot defect and not quadratic in the field.
 
-**Approach.** `<TODO: the instrument; read docs/verification.md first, since sim time lags wall
-time on the user's rig>`.
+**Approach (landed: a measurement, no code).** The instrument is the repo's own `--perf` on the
+wall clock (`--no-det --no-vsync --seed=1`), read per tick as PERF-1 and PERF-37 say:
+`phys_tick_ms` (the whole tick, the session step inside it) and `phys_hz` (sim seconds per wall
+second, the cadence the trap below asks for), with `sim_ms`'s `HumanAircraft`, `Projectiles` and
+`Versus` slots as the bots' share of the tick and `proc_sites_ms`'s `Flight` as their per-frame
+presentation. `--det` was not used: it moves the step into the process pass and steps the sim per
+rendered frame, which a network pair cannot share. Windows from sim frame 1200 on (20 s in, the
+bots fighting: six respawns per 15-bot run, rounds in `Projectiles`), 40 windows a run, 3600 frames
+each, MP1, seed 1. A temporary bracket split the bots' step by part on both the wall clock and the
+main thread's own cycles (PERF-36); it was removed and is not in the tree.
 
-**Model recommendation.** `<TODO: not settled in the session>`
+Readings, ms, median (min to max) over six or seven local runs (`--vs`, one idle pane plus N bots)
+and two or three network runs (`--net-host=127.0.0.1` plus one `--net-join` guest that stays to the
+end; 15 bots requested, 14 seated, since the guest takes the sixteenth seat). `phys_hz` read 59.98 to 60.04 in
+every run: the sim kept wall time throughout.
 
-**Verify.** `<TODO: the measured baseline and the threshold>`
+| Bots | `phys_tick_ms` | bot phases of `sim_ms` | sim step, thread CPU | bots' own step, CPU | of it the pose write | `Flight` per frame |
+|---|---|---|---|---|---|---|
+| 0 local | 1.61 (1.31-1.71) | 0.20 (0.18-0.23) | 0.23 (0.20-0.23) | - | - | 0.15 (0.13-0.20) |
+| 1 local | 1.55 (1.41-2.24) | 0.32 (0.29-0.53) | 0.35 (0.33-0.37) | 0.10 (0.10-0.11) | 0.04 (0.03-0.04) | 0.20 (0.18-0.40) |
+| 4 local | 2.16 (1.78-2.82) | 0.73 (0.56-0.99) | 0.69 (0.59-0.79) | 0.38 (0.31-0.44) | 0.15 (0.11-0.18) | 0.37 (0.29-0.54) |
+| 8 local | 2.25 (2.00-3.35) | 0.99 (0.86-1.53) | 1.01 (0.94-1.08) | 0.69 (0.64-0.75) | 0.30 (0.27-0.33) | 0.52 (0.47-0.80) |
+| 15 local | 3.63 (2.73-4.25) | 2.03 (1.49-2.36) | 1.53 (1.48-2.03) | 1.18 (1.14-1.58) | 0.49 (0.47-0.73) | 1.04 (0.75-1.29) |
+| 0 network | 1.79 (1.65-1.86) | 0.32 (0.28-0.35) | 0.40 (0.32-0.43) | - | - | 0.36 (0.31-0.39) |
+| 8 network | 3.41 (2.74-4.09) | 1.65 (1.28-2.01) | 1.67 (1.52-1.81) | 1.04 (0.90-1.18) | 0.51 (0.42-0.61) | 0.98 (0.79-1.18) |
+| 14 network | 4.13 (3.73-4.19) | 2.36 (2.10-2.42) | 2.49 (2.07-2.86) | 1.83 (1.43-2.07) | 0.91 (0.65-1.09) | 1.23 (1.15-1.34) |
 
-**⚠ Traps.** Read the sim-clock cadence, not `physics_ms`, on the user's rig.
+The thread-CPU columns come from three of the local runs (two at 1, 4 and 8 bots). The bots' step
+at fifteen, by part (CPU, those runs): pose write 0.47 to 0.73, collision sweep 0.12 to 0.14,
+gunner 0.08 to 0.10, fire step 0.07 to 0.09, `AiPilot` 0.05 to 0.06, flight model 0.04 to 0.05,
+far-field scan 0.01 to 0.02, and 0.3 to 0.4 elsewhere in the step. The network host's state send
+was 0.01 to 0.02 ms with no bot and 0.05 to 0.07 ms with fourteen; the `Versus` phase (the rearm
+order with the match clock) 0.004 with none and 0.013 to 0.022 with fifteen. Another session's
+engine runs shared the machine for most readings (a six-shard battery through two of the three
+network runs at each count), which inflates the wall terms and, through shared cores, the thread
+clock too. The quietest pair, no other engine process alive, read 1.55 and 2.93 ms `phys_tick_ms`
+(0.23 and 1.48 ms of thread CPU) locally at 0 and 15 bots, and 1.65 and 3.73 ms (0.32 and 2.07)
+on the network host with one other process. `AnimAdvance`, the world's
+animation, moves between 1.0 and 1.7 ms from run to run whatever the field, and is most of the
+spread in `phys_tick_ms`.
+
+**Judgement.** On the user's rig a host with fifteen bots spends about 2 ms more per tick than one
+with none (2.0 ms at the local `phys_tick_ms` medians; 1.3 ms locally and 2.1 ms on the network
+host at the thread-clock medians), 0.09 to 0.14 ms a bot, against the 16.7 ms tick, so the tick
+stays near a quarter of its budget and the sim never fell behind wall time. It holds with room to
+spare, local or network. No threshold is warranted on the rig. **On the Deck, projected:** CM24's
+22-AI tick read 2.85 to 3.16 ms on the author's machine and 3.71 ms on the Deck (commit 41668677a),
+a ratio of 1.2 to 1.3 for a tick of the same kind; PERF-42 puts managed phases at 1.2 to 1.4 times
+and engine-native terms at 5 to 7 times. About 40 per cent of a bot's step is the native pose write.
+Fifteen bots then cost a Deck host 2 to 3 ms a tick at the CM24 ratio and up to about 6 ms if the
+pose write grows as the native terms did there. Both keep the 60 Hz sim inside its budget, but on a
+Deck drawing 30 to 40 frames a second each frame carries 1.5 to 2 ticks, so fifteen bots add 3 to
+12 ms to its frame (and about 1.4 ms of presentation), which likely costs a Deck host its 60 fps in
+a full field while the sim keeps time. **Provisional Deck threshold:** if the Deck reading at
+fifteen bots shows `phys_hz` under 59 or `phys_tick_ms` over 8.3 ms (two ticks per 30 fps frame),
+a Deck host needs a lower Fill-to-N default or a cheaper pose write before a full field is offered
+there.
+
+**Hot spot, not fixed here.** The pose write is 40 to 50 per cent of a bot's step and scales with
+the rig's node count (about 1,195 nodes a bot), not with the field squared. Every aircraft rig pays
+it; a lever would be fewer nodes under the transform root of an aircraft rig (the pre-warmed crash
+rig emitters, about 200 a rig, are one candidate) or a write that does not walk them. Measure it on
+the Deck before choosing.
+
+**Model recommendation.** Sonnet would do the runs and the arithmetic. Opus was used because the
+instrument had to be chosen against PERF-1, -36, -37 and -42 and the readings separated from a
+shared, loaded machine.
+
+**Verify.** Every run through `RunProbe.ps1` on the hidden desktop, from the worktree, with
+`$env:CSVM_DATA_ROOT="Z:\CSVM"`: local, `RunProbe.ps1 -TimeoutSec 300 --vs --mission=MP1 --mute
+--perf --no-det --no-vsync --seed=1 --vs-bots=<N> --screenshot=<png> --frames=3600` (no
+`--vs-bots` for the baseline); network, the host as the same plus `--net-host=127.0.0.1:47781`, and a guest started 6 s later with `--vs --mission=MP1 --mute --no-det
+--no-vsync --net-join=127.0.0.1:47781 --screenshot=<png> --frames=6600`, so it stays until the host
+quits. Read the `[perf] window` lines from sim frame 1200. **Owed, the Deck reading (the user):**
+with a build that carries the bots in `~/CSVM`, run in Desktop Mode or over ssh with `DISPLAY=:0`
+and `CSVM_DATA_ROOT=/home/deck/CSVM`:
+`cd ~/CSVM && ./CSVM.x86_64 -- --vs --mission=MP1 --mute --perf --no-det --no-vsync --seed=1
+--vs-bots=15 --screenshot=/tmp/d33-15.png --frames=3600`, then the same without `--vs-bots=15`
+(the shot is blank without `--det`, which does not matter here). From the newest file in
+`~/CSVM/logs/`, report each run's `phys_tick_ms`, `phys_hz`, `sim_ms`'s `HumanAircraft` and
+`fps` from sim frame 1200 on, and whether the fifteen-bot fight felt smooth.
+
+**Verified.** A measurement with no code change: the readings above are its verification, taken on the plan tree at da019b0d with the build at 0 warnings and 0 errors. The Steam Deck reading is owed by the user.
+
+**⚠ Traps.** Read the sim-clock cadence (`phys_hz`), not `physics_ms`, on the user's rig. A guest
+given the host's frame count finishes first under `--no-vsync`, and with no bot the host's match
+then ends `AllAlone` and its tick drops to the results board's: give the guest more frames. Every
+scripted network pair here but one process exited `0xE0434352` at quit on the ENet service thread
+(GitHub issue #144), after its readings; read the screenshot line, not the exit code.
