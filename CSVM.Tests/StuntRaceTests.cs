@@ -305,6 +305,30 @@ public class StuntRaceTests
     }
 
     [Fact]
+    public void APilotLeavingAnEndedRaceIsNotMarkedOnTheHostOrOnAReplica()
+    {
+        // ABLE-TO-FAIL CONTROL: while the race runs, leaving marks the pilot.
+        var running = OpenRace(3, out _, out var leaves, out _);
+        FlyRun(running, 1, new[] { 1f, 2f, 5f });
+        Assert.True(running.MarkLeft(1));
+        Assert.True(leaves.Left);
+
+        var race = OpenRace(3, out _, out var b, out _);
+        FlyRun(race, 1, new[] { 1f, 2f, 5f });
+        Advance(race, 61f);
+        Assert.True(race.Ended);
+        Assert.False(race.MarkLeft(1));
+        Assert.Equal((false, "P2", false), (b.Left, StuntRace.NameText(b), race.Racers[1].Line().Left));
+
+        var copy = OpenRace(3, out _, out _, out _);
+        copy.Replicate();
+        copy.TakeHostClock(StuntRacePhase.Ended, 0.0, Dt);
+        Assert.True(copy.Ended);
+        Assert.False(copy.MarkLeft(1));
+        Assert.False(copy.Of(1)!.Left);
+    }
+
+    [Fact]
     public void GapsAndClocksFormatInvariantly()
     {
         Assert.Equal("+1.3", StuntRace.FormatGap(1.25f + 0.04f));

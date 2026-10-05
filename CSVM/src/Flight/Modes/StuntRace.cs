@@ -453,12 +453,13 @@ public sealed class StuntRace
         EndIfNoRunLeft();
     }
 
-    /// <summary>Player <paramref name="index"/>'s pilot left the race. Their record stays and ranks as
+    /// <summary>Player <paramref name="index"/>'s pilot left mid-race. Their record stays and ranks as
     /// it stood, and a run in progress stops, which may end a final run. A replica marks it alone.
-    /// Answers whether the racer was still in.</summary>
+    /// An ended race marks nobody, since a pilot who flew the whole window did not leave it.
+    /// Answers whether the racer was marked.</summary>
     public bool MarkLeft(int index)
     {
-        if (Of(index) is not { Left: false } racer)
+        if (Ended || Of(index) is not { Left: false } racer)
             return false;
         racer.Leave();
         Log.Info("flight", $"stunt race: {racer.Callsign} left, their record kept ({BestText(racer, ZoneCount)})");
