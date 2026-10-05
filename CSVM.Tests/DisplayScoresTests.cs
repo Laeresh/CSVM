@@ -101,7 +101,7 @@ public class DisplayScoresTests
     }
 
     [Fact]
-    public void AFreeForAllReadsAsTheOriginalsNameAndScoreColumnsByScore()
+    public void AFreeForAllReadsAsTheOriginalsNameAndScoreColumnsThenKillsAndDeathsByScore()
     {
         var match = new VersusMatch(3, killTarget: 0, timeLimit: 0f);
         match.RegisterKill(1, 0);
@@ -115,10 +115,10 @@ public class DisplayScoresTests
         Assert.Equal(
             new[]
             {
-                $"{"  Player",-21} {"score",-7}",
-                $"{"A callsign far too lo",-21} {"2",-7}",
-                $"{"P3",-21} {"1",-7}",
-                $"{"Laeresh",-21} {"-1",-7}",
+                $"{"  Player",-21} {"score",-7} {"kills",-6} deaths",
+                $"{"A callsign far too lo",-21} {"2",-7} {"2",-6} 0",
+                $"{"P3",-21} {"1",-7} {"1",-6} 0",
+                $"{"Laeresh",-21} {"-1",-7} {"0",-6} 4",
             },
             lines.Select(l => l.Text).ToArray());
         Assert.All(lines, l => Assert.Equal(0, l.Flag));
@@ -140,12 +140,12 @@ public class DisplayScoresTests
         Assert.Equal(
             new[]
             {
-                $"{"  Player/Team",-21} {"score",-7}",
+                $"{"  Player/Team",-21} {"score",-7} {"kills",-6} deaths",
                 "Red Skulls (Team Score: 3)",
-                $"{" pilot2",-21} {"2",-7}",
-                $"{" pilot0",-21} {"1",-7}",
+                $"{" pilot2",-21} {"2",-7} {"2",-6} 0",
+                $"{" pilot0",-21} {"1",-7} {"1",-6} 0",
                 "Hell's Angels (Team Score: 0)",
-                $"{" pilot1",-21} {"0",-7}",
+                $"{" pilot1",-21} {"0",-7} {"0",-6} 3",
             },
             lines.Select(l => l.Text).ToArray());
         Assert.Equal(new[] { 0, 0, 2, 0, 0, 0 }, lines.Select(l => l.Flag).ToArray());

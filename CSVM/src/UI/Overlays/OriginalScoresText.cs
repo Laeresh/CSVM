@@ -33,8 +33,8 @@ public sealed record OriginalScoresWords(string Player, string PlayerTeam, strin
 /// <summary>
 /// The original's in-flight scores, the text Display Scores raises in the HUD, as monospaced lines.
 /// A Dogfight's lines are the original's own: a header, then one pilot per line. The name stands in a
-/// 21-character column and the score in a 7-character one. A team match puts each team's line over
-/// its pilots, indented by one. A race borrows that grid for columns of its own, and every table
+/// 21-character column and the score in a 7-character one, then the remake's kills and deaths. A
+/// team match puts each team's line over its pilots, indented by one. A race borrows that grid for columns of its own, and every table
 /// holds at most <see cref="MaxLines"/> lines, header included. Engine-free, drawn by
 /// <see cref="ScoresOverlay"/>; decode in docs/org/multiplayer-scoring.md "The in-flight scores".
 /// </summary>
@@ -49,7 +49,9 @@ public static class OriginalScoresText
     /// <summary>The lines the HUD holds, <c>FUN_004565d0</c>'s rows from 30 to 200 every 10.</summary>
     public const int MaxLines = 18;
 
-    // The race's own columns after the name, remake text in the original's lowercase header style.
+    // The remake's columns after the original's, its text in the original's lowercase header style:
+    // a Dogfight's kills, and a race's aircraft, best and gap.
+    private const int KillsWidth = 6;
     private const int AircraftWidth = 12;
     private const int BestWidth = 10;
     private const int GapWidth = 9;
@@ -65,13 +67,14 @@ public static class OriginalScoresText
         ArgumentNullException.ThrowIfNull(words);
         var lines = new List<OriginalScoresLine>
         {
-            new(Cell(match.Teamed ? words.PlayerTeam : words.Player, NameWidth) + " " + Cell(words.Score, ScoreWidth), 0),
+            new(Cell(match.Teamed ? words.PlayerTeam : words.Player, NameWidth) + " " + Cell(words.Score, ScoreWidth)
+                + " " + Cell("kills", KillsWidth) + " deaths", 0),
         };
         var standings = match.Standings().ToList();
         if (!match.Teamed)
         {
             foreach (var st in standings)
-                lines.Add(new(Pilot(name(st.PlayerIndex), st.Score), 0));
+                lines.Add(new(Pilot(name(st.PlayerIndex), st), 0));
             return Capped(lines);
         }
 
@@ -79,12 +82,12 @@ public static class OriginalScoresText
         {
             lines.Add(new(string.Format(CultureInfo.InvariantCulture, "{0} (Team Score: {1})", team.Name, team.Score), 0));
             foreach (var st in standings.Where(s => match.TeamOf(s.PlayerIndex) == team.Team))
-                lines.Add(new(Pilot(" " + name(st.PlayerIndex), st.Score), carried?.Invoke(st.PlayerIndex) ?? 0));
+                lines.Add(new(Pilot(" " + name(st.PlayerIndex), st), carried?.Invoke(st.PlayerIndex) ?? 0));
         }
 
         // A seat on no lobby team has no team line to stand under; it follows the teams.
         foreach (var st in standings.Where(s => match.TeamOf(s.PlayerIndex) == 0))
-            lines.Add(new(Pilot(name(st.PlayerIndex), st.Score), 0));
+            lines.Add(new(Pilot(name(st.PlayerIndex), st), 0));
         return Capped(lines);
     }
 
@@ -124,9 +127,10 @@ public static class OriginalScoresText
         return padded[..width];
     }
 
-    // One pilot's line: the name column, a space, and the score column.
-    private static string Pilot(string name, int score) =>
-        Cell(name, NameWidth) + " " + Cell(score.ToString(CultureInfo.InvariantCulture), ScoreWidth);
+    // One pilot's line: the original's name and score columns, then the remake's kills and deaths.
+    private static string Pilot(string name, VersusStanding st) =>
+        Cell(name, NameWidth) + " " + Cell(st.Score.ToString(CultureInfo.InvariantCulture), ScoreWidth) + " "
+        + Cell(st.Kills.ToString(CultureInfo.InvariantCulture), KillsWidth) + " " + st.Deaths.ToString(CultureInfo.InvariantCulture);
 
     private static IReadOnlyList<OriginalScoresLine> Capped(List<OriginalScoresLine> lines) =>
         lines.Count > MaxLines ? lines.GetRange(0, MaxLines) : lines;

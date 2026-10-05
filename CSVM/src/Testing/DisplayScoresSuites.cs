@@ -76,7 +76,8 @@ internal static class DisplayScoresSuites
     [Suite("dogfight-display-scores",
         "two Dogfight seats, each in its own pane with a chat line up: nothing shows before a hold; "
         + "P2 holding Display Scores puts the match's scores in P2's pane alone, in the original's "
-        + "name and score columns and in the board's chrome columns, and hides P2's chat lines while "
+        + "name and score columns with the remake's kills and deaths after them, and in the board's "
+        + "chrome columns, and hides P2's chat lines while "
         + "P1's stay; the release takes both back")]
     internal static void DogfightDisplayScores(TestContext ctx)
     {
@@ -97,8 +98,8 @@ internal static class DisplayScoresSuites
         p2.Match = match;
         HeldScores(ctx, seats, source, p2, p1, "Dogfight",
             lines => lines.Count == 3
-                && lines[1] == OriginalScoresText.Cell("P2", OriginalScoresText.NameWidth) + " " + OriginalScoresText.Cell("1", OriginalScoresText.ScoreWidth)
-                && lines[2].StartsWith("P1 ", StringComparison.Ordinal),
+                && lines[1] == OriginalScoresText.Cell("P2", OriginalScoresText.NameWidth) + " " + OriginalScoresText.Cell("1", OriginalScoresText.ScoreWidth) + " " + OriginalScoresText.Cell("1", 6) + " 0"
+                && lines[2] == OriginalScoresText.Cell("P1", OriginalScoresText.NameWidth) + " " + OriginalScoresText.Cell("0", OriginalScoresText.ScoreWidth) + " " + OriginalScoresText.Cell("0", 6) + " 1",
             rows => rows.Count == 2 && rows[0] == "#1  P2  1  1  0" && rows[1] == "#2  P1  0  0  1");
         ctx.Note($"a held Dogfight table in the holder's pane alone, gone on release");
     }

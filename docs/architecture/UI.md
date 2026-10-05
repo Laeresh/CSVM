@@ -647,8 +647,8 @@ pane. `Flight/Hud/ChatPanel.cs` steps aside on the same reading. Decode:
 
 ## src/UI/Overlays/OriginalScoresText.cs
 The original's in-flight scores as monospaced lines, engine-free: a Dogfight's header, team lines
-and pilot lines in the decoded 21- and 7-character columns and order, each pilot line carrying the
-flag it holds, and a race's standings borrowing that grid for its own columns. `OriginalScoresWords`
+and pilot lines in the decoded 21- and 7-character columns and order, the remake's kills and deaths
+after them, each pilot line carrying the flag it holds, and a race's standings borrowing that grid for its own columns. `OriginalScoresWords`
 reads the three header strings out of the message table. Capped at the HUD's 18 lines. Drawn by
 `ScoresOverlay.cs`.
 

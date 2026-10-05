@@ -706,7 +706,7 @@ original's own "Display Scores (Multiplayer Only)", kept because the remake's sp
 multiplayer too; it fits the Original page's action column (capture). The Original KEYS AND BUTTONS
 page lists it on the Other tab between Pause/Quit/Objectives and Chat to Everyone, as the original's
 page does; the Built-in controls screen lists every flight action already.
-*Held, per pane (lead-only, the user's ruling over the decoded tap).* `FlightController.ScoresShown`
+*Held, per pane (lead-only, the user's ruling).* The original's four-second tap was put to the user, kept the hold. `FlightController.ScoresShown`
 is the held action in a race or a Dogfight with no board, pause sheet or photo mode over the flight
 (`--debug-scores` holds it, documented in `docs/cli.md`). `GameSession.AttachScores` gives every local
 pane a `UI/Overlays/ScoresOverlay.cs` on a layer over its HUD wherever a race or a Dogfight exists,
@@ -719,7 +719,10 @@ line, which is not reproduced.
 *The looks.* Original (traced-to-code for a Dogfight): `OriginalScoresText` builds the decoded
 lines, the team branch and the flag included, and the overlay draws them three times over in the
 HUD's 1440-line reference, every character on the 8-pixel cell so the columns hold under any stand-in
-face, in Courier New weight 600 where installed. A race (borrowed, remake text): the same grid with
+face, in Courier New weight 600 where installed. By the user's ruling each Dogfight pilot line also
+carries kills (6 characters) and deaths after the original's two columns, headed "kills" and
+"deaths": remake columns on the original's grid, borrowed like the race's; a team's line stays the
+original's. A race (borrowed, remake text): the same grid with
 place and callsign in the name column, then aircraft (12), best (10), gap (9) and runs, headed
 "aircraft", "best", "gap", "runs" in the score header's lowercase. B15's `OriginalRaceTable` is not
 used, since the in-flight display is not the lobby page. Built-in: `ScoresTable` in the results
@@ -737,8 +740,8 @@ for a change of the race columns, the Built-in table's placement or the label.
 alone, captioned with the original's string; a keymap saved before it reads every other flight row
 back as saved (a rebind included) and the new action at its default; a saved row on `Tab` keeps the
 key and the action keeps Back; the Other tab's order; a free-for-all's lines (header, a cut long
-name, a negative score, no flag); a team match's lines (team totals, one-character indent, the
-carrier's flag); the 18-line cap; a race's rows and lines in both looks; the Dogfight table's team
+name, a negative score, no flag, kills and deaths after the score); a team match's lines (team
+totals, one-character indent, the carrier's flag, the members' kills and deaths); the 18-line cap; a race's rows and lines in both looks; the Dogfight table's team
 rows first; a source with no mode shows nothing; the header words from the table and the fallback.
 Also the shipped-table rows in `DefaultBindingsTests` and `FlightBindingMappingTests` (`Tab`, Back).
 Engine suites (weighted): `stunt-race-display-scores` and `dogfight-display-scores`
@@ -747,7 +750,8 @@ Engine suites (weighted): `stunt-race-display-scores` and `dogfight-display-scor
 the standings in both looks while the other pane does not; the holder's chat steps aside and the
 other's stays; the release takes both back; a race seat with no race shows nothing.
 Mutation-checked, each red and restored: name column 20, no member indent, 17 lines, gap column 8,
-team lines unmarked, no pad Back, the tab order moved, a member filed before the action (units);
+team lines unmarked, no pad Back, the tab order moved, a member filed before the action, kills 5, deaths dropped, the score in the kills column, the header without kills and deaths
+(units); deaths dropped (Dogfight suite);
 the held action ignored (both suites), the chat never hidden (both suites), no mode gate (race
 suite). Captures through the golden stage with temporary manifest entries (`--debug-scores`, two
 seats, with and without `--force-builtin`, a Dogfight with `--debug-scoreboard`'s kill, and
@@ -762,7 +766,8 @@ so a report of "the table vanishes after four seconds" is the original's behavio
 Do not draw the Original lines as whole strings in a proportional face: the columns are character
 cells. The table is per pane on purpose; a whole-window version must decide whose hold raises it.
 A team-less seat in a team match has no counterpart in the original and follows the teams as a
-plain line. C21's network race reaches the overlay through the `StuntRace` it builds; its seats'
+plain line. Kills and deaths under Original are the remake's columns, not a decode: the original's
+lines carry name and score alone. C21's network race reaches the overlay through the `StuntRace` it builds; its seats'
 callsigns come from `NetSeat.Callsign`.
 
 **Verified.** <pending orchestrator run>
