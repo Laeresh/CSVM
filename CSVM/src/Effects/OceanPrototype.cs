@@ -315,6 +315,19 @@ vec2 ocean_mask(vec2 p) {
     return textureLod(mask_tex, (p - mask_rect.xy) * mask_rect.zw, 0.0).rg;
 }
 
+float foam_hash(vec2 c) {
+    return fract(sin(dot(c, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+// Smooth value noise in [0, 1]; the cell is integer, so it stays exact far from the origin.
+float foam_noise(vec2 p) {
+    vec2 c = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(foam_hash(c), foam_hash(c + vec2(1.0, 0.0)), f.x),
+        mix(foam_hash(c + vec2(0.0, 1.0)), foam_hash(c + vec2(1.0, 1.0)), f.x), f.y);
+}
+
 float ship_calm(vec2 p) {
     float a = 1.0;
     for (int i = 0; i < " + MaxShips.ToString(CultureInfo.InvariantCulture) + @"; i++) {
@@ -383,8 +396,14 @@ void fragment() {
     float dist = distance(world.xz, CAMERA_POSITION_WORLD.xz);
     vec3 tint = texture(tint_tex, (p - mask_rect.xy) * mask_rect.zw).rgb;
     vec3 col = mix(base_color, texture(albedo_tex, p / tile_m).rgb, detail_mix) * tint;
-    float crest = smoothstep(0.6, 0.9, h / max(SWELL_SUM * wave_scale, 0.01));
-    col = mix(col, vec3(0.6, 0.65, 0.68), crest * foam_strength);
+    // The swell's crest coincidences repeat on a lattice, so foam alone would print a pattern.
+    // A drifting patch field decides where whitecaps can form and moves each crest's threshold.
+    vec2 drift = SWELL_DKA[0].xy * (csky_time * 1.5);
+    float patches = foam_noise((p - drift) / 230.0) * 0.65 + foam_noise((p - drift) / 71.0) * 0.35;
+    float breakup = foam_noise((p - drift * 2.0) / 9.0);
+    float crest = smoothstep(0.5, 0.85, h / max(SWELL_SUM * wave_scale, 0.01) + (patches - 0.55) * 0.5);
+    float foam = crest * smoothstep(0.55, 0.8, patches) * smoothstep(0.25, 0.85, breakup);
+    col = mix(col, vec3(0.6, 0.65, 0.68), foam * foam_strength);
     ALBEDO = col;
     METALLIC = 0.0;
     SPECULAR = 0.5;
