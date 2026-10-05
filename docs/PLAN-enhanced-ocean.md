@@ -268,15 +268,29 @@ carries the border sea outward instead.
 
 **Goal.** Every chapter whose sea sits at y = 0 draws the ocean, with its own coast layers intact.
 
-**Evidence (confidence: lead-only).** From the earlier research agent, not re-checked this session:
-about 99 % of water in every chapter is at y = 0; C1 uses `water1_trans1/2` waterline sheets under
-`cliff01_trans2`; C1B and C2 use the `srf0001` surf ring; C3's `waterlevel` is at y = 13.2 and C4's
-lakes at y = 517 and 704 (C4 has no sea), and those keep the flat glossy arm.
-`IsOceanBaseTexture` matches `wtr*` only, which is C1B's base. <TODO: which chapters have a sea-level base sheet at all, each one's base-sheet
-texture name and whether it is opaque.>
+**Evidence (confidence: direction-sound).** A data survey of every chapter's gamez, with world y
+through the full node transform chain (scripts and outputs in the plan tree's `.scratch\c21\`,
+summary in `REPORT.md` there). Sea-level water (y within 0.5 m), its base sheet, and the risks:
 
-**Approach.** Widen the base-sheet classifier per chapter from data, check the mask on each, and
-lift the C1B gate. <TODO: per-chapter coast checks.>
+| Ch | Base sheet (polys, priority) | Over or beside it | Coplanar land at y = 0 |
+|---|---|---|---|
+| C1 | `water1` 236 (p0), a strip along z -3421..0 | opaque coast tiles `water1_trans1/2` 372 BESIDE it (p0), carrying soft `cliff01_trans*` overlay passes | none |
+| C1B | `wtr00000` 695 (p0), whole map | `srf0001` 375 (p1, soft); `wakefront1` on the freighter | none |
+| C1C | `water1` 576 (p0), whole map | none | none |
+| C2 | `wtr00000` 327 (p0 x263, p-1 x43, p1 x18, p2 x3) | `srf0001` 86 (p1) | 110: `beach1` 58 (soft), `cliff01_trans2` 27, `terpat*` 22 |
+| C2B | `wtr00000` 576 (p0), whole map | none | none |
+| C3 | `wtr00000` 1565 (p0 x1182, p-1 x383), 18 km2 double sheet | none | 2090 (`shore1/2`, `shore_trans`, `cliff1_watertrans*`, `sand128`, ...), 85-94 % lying on the sheet; terrain pits to -48.7 m |
+| C4 | none (lakes at y = 517 and 704 only) | | |
+| C5 | `wtr00000` 700, all p-10 | 142 carry soft fog-gradient overlay passes (`z3_foggrad`, `foggrad8x64`) | none |
+
+C3's `waterlevel` sits at y = 13.17 and C4's lakes keep the flat glossy arm. `IsOceanBaseTexture`
+matches `wtr*`; C1 and C1C need `water1` matched EXACTLY, since the opaque `water1_trans1/2` coast
+tiles must stay out. Inference, not measured: C5's fog-gradient passes would stay a flat layer over
+the waves.
+
+**Approach.** <TODO: the chapter scope is the user's call. As is: C2B. Classifier widened: C1, C1C.
+Riskier: C2 (two-level sheet, 110 coplanar polys), C5 (fog passes over the sea), C3 (2090 coplanar
+shore polys). Then per chapter: lift the gate, check the mask, shoot a coast and an open-sea pose.>
 
 **Model recommendation.** high: per-chapter data reading, where a wrong classifier hides real sea or
 leaves a z-fight.
