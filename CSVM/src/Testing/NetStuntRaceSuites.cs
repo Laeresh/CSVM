@@ -101,12 +101,17 @@ internal static class NetStuntRaceSuites
         }
     }
 
+    /// <summary>A lobby race's launch arguments. A race spec is not <c>--det</c>, so without a named
+    /// store a guest's best would land in the player's own stunt scores.</summary>
+    internal static string[] RaceArgs(TestContext ctx) =>
+        new[] { "--mute", "--no-pads", $"--scores={System.IO.Path.Combine(ctx.ScratchDir, "net_race_scores.json")}" };
+
     private static void Race(TestContext ctx, string cell, LoopbackConditions link, int seed, int opensWithin)
     {
         var options = new DogfightOptionsMessage(1, (byte)DogfightLobby.EnvironmentOf(RaceChapter), (byte)DogfightMissionType.StuntRace,
             DogfightVictory.Time, 5, DogfightLobby.DefaultScore, false, DogfightLobby.DefaultLives, false);
         var rules = DogfightLobby.RulesOf(options);
-        var spec = SessionSpec.FromMenu(SessionSpec.Parse(new[] { "--mute", "--no-pads" }), DogfightLobby.ChapterOf(options.Environment),
+        var spec = SessionSpec.FromMenu(SessionSpec.Parse(RaceArgs(ctx)), DogfightLobby.ChapterOf(options.Environment),
             new[] { "player_pfighter" }, DogfightLobby.LaunchMode(options), vsTimeMinutes: rules.TimeLimitMinutes,
             vsLives: rules.Lives, vsAutoRespawn: rules.AutoRespawn, missionType: rules.MissionType);
 
@@ -367,7 +372,7 @@ internal static class NetStuntRaceSuites
         var options = new DogfightOptionsMessage(1, (byte)DogfightLobby.EnvironmentOf(RaceChapter), (byte)DogfightMissionType.StuntRace,
             DogfightVictory.Time, 5, DogfightLobby.DefaultScore, false, DogfightLobby.DefaultLives, false);
         var rules = DogfightLobby.RulesOf(options);
-        var spec = SessionSpec.FromMenu(SessionSpec.Parse(new[] { "--mute", "--no-pads" }), DogfightLobby.ChapterOf(options.Environment),
+        var spec = SessionSpec.FromMenu(SessionSpec.Parse(RaceArgs(ctx)), DogfightLobby.ChapterOf(options.Environment),
             new[] { "player_pfighter" }, DogfightLobby.LaunchMode(options), vsTimeMinutes: rules.TimeLimitMinutes,
             vsLives: rules.Lives, vsAutoRespawn: rules.AutoRespawn, missionType: rules.MissionType);
         var mesh = LoopbackTransport.Mesh(2, new LoopbackConditions(Latency, 0.0, 0.0), new Random(seed));

@@ -162,7 +162,7 @@ internal static class NetLobbyEnvironmentSuites
         var specs = new SessionSpec[2];
         for (int i = 0; i < specs.Length; i++)
         {
-            specs[i] = SessionSpec.FromMenu(SessionSpec.Parse(new[] { "--mute", "--no-pads" }), DogfightLobby.ChapterOf(options.Environment),
+            specs[i] = SessionSpec.FromMenu(SessionSpec.Parse(NetStuntRaceSuites.RaceArgs(ctx)), DogfightLobby.ChapterOf(options.Environment),
                 new[] { "player_pfighter" }, DogfightLobby.LaunchMode(options), vsTimeMinutes: rules.TimeLimitMinutes,
                 vsLives: rules.Lives, vsAutoRespawn: rules.AutoRespawn, missionType: rules.MissionType);
         }

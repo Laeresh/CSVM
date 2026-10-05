@@ -108,7 +108,7 @@ public static class OriginalScoresText
         {
             var r = standings[i];
             lines.Add(new(
-                Cell(StuntRace.Ordinal(i + 1) + " " + r.Callsign, NameWidth) + " "
+                Cell(StuntRace.Ordinal(i + 1) + " " + StuntRace.NameText(r), NameWidth) + " "
                     + Cell(r.PlaneDisplay, AircraftWidth) + " "
                     + Cell(StuntRace.BestText(r, race.ZoneCount), BestWidth) + " "
                     + Cell(StuntRace.GapText(r, winner), GapWidth) + " "

@@ -188,6 +188,22 @@ public class DisplayScoresTests
     }
 
     [Fact]
+    public void APilotWhoLeftKeepsTheirLineMarkedLeftInTheOriginalsGrid()
+    {
+        var race = new StuntRace(60f, 2);
+        race.Add(0, "Bloodhawk");
+        race.Add(1, "Kestrel");
+        race.BeginOpening(0f);
+        FlyRun(race, 0, 6f, 12.5f);
+        FlyRun(race, 1, 4f, 10f);
+        Assert.True(race.MarkLeft(1));
+
+        var lines = OriginalScoresText.Race(race, Shipped).Select(l => l.Text).ToArray();
+        Assert.Equal($"{"1st P2" + StuntRace.LeftSuffix,-21} {"Kestrel",-12} {"0:10.0",-10} {"",-9} 1/1", lines[1]);
+        Assert.Equal($"{"2nd P1",-21} {"Bloodhawk",-12} {"0:12.5",-10} {"+2.5",-9} 1/1", lines[2]);
+    }
+
+    [Fact]
     public void ADogfightTableLeadsWithTheTeamsInTheBoardsColumns()
     {
         var match = new VersusMatch(2, killTarget: 0, timeLimit: 0f);
