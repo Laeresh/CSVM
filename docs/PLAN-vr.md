@@ -197,7 +197,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ◐ A1 OpenXR boots in a flight session on VDXR and SteamVR
 2. ☑ A2 The `--xr-sim` stand-in interface
-3. ☐ A3 Precision near the eye: render-only floating origin, double-precision fallback
+3. ❌ A3 Precision near the eye: render-only floating origin, double-precision fallback
 4. ☐ A4 Screen-space effects under multiview
 5. ☑ A5 Cockpit scale per plane
 
@@ -416,37 +416,160 @@ it the stereo variants and no shader cache; the scripts set it per process only.
 
 **Verified.** <pending orchestrator run>
 
-## A3 ☐ Precision near the eye: render-only floating origin, double-precision fallback
+## A3 ❌ Precision near the eye: render-only floating origin, double-precision fallback
+
+**Outcome: no render-only remedy exists in the stock single-precision engine; this is a stop for a
+re-plan.** The VR jitter is measured and is worse than flat. Candidate (a) is measured to change
+nothing, (b) is not render-only in this tree, and the double-precision path is written up below
+and not started.
 
 **Goal.** In VR, the cockpit interior, a HUD quad and the plane in rigid chase show sub-pixel jitter
 per eye at 20 km from the chapter origin, with simulation, physics and network still in chapter
 coordinates. Or, if that cannot be done, a documented decision to move to a double-precision Godot
 build.
 
-**Evidence (confidence: direction-sound).** The jitter is measured: 0.02 px at the origin, 0.7 px at
-10 km, 2.7 px at 20 km at 1280x720 with a rotated heading (⚠ table row 1). The flat game avoids it
-only for the interior, through `Flight/Hud/CockpitOverlay.cs`'s private world, which cannot work in
-stereo. Headsets resolve roughly 20-25 px per degree against about 16 on the flat 80° cockpit view,
-so the same rounding is larger in VR and differs between eyes. That a render-only offset removes it
-is a hypothesis.
+**Evidence (confidence: measured for the jitter and for candidate (a); traced to the Godot
+4.7-stable source for where the rounding happens; traced to this tree for the cost of (b)).**
 
-**Approach.** Prototype a render-side origin shift relative to the player, keeping physics bodies and
-the sim out of the shifted subtree. Measure with the bezel-masked phase-correlation rig, per eye
-through A2's stand-in, `--direction=-0.743,0,-0.669`, `--shots=N`, at 0, 10 and 20 km. If it misses,
-write up the double-precision path (custom editor and Windows/Linux export templates, .NET glue built
-with `precision=double`, a double build of webrtc-native in place of `InstallWebRtc.ps1`'s pinned
-release, a re-pin of every golden) and stop for a re-plan.
-<TODO: which subtree carries the shift, and how the sky/deck anchoring in `PlayerRig` and
-`GameSession` follows it.>
+- **The baseline, per eye at headset density.** `RunProbe.ps1 --chapter=C1 --plane=player_bhawk
+  "--pos=X,300,0" "--direction=-0.743,0,-0.669" --view=cockpit --no-cockpit-pass "--hold=0,0,0,0.6"
+  "--xr-sim=eye=2732x2732,fov=100,shot=left|right" --frames=60 --shots=6 --screenshot=...`, with X
+  at 0, 10000 and 20000. That is 20.0 px per degree at the centre, so 1 px is 3.0 arcmin. Each
+  region is registered frame to frame by subpixel phase correlation: the six dials on a bezel ring
+  with the needle masked out, and the canopy strut, a canopy frame corner and the dash wood on a
+  Hann-windowed crop. The table gives the worst step over five consecutive pairs. The far-world
+  control (the cloud deck ahead) gives its worst deviation from the burst's mean step, since the
+  flight's own motion is a steady step there.
 
-**Model recommendation.** <TODO: tier not settled in the session.>
+  | Region | 0 km L | 0 km R | 10 km L | 10 km R | 20 km L | 20 km R |
+  |---|---|---|---|---|---|---|
+  | Worst dial | 0.22 px (0.7') | 0.16 px (0.5') | 5.06 px (15.2') | 5.41 px (16.2') | 7.23 px (21.7') | 5.21 px (15.6') |
+  | Worst shell (strut, frame, dash) | 0.09 px (0.3') | 0.18 px (0.5') | 3.55 px (10.6') | 3.64 px (10.9') | 8.03 px (24.1') | 7.67 px (23.0') |
+  | Far-world control | 0.05 px | 0.09 px | 0.05 px | 0.08 px | 0.04 px | 0.10 px |
 
-**Verify.** Sub-pixel per-eye jitter at 20 km on a rotated heading with a shell control region,
-measured by phase correlation over consecutive frames. Flat goldens unmoved, the full battery green.
+  The growth with distance reproduces the flat measurement (⚠ table row 1: 0.02, 0.7 and 2.7 px
+  at 13.3 px per degree, or 0.1', 3.2' and 12.2'), and in angle it is two to five times larger.
+  The eyes jitter differently: at 20 km the rockets dial steps 7.2 px in the left eye and 1.5 px in
+  the right, which is a disparity jitter as well as a positional one. The shell moves as much as
+  the dials, where the flat C20 capture held the struts at 0.004 px. The interior now jumps as a
+  block, so the eye itself rounds.
+- **Chase is not affected.** The same capture in `--view=chase --frames=120` registers the plane
+  at 0.11 px at 0 km and 0.13 px at 20 km, with a far-world control of 0.08 and 0.07 px. A
+  millimetre at chase distance is a small fraction of a pixel. A HUD quad at 1.5-2 m would sit
+  between the two: scaling the interior's 8 px at about 0.45 m by distance gives roughly 2-2.5 px,
+  an estimate and not a capture.
+- **Where the rounding happens (Godot 4.7-stable).** Every step that places an eye composes
+  chapter-scale coordinates in float32:
+  - `Node3D` composes each mesh's global transform on the CPU. Each dial rounds its own
+    translation, which is C20's per-dial jitter.
+  - `OpenXRInterface::get_transform_for_view` (and the stand-in's `XrSimEyes.View`) returns
+    `origin * reference * eye`, so the eye position rounds at the origin's magnitude.
+  - `RendererSceneRender::CameraData::set_multiview_camera` builds the combined camera by
+    intersecting the two eyes' frustum planes in world space. The planes' distances are about
+    20,000, so its origin carries several ulps of error. It then stores each eye as
+    `main_inv * eye`, a second subtraction of world-scale values.
+  - `scene_forward_clustered.glsl` forms `MODELVIEW_MATRIX = view * model` on the GPU in float32.
+    Under `USE_DOUBLE_PRECISION` it instead adds the two translations with an emulated double
+    (`double_add_vec3` with `model_precision` and `inv_view_precision`).
+
+  The camera-side steps explain the block motion that flat does not show. They also rule out
+  every fix that only moves the near subtree: the eyes are wrong by about a millimetre before the
+  interior is drawn at all.
+- **Candidate (a), the interior placed in the XR origin's own frame, is measured to change
+  nothing.** A scratch build re-parented `cockpit1` under the `XROrigin3D` with only its mount
+  basis. Its bursts at 0 and 20 km, both eyes, were bit-identical to the baseline, pixel for
+  pixel. The reason is that `XrMount` already puts the origin at the flat eye. That eye is composed
+  exactly as the interior's mount is: the same plane transform times the `cockpit_camera` offset.
+  The interior and the origin therefore already share their float values. What is left is each
+  child mesh's own rounding and the camera-side rounding, and neither is the interior root's.
+- **Candidate (b), a render-side origin shift, is not render-only in this tree.** Godot 4.7 has no
+  render origin. A visual instance's transform is its node's global transform, so a shift has to
+  move a scene subtree. Physics cannot be kept out of that subtree:
+  - Colliders are `StaticBody3D` children of the meshes they collide for (`Mech3/SceneBuilder.cs`
+    `body = new StaticBody3D`, clutter regions, `MapEdgeExtender`) and of each aircraft
+    (`Flight/Airframe/AircraftBody.cs`), so the shift moves the physics space with the visuals.
+  - Outside the suites, the game reads or writes node world transforms on about 320 lines in 80
+    files, and touches physics bodies and queries on about 115 lines in 24 files
+    (`Flight/Weapons/Projectile.cs` alone has 24). All of them work in chapter coordinates.
+
+  So the shift is a game-wide floating origin, with physics, sim reads and the network boundary
+  translated, and rebasing every static collider whenever the origin moves. That is the
+  "touches sim or physics" case Decision 4 sends to the fallback. If the re-plan takes it anyway,
+  the answer to the shift question is the whole session root. The skydome and the cloud deck then
+  follow it for free, since `PlayerRig.Horizon` and `Deck` are re-centred on the rig camera's
+  position every frame.
+- **A near pass drawn from the game's own eye pose was considered and rejected.** That candidate
+  draws the near subtree with a custom vertex path, from small origin-relative transforms and an
+  eye pose the game supplies. Under the stand-in it would be exact, because the head is pinned.
+  Under OpenXR the eye poses the frame draws with are located on the render thread
+  (`OpenXRAPI::pre_render` calls `xrLocateViews`), and `get_view_transform` refuses any other
+  thread (`ERR_NOT_ON_RENDER_THREAD`). The main thread's `XRCamera3D` pose is an earlier
+  prediction, so the cockpit would swim against the world during head motion by the difference.
+  Only a headset could judge that, and every interior mesh's transform would have to be re-supplied
+  each frame.
+- **0 km is the bound a precise path reaches**: 0.22 px (0.7') worst on the dials, which carries
+  the gauges' own motion, and 0.18 px on the shell.
+
+**The double-precision path, written up and not started.** It fixes the class outright: every CPU
+transform above becomes `double`, and the GPU's model-view translation goes through the emulated
+add. It takes these pieces:
+
+1. **The engine.** The Godot 4.7-stable editor built with
+   `scons platform=windows target=editor precision=double module_mono_enabled=yes`, then
+   `--headless --generate-mono-glue modules/mono/glue`, then
+   `modules/mono/build_scripts/build_assemblies.py --godot-output-dir=bin --precision=double
+   --push-nupkgs-local <feed>`. `tools/godot/` then holds the custom build in place of the
+   downloaded one. A local NuGet feed carries `Godot.NET.Sdk` and `GodotSharp` built
+   `REAL_T_IS_DOUBLE`, and the project restores from it.
+2. **The export templates.** Windows and Linux, `target=template_release` (and `template_debug`)
+   with `precision=double module_mono_enabled=yes`. Linux is included because the C# assembly is
+   compiled against one precision and ships to both platforms, so the flat Linux build goes double
+   too. The Linux toolchain is the one `ExportRelease.ps1 -Linux` already uses.
+3. **The C# port.** Under `REAL_T_IS_DOUBLE` every `Vector3`, `Basis` and `Transform3D` component
+   is `double`, and every implicit narrowing to `float` stops compiling. The tree has about 9,000
+   lines that name `float` in about 990 C# files. Most of them read a vector component, so this is
+   the largest single piece of work. The engine-free sim math has to choose whether to stay `float`
+   (it is chapter-scale and deterministic today) or follow the engine.
+4. **WebRTC.** The GDExtension is built against godot-cpp with `precision=double` (godot-cpp names
+   those libraries `.double`) in place of the official single-precision release `InstallWebRtc.ps1`
+   pins. A single-precision extension does not load into a double engine.
+5. **Goldens and suites.** Every golden is re-pinned, the 24 flat shots and `c1-cockpit-xr-sim`.
+   Every `--det` capture changes at world scale, and physics results can differ in the last bits,
+   so the engine suites' hit and contact expectations are re-run. This breaks the boundary rule
+   for the flat game by construction, so the switch is the author's decision on its own merits,
+   not a VR item.
+6. **Shader caveats.** The emulated add covers `MODELVIEW_MATRIX`, which the world shaders use
+   under `skip_vertex_transform` (`SceneBuilder.cs`'s `VERTEX = (MODELVIEW_MATRIX * ...)`). Any
+   shader that rebuilds the model-view from `VIEW_MATRIX * MODEL_MATRIX` itself bypasses it, as
+   the billboard path does (`MODELVIEW_MATRIX = VIEW_MATRIX * mat4(...)`). Those are far-world
+   sprites today, but a near one would need the same care. Multimesh instances under
+   `skip_vertex_transform` also skip the emulation (`scene_forward_clustered.glsl`, the
+   `sc_multimesh` branch).
+7. **Verification.** This item's instrument at 20 km should then read near the 0 km row.
+
+**Approach (what was done).** Measured the baseline per eye, read the renderer's XR path, built
+(a) as a scratch change and measured it, sized (b) against the tree, and wrote up the fallback.
+The scratch change is reverted. The instruments are `.scratch/A3/a3_reg.py` (subpixel phase
+correlation by an upsampled DFT, bezel rings with the needle masked, checked against synthetic
+shifts of 0.04-3.6 px to 0.01 px) and `a3_table.py` (the table above, right eye registered with the
+panel's L-to-R offset). The fetched engine sources are in `.scratch/A3-src/`. A worktree loses its
+`.scratch` on removal, so the table above is the record.
+
+**Model recommendation.** Measurement and source reading; closed without code. The re-plan
+(engine build, C# port) is a High-tier item.
+
+**Verify.** Goldens stage on the reverted tree: 25 of 25 hash-identical, `c1-cockpit-xr-sim`
+included (`RunTests.ps1 -SkipUnits -SkipEngine -SkipHitch`). The complete battery was not run
+here, because a sibling item shared the hidden desktop.
 
 **⚠ Traps.** A heading-0 pin cannot show the effect (⚠ table row 1). A luminance centroid moves with
-shading; use phase correlation on a bezel-only mask. The scratch tool from PLAN-cockpit-panel C20 was
-swept; rebuild it from `git show docs-archive:docs/plans/PLAN-cockpit-panel.md`.
+shading; use phase correlation on a bezel-only mask. ⚠ Do not judge a near-subtree fix by its
+shell regions alone. Under multiview the shell jumps with the dials, because the eyes round, so a fix
+that only steadies the dials against the shell has not steadied either against the eye. ⚠ A
+re-parent that keeps the same float operations (the interior under the XR origin) renders
+bit-identical frames. Check a candidate with a pixel diff against the baseline before measuring it.
+
+**Verified.** <pending orchestrator run>
 
 ## A4 ☐ Screen-space effects under multiview
 
