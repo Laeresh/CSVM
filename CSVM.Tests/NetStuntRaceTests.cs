@@ -285,7 +285,7 @@ public sealed class NetStuntRaceTests
         Assert.True(RaceCallMessage.TryRead(bytes.AsSpan(0, 8), out var back));
         Assert.Equal(call, back);
         Assert.False(RaceCallMessage.TryRead(bytes.AsSpan(0, 7), out _));
-        Assert.Equal(new[] { 1, 2, 3 }, new[] { NetRaceCall.Restart, NetRaceCall.Lobby, NetRaceCall.Leave }.Select(c => (int)c));
+        Assert.Equal(new[] { 1, 2, 3 }, new[] { NetRaceCall.Rerun, NetRaceCall.Lobby, NetRaceCall.Leave }.Select(c => (int)c));
 
         var line = new RaceStandingMessage(1, 0, inRun: false, completed: true, 2, 1, 9f, 9f, 3, 0, new[] { 3f, 6f, 9f }, left: true);
         Assert.Equal(120, line.Write(bytes));
@@ -300,14 +300,14 @@ public sealed class NetStuntRaceTests
     }
 
     [Fact]
-    public void TheHostsRestartOpensTheGuestsNextWindowAheadOfItsLinesAndAnOldLineOrCallOpensNothing()
+    public void TheHostsRerunOpensTheGuestsNextWindowAheadOfItsLinesAndAnOldLineOrCallOpensNothing()
     {
         var f = Field();
-        int restarts = 0;
-        f.Guest.Restarted = () =>
+        int reruns = 0;
+        f.Guest.Rerun = () =>
         {
-            restarts++;
-            f.GuestRace.Restart();
+            reruns++;
+            f.GuestRace.Rerun();
             f.GuestRace.BeginOpening(0f);
         };
         f.Guest.Report(1, NetRaceRun.Started);
@@ -316,20 +316,20 @@ public sealed class NetStuntRaceTests
         f.Step();
         Assert.Equal(9f, f.GuestRace.Of(1)!.BestTime);
 
-        f.HostRace.Restart();
+        f.HostRace.Rerun();
         f.HostRace.BeginOpening(0f);
-        f.Host.CallRestart();
+        f.Host.CallRerun();
         f.Step();
-        Assert.Equal((1, 1, 1), (restarts, f.HostRace.Round, f.GuestRace.Round));
+        Assert.Equal((1, 1, 1), (reruns, f.HostRace.Window, f.GuestRace.Window));
         Assert.Null(f.GuestRace.Of(1)!.BestTime);
 
-        // The old window's line, arriving now, is dropped; so is the same restart heard again.
+        // The old window's line, arriving now, is dropped; so is the same rerun heard again.
         int lines = f.Guest.Lines;
         f.HostSession.Broadcast(new RaceStandingMessage(1, 0, false, true, 1, 1, 9f, 9f, 3, 0, new[] { 3f, 6f, 9f }), NetChannels.Events);
-        f.HostSession.Broadcast(new RaceCallMessage(NetRaceCall.Restart, 1), NetChannels.Events);
+        f.HostSession.Broadcast(new RaceCallMessage(NetRaceCall.Rerun, 1), NetChannels.Events);
         f.HostSession.Broadcast(new RaceCallMessage(NetRaceCall.Lobby, 0), NetChannels.Events);
         f.Pump();
-        Assert.Equal((lines, 1, false), (f.Guest.Lines, restarts, f.Guest.LobbyCalled));
+        Assert.Equal((lines, 1, false), (f.Guest.Lines, reruns, f.Guest.LobbyCalled));
         Assert.Null(f.GuestRace.Of(1)!.BestTime);
 
         // ABLE-TO-FAIL CONTROL: the new window's own line is taken, and so is its runs' report.

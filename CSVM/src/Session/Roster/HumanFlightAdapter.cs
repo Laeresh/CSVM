@@ -466,11 +466,11 @@ internal sealed class HumanFlightAdapter
             var runHud = StuntRunHud.Build(run);
             runHud.Count = controller.StartCount;
             pilotHud.StuntRun = runHud;
-            // A run starts, and restarts, behind the count; the first one begins once Setup below
+            // A run starts, and reruns, behind the count; the first one begins once Setup below
             // has placed the spawn it walks to.
-            if (_human.RestartCount is { } count)
+            if (_human.RerunCount is { } count)
             {
-                controller.RestartCount = count;
+                controller.RerunCount = count;
                 controller.Audio?.BindStartCount(_human.MenuSounds);
             }
             var scoreKey = $"{_policy.Chapter}/{_policy.Mission}/{custom?.Name ?? planeName}";
@@ -587,7 +587,7 @@ internal sealed class HumanFlightAdapter
         controller.Setup(new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),
             remote ? null : rig.Camera, camParams, start.Pos, start.LookAt,
             start.ThrottleFrac, start.SpeedMps, cockpitCameraOffset: planeBuilder.CockpitCameraOffset);
-        if (controller.RestartCount != null && _human.FirstStartCount is { } firstCount)
+        if (controller.RerunCount != null && _human.FirstStartCount is { } firstCount)
             controller.BeginStartCount(firstCount); // a run's first start is a start like any other
         // The Danger Zone eye, framed off the airframe's own chase distance and aimed at the pose
         // the controller draws, which is the controller node's own transform.

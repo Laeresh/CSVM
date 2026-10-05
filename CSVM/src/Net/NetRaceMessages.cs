@@ -18,7 +18,7 @@ public enum NetRaceRun : byte
     /// <summary>The run cleared every zone, in the run time carried.</summary>
     Finished = 3,
 
-    /// <summary>The run was thrown away by a restart.</summary>
+    /// <summary>The run was thrown away by a rerun.</summary>
     Abandoned = 4,
 }
 
@@ -46,8 +46,8 @@ public enum NetRaceCall : byte
     /// <summary>A call this build does not know; it does nothing.</summary>
     Unknown = 0,
 
-    /// <summary>The host opened a new window, the round carried, over the same course and field.</summary>
-    Restart = 1,
+    /// <summary>The host opened a new window, the one carried, over the same course and field.</summary>
+    Rerun = 1,
 
     /// <summary>The host took the race back to the lobby; every guest follows it there.</summary>
     Lobby = 2,
@@ -59,10 +59,10 @@ public enum NetRaceCall : byte
 /// <summary>
 /// One fact about a seat's own run, sent by the machine flying it to the host, which times nothing
 /// of a remote seat itself. Reliable. <c>Run</c> numbers the owner's runs from 1 within a window,
-/// and <c>Round</c> names the window. The host drops a repeated start and any report of a run or a
+/// and <c>Window</c> numbers the window. The host drops a repeated start and any report of a run or a
 /// window it has moved past (<c>docs/org/multiplayer-messages.md</c>, "Stunt race").
 /// </summary>
-public readonly record struct RaceRunMessage(byte Seat, NetRaceRun Kind, byte Zone, byte Round, ushort Run, float RunTime)
+public readonly record struct RaceRunMessage(byte Seat, NetRaceRun Kind, byte Zone, byte Window, ushort Run, float RunTime)
     : INetMessage<RaceRunMessage>
 {
     /// <summary>The fixed width of the message, header included.</summary>
@@ -88,10 +88,10 @@ public readonly record struct RaceRunMessage(byte Seat, NetRaceRun Kind, byte Zo
         byte seat = reader.ReadByte();
         var kind = (NetRaceRun)reader.ReadByte();
         byte zone = reader.ReadByte();
-        byte round = reader.ReadByte();
+        byte window = reader.ReadByte();
         ushort run = reader.ReadUInt16();
         _ = reader.ReadUInt16();
-        message = new RaceRunMessage(seat, kind, zone, round, run, reader.ReadSingle());
+        message = new RaceRunMessage(seat, kind, zone, window, run, reader.ReadSingle());
         return true;
     }
 
@@ -102,7 +102,7 @@ public readonly record struct RaceRunMessage(byte Seat, NetRaceRun Kind, byte Zo
         writer.WriteByte(Seat);
         writer.WriteByte((byte)Kind);
         writer.WriteByte(Zone);
-        writer.WriteByte(Round);
+        writer.WriteByte(Window);
         writer.WriteUInt16(Run);
         writer.WriteUInt16(0);
         writer.WriteSingle(RunTime);
@@ -115,9 +115,9 @@ public readonly record struct RaceRunMessage(byte Seat, NetRaceRun Kind, byte Zo
 /// clock at send. Reliable, sent once a second and at once on every change of phase, the ending
 /// among them. <c>Elapsed</c> is the opening's seconds gone during the opening and the window's
 /// after it. A guest reads it forward by its lateness, which is how its opening count starts on the
-/// host's instant. <c>Round</c> names the window, so a guest can tell the host's next one.
+/// host's instant. <c>Window</c> numbers the window, so a guest can tell the host's next one.
 /// </summary>
-public readonly record struct RaceStateMessage(NetRacePhase Phase, byte Round, float Elapsed, float WindowSeconds, float HostClock)
+public readonly record struct RaceStateMessage(NetRacePhase Phase, byte Window, float Elapsed, float WindowSeconds, float HostClock)
     : INetMessage<RaceStateMessage>
 {
     /// <summary>The fixed width of the message, header included.</summary>
@@ -138,11 +138,11 @@ public readonly record struct RaceStateMessage(NetRacePhase Phase, byte Round, f
             return false;
 
         var phase = (NetRacePhase)reader.ReadByte();
-        byte round = reader.ReadByte();
+        byte window = reader.ReadByte();
         _ = reader.ReadUInt16();
         float elapsed = reader.ReadSingle();
-        float window = reader.ReadSingle();
-        message = new RaceStateMessage(phase, round, elapsed, window, reader.ReadSingle());
+        float windowSeconds = reader.ReadSingle();
+        message = new RaceStateMessage(phase, window, elapsed, windowSeconds, reader.ReadSingle());
         return true;
     }
 
@@ -151,7 +151,7 @@ public readonly record struct RaceStateMessage(NetRacePhase Phase, byte Round, f
     {
         var writer = new NetMessageWriter(into, Type);
         writer.WriteByte((byte)Phase);
-        writer.WriteByte(Round);
+        writer.WriteByte(Window);
         writer.WriteUInt16(0);
         writer.WriteSingle(Elapsed);
         writer.WriteSingle(WindowSeconds);
@@ -163,11 +163,11 @@ public readonly record struct RaceStateMessage(NetRacePhase Phase, byte Round, f
 /// <summary>
 /// The window's end decided by one machine for the rest. The host sends every guest its new window
 /// or its return to the lobby; a guest tells the host it left. Reliable, on the channel the race's
-/// lines and clock take, so a restart reaches a guest ahead of the new window's lines.
-/// <c>Round</c> names the window the call opens or ends (<c>docs/org/multiplayer-messages.md</c>,
+/// lines and clock take, so a rerun reaches a guest ahead of the new window's lines.
+/// <c>Window</c> numbers the window the call opens or ends (<c>docs/org/multiplayer-messages.md</c>,
 /// "Stunt race").
 /// </summary>
-public readonly record struct RaceCallMessage(NetRaceCall Call, byte Round) : INetMessage<RaceCallMessage>
+public readonly record struct RaceCallMessage(NetRaceCall Call, byte Window) : INetMessage<RaceCallMessage>
 {
     /// <summary>The fixed width of the message, header included.</summary>
     public const int Size = NetMessage.HeaderBytes + 4;
@@ -196,7 +196,7 @@ public readonly record struct RaceCallMessage(NetRaceCall Call, byte Round) : IN
     {
         var writer = new NetMessageWriter(into, Type);
         writer.WriteByte((byte)Call);
-        writer.WriteByte(Round);
+        writer.WriteByte(Window);
         writer.WriteUInt16(0);
         return writer.Close();
     }
@@ -226,14 +226,14 @@ public readonly struct RaceStandingMessage : INetMessage<RaceStandingMessage>, I
     private readonly float[]? _splits;
 
     /// <summary>One racer's line. <paramref name="splits"/> is cut at <see cref="MaxZones"/>.</summary>
-    public RaceStandingMessage(byte seat, byte round, bool inRun, bool completed, ushort runsStarted,
+    public RaceStandingMessage(byte seat, byte window, bool inRun, bool completed, ushort runsStarted,
         ushort runsFinished, float bestTime, float timeToMostZones, byte mostZones, byte currentZones,
         IReadOnlyList<float> splits, bool left = false)
     {
         ArgumentNullException.ThrowIfNull(splits);
         Seat = seat;
         Left = left;
-        Round = round;
+        Window = window;
         InRun = inRun;
         Completed = completed;
         RunsStarted = runsStarted;
@@ -257,7 +257,7 @@ public readonly struct RaceStandingMessage : INetMessage<RaceStandingMessage>, I
     public byte Seat { get; }
 
     /// <summary>The window this line belongs to.</summary>
-    public byte Round { get; }
+    public byte Window { get; }
 
     /// <summary>Whether the host counts a run of this racer in progress.</summary>
     public bool InRun { get; }
@@ -300,7 +300,7 @@ public readonly struct RaceStandingMessage : INetMessage<RaceStandingMessage>, I
 
         byte seat = reader.ReadByte();
         byte flags = reader.ReadByte();
-        byte round = reader.ReadByte();
+        byte window = reader.ReadByte();
         int count = Math.Min((int)reader.ReadByte(), MaxZones);
         ushort started = reader.ReadUInt16();
         ushort finished = reader.ReadUInt16();
@@ -313,7 +313,7 @@ public readonly struct RaceStandingMessage : INetMessage<RaceStandingMessage>, I
         for (int i = 0; i < count; i++)
             splits[i] = reader.ReadSingle();
 
-        message = new RaceStandingMessage(seat, round, (flags & InRunFlag) != 0, (flags & CompletedFlag) != 0,
+        message = new RaceStandingMessage(seat, window, (flags & InRunFlag) != 0, (flags & CompletedFlag) != 0,
             started, finished, best, toMost, most, current, splits, (flags & LeftFlag) != 0);
         return true;
     }
@@ -325,7 +325,7 @@ public readonly struct RaceStandingMessage : INetMessage<RaceStandingMessage>, I
         var writer = new NetMessageWriter(into, Type);
         writer.WriteByte(Seat);
         writer.WriteByte((byte)((InRun ? InRunFlag : 0) | (Completed ? CompletedFlag : 0) | (Left ? LeftFlag : 0)));
-        writer.WriteByte(Round);
+        writer.WriteByte(Window);
         writer.WriteByte((byte)splits.Count);
         writer.WriteUInt16(RunsStarted);
         writer.WriteUInt16(RunsFinished);
@@ -343,7 +343,7 @@ public readonly struct RaceStandingMessage : INetMessage<RaceStandingMessage>, I
     /// <inheritdoc/>
     public bool Equals(RaceStandingMessage other)
     {
-        if (Seat != other.Seat || Round != other.Round || InRun != other.InRun || Completed != other.Completed || Left != other.Left
+        if (Seat != other.Seat || Window != other.Window || InRun != other.InRun || Completed != other.Completed || Left != other.Left
             || RunsStarted != other.RunsStarted || RunsFinished != other.RunsFinished
             || !BestTime.Equals(other.BestTime) || !TimeToMostZones.Equals(other.TimeToMostZones)
             || MostZones != other.MostZones || CurrentZones != other.CurrentZones
@@ -365,5 +365,5 @@ public readonly struct RaceStandingMessage : INetMessage<RaceStandingMessage>, I
     public override bool Equals(object? obj) => obj is RaceStandingMessage other && Equals(other);
 
     /// <inheritdoc/>
-    public override int GetHashCode() => HashCode.Combine(Seat, Round, RunsStarted, RunsFinished, Splits.Count);
+    public override int GetHashCode() => HashCode.Combine(Seat, Window, RunsStarted, RunsFinished, Splits.Count);
 }

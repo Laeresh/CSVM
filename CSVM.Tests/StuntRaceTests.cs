@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using CSVM.Flight.Modes;
+using CSVM.UI.Screens;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -77,7 +78,7 @@ public class StuntRaceTests
 
         FlyRun(race, 0, new[] { 50f, 90f, 99f }); // slow, but the only completed run
         PartialRun(race, 1, new[] { (0, 10f), (1, 30f) });
-        // Two zones in an earlier run, faster to them than P2, then a restart that gets only one.
+        // Two zones in an earlier run, faster to them than P2, then a rerun that gets only one.
         PartialRun(race, 2, new[] { (2, 8f), (0, 20f) });
         race.RunAbandoned(2);
         PartialRun(race, 2, new[] { (1, 4f) });
@@ -90,15 +91,15 @@ public class StuntRaceTests
     }
 
     [Fact]
-    public void ARestartKeepsTheBestAndOnlyAFasterRunReplacesIt()
+    public void ARerunKeepsTheBestAndOnlyAFasterRunReplacesIt()
     {
         var race = OpenRace(3, out var a, out _, out _);
         FlyRun(race, 0, new[] { 3f, 6f, 9f });
-        race.RunAbandoned(0); // the restart's reset after a completed run throws nothing away
+        race.RunAbandoned(0); // the rerun's reset after a completed run throws nothing away
         Assert.Equal(9f, a.BestTime);
 
         PartialRun(race, 0, new[] { (0, 1f) });
-        race.RunAbandoned(0); // a held restart mid-run
+        race.RunAbandoned(0); // a held rerun mid-run
         Assert.Equal(9f, a.BestTime);
         Assert.Equal(new float?[] { 3f, 6f, 9f }, a.Splits);
 
@@ -117,7 +118,7 @@ public class StuntRaceTests
     }
 
     [Fact]
-    public void NoRunStartsOrRestartsAfterTimeUp()
+    public void NoRunStartsOrRerunsAfterTimeUp()
     {
         var race = new StuntRace(1f, 3);
         var a = race.Add(0, "Bloodhawk");
@@ -195,11 +196,11 @@ public class StuntRaceTests
     }
 
     [Fact]
-    public void ARestartedRaceClearsEveryRunAndWaitsForItsOpening()
+    public void ARerunRaceClearsEveryRunAndWaitsForItsOpening()
     {
         var race = OpenRace(3, out var a, out _, out _);
         FlyRun(race, 0, new[] { 3f, 6f, 9f });
-        race.Restart();
+        race.Rerun();
 
         Assert.Equal(StuntRacePhase.Opening, race.Phase);
         Assert.Null(a.BestTime);
@@ -265,8 +266,8 @@ public class StuntRaceTests
         // Their best still leads, and their run in progress stopped with them.
         Assert.Equal(new[] { 0, 1, 2 }, race.Standings().Select(r => r.Index));
         Assert.Equal((5f, false, true), (a.BestTime, a.InRun, a.Left));
-        Assert.Equal("P1 (left)", StuntRace.NameText(a));
-        Assert.Equal("P2", StuntRace.NameText(b));
+        Assert.Equal("P1 (left)", RaceRows.NameText(a));
+        Assert.Equal("P2", RaceRows.NameText(b));
         Assert.Contains("LEADER P1 (left) 0:05.0", race.LeaderboardLine(1), StringComparison.Ordinal);
         Assert.True(race.Racers[0].Line().Left);
 
@@ -279,7 +280,7 @@ public class StuntRaceTests
         Assert.Equal(new[] { 1, 0, 2 }, race.Standings().Select(r => r.Index));
 
         // A new window leaves them out; the rest go again.
-        race.Restart();
+        race.Rerun();
         Assert.Equal(new[] { 1, 2 }, race.Racers.Select(r => r.Index));
     }
 
@@ -302,6 +303,30 @@ public class StuntRaceTests
         Assert.Equal(StuntRacePhase.FinalRun, copy.Phase);
         copy.TakeLine(1, new RacerLine(false, 0, 0, null, 0, 0f, 0, new float?[3], Left: true));
         Assert.True(copy.Of(1)!.Left);
+    }
+
+    [Fact]
+    public void APilotLeavingAnEndedRaceIsNotMarkedOnTheHostOrOnAReplica()
+    {
+        // ABLE-TO-FAIL CONTROL: while the race runs, leaving marks the pilot.
+        var running = OpenRace(3, out _, out var leaves, out _);
+        FlyRun(running, 1, new[] { 1f, 2f, 5f });
+        Assert.True(running.MarkLeft(1));
+        Assert.True(leaves.Left);
+
+        var race = OpenRace(3, out _, out var b, out _);
+        FlyRun(race, 1, new[] { 1f, 2f, 5f });
+        Advance(race, 61f);
+        Assert.True(race.Ended);
+        Assert.False(race.MarkLeft(1));
+        Assert.Equal((false, "P2", false), (b.Left, RaceRows.NameText(b), race.Racers[1].Line().Left));
+
+        var copy = OpenRace(3, out _, out _, out _);
+        copy.Replicate();
+        copy.TakeHostClock(StuntRacePhase.Ended, 0.0, Dt);
+        Assert.True(copy.Ended);
+        Assert.False(copy.MarkLeft(1));
+        Assert.False(copy.Of(1)!.Left);
     }
 
     [Fact]

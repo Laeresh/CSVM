@@ -868,18 +868,18 @@ every guest (`Session/World/NetRaceLink.cs`, the race itself `Flight/Modes/Stunt
 
 | Id | Message | Class | Carries |
 |---|---|---|---|
-| `0x67` | Race run | reliable, guest to host | seat at 4, kind at 5 (started 1, zone 2, finished 3, abandoned 4), course zone at 6 (`0xFF` for none), round at 7, the owner's run number at 8, two reserved bytes, the run time at 12 (16 bytes) |
-| `0x68` | Race state | reliable, host to each guest | phase at 4 (opening 0, open 1, final run 2, ended 3), round at 5, two reserved bytes, seconds into the phase's clock at 8 (the opening's while it runs, the window's after), the window's length at 12, the host's session clock at 16 (20 bytes) |
-| `0x69` | Race standing | reliable, host to each guest | seat at 4, flags at 5 (bit 0 in a run, bit 1 a completed run, bit 2 the pilot left), round at 6, split count at 7, runs started at 8, runs finished at 10, best time at 12 (0 without a completed run), time to the most zones at 16, most zones at 20, the run in progress's zones at 21, two reserved bytes, then 24 splits of 4 bytes, the ranking run's, -1 for a zone it never cleared (120 bytes) |
-| `0x6A` | Race call | reliable, host to each guest (restart, lobby) and guest to host (leave) | call at 4 (restart 1, lobby 2, leave 3), round at 5, two reserved bytes (8 bytes) |
+| `0x67` | Race run | reliable, guest to host | seat at 4, kind at 5 (started 1, zone 2, finished 3, abandoned 4), course zone at 6 (`0xFF` for none), window at 7, the owner's run number at 8, two reserved bytes, the run time at 12 (16 bytes) |
+| `0x68` | Race state | reliable, host to each guest | phase at 4 (opening 0, open 1, final run 2, ended 3), window at 5, two reserved bytes, seconds into the phase's clock at 8 (the opening's while it runs, the window's after), the window's length at 12, the host's session clock at 16 (20 bytes) |
+| `0x69` | Race standing | reliable, host to each guest | seat at 4, flags at 5 (bit 0 in a run, bit 1 a completed run, bit 2 the pilot left), window at 6, split count at 7, runs started at 8, runs finished at 10, best time at 12 (0 without a completed run), time to the most zones at 16, most zones at 20, the run in progress's zones at 21, two reserved bytes, then 24 splits of 4 bytes, the ranking run's, -1 for a zone it never cleared (120 bytes) |
+| `0x6A` | Race call | reliable, host to each guest (rerun, lobby) and guest to host (leave) | call at 4 (rerun 1, lobby 2, leave 3), window at 5, two reserved bytes (8 bytes) |
 
 **The reports.** A guest sends one report per event of its own seat's run: the run clock's start on
 the step after its count's GO, each zone's first clearing with its run time, the finish, and a
-restart that throws the run away. The owner numbers its runs from 1 within a window, and the round
-is the window's (0 for the first). The host takes a report only from the machine flying its seat
-and only under its own round. A start must carry a run number above the newest it heard from that
-seat, and any other report must name that newest run, so a repeated start or a report of a run
-already superseded counts nothing. A zone or finish with no finite run time is dropped. The race
+rerun that throws the run away. The owner numbers its runs from 1 within a window, and the window
+number is 0 for the first, one more for each rerun. The host takes a report only from the machine
+flying its seat and only under its own window. A start must carry a run number above the newest it
+heard from that seat, and any other report must name that newest run, so a repeated start or a
+report of a run already superseded counts nothing. A zone or finish with no finite run time is dropped. The race
 then applies its own rules to what passes: a start counts only in the open window, by when it
 reaches the host, a finish after time up counts while the race runs, and nothing counts after the
 end. The host's own seats feed its race directly.
@@ -891,7 +891,7 @@ ending, already holds every line the host decided before it. The race does not r
 fields are a Dogfight's score target and end reasons, and a race has an opening and a final run
 where a match has neither. A guest's race is a replica. It takes each line whole and takes the
 host's phase, which only moves on; its opening and window clock run between readings, so its own
-time up refuses a restart there, but it never ends of its own accord and ends on the host's
+time up refuses a rerun there, but it never ends of its own accord and ends on the host's
 ending. A guest records its own pilot's best off the host's line, so a finish the host refused is
 never saved. The final-run cap is the host's alone.
 
@@ -909,12 +909,12 @@ step.
 on the same MAJOR.MINOR (`BuildVersionMessage`), and these ship with type 3 in a minor release.
 
 **A new window.** Only the host's board offers Restart; a guest's reads "Waiting for the host" in
-its place, and a guest's own restart opens nothing. The host's Restart sends a restart call naming
-the new round, at the restart itself and so ahead of that window's lines and clock on the one
-ordered channel. A guest takes it only when the round is the one after its own, and opens the same
+its place, and a guest's own rerun opens nothing. The host's Restart sends a rerun call naming
+the new window, at the rerun itself and so ahead of that window's lines and clock on the one
+ordered channel. A guest takes it only when the window is the one after its own, and opens the same
 window: every local seat back on the shared spawn behind a fresh opening count, its race cleared.
 The new window's clock then catches the guest's opening up to the host's instant exactly as the
-first window's does. A guest drops a line or a clock under another round than its own, which is an
+first window's does. A guest drops a line or a clock under another window than its own, which is an
 old window's.
 
 **Leaving.** A guest that leaves a race keeps its link when it walks back to the lobby, so it sends
@@ -924,7 +924,9 @@ label, and every other guest hears it through the world link's seat-left event. 
 every board with its record, ranked as it stood and marked left: the scores page's grey row on the
 Original board and in the lobby, a "(left)" suffix on the Built-in board, the Built-in held scores
 table and the live leaderboard line. A run it had in progress stops, nothing more counts for it, and a new
-window leaves it out. A race left with one pilot runs on to the window's end, since a race builds no
+window leaves it out. Only a mid-race leave marks the racer: a guest that flew the whole window and
+leaves from the ended race's board keeps an unmarked row, since the host marks nobody once the race
+has ended. A race left with one pilot runs on to the window's end, since a race builds no
 Dogfight match and so has no "fewer than two pilots" ending. The host leaving mid-race closes its
 door, which ends every guest's flight as a Dogfight's host leaving does.
 

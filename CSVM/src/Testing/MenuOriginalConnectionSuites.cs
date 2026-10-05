@@ -480,7 +480,8 @@ internal static class MenuOriginalConnectionSuites
     [Suite("menu-original-lobby-race-end",
         "A Stunt Race's end in the Multiplayer Lobby over the loopback: an ended race lands both ends on "
         + "Game Scores with its table, the race board's columns, a pilot who left on the scores page's grey "
-        + "row and the Dogfight headers gone, where a race still running lands nowhere. A second race then "
+        + "row and the Dogfight headers gone, where a race still running lands nowhere and a guest leaving "
+        + "after the end lands unflagged. A second race then "
         + "launches from that lobby, and the host leaving it ends the guest's flight as it ends a "
         + "Dogfight's, onto the Connection page")]
     internal static void TheLobbyRaceEnd(TestContext ctx)
@@ -2972,21 +2973,7 @@ internal static class MenuOriginalConnectionSuites
     private static void LandTheRace(TestContext ctx, End host, End guest, List<End> ends)
     {
         var names = host.Door.Dogfight!.LaunchNames;
-        var race = new StuntRace(420f, 3);
-        race.Add(0, "Devastator").Callsign = names[0];
-        race.Add(1, "Firebrand").Callsign = names[1];
-        race.BeginOpening(0f);
-        foreach (var (seat, finish) in new[] { (1, 8f), (0, 9.5f) })
-        {
-            race.RunStarted(seat);
-            for (int zone = 0; zone < 3; zone++)
-            {
-                race.ZoneCleared(seat, zone, finish * (zone + 1) / 3f);
-            }
-
-            race.RunFinished(seat, finish);
-        }
-
+        var race = FlownRace(names);
         ctx.Check(CSVM.Launch.Launcher.LobbyLanding(true, host.Door.Dogfight, null, race) == null,
             $"ABLE-TO-FAIL CONTROL: a race still running lands nowhere near the lobby");
         race.MarkLeft(1);
@@ -2995,6 +2982,14 @@ internal static class MenuOriginalConnectionSuites
         var guestLanding = CSVM.Launch.Launcher.LobbyLanding(true, guest.Door.Dogfight, null, race);
         ctx.Check(hostLanding is { Scores.Count: 0, Race.Count: 2 } && guestLanding is { Race.Count: 2 } && hostLanding.Race![0].Left,
             $"an ended race lands both ends on their lobby with its table, the guest who left first ({hostLanding?.Race?.Count} rows)");
+
+        // A guest who flew the whole window and leaves from the finished board did not leave the race.
+        var flown = FlownRace(names);
+        flown.Advance(421f);
+        bool marked = flown.MarkLeft(1);
+        var flownLanding = CSVM.Launch.Launcher.LobbyLanding(true, host.Door.Dogfight, null, flown);
+        ctx.Check(!marked && flownLanding?.Race is { Count: 2 } table && !table[0].Left && !table[1].Left,
+            $"a guest leaving after the end lands unflagged ({marked}, {string.Join(" | ", flownLanding?.Race?.Select(r => $"{r.Pilot} {r.Left}") ?? Array.Empty<string>())})");
         ctx.Check(host.Door.Reclaim() && guest.Door.Reclaim(), $"and both doors take their wire back");
         if (hostLanding == null || guestLanding == null)
         {
@@ -3022,6 +3017,27 @@ internal static class MenuOriginalConnectionSuites
         ctx.Check(left?.Colour == new BoardTint(0xbb, 0xbb, 0xbb) && stayed?.Colour == new BoardTint(0, 0, 0)
                   && Draws(board, "0:08.0") && !Draws(board, "Hits %"),
             $"the page draws the race board's columns, the pilot who left grey and the other black, and no Dogfight header ({left?.Colour}, {stayed?.Colour})");
+    }
+
+    // Both seats fly one whole run in a 7 minute window, the guest's faster; the window still runs.
+    private static StuntRace FlownRace(IReadOnlyList<string> names)
+    {
+        var race = new StuntRace(420f, 3);
+        race.Add(0, "Devastator").Callsign = names[0];
+        race.Add(1, "Firebrand").Callsign = names[1];
+        race.BeginOpening(0f);
+        foreach (var (seat, finish) in new[] { (1, 8f), (0, 9.5f) })
+        {
+            race.RunStarted(seat);
+            for (int zone = 0; zone < 3; zone++)
+            {
+                race.ZoneCleared(seat, zone, finish * (zone + 1) / 3f);
+            }
+
+            race.RunFinished(seat, finish);
+        }
+
+        return race;
     }
 
     // The host walks out of a race in flight, and its door closes with the notice. The guest's door

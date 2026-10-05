@@ -192,6 +192,13 @@ element goes through the same mapping and only the scale changes; a viewport wit
 to 1:1 rather than a scale nothing can draw at. The rejected alternatives and why the art is sampled
 nearest are in [../org/campaign-board.md](../org/campaign-board.md), and bind every campaign screen.
 
+## src/UI/Boards/AuthoredPointer.cs
+A keyboard seat's mouse on a board drawn in the authored 800x600 space: the viewport pointer
+mapped back through `BoardFit` into authored pixels, with the left button, and none for a pad seat
+or a board out of the tree. The Original race and pause boards (`Menu/Original/OriginalRaceBoard.cs`,
+`OriginalPauseBoard.cs`) hand it to `BoardMenuPointer`. `PausePreferences` and the Built-in
+`PauseBoard` read their pointer their own way, raw and capture-aware.
+
 ## src/UI/Boards/ComposedBoard.cs
 What a composed campaign screen is made of, engine-free: the screen's fixed backdrop, the fills a
 page paints on it, pictures at authored pixel positions, connector strokes, text lines, button
@@ -493,11 +500,19 @@ since the scoreboard rules off its total and the wrap-up board runs the table st
 
 ## src/UI/Screens/StuntRaceBoard.cs
 The time-attack race's shared Built-in results overlay on `ResultsBoard`'s shell: one row per pilot from `StuntRace.Standings()` with placing, callsign, plane, best time, gap to the winner and runs, a
-pilot with no completed run showing their furthest run's zones and time to them (the columns' words are `StuntRace.BestText` and `GapText`, which the Original board shares; every column but the placing is headed), then each
+pilot with no completed run showing their furthest run's zones and time to them (the columns' words are `RaceRows`', which the Original board shares; every column but the placing is headed), then each
 pilot's best-run splits, a row per zone in course order. Whole-window, since a race ends for everybody at once, and built in Instant Action too, where the race rather than the mission ends a
 multi-seat run. Wakes on `RaceCompleted` and retires once `Ended` clears, so a new window is reachable without the menu; `Rows` is the ranked text the suite reads. Its exit row is
-`ExitLabel`: Back from a menu launch, which returns to the screen the race was launched from, and Quit Game from the command line, the label both race boards take; a network race's is `NetworkExitLabel`, Lobby on the host and Leave on a guest, whose board shows `WaitingForHost` in place of Restart. A pilot who left reads dim, marked by `StuntRace.NameText`. `StuntScoreboard` is the
+`ExitLabel`: Back from a menu launch, which returns to the screen the race was launched from, and Quit Game from the command line, the label both race boards take; a network race's is `NetworkExitLabel`, Lobby on the host and Leave on a guest, whose board shows `WaitingForHost` in place of Restart. A pilot who left reads dim, marked by `RaceRows.NameText`. `StuntScoreboard` is the
 single-pilot form; the Original presentation builds `Menu/Original/OriginalRaceBoard.cs` instead.
+
+## src/UI/Screens/RaceRows.cs
+The one reading of a stunt race's standings as board rows, engine-free: `Of(standings, zoneCount)`
+gives each pilot's `RaceRow` (place, name marked when they left, aircraft, best, gap to the
+winner, runs finished of started) and the `Racer` behind it for its seat and colour. `NameText`,
+`BestText` and `GapText` are the column words. `StuntRaceBoard`, `Overlays/ScoresTable.cs`,
+`Overlays/OriginalScoresText.cs` and `Menu/Original/OriginalRaceTable.cs` lay the rows out their own
+way. It lives in `UI.Screens` because `UI.Boards` ranks below `Flight` in the family order.
 
 ## src/UI/Screens/VersusBoard.cs
 The whole-window Dogfight results overlay on `ResultsBoard`'s shell: the winner in their own
@@ -1292,7 +1307,7 @@ the screen tests off engine and this node owns the cursor, the pointer and the f
 seat's pointer shares the cursor on `BoardMenuPointer`'s rule: entering a strip moves it, a press holds the strip, the release on it fires, and the OS pointer gives way to the dialog's own. Its readout is a delegate, since the objectives follow the running mission. Preferences stands `PausePreferences` over the held world and `Reprime`s on its close, and photo mode does the same over the frozen world. It draws no control hints, since the original's sheet carries none. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/UI/Menu/Original/OriginalRaceTable.cs
-A stunt race's standings drawn as the original's multiplayer scores page, engine-free. `Rows(standings, zoneCount)` turns `StuntRace.Standings()` into `RaceTableRow`s in the Built-in board's own words, and `Compose(rows, pageX, pageY, strings, layers)` writes `MP_LOBBY_STATSCREEN.PNG` into the backdrop at that page corner and the headers and up to ten rows into the lines, at `MULTIPLAYERLOBBY_STATS.SCRIPT`'s positions and faces: rows from (+24, +69) at a 20-pixel pitch, the name column 154 wide and left-justified, then cells 62, 61, 60 and 57 wide, centred. The original has no race table, so the race borrows the page: place and callsign at the name column's left and the aircraft at its right, best, gap and runs in the next three, the fifth empty, under remake-only headers. A row whose pilot left the race draws in the scores page's grey for a flagged row (`0xffbbbbbb`), and `ComposeRows` writes the headers and rows alone over a page already drawn, the lobby's own Game Scores after a race. A held scores display composes it over its own frame. Geometry: [../org/menu-inventory.md](../org/menu-inventory.md), the Multiplayer Lobby.
+A stunt race's standings drawn as the original's multiplayer scores page, engine-free. `Rows(standings, zoneCount)` turns `StuntRace.Standings()` into `RaceTableRow`s in `UI/Screens/RaceRows.cs`' words, and `Compose(rows, pageX, pageY, strings, layers)` writes `MP_LOBBY_STATSCREEN.PNG` into the backdrop at that page corner and the headers and up to ten rows into the lines, at `MULTIPLAYERLOBBY_STATS.SCRIPT`'s positions and faces: rows from (+24, +69) at a 20-pixel pitch, the name column 154 wide and left-justified, then cells 62, 61, 60 and 57 wide, centred. The original has no race table, so the race borrows the page: place and callsign at the name column's left and the aircraft at its right, best, gap and runs in the next three, the fifth empty, under remake-only headers. A row whose pilot left the race draws in the scores page's grey for a flagged row (`0xffbbbbbb`), and `ComposeRows` writes the headers and rows alone over a page already drawn, the lobby's own Game Scores after a race. A held scores display composes it over its own frame. Geometry: [../org/menu-inventory.md](../org/menu-inventory.md), the Multiplayer Lobby.
 
 ## src/UI/Menu/Original/OriginalRaceResults.cs
 The Original presentation's end-of-race screen, engine-free. `RaceResultsSheet.Of(race, zoneNames, context, exitLabel)` freezes one ended race (standings, zone names, each pilot's splits in race order), so a restart's cleared field never redraws it, and `Compose(sheet, strings, focus, pressed)` draws it into the screen a Dogfight's end lands on, the Multiplayer Lobby on its Game Scores tab: `MP_LOBBY_BACKGROUND.JPG`, `OriginalRaceTable` at the tab page's corner, the title in the lobby's title box, the zone key down the player list's lines (two columns past eleven zones), the splits in the chat pane (zone numbers on its first line, a pilot per line, columns no wider than the scores page's), the context in the chat line, and Photo Mode, Restart and the exit on the Create Team, Send and Leave Game plaques with the lobby's strip frames and label tints. Every word but the tab's is remake-only, in the face of the lobby string at that place. A network guest's sheet carries `Withheld`, its line after the context, and leaves the Send plaque empty, so the exit keeps its slot (`Slots`); a pilot who left draws grey in the splits too. `RowAt` is the pointer's hit test, `MenuRowAt` the menu row on a plaque.

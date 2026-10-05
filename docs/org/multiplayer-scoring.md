@@ -171,11 +171,9 @@ a network game. [Evidence: inferred] The list's entries are made by the multipla
 `FUN_004136e0` and by each arriving player's record (`FUN_00414640`), so outside a network game the
 list is empty and the press only hides the chat.
 
-[Evidence: decoded] **A tap, not a hold.** The keyboard dispatch in `FUN_00535a80`
-(`0x00535dfe`..`0x00535e24`) calls a code's handler only while its state word has bit 0 set. A press
-writes 1 (3 if the word was already 1) and a release ORs 4; the next frame's `FUN_00535a00` turns 1
-into 2 and any released word into 0. A key held across a frame is therefore released from 2 into 6
-and calls nothing: the handler runs on the press, and on a press and release inside one frame.
+[Evidence: decoded] **A tap, not a hold.** Display Scores' handler runs on the press, as every
+keyboard handler does ([`input.md`](input.md#dispatch), "A handler runs on the press"), so the
+original's key is a tap, not a hold.
 
 [Evidence: decoded] **What it draws.** `FUN_004565d0` builds 18 rows once (the byte at `+0x10`),
 each two text items in the `hudNetPlay` font: the line at x 50 and a flag column at x 40, rows at
@@ -216,22 +214,23 @@ flag its aircraft carries (aircraft `+0x720`, [`multiplayer-ctf.md`](multiplayer
 in a free-for-all the pilots go by score, then by the join counter at record `+0x18`, higher first.
 
 **The remake.** `UI/Overlays/ScoresOverlay.cs` draws the table while a seat holds Display Scores
-and drops it on release, the user's ruling over the decoded four-second tap; a score update does not
-raise it. Under the Original presentation the lines are `OriginalScoresText`'s, built by the table
-above, drawn at the decoded positions three times over in the HUD's 1440-line reference, every
-character on the 8-pixel cell, in Courier New at weight 600 in `hudNetPlay`'s ink with its shadow,
-and the flag column marks a Capture the Flag carrier in the colours above. After the original's two
-columns each pilot line carries the remake's kills (6 characters) and deaths under "kills" and
-"deaths" in the header's lowercase, the user's ruling, so the line reads like the Dogfight board; a
-team's line stays the original's own. Not carried: the entry
-colour, `scorecolors`, and the join-order tie break (ties keep `VersusMatch.Standings` order). A seat
-on no lobby team in a team match, which the original has no counterpart for, follows the teams as a
-plain line. A stunt race borrows the grid for its own columns, remake text in the header's style:
-place and callsign in the name column, then the aircraft (12), best (10), gap (9) and runs. Under
-Built-in the same standings stand as a chrome table in the results board's columns. Either look
-stands in the holding seat's pane alone, as the original's stands in its one screen's HUD, so a
-split screen seat's table never covers another pilot's flight. While it stands, that pane's chat
-lines step aside; the original instead hides the panel at once on the press until the next line.
+and drops it on release. That hold is a remake-only rule in place of the decoded four-second tap, so
+the table stands exactly as long as the pilot asks for it, and a score update does not raise it.
+Under the Original presentation the lines are `OriginalScoresText`'s, built by the table above,
+drawn at the decoded positions three times over in the HUD's 1440-line reference, every character
+on the 8-pixel cell, in Courier New at weight 600 in `hudNetPlay`'s ink with its shadow, and the
+flag column marks a Capture the Flag carrier in the colours above. After the original's two columns
+each pilot line carries the remake's kills (6 characters) and deaths under "kills" and "deaths" in
+the header's lowercase, a remake-only rule so the line reads like the Dogfight board; a team's line
+stays the original's own. Not carried: the entry colour, `scorecolors`, and the join-order tie
+break (ties keep `VersusMatch.Standings` order). A seat on no lobby team in a team match, which the
+original has no counterpart for, follows the teams as a plain line. A stunt race borrows the grid
+for its own columns, remake text in the header's style: place and callsign in the name column, then
+the aircraft (12), best (10), gap (9) and runs. Under Built-in the same standings stand as a chrome
+table in the results board's columns. Either look stands in the holding seat's pane alone, as the
+original's stands in its one screen's HUD, so a split screen seat's table never covers another
+pilot's flight. While it stands, that pane's chat lines step aside; the original instead hides the
+panel at once on the press until the next line.
 
 ## What the remake takes
 

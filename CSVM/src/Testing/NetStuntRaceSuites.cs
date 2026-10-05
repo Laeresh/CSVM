@@ -76,7 +76,7 @@ internal static class NetStuntRaceSuites
     [Suite("net-stunt-race-end",
         "a two-machine Stunt Race's end over a 100 ms loopback: at the window's end the host's board offers "
         + "Restart and Lobby, the guest's says it waits for the host and offers Leave, and the guest's own "
-        + "restart is refused; the host's Restart reopens the window on both machines in a new round, both "
+        + "restart is refused; the host's Restart opens the next window on both machines, both "
         + "openings on one step with each local seat back on the spawn, an old window's line dropped; a guest "
         + "leaving mid-window keeps its best, ranked and marked left on the host's board, and its aeroplane "
         + "goes from the host's world, while the host's race runs on alone to the window's end; on a second "
@@ -220,10 +220,10 @@ internal static class NetStuntRaceSuites
             ctx.Check(MenuRows(guestBoard) == "Photo Mode|Leave" && guestBoard!.WithheldLine == UI.Screens.StuntRaceBoard.WaitingForHost,
                 $"[{cell}] the guest's board says it waits for the host and offers Leave ({MenuRows(guestBoard)}, \"{guestBoard?.WithheldLine}\")");
 
-            s.Guest.RestartRace!();
+            s.Guest.RerunRace!();
             Steps(s.Peers, 10);
-            ctx.Check(s.GuestRace.Ended && s.HostRace.Ended && s.GuestRace.Round == 0 && s.HostRace.Round == 0,
-                $"[{cell}] the guest's own restart opens no window anywhere ({s.HostRace.Phase} {s.HostRace.Round}/{s.GuestRace.Phase} {s.GuestRace.Round})");
+            ctx.Check(s.GuestRace.Ended && s.HostRace.Ended && s.GuestRace.Window == 0 && s.HostRace.Window == 0,
+                $"[{cell}] the guest's own restart opens no window anywhere ({s.HostRace.Phase} {s.HostRace.Window}/{s.GuestRace.Phase} {s.GuestRace.Window})");
 
             Reopen(ctx, cell, s, spawn, hostBoard, guestBoard);
             Leaving(ctx, cell, s, exits, hostBoard);
@@ -238,11 +238,11 @@ internal static class NetStuntRaceSuites
     }
 
     // The host's Restart reaches the guest as a call ahead of the new window's lines. Both races go
-    // to round 1 and both boards retire. Both openings end on one step, each local seat on the spawn.
+    // to window 1 and both boards retire. Both openings end on one step, each local seat on the spawn.
     private static void Reopen(TestContext ctx, string cell, RaceSeats s, Vector3 spawn,
         UI.Screens.StuntRaceBoard? hostBoard, UI.Screens.StuntRaceBoard? guestBoard)
     {
-        s.Host.RestartRace!();
+        s.Host.RerunRace!();
         var opened = new[] { -1, -1 };
         var at = new Vector3[2];
         var races = new[] { s.HostRace, s.GuestRace };
@@ -255,7 +255,7 @@ internal static class NetStuntRaceSuites
 
             // A finished run of the old window, sent once the guest is in the new one. No line of the
             // new window follows it until a run starts, so a taken one would still stand a link later.
-            if (staleAt < 0 && s.GuestRace.Round == 1)
+            if (staleAt < 0 && s.GuestRace.Window == 1)
             {
                 staleAt = step;
                 s.Peers[0].Wire.Link!.Broadcast(new RaceStandingMessage(1, 0, false, true, 1, 1, 1f, 1f, 5, 0, new float[5]), NetChannels.Events);
@@ -268,7 +268,7 @@ internal static class NetStuntRaceSuites
 
             for (int machine = 0; machine < 2; machine++)
             {
-                if (opened[machine] < 0 && races[machine].Round == 1 && races[machine].MayStartRun)
+                if (opened[machine] < 0 && races[machine].Window == 1 && races[machine].MayStartRun)
                 {
                     opened[machine] = step;
                     at[machine] = seats[machine].WorldPosition;
@@ -276,8 +276,8 @@ internal static class NetStuntRaceSuites
             }
         }
 
-        ctx.Check(s.HostRace.Round == 1 && s.GuestRace.Round == 1 && s.Peers[1].Wire.Race?.CallsTaken == 1,
-            $"[{cell}] the host's Restart opens round 1 on both machines, the guest's on the host's call ({s.HostRace.Round}/{s.GuestRace.Round})");
+        ctx.Check(s.HostRace.Window == 1 && s.GuestRace.Window == 1 && s.Peers[1].Wire.Race?.CallsTaken == 1,
+            $"[{cell}] the host's Restart opens window 1 on both machines, the guest's on the host's call ({s.HostRace.Window}/{s.GuestRace.Window})");
         ctx.Check(opened.All(o => o >= 0) && opened[1] >= opened[0] && opened[1] - opened[0] <= 1,
             $"[{cell}] both new openings end on the host's step or the guest's one after, never before ({opened[0]}, {opened[1]})");
         ctx.Check(at.All(p => p.DistanceTo(spawn) < SpawnReach),

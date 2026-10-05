@@ -663,7 +663,7 @@ apart from its logging. Read `TargetSelection` for how a pilot picks a zone, `St
 rest of what a run draws, and `StuntScoreboard` for what it scores.
 
 ## src/Flight/Modes/StartCount.cs
-A run's start count, engine-free and one per seat: `Begin` takes the figures (`Restart` is 3, 2, 1;
+A run's start count, engine-free and one per seat: `Begin` takes the figures (`Rerun` is 3, 2, 1;
 `Opening` puts READY first for a race window), `Advance` steps it on the sim dt and answers a beat
 per figure and GO, and `Figure` is what the HUD draws, GO lingering for `GoSeconds`. `WalkPose` is
 the kinematic walk the aircraft rides meanwhile, back along the spawn nose by the spawn speed times
@@ -819,9 +819,9 @@ The time-attack race's bookkeeping, engine-free and fed by events, never by a co
 (`FinalRunCap` past time up), and `RunStarted`, `ZoneCleared`, `RunFinished` and `RunAbandoned`
 carry each pilot's runs, a network host's entry points as much as `Follow`'s local feed. A `Racer`
 keeps its best and furthest runs with splits by course index; `Standings()` ranks by best, then
-most zones and time to them. `MayStartRun` gates restarts, `BestImproved` records bests and
+most zones and time to them. `MayStartRun` gates reruns, `BestImproved` records bests and
 `RaceCompleted` raises the board. A network guest's race is `Replicate`d, fed by `TakeLine` and
-`TakeHostClock` and never ending of its own accord. `MarkLeft` keeps a departed pilot's record, ranked as it stood and named with `NameText`'s mark, counts nothing more for it and lets `Restart` drop it from the next window. Read `StuntRaceTests.cs` and `StuntRaceBoard`.
+`TakeHostClock` and never ending of its own accord. `MarkLeft` keeps a pilot's record who left mid-race, ranked as it stood and named with `LeftSuffix`, counts nothing more for it and lets `Rerun` drop it from the next window; an ended race marks nobody. The boards' column words are `UI/Screens/RaceRows.cs`. Read `StuntRaceTests.cs` and `StuntRaceBoard`.
 
 ## src/Flight/Modes/MatchScores.cs
 What each network match scoring event is worth, engine-free: the nine `score_*` keys of
@@ -1266,7 +1266,7 @@ text, dials and gates compose and assert here with no `Control` (`ComputeStallWa
 ## src/Flight/Airframe/FlightController.cs
 The flying-aircraft node: input through `FlightModel` to a transform (or, for an AI pilot publishing
 a `RailPose`, the danger-zone ribbon's pose in place of the model step, the sweep still run), plus
-weapon fire as `FireControl`'s engine adapter and the crash and respawn paths (a stunt run splits the respawn control by hold length into `ReturnToLastZone` and `Rerun`, which opens on `RestartCount` through `BeginStartCount`, the `StartCount` walk that holds the controls and the run clock until GO; `Respawn` takes what its `RespawnPlacement` hook answers, `RespawnAt` a pose handed to it instead, and `RespawnRequest` withholds the return altogether for a seat whose placement is somebody else's to grant), and `Rearm`, a rearm base's in-flight restore of parts, damage stages and every slot. It keeps no rule it
+weapon fire as `FireControl`'s engine adapter and the crash and respawn paths (a stunt run splits the respawn control by hold length into `ReturnToLastZone` and `Rerun`, which opens on `RerunCount` through `BeginStartCount`, the `StartCount` walk that holds the controls and the run clock until GO; `Respawn` takes what its `RespawnPlacement` hook answers, `RespawnAt` a pose handed to it instead, and `RespawnRequest` withholds the return altogether for a seat whose placement is somebody else's to grant), and `Rearm`, a rearm base's in-flight restore of parts, damage stages and every slot. It keeps no rule it
 can delegate: the camera is `CameraController`'s, the pilot HUD `FlightHud`'s, this frame's stick
 one `IFlightInputSource`, the states an aircraft moves between `AircraftLifecycle`'s, and what a
 contact costs `AircraftContactResolver`'s. The seat's rendered-frame parts are modules it composes and steps, none reaching back into it: `Mouse` (`SeatMouse`), `Look` (`SeatLook`), `Pause` (`SeatPause`), `Dressing` (`FirstPersonDressing`), `TargetInput` (`SeatTargeting`) and the propeller slot `Propellers` (`PropellerSlot`); the AI gunner's acquisition is `Acquisition` (`GunnerAcquisition`). This node reads the devices, performs what each of those

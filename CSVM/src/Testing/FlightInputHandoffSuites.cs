@@ -326,7 +326,7 @@ internal static class FlightInputHandoffSuites
         {
             pilot = HumanRig(ctx, GameZ.Load(ctx.PlanesGamezPath), textures, pool, StuntSpawnSpeed);
             pilot.Stunt = run;
-            pilot.RestartCount = StartCount.Restart;
+            pilot.RerunCount = StartCount.Rerun;
             // The spawn state a plain respawn leaves, which GO must reproduce bit for bit.
             var spawnPos = pilot.WorldPosition;
             var spawnNose = pilot.NoseDirection;

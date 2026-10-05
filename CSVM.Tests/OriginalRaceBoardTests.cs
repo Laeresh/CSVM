@@ -86,7 +86,7 @@ public class OriginalRaceBoardTests
         Assert.Equal(new[] { "0:03.0", "0:06.0", "0:09.5" }, sheet.Splits[1].Cells);
         Assert.Equal(new[] { "-", "-", "0:04.0" }, sheet.Splits[2].Cells);
 
-        race.Restart();
+        race.Rerun();
         Assert.Equal("0:08.0", sheet.Standings[0].Best);
     }
 

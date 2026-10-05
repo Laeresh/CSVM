@@ -202,20 +202,8 @@ public sealed partial class OriginalRaceBoard : Control
         _state.Clear(HaltReason.Ended);
     }
 
-    // Player 1's mouse in authored pixels, only where player 1 reads the keyboard (MenuInput's rule
-    // for seat 0). A pad player's board is driven by the pad alone.
-    private (float X, float Y, bool Pressed)? SeatPointer()
-    {
-        if (_input is not { Keyboard: true } || !IsInsideTree())
-        {
-            return null;
-        }
-
-        var size = GetViewportRect().Size;
-        var fit = BoardFit.For(size.X, size.Y);
-        var at = GetViewport().GetMousePosition();
-        return ((at.X - fit.OriginX) / fit.Scale, (at.Y - fit.OriginY) / fit.Scale, Input.IsMouseButtonPressed(MouseButton.Left));
-    }
+    // Player 1's mouse in authored pixels.
+    private (float X, float Y, bool Pressed)? SeatPointer() => AuthoredPointer.Of(this, _input);
 
     private void Compose()
     {

@@ -26,7 +26,7 @@ public class StartCountTests
         foreach (var (pos, attitude, speed) in new[] { slow, fast })
         {
             var count = new StartCount();
-            count.Begin(StartCount.Restart);
+            count.Begin(StartCount.Rerun);
             var (first, firstAttitude) = count.WalkPose(pos, attitude, speed);
             Assert.Equal(speed * count.Duration, first.DistanceTo(pos), 2);
             Assert.True((pos - first).Normalized().Dot(-attitude.Z) > 0.9999f,
@@ -55,10 +55,10 @@ public class StartCountTests
     }
 
     [Fact]
-    public void The_restart_count_beats_three_two_one_a_second_apart_then_goes()
+    public void The_rerun_count_beats_three_two_one_a_second_apart_then_goes()
     {
         var count = new StartCount();
-        count.Begin(StartCount.Restart);
+        count.Begin(StartCount.Rerun);
         Assert.Equal("3", count.Figure);
         var cues = Run(count, out int goStep);
         Assert.Equal(new[] { (1, "3"), (60, "2"), (120, "1") }, cues);
@@ -93,7 +93,7 @@ public class StartCountTests
     {
         // A seat reads Running before it steps, as FlightController does.
         var count = new StartCount();
-        count.Begin(StartCount.Restart);
+        count.Begin(StartCount.Rerun);
         int held = 0;
         StartCountCue cue;
         do
@@ -111,7 +111,7 @@ public class StartCountTests
     public void A_cancelled_count_holds_nothing_and_shows_nothing()
     {
         var count = new StartCount();
-        count.Begin(StartCount.Restart);
+        count.Begin(StartCount.Rerun);
         count.Advance(Dt);
         count.Cancel();
         Assert.False(count.Running);
@@ -144,7 +144,7 @@ public class StartCountTests
     private static Vector3 PoseOneStepBeforeGo(Vector3 pos, Basis attitude, float speed)
     {
         var count = new StartCount();
-        count.Begin(StartCount.Restart);
+        count.Begin(StartCount.Rerun);
         for (int step = 1; step < 180; step++)
             count.Advance(Dt);
         Assert.True(count.Running);

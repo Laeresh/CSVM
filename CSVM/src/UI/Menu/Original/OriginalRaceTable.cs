@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using CSVM.Flight.Modes;
 using CSVM.Mech3;
 using CSVM.UI.Boards;
+using CSVM.UI.Screens;
 
 namespace CSVM.UI.Menu.Original;
 
@@ -65,23 +65,15 @@ public static class OriginalRaceTable
     private static readonly BoardTint Ink = new(0, 0, 0);
     private static readonly BoardTint FlaggedInk = new(0xbb, 0xbb, 0xbb);
 
-    /// <summary>The field in <paramref name="standings"/>' order as table rows, each column in the
-    /// words the Built-in board uses too. <paramref name="zoneCount"/> is the course's.</summary>
+    /// <summary>The field in <paramref name="standings"/>' order as table rows, each column
+    /// <see cref="RaceRows"/>' words. A pilot who left goes unsuffixed, since the page greys the row.
+    /// <paramref name="zoneCount"/> is the course's.</summary>
     public static IReadOnlyList<RaceTableRow> Rows(IReadOnlyList<Racer> standings, int zoneCount)
     {
-        ArgumentNullException.ThrowIfNull(standings);
-        var rows = new List<RaceTableRow>(standings.Count);
-        float? winner = standings.Count > 0 ? standings[0].BestTime : null;
-        for (int i = 0; i < standings.Count; i++)
+        var rows = new List<RaceTableRow>();
+        foreach (var row in RaceRows.Of(standings, zoneCount))
         {
-            var r = standings[i];
-            rows.Add(new RaceTableRow(
-                $"{StuntRace.Ordinal(i + 1)}  {r.Callsign}",
-                r.PlaneDisplay,
-                StuntRace.BestText(r, zoneCount),
-                StuntRace.GapText(r, winner),
-                string.Format(CultureInfo.InvariantCulture, "{0}/{1}", r.RunsFinished, r.RunsStarted),
-                r.Left));
+            rows.Add(new RaceTableRow($"{row.Place}  {row.Racer.Callsign}", row.Aircraft, row.Best, row.Gap, row.Runs, row.Left));
         }
 
         return rows;
