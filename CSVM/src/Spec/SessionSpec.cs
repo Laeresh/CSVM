@@ -2287,6 +2287,10 @@ public sealed record SessionSpec
             MenuLoadouts = new[] { fit },
         };
 
+    /// <summary>A copy flying one pane, the first <c>--plane=</c> entry's, for a launch whose VR
+    /// headset or stand-in draws one seat in every mode. Unchanged when it already flies one.</summary>
+    public SessionSpec WithOneSeat() => Players <= 1 ? this : this with { Players = 1 };
+
     private static float Flt(string s) => float.Parse(s, CultureInfo.InvariantCulture);
 
     // Whether arg is the setting's own flag. A word the setting does not know comes back null with a

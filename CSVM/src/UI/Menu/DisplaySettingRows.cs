@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace CSVM.UI.Menu;
 
 /// <summary>
-/// How the six display settings and the shadow quality read as rows. The two Options screens
+/// How the six display settings, the shadow quality and VR mode read as rows. The two Options screens
 /// share it so they cannot disagree about a saved value. The labels are one per vocabulary entry
 /// and in that order, since a row reads and writes the store word by index. The index rules restate
 /// the resolvers' forgiving reads: a never-set row shows the setting's own default, an unoffered or
@@ -38,6 +38,13 @@ public static class DisplaySettingRows
         graphicsWord == CSVM.Utils.GraphicsMode.EnhancedWord
             ? "Select how the sun's shadows are drawn. Lower levels run faster. Seen once the choices are applied."
             : "Enhanced Graphics only. The original world casts no sun shadows.";
+
+    /// <summary>What the VR mode row says. Off Windows the row is dead, PC VR being a Windows build's
+    /// alone, and a row that refuses without saying why reads as broken. ⚠ Keep each under about 80
+    /// characters: the VIDEO page wraps it at 244 authored pixels above the next row's line.</summary>
+    public static string VrModeDetail(bool windows) => windows
+        ? "Experimental PC VR. Applied from the menu, the game restarts in the headset."
+        : "PC VR needs the Windows build and a headset.";
 
     /// <summary>The render-scale labels for <paramref name="words"/>, which is the list
     /// <see cref="CSVM.Utils.RenderScaleSetting.ChoicesFor"/> offers under the standing method. Each

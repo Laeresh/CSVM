@@ -96,9 +96,14 @@ public sealed class PlayerSetupFeature : IMenuFeature
     /// <summary>The shipped match clock in minutes, the same default <c>--vs-time=</c> carries.</summary>
     public const int DefaultTimeLimitMinutes = 5;
 
+    /// <summary>What a screen says where VR's one seat refuses a second: the join board's closed
+    /// entries and a local Dogfight's gate.</summary>
+    public const string VrOneSeat = "VR mode flies one seat: no splitscreen. A Dogfight goes over the network.";
+
     private readonly List<PlayerSeat> _seats = new();
     private readonly SourceView _sources;
     private IReadOnlyList<MenuAircraft> _roster = Array.Empty<MenuAircraft>();
+    private int _seatLimit = MaxSeats;
 
     public PlayerSetupFeature()
     {
@@ -124,6 +129,18 @@ public sealed class PlayerSetupFeature : IMenuFeature
     /// <summary>Bumps on every join and unjoin, so a presentation holding per-seat state can tell
     /// the seat list moved without comparing it.</summary>
     public int Revision { get; private set; }
+
+    /// <summary>How many seats may join in this process. It is <see cref="MaxSeats"/>, or one while
+    /// a VR headset or its stand-in draws, VR being one local seat in every mode. The launcher sets
+    /// it once; <see cref="Join"/> refuses past it and <see cref="Refusal"/> names it.</summary>
+    public int SeatLimit
+    {
+        get => _seatLimit;
+        set => _seatLimit = Math.Clamp(value, 1, MaxSeats);
+    }
+
+    /// <summary>Whether <see cref="SeatLimit"/> holds the seats to one for VR.</summary>
+    public bool OneSeatForVr => _seatLimit == 1;
 
     /// <summary>How many seats have confirmed.</summary>
     public int ConfirmedCount
@@ -191,13 +208,13 @@ public sealed class PlayerSetupFeature : IMenuFeature
     public void SetRoster(IReadOnlyList<MenuAircraft> roster) =>
         _roster = roster ?? throw new ArgumentNullException(nameof(roster));
 
-    /// <summary>Joins a seat for <paramref name="source"/>, or returns null when every seat is
-    /// taken or the source already holds one: a claim is one source, one seat, and two claims on
-    /// the same frame are settled in the order they arrive.</summary>
+    /// <summary>Joins a seat for the source, or returns null when every seat the limit allows is
+    /// taken or the source already holds one (<see cref="SeatLimit"/>). A claim is one source, one
+    /// seat, and two claims on the same frame are settled in the order they arrive.</summary>
     public PlayerSeat? Join(IMenuInputSource source)
     {
         ArgumentNullException.ThrowIfNull(source);
-        if (_seats.Count >= MaxSeats || IsClaimed(source))
+        if (_seats.Count >= _seatLimit || IsClaimed(source))
         {
             return null;
         }
@@ -359,7 +376,8 @@ public sealed class PlayerSetupFeature : IMenuFeature
     /// <summary>Why a launch in <paramref name="mode"/> is refused right now, or null when it
     /// may go: at least the mode's minimum of seats, every seat confirmed. A lone Dogfight seat
     /// is refused for the second seat before its own confirmation, unless
-    /// <paramref name="networked"/>, where the opponent sits at another machine.</summary>
+    /// <paramref name="networked"/>, where the opponent sits at another machine. Under VR's one
+    /// seat the refusal says no second seat can join.</summary>
     public string? Refusal(MenuMode mode, bool networked = false)
     {
         if (_seats.Count == 0)
@@ -369,7 +387,7 @@ public sealed class PlayerSetupFeature : IMenuFeature
 
         if (!networked && _seats.Count < MinimumSeats(mode))
         {
-            return "Dogfight needs a second seat";
+            return MinimumSeats(mode) > _seatLimit ? VrOneSeat : "Dogfight needs a second seat";
         }
 
         int confirmed = ConfirmedCount;

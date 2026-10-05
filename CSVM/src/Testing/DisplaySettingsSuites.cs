@@ -68,6 +68,7 @@ internal static class DisplaySettingsSuites
         ("NetVoice", 5, false),
         ("NetGameName", "DaRein", false),
         ("NetMasterServer", "https://master.example.org", false),
+        ("VrMode", true, false),
     };
 
     [Suite("display-vsync",

@@ -129,6 +129,11 @@ public partial class Launcher : Node3D
     private OrbitCamera _orbit = null!;
     // The headset path, null on every flat launch. Built once in _Ready, like the camera it follows.
     private XrSession? _xr;
+    // Whether this launch asked Godot for OpenXR (--xr-mode on), which compiles the stereo shader
+    // variants whether or not a runtime then starts.
+    private bool _xrRequested;
+    // The shader cache watch such a launch keeps, swept as it ends or relaunches; null otherwise.
+    private XrShaderCache? _xrCache;
 
     // Session lifecycle (the launchscreen's in-process world rebuild): each launch instantiates a
     // GameSession node, freed again by ReturnToMenu or RestartSession. The camera, lights and
@@ -546,6 +551,13 @@ public partial class Launcher : Node3D
             ?? Path.Combine(Log.DirectoryFor(_repoRoot, _exported), $"{_spec.ModeName}-nolog.hitches.jsonl");
         _hitchSidecar = new HitchSidecar(hitchLogPath, _hitchMonitor.Last.Ring.Length);
 
+        // VR mode at boot, before anything heavy runs: a relaunch into the headset leaves from here
+        // in the state the --extract branch below runs in.
+        if (StartXrMode())
+        {
+            return;
+        }
+
         // --extract builds no world and no menu: it writes the data root's extracted/ and quits.
         if (_spec.ExtractInstall is { } extractInstall)
         {
@@ -861,6 +873,14 @@ public partial class Launcher : Node3D
             AddChild(_xr);
         }
 
+        // VR is one local seat in every mode, so a command line asking for splitscreen flies one.
+        if (_xr != null && _spec.Players > 1)
+        {
+            Log.Warn("core", $"xr: --players={_spec.Players} refused, {PlayerSetupFeature.VrOneSeat} Flying one seat");
+            _spec = _spec.WithOneSeat();
+            _cli = _cli.WithOneSeat();
+        }
+
         // The F14 / --debug-fps readout, process-wide like the camera so it works at the
         // launchscreen too. Built after the --run-tests/--dump-* early exits, which render no
         // frame it would have anything to show.
@@ -960,6 +980,7 @@ public partial class Launcher : Node3D
     // sidecar's flush-interval loss bound (HitchSidecar's own doc) covers instead.
     public override void _ExitTree()
     {
+        SweepXrShaderCache();
         DrainLowPriorityTasks();
         _hitchSidecar.Flush();
         _musicArchive?.Dispose();
@@ -2427,8 +2448,15 @@ public partial class Launcher : Node3D
         host.Features.Add(new FreeFlightFeature());
         host.Features.Add(InstantActionFeature.ForDataRoot(_dataRoot));
         // Before the seat: the host lends the setup feature's seat list once the feature is in,
-        // so seat 0 has to be joined through it.
-        host.Features.Add(new PlayerSetupFeature());
+        // so seat 0 has to be joined through it. A headset or its stand-in holds it to one seat.
+        host.Features.Add(new PlayerSetupFeature { SeatLimit = _xr != null ? 1 : PlayerSetupFeature.MaxSeats });
+        var notice = new MenuNoticeFeature();
+        if (XrRelaunch.FellBack(_xrRequested, _xr is { PacesFrames: true }))
+        {
+            notice.Post(XrRelaunch.FallbackNotice);
+        }
+
+        host.Features.Add(notice);
         var strings = UiStrings.TryLoad(_dataRoot) ?? UiStrings.Empty;
         host.Features.Add(new HangarFeature(strings, StockAirframes.Node, () => StockLoadouts.Load(), _zrdrPath));
         // The campaign feature carries both cinemas because both presentations already read that
@@ -2553,16 +2581,106 @@ public partial class Launcher : Node3D
             return;
         }
 
+        bool? vrBefore = OptionsStore.UserOptions().Load().VrMode;
         PersistOptions(applied);
+        // A changed VR mode takes a new process, OpenXR starting only with the engine.
+        string? flatOnly = XrFlatOnly();
+        if (XrRelaunch.OnApply(vrBefore, applied.VrMode, _xrRequested, flatOnly) is { } vrOn
+            && Relaunch(vrOn, "the Options apply changed VR mode", skipIntro: true))
+        {
+            return;
+        }
+
+        if ((applied.VrMode == true) != (vrBefore == true) && flatOnly != null)
+        {
+            Log.Info("core", $"xr: VR mode saved {(applied.VrMode == true ? "on" : "off")}; a {flatOnly} run does not relaunch for it");
+        }
+
         _menuHost.Deactivate();
         ShowMenu(MenuReturnDestination.TopLevel);
     }
 
+    // VR mode at boot. A launch that compiled the stereo variants opens the shader cache's watch;
+    // any other first sweeps what a headset launch that never ended left (XrShaderCache.cs). Then a
+    // launch with VR mode saved on that did not ask for OpenXR relaunches into it. True means this
+    // process is quitting for that.
+    private bool StartXrMode()
+    {
+        var args = XrRelaunch.WithoutProgram(System.Environment.GetCommandLineArgs());
+        _xrRequested = XrLaunch.Requested(args, ProjectSettings.GetSetting(XrLaunch.EnabledSetting).AsBool());
+        string userDir = ProjectSettings.GlobalizePath("user://");
+        if (_xrRequested)
+        {
+            using var self = System.Diagnostics.Process.GetCurrentProcess();
+            _xrCache = XrShaderCache.Begin(userDir, self.Id, self.StartTime.ToUniversalTime());
+        }
+        else if (XrShaderCache.Recover(userDir, XrShaderCache.LiveStartUtc) is { } swept)
+        {
+            Log.Info("core", $"xr: a headset launch ended without sweeping the shader cache; swept {swept} files it wrote");
+        }
+
+        string? flatOnly = XrFlatOnly();
+        bool? saved = flatOnly == null ? OptionsStore.UserOptions().Load().VrMode : null;
+        if (!XrRelaunch.AtBoot(saved, XrRelaunch.Mode(args), flatOnly))
+        {
+            return false;
+        }
+
+        return Relaunch(true, "VR mode is saved on", skipIntro: false);
+    }
+
+    // Why this process never relaunches for VR mode, or null (XrRelaunch.FlatOnly).
+    private string? XrFlatOnly() =>
+        XrRelaunch.FlatOnly(_cli, DisplayServer.GetName() == "headless", OS.GetName() == "Windows");
+
+    // Starts this executable again with VR mode on or off, then quits. The cache is swept first,
+    // since the child's renderer reads it before any game code runs. False when the start failed,
+    // and this process carries on.
+    private bool Relaunch(bool on, string why, bool skipIntro)
+    {
+        var args = XrRelaunch.Arguments(XrRelaunch.WithoutProgram(System.Environment.GetCommandLineArgs()), on, skipIntro);
+        SweepXrShaderCache();
+        string exe = OS.GetExecutablePath();
+        string[] argv = new string[args.Count];
+        for (int i = 0; i < argv.Length; i++)
+        {
+            argv[i] = args[i];
+        }
+
+        int pid = OS.CreateProcess(exe, argv);
+        if (pid < 0)
+        {
+            Log.Error("core", $"xr: could not relaunch {(on ? "into the headset" : "flat")} ({why}): {exe} {string.Join(' ', argv)}");
+            return false;
+        }
+
+        Log.Info("core", $"xr: relaunching {(on ? "into the headset" : "flat")} ({why}) pid={pid}: {exe} {string.Join(' ', argv)}");
+        if (_env != null)
+        {
+            BlankAndQuit();
+        }
+        else
+        {
+            GetTree().Quit();
+        }
+
+        return true;
+    }
+
+    // The headset launch's end: every shader cache file written since it started goes, once.
+    private void SweepXrShaderCache()
+    {
+        if (_xrCache?.End() is int swept && swept > 0)
+        {
+            Log.Info("core", $"xr: swept {swept} shader cache files this headset launch wrote, so a flat launch reads none of them");
+        }
+    }
+
     // The options file's one writer, shared by the menu's apply above and by the pause leaf's.
     // The display settings, the mix, the view distance and the graphics mode apply now.
-    // ⚠ The opening view and the difficulty are saved and no more, so do not rebuild anything for
-    // them here. The pause leaf puts the head turn and targeting switch on the seats flying now
-    // (PausePreferences.FeedGameOptions).
+    // ⚠ Do not rebuild or relaunch for the opening view, the difficulty or VR mode here; they are
+    // saved and no more. The menu's ApplyOptions relaunches. The pause leaf puts the head turn and
+    // targeting switch on the seats flying now (PausePreferences.FeedGameOptions).
     private void PersistOptions(OptionsApplyExit applied)
     {
         var store = OptionsStore.UserOptions();
@@ -2585,6 +2703,7 @@ public partial class Launcher : Node3D
         options.AudioMusic = applied.AudioMusic;
         options.AudioEffects = applied.AudioEffects;
         options.AudioVoice = applied.AudioVoice;
+        options.VrMode = applied.VrMode;
         store.Save(options);
         // The display settings take effect now instead of at the next start, through the same calls
         // the startup path makes and in the order the window needs them: the screen it sits on, the

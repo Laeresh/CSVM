@@ -183,7 +183,8 @@ public sealed class OriginalJoinBoard : IOriginalScreenModule
         ArgumentNullException.ThrowIfNull(layers);
         layers.Backdrop.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, Background), 0f, 0f));
         layers.Lines.Add(new BoardLine("CREW MANIFEST", ManifestX, ManifestY, 0f, HeadingFont, BoardInk.Heading, Bold: true));
-        layers.Lines.Add(new BoardLine("four seats, no stowaways", ManifestX, SubtitleY, 0f, SmallFont, BoardInk.Detail, Italic: true));
+        string subtitle = Roster?.Closed(1) == true ? "one seat while VR mode is on" : "four seats, no stowaways";
+        layers.Lines.Add(new BoardLine(subtitle, ManifestX, SubtitleY, 0f, SmallFont, BoardInk.Detail, Italic: true));
         for (int entry = 0; entry < Entries; entry++)
         {
             ComposeEntry(entry, layers);
@@ -220,8 +221,9 @@ public sealed class OriginalJoinBoard : IOriginalScreenModule
         return new OriginalRow(key, label, OriginalRowKind.TextButton, x, y, size.Width, size.Height, true, 0, _plaque);
     }
 
-    // One seat's entry: the chip in that seat's own colour, faint while the seat is open. Then
-    // either the device over "signed on" or the open seat over the press that takes it.
+    // One seat's entry: the chip in that seat's own colour, faint while the seat is open. Under it
+    // stands the device over "signed on", or the open seat over the press that takes it. A seat VR
+    // mode keeps shut stands over the reason.
     private void ComposeEntry(int entry, BoardLayers layers)
     {
         var roster = Roster;
@@ -231,7 +233,14 @@ public sealed class OriginalJoinBoard : IOriginalScreenModule
             signed ? 1f : 0.25f, Ink: SeatStrip.Ink(entry)));
         layers.Lines.Add(new BoardLine(SplitScreen.PlayerTag(entry), ManifestX, y + TagDrop, ChipWidth, SmallFont,
             BoardInk.Dialog, Justify: BoardJustify.Center, Bold: true));
-        if (signed)
+        if (!signed && roster?.Closed(entry) == true)
+        {
+            layers.Lines.Add(new BoardLine("closed seat", WordsX, y + DeviceDrop, WordsWidth, DeviceFont,
+                BoardInk.Detail, Italic: true));
+            layers.Lines.Add(new BoardLine("VR mode flies one seat", WordsX, y + StatusDrop, 0f,
+                SmallFont, BoardInk.Detail, Italic: true));
+        }
+        else if (signed)
         {
             layers.Lines.Add(new BoardLine(roster!.Device(entry), WordsX, y + DeviceDrop, WordsWidth, DeviceFont,
                 BoardInk.Row, Italic: true));
@@ -283,6 +292,8 @@ public sealed class OriginalJoinBoard : IOriginalScreenModule
         public bool SignedOn(int entry) => entry >= 0 && entry < _pads;
 
         public string Device(int entry) => SignedOn(entry) ? Devices[entry] : string.Empty;
+
+        public bool Closed(int entry) => false;
 
         public void DropSignOns()
         {

@@ -206,7 +206,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B, the VR rig
 
-6. ☐ B6 VR mode option, relaunch, fallback and mode gating
+6. ◐ B6 VR mode option, relaunch, fallback and mode gating
 7. ☐ B7 The XR rig in `PlayerRig`, recenter and per-plane scale data
 8. ☐ B8 The cockpit interior in the main world under VR
 9. ☐ B9 Views in VR: rigid chase, nose, head tracking in place of head look
@@ -827,24 +827,108 @@ stereo variants reach them all once (B6 owns the fix).
 
 # Wave B, the VR rig
 
-## B6 ☐ VR mode option, relaunch, fallback and mode gating
+## B6 ◐ VR mode option, relaunch, fallback and mode gating
 
 **Goal.** Options carries "VR mode"; toggling it saves the choice and relaunches the executable with
 `--xr-mode on`. With VR on, a failed runtime falls back to flat with a clear message, local
 splitscreen is refused at setup, and the dev modes stay flat.
 
-**Evidence (confidence: lead-only).** OpenXR must start with the engine (Decision 9). Options are in
-`Utils/` (config, options); splitscreen is `--players` and `UI/Boards/SplitScreen.cs`.
+**Evidence (confidence: traced to code in the Godot 4.7-stable source for the engine-start rule and
+the shader cache; measured in-engine for the argument source, the one-seat refusal under `--xr-sim`
+and the flat goldens; lead-only for anything a headset shows until the author's run).**
+- OpenXR and the stereo variants start only with the engine, so the saved option needs a new
+  process. `RendererCompositor`'s constructor fixes `is_xr_enabled()` from `--xr-mode` before any
+  script runs, and `OpenXRAPI` is created at module init. No 4.7 API turns either on later.
+- A plain double-click gets OpenXR by a **relaunch at boot**: `Launcher._Ready` reads the saved
+  `vrMode` right after the log opens and, with no `--xr-mode` on the command line, starts itself
+  again with `--xr-mode on` first and quits. The child carries the flag, so its boot never
+  relaunches again, and an explicit `--xr-mode off` keeps a launch flat by name. `override.cfg` and
+  `application/config/project_settings_override` were rejected for the reason A2 gives: both are
+  read by every launch, the battery's included.
+- **The child's arguments** are the process's own (`System.Environment.GetCommandLineArgs()`, the
+  only list that still holds Godot's engine arguments, A1) with the program name dropped and every
+  argument carried verbatim, engine and user alike: a dev launch keeps `--path`, the scene and its
+  `--` flags. Each `--xr-mode` pair ahead of `--` is dropped and `--xr-mode on` goes first; a menu
+  relaunch adds `--skip-intro`. The `xr-relaunch-args` suite reads this in a real engine process:
+  entry 0 is the executable `OS.GetExecutablePath()` names, and the rest behind `--` equals
+  `OS.GetCmdlineUserArgs()`.
+- **Flat-only runs** (`XrRelaunch.FlatOnly`): off Windows, `--headless`, `--run-tests`, every
+  scripted and `--det` run (so the goldens, perf and hitch stages), `--xr-sim`, `--extract`,
+  `--movie`, `--net-host`/`--net-join`, `--viewer`, `--freecam`, `--anim-lab`, `--weapon-lab`,
+  `--debug-node-lab`, `--debug-damage`. Such a run never relaunches and never reads the saved choice;
+  `--run-tests` also reads its options from scratch. Units pin every flag; the goldens stage was
+  25/25 hash-identical with the change.
+- **The fallback** posts `XrRelaunch.FallbackNotice` through the new `UI/Menu/MenuNoticeFeature.cs`
+  when the launch requested OpenXR and no OpenXR session is live (`XrSession`'s warning stays). The
+  mechanism the menu already had was Built-in's error line (`LaunchMenu.ShowError`, the failed-build
+  note); Original had none at its top level, so it raises its own one-button messagebox. Suite
+  `xr-fallback-notice` on both presentations. A command-line flight has no menu, so there the log
+  warning is the message.
+- **The refusal** shows where a second seat would be taken: the join board. With a headset or the
+  stand-in live, `PlayerSetupFeature.SeatLimit` is one, both boards draw the three entries past the
+  captain's as "closed seat / VR mode flies one seat" and refuse a second pad (the first pad still
+  takes the captain's chair), Built-in's strip says so on every screen, and a local Dogfight's gate
+  names it on both presentations; a network Dogfight is unaffected. `--players` above one is refused
+  with a warning and flies one seat: `RunProbe.ps1 --stage=empty --players=2 --xr-sim --mute
+  --frames=20 --screenshot=...` logged `xr: --players=2 refused` and the capture shows one aircraft
+  per eye (`.scratch/B6/B6-xr-sim-two-players.png`). Suite `xr-one-seat`.
+- **The shared shader cache.** `ShaderRD::_load_from_cache` (`servers/rendering/renderer_rd/
+  shader_rd.cpp`, 4.7-stable) reads each variant's size and `continue`s past a disabled variant
+  without skipping its bytes, so a flat launch misreads a file a stereo launch wrote, and the file
+  name (`<shader>/<group sha256>/<version sha1>.<api>.cache`) does not depend on which variants are
+  enabled. `RendererCompositorRD` sets the folder to `user://shader_cache` (`Engine::
+  get_shader_cache_path` is set by the editor alone), before any script. No per-launch lever exists
+  for an `--xr-mode on` launch: no command-line option names a cache or user directory, Godot adds
+  no feature tag for XR, an exported build reads no `GODOT_EDITOR_CUSTOM_FEATURES`, and moving
+  `APPDATA` would move every store with it. The fix keeps the flat path untouched:
+  `Launch/XrShaderCache.cs` has a launch that requested OpenXR write a marker at boot and, as it ends
+  or relaunches, delete every `.cache` file written since its process started; a boot over the marker
+  of a process that is gone sweeps the same way. The flat launches' own files are never touched, so
+  the next flat launch recompiles only what the headset session rewrote. Units over a scratch user
+  directory; the sweep runs before a relaunch starts its child, whose renderer reads the cache before
+  any game code.
 
-**Approach.** An option key, a relaunch through `OS.CreateProcess` with the engine argument, an
-init-failure path that shows a board message and continues flat, and a refusal of `--players>1`
-while VR is live. <TODO: where in the launch menu the refusal shows.>
+**Approach (landed).** `OptionsDef.VrMode` (`vrMode`, null reads off) rides `OptionsApplyExit` like
+every field; Original shows it on the VIDEO page's Clutter Detail line (`VP_B_CLUTTER`, a checkbox,
+live on Windows alone) and Built-in as its Options screen's row under Shadow quality.
+`Launcher.ApplyOptions` relaunches when the row changed and differs from what the running launch
+asked for (`XrRelaunch.OnApply`); the pause leaf's apply saves it and no more. `Launch/XrRelaunch.cs`
+holds the decisions and the arguments, `Launch/XrShaderCache.cs` the sweep, `Launcher` acts on both.
 
 **Model recommendation.** <TODO: tier not settled in the session.>
 
-**Verify.** <TODO: a suite for the relaunch argument and the splitscreen refusal under `--xr-sim`.>
+**Verify.** Units: `CSVM.Tests/XrRelaunchTests.cs` (the arguments with the engine flag ahead of `--`,
+the dev-run exclusions, no loop, the apply rule, the fallback condition), `XrShaderCacheTests.cs`,
+the store round trip, the seat limit and the VIDEO row. Suites: `xr-relaunch-args`, `xr-one-seat`,
+`xr-fallback-notice`, and the Built-in Options walk in `menu-original-tracer`. The "requested but
+failed" path is exercised as the pure `XrRelaunch.FellBack` and the notice it posts, so nothing here
+starts a runtime. Owed at the headset (the author's), each from a fresh `.\RunGame.ps1`:
+1. Options, VR mode On, ACCEPT CHANGES: the game closes and relaunches into the headset. The first
+   launch's `.scratch/logs/menu-*.log` ends `xr: relaunching into the headset (...)`, and the child's
+   log carries `xr: OpenXR live runtime=...`.
+2. In that headset launch, Options, VR mode Off, ACCEPT CHANGES: it relaunches flat, logging
+   `xr: swept N shader cache files` before `xr: relaunching flat`.
+3. With VR mode left On, quit and run `.\RunGame.ps1` again: one window opens and closes, the
+   headset launch follows (`xr: relaunching into the headset (VR mode is saved on)`).
+4. Fallback: with the Virtual Desktop streamer disconnected (or the headset off), `.\RunGame.ps1`
+   with VR mode On: the relaunched game plays flat and the menu shows "VR mode is on, but no headset
+   started..." (Original's box; `.\RunGame.ps1 --force-builtin` shows the error line).
+5. After a headset session ends normally, the next flat engine and goldens stages
+   (`.\RunTests.ps1 -SkipUnits`) log no `br != variant_size` and no `Uniform buffer supplied` line.
+6. `.\RunGame.ps1 -EngineArgs '--xr-mode','off'` with VR mode On stays flat.
+The same in an exported build (`.\ExportRelease.ps1`, then double-click `.scratch/export/CSVM.exe`).
 
-**⚠ Traps.** <TODO: none known yet.>
+**⚠ Traps.**
+- Sweep the cache before `OS.CreateProcess`, never after: the child's renderer reads
+  `user://shader_cache` before any of its game code runs, and the parent's exit is too late.
+- A flat launch running *during* a headset session can still misread a file the session writes;
+  the sweep covers only the launches after it.
+- `RunGame.ps1` waits for the process it started, so its console returns at a relaunch while the
+  child plays on with no console of its own; the child's log is the next `menu-*.log`.
+- The boot relaunch shows the first window for a moment: Godot creates it before any game code.
+- `SeatLimit` is the process's, not setup state: `PlayerSetupFeature.Discard` keeps it.
+
+**Verified.** <pending orchestrator run>
 
 ## B7 ☐ The XR rig in `PlayerRig`, recenter and per-plane scale data
 

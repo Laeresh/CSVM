@@ -83,6 +83,12 @@ public sealed class BuiltInPresentation : IMenuPresentation
                 _menu.OpenCampaignScrapbook(debrief.Profile, debrief.MissionSeq, debrief.MissionWon);
                 break;
         }
+
+        // After the show, which clears the error line the notice is written on.
+        if (host.Features.TryGet<MenuNoticeFeature>(out var notice) && notice.Take() is { } message)
+        {
+            _menu.ShowError(message);
+        }
     }
 
     public void Tick(float dt) => _menu?._Process(dt);

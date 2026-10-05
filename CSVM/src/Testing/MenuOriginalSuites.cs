@@ -85,10 +85,11 @@ internal static class MenuOriginalSuites
         + "its six display rows over the machine's own screens and sizes, the four vocabularies "
         + "and a wrap onto the last frame cap and, past the three scales below native, onto the last render scale, an anti-aliasing row "
         + "on the stepped mode's default whose step onto FSR 2.2 pulls that scale back to native "
-        + "and narrows the scale row, a shadow-quality row that steps only under Enhanced, its four volume rows "
+        + "and narrows the scale row, a shadow-quality row that steps only under Enhanced, a VR mode row "
+        + "that Right turns on, its four volume rows "
         + "stepped by the AUDIO page's own step and clamped at both ends, "
         + "opens and leaves the rebinding screen behind its Controls door and emits the apply exit "
-        + "carrying all eighteen with no presentation row among them, "
+        + "carrying all nineteen with no presentation row among them, "
         + "Original's VIDEO door opens the decoded page on its Display Mode dropdown "
         + "which fits its authored window and draws no bar, over the V-Sync one whose five words "
         + "window into four with the arrows and the thumb inside the box's right edge and the fifth "
@@ -672,8 +673,8 @@ internal static class MenuOriginalSuites
         ctx.Check(menu.ShownRowText == LaunchMenu.OptionsRow,
             $"Up from Free Flight wraps onto the multiplayer door, and again onto Options ({menu.ShownRowText})");
         Press(host, seat, Accept);
-        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 20 && menu.ShownRowText == "Difficulty: Normal",
-            $"Accept opens the Options screen with its twenty rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
+        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 21 && menu.ShownRowText == "Difficulty: Normal",
+            $"Accept opens the Options screen with its twenty-one rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "Difficulty: Hard", $"Right steps the difficulty to Hard ({menu.ShownRowText})");
         Press(host, seat, Down);
@@ -722,10 +723,11 @@ internal static class MenuOriginalSuites
             $"a step moves it under Enhanced and not under Original, whose detail says why ({graphics}: {viewDistance} -> {menu.ShownRowText}, {menu.ShownDetail})");
         var display = BuiltInDisplayRows(ctx, host, seat, menu, graphics);
         string? shadowQuality = BuiltInShadowQualityRow(ctx, host, seat, menu, graphics);
+        bool? vrMode = BuiltInVrModeRow(ctx, host, seat, menu);
         BuiltInAudioRows(ctx, host, seat, menu);
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow && menu.ShownHeading == "OPTIONS  (19/20)",
-            $"the nineteenth row is the Controls door, the heading counting the window's position ({menu.ShownRowText}, {menu.ShownHeading})");
+        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow && menu.ShownHeading == "OPTIONS  (20/21)",
+            $"the twentieth row is the Controls door, the heading counting the window's position ({menu.ShownRowText}, {menu.ShownHeading})");
         Press(host, seat, Accept);
         ctx.Check(menu.ShownScreen == "Controls" && menu.ShownRowCount > 2,
             $"which opens the rebinding screen over a seat's own keymap ({menu.ShownScreen}, {menu.ShownRowCount} rows)");
@@ -749,6 +751,8 @@ internal static class MenuOriginalSuites
                 $"and all six display settings the rows stepped ({applied.MonitorIndex}, {applied.Resolution}, {applied.DisplayMode}, {applied.VSync}, {applied.RenderScale}, {applied.AntiAliasing})");
             ctx.Check(applied.ShadowQuality == shadowQuality,
                 $"and the shadow quality the row left, never set where the row stood dead ({applied.ShadowQuality ?? "unset"})");
+            ctx.Check(applied.VrMode == vrMode,
+                $"and VR mode as the row left it, the launcher's to relaunch for ({applied.VrMode?.ToString() ?? "unset"})");
             ctx.Check(applied.AudioMaster == null && applied.AudioMusic == AudioMix.DefaultMusic - SliderControl.KeyStep
                 && applied.AudioEffects == null && applied.AudioVoice == AudioMix.MinLevel,
                 $"and the levels the volume rows moved, the two left alone still never set ({Level(applied.AudioMaster)}, {Level(applied.AudioMusic)}, {Level(applied.AudioEffects)}, {Level(applied.AudioVoice)})");
@@ -872,14 +876,32 @@ internal static class MenuOriginalSuites
         return ShadowQualitySetting.Low;
     }
 
-    // The four volume rows, walked from the shadow-quality row on a mix nothing has saved. Each shows
+    // The VR mode row under the shadow quality, on a store nothing has saved: Off, and Right turns it
+    // on. Off Windows it stays Off and says why. Returns what the apply carries.
+    private static bool? BuiltInVrModeRow(TestContext ctx, MenuHost host, ScriptedSeat seat, LaunchMenu menu)
+    {
+        Press(host, seat, Down);
+        ctx.Check(menu.ShownRowText == "VR mode (experimental): Off" && menu.ShownDetail == DisplaySettingRows.VrModeDetail(System.OperatingSystem.IsWindows()),
+            $"the fifteenth row is VR mode, unsaved showing Off with its own detail ({menu.ShownRowText}, {menu.ShownDetail})");
+        Press(host, seat, Right);
+        if (!System.OperatingSystem.IsWindows())
+        {
+            ctx.Check(menu.ShownRowText == "VR mode (experimental): Off", $"off Windows Right steps it nowhere ({menu.ShownRowText})");
+            return null;
+        }
+
+        ctx.Check(menu.ShownRowText == "VR mode (experimental): On", $"Right turns it on ({menu.ShownRowText})");
+        return true;
+    }
+
+    // The four volume rows, walked from the VR mode row on a mix nothing has saved. Each shows
     // the shipped level, steps by the AUDIO page's own keyboard step, and clamps at both ends. A step
     // that moves nothing writes nothing, so Master stepped up off full stays never set.
     private static void BuiltInAudioRows(TestContext ctx, MenuHost host, ScriptedSeat seat, LaunchMenu menu)
     {
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == $"Master volume: {AudioMix.DefaultMaster}" && menu.ShownHeading == "OPTIONS  (15/20)",
-            $"the fifteenth row is the Master level, unsaved showing the shipped full level ({menu.ShownRowText}, {menu.ShownHeading})");
+        ctx.Check(menu.ShownRowText == $"Master volume: {AudioMix.DefaultMaster}" && menu.ShownHeading == "OPTIONS  (16/21)",
+            $"the sixteenth row is the Master level, unsaved showing the shipped full level ({menu.ShownRowText}, {menu.ShownHeading})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == $"Master volume: {AudioMix.MaxLevel}",
             $"Right at full clamps rather than wrapping to silence ({menu.ShownRowText})");

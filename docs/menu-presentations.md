@@ -299,6 +299,17 @@ symmetric: the pacing is applied on every launch, the mode and the size only on 
 at, a scripted run's window being hidden off screen with its capture compared against the viewport
 `project.godot` pins.
 
+VR mode is the one option an apply answers with a new process. Both screens offer it, Original on
+its VIDEO page's Clutter Detail line, live on Windows alone. `Launcher.ApplyOptions` saves it and,
+when the player changed it and the running launch did not already ask Godot for that mode,
+relaunches the executable with or without `--xr-mode on` (`CSVM/src/Launch/XrRelaunch.cs`); the
+pause leaf's apply saves it and no more. A launch with it saved on relaunches itself once at boot.
+Under a headset or the `--xr-sim` stand-in the shared player setup holds one seat
+(`PlayerSetupFeature.SeatLimit`), so both join boards draw the seats past the captain's closed and a
+local Dogfight's gate says VR flies one seat. A launch that asked for OpenXR and plays flat posts a
+`MenuNoticeFeature` notice, which Built-in writes on its error line and Original raises as its
+one-button box at the next show.
+
 A screen never writes the store. Both values ride the exit and `Launcher.ApplyOptions` is the only
 writer, so the options file has exactly one, and no test or suite that drives an Options screen
 through Apply can write the player's own file. Nor read it: `--run-tests` points

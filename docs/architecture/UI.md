@@ -939,6 +939,13 @@ instance outliving every presentation switch. `DiscardTransient()` calls every f
 `Discard` and is the whole of what a switch discards, so anything a feature keeps past it is by
 definition persisted data.
 
+## src/UI/Menu/MenuNoticeFeature.cs
+One notice the launcher posts for the player to read at the menu's next show, whichever
+presentation is active: today only VR mode falling back to the flat game
+(`Launch/XrRelaunch.cs`'s `FallbackNotice`). Built-in writes it on its error line
+(`LaunchMenu.ShowError`) and Original raises it as the one-button warning box
+(`OriginalShell.ShowNotice`); each takes it once, and a switch keeps one nothing has shown.
+
 ## src/UI/Menu/MenuCommands.cs
 The device-neutral input seam: `MenuCommands` is one frame of one seat's semantic commands
 (auto-repeated cursor steps, edge presses with `KeylessAccept` marking an accept no key gave, typed text and a paste, `OnPad` naming the side a hint words itself for, an optional window-pixel `MenuPointer` whose
@@ -968,9 +975,9 @@ narration.
 The one typed way out of the menu, handed to `IMenuHost.Exit` and consumed by `Launcher`:
 `LaunchExit` (chapter, per-seat `MenuSeatChoice`, `MenuMode`, optional `InstantActionDef` with the wingmen's edited fit beside it, and for Dogfight or a lobby Stunt Race a `VersusRules` of kill target, minutes, lives, auto-respawn and the lobby type that an explicit `--vs-kills=`/`--vs-time=`/`--vs-lives=`/`--vs-no-respawn` beats),
 `CampaignMissionExit` (profile, `cm_sequence` position, per-seat choices), `QuitExit` and
-`OptionsApplyExit` (the graphics-mode and difficulty words, the six display settings, the four volume levels and the gameplay switches, null where never set).
+`OptionsApplyExit` (the graphics-mode and difficulty words, the six display settings, the four volume levels, the gameplay switches and VR mode, null where never set).
 An applied choice rides the exit rather than being saved by the screen that took it, so the options file keeps one writer, and a screen
-hands back the settings it does not show; none of the seventeen is defaulted, so a page cannot hand back a null it never read, and a field no screen offers any more is dropped rather than left riding as a null the consumer would save. A custom
+hands back the settings it does not show; none of the nineteen is defaulted, so a page cannot hand back a null it never read, and a field no screen offers any more is dropped rather than left riding as a null the consumer would save. A custom
 plane rides the exit as a resolved `CustomPlaneDef`, never a store name. Presentations never construct
 sessions. The return side is `MenuReturnDestination`; the exit table and the scans holding the seam: [../menu-presentations.md](../menu-presentations.md).
 
@@ -980,7 +987,7 @@ about a saved value: one label per `DisplayWords` entry in that order, since a r
 plus the two forgiving reads (an unknown word is the vocabulary's first value, a size the screen does not offer is the
 project default) and the wrap a sideways step takes. Under a `Pinned` display mode the size row reads the screen's own size
 whatever is saved. An unset anti-aliasing row reads the default of the graphics word on the same page, and the render-scale
-labels are built over the list the standing method offers, so the scale row narrows the moment FSR 2.2 is picked. The shadow row's description says Enhanced only while the page's graphics word is Original, where both screens hold the row dead. The
+labels are built over the list the standing method offers, so the scale row narrows the moment FSR 2.2 is picked. The shadow row's description says Enhanced only while the page's graphics word is Original, where both screens hold the row dead, and the VR mode row's says it is Windows only where both hold it dead off Windows. The
 screens and the sizes are enumerated per machine by `Utils/MonitorSetting.cs` and `Utils/ResolutionSetting.cs`.
 Engine-free, so the rules test without a screen (`CSVM.Tests/DisplaySettingRowsTests.cs`).
 
@@ -1214,7 +1221,7 @@ The VIDEO page, the Game Options table's shape over the authored Video rows: the
 Anti-aliasing over `Utils/OptionsStore.cs`'s `DisplayWords`, and Enhanced Graphics on the Shadows checkbox whose gate it owns. Render Scale stands on
 the Objects Detail line and Anti-aliasing on the Lighting Quality line (whose `VP_D_DLight` authors five items), picking FSR 2.2 narrowing the scale
 list to 50..100 on the spot; Shadow Quality (`Utils/ShadowQualitySetting.cs`) stands on the Texture Quality line, dead while Enhanced Graphics is
-clear. The Graphics row's title and description are the page's own. It holds the display settings and the view distance it carries unshown.
+clear. VR Mode is a checkbox on the Clutter Detail line, live on Windows alone. The Graphics row's title and description are the page's own. It holds the display settings and the view distance it carries unshown.
 
 ## src/UI/Menu/Original/OriginalControlsPage.cs
 The CONTROLS page over the shared `ControlsFeature`: the seat chooser on the Controller Type row, the authored Mouse Sensitivity slider over
@@ -1254,7 +1261,7 @@ come from `Sticks/StickLabels.cs`'s `Columns`. The page placing the column:
 The join board, one standalone module behind the top level's remake-only JOIN BOARD door and the only screen a pad signs onto a
 seat from. It draws as the open scrapbook (`SB_BackGround.jpg`, the `Album` palette): the CREW MANIFEST down the left page, one
 entry per seat carrying that seat's identity chip and player tag and either the device name over "signed on" or the open seat
-over the press that takes it, and the ARTICLES OF THE CREW down the right, three rules and the captain's cast-off line whose pad
+over the press that takes it (or, under VR mode's one seat, a closed seat saying why), and the ARTICLES OF THE CREW down the right, three rules and the captain's cast-off line whose pad
 buttons are drawn inline through `BoardLine.Glyph`. The gestures are `MenuSeatDevices`'s (`PrimeBoard`/`ScanBoard`), read raw off
 the devices because a pad with no seat has no commands to read; CONTINUE keeps the manifest and BACK drops every sign-on. The
 keyboard is never listed, since it holds seat 1 whatever the manifest says and the first pad to sign on shares that seat, and
@@ -1474,7 +1481,7 @@ seat, settled in arrival order, and seat 0 never leaves. `Roster` is the `MenuAi
 seat picks from, set by the presentation and built by the shared rule (the stock rows in their given
 order, then one row per saved custom flying its airframe's stock node, a campaign plane nobody has
 exported left out). Per seat it owns the cursor, the two stages of the pick, the loadout door and
-the backing-out ladder; the gate is the mode's minimum of seats and every seat confirmed. It also holds Dogfight's two match rules, `KillTarget` and `TimeLimitMinutes` with their steppers, starting at the command line's own 5 and 5 and riding a Versus exit. `Choices`
+the backing-out ladder; the gate is the mode's minimum of seats and every seat confirmed. `SeatLimit` is one while a headset or the `--xr-sim` stand-in draws (the launcher sets it), so a second claim is refused and a local Dogfight's refusal is `VrOneSeat`. It also holds Dogfight's two match rules, `KillTarget` and `TimeLimitMinutes` with their steppers, starting at the command line's own 5 and 5 and riding a Versus exit. `Choices`
 and `BuildExit` are the typed result. Nothing here reads a pad: `src/UI/Screens/MenuSeatDevices.cs`, below.
 
 ## src/UI/Menu/NetPlayFeature.cs
@@ -1534,7 +1541,7 @@ The pad side of the shared player setup, for any presentation, over seat 0's `Me
 feature. `P1Pad` is the captain's pad, the first to sign on. `Sync` reconciles the
 seats with the connected pads: a seat whose pad vanished is unjoined, a vanished captain's pad frees
 seat 0, and seat 0's poller is bound to the captain's pad or to every unclaimed one.
-`PrimeBoard`, `ScanBoard` and the `BoardScan` it answers with are both presentations' join board and the only way a pad takes a seat, A signing a pad on, B signing it off and Start on the captain's pad casting off, over `SignOn`, `SignOff`, `IsCaptain` and the `IJoinRoster` each board draws its manifest from. A first sign-on takes `P1Pad` rather than a seat of its own, since the keyboard holds seat 1 whatever the manifest says, and `DropSignOns` is BACK giving every one of them back.
+`PrimeBoard`, `ScanBoard` and the `BoardScan` it answers with are both presentations' join board and the only way a pad takes a seat, A signing a pad on, B signing it off and Start on the captain's pad casting off, over `SignOn`, `SignOff`, `IsCaptain` and the `IJoinRoster` each board draws its manifest from, whose `Closed` entries are the seats past the feature's `SeatLimit`. A first sign-on takes `P1Pad` rather than a seat of its own, since the keyboard holds seat 1 whatever the manifest says, and `DropSignOns` is BACK giving every one of them back.
 `PadOf` reads a joined seat's pad back off its
 `BuiltInSeat`, and `FlightPads` is the binding a launch carries, the answer both presentations
 hand the feature's `Choices`. Read `src/UI/Menu/PlayerSetupFeature.cs` for the seats themselves.

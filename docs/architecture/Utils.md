@@ -409,7 +409,7 @@ block, where the same predicate drives both window hiding and the interactive ru
 
 ## src/Utils/OptionsStore.cs
 Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode, view distance and difficulty words, the six
-display settings (monitor index, resolution, display mode, V-Sync, render scale, anti-aliasing), the Enhanced shadow quality, the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn, the remembered install folder (fully qualified or dropped), and the network callsign, voice and game name the Game and Player Information boxes remember. One file, `user://options.json`,
+display settings (monitor index, resolution, display mode, V-Sync, render scale, anti-aliasing), the Enhanced shadow quality, the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn, VR mode (read only where `Launch/XrRelaunch.cs`'s dev-run rule allows), the remembered install folder (fully qualified or dropped), and the network callsign, voice and game name the Game and Player Information boxes remember. One file, `user://options.json`,
 independent of `Session/Campaign/CampaignProfileStore.cs`. A missing or malformed file reads as empty, an unknown version invalidates it, an
 unknown value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
 `Version`. Four reads hold that one contract: a word set (`DisplayWords`, `DifficultyWords` and `ViewWords` hold the vocabularies, whose resolved tier and view mode belong to `Flight`), a shape predicate for the

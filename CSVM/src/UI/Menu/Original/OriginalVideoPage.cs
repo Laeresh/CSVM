@@ -48,6 +48,9 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     /// <summary>The page's enhanced-graphics checkbox.</summary>
     public const string GraphicsKey = "GRAPHICS";
 
+    /// <summary>The page's VR mode checkbox, on the authored Clutter Detail line.</summary>
+    public const string VrModeKey = "VRMODE";
+
     // The page's authored row shape, used where a layout does not carry the section. It is the
     // title column and the Shadows row's line, the checkbox's offset from its title, and the
     // dropdown column and box. The description column takes the width the plaque column leaves it.
@@ -63,6 +66,8 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     private const float PlaqueX = 569f;
 
     private static readonly string[] GraphicsWords = { "FAITHFUL", "ENHANCED" };
+
+    private static readonly string[] OffOnWords = { "OFF", "ON" };
 
     // The settings, in the authored order of the rows they stand on. Each is a title, the authored
     // row it stands on, a description, a control and the words of the store field it reads and
@@ -106,6 +111,11 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
             s => DisplaySettingRows.WordIndex(CSVM.Utils.ShadowQualitySetting.Words, s._shadowQuality, CSVM.Utils.ShadowQualitySetting.Word),
             (s, i) => s._shadowQuality = CSVM.Utils.ShadowQualitySetting.Words[i],
             s => s.ShadowQualityLive),
+        new(VrModeKey, "VR Mode", "VP_T_ClutterTitle", "VP_B_CLUTTER", "VP_T_ClutterDESC",
+            _ => DisplaySettingRows.VrModeDetail(OperatingSystem.IsWindows()), OriginalRowKind.Radio, _ => OffOnWords,
+            s => s._vrMode == true ? 1 : 0,
+            (s, i) => s._vrMode = i == 1,
+            _ => OperatingSystem.IsWindows()),
         new(GraphicsKey, "Enhanced Graphics", "VP_T_ShadowsTitle", "VP_B_SHADOWS", "VP_T_ShadowsDESC",
             _ => GraphicsDescription(), OriginalRowKind.Radio, _ => GraphicsWords,
             s => s._graphics == CSVM.Utils.GraphicsMode.EnhancedWord ? 1 : 0,
@@ -138,6 +148,8 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     // The sun's shadow quality as saved. Null is "never set", which the next start reads as the
     // enhanced mode's own look.
     private string? _shadowQuality;
+    // VR mode as saved, null while never set, which reads as off.
+    private bool? _vrMode;
 
     internal OriginalVideoPage(
         OriginalOptionsChrome chrome,
@@ -206,6 +218,10 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     /// <summary>The shadow-quality word (<see cref="CSVM.Utils.ShadowQualitySetting.Words"/>) the
     /// page would apply, or null while nothing has been saved and no row has been touched.</summary>
     public string? ShadowQualityChoice => _shadowQuality;
+
+    /// <summary>The VR mode the page would apply, or null while nothing has been saved and the row
+    /// has not been touched.</summary>
+    public bool? VrModeChoice => _vrMode;
 
     /// <summary>Whether the Shadow Quality row takes a press, which it does while the page's own
     /// Enhanced Graphics box is ticked. The faithful world casts no sun shadow, so under Original the
@@ -428,6 +444,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         _renderScale = saved?.RenderScale;
         _antiAliasing = saved?.AntiAliasing;
         _shadowQuality = saved?.ShadowQuality;
+        _vrMode = saved?.VrMode;
     }
 
     private static int IndexOf(string key)

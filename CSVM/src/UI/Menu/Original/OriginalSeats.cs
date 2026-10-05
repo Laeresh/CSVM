@@ -490,7 +490,9 @@ public sealed partial class OriginalShell
 
         if (seats.Count < PlayerSetupFeature.MinimumSeats(SortieMode))
         {
-            return "Dogfight needs a second seat: sign one on at the JOIN BOARD";
+            return PlayerSetupFeature.MinimumSeats(SortieMode) > _setup.SeatLimit
+                ? PlayerSetupFeature.VrOneSeat
+                : "Dogfight needs a second seat: sign one on at the JOIN BOARD";
         }
 
         for (int i = 1; i < seats.Count; i++)

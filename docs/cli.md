@@ -480,6 +480,19 @@ after it. `RunGame.ps1 -EngineArgs '<arg>','<value>'` and `RunProbe.ps1 -EngineA
 * `--render-thread safe|separate` overrides `project.godot`'s separate render thread for one launch;
   `safe` renders on the main thread.
 
+**VR mode and `--xr-mode`.** The Options row (Original's VIDEO page, on the Clutter Detail line;
+Built-in's Options screen) saves `vrMode` in `options.json`. Applied from the menu with a change, it
+relaunches the executable with `--xr-mode on` placed first, every other argument (engine and user)
+carried verbatim and `--skip-intro` added; turning it off relaunches without the flag. A launch with
+VR mode saved on and no `--xr-mode` relaunches itself once at boot, and `--xr-mode off` keeps a launch
+flat by name. The child carries the flag, so it never relaunches again: a runtime that does not start
+leaves the flat game with a notice on the menu. A run that is `--det`, `--run-tests`, scripted,
+`--headless`, `--xr-sim`, a dev mode, a lab, `--net-host`/`--net-join` or not on Windows never
+relaunches and never reads the saved choice (`Launch/XrRelaunch.cs`). Under a headset or `--xr-sim`
+the game flies one seat: `--players` above one is refused with a warning and the join boards close
+the other seats. A headset launch deletes the shader cache files it wrote as it ends, so the next flat
+launch reads none of them (`Launch/XrShaderCache.cs`).
+
 `--xr-sim` is a user argument, but what it needs is engine state: Godot compiles the multiview
 shader variants only at start, and `project.godot` turns them on (and the shared shader cache off)
 under the `csvm_xr_sim` feature tag. The editor binary reads custom tags from the

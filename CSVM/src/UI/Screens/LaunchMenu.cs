@@ -181,10 +181,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The Options screen's stepper rows, above the Controls door and the apply row. The screen
     // is a form the cursor walks top to bottom. First the five gameplay settings: the three the
     // Original presentation's GAME OPTIONS page draws, in its order, then the targeting switch
-    // and the rumble. Then the graphics mode, its view distance, the six display settings and the
-    // shadow quality in the order the Original presentation's VIDEO page draws them. Then the four
-    // volume levels in the order its AUDIO page draws them, then the two doors.
-    private const int OptionsStepperRows = 18;
+    // and the rumble. Then the graphics mode and its view distance. The six display settings, the
+    // shadow quality and VR mode follow in the order the Original presentation's VIDEO page draws
+    // them. Then the four volume levels in the order its AUDIO page draws them, then the two doors.
+    private const int OptionsStepperRows = 19;
     // How many Options rows show at once. Twenty rows do not fit the band at 720p, and a band
     // sized to all of them shrinks every row. The screen is windowed at the Controls list's
     // height, which is known to fit.
@@ -326,6 +326,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     // the word the options file carries, never as a row index. A screen unplugged or a size the
     // monitor stopped offering then meets the resolver's own forgiving read, not a stale position.
     private string? _monitorChoice, _resolutionChoice, _displayModeChoice, _vsyncChoice, _renderScaleChoice, _antiAliasingChoice, _shadowQualityChoice;
+    // VR mode as saved, null while never set, which reads as off.
+    private bool? _vrModeChoice;
     // The size the options file named when this screen opened, which the size row offers as an entry
     // of its own (ResolutionSizes). It is held apart from the stepped choice, so a hand-written
     // size stays in the list after a step lands elsewhere. A step back then reaches it again.
@@ -1872,7 +1874,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         switch (_screen)
         {
             case Screen.Options:
-                // The eighteen choice rows are steppers; the doors under them have nothing to step.
+                // The nineteen choice rows are steppers; the doors under them have nothing to step.
                 switch (_optionsIndex)
                 {
                     case 0: StepDifficultyChoice(dir); return true;
@@ -1889,10 +1891,11 @@ public sealed partial class LaunchMenu : CanvasLayer
                     case 11: StepRenderScaleChoice(dir); return true;
                     case 12: StepAntiAliasingChoice(dir); return true;
                     case 13: StepShadowQualityChoice(dir); return true;
-                    case 14: _audioMasterChoice = StepLevel(_audioMasterChoice, AudioMix.DefaultMaster, dir); return true;
-                    case 15: _audioMusicChoice = StepLevel(_audioMusicChoice, AudioMix.DefaultMusic, dir); return true;
-                    case 16: _audioEffectsChoice = StepLevel(_audioEffectsChoice, AudioMix.DefaultEffects, dir); return true;
-                    case 17: _audioVoiceChoice = StepLevel(_audioVoiceChoice, AudioMix.DefaultVoice, dir); return true;
+                    case 14: ToggleVrModeChoice(); return true;
+                    case 15: _audioMasterChoice = StepLevel(_audioMasterChoice, AudioMix.DefaultMaster, dir); return true;
+                    case 16: _audioMusicChoice = StepLevel(_audioMusicChoice, AudioMix.DefaultMusic, dir); return true;
+                    case 17: _audioEffectsChoice = StepLevel(_audioEffectsChoice, AudioMix.DefaultEffects, dir); return true;
+                    case 18: _audioVoiceChoice = StepLevel(_audioVoiceChoice, AudioMix.DefaultVoice, dir); return true;
                     default: return false;
                 }
             case Screen.Network:
@@ -2024,7 +2027,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                         Difficulty.Word(_difficultyChoice), _monitorChoice, _resolutionChoice,
                         _displayModeChoice, _vsyncChoice, _renderScaleChoice, _antiAliasingChoice, _shadowQualityChoice, _audioMasterChoice,
                         _audioMusicChoice, _audioEffectsChoice, _audioVoiceChoice, _nearestAfterKillChoice,
-                        _rumbleChoice, _defaultViewChoice, _autoHeadTurnChoice, _viewDistanceChoice));
+                        _rumbleChoice, _defaultViewChoice, _autoHeadTurnChoice, _viewDistanceChoice, _vrModeChoice));
                 }
 
                 break;
@@ -3420,11 +3423,14 @@ public sealed partial class LaunchMenu : CanvasLayer
         return ZonePad + entry + seats + rules + rows + ((BoardRules.Length + 3) * ZoneSeparation);
     }
 
-    // A seat entry's device: the pad that signed on, a device-less seat's own label, or the open seat.
-    private string EntryDevice(int entry) => _devices.SignedOn(entry) ? _devices.Device(entry) : "open seat";
+    // A seat entry's device: the pad that signed on, a device-less seat's own label, the open seat,
+    // or a seat VR mode keeps shut.
+    private string EntryDevice(int entry) =>
+        _devices.SignedOn(entry) ? _devices.Device(entry) : _devices.Closed(entry) ? "closed seat" : "open seat";
 
     // A seat entry's status, which for an open seat is the press that takes it.
-    private string EntryStatus(int entry) => _devices.SignedOn(entry) ? "signed on" : "A to sign on";
+    private string EntryStatus(int entry) =>
+        _devices.SignedOn(entry) ? "signed on" : _devices.Closed(entry) ? "VR mode flies one seat" : "A to sign on";
 
     // The footer band: what the focused row is (or why the last press did nothing) and the presses
     // that do something here. Its height is fixed, so the controls line stays on the same pixel.
@@ -3468,6 +3474,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         _renderScaleChoice = saved.RenderScale;
         _antiAliasingChoice = saved.AntiAliasing;
         _shadowQualityChoice = saved.ShadowQuality;
+        _vrModeChoice = saved.VrMode;
         _audioMasterChoice = saved.AudioMaster;
         _audioMusicChoice = saved.AudioMusic;
         _audioEffectsChoice = saved.AudioEffects;
@@ -3804,6 +3811,15 @@ public sealed partial class LaunchMenu : CanvasLayer
     private void ToggleRumbleChoice() => _rumbleChoice = _rumbleChoice == false;
 
     private string RumbleChoiceLabel() => _rumbleChoice != false ? "On" : "Off";
+
+    // A never-set VR mode is off. Off Windows the row stays put, PC VR being the Windows build's.
+    private void ToggleVrModeChoice()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            _vrModeChoice = _vrModeChoice != true;
+        }
+    }
 
     private void ToggleGraphicsChoice() =>
         _graphicsChoice = _graphicsChoice == GraphicsMode.EnhancedWord
@@ -4504,11 +4520,12 @@ public sealed partial class LaunchMenu : CanvasLayer
                 11 => $"Render scale: {RenderScaleChoiceLabel()}",
                 12 => $"Anti-aliasing: {AntiAliasingChoiceLabel()}",
                 13 => $"Shadow quality: {ShadowQualityChoiceLabel()}",
-                14 => $"Master volume: {LevelLabel(_audioMasterChoice, AudioMix.DefaultMaster)}",
-                15 => $"Music volume: {LevelLabel(_audioMusicChoice, AudioMix.DefaultMusic)}",
-                16 => $"Effects volume: {LevelLabel(_audioEffectsChoice, AudioMix.DefaultEffects)}",
-                17 => $"Voice volume: {LevelLabel(_audioVoiceChoice, AudioMix.DefaultVoice)}",
-                18 => ControlsRow,
+                14 => $"VR mode (experimental): {(_vrModeChoice == true ? "On" : "Off")}",
+                15 => $"Master volume: {LevelLabel(_audioMasterChoice, AudioMix.DefaultMaster)}",
+                16 => $"Music volume: {LevelLabel(_audioMusicChoice, AudioMix.DefaultMusic)}",
+                17 => $"Effects volume: {LevelLabel(_audioEffectsChoice, AudioMix.DefaultEffects)}",
+                18 => $"Voice volume: {LevelLabel(_audioVoiceChoice, AudioMix.DefaultVoice)}",
+                19 => ControlsRow,
                 _ => "Apply and restart the menu",
             },
             Screen.Controls => $"{ControlsRowLabel(index)}   {ControlsRowValue(index)}",
@@ -4755,6 +4772,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         if (_slots.Count >= SplitScreen.MaxPlayers)
             return $"({SplitScreen.MaxPlayers}-player maximum)";
+        // VR mode's one seat outranks every invitation below: no press here seats anybody.
+        if (_setup.OneSeatForVr && !Networked())
+            return $"({PlayerSetupFeature.VrOneSeat})";
         if (_screen == Screen.Join)
             return "";
         if (_screen == Screen.Controls)
@@ -4919,11 +4939,12 @@ public sealed partial class LaunchMenu : CanvasLayer
             11 => "Render the world below native to spare the GPU, or above it for cleaner edges. Applies at once.",
             12 => "Select how edges are smoothed. FSR 2.2 also upscales a Render Scale below 100%. Applies at once.",
             13 => DisplaySettingRows.ShadowQualityDetail(_graphicsChoice),
-            14 => "Set the overall volume of all sounds. Heard once the choices are applied.",
-            15 => "Set the volume of the in-game music. Heard once the choices are applied.",
-            16 => "Set the volume of the sound effects. Heard once the choices are applied.",
-            17 => "Set the volume of the voices. Heard once the choices are applied.",
-            18 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
+            14 => DisplaySettingRows.VrModeDetail(OperatingSystem.IsWindows()),
+            15 => "Set the overall volume of all sounds. Heard once the choices are applied.",
+            16 => "Set the volume of the in-game music. Heard once the choices are applied.",
+            17 => "Set the volume of the sound effects. Heard once the choices are applied.",
+            18 => "Set the volume of the voices. Heard once the choices are applied.",
+            19 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
             _ => "Saves every choice and restarts the menu at its top level; unfinished setup is discarded.",
         },
         Screen.Controls => ControlsDetail(focus),

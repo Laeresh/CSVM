@@ -493,6 +493,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/BuiltIn/BuiltInSeat.cs`, a pad-side input source: one `MenuInput` polled and translated into one seat's command frame.
 - `src/UI/Menu/IMenuFeature.cs`, the shared-feature contract: typed state and semantic operations; `Discard()` drops transient setup.
 - `src/UI/Menu/MenuFeatureSet.cs`, the host-owned feature registry, fetched by concrete type; `DiscardTransient()` is what a switch drops.
+- `src/UI/Menu/MenuNoticeFeature.cs`, one launcher notice the active presentation shows once at its next show: VR mode's fall back to flat.
 - `src/UI/Menu/MenuCommands.cs`, one seat's semantic commands plus `IMenuInputSource`, the device-neutral seam every device sits behind.
 - `src/UI/Menu/IMenuAudio.cs`, the shared menu audio contract: presentations ask for cues, narration and a mix preview, the service owns everything else.
 - `src/UI/Menu/MenuExit.cs`, the one typed menu exit `Launcher` consumes: launch, campaign mission, quit, options-apply. No presentation builds a session.
@@ -678,6 +679,8 @@ The process and the per-launch session: the top family bar `Testing`, so nothing
 - `src/Launch/MasterServerLink.cs`, the shipped way to the master server over .NET's HTTP and WebSocket clients: the games list fetch and the socket with its two loops.
 - `src/Launch/MasterFrames.cs`, the master server socket's read of one whole message, shared by the game and the server.
 - `src/Launch/XrSession.cs`, the stereo path when Godot started OpenXR or `--xr-sim` asked for the stand-in: the viewport to the interface, the origin at the pilot's eye, the boot and frame-pacing log lines.
+- `src/Launch/XrRelaunch.cs`, VR mode's relaunch rules: when a boot or a menu apply relaunches, the child's arguments, the flat-only runs, the fallback notice.
+- `src/Launch/XrShaderCache.cs`, a headset launch's shader cache writes swept as it ends, with a marker that covers a crash, so flat launches never misread them.
 - `src/Launch/XrSimInterface.cs`, the `--xr-sim` stand-in headset: an XR interface with a pinned head and no runtime, drawing both eyes side by side.
 - `src/Launch/XrFrameWindow.cs`, the headset's frame pacing in wall-second windows: mean and worst interval, late frames and skipped refreshes.
 

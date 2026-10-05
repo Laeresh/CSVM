@@ -670,6 +670,11 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         Open(OriginalScreen.TopLevel);
     }
 
+    /// <summary>Stands a one-button warning box carrying <paramref name="message"/> over the screen
+    /// showing, the way the launcher's notice reaches the player (<see cref="MenuNoticeFeature"/>).
+    /// </summary>
+    public void ShowNotice(string message) => RaiseDialog(message, DialogIcon.Warning, Ok());
+
     /// <summary>Opens a screen directly, the screenshot aids' door. Any screen the walk does not
     /// stand on (<see cref="OnSeatWalk"/>) ends a seat walk in progress.</summary>
     public void Open(OriginalScreen screen)
