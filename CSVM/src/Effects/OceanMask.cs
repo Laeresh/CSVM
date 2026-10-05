@@ -1,8 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Globalization;
+using System.Runtime.CompilerServices;
 using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
+using Kind = CSVM.Effects.OceanMaskRaster.Kind;
+using Tri = CSVM.Effects.OceanMaskRaster.Tri;
 
 namespace CSVM.Effects;
 
@@ -11,26 +16,18 @@ namespace CSVM.Effects;
 /// sea coverage. Its green channel is the wave height left after a fade from every shore, surf
 /// texel and solid object near sea level. The tint texture carries the base sheet's baked vertex
 /// colour, which darkens the water around the islands. The bake also finds the wake sheets and the
-/// base texture's tile size.
+/// base texture's tile size. <see cref="OceanMaskRaster"/> turns the triangles into texels.
 /// </summary>
 internal sealed class OceanMask
 {
-    /// <summary>The texel edge in metres. Fine enough that the calm band hugs the surf ring.</summary>
-    public const float Cell = 8f;
+    /// <summary>The texel edge in metres.</summary>
+    public const float Cell = OceanMaskRaster.Cell;
 
-    // Waves are fully calm this close to a shore or a surf texel, and reach full height here.
-    private const float ShoreCalm = 24f;
-    private const float ShoreFull = 160f;
+    // One bake per built world, held only as long as its builder lives.
+    private static readonly ConditionalWeakTable<SceneBuilder, Memo> Baked = new();
 
     private OceanMask()
     {
-    }
-
-    private enum Kind
-    {
-        Base,
-        Edge,
-        Solid,
     }
 
     public ImageTexture Texture { get; private set; } = null!;
@@ -38,6 +35,9 @@ internal sealed class OceanMask
     public Image Image { get; private set; } = null!;
 
     public ImageTexture TintTexture { get; private set; } = null!;
+
+    /// <summary>The tint texture's pixels, kept for <c>--dump-ocean-mask</c>.</summary>
+    public Image TintImage { get; private set; } = null!;
 
     /// <summary>The world X/Z of the mask's first texel corner.</summary>
     public Vector2 Origin { get; private set; }
@@ -64,24 +64,38 @@ internal sealed class OceanMask
     /// <summary>The wake sheets found in the world, whose positions the ocean calms around.</summary>
     public List<Node3D> Wakes { get; } = new();
 
-    private Color VertexColor { get; set; } = Colors.White;
+    /// <summary>The bake's milliseconds per phase, for the build log line.</summary>
+    public string Timing { get; private set; } = "";
 
     /// <summary>Bakes the mask over the world under <paramref name="root"/>, skipping the subtrees in
-    /// <paramref name="skip"/>; null when that world has no sea-level base sheet.</summary>
-    public static OceanMask? Bake(Node3D root, Dictionary<Material, string> names, ISet<Node> skip)
+    /// <paramref name="skip"/>; null when that world has no sea-level base sheet. The surfaces are
+    /// read through <paramref name="scene"/>, which holds the arrays it committed.</summary>
+    public static OceanMask? Bake(Node3D root, SceneBuilder scene, ISet<Node> skip)
     {
-        var result = new OceanMask();
-        // An animated ship carries its wake sheet. Its hull must not leave a calm patch where it
-        // started, so the wake's parent subtree is left out of the bake.
-        FindWakes(root, names, result.Wakes);
-        var skipped = new HashSet<Node>(skip);
-        foreach (var wake in result.Wakes)
+        // The world is static. An ocean rebuilt over it, after a live switch or a Water Quality
+        // change, reuses the first bake. The frame path never pays it twice.
+        if (Baked.TryGetValue(scene, out var kept) && kept.Root == root && GodotObject.IsInstanceValid(root))
         {
-            if (wake.GetParent() is { } hull && hull != root)
-                skipped.Add(hull);
+            kept.Mask?.Wakes.RemoveAll(w => !GodotObject.IsInstanceValid(w));
+            if (kept.Mask != null)
+                kept.Mask.Timing = "reused";
+            return kept.Mask;
         }
-        var walker = new Walker(root, names, skipped, result);
-        walker.Walk(root, Transform3D.Identity);
+        var mask = BakeNew(root, scene, skip);
+        Baked.AddOrUpdate(scene, new Memo(root, mask));
+        return mask;
+    }
+
+    private static OceanMask? BakeNew(Node3D root, SceneBuilder scene, ISet<Node> skip)
+    {
+        long t0 = Stopwatch.GetTimestamp();
+        var names = new Dictionary<Material, string>();
+        foreach (var (mat, tex) in scene.TexturedMaterials)
+            names[mat] = tex;
+        var result = new OceanMask();
+        var walker = new Walker(root, scene, names, skip, result);
+        walker.Walk();
+        double walkMs = Lap(ref t0);
         if (result.BaseTriangles == 0)
             return null;
         int best = 0;
@@ -99,204 +113,65 @@ internal sealed class OceanMask
             uvSamples.Sort();
             result.TileMetres = uvSamples[uvSamples.Count / 2];
         }
+        var vertexColor = Colors.White;
         if (walker.ColorCount > 0)
         {
             int cn = walker.ColorCount;
-            result.VertexColor = new Color((float)(walker.R / cn), (float)(walker.G / cn), (float)(walker.B / cn)).SrgbToLinear();
+            vertexColor = new Color((float)(walker.R / cn), (float)(walker.G / cn), (float)(walker.B / cn)).SrgbToLinear();
         }
-        result.Rasterise(walker.Tris);
+        var raster = OceanMaskRaster.Run(walker.Tris.ToArray(), vertexColor.LinearToSrgb(), OceanMaskRaster.DefaultBands);
+        Lap(ref t0);
+        result.Width = raster.Width;
+        result.Height = raster.Height;
+        result.Origin = raster.Origin;
+        result.Size = new Vector2(raster.Width * Cell, raster.Height * Cell);
+        result.Image = Image.CreateFromData(raster.Width, raster.Height, false, Image.Format.Rg8, raster.Mask);
+        result.TintImage = Image.CreateFromData(raster.Width, raster.Height, false, Image.Format.Rgb8, raster.Tint);
+        // Both kept: --dump-ocean-mask reads them after the upload.
+        result.TintTexture = TextureUpload.Create(result.TintImage, callerKeeps: true);
+        result.Texture = TextureUpload.Create(result.Image, callerKeeps: true);
+        double uploadMs = Lap(ref t0);
+        result.Timing = string.Create(CultureInfo.InvariantCulture,
+            $"walk={walkMs:0.0} raster={raster.FillMs:0.0} distance={raster.EncodeMs:0.0} upload={uploadMs:0.0} bands={raster.Bands}");
         return result;
     }
 
-    private static void FindWakes(Node node, Dictionary<Material, string> names, List<Node3D> wakes)
+    // Milliseconds since t0, which moves to now.
+    private static double Lap(ref long t0)
     {
-        if (node is MeshInstance3D mi && mi.Mesh is { } mesh)
-        {
-            for (int s = 0; s < mesh.GetSurfaceCount(); s++)
-            {
-                var mat = mi.GetSurfaceOverrideMaterial(s) ?? mesh.SurfaceGetMaterial(s);
-                if (mat != null && names.TryGetValue(mat, out var tex)
-                    && tex.Contains("wakefront", StringComparison.OrdinalIgnoreCase))
-                {
-                    wakes.Add(mi);
-                    break;
-                }
-            }
-        }
-        foreach (var child in node.GetChildren())
-            FindWakes(child, names, wakes);
+        long now = Stopwatch.GetTimestamp();
+        double ms = (now - t0) * 1000.0 / Stopwatch.Frequency;
+        t0 = now;
+        return ms;
     }
 
-    private static void Raster(Tri t, float minX, float minZ, int w, int h, byte[] sea, bool[] solid, Color[] tint)
-    {
-        var a = new Vector2(t.A.X, t.A.Z);
-        var b = new Vector2(t.B.X, t.B.Z);
-        var c = new Vector2(t.C.X, t.C.Z);
-        float area = Cross(b - a, c - a);
-        int x0 = Math.Max(0, (int)Math.Floor((Math.Min(a.X, Math.Min(b.X, c.X)) - minX) / Cell));
-        int x1 = Math.Min(w - 1, (int)Math.Ceiling((Math.Max(a.X, Math.Max(b.X, c.X)) - minX) / Cell));
-        int z0 = Math.Max(0, (int)Math.Floor((Math.Min(a.Y, Math.Min(b.Y, c.Y)) - minZ) / Cell));
-        int z1 = Math.Min(h - 1, (int)Math.Ceiling((Math.Max(a.Y, Math.Max(b.Y, c.Y)) - minZ) / Cell));
-        // A triangle smaller than a texel still marks the texels its corners land in.
-        if (t.Kind == Kind.Solid)
-        {
-            foreach (var p in new[] { a, b, c })
-                Mark((int)((p.X - minX) / Cell), (int)((p.Y - minZ) / Cell));
-        }
-        if (Math.Abs(area) < 1e-6f)
-            return;
-        for (int z = z0; z <= z1; z++)
-        {
-            for (int x = x0; x <= x1; x++)
-            {
-                var p = new Vector2(minX + (x + 0.5f) * Cell, minZ + (z + 0.5f) * Cell);
-                float w0 = Cross(b - a, p - a) / area;
-                float w1 = Cross(c - b, p - b) / area;
-                float w2 = Cross(a - c, p - c) / area;
-                if (w0 >= -1e-4f && w1 >= -1e-4f && w2 >= -1e-4f)
-                {
-                    Mark(x, z);
-                    if (t.Kind == Kind.Base)
-                        tint[z * w + x] = (t.CA * w1) + (t.CB * w2) + (t.CC * w0);
-                }
-            }
-        }
+    // Godot keeps a vertex colour as RGBA8, truncated, and a read-back returns those bytes over 255.
+    // The builder's kept arrays hold the committed floats, so they take the same step here. The tint
+    // then matches either source, and a stored value passes through unchanged.
+    private static Color Stored(Color c) => new(
+        (byte)Math.Clamp(c.R * 255f, 0f, 255f) / 255f,
+        (byte)Math.Clamp(c.G * 255f, 0f, 255f) / 255f,
+        (byte)Math.Clamp(c.B * 255f, 0f, 255f) / 255f,
+        (byte)Math.Clamp(c.A * 255f, 0f, 255f) / 255f);
 
-        void Mark(int x, int z)
-        {
-            if (x < 0 || z < 0 || x >= w || z >= h)
-                return;
-            int i = z * w + x;
-            switch (t.Kind)
-            {
-                case Kind.Base:
-                    if (sea[i] == 0)
-                        sea[i] = 1;
-                    break;
-                case Kind.Edge:
-                    sea[i] = 2;
-                    break;
-                default:
-                    solid[i] = true;
-                    break;
-            }
-        }
-    }
+    // A world's bake, or null when it had no sea-level base sheet.
+    private sealed record Memo(Node3D Root, OceanMask? Mask);
 
-    private static float Cross(Vector2 u, Vector2 v) => u.X * v.Y - u.Y * v.X;
-
-    // Distance in metres to the nearest texel that is not open base sea, by a two-pass chamfer.
-    private static float[] ShoreDistance(byte[] sea, bool[] solid, int w, int h)
-    {
-        var dist = new float[w * h];
-        const float big = 1e6f;
-        for (int i = 0; i < dist.Length; i++)
-            dist[i] = sea[i] == 1 && !solid[i] ? big : 0f;
-        float d1 = Cell, d2 = Cell * 1.4142f;
-        for (int y = 0; y < h; y++)
-        {
-            for (int x = 0; x < w; x++)
-            {
-                int i = y * w + x;
-                float d = dist[i];
-                if (d == 0f)
-                    continue;
-                if (x > 0) d = Math.Min(d, dist[i - 1] + d1);
-                if (y > 0) d = Math.Min(d, dist[i - w] + d1);
-                if (x > 0 && y > 0) d = Math.Min(d, dist[i - w - 1] + d2);
-                if (x < w - 1 && y > 0) d = Math.Min(d, dist[i - w + 1] + d2);
-                dist[i] = d;
-            }
-        }
-        for (int y = h - 1; y >= 0; y--)
-        {
-            for (int x = w - 1; x >= 0; x--)
-            {
-                int i = y * w + x;
-                float d = dist[i];
-                if (d == 0f)
-                    continue;
-                if (x < w - 1) d = Math.Min(d, dist[i + 1] + d1);
-                if (y < h - 1) d = Math.Min(d, dist[i + w] + d1);
-                if (x < w - 1 && y < h - 1) d = Math.Min(d, dist[i + w + 1] + d2);
-                if (x > 0 && y < h - 1) d = Math.Min(d, dist[i + w - 1] + d2);
-                dist[i] = d;
-            }
-        }
-        return dist;
-    }
-
-    private void Rasterise(List<Tri> tris)
-    {
-        float minX = float.MaxValue, minZ = float.MaxValue, maxX = float.MinValue, maxZ = float.MinValue;
-        foreach (var t in tris)
-        {
-            if (t.Kind == Kind.Solid)
-                continue;
-            foreach (var v in new[] { t.A, t.B, t.C })
-            {
-                minX = Math.Min(minX, v.X);
-                maxX = Math.Max(maxX, v.X);
-                minZ = Math.Min(minZ, v.Z);
-                maxZ = Math.Max(maxZ, v.Z);
-            }
-        }
-        minX = Math.Max(minX, -30000f);
-        minZ = Math.Max(minZ, -30000f);
-        maxX = Math.Min(maxX, 30000f);
-        maxZ = Math.Min(maxZ, 30000f);
-        // No spare texel past the last polygon: clamp-to-edge carries the border sea outward.
-        int w = Math.Max(1, (int)Math.Ceiling((maxX - minX) / Cell));
-        int h = Math.Max(1, (int)Math.Ceiling((maxZ - minZ) / Cell));
-        Width = w;
-        Height = h;
-        Origin = new Vector2(minX, minZ);
-        Size = new Vector2(w * Cell, h * Cell);
-        var sea = new byte[w * h];   // 1 base, 2 edge
-        var solid = new bool[w * h];
-        var tint = new Color[w * h];
-        Array.Fill(tint, new Color(-1f, 0f, 0f));
-        foreach (var t in tris)
-            Raster(t, minX, minZ, w, h, sea, solid, tint);
-
-        var dist = ShoreDistance(sea, solid, w, h);
-        var bytes = new byte[w * h * 2];
-        for (int i = 0; i < w * h; i++)
-        {
-            bytes[2 * i] = sea[i] != 0 ? (byte)255 : (byte)0;
-            float a = Mathf.SmoothStep(ShoreCalm, ShoreFull, dist[i]);
-            bytes[2 * i + 1] = (byte)Math.Round(a * 255f);
-        }
-        Image = Image.CreateFromData(w, h, false, Image.Format.Rg8, bytes);
-        // The base sheet's baked vertex colour per texel, sRGB as authored; open texels take the mean.
-        var tintBytes = new byte[w * h * 3];
-        var mean = VertexColor.LinearToSrgb();
-        for (int i = 0; i < w * h; i++)
-        {
-            var c = tint[i].R < 0f ? mean : tint[i];
-            tintBytes[3 * i] = (byte)Math.Clamp(Math.Round(c.R * 255f), 0, 255);
-            tintBytes[3 * i + 1] = (byte)Math.Clamp(Math.Round(c.G * 255f), 0, 255);
-            tintBytes[3 * i + 2] = (byte)Math.Clamp(Math.Round(c.B * 255f), 0, 255);
-        }
-        TintTexture = TextureUpload.Create(w, h, Image.Format.Rgb8, tintBytes);
-        // Kept for --dump-ocean-mask, which only reads it.
-        Texture = TextureUpload.Create(Image, callerKeeps: true);
-    }
-
-    private readonly record struct Tri(Vector3 A, Vector3 B, Vector3 C, Kind Kind, Color CA, Color CB, Color CC);
-
-    // One pass over the world tree collects every sea-level water triangle and every solid one near
-    // sea level, in world space. It also counts the base sheet's textures, tile sizes and colour.
+    // One pass over the world tree finds the wake sheets and lists the surfaces to read, in tree
+    // order. The triangles are read after it, once every hull subtree is known and dropped.
     private sealed class Walker
     {
         private readonly Node3D _root;
+        private readonly SceneBuilder _scene;
         private readonly Dictionary<Material, string> _names;
         private readonly ISet<Node> _skip;
         private readonly OceanMask _result;
+        private readonly List<Surface> _surfaces = new();
 
-        public Walker(Node3D root, Dictionary<Material, string> names, ISet<Node> skip, OceanMask result)
+        public Walker(Node3D root, SceneBuilder scene, Dictionary<Material, string> names, ISet<Node> skip, OceanMask result)
         {
             _root = root;
+            _scene = scene;
             _names = names;
             _skip = skip;
             _result = result;
@@ -316,44 +191,72 @@ internal sealed class OceanMask
 
         public int ColorCount { get; private set; }
 
-        public void Walk(Node node, Transform3D parent)
+        public void Walk()
         {
-            if (_skip.Contains(node))
-                return;
-            var xf = parent;
-            if (node is Node3D n3 && node != _root)
-                xf = parent * n3.Transform;
-            if (node is MeshInstance3D mi && mi.Mesh is ArrayMesh mesh)
-            {
-                for (int s = 0; s < mesh.GetSurfaceCount(); s++)
-                {
-                    var mat = mi.GetSurfaceOverrideMaterial(s) ?? mesh.SurfaceGetMaterial(s);
-                    if (mat != null && _names.TryGetValue(mat, out var tex))
-                        WalkSurface(mesh, s, tex, xf);
-                }
-            }
-            foreach (var child in node.GetChildren())
-                Walk(child, xf);
+            Visit(_root, Transform3D.Identity, true);
+            foreach (var s in _surfaces)
+                Read(s);
         }
 
-        private void WalkSurface(ArrayMesh mesh, int s, string tex, Transform3D xf)
+        // Whether the node is a wake sheet. Wakes are found everywhere, skipped subtrees included.
+        // A ship's hull, the wake's parent, gives up its surfaces, so an animated ship leaves no calm
+        // patch where it started. A subtree's surfaces are the tail it appended.
+        private bool Visit(Node node, Transform3D parent, bool collect)
         {
-            var arrays = mesh.SurfaceGetArrays(s);
+            collect = collect && !_skip.Contains(node);
+            int start = _surfaces.Count;
+            var xf = parent;
+            if (collect && node is Node3D n3 && node != _root)
+                xf = parent * n3.Transform;
+            bool wake = false;
+            if (node is MeshInstance3D mi && mi.Mesh is { } mesh)
+            {
+                var arrayMesh = collect ? mesh as ArrayMesh : null;
+                int count = mesh.GetSurfaceCount();
+                for (int s = 0; s < count; s++)
+                {
+                    var mat = mi.GetSurfaceOverrideMaterial(s) ?? mesh.SurfaceGetMaterial(s);
+                    if (mat == null || !_names.TryGetValue(mat, out var tex))
+                        continue;
+                    if (!wake && tex.Contains("wakefront", StringComparison.OrdinalIgnoreCase))
+                    {
+                        wake = true;
+                        _result.Wakes.Add(mi);
+                    }
+                    if (arrayMesh != null)
+                        _surfaces.Add(new Surface(arrayMesh, s, tex, xf));
+                }
+            }
+            bool hull = false;
+            int children = node.GetChildCount();
+            for (int i = 0; i < children; i++)
+                hull |= Visit(node.GetChild(i), xf, collect);
+            if (hull && node != _root)
+                _surfaces.RemoveRange(start, _surfaces.Count - start);
+            return wake;
+        }
+
+        private void Read(Surface surface)
+        {
+            var (mesh, s, tex, xf) = surface;
+            bool water = SceneBuilder.ClassifySurface(tex) == "water";
+            bool isBase = water && SceneBuilder.IsOceanBaseTexture(tex);
+            // The builder's own copy: Godot's read-back copies the surface off the GPU and waits
+            // for the render thread, about a millisecond a surface. UVs and colours serve the base.
+            var arrays = _scene.SurfaceArrays(mesh, s);
             var v = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
             var ix = arrays[(int)Mesh.ArrayType.Index].VariantType == Variant.Type.Nil
                 ? Array.Empty<int>() : arrays[(int)Mesh.ArrayType.Index].AsInt32Array();
-            var uv = arrays[(int)Mesh.ArrayType.TexUV].VariantType == Variant.Type.Nil
+            var uv = !isBase || arrays[(int)Mesh.ArrayType.TexUV].VariantType == Variant.Type.Nil
                 ? Array.Empty<Vector2>() : arrays[(int)Mesh.ArrayType.TexUV].AsVector2Array();
-            var col = arrays[(int)Mesh.ArrayType.Color].VariantType == Variant.Type.Nil
+            var col = !isBase || arrays[(int)Mesh.ArrayType.Color].VariantType == Variant.Type.Nil
                 ? Array.Empty<Color>() : arrays[(int)Mesh.ArrayType.Color].AsColorArray();
-            bool water = SceneBuilder.ClassifySurface(tex) == "water";
-            bool isBase = water && SceneBuilder.IsOceanBaseTexture(tex);
             int triCount = ix.Length > 0 ? ix.Length / 3 : v.Length / 3;
             for (int t = 0; t < triCount; t++)
             {
                 int i0 = ix.Length > 0 ? ix[3 * t] : 3 * t;
-                int i1 = ix.Length > 0 ? ix[3 * t + 1] : 3 * t + 1;
-                int i2 = ix.Length > 0 ? ix[3 * t + 2] : 3 * t + 2;
+                int i1 = ix.Length > 0 ? ix[(3 * t) + 1] : (3 * t) + 1;
+                int i2 = ix.Length > 0 ? ix[(3 * t) + 2] : (3 * t) + 2;
                 var a = xf * v[i0];
                 var b = xf * v[i1];
                 var c = xf * v[i2];
@@ -375,9 +278,10 @@ internal sealed class OceanMask
                     }
                     if (col.Length > 0)
                     {
-                        R += col[i0].R;
-                        G += col[i0].G;
-                        B += col[i0].B;
+                        var c0 = Stored(col[i0]);
+                        R += c0.R;
+                        G += c0.G;
+                        B += c0.B;
                         ColorCount++;
                     }
                 }
@@ -396,8 +300,10 @@ internal sealed class OceanMask
                     continue;
                 }
                 bool tinted = kind == Kind.Base && col.Length > 0;
-                Tris.Add(new Tri(a, b, c, kind, tinted ? col[i0] : Colors.White, tinted ? col[i1] : Colors.White, tinted ? col[i2] : Colors.White));
+                Tris.Add(new Tri(a, b, c, kind, tinted ? Stored(col[i0]) : Colors.White, tinted ? Stored(col[i1]) : Colors.White, tinted ? Stored(col[i2]) : Colors.White));
             }
         }
+
+        private readonly record struct Surface(ArrayMesh Mesh, int Index, string Texture, Transform3D Xf);
     }
 }

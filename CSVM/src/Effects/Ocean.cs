@@ -80,15 +80,13 @@ public sealed partial class Ocean : Node3D
         Func<IEnumerable<Vector3>> ships, ISet<Node> skip, string maskPng)
     {
         long start = System.Diagnostics.Stopwatch.GetTimestamp();
-        var names = new Dictionary<Material, string>();
-        foreach (var (mat, tex) in scene.TexturedMaterials)
-            names[mat] = tex;
-        var mask = OceanMask.Bake(worldRoot, names, skip);
+        var mask = OceanMask.Bake(worldRoot, scene, skip);
         if (mask == null)
         {
             Log.Info("world", $"ocean: no sea-level base sheet, not built");
             return null;
         }
+        double bakeMs = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;
         var baseTex = textures.Find(mask.BaseTexture);
         var meanTex = MeanColor(textures.FindImage(mask.BaseTexture));
 
@@ -116,7 +114,7 @@ public sealed partial class Ocean : Node3D
         };
         ocean.AddChild(instance);
         double ms = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;
-        Log.Info("world", $"ocean: built grid verts={mesh.SurfaceGetArrayLen(0)} mask={mask.Width}x{mask.Height} cell={OceanMask.Cell}m origin=({mask.Origin.X:0},{mask.Origin.Y:0}) base={mask.BaseTexture} tile={mask.TileMetres:0.0}m base_tris={mask.BaseTriangles} edge_tris={mask.EdgeTriangles} solid_tris={mask.SolidTriangles} wakes={mask.Wakes.Count} ms={ms:0}");
+        Log.Info("world", $"ocean: built grid verts={mesh.SurfaceGetArrayLen(0)} mask={mask.Width}x{mask.Height} cell={OceanMask.Cell}m origin=({mask.Origin.X:0},{mask.Origin.Y:0}) base={mask.BaseTexture} tile={mask.TileMetres:0.0}m base_tris={mask.BaseTriangles} edge_tris={mask.EdgeTriangles} solid_tris={mask.SolidTriangles} wakes={mask.Wakes.Count} ms={ms:0} bake={bakeMs:0} ({mask.Timing})");
         foreach (var wake in mask.Wakes)
         {
             if (wake.IsInsideTree())
@@ -128,6 +126,8 @@ public sealed partial class Ocean : Node3D
         if (maskPng.Length > 0)
         {
             var err = mask.Image.SavePng(maskPng);
+            if (err == Error.Ok)
+                err = mask.TintImage.SavePng(System.IO.Path.ChangeExtension(maskPng, ".tint.png"));
             if (err == Error.Ok)
                 Log.Info("world", $"ocean: mask written to {maskPng}");
             else

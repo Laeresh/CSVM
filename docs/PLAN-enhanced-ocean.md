@@ -89,7 +89,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☐ Bring the low-altitude SSR cost within budget
 12. ☐ Measure and budget the Deck
-13. ☐ Cache or speed up the mask bake
+13. ◐ Cache or speed up the mask bake
 
 ### Wave C, coverage
 
@@ -273,7 +273,30 @@ timed out). The handoff notes Enhanced split-screen already runs below 60 fps th
 
 **⚠ Traps.** SSH screenshots on the Deck need `--det`; a `--no-det` shot captures the loading frame.
 
-## B13 ☐ Cache or speed up the mask bake
+## B13 ◐ Cache or speed up the mask bake
+
+**Landed.** The `ocean: built` line now carries `bake=` and the split `walk= raster= distance=
+upload= bands=`. Measured first on the C1B cruise pose (Debug build, a shared machine): the bake
+took 3.0 to 4.8 s, of which `ArrayMesh.SurfaceGetArrays` over 2238 surfaces took 1.9 to 3.6 s
+(about 1 ms each, the render-thread read-back), the triangle raster 0.7 s, the encode 0.15 s and
+the chamfer 0.1 s. The fix follows those numbers, with no disk cache, since nothing left is worth
+invalidating. `OceanMask` reads each surface through `SceneBuilder.SurfaceArrays`, the arrays the
+builder already keeps (positions, indices and UVs bit-equal to the read-back; colours truncated to
+RGBA8 as Godot stores them). One tree pass now finds the wakes and the surfaces together. The
+compute moved to a new pure module, `Effects/OceanMaskRaster.cs`: scalar arithmetic in the old
+operator order, rows clipped to the texels the test can take, and row bands on the thread pool,
+the distance pass reading a 24-row halo. A built world keeps its bake, so an ocean rebuilt over it
+(live switch, Water Quality) reuses it. After: `bake=` 87 to 96 ms over five loads (walk 27 to 33,
+raster 26 to 36, distance 17 to 21, upload 7 to 8); a bake run after the world merge took 107 ms
+and gave the same mask. Every load is a cold bake; there is no warm path besides the in-session
+reuse. The rest of `ms=` (about 60 ms) is the grid and material in `Ocean.Create`, outside the mask.
+Mask, tint and cruise shot are pixel-identical before and after (mask decoded md5 `75EBB314...`,
+tint `8742B5D0...`, cruise BGRA md5 `6E4CA61F...`). `OceanMaskRasterTests` hold the module to the
+old whole-image pass at 1, 5 and 12 bands.
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** The bake adds no noticeable load time.
 

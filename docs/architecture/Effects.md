@@ -62,10 +62,23 @@ Quality (`Utils/WaterQualitySetting.cs`) and drops it on Original or `flat`; `--
 The shore calm comes from `OceanMask.cs`.
 
 ## src/Effects/OceanMask.cs
-The wave ocean's shore mask, baked once from the built world's mesh instances at 8 m texels: sea
-coverage, the wave height left after a fade from every shore, surf texel and solid near sea level,
-and the base sheet's baked vertex colour. Also finds the wake sheets and the base texture's tile
-size. `--dump-ocean-mask=` writes it out. Read `Ocean.cs` for how the shader samples it.
+The wave ocean's shore mask at 8 m texels: sea coverage, the wave height left after a fade from
+every shore, surf texel and solid near sea level, and the base sheet's baked vertex colour. The same
+tree pass finds the wake sheets and the base texture's tile size. Surfaces are read through
+`SceneBuilder.SurfaceArrays`, never `SurfaceGetArrays`, whose read-back waits on the render thread
+about a millisecond a surface (3 to 5 s on C1B). Kept colours are truncated to RGBA8 as Godot
+stores them, so the tint matches a read-back. One bake per built world (keyed on its `SceneBuilder`)
+serves every rebuild of the ocean over it. `--dump-ocean-mask=` writes the mask and the tint. Read
+`OceanMaskRaster.cs` for the texels and `Ocean.cs` for how the shader samples them.
+
+## src/Effects/OceanMaskRaster.cs
+The mask bake's compute: world-space triangles in, the RG8 mask and RGB8 tint bytes out, with no
+engine object touched. Runs in row bands on the thread pool; the distance pass reads a halo of
+rows past each band, deep enough for every distance below the full-height fade, so the bytes are
+identical for any band count. The barycentric test and the tint blend are written in scalars in the
+operation order of the Vector2 and Color operators they replace, and each row skips the texels the
+test cannot take, so a texel rounds exactly as in a plain pass. `OceanMaskRasterTests` hold it to
+that plain pass at several band counts.
 
 ## src/Effects/Precipitation.cs
 Rain and snow from `weather.json`'s precipitation block (`WeatherState.PrecipData`): ONE MultiMesh
