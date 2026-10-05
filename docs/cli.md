@@ -163,8 +163,8 @@ lines**.
 - `--vs` (**"Dogfight" mode**: splitscreen free-for-all deathmatch, `--fly` plus the `dogfight_ace`
   spawn list unless `--scenario=` is explicit. It **beats `--stunt` by fixed precedence** rather
   than last-flag-wins, dropping stunt mode with a warning when both are given.
-  `--vs-kills=`/`--vs-time=` set the match rules. The menu requires two pilots before it starts a
-  match; this flag only warns when `--players=1` has no `--vs-bots=` opponent. The opening spawn
+  `--vs-kills=`/`--vs-time=` set the match rules. The menu needs two pilots, join board bots
+  included; this flag only warns when `--players=1` has no `--vs-bots=` opponent. The opening spawn
   is the list walk; a downed seat respawns on a rotated list point clear of the living field and
   its killer)
 - `--vs-kills=N` (with `--vs`, the kill target that ends a match early once a player reaches it.
@@ -186,7 +186,8 @@ lines**.
   the guests: a Random stock plane, veteran, no team, and a callsign drawn from the shipped pilot
   names. This machine flies them, and a host's roster carries them, so a guest passes no flag; one
   passed there is ignored with a warning. A field past 16 seats is cut with a warning, and guests
-  that fill it leave the last bots out. `--vs-bot=` entries take the first places)
+  that fill it leave the last bots out. `--vs-bot=` entries take the first places. A menu launch
+  seats the join board's bots instead)
 - `--vs-bot=<plane>[:skill=<tier>][:team=<n>][:name=<callsign>][,...]` (with `--vs`, local or
   `--net-host`, one bot per entry, ahead of `--vs-bots=`'s. `<plane>` is a stock node such as
   `player_fury`, or `random` or empty for Random; `skill=` takes `--difficulty=`'s words or 0-2,

@@ -127,9 +127,7 @@ public sealed class DogfightLobby
     private readonly Dictionary<int, LobbyTeamsMessage> _teamsSent = new();
     private readonly List<PlaneRefusal> _refusals = new();
     private readonly NetTeamBook _teams = new();
-    private readonly List<DogfightBot> _bots = new();
-    private Random? _draws;
-    private int _nextBot = 1;
+    private readonly DogfightBots _bots = new();
     private DogfightOptionsMessage _options = new(
         1, 0, (byte)DogfightMissionType.Deathmatch, DogfightVictory.Time, DefaultTimeMinutes, DefaultScore,
         false, DefaultLives, true);
@@ -177,14 +175,18 @@ public sealed class DogfightLobby
 
     /// <summary>The callsigns a new bot row draws from, the shipped pilot names
     /// (<c>Session/Roster/BotSeats.cs</c>). Empty, every bot is called <c>Bot n</c>.</summary>
-    public IReadOnlyList<string> CallsignPool { get; set; } = Array.Empty<string>();
+    public IReadOnlyList<string> CallsignPool
+    {
+        get => _bots.CallsignPool;
+        set => _bots.CallsignPool = value;
+    }
 
     /// <summary>The draws a new bot row's callsign takes, the launch's own bot-field stream unless a
     /// caller pins one.</summary>
     public Random BotDraws
     {
-        get => _draws ??= new Random(CSVM.Utils.Rng.IntSeedFor(CSVM.Utils.Rng.BotField));
-        init => _draws = value;
+        get => _bots.Draws;
+        init => _bots.Draws = value;
     }
 
     /// <summary>Whether this end owns the options and launches the match.</summary>
@@ -194,7 +196,7 @@ public sealed class DogfightLobby
     /// seated in. A person seated past <see cref="NetSeats.MaxPlayers"/> pilots takes the last
     /// row's place on the next <see cref="Step"/>. Empty on a guest, which reads them as rows of
     /// <see cref="Players"/>.</summary>
-    public IReadOnlyList<DogfightBot> Bots => _bots;
+    public IReadOnlyList<DogfightBot> Bots => _bots.Rows;
 
     /// <summary>How many pilots the field holds: every seat the host's machine flies, one per seated
     /// guest and one per bot. A guest counts the host's rows.</summary>
@@ -219,20 +221,7 @@ public sealed class DogfightLobby
     /// <summary>The bot rows as the launch seats them. A Random plane is null, which the host draws
     /// (<c>BotSeats.Resolve</c>), and a stock one is its node. Empty on a guest and under a type
     /// that takes no bots.</summary>
-    public IReadOnlyList<VsBotEntry> LaunchBots
-    {
-        get
-        {
-            var entries = new VsBotEntry[TakesBots ? _bots.Count : 0];
-            for (int i = 0; i < entries.Length; i++)
-            {
-                var bot = _bots[i];
-                entries[i] = new VsBotEntry(bot.RandomPlane ? null : StockAirframes.Node(bot.Airframe), bot.Skill, bot.Team, bot.Callsign);
-            }
-
-            return entries;
-        }
-    }
+    public IReadOnlyList<VsBotEntry> LaunchBots => TakesBots ? _bots.LaunchEntries() : Array.Empty<VsBotEntry>();
 
     /// <summary>Whether a guest has heard the host's options yet. Always true on the host.</summary>
     public bool HasOptions => IsHost || _wire.DogfightOptions.HasValue;
@@ -624,7 +613,7 @@ public sealed class DogfightLobby
             return false;
         }
 
-        _bots.Add(new DogfightBot(_nextBot++, DrawCallsign(), DogfightLobbySeat.RandomAirframe, NetBotSkill.Veteran, SmallestTeam()));
+        _bots.Add(PeopleNames(), SmallestTeam());
         return true;
     }
 
@@ -632,78 +621,37 @@ public sealed class DogfightLobby
     /// <paramref name="pilots"/> pilots, people and bots together, or
     /// <see cref="NetSeats.MaxPlayers"/>. A field already that large takes none, and no row is
     /// removed. Answers how many it added.</summary>
-    public int FillTo(int pilots)
-    {
-        int target = Math.Min(pilots, NetSeats.MaxPlayers);
-        int added = 0;
-        while (FieldSeats < target && AddBot())
-        {
-            added++;
-        }
-
-        return added;
-    }
+    public int FillTo(int pilots) => DogfightBots.FillTo(pilots, () => FieldSeats, AddBot);
 
     /// <summary>Removes the bot row <paramref name="id"/>. Refused as <see cref="AddBot"/> is, and
     /// for a row that is not there.</summary>
-    public bool RemoveBot(int id) => EditsBots && _bots.RemoveAll(bot => bot.Id == id) > 0;
+    public bool RemoveBot(int id) => EditsBots && _bots.Remove(id);
 
     /// <summary>Renames bot row <paramref name="id"/>, cut at the Callsign box's 12 characters.
     /// Refused for a blank name and for one another row holds.</summary>
-    public bool SetBotCallsign(int id, string callsign)
-    {
-        string clipped = BotSeats.ClipName(callsign);
-        if (clipped.Length == 0)
-        {
-            return false;
-        }
-
-        foreach (var bot in _bots)
-        {
-            if (bot.Id != id && string.Equals(bot.Callsign, clipped, StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-        }
-
-        return !Contains(PeopleNames(), clipped) && EditBot(id, bot => bot with { Callsign = clipped });
-    }
+    public bool SetBotCallsign(int id, string callsign) => EditsBots && _bots.Rename(id, callsign, PeopleNames());
 
     /// <summary>Puts bot row <paramref name="id"/> on one of the eleven stock airframes or on
     /// <see cref="DogfightLobbySeat.RandomAirframe"/>.</summary>
-    public bool SetBotAirframe(int id, int airframe) =>
-        (airframe is >= 0 and < AirframeCount || airframe == DogfightLobbySeat.RandomAirframe)
-        && EditBot(id, bot => bot with { Airframe = (byte)airframe });
+    public bool SetBotAirframe(int id, int airframe) => EditsBots && _bots.SetAirframe(id, airframe);
 
     /// <summary>Sets bot row <paramref name="id"/>'s skill tier.</summary>
-    public bool SetBotSkill(int id, NetBotSkill skill) =>
-        skill is >= NetBotSkill.Novice and <= NetBotSkill.Ace && EditBot(id, bot => bot with { Skill = skill });
+    public bool SetBotSkill(int id, NetBotSkill skill) => EditsBots && _bots.SetSkill(id, skill);
 
     /// <summary>Moves bot row <paramref name="id"/> to team <paramref name="team"/>, a standing
     /// team or 0 for none.</summary>
     public bool SetBotTeam(int id, byte team) =>
-        (team == 0 || _teams.Find(team) != null) && EditBot(id, bot => bot with { Team = team });
+        (team == 0 || _teams.Find(team) != null) && EditsBots && _bots.SetTeam(id, team);
 
     /// <summary>The bot row <paramref name="id"/> as the host holds it, or null.</summary>
-    public DogfightBot? BotById(int id)
-    {
-        foreach (var bot in _bots)
-        {
-            if (bot.Id == id)
-            {
-                return bot;
-            }
-        }
-
-        return null;
-    }
+    public DogfightBot? BotById(int id) => _bots.ById(id);
 
     /// <summary>The id of the bot on a host's player list row. It is -1 for a person's row, for a
     /// row past the list, and on a guest.</summary>
     public int BotAt(int row)
     {
         int index = row - 1 - (IsHost ? SeatedPeers().Count : 0);
-        return IsHost && row >= 1 && index >= 0 && index < _bots.Count ? _bots[index].Id : -1;
+        return IsHost && row >= 1 && index >= 0 && index < _bots.Count ? _bots.Rows[index].Id : -1;
     }
 
     /// <summary>Sets the Time box, in minutes. Refused on a guest and outside 1 to 99.</summary>
@@ -996,19 +944,6 @@ public sealed class DogfightLobby
         return false;
     }
 
-    private static bool Contains(IReadOnlyList<string> names, string name)
-    {
-        foreach (string held in names)
-        {
-            if (string.Equals(held, name, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     // Every row's team and the players it counts: a bot one, a guest one, the host its seats.
     private List<(byte Team, int Seats)> Weighed()
     {
@@ -1069,59 +1004,8 @@ public sealed class DogfightLobby
     {
         while (_bots.Count > 0 && FieldSeats > NetSeats.MaxPlayers)
         {
-            _bots.RemoveAt(_bots.Count - 1);
+            _bots.DropNewest();
         }
-    }
-
-    // A pilot name no row holds, at random from the pool, else the first "Bot n" none holds.
-    private string DrawCallsign()
-    {
-        var held = PeopleNames();
-        foreach (var bot in _bots)
-        {
-            held.Add(bot.Callsign);
-        }
-
-        var free = new List<string>();
-        foreach (string name in CallsignPool)
-        {
-            if (BotSeats.ClipName(name) is { Length: > 0 } clipped && !Contains(held, clipped) && !Contains(free, clipped))
-            {
-                free.Add(clipped);
-            }
-        }
-
-        if (free.Count > 0)
-        {
-            return free[BotDraws.Next(free.Count)];
-        }
-
-        for (int n = 1; ; n++)
-        {
-            string fallback = SessionSpec.BotCallsign(n);
-            if (!Contains(held, fallback))
-            {
-                return fallback;
-            }
-        }
-    }
-
-    // One bot row changed in place, keeping its place in the list.
-    private bool EditBot(int id, Func<DogfightBot, DogfightBot> change)
-    {
-        if (!EditsBots)
-        {
-            return false;
-        }
-
-        int at = _bots.FindIndex(bot => bot.Id == id);
-        if (at < 0)
-        {
-            return false;
-        }
-
-        _bots[at] = change(_bots[at]);
-        return true;
     }
 
     private List<int> SeatedPeers()
@@ -1253,7 +1137,7 @@ public sealed class DogfightLobby
         }
 
         // A bot is always Ready: it has no plane of its own to consent to.
-        foreach (var bot in _bots)
+        foreach (var bot in _bots.Rows)
         {
             rows.Add(new DogfightLobbySeat(bot.Callsign, bot.Airframe, true, false, bot.Team, false, NetPilot.Bot, bot.Skill));
         }
@@ -1323,13 +1207,7 @@ public sealed class DogfightLobby
                 continue;
             }
 
-            for (int i = 0; i < _bots.Count; i++)
-            {
-                if (_bots[i].Team == happened.Team)
-                {
-                    _bots[i] = _bots[i] with { Team = 0 };
-                }
-            }
+            _bots.ClearTeam(happened.Team);
         }
     }
 

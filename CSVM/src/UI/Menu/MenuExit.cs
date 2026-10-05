@@ -83,7 +83,8 @@ public sealed record MenuNetLaunch(INetTransport Transport, bool IsHost);
 /// built <see cref="InstantActionDef"/> and the wingmen's edited fit (null for the stock fit).
 /// Dogfight alone adds the match rules; a null <paramref name="Match"/> leaves the command
 /// line's own kill target and time limit. A network match carries the open wire, null on every
-/// local launch.</summary>
+/// local launch. A local Dogfight carries the join board's bot rows in <paramref name="Bots"/>,
+/// seated after the panes; a network host's come from its lobby instead.</summary>
 public sealed record LaunchExit(
     string Chapter,
     IReadOnlyList<MenuSeatChoice> Seats,
@@ -91,7 +92,8 @@ public sealed record LaunchExit(
     InstantActionDef? InstantAction = null,
     VersusRules? Match = null,
     LoadoutChoice? WingmanLoadout = null,
-    MenuNetLaunch? Net = null) : MenuExit;
+    MenuNetLaunch? Net = null,
+    IReadOnlyList<VsBotEntry>? Bots = null) : MenuExit;
 
 /// <summary>A campaign mission launch: the seated profile's name, the <c>cm_sequence</c> story
 /// position, and one <see cref="MenuSeatChoice"/> per joined human in seat order. Seat 0 is the

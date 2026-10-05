@@ -929,7 +929,7 @@ narration.
 
 ## src/UI/Menu/MenuExit.cs
 The one typed way out of the menu, handed to `IMenuHost.Exit` and consumed by `Launcher`:
-`LaunchExit` (chapter, per-seat `MenuSeatChoice`, `MenuMode`, optional `InstantActionDef` with the wingmen's edited fit beside it, and for Dogfight a `VersusRules` of kill target, minutes, lives and auto-respawn that an explicit `--vs-kills=`/`--vs-time=`/`--vs-lives=`/`--vs-no-respawn` beats),
+`LaunchExit` (chapter, per-seat `MenuSeatChoice`, `MenuMode`, optional `InstantActionDef` with the wingmen's edited fit beside it, and for Dogfight a `VersusRules` of kill target, minutes, lives and auto-respawn that an explicit `--vs-kills=`/`--vs-time=`/`--vs-lives=`/`--vs-no-respawn` beats, and a local one's join board bot rows as `Bots`),
 `CampaignMissionExit` (profile, `cm_sequence` position, per-seat choices), `QuitExit` and
 `OptionsApplyExit` (the graphics-mode and difficulty words, the six display settings, the four volume levels and the gameplay switches, null where never set).
 An applied choice rides the exit rather than being saved by the screen that took it, so the options file keeps one writer, and a screen
@@ -1221,14 +1221,19 @@ over the press that takes it, and the ARTICLES OF THE CREW down the right, three
 buttons are drawn inline through `BoardLine.Glyph`. The gestures are `MenuSeatDevices`'s (`PrimeBoard`/`ScanBoard`), read raw off
 the devices because a pad with no seat has no commands to read; CONTINUE keeps the manifest and BACK drops every sign-on. The
 keyboard is never listed, since it holds seat 1 whatever the manifest says and the first pad to sign on shares that seat, and
-`Pose` fills the entries for a screenshot with nobody at the controls: [../menu-presentations.md](../menu-presentations.md).
+`Pose` fills the entries for a screenshot with nobody at the controls: [../menu-presentations.md](../menu-presentations.md). Under the articles stand a Dogfight's bot rows and, in the articles' place while one is picked, the Edit Bot panel (`OriginalBotPanel.cs`); `PoseBots` stands them for a screenshot.
+
+## src/UI/Menu/Original/OriginalBotPanel.cs
+The join board's bot rows, the keyboard's and the mouse's to edit: the Bots block under the articles (ADD BOT, FILL TO and its 2-to-16 count, then a row per bot in two columns with its tier) and the Edit Bot panel (Callsign, Plane with Random and the eleven stock airframes, Skill from langui 3695 to 3697, REMOVE, ACCEPT, the stock plane's icon and ratings).
+The rows are `PlayerSetupFeature.Bots`, so the Dogfight screen counts them and its launch carries them; the pilot names load from the message table on the first add. A local Dogfight has no teams, so the panel offers none.
+Words, boxes and lists take the Multiplayer Lobby's bot faces through `MultiplayerBoardText`, the plaques the board's own paper strip. The lobby's twin: `OriginalLobbyScreen.cs`.
 
 ## src/UI/Menu/Original/OriginalSeats.cs
 The shell's two sortie screens, Free Flight and Dogfight, over the shared player setup, plus the
 seat rules every screen shares. Rows: the chapter column and BACK, then the aircraft column over
 the setup's roster (an eleven-row sliding window) and FLY. Seat 0 alone drives these screens; each
 joined seat then picks on its own screen (`OriginalSeatPlane.cs`). FLY is enabled once the mode's
-gate is met and leaves as the mode's own typed exit, which the walk's last confirm reaches for it.
+gate is met (a Dogfight counting the join board's bots, which its strip names) and leaves as the mode's own typed exit, which the walk's last confirm reaches for it.
 `JoiningOpen` is the per-screen joining rule the presentation reads, true on the join board alone, so these screens read the roster that board wrote and take no join gesture of their own. `CampaignSeatPanel` is the
 seat strip the campaign boards and the Instant Action screen take as an overlay once a second seat
 has joined, Built-in's chip row on `SeatStrip`'s shared shape, a co-op chip named by `NetPlayFeature.CoopSeatName`. Remake-only by design: [../org/menu-inventory.md](../org/menu-inventory.md).
@@ -1429,7 +1434,7 @@ seat, settled in arrival order, and seat 0 never leaves. `Roster` is the `MenuAi
 seat picks from, set by the presentation and built by the shared rule (the stock rows in their given
 order, then one row per saved custom flying its airframe's stock node, a campaign plane nobody has
 exported left out). Per seat it owns the cursor, the two stages of the pick, the loadout door and
-the backing-out ladder; the gate is the mode's minimum of seats and every seat confirmed. It also holds Dogfight's two match rules, `KillTarget` and `TimeLimitMinutes` with their steppers, starting at the command line's own 5 and 5 and riding a Versus exit. `Choices`
+the backing-out ladder; the gate is the mode's minimum of pilots and every seat confirmed. A local Dogfight's bot rows are its `Bots` (`DogfightBots.cs`, edited on the join board): they count toward that minimum and the 16-pilot field (`Pilots`, `FieldPilots`, `BotRoom`, `FillBots`), a seat signing onto a full field takes the newest bot's place, and they ride a Versus exit and survive a return from flight. It also holds Dogfight's two match rules, `KillTarget` and `TimeLimitMinutes` with their steppers, starting at the command line's own 5 and 5 and riding a Versus exit. `Choices`
 and `BuildExit` are the typed result. Nothing here reads a pad: `src/UI/Screens/MenuSeatDevices.cs`, below.
 
 ## src/UI/Menu/NetPlayFeature.cs
@@ -1462,9 +1467,14 @@ It lasts the joined session across flights and starts on `StarterAirframe`, the 
 The Multiplayer Lobby's state over a `Net/NetLobby.cs`, engine-free, one class for both ends.
 The host owns the options (environment, mission type, Time, Score or both, Restrict Number of Teams with its bounds, the lives rule), the plane `Rules` (Allow Custom Planes ticked on its first `Show`, as the original's lobby opens) and the teams (a `Net/NetTeams.cs` book), and sends them to every guest; any option change advances the round and clears every Ready, its own included. `CreateTeam`, `JoinTeam` and `LeaveTeam` act on the host's book or ask the host, `Teams` and each row's team read the outcome, `LaunchRefusal` is the team launch check and `TeamOfPeer` a seat's team at launch.
 A guest reads the options and the host's player list, and sends its plane (a custom one as its `Build`), fit and Ready under the round it heard once a lobby screen `Show`s it; a changed pick clears its own Ready. `SetReady` runs the original's Ready check, and the host counts a guest Ready only on a plane its rules admit. `Say` sends one chat line, which the host relays; `Announce` posts a host's notice under no name, and `PeerAt` names the peer on a host's row.
-The host also keeps bot rows (`Bots`, each a `DogfightBot` with an id that outlives its place), listed and seated after the guests and kept across matches: `AddBot` (a Random plane at veteran, a callsign drawn from `CallsignPool`, the smallest standing team at that moment and no rebalance after), `FillTo(n)` (n counts people and bots together), `RemoveBot` and the per-row setters, all refused on a guest and while the host is Ready; only a Deathmatch takes bots (`TakesBots`, `BotsGrounded`). `FieldSeats` and `BotRoom` keep people and bots within `NetSeats.MaxPlayers`, and a host's `Step` lets the newest bots go while seated people push the field past it, one per seat, so a person who joins a full field takes the newest bot's place and a leaver's seat is not refilled; a disbanded team's bots go teamless; `LaunchRefusal` and `Teamed` count bot rows; `LaunchBots` is what the launch resolves and seats.
+The host also keeps bot rows (`Bots`, each a `DogfightBot` with an id that outlives its place, held in a `DogfightBots` whose list rules the local join board shares), listed and seated after the guests and kept across matches: `AddBot` (a Random plane at veteran, a callsign drawn from `CallsignPool`, the smallest standing team at that moment and no rebalance after), `FillTo(n)` (n counts people and bots together), `RemoveBot` and the per-row setters, all refused on a guest and while the host is Ready; only a Deathmatch takes bots (`TakesBots`, `BotsGrounded`). `FieldSeats` and `BotRoom` keep people and bots within `NetSeats.MaxPlayers`, and a host's `Step` lets the newest bots go while seated people push the field past it, one per seat, so a person who joins a full field takes the newest bot's place and a leaver's seat is not refilled; a disbanded team's bots go teamless; `LaunchRefusal` and `Teamed` count bot rows; `LaunchBots` is what the launch resolves and seats.
 `CanLaunch` is the host's gate, every row Ready; `RulesOf` is the `VersusRules` a launch carries, lives clamped to 1..99, Capture the Flag with its option and Zeppelin vs Zeppelin, and `ChapterOf` the chapter an environment flies on, the world its row's number names (Above the Clouds is `C1C`); `EnvironmentNumber` and `ModeOf` are the numbers the original's session setup writes for a row and a launch, and `Teamed` whether any pilot joined a team. Capture the Flag fixes two teams numbered 1 and 2 and offers the five environments with an `MP2` map (`Offers`); Zeppelin vs Zeppelin fixes two teams of any number (`FixesTeams`) on all seven. Setters refuse on a guest and for a greyed choice. `CheckBuiltInLaunch` gates a Built-in host's launch on its lobby guests, and `Land` holds a match's `Scores` (from `ScoresOf`, a team match's team lines with their pilots under them) and opens the next round.
 Wire: [../org/multiplayer-messages.md](../org/multiplayer-messages.md). Coverage: `CSVM.Tests/DogfightLobbyTests.cs`.
+
+## src/UI/Menu/DogfightBots.cs
+The bot rows a Dogfight host keeps and the rules every such list follows, engine-free, shared by the network lobby (`DogfightLobby.cs`) and the local join board (`PlayerSetupFeature.Bots`).
+`Add` makes a row on a Random plane at veteran under a callsign drawn from `CallsignPool` that neither a row nor a person holds, else `Bot n`; `Rename` (cut to 12, refusing a blank or held name), `SetAirframe`, `SetSkill`, `SetTeam`, `Remove`, `DropNewest` (the row a joining person takes the place of) and `ClearTeam` (a disband) edit them in place by id. `Room` and `FillTo` are the 16-pilot rules, and `LaunchEntries` is what a launch resolves through `Session/Roster/BotSeats.cs`.
+The owner holds the gates: who may edit, how many pilots its field holds and which team a new row joins. Coverage: `CSVM.Tests/DogfightLobbyTests.cs`, `CSVM.Tests/JoinBoardBotTests.cs`.
 
 ## src/UI/Menu/CoopDoorText.cs
 The words the network door is drawn in, engine-free and built off the door alone: the host's band

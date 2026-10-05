@@ -493,7 +493,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/DisplaySettingRows.cs`, the display settings as rows, shared by both Options screens: a label per store word, the two forgiving reads, the wrap.
 - `src/UI/Menu/MenuLayout.cs`, the runtime reader of `extracted/rof/menu_layout.json`: screens, widgets with typed fields, navigation edges.
 - `src/UI/Menu/ControlsFeature.cs`, the shared rebinding screen: one seat's keymaps, the cursors, the capture, and the steal it names first.
-- `src/UI/Menu/PlayerSetupFeature.cs`, the shared player setup: seats claimed by source identity, the roster, the two-stage pick, the gate.
+- `src/UI/Menu/PlayerSetupFeature.cs`, the shared player setup: seats claimed by source identity, the roster, the two-stage pick, a local Dogfight's bot rows, the gate.
 - `src/UI/Menu/HangarFeature.cs`, the shared hangar: one scratch build over a plane store and an optional wallet, and the purchase gate.
 - `src/UI/Menu/HangarDescriptions.cs`, a construction tab's description box: the shipped figures string, the heading it ends with, and the component's own prose.
 - `src/UI/Menu/CampaignFeature.cs`, the campaign as a shared feature: the profile roster, the seated player, the mission, and every write.
@@ -510,6 +510,7 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/CoopHostFlow.cs`, what a co-op host names to its guests: its board, mission, progress, hangar with each plane's holder, debrief result and shared film, each guest's words sent again only when they changed.
 - `src/UI/Menu/CoopGuestPick.cs`, a guest's own pick: airframe, fit, Ready and the walk-out mark, sent under the host's round.
 - `src/UI/Menu/DogfightLobby.cs`, the Multiplayer Lobby's state over the network lobby: the host's options and rounds, the player list with the host's bot rows, picks and Ready, chat, and the launch gate.
+- `src/UI/Menu/DogfightBots.cs`, the bot rows a Dogfight host keeps and their rules, shared by the network lobby and the local join board: add, fill, rename, edit, the newest yielding, the launch entries.
 - `src/UI/Menu/CoopDoorText.cs`, the words the campaign's network door is drawn in: the host's band, the advertised session's name, the join and waiting boards' status lines.
 - `src/UI/Menu/NetDoorAid.cs`, the loopback multiplayer doors the screenshot aids stand on: no socket, no router, a campaign host already advertising.
 - `src/UI/Menu/Original/OriginalShell.cs`, the Original presentation's screen graph over the decoded layout, its three partials below, and the dialog and cheats it holds.
@@ -523,7 +524,8 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Menu/Original/OriginalOptionsScreen.cs`, the form behind the Options hub's doors: the frame, each page's ACCEPT and CANCEL plaques, the page switch and the one apply exit, over five page modules.
 - `src/UI/Menu/Original/KeysStickColumn.cs`, the KEYS AND BUTTONS page's split of a row's bindings between Control A/B and the port's Stick column.
 - `src/UI/Menu/Original/OriginalCredits.cs`, the shell's credits screen (a `partial`): the painted background pane, ABOUT drawn disabled, the DONE plaque.
-- `src/UI/Menu/Original/OriginalJoinBoard.cs`, the join board as one standalone module: the crew manifest, the articles of the crew, and the one place a pad signs onto a seat.
+- `src/UI/Menu/Original/OriginalJoinBoard.cs`, the join board as one standalone module: the crew manifest, the articles of the crew, the one place a pad signs onto a seat, and a Dogfight's bot rows.
+- `src/UI/Menu/Original/OriginalBotPanel.cs`, the join board's bot rows: the Bots block with Add Bot and Fill to, and the Edit Bot panel in the lobby's bot faces.
 - `src/UI/Menu/Original/OriginalSeats.cs`, the shell's two sortie screens (a `partial`): the chapters, the windowed aircraft column, FLY.
 - `src/UI/Menu/Original/OriginalSeatPlane.cs`, the shell's per-seat aircraft screen (a `partial`): one joined seat picking on the plane-selection board's shape.
 - `src/UI/Menu/Original/OriginalInstantActionScreen.cs`, the Instant Action screen and its Weapon Loadout as one standalone module: the contents list, dropdowns, enemy pages, the Build door, and the decoded ammo chrome over one aeroplane's fit.

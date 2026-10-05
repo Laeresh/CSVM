@@ -129,6 +129,14 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// manifest or <c>join-board:N</c> with that many entries posed as signed on.</summary>
     public const string JoinBoardAid = "join-board";
 
+    /// <summary>The join board aid's suffix, <c>join-board:N:bots</c>, that stands five bot rows
+    /// under the articles.</summary>
+    public const string JoinBoardBotsAid = "bots";
+
+    /// <summary>The join board aid's suffix, <c>join-board:N:bot</c>, that also opens the Edit Bot
+    /// panel on one of them.</summary>
+    public const string JoinBoardBotAid = "bot";
+
     /// <summary>The aid value that opens the hangar's name screen on a fresh build.</summary>
     public const string PlaneNameAid = "plane-name";
 
@@ -649,6 +657,10 @@ public sealed class OriginalPresentation : IMenuPresentation
                     break;
                 case JoinBoardAid:
                     _shell.JoinBoard.Open();
+                    break;
+                case string board when board.StartsWith(JoinBoardAid + ":", StringComparison.Ordinal)
+                    && board.Split(':') is { Length: 3 } parts && parts[2] is JoinBoardBotsAid or JoinBoardBotAid:
+                    _shell.JoinBoard.PoseBots(AidCount(parts[0] + ":" + parts[1]), parts[2] == JoinBoardBotAid);
                     break;
                 case string board when board.StartsWith(JoinBoardAid + ":", StringComparison.Ordinal):
                     _shell.JoinBoard.Pose(AidCount(board));

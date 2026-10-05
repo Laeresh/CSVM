@@ -1828,23 +1828,26 @@ public sealed record SessionSpec
         return (address.Length == 0 ? "*" : address, port);
     }
 
-    /// <summary>The spec for a launchscreen launch, one plane per player, derived from the pristine command line
-    /// <paramref name="cli"/>, never the last session's spec. ⚠ Does not re-resolve: every menu-settable field must
-    /// be written here, or the pristine base drops it. An <paramref name="iaDef"/> decides <see cref="Scenario"/> and
-    /// <see cref="Stunt"/> instead. The vs arguments are a screen's match rules, null where none offers them.
-    /// ⚠ A Dogfight flies its type's map whatever <c>--mission</c> says, <see cref="DeathmatchMission"/>,
-    /// <see cref="CtfMission"/> or <see cref="ZvzMission"/>: the type is all a guest hears of the host's mission.</summary>
+    /// <summary>The spec for a launchscreen launch, one plane per player, derived from the pristine command line <paramref name="cli"/>,
+    /// never the last session's spec. ⚠ Does not re-resolve: every menu-settable field must be written here, or the pristine
+    /// base drops it. An <paramref name="iaDef"/> decides <see cref="Scenario"/> and <see cref="Stunt"/> instead. The vs arguments
+    /// are a screen's match rules, null where none offers them, and <paramref name="bots"/> a local Deathmatch's join board rows.
+    /// ⚠ A Dogfight flies its type's map (<see cref="DeathmatchMission"/>, <see cref="CtfMission"/>, <see cref="ZvzMission"/>)
+    /// whatever <c>--mission</c> says: a guest hears only the type.</summary>
     public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
         MenuMode mode, InstantActionDef? iaDef = null, IReadOnlyList<LoadoutChoice?>? loadouts = null,
         IReadOnlyList<CustomPlaneDef?>? customPlanes = null, int? vsKills = null, int? vsTimeMinutes = null,
         int? vsLives = null, bool? vsAutoRespawn = null, LoadoutChoice? iaWingmanLoadout = null,
-        bool captureTheFlag = false, bool flagHomeToCapture = false, bool zeppelinVsZeppelin = false)
+        bool captureTheFlag = false, bool flagHomeToCapture = false, bool zeppelinVsZeppelin = false,
+        IReadOnlyList<VsBotEntry>? bots = null)
     {
         var names = planeNodes.ToArray();
         bool ctf = captureTheFlag && mode == MenuMode.Versus;
         bool zvz = zeppelinVsZeppelin && !ctf && mode == MenuMode.Versus;
+        bool deathmatch = mode == MenuMode.Versus && !ctf && !zvz;
         return cli with
         {
+            VsBots = deathmatch && bots != null ? bots.ToArray() : Array.Empty<VsBotEntry>(),
             CaptureTheFlag = ctf,
             FlagHomeToCapture = ctf && flagHomeToCapture,
             ZeppelinVsZeppelin = zvz,

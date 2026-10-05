@@ -15,8 +15,8 @@ using Godot;
 namespace CSVM.Testing;
 
 /// <summary>A local Dogfight with bots: one pane and its bots on a seat roster with no wire. The
-/// roster is the one a command-line <c>--vs --vs-bots=</c> launch builds through
-/// <see cref="Launcher.LocalVersusField"/>. This machine is the authority over every seat, as a
+/// roster is the one a command-line <c>--vs --vs-bots=</c> launch, or a menu launch carrying the
+/// join board's bots, builds through <see cref="Launcher.LocalVersusField"/>. This machine is the authority over every seat, as a
 /// network host is over its bots. It scores each death off the Downed report, places each return
 /// from its own rotation and runs the rematch. The session rig is <see cref="NetCombatSuites"/>'s,
 /// opened with no transport.</summary>
@@ -47,14 +47,16 @@ internal static class LocalBotSuites
         + "callsign, both come back on the local rotation, a rematch places both on their opening "
         + "entries; with Auto Respawn off the bot still returns after the crash camera while the "
         + "pane waits for Fire Guns; with one life a living bot keeps the match running and the "
-        + "last bot's death ends it on nobody left to fight; and two panes with no bots keep the "
-        + "rosterless path, scoring, naming and returning as before")]
+        + "last bot's death ends it on nobody left to fight; two panes with no bots keep the "
+        + "rosterless path, scoring, naming and returning as before; and a menu launch of one seat "
+        + "and two join board bots flies them in board order, the Random one on a stock plane")]
     internal static void LocalBotsScoreRespawnAndRematch(TestContext ctx)
     {
         var auto = NetCombatSuites.MatchSpec(ctx, out var table, "--vs-bots=1");
         var pressed = NetCombatSuites.MatchSpec(ctx, out _, "--vs-bots=1", "--vs-no-respawn");
         var limited = NetCombatSuites.MatchSpec(ctx, out _, "--vs-bots=2", "--vs-lives=1");
         var panes = NetCombatSuites.MatchSpec(ctx, out _, "--players=2");
+        var (menu, board) = MenuLaunch(ctx, NetCombatSuites.MatchSpec(ctx, out _));
         var ambient = NetCombatSuites.Ambient.Save();
         try
         {
@@ -62,6 +64,7 @@ internal static class LocalBotSuites
             Fly(ctx, pressed, "no auto respawn", session => ReturnsUnasked(ctx, session));
             Fly(ctx, limited, "one life", session => SpendsItsLife(ctx, session));
             PanesAlone(ctx, panes, table);
+            Fly(ctx, menu, "menu launch", session => FliesTheBoardsBots(ctx, session, board));
         }
         finally
         {
@@ -295,6 +298,44 @@ internal static class LocalBotSuites
         {
             end.Close();
         }
+    }
+
+    // A one-seat Dogfight exit off the player setup the join board writes, with two bot rows: a stock
+    // Fury at ace, then a Random one. The spec is the launcher's own FromMenu over the suite's line.
+    private static (SessionSpec Spec, IReadOnlyList<VsBotEntry> Bots) MenuLaunch(TestContext ctx, SessionSpec cli)
+    {
+        var setup = new UI.Menu.PlayerSetupFeature();
+        setup.SetRoster(UI.Menu.Original.OriginalRosters.Roster(Array.Empty<Flight.Hangar.CustomPlaneDef>()));
+        var seat = setup.Join(new UI.Menu.MenuIdleSource())!;
+        setup.Select(seat);
+        setup.Confirm(seat);
+        setup.Bots.CallsignPool = Session.Roster.BotSeats.CallsignPool(Mech3.Messages.Load(ctx.MessagesPath));
+        setup.AddBot();
+        setup.AddBot();
+        int ace = setup.Bots.Rows[0].Id;
+        setup.Bots.SetAirframe(ace, Flight.Hangar.StockAirframes.IdOf("player_fury") ?? 0);
+        setup.Bots.SetSkill(ace, NetBotSkill.Ace);
+        var exit = setup.BuildExit(ctx.Chapter, MenuMode.Versus, _ => Array.Empty<int>());
+        var spec = SessionSpec.FromMenu(cli, exit.Chapter, exit.Seats.Select(s => s.PlaneNode).ToArray(), exit.Mode,
+            vsKills: exit.Match?.KillTarget, vsTimeMinutes: exit.Match?.TimeLimitMinutes, bots: exit.Bots);
+        return (spec, exit.Bots ?? Array.Empty<VsBotEntry>());
+    }
+
+    // The launch's roster is the board's: its pane, then each bot row by callsign. The named plane and
+    // tier are kept and the Random plane is drawn from the stock eleven. Each bot flies an armed pilot.
+    private static void FliesTheBoardsBots(TestContext ctx, GameSession session, IReadOnlyList<VsBotEntry> board)
+    {
+        const string cell = "menu launch";
+        var seats = session.NetSeats;
+        ctx.Check(board.Count == 2 && seats.Count == 3 && seats[0].HasPane
+                  && seats.Skip(1).Select(s => s.Callsign).SequenceEqual(board.Select(b => b.Callsign)),
+            $"[{cell}] the session seats the pane and then the board's bots by callsign ({Seats(seats)})");
+        ctx.Check(seats.Count == 3 && seats[1] is { PlaneNode: "player_fury", Skill: NetBotSkill.Ace }
+                  && seats[2].Skill == NetBotSkill.Veteran && Flight.Hangar.StockAirframes.Nodes.Contains(seats[2].PlaneNode),
+            $"[{cell}] the edited bot keeps its Fury at ace and the Random one flies a stock plane ({string.Join(", ", seats.Select(s => $"{s.PlaneNode}:{s.Skill}"))})");
+        ctx.Check(session.SeatRigs.Count == 3
+                  && session.SeatRigs.Skip(1).All(r => r.Controller is { IsHumanPiloted: false, Pilot: not null }),
+            $"[{cell}] both bots fly on an armed AI pilot ({session.SeatRigs.Count} seat rig(s))");
     }
 
     // Steps until the aeroplane flies again, and answers how many steps that took.

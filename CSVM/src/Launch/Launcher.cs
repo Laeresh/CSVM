@@ -1544,9 +1544,9 @@ public partial class Launcher : Node3D
         }
     }
 
-    /// <summary>A local Dogfight's seat roster: its panes, then the command line's bots, all flown
-    /// here with no wire. Null without bots, so such a match keeps its panes as its seats. Random
-    /// planes and callsigns are drawn as a host draws them.</summary>
+    /// <summary>A local Dogfight's seat roster: its panes, then the spec's bots (the command line's or
+    /// the join board's), all flown here with no wire. Null without bots, so such a match keeps its
+    /// panes as its seats. Random planes and blank callsigns are drawn as a host draws them.</summary>
     internal static Net.NetSeat[]? LocalVersusField(SessionSpec spec, string messagesPath)
     {
         if (!spec.Versus || spec.VsBots.Count == 0)
@@ -1570,7 +1570,7 @@ public partial class Launcher : Node3D
         return seats.ToArray();
     }
 
-    /// <summary>The command line's bots resolved for a field whose people are
+    /// <summary>The spec's bots resolved for a field whose people are
     /// <paramref name="people"/>. The pilot names are read once from the message table, which
     /// nothing has loaded before the session builds; a missing table seats "Bot n". The draws take
     /// a stream of their own, a function of the master seed alone.</summary>
@@ -2806,11 +2806,14 @@ public partial class Launcher : Node3D
         _spec = SessionSpec.FromMenu(_cli, launch.Chapter, planes, launch.Mode, launch.InstantAction, fits, customs,
             launch.Match?.KillTarget, launch.Match?.TimeLimitMinutes, launch.Match?.Lives, launch.Match?.AutoRespawn,
             launch.WingmanLoadout, launch.Match?.CaptureTheFlag == true, launch.Match?.FlagHomeToCapture == true,
-            launch.Match?.ZeppelinVsZeppelin == true);
+            launch.Match?.ZeppelinVsZeppelin == true, launch.Bots);
         // Step the master so flying again is a new mission rather than a replay: without this every
         // relaunch re-derives the same spawn, opposition and liveries. ⚠ A pinned run must hold
         // still, which is what keeps the goldens and the perf harnesses reproducible.
         StepSortieSeed();
+        // A local Dogfight with join board bots flies a seat roster with no wire, as a command-line
+        // one does. The roster outlives a Restart, and the next menu launch's TakeNetLaunch clears it.
+        _netRoster = _netWire == null ? LocalVersusField(_spec, _messagesPath) : _netRoster;
         BindMenuPads(pads);
         BeginLaunch();
     }

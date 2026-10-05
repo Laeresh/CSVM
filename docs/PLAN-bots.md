@@ -109,7 +109,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 20. ☑ A local match runs off a seat roster with no wire, so it can hold bot seats
 21. ☑ Multiplayer Lobby: Add bot, Fill-to-N, per-row plane/skill/team/callsign, Remove
 22. ☑ A joining human takes the newest bot's seat in the lobby, a late joiner once the match is back there
-23. ☐ Local join board: bot rows, and the two-pilot minimum counts bots
+23. ☑ Local join board: bot rows, and the two-pilot minimum counts bots
 
 ### Wave D, presentation and measurement
 
@@ -925,23 +925,98 @@ seat's channels and sequence counters (`AircraftStateCadence._sequence`, `Sessio
 `NetInstruments`) must reset when the seat changes hands, or the guest's first samples in the next
 match read as stale.
 
-## C23 ☐ Local join board: bot rows, and the two-pilot minimum counts bots
+## C23 ☑ Local join board: bot rows, and the two-pilot minimum counts bots
+
+Landed. The user approved the join board's Bots block and Edit Bot panel from the captures
+(`c23-board.png`, `c23-board-editor.png`, below).
 
 **Goal.** The local Dogfight setup offers the same bot rows as the lobby, and one human plus one
 bot can start a match (Decision 13).
 
-**Evidence (confidence: lead-only).** The menu requires two joined pilots before it starts a
-match (`docs/cli.md:166-167`). `DogfightLobby.LocalSeats` counts the host machine's split screen
-seats (`DogfightLobby.cs:152-155`). The join board is `UI/Menu/Original/OriginalJoinBoard.cs`.
+**Evidence (confidence: traced-to-code).** The leads pointed at the right files but the wrong
+seams. The join board (`OriginalJoinBoard.cs`) hands nothing to the launch: it signs pads onto the
+shared `PlayerSetupFeature`'s seats, and the Original Dogfight screen (`OriginalSeats.cs`, a shell
+partial) launches through `PlayerSetupFeature.BuildExit`, a `LaunchExit` with one `MenuSeatChoice`
+per seat and no wire. The two-pilot minimum is `PlayerSetupFeature.MinimumSeats(Versus)` = 2, read
+by `Refusal` (which `BuildExit` throws on), by the Dogfight screen's `FlyEnabled` and its hint, and
+by Built-in's `LaunchMenu.CanLaunch`. `DogfightLobby.LocalSeats` is the network lobby's and plays no
+part in a local match. C20's wiring note held: `StartSessionFromMenu` -> `TakeNetLaunch` leaves
+`_netRoster` null with no wire, `SessionSpec.FromMenu` kept the command line's `VsBots` (`cli with`)
+but no menu path read them, and `CloseNetLaunch` clears the roster only when a wire existed. The
+local Dogfight has no teams: no menu screen offers one and `FromMenu` sets none, so the one-team
+refusal (10519) has no local counterpart. The Built-in presentation has a join board too
+(`LaunchMenu`) but, as C21 found for the lobby, no bot controls; it is left without them.
 
-**Approach.** Reuse C21's bot rows on the local path; the minimum counts humans and bots.
-`<TODO: read how the local join board hands its roster to the launch>`.
+**Approach (landed).** The bot rows and their rules moved out of `DogfightLobby` into a small shared
+type, `UI/Menu/DogfightBots.cs`: the list, the id counter, `CallsignPool` and `Draws`, and `Add`
+(Random, veteran, a drawn callsign no row or person holds, else `Bot n`), `Rename` (cut at 12,
+refusing a blank or held name), `SetAirframe`, `SetSkill`, `SetTeam`, `Remove`, `DropNewest`,
+`ClearTeam`, `ById`, `Room`, `FillTo` and `LaunchEntries`. **What moved out of `DogfightLobby.cs`:**
+the fields `_bots`/`_draws`/`_nextBot` became one `DogfightBots _bots`; the bodies of `AddBot`,
+`FillTo`, `RemoveBot`, `SetBotCallsign`, `SetBotAirframe`, `SetBotSkill`, `SetBotTeam`, `BotById`,
+`BotAt`, `LaunchBots`, `YieldToPeople`, the `HostRows` bot loop and the disband loop in `Post` now
+call it; the private `DrawCallsign`, `EditBot` and the string `Contains` overload were deleted. The
+lobby keeps its gates (`EditsBots`, `TakesBots`, `BotRoom`, `SmallestTeam`, standing teams) and its
+public API is unchanged; `DogfightBot` and `DogfightScore` did not move. The local rows are
+`PlayerSetupFeature.Bots`, team 0 always: `AddBot` (refused past 16), `FillBots(n)` (n counts seats
+and bots), `RenameBot` (refusing `P1` to `P4`), `Pilots(mode)` (seats plus bots for a Dogfight, seats
+otherwise), `FieldPilots` and `BotRoom`. `Refusal` and the Dogfight screen's `FlyEnabled` count
+`Pilots`, so one seat and one bot fly; a seat that `Join`s a full field takes the newest bot's place
+(C22's rule, `DropNewest`); `Discard` clears the rows and a return from flight keeps them
+(Decision 18). `BuildExit` puts them on the new `LaunchExit.Bots` for a Dogfight alone.
+`SessionSpec.FromMenu` takes `bots` and sets `VsBots` to them for a Deathmatch and to none
+otherwise, so a menu launch never seats the command line's. `StartSessionFromMenu`, after
+`StepSortieSeed`, sets `_netRoster = LocalVersusField(_spec, _messagesPath)` when no wire opened: C20's
+own builder, panes from `NetSeats.LocalPanes`, then `NetSeats.AddBots` over `BotSeats.Resolve`
+(Random planes drawn on `Rng.BotField`, named planes and the board's callsigns kept), then
+`Validate`. **Where the controls sit:** on the join board's right page, the closest equivalent of
+Mission Options' left column. Under the articles stand a "Bots" heading with a "Dogfight only" hint,
+ADD BOT and FILL TO (the board's own paper plaques), the count box with arrows (2 to 16, opening on
+`DogfightLobby.DefaultFillTo` 8), then the rows in two columns of eight, each callsign with its tier.
+A press on a row puts the Edit Bot panel in the articles' place: Callsign (focused, typed into),
+Plane (Random, then the eleven stock planes as "Stock <name>"), Skill (langui 3695 to 3697, first
+letter raised), REMOVE and ACCEPT, with the stock plane's caption, icon and four ratings below, or
+"Drawn at launch" for Random. No Team box, since the local match has none. The boxes, lists and
+rows take face 10558 and the labels 10096, the heading 10099 and the editor's title 10114, as
+C21's. Module: `UI/Menu/Original/OriginalBotPanel.cs`, driven by `OriginalJoinBoard`; the shell
+routes typed text and `CapturingText` to it. The Dogfight screen's seat strip adds a "+ N bots from
+the JOIN BOARD" line and its lone-seat hint reads "Dogfight needs a second seat or a bot, from the
+JOIN BOARD". Aids: `--menu=join-board:N:bots` and `join-board:N:bot`. For later items: the widget
+drawing (dropdown, box, open list) is a copy of `OriginalLobbyScreen`'s private composers, which
+could move into one shared helper once D31 has landed there.
 
-**Model recommendation.** `<TODO: not settled in the session>`
+**Model recommendation.** Opus: the shared-type move had to keep `DogfightLobby`'s API and C21/C22's
+tests intact beside a sibling's edits, and the screen work spans the shell, a module and the
+launcher.
 
-**Verify.** `<TODO: a test that one human and one bot launch a local match>`
+**Verify.** `JoinBoardBotTests` (8 units): one seat is refused alone and launches with one bot, the
+exit carrying a Random veteran row the menu spec seats; bots count for a Dogfight alone and ride no
+other exit, a CTF, ZvZ or Free Flight spec carries none, a menu spec drops the command line's, and
+`Discard` clears them; Fill-to-N stops at 16 (15 bots for one seat, 6 for two seats filling to 8)
+with distinct callsigns and no player tag; a seat joining a full field takes the newest bot's place
+(control: one joining with room takes none); a rename is cut and refuses a tag or a held name;
+Random resolves to a stock node at launch and a named plane is kept, the local roster validating;
+and on the layout fixture the board adds, fills, opens Edit Bot, renames by typing, picks a plane
+from the list and steps the skill, removes, and the Dogfight screen names the bots and launches one
+seat with them, while a lone seat's hint offers a bot. `DogfightLobbyTests` (41) pass unchanged on
+the moved rules. New engine suite `menu-join-board-bots` (`CSVM/src/Testing/MenuJoinBoardBotSuites.cs`,
+weight 0.3): the install's layout and pilot names, Add Bot, Edit Bot to a Fury at ace, Fill to 4,
+the strip, FLY with one seat and the exit's three bots in order (able-to-fail: with `Pilots`
+counting seats alone, four checks fail). `versus-local-bot` gains a menu launch cell (weight now
+16.0): a one-seat `BuildExit` with a Fury ace and a Random bot through `FromMenu` and
+`LocalVersusField` flies the pane then both bots by callsign, the Random one on a stock plane, both
+on armed pilots (able-to-fail: with `FromMenu` dropping the bots, the roster check fails). Captures
+(`RunProbe.ps1 -Resolution 800x600 --presentation=original --menu=join-board:2:bots` and `:bot`):
+`c23-board.png` and `c23-board-editor.png` in the session scratchpad; no golden shows a menu. Runs in `bots-c23`:
+`RunTests.ps1 -SkipEngine -SkipGoldens -SkipHitch` units 6273 passed / 0 failed / 3 skipped;
+`-Filter menu- -Shards 4 -SkipUnits -SkipGoldens -SkipHitch` 46/46; `-Filter net- -Shards 4 -SkipUnits
+-SkipGoldens -SkipHitch` 60/60; `-Suite versus-local-bot` pass; engine errors clean on every run.
 
-**⚠ Traps.** Shares `DogfightLobby.cs` with C21; run after it, never in parallel.
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** Never let a menu launch read the command line's `VsBots`: `FromMenu` replaces them, or
+a `--menu --vs-bots=` run would seat bots no board shows. The join board's bots fly a Dogfight
+alone; a Free Flight exit must carry none.
 
 # Wave D, presentation and measurement
 
