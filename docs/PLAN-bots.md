@@ -103,6 +103,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☑ Bots respawn through the host's rotation and follow Limited Lives
 13. ☑ Skill tiers, personalities, stock plane with Random, and the callsign pool
 14. ☑ Rearm standing order: a bot breaks off to a base when low or badly damaged
+15. ☐ A bot takes a person's world-contact rule: it grazes and bounces, never destroyed outright
 
 ### Wave C, lobby and local setup
 
@@ -642,6 +643,38 @@ test on `MP1`. The rearm latch is one per seat and releases only outside every s
 launch a bot session with `--hold=` (INSTR-101). A suite that places a bot with `RespawnAt` clears
 its run and refills it, so empty it again after the placement. Do not gate the run on fire instead
 of acquisition: a held quarry keeps the machine chasing it.
+
+## B15 ☐ A bot takes a person's world-contact rule: it grazes and bounces, never destroyed outright
+
+**Goal.** A bot that touches world geometry grazes, bounces and takes contact damage as a person
+does, so it dies to a world contact only when a person in the same plane would. The user's ruling
+on the first D32 sortie, by extension of Decision 8 (a bot's hull equals a person's).
+
+**Evidence (confidence: traced-to-code).** The user's first crowded sortie
+(`vs-20261005-231643.log`, local `--vs --mission=MP1 --vs-bots=15`): P3 spawned on MP1's point #8,
+52 m from P4 on #9 at the same height; both bots took each other as their first target, P3 opened
+fire at 51 m, and at t = 2.75 s logged `AI ram into g140/col, destroyed outright (the decoded
+local_11 rule)`. P16 later logged "embedded in terrain after a graze, destroyed". Every seat had its
+own spawn point. `AircraftContactResolver` applies the decoded doom rule (`local_11`,
+`0x0048d79e`) to a non-player striker: one that resolves anything but an aeroplane is destroyed
+whatever health it has left, and the graze restitution impulse is player-only (`graze-bounce`
+suite). A3 set `IsHumanPiloted = false` for a bot on both ends, which puts it on the AI side of
+both gates.
+
+**Approach.** Give the contact gates their own question, "takes a person's contact rule", answered
+true for a person and for a bot seat, instead of reading `IsHumanPiloted`. A bot keeps the AI force
+path, the AI's crash avoidance, its AI shakes and `ai_crash_*` wreck, so only world contact
+changes. The host decides a bot's death (it flies it), and a guest's copy takes its pose off the
+wire, so check that both ends agree on the visible bounce. Leave world AI and every campaign path on
+the decoded rule.
+
+**Model recommendation.** Opus.
+
+**Verify.** An engine check on the `graze-bounce` template: a bot rig on the trajectory a person
+grazes survives with the person's rebound, and a world-AI rig on it is still destroyed outright
+(the control). `net-bot-*`, `versus-local-bot` and the AI suites stay green.
+
+**⚠ Traps.** `graze-bounce` pins the decoded AI rule for world AI; it must stay green unchanged.
 
 # Wave C, lobby and local setup
 
