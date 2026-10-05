@@ -310,6 +310,15 @@ period answer which thread model holds the headset rate. A launch with the runti
 warning and flies flat. The HUD, menus, boards and the cockpit pass are canvas layers and do not
 show in the headset; that is C10, C12 and B8, not a failure here.
 
+The first run (VDXR, separate render thread) came up as `VirtualDesktopXR 1.0.10`, Meta Quest 3,
+3072x3264 per eye at 120 Hz, stereo with head tracking; the earlier attempt with the headset not
+yet connected logged `XR_ERROR_FORM_FACTOR_UNAVAILABLE` and flew flat as designed. At 120 Hz the
+GPU took about 11 ms against the 8.3 ms period and missed refreshes every second; set the runtime
+to 90 Hz (Decision 10) for the remaining runs. The cockpit defects it showed belong to B8. A1
+leaves the tracking origin where the runtime's Local space puts it and never recenters; the
+follow-up is `XRServer.CenterOnHmd(ResetButKeepTilt, keepHeight: false)` on the first valid head
+pose after `SessionFocussed` and on `PoseRecentered`, landed with or before B7's recenter action.
+
 **⚠ Traps.** `--xr-mode` is a Godot engine argument and goes before `--`, not among the user args.
 The active runtime on the author's machine is VDXR; a SteamVR test needs the runtime switched (or
 `XR_RUNTIME_JSON` set), otherwise both "runs" exercise VDXR. `XR_RUNTIME_JSON` set in a PowerShell
@@ -574,8 +583,36 @@ world per eye, with the gauges moving, and no cockpit pass is built.
 world (`Flight/Hud/CockpitOverlay.cs:15`). The pass also carries a cloned sun, the panel point-light
 term through `light_origin` (`CockpitOverlay.cs:20-33`) and the shake mount (`WobbledMount`).
 
+The first headset run (A1, VDXR, Bloodhawk, `--no-cockpit-pass`) showed two interior defects, both
+traced to the data and the code:
+
+- **A red "person cutout" straight ahead.** Ten interiors carry a flat head-and-shoulders plate on
+  one z plane 0.16-1.80 iu aft of the eye (Bloodhawk: polygons #48-54 of `cockpit1/structure/g366`
+  at z +0.80 iu, 3.2 cm at 0.04 m/iu, Colored `rgb(215,43,0)`, priority 5, normal aft, no
+  `show_backface`; the Brigand's is grey, the Warhawk has none). From the authored eye it is behind
+  the camera and back-facing, so the flat game never draws it; a tracked head more than a few cm
+  aft of the eye sees its front face between the eye and the panel. It shares its node with canopy
+  structure, so it cannot be dropped by node name. Its role in the original is undecoded.
+- **Gauges at a different depth from the panel.** The interior's depth bias is a real view-space
+  displacement, `VERTEX *= 1.0 - (depth_bias + node_bias)` (`Mech3/SceneBuilder.cs:2040`), scaled
+  by `DepthBiasScale = 1/InteriorScale` = 25 (`Mech3/PlaneBuilder.cs:131`), 2e-4 per priority
+  level, clamped at 0.25. In mono the pull lies along the eye ray and changes only depth order; in
+  Godot 4.7 multiview `VERTEX` is in the combined view and scales toward a point behind the eyes,
+  so the pull is a real stereo depth step. The authored dial faces are coplanar with the dashboard;
+  the bias puts the main needles (priority 8-9) about 2 cm in front of it, the green missile lamps
+  (30) about 7 cm, the gun and missile arrows (49) about 11.5 cm, and the compass bezel (-10)
+  2.9 cm behind, at a 0.47-0.50 m panel.
+
 **Approach.** Under VR take the `--no-cockpit-pass` path, keep `light_origin`, the shake and the
-gauge drive working on the in-world interior, and rely on A3 for precision.
+gauge drive working on the in-world interior, and rely on A3 for precision. Under VR only: leave the
+plate out of the interior build with a polygon filter (all vertices on one z plane with
+0 < z ≤ 2.5 iu, normal aft, Colored, priority 5; on the diagnosis scan this matches exactly the 5-7
+plate polygons per interior and nothing else), and give the interior a shader variant that keeps the
+true position and biases depth only:
+`vec4 c = PROJECTION_MATRIX * vec4(VERTEX, 1.0); vec4 p = PROJECTION_MATRIX * vec4(VERTEX * (1.0 - bias), 1.0); POSITION = vec4(c.xy, p.z / p.w * c.w, c.w);`
+(`PROJECTION_MATRIX` is per view under multiview). The cheaper fallback, `DepthBiasScale = 1` under
+VR, leaves about 0.5 cm on the arrows and needs a z-fighting check. The world materials carry the
+same unscaled bias, negligible in stereo beyond a few metres.
 
 **Model recommendation.** <TODO: tier not settled in the session.>
 
