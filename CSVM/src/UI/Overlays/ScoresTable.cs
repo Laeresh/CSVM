@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using CSVM.Flight.Modes;
 using CSVM.UI.Boards;
+using CSVM.UI.Screens;
 
 namespace CSVM.UI.Overlays;
 
@@ -39,18 +40,10 @@ public sealed class ScoresTable
     public static ScoresTable Race(StuntRace race)
     {
         ArgumentNullException.ThrowIfNull(race);
-        var standings = race.Standings();
-        float? winner = standings.Count > 0 ? standings[0].BestTime : null;
-        var rows = new List<ScoresRow>(standings.Count);
-        for (int i = 0; i < standings.Count; i++)
+        var rows = new List<ScoresRow>();
+        foreach (var row in RaceRows.Of(race.Standings(), race.ZoneCount))
         {
-            var r = standings[i];
-            rows.Add(new ScoresRow(new[]
-            {
-                StuntRace.Ordinal(i + 1), StuntRace.NameText(r), r.PlaneDisplay, StuntRace.BestText(r, race.ZoneCount),
-                StuntRace.GapText(r, winner),
-                string.Format(CultureInfo.InvariantCulture, "{0}/{1}", r.RunsFinished, r.RunsStarted),
-            }, r.Index, false));
+            rows.Add(new ScoresRow(new[] { row.Place, row.Name, row.Aircraft, row.Best, row.Gap, row.Runs }, row.Racer.Index, false));
         }
 
         return new ScoresTable(

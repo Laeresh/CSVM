@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using CSVM.Flight.Modes;
 using CSVM.Mech3;
+using CSVM.UI.Screens;
 
 namespace CSVM.UI.Overlays;
 
@@ -102,17 +103,11 @@ public static class OriginalScoresText
             new(Cell(words.Player, NameWidth) + " " + Cell("aircraft", AircraftWidth) + " "
                 + Cell("best", BestWidth) + " " + Cell("gap", GapWidth) + " runs", 0),
         };
-        var standings = race.Standings();
-        float? winner = standings.Count > 0 ? standings[0].BestTime : null;
-        for (int i = 0; i < standings.Count; i++)
+        foreach (var row in RaceRows.Of(race.Standings(), race.ZoneCount))
         {
-            var r = standings[i];
             lines.Add(new(
-                Cell(StuntRace.Ordinal(i + 1) + " " + StuntRace.NameText(r), NameWidth) + " "
-                    + Cell(r.PlaneDisplay, AircraftWidth) + " "
-                    + Cell(StuntRace.BestText(r, race.ZoneCount), BestWidth) + " "
-                    + Cell(StuntRace.GapText(r, winner), GapWidth) + " "
-                    + string.Format(CultureInfo.InvariantCulture, "{0}/{1}", r.RunsFinished, r.RunsStarted),
+                Cell(row.Place + " " + row.Name, NameWidth) + " " + Cell(row.Aircraft, AircraftWidth) + " "
+                    + Cell(row.Best, BestWidth) + " " + Cell(row.Gap, GapWidth) + " " + row.Runs,
                 0));
         }
 

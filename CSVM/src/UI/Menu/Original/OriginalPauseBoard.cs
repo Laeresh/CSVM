@@ -212,23 +212,8 @@ public sealed partial class OriginalPauseBoard : Control
         Compose();
     }
 
-    // The pausing seat's mouse in authored pixels. Only a seat that reads the keyboard holds one
-    // (MenuInput's rule for seat 0), so a pad player's pause is driven by the pad alone.
-    private (float X, float Y, bool Pressed)? SeatPointer()
-    {
-        if (_input is not { Keyboard: true } || !IsInsideTree())
-        {
-            return null;
-        }
-
-        var size = GetViewportRect().Size;
-        var fit = BoardFit.For(size.X, size.Y);
-        var at = GetViewport().GetMousePosition();
-        return (
-            (at.X - fit.OriginX) / fit.Scale,
-            (at.Y - fit.OriginY) / fit.Scale,
-            Input.IsMouseButtonPressed(MouseButton.Left));
-    }
+    // The pausing seat's mouse in authored pixels.
+    private (float X, float Y, bool Pressed)? SeatPointer() => AuthoredPointer.Of(this, _input);
 
     // The dialog authors its own pointer, so the OS one goes away while the sheet stands. Taken
     // only where the seat has a mouse to point with and the dialog a cursor to draw in its place.

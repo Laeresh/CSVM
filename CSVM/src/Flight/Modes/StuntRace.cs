@@ -210,7 +210,8 @@ public sealed class StuntRace
     /// <summary>How long after time up a run in progress may still finish, seconds.</summary>
     public const float FinalRunCap = 120f;
 
-    /// <summary>What the boards add to the name of a pilot who left the race.</summary>
+    /// <summary>What the leaderboard line and the boards' rows add to the name of a pilot who left
+    /// the race.</summary>
     public const string LeftSuffix = " (left)";
 
     // The start count's own boundary rule. A window opening on the seats' steps then opens on
@@ -250,7 +251,7 @@ public sealed class StuntRace
 
     /// <summary>Which window this is: zero for the first, one more for each <see cref="Rerun"/>.
     /// A network report or line names it, so one from an earlier window is told apart.</summary>
-    public int Round { get; private set; }
+    public int Window { get; private set; }
 
     /// <summary>True on a network guest: every racer's record and the race's end arrive from the
     /// host (<see cref="TakeLine"/>, <see cref="TakeHostClock"/>). The run entry points then count
@@ -303,21 +304,6 @@ public sealed class StuntRace
             ? sign + magnitude.ToString("0.0", CultureInfo.InvariantCulture)
             : sign + StuntMission.FormatTime(magnitude);
     }
-
-    /// <summary>A board's name for one pilot: the callsign, marked when the pilot left the race.</summary>
-    public static string NameText(Racer racer) => racer.Left ? racer.Callsign + LeftSuffix : racer.Callsign;
-
-    /// <summary>A board's best column for one pilot: the best time, or the furthest run's zones out
-    /// of <paramref name="zoneCount"/> for a pilot with no completed run.</summary>
-    public static string BestText(Racer racer, int zoneCount) =>
-        racer.BestTime is { } best ? StuntMission.FormatTime(best) : $"{racer.MostZones}/{zoneCount} ZONES";
-
-    /// <summary>A board's gap column for one pilot: behind <paramref name="winner"/>'s best, and
-    /// blank for the winner. A pilot with no completed run shows the time to the furthest zones.
-    /// </summary>
-    public static string GapText(Racer racer, float? winner) =>
-        racer.BestTime is { } best ? (winner is { } w && best > w ? FormatGap(best - w) : "")
-        : racer.MostZones > 0 ? $"at {StuntMission.FormatTime(racer.TimeToMostZones)}" : "";
 
     /// <summary>Enters a player. Call in player order at session build.</summary>
     public Racer Add(int index, string planeDisplay, string scoreKey = "")
@@ -453,15 +439,17 @@ public sealed class StuntRace
         EndIfNoRunLeft();
     }
 
-    /// <summary>Player <paramref name="index"/>'s pilot left the race. Their record stays and ranks as
+    /// <summary>Player <paramref name="index"/>'s pilot left mid-race. Their record stays and ranks as
     /// it stood, and a run in progress stops, which may end a final run. A replica marks it alone.
-    /// Answers whether the racer was still in.</summary>
+    /// An ended race marks nobody, since a pilot who flew the whole window did not leave it.
+    /// Answers whether the racer was marked.</summary>
     public bool MarkLeft(int index)
     {
-        if (Of(index) is not { Left: false } racer)
+        if (Ended || Of(index) is not { Left: false } racer)
             return false;
         racer.Leave();
-        Log.Info("flight", $"stunt race: {racer.Callsign} left, their record kept ({BestText(racer, ZoneCount)})");
+        string best = racer.BestTime is { } time ? StuntMission.FormatTime(time) : "none";
+        Log.Info("flight", $"stunt race: {racer.Callsign} left, their record kept (best {best}, {racer.MostZones}/{ZoneCount} zones)");
         EndIfNoRunLeft();
         return true;
     }
@@ -497,7 +485,7 @@ public sealed class StuntRace
         _racers.RemoveAll(r => r.Left);
         foreach (var r in _racers)
             r.Clear();
-        Round++;
+        Window++;
         Phase = StuntRacePhase.Opening;
         _openingSeconds = 0f;
         _openingElapsed = 0f;
@@ -534,7 +522,7 @@ public sealed class StuntRace
         var me = order[place - 1];
         var leader = order[0];
         string line = $"{clock}   {Ordinal(place)}/{order.Count}   LEADER "
-            + (leader.BestTime is { } lead ? $"{NameText(leader)} {StuntMission.FormatTime(lead)}" : "--");
+            + (leader.BestTime is { } lead ? $"{leader.Callsign}{(leader.Left ? LeftSuffix : "")} {StuntMission.FormatTime(lead)}" : "--");
         if (me.BestTime is not { } mine)
             return line + "   NO TIME";
         if (me != leader)

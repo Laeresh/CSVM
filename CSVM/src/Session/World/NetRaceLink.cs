@@ -25,15 +25,15 @@ internal sealed class NetRaceLink
     private readonly NetClockPing? _ping;
     private readonly float _stepSeconds;
     private readonly MatchStateCadence? _cadence;
-    // The host's newest run number from each remote seat's owner, under the round it was heard in.
+    // The host's newest run number from each remote seat's owner, under the window it was heard in.
     private readonly Dictionary<int, ushort> _ownerRuns = new();
     private readonly Dictionary<int, int> _sentRevisions = new();
     // A guest's own seats' run numbers in the current window.
     private readonly Dictionary<int, ushort> _ownRuns = new();
-    private int _ownerRunsRound;
-    private int _ownRunsRound;
+    private int _ownerRunsWindow;
+    private int _ownRunsWindow;
     private StuntRacePhase? _sentPhase;
-    private int _sentRound = -1;
+    private int _sentWindow = -1;
     private bool _askedClock;
     private bool _windowMismatchLogged;
 
@@ -70,7 +70,7 @@ internal sealed class NetRaceLink
     /// <summary>Whether this end is the race's host.</summary>
     internal bool IsHost => _net.IsHost;
 
-    /// <summary>On the host, reports that passed the owner, round and run checks.</summary>
+    /// <summary>On the host, reports that passed the owner, window and run checks.</summary>
     internal int ReportsTaken { get; private set; }
 
     /// <summary>On the host, reports dropped: a spoofed seat, another window, a repeat or a stale run.</summary>
@@ -116,7 +116,7 @@ internal sealed class NetRaceLink
     {
         if (_net.IsHost)
         {
-            _net.Broadcast(new RaceCallMessage(NetRaceCall.Rerun, (byte)_race.Round), NetChannels.Events);
+            _net.Broadcast(new RaceCallMessage(NetRaceCall.Rerun, (byte)_race.Window), NetChannels.Events);
         }
     }
 
@@ -127,11 +127,11 @@ internal sealed class NetRaceLink
     {
         if (!_net.IsHost)
         {
-            _net.Send(_net.HostPeer, new RaceCallMessage(NetRaceCall.Leave, (byte)_race.Round), NetChannels.Events);
+            _net.Send(_net.HostPeer, new RaceCallMessage(NetRaceCall.Leave, (byte)_race.Window), NetChannels.Events);
         }
         else if (toLobby && _race.Ended)
         {
-            _net.Broadcast(new RaceCallMessage(NetRaceCall.Lobby, (byte)_race.Round), NetChannels.Events);
+            _net.Broadcast(new RaceCallMessage(NetRaceCall.Lobby, (byte)_race.Window), NetChannels.Events);
         }
     }
 
@@ -180,10 +180,10 @@ internal sealed class NetRaceLink
             return;
         }
 
-        if (_ownRunsRound != _race.Round)
+        if (_ownRunsWindow != _race.Window)
         {
             _ownRuns.Clear();
-            _ownRunsRound = _race.Round;
+            _ownRunsWindow = _race.Window;
         }
 
         ushort run = _ownRuns.GetValueOrDefault(seat);
@@ -198,7 +198,7 @@ internal sealed class NetRaceLink
         }
 
         _net.Send(_net.HostPeer,
-            new RaceRunMessage((byte)seat, kind, (byte)Math.Clamp(zone, 0, RaceRunMessage.NoZone), (byte)_race.Round, run, runTime),
+            new RaceRunMessage((byte)seat, kind, (byte)Math.Clamp(zone, 0, RaceRunMessage.NoZone), (byte)_race.Window, run, runTime),
             NetChannels.Events);
     }
 
@@ -232,12 +232,12 @@ internal sealed class NetRaceLink
             }
         }
 
-        if (tick || _sentPhase != _race.Phase || _sentRound != _race.Round)
+        if (tick || _sentPhase != _race.Phase || _sentWindow != _race.Window)
         {
             _sentPhase = _race.Phase;
-            _sentRound = _race.Round;
+            _sentWindow = _race.Window;
             float elapsed = _race.Phase == StuntRacePhase.Opening ? _race.OpeningElapsed : _race.WindowElapsed;
-            _net.Broadcast(new RaceStateMessage((NetRacePhase)_race.Phase, (byte)_race.Round, elapsed,
+            _net.Broadcast(new RaceStateMessage((NetRacePhase)_race.Phase, (byte)_race.Window, elapsed,
                 _race.WindowSeconds, (float)_clock()), NetChannels.Events);
             States++;
         }
@@ -252,7 +252,7 @@ internal sealed class NetRaceLink
             splits[i] = line.Splits[i] ?? RaceStandingMessage.NoSplit;
         }
 
-        return new RaceStandingMessage((byte)racer.Index, (byte)_race.Round, line.InRun, line.BestTime != null,
+        return new RaceStandingMessage((byte)racer.Index, (byte)_race.Window, line.InRun, line.BestTime != null,
             (ushort)Math.Min(line.RunsStarted, ushort.MaxValue), (ushort)Math.Min(line.RunsFinished, ushort.MaxValue),
             line.BestTime ?? 0f, line.TimeToMostZones, (byte)Math.Min(line.MostZones, byte.MaxValue),
             (byte)Math.Min(line.CurrentZones, byte.MaxValue), splits, line.Left);
@@ -279,13 +279,13 @@ internal sealed class NetRaceLink
             return;
         }
 
-        if (call.Call == NetRaceCall.Rerun && call.Round == (byte)(_race.Round + 1))
+        if (call.Call == NetRaceCall.Rerun && call.Window == (byte)(_race.Window + 1))
         {
             CallsTaken++;
-            Log.Info("flight", $"net race: the host opened window {call.Round}");
+            Log.Info("flight", $"net race: the host opened window {call.Window}");
             Rerun?.Invoke();
         }
-        else if (call.Call == NetRaceCall.Lobby && call.Round == (byte)_race.Round)
+        else if (call.Call == NetRaceCall.Lobby && call.Window == (byte)_race.Window)
         {
             CallsTaken++;
             LobbyCalled = true;
@@ -293,7 +293,7 @@ internal sealed class NetRaceLink
         }
         else
         {
-            Log.Info("flight", $"net race: dropped the host's {call.Call} call for window {call.Round} in window {_race.Round}");
+            Log.Info("flight", $"net race: dropped the host's {call.Call} call for window {call.Window} in window {_race.Window}");
         }
     }
 
@@ -308,7 +308,7 @@ internal sealed class NetRaceLink
             return;
         }
 
-        if (report.Round != (byte)_race.Round)
+        if (report.Window != (byte)_race.Window)
         {
             Refuse(report, "of another window");
             return;
@@ -320,10 +320,10 @@ internal sealed class NetRaceLink
             return;
         }
 
-        if (_ownerRunsRound != _race.Round)
+        if (_ownerRunsWindow != _race.Window)
         {
             _ownerRuns.Clear();
-            _ownerRunsRound = _race.Round;
+            _ownerRunsWindow = _race.Window;
         }
 
         ushort newest = _ownerRuns.GetValueOrDefault(report.Seat);
@@ -367,14 +367,14 @@ internal sealed class NetRaceLink
     private void Refuse(in RaceRunMessage report, string why)
     {
         ReportsRefused++;
-        Log.Info("flight", $"net race: dropped seat {report.Seat}'s {report.Kind} report (run {report.Run}, round {report.Round}), {why}");
+        Log.Info("flight", $"net race: dropped seat {report.Seat}'s {report.Kind} report (run {report.Run}, window {report.Window}), {why}");
     }
 
     // A guest takes a line only under its own window. The host's rerun call reaches it ahead of
-    // the next window's lines, so a line under another round is an old window's.
+    // the next window's lines, so a line under another window number is an old window's.
     private void TakeLine(in RaceStandingMessage line)
     {
-        if (line.Round != (byte)_race.Round)
+        if (line.Window != (byte)_race.Window)
         {
             return;
         }
@@ -394,7 +394,7 @@ internal sealed class NetRaceLink
     // newest clock reading, not the offset still walking to it: a catch-up is applied once.
     private void TakeState(in RaceStateMessage state)
     {
-        if (state.Round != (byte)_race.Round || state.Phase > NetRacePhase.Ended
+        if (state.Window != (byte)_race.Window || state.Phase > NetRacePhase.Ended
             || !float.IsFinite(state.Elapsed) || !float.IsFinite(state.HostClock))
         {
             return;
