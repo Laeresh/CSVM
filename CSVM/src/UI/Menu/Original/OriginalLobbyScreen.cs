@@ -215,6 +215,11 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private const string UpArt = "MP_B_SCROLLUP.PNG";
     private const string DownArt = "MP_B_SCROLLDOWN.PNG";
     private const float MemberIndent = 12f;
+
+    // The bot editor's faces: the Mission Options dropdowns' for its boxes and captions, and their
+    // titles' for its labels. The Select Plane script's typewriter face is the pilot's own page's.
+    private const int BotFace = 10558;
+    private const int BotLabelFace = 10096;
     private const string TabLargeArt = "MP_LOBBY_TABLARGE.PNG";
     private const string TabSmallArt = "MP_LOBBY_TABSMALL.PNG";
     private const string IconArt = "MP_PLANEICONSTOPFRONT.PNG";
@@ -1538,13 +1543,19 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
     private string PlaneWord(int airframe) =>
         _text.Word(10565, "Stock") + " " + ShortNames[Math.Clamp(airframe, 0, ShortNames.Length - 1)];
 
-    // IDS_IA_DIFFICULTY, Instant Action's own three words for the same tiers.
-    private string SkillWord(NetBotSkill skill) => skill switch
+    // IDS_IA_DIFFICULTY, Instant Action's own three words for the same tiers. They ship in lower
+    // case, so the first letter is raised for the box, as the lobby's other items read.
+    private string SkillWord(NetBotSkill skill)
     {
-        NetBotSkill.Novice => _text.Word(3695, "Novice"),
-        NetBotSkill.Ace => _text.Word(3697, "Ace"),
-        _ => _text.Word(3696, "Veteran"),
-    };
+        string word = skill switch
+        {
+            NetBotSkill.Novice => _text.Word(3695, "novice"),
+            NetBotSkill.Ace => _text.Word(3697, "ace"),
+            _ => _text.Word(3696, "veteran"),
+        };
+
+        return word.Length > 0 ? char.ToUpperInvariant(word[0]) + word[1..] : word;
+    }
 
     // The bot's lists: Random then the eleven stock planes, the three tiers, no team then each
     // standing team. Null for any other key.
@@ -1914,7 +1925,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
             layers.Fills.Add(_host.FocusMark(row));
         }
 
-        int faceId = row.Key is EnvironmentKey or TypeKey ? 10558 : 10144;
+        int faceId = row.Key is EnvironmentKey or TypeKey or BotPlaneKey or BotSkillKey or BotTeamKey ? BotFace : 10144;
         var face = _text.Regular(faceId);
         float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
         float textY = row.Key == PlaneKey ? row.Y + 5f : row.Y + ((row.Height - size) / 2f) - 1f;
@@ -1955,7 +1966,12 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
 
     private void ComposeBox(OriginalRow row, bool focused, BoardLayers layers)
     {
-        var face = _text.Regular(row.Key == ChatKey ? 10575 : 10105);
+        var face = _text.Regular(row.Key switch
+        {
+            ChatKey => 10575,
+            BotNameKey => BotFace,
+            _ => 10105,
+        });
         float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
         if (row.Key == ChatKey)
         {
@@ -2142,33 +2158,34 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         string[] labels = { "Callsign", "Plane", "Skill", "Team" };
         for (int i = 0; i < labels.Length; i++)
         {
-            layers.Lines.Add(_text.Line(-1, labels[i], PageX + 11f, PageY + 70f + (46f * i), 0f, Black, faceId: 10566));
+            layers.Lines.Add(_text.Line(-1, labels[i], PageX + 11f, PageY + 68f + (46f * i), 0f, Black, faceId: BotLabelFace));
         }
 
         if (bot.RandomPlane)
         {
             layers.Lines.Add(_text.Line(10566, "Plane:", PageX + 225f, PageY + 75f, 0f, Black,
-                text: _text.Word(10566, "Plane:") + " " + RandomWord()));
-            layers.Lines.Add(_text.Line(-1, "Drawn at launch", PageX + 225f, PageY + 90f, 220f, Black, faceId: 10566));
+                text: _text.Word(10566, "Plane:") + " " + RandomWord(), faceId: BotFace));
+            layers.Lines.Add(_text.Line(-1, "Drawn at launch", PageX + 225f, PageY + 90f, 220f, Black, faceId: BotFace));
             return;
         }
 
         // A bot flies the stock loadout, never the host's own custom plane.
-        ComposeAirframe(bot.Airframe, _stock()?.ForModel(StockAirframes.Node(bot.Airframe)), layers);
+        ComposeAirframe(bot.Airframe, _stock()?.ForModel(StockAirframes.Node(bot.Airframe)), BotFace, layers);
     }
 
     private void ComposePlane(DogfightLobby lobby, BoardLayers layers)
     {
         layers.Lines.Add(_text.Line(10114, "Select Plane", PageX + 11f, PageY + 43f, 0f, Black));
-        ComposeAirframe(lobby.Airframe, StockDef(lobby.Airframe), layers);
+        ComposeAirframe(lobby.Airframe, StockDef(lobby.Airframe), 10566, layers);
     }
 
     // A stock airframe's column on Select Plane: its name, its icon, its four ratings and its guns.
-    private void ComposeAirframe(int airframe, LoadoutDef? def, BoardLayers layers)
+    // The pilot's own page captions it in the script's typewriter face, a bot's page in BotFace.
+    private void ComposeAirframe(int airframe, LoadoutDef? def, int captionFace, BoardLayers layers)
     {
         string plane = _text.Word(10566, "Plane:") + " " + _text.Word(10565, "Stock");
-        layers.Lines.Add(_text.Line(10566, "Plane:", PageX + 225f, PageY + 75f, 0f, Black, text: plane));
-        layers.Lines.Add(_text.Line(3000 + airframe, ShortNames[airframe], PageX + 225f, PageY + 90f, 220f, Black, faceId: 10566));
+        layers.Lines.Add(_text.Line(10566, "Plane:", PageX + 225f, PageY + 75f, 0f, Black, text: plane, faceId: captionFace));
+        layers.Lines.Add(_text.Line(3000 + airframe, ShortNames[airframe], PageX + 225f, PageY + 90f, 220f, Black, faceId: captionFace));
         layers.Pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, IconArt, IconFrames), PageX + 251f, PageY + 102f, airframe));
         var fit = PlaneFit.For(airframe, null, def);
         var ratings = PlaneRatings.For(fit);
@@ -2231,7 +2248,7 @@ public sealed class OriginalLobbyScreen : IOriginalScreenModule
         var fills = new List<BoardFill>();
         var lines = new List<BoardLine>();
         int picked = _open != null && DropdownFor(_open) is { } open ? open.Current : -1;
-        var face = _text.Regular(_open is EnvironmentKey or TypeKey ? 10558 : 10144);
+        var face = _text.Regular(_open is EnvironmentKey or TypeKey or BotPlaneKey or BotSkillKey or BotTeamKey ? BotFace : 10144);
         float size = face?.Pixels ?? MultiplayerBoardText.TextFallback;
         float top = float.MaxValue, bottom = float.MinValue, left = 0f, width = 0f;
         foreach (var row in rows)

@@ -107,7 +107,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C, lobby and local setup
 
 20. ☑ A local match runs off a seat roster with no wire, so it can hold bot seats
-21. ◐ Multiplayer Lobby: Add bot, Fill-to-N, per-row plane/skill/team/callsign, Remove (the user's look at the layout)
+21. ☑ Multiplayer Lobby: Add bot, Fill-to-N, per-row plane/skill/team/callsign, Remove
 22. ☐ A joining human takes the newest bot's seat in the lobby, a late joiner once the match is back there
 23. ☐ Local join board: bot rows, and the two-pilot minimum counts bots
 
@@ -735,9 +735,13 @@ menu-original-lobby,pause-sheet,voice-runtime,ai-voice,flight-live-respawn-gate'
 roster (`VersusDirector.Wired` carries the warning). A local roster's panes must name no plane, or
 the seat's plane overrules the pane's own pick.
 
-## C21 ◐ Multiplayer Lobby: Add bot, Fill-to-N, per-row plane/skill/team/callsign, Remove
+## C21 ☑ Multiplayer Lobby: Add bot, Fill-to-N, per-row plane/skill/team/callsign, Remove
 
 Landed in code and tests; left: the user's look at the layout (`c21-lobby.png`, below).
+The user approved the layout with two fixes, both landed: the bot editor's boxes, lists and plane
+caption take the Mission Options dropdowns' face (its labels their titles' face) in place of the
+Select Plane typewriter face, and the Skill list raises the first letter of langui 3695 to 3697,
+which ship in lower case, to read Novice, Veteran and Ace.
 
 **Goal.** The host adds a bot row with Add, or creates rows with Fill-to-N; edits each row's plane,
 skill, team and callsign; removes a row; new bots join the smallest team (Decisions 5, 12); rows
