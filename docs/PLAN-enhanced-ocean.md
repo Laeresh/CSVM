@@ -250,8 +250,8 @@ ocean out of the tree and leaves the sheet the text a fresh Original build gives
 collapse; a switch back builds a new ocean, exactly one under the whole test host, and the sheet's
 text is a fresh Enhanced build's again; an Original-built session switched to Enhanced builds the
 ocean with the same sheet text; each closed session leaves no ocean in the tree, so the sheet's
-switch is back at 0; and a following Enhanced C2B session (a whole-map `wtr00000` sheet that
-carries the collapse, which a switch left on would hole) builds none. A network session's refusal
+switch is back at 0; and a following Enhanced C2B session at flat water quality (a whole-map
+`wtr00000` sheet that carries the hide, which a switch left on would hole) builds none. A network session's refusal
 is already `net-pause-overlay`'s, and it returns before the session follows anything. Mutating
 `FollowOcean` to forget the dropped ocean fails the leave and exactly-once checks. The motion
 judgement at the controls is still owed.
