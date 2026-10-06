@@ -2108,7 +2108,9 @@ with no shimmer; (8) under Enhanced (last line) the dial colours against the fla
   in a stereo flight it goes to the theater and, being a board layer, raises the screen over a
   dimmed world when it shows. Not checked at the stand-in.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged tree with D15 and C12: build PASS, units 6462
+passed 3 skipped, engine 546 passed 2 skipped with clean engine errors, goldens 34/34
+hash-identical. The headset checks named above are still owed.
 
 ## C13 ◐ World-tied markers and the edge-marker ring
 
@@ -2702,7 +2704,9 @@ values to tune are `StereoPair.ConvergenceOfCard` (below 1 deepens the scene and
 - The headset still renders the world behind the opaque surround, so a cutscene costs three world
   renders a frame (D18).
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged tree with D15 and C12: build PASS, units 6462
+passed 3 skipped, engine 546 passed 2 skipped with clean engine errors, goldens 34/34
+hash-identical. The headset checks named above are still owed.
 
 ## D16 ☐ Comfort: fades, tunnel vignette, render-scale slider
 
