@@ -88,8 +88,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B, cost
 
 11. ☐ Bring the low-altitude SSR cost within budget
-12. ☐ Measure and budget the Deck
+12. ☑ Measure and budget the Deck
 13. ☑ Cache or speed up the mask bake
+14. ☐ No secondary viewport draws the ocean grid it does not need
 
 ### Wave C, coverage
 
@@ -279,7 +280,54 @@ keep SSR for near objects.>
 **⚠ Traps.** Read `docs/verification.md` PERF-1/PERF-2 first: judge `gpu_ms`, not `fps`. A shared
 GPU (another session's battery) inflates both arms.
 
-## B12 ☐ Measure and budget the Deck
+## B12 ☑ Measure and budget the Deck
+
+**Landed.** Measured, no code change. Decision 10 holds: the Deck cannot carry waves at 60 Hz, so
+Water Quality stays `flat` there by default, and a player can still choose `waves`. A Linux export of
+the plan tree (`9077d2c5b`) ran in `~/CSVM-tmp/b12` on the Deck's own screen (gamescope, 1280x800,
+60 Hz) under `--det --perf --no-vsync --frames=600`. That is native render scale with TAA, which is
+also the user's saved Deck setup (render scale and AA unset), and `--shadow-quality` as the Deck's
+own fallback (high at 1 and 2 panes, off at 4). Arms `--water-quality=waves` and `=flat`, alternated
+over two rounds; the rounds agree within 0.1 ms. Single player reads `gpu_ms`; split screen reads
+`frame_ms`, since `gpu_ms` there measures only the root viewport (PERF-39). Means over the windows
+after sim frame 240, except the low pass (see the traps):
+
+| Pose | Panes | Flat | Waves | Ocean cost | Prims, flat / waves |
+|---|---|---|---|---|---|
+| C1B cruise | 1 (`gpu_ms`) | 8.67 | 15.50 | +6.8 ms | 10k / 278k |
+| C1B low pass | 1 (`gpu_ms`) | 9.38 | 17.31 | +7.9 ms | 12k / 280k |
+| C3 coast | 1 (`gpu_ms`) | 9.82 | 17.27 | +7.5 ms | 17k / 284k |
+| C1B cruise | 2 (`frame_ms`) | 9.98 | 22.18 | +12.2 ms | 32k / 1.10M |
+| C1B low pass | 2 (`frame_ms`) | 11.14 | 25.84 | +14.7 ms | 33k / 1.10M |
+| C3 coast | 2 (`frame_ms`) | 11.55 | 24.85 | +13.3 ms | 58k / 1.13M |
+| C1B cruise | 4 (`frame_ms`) | 12.89 | 27.45 | +14.6 ms | 51k / 2.19M |
+| C1B low pass | 4 (`frame_ms`) | 16.66 | 30.94 | +14.3 ms | 59k / 2.20M |
+| C3 coast | 4 (`frame_ms`) | 16.59 | 29.78 | +13.2 ms | 103k / 2.24M |
+| Low pass held, 720p | 1 (`gpu_ms`) | 8.22 | 14.86 | +6.6 ms | 12k / 280k |
+| Low pass held, 720p | 2 (`frame_ms`) | 10.07 | 23.06 | +13.0 ms | 34k / 1.10M |
+| Low pass held, 720p | 4 (`frame_ms`) | 16.05 | 29.20 | +13.2 ms | 60k / 2.20M |
+
+The last three rows are the low pass held airborne over all 600 frames (`--hold=0.04,0,0,0.7`, near
+22 m), measured later in the Deck's Desktop Mode, where the window came up at 1280x720 under KWin
+instead of 1280x800 under gamescope. They compare with each other, not with the rows above.
+
+Draw calls do not move (under 10 more). Single-player waves run at 64 fps at cruise and at 57 to 58 fps
+at the low pass and the C3 coast, against 101 to 114 fps flat. With two panes they run at 39 to 45 fps,
+against 87 to 100 fps flat, and with four at 32 to 36 fps, against 60 to 78 fps flat. On the desktop the ocean
+costs +0.45 ms at cruise and +1.45 ms at the low pass (C23, 1920x1080), so the Deck pays about 15 and
+5 times that at fewer than half the pixels. In split screen the
+prims are four and eight times the single-player grid, and `[perf] spyglass` reads one live disc per
+pane, which fits each pane's spyglass disc drawing the grid too (inferred from the counts, not split by
+viewport per PERF-44). If split-screen waves are ever wanted on the Deck, the disc's cull mask is the
+first lever to test. Linux machines with a discrete GPU also
+default to `flat` under Decision 10; B12 did not measure one. Shots with the ocean, all at frame 600 on
+`RADV VANGOGH`, are in the plan tree's `.scratch\b12\`: `r1-cruise-1p-ocean.png`,
+`g1-lowh-1p-ocean.png` (the held low pass, 720p) and `r1-c3-1p-ocean.png`, plus the 2-pane and 4-pane
+`r1-*-ocean.png` shots.
+
+**Verified.** Measurement only, no engine code changed. Every row is two alternated rounds agreeing within 0.1 ms, with no other CSVM process on the Deck at any run's start or end; the user's interruption killed one follow-up batch, which was discarded whole and re-run once the Deck was free. Decision 10 holds: the Deck keeps `flat` by default.
+
+**Original approach (kept for reference).**
 
 **Goal.** The ocean's cost on the Steam Deck is known for single-player and split-screen, and the
 Water Quality default there follows from it.
@@ -295,6 +343,23 @@ timed out). The handoff notes Enhanced split-screen already runs below 60 fps th
 **Verify.** <TODO: the budget line and the default it implies.>
 
 **⚠ Traps.** SSH screenshots on the Deck need `--det`; a `--no-det` shot captures the loading frame.
+- The B11 low-pass pose with no input flies into the sea at about sim frame 280 (`[flight] CRASH into
+  g28278/col_water`, every pane), so its windows after frame 240 measure the crash splash, not the
+  water. The table's low-pass row reads the windows at sim frames 120 to 240, before the impact.
+  `--hold=0.04,0,0,0.7` keeps it near 22 m for 600 frames; 0.02 grazes the water and 0.07 climbs to
+  90 m. Desktop low-pass figures taken over frames 240 to 600 carry the same splash.
+- A run on the Deck opens on its screen, so a run while someone uses the Deck interrupts them, and
+  they may kill it. Check that the Deck is free first. Read the `[perf]` lines from the run's stdout:
+  the `*.log` a run leaves may be the `.godot.log` mirror, which stops short of the last windows.
+- In Desktop Mode a split-screen `--screenshot` run can hang after frame 600, at the capture or in
+  teardown, until `timeout` kills it. Its `[perf]` windows are complete by then, but stdout is cut
+  where the kill lands. Kill the process once the frame-600 window is out, rather than waiting.
+- In split screen `gpu_ms` reads about 0.15 ms (PERF-39). `frame_ms` with `--no-vsync` is the
+  measure, and `proc_ms` rises with the ocean only because the frame waits on the render thread
+  (PERF-43).
+- The first run after an install compiles the pipelines. A cold cruise run, beside another session's
+  headless run, read 19 ms where warm runs read 15.5 ms. Discard it, and check `pgrep -f CSVM.x86_64`
+  before each run.
 
 ## B13 ☑ Cache or speed up the mask bake
 
@@ -736,3 +801,23 @@ bake as wakes' ships already are.>
 
 **⚠ Traps.** C22: `--direction` turns the view the opposite way on x in this mode; a hull counts only
 while its origin is within 3 m of sea level.
+
+## B14 ☐ No secondary viewport draws the ocean grid it does not need
+
+**Goal.** The ocean grid draws once per pane camera, not again in each pane's spyglass disc or any
+other secondary viewport that does not show the sea.
+
+**Evidence (confidence: lead-only).** B12 on the Deck: primitives go from about 10k flat to 280k with
+waves at one pane, 1.1M at two and 2.2M at four, with draw calls unchanged. 4x and 8x fit each pane's
+spyglass disc (its own viewport, `SpyglassView`) also drawing the 134k-vertex grid. Inferred from the
+counts, not from a per-viewport split. Split screen on the Deck costs +12 to +15 ms with waves.
+
+**Approach.** <TODO: confirm per viewport (`--perf`'s spyglass line, PERF-47), then keep the grid off
+the disc's cull mask or the disc's camera off the grid's layer, unless the disc is meant to show the
+sea; then re-measure the split-screen rows of B12's table.>
+
+**Model recommendation.** medium.
+
+**Verify.** <TODO: the per-viewport prim counts before and after, and B12's 2- and 4-pane rows.>
+
+**⚠ Traps.** In split screen `gpu_ms` measures the root viewport alone (PERF-39): read `frame_ms`.
