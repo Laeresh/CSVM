@@ -552,7 +552,7 @@ raw lead. Gates in the engine's order: the quick-draw cone aborting the whole pa
 the armed check, the two-way `DAMAGES_ZEPPELIN` match, the squared engagement band and the traverse
 clamp's residual against an aim-quality cosine tighter than the gun's. The lead is solved per pylon
 in the frame that round flies in, and each unlocked pass leaves a verdict behind, keyed without its
-numbers so a host logs a gate change. `Reset` clears both lockouts for a respawned pilot's fresh airframe. Engine-free. Decode: [aiWeapons.md](../org/aiPilot/aiWeapons.md).
+numbers so a host logs a gate change. `Reset` clears both lockouts for a respawned pilot's fresh airframe. A bot seat's launcher takes `UseWingmanRule` (1 to 900 m and 20 s over every pylon's own numbers) and `FiresOnFailedRoll` (the original's `Network` override); every other AI keeps the roll. Engine-free. Decode: [aiWeapons.md](../org/aiPilot/aiWeapons.md).
 
 ## src/Flight/Ai/AiVoiceDispatcher.cs
 The combat-voice trigger dispatch, engine-free

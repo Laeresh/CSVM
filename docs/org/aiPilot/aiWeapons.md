@@ -116,8 +116,9 @@ wingman of the flight, where the original rebuilds `wingman_1` only, and an uned
 the spawn as none, so those wingmen keep the stock table's fit on the rocketeer's default gates. Two of the table's quantities have no consumer here:
 an AI gun's cadence is its weapon's own fire rate for every AI, so the 0.5 s and 1.0 s refire are
 not carried, and the wingman flies its airframe's stock build, whose wing mounts are all twinned,
-so no gun takes the halved magazine. The original's `Network` gate has no counterpart either: a
-co-op host binds its pick and hands it to the guest, and both machines fly it.
+so no gun takes the halved magazine. The wiring's `Network` gate has no counterpart either: a
+co-op host binds its pick and hands it to the guest, and both machines fly it. (The flag's other
+reader, the failed roll's override, is a Dogfight bot seat's; see [What `AiGunner` runs](#what-aigunner-runs).)
 
 ## The `weapons` 5-tuple, decoded
 
@@ -385,6 +386,21 @@ two classes share no mount and no aim vector, so there is nothing to arbitrate).
 staying fixed to the pylon while the round leaves along the clamped aim is not a divergence at all
 (above, "Census: no shipped airframe animates that mount"): the original's own mount is the fixed
 case for every shipped ordnance pylon, so it does not move either.
+
+**A Dogfight bot seat launches on the original's networked wingman rules.** The original has no
+bot, so a bot seat (network or local) takes the two decoded rules nearest its case, both set by
+`AiFlightAssembler.ArmSeatPilot`. It flies a hangar fit, its plane's stock one, so it takes the
+wingman rule (`AiRocketeer.UseWingmanRule`): the `FUN_00444300` literals, 1 to 900 m and 20 s
+(`Loadout.WingmanMinRangeM`, `WingmanMaxRangeM`, `WingmanOrdnanceRefireS`), standing over any
+window or interval a pylon carries. A Dogfight is the original's networked mode, so a failed roll
+launches anyway (`AiRocketeer.FiresOnFailedRoll`, the `Network` override at `0x004b6b84`); the
+lockout is still stamped first and the dice are still drawn. A bot in `Pursue` with its target in
+the band, inside the quick-draw cone and within 5° of the lead therefore launches once per 20 s,
+at most three rockets a minute at every tier, where the roll on the 30 s fallback allowed one
+attempt per 30 s at 0.05 to 0.44. Every other AI keeps the roll and its def's tuple or the 30 s and 200 to
+800 m fallback: the campaign's and Instant Action's wingmen, enemies and world AI are armed by
+`PreparePilot` alone and never pass through `ArmSeatPilot`. The remake's own Pursue-only firing
+hold (`FlightController.DriveAiRocketeer`) applies to a bot as to every AI.
 
 The match's zeppelin side is flown. The acquisition offers a gasbag to a pilot whose
 `DAMAGES_ZEPPELIN` ordnance can launch now and hands the identity to `Solve`, and an AI aeroplane

@@ -106,6 +106,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 15. ☑ A bot takes a person's world-contact rule: it grazes and bounces, never destroyed outright
 16. ☑ A bot's world bounce matches a person's in the same plane
 17. ☑ A bot rearms when its rockets run out, not its guns
+18. ☑ A bot fires rockets at the wingman's rate, a failed roll still launching
 
 ### Wave C, lobby and local setup
 
@@ -843,7 +844,9 @@ to `Capacity` and refills `FireControl`, so a base restores the racks as well as
   per launch (`AiRocketeer.RefireSeconds`, since a stock fit authors none) and launches only on its
   ordnance roll (0.14 and 0.18 per attempt in D32's log). A stock fit's 6 to 24 rounds therefore take
   at least 2.5 to 11.5 minutes alive and in pursuit to empty. In a short match the hull stays the
-  trigger that fires; whether that suits play is a judgement for the next playtest.
+  trigger that fires. B18 answers this on the user's ruling: a bot launches on the wingman's 20 s
+  with a failed roll launching anyway, at most three rockets a minute (1.6 to 1.9 measured), so its
+  racks can run out in play.
 
 **Approach (landed).** `AiRearmOrder.LowAmmoShare` and `AiRearmOrder.LoadShare` are removed.
 `AiRearmOrder.RocketsOut(pylons, infinite)` is true when every pylon with a capacity holds 0 rounds;
@@ -896,6 +899,97 @@ loaded. A suite that keeps a bot in combat with rockets left must leave it more 
 launch in the window: one launch per 30 s, so one round on each pylon holds through 300 steps. A
 suite that places a bot with `RespawnAt` refills its pylons and mends its hull, so empty them again
 after the placement.
+
+## B18 ☑ A bot fires rockets at the wingman's rate, a failed roll still launching
+
+**Goal.** A bot launches rockets at about the rate a person does, so its racks empty in play and
+B17's rocket trigger sends it to a base. The user's ruling, asked "Which rocket rate should bots use
+in a Dogfight? (Instant Action and the campaign stay as decoded either way.)": option C, "the
+wingman rule, no roll". A bot seat's rocketeer takes the original's hangar-fit wingman rule (20 s
+plane-wide refire, a 1 to 900 m band) in place of the 30 s and 200 to 800 m fallback, and the
+original's `Network` override, so a failed quick-draw roll still launches.
+
+**Evidence (confidence: traced-to-code; the measured rate in play is direction-sound-magnitude-TUNE).**
+Every lead held. `AiRocketeer.RefireSeconds = 30f` is the fallback "for a pylon whose fit authored
+none", and `Solve` takes a pylon's own interval and band only when they are above 0.
+`FlightController.DriveAiRocketeer` passes `hp.RefireSeconds`, `hp.MinRangeM` and `hp.MaxRangeM`; a
+bot's fit is bound by the seat path's `Loadout.Bind`, which writes none of the three (only
+`Loadout.BindAi` and `Loadout.BindWingman` do), so every bot flew the fallback. The 30 is the
+militia data's value, not a decode for a hangar fit. `PreparePilot` sets only the cone and the roll
+chance, and `ArmSeatPilot` changed nothing on the rocketeer. The decode
+(`docs/org/aiPilot/aiWeapons.md`): both lockouts are stamped before the roll (`0x004b6b36`,
+`0x004b6b3b`), the roll is at `0x004b6b59`, and only a failed roll reaches `0x004b6b84`, whose
+`Network` flag fires the round anyway. The original's only AI on a hangar fit is `wingman_1`, built
+by `FUN_00444300` with 1 to 900 m and 20 s (`Loadout.WingmanMinRangeM`, `WingmanMaxRangeM`,
+`WingmanOrdnanceRefireS`). `ArmSeatPilot` has one caller, `HumanFlightAdapter`'s bot block, so the
+campaign, Instant Action (wingmen and waves) and every world AI never reach it. Before the change,
+the user's match log read 21 launches over 15 veteran bots in about 3.7 minutes, 0.38 per bot per
+minute. Measured on the hidden desktop, before (the two arming lines removed) and after, with a
+local `--vs --mission=MP1 --vs-bots=15 --mute` under `--screenshot`'s fixed clock (seed 1, nobody
+flying the pane), counting `rocket: playerN launched` lines for seats 2 to 16 and
+`rearm: bot seat N breaks off` lines by reason:
+
+| Run | Rule | Sim span | Launches | Per bot per minute | Rearms, rockets out / hull |
+|---|---|---|---|---|---|
+| 3600 frames | 30 s, 200-800 m, roll (before) | 60 s | 7 | 0.47 | 0 / 0 |
+| 3600 frames | 20 s, 1-900 m, no roll | 60 s | 28 | 1.87 | 0 / 1 |
+| 10800 frames | before | 180 s | 13 | 0.29 | 0 / 9 |
+| 10800 frames | after | 140.8 s (the default kill target ended it) | 64 | 1.82 | 0 / 5 |
+| 21600 frames, `--vs-kills=0 --vs-time=0` | after | 360 s | 147 | 1.63 | 1 / 22 |
+
+The rate rose four to six times, to about 1.6 to 1.9 per bot per minute, all fifteen bots launching
+over the six minutes. It stays under the three a minute the 20 s interval allows, because a bot
+launches only in `Pursue`, inside the quick-draw cone and within 5° of the lead. The rocket trigger fired once in six minutes
+(seat 6): a death and a hull rearm both refill the racks, and the hull trigger, at 22, still fires
+far more often while no person is flying.
+
+**Approach (landed).** `AiRocketeer` gains two named switches. `UseWingmanRule()` sets `MinRangeM`,
+`MaxRangeM` and `RefireSeconds` from the three `Loadout.Wingman*` constants and raises `WingmanRule`,
+under which `Solve` reads the rocketeer's own window and interval for every pylon, whatever the
+pylon carries; that mirrors `FUN_00444300` writing its literals over every slot, and a bot's stock
+fit authors 0 today in any case. `FiresOnFailedRoll` (default false, the `Network` override at
+`0x004b6b84`): the dice are still drawn after the lockout is stamped, so the bot's ordnance stream
+advances as before, and a failed draw launches. The verdict reads `dice fail, launched anyway`.
+`AiFlightAssembler.ArmSeatPilot`, after `PreparePilot` and beside B11's `PlayersPreferred = false`,
+calls both on the bot's rocketeer and logs `bot: '<plane>' launches every 20 s over 1-900 m, a
+failed roll launching anyway`. A local bot (C20) arms through the same method. The remake-only
+Pursue-only firing hold (`FlightController.DriveAiRocketeer`, "Only Pursue shoots") is unchanged
+and applies to a bot as to every AI, so a bot launches only while it pursues. Docs:
+`docs/org/aiPilot/aiWeapons.md` (a bot-seat paragraph under "What `AiGunner` runs", and a pointer
+from the wingman's `Network` gate), `docs/org/multiplayer-rearm.md` (the bot's rate), the
+`AiRocketeer.cs` and `AiFlightAssembler.cs` architecture entries, and B17's rate sentence.
+
+**Model recommendation.** Sonnet: two switches on an engine-free class and one arming block. The
+part that wants care is proving the world AI untouched, which the `net-seats` control does.
+
+**Verify.** Units in `AiRocketeerTests` (10 new, 38 in the class): a failed roll launches with
+`FiresOnFailedRoll` and does not without it, on the same stamped lockout (the control); the override
+still draws the dice once; under `UseWingmanRule` 50 m, 150 m and 850 m launch and 950 m does not,
+on a 20 s lockout; the rule stands over a pylon carrying 350 to 800 m and 5 s (a 300 m shot launches
+on 20 s); a fresh launcher, which is what `PreparePilot` builds for a world AI, keeps 30 s,
+200 to 800 m, the roll and no rule; and the rule with the override launches 15 times over 299 s at
+60 Hz. Engine: `net-seats` reads the host bot's rocketeer on the rule (20 s, 1 to 900 m) with the
+override, and a world AI spawned through the same `FlightRoster.SpawnAi` and assembler keeps
+30 s, 200 to 800 m and the roll (control); `versus-local-bot` reads the rule and the override on
+the local bot in all four cells. Able-to-fail: with the two lines removed from `ArmSeatPilot`,
+`net-seats` fails its bot check (30 s over 200-800 m, rule False, override False) and
+`versus-local-bot` fails four checks. The measurement above, through `RunProbe.ps1`. Runs in
+`bots-b18`: `RunTests.ps1 -Filter
+'net-bot-,versus-local-bot,rearm,ai-,instant-action,campaign-roster,net-seats' -Shards 4 -SkipUnits
+-SkipGoldens -SkipHitch` 55 passed / 0 failed (every `net-bot-*`, `versus-local-bot`,
+`versus-local-bot-graze`, `net-rearm-deathmatch`, `net-rearm-zeppelins`, `ai-engine-rearm`, the
+`ai-` suites, `instant-action*`, `campaign-roster*`, `net-seats`); `-Filter
+'wingman,warhawk,torpedo' -Shards 4 -SkipGoldens -SkipHitch` units 6370 passed / 0 failed / 3
+skipped, engine 8 passed / 0 failed; engine errors clean on every run. `CheckCommentCaps.ps1`,
+`CheckDocEntries.ps1`, `CheckEncoding.ps1` and `CheckItemIds.ps1` clean.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** Never set the override or the wingman rule in `PreparePilot`: Instant Action and the
+campaign fly the decoded single-player gate, the roll. Keep drawing the dice under the override, or
+the bot's ordnance stream shifts and a seeded run reads differently. A suite that keeps a bot in
+combat with rockets left must allow one launch per 20 s with no roll. The Pursue-only hold is the
+remake's, not the original's; lifting it raises the rate for every AI at once, guns included.
 
 # Wave C, lobby and local setup
 

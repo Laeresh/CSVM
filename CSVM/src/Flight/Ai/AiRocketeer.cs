@@ -92,6 +92,11 @@ public sealed class AiRocketeer
     /// (docs/org/aiPilot/aiWeapons.md, "The fire routine").</summary>
     public float RefireSeconds = 30f;
 
+    /// <summary>A failed roll launches anyway: the original's <c>Network</c> override, read only
+    /// on a failed roll at <c>0x004b6b84</c>. The dice are still drawn, so the stream advances
+    /// as before. Off for every single-player AI, where the roll is the gate.</summary>
+    public bool FiresOnFailedRoll;
+
     private readonly Func<float> _roll;
     private readonly Dictionary<int, float> _slotLockouts = new();
     private float _lockout;
@@ -105,8 +110,9 @@ public sealed class AiRocketeer
         _roll = roll;
     }
 
-    /// <summary>True when this tick's geometry passed every gate and the dice came up, the AI's
-    /// rocket trigger, replacing the human one for a non-human pilot.</summary>
+    /// <summary>The AI's rocket trigger, replacing the human one for a non-human pilot. True when
+    /// this tick's geometry passed every gate and the dice came up or were overridden
+    /// (<see cref="FiresOnFailedRoll"/>).</summary>
     public bool WantsFire { get; private set; }
 
     /// <summary>The hardpoint the walk settled on, or -1. Set whenever a pylon clears the
@@ -131,6 +137,21 @@ public sealed class AiRocketeer
     /// <summary>The gate and pylon behind <see cref="LastVerdict"/> without its numbers, so the
     /// host logs a verdict when the GATE changes rather than every metre the range moves.</summary>
     public string LastVerdictKey { get; private set; } = string.Empty;
+
+    /// <summary>True once <see cref="UseWingmanRule"/> ran: the vehicle's window and interval then
+    /// stand for every pylon, whatever window or interval a pylon carries.</summary>
+    public bool WingmanRule { get; private set; }
+
+    /// <summary>The original's rule for an AI flying a hangar fit. Its wingman slot builder
+    /// (<c>FUN_00444300</c>) writes 1 to 900 m and 20 s into every ordnance slot. No pylon's own
+    /// numbers survive it.</summary>
+    public void UseWingmanRule()
+    {
+        MinRangeM = Loadout.WingmanMinRangeM;
+        MaxRangeM = Loadout.WingmanMaxRangeM;
+        RefireSeconds = Loadout.WingmanOrdnanceRefireS;
+        WingmanRule = true;
+    }
 
     /// <summary>Whether both timers a launch stamps have run out for this pylon, the vehicle-wide
     /// lockout and the slot's own: the acquisition's gasbag gate reads it (<c>FUN_00420070</c>),
@@ -207,8 +228,8 @@ public sealed class AiRocketeer
             // it expire alongside the vehicle-wide timer the same launch set.
             if (_slotLockouts.TryGetValue(p.Index, out float slotLockout) && slotLockout > 0f)
                 continue;
-            float minRange = p.MinRangeM > 0f ? p.MinRangeM : MinRangeM;
-            float maxRange = p.MaxRangeM > 0f ? p.MaxRangeM : MaxRangeM;
+            float minRange = !WingmanRule && p.MinRangeM > 0f ? p.MinRangeM : MinRangeM;
+            float maxRange = !WingmanRule && p.MaxRangeM > 0f ? p.MaxRangeM : MaxRangeM;
             float sep2 = p.MountPos.DistanceSquaredTo(targetPos);
             if (sep2 < minRange * minRange || sep2 > maxRange * maxRange)
             {
@@ -247,14 +268,16 @@ public sealed class AiRocketeer
             }
             SelectedPylon = p.Index;
             LaunchDirWorld = (basis * clamped).Normalized();
-            float refire = p.RefireSeconds > 0f ? p.RefireSeconds : RefireSeconds;
+            float refire = !WingmanRule && p.RefireSeconds > 0f ? p.RefireSeconds : RefireSeconds;
             _lockout = refire;
             _slotLockouts[p.Index] = refire;
             // The dice, last and only here. Inclusive, as the original's compare is.
-            WantsFire = _roll() <= QuickDrawChance;
+            bool rolled = _roll() <= QuickDrawChance;
+            WantsFire = rolled || FiresOnFailedRoll;
+            string dice = rolled ? "pass" : FiresOnFailedRoll ? "fail, launched anyway" : "fail";
             LastVerdict = FormattableString.Invariant(
-                $"pylon{p.Index} taken, dice {(WantsFire ? "pass" : "fail")}, next in {refire:0} s");
-            LastVerdictKey = $"taken:{p.Index}:{WantsFire}";
+                $"pylon{p.Index} taken, dice {dice}, next in {refire:0} s");
+            LastVerdictKey = $"taken:{p.Index}:{rolled}";
             return;
         }
         LastVerdict = passedOver;

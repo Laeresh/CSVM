@@ -112,7 +112,7 @@ internal static class NetBotRearmSuites
     }
 
     // ABLE-TO-FAIL CONTROL for the run below: half a load of guns and rockets and half a hull call
-    // for nothing. The rocketeer's 30 s lockout lets it launch once at most in the window, so a
+    // for nothing. The rocketeer's 20 s lockout lets it launch once at most in the window, so a
     // round left on every pylon cannot all go.
     private static void FightsOnAboveTheThresholds(TestContext ctx, GameSession[] peers, FlightController bot)
     {

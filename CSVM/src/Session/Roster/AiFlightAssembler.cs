@@ -310,7 +310,8 @@ internal sealed class AiFlightAssembler
     /// the same skill tables, and the airframe's ranges. Its nine ratings are a personality rolled
     /// on <see cref="Rng.Bots"/> and shifted by <paramref name="tier"/> (<see cref="BotSeats.Ratings"/>);
     /// <c>--ai-attack=</c> pins them instead. The human path builds the seat's aeroplane, so no tier
-    /// reaches its hull, fit or spawn.</summary>
+    /// reaches its hull, fit or spawn. No world AI passes here, so only a bot launches on the
+    /// wingman rule with no roll.</summary>
     public void ArmSeatPilot(AiPilot pilot, PlaneStats stats, string planeName, int team, Net.NetBotSkill tier)
     {
         var ratings = BotSeats.Ratings(BotSeats.Personality(Rng.Stream(Rng.Bots).Randi()), tier);
@@ -323,6 +324,15 @@ internal sealed class AiFlightAssembler
         if (pilot.Gunner is { } gunner)
         {
             gunner.PlayersPreferred = false;   // a Dogfight ranks a person and a bot alike
+        }
+
+        if (pilot.Rocketeer is { } rocketeer)
+        {
+            // A hangar fit flown in a networked mode: the original's wingman window and interval,
+            // and its networked override of a failed roll.
+            rocketeer.UseWingmanRule();
+            rocketeer.FiresOnFailedRoll = true;
+            Log.Info("weapons", $"bot: '{planeName}' launches every {rocketeer.RefireSeconds:0} s over {rocketeer.MinRangeM:0}-{rocketeer.MaxRangeM:0} m, a failed roll launching anyway");
         }
 
         if (pilot.Machine is { } machine)

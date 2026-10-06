@@ -128,11 +128,15 @@ pylon, or one flying with infinite ammunition, never runs out. The health share 
 with no original to match. It flies to the nearest base that serves it, and the base restores it by
 the rule above, pylons included, which a bot meets by flying through the radius.
 
-[Evidence: traced-to-code] A bot's rocketeer launches at most once per 30 s
-(`AiRocketeer.RefireSeconds`, the vehicle-wide lockout, since a stock fit authors none), and only on
-its ordnance roll. Each stock fit hangs two to eight high-explosive pylons of three rounds, so a bot
-needs at least 2.5 to 11.5 minutes alive and in pursuit to run its racks dry; in a short match the
-hull is the trigger that fires.
+[Evidence: traced-to-code] A bot's rocketeer flies the original's wingman rule with a failed roll
+launching anyway ([aiPilot/aiWeapons.md](aiPilot/aiWeapons.md#what-aigunner-runs)), so it launches
+once per 20 s whenever its target sits in the 1 to 900 m band, the quick-draw cone and the 5° aim
+gate while it pursues, at most three rockets a minute at every tier. Each stock fit hangs two to
+eight high-explosive pylons of three rounds, so a bot needs at least 2 to 8 minutes in pursuit to
+run its racks dry, after which it breaks off on `rockets out`. [Evidence: measured] In a local
+15-bot free-for-all on MP1 with nobody flying the pane, bots launched 1.6 to 1.9 rockets a minute
+each; over six minutes the rocket trigger fired once and the hull trigger 22 times, since a death
+and a hull rearm both refill the racks.
 
 [Evidence: measured] C1's MP1 base is a fly-through bay. Level rays from the node meet `racmplx`'s
 walls 42 m and 47 m to either side on X, its roof 28 m above and its floor 16 m below, and the hall

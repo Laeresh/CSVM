@@ -119,6 +119,8 @@ internal static class LocalBotSuites
         ctx.Check(!bot.IsHumanPiloted && !bot.RemoteOwned && bot.Pilot is { Gunner.PlayersPreferred: false, Machine: not null }
                   && bot.PlayerIndex == BotSeat,
             $"[{cell}] the bot flies on an armed AI pilot under its seat index (human {bot.IsHumanPiloted}, shooter {bot.PlayerIndex})");
+        ctx.Check(bot.Pilot?.Rocketeer is { WingmanRule: true, FiresOnFailedRoll: true },
+            $"[{cell}] and its ordnance takes the wingman rule with a failed roll launching, as a network bot's does");
         ctx.Check(bot.RespawnRequest == null && bot.RespawnPlacement != null
                   && pane.RespawnRequest == null && pane.RespawnPlacement != null,
             $"[{cell}] every seat's return is placed by this machine's rotation, none asked of a host (bot asks {bot.RespawnRequest != null}, pane asks {pane.RespawnRequest != null})");

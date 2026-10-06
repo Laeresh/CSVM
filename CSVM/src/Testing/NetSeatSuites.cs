@@ -6,6 +6,7 @@ using System.Text;
 using CSVM.Bindings;
 using CSVM.Extraction;
 using CSVM.Flight;
+using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
 using CSVM.Flight.Camera;
 using CSVM.Flight.Modes;
@@ -50,8 +51,10 @@ internal static class NetSeatSuites
         + "is built with no HUD in a pane, no pad, no keyboard, no pause key, no target selection "
         + "and no camera-anchored cue, while the local seat in the same build has all of them; a "
         + "bot seat this host flies is built paneless the same way, with no menu pick and no pose "
-        + "buffer, steered by an armed AI pilot under its own seat index, and joins the seat list "
-        + "rather than the roster's AI")]
+        + "buffer, steered by an armed AI pilot under its own seat index, its ordnance on the "
+        + "wingman's 20 s and 1-900 m with a failed roll launching while a world AI from the same "
+        + "assembler keeps 30 s, 200-800 m and the roll, and joins the seat list rather than the "
+        + "roster's AI")]
     internal static void RemoteSeatsWithoutPanes(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -166,6 +169,20 @@ internal static class NetSeatSuites
                 $"and it is a seat, not one of the roster's AI, which the world link would replicate again ({flightRoster.AiAircraft.Count} AI)");
             ctx.Check(bot.Pilot?.Gunner is { PlayersPreferred: false },
                 $"and its gunner ranks a person at the weight it gives a bot (players preferred {bot.Pilot?.Gunner?.PlayersPreferred})");
+            var botRockets = bot.Pilot?.Rocketeer;
+            ctx.Check(botRockets is { WingmanRule: true, FiresOnFailedRoll: true }
+                      && botRockets.RefireSeconds == Loadout.WingmanOrdnanceRefireS
+                      && botRockets.MinRangeM == Loadout.WingmanMinRangeM && botRockets.MaxRangeM == Loadout.WingmanMaxRangeM,
+                $"and its ordnance flies the wingman rule with a failed roll launching anyway ({Rockets(botRockets)})");
+
+            // ABLE-TO-FAIL CONTROL: a world AI from the same assembler never passes the bot arming.
+            // It keeps the fallback interval, the band and the roll.
+            var worldAt = pilots[0].WorldPosition + (Vector3.Up * 400f);
+            var world = flightRoster.SpawnAi(new AiSpawn(RemotePlane, worldAt, worldAt + Vector3.Forward,
+                AiPilot.HoldingCourse(worldAt, worldAt + Vector3.Forward), Team: 2, AttackRating: 5));
+            var worldRockets = world.Pilot?.Rocketeer;
+            ctx.Check(worldRockets is { WingmanRule: false, FiresOnFailedRoll: false, RefireSeconds: 30f, MinRangeM: 200f, MaxRangeM: 800f },
+                $"ABLE-TO-FAIL CONTROL: a world AI from the same assembler keeps 30 s over 200-800 m and the roll ({Rockets(worldRockets)})");
 
             // ABLE-TO-FAIL CONTROL: the local seat in this same build takes every one of those.
             // The assertions above cannot be passing because the roster built nothing at all.
@@ -347,6 +364,11 @@ internal static class NetSeatSuites
                 PadAssignment = padAssignment,
                 PauseState = new PauseState(),
             }, field.Picker);
+
+    private static string Rockets(AiRocketeer? r) =>
+        r == null
+            ? "no launcher"
+            : $"every {r.RefireSeconds:0} s over {r.MinRangeM:0}-{r.MaxRangeM:0} m, wingman rule {r.WingmanRule}, failed roll launches {r.FiresOnFailedRoll}";
 
     // One stored keymap with a single action moved onto Z, through the real serializer.
     private static void WriteKeymap(string dir, int player, InputAction action)
