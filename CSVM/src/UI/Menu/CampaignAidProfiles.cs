@@ -128,6 +128,12 @@ public static class CampaignAidProfiles
             {
                 alive = false;
             }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                // Access denied: the pid now names a process this user cannot query, such as a
+                // system service. A test shard is never one, so the store's owner has exited.
+                alive = false;
+            }
 
             if (!alive)
             {
