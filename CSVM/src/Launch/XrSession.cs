@@ -129,6 +129,29 @@ public partial class XrSession : Node
         return null;
     }
 
+    /// <summary>Sets the eye size <paramref name="xr"/> renders at to <paramref name="scale"/> times
+    /// the runtime's recommendation, OpenXR or the stand-in, and logs the size it now asks for. It
+    /// applies live: Godot 4.7 recreates the swapchain on the next frame whose size differs.</summary>
+    public static Vector2 ApplyRenderScale(XRInterface xr, float scale)
+    {
+        switch (xr)
+        {
+            case OpenXRInterface openXr:
+                openXr.RenderTargetSizeMultiplier = scale;
+                break;
+            case XrSimInterface sim:
+                sim.RenderTargetSizeMultiplier = scale;
+                break;
+        }
+
+        Vector2 eye = xr.GetRenderTargetSize();
+        Log.Info("core", $"xr: render scale {scale:0.##} eye_px={eye.X:0}x{eye.Y:0}");
+        return eye;
+    }
+
+    /// <summary>This session's interface at <paramref name="scale"/> (the static form).</summary>
+    public void ApplyRenderScale(float scale) => ApplyRenderScale(_xr, scale);
+
     public override void _Process(double delta)
     {
         if (_recenterPending is { } why && HeadTracked())

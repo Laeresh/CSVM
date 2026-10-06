@@ -274,6 +274,12 @@ internal static class XrViewSuites
         ctx.WriteArtifact("test-xr-view-cutscene.txt", report.ToString());
     }
 
+    /// <summary>One human flying <paramref name="hold"/> in <paramref name="mode"/> under the stand-in
+    /// headset's VR seat, for another suite's <paramref name="sortie"/>. False when no aircraft built.</summary>
+    internal static bool FlyWithHeadset(TestContext ctx, PilotViewMode mode, string hold, XrChase? headset,
+        Action<GameClock, FlightController, XrRig, Vector3> sortie) =>
+        WithHeadsetFlight(ctx, mode, hold, headset, sortie);
+
     // The cycle key three times from Cockpit: Nose, Chase, Cockpit, each press one cut.
     private static void CycleSortie(TestContext ctx, GameClock clock, FlightController plane, XrRig rig,
         StringBuilder report)

@@ -178,13 +178,12 @@ public sealed partial class LaunchMenu : CanvasLayer
     // in its order: reset the keymap, abandon the staged edits, commit them. Accept stays last. TUNE.
     private const int ControlsFooterRows = 4;
     private const int ControlsFolderButton = 0;
-    // The Options screen's stepper rows, above the Controls door and the apply row. The screen
-    // is a form the cursor walks top to bottom. First the five gameplay settings: the three the
-    // Original presentation's GAME OPTIONS page draws, in its order, then the targeting switch
-    // and the rumble. Then the graphics mode and its view distance. The six display settings, the
-    // shadow quality and VR mode follow in the order the Original presentation's VIDEO page draws
-    // them. Then the four volume levels in the order its AUDIO page draws them, then the two doors.
-    private const int OptionsStepperRows = 19;
+    // The Options screen's stepper rows, above the Controls door and the apply row, walked top to
+    // bottom. First the three GAME OPTIONS settings in Original's order, the targeting switch and the
+    // rumble. Then the graphics mode and its view distance, and the VIDEO page's rows in its order.
+    // The headset's render scale and vignette follow. Then the four volume levels in the AUDIO
+    // page's order, then the two doors.
+    private const int OptionsStepperRows = 21;
     // How many Options rows show at once. Twenty rows do not fit the band at 720p, and a band
     // sized to all of them shrinks every row. The screen is windowed at the Controls list's
     // height, which is known to fit.
@@ -328,6 +327,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string? _monitorChoice, _resolutionChoice, _displayModeChoice, _vsyncChoice, _renderScaleChoice, _antiAliasingChoice, _shadowQualityChoice;
     // VR mode as saved, null while never set, which reads as off.
     private bool? _vrModeChoice;
+    // The headset's render scale and vignette words as saved, null while never set.
+    private string? _vrRenderScaleChoice, _vrVignetteChoice;
     // The size the options file named when this screen opened, which the size row offers as an entry
     // of its own (ResolutionSizes). It is held apart from the stepped choice, so a hand-written
     // size stays in the list after a step lands elsewhere. A step back then reaches it again.
@@ -1338,6 +1339,10 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private static Control Spacer(int height) => new() { CustomMinimumSize = new Vector2(0, height) };
 
+    // A word row's sideways step over its vocabulary, a never-set word standing on the default.
+    private static string StepWord(IReadOnlyList<string> words, string? word, string fallback, int dir) =>
+        words[DisplaySettingRows.Step(DisplaySettingRows.WordIndex(words, word, fallback), dir, words.Count)];
+
     // One of the three bands: a full-width row whose single content column is centred in it.
     private static HBoxContainer Band(Node parent)
     {
@@ -1876,7 +1881,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         switch (_screen)
         {
             case Screen.Options:
-                // The nineteen choice rows are steppers; the doors under them have nothing to step.
+                // The twenty-one choice rows are steppers; the doors under them have nothing to step.
                 switch (_optionsIndex)
                 {
                     case 0: StepDifficultyChoice(dir); return true;
@@ -1894,10 +1899,12 @@ public sealed partial class LaunchMenu : CanvasLayer
                     case 12: StepAntiAliasingChoice(dir); return true;
                     case 13: StepShadowQualityChoice(dir); return true;
                     case 14: ToggleVrModeChoice(); return true;
-                    case 15: _audioMasterChoice = StepLevel(_audioMasterChoice, AudioMix.DefaultMaster, dir); return true;
-                    case 16: _audioMusicChoice = StepLevel(_audioMusicChoice, AudioMix.DefaultMusic, dir); return true;
-                    case 17: _audioEffectsChoice = StepLevel(_audioEffectsChoice, AudioMix.DefaultEffects, dir); return true;
-                    case 18: _audioVoiceChoice = StepLevel(_audioVoiceChoice, AudioMix.DefaultVoice, dir); return true;
+                    case 15: _vrRenderScaleChoice = StepWord(VrRenderScaleSetting.Words, _vrRenderScaleChoice, VrRenderScaleSetting.Default, dir); return true;
+                    case 16: _vrVignetteChoice = StepWord(VrVignetteSetting.Words, _vrVignetteChoice, VrVignetteSetting.Default, dir); return true;
+                    case 17: _audioMasterChoice = StepLevel(_audioMasterChoice, AudioMix.DefaultMaster, dir); return true;
+                    case 18: _audioMusicChoice = StepLevel(_audioMusicChoice, AudioMix.DefaultMusic, dir); return true;
+                    case 19: _audioEffectsChoice = StepLevel(_audioEffectsChoice, AudioMix.DefaultEffects, dir); return true;
+                    case 20: _audioVoiceChoice = StepLevel(_audioVoiceChoice, AudioMix.DefaultVoice, dir); return true;
                     default: return false;
                 }
             case Screen.Network:
@@ -2029,7 +2036,8 @@ public sealed partial class LaunchMenu : CanvasLayer
                         Difficulty.Word(_difficultyChoice), _monitorChoice, _resolutionChoice,
                         _displayModeChoice, _vsyncChoice, _renderScaleChoice, _antiAliasingChoice, _shadowQualityChoice, _audioMasterChoice,
                         _audioMusicChoice, _audioEffectsChoice, _audioVoiceChoice, _nearestAfterKillChoice,
-                        _rumbleChoice, _defaultViewChoice, _autoHeadTurnChoice, _viewDistanceChoice, _vrModeChoice));
+                        _rumbleChoice, _defaultViewChoice, _autoHeadTurnChoice, _viewDistanceChoice, _vrModeChoice,
+                        _vrRenderScaleChoice, _vrVignetteChoice));
                 }
 
                 break;
@@ -3477,6 +3485,8 @@ public sealed partial class LaunchMenu : CanvasLayer
         _antiAliasingChoice = saved.AntiAliasing;
         _shadowQualityChoice = saved.ShadowQuality;
         _vrModeChoice = saved.VrMode;
+        _vrRenderScaleChoice = saved.VrRenderScale;
+        _vrVignetteChoice = saved.VrVignette;
         _audioMasterChoice = saved.AudioMaster;
         _audioMusicChoice = saved.AudioMusic;
         _audioEffectsChoice = saved.AudioEffects;
@@ -4523,11 +4533,13 @@ public sealed partial class LaunchMenu : CanvasLayer
                 12 => $"Anti-aliasing: {AntiAliasingChoiceLabel()}",
                 13 => $"Shadow quality: {ShadowQualityChoiceLabel()}",
                 14 => $"VR mode (experimental): {(_vrModeChoice == true ? "On" : "Off")}",
-                15 => $"Master volume: {LevelLabel(_audioMasterChoice, AudioMix.DefaultMaster)}",
-                16 => $"Music volume: {LevelLabel(_audioMusicChoice, AudioMix.DefaultMusic)}",
-                17 => $"Effects volume: {LevelLabel(_audioEffectsChoice, AudioMix.DefaultEffects)}",
-                18 => $"Voice volume: {LevelLabel(_audioVoiceChoice, AudioMix.DefaultVoice)}",
-                19 => ControlsRow,
+                15 => $"VR render scale: {VrRenderScaleSetting.Label(_vrRenderScaleChoice)}",
+                16 => $"VR comfort vignette: {VrVignetteSetting.Label(_vrVignetteChoice)}",
+                17 => $"Master volume: {LevelLabel(_audioMasterChoice, AudioMix.DefaultMaster)}",
+                18 => $"Music volume: {LevelLabel(_audioMusicChoice, AudioMix.DefaultMusic)}",
+                19 => $"Effects volume: {LevelLabel(_audioEffectsChoice, AudioMix.DefaultEffects)}",
+                20 => $"Voice volume: {LevelLabel(_audioVoiceChoice, AudioMix.DefaultVoice)}",
+                21 => ControlsRow,
                 _ => "Apply and restart the menu",
             },
             Screen.Controls => $"{ControlsRowLabel(index)}   {ControlsRowValue(index)}",
@@ -4942,11 +4954,13 @@ public sealed partial class LaunchMenu : CanvasLayer
             12 => "Select how edges are smoothed. FSR 2.2 also upscales a Render Scale below 100%. Applies at once.",
             13 => DisplaySettingRows.ShadowQualityDetail(_graphicsChoice),
             14 => DisplaySettingRows.VrModeDetail(OperatingSystem.IsWindows()),
-            15 => "Set the overall volume of all sounds. Heard once the choices are applied.",
-            16 => "Set the volume of the in-game music. Heard once the choices are applied.",
-            17 => "Set the volume of the sound effects. Heard once the choices are applied.",
-            18 => "Set the volume of the voices. Heard once the choices are applied.",
-            19 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
+            15 => DisplaySettingRows.VrRenderScaleDetail,
+            16 => DisplaySettingRows.VrVignetteDetail,
+            17 => "Set the overall volume of all sounds. Heard once the choices are applied.",
+            18 => "Set the volume of the in-game music. Heard once the choices are applied.",
+            19 => "Set the volume of the sound effects. Heard once the choices are applied.",
+            20 => "Set the volume of the voices. Heard once the choices are applied.",
+            21 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
             _ => "Saves every choice and restarts the menu at its top level; unfinished setup is discarded.",
         },
         Screen.Controls => ControlsDetail(focus),

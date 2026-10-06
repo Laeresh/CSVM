@@ -174,6 +174,11 @@ public sealed class CameraController
     private XrAnchor? _xrWrite;
     private XrChase? _headset;
 
+    // Under a headset with a fade, the view keys pressed while the view darkens. They land together
+    // once it is black: the selection they walked to, then the flyby.
+    private PilotViewMode? _askedView;
+    private bool _askedFlyby;
+
     public CameraController(Camera3D camera, CamParams cam, Func<InputAction, bool> held, int pinnedView,
         PilotViewMode viewMode = PilotViewMode.Chase, Vector3 cockpitCameraOffset = default,
         Func<float>? staticDraw = null)
@@ -252,6 +257,11 @@ public sealed class CameraController
         }
     }
 
+    /// <summary>The headset's comfort fade, which <see cref="XrRig"/> hands over each frame. Under a
+    /// headset a view key waits on it, so the switch lands on a black frame. Null switches at once.
+    /// </summary>
+    public UI.Boards.XrFade? Fade { get; set; }
+
     /// <summary>How many cuts this camera has made. A cut is a view change, a respawn, a static
     /// camera's new spot or a new aircraft to watch. <see cref="XrRig"/> raises its own on a change.
     /// </summary>
@@ -287,19 +297,38 @@ public sealed class CameraController
     /// <summary>One frame of the view-selection controls, each acted on once per press. The cycle
     /// (<see cref="CycleCockpitViews"/>) and the direct Chase select come from each device half on
     /// its own edge, so a pad-only pilot reaches every view. The flyby comes last. The bindings are
-    /// this port's; the original's binding menu also puts its cycle on a joystick button.</summary>
+    /// this port's; the original's binding menu also puts its cycle on a joystick button. Under a
+    /// headset with a <see cref="Fade"/> the presses wait for black and land together.</summary>
     public void StepViewKeys(bool cycleKey, bool chaseKey, bool cyclePad, bool chasePad, bool flyby)
     {
+        if (_headset == null || Fade == null)
+        {
+            _askedView = null;
+            _askedFlyby = false;
+            if (ViewKeyEdge(0, cycleKey))
+                CycleCockpitViews();
+            if (ViewKeyEdge(1, chaseKey))
+                SelectChase();
+            if (ViewKeyEdge(2, cyclePad))
+                CycleCockpitViews();
+            if (ViewKeyEdge(3, chasePad))
+                SelectChase();
+            if (ViewKeyEdge(4, flyby))
+                EnterFlyby();
+            return;
+        }
+
         if (ViewKeyEdge(0, cycleKey))
-            CycleCockpitViews();
+            AskView(PilotView.Cycle(_askedView ?? ViewMode));
         if (ViewKeyEdge(1, chaseKey))
-            SelectChase();
+            AskView(PilotViewMode.Chase);
         if (ViewKeyEdge(2, cyclePad))
-            CycleCockpitViews();
+            AskView(PilotView.Cycle(_askedView ?? ViewMode));
         if (ViewKeyEdge(3, chasePad))
-            SelectChase();
-        if (ViewKeyEdge(4, flyby))
-            EnterFlyby();
+            AskView(PilotViewMode.Chase);
+        if (ViewKeyEdge(4, flyby) && !FlybyActive)
+            _askedFlyby = true;
+        LandAskedViews(Fade);
     }
 
     /// <summary>Enter the death camera: one spot chosen on the next step and held for the whole
@@ -893,5 +922,40 @@ public sealed class CameraController
         bool pressed = down && !_viewKeyPrev[slot];
         _viewKeyPrev[slot] = down;
         return pressed;
+    }
+
+    // A view press under a headset: the selection it walks to, which a later flyby press follows.
+    private void AskView(PilotViewMode mode)
+    {
+        _askedView = mode;
+        _askedFlyby = false;
+    }
+
+    // Lands the asked views once the fade is black. A press that would not move the camera (the
+    // view already standing, nothing in the flyby) asks for no fade at all.
+    private void LandAskedViews(UI.Boards.XrFade fade)
+    {
+        if (_askedView == ViewMode && !FlybyActive)
+        {
+            _askedView = null;
+        }
+
+        if ((_askedView == null && !_askedFlyby) || !fade.Cover())
+        {
+            return;
+        }
+
+        if (_askedView is { } view)
+        {
+            Select(view);
+        }
+
+        if (_askedFlyby)
+        {
+            EnterFlyby();
+        }
+
+        _askedView = null;
+        _askedFlyby = false;
     }
 }

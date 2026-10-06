@@ -388,6 +388,9 @@ the `UI.Menu` presentation tree. `Campaign`, `Screens`, `Overlays` and `Labs` ar
 - `src/UI/Boards/CanvasRehost.cs`, the root's canvas layers of chosen numbers drawn into a SubViewport, their controls left in the root's tree.
 - `src/UI/Boards/TheaterLayout.cs`, the theater screen's seat, size, resolution, hosted layers, cutscene rect and pointer hit, engine-free.
 - `src/UI/Boards/StereoPair.cs`, the 3D-cinema pair a cutscene plays as on the theater screen: eye cameras, converging frusta and the parallax law, engine-free.
+- `src/UI/Boards/ComfortQuads.cs`, the headset's comfort fade and tunnel vignette as two black quads on the headset layer, the fade over the theater unless a board shows.
+- `src/UI/Boards/XrFade.cs`, the comfort fade's clock: every cut lands on a black frame, a view key darkening first, engine-free.
+- `src/UI/Boards/XrVignette.cs`, the tunnel vignette's curve over the XR origin's own turn rate, engine-free.
 - `src/UI/Boards/TheaterPointer.cs`, the hand controllers' laser on the theater screen: beam, dot, trigger clicks pushed into the root, and the override of the one pointer source.
 - `src/UI/Boards/ScreenPointer.cs`, the one pointer the polled readers take: the desktop mouse, or the laser while it stands in.
 - `src/UI/Boards/BlendWash.cs`, one pane's victim-routed wash: the sonic, flash and smoke blend rule and its attack, sustain and release envelope.
@@ -616,6 +619,8 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/EngineGapCost.cs`, the frame time outside every scene-tree callback, split into the engine step after a tick, the end-of-frame flush, the draw and the idle rest.
 - `src/Utils/RenderPoses.cs`, the render half of the fixed-tick simulation: the pose a realtime session draws between two simulation steps.
 - `src/Utils/RenderScaleSetting.cs`, the render scale: the saved/config `WordSetting` lookup over 50 to 200 percent of native, capped at native under FSR 2.2, resolved once at launch for the four 3D viewports.
+- `src/Utils/VrRenderScaleSetting.cs`, the headset's render scale: the flag/saved `WordSetting` lookup over 50 to 125 percent of the runtime's eye size, applied live as OpenXR's multiplier.
+- `src/Utils/VrVignetteSetting.cs`, the headset's comfort vignette (off, mild, strong): the flag/saved `WordSetting` lookup over off and the level the comfort quads read.
 - `src/Utils/ResolutionSetting.cs`, the window size: the sizes a screen can hold, the saved one against the screen's own size, and the one place the window size is set.
 - `src/Utils/Rng.cs`, the session's one master seed and the named subsystem generators every random draw derives from.
 - `src/Utils/SceneCopy.cs`, a node subtree's copy in place of `Duplicate()`, which under the separate render thread corrupts memory on any geometry node.

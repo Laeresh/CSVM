@@ -83,6 +83,10 @@ public sealed class XrRig
     /// still centres on the eye the pair is drawn from.</summary>
     public bool Screening { get; private set; }
 
+    /// <summary>The comfort fade a view key waits on, handed to the pilot's camera on every
+    /// <see cref="Place()"/>. Set by the composition; null cuts at once.</summary>
+    public UI.Boards.XrFade? Fade { get; set; }
+
     /// <summary>Makes <paramref name="pane"/> the one the headset flies.</summary>
     public void Bind(PlayerRig pane)
     {
@@ -125,6 +129,11 @@ public sealed class XrRig
         }
 
         Screening = screening;
+        if (views != null)
+        {
+            views.Fade = Fade;
+        }
+
         XrAnchor anchor;
         if (views == null)
         {

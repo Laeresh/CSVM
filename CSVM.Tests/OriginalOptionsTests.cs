@@ -454,6 +454,49 @@ public class OriginalOptionsTests
         Assert.False(exit.VrMode);
     }
 
+    /// <summary>Under a live headset the two comfort rows take the Display Mode and V-Sync lines. Each
+    /// opens on the saved word and steps with wrap, and the apply carries both beside the hidden rows'
+    /// saved words, unchanged.</summary>
+    [Fact]
+    public void UnderAHeadsetTheComfortRowsStandInForDisplayModeAndVSync()
+    {
+        string windowed = DisplayWords.DisplayModes[0];
+        string vsyncOff = DisplayWords.VSyncChoices[1];
+        var host = Host(() => new OptionsDef { VrRenderScale = "70", DisplayMode = windowed, VSync = vsyncOff });
+        host.Module.Video.Headset = () => true;
+        host.Module.Video.Open();
+        var keys = host.Rows.Select(r => r.Key).ToArray();
+        Assert.DoesNotContain(OriginalVideoPage.DisplayModeKey, keys);
+        Assert.DoesNotContain(OriginalVideoPage.VSyncKey, keys);
+        Assert.True(Array.IndexOf(keys, OriginalVideoPage.VrVignetteKey) == 2 && Array.IndexOf(keys, OriginalVideoPage.VrRenderScaleKey) == 3,
+            "the vignette stands on the third line and the render scale on the fourth");
+
+        host.Module.Video.OpenOn(OriginalVideoPage.VrVignetteKey);
+        Assert.Equal("Off", Row(host, OriginalVideoPage.VrVignetteKey).Label);
+        StepX(host, 1);
+        Assert.Equal("mild", host.Module.Video.VrVignetteChoice);
+        Down(host);
+        Assert.Equal(OriginalVideoPage.VrRenderScaleKey, host.FocusedKey);
+        Assert.Equal("70%", Row(host, OriginalVideoPage.VrRenderScaleKey).Label);
+        StepX(host, 1);
+        Assert.Equal("80", host.Module.Video.VrRenderScaleChoice);
+        StepX(host, -1);
+        StepX(host, -1);
+        Assert.Equal("60", host.Module.Video.VrRenderScaleChoice);
+
+        var exit = ((IOriginalOptionsForm)host.Module).Apply();
+        Assert.Equal("60", exit.VrRenderScale);
+        Assert.Equal("mild", exit.VrVignette);
+        Assert.Equal(windowed, exit.DisplayMode);
+        Assert.Equal(vsyncOff, exit.VSync);
+
+        host.Module.Video.Headset = () => false;
+        host.Module.Video.Open();
+        keys = host.Rows.Select(r => r.Key).ToArray();
+        Assert.Contains(OriginalVideoPage.DisplayModeKey, keys);
+        Assert.DoesNotContain(OriginalVideoPage.VrRenderScaleKey, keys);
+    }
+
     /// <summary>The display-mode row: its list opens over the three words at the authored Viewing
     /// Range dropdown's own box. Picking one closes the list on it. ACCEPT CHANGES carries the
     /// store word rather than the label the row draws.</summary>
@@ -1297,6 +1340,18 @@ public class OriginalOptionsTests
     }
 
     [Fact]
+    public void TheVideoRowsUnderAHeadsetClearEachOtherAndTheirWordsOverTheFixture()
+    {
+        VideoRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), Measure, headset: true);
+    }
+
+    [ExtractedDataFact]
+    public void TheVideoRowsUnderAHeadsetClearEachOtherAndTheirWordsOverTheInstall()
+    {
+        VideoRowsAreClearOfEachOther(InstallLayout(out var measure), measure, headset: true);
+    }
+
+    [Fact]
     public void TheControlsRowsClearEachOtherAndTheirWordsOverTheFixture()
     {
         ControlsRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), Measure);
@@ -1351,17 +1406,22 @@ public class OriginalOptionsTests
     // The VIDEO page's rows, the same rule over its own plate. Each control must stand clear of the
     // title beside it, and the description must stop before the plaque column. That is what makes
     // the authored Shadows row carry a longer title and description than it was written for. The
-    // rows come back in authored order, since that is the order the cursor walks.
-    private static void VideoRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure)
+    // rows come back in authored order, since that is the order the cursor walks. Under a headset
+    // the comfort rows stand on the Display Mode and V-Sync lines.
+    private static void VideoRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure,
+        bool headset = false)
     {
         var host = Host(layout, measure);
+        host.Module.Video.Headset = () => headset;
         host.Module.Video.Open();
         var rows = host.Rows.ToArray();
         Assert.Equal(
             new[]
             {
-                OriginalVideoPage.MonitorKey, OriginalVideoPage.ResolutionKey, OriginalVideoPage.DisplayModeKey,
-                OriginalVideoPage.VSyncKey, OriginalVideoPage.RenderScaleKey, OriginalVideoPage.AntiAliasingKey,
+                OriginalVideoPage.MonitorKey, OriginalVideoPage.ResolutionKey,
+                headset ? OriginalVideoPage.VrVignetteKey : OriginalVideoPage.DisplayModeKey,
+                headset ? OriginalVideoPage.VrRenderScaleKey : OriginalVideoPage.VSyncKey,
+                OriginalVideoPage.RenderScaleKey, OriginalVideoPage.AntiAliasingKey,
                 OriginalVideoPage.ShadowQualityKey, OriginalVideoPage.VrModeKey, OriginalVideoPage.GraphicsKey,
                 OriginalVideoPage.AcceptKey, OriginalVideoPage.CancelKey,
             },

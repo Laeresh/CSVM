@@ -402,6 +402,20 @@ above native to 100 (`ClampFor`, which the VIDEO page applies when FSR 2.2 is pi
 to 100. `SavedWord` holds the `--det` guard. The resolve runs at launch and on a live apply, landing in the static `Scale`, whose one
 reader is `ViewportQuality.Apply`; `Launcher`'s `[world] graphics mode:` line announces it and any clamp.
 
+## src/Utils/VrRenderScaleSetting.cs
+The VR render scale, a headset setting: the multiple of the runtime's recommended eye size the session
+renders at, OpenXR's `render_target_size_multiplier`, which Godot 4.7 applies live by recreating the
+swapchain on the next frame whose size differs. It cuts the GPU's work and the runtime's compositing and
+encoding, where `RenderScaleSetting.cs` resamples the 3D inside that size; under a headset the two
+multiply, and the root's 2D layout (the eye's render target) shrinks with it. Words 50 to 125 percent;
+`Resolve` takes `--xr-render-scale=` over the saved `vrRenderScale` over 100, and `SavedWord`
+holds the `--det` guard. `Launch/XrSession.cs` applies it at boot and on every options apply.
+
+## src/Utils/VrVignetteSetting.cs
+The headset's comfort vignette as a word, `off`, `mild` or `strong`, and its `VrVignette` level.
+`Resolve` takes `--xr-vignette=` over the saved `vrVignette` over off, the shipped default, and
+`SavedWord` holds the `--det` guard. The composition sets `Current` at boot and on every options
+apply; `UI/Boards/ComfortQuads.cs` reads it each frame and `UI/Boards/XrVignette.cs` holds the curve.
 ## src/Utils/ScriptedWindow.cs
 Win32-only window hiding for scripted runs: `ScriptedWindow.Hide()` calls `ShowWindow(SW_HIDE)` on
 the native window handle. Fully static, one call site in `Launcher._Ready` right after the `--det`
@@ -409,7 +423,7 @@ block, where the same predicate drives both window hiding and the interactive ru
 
 ## src/Utils/OptionsStore.cs
 Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode, view distance and difficulty words, the six
-display settings (monitor index, resolution, display mode, V-Sync, render scale, anti-aliasing), the Enhanced shadow quality, the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn, VR mode (read only where `Launch/XrRelaunch.cs`'s dev-run rule allows), the remembered install folder (fully qualified or dropped), and the network callsign, voice and game name the Game and Player Information boxes remember. One file, `user://options.json`,
+display settings (monitor index, resolution, display mode, V-Sync, render scale, anti-aliasing), the Enhanced shadow quality, the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in, the automatic head turn, VR mode (read only where `Launch/XrRelaunch.cs`'s dev-run rule allows), the headset's render scale and comfort vignette words, the remembered install folder (fully qualified or dropped), and the network callsign, voice and game name the Game and Player Information boxes remember. One file, `user://options.json`,
 independent of `Session/Campaign/CampaignProfileStore.cs`. A missing or malformed file reads as empty, an unknown version invalidates it, an
 unknown value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
 `Version`. Four reads hold that one contract: a word set (`DisplayWords`, `DifficultyWords` and `ViewWords` hold the vocabularies, whose resolved tier and view mode belong to `Flight`), a shape predicate for the

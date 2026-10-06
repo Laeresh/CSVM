@@ -306,7 +306,10 @@ relaunches the executable with or without `--xr-mode on` (`CSVM/src/Launch/XrRel
 pause leaf's apply saves it and no more. A launch with it saved on relaunches itself once at boot.
 Under a headset or the `--xr-sim` stand-in the shared player setup holds one seat
 (`PlayerSetupFeature.SeatLimit`), so both join boards draw the seats past the captain's closed and a
-local Dogfight's gate says VR flies one seat. A launch that asked for OpenXR and plays flat posts a
+local Dogfight's gate says VR flies one seat. The headset's render scale and comfort vignette are
+ordinary options applied at once: Built-in shows their rows always, and Original's VIDEO page puts
+them on the Display Mode and V-Sync lines while a headset is live, those two settings meaning nothing
+there. A launch that asked for OpenXR and plays flat posts a
 `MenuNoticeFeature` notice, which Built-in writes on its error line and Original raises as its
 one-button box at the next show.
 

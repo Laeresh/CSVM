@@ -224,7 +224,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D, cutscenes, comfort and performance
 
 15. ◐ D15 Cutscenes as a stereo 3D-cinema pair on the theater screen
-16. ☐ D16 Comfort: fades, tunnel vignette, render-scale slider
+16. ◐ D16 Comfort: fades, tunnel vignette, render-scale slider
 17. ☐ D17 Port the screen-space effects to multiview
 18. ☐ D18 Performance pass to the 90 Hz budget
 19. ☐ D19 Spyglass as a binocular quad
@@ -2708,23 +2708,157 @@ values to tune are `StereoPair.ConvergenceOfCard` (below 1 deepens the scene and
 passed 3 skipped, engine 546 passed 2 skipped with clean engine errors, goldens 34/34
 hash-identical. The headset checks named above are still owed.
 
-## D16 ☐ Comfort: fades, tunnel vignette, render-scale slider
+## D16 ◐ Comfort: fades, tunnel vignette, render-scale slider
+
+**Outcome: built and pinned on the stand-in; the fade's feel and durations, the vignette's curve
+and strength, and the render scale are owed at the headset.** Every cut the headset sees lands on a
+black frame. A cut the game makes (`XrRig.Cut`: a respawn, a crash, a new aircraft, a static
+camera's re-site, the camera taken by another owner or handed back, so a cutscene's take and
+hand-back) snaps to black on its own frame and clears over 0.3 s. A view key (`F8`, D-pad down, the
+XR cycle button, `F7`) darkens over 0.15 s first and the view changes on the black frame. The first
+flight frame after a load lands on black. The mission end keeps C14's 2 s fade. The optional tunnel
+vignette (Off, Mild, Strong; off by default) closes in with the XR origin's own turn rate, and the VR
+render scale (50 to 125 %) sets OpenXR's render target multiplier, live.
 
 **Goal.** Respawn, mission end and view switch fade through black instead of cutting; an optional
 tunnel vignette scaled by angular rate is off by default; a VR render-scale slider sets the
 runtime's resolution multiplier.
 
-**Evidence (confidence: lead-only).** Decision 12. `Utils/ViewportQuality.cs` already owns
-`Scaling3DScale` for the flat viewports.
+**Evidence (confidence: traced to code and measured on the stand-in for the fade's timing and
+placement, the vignette's response and the render scale's reach; traced to the Godot 4.7-stable
+source for the render scale applying live; direction sound, magnitude TUNE for every duration, the
+curve and the scale's steps; lead-only for comfort until the author's run).** Reports
+`.scratch/test-xr-comfort-fade.txt`, `.scratch/test-xr-comfort-vignette.txt`; captures and
+instruments `.scratch/D16/` (`D16_burst.py`, `D16_hashes.ps1`).
+- **A cut the game makes cannot wait at the rig.** `XrRig.Cut` is raised on the frame the camera
+  has already cut: the controller has changed view, the interior's visibility and the cull mask
+  follow, and for a cutscene `Screening` raises the theater in the same `Place`. Holding the origin
+  at the old pose for a fade-out would draw it with the new view's dressing (the interior placed
+  round a chase eye, the hull round a seat, a cockpit camera's picture on the cutscene screen). So
+  those cuts land on black on their own frame and fade in. The fade-out exists where the cut can
+  wait: the view keys, which `CameraController.StepViewKeys` holds under a headset until
+  `XrFade.Cover` reports black, so the switch itself lands on the black frame.
+- **Measured on the stand-in** (`xr-comfort-fade`, 60 Hz steps, C1 Bloodhawk in Cockpit): the rig's
+  first cut, the first flight frame, the camera taken by another owner and its hand-back each read
+  alpha 1, the quad shown and its opacity 1 on the cut frame, and clear in 18 frames (0.3 s) after it.
+  A view key darkens monotonically for 9 frames (0.15 s) and the view changes on the 10th, which is
+  black, with exactly one rig cut, then clears in 18 frames.
+- **Captured** (`RunProbe.ps1 --chapter=C1 --plane=player_bhawk --pos=-6350,300,-4144
+  --direction=-0.743,0,-0.669 --view=cockpit --no-cockpit-pass --hold=0,0,0,0.6 --xr-sim --det --mute
+  --frames=1 --shots=30`, `.scratch/D16/burst/`): sim frames 1 and 2 are black in both eyes (mean
+  0.00, max 0); the mean then rises 4.9 to 5.2 levels a frame, linear in sRGB as a canvas fade
+  darkens, and reaches the settled picture (83.7 against 83.0) at frame 20.
+- **Where the fade stands.** Render priority 127 on `SplitScreen.HeadsetLayer`: over the theater's
+  surround (125) and screen (126), so a cutscene's take and hand-back fade with the dark room, while
+  the pair's cameras leave the layer out and the film never carries it. While a board shows on the
+  theater (`TheaterScreen.BoardShown`: no flight live, or a board raised in flight) it drops to 123,
+  under the surround, so a fade behind the pause or results board darkens the dimmed world and never
+  the board. The laser beam also stands at 127 and shows only over a board. The vignette draws at
+  122, over every `HeadLockedQuads` tier (the mission-end fade at 121) and the HUD panel's 115.
+- **The load screen to the world.** The rig's cut onto the new aircraft comes while the load board
+  still shows, under the surround, so `ComfortQuads` makes the first frame a flight is on view (the
+  theater's own condition, one shared function) a cut of its own; captured above.
+- **Mission end** is C14's tier and unchanged: `CampaignDirector.LeavingFade` darkens the world over
+  its 2 s hold on `HeadLockedQuads`' quad (layer 1, so it darkens a held cutscene's picture too,
+  D15), and the results board or the menu then rises in the theater's surround.
+- **The vignette** (`xr-comfort-vignette`): unset, it resolves off and draws nothing through a
+  full-stick roll. At Strong, level cruise turns the origin at 0 deg/s and leaves the view open; a
+  full-stick roll turns it at up to 181.4 deg/s, the strength reaches 1 and the quad's clear cone 28°.
+  Captures `.scratch/D16/vignette-mild.png` and `vignette-strong.png` (frame 90 of that roll at 600 m,
+  `--xr-vignette=`): the tunnel stands on each eye's own axis.
+- **The render scale applies live** (Godot 4.7-stable, `modules/openxr/openxr_api.cpp`):
+  `OpenXRInterface.render_target_size_multiplier` sets the main thread's multiplier and the render
+  thread's copy, `get_recommended_target_size` multiplies the runtime's recommendation by it, and
+  `pre_draw_viewport` frees and recreates the swapchains on the first frame whose size differs. It
+  therefore takes effect on the next frame, from the Options apply as at boot. `Viewport::
+  _check_xr_size` resizes the root to it, and `RendererViewport::_configure_3d_render_buffers` scales
+  the 3D buffers inside it by the root's `scaling_3d_scale`, so the flat Render Scale multiplies with
+  it. On the stand-in `--xr-render-scale=70` logged `xr: render scale 0.7 eye_px=448x504` for the
+  640x720 eye and the theater relaid at 448x504; `xr-render-scale` pins 1600x1200 to 1120x840 and
+  back through the stand-in's twin of the multiplier. Live under OpenXR is source-traced, not seen.
+- **Flat unchanged.** Everything is built beside `XrSession` in `Launcher`, the view-key wait needs
+  `CameraController.Headset` and the rig's `Fade`, null on every flat seat, and only a headset launch
+  reads the two options. Under `--det` the fade steps on the fixed clock, so a capture repeats. All
+  nine `xr-sim` goldens probed hash-identical one by one (`D16_hashes.ps1`); the flat set is the
+  merged battery's.
 
-**Approach.** <TODO: the fade duration and the vignette curve are TUNE; the author sets them at the
-headset.>
+**Resolved TODOs (proposed values, TUNE for the author).**
+- **Fade:** 0.15 s out (view keys only) and 0.3 s in (`XrFade.DefaultOutS`, `DefaultInS`). VR titles
+  sit at 0.1 to 0.3 s; the out is kept short because the view key waits on it.
+- **Vignette curve:** nothing below 20 deg/s (a gentle bank), full at 90 deg/s, a smoothstep between,
+  followed in 0.1 s and let go in 0.4 s so a series of short rolls does not pulse. The clear cone
+  closes from 60° (past any eye's edge) to 40° (Mild) or 28° (Strong), feathered over 12°
+  (`XrVignette`). The rate is the origin's own turn, so the chase view's rolls count and head turns
+  never do.
+- **Render scale:** OpenXR's `RenderTargetSizeMultiplier`, words 50, 60, 70, 80, 90, 100 and 125 %;
+  70 % is about the author's 2112x2304 runtime setting against VDXR's 3072x3264.
+- **Options:** `OptionsStore` `vrRenderScale` and `vrVignette`, riding `OptionsApplyExit` and applied
+  at once (`Launcher.ApplyVrComfort`, the pause leaf's apply included). Built-in shows both rows under
+  VR mode. Original's VIDEO page has no free authored line (B6 took the last), so under a live headset
+  the comfort rows take the Display Mode and V-Sync lines, two settings a headset makes moot; their
+  words ride the apply unshown. `--xr-render-scale=` and `--xr-vignette=` beat the saved words.
+- Model recommendation: Standard.
 
-**Model recommendation.** <TODO: tier not settled in the session.>
+**Approach (landed, VR only).**
+- `UI/Boards/XrFade.cs` (the fade's clock) and `UI/Boards/XrVignette.cs` (the curve), engine-free;
+  `UI/Boards/ComfortQuads.cs`, the two head-locked quads, built by `Launch/Launcher.cs` beside the
+  theater and subscribed to `XrRig.Cut`. They sit in `UI.Boards` because the family order ranks it
+  under `Flight`, which names them.
+- `Flight/Camera/XrRig.cs` `Fade`, handed to the pilot's camera each `Place`;
+  `Flight/Camera/CameraController.cs` `Fade` and the held view keys in `StepViewKeys`.
+- `UI/Boards/TheaterScreen.cs` `BoardShown`.
+- `Utils/VrRenderScaleSetting.cs`, `Utils/VrVignetteSetting.cs`; `Launch/XrSession.cs`
+  `ApplyRenderScale`; `Launch/XrSimInterface.cs` `RenderTargetSizeMultiplier`; `Spec/SessionSpec.cs`
+  the two flags; the rows in `UI/Screens/LaunchMenu.cs`, `UI/Menu/Original/OriginalVideoPage.cs`
+  (`Headset`) and `UI/Menu/DisplaySettingRows.cs`.
 
-**Verify.** <TODO>
+**Verify.** Units: `CSVM.Tests/XrComfortTests.cs` (the fade's cut, cover, dropped cover and restart;
+the curve, the rate and a cut's jump; the words, the store fields, the flags),
+`OriginalOptionsTests` (the headset rows on both layouts, stepping and riding the apply). Suites:
+`xr-comfort-fade`, `xr-comfort-vignette`, `xr-render-scale`; `menu-original-tracer` walks the two
+Built-in rows, `menu-backdrop` counts them, `display-det-guard` names both fields as display settings
+no `--det` run reads. Every menu, display, options, pause, xr, theater, cockpit and camera suite
+passed (93 of 93, clean engine errors), units 6465 passed 3 skipped. Goldens: none new; the nine
+`xr-sim` shots unmoved. The rules that bite (docs/verification.md): SHOT-44 (each eye is read in the
+side-by-side capture), METHOD-9 (the vignette's Off and cruise runs are the controls for its roll).
 
-**⚠ Traps.** <TODO: none known yet.>
+Owed at the headset (the author's), runtime at 90 Hz, VDXR first, from the tree this lands in:
+```
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669"
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --xr-vignette=mild
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --xr-vignette=strong
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --chapter=C1 --plane=player_bhawk "--pos=-6144,300,-6144" "--direction=-0.743,0,-0.669" --xr-render-scale=70
+.\RunGame.ps1 -EngineArgs '--xr-mode','on' --campaign=csvm-vr:0 --plane=player_bhawk
+.\RunGame.ps1 -EngineArgs '--xr-mode','on'
+```
+Look for: (1) first line: the first flight frame comes out of black; `F8` (D-pad down, the left
+upper face) darkens briefly and each view lands on black, the delay acceptable; `F7` and each flyby
+re-site, `Backspace` (pad Y) and a crash into the ground do the same; say whether the fades are too
+long, too short or too abrupt; (2) second and third lines: hard rolls and tight turns in Cockpit and
+Chase; whether the vignette helps, comes in late or pumps, Mild against Strong, and whether gentle
+flying stays clear; (3) fourth line: sharpness, and the `xr frames` lines' `gpu_ms` against the first
+line's at 100 % (the log has `xr: render scale 0.7 eye_px=...`); (4) fifth line: the intro's take and
+hand-back fade through black with the dark room; (5) sixth line: Options, VIDEO under the headset
+shows Comfort Vignette on the Display Mode line and VR Render Scale on the V-Sync line; in a flight,
+Esc, Options, change the render scale and ACCEPT CHANGES: the picture changes resolution at once with
+no more than a frame's hitch; a campaign mission's end keeps its 2 s fade. The values to tune are
+`XrFade.DefaultOutS`/`DefaultInS`, `XrVignette`'s six constants, and the scale's steps.
+
+**⚠ Traps.**
+- Do not hold the origin at the old pose to fade out a cut the game makes: the view's dressing (the
+  interior, the hull, the cull mask, the theater) changed with the camera on that frame.
+- Do not put the comfort quads on layer 1: the cutscene's pair would draw them into the film, and the
+  screen's picture would darken twice.
+- Do not leave the fade over a raised board; it drops under the surround while `BoardShown`.
+- `XrFade.Cover` must be called every frame while a request stands; a frame without it clears.
+- The vignette reads the origin, never the head: a head turn must not close it.
+- Under a VR render scale the root's 2D layout, the eye's render target, shrinks with it. Anything
+  laid out from the root's size sees the smaller size: the theater keeps two texels per board pixel
+  regardless; the HUD panel (C12, `HudMetrics` reads the root height) must too.
+- A golden whose shot frame falls within 0.3 s of a cut would carry the fade; the nine `xr-sim`
+  shots stand well clear (frame 120, or 45 for the markers).
+
+**Verified.** <pending orchestrator run>
 
 ## D17 ☐ Port the screen-space effects to multiview
 

@@ -97,6 +97,10 @@ public sealed partial class TheaterScreen : Node3D
     /// <summary>Whether a cutscene played on the screen at the last <see cref="Refresh"/>.</summary>
     public bool PlaysCutscene { get; private set; }
 
+    /// <summary>Whether a board, menu or cinema showed on the screen at the last
+    /// <see cref="Refresh"/>: always with no flight live, in flight once one raised it.</summary>
+    public bool BoardShown { get; private set; }
+
     /// <summary>The cutscene's two renders, left eye first, updating only while one plays.</summary>
     public IReadOnlyList<SubViewport> CutsceneEyes => _eyes;
 
@@ -214,7 +218,8 @@ public sealed partial class TheaterScreen : Node3D
         bool live = _flightLive();
         var raiser = live ? _rehost.Showing(TheaterLayout.Raises) : null;
         var cutscene = live && _cutscene() is { } playing && IsInstanceValid(playing.Camera) ? playing : (TheaterCutscene?)null;
-        bool shown = !live || raiser != null || cutscene != null;
+        BoardShown = !live || raiser != null;
+        bool shown = BoardShown || cutscene != null;
         // A cutscene takes the full surround. Its camera flies through the world the seat stands in,
         // and that world showing round the window would move against the picture.
         SurroundOpacity = !live || cutscene != null ? 1f : raiser != null ? DimOpacity : 0f;

@@ -670,8 +670,10 @@ stunt flying that is a cut the player did not ask for. `--xr-chase=level` flies 
 form for a side-by-side judgement at the headset.
 
 Every jump of the origin (a view change, a respawn, a new static spot, a new watched aircraft, a
-camera taken by another owner or handed back) raises `XrRig.Cut`, the place a comfort fade hangs on;
-today each is a hard cut.
+camera taken by another owner or handed back) raises `XrRig.Cut`, and the comfort fade lands it on a
+black frame that clears over 0.3 s (`UI/Boards/ComfortQuads.cs`). The view keys and the flyby key wait
+for black instead: the view darkens over 0.15 s and changes on the black frame, so the player never
+sees the jump. The first flight frame after a load lands on black the same way.
 
 ### The gunsight under a headset
 

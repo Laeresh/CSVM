@@ -618,7 +618,7 @@ the controls keep the root's layout and input. Its geometry and resolution are `
 With no flight live it stands in a dark surround and the camera takes a plain environment, so no AgX
 or glow touches the boards; in flight a board or cinema raises it over the world dimmed to 60 %, and a presenting cutscene in the full surround with the plain environment: two `SubViewport`s draw the world from `StereoPair.cs`'s cameras, and the shader picks each eye's picture by `VIEW_INDEX` in the board's 4:3 rect, under any board. The world behind that surround is still drawn.
 Its geometry stands on `SplitScreen.HeadsetLayer`, which the pair leaves out, so it never draws into its own picture. Its render priorities sit over `HeadLockedQuads`'
-fade. `Launch/Launcher.cs` builds it beside `XrSession`; the laser (`TheaterPointer.cs`) reaches it through `Hit` and `LayoutPoint`.
+fade and under `ComfortQuads.cs`' fade, which `BoardShown` drops under it. `Launch/Launcher.cs` builds it beside `XrSession`; the laser (`TheaterPointer.cs`) reaches it through `Hit` and `LayoutPoint`.
 
 ## src/UI/Boards/CanvasRehost.cs
 Draws the root viewport's canvas layers of chosen numbers into a SubViewport through
@@ -645,6 +645,31 @@ convergence, so that depth lands on the screen plane. It converges on the letter
 on the screen plane and the scene recedes behind it. On the default seat, framed at 55.76°, infinity lies 12.1 mm behind
 (0.6 % of the width) and appears 3.1 m away; a point 3 m from the camera stands out at 1.9 m. Converging at 1.45 m
 instead makes the screen an undistorted window but sinks the bars 13 m deep. `ConvergenceOfCard` is the knob.
+
+## src/UI/Boards/ComfortQuads.cs
+The headset's comfort layers, one per process beside the theater: a black quad locked to the head
+that every cut lands on (`XrFade.cs`), and the optional tunnel vignette (`XrVignette.cs`), a black
+ring easing in past a clear cone. Both stand on `SplitScreen.HeadsetLayer`, so a cutscene's pair never
+draws them. The fade draws at 127, over the theater's surround and screen so a cutscene's take and
+hand-back fade too, and drops to 123 under the surround while a board shows (`TheaterScreen.BoardShown`);
+the vignette draws at 122, over every `HeadLockedQuads` tier. It darkens as a canvas fade does, linearly
+in sRGB. `Launch/Launcher.cs` builds it and hands it the rig's cuts; the first flight frame after a load
+is a cut of its own. The `xr-comfort-*` suites pin it.
+
+## src/UI/Boards/XrFade.cs
+The comfort fade's clock, engine-free: clear, darkening, black, clearing. A cut the game makes snaps to
+black on its own frame and clears over `DefaultInS` (0.3 s); a cut the player asks for, a view key,
+darkens over `DefaultOutS` (0.15 s) through `Cover`, which `Flight/Camera/CameraController.cs` calls
+every frame until it reports black and then cuts. A black nobody holds clears on the next frame, so a
+dropped request cannot leave the headset dark. Both durations are TUNE. Pinned by
+`CSVM.Tests/XrComfortTests.cs`.
+
+## src/UI/Boards/XrVignette.cs
+The tunnel vignette's curve, engine-free. The rate is the XR origin's own turn a second, to which head
+tracking adds nothing, and a cut is no turn. The strength is a smoothstep from 20 deg/s (nothing) to
+90 deg/s (full), followed in 0.1 s and let go in 0.4 s, and closes the clear cone's half-angle from
+60 degrees (past any eye's edge) to 40 (Mild) or 28 (Strong), feathered over 12. Every number is
+TUNE. Pinned by `CSVM.Tests/XrComfortTests.cs`; the level is `Utils/VrVignetteSetting.cs`.
 
 ## src/UI/Boards/TheaterPointer.cs
 The hand controllers' laser on the theater screen: a ray from one hand's aim pose
@@ -1038,9 +1063,9 @@ narration.
 The one typed way out of the menu, handed to `IMenuHost.Exit` and consumed by `Launcher`:
 `LaunchExit` (chapter, per-seat `MenuSeatChoice`, `MenuMode`, optional `InstantActionDef` with the wingmen's edited fit beside it, and for Dogfight or a lobby Stunt Race a `VersusRules` of kill target, minutes, lives, auto-respawn and the lobby type that an explicit `--vs-kills=`/`--vs-time=`/`--vs-lives=`/`--vs-no-respawn` beats),
 `CampaignMissionExit` (profile, `cm_sequence` position, per-seat choices), `QuitExit` and
-`OptionsApplyExit` (the graphics-mode and difficulty words, the six display settings, the four volume levels, the gameplay switches and VR mode, null where never set).
+`OptionsApplyExit` (the graphics-mode and difficulty words, the six display settings, the four volume levels, the gameplay switches, VR mode and the headset's render scale and vignette, null where never set).
 An applied choice rides the exit rather than being saved by the screen that took it, so the options file keeps one writer, and a screen
-hands back the settings it does not show; none of the nineteen is defaulted, so a page cannot hand back a null it never read, and a field no screen offers any more is dropped rather than left riding as a null the consumer would save. A custom
+hands back the settings it does not show; none of the twenty-one is defaulted, so a page cannot hand back a null it never read, and a field no screen offers any more is dropped rather than left riding as a null the consumer would save. A custom
 plane rides the exit as a resolved `CustomPlaneDef`, never a store name. Presentations never construct
 sessions. The return side is `MenuReturnDestination`; the exit table and the scans holding the seam: [../menu-presentations.md](../menu-presentations.md).
 
@@ -1050,7 +1075,7 @@ about a saved value: one label per `DisplayWords` entry in that order, since a r
 plus the two forgiving reads (an unknown word is the vocabulary's first value, a size the screen does not offer is the
 project default) and the wrap a sideways step takes. Under a `Pinned` display mode the size row reads the screen's own size
 whatever is saved. An unset anti-aliasing row reads the default of the graphics word on the same page, and the render-scale
-labels are built over the list the standing method offers, so the scale row narrows the moment FSR 2.2 is picked. The shadow row's description says Enhanced only while the page's graphics word is Original, where both screens hold the row dead, and the VR mode row's says it is Windows only where both hold it dead off Windows. The
+labels are built over the list the standing method offers, so the scale row narrows the moment FSR 2.2 is picked. The shadow row's description says Enhanced only while the page's graphics word is Original, where both screens hold the row dead, and the VR mode row's says it is Windows only where both hold it dead off Windows. The headset's render-scale and vignette rows carry their own fixed descriptions. The
 screens and the sizes are enumerated per machine by `Utils/MonitorSetting.cs` and `Utils/ResolutionSetting.cs`.
 Engine-free, so the rules test without a screen (`CSVM.Tests/DisplaySettingRowsTests.cs`).
 
@@ -1284,7 +1309,7 @@ The VIDEO page, the Game Options table's shape over the authored Video rows: the
 Anti-aliasing over `Utils/OptionsStore.cs`'s `DisplayWords`, and Enhanced Graphics on the Shadows checkbox whose gate it owns. Render Scale stands on
 the Objects Detail line and Anti-aliasing on the Lighting Quality line (whose `VP_D_DLight` authors five items), picking FSR 2.2 narrowing the scale
 list to 50..100 on the spot; Shadow Quality (`Utils/ShadowQualitySetting.cs`) stands on the Texture Quality line, dead while Enhanced Graphics is
-clear. VR Mode is a checkbox on the Clutter Detail line, live on Windows alone. The Graphics row's title and description are the page's own. It holds the display settings and the view distance it carries unshown.
+clear. VR Mode is a checkbox on the Clutter Detail line, live on Windows alone. While a headset is live (`Headset`) the comfort vignette and VR render scale (`Utils/VrVignetteSetting.cs`, `Utils/VrRenderScaleSetting.cs`) take the Display Mode and V-Sync lines, whose words ride the apply unshown. The Graphics row's title and description are the page's own. It holds the display settings and the view distance it carries unshown.
 
 ## src/UI/Menu/Original/OriginalControlsPage.cs
 The CONTROLS page over the shared `ControlsFeature`: the seat chooser on the Controller Type row, the authored Mouse Sensitivity slider over

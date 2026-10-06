@@ -781,6 +781,13 @@ public sealed record SessionSpec
     /// <summary>The frame a headset's chase view rides, <c>--xr-chase=rigid|level</c>: locked to the
     /// aircraft's attitude (the default) or to its heading alone. A flat launch never reads it.</summary>
     public Flight.Camera.XrChase XrChase { get; private set; }
+    /// <summary><c>--xr-render-scale=50..125</c>, the headset's eye size as a percentage of the
+    /// runtime's recommendation, one of <see cref="VrRenderScaleSetting.Words"/>. Null
+    /// when not given, and for an unknown word with a note. Beats the saved option.</summary>
+    public string? XrRenderScale { get; private set; }
+    /// <summary><c>--xr-vignette=off|mild|strong</c>, the headset's tunnel vignette. Null when not
+    /// given, and for an unknown word with a note. Beats the saved option.</summary>
+    public string? XrVignette { get; private set; }
     /// <summary>Deprecated spellings seen, first-seen order, deduplicated, with their replacement.</summary>
     public IReadOnlyList<(string Old, string New)> Deprecated { get; private set; }
         = Array.Empty<(string, string)>();
@@ -1811,6 +1818,30 @@ public sealed record SessionSpec
                 else
                 {
                     notes.Add(new Note("core", $"--xr-chase={want} is not rigid or level, ignoring it"));
+                }
+            }
+            else if (arg.StartsWith(VrRenderScaleSetting.Flag + "="))
+            {
+                string want = arg[(VrRenderScaleSetting.Flag.Length + 1)..];
+                if (VrRenderScaleSetting.Lookup.IsWord(want))
+                {
+                    s.XrRenderScale = want;
+                }
+                else
+                {
+                    notes.Add(new Note("core", $"{VrRenderScaleSetting.Flag}={want} is not one of {string.Join("/", VrRenderScaleSetting.Words)}, ignoring it"));
+                }
+            }
+            else if (arg.StartsWith(VrVignetteSetting.Flag + "="))
+            {
+                string want = arg[(VrVignetteSetting.Flag.Length + 1)..].ToLowerInvariant();
+                if (VrVignetteSetting.Lookup.IsWord(want))
+                {
+                    s.XrVignette = want;
+                }
+                else
+                {
+                    notes.Add(new Note("core", $"{VrVignetteSetting.Flag}={want} is not one of {string.Join("/", VrVignetteSetting.Words)}, ignoring it"));
                 }
             }
             else if (arg == "--xr-sim") { s.XrSim = XrSimSpec.Default; }

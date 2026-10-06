@@ -876,11 +876,12 @@ public partial class Launcher : Node3D
             // A stereo root draws no canvas layer, so every board, menu and cinema built from here
             // on draws on the screen instead. A flight is on view once its first frame is ready.
             var rig = _xr.Rig;
+            System.Func<bool> flightLive = () => rig.Pane != null && _session is { InSession: true, FirstFrameReady: true };
             // A presenting cutscene plays on the screen as a stereo pair, converged on its letterbox.
             rig.CutscenePlays = () => _session?.Cutscene is { Playing: true, Presenting: true };
             _theater = UI.Boards.TheaterScreen.Build(
                 GetViewport(), _camera, () => rig.Origin.GlobalTransform,
-                () => rig.Pane != null && _session is { InSession: true, FirstFrameReady: true },
+                flightLive,
                 eyeFeed: true,
                 cutscene: () => rig is { Screening: true, Pane: { } pane } && _session?.Cutscene is { } film
                     ? new UI.Boards.TheaterCutscene(pane.Camera, UI.Boards.StereoPair.ConvergenceM(Mathf.Abs(film.CardBox.GetCenter().Z)))
@@ -890,6 +891,14 @@ public partial class Launcher : Node3D
             // The hand controllers' laser pointer on it, since the desktop mouse cannot reach the
             // eye-size layout a stereo root lays its 2D out in.
             AddChild(UI.Boards.TheaterPointer.Build(GetViewport(), _theater, () => rig.Origin.GlobalTransform, eyeFeed: true));
+            // Every cut the headset sees lands on black, and the optional vignette closes in on turns.
+            rig.Fade = new XrFade();
+            var theater = _theater;
+            var comfort = UI.Boards.ComfortQuads.Build(rig.Fade, () => rig.Origin.GlobalTransform, flightLive,
+                () => theater.BoardShown, () => VrVignetteSetting.Current);
+            rig.Cut += comfort.OnCut;
+            AddChild(comfort);
+            ApplyVrComfort(VrRenderScaleSetting.SavedWord(_spec.Det), VrVignetteSetting.SavedWord(_spec.Det));
         }
 
         // VR is one local seat in every mode, so a command line asking for splitscreen flies one.
@@ -2687,6 +2696,17 @@ public partial class Launcher : Node3D
         return true;
     }
 
+    // The headset's comfort settings, each flag beating the given word: the saved one at boot (none
+    // under --det), the apply's after it. Both take effect at once, the render scale in the runtime.
+    private void ApplyVrComfort(string? renderScaleWord, string? vignetteWord)
+    {
+        var scale = VrRenderScaleSetting.Resolve(_spec.XrRenderScale, renderScaleWord);
+        var vignette = VrVignetteSetting.Resolve(_spec.XrVignette, vignetteWord);
+        VrVignetteSetting.Current = VrVignetteSetting.LevelOf(vignette.Word);
+        Log.Info("core", $"xr: comfort vignette={vignette.Word} source={VrVignetteSetting.Lookup.SourceName(vignette.Source)} render_scale={scale.Word} source={VrRenderScaleSetting.Lookup.SourceName(scale.Source)}");
+        _xr?.ApplyRenderScale(VrRenderScaleSetting.ScaleOf(scale.Word));
+    }
+
     // The headset launch's end: every shader cache file written since it started goes, once.
     private void SweepXrShaderCache()
     {
@@ -2697,7 +2717,8 @@ public partial class Launcher : Node3D
     }
 
     // The options file's one writer, shared by the menu's apply above and by the pause leaf's.
-    // The display settings, the mix, the view distance and the graphics mode apply now.
+    // The display settings, the mix, the view distance, the graphics mode and a live headset's
+    // comfort settings apply now.
     // ⚠ Do not rebuild or relaunch for the opening view, the difficulty or VR mode here; they are
     // saved and no more. The menu's ApplyOptions relaunches. The pause leaf puts the head turn and
     // targeting switch on the seats flying now (PausePreferences.FeedGameOptions).
@@ -2724,7 +2745,14 @@ public partial class Launcher : Node3D
         options.AudioEffects = applied.AudioEffects;
         options.AudioVoice = applied.AudioVoice;
         options.VrMode = applied.VrMode;
+        options.VrRenderScale = applied.VrRenderScale;
+        options.VrVignette = applied.VrVignette;
         store.Save(options);
+        if (_xr != null)
+        {
+            ApplyVrComfort(applied.VrRenderScale, applied.VrVignette);
+        }
+
         // The display settings take effect now instead of at the next start, through the same calls
         // the startup path makes and in the order the window needs them: the screen it sits on, the
         // mode, the size, then the pacing, which --no-vsync still beats (docs/menu-presentations.md).

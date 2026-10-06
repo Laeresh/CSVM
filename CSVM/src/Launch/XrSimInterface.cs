@@ -31,6 +31,8 @@ public partial class XrSimInterface : XRInterfaceExtension
     private XRControllerTracker? _left;
     private XRControllerTracker? _right;
     private bool _initialized;
+    // Read on the render thread as well, so it is one word written whole.
+    private volatile float _sizeMultiplier = 1f;
 
     /// <summary>Required by Godot's script instancing; never used.</summary>
     public XrSimInterface()
@@ -45,6 +47,14 @@ public partial class XrSimInterface : XRInterfaceExtension
         _fovDeg = spec.FovDeg;
         _pinned = new Pinned(new XrSimEyes(spec.YawDeg, spec.PitchDeg, spec.Head, spec.IpdMm, spec.FovDeg, spec.RollDeg));
         _eyePx = spec.EyePx;
+    }
+
+    /// <summary>The stand-in's twin of OpenXR's <c>render_target_size_multiplier</c>: the eye size
+    /// the flag gives, scaled. The main viewport follows it on its next frame, as under OpenXR.</summary>
+    public float RenderTargetSizeMultiplier
+    {
+        get => _sizeMultiplier;
+        set => _sizeMultiplier = value;
     }
 
     private XrSimEyes Eyes => _pinned.Eyes;
@@ -159,7 +169,7 @@ public partial class XrSimInterface : XRInterfaceExtension
 
     public override bool _SetPlayAreaMode(XRInterface.PlayAreaMode mode) => mode == XRInterface.PlayAreaMode.Sitting;
 
-    public override Vector2 _GetRenderTargetSize() => _eyePx;
+    public override Vector2 _GetRenderTargetSize() => (_eyePx * _sizeMultiplier).Round();
 
     public override uint _GetViewCount() => 2;
 

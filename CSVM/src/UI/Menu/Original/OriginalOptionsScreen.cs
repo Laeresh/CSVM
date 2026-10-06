@@ -267,7 +267,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule, IOriginalOpti
             Audio.MasterChoice, Audio.MusicChoice, Audio.EffectsChoice, Audio.VoiceChoice,
             GameOptions.NearestAfterKillChoice, GameOptions.RumbleChoice,
             GameOptions.DefaultViewChoice, GameOptions.AutoHeadTurnChoice, Video.ViewDistanceChoice,
-            Video.VrModeChoice);
+            Video.VrModeChoice, Video.VrRenderScaleChoice, Video.VrVignetteChoice);
 
     // Back from a page: the saved settings are read again, so an edit the player declined is gone.
     void IOriginalOptionsForm.Leave()

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace CSVM.UI.Menu;
 
 /// <summary>
-/// How the six display settings, the shadow quality and VR mode read as rows. The two Options screens
+/// How the six display settings, the shadow quality and the VR settings read as rows. The two Options screens
 /// share it so they cannot disagree about a saved value. The labels are one per vocabulary entry
 /// and in that order, since a row reads and writes the store word by index. The index rules restate
 /// the resolvers' forgiving reads: a never-set row shows the setting's own default, an unoffered or
@@ -14,6 +14,13 @@ namespace CSVM.UI.Menu;
 /// </summary>
 public static class DisplaySettingRows
 {
+    /// <summary>What the headset's render-scale row says. It reaches the runtime at once. Kept short
+    /// for the same wrap <see cref="VrModeDetail"/> keeps.</summary>
+    public const string VrRenderScaleDetail = "Headset render size, a share of the runtime's own. Lower runs faster. Applies at once.";
+
+    /// <summary>What the headset's comfort vignette row says, kept as short.</summary>
+    public const string VrVignetteDetail = "Darkens the edge of view while the aircraft turns, to ease motion sickness.";
+
     /// <summary>The display-mode labels. The two fullscreen modes read as one word each because the
     /// VIDEO page's authored box is 120 wide; which of them keeps the desktop alive beside the game
     /// is what a row's description says.</summary>

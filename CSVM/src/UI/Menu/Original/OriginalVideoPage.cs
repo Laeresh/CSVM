@@ -51,6 +51,14 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     /// <summary>The page's VR mode checkbox, on the authored Clutter Detail line.</summary>
     public const string VrModeKey = "VRMODE";
 
+    /// <summary>The headset's comfort vignette dropdown, on the authored Viewing Range line while a
+    /// headset is live.</summary>
+    public const string VrVignetteKey = "VRVIGNETTE";
+
+    /// <summary>The headset's render-scale dropdown, on the authored Effects Level line while a
+    /// headset is live.</summary>
+    public const string VrRenderScaleKey = "VRRENDERSCALE";
+
     // The page's authored row shape, used where a layout does not carry the section. It is the
     // title column and the Shadows row's line, the checkbox's offset from its title, and the
     // dropdown column and box. The description column takes the width the plaque column leaves it.
@@ -89,12 +97,26 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
             _ => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
             OriginalRowKind.Dropdown, _ => DisplaySettingRows.DisplayModeLabels,
             s => DisplaySettingRows.WordIndex(CSVM.Utils.DisplayWords.DisplayModes, s._displayMode, CSVM.Utils.DisplayModeSetting.Default),
-            (s, i) => s._displayMode = CSVM.Utils.DisplayWords.DisplayModes[i]),
+            (s, i) => s._displayMode = CSVM.Utils.DisplayWords.DisplayModes[i],
+            Shown: s => !s.Headset()),
+        new(VrVignetteKey, "Comfort Vignette", "VP_T_ViewTitle", "VP_D_View", "VP_T_ViewDESC",
+            _ => DisplaySettingRows.VrVignetteDetail,
+            OriginalRowKind.Dropdown, _ => CSVM.Utils.VrVignetteSetting.Labels(),
+            s => DisplaySettingRows.WordIndex(CSVM.Utils.VrVignetteSetting.Words, s._vrVignette, CSVM.Utils.VrVignetteSetting.Default),
+            (s, i) => s._vrVignette = CSVM.Utils.VrVignetteSetting.Words[i],
+            Shown: s => s.Headset()),
         new(VSyncKey, "V-Sync", "VP_T_EffectsTitle", "VP_D_Effects", "VP_T_EffectsDESC",
             _ => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
             OriginalRowKind.Dropdown, _ => DisplaySettingRows.VSyncLabels,
             s => DisplaySettingRows.WordIndex(CSVM.Utils.DisplayWords.VSyncChoices, s._vsync, CSVM.Utils.VSyncSetting.Default),
-            (s, i) => s._vsync = CSVM.Utils.DisplayWords.VSyncChoices[i]),
+            (s, i) => s._vsync = CSVM.Utils.DisplayWords.VSyncChoices[i],
+            Shown: s => !s.Headset()),
+        new(VrRenderScaleKey, "VR Render Scale", "VP_T_EffectsTitle", "VP_D_Effects", "VP_T_EffectsDESC",
+            _ => DisplaySettingRows.VrRenderScaleDetail,
+            OriginalRowKind.Dropdown, _ => CSVM.Utils.VrRenderScaleSetting.Labels(),
+            s => DisplaySettingRows.WordIndex(CSVM.Utils.VrRenderScaleSetting.Words, s._vrRenderScale, CSVM.Utils.VrRenderScaleSetting.Default),
+            (s, i) => s._vrRenderScale = CSVM.Utils.VrRenderScaleSetting.Words[i],
+            Shown: s => s.Headset()),
         new(RenderScaleKey, "Render Scale", "VP_T_ObjectsTitle", "VP_D_Objects", "VP_T_ObjectsDESC",
             _ => "Render the world below native to spare the GPU, or above it for cleaner edges. Applies at once.",
             OriginalRowKind.Dropdown, s => DisplaySettingRows.RenderScaleLabels(s.RenderScaleWords),
@@ -150,6 +172,9 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     private string? _shadowQuality;
     // VR mode as saved, null while never set, which reads as off.
     private bool? _vrMode;
+    // The headset's render scale and vignette words as saved, null while never set.
+    private string? _vrRenderScale;
+    private string? _vrVignette;
 
     internal OriginalVideoPage(
         OriginalOptionsChrome chrome,
@@ -223,6 +248,17 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     /// has not been touched.</summary>
     public bool? VrModeChoice => _vrMode;
 
+    /// <summary>The headset render-scale word the page would apply, or null while never set.</summary>
+    public string? VrRenderScaleChoice => _vrRenderScale;
+
+    /// <summary>The headset vignette word the page would apply, or null while never set.</summary>
+    public string? VrVignetteChoice => _vrVignette;
+
+    /// <summary>Whether a headset is live. Its two comfort rows then take the Display Mode and V-Sync
+    /// lines. A headset has no use for those two: it paces its own frames, and the window only
+    /// mirrors it. The hidden rows' words ride the apply unchanged. Settable for a test.</summary>
+    public Func<bool> Headset { get; set; } = static () => CSVM.Bindings.XrControllers.SessionLive;
+
     /// <summary>Whether the Shadow Quality row takes a press, which it does while the page's own
     /// Enhanced Graphics box is ticked. The faithful world casts no sun shadow, so under Original the
     /// row draws dead and keeps the saved word for a later flip.</summary>
@@ -252,6 +288,25 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     // makes. The row therefore cannot show a screen the window would not be moved to.
     private CSVM.Utils.ScreenList Screens => _screens?.Invoke() ?? CSVM.Utils.MonitorSetting.Unknown;
 
+    // The settings the page shows now, in authored order. Under a headset its comfort rows stand on
+    // two lines whose settings it has no use for.
+    private List<VideoOption> Rows
+    {
+        get
+        {
+            var shown = new List<VideoOption>(Options.Length);
+            foreach (var option in Options)
+            {
+                if (option.Shows(this))
+                {
+                    shown.Add(option);
+                }
+            }
+
+            return shown;
+        }
+    }
+
     // The method the Anti-aliasing row shows: the saved word, or the default of the graphics mode
     // this page would apply.
     private string AntiAliasingWord => DisplaySettingRows.AntiAliasingWord(_antiAliasing, _graphics);
@@ -280,16 +335,17 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
     void IOriginalOptionsPage.BuildRows(List<OriginalRow> rows)
     {
         var screen = _chrome.Layout.Screen(Section);
+        var shown = Rows;
         if (screen == null)
         {
-            for (int i = 0; i < Options.Length; i++)
+            for (int i = 0; i < shown.Count; i++)
             {
-                var fallback = Options[i];
+                var fallback = shown[i];
                 rows.Add(_host.PlaqueRow(fallback.Key, fallback.Words(this)[fallback.Read(this)], i,
                     fallback.Editable(this), 0));
             }
 
-            _chrome.AddFallbackPlaques(rows, AcceptKey, CancelKey, Options.Length);
+            _chrome.AddFallbackPlaques(rows, AcceptKey, CancelKey, shown.Count);
             return;
         }
 
@@ -400,7 +456,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
 
         _chrome.ComposePlate(screen, "VP_BACKGROUND", layers.Backdrop);
         _chrome.ComposePageTitle(screen, "VP_T_TITLE", "VIDEO", layers.Lines);
-        foreach (var option in Options)
+        foreach (var option in Rows)
         {
             var place = Place(screen, option);
             layers.Lines.Add(new BoardLine(option.Title, place.TitleX, place.TitleY, place.TitleWidth,
@@ -419,7 +475,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
             var closed = new List<OriginalRow>();
             BuildControls(screen, closed);
             controls = closed;
-            controlFocus = IndexOf(_open);
+            controlFocus = ShownIndexOf(_open);
             controlPressed = -1;
         }
 
@@ -445,6 +501,8 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         _antiAliasing = saved?.AntiAliasing;
         _shadowQuality = saved?.ShadowQuality;
         _vrMode = saved?.VrMode;
+        _vrRenderScale = saved?.VrRenderScale;
+        _vrVignette = saved?.VrVignette;
     }
 
     private static int IndexOf(string key)
@@ -488,6 +546,21 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
             : "Select the window size.";
     }
 
+    // Where a key stands among the rows the page shows now, -1 when it is not shown.
+    private int ShownIndexOf(string key)
+    {
+        var shown = Rows;
+        for (int i = 0; i < shown.Count; i++)
+        {
+            if (shown[i].Key == key)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
     // FSR 2.2 refuses a scale above native, so picking it moves a scale standing there to native.
     // The launch clamps a saved pair the same way, so the page never shows a scale the run ignores.
     private void PickAntiAliasing(string word)
@@ -528,7 +601,7 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
 
     private void BuildControls(MenuLayoutScreen screen, List<OriginalRow> rows)
     {
-        foreach (var option in Options)
+        foreach (var option in Rows)
         {
             var place = Place(screen, option);
             rows.Add(new OriginalRow(option.Key,
@@ -602,12 +675,15 @@ public sealed class OriginalVideoPage : IOriginalOptionsPage
         Func<OriginalVideoPage, string> Description, OriginalRowKind Kind,
         Func<OriginalVideoPage, IReadOnlyList<string>> Words,
         Func<OriginalVideoPage, int> Read, Action<OriginalVideoPage, int> Write,
-        Func<OriginalVideoPage, bool>? Live = null)
+        Func<OriginalVideoPage, bool>? Live = null, Func<OriginalVideoPage, bool>? Shown = null)
     {
         // Whether the row takes a press at all. A row another setting owns the value of is dead.
         // The cursor walks past it, the pointer cannot arm it, and it draws in its disabled frame.
         // Every other unavailable row on these pages already does that.
         public bool Editable(OriginalVideoPage page) => Live?.Invoke(page) ?? true;
+
+        // Whether the row stands on the page at all. Two rows share each of two authored lines.
+        public bool Shows(OriginalVideoPage page) => Shown?.Invoke(page) ?? true;
     }
 
     // One row's place in authored pixels: the title box, the control's own rectangle and strip,
