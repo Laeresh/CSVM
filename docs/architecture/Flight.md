@@ -860,7 +860,7 @@ Off-engine coverage: `CSVM.Tests/VersusSpawnRotationTests.cs`; the suites are `v
 
 ## src/Flight/Modes/VersusHud.cs
 The per-pane Dogfight HUD: a compact status line (remaining time, this pane's kills and deaths, the
-leader's tag, or in a team match this pane's team total and the leading team) in `StuntRunHud`'s run-status slot, and one marker per living opponent rig, either an
+leader, a bot by callsign through `BotName` and a person by player tag, or in a team match this pane's team total and the leading team) in `StuntRunHud`'s run-status slot, and one marker per living opponent rig, either an
 on-screen tag or `EdgeMarker`'s arrow and bearing in that opponent's own `SplitScreen.PlayerColor`,
 a teammate's in `TargetHud`'s friendly green (`MarkerColor`). The status line steps aside while `StatusHiddenWhile` answers true (the seat's held scores); the markers stay.
 `Build` binds the match and this pane's own camera; `HumanFlightAdapter` attaches the live rig list

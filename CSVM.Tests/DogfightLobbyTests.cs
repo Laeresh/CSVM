@@ -1254,6 +1254,31 @@ public sealed class DogfightLobbyTests
         Assert.Equal(1, host.BotRoom);
     }
 
+    // A bot named while the person was not yet seated, the case AddBot's own check cannot see.
+    [Fact]
+    public void ABotWhoseCallsignAJoiningPersonHoldsDrawsAFreshOne()
+    {
+        var admitted = new HashSet<int>();
+        var (host, guests, _) = Lobbies(3, "Lucy", seated: admitted.Contains);
+        Settle(host, guests);
+        Assert.True(host.AddBot() && host.AddBot());
+        int named = host.Bots[0].Id;
+        Assert.True(host.SetBotCallsign(named, "lucy"));
+        string other = host.Bots[1].Callsign;
+
+        // ABLE-TO-FAIL CONTROL: with nobody seated under the name, the bot keeps it.
+        Settle(host, guests);
+        Assert.Equal("lucy", host.Bots[0].Callsign);
+
+        admitted.Add(1);
+        Settle(host, guests);
+        Assert.Equal(named, host.Bots[0].Id);
+        Assert.NotEqual("lucy", host.Bots[0].Callsign, StringComparer.OrdinalIgnoreCase);
+        Assert.NotEqual(other, host.Bots[0].Callsign);
+        Assert.Equal(other, host.Bots[1].Callsign);
+        Assert.Single(guests[0].Players, row => string.Equals(row.Name, "Lucy", StringComparison.OrdinalIgnoreCase));
+    }
+
     [Fact]
     public void ABotYieldsOnlyWhenTheFieldIsFullCountingTheHostsSplitscreenSeats()
     {

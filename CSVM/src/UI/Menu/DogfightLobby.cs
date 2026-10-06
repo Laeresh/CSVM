@@ -1120,7 +1120,8 @@ public sealed class DogfightLobby
     // ⚠ Do not call this outside Step. A host's door steps its lobby only while the lobby stands.
     // A player who joins mid-match then waits, and no seat changes hands in flight or on a Restart.
     // One bot goes per seat past the cap, newest first, so waiting people take the newest bots'
-    // places in join order. A leaver's seat is not refilled.
+    // places in join order. A leaver's seat is not refilled. A bot whose callsign a seated person
+    // holds draws a new one, since the death lines and Game Scores name seats by callsign.
     private void YieldToPeople()
     {
         while (_bots.Count > 0 && FieldSeats > NetSeats.MaxPlayers)
@@ -1129,6 +1130,8 @@ public sealed class DogfightLobby
             _bots.DropNewest();
             Announce(YieldLine(callsign));
         }
+
+        _bots.YieldNames(PeopleNames());
     }
 
     private List<int> SeatedPeers()

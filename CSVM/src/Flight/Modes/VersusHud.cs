@@ -58,6 +58,11 @@ public sealed partial class VersusHud : Control
     /// </summary>
     public Func<bool>? StatusHiddenWhile { get; set; }
 
+    /// <summary>A seat's callsign when a bot flies it, else null. The status line then names a bot
+    /// leader by callsign and a person by player tag, as the death line does. Null names every seat
+    /// by tag.</summary>
+    public Func<int, string?>? BotName { get; set; }
+
     /// <summary>Whether the status line draws this frame.</summary>
     public bool StatusShown => StatusHiddenWhile?.Invoke() != true;
 
@@ -85,6 +90,27 @@ public sealed partial class VersusHud : Control
     public static Color MarkerColor(int? ownTeam, int seatTeam, int seatIndex) =>
         ownTeam is { } own && AimAssist.Friendly(own, seatTeam) ? TargetHud.HudGreen
             : SplitScreen.PlayerColor(seatIndex);
+
+    /// <summary>The sole rank-1 seat's name, or TIED while nobody leads (including 0-0 before the
+    /// first kill). A team match names pane <paramref name="playerIndex"/>'s team and its total,
+    /// then the leading team. <paramref name="botName"/> is <see cref="BotName"/>.</summary>
+    public static string LeaderText(VersusMatch match, int playerIndex, Func<int, string?>? botName)
+    {
+        ArgumentNullException.ThrowIfNull(match);
+        if (match.Teamed)
+        {
+            int own = match.TeamOf(playerIndex);
+            string mine = own > 0 ? $"{match.TeamName(own)} {match.TeamScoreOf(own)}   " : "";
+            var teams = match.TeamStandings().Where(t => t.Rank == 1).ToList();
+            return mine + (teams.Count == 1 ? $"LEADER {teams[0].Name}" : "LEADER TIED");
+        }
+
+        var leaders = match.Standings().Where(st => st.Rank == 1).ToList();
+        if (leaders.Count != 1)
+            return "LEADER TIED";
+        int seat = leaders[0].PlayerIndex;
+        return $"LEADER {botName?.Invoke(seat) ?? SplitScreen.PlayerTag(seat)}";
+    }
 
     public override void _Process(double delta)
     {
@@ -137,23 +163,7 @@ public sealed partial class VersusHud : Control
     {
         string time = match.TimeLimit > 0f ? $"{FormatTime(match.TimeRemaining)}   " : "";
         string kd = $"K/D {match.KillsOf(PlayerIndex)}/{match.DeathsOf(PlayerIndex)}";
-        return $"{time}{kd}   {LeaderText(match)}";
-    }
-
-    // The sole rank-1 player's tag, or TIED while nobody leads (including 0-0 before the
-    // first kill). A team match names this pane's team and its total, then the leading team.
-    private string LeaderText(VersusMatch match)
-    {
-        if (match.Teamed)
-        {
-            int own = match.TeamOf(PlayerIndex);
-            string mine = own > 0 ? $"{match.TeamName(own)} {match.TeamScoreOf(own)}   " : "";
-            var teams = match.TeamStandings().Where(t => t.Rank == 1).ToList();
-            return mine + (teams.Count == 1 ? $"LEADER {teams[0].Name}" : "LEADER TIED");
-        }
-
-        var leaders = match.Standings().Where(st => st.Rank == 1).ToList();
-        return leaders.Count == 1 ? $"LEADER {SplitScreen.PlayerTag(leaders[0].PlayerIndex)}" : "LEADER TIED";
+        return $"{time}{kd}   {LeaderText(match, PlayerIndex, BotName)}";
     }
 
     // One opponent's marker: on screen, their tag floats just above the projected

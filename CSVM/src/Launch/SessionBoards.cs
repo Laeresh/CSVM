@@ -186,7 +186,7 @@ internal sealed class SessionBoards
     {
         var seats = _in.NetSeats;
         var board = VersusBoard.Build(match, context, exitsToMenu: _in.MenuDriven, _in.PauseState, InputFor,
-            seat => seats != null && seat >= 0 && seat < seats.Count && seats[seat].IsBot ? seats[seat].Callsign : null);
+            seat => Net.NetSeats.BotCallsign(seats, seat));
         board.Restart = restart;
         if (restartWithheld != null)
             board.RestartWithheld = restartWithheld;

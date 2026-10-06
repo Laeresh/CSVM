@@ -134,6 +134,11 @@ public static class NetSeats
         return left;
     }
 
+    /// <summary>Seat <paramref name="seat"/>'s callsign when a bot flies it, else null, so a caller
+    /// names a person by player tag. Null too for a seat past the roster or with no roster.</summary>
+    public static string? BotCallsign(IReadOnlyList<NetSeat>? roster, int seat) =>
+        roster != null && seat >= 0 && seat < roster.Count && roster[seat].IsBot ? roster[seat].Callsign : null;
+
     /// <summary>A bot seat at <paramref name="seatIndex"/>, owned and flown by the host whose peer
     /// is <paramref name="hostPeer"/>. It has no pane and no menu pick. Its loadout and build reach
     /// the session by seat, as a guest's do. <paramref name="team"/> is a lobby team number.

@@ -114,6 +114,25 @@ public sealed class DogfightBots
         return Edit(id, bot => bot with { Callsign = clipped });
     }
 
+    /// <summary>Redraws the callsign of every row whose name one of <paramref name="people"/> holds,
+    /// as <see cref="Add"/> draws, since a person keeps the name they joined with. Answers how many
+    /// rows it renamed.</summary>
+    public int YieldNames(IReadOnlyList<string> people)
+    {
+        ArgumentNullException.ThrowIfNull(people);
+        int renamed = 0;
+        for (int i = 0; i < _rows.Count; i++)
+        {
+            if (Holds(people, _rows[i].Callsign))
+            {
+                _rows[i] = _rows[i] with { Callsign = DrawCallsign(people) };
+                renamed++;
+            }
+        }
+
+        return renamed;
+    }
+
     /// <summary>Puts row <paramref name="id"/> on one of the eleven stock airframes or on
     /// <see cref="DogfightLobbySeat.RandomAirframe"/>.</summary>
     public bool SetAirframe(int id, int airframe) =>

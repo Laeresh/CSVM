@@ -544,6 +544,8 @@ internal sealed class HumanFlightAdapter
             controller.VersusHud = VersusHud.Build(versus, pi, rig.Camera);
             controller.VersusHud.Rigs = _human.Rigs;
             controller.VersusHud.StatusHiddenWhile = () => controller.ScoresShown;
+            var seats = _human.NetSeats;
+            controller.VersusHud.BotName = s => Net.NetSeats.BotCallsign(seats, s);
             if (verbose)
                 Log.Info("flight", $"dogfight HUD: match timer/K-D/leader line + kill banner + opponent markers");
         }
@@ -606,6 +608,17 @@ internal sealed class HumanFlightAdapter
             botPilot.TargetHeadingDeg = AiPilot.HeadingDegOf(start.LookAt - start.Pos);
             botPilot.TargetAltitude = start.Pos.Y;
             _botPilots.ArmSeatPilot(botPilot, stats, planeName, controller.Team, seat!.Skill);
+            // A world AI's roster logs every mode change and a bot's logs none. The lay-off assist
+            // is logged alone, the one change a sortie's log is read for: whether bots ease off people.
+            if (botPilot.Machine is { } modes)
+            {
+                string callsign = seat.Callsign;
+                modes.ModeChanged += (from, to, why) =>
+                {
+                    if (from == AiMode.LayOff || to == AiMode.LayOff)
+                        Log.Info("flight", $"bot lay-off: seat {pi} '{callsign}':{AiModeMachine.NameOf(from)} -> {AiModeMachine.NameOf(to)} ({why}) t={GameClock.Current?.Time ?? 0.0:0.00}");
+                };
+            }
             // Out of rockets or low on hull, it breaks off to a base; the match's base runtime runs the order.
             botPilot.RearmOrder = new AiRearmOrder(controller.WorldBlocksLine);
             controller.ArmSpawnTimers();
