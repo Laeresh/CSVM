@@ -16,20 +16,16 @@ public enum AiRearmLeg : byte
 }
 
 /// <summary>
-/// A bot's rearm standing order: low on guns or hull, it breaks off to the nearest base serving it.
-/// Once restored and clear of the base it hands back to combat. A base is a fly-through bay, so the
-/// run flies a gate out on the bay's open side, then a final leg through the node. The base runtime
-/// feeds <see cref="Update"/> and <see cref="AiPilot"/> flies <see cref="Aim"/>. Approach and the
-/// measured bay: docs/org/multiplayer-rearm.md, "Bots at a base"; engine-free beyond the vector struct.
+/// A bot's rearm standing order: out of rockets or badly damaged, it breaks off to the nearest base
+/// serving it. Once restored and clear of the base it hands back to combat. A base is a fly-through
+/// bay, so the run flies a gate out on the bay's open side, then a final leg through the node. The
+/// base runtime feeds <see cref="Update"/> and <see cref="AiPilot"/> flies <see cref="Aim"/>. Approach
+/// and the measured bay: docs/org/multiplayer-rearm.md, "Bots at a base"; engine-free beyond the vector struct.
 /// </summary>
 public sealed class AiRearmOrder
 {
-    /// <summary>TUNE, a remake value: the original has no computer pilots. The share of a full gun
-    /// load at or below which a run starts.</summary>
-    public const float LowAmmoShare = 0.2f;
-
-    /// <summary>TUNE, a remake value: the share of whole-vehicle health, the pool the death test
-    /// reads, at or below which a run starts.</summary>
+    /// <summary>TUNE, a remake value: the original has no computer pilots. The share of whole-vehicle
+    /// health, the pool the death test reads, at or below which a run starts.</summary>
     public const float DamagedHullShare = 0.35f;
 
     /// <summary>How far out along the open bearing the gate stands, metres: the final leg's length.</summary>
@@ -99,30 +95,40 @@ public sealed class AiRearmOrder
     /// <summary>Why the standing run started, for the log.</summary>
     public string Reason { get; private set; } = string.Empty;
 
-    /// <summary>Whether the supplies call for a run: guns at or under <see cref="LowAmmoShare"/>, or
-    /// the hull at or under <see cref="DamagedHullShare"/>.</summary>
-    public static bool Wants(float ammoShare, float hullShare) =>
-        ammoShare <= LowAmmoShare || hullShare <= DamagedHullShare;
+    /// <summary>Whether the supplies call for a run: every rocket pylon empty, or the hull at or under
+    /// <see cref="DamagedHullShare"/>. The guns never call for one, since a bot's guns outlast its
+    /// rockets by far and a person flies back only for rockets (docs/org/multiplayer-rearm.md).</summary>
+    public static bool Wants(bool rocketsOut, float hullShare) =>
+        rocketsOut || hullShare <= DamagedHullShare;
 
-    /// <summary>The share of a full load the slots hold together: 1 with infinite ammunition or with
-    /// no capacity at all, since neither can run low.</summary>
-    public static float LoadShare(IEnumerable<IAmmoSlot> slots, bool infinite)
+    /// <summary>Whether every pylon is empty, whatever it carries: the game names all pylon ordnance
+    /// rockets, and a bot launches every pylon alike. A pylon with no capacity carries nothing and is
+    /// skipped. False with no loaded pylon at all, or with infinite ammunition, since neither runs out.</summary>
+    public static bool RocketsOut(IEnumerable<IAmmoSlot> pylons, bool infinite)
     {
-        ArgumentNullException.ThrowIfNull(slots);
+        ArgumentNullException.ThrowIfNull(pylons);
         if (infinite)
         {
-            return 1f;
+            return false;
         }
 
-        long ammo = 0;
-        long capacity = 0;
-        foreach (var slot in slots)
+        bool carries = false;
+        foreach (var pylon in pylons)
         {
-            ammo += Math.Max(slot.Ammo, 0);
-            capacity += Math.Max(slot.Capacity, 0);
+            if (pylon.Capacity <= 0)
+            {
+                continue;
+            }
+
+            if (pylon.Ammo > 0)
+            {
+                return false;
+            }
+
+            carries = true;
         }
 
-        return capacity > 0 ? (float)ammo / capacity : 1f;
+        return carries;
     }
 
     /// <summary>Bearing <paramref name="index"/> of <paramref name="count"/>, as a horizontal unit
@@ -197,15 +203,15 @@ public sealed class AiRearmOrder
     /// <paramref name="at"/> flying <paramref name="velocity"/>, the nearest base serving it is
     /// <paramref name="nearestBase"/> (null when none offers), and <paramref name="restored"/> says
     /// a base restored it on this step.</summary>
-    public void Update(Vector3 at, Vector3 velocity, float ammoShare, float hullShare, Vector3? nearestBase,
+    public void Update(Vector3 at, Vector3 velocity, bool rocketsOut, float hullShare, Vector3? nearestBase,
         bool restored)
     {
         switch (Leg)
         {
             case AiRearmLeg.None:
-                if (nearestBase is { } found && Wants(ammoShare, hullShare))
+                if (nearestBase is { } found && Wants(rocketsOut, hullShare))
                 {
-                    Reason = FormattableString.Invariant($"guns {ammoShare:0.00}, hull {hullShare:0.00}");
+                    Reason = Why(rocketsOut, hullShare);
                     Plan(at, velocity, found);
                 }
 
@@ -273,6 +279,18 @@ public sealed class AiRearmOrder
     }
 
     private static Vector3 Horizontal(Vector3 v) => new(v.X, 0f, v.Z);
+
+    // The trigger that fired, both when both did; the hull's share only when it is the reason.
+    private static string Why(bool rocketsOut, float hullShare)
+    {
+        string hull = FormattableString.Invariant($"hull {hullShare:0.00}");
+        if (!rocketsOut)
+        {
+            return hull;
+        }
+
+        return hullShare <= DamagedHullShare ? "rockets out, " + hull : "rockets out";
+    }
 
     // A new run, or the same one planned afresh: the open side nearest the pilot, then the gate.
     // A pilot already in the final leg's corridor joins the leg at once. The bay is the level

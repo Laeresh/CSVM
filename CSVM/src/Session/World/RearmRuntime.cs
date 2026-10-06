@@ -163,12 +163,13 @@ internal sealed class RearmRuntime
         hull < 0 || (_in.Hulls?.NodeAt(hull) is { } node && !_in.Hulls.IsDead(node));
 
     // A bot's rearm run reads its supplies after any restore on this step, so a restore ends it.
+    // Its pylons and hull are read; its guns are not, which a bot never empties before its rockets.
     private void StepOrder(int seat, FlightController pilot, AiRearmOrder order, int team, bool entered)
     {
         var was = order.Leg;
-        float guns = AiRearmOrder.LoadShare(pilot.Loadout?.FirableGuns ?? Enumerable.Empty<GunGroup>(), pilot.InfiniteAmmo);
+        bool rocketsOut = AiRearmOrder.RocketsOut(pilot.Loadout?.Hardpoints ?? Enumerable.Empty<Hardpoint>(), pilot.InfiniteAmmo);
         float hull = pilot.Damage?.SummaryHealthFraction ?? 1f;
-        order.Update(pilot.WorldPosition, pilot.WorldVelocity, guns, hull, _rules.NearestServing(pilot.WorldPosition, team, _bases), entered);
+        order.Update(pilot.WorldPosition, pilot.WorldVelocity, rocketsOut, hull, _rules.NearestServing(pilot.WorldPosition, team, _bases), entered);
         if (order.Leg == was)
         {
             return;

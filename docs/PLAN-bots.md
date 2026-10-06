@@ -105,6 +105,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 14. ☑ Rearm standing order: a bot breaks off to a base when low or badly damaged
 15. ☑ A bot takes a person's world-contact rule: it grazes and bounces, never destroyed outright
 16. ☑ A bot's world bounce matches a person's in the same plane
+17. ☑ A bot rearms when its rockets run out, not its guns
 
 ### Wave C, lobby and local setup
 
@@ -810,6 +811,92 @@ in the impulse or cap its rebound: the pilot's own pull-up is a person's state. 
 `FlightModel.BodyRates` from outside the plant leaves the ground blow's share stale; nothing in
 production does.
 
+## B17 ☑ A bot rearms when its rockets run out, not its guns
+
+**Goal.** A bot breaks off to a base when every rocket pylon it carries is empty, or when its hull is
+badly damaged, and never for its guns. The user's ruling on D32's rearm reading: asked what should
+send a bot back, "Rockets out + damage"; asked when a bot is out of rockets, "All pylons empty". In
+the user's own play, "Gun ammo is plenty but i would only return to rearm rockets."
+
+**Evidence (confidence: traced-to-code; the rocket trigger's rate in play is
+direction-sound-magnitude-TUNE).** In D32's second sortie (`vs-20261006-193354.log`) the rearm order
+fired 18 times, every time on the hull (0.02 to 0.34) and never on ammunition; the guns read 0.91 to
+1.00 at every break-off. B14 read only the forward guns: `RearmRuntime.StepOrder` passed
+`AiRearmOrder.LoadShare(pilot.Loadout?.FirableGuns ...)` against `LowAmmoShare = 0.2`, and left the
+pylons out on the reading that a bot fights with its guns. A pylon's count is `Hardpoint.Ammo` of
+`Hardpoint.Capacity` (the weapon's `CLUSTER_SIZE`, or the fit's own rounds) on
+`Loadout.Hardpoints`, the list `FireControl` launches from and the AI rocketeer walks.
+`FlightController.Rearm` calls `RestockWeapons`, which tops every gun group and every hardpoint back
+to `Capacity` and refills `FireControl`, so a base restores the racks as well as the guns.
+- **Planes with no rocket pylons.** None among the stock fits: all eleven in `stock_loadouts.json`
+  hang `wep_06` (high explosive, three rounds) on 2 (Autogyro) to 8 (Balmoral, Warhawk) pylons, and a
+  bot flies its plane's stock fit, since the lobby's bot row picks no fit. A loadout with no loaded
+  pylon (a `none` pick binds no hardpoint, a race pilot carries no loadout) never trips the trigger,
+  and neither does infinite ammunition.
+- **Pylons carrying something other than rockets.** None exist. Every ordnance a pylon can carry
+  (`selectable.pylon_ordnance`, `wep_05` to `wep_15`) is flagged `ROCKET` in `weapons.zrd`, the
+  torpedo (`wep_14`), smoke (`wep_13`) and flare (`wep_15`) included; there are no pylon bombs. The
+  game's own screens name every pylon's ordnance a rocket (the ROCKETS gauge, `IDS_ROCKETSHORTNAME`),
+  and a bot's rocketeer launches any loaded pylon (`DriveAiRocketeer` views every hardpoint). So every
+  loaded pylon counts, whatever it carries; only `--rocket=` and `--loadout=` change what a bot hangs.
+- **How often the rocket trigger can fire.** A bot's rocketeer stamps a 30 s vehicle-wide lockout
+  per launch (`AiRocketeer.RefireSeconds`, since a stock fit authors none) and launches only on its
+  ordnance roll (0.14 and 0.18 per attempt in D32's log). A stock fit's 6 to 24 rounds therefore take
+  at least 2.5 to 11.5 minutes alive and in pursuit to empty. In a short match the hull stays the
+  trigger that fires; whether that suits play is a judgement for the next playtest.
+
+**Approach (landed).** `AiRearmOrder.LowAmmoShare` and `AiRearmOrder.LoadShare` are removed.
+`AiRearmOrder.RocketsOut(pylons, infinite)` is true when every pylon with a capacity holds 0 rounds;
+it is false with no such pylon or with infinite ammunition. `Wants(rocketsOut, hullShare)` and
+`Update(at, velocity, rocketsOut, hullShare, nearestBase, restored)` take the boolean in place of the
+guns' share; `DamagedHullShare = 0.35` is unchanged. `RearmRuntime.StepOrder` reads
+`pilot.Loadout?.Hardpoints` and no longer reads the guns. `Reason`, which the
+`rearm: bot seat N breaks off ... (...)` line prints, names the trigger that fired: `rockets out`,
+`hull 0.30`, or `rockets out, hull 0.20` when both did. `AiPilot.ResetForSpawn` still clears the run,
+and a return or a base refills the pylons, so a bot that rearmed for rockets comes back with full
+racks. Docs: `docs/org/multiplayer-rearm.md` "Bots at a base" (the trigger, the pylon reading, the
+rate), the `AiRearmOrder.cs` and `RearmRuntime.cs` architecture entries, and the index bullet. B14's
+section stays as the record of what landed then.
+
+**Model recommendation.** Sonnet: a small change to one engine-free order and its one caller, on an
+existing suite. The one non-obvious fact is the rocketeer's 30 s lockout, which a suite control that
+leaves the bot in combat has to allow for.
+
+**Verify.** Units in `AiRearmOrderTests`: every loaded pylon empty is out, and a pylon with no
+capacity is skipped; one rocket left on one pylon is not out, nor is an empty rack with infinite
+ammunition; a plane with no rocket pylons never runs out and starts no run; the hull alone still
+starts a run, and `Reason` reads `hull 0.30`, `rockets out` or `rockets out, hull 0.20`; the
+threshold control (rockets left, hull just above 0.35, no run); and an extracted-data tripwire that
+every selectable pylon ordnance is a loaded `ROCKET` and every stock fit hangs at least two loaded
+rocket pylons. `AiPilotTests`' reset test feeds the new argument. Suite `net-bot-rearm`
+(`CSVM/src/Testing/NetBotRearmSuites.cs`, MP1, host, guest and bot on a clean loopback): with half
+its guns, one round on each of its four pylons (4/12) and half its hull the bot keeps a quarry and
+starts no run over 300 steps (control); restored and with its guns emptied (0/7200), racks full and
+hull sound, it starts no run over 300 steps (the control for the removal); every pylon emptied with
+full guns, it breaks off in 2 steps on `rockets out` and drops its quarry; set down 3 km out on the
+bay's closed side with its pylons emptied again and its hull halved, it flies to the gate, takes no
+quarry with a hostile put 800 m ahead, and the base restores it in 5268 steps to rockets 12/12, guns
+7200/7200 and health 100/100; it hands back 150 m out and chases a quarry 97 steps later; with its
+hull at 0.30 and full racks it breaks off in one step on `hull 0.30`; shot down on the way it comes
+back with no run. Able-to-fail: with the gun trigger put back in `StepOrder` the removal control
+fails (run True at guns 0/7200); with the rocket reading forced false four checks fail (no break-off,
+no gate, no restore, no lure). Runs in `bots-b17`: `RunTests.ps1 -Filter
+'net-bot-,versus-local-bot,rearm' -Shards 4 -SkipGoldens -SkipHitch` units 6360 passed / 0 failed / 3
+skipped (`AiRearmOrderTests` 11), engine 11 passed / 0 failed (every `net-bot-*`, `versus-local-bot`,
+`versus-local-bot-graze`, `net-rearm-deathmatch`, `net-rearm-zeppelins`, `ai-engine-rearm`); `-Filter
+'ai-' -Shards 4 -SkipUnits -SkipGoldens -SkipHitch` 32 passed / 0 failed; engine errors clean on
+every run. `CheckCommentCaps.ps1`, `CheckDocEntries.ps1`, `CheckEncoding.ps1` and `CheckItemIds.ps1`
+clean.
+
+**Verified.** <pending orchestrator run>
+
+**⚠ Traps.** Never put the guns back into the trigger: the user flies back only for rockets. A pylon
+built with no capacity carries nothing; counting it as empty would send a bot whose real pylons are
+loaded. A suite that keeps a bot in combat with rockets left must leave it more rounds than it can
+launch in the window: one launch per 30 s, so one round on each pylon holds through 300 steps. A
+suite that places a bot with `RespawnAt` refills its pylons and mends its hull, so empty them again
+after the placement.
+
 # Wave C, lobby and local setup
 
 ## C20 ☑ A local match runs off a seat roster with no wire, so it can hold bot seats
@@ -1339,9 +1426,10 @@ for it (`vs-20261006-193354.log`, about 3.7 minutes). Every one of the ten death
 bot flew into terrain or a structure, no `AI ram` death, four harmless grazes. The rearm order fired
 eighteen times, every one on hull (health 0.02 to 0.34) and never on ammunition (the guns read 0.91
 to 1.00 each time); all eighteen chose the same of MP1's two bases; three ended in a restore after
-46, 59 and 71 s away, and the rest were shot down en route or still flying at the log's end. Those
-two observations (the ammunition threshold never trips, and every trip goes to one base) stay
-TUNE for a later playtest; the lay-off assist logs nothing, so it was not read. The sortie also
+46, 59 and 71 s away, and the rest were shot down en route or still flying at the log's end. The
+ammunition threshold that never tripped is replaced by B17: the user ruled that a bot rearms when
+every rocket pylon is empty or its hull is badly damaged, never for its guns. That every trip goes
+to one base stays TUNE for a later playtest; the lay-off assist logs nothing, so it was not read. The sortie also
 showed a held Respawn control placing the user's plane six times after a crash, an older defect
 fixed on this branch (84bad29a) and not a bot one.
 

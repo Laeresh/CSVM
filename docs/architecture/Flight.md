@@ -477,8 +477,8 @@ Pure and seeded, so a fixed-dt run is deterministic. Decode: [../org/aiPilot.md]
 
 ## src/Flight/Ai/AiRearmOrder.cs
 A bot's rearm standing order, engine-free. `Update`, called by `Session/World/RearmRuntime.cs` each
-step, starts a run when the guns' `LoadShare` or the whole-vehicle health falls to its TUNE threshold,
-plans the bay's open side with the world line probe the seat path hands it (`OpenBearing`), and walks
+step, starts a run when `RocketsOut` reads every loaded pylon empty or the whole-vehicle health falls to
+its TUNE threshold (the guns are not read), plans the bay's open side with the world line probe the seat path hands it (`OpenBearing`), and walks
 the legs: the gate out on that side, the level final leg through the node, and clear of the base once
 restored. `AiPilot` flies `Aim` on the cruise table while the run stands. Approach and the measured
 bay: [../org/multiplayer-rearm.md](../org/multiplayer-rearm.md); units `AiRearmOrderTests.cs`, suite

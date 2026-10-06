@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Airframe;
+using CSVM.Flight.Weapons;
 using CSVM.Launch;
 using CSVM.Net;
 using CSVM.Session.World;
@@ -46,12 +48,12 @@ internal static class NetBotRearmSuites
     private static readonly string[] Airframes = { "player_pfighter", "player_fbrand" };
 
     [Suite("net-bot-rearm",
-        "a host with a bot seat and a guest seat on the chapter's MP1 over a clean loopback: with its "
-        + "guns and hull above the rearm thresholds the bot fights on and starts no run; its guns "
-        + "emptied, it breaks off, holds no quarry with a hostile put in its path, flies the bay's "
-        + "open side to the base, which restores its guns and hull, and once clear takes a quarry and "
-        + "chases it again; its hull under the threshold it breaks off with full guns, and shot down "
-        + "on the way it comes back with no run standing")]
+        "a host with a bot seat and a guest seat on the chapter's MP1 over a clean loopback: with "
+        + "rockets left and its hull above the threshold the bot fights on and starts no run, its guns "
+        + "emptied included; every pylon emptied, it breaks off, holds no quarry with a hostile put in "
+        + "its path, flies the bay's open side to the base, which restores its pylons, guns and hull, "
+        + "and once clear takes a quarry and chases it again; its hull under the threshold it breaks "
+        + "off with full racks, and shot down on the way it comes back with no run standing")]
     internal static void ABotBreaksOffToABaseAndRejoins(TestContext ctx)
     {
         var spec = NetCombatSuites.MatchSpec(ctx, out _, "--vs-kills=0", "--vs-time=0");
@@ -93,6 +95,7 @@ internal static class NetBotRearmSuites
             Lift(host.Session.SeatRigs[HostSeat].Controller!);
             Lift(guest.Session.SeatRigs[GuestSeat].Controller!);
             FightsOnAboveTheThresholds(ctx, peers, bot);
+            EmptyGunsSendNothing(ctx, peers, bot);
             if (FliesToTheBase(ctx, peers, bot, rearm))
             {
                 RejoinsTheFight(ctx, peers, bot);
@@ -108,13 +111,20 @@ internal static class NetBotRearmSuites
         }
     }
 
-    // ABLE-TO-FAIL CONTROL for the run below: half a load of guns and half a hull call for nothing.
+    // ABLE-TO-FAIL CONTROL for the run below: half a load of guns and rockets and half a hull call
+    // for nothing. The rocketeer's 30 s lockout lets it launch once at most in the window, so a
+    // round left on every pylon cannot all go.
     private static void FightsOnAboveTheThresholds(TestContext ctx, GameSession[] peers, FlightController bot)
     {
         var order = bot.Pilot!.RearmOrder!;
         foreach (var gun in bot.Loadout!.FirableGuns)
         {
             gun.Ammo = gun.Capacity / 2;
+        }
+
+        foreach (var pylon in bot.Loadout.Hardpoints)
+        {
+            pylon.Ammo = Math.Max(1, pylon.Capacity / 2);
         }
 
         bot.Damage!.ScalePools(0.5f, 0.5f);
@@ -128,11 +138,33 @@ internal static class NetBotRearmSuites
         }
 
         ctx.Check(!flew && chased,
-            $"ABLE-TO-FAIL CONTROL: with half its guns and half its hull the bot keeps a quarry and starts no run over {ControlSteps} steps (guns {Guns(bot):0.00}, hull {bot.Damage.SummaryHealthFraction:0.00}, run {flew}, quarry {chased})");
+            $"ABLE-TO-FAIL CONTROL: with half its guns, rockets on its pylons and half its hull the bot keeps a quarry and starts no run over {ControlSteps} steps (guns {Load(bot.Loadout.FirableGuns)}, rockets {Load(bot.Loadout.Hardpoints)}, hull {bot.Damage.SummaryHealthFraction:0.00}, run {flew}, quarry {chased})");
     }
 
-    // The guns emptied, the bot breaks off at once and takes no quarry with one put in its path.
-    // The base restores it on the pass.
+    // ABLE-TO-FAIL CONTROL for the gun trigger's removal: a dry magazine with full racks and a sound
+    // hull sends nothing. The gun trigger broke off within two steps.
+    private static void EmptyGunsSendNothing(TestContext ctx, GameSession[] peers, FlightController bot)
+    {
+        var order = bot.Pilot!.RearmOrder!;
+        bot.Rearm();
+        foreach (var gun in bot.Loadout!.Guns)
+        {
+            gun.Ammo = 0;
+        }
+
+        bool flew = false;
+        for (int step = 0; step < ControlSteps; step++)
+        {
+            Lockstep(1, peers);
+            flew |= order.Flying;
+        }
+
+        ctx.Check(!flew && bot.Loadout.Guns.All(g => g.Ammo == 0),
+            $"ABLE-TO-FAIL CONTROL: its guns emptied with its racks full and its hull sound, it starts no run over {ControlSteps} steps (guns {Load(bot.Loadout.FirableGuns)}, rockets {Load(bot.Loadout.Hardpoints)}, hull {bot.Damage!.SummaryHealthFraction:0.00}, run {flew})");
+    }
+
+    // Every pylon emptied, the bot breaks off at once and takes no quarry with one put in its path.
+    // The base restores it on the pass, its racks full again.
     private static bool FliesToTheBase(TestContext ctx, GameSession[] peers, FlightController bot, RearmRuntime rearm)
     {
         var pilot = bot.Pilot!;
@@ -140,23 +172,23 @@ internal static class NetBotRearmSuites
         var gunner = pilot.Gunner!;
         foreach (var gun in bot.Loadout!.Guns)
         {
-            gun.Ammo = 0;
+            gun.Ammo = gun.Capacity;
         }
 
+        EmptyPylons(bot);
         int before = rearm.Rearms;
         int steps = StepUntil(() => order.Flying && gunner.Target == null, peers, WaitSteps);
-        ctx.Check(order.Flying && gunner.Target == null && pilot.Machine!.Mode != AiMode.Pursue,
-            $"its guns emptied, the bot breaks off for a base and drops its quarry ({order.Leg}, {order.Reason}, quarry {FlightController.TargetLabel(gunner.Target)}, {AiModeMachine.NameOf(pilot.Machine!.Mode)}, {steps} step(s))");
+        ctx.Check(order.Flying && order.Reason == "rockets out" && gunner.Target == null && pilot.Machine!.Mode != AiMode.Pursue,
+            $"every pylon emptied, with full guns, the bot breaks off for a base and drops its quarry ({order.Leg}, {order.Reason}, quarry {FlightController.TargetLabel(gunner.Target)}, {AiModeMachine.NameOf(pilot.Machine!.Mode)}, {steps} step(s))");
 
         // Set down on the far side of the bay from the side the run chose, the run must fly round to
-        // the gate. The return clears the run and refills the guns, so they are emptied again.
+        // the gate. The return clears the run, refills the pylons and mends the hull. So the pylons
+        // are emptied again and the hull halved, short of its own threshold.
         var far = order.Base - (order.Approach * FarSide) + (Vector3.Up * FarAbove);
         bot.RespawnAt(far, order.Base + (Vector3.Up * FarAbove));
         bot.ArmSpawnTimers();
-        foreach (var gun in bot.Loadout.Guns)
-        {
-            gun.Ammo = 0;
-        }
+        EmptyPylons(bot);
+        bot.Damage!.ScalePools(0.5f, 0.5f);
 
         Lockstep(1, peers);
         ctx.Check(order.Leg == AiRearmLeg.Gate && order.Approach.Dot(bot.WorldPosition - order.Base) < 0f,
@@ -182,10 +214,12 @@ internal static class NetBotRearmSuites
         }
 
         var damage = bot.Damage!;
-        bool full = bot.Loadout.FirableGuns.All(g => g.Ammo == g.Capacity)
+        bool full = bot.Loadout.Hardpoints.Count > 0
+            && bot.Loadout.Hardpoints.All(h => h.Ammo == h.Capacity)
+            && bot.Loadout.FirableGuns.All(g => g.Ammo == g.Capacity)
             && Mathf.IsEqualApprox(damage.WholeHealth, damage.WholeHealthMax);
         ctx.Check(rearm.Rearms == before + 1 && full && order.Leg == AiRearmLeg.Clear,
-            $"it reaches the base, which restores its guns and its hull ({rearm.Rearms - before} rearm(s), guns {Guns(bot):0.00}, health {damage.WholeHealth:0}/{damage.WholeHealthMax:0}, {order.Leg}, {steps} step(s), closest {closest:0.0} m)");
+            $"it reaches the base, which restores its pylons, its guns and its hull ({rearm.Rearms - before} rearm(s), rockets {Load(bot.Loadout.Hardpoints)}, guns {Load(bot.Loadout.FirableGuns)}, health {damage.WholeHealth:0}/{damage.WholeHealthMax:0}, {order.Leg}, {steps} step(s), closest {closest:0.0} m)");
         ctx.Check(lured && !engaged,
             $"on the way it takes no quarry and chases nothing, a hostile put {LureAhead:0} m ahead in its path included (lure placed {lured}, engaged {engaged})");
         ctx.Check(bot.RespawnCount == respawns && !bot.Crashed,
@@ -212,20 +246,21 @@ internal static class NetBotRearmSuites
             $"and back in the fight its gunner takes a quarry and the pilot chases it ({FlightController.TargetLabel(pilot.Gunner.Target)}, {AiModeMachine.NameOf(pilot.Machine!.Mode)}, {steps} step(s))");
     }
 
-    // The hull alone starts a run with full guns. Shot down on the way, the bot comes back with none.
+    // The hull alone starts a run with full racks. Shot down on the way, the bot comes back with none.
     private static void DownedOnTheWay(TestContext ctx, GameSession[] peers, FlightController bot)
     {
         var pilot = bot.Pilot!;
         var order = pilot.RearmOrder!;
-        foreach (var gun in bot.Loadout!.FirableGuns)
+        foreach (var pylon in bot.Loadout!.Hardpoints)
         {
-            gun.Ammo = gun.Capacity;
+            pylon.Ammo = pylon.Capacity;
         }
 
         bot.Damage!.ScalePools(0.3f, 0.3f);
         int steps = StepUntil(() => order.Flying, peers, WaitSteps);
-        ctx.Check(order.Flying && Guns(bot) >= 1f,
-            $"its hull under the threshold, the bot breaks off with full guns ({order.Leg}, {order.Reason}, {steps} step(s))");
+        ctx.Check(order.Flying && order.Reason.StartsWith("hull ", StringComparison.Ordinal)
+                  && bot.Loadout.Hardpoints.All(h => h.Ammo == h.Capacity),
+            $"its hull under the threshold, the bot breaks off with full racks ({order.Leg}, {order.Reason}, rockets {Load(bot.Loadout.Hardpoints)}, {steps} step(s))");
         Lockstep(DownedAfter, peers);
         ctx.Check(order.Flying && pilot.Gunner!.Disengaged,
             $"ABLE-TO-FAIL CONTROL: the run still stands {DownedAfter} steps on, its gunner disengaged ({order.Leg})");
@@ -245,8 +280,20 @@ internal static class NetBotRearmSuites
         ctx.Check(!flew, $"and its fresh airframe, full again, starts no run over {ControlSteps} steps");
     }
 
-    private static float Guns(FlightController bot) =>
-        AiRearmOrder.LoadShare(bot.Loadout!.FirableGuns, bot.InfiniteAmmo);
+    // Rounds left of a full load, summed over the slots, for a check's message.
+    private static string Load(IEnumerable<IAmmoSlot> slots)
+    {
+        var all = slots.ToList();
+        return FormattableString.Invariant($"{all.Sum(s => s.Ammo)}/{all.Sum(s => s.Capacity)}");
+    }
+
+    private static void EmptyPylons(FlightController bot)
+    {
+        foreach (var pylon in bot.Loadout!.Hardpoints)
+        {
+            pylon.Ammo = 0;
+        }
+    }
 
     // The host's own aeroplane put ahead of the bot and above it, by its own respawn.
     private static void PutAhead(FlightController quarry, FlightController bot)

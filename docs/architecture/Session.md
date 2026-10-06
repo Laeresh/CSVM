@@ -241,7 +241,7 @@ serving its side while the hull lives. Each machine steps only the seats it flie
 `RearmBases`, and on entry calls `FlightController.Rearm` and posts "Rearmed!" in the seat's own
 pane. The restored ledger reaches every other machine in the next `0x40` damage report, where a
 hurt copy reading full again takes its stages off. A bot's `Flight/Ai/AiRearmOrder.cs` is updated
-there after the restore check, with its guns, its hull, the nearest serving base and the restore.
+there after the restore check, with its pylons, its hull, the nearest serving base and the restore.
 Decode: [../org/multiplayer-rearm.md](../org/multiplayer-rearm.md).
 
 ## src/Session/World/NetCutsceneLink.cs

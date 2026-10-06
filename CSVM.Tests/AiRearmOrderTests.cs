@@ -1,4 +1,6 @@
+using System.IO;
 using System.Linq;
+using CSVM.Extraction;
 using CSVM.Flight.Ai;
 using CSVM.Flight.Modes;
 using CSVM.Flight.Weapons;
@@ -8,8 +10,8 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// A bot's rearm run off-engine. <see cref="AiRearmOrder"/> starts on low guns or a badly damaged
-/// hull and lines up on a base's open side. It flies the final leg through the node, and hands back
+/// A bot's rearm run off-engine. <see cref="AiRearmOrder"/> starts with every rocket pylon empty or a
+/// badly damaged hull and lines up on a base's open side. It flies the final leg through the node, and hands back
 /// once the base has restored it and it has flown clear.
 /// </summary>
 [Trait("Tier", "Quick")]
@@ -18,23 +20,89 @@ public sealed class AiRearmOrderTests
     private static readonly Vector3 Node = new(0f, 100f, 0f);
 
     [Fact]
-    public void ARunStartsOnLowGunsOrABadlyDamagedHullAndNotAbove()
+    public void ARunStartsWithTheRocketsOutOrABadlyDamagedHullAndNotAbove()
     {
-        Assert.True(AiRearmOrder.Wants(AiRearmOrder.LowAmmoShare, 1f));
-        Assert.True(AiRearmOrder.Wants(1f, AiRearmOrder.DamagedHullShare));
-        Assert.True(AiRearmOrder.Wants(0f, 0f));
+        Assert.True(AiRearmOrder.Wants(rocketsOut: true, 1f));
+        Assert.True(AiRearmOrder.Wants(rocketsOut: false, AiRearmOrder.DamagedHullShare));
+        Assert.True(AiRearmOrder.Wants(rocketsOut: true, 0f));
 
-        // ABLE-TO-FAIL CONTROL: just above both thresholds nothing calls for a run.
-        Assert.False(AiRearmOrder.Wants(AiRearmOrder.LowAmmoShare + 0.01f, AiRearmOrder.DamagedHullShare + 0.01f));
+        // ABLE-TO-FAIL CONTROL: rockets left and the hull just above its threshold call for nothing.
+        Assert.False(AiRearmOrder.Wants(rocketsOut: false, AiRearmOrder.DamagedHullShare + 0.01f));
     }
 
     [Fact]
-    public void TheLoadShareSumsEverySlotAndCannotRunLowWithoutCapacityOrWithInfiniteAmmo()
+    public void TheRocketsAreOutOnlyWhenEveryLoadedPylonIsEmpty()
     {
-        var slots = new IAmmoSlot[] { new Slot(50, 200), new Slot(0, 200) };
-        Assert.Equal(0.125f, AiRearmOrder.LoadShare(slots, infinite: false), 4);
-        Assert.Equal(1f, AiRearmOrder.LoadShare(slots, infinite: true));
-        Assert.Equal(1f, AiRearmOrder.LoadShare(System.Array.Empty<IAmmoSlot>(), infinite: false));
+        Assert.True(AiRearmOrder.RocketsOut(new IAmmoSlot[] { new Slot(0, 4), new Slot(0, 4), new Slot(0, 4) }, infinite: false));
+
+        // A pylon that carries nothing is no rocket pylon, so the empty loaded ones still count as out.
+        Assert.True(AiRearmOrder.RocketsOut(new IAmmoSlot[] { new Slot(0, 4), new Slot(0, 0) }, infinite: false));
+
+        // ABLE-TO-FAIL CONTROL: one rocket left on one pylon keeps the bot in the fight.
+        Assert.False(AiRearmOrder.RocketsOut(new IAmmoSlot[] { new Slot(0, 4), new Slot(1, 4), new Slot(0, 4) }, infinite: false));
+        Assert.False(AiRearmOrder.RocketsOut(new IAmmoSlot[] { new Slot(0, 4), new Slot(0, 4) }, infinite: true));
+    }
+
+    [Fact]
+    public void APlaneWithNoRocketPylonsNeverRunsOut()
+    {
+        Assert.False(AiRearmOrder.RocketsOut(System.Array.Empty<IAmmoSlot>(), infinite: false));
+        Assert.False(AiRearmOrder.RocketsOut(new IAmmoSlot[] { new Slot(0, 0) }, infinite: false));
+
+        var order = new AiRearmOrder();
+        bool rocketsOut = AiRearmOrder.RocketsOut(System.Array.Empty<IAmmoSlot>(), infinite: false);
+        order.Update(new Vector3(0f, 300f, 3000f), Vector3.Zero, rocketsOut, 1f, Node, restored: false);
+        Assert.False(order.Flying);
+    }
+
+    [Fact]
+    public void TheHullAloneStillStartsARunAndTheReasonNamesTheTrigger()
+    {
+        var hull = new AiRearmOrder();
+        hull.Update(new Vector3(0f, 300f, 3000f), Vector3.Zero, rocketsOut: false, 0.3f, Node, restored: false);
+        Assert.True(hull.Flying);
+        Assert.Equal("hull 0.30", hull.Reason);
+
+        var rockets = new AiRearmOrder();
+        rockets.Update(new Vector3(0f, 300f, 3000f), Vector3.Zero, rocketsOut: true, 0.9f, Node, restored: false);
+        Assert.Equal("rockets out", rockets.Reason);
+
+        var both = new AiRearmOrder();
+        both.Update(new Vector3(0f, 300f, 3000f), Vector3.Zero, rocketsOut: true, 0.2f, Node, restored: false);
+        Assert.Equal("rockets out, hull 0.20", both.Reason);
+    }
+
+    /// <summary>Why every pylon counts as a rocket pylon: each ordnance a pylon can carry is a ROCKET,
+    /// the torpedo, smoke and flare included. Each stock fit, the one a bot flies, hangs loaded
+    /// pylons, so every bot can run out. A tripwire for a data or loadout change.</summary>
+    [ExtractedDataFact]
+    public void EveryPylonOrdnanceIsARocketAndEveryStockFitCarriesSome()
+    {
+        var weapons = WeaponDefs.Load(SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip")));
+        var loadouts = StockLoadouts.Load(Path.Combine(TestData.RepoRoot, "CSVM", "data", "stock_loadouts.json"));
+
+        var pickable = loadouts.Options.PylonOrdnance.Where(o => o.Id != LoadoutChoice.None).ToList();
+        Assert.NotEmpty(pickable);
+        foreach (var option in pickable)
+        {
+            var weapon = weapons.Get(option.Id);
+            Assert.True(weapon is { IsRocket: true, ClusterSize: > 0 }, $"{option.Id} ({option.Label}) is no loaded rocket");
+        }
+
+        Assert.Equal(11, loadouts.All.Count);
+        foreach (var (plane, fit) in loadouts.All)
+        {
+            int loaded = 0;
+            for (int i = 0; fit.Hardpoints is { } hp && i < hp.Count; i++)
+            {
+                if (hp.Stock[i] != LoadoutChoice.None && weapons.Get(hp.Stock[i]) is { IsRocket: true, ClusterSize: > 0 })
+                {
+                    loaded++;
+                }
+            }
+
+            Assert.True(loaded >= 2, $"{plane} hangs {loaded} loaded rocket pylon(s)");
+        }
     }
 
     [Fact]
@@ -70,7 +138,7 @@ public sealed class AiRearmOrderTests
     {
         // Every bearing but due south (+Z, heading 180) is walled off.
         var order = new AiRearmOrder((from, to) => (to - from).Normalized().Z < 0.99f);
-        order.Update(new Vector3(800f, 300f, 800f), Vector3.Zero, 0f, 1f, Node, restored: false);
+        order.Update(new Vector3(800f, 300f, 800f), Vector3.Zero, true, 1f, Node, restored: false);
 
         Assert.Equal(AiRearmLeg.Gate, order.Leg);
         Assert.Equal(0f, order.Approach.DistanceTo(Vector3.Back), 3);
@@ -81,17 +149,17 @@ public sealed class AiRearmOrderTests
     {
         var order = new AiRearmOrder();
         var inbound = new Vector3(0f, 0f, -90f);
-        order.Update(new Vector3(0f, 300f, 4000f), inbound, 0f, 1f, Node, restored: false);
+        order.Update(new Vector3(0f, 300f, 4000f), inbound, true, 1f, Node, restored: false);
         Assert.Equal(AiRearmLeg.Gate, order.Leg);
-        Assert.Contains("guns 0.00", order.Reason, System.StringComparison.Ordinal);
+        Assert.Equal("rockets out", order.Reason);
         var gate = new Vector3(0f, Node.Y + AiRearmOrder.GateAboveM, AiRearmOrder.FinalLegM);
         Assert.Equal(gate, order.Aim(new Vector3(0f, 300f, 4000f)));
 
         // ABLE-TO-FAIL CONTROL: crossing the corridor outbound, it keeps flying to the gate.
         var lined = gate + new Vector3(0f, 0f, 100f);
-        order.Update(lined, -inbound, 0f, 1f, Node, restored: false);
+        order.Update(lined, -inbound, true, 1f, Node, restored: false);
         Assert.Equal(AiRearmLeg.Gate, order.Leg);
-        order.Update(lined, inbound, 0f, 1f, Node, restored: false);
+        order.Update(lined, inbound, true, 1f, Node, restored: false);
         Assert.Equal(AiRearmLeg.Final, order.Leg);
 
         // The aim leads by LeadM and descends along the leg to the node's height.
@@ -103,15 +171,15 @@ public sealed class AiRearmOrderTests
         Assert.Equal(new Vector3(0f, 100f, 500f - AiRearmOrder.LeadM), order.Aim(new Vector3(0f, 100f, 500f)));
         Assert.Equal(new Vector3(0f, 100f, 100f - AiRearmOrder.LeadM), order.Aim(new Vector3(0f, 100f, 100f)));
 
-        order.Update(new Vector3(0f, 100f, 20f), Vector3.Zero, 0f, 1f, Node, restored: true);
+        order.Update(new Vector3(0f, 100f, 20f), Vector3.Zero, true, 1f, Node, restored: true);
         Assert.Equal(AiRearmLeg.Clear, order.Leg);
         Assert.Equal(100f, order.Aim(new Vector3(0f, 100f, -10f)).Y);
         Assert.Equal(100f + AiRearmOrder.ClearClimbM, order.Aim(new Vector3(0f, 100f, -100f)).Y);
 
         // Restored, its supplies are full: the run ends only once it is clear of the base.
-        order.Update(new Vector3(0f, 100f, -140f), Vector3.Zero, 1f, 1f, Node, restored: false);
+        order.Update(new Vector3(0f, 100f, -140f), Vector3.Zero, false, 1f, Node, restored: false);
         Assert.Equal(AiRearmLeg.Clear, order.Leg);
-        order.Update(new Vector3(0f, 100f, -151f), Vector3.Zero, 1f, 1f, Node, restored: false);
+        order.Update(new Vector3(0f, 100f, -151f), Vector3.Zero, false, 1f, Node, restored: false);
         Assert.Equal(AiRearmLeg.None, order.Leg);
         Assert.False(order.Flying);
     }
@@ -120,19 +188,19 @@ public sealed class AiRearmOrderTests
     public void AMissedPassPlansAgainAndALostBaseEndsTheRun()
     {
         var order = new AiRearmOrder();
-        order.Update(new Vector3(0f, 100f, 400f), Vector3.Zero, 0f, 1f, Node, restored: false);
+        order.Update(new Vector3(0f, 100f, 400f), Vector3.Zero, true, 1f, Node, restored: false);
         Assert.Equal(AiRearmLeg.Final, order.Leg);
 
         // Past the node by more than the miss distance, unrestored: it turns back from this side.
-        order.Update(new Vector3(0f, 100f, -200f), Vector3.Zero, 0f, 1f, Node, restored: false);
+        order.Update(new Vector3(0f, 100f, -200f), Vector3.Zero, true, 1f, Node, restored: false);
         Assert.Equal(AiRearmLeg.Final, order.Leg);
         Assert.Equal(0f, order.Approach.DistanceTo(Vector3.Forward), 3);
 
         // A base that moved is planned afresh; one that offers nothing ends the run.
         var moved = Node + new Vector3(40f, 0f, 0f);
-        order.Update(new Vector3(0f, 100f, -200f), Vector3.Zero, 0f, 1f, moved, restored: false);
+        order.Update(new Vector3(0f, 100f, -200f), Vector3.Zero, true, 1f, moved, restored: false);
         Assert.Equal(moved, order.Base);
-        order.Update(new Vector3(0f, 100f, -200f), Vector3.Zero, 0f, 1f, null, restored: false);
+        order.Update(new Vector3(0f, 100f, -200f), Vector3.Zero, true, 1f, null, restored: false);
         Assert.Equal(AiRearmLeg.None, order.Leg);
     }
 
@@ -140,14 +208,14 @@ public sealed class AiRearmOrderTests
     public void NoBaseOrFullSuppliesStartNothingAndClearDropsARun()
     {
         var order = new AiRearmOrder();
-        order.Update(new Vector3(0f, 300f, 3000f), Vector3.Zero, 0f, 0f, null, restored: false);
+        order.Update(new Vector3(0f, 300f, 3000f), Vector3.Zero, true, 0f, null, restored: false);
         Assert.Equal(AiRearmLeg.None, order.Leg);
 
         // ABLE-TO-FAIL CONTROL: above both thresholds, with a base standing, there is no run.
-        order.Update(new Vector3(0f, 300f, 3000f), Vector3.Zero, 0.5f, 0.5f, Node, restored: false);
+        order.Update(new Vector3(0f, 300f, 3000f), Vector3.Zero, false, 0.5f, Node, restored: false);
         Assert.Equal(AiRearmLeg.None, order.Leg);
 
-        order.Update(new Vector3(0f, 300f, 3000f), Vector3.Zero, 0.5f, 0.2f, Node, restored: false);
+        order.Update(new Vector3(0f, 300f, 3000f), Vector3.Zero, false, 0.2f, Node, restored: false);
         Assert.True(order.Flying);
         order.Clear();
         Assert.False(order.Flying);

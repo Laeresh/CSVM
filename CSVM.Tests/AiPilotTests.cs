@@ -44,7 +44,7 @@ public class AiPilotTests
         var at = new Vector3(100f, 650f, -40f);
 
         // A rearm run standing at the death, as a bot shot down on its way to a base has one.
-        pilot.RearmOrder.Update(at, Vector3.Zero, 0f, 1f, at + new Vector3(0f, 0f, -3000f), restored: false);
+        pilot.RearmOrder.Update(at, Vector3.Zero, true, 1f, at + new Vector3(0f, 0f, -3000f), restored: false);
         Assert.True(pilot.RearmOrder.Flying);
 
         pilot.ResetForSpawn(at, at + Vector3.Right, 0.6f);

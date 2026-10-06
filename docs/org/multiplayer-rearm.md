@@ -120,10 +120,19 @@ a map laying two serving bases apart it would still rearm once per entry where t
 The original has no computer pilots, so everything here is the remake's own
 (`Flight/Ai/AiRearmOrder.cs`). Evidence tag: measured, read in an engine suite on C1.
 
-A bot starts a run when its forward guns hold 20% of a full load or less, or its whole-vehicle
-health is at 35% or less. Both are tuning values with no original to match. It flies to the nearest
-base that serves it, and the base restores it by the rule above, which a bot meets by flying
-through the radius.
+A bot starts a run when every pylon it carries is empty, or its whole-vehicle health is at 35% or
+less. The guns are not read: a person flies back to rearm rockets, and a bot's guns last far longer
+than its rockets. Every pylon counts, whatever it carries, since every ordnance a pylon can hang
+(`wep_05` to `wep_15`, the torpedo, smoke and flare included) is a `ROCKET`. A plane with no loaded
+pylon, or one flying with infinite ammunition, never runs out. The health share is a tuning value
+with no original to match. It flies to the nearest base that serves it, and the base restores it by
+the rule above, pylons included, which a bot meets by flying through the radius.
+
+[Evidence: traced-to-code] A bot's rocketeer launches at most once per 30 s
+(`AiRocketeer.RefireSeconds`, the vehicle-wide lockout, since a stock fit authors none), and only on
+its ordnance roll. Each stock fit hangs two to eight high-explosive pylons of three rounds, so a bot
+needs at least 2.5 to 11.5 minutes alive and in pursuit to run its racks dry; in a short match the
+hull is the trigger that fires.
 
 [Evidence: measured] C1's MP1 base is a fly-through bay. Level rays from the node meet `racmplx`'s
 walls 42 m and 47 m to either side on X, its roof 28 m above and its floor 16 m below, and the hall
