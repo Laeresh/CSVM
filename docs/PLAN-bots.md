@@ -104,7 +104,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 13. ☑ Skill tiers, personalities, stock plane with Random, and the callsign pool
 14. ☑ Rearm standing order: a bot breaks off to a base when low or badly damaged
 15. ☑ A bot takes a person's world-contact rule: it grazes and bounces, never destroyed outright
-16. ☐ A bot's world bounce matches a person's in the same plane
+16. ☑ A bot's world bounce matches a person's in the same plane
 
 ### Wave C, lobby and local setup
 
@@ -733,32 +733,82 @@ own pull-up moves the normal speed by up to 0.8 m/s a step.
 a fifth of a person's ram damage; a person's full rule would make bot-on-bot mid-airs in a crowd kill
 both too often.
 
-## B16 ☐ A bot's world bounce matches a person's in the same plane
+## B16 ☑ A bot's world bounce matches a person's in the same plane
 
 **Goal.** A bot that grazes the world rebounds as a person in the same plane on the same contact
 would, never faster than it came in. The user's ruling on B15's finding.
 
-**Evidence (confidence: traced-to-code, from B15).** In the MP1 staging (Fury, 25 degrees down at
-80 m/s) the pane's restitution read 0.56 to 0.76 across runs and the bot's 1.07 to 1.36; one
-random-plane staging went from 31.7 m/s down to 124 m/s up. The decoded impulse
-(`FlightModel.Collide`, docs/org/flightModel.md "Only the player bounces") uses the velocity at the
-contact point, rotation included, and during the contact a bot's pilot and the AI ground blow pitch
-it up, adding rotation that the impulse turns into rebound.
+**Evidence (confidence: traced-to-code, measured term by term).** B15's reading reproduces: in the
+MP1 staging (Fury, 25 degrees down at 80 m/s) the pane reads e 0.56 and the bot 1.07 over the
+contact (1.10 at the impulse itself). The decoded impulse (`FlightModel.Collide`,
+docs/org/flightModel.md "Only the player bounces") uses the velocity at the contact point, rotation
+included. A per-step log of the staged bot named the rotation's source: the AI ground blow
+(`GroundBlowTerm`'s AI law, `0x0048c317`) writes a fixed push straight into `BodyRates` each tick,
+3.37, 3.01 and 1.78 rad/s (half-angle) in the three steps before the contact, against 0.055 a step
+from the pilot's full pull. The bot turns from 25 degrees nose-down to 28.7 nose-up, its tail strikes
+first, and the rotation adds 12.3 m/s to the contact point's closing speed. The bot's restitution
+on the MP1 contact with each term switched off in turn:
+- nothing off: 1.10;
+- the AI pilot's command off: 1.10 (the pilot is not the cause);
+- the AI ground blow off: 0.52;
+- both off: 0.56, the pane's;
+- the impulse read with zero rotation: 0.56;
+- the ground blow held out of the contact step only: 1.10. The contact step carries no blow (the
+  nose is already up, so the probe misses); the whole deposit lands in the steps before.
+- the far-field plant was not in play (the bot was inside 1 km of the pane).
+Across every stock airframe with the ground blow on (bare rigs, `graze-bounce`'s 15 degrees at
+60 m/s and the MP1 staging's 25 degrees at 80 m/s), the bot's restitution spanned -0.4 to 7.26
+(the Balmoral 14.2 m/s down to 103.5 up) against the person's 0.52 to 0.57. That covers B15's
+random-plane case of 31.7 m/s down to 124 up.
 
-**Approach.** `<TODO: pick between holding the bot's AI pitch-up (and the AI ground blow) out of the
-step that resolves a world contact, so the impulse sees a person's state, and capping a bot's
-rebound normal speed at the person's restitution for that contact; prefer the one that changes no
-person's or world AI's bounce and keeps the decoded impulse untouched for a person>`.
+**Approach (landed).** Option (a), in the form the measurement allowed: the AI ground blow's
+rotation is held out of the impulse that resolves the contact. `FlightModel` keeps the blow's
+deposit as its own share of the body rates (`_aiGroundBlowRates`, added where the AI law adds to
+`BodyRates`, decayed by the same factor, zeroed by `Reset`). The rates are linear in their deposits,
+so the split is exact. `Collide` hands `BounceImpulse` `BodyRates - _aiGroundBlowRates`; the rate kick
+it returns still adds to the full rates, so the bot keeps flying the rotation it had. Why this one:
+- The cause is one AI term, and it is wrong only at the contact. The original's AI never takes the
+  impulse, so the blow's per-tick rotation never meets it there. Away from contact the blow is the
+  bot's crash avoidance, which B15 kept, and this leaves its flying untouched.
+- The literal option (a), holding the blow out of the contact step, changes nothing (1.10 above).
+  Holding it out of "the few steps of a graze" would need to know a contact is coming.
+- Option (b), a cap at the person's restitution, would also clip rotation a person's own stick can
+  put there, and would leave the rate kick computed on the blow's rotation. The excess is not
+  inherent to the AI force path: with the blow's share out, the bot reads 0.43 to 0.56 everywhere.
+- A person's share is always zero (the player path deposits none), so a person's impulse is the
+  decoded one bit for bit. World AI takes no impulse. `graze-bounce` is unchanged and green.
+The piloted bot's own pull-up stays in the impulse, as a person's does.
 
-**Model recommendation.** Opus.
+**Model recommendation.** Opus: the fix is a few lines, but choosing it needed the per-term
+measurement, and the obvious reading of option (a) is inert.
 
-**Verify.** `graze-bounce-bot` gains a check that the bot's restitution on the floor trajectory is
-within a person's band (at most 1, and within a stated tolerance of the pane's on the same
-contact), with an able-to-fail control; `versus-local-bot-graze` gains the same reading on MP1;
-`graze-bounce` stays unchanged.
+**Verify.** `graze-bounce-bot` (`CSVM/src/Testing/BotContactSuites.cs`, weight 4.7) gains a bot rig
+with the AI ground blow on, flown down `graze-bounce`'s floor trajectory: it rebounds at e 0.55
+against the person's 0.52, checked at most 1 and within 0.1. A second check sweeps every stock
+airframe on both trajectories (22 pairs): every bot at e at most 1 and within 0.15 of the person in
+the same plane (the worst pair, the Hoplite entering at 6 m/s, stands 0.09 apart). The reading is
+over the contact: `FlyInto` takes the normal speed entering the first rebound and leaving the last,
+where a later rebound is one inside 6 steps of the one before. `versus-local-bot-graze` turns its
+note into a check, bot at most 1 and within 0.1 of the pane on MP1: 0.56 against 0.56. Able-to-fail:
+with the impulse reading the full `BodyRates`, three checks fail (1.12 on the floor; 22 of 22 pairs
+outside, worst 7.26; 1.07 on MP1), and pass with the fix. Unit
+`CollideResponseTests.ABotsImpulseLeavesOutTheRotationItsAiGroundBlowDeposited` (an AI plant stepped
+once with a ground-blow hit rebounds as a still plant in the same pose; a person carrying the same
+rates keeps the rotation term and rebounds harder), which fails with the fix reverted. Runs in
+`bots-b16`: `RunTests.ps1 -Suite 'graze-bounce-bot,versus-local-bot-graze,graze-bounce' -SkipUnits
+-SkipGoldens -SkipHitch` 3 passed; `-Filter 'ai-,graze,contact,collide,crash,bounce,airframe'
+-Shards 4 -SkipUnits -SkipGoldens -SkipHitch` 46 passed / 0 failed; `-Filter 'net-,versus-' -Shards 4
+-SkipUnits -SkipGoldens -SkipHitch` 66 passed / 0 failed; `-SkipEngine -SkipGoldens -SkipHitch` units
+6357 passed / 0 failed / 3 skipped; engine errors clean on every run.
+`CheckCommentCaps.ps1`, `CheckDocEntries.ps1` and `CheckEncoding.ps1` clean.
+
+**Verified.** <pending orchestrator run>
 
 **⚠ Traps.** B15's trap holds: a piloted bot near the ground moves its normal speed by up to 0.8 m/s
-a step, so read restitution over the contact, not off one step.
+a step, so read restitution over the contact, not off one step. Never zero the bot's whole rotation
+in the impulse or cap its rebound: the pilot's own pull-up is a person's state. Anything that writes
+`FlightModel.BodyRates` from outside the plant leaves the ground blow's share stale; nothing in
+production does.
 
 # Wave C, lobby and local setup
 

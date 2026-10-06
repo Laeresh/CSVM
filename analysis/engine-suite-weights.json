@@ -236,7 +236,7 @@
     "graphics-switch-cover": 0.02,
     "graphics-view-distance": 6.9,
     "graze-bounce": 0.361,
-    "graze-bounce-bot": 1.4,
+    "graze-bounce-bot": 4.7,
     "ground-contact": 0.022,
     "gun-voice-reach": 2.49,
     "hangar-door-wake": 2.614,

@@ -379,12 +379,53 @@ public class CollideResponseTests
         Assert.Equal(beforeSlide, m.Speed, 3);
     }
 
-    private static FlightModel Plant(float bounceFactor) => new(new PlaneStats
+    /// <summary>A bot seat's impulse (the AI force path on a person's contact rule) reads the body
+    /// rates without the share the AI ground blow deposited. The blow pitches a bot nose-up just
+    /// before it lands, so its tail meets the ground carrying that rotation. The bot rebounds as a
+    /// still plant in the same pose does. The control: a person carrying the same rates keeps the
+    /// decoded rotation term and rebounds harder.</summary>
+    [Fact]
+    public void ABotsImpulseLeavesOutTheRotationItsAiGroundBlowDeposited()
     {
-        RecInertia = new Vector3(1.18f, 1f, 1.1f),
-        FdSpeed = 135f,
-        VehWeight = 1900f,
-        RefArea = 330f,
-        BounceFactor = bounceFactor,
-    });
+        var noseDown = Basis.LookingAt(new Vector3(0f, -Mathf.Sin(0.436f), -Mathf.Cos(0.436f)), Vector3.Up);
+        var bot = Plant(0.6f, aiForcePath: true);
+        bot.Reset(new Vector3(0f, 5f, 0f), noseDown, Sink * 2f, 0f);
+        bot.Step(new FlightInput { GroundBlowNormal = Vector3.Up, GroundBlowDistM = 5f }, 1f / 60f);
+        Assert.True(bot.BodyRates.X > 0.5f, $"the AI ground blow must have pitched the bot up: {bot.BodyRates.X:0.000}");
+
+        var still = Plant(0.6f, aiForcePath: true);
+        var person = Plant(0.6f);
+        foreach (var other in new[] { still, person })
+        {
+            other.Reset(bot.Position, bot.Attitude, bot.Speed, 0f);
+            other.VelocityDir = bot.VelocityDir;
+        }
+
+        person.BodyRates = bot.BodyRates;
+        float vnIn = bot.VelocityDir.Dot(Vector3.Up) * bot.Speed;
+        foreach (var m in new[] { bot, still, person })
+        {
+            // The tail strikes, 2 m behind the centre and 1.7 m below it; 0.03 m is the placement's push-out.
+            var impact = m.Position + new Vector3(0f, 0.03f, 0f) + (m.Attitude * new Vector3(0f, -1.7f, 2f));
+            m.Collide(m.Position, Vector3.Zero, 0f, impact, Vector3.Up, personsRule: true);
+        }
+
+        float vnBot = bot.VelocityDir.Dot(Vector3.Up) * bot.Speed;
+        float vnStill = still.VelocityDir.Dot(Vector3.Up) * still.Speed;
+        float vnPerson = person.VelocityDir.Dot(Vector3.Up) * person.Speed;
+        Assert.Equal(vnStill, vnBot, 3);
+        Assert.True(vnBot > 0f && vnBot < -vnIn, $"the bot rebounds slower than it came in: {vnBot:0.00} from {vnIn:0.00} m/s");
+        Assert.True(vnPerson > vnBot + 1f, $"a person carrying the same rates keeps the rotation term: {vnPerson:0.00} against {vnBot:0.00} m/s");
+    }
+
+    private static FlightModel Plant(float bounceFactor, bool aiForcePath = false) => new(
+        new PlaneStats
+        {
+            RecInertia = new Vector3(1.18f, 1f, 1.1f),
+            FdSpeed = 135f,
+            VehWeight = 1900f,
+            RefArea = 330f,
+            BounceFactor = bounceFactor,
+        },
+        aiForcePath);
 }

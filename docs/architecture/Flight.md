@@ -1043,7 +1043,7 @@ with, so that ramp reads this step's own delivered lift. Translation is a clampe
 decoded Mach drag, thrust and gravity, the velocity direction rotating only through that lift and
 the ground-blow steer. `FarFieldPlant` is the original's LOD branch, re-decided each step off
 `FlightInput.NearestHumanDistSqM`; `Collide` is the decoded contact response, placement and
-the normal impulse on a person's contact rule (a person or a bot seat), lifecycle left to `AircraftContactResolver`. `FlightInput.Boost`
+the normal impulse on a person's contact rule (a person or a bot seat, whose rates the impulse reads without the AI ground blow's share), lifecycle left to `AircraftContactResolver`. `FlightInput.Boost`
 replaces the thrust lever and scales drag. Decode and ledger: [../org/flightModel.md](../org/flightModel.md).
 
 ## src/Flight/Airframe/StickRamp.cs

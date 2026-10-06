@@ -3032,6 +3032,17 @@ would: it sweeps the airframe hulls, bounces, and is exempt from `local_11` belo
 AI shakes. World AI keeps the decoded rule. `graze-bounce-bot` flies a person, a bot and world AI
 down `graze-bounce`'s trajectory, and `versus-local-bot-graze` stages a local match's bot into MP1.
 
+**Remake-only rule: a bot's impulse reads `ω` without the AI ground blow's share.** The AI ground
+blow (`0x0048c317`) writes a fixed push straight into `ω` every tick, where the player's law only
+biases the stick. Near the ground it pitches a bot nose-up within a few steps (the Fury staged 25°
+down at 80 m/s over MP1 turns from −25° to +29° in three steps), so the tail strikes carrying that
+rotation, and `vp` above turns it into rebound: read with that share, a bot's restitution across the
+stock airframes spans −0.4 to 7.3 against a person's 0.52 to 0.57. The original never meets this
+case, since its AI takes no impulse. `FlightModel` keeps the blow's deposit as its own decayed share of `ω` and
+`Collide` subtracts it before the impulse, so the bot's rebound is the one a person's state would
+give; the share is always zero on the player path. `graze-bounce-bot` sweeps every stock airframe on
+two trajectories with the blow on, and `versus-local-bot-graze` reads the MP1 staging.
+
 With `r` the contact point minus `obj+0x204`, `ω` the body rates at `obj+0x16c`, and
 `I⁻¹ = (obj[0x197], obj[0x198], obj[0x199])`:
 
