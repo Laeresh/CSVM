@@ -511,13 +511,26 @@ Judge the edge where an opaque coast tile meets the open-sea tile, close and low
 
 **Goal.** A node a mission shows after the mask bake does not leave the sea without water under it.
 
-**Evidence (confidence: lead-only).** C21's mask walks only the visible tree, because C3's hidden`nswtr01`-`05` sheets over the crater floor made the ocean cover the valleys. A sea-level sheet hidden at
-the bake and shown later would then hide (the shader's hide does not consult the mask) with no ocean
-under it. Not observed; no census of such nodes yet.
+**Evidence (confidence: traced).** C21's mask walks only the visible tree, because C3's hidden
+`swtr01`-`05` sheets over the crater floor made the ocean cover the valleys. A census of every
+chapter's gamez and every `OBJECT_ACTIVE_STATE`/`ADD_CHILD`/`DELETE_CHILD`/motion event in the
+compiled defs and reader zrdr files (scripts in the plan tree's `.scratch\c26\`) found one base sheet
+hidden at the bake and shown later: C3's `craterlake>waterbottom` (7 `wtr00000` polys at y = 0, x
+-9038..-8508, z -4921..-4391). The `RESET_STATE` of `craterlake-waterlevel_down-floodgate_healthy`
+hides it; sequence 5 of the same def shows it when `floodgate_healthy` is shot, while `waterlevel`
+sinks from 13.17 m and fades out over 15 s (IA1, M01, M04, M05, MP1-3). Inferred, not observed: the
+build then shows a hole in the crater floor. The `swtr*` sheets are set by the mission script before
+the bake and never change after it; the only other hidden-then-shown water is wake sheets, which are
+not base sheets. No base sheet is visible at load and hidden later.
 
-**Approach.** <TODO: census which sea-level water nodes start hidden and which events show them, then
-re-bake on show or keep their texels as sea.>
+**Approach.** Hide a base-sheet fragment only where the mask says the ocean draws: the sheet's hide
+samples the mask's sea coverage through a global and uses the ocean's own discard threshold, so each
+texel has exactly one owner. `waterbottom` then draws as the flat sheet once shown, as in Original,
+and any case the census missed falls back to the flat sheet rather than a hole. Rejected: baking
+hidden sea-level sheets as sea (brings back C21's valley cover, about 90 area-toggled `g28xxx` tiles
+per C3 mission), and re-baking when a node is shown (a full bake mid-flight, cost unmeasured).
 
 **Model recommendation.** medium.
 
-**Verify.** <TODO: a mission that shows such a node, before and after.>
+**Verify.** C3 at the crater: shoot the floodgate (or force the def) and capture the floor after the
+drain, with and without `--no-ocean`; no hole. C1B cruise unchanged; `graphics-ocean-switch` green.
