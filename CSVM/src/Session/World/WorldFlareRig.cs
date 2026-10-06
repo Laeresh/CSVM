@@ -13,8 +13,9 @@ namespace CSVM.Session.World;
 /// quads at sky distance, on the great circle from the sun to the view's forward direction.
 /// The law is <see cref="LensFlareRig"/>'s carried into angles, so in a flat pane each element
 /// lands on the screen rig's pixel at its size. The core is depth-tested, so a ridge
-/// or an aircraft covers it gradually; the rings ignore everything past the seat. Stereo always
-/// draws this rig, flat Enhanced only under <c>--world-flare</c>. Entry: docs/architecture/Session.md.</summary>
+/// or an aircraft covers it gradually; the rings ignore everything past the seat. Every stereo and
+/// every flat Enhanced session draws this rig; flat Original keeps the screen rig.
+/// Entry: docs/architecture/Session.md.</summary>
 public sealed class WorldFlareRig
 {
     // ⚠ Keep these equal to LensFlareRig's: they are the same footage measurement
@@ -62,6 +63,15 @@ public sealed class WorldFlareRig
         (0.90f, 45f, 0.45f),
         (2.0f, 164f, 0.18f),
     };
+
+    /// <summary>Each element's extra gain under Enhanced, sun first. AgX tonemaps these quads and not
+    /// the screen rig's canvas, which halves a ring's level over the sky. Each ring's gain takes
+    /// back the screen rig's level; the core and the wash keep 1. Measured: docs/org/weather.md.</summary>
+    internal static IReadOnlyList<float> EnhancedGain { get; } = new[] { 1f, 2.5f, 2.5f, 2.0f };
+
+    /// <summary>The look's gain on element <paramref name="index"/>: <see cref="EnhancedGain"/>
+    /// under Enhanced, 1 in Original, whose tonemap leaves the add as the canvas makes it.</summary>
+    public static float LookGain(int index, bool enhanced) => enhanced ? EnhancedGain[index] : 1f;
 
     /// <summary>Where the sun stands in a view. The result says whether it is in the frame and gives
     /// its tangent-plane point (x right, y up, 1 at 45 degrees off). It also gives its depth along
@@ -248,6 +258,7 @@ public sealed class WorldFlareRig
             }
 
             bool shown = inst.Overlay.Visible;
+            bool enhanced = GraphicsMode.Enhanced;
             Vector3 sunDir = (sunGlobal - view.Origin).Normalized();
             float depth = at.Depth * DepthShare;
             foreach (var e in inst.Elements)
@@ -262,7 +273,7 @@ public sealed class WorldFlareRig
                 e.Material.SetShaderParameter("sun_dir", sunDir);
                 e.Material.SetShaderParameter("depth_m", depth);
                 e.Material.SetShaderParameter("half_size", HalfSize(Elements[e.Index].DiaPx, tanHalfV));
-                e.Material.SetShaderParameter("gain", Elements[e.Index].Intensity * fade);
+                e.Material.SetShaderParameter("gain", Elements[e.Index].Intensity * fade * LookGain(e.Index, enhanced));
             }
         }
     }

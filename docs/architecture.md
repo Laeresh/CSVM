@@ -745,7 +745,7 @@ The session-build clusters `GameSession` delegates to, in five sub-namespaces, o
 - `src/Session/World/WeatherRig.cs`, loads the mission's weather and drives the per-rig skydome, whiteout, deck and zone gate each frame.
 - `src/Session/World/FogViewTable.cs`, the per-view fog and vertex-light table the atmosphere shaders search, so each pane wears its own zone's.
 - `src/Session/World/LensFlareRig.cs`, the sun's lens flare: screen-space sprites along the sun-to-centre line plus the wash, one instance per pane.
-- `src/Session/World/WorldFlareRig.cs`, the same flare as world quads at sky depth, depth-tested core; every stereo session, and flat Enhanced under `--world-flare`.
+- `src/Session/World/WorldFlareRig.cs`, the same flare as world quads at sky depth, depth-tested core, Enhanced ring gain; every stereo session and flat Enhanced (`--screen-flare` for the A/B).
 - `src/Session/World/WorldEffectsFactory.cs`, builds the impact/destruction effect stages and the per-plane crash runtime.
 - `src/Session/World/CutsceneController.cs`, the host a cutscene definition raises its `CALLBACK` codes to, and the session state those codes describe.
 - `src/Session/World/ScriptedPathVehicles.cs`, one mission's scripted-path vehicles: the snap onto waypoint 0, the freeze, `START_TAXI`'s release, the handoff back.

@@ -129,18 +129,34 @@ public class WorldFlareTests
     }
 
     [Fact]
-    public void StereoAlwaysTakesTheWorldRigAndFlatOnlyInEnhancedOnAsk()
+    public void StereoAndFlatEnhancedTakeTheWorldRigUnlessFlatAsksForTheScreenRig()
     {
-        Assert.True(SkyStage.UsesWorldFlare(stereo: true, asked: false, enhanced: false));
-        Assert.True(SkyStage.UsesWorldFlare(stereo: false, asked: true, enhanced: true));
-        Assert.False(SkyStage.UsesWorldFlare(stereo: false, asked: true, enhanced: false));
-        Assert.False(SkyStage.UsesWorldFlare(stereo: false, asked: false, enhanced: true));
+        Assert.True(SkyStage.UsesWorldFlare(stereo: true, enhanced: false, screenAsked: false));
+        Assert.True(SkyStage.UsesWorldFlare(stereo: true, enhanced: true, screenAsked: true));
+        Assert.True(SkyStage.UsesWorldFlare(stereo: false, enhanced: true, screenAsked: false));
+        Assert.False(SkyStage.UsesWorldFlare(stereo: false, enhanced: true, screenAsked: true));
+        Assert.False(SkyStage.UsesWorldFlare(stereo: false, enhanced: false, screenAsked: false));
     }
 
     [Fact]
-    public void WorldFlareFlagParses()
+    public void ScreenFlareFlagParses()
     {
-        Assert.True(SessionSpec.Parse(new[] { "--chapter=C3", "--world-flare" }).WorldFlare);
-        Assert.False(SessionSpec.Parse(new[] { "--chapter=C3" }).WorldFlare);
+        Assert.True(SessionSpec.Parse(new[] { "--chapter=C3", "--screen-flare" }).ScreenFlare);
+        Assert.False(SessionSpec.Parse(new[] { "--chapter=C3" }).ScreenFlare);
+    }
+
+    [Fact]
+    public void OnlyTheRingsTakeAGainAndOnlyUnderEnhanced()
+    {
+        Assert.Equal(WorldFlareRig.Elements.Count, WorldFlareRig.EnhancedGain.Count);
+        Assert.Equal(1f, WorldFlareRig.LookGain(0, enhanced: true));
+        for (int i = 0; i < WorldFlareRig.Elements.Count; i++)
+        {
+            Assert.Equal(1f, WorldFlareRig.LookGain(i, enhanced: false));
+            if (i > 0)
+            {
+                Assert.True(WorldFlareRig.LookGain(i, enhanced: true) > 1f);
+            }
+        }
     }
 }

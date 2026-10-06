@@ -482,10 +482,10 @@ public sealed record SessionSpec
     /// role <c>--no-fog</c> plays for the fog wall.</summary>
     public bool NoFlare { get; private set; }
 
-    /// <summary><c>--world-flare</c>: draw a flat Enhanced flight's lens flare with the world rig
-    /// (<c>Session.World.WorldFlareRig</c>) instead of the screen rig. A comparison switch for the
-    /// author's montage; the Original look ignores it, and a stereo session always uses the world rig.</summary>
-    public bool WorldFlare { get; private set; }
+    /// <summary><c>--screen-flare</c>: draw a flat Enhanced flight's lens flare with the screen rig
+    /// (<c>Session.World.LensFlareRig</c>) instead of the world rig. It is the A/B door for flare work.
+    /// Original draws the screen rig anyway, and a stereo session always draws the world rig.</summary>
+    public bool ScreenFlare { get; private set; }
 
     /// <summary><c>--mips=authored|generated</c>: whether a texture's levels 1 and 2 come from the
     /// archive's hand-authored <c>_1</c>/<c>_2</c> siblings (the default) or are box-filtered from
@@ -1647,7 +1647,7 @@ public sealed record SessionSpec
             else if (arg == "--no-clutter") { s.NoClutter = true; }
             else if (arg == "--no-zone-cull") { s.NoZoneCull = true; }
             else if (arg == "--no-flare") { s.NoFlare = true; }
-            else if (arg == "--world-flare") { s.WorldFlare = true; }
+            else if (arg == "--screen-flare") { s.ScreenFlare = true; }
             else if (arg == "--no-ssao") { s.SkippedPasses |= EnhancedPasses.Ssao; }
             else if (arg == "--no-ssr") { s.SkippedPasses |= EnhancedPasses.Ssr; }
             else if (arg == "--no-glow") { s.SkippedPasses |= EnhancedPasses.Glow; }

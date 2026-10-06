@@ -80,9 +80,10 @@ internal sealed class SkyStage
     public FogVolumeClutter? CloudField { get; private set; }
 
     /// <summary>Whether a session draws the world flare rig rather than the screen rig. Stereo always
-    /// does, since no canvas layer draws there; a flat session does in Enhanced when asked. Chosen at
-    /// the build, so a live graphics switch keeps the rig the session was built with.</summary>
-    public static bool UsesWorldFlare(bool stereo, bool asked, bool enhanced) => stereo || (asked && enhanced);
+    /// does, since no canvas layer draws there; a flat session does in Enhanced unless
+    /// <c>--screen-flare</c> asks for the screen rig. Chosen at the build, so a live graphics switch
+    /// keeps the rig the session was built with.</summary>
+    public static bool UsesWorldFlare(bool stereo, bool enhanced, bool screenAsked) => stereo || (enhanced && !screenAsked);
 
     /// <summary>The world bootstrap's FOG_STATE sink: applied at once over a built rig, held until
     /// the rig has applied its zone otherwise.</summary>
@@ -106,7 +107,7 @@ internal sealed class SkyStage
 
         // ⚠ Build the flare after the weather. Its sun node is a child of each rig's horizon, and
         // finding it is one of the two gates. The chapter data decides whether anything is built.
-        if (UsesWorldFlare(_xrHead != null, _spec.WorldFlare, GraphicsMode.Enhanced))
+        if (UsesWorldFlare(_xrHead != null, GraphicsMode.Enhanced, _spec.ScreenFlare))
         {
             WorldFlare = new WorldFlareRig(_spec, _xrHead);
             WorldFlare.Build(_rigs, state.Textures, state.InterpPath, _spec.Chapter, _worldRoot);

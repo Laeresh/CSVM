@@ -42,7 +42,7 @@ A3 can redirect the whole plan to a custom engine build.
 **VR never changes the flat game.** OpenXR stays off in `project.godot`, every VR branch is gated on
 the VR session being live (or `--xr-sim`), and the existing goldens must not move. A change that
 needs the flat path altered to make VR work is its own item, argued on its own merits; the one such
-change in this plan is the Enhanced flare (Decision 16, C14), which waits on the author's montage
+change in this plan is the Enhanced flare (Decision 16, C14), adopted on the author's montage
 judgement.
 
 ## Decisions (2026-10-05)
@@ -1292,18 +1292,25 @@ adopts it once the author has judged it against the current rig; Original keeps 
 rig unchanged. (2) The remaining full-pane canvas effects (the cloud whiteout, `ScreenFlash`, the
 mission-end fade) get a VR form as head-locked quads near the eye.
 
-**Outcome: built; the Enhanced adoption and the VR ring default are the author's.** The world rig
-(`Session/World/WorldFlareRig.cs`) draws every stereo session's flare and, behind `--world-flare`,
-a flat Enhanced one; flat Enhanced and Original stay on `LensFlareRig` by default, which is
-unchanged. The whiteout, `ScreenFlash`, the sun wash and the mission-end fade have head-locked
-stereo quads (`UI/Boards/HeadLockedQuads.cs`). The montage is in `.scratch/C14/` (below).
+**Outcome: built and adopted in flat Enhanced; the VR ring default is the author's.** The world rig
+(`Session/World/WorldFlareRig.cs`) draws every stereo session's flare and every flat Enhanced one;
+flat Original stays on `LensFlareRig`, which is unchanged. The whiteout, `ScreenFlash`, the sun wash
+and the mission-end fade have head-locked stereo quads (`UI/Boards/HeadLockedQuads.cs`). The
+montages are in `.scratch/C14/` (below).
 
 **Ruling on the montage: adopt the world rig in flat Enhanced, with a ring gain under Enhanced** so
 the ghost rings read about as strongly as the screen rig's (the montage measured 4.2/9.1/3.9 levels
-over the sky against 11.0/20.8/6.1, since AgX tonemaps the world rig and not the canvas). Open
-follow-up in this item: `SkyStage.UsesWorldFlare` to `stereo || enhanced`, the Enhanced ring gain
-tuned against the screen rig's levels, the C2/C3 Enhanced goldens re-pinned, and `--world-flare`
-retired or kept as a comparison switch. The VR ring default is still the author's at the headset.
+over the sky against 11.0/20.8/6.1, since AgX tonemaps the world rig and not the canvas).
+
+**The follow-up (done).** `SkyStage.UsesWorldFlare(stereo, enhanced, screenAsked)` is
+`stereo || (enhanced && !screenAsked)`. `--world-flare` is retired and replaced by `--screen-flare`,
+which puts flat Enhanced back on the screen rig: the default flipped, so the A/B door now opens the
+other way (it reproduces the screen rig's frame hash-identically on all six poses; `docs/cli.md`'s
+counts are unchanged). `WorldFlareRig.EnhancedGain` multiplies the rings by **2.5 / 2.5 / 2.0**
+whenever the live look is Enhanced, stereo included, since a stereo session runs either look and
+AgX acts on its quads the same way; Original keeps 1, where the two rigs already agree. The core and
+the wash take no gain. No golden moved: none of the 27 is a C2/C3 Enhanced shot, and
+`c3-flare-xr-sim` runs in Original.
 
 **Evidence (confidence: traced to code and measured for placement, size, depth and the stereo
 quads; the look is the author's judgement).**
@@ -1327,6 +1334,19 @@ quads; the look is the author's judgement).**
   and not on the canvas: on the same pose the rings read 4.2 / 9.1 / 3.9 levels over the sky
   against the screen rig's 11.0 / 20.8 / 6.1, and the core rolls off below 255 with a glow halo
   (verification SHOT-46). That difference is the look the montage puts to the author.
+- **The Enhanced ring gain (confidence: measured; the look is the author's).** Brightest-pixel lift
+  over the same pose under `--no-flare`, local sky offset removed (the estimator
+  `docs/org/weather.md` calibrates the rings with, and it reproduces the montage's figures: screen
+  rig 11.0 / 21.0 / 6.0, world rig 4.3 / 9.0 / 3.7 on the off-centre chase pose). With gains
+  2.5 / 2.5 / 2.0 the world rig reads 11.0 / 20.0 / 6.3 there (0, −5, +5 %), and 10.7 / 17.7 on
+  the off-centre cockpit pose against 10.7 / 18.3 (ring C falls on the panel there). The mean lift
+  over the screen rig's footprint agrees within 9 % on every ring at both poses. Per ring, because
+  one gain of 2.3 left rings A and B 11-12 % under and ring C 12 % over. The core is not boosted:
+  its centre reads 252 against the sprite's 255 and its glow halo runs brighter than the sprite past
+  24 px, so its lower peak lift (37 against 59) is AgX rolling off a saturated disc; the author ruled
+  on that core in the montage. The flat wash is the same canvas rect in both rigs and measured the
+  same (16.3 levels on the chase pose). Tools: `.scratch/C14/C14b_poses.ps1` (captures),
+  `C14b_peak.py` and `C14b_levels.py` (levels), `C14b_core.py` (the core's radial profile).
 - **Occlusion.** The core is depth-tested, so the own airframe in chase and the C3 crater rim cut it
   partway (montage rows 2 and 6). The rings keep the screen rig's one ray to the sun's centre for
   on/off, skip depth testing, and discard pixels whose scene depth is nearer than 1.4 m (the seat
@@ -1352,17 +1372,21 @@ quads; the look is the author's judgement).**
   clear, the world beyond whitens. The interior's own wings, where a plane's interior has them,
   reach past 1.4 m and whiten with the world; a stencil mark on the interior would be exact (B8).
 - Flat goldens unmoved (25 of 25); the new `c3-flare-xr-sim` golden is hash-stable over 12 runs.
+  With the adoption and the gain, all 27 goldens stay hash-identical.
 
-**Montage for the author** (`.scratch/C14/`, Enhanced, frame 60, screen rig left, world rig right,
-1:1 crops around the sun under each frame): `montage-C14-overview.png` (all six, half size), and
-`montage-m1-chase-centred.png`, `montage-m2-chase-occluded-by-plane.png`,
-`montage-m3-chase-offcentre.png`, `montage-m4-cockpit-centred.png`,
-`montage-m5-cockpit-offcentre.png`, `montage-m6-freecam-ridge-occluded.png`. Poses:
+**Montage for the author** (`.scratch/C14/`, Enhanced, frame 60, 1:1 crops around the sun under
+each frame). The first montage (screen rig against the ungained world rig, `montage-C14-*.png`) is
+kept beside it in the plan worktree's `.scratch/C14/`. The gain montage puts today's screen rig
+(`--screen-flare`, left) against the adopted world rig with its gain (right):
+`montage-C14b-overview.png` (all six, half size), and `montage-C14b-m1-chase-centred.png`,
+`montage-C14b-m2-chase-occluded-by-plane.png`, `montage-C14b-m3-chase-offcentre.png`,
+`montage-C14b-m4-cockpit-centred.png`, `montage-C14b-m5-cockpit-offcentre.png`,
+`montage-C14b-m6-freecam-ridge-occluded.png`. Poses:
 `--chapter=C3 --plane=player_bhawk --pos=0,1200,0 --hold=0,0,0,0.6` with `--direction=` 0.586,0.559,
 -0.586 / 0.509,0.695,-0.509 / 0.785,0.423,-0.453, and with `--view=cockpit` 0.5,0.707,-0.5 /
 0.765,0.469,-0.441; the ridge pose is `--freecam --chapter=C3 --pos=-4484,390,-6310
---direction=0.586,0.559,-0.586`. Each pair re-runs with `.scratch/C14/C14_shot.ps1` and
-`C14_montage.py`.
+--direction=0.586,0.559,-0.586`. They re-run with `.scratch/C14/C14b_poses.ps1 -Variant <name>
+-Extra <flags>` and `C14b_montage.py`.
 
 **Background (the survey).** `Session/World/LensFlareRig.cs` draws four additive
 `TextureRect` sprites on `HudLayers.FlareSprites` at fractions 0, 0.5, 0.9 and 2.0 of the
@@ -1386,20 +1410,21 @@ nearer than the HUD panel (C12).
 
 **Approach (landed).** `Launch/SkyStage.cs` builds `WorldFlareRig` in place of `LensFlareRig` when
 `UsesWorldFlare` holds: a stereo session (the launcher hands `GameSession` the XR head through
-`LauncherContext.XrHead`, read-only from `XrSession.Head`), or `--world-flare` in a flat Enhanced
-session, chosen at the build. A stereo session places the flare for the head's pose and builds
-`HeadLockedQuads`, which follows the whiteout rectangle, `ScreenFlash.CurrentFor(0)`, the world
-rig's wash and the director's `LeavingFade`; the flat canvas layers are untouched. Adopting the world
-rig in flat Enhanced is one line in `UsesWorldFlare` once the author has judged the montage.
-**Owed to the author:** the montage judgement (Decision 16), and at the headset (E21) whether the VR
-flare keeps the rings, which it shows by default now, or shows the core and wash only.
+`LauncherContext.XrHead`, read-only from `XrSession.Head`), or a flat Enhanced session without
+`--screen-flare`, chosen at the build. A stereo session places the flare for the head's pose and
+builds `HeadLockedQuads`, which follows the whiteout rectangle, `ScreenFlash.CurrentFor(0)`, the
+world rig's wash and the director's `LeavingFade`; the flat canvas layers are untouched. The ring
+gain is read from `GraphicsMode.Enhanced` each tick, so a live switch to Original drops it to 1.
+**Owed to the author:** a look at the gain montage (`montage-C14b-overview.png`) to confirm the
+rings, and at the headset (E21) whether the VR flare keeps the rings, which it shows by default
+now, or shows the core and wash only.
 
 **Model recommendation.** <TODO: tier not settled in the session.>
 
-**Verify.** Original-mode goldens and every existing golden unmoved (25 of 25 hash-identical). The
-montage above for the Enhanced adoption. `world-flare-pixels` and `head-locked-quads` (engine
-suites) and `CSVM.Tests/WorldFlareTests.cs` (the law, the selection rule, the flag, and the spec
-pinned to `LensFlareRig`'s private copy by reflection). The golden `c3-flare-xr-sim` (C3, nose view,
+**Verify.** Original-mode goldens and every existing golden unmoved (27 of 27 hash-identical). The
+montages above for the Enhanced adoption and its gain. `world-flare-pixels` and `head-locked-quads`
+(engine suites) and `CSVM.Tests/WorldFlareTests.cs` (the law, the selection rule, the flag, the
+gain's shape, and the spec pinned to `LensFlareRig`'s private copy by reflection). The golden `c3-flare-xr-sim` (C3, nose view,
 `--xr-sim`, frame 120, frame-sensitive 15.38 %, 86 % of its pixels move over 8 levels without the
 flare): the core, the three rings and the wash quad in both eyes.
 
@@ -1420,6 +1445,8 @@ and with this item's code switched off; on `--render-thread safe` it exited 0 in
 **Verified.** The complete battery on the merged tree with A3b, B6 and C14 and the ShaderTwins
 rewrite fix (LOG-26): build PASS, units 6348 passed 3 skipped, engine 533 passed 2 skipped with
 clean engine errors, goldens 27/27 hash-identical. The headset checks named above are still owed.
+
+**Verified.** <pending orchestrator run>
 
 # Wave D, cutscenes, comfort and performance
 

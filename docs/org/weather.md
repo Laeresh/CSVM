@@ -395,6 +395,31 @@ Ring A 0.38 → 11.0 (target 10–12, nudged up from an initial 0.30), Ring B 0.
 landed mid-band and were deliberately left alone, since the bands are the spread across two poses,
 not error bars, and fitting to the middle would be fitting to the estimator.
 
+**Which rig draws it.** Flat Original draws these sprites on the canvas (`LensFlareRig`). Flat
+Enhanced and every stereo session draw the same elements as world quads (`WorldFlareRig`), whose
+core is depth-tested and feeds the glow pass; `--screen-flare` puts flat Enhanced back on the canvas
+rig for an A/B. The canvas composites after the tonemap and the world quads before it, so in Original
+the two rigs agree (0.22 % of pixels over 2 levels on C3) while under Enhanced AgX roughly halves a
+world ring's lift. The world rig therefore multiplies each ring's intensity by an Enhanced-only gain
+of **2.5 / 2.5 / 2.0** (rings A, B, C; the core and the wash keep 1), tuned on the C3 off-centre
+poses (`--chapter=C3 --plane=player_bhawk --pos=0,1200,0 --hold=0,0,0,0.6 --graphics=enhanced
+--frames=60`, `--direction=0.785,0.423,-0.453` in chase and `0.765,0.469,-0.441` with
+`--view=cockpit`) by the brightest-pixel lift over the same pose under `--no-flare`, the local sky
+offset removed:
+
+| Brightest-pixel lift (chase / cockpit) | Ring A | Ring B | Ring C |
+|---|---|---|---|
+| Screen rig | 11.0 / 10.7 | 21.0 / 18.3 | 6.0 / (behind the panel) |
+| World rig, no gain | 4.3 / 6.3 | 9.0 / 8.7 | 3.7 |
+| World rig, gain | 11.0 / 10.7 | 20.0 / 17.7 | 6.3 |
+
+The mean lift over the screen rig's own footprint agrees within 9 % on every ring at both poses
+(chase 5.2 / 13.2 / 3.1 against 5.0 / 13.0 / 3.3). Ring C takes less gain because one gain of 2.3
+left it 12 % over the screen rig's chase peak while rings A and B sat 11-12 % under. The core is not
+boosted: its centre reads 252 against the sprite's 255 and its halo runs brighter than the sprite
+past 24 px, so its lower peak lift (37 against 59 levels) is the AgX roll-off of a saturated disc,
+not a weaker element.
+
 ## The horizon dome, drawn camera-centred
 
 The dome is a **pure zero-parallax backdrop**: it is re-centred on the camera in *all* axes every
