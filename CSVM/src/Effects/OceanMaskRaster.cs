@@ -15,6 +15,9 @@ internal static class OceanMaskRaster
     /// <summary>The texel edge in metres. Fine enough that the calm band hugs the surf ring.</summary>
     public const float Cell = 8f;
 
+    /// <summary>The zone byte of a texel every zone group's ocean draws: water the gate never splits.</summary>
+    public const byte AnyZone = 255;
+
     // Waves are fully calm this close to a shore or a surf texel, and reach full height here.
     private const float ShoreCalm = 24f;
     private const float ShoreFull = 160f;
@@ -77,7 +80,7 @@ internal static class OceanMaskRaster
         Parallel.For(0, count, b => Encode(grid, b * rows, Math.Min(h, (b + 1) * rows) - 1, mask));
         long t2 = System.Diagnostics.Stopwatch.GetTimestamp();
         double tick = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
-        return new Result(w, h, new Vector2(minX, minZ), mask, tint, (t1 - t0) * tick, (t2 - t1) * tick, count);
+        return new Result(w, h, new Vector2(minX, minZ), mask, tint, (t1 - t0) * tick, (t2 - t1) * tick, count, grid.Zone);
     }
 
     /// <summary>(byte)Math.Clamp(Math.Round(v * 255f), 0, 255), banker's rounding included, in float
@@ -178,6 +181,8 @@ internal static class OceanMaskRaster
                     case Kind.Base:
                         if (g.Sea[i] == 0)
                             g.Sea[i] = 1;
+                        if (g.Zone[i] != AnyZone)
+                            g.Zone[i] = t.Zone;
                         tint[((z - r0) * w) + x] = new Color(
                             (t.CA.R * w1) + (t.CB.R * w2) + (t.CC.R * w0),
                             (t.CA.G * w1) + (t.CB.G * w2) + (t.CC.G * w0),
@@ -185,6 +190,7 @@ internal static class OceanMaskRaster
                         break;
                     case Kind.Edge:
                         g.Sea[i] = 2;
+                        g.Zone[i] = AnyZone;
                         break;
                     default:
                         g.Solid[i] = true;
@@ -285,13 +291,15 @@ internal static class OceanMaskRaster
         return dist;
     }
 
-    /// <summary>One world-space triangle and, on the base sheet, its corners' stored vertex colours.</summary>
-    public readonly record struct Tri(Vector3 A, Vector3 B, Vector3 C, Kind Kind, Color CA, Color CB, Color CC);
+    /// <summary>One world-space triangle and, on the base sheet, its corners' stored vertex colours
+    /// and the zone group its mesh instance is drawn in.</summary>
+    public readonly record struct Tri(Vector3 A, Vector3 B, Vector3 C, Kind Kind, Color CA, Color CB, Color CC, byte Zone = 0);
 
-    /// <summary>The mask's texel bytes (RG8: sea, wave height) and the tint's (RGB8, sRGB), with
-    /// the milliseconds each pass took over how many bands.</summary>
+    /// <summary>The texel bytes of the mask (RG8: sea, wave height), the tint (RGB8, sRGB) and the
+    /// zone group (R8, <see cref="AnyZone"/> on surf-ring water). Also the milliseconds each pass
+    /// took over how many bands.</summary>
     public sealed record Result(int Width, int Height, Vector2 Origin, byte[] Mask, byte[] Tint,
-        double FillMs, double EncodeMs, int Bands);
+        double FillMs, double EncodeMs, int Bands, byte[] Zones);
 
     // The coverage both passes share. Each band writes only its own rows.
     private sealed class Grid
@@ -304,6 +312,7 @@ internal static class OceanMaskRaster
             MinZ = minZ;
             Sea = new byte[w * h];
             Solid = new bool[w * h];
+            Zone = new byte[w * h];
         }
 
         public int W { get; }
@@ -318,5 +327,8 @@ internal static class OceanMaskRaster
         public byte[] Sea { get; }
 
         public bool[] Solid { get; }
+
+        // The zone group of the base sheet a texel shows, AnyZone on surf-ring water.
+        public byte[] Zone { get; }
     }
 }

@@ -57,9 +57,20 @@ internal sealed class OceanMask
 
     public int BaseTriangles { get; private set; }
 
+    /// <summary>The lowest draw priority any sea-level base-sheet surface carries. The ocean draws a
+    /// level below it, under every coplanar layer drawn on or beside any part of the sheet.</summary>
+    public int BaseLevel { get; private set; }
+
     public int EdgeTriangles { get; private set; }
 
     public int SolidTriangles { get; private set; }
+
+    /// <summary>The visual layer sets the base sheets are drawn on, one per zone group. The zone
+    /// gate culls a whole group per camera, so the ocean over it draws on the same layers.</summary>
+    public List<uint> ZoneLayers { get; } = new();
+
+    /// <summary>Which zone group each texel shows (R8), or null when the sheet is one group.</summary>
+    public ImageTexture? ZoneTexture { get; private set; }
 
     /// <summary>The wake sheets found in the world, whose positions the ocean calms around.</summary>
     public List<Node3D> Wakes { get; } = new();
@@ -82,6 +93,14 @@ internal sealed class OceanMask
             return kept.Mask;
         }
         var mask = BakeNew(root, scene, skip);
+        // ⚠ Do not drop this collection. Reading MeshInstance3D.Mesh mints a managed wrapper for
+        // every mesh whose wrapper was already collected, and each holds its mesh until collected.
+        // A short run that quits first leaves hundreds alive, and Godot's exit check aborts.
+        long gcStart = System.Diagnostics.Stopwatch.GetTimestamp();
+        GC.Collect();
+        if (mask != null)
+            mask.Timing += string.Create(CultureInfo.InvariantCulture,
+                $" gc={System.Diagnostics.Stopwatch.GetElapsedTime(gcStart).TotalMilliseconds:0}");
         Baked.AddOrUpdate(scene, new Memo(root, mask));
         return mask;
     }
@@ -130,6 +149,8 @@ internal sealed class OceanMask
         // Both kept: --dump-ocean-mask reads them after the upload.
         result.TintTexture = TextureUpload.Create(result.TintImage, callerKeeps: true);
         result.Texture = TextureUpload.Create(result.Image, callerKeeps: true);
+        if (result.ZoneLayers.Count > 1)
+            result.ZoneTexture = TextureUpload.Create(raster.Width, raster.Height, Image.Format.R8, Seam(raster));
         double uploadMs = Lap(ref t0);
         result.Timing = string.Create(CultureInfo.InvariantCulture,
             $"walk={walkMs:0.0} raster={raster.FillMs:0.0} distance={raster.EncodeMs:0.0} upload={uploadMs:0.0} bands={raster.Bands}");
@@ -153,6 +174,44 @@ internal sealed class OceanMask
         (byte)Math.Clamp(c.G * 255f, 0f, 255f) / 255f,
         (byte)Math.Clamp(c.B * 255f, 0f, 255f) / 255f,
         (byte)Math.Clamp(c.A * 255f, 0f, 255f) / 255f);
+
+    // The zone groups with every texel on a seam between two groups taken from both. A seam texel's
+    // centre can fall on either side, so either grid would overhang the other group's culled sea.
+    // C5 lays an opaque fog gradient along each seam, which hides the gap this leaves.
+    private static byte[] Seam(OceanMaskRaster.Result raster)
+    {
+        int w = raster.Width, h = raster.Height;
+        var zones = raster.Zones;
+        var mask = raster.Mask;
+        var seamed = (byte[])zones.Clone();
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                int i = (y * w) + x;
+                byte z = zones[i];
+                if (mask[2 * i] == 0 || z >= OceanMaskRaster.AnyZone - 1)
+                    continue;
+                for (int d = 0; d < 4; d++)
+                {
+                    int nx = x + (d == 0 ? 1 : d == 1 ? -1 : 0), ny = y + (d == 2 ? 1 : d == 3 ? -1 : 0);
+                    if (nx < 0 || ny < 0 || nx >= w || ny >= h)
+                        continue;
+                    int n = (ny * w) + nx;
+                    if (mask[2 * n] != 0 && zones[n] < OceanMaskRaster.AnyZone - 1 && zones[n] != z)
+                        seamed[i] = OceanMaskRaster.AnyZone - 1;
+                }
+            }
+        }
+        return seamed;
+    }
+
+    // The authored priority a world material was built at. Its depth bias adds under half a level
+    // on top (rank, no_clutter), so the floor a quarter level up recovers it.
+    private static int LevelOf(Material material) =>
+        material is ShaderMaterial sm
+            ? (int)Math.Floor((sm.GetShaderParameter("depth_bias").AsSingle() / SceneBuilder.DepthBiasPerLevel) + 0.25f)
+            : 0;
 
     // A world's bake, or null when it had no sea-level base sheet.
     private sealed record Memo(Node3D Root, OceanMask? Mask);
@@ -203,7 +262,9 @@ internal sealed class OceanMask
         // patch where it started. A subtree's surfaces are the tail it appended.
         private bool Visit(Node node, Transform3D parent, bool collect)
         {
-            collect = collect && !_skip.Contains(node);
+            // A hidden subtree draws nothing: C3's unplaced swtr sheets over its crater floor, and
+            // every unplaced vehicle parked at the origin.
+            collect = collect && !_skip.Contains(node) && node is not Node3D { Visible: false };
             int start = _surfaces.Count;
             var xf = parent;
             if (collect && node is Node3D n3 && node != _root)
@@ -224,7 +285,7 @@ internal sealed class OceanMask
                         _result.Wakes.Add(mi);
                     }
                     if (arrayMesh != null)
-                        _surfaces.Add(new Surface(arrayMesh, s, tex, xf));
+                        _surfaces.Add(new Surface(arrayMesh, s, tex, xf, mat, mi.Layers));
                 }
             }
             bool hull = false;
@@ -238,7 +299,7 @@ internal sealed class OceanMask
 
         private void Read(Surface surface)
         {
-            var (mesh, s, tex, xf) = surface;
+            var (mesh, s, tex, xf, material, layers) = surface;
             bool water = SceneBuilder.ClassifySurface(tex) == "water";
             bool isBase = water && SceneBuilder.IsOceanBaseTexture(tex);
             // The builder's own copy: Godot's read-back copies the surface off the GPU and waits
@@ -267,7 +328,9 @@ internal sealed class OceanMask
                 if (isBase && seaLevel)
                 {
                     kind = Kind.Base;
-                    _result.BaseTriangles++;
+                    int level = LevelOf(material);
+                    if (_result.BaseTriangles++ == 0 || level < _result.BaseLevel)
+                        _result.BaseLevel = level;
                     BaseCounts[tex] = BaseCounts.GetValueOrDefault(tex) + 1;
                     if (uv.Length > 0)
                     {
@@ -285,8 +348,10 @@ internal sealed class OceanMask
                         ColorCount++;
                     }
                 }
-                else if (water && seaLevel)
+                else if (water && (seaLevel || (isBase && minY > -0.5f && minY < 0.5f)))
                 {
+                    // A base-sheet ramp rising off the sea hides only below 0.25 m, so the ocean
+                    // must reach under its foot, calm.
                     kind = Kind.Edge;
                     _result.EdgeTriangles++;
                 }
@@ -300,10 +365,23 @@ internal sealed class OceanMask
                     continue;
                 }
                 bool tinted = kind == Kind.Base && col.Length > 0;
-                Tris.Add(new Tri(a, b, c, kind, tinted ? Stored(col[i0]) : Colors.White, tinted ? Stored(col[i1]) : Colors.White, tinted ? Stored(col[i2]) : Colors.White));
+                byte zone = kind == Kind.Base ? ZoneOf(layers) : (byte)0;
+                Tris.Add(new Tri(a, b, c, kind, tinted ? Stored(col[i0]) : Colors.White, tinted ? Stored(col[i1]) : Colors.White, tinted ? Stored(col[i2]) : Colors.White, zone));
             }
         }
 
-        private readonly record struct Surface(ArrayMesh Mesh, int Index, string Texture, Transform3D Xf);
+        // The group of base sheets sharing one visual layer set, numbered in first-seen order.
+        private byte ZoneOf(uint layers)
+        {
+            int k = _result.ZoneLayers.IndexOf(layers);
+            if (k < 0)
+            {
+                k = _result.ZoneLayers.Count;
+                _result.ZoneLayers.Add(layers);
+            }
+            return (byte)Math.Min(k, OceanMaskRaster.AnyZone - 2);
+        }
+
+        private readonly record struct Surface(ArrayMesh Mesh, int Index, string Texture, Transform3D Xf, Material Material, uint Layers);
     }
 }

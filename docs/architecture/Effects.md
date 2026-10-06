@@ -53,26 +53,27 @@ and the one draw both `far_fade_range` pairs are interpolated with into a custom
 `Rng.CloudBands` stream. The shipped field is that decoded lattice plus a remake-only X/Z offset per card (`ShippedJitter`, 30 m, overridden by `--cloud-jitter=`), drawn off `Rng.CloudJitter` and reaching no other population. The quad is posed by `csky_facade_spherical` (`shaders/csky_facade.gdshaderinc`), a world-up look-at standing in for the original's SphericalY tracker, which reads the eye's position and not its basis, so neither the camera's roll nor a sideways move turns a card ([../org/cloudCards.md](../org/cloudCards.md)). A `lighting: true` card (C1C, C2B, C5) carries its three authored normals and takes the original's per-vertex `AMBIENT + DIFFUSE x max(N.L, 0)` through that same pose off `WeatherRig`'s uncollapsed globals, never `csky_world_light` ([../org/vertexLighting.md](../org/vertexLighting.md)). Under `GraphicsMode.Enhanced` alone, `ShaderCode` layers a grade by the global `csky_sun_dir` over either variant, leaving the faithful and lit text byte-identical, and draws both kinds from the deck pool of rendered puffs (`Mech3/CloudPuffs.cs`), tinted by the authored mask's colour, each card picking its puff, tilt, mirror and size off a hash of its own position. `FollowGraphicsMode` moves each kind onto the card shader for the standing mode, one compiled per text and kept, and writes its pool and cull margin again; `WarmOtherMode` compiles the other mode's ahead. Gating: `GameSession`/`WorldBuilder`/`WeatherRig`. Schema: [../formats/fogvol.md](../formats/fogvol.md).
 
 ## src/Effects/Ocean.cs
-The Enhanced wave ocean, C1B only (`Ocean.Covers`). A camera-centred polar grid with a Gerstner
-swell in its vertex stage and chop in its fragment normals replaces the sea-level base sheet, which
-steps aside through `csky_ocean.gdshaderinc` (`SceneBuilder.IsOceanBaseTexture`) while its colliders
-stay flat. Owns the wave tables, the foam patch field and the calm discs at hulls and wake sheets,
-all on `csky_time`. `GameSession.FollowOcean` builds it on an Enhanced frame at the `waves` Water
-Quality (`Utils/WaterQualitySetting.cs`) and drops it on Original or `flat`; `--no-ocean` closes it.
-The shore calm comes from `OceanMask.cs`.
+The Enhanced wave ocean on every chapter with a sea at y = 0 (`Ocean.Covers`, all but C4). A
+camera-centred polar grid with a Gerstner swell in its vertex stage and chop in its fragment normals
+replaces the sea-level base sheet, whose fragments step aside through `csky_ocean.gdshaderinc`
+(`SceneBuilder.IsOceanBaseTexture`) while its colliders stay flat. It draws a priority level below
+the lowest base sheet, one grid per zone-gate group on that group's layers. Owns the wave tables,
+the foam field and the calm discs at hulls and wakes, all on `csky_time`. `GameSession.FollowOcean`
+builds it at the `waves` Water Quality and drops it on Original or `flat`; `--no-ocean` closes it.
+The shore calm, the sheet's level and the zone groups come from `OceanMask.cs`.
 
 ## src/Effects/OceanMask.cs
 The wave ocean's shore mask at 8 m texels: sea coverage, the wave height left after a fade from
-every shore, surf texel and solid near sea level, and the base sheet's baked vertex colour. The same
-tree pass finds the wake sheets and the base texture's tile size. Surfaces are read through
-`SceneBuilder.SurfaceArrays`, never `SurfaceGetArrays`, whose read-back waits on the render thread
-about a millisecond a surface (3 to 5 s on C1B). Kept colours are truncated to RGBA8 as Godot
-stores them, so the tint matches a read-back. One bake per built world (keyed on its `SceneBuilder`)
-serves every rebuild of the ocean over it. `--dump-ocean-mask=` writes the mask and the tint. Read
-`OceanMaskRaster.cs` for the texels and `Ocean.cs` for how the shader samples them.
+every shore, surf texel and solid near sea level (overlay passes included), the base sheet's baked
+vertex colour and, where the sheet spans zone-gate layers, each texel's zone group. The same pass
+over the visible tree finds the wakes, the tile size and the sheet's lowest priority. Surfaces are
+read through `SceneBuilder.SurfaceArrays`, never `SurfaceGetArrays`, whose read-back stalls on the
+render thread. One bake per built world (keyed on its `SceneBuilder`) serves every rebuild of the
+ocean over it. `--dump-ocean-mask=` writes the mask and the tint. Read `OceanMaskRaster.cs` for
+the texels and `Ocean.cs` for how the shader samples them.
 
 ## src/Effects/OceanMaskRaster.cs
-The mask bake's compute: world-space triangles in, the RG8 mask and RGB8 tint bytes out, with no
+The mask bake's compute: world-space triangles in, the RG8 mask, RGB8 tint and R8 zone bytes out, with no
 engine object touched. Runs in row bands on the thread pool; the distance pass reads a halo of
 rows past each band, deep enough for every distance below the full-height fade, so the bytes are
 identical for any band count. The barycentric test and the tint blend are written in scalars in the

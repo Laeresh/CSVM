@@ -628,6 +628,10 @@ member, and it does not go here.
   world: an empty list is a library root, which the world build never creates and no lookup finds.**
   C1's `cs_flg_light1`, the carried flag, answered neither `AnimRuntime.FindNodes` nor a name walk
   of the world root while `nodes.json` held it, and `SceneBuilder.BuildSubtree` built it.
+- **WORLD-51**, **A layering census over `nodes.json` counts geometry the session hides; before
+  reading "X lies under Y" as what draws, check it against a flat render with the suspect texture
+  overridden.** C3's survey put 9,500 cells of `p-1` cliff and sand tiles under a `p0` sea sheet
+  the flat render draws them over, and its `swtr01`-`05` sheets above the crater floor build hidden.
 
 ## SHELL, Windows, PowerShell, and processes
 

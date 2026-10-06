@@ -30,8 +30,8 @@ internal static class GraphicsSwitchSuites
     // The one chapter the wave ocean covers (Effects.Ocean.Covers).
     private const string OceanChapter = "C1B";
 
-    // A chapter whose whole-map wtr sheet the ocean does not cover. Its sheet carries the same
-    // collapse under Enhanced, so a switch a closed session left on would hole its whole sea.
+    // A whole-map wtr sea opened at flat water quality, so no ocean builds over it. Its sheet still
+    // carries the hide under Enhanced, so a switch a closed session left on would hole its whole sea.
     private const string UncoveredSeaChapter = "C2B";
 
     // The base sheet's vertex-stage call. The include line alone never matches it.
@@ -350,12 +350,12 @@ internal static class GraphicsSwitchSuites
 
     [Suite("graphics-ocean-switch",
         "the C1B wave ocean follows a live graphics switch at water quality waves: an Enhanced build "
-        + "stands one ocean and every sea-level base sheet material carries the vertex collapse; "
+        + "stands one ocean and every sea-level base sheet material carries the hide; "
         + "switched to Original the ocean leaves the tree and the sheet carries a fresh Original "
-        + "build's text, with no collapse; back to Enhanced exactly one ocean stands and the sheet "
+        + "build's text, with no hide; back to Enhanced exactly one ocean stands and the sheet "
         + "carries a fresh Enhanced build's text; an Original build switched to Enhanced builds the "
-        + "ocean; a closed session leaves no ocean in the tree, and a following Enhanced session on "
-        + "a sea chapter the ocean does not cover builds none")]
+        + "ocean; a closed session leaves no ocean in the tree, and a following Enhanced C2B session "
+        + "at flat water quality builds none while its sheet still carries the hide")]
     internal static void OceanFollowsSwitch(TestContext ctx)
     {
         RequireData(ctx, OceanChapter);
@@ -387,7 +387,7 @@ internal static class GraphicsSwitchSuites
                 original.Close();
             }
             ctx.Check(freshOriginal.Oceans == 0 && freshOriginal.Materials > 0 && freshOriginal.Drawn > 0 && freshOriginal.Hidden == 0,
-                $"an Original C1B build stands no ocean and its base sheet carries no collapse ({freshOriginal})");
+                $"an Original C1B build stands no ocean and its base sheet carries no hide ({freshOriginal})");
             ctx.Check(originalToEnhanced.Oceans == 1 && originalToEnhanced.Hidden == originalToEnhanced.Materials,
                 $"switched to Enhanced it builds the ocean and hides the sheet ({originalToEnhanced})");
             Left(ctx, builtLive, "the Original build switched to Enhanced");
@@ -406,7 +406,7 @@ internal static class GraphicsSwitchSuites
                 builtFresh = FirstOcean(ctx.Host);
                 ctx.Check(freshEnhanced.Oceans == 1 && enhanced.Session.OceanBuilt && freshEnhanced.Materials > 0
                         && freshEnhanced.Drawn > 0 && freshEnhanced.Hidden == freshEnhanced.Materials,
-                    $"an Enhanced C1B build stands one ocean and every base sheet material collapses its sea-level vertices ({freshEnhanced})");
+                    $"an Enhanced C1B build stands one ocean and every base sheet material hides its sea-level fragments ({freshEnhanced})");
                 ctx.Check(originalToEnhanced.Census == freshEnhanced.Census,
                     $"the Original build switched to Enhanced carries a fresh Enhanced build's base sheet text");
                 ctx.Check(freshEnhanced.Census != freshOriginal.Census,
@@ -418,7 +418,7 @@ internal static class GraphicsSwitchSuites
                         && builtFresh is { } dropped && (!GodotObject.IsInstanceValid(dropped) || !dropped.IsInsideTree()),
                     $"switched to Original the ocean leaves the tree ({switchedOriginal}, {OceansUnder(ctx.Host)} under the host)");
                 ctx.Check(switchedOriginal.Hidden == 0 && switchedOriginal.Census == freshOriginal.Census,
-                    $"and the base sheet carries a fresh Original build's text, with no collapse ({switchedOriginal.Hidden} collapsing)");
+                    $"and the base sheet carries a fresh Original build's text, with no hide ({switchedOriginal.Hidden} hiding)");
 
                 Switch(enhanced, true);
                 var roundTrip = Sea(enhanced);
@@ -436,15 +436,16 @@ internal static class GraphicsSwitchSuites
             }
             Left(ctx, builtFresh, "the round-tripped Enhanced session");
 
+            WaterQualitySetting.Resolve(WaterQualitySetting.Flat, null, null);
             var uncovered = Open(ctx, enhanced: true, chapter: UncoveredSeaChapter);
             try
             {
                 var sea = uncovered.Built ? Sea(uncovered) : null;
-                ctx.Check(!Effects.Ocean.Covers(UncoveredSeaChapter) && uncovered.Built && !uncovered.Session.OceanBuilt
+                ctx.Check(uncovered.Built && !uncovered.Session.OceanBuilt
                         && sea is { Oceans: 0 } && OceansUnder(ctx.Host) == 0,
-                    $"a following Enhanced {UncoveredSeaChapter} session builds no ocean (built={uncovered.Built}, {sea?.ToString() ?? "no reading"}, {OceansUnder(ctx.Host)} under the host)");
+                    $"a following Enhanced {UncoveredSeaChapter} session at flat water builds no ocean (built={uncovered.Built}, {sea?.ToString() ?? "no reading"}, {OceansUnder(ctx.Host)} under the host)");
                 ctx.Check(sea is { Materials: > 0, Drawn: > 0 } && sea.Hidden == sea.Materials,
-                    $"and its drawn sheet carries the collapse, so a switch left on would hole its sea ({sea?.ToString() ?? "no reading"})");
+                    $"and its drawn sheet carries the hide, so a switch left on would hole its sea ({sea?.ToString() ?? "no reading"})");
                 report.AppendLine($"uncovered {UncoveredSeaChapter}\n{sea?.Print() ?? "no reading"}");
             }
             finally
@@ -976,7 +977,7 @@ internal static class GraphicsSwitchSuites
     }
 
     // The base sheet's materials as the world builder named them, by texture and shader text. Also
-    // how many carry the collapse and are drawn.
+    // how many carry the hide and are drawn.
     private static SeaReading Sea(Rig rig)
     {
         var sheet = new HashSet<ShaderMaterial>();

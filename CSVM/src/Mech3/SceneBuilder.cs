@@ -56,6 +56,13 @@ public sealed class SceneBuilder
     // logged, not silently collapsed.
     public const int ConflictRankCap = 7;
 
+    // Depth-bias fraction per priority level. A polygon is pulled toward the eye by priority × this
+    // fraction of its view distance: same projected position, nearer depth. That replicates the
+    // original's coplanar layering (terrain patches, decals, plane logos) without z-fighting.
+    // TUNE: big enough to beat coplanar interpolation noise at 10 km. Small enough that the ±49
+    // extremes (cockpit gauges, skydome) stay well under 1% of view distance.
+    public const float DepthBiasPerLevel = 2e-4f;
+
     /// <summary>How near the drawing camera must stand to the eye <see cref="PhotoEyeParam"/>
     /// carries, in metres, to draw the photograph's fill. It separates the photograph's camera
     /// from every pane's, which never stands two and a half chase distances ahead of the nose.</summary>
@@ -316,13 +323,6 @@ void fragment() {
     // The source UVs are exact 0.0/1.0 at the fold, so this only absorbs float noise.
     private const float UvEpsilon = 1e-6f;
 
-    // Depth-bias fraction per priority level. Polygons are pulled toward the eye by
-    // priority × this fraction of their view distance, same projected position, nearer
-    // depth, replicating the original's coplanar-decal layering (terrain patches,
-    // road/shadow decals, plane logos) without z-fighting at any range.
-    // TUNE: big enough to beat coplanar interpolation noise at 10 km, small enough that
-    // the ±49 extremes (cockpit gauges, skydome) stay well under 1% of view distance.
-    private const float DepthBiasPerLevel = 2e-4f;
     // The within-mesh equal-priority tie-break, reproducing the original's draw order (drawn later
     // = on top): surface rank is the first-occurrence order of the (material, priority) group in
     // the polygon list, so a tile's roads and shoreline blends land over its base grass.
@@ -705,9 +705,16 @@ void fragment() {
     }
 
     /// <summary>Whether a water texture is the open-sea base sheet the Enhanced wave ocean
-    /// (<c>Effects.Ocean</c>) replaces. A coastline blend, surf ring or wake drawn over it is not.</summary>
-    internal static bool IsOceanBaseTexture(string texName) =>
-        texName.StartsWith("wtr", StringComparison.OrdinalIgnoreCase);
+    /// (<c>Effects.Ocean</c>) replaces. A coastline blend, surf ring or wake drawn over it is not.
+    /// ⚠ Match C1's <c>water1</c> exactly: its <c>water1_trans1/2</c> coast tiles are opaque land.</summary>
+    internal static bool IsOceanBaseTexture(string texName)
+    {
+        if (texName.StartsWith("wtr", StringComparison.OrdinalIgnoreCase))
+            return true;
+        int dot = texName.IndexOf('.');
+        var stem = dot < 0 ? texName.AsSpan() : texName.AsSpan(0, dot);
+        return stem.Equals("water1", StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>A copy of <paramref name="tex"/> whose alpha is the distance from its corner texel's
     /// colour. The backdrop goes to 0, a painted halo to a partial value, the figure to 1. An
@@ -1967,7 +1974,10 @@ void fragment() {
         if (pointLit)
             sb.AppendLine(LightsInclude);
         if (oceanHide)
+        {
             sb.AppendLine(OceanInclude);
+            sb.AppendLine("varying float v_ocean_y;");
+        }
         if (textured)
         {
             // Anisotropic mipmap filtering: the world is viewed at grazing angles from the air,
@@ -2020,9 +2030,10 @@ void fragment() {
               + "    VERTEX *= step(0.004, v_clutter_alpha);\n"
             : "";
         string ghostVertex = raceGhost ? RaceGhost.VertexLine + "\n" : "";
-        // A collapsed triangle rasterises nothing, and the flat collider under it stays as built.
+        // ⚠ Hide per fragment, never by collapsing vertices. A water ramp rising off the sea (C2, C5)
+        // would stretch to its model origin. The colliders stay flat.
         if (oceanHide)
-            ghostVertex += "    if (csky_ocean_hides_sea((MODEL_MATRIX * vec4(VERTEX, 1.0)).y)) { VERTEX = vec3(0.0); }\n";
+            ghostVertex += "    v_ocean_y = (MODEL_MATRIX * vec4(VERTEX, 1.0)).y;\n";
         // Per vertex in world space: the drawing view's sun and the point lights, summed into one
         // factor on the authored colour, clamped at white. At an armed eye (PhotoEyeParam) the
         // ambient half is the photograph's fill; `lighting: false` keeps the authored colour.
@@ -2057,6 +2068,8 @@ void vertex() {{
 }}
 
 void fragment() {{");
+        if (oceanHide)
+            sb.AppendLine("    if (csky_ocean_hides_sea(v_ocean_y)) { discard; }");
         if (clutterFade)
             sb.AppendLine("    if (!csky_clutter_dither_keep(FRAGCOORD.xy, v_clutter_alpha)) { discard; }");
         if (raceGhost)

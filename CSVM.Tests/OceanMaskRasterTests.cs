@@ -83,6 +83,27 @@ public class OceanMaskRasterTests
         Assert.Equal(255, r.Mask[(2 * ((cz * r.Width) + cx + 40)) + 1]);
     }
 
+    // A sheet split over two zone layers, with surf-ring water on the seam. Each texel names the
+    // group of the sheet it shows, the ring every group, and no band count moves either.
+    [Fact]
+    public void EachTexelNamesItsSheetsZoneGroup()
+    {
+        var tris = new List<Tri>();
+        AddQuad(tris, -1024f, -1024f, 1024f, Kind.Base, Colors.White);
+        int east = tris.Count;
+        AddQuad(tris, 0f, -1024f, 1024f, Kind.Base, Colors.White);
+        for (int i = east; i < tris.Count; i++)
+            tris[i] = tris[i] with { Zone = 1 };
+        var p = new Vector3(-100f, 0f, -600f);
+        tris.Add(new Tri(p, p + new Vector3(200f, 0f, 0f), p + new Vector3(0f, 0f, 200f), Kind.Edge, Colors.White, Colors.White, Colors.White));
+        var one = OceanMaskRaster.Run(tris.ToArray(), Mean, 1);
+        byte At(float x, float z) => one.Zones[((int)((z - one.Origin.Y) / Cell) * one.Width) + (int)((x - one.Origin.X) / Cell)];
+        Assert.Equal(0, At(-500f, -100f));
+        Assert.Equal(1, At(500f, -100f));
+        Assert.Equal(OceanMaskRaster.AnyZone, At(-50f, -550f));
+        Assert.True(one.Zones.AsSpan().SequenceEqual(OceanMaskRaster.Run(tris.ToArray(), Mean, 7).Zones));
+    }
+
     // C1B-like: a sheet of 512 m base quads with baked colours and scattered edge water. The solids
     // run from slivers to large faces, some reaching past the sheet.
     private static List<Tri> Scene(Random rng)

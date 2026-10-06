@@ -34,6 +34,7 @@ public sealed partial class Ocean : Node3D
     private const float Choppiness = 0.55f;
 
     private static readonly StringName ParamName = Param;
+    private static readonly string[] Chapters = { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C5" };
     private static readonly float[] BandEnds = { 700f, 2800f, 11000f, 45000f };
 
     // TUNE. The swell the vertex stage displaces: wavelengths of tens of metres, a crest of about
@@ -68,10 +69,9 @@ public sealed partial class Ocean : Node3D
     public static void RegisterGlobal() =>
         RenderingServer.GlobalShaderParameterAdd(Param, RenderingServer.GlobalShaderParameterType.Float, 0.0f);
 
-    /// <summary>Whether a chapter's sea gets the ocean. C1B alone: the other sea-level chapters'
-    /// coast layers and base sheets are not yet checked against the mask.</summary>
-    public static bool Covers(string chapter) =>
-        string.Equals(chapter, "C1B", StringComparison.OrdinalIgnoreCase);
+    /// <summary>Whether a chapter's sea gets the ocean: every chapter with a sea at y = 0. C4 has
+    /// only raised lakes, which keep the flat glossy water.</summary>
+    public static bool Covers(string chapter) => Array.Exists(Chapters, c => string.Equals(c, chapter, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Builds the ocean over the world under <paramref name="worldRoot"/>, or null when
     /// that world has no sea-level base sheet to replace. A non-empty <paramref name="maskPng"/>
@@ -90,7 +90,8 @@ public sealed partial class Ocean : Node3D
         var baseTex = textures.Find(mask.BaseTexture);
         var meanTex = MeanColor(textures.FindImage(mask.BaseTexture));
 
-        var shader = new Shader { Code = ShaderCode() };
+        bool zoned = mask.ZoneTexture != null;
+        var shader = new Shader { Code = ShaderCode(mask.BaseLevel - 1, zoned) };
         var material = new ShaderMaterial { Shader = shader };
         material.SetShaderParameter("mask_tex", mask.Texture);
         material.SetShaderParameter("mask_rect", new Vector4(mask.Origin.X, mask.Origin.Y, 1f / mask.Size.X, 1f / mask.Size.Y));
@@ -99,22 +100,33 @@ public sealed partial class Ocean : Node3D
         material.SetShaderParameter("tile_m", mask.TileMetres);
         material.SetShaderParameter("base_color", meanTex);
         material.SetShaderParameter("tint_tex", mask.TintTexture);
+        if (mask.ZoneTexture is { } zoneTex)
+            material.SetShaderParameter("zone_tex", zoneTex);
 
         var ocean = new Ocean(material, ships, mask.Wakes);
         ocean.PublishShips();
         var mesh = BuildGrid();
         mesh.SurfaceSetMaterial(0, material);
-        var instance = new MeshInstance3D
+        // One grid per zone group, on that group's layers. The zone gate then culls the waves with
+        // the sheet they replace; C5 splits its sea over zone_id 1 and 3.
+        for (int z = 0; z < Math.Max(1, mask.ZoneLayers.Count); z++)
         {
-            Name = "OceanGrid",
-            Mesh = mesh,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            // The grid follows every camera in its vertex stage, so it must never be culled.
-            CustomAabb = new Aabb(new Vector3(-80000f, -50f, -80000f), new Vector3(160000f, 100f, 160000f)),
-        };
-        ocean.AddChild(instance);
+            var instance = new MeshInstance3D
+            {
+                Name = z == 0 ? "OceanGrid" : $"OceanGrid{z}",
+                Mesh = mesh,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                // The grid follows every camera in its vertex stage, so it must never be culled.
+                CustomAabb = new Aabb(new Vector3(-80000f, -50f, -80000f), new Vector3(160000f, 100f, 160000f)),
+            };
+            if (z < mask.ZoneLayers.Count)
+                instance.Layers = mask.ZoneLayers[z];
+            if (zoned)
+                instance.SetInstanceShaderParameter("zone_index", (float)z);
+            ocean.AddChild(instance);
+        }
         double ms = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;
-        Log.Info("world", $"ocean: built grid verts={mesh.SurfaceGetArrayLen(0)} mask={mask.Width}x{mask.Height} cell={OceanMask.Cell}m origin=({mask.Origin.X:0},{mask.Origin.Y:0}) base={mask.BaseTexture} tile={mask.TileMetres:0.0}m base_tris={mask.BaseTriangles} edge_tris={mask.EdgeTriangles} solid_tris={mask.SolidTriangles} wakes={mask.Wakes.Count} ms={ms:0} bake={bakeMs:0} ({mask.Timing})");
+        Log.Info("world", $"ocean: built grid verts={mesh.SurfaceGetArrayLen(0)} mask={mask.Width}x{mask.Height} cell={OceanMask.Cell}m origin=({mask.Origin.X:0},{mask.Origin.Y:0}) base={mask.BaseTexture} tile={mask.TileMetres:0.0}m base_tris={mask.BaseTriangles} base_level={mask.BaseLevel} zone_groups={mask.ZoneLayers.Count} edge_tris={mask.EdgeTriangles} solid_tris={mask.SolidTriangles} wakes={mask.Wakes.Count} ms={ms:0} bake={bakeMs:0} ({mask.Timing})");
         foreach (var wake in mask.Wakes)
         {
             if (wake.IsInsideTree())
@@ -260,7 +272,12 @@ public sealed partial class Ocean : Node3D
         sb.AppendLine($"const vec2 {name}_QW[{waves.Length}] = vec2[{waves.Length}]({string.Join(", ", b)});");
     }
 
-    private static string ShaderCode()
+    // The view-space scale that draws the ocean at priority level, in the bias shader's own step
+    // (SceneBuilder.DepthBiasPerLevel), spelled as a shader literal.
+    private static string DepthScale(int level) =>
+        (1.0 - (level * (double)SceneBuilder.DepthBiasPerLevel)).ToString("0.0######", CultureInfo.InvariantCulture);
+
+    private static string ShaderCode(int level, bool zoned)
     {
         float swellSum = 0f;
         foreach (var w in Swell)
@@ -283,6 +300,12 @@ public sealed partial class Ocean : Node3D
         sb.AppendLine("uniform float wave_scale = 1.0;");
         sb.AppendLine("uniform float foam_strength = 0.12;");
         sb.AppendLine($"uniform vec4 ships[{MaxShips}];");
+        // A sheet split over zone layers gets one grid per group, each keeping only its own texels.
+        if (zoned)
+        {
+            sb.AppendLine("uniform sampler2D zone_tex : filter_nearest, repeat_disable;");
+            sb.AppendLine("instance uniform float zone_index = 0.0;");
+        }
         EmitWaves(sb, "SWELL", Swell, Swell.Length);
         EmitWaves(sb, "CHOP", Chop, Chop.Length);
         sb.AppendLine($"const float SWELL_SUM = {F(swellSum)};");
@@ -331,8 +354,9 @@ void vertex() {
     v_param = p;
     vec3 world = vec3(p.x + disp.x, disp.y, p.y + disp.z);
     VERTEX = (VIEW_MATRIX * vec4(world, 1.0)).xyz;
-    // One priority level away from the eye, so sea-level ground and the surf ring draw over it.
-    VERTEX *= 1.0002;
+    // A priority level below the lowest base sheet. Every coplanar layer over or beside it stays
+    // on top, the surf ring and C5's fog-gradient passes included.
+    VERTEX *= " + DepthScale(level) + @";
     NORMAL = (VIEW_MATRIX * vec4(0.0, 1.0, 0.0, 0.0)).xyz;
 }
 
@@ -343,7 +367,11 @@ void fragment() {
     // One-sided like the sheet it replaces: an eye below the surface sees through it.
     if (m.r < 0.02 || CAMERA_POSITION_WORLD.y < world.y) {
         discard;
-    }
+    }" + (zoned ? @"
+    float zone = textureLod(zone_tex, (p - mask_rect.xy) * mask_rect.zw, 0.0).r * 255.0;
+    if (zone < " + F(OceanMaskRaster.AnyZone - 0.5f) + @" && abs(zone - zone_index) > 0.5) {
+        discard;
+    }" : "") + @"
     float amp = m.g * ship_calm(p) * wave_scale;
     vec2 fw = fwidth(p);
     float footprint = max(max(fw.x, fw.y), 0.001);

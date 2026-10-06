@@ -82,21 +82,23 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A, from prototype to feature
 
 1. ☑ Port the prototype to a production module on C1B
-2. ◐ Water Quality setting (flat or waves), live switch included
+2. ☑ Water Quality setting (flat or waves), live switch included
 3. ☐ Verify the live graphics switch and the motion look
 
 ### Wave B, cost
 
 11. ☐ Bring the low-altitude SSR cost within budget
 12. ☐ Measure and budget the Deck
-13. ◐ Cache or speed up the mask bake
+13. ☑ Cache or speed up the mask bake
 
 ### Wave C, coverage
 
-21. ☐ The other chapters with a sea at y = 0
+21. ☑ The other chapters with a sea at y = 0
 22. ☐ Ship calm zones for every hull and wake
 23. ☐ Swell regularity from altitude
 24. ☐ An Enhanced ocean golden
+25. ☐ The ocean matches the flat sheet at the shore and in fog
+26. ☐ No hole where a mission shows a node hidden at the bake
 
 ## Dependency and parallelism notes
 
@@ -167,7 +169,7 @@ equivalence check (waves off, roughness 0.25) within 1/255.
 - The ocean must stay one-sided: a cutscene camera below y = 0 (C1B/M03's intro) otherwise sees the
   ocean across the sky.
 
-## A2 ◐ Water Quality setting (flat or waves), live switch included
+## A2 ☑ Water Quality setting (flat or waves), live switch included
 
 **Landed.** `Utils/WaterQualitySetting.cs` is a `WordSetting` over `flat`/`waves`:
 `--water-quality=` beats the saved `waterQuality` option, which beats the `graphics.waterQuality`
@@ -185,7 +187,11 @@ A switch to Original drops it as before. `--no-ocean` still wins. The word is an
 `[world] graphics mode:` line and on `water quality applied:`. `docs/cli.md` has the bullet and
 index entry.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the plan tree with A2, A3's scripted half, B13 and C21 merged: units 6307
+passed, 3 skipped; engine 528 passed, 2 skipped, errors clean, after one fix (`menu-backdrop` still
+counted eighteen Options steppers; A2's row makes nineteen); 3 Enhanced goldens moved, all by the
+ocean now covering C1 and C5 (`c1-lake-enhanced`, `c5-city-night-enhanced`,
+`c1-rocket-hit-enhanced`), re-pinned after C25. `graphics-water-quality` builds, drops and rebuilds the ocean on a live change.
 
 **Original approach (kept for reference).**
 
@@ -289,7 +295,7 @@ timed out). The handoff notes Enhanced split-screen already runs below 60 fps th
 
 **⚠ Traps.** SSH screenshots on the Deck need `--det`; a `--no-det` shot captures the loading frame.
 
-## B13 ◐ Cache or speed up the mask bake
+## B13 ☑ Cache or speed up the mask bake
 
 **Landed.** The `ocean: built` line now carries `bake=` and the split `walk= raster= distance=
 upload= bands=`. Measured first on the C1B cruise pose (Debug build, a shared machine): the bake
@@ -310,7 +316,11 @@ Mask, tint and cruise shot are pixel-identical before and after (mask decoded md
 tint `8742B5D0...`, cruise BGRA md5 `6E4CA61F...`). `OceanMaskRasterTests` hold the module to the
 old whole-image pass at 1, 5 and 12 bands.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the plan tree with A2, A3's scripted half, B13 and C21 merged: units 6307
+passed, 3 skipped; engine 528 passed, 2 skipped, errors clean, after one fix (`menu-backdrop` still
+counted eighteen Options steppers; A2's row makes nineteen); 3 Enhanced goldens moved, all by the
+ocean now covering C1 and C5 (`c1-lake-enhanced`, `c5-city-night-enhanced`,
+`c1-rocket-hit-enhanced`), re-pinned after C25. The bake logs 100-171 ms with `gc=` 32-45 ms on C1B, C2B and C3.
 
 **Original approach (kept for reference).**
 
@@ -333,7 +343,48 @@ carries the border sea outward instead.
 
 # Wave C, coverage
 
-## C21 ☐ The other chapters with a sea at y = 0
+## C21 ☑ The other chapters with a sea at y = 0
+
+**Landed.** `Ocean.Covers` lists C1, C1B, C1C, C2, C2B, C3 and C5; C4 keeps its flat lakes.
+`IsOceanBaseTexture` takes `wtr*` and `water1` exactly, so C1's opaque `water1_trans1/2` coast
+tiles stay and draw over a calm ocean. Five mechanisms, all Enhanced-only and inert at the C1B
+cruise pose (decoded md5 `6E4CA61F...` before and after every step):
+- The sheet hides per fragment, not by collapsing vertices. C2's channel ramp `g36353` (0 to
+  1.03 m) stretched a sea triangle to its model origin, a white wedge in the harbour. The ramp's
+  foot is now surf-ring water in the mask, calm and covered, and its raised part keeps the flat arm.
+- The ocean draws one priority level below the LOWEST base sheet (`OceanMask.BaseLevel`): C2 and C3
+  at -2 (their `p-1` sheets sit beside `terpat`, `cliff1_watertrans*` and `sand128` at -1, which
+  must stay on top), C5 at -11 (its sheet is `p-10`), the rest at -1 as on C1B.
+- The mask walks only the visible tree. C3's `swtr01`-`05` sheets build hidden over the crater
+  floor that dips to -48.7 m (`g28608`); counting them drew the ocean across the island valleys.
+  It also drops the unplaced zeppelins parked at the origin, a calm patch in every chapter.
+- The ocean draws on its base sheet's zone-gate layers. C5 splits its sea between `zone_id` 3 and
+  1, and the camera above the band culls the zone-1 half to black; the ocean is one grid per group
+  with an R8 zone texture, seam texels belonging to neither, under C5's opaque fog strip.
+- C5's fog-gradient passes (`z3_foggrad`, `foggrad8x64`) are overlay passes on the hidden `p-10`
+  sheet. They are not water, so they keep drawing; at -1 the ocean would have covered them, at -11
+  it sits behind. The mask counts them as solid, so the waves are flat under every strip and the
+  strip blends over calm water exactly as over the sheet. They mark the zone seams, where the sea
+  fades into the culled zone.
+Per chapter: C2B and C1C are whole-map seas with no coast (zeppelin chapters), no rule beyond the
+gate. C1 `water1` plus its coast tiles as surf-ring water. C2 the ramp fix and level -2. C5 level -11
+and two zone grids. C3 level -2 and the visible-tree walk.
+Coplanar shore layers (C2 `beach1`, `terpat*`, `cliff01_trans2`; C3 `shore1/2`, `shore_trans`,
+`sand128`, `cliff1_*trans*`) are solid in the mask, so the waves reach zero under them. The bake
+ends with a `GC.Collect`: without it a C2B shot at frame 15 crashed at exit (0xC000001D, Godot's
+FATAL on live wrappers), a run 300 frames long did not. Tests: `OceanBaseTextureTests`, and
+`OceanMaskRasterTests.EachTexelNamesItsSheetsZoneGroup`. Montages, flat left and ocean right, per
+chapter in the plan tree's `.scratch\c21w\montage-<ch>.png`.
+
+**Verified.** The complete battery on the plan tree with A2, A3's scripted half, B13 and C21 merged: units 6307
+passed, 3 skipped; engine 528 passed, 2 skipped, errors clean, after one fix (`menu-backdrop` still
+counted eighteen Options steppers; A2's row makes nineteen); 3 Enhanced goldens moved, all by the
+ocean now covering C1 and C5 (`c1-lake-enhanced`, `c5-city-night-enhanced`,
+`c1-rocket-hit-enhanced`), re-pinned after C25. Every chapter's montage was approved by the user (Decision 12 scope), with the
+fog mismatch and the swell cross-hatch filed as C25 and C23. A short C2B run crashed on exit (0xC000001D,
+451 leaked `ArrayMesh` wrappers) without the collection after the bake, and exits clean with it.
+
+**Original approach (kept for reference).**
 
 **Goal.** Every chapter whose sea sits at y = 0 draws the ocean, with its own coast layers intact.
 
@@ -427,3 +478,46 @@ keeps waves the grid cannot carry from crawling. Keep it for any new wave.
 
 **⚠ Traps.** A hash that flips under GPU load is a determinism defect, not noise. Pin the stable
 frame and track the flip separately. The `exercises` field is rewritten on a re-pin, never appended.
+
+## C25 ☐ The ocean matches the flat sheet at the shore and in fog
+
+**Goal.** Where the waves calm to nothing, the ocean draws exactly as the flat sheet beside it, so no
+edge shows against an opaque coast tile; and in a fogged chapter the far ocean fogs as the flat sheet
+does.
+
+**Evidence (confidence: direction-sound).** `c1-lake-enhanced`'s re-rendered golden shows a hard
+straight edge in the lake where the ocean on `water1` meets the flat `water1_trans` coast tiles:
+darker and wavier on one side, lighter and flat on the other, though the mask calms the waves there.
+With waves, foam and detail neutralised and roughness at the sheet's 0.25, the ocean matched the flat
+sheet to 0.65/255 (the prototype's equivalence check), so the shading constants are what differ
+(roughness 0.2-0.3 vs 0.25, a 60 % texture mix vs 100 %). The C1C and C2B montages show the far ocean
+clearly less fogged than the flat sheet in rain; cause unknown. The user accepted C21 with both filed.
+
+**Approach.** Blend the ocean's look toward the flat sheet's by the same shore amplitude that calms
+the waves: at zero amplitude, flat normals, roughness 0.25, the full texture mix and no foam.
+Diagnose the fog gap by bisecting with `--no-ssr`, roughness and normals against the flat sheet in
+C1C before changing the fog term. <TODO: the fog cause.>
+
+**Model recommendation.** high: a look change judged by eye, where the measurement can mislead.
+
+**Verify.** `c1-lake-enhanced`'s pose with and without `--no-ocean`: no edge at the tile boundary.
+C1C and C2B open-sea montages: the far ocean's fog matches the flat sheet's. C1B cruise looks as
+approved (its md5 may move; send the montage).
+
+**⚠ Traps.** The C1 coast montage at 250 m did not show the seam; the golden's low lake pose did.
+Judge the edge where an opaque coast tile meets the open-sea tile, close and low.
+
+## C26 ☐ No hole where a mission shows a node hidden at the bake
+
+**Goal.** A node a mission shows after the mask bake does not leave the sea without water under it.
+
+**Evidence (confidence: lead-only).** C21's mask walks only the visible tree, because C3's hidden`nswtr01`-`05` sheets over the crater floor made the ocean cover the valleys. A sea-level sheet hidden at
+the bake and shown later would then hide (the shader's hide does not consult the mask) with no ocean
+under it. Not observed; no census of such nodes yet.
+
+**Approach.** <TODO: census which sea-level water nodes start hidden and which events show them, then
+re-bake on show or keep their texels as sea.>
+
+**Model recommendation.** medium.
+
+**Verify.** <TODO: a mission that shows such a node, before and after.>
