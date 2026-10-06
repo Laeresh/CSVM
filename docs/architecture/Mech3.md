@@ -46,9 +46,9 @@ The generated shaders behind every shader cache (`SceneBuilder`'s three, `Clutte
 a `ModeShader` with one shader per graphics mode, so keys whose texts agree in a mode share one and
 Godot compiles it once. `Follow` records the key a material wears, `Copy` and `FadeCopy` the key a
 duplicate wears, and `Regenerate` moves each onto its key's shader for the standing mode with no
-text changed. `WarmOtherMode` compiles the other mode ahead; before an Enhanced frame has drawn
-(`EnhancedDrawn`) a first switch to Enhanced rewrites in place. `Pooled` also serves constant texts
-made per instance (plane flare, light sprites, ground shadow). Read `Launch/EnhancedLook.cs`.
+text changed. `WarmOtherMode` compiles the other mode ahead. Before an Enhanced frame has drawn
+(`EnhancedDrawn`), a first switch to Enhanced rewrites in place and keeps a material on each shader
+it rewrites (LOG-26). `Pooled` serves per-instance constant texts too. Read `Launch/EnhancedLook.cs`.
 
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame

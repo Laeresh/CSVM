@@ -758,7 +758,9 @@ prints one shader-cache error (B6 owns it).
   the interior would be drawn as if it were an eye; none casts on it today.
 - Never `ipd=0` on a chapter world (A4's Traps).
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged tree with A3b, B6 and C14 and the ShaderTwins
+rewrite fix (LOG-26): build PASS, units 6348 passed 3 skipped, engine 533 passed 2 skipped with
+clean engine errors, goldens 27/27 hash-identical. The headset checks named above are still owed.
 
 ## A4 ☑ Screen-space effects under multiview
 
@@ -1097,7 +1099,9 @@ The same in an exported build (`.\ExportRelease.ps1`, then double-click `.scratc
 - The boot relaunch shows the first window for a moment: Godot creates it before any game code.
 - `SeatLimit` is the process's, not setup state: `PlayerSetupFeature.Discard` keeps it.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged tree with A3b, B6 and C14 and the ShaderTwins
+rewrite fix (LOG-26): build PASS, units 6348 passed 3 skipped, engine 533 passed 2 skipped with
+clean engine errors, goldens 27/27 hash-identical. The headset checks named above are still owed.
 
 ## B7 ☐ The XR rig in `PlayerRig`, recenter and per-plane scale data
 
@@ -1413,7 +1417,9 @@ the nose-view golden avoids and B8 inherits. A C3 `--xr-sim` probe exits with an
 or a C# finalizer fatal after saving its shot in about half the runs, with the flare or without it
 and with this item's code switched off; on `--render-thread safe` it exited 0 in 28 of 28.
 
-**Verified.** <pending orchestrator run>
+**Verified.** The complete battery on the merged tree with A3b, B6 and C14 and the ShaderTwins
+rewrite fix (LOG-26): build PASS, units 6348 passed 3 skipped, engine 533 passed 2 skipped with
+clean engine errors, goldens 27/27 hash-identical. The headset checks named above are still owed.
 
 # Wave D, cutscenes, comfort and performance
 

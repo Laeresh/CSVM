@@ -31,6 +31,10 @@ internal static class ShaderTwins
     private static readonly Dictionary<ShaderMaterial, (ModeShader Twins, bool Fade)> Tracked =
         new(ReferenceEqualityComparer.Instance);
 
+    // One material on each shader rewritten in place, held for the process. A rewrite recompiles
+    // only when a material on that shader next updates (Keep). docs/verification.md LOG-26.
+    private static readonly List<ShaderMaterial> Keepers = new();
+
     // The mode the tracked materials last followed, null before the first.
     private static bool? _textEnhanced;
 
@@ -256,6 +260,7 @@ internal static class ShaderTwins
                 if (free && !rewritten && !ByText.ContainsKey(text))
                 {
                     ByText.Remove(from.Code);
+                    Keep(from);
                     from.Code = text;
                     ByText[text] = from;
                     TextRewrites++;
@@ -276,6 +281,17 @@ internal static class ShaderTwins
             }
         }
         return rewrote;
+    }
+
+    // Puts a material on a shader about to be rewritten, so the rewrite has an owner to recompile
+    // it. ⚠ Do not drop it. With no owner, the first advanced-variant draw marks the shader built
+    // from its old text, and later materials then fail to bind their uniforms.
+    private static void Keep(Shader shader)
+    {
+        var keeper = new ShaderMaterial { Shader = shader };
+        // The RID is made on first ask; asking now makes the owner before the new text lands.
+        keeper.GetRid();
+        Keepers.Add(keeper);
     }
 
     /// <summary>What one <see cref="Regenerate"/> did. It names the keys, the tracked materials and

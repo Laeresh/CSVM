@@ -27,6 +27,23 @@ internal static class GraphicsSwitchSuites
     // on a commit, so a reading taken before one would show the pool the switch left.
     private const int Steps = 3;
 
+    // The two texts of shader-twins-retext-owner's key. Their uniform blocks differ in size, which is
+    // what a material on a stale build fails to bind.
+    private const string RetextOriginal = """
+        shader_type spatial;
+        render_mode unshaded;
+        uniform vec4 tint_a = vec4(0.5, 0.0, 0.0, 1.0);
+        uniform vec4 tint_b = vec4(0.5, 0.0, 0.0, 1.0);
+        void fragment() { ALBEDO = tint_a.rgb + tint_b.rgb; }
+        """;
+
+    private const string RetextEnhanced = """
+        shader_type spatial;
+        render_mode unshaded;
+        uniform vec4 tint_a = vec4(0.0, 1.0, 0.0, 1.0);
+        void fragment() { ALBEDO = tint_a.rgb; }
+        """;
+
     // Every shader text a reading met, by its census key, for the mismatch artifact.
     private static readonly Dictionary<string, string> TextByKey = new(StringComparer.Ordinal);
 
@@ -313,6 +330,63 @@ internal static class GraphicsSwitchSuites
             rig.Close();
             Mech3.ShaderTwins.EnhancedDrawn = wasDrawn;
             Restore(wasEnhanced);
+        }
+    }
+
+    [Suite("shader-twins-retext-owner",
+        "a key's Original shader whose last material is gone takes the Enhanced text in place on the "
+        + "first switch to Enhanced, a TAA frame then builds the advanced variants, and a new material "
+        + "on it still draws the Enhanced text's colour with no engine error: the rewrite keeps a "
+        + "material on the shader, so Godot recompiles it before that frame (docs/verification.md "
+        + "LOG-26). Red only as the first TAA draw of its process, so run it alone with -Suite")]
+    internal static void RetextOwner(TestContext ctx)
+    {
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        bool wasDrawn = Mech3.ShaderTwins.EnhancedDrawn;
+        var pane = RetextPane(taa: false);
+        ctx.Host.AddChild(pane);
+        try
+        {
+            GraphicsMode.Set(false);
+            Mech3.ShaderTwins.EnhancedDrawn = false;
+            Mech3.ShaderTwins.Regenerate();
+            var twins = Mech3.ShaderTwins.Make(() => GraphicsMode.Enhanced ? RetextEnhanced : RetextOriginal,
+                "retext-owner", "retext-owner:0");
+            var first = RetextQuad(Mech3.ShaderTwins.Follow(new ShaderMaterial(), twins));
+            pane.AddChild(first);
+            ForcedFrames(pane);
+            var original = Centre(pane);
+
+            // The key's last material goes before the switch, so the rewrite finds no owner of its own.
+            var material = first.MaterialOverride;
+            first.MaterialOverride = null;
+            first.Free();
+            material.Dispose();
+            Mech3.ShaderTwins.ReleaseUnused();
+            ForcedFrames(pane);
+
+            GraphicsMode.Set(true);
+            int retexted = Mech3.ShaderTwins.Regenerate().Retexted;
+            var taa = RetextPane(taa: true);
+            pane.AddChild(taa);
+            taa.AddChild(RetextQuad(new StandardMaterial3D { AlbedoColor = Colors.Blue }));
+            ForcedFrames(pane);
+
+            pane.AddChild(RetextQuad(Mech3.ShaderTwins.Follow(new ShaderMaterial(), twins)));
+            ForcedFrames(pane);
+            var enhanced = Centre(pane);
+            ctx.Check(retexted >= 1, $"the switch rewrote the key's shader in place ({retexted} rewritten)");
+            ctx.Check(original.R > 200 && original.G < 60,
+                $"ABLE-TO-FAIL CONTROL: the Original text draws red before the switch ({original})");
+            ctx.Check(enhanced.G > 200 && enhanced.R < 60,
+                $"a new material on the rewritten shader draws the Enhanced text's green ({enhanced})");
+        }
+        finally
+        {
+            pane.QueueFree();
+            GraphicsMode.Set(wasEnhanced);
+            Mech3.ShaderTwins.EnhancedDrawn = wasDrawn;
+            Mech3.ShaderTwins.Regenerate();
         }
     }
 
@@ -742,6 +816,57 @@ internal static class GraphicsSwitchSuites
     {
         for (int i = 0; i < Steps; i++)
             rig.Session._PhysicsProcess(GameClock.FixedDt);
+    }
+
+    // A small pane with its own world and camera, drawn by every forced frame.
+    private static SubViewport RetextPane(bool taa)
+    {
+        var pane = new SubViewport
+        {
+            Size = new Vector2I(64, 64),
+            OwnWorld3D = true,
+            World3D = new World3D(),
+            RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+            UseTaa = taa,
+        };
+        pane.AddChild(new Camera3D { Current = true });
+        return pane;
+    }
+
+    // A quad filling the pane's centre, in front of its camera.
+    private static MeshInstance3D RetextQuad(Material material) => new()
+    {
+        Mesh = new QuadMesh { Size = new Vector2(4f, 4f) },
+        MaterialOverride = material,
+        Position = new Vector3(0f, 0f, -5f),
+    };
+
+    // Two forced frames over the pane, its transforms pushed first: a suite never reaches the frame
+    // that would push them. The sync waits for the render thread to draw them, or a material made
+    // next would reach the server before the frame does.
+    private static void ForcedFrames(Node pane)
+    {
+        PushTransforms(pane);
+        RenderingServer.ForceDraw();
+        RenderingServer.ForceDraw();
+        RenderingServer.ForceSync();
+    }
+
+    private static void PushTransforms(Node node)
+    {
+        if (node is Node3D spatial)
+            spatial.ForceUpdateTransform();
+        foreach (var child in node.GetChildren())
+            PushTransforms(child);
+    }
+
+    private static (int R, int G, int B) Centre(SubViewport pane)
+    {
+        var img = pane.GetTexture()?.GetImage();
+        if (img == null || img.IsEmpty())
+            return (-1, -1, -1);
+        var c = img.GetPixel(img.GetWidth() / 2, img.GetHeight() / 2);
+        return (c.R8, c.G8, c.B8);
     }
 
     // One flight session in its own pane, lit as the launcher lights one. The sun and the

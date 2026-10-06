@@ -527,6 +527,12 @@ member, and it does not go here.
   cache the other launches read: Godot 4.7 misreads a cache file holding a variant the reader has
   disabled, and the `br != variant_size` line it prints fails the engine stage's error screen.**
   One `--xr-sim` launch with the cache on made the next flat launch print it for `VrsShaderRD`.
+- **LOG-26**, **Keep a material on a Shader whose text is rewritten in place until Godot recompiles
+  it: Godot 4.7 recompiles a rewritten shader only when a material on it updates, and enabling the
+  advanced group first (a process's first TAA draw, PERF-45) marks it built from the old text.**
+  Every later material on it then prints `Uniform buffer supplied (binding: 0) size (128) is smaller
+  than size of shader uniform: (144)`. Which rewritten shaders had lost their last material varied
+  from run to run, so the same ordered suites failed 1 to 3 of 6 concurrent processes.
 
 ## WORLD, world data and runtime traps
 
