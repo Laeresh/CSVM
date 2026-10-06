@@ -333,6 +333,7 @@ rows).
 - `src/Effects/OceanCalmZone.cs`, one ship's calm zone on the wave ocean: a box along the hull's heading over its waterline and wake sheets.
 - `src/Effects/OceanMask.cs`, the wave ocean's shore mask, baked from the built world's water and solid polygons.
 - `src/Effects/OceanMaskRaster.cs`, the shore mask's texels from its triangles, in parallel row bands that give identical bytes.
+- `src/Effects/OceanMovers.cs`, the rule for the boats an animation carries across the sea, which the ocean calms around wherever they float.
 - `src/Effects/Precipitation.cs`, weather.json rain/snow: one camera-following MultiMesh of flakes or streaks, self-animating on the GPU.
 - `src/Effects/ScorchField.cs`, the enhanced presentation's scorch marks: a capped pool of decals with one procedural burn texture, laid over the crater carve.
 - `src/Effects/WindStreaks.cs`, the enhanced presentation's camera-local wind streaks, keyed to airspeed and load factor, over the authored speed cue.

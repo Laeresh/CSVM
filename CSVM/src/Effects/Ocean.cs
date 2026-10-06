@@ -31,10 +31,10 @@ public sealed partial class Ocean : Node3D
     private const int MaxShips = 16;
 
     // A hull is on the water while its origin sits this close to sea level; a hoisted lifeboat is not.
-    private const float HullWaterBand = 3f;
+    private const float HullWaterBand = OceanMovers.OriginBand;
 
     // The hull meshes that reach this close to the hull's own y = 0 make its waterline.
-    private const float WaterlineBand = 2f;
+    private const float WaterlineBand = OceanMovers.WaterlineBand;
 
     // TUNE. The wind the swell runs with, degrees from +X toward +Z, and the crest sharpness.
     private const float WindDeg = 20f;
@@ -90,6 +90,12 @@ public sealed partial class Ocean : Node3D
     private readonly Node3D?[] _zoneHulls = new Node3D?[MaxShips];
     private readonly Dictionary<Node3D, Aabb?> _waterlines = new();
     private readonly OceanMask _mask;
+    private readonly List<Node3D> _candidates = new();
+    private readonly List<Vector3> _candidateAt = new();
+    private readonly List<bool> _candidateWake = new();
+    private readonly List<int> _order = new();
+    private readonly Dictionary<Node3D, Transform3D> _nestedRest = new();
+    private readonly HashSet<Node3D> _zoned = new();
 
     private Ocean(ShaderMaterial material, Func<IEnumerable<Node3D>> ships, OceanMask mask, Node3D worldRoot)
     {
@@ -114,13 +120,14 @@ public sealed partial class Ocean : Node3D
     public static bool Covers(string chapter) => Array.Exists(Chapters, c => string.Equals(c, chapter, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Builds the ocean over the world under <paramref name="worldRoot"/>, or null when
-    /// that world has no sea-level base sheet to replace. A non-empty <paramref name="maskPng"/>
-    /// receives the baked mask (<c>--dump-ocean-mask=</c>).</summary>
+    /// that world has no sea-level base sheet to replace. The <paramref name="movers"/> an animation
+    /// carries (<see cref="OceanMovers"/>) are calmed around as hulls wherever they float. A
+    /// non-empty <paramref name="maskPng"/> receives the baked mask (<c>--dump-ocean-mask=</c>).</summary>
     public static Ocean? Create(Node3D worldRoot, SceneBuilder scene, TextureArchive textures,
-        Func<IEnumerable<Node3D>> ships, ISet<Node> skip, string maskPng)
+        Func<IEnumerable<Node3D>> ships, ISet<Node> skip, IReadOnlyCollection<Node3D> movers, string maskPng)
     {
         long start = System.Diagnostics.Stopwatch.GetTimestamp();
-        var mask = OceanMask.Bake(worldRoot, scene, skip);
+        var mask = OceanMask.Bake(worldRoot, scene, skip, movers);
         if (mask == null)
         {
             Log.Info("world", $"ocean: no sea-level base sheet, not built");
@@ -166,7 +173,16 @@ public sealed partial class Ocean : Node3D
             ocean.AddChild(instance);
         }
         double ms = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;
-        Log.Info("world", $"ocean: built grid verts={mesh.SurfaceGetArrayLen(0)} mask={mask.Width}x{mask.Height} cell={OceanMask.Cell}m origin=({mask.Origin.X:0},{mask.Origin.Y:0}) base={mask.BaseTexture} tile={mask.TileMetres:0.0}m base_tris={mask.BaseTriangles} base_level={mask.BaseLevel} zone_groups={mask.ZoneLayers.Count} edge_tris={mask.EdgeTriangles} solid_tris={mask.SolidTriangles} wakes={mask.Wakes.Count} ms={ms:0} bake={bakeMs:0} ({mask.Timing})");
+        Log.Info("world", $"ocean: built grid verts={mesh.SurfaceGetArrayLen(0)} mask={mask.Width}x{mask.Height} cell={OceanMask.Cell}m origin=({mask.Origin.X:0},{mask.Origin.Y:0}) base={mask.BaseTexture} tile={mask.TileMetres:0.0}m base_tris={mask.BaseTriangles} base_level={mask.BaseLevel} zone_groups={mask.ZoneLayers.Count} edge_tris={mask.EdgeTriangles} solid_tris={mask.SolidTriangles} wakes={mask.Wakes.Count} movers={movers.Count} moving_hulls={mask.MovingHulls.Count} unjudged={mask.UnjudgedMovers.Count} hull_tris={mask.MovingHullTriangles} ms={ms:0} bake={bakeMs:0} ({mask.Timing})");
+        foreach (var hull in mask.MovingHulls)
+        {
+            var p = hull.GlobalPosition;
+            var line = ocean.Waterline(hull);
+            string size = line is { } l ? string.Create(CultureInfo.InvariantCulture, $"{l.Size.X:0}x{l.Size.Z:0}m") : "none";
+            Log.Info("world", $"ocean: moving hull '{hull.Name}' at ({p.X:0},{p.Y:0.0},{p.Z:0}) waterline {size}");
+        }
+        foreach (var mover in mask.UnjudgedMovers)
+            Log.Debug("world", $"ocean: mover '{mover.Name}' hidden at the bake, judged when shown");
         foreach (var wake in mask.Wakes)
         {
             if (wake.IsInsideTree() && wake is MeshInstance3D { Mesh: { } wakeMesh })
@@ -532,6 +548,16 @@ void fragment() {
         return new Vector2(z.X, z.Z);
     }
 
+    // Whether a hull shows with its origin on sea level.
+    private static bool Afloat(Node3D hull) =>
+        IsInstanceValid(hull) && hull.IsInsideTree() && hull.IsVisibleInTree()
+        && Mathf.Abs(hull.GlobalPosition.Y) <= HullWaterBand;
+
+    // A visible wake sheet's mesh while the sheet lies on the water, else null.
+    private static Mesh? WakeOnWater(Node3D wake) =>
+        IsInstanceValid(wake) && wake.IsInsideTree() && wake.IsVisibleInTree() && wake is MeshInstance3D { Mesh: { } mesh }
+        && Mathf.Abs(wake.GlobalPosition.Y) <= HullWaterBand ? mesh : null;
+
     // The hull a wake sheet trails: the sheet's mesh sits under its own node, which hangs off the
     // ship. A wake node straight under the world root is its own hull.
     private Node3D HullOf(Node3D wake)
@@ -541,34 +567,61 @@ void fragment() {
     }
 
     // One zone per ship on the water, over its waterline and its visible wake sheets, each frame;
-    // an unused slot sits far away.
+    // an unused slot sits far away. With more ships afloat than slots, the nearest to the eye win.
     private void PublishShips()
     {
-        int n = 0;
+        _candidates.Clear();
+        _candidateAt.Clear();
+        _candidateWake.Clear();
         foreach (var hull in _ships())
-            n = AddHull(hull, n);
+            Offer(hull, wake: false);
+        foreach (var hull in _mask.MovingHulls)
+            Offer(hull, wake: false);
+        foreach (var mover in _mask.UnjudgedMovers)
+        {
+            if (Afloat(mover) && Waterline(mover) != null && OverSea(mover.GlobalPosition))
+                Offer(mover, wake: false);
+        }
+        for (int i = _candidates.Count - 1; i >= 0; i--)
+        {
+            if (Rides(_candidates[i]))
+            {
+                _candidates.RemoveAt(i);
+                _candidateAt.RemoveAt(i);
+                _candidateWake.RemoveAt(i);
+            }
+        }
         foreach (var wake in _wakes)
         {
-            if (!IsInstanceValid(wake) || !wake.IsInsideTree() || !wake.IsVisibleInTree() || wake is not MeshInstance3D { Mesh: { } mesh }
-                || Mathf.Abs(wake.GlobalPosition.Y) > HullWaterBand)
-                continue;
-            var hull = HullOf(wake);
-            int z = Array.IndexOf(_zoneHulls, hull, 0, n);
-            if (z < 0)
+            if (WakeOnWater(wake) is { } && ZoneHullOf(wake, _candidates, _candidates.Count) < 0)
+                Offer(HullOf(wake), wake: true);
+        }
+        int n = 0;
+        var eye = IsInsideTree() ? GetViewport()?.GetCamera3D()?.GlobalPosition : null;
+        // Without a camera the first listed keep the slots: roster, moving, then wake hulls.
+        OceanMovers.Nearest(_candidateAt, eye ?? Vector3.Zero, eye != null ? MaxShips : int.MaxValue, _order);
+        if (_order.Count > MaxShips)
+            _order.RemoveRange(MaxShips, _order.Count - MaxShips);
+        foreach (int i in _order)
+        {
+            var hull = _candidates[i];
+            int added = AddHull(hull, n);
+            if (added == n && _candidateWake[i])
             {
-                if (n >= MaxShips)
-                    continue;
-                n = AddHull(hull, n);
-                z = Array.IndexOf(_zoneHulls, hull, 0, n);
-                if (z < 0)
-                {
-                    var o = hull.GlobalPosition;
-                    _zones[n] = new OceanCalmZone(new Vector2(o.X, o.Z), Heading(hull));
-                    _zoneHulls[n] = hull;
-                    z = n++;
-                }
+                // A wake's ship keeps its zone wherever its own origin stands.
+                var o = hull.GlobalPosition;
+                _zones[n] = new OceanCalmZone(new Vector2(o.X, o.Z), Heading(hull));
+                _zoneHulls[n] = hull;
+                added = n + 1;
             }
-            _zones[z].Add(mesh.GetAabb(), wake.GlobalTransform);
+            if (added > n && _zoned.Add(hull))
+                Log.Debug("world", $"ocean: zone over '{hull.Name}' at ({_candidateAt[i].X:0},{_candidateAt[i].Y:0.0},{_candidateAt[i].Z:0}) of {_candidates.Count} afloat");
+            n = added;
+        }
+        foreach (var wake in _wakes)
+        {
+            if (WakeOnWater(wake) is { } mesh && ZoneHullOf(wake, _zoneHulls, n) is var z and >= 0)
+                _zones[z].Add(mesh.GetAabb(), wake.GlobalTransform);
         }
         for (int i = 0; i < MaxShips; i++)
         {
@@ -633,6 +686,56 @@ void fragment() {
         }
         _waterlines[hull] = line;
         return line;
+    }
+
+    // Lists a ship for a zone this frame, once. A wake's ship needs no origin on the water.
+    private void Offer(Node3D hull, bool wake)
+    {
+        if (!IsInstanceValid(hull) || !hull.IsInsideTree() || (!wake && !Afloat(hull)) || _candidates.Contains(hull))
+            return;
+        _candidates.Add(hull);
+        _candidateAt.Add(hull.GlobalPosition);
+        _candidateWake.Add(wake);
+    }
+
+    // The first of hulls[0..count) that is the wake's ship or holds the sheet, else -1.
+    private int ZoneHullOf(Node3D wake, IReadOnlyList<Node3D?> hulls, int count)
+    {
+        var ship = HullOf(wake);
+        for (int i = 0; i < count; i++)
+        {
+            if (hulls[i] is { } h && (h == ship || h.IsAncestorOf(wake)))
+                return i;
+        }
+        return -1;
+    }
+
+    // Whether a hull rides inside another listed hull where it stood when first seen there, which
+    // that hull's waterline already covers. A part that moves off on its own keeps a zone.
+    private bool Rides(Node3D inner)
+    {
+        foreach (var outer in _candidates)
+        {
+            if (outer == inner || !outer.IsAncestorOf(inner))
+                continue;
+            var rel = outer.GlobalTransform.AffineInverse() * inner.GlobalTransform;
+            if (!_nestedRest.TryGetValue(inner, out var rest))
+            {
+                _nestedRest[inner] = rel;
+                return true;
+            }
+            return rel.Origin.DistanceTo(rest.Origin) < 0.5f && rel.Basis.Z.Normalized().Dot(rest.Basis.Z.Normalized()) > 0.999f;
+        }
+        return false;
+    }
+
+    // Whether the mask counts the texel under a world point as sea.
+    private bool OverSea(Vector3 p)
+    {
+        int x = (int)Math.Floor((p.X - _mask.Origin.X) / OceanMask.Cell);
+        int y = (int)Math.Floor((p.Z - _mask.Origin.Y) / OceanMask.Cell);
+        return x >= 0 && y >= 0 && x < _mask.Width && y < _mask.Height
+            && _mask.Image.GetPixel(x, y).R >= OceanMask.SeaThreshold;
     }
 
     // One Gerstner component: direction, wavelength in metres, steepness k*A.

@@ -97,6 +97,16 @@ internal sealed class OceanMask
     /// <summary>The wake sheets' meshes found in the world, whose ships the ocean calms around.</summary>
     public List<Node3D> Wakes { get; } = new();
 
+    /// <summary>The movers the bake found to be hulls on the sea (<see cref="OceanMovers"/>). They stay
+    /// out of the mask, so a hull that sails off leaves no calm patch.</summary>
+    public List<Node3D> MovingHulls { get; } = new();
+
+    /// <summary>The movers hidden at the bake, which the ocean judges once they show.</summary>
+    public List<Node3D> UnjudgedMovers { get; } = new();
+
+    /// <summary>The bake's triangles under moving hulls, kept out of the mask.</summary>
+    public int MovingHullTriangles { get; private set; }
+
     /// <summary>The bake's milliseconds per phase, for the build log line.</summary>
     public string Timing { get; private set; } = "";
 
@@ -123,21 +133,24 @@ internal sealed class OceanMask
     }
 
 
-    /// <summary>Bakes the mask over the world under <paramref name="root"/>, skipping the subtrees in
-    /// <paramref name="skip"/>; null when that world has no sea-level base sheet. The surfaces are
-    /// read through <paramref name="scene"/>, which holds the arrays it committed.</summary>
-    public static OceanMask? Bake(Node3D root, SceneBuilder scene, ISet<Node> skip)
+    /// <summary>Bakes the mask over the world under <paramref name="root"/>, or null when that world
+    /// has no sea-level base sheet. It skips the subtrees in <paramref name="skip"/> and the
+    /// <paramref name="movers"/> found to be hulls on the sea. The surfaces are read through
+    /// <paramref name="scene"/>, which holds the arrays it committed.</summary>
+    public static OceanMask? Bake(Node3D root, SceneBuilder scene, ISet<Node> skip, IReadOnlyCollection<Node3D> movers)
     {
         // The world is static. An ocean rebuilt over it, after a live switch or a Water Quality
         // change, reuses the first bake. The frame path never pays it twice.
         if (Baked.TryGetValue(scene, out var kept) && kept.Root == root && GodotObject.IsInstanceValid(root))
         {
             kept.Mask?.Wakes.RemoveAll(w => !GodotObject.IsInstanceValid(w));
+            kept.Mask?.MovingHulls.RemoveAll(h => !GodotObject.IsInstanceValid(h));
+            kept.Mask?.UnjudgedMovers.RemoveAll(h => !GodotObject.IsInstanceValid(h));
             if (kept.Mask != null)
                 kept.Mask.Timing = "reused";
             return kept.Mask;
         }
-        var mask = BakeNew(root, scene, skip);
+        var mask = BakeNew(root, scene, skip, movers);
         // ⚠ Do not drop this collection. Reading MeshInstance3D.Mesh mints a managed wrapper for
         // every mesh whose wrapper was already collected, and each holds its mesh until collected.
         // A short run that quits first leaves hundreds alive, and Godot's exit check aborts.
@@ -162,14 +175,14 @@ internal sealed class OceanMask
         RenderingServer.GlobalShaderParameterSet(RectParam, new Vector4(Origin.X, Origin.Y, 1f / Size.X, 1f / Size.Y));
     }
 
-    private static OceanMask? BakeNew(Node3D root, SceneBuilder scene, ISet<Node> skip)
+    private static OceanMask? BakeNew(Node3D root, SceneBuilder scene, ISet<Node> skip, IReadOnlyCollection<Node3D> movers)
     {
         long t0 = Stopwatch.GetTimestamp();
         var names = new Dictionary<Material, string>();
         foreach (var (mat, tex) in scene.TexturedMaterials)
             names[mat] = tex;
         var result = new OceanMask();
-        var walker = new Walker(root, scene, names, skip, result);
+        var walker = new Walker(root, scene, names, skip, movers, result);
         walker.Walk();
         double walkMs = Lap(ref t0);
         if (result.BaseTriangles == 0)
@@ -286,14 +299,29 @@ internal sealed class OceanMask
         private readonly ISet<Node> _skip;
         private readonly OceanMask _result;
         private readonly List<Surface> _surfaces = new();
+        private readonly Dictionary<Node, int> _moverIndex = new();
+        private readonly Mover[] _movers;
+        private readonly List<int> _moverPath = new();
+        private readonly List<int[]> _triMovers = new();
+        private int[] _pathArray = Array.Empty<int>();
 
-        public Walker(Node3D root, SceneBuilder scene, Dictionary<Material, string> names, ISet<Node> skip, OceanMask result)
+        public Walker(Node3D root, SceneBuilder scene, Dictionary<Material, string> names, ISet<Node> skip,
+            IReadOnlyCollection<Node3D> movers, OceanMask result)
         {
             _root = root;
             _scene = scene;
             _names = names;
             _skip = skip;
             _result = result;
+            _movers = new Mover[movers.Count];
+            foreach (var m in movers)
+            {
+                if (m != root && GodotObject.IsInstanceValid(m) && !_moverIndex.ContainsKey(m))
+                {
+                    _movers[_moverIndex.Count] = new Mover { Node = m };
+                    _moverIndex[m] = _moverIndex.Count;
+                }
+            }
         }
 
         public List<Tri> Tris { get; } = new();
@@ -315,6 +343,8 @@ internal sealed class OceanMask
             Visit(_root, Transform3D.Identity, true);
             foreach (var s in _surfaces)
                 Read(s);
+            if (_moverIndex.Count > 0)
+                DropMovingHulls();
         }
 
         private static bool IsWakeTexture(string tex) =>
@@ -334,6 +364,15 @@ internal sealed class OceanMask
             var xf = parent;
             if (collect && node is Node3D n3 && node != _root)
                 xf = parent * n3.Transform;
+            bool mover = false;
+            if (collect && _moverIndex.TryGetValue(node, out int moverAt))
+            {
+                mover = true;
+                _movers[moverAt].Collected = true;
+                _movers[moverAt].Origin = xf.Origin;
+                _moverPath.Add(moverAt);
+                _pathArray = _moverPath.ToArray();
+            }
             bool wake = false;
             if (node is MeshInstance3D mi && mi.Mesh is { } mesh)
             {
@@ -352,13 +391,18 @@ internal sealed class OceanMask
                         _result.Wakes.Add(mi);
                     }
                     if (arrayMesh != null)
-                        _surfaces.Add(new Surface(arrayMesh, s, tex, xf, mat, mi.Layers));
+                        _surfaces.Add(new Surface(arrayMesh, s, tex, xf, mat, mi.Layers, _pathArray));
                 }
             }
             int below = 0;
             int children = node.GetChildCount();
             for (int i = 0; i < children; i++)
                 below = Math.Max(below, Visit(node.GetChild(i), xf, collect));
+            if (mover)
+            {
+                _moverPath.RemoveAt(_moverPath.Count - 1);
+                _pathArray = _moverPath.ToArray();
+            }
             if (below > 0 && node != _root)
                 _surfaces.RemoveRange(start, _surfaces.Count - start);
             return wake ? 2 : Math.Max(below - 1, 0);
@@ -366,7 +410,7 @@ internal sealed class OceanMask
 
         private void Read(Surface surface)
         {
-            var (mesh, s, tex, xf, material, layers) = surface;
+            var (mesh, s, tex, xf, material, layers, movers) = surface;
             bool water = SceneBuilder.ClassifySurface(tex) == "water";
             bool isBase = water && SceneBuilder.IsOceanBaseTexture(tex);
             // The builder's own copy: Godot's read-back copies the surface off the GPU and waits
@@ -391,10 +435,17 @@ internal sealed class OceanMask
                 float minY = Math.Min(a.Y, Math.Min(b.Y, c.Y));
                 float maxY = Math.Max(a.Y, Math.Max(b.Y, c.Y));
                 bool seaLevel = minY > -0.5f && maxY < 0.5f;
+                if (movers.Length > 0 && OceanMovers.ReachesWaterline(a, b, c))
+                {
+                    foreach (int m in movers)
+                        _movers[m].Waterline = true;
+                }
                 Kind kind;
                 if (isBase && seaLevel)
                 {
                     kind = Kind.Base;
+                    foreach (int m in movers)
+                        _movers[m].HasBase = true;
                     int level = LevelOf(material);
                     if (_result.BaseTriangles++ == 0 || level < _result.BaseLevel)
                         _result.BaseLevel = level;
@@ -434,6 +485,7 @@ internal sealed class OceanMask
                 bool tinted = kind == Kind.Base && col.Length > 0;
                 byte zone = kind == Kind.Base ? ZoneOf(layers) : (byte)0;
                 Tris.Add(new Tri(a, b, c, kind, tinted ? Stored(col[i0]) : Colors.White, tinted ? Stored(col[i1]) : Colors.White, tinted ? Stored(col[i2]) : Colors.White, zone));
+                _triMovers.Add(movers);
             }
         }
 
@@ -449,6 +501,71 @@ internal sealed class OceanMask
             return (byte)Math.Min(k, OceanMaskRaster.AnyZone - 2);
         }
 
-        private readonly record struct Surface(ArrayMesh Mesh, int Index, string Texture, Transform3D Xf, Material Material, uint Layers);
+        // A mover is a hull when its origin sits on sea level over the world's own sea-level water
+        // and its meshes reach the waterline. A mover carrying base-sheet water is sea, not a hull.
+        // Its triangles and every nested mover's leave the mask together; triangle order is kept.
+        private void DropMovingHulls()
+        {
+            var hull = new bool[_moverIndex.Count];
+            for (int m = 0; m < hull.Length; m++)
+            {
+                ref var mover = ref _movers[m];
+                if (!mover.Collected)
+                {
+                    _result.UnjudgedMovers.Add(mover.Node);
+                    continue;
+                }
+                if (!mover.Waterline || mover.HasBase || Math.Abs(mover.Origin.Y) > OceanMovers.OriginBand)
+                {
+                    Log.Debug("world", $"ocean: mover '{mover.Node.Name}' at ({mover.Origin.X:0},{mover.Origin.Y:0.0},{mover.Origin.Z:0}) not a hull: waterline={mover.Waterline} base={mover.HasBase}");
+                    continue;
+                }
+                var p = new Vector2(mover.Origin.X, mover.Origin.Z);
+                for (int i = 0; i < Tris.Count; i++)
+                {
+                    var t = Tris[i];
+                    if (t.Kind != Kind.Solid && _triMovers[i].Length == 0 && OceanMovers.Covers(t.A, t.B, t.C, p))
+                    {
+                        hull[m] = true;
+                        _result.MovingHulls.Add(mover.Node);
+                        break;
+                    }
+                }
+                if (!hull[m])
+                    Log.Debug("world", $"ocean: mover '{mover.Node.Name}' at ({mover.Origin.X:0},{mover.Origin.Y:0.0},{mover.Origin.Z:0}) not a hull: off the sea");
+            }
+            if (_result.MovingHulls.Count == 0)
+                return;
+            int kept = 0;
+            for (int i = 0; i < Tris.Count; i++)
+            {
+                bool drop = false;
+                foreach (int m in _triMovers[i])
+                    drop |= hull[m];
+                if (!drop)
+                {
+                    Tris[kept++] = Tris[i];
+                    continue;
+                }
+                _result.MovingHullTriangles++;
+                if (Tris[i].Kind == Kind.Solid)
+                    _result.SolidTriangles--;
+                else if (Tris[i].Kind == Kind.Edge)
+                    _result.EdgeTriangles--;
+            }
+            Tris.RemoveRange(kept, Tris.Count - kept);
+        }
+
+        private readonly record struct Surface(ArrayMesh Mesh, int Index, string Texture, Transform3D Xf, Material Material, uint Layers, int[] Movers);
+
+        // One mover as the walk found it: where it stood, and what its visible meshes reach.
+        private struct Mover
+        {
+            public Node3D Node;
+            public Vector3 Origin;
+            public bool Collected;
+            public bool Waterline;
+            public bool HasBase;
+        }
     }
 }

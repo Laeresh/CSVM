@@ -99,7 +99,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 24. ☐ An Enhanced ocean golden
 25. ☑ The ocean matches the flat sheet at the shore and in fog
 26. ◐ No hole where a mission shows a node hidden at the bake
-27. ☐ Calm zones for mission-animated boats with no wake sheet
+27. ◐ Calm zones for mission-animated boats with no wake sheet
 
 ## Dependency and parallelism notes
 
@@ -666,7 +666,44 @@ per C3 mission), and re-baking when a node is shown (a full bake mid-flight, cos
 **Verify.** C3 at the crater: shoot the floodgate (or force the def) and capture the floor after the
 drain, with and without `--no-ocean`; no hole. C1B cruise unchanged; `graphics-ocean-switch` green.
 
-## C27 ☐ Calm zones for mission-animated boats with no wake sheet
+## C27 ◐ Calm zones for mission-animated boats with no wake sheet
+
+**Landed.** The hulls come from the bound program, not a name list (`OceanMovers`). A mover is the
+target of a played OBJECT_MOTION_FROM_TO with a translate channel, an SI script or an
+OBJECT_TRANSLATE_STATE in a sequence, resolved as the dispatch binds it (`GameSession.OceanMovers`:
+the def's symbol table, else a name match per anchor). Reset states, spins and ballistic debris are not
+movers. The mask walk judges each one it reaches visible: a hull has its origin within 3 m of sea level
+over the world's own sea-level water (base sheet or surf-ring triangles that no mover carries) and a
+triangle within 2 m of y = 0, and carries no base-sheet water. A hull's triangles and its nested movers'
+leave the bake together, triangle order kept. A mover hidden at the bake is judged by the ocean once it
+shows (visible, origin on sea level, a waterline, mask sea under its origin). Static hulls stay solid in
+the mask as before, which already keeps the waves out of them. Zones: roster hulls, moving hulls and wake
+ships compete for the 16 slots, nearest the camera first when more float; a hull riding inside another
+listed hull where it first stood there takes no slot of its own (the tugs' `bmover`, the goose's
+`local_xyz`). Census, freecam per chapter and campaign mission (`.scratch\c27\census-*.txt` in the C27 tree):
+- Baked solid and now left out: C2/M01's `sprucegoose` and `tugandbarge01`-`04` (`tugandbarge03` sits
+  on the channel ramp's surf-ring water), C5/M03's `sprucegoose`.
+- Hidden at the bake, zoned once shown: C2's `yacht1`-`4` and `sailboat1`-`3` (every C2 session; the
+  startup defs show them after the bake, so they never left a calm patch, but the waves crossed their
+  hulls). Inferred from the rule, not shot: C3/M03's `barracuda` once it surfaces to y = 0 (it cruises
+  at y = -6, outside the origin band), and the leisure yachts' `sinker` wrecks while they float.
+- Not hulls: C3's `leasure*` yachts do not move (`boats_still.zrd`; only their wreck sinks) and stay solid
+  in the mask; C5's `thug*` are people, not boats. C5/M01's `stein_ship` has its origin at y = -6.7, so it
+  stays solid in the mask, which keeps the waves out while it floats; when it sinks in place the mask's
+  calm stays where it went down. Trains, cars, zeppelins and hangar parts fail the waterline or origin test.
+- C1, C1B, C1C, C2B: no moving hull; C1B and C1C free flight bake identically.
+Evidence, montage `montage-c27.png` in the C27 tree's `.scratch\c27\` (flat / before / after): C2's
+`sailboat3` 600 m from its start at frame 3600 (before, the swell covers its stern; after, flat water
+under the hull), C2/M01's `tugandbarge01` after its run (`--debug-damage=node=kkgate,kill` frees the goose,
+which calls `placebarge1`; frame 3000), and its load position after it left. That load position lies by
+the quay, whose shore fade already calms the water, so the patch the old bake left there is faint (mean
+0.46 levels over the frame). `--no-ocean` is byte-identical between the trees at all three poses. The C1B
+cruise shot stays `3D0FD8B6...`. Goldens: the same three Enhanced shots move as on the tree before this
+item, to the same hashes. Tests: `OceanMoversTests` (event rule, waterline band, sea test, ranking).
+
+**Verified.** <pending orchestrator run>
+
+**Original approach (kept for reference).**
 
 **Goal.** A boat a mission animates across the sea keeps the waves out of its hull and leaves no calm
 patch where it stood at load, whether or not it carries a wake sheet.

@@ -58,8 +58,9 @@ polar grid with a Gerstner swell in its vertex stage and chop in its fragment no
 base sheet, whose fragments step aside through `csky_ocean.gdshaderinc` only where the ocean draws; its colliders
 stay flat. It draws a priority level below the lowest base sheet, one grid per zone-gate group. Owns the wave
 tables, a still sea-state field that groups each wave so the swell shows no lattice, the foam field and up to 16
-ship calm zones (`OceanCalmZone.cs`), all on `csky_time`. At a calmed shore or in fog it shades as the flat sheet.
-`GameSession.FollowOcean` builds it at `waves`, drops it on Original or `flat`; shore calm is `OceanMask.cs`'s.
+ship calm zones (`OceanCalmZone.cs`) over roster hulls, wake ships and hulls an animation moves (`OceanMovers.cs`),
+nearest the eye first, all on `csky_time`. At a calmed shore or in fog it shades as the flat sheet. Built and
+dropped by `GameSession.FollowOcean` at `waves`, Original or `flat`; shore calm is `OceanMask.cs`'s.
 
 ## src/Effects/OceanCalmZone.cs
 One ship's calm zone on the wave ocean: a box on the water along the hull's heading, grown over
@@ -71,8 +72,8 @@ box, full height a fade further out on a smoothstep. `OceanCalmZoneTests` hold t
 The wave ocean's shore mask at 8 m texels: sea coverage, the wave height left after a fade from every shore, surf texel
 and solid near sea level (overlay passes included), the base sheet's baked vertex colour and, where the sheet spans
 zone-gate layers, each texel's zone group. The same pass over the visible tree finds the wake sheets (flat
-`wakefront*`/`wakeback*` meshes), the tile size and the sheet's lowest priority. A wake's ship stays out of the mask, so a
-moving hull leaves no calm patch at its start. Surfaces are read through `SceneBuilder.SurfaceArrays`, never
+`wakefront*`/`wakeback*` meshes), the tile size and the sheet's lowest priority. A wake's ship and every mover found to be a
+hull (`OceanMovers.cs`) stay out of the mask, so a moving hull leaves no calm patch at its start. Surfaces are read through `SceneBuilder.SurfaceArrays`, never
 `SurfaceGetArrays`, whose read-back stalls on the render thread. One bake per built world (keyed on its `SceneBuilder`)
 serves every rebuild of the ocean over it. `--dump-ocean-mask=` writes the mask and the tint. While an ocean stands, `Publish` hands the mask, zone texture and rect to the `csky_ocean_mask`/`_zone`/`_rect` globals; the sheet's hide steps aside at the ocean's own discard (`SeaThreshold`) off any zone seam, and `Withdraw` restores 1x1 no-sea defaults.
 Read `OceanMaskRaster.cs` for the texels and `Ocean.cs` for the sampling.
@@ -86,6 +87,14 @@ operation order of the Vector2 and Color operators they replace, and each row sk
 test cannot take, so a texel rounds exactly as in a plain pass. A texel off the sheet takes its
 tinted neighbours' mean, so the linearly filtered tint does not lighten the sheet's edge. `OceanMaskRasterTests` hold it to
 that plain pass at several band counts.
+
+## src/Effects/OceanMovers.cs
+The rule for the boats an animation carries across the sea, with no engine object touched. A mover is the target
+of a played OBJECT_MOTION_FROM_TO with a translate channel, an SI script or an OBJECT_TRANSLATE_STATE; reset
+states, spins and ballistic debris are not. `GameSession.OceanMovers` resolves the names as the dispatch binds them
+(symbol table, else a name match per anchor). `OceanMask`'s walk judges each: a hull has its origin within 3 m of
+sea level over the world's own sea-level water and meshes within 2 m of it; one hidden at the bake is judged by
+`Ocean` once it shows. `Nearest` picks the zones when more hulls float than there are slots. `OceanMoversTests`.
 
 ## src/Effects/Precipitation.cs
 Rain and snow from `weather.json`'s precipitation block (`WeatherState.PrecipData`): ONE MultiMesh

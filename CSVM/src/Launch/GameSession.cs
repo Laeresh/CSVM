@@ -295,6 +295,8 @@ public partial class GameSession : Node3D
     private Effects.ScorchField? _scorches;
     private Effects.Ocean? _ocean;
     private bool _oceanEligible;
+    // The world runtime whose motions say which hulls the ocean follows; set in every mode it builds in.
+    private AnimRuntime? _oceanRuntime;
     private ClutterBuilder? _clutter;
     private SceneBuilder? _worldScene;
     // The session-owned texture archive, kept open past the build scope so the data-driven crash can
@@ -792,6 +794,7 @@ public partial class GameSession : Node3D
 
         FinishFraming(state);
         _oceanEligible = state.NodeSubtree == null && (_spec.Fly || _spec.Freecam);
+        _oceanRuntime = state.WorldRuntime;
         FollowOcean();
         BuildWorldMerge(state);
         // By default only once this process has switched. The warm-up costs what one switch does,
@@ -2545,9 +2548,54 @@ public partial class GameSession : Node3D
             foreach (var v in _surfaceVehicles.Vessels)
                 hulls.Add(v.Body);
         }
-        _ocean = Effects.Ocean.Create(_plane, _worldScene, _sessionTextures, OceanHulls, hulls, _spec.OceanMaskPath);
+        _ocean = Effects.Ocean.Create(_plane, _worldScene, _sessionTextures, OceanHulls, hulls, OceanMovers(hulls), _spec.OceanMaskPath);
         if (_ocean != null)
             _plane.AddChild(_ocean);
+    }
+
+    // The world nodes the bound program's played motions carry. Each resolves as the dispatch binds
+    // it: the definition's symbol table first, else a name match under each of its anchors. The
+    // roster hulls are left out; they have their own source.
+    private List<Node3D> OceanMovers(HashSet<Node> roster)
+    {
+        var movers = new List<Node3D>();
+        if (_oceanRuntime is not { } runtime || _plane == null)
+            return movers;
+        var seen = new HashSet<Node3D>();
+        foreach (var def in runtime.ProgramDefs)
+        {
+            foreach (var name in Effects.OceanMovers.MovedNames(def))
+            {
+                IEnumerable<Node3D> found;
+                if (def.NodeRefs.TryGetValue(name, out int index))
+                {
+                    found = runtime.FindNodeByIndex(index) is { } bound ? new[] { bound } : Array.Empty<Node3D>();
+                }
+                else
+                {
+                    var hits = new List<Node3D>();
+                    foreach (var anchor in runtime.AnchorsOf(def))
+                        hits.AddRange(runtime.FindNodes(name, anchor));
+                    found = hits;
+                }
+                foreach (var node in found)
+                {
+                    if (node != _plane && GodotObject.IsInstanceValid(node) && !InRoster(node) && seen.Add(node))
+                        movers.Add(node);
+                }
+            }
+        }
+        return movers;
+
+        bool InRoster(Node node)
+        {
+            for (Node? n = node; n != null; n = n.GetParent())
+            {
+                if (roster.Contains(n))
+                    return true;
+            }
+            return false;
+        }
     }
 
     // The roster hulls the ocean calms around, each over its own waterline.
